@@ -284,7 +284,7 @@ FocusScope {
         }
     }
 
-    Keys.onPressed: {
+    Keys.onPressed: function(event) {
         event.accepted = true;
         // The A that opened the menu is still down; its repeats must not pick an item.
         if (event.isAutoRepeat)

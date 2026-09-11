@@ -100,7 +100,7 @@ FocusScope {
         rail.slideToCurrent();
     }
 
-    Keys.onPressed: {
+    Keys.onPressed: function(event) {
         if (event.isAutoRepeat)
             return;
         if (api.keys.isFilters(event)) {
@@ -283,12 +283,12 @@ FocusScope {
                 Keys.onLeftPressed: heroActions.step(-1)
                 Keys.onRightPressed: heroActions.step(1)
                 Keys.onUpPressed: page.chromeRequested()
-                Keys.onDownPressed: {
+                Keys.onDownPressed: function(event) {
                     Sound.panel();
                     rail.forceActiveFocus();
                 }
 
-                Keys.onPressed: {
+                Keys.onPressed: function(event) {
                     if (api.keys.isAccept(event)) {
                         if (page.tileSelected) {
                             event.accepted = true;
@@ -404,7 +404,7 @@ FocusScope {
             onCountChanged: slideToCurrent()
 
             // Left unaccepted so the view's own navigation still moves the index.
-            Keys.onLeftPressed: {
+            Keys.onLeftPressed: function(event) {
                 if (page.tileSelected) {
                     page.tileSelected = false;
                     Sound.tick();
@@ -413,7 +413,7 @@ FocusScope {
                 event.accepted = false;
                 rail.currentIndex > 0 ? Sound.tick() : Sound.edge();
             }
-            Keys.onRightPressed: {
+            Keys.onRightPressed: function(event) {
                 if (page.tileSelected) {
                     Sound.edge();
                     return;
@@ -426,7 +426,7 @@ FocusScope {
                 event.accepted = false;
                 Sound.tick();
             }
-            Keys.onUpPressed: {
+            Keys.onUpPressed: function(event) {
                 Sound.panel();
                 heroActions.forceActiveFocus();
             }
@@ -434,7 +434,7 @@ FocusScope {
 
             // On the tile, A opens the library and X has nothing to show; neither
             // may reach the shell, which would act on the last game.
-            Keys.onPressed: {
+            Keys.onPressed: function(event) {
                 if (!page.tileSelected)
                     return;
                 if (api.keys.isAccept(event)) {

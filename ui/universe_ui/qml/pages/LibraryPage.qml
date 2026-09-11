@@ -187,7 +187,7 @@ FocusScope {
             ChipPicker {
                 id: picker
 
-                onChosen: {
+                onChosen: function(index) {
                     picker.hide();
                     chipBar.forceActiveFocus();
                     if (chipBar.index === 0) {
@@ -207,12 +207,12 @@ FocusScope {
             Keys.onLeftPressed: chipBar.step(-1)
             Keys.onRightPressed: chipBar.step(1)
             Keys.onUpPressed: page.chromeRequested()
-            Keys.onDownPressed: {
+            Keys.onDownPressed: function(event) {
                 Sound.panel();
                 grid.forceActiveFocus();
             }
 
-            Keys.onPressed: {
+            Keys.onPressed: function(event) {
                 if (event.isAutoRepeat)
                     return;
                 if (api.keys.isAccept(event)) {
@@ -248,7 +248,7 @@ FocusScope {
         cellWidth: page.cellWidth
         selectionActive: !chipBar.activeFocus
 
-        Keys.onPressed: {
+        Keys.onPressed: function(event) {
             if (event.isAutoRepeat)
                 return;
             if (api.keys.isFilters(event)) {
@@ -264,7 +264,7 @@ FocusScope {
             }
         }
 
-        Keys.onReleased: {
+        Keys.onReleased: function(event) {
             if (event.isAutoRepeat)
                 return;
             if (api.keys.isPageUp(event)) {
@@ -280,7 +280,7 @@ FocusScope {
         }
     }
 
-    Keys.onUpPressed: {
+    Keys.onUpPressed: function(event) {
         Sound.panel();
         chipBar.forceActiveFocus();
     }

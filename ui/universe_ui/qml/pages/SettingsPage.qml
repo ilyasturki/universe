@@ -243,12 +243,12 @@ FocusScope {
             Keys.onLeftPressed: chipBar.step(-1)
             Keys.onRightPressed: chipBar.step(1)
             Keys.onUpPressed: page.chromeRequested()
-            Keys.onDownPressed: {
+            Keys.onDownPressed: function(event) {
                 Sound.panel();
                 list.forceActiveFocus();
             }
 
-            Keys.onPressed: {
+            Keys.onPressed: function(event) {
                 if (event.isAutoRepeat)
                     return;
                 if (api.keys.isAccept(event)) {
@@ -338,13 +338,13 @@ FocusScope {
         rows: page.rows
         dimmed: picker.open || sheet.open
 
-        onActivated: page.activate(index, row)
+        onActivated: function(index, row) { page.activate(index, row); }
         onEscapedUp: {
             Sound.panel();
             chipBar.forceActiveFocus();
         }
 
-        Keys.onPressed: {
+        Keys.onPressed: function(event) {
             if (event.isAutoRepeat)
                 return;
             if (api.keys.isCancel(event)) {
@@ -405,7 +405,7 @@ FocusScope {
                     list.y + Theme.dp(60) + Math.max(0, (list.index - 1)) * (list.rowHeight + Theme.dp(4)))
         z: 3
 
-        onChosen: {
+        onChosen: function(index) {
             var choices = page.modulesForm.row(pendingIndex).choices || [];
             picker.hide();
             list.forceActiveFocus();
@@ -435,7 +435,7 @@ FocusScope {
         anchors.bottomMargin: -Theme.dp(Theme.hintBarHeight)
         z: 5
 
-        onAccepted: {
+        onAccepted: function(value) {
             list.forceActiveFocus();
             if (pendingKind === "module")
                 page.modulesForm.setValue(pendingIndex, value);
@@ -448,12 +448,12 @@ FocusScope {
     }
 
     // Triggers cycle the section from anywhere, as they cycle the collection in the library.
-    Keys.onPressed: {
+    Keys.onPressed: function(event) {
         if (api.keys.isPageUp(event) || api.keys.isPageDown(event))
             event.accepted = true;
     }
 
-    Keys.onReleased: {
+    Keys.onReleased: function(event) {
         if (event.isAutoRepeat || sheet.open || picker.open)
             return;
         if (api.keys.isPageUp(event)) {

@@ -55,7 +55,7 @@ FocusScope {
     Keys.onUpPressed: step(-1)
     Keys.onDownPressed: step(1)
 
-    Keys.onPressed: {
+    Keys.onPressed: function(event) {
         if (event.isAutoRepeat)
             return;
         if (api.keys.isAccept(event)) {

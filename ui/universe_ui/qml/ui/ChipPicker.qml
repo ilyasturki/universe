@@ -91,7 +91,7 @@ FocusScope {
     Keys.onLeftPressed: Sound.edge()
     Keys.onRightPressed: Sound.edge()
 
-    Keys.onPressed: {
+    Keys.onPressed: function(event) {
         if (event.isAutoRepeat)
             return;
         if (api.keys.isAccept(event)) {

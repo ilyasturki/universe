@@ -57,12 +57,12 @@ FocusScope {
     Keys.onLeftPressed: root.step(-1)
     Keys.onRightPressed: root.step(1)
     Keys.onUpPressed: Sound.edge()
-    Keys.onDownPressed: {
+    Keys.onDownPressed: function(event) {
         Sound.panel();
         root.entered();
     }
 
-    Keys.onPressed: {
+    Keys.onPressed: function(event) {
         if (event.isAutoRepeat)
             return;
         if (api.keys.isAccept(event)) {

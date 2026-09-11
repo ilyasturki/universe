@@ -599,7 +599,7 @@ FocusScope {
         }
     }
 
-    Keys.onPressed: {
+    Keys.onPressed: function(event) {
         if (event.isAutoRepeat && !(event.key === Qt.Key_Up || event.key === Qt.Key_Down
                                     || event.key === Qt.Key_Left || event.key === Qt.Key_Right))
             return;

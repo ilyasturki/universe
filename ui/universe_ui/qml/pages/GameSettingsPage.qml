@@ -91,10 +91,10 @@ FocusScope {
         rows: page.form.rows
         dimmed: picker.open || sheet.open
 
-        onActivated: page.activate(index, row)
+        onActivated: function(index, row) { page.activate(index, row); }
         onEscapedUp: Sound.edge()
 
-        Keys.onPressed: {
+        Keys.onPressed: function(event) {
             if (event.isAutoRepeat)
                 return;
             if (api.keys.isCancel(event)) {
@@ -115,7 +115,7 @@ FocusScope {
                     list.y + Theme.dp(60) + Math.max(0, (list.index - 1)) * (list.rowHeight + Theme.dp(4)))
         z: 2
 
-        onChosen: {
+        onChosen: function(index) {
             var choices = page.form.row(pendingIndex).choices || [];
             picker.hide();
             list.forceActiveFocus();
@@ -148,7 +148,7 @@ FocusScope {
         anchors.fill: parent
         z: 3
 
-        onAccepted: {
+        onAccepted: function(value) {
             page.form.setValue(pendingIndex, value);
             list.forceActiveFocus();
         }

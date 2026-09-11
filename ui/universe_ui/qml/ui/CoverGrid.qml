@@ -81,7 +81,7 @@ GridView {
     onCountChanged: scrollToCurrent()
 
     // A ragged last row is short, so the step down clamps to the final cell.
-    Keys.onDownPressed: {
+    Keys.onDownPressed: function(event) {
         if (!selectionActive)
             event.accepted = false;
         else if (Math.floor(currentIndex / columns) < lastRow)
@@ -90,21 +90,21 @@ GridView {
             Sound.edge();
     }
 
-    Keys.onUpPressed: {
+    Keys.onUpPressed: function(event) {
         if (selectionActive && currentIndex >= columns)
             moveCurrent(currentIndex - columns);
         else
             event.accepted = false;
     }
 
-    Keys.onLeftPressed: {
+    Keys.onLeftPressed: function(event) {
         if (!selectionActive || (escapesLeft && currentIndex % columns === 0))
             event.accepted = false;
         else
             moveCurrent(currentIndex - 1);
     }
 
-    Keys.onRightPressed: {
+    Keys.onRightPressed: function(event) {
         if (!selectionActive)
             event.accepted = false;
         else

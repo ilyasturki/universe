@@ -54,7 +54,7 @@ FocusScope {
     Keys.onUpPressed: keyboard.move(-1, 0) ? Sound.kbtick() : Sound.edge()
     Keys.onDownPressed: keyboard.move(1, 0) ? Sound.kbtick() : Sound.edge()
 
-    Keys.onPressed: {
+    Keys.onPressed: function(event) {
         event.accepted = true;
         if (event.isAutoRepeat)
             return;
@@ -175,7 +175,7 @@ FocusScope {
             showDone: true
             symbols: sheet.symbols
 
-            onCharEntered: {
+            onCharEntered: function(value) {
                 Sound.type();
                 sheet.text += value;
             }

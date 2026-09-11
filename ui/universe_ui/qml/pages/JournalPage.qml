@@ -50,7 +50,7 @@ FocusScope {
 
     Keys.onUpPressed: reading ? scroll(-1) : step(-1)
     Keys.onDownPressed: reading ? scroll(1) : step(1)
-    Keys.onRightPressed: {
+    Keys.onRightPressed: function(event) {
         if (!reading && current) {
             Sound.panel();
             reading = true;
@@ -58,7 +58,7 @@ FocusScope {
             Sound.edge();
         }
     }
-    Keys.onLeftPressed: {
+    Keys.onLeftPressed: function(event) {
         if (reading) {
             Sound.panel();
             reading = false;
@@ -67,7 +67,7 @@ FocusScope {
         }
     }
 
-    Keys.onPressed: {
+    Keys.onPressed: function(event) {
         if (event.isAutoRepeat)
             return;
         if (api.keys.isAccept(event)) {

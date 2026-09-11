@@ -336,7 +336,7 @@ FocusScope {
             currentIndex: root.tabIndex
             focus: root.focusOwner === "chrome"
 
-            onTabRequested: root.goToTab(index)
+            onTabRequested: function(index) { root.goToTab(index); }
             onSearchRequested: root.openSearch()
             onEntered: root.focusPage()
             onDismissed: root.focusPage()
@@ -514,8 +514,8 @@ FocusScope {
     ContextMenu {
         id: contextMenu
         anchors.fill: parent
-        onPlayRequested: root.launchGame(game)
-        onDetailRequested: root.openDetail(game)
+        onPlayRequested: function(game) { root.launchGame(game); }
+        onDetailRequested: function(game) { root.openDetail(game); }
         onFavouriteRequested: root.toggleFavourite(game)
         onSettingsRequested: root.openSub("pages/GameSettingsPage.qml", game)
         onRecordingsRequested: root.openSub("pages/RecordingsPage.qml", game)
@@ -540,7 +540,7 @@ FocusScope {
             if (root.activePage && root.activePage.leave)
                 root.activePage.leave();
         }
-        onFailed: toast.show("Could not launch" + (game ? " " + game.title : "") + (message ? ": " + message : ""))
+        onFailed: function(game, message) { toast.show("Could not launch" + (game ? " " + game.title : "") + (message ? ": " + message : "")); }
     }
 
     Toast {
@@ -557,7 +557,7 @@ FocusScope {
         }
     }
 
-    Keys.onPressed: {
+    Keys.onPressed: function(event) {
         if (root.launching || root.subOpen) {
             event.accepted = true;
             return;
@@ -611,7 +611,7 @@ FocusScope {
         }
     }
 
-    Keys.onReleased: {
+    Keys.onReleased: function(event) {
         // Pegasus repeats a held button as release/press pairs flagged auto-repeat.
         if (event.isAutoRepeat || !api.keys.isAccept(event) || !root.acceptHeld)
             return;

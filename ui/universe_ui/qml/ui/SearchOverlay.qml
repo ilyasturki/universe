@@ -90,7 +90,7 @@ FocusScope {
     Keys.onLeftPressed: overlay.typing ? overlay.kbMove(0, -1) : overlay.moveResult(-1)
     Keys.onRightPressed: overlay.typing ? overlay.kbMove(0, 1) : overlay.moveResult(1)
 
-    Keys.onUpPressed: {
+    Keys.onUpPressed: function(event) {
         if (!overlay.typing) {
             Sound.edge();
             return;
@@ -102,7 +102,7 @@ FocusScope {
         overlay.kbMove(-1, 0);
     }
 
-    Keys.onDownPressed: {
+    Keys.onDownPressed: function(event) {
         if (overlay.typing) {
             overlay.kbMove(1, 0);
             return;
@@ -110,7 +110,7 @@ FocusScope {
         overlay.toKeyboard();
     }
 
-    Keys.onPressed: {
+    Keys.onPressed: function(event) {
         if (api.keys.isCancel(event)) {
             event.accepted = true;
             if (event.isAutoRepeat)
@@ -382,7 +382,7 @@ FocusScope {
                 NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
             }
 
-            onCharEntered: {
+            onCharEntered: function(value) {
                 Sound.type();
                 overlay.query += value;
             }

@@ -227,18 +227,18 @@ FocusScope {
         }
 
         // Left unaccepted so the view's own navigation still moves the index.
-        Keys.onLeftPressed: {
+        Keys.onLeftPressed: function(event) {
             event.accepted = false;
             row.currentIndex > 0 ? Sound.tick() : Sound.edge();
         }
-        Keys.onRightPressed: {
+        Keys.onRightPressed: function(event) {
             event.accepted = false;
             row.currentIndex < row.count - 1 ? Sound.tick() : Sound.edge();
         }
         Keys.onUpPressed: page.chromeRequested()
         Keys.onDownPressed: Sound.edge()
 
-        Keys.onPressed: {
+        Keys.onPressed: function(event) {
             if (event.isAutoRepeat)
                 return;
             if (api.keys.isFilters(event)) {
