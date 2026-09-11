@@ -96,15 +96,26 @@
         meta.mainProgram = "universe";
       };
 
-      pytestCheck = pkgs.stdenvNoCC.mkDerivation {
-        name = "universe-pytest";
-        src = ./.;
+      pytestUi = pkgs.stdenvNoCC.mkDerivation {
+        name = "universe-pytest-ui";
+        src = ./ui;
         dontWrapQtApps = true;
-        nativeBuildInputs = [ (pkgs.python3.withPackages (ps: [ ps.pyside6 ps.pysdl2 ps.qrcode ps.pytest ])) pkgs.qt6.qt5compat pkgs.qt6.qtmultimedia pkgs.qt6.qtdeclarative ] ++ moduleRuntime;
-        postPatch = "patchShebangs modules ui";
+        nativeBuildInputs = [ (pkgs.python3.withPackages (ps: [ ps.pyside6 ps.pysdl2 ps.qrcode ps.pytest ])) pkgs.qt6.qt5compat pkgs.qt6.qtmultimedia pkgs.qt6.qtdeclarative ];
         buildPhase = ''
           export HOME=$TMPDIR QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 LC_ALL=C.UTF-8 TZ=Europe/Paris TZDIR=${pkgs.tzdata}/share/zoneinfo
           export QML2_IMPORT_PATH=${pkgs.qt6.qtdeclarative}/lib/qt-6/qml:${pkgs.qt6.qt5compat}/lib/qt-6/qml:${pkgs.qt6.qtmultimedia}/lib/qt-6/qml
+          python3 -m pytest -q -p no:cacheprovider
+        '';
+        installPhase = "touch $out";
+      };
+
+      pytestModules = pkgs.stdenvNoCC.mkDerivation {
+        name = "universe-pytest-modules";
+        src = ./modules;
+        nativeBuildInputs = [ (pkgs.python3.withPackages (ps: [ ps.pytest ])) ] ++ moduleRuntime;
+        postPatch = "patchShebangs .";
+        buildPhase = ''
+          export HOME=$TMPDIR LC_ALL=C.UTF-8 TZ=Europe/Paris TZDIR=${pkgs.tzdata}/share/zoneinfo
           python3 -m pytest -q -p no:cacheprovider
         '';
         installPhase = "touch $out";
@@ -119,9 +130,9 @@
       } // lib.mapAttrs' (n: v: lib.nameValuePair "modules-${n}" v) modulePkgs;
 
       apps.${system} = {
-        default = { type = "app"; program = "${universe}/bin/universe"; };
-        universed = { type = "app"; program = "${universe}/bin/universed"; };
-        universe-ui = { type = "app"; program = "${ui}/bin/universe-ui"; };
+        default = { type = "app"; program = "${universe}/bin/universe"; meta.description = "Universe launcher CLI"; };
+        universed = { type = "app"; program = "${universe}/bin/universed"; meta.description = "Universe daemon"; };
+        universe-ui = { type = "app"; program = "${ui}/bin/universe-ui"; meta.description = "Universe Qt UI"; };
       };
 
       overlays.default = final: prev: { universe = universe; universe-ui = ui; universe-core = core; universe-modules = modulesPkg; };
@@ -138,10 +149,11 @@
 
       checks.${system} = {
         core = core;
-        pytest = pytestCheck;
+        pytest-ui = pytestUi;
+        pytest-modules = pytestModules;
       };
 
       nixosModules.default = import ./nix/nixos.nix { universePkg = universe; uiPkg = ui; };
-      homeManagerModules.default = import ./nix/home-manager.nix { universePkg = universe; uiPkg = ui; };
+      homeModules.default = import ./nix/home-manager.nix { universePkg = universe; uiPkg = ui; };
     };
 }

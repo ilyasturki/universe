@@ -21,7 +21,7 @@ programs.universe.enable = true;          # programs.gpu-screen-recorder + dbus 
 Home-manager side (config.toml, `universed` user service, enabled modules):
 
 ```nix
-imports = [ universe.homeManagerModules.default ];
+imports = [ universe.homeModules.default ];
 programs.universe = {
   enable = true;
   modules.enabled = [ "gog" "capture" "journal" "tracker-md" ];
