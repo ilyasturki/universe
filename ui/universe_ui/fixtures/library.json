@@ -1,0 +1,754 @@
+{
+  "games": [
+    {
+      "id": "the-technomancer",
+      "title": "The Technomancer",
+      "source": "gog",
+      "favorite": true,
+      "hidden": false,
+      "tags": [
+        "rpg",
+        "mars"
+      ],
+      "launch": {
+        "exe": "/mnt/games/PC/The Technomancer/TheTechnomancer.exe",
+        "prefix": "/mnt/games/gog/the-technomancer",
+        "proton": "proton-ge",
+        "env": {
+          "WINE_CPU_TOPOLOGY": "4:0,1,2,3"
+        }
+      },
+      "gog": {
+        "id": "1972906591",
+        "build": "52654527801265271"
+      },
+      "metadata": {
+        "developers": [
+          "Spiders"
+        ],
+        "publishers": [
+          "Focus Home Interactive"
+        ],
+        "genres": [
+          "Action RPG",
+          "Science fiction"
+        ],
+        "release_year": 2016,
+        "players": 1,
+        "description": "Two hundred years after the first colonists arrived, Mars is ruled by corporations and short of water. Zachariah, a Technomancer of the Abundance army, flees the secret police across the red planet with a band of companions, from the domes of Ophir to the Noctis slums, trading, fighting and deciding who to trust.",
+        "summary": "A science-fiction RPG set on a hostile Mars.",
+        "extra": {
+          "metacritic": [
+            62
+          ],
+          "hltb-main": [
+            26.5
+          ],
+          "hltb-extra": [
+            39
+          ],
+          "hltb-completionist": [
+            50
+          ]
+        },
+        "sgdb_id": "4287"
+      },
+      "stats": {
+        "hours": 41.5,
+        "play_count": 23,
+        "last_played": "2026-09-09T22:41:00+02:00"
+      },
+      "modules": {
+        "capture": {
+          "enabled": true,
+          "cursor": false
+        },
+        "journal": {
+          "enabled": true,
+          "language": "fr"
+        }
+      },
+      "platform": "windows"
+    },
+    {
+      "id": "mini-metro",
+      "title": "Mini Metro",
+      "source": "gog",
+      "favorite": false,
+      "launch": {
+        "exe": "/mnt/games/PC/Mini Metro/MiniMetro.exe",
+        "proton": "proton-ge"
+      },
+      "gog": {
+        "id": "1434554947",
+        "build": "59049085453457155"
+      },
+      "metadata": {
+        "developers": [
+          "Dinosaur Polo Club"
+        ],
+        "publishers": [
+          "Dinosaur Polo Club"
+        ],
+        "genres": [
+          "Strategy",
+          "Puzzle"
+        ],
+        "release_year": 2015,
+        "players": 1,
+        "description": "Draw the subway map of a growing city. Stations appear, passengers wait, and every week you pick one upgrade to keep the lines from clogging."
+      },
+      "stats": {
+        "hours": 6.2,
+        "play_count": 11,
+        "last_played": "2026-09-07T20:10:00+02:00"
+      },
+      "platform": "Nintendo Switch"
+    },
+    {
+      "id": "dead-cells",
+      "title": "Dead Cells",
+      "source": "gog",
+      "favorite": true,
+      "metadata": {
+        "developers": [
+          "Motion Twin"
+        ],
+        "publishers": [
+          "Motion Twin"
+        ],
+        "genres": [
+          "Roguelite",
+          "Metroidvania",
+          "Action"
+        ],
+        "release_year": 2018,
+        "players": 1,
+        "description": "A dead body possessed by a ball of cells fights its way through a shifting island, one run at a time. Nothing between runs survives but the blueprints you unlocked."
+      },
+      "stats": {
+        "hours": 18.75,
+        "play_count": 40,
+        "last_played": "2026-09-02T23:05:00+02:00"
+      },
+      "platform": "windows"
+    },
+    {
+      "id": "control",
+      "title": "Control",
+      "source": "gog",
+      "metadata": {
+        "developers": [
+          "Remedy Entertainment"
+        ],
+        "publishers": [
+          "505 Games"
+        ],
+        "genres": [
+          "Action",
+          "Adventure"
+        ],
+        "release_year": 2019,
+        "players": 1,
+        "description": "Jesse Faden walks into the Federal Bureau of Control looking for her brother and leaves the lobby as its new Director. The Oldest House shifts around her while the Hiss speaks through its staff."
+      },
+      "stats": {
+        "hours": 12.0,
+        "play_count": 8,
+        "last_played": "2026-08-20T21:30:00+02:00"
+      },
+      "platform": "windows"
+    },
+    {
+      "id": "dishonored",
+      "title": "Dishonored",
+      "source": "lutris",
+      "sort_title": "Dishonored",
+      "metadata": {
+        "developers": [
+          "Arkane Studios"
+        ],
+        "publishers": [
+          "Bethesda Softworks"
+        ],
+        "genres": [
+          "Stealth",
+          "Action"
+        ],
+        "release_year": 2012,
+        "players": 1,
+        "description": "Corvo Attano, bodyguard framed for the Empress's murder, takes to the rooftops of Dunwall with a blade, a mask and the Outsider's mark."
+      },
+      "stats": {
+        "hours": 3.4,
+        "play_count": 3,
+        "last_played": "2026-07-14T19:00:00+02:00"
+      },
+      "platform": "windows"
+    },
+    {
+      "id": "mirrors-edge",
+      "title": "Mirror's Edge",
+      "source": "lutris",
+      "metadata": {
+        "developers": [
+          "DICE"
+        ],
+        "publishers": [
+          "Electronic Arts"
+        ],
+        "genres": [
+          "Platformer",
+          "Action"
+        ],
+        "release_year": 2008,
+        "players": 1,
+        "description": "Faith runs messages across the rooftops of a city too clean to be honest, and the red paint on the pipes tells her where to go next."
+      },
+      "stats": {
+        "hours": 0,
+        "play_count": 0,
+        "last_played": null
+      },
+      "platform": "windows"
+    },
+    {
+      "id": "lego-batman",
+      "title": "LEGO Batman: The Videogame",
+      "source": "gog",
+      "metadata": {
+        "developers": [
+          "Traveller's Tales"
+        ],
+        "publishers": [
+          "Warner Bros. Interactive"
+        ],
+        "genres": [
+          "Action",
+          "Adventure"
+        ],
+        "release_year": 2008,
+        "players": 2,
+        "description": "Gotham's villains break out of Arkham in three gangs, and Batman and Robin chase them down brick by brick, in the one game where the villains get their own campaign."
+      },
+      "stats": {
+        "hours": 1.1,
+        "play_count": 2,
+        "last_played": "2026-05-03T16:20:00+02:00"
+      },
+      "platform": "Nintendo Wii"
+    },
+    {
+      "id": "batman-arkham-origins",
+      "title": "Batman: Arkham Origins",
+      "source": "gog",
+      "metadata": {
+        "developers": [
+          "WB Games Montréal"
+        ],
+        "publishers": [
+          "Warner Bros. Interactive"
+        ],
+        "genres": [
+          "Action",
+          "Adventure"
+        ],
+        "release_year": 2013,
+        "players": 1,
+        "description": "Christmas Eve, a younger Batman, and eight assassins hired by Black Mask to end him before morning."
+      },
+      "stats": {
+        "hours": 0,
+        "play_count": 0,
+        "last_played": null
+      },
+      "platform": "windows"
+    },
+    {
+      "id": "cyberpunk-2077",
+      "title": "Cyberpunk 2077",
+      "source": "gog",
+      "hidden": true,
+      "metadata": {
+        "developers": [
+          "CD PROJEKT RED"
+        ],
+        "genres": [
+          "RPG"
+        ],
+        "release_year": 2020
+      },
+      "stats": {
+        "hours": 0,
+        "play_count": 0,
+        "last_played": null
+      },
+      "platform": "windows"
+    }
+  ],
+  "sessions": {
+    "the-technomancer": [
+      {
+        "session": "20260909-213045",
+        "game": "the-technomancer",
+        "started_at": "2026-09-09T21:30:45+02:00",
+        "ended_at": "2026-09-09T22:41:00+02:00",
+        "duration_s": 4215,
+        "source": "daemon",
+        "unit": "universe-game-the-technomancer-20260909-213045.scope",
+        "screen": "DP-1",
+        "exit": 0,
+        "recording": "/mnt/recordings/games/the-technomancer/20260909-213045.mkv"
+      },
+      {
+        "session": "20260907-224100",
+        "game": "the-technomancer",
+        "started_at": "2026-09-07T22:41:00+02:00",
+        "ended_at": "2026-09-07T23:58:20+02:00",
+        "duration_s": 4640,
+        "source": "daemon",
+        "unit": "universe-game-the-technomancer-20260907-224100.scope",
+        "screen": "DP-1",
+        "exit": 0,
+        "recording": "/mnt/recordings/games/the-technomancer/20260907-224100.mkv"
+      },
+      {
+        "session": "20260901-200000",
+        "game": "the-technomancer",
+        "started_at": "2026-09-01T20:00:00+02:00",
+        "ended_at": "2026-09-01T21:12:00+02:00",
+        "duration_s": 4320,
+        "source": "import-lutris",
+        "unit": "",
+        "screen": "",
+        "exit": 0,
+        "recording": null
+      }
+    ]
+  },
+  "recordings": {
+    "the-technomancer": [
+      {
+        "session": "20260909-213045",
+        "path": "",
+        "size": 2147483648,
+        "duration_s": 4215,
+        "created_at": "2026-09-09T22:41:05+02:00"
+      },
+      {
+        "session": "20260907-224100",
+        "path": "",
+        "size": 2415919104,
+        "duration_s": 4640,
+        "created_at": "2026-09-07T23:58:25+02:00"
+      }
+    ]
+  },
+  "journal": {
+    "the-technomancer": [
+      {
+        "session": "20260909-213045",
+        "game": "the-technomancer",
+        "written_at": "2026-09-09T22:46:00+02:00",
+        "lang": "fr",
+        "title": "Les égouts de Noctis",
+        "provider": "codex",
+        "paragraphs": [
+          "Zachariah descend dans les égouts sous Noctis pour retrouver le contact d'Amelia. Les mutants y sont plus nombreux que prévu et la première rencontre coûte trois soins.",
+          "Le style guerrier tient mieux qu'avant : le bâton électrifié à pleine charge fait tomber les molosses en deux coups. La compétence de bouclier n'a pas encore servi.",
+          "Fin de séance sur le retour à la surface, Niesha se dispute avec Andrew au camp."
+        ],
+        "next_up": "Parler à Amelia, puis rapporter le sérum à la base de l'Abondance avant que la police secrète ne rattrape le groupe.",
+        "images": []
+      },
+      {
+        "session": "20260907-224100",
+        "game": "the-technomancer",
+        "written_at": "2026-09-07T23:59:00+02:00",
+        "lang": "fr",
+        "title": "Ophir, première nuit",
+        "provider": "codex",
+        "paragraphs": [
+          "Arrivée à Ophir après l'initiation. Le dôme est plus grand que dans mes souvenirs, et le marché de la Source vend enfin des plans d'armure.",
+          "Deux quêtes secondaires terminées pour Scott, une troisième abandonnée : les gardes du secteur des officiers ne laissent pas passer."
+        ],
+        "next_up": "Trouver un moyen d'entrer dans le secteur des officiers.",
+        "images": []
+      }
+    ]
+  },
+  "modules": [
+    {
+      "id": "capture",
+      "name": "Capture vidéo",
+      "kind": [
+        "hooks"
+      ],
+      "version": "0.1.0",
+      "dir": "/nix/store/xxx-universe/share/universe/modules/capture",
+      "enabled": true,
+      "available": true,
+      "missing": [],
+      "hooks": {
+        "post-launch": "bin/start",
+        "session-end": "bin/stop",
+        "screenshot": "bin/shot"
+      },
+      "verbs": [],
+      "settings": [
+        {
+          "key": "enabled",
+          "type": "bool",
+          "default": true,
+          "label": "Record the session",
+          "scope": "game"
+        },
+        {
+          "key": "cursor",
+          "type": "bool",
+          "default": false,
+          "label": "Capture the cursor",
+          "scope": "game"
+        },
+        {
+          "key": "codec",
+          "type": "enum",
+          "default": "av1_10bit",
+          "label": "Codec",
+          "scope": "global",
+          "choices": [
+            "av1_10bit",
+            "av1",
+            "hevc_10bit",
+            "hevc",
+            "h264"
+          ]
+        },
+        {
+          "key": "fps",
+          "type": "int",
+          "default": 60,
+          "label": "Frame rate",
+          "scope": "global"
+        },
+        {
+          "key": "microphone",
+          "type": "bool",
+          "default": true,
+          "label": "Record the microphone",
+          "scope": "global"
+        }
+      ],
+      "frontend_qml": null
+    },
+    {
+      "id": "journal",
+      "name": "Journal",
+      "kind": [
+        "hooks"
+      ],
+      "version": "0.1.0",
+      "dir": "/nix/store/xxx-universe/share/universe/modules/journal",
+      "enabled": true,
+      "available": true,
+      "missing": [],
+      "hooks": {
+        "post-process": "bin/process"
+      },
+      "verbs": [],
+      "settings": [
+        {
+          "key": "enabled",
+          "type": "bool",
+          "default": true,
+          "label": "Write a journal entry",
+          "scope": "game"
+        },
+        {
+          "key": "language",
+          "type": "enum",
+          "default": "fr",
+          "label": "Language",
+          "scope": "game",
+          "choices": [
+            "fr",
+            "en"
+          ]
+        },
+        {
+          "key": "provider",
+          "type": "enum",
+          "default": "codex",
+          "label": "Provider",
+          "scope": "global",
+          "choices": [
+            "codex",
+            "anthropic",
+            "ollama"
+          ]
+        },
+        {
+          "key": "markdown_export",
+          "type": "bool",
+          "default": true,
+          "label": "Render Markdown notes",
+          "scope": "global"
+        },
+        {
+          "key": "journal_root",
+          "type": "path",
+          "default": "~/Documents/notes/games/journal",
+          "label": "Notes folder",
+          "scope": "global"
+        }
+      ],
+      "frontend_qml": null
+    },
+    {
+      "id": "gog",
+      "name": "GOG",
+      "kind": [
+        "source"
+      ],
+      "version": "0.1.0",
+      "dir": "/nix/store/xxx-universe/share/universe/modules/gog",
+      "enabled": true,
+      "available": true,
+      "missing": [],
+      "hooks": {},
+      "verbs": [
+        "login",
+        "library",
+        "search",
+        "info",
+        "install",
+        "update",
+        "scan"
+      ],
+      "settings": [
+        {
+          "key": "games_dir",
+          "type": "path",
+          "default": "/mnt/games/PC",
+          "label": "Install folder",
+          "scope": "global"
+        }
+      ],
+      "frontend_qml": null
+    },
+    {
+      "id": "tracker-md",
+      "name": "Markdown tracker",
+      "kind": [
+        "hooks"
+      ],
+      "version": "0.1.0",
+      "dir": "/home/yasso/.config/universe/modules/tracker-md",
+      "enabled": false,
+      "available": false,
+      "missing": [
+        "uv"
+      ],
+      "hooks": {
+        "session-end": "bin/update"
+      },
+      "verbs": [],
+      "settings": [
+        {
+          "key": "root",
+          "type": "path",
+          "default": "~/Documents/notes/games",
+          "label": "Tracker folder",
+          "scope": "global"
+        },
+        {
+          "key": "create_missing",
+          "type": "bool",
+          "default": false,
+          "label": "Create missing rows",
+          "scope": "global"
+        }
+      ],
+      "frontend_qml": null
+    }
+  ],
+  "sources": [
+    {
+      "id": "gog",
+      "name": "GOG",
+      "available": true,
+      "logged_in": true,
+      "games_dir": "/mnt/games/PC"
+    }
+  ],
+  "login_url": "https://auth.gog.com/auth?client_id=46755278331571209&redirect_uri=https%3A%2F%2Fembed.gog.com%2Fon_login_success%3Forigin%3Dclient&response_type=code&layout=client2",
+  "source_library": {
+    "gog": [
+      {
+        "id": "1972906591",
+        "title": "The Technomancer",
+        "owned": true,
+        "installed": true,
+        "dir": "/mnt/games/PC/The Technomancer",
+        "build": "52654527801265271",
+        "remote_build": "52654527801265271"
+      },
+      {
+        "id": "1434554947",
+        "title": "Mini Metro",
+        "owned": true,
+        "installed": true,
+        "dir": "/mnt/games/PC/Mini Metro",
+        "build": "59049085453457155",
+        "remote_build": "59049085453457156"
+      },
+      {
+        "id": "1237807960",
+        "title": "Dead Cells",
+        "owned": true,
+        "installed": true,
+        "dir": "/mnt/games/PC/Dead Cells",
+        "build": "1",
+        "remote_build": "1"
+      },
+      {
+        "id": "2010311939",
+        "title": "Control Ultimate Edition",
+        "owned": true,
+        "installed": true,
+        "dir": "/mnt/games/PC/Control",
+        "build": "7",
+        "remote_build": "7"
+      },
+      {
+        "id": "1207658930",
+        "title": "The Witcher 3: Wild Hunt",
+        "owned": true,
+        "installed": false,
+        "dir": null,
+        "build": null,
+        "remote_build": "9"
+      },
+      {
+        "id": "1207666883",
+        "title": "Stardew Valley",
+        "owned": true,
+        "installed": false,
+        "dir": null,
+        "build": null,
+        "remote_build": "3"
+      },
+      {
+        "id": "1441974651",
+        "title": "Disco Elysium",
+        "owned": true,
+        "installed": false,
+        "dir": null,
+        "build": null,
+        "remote_build": "5"
+      }
+    ]
+  },
+  "catalog": [
+    {
+      "id": "1207658924",
+      "title": "The Witcher: Enhanced Edition",
+      "owned": false,
+      "installed": false,
+      "dir": null,
+      "build": null,
+      "remote_build": null
+    },
+    {
+      "id": "1207658930",
+      "title": "The Witcher 3: Wild Hunt",
+      "owned": true,
+      "installed": false,
+      "dir": null,
+      "build": null,
+      "remote_build": "9"
+    }
+  ],
+  "updates": [
+    {
+      "id": "1434554947",
+      "title": "Mini Metro",
+      "local_build": "59049085453457155",
+      "remote_build": "59049085453457156",
+      "version": "1.2.1",
+      "date": "2026-09-01"
+    }
+  ],
+  "doctor": [
+    {
+      "check": "gogdl on PATH",
+      "ok": true,
+      "detail": "/run/current-system/sw/bin/gogdl",
+      "module": "gog"
+    },
+    {
+      "check": "gpu-screen-recorder",
+      "ok": true,
+      "detail": "1.9",
+      "module": "capture"
+    },
+    {
+      "check": "gsr-kms-server",
+      "ok": true,
+      "detail": "/run/wrappers/bin/gsr-kms-server",
+      "module": "capture"
+    },
+    {
+      "check": "Proton proton-ge",
+      "ok": true,
+      "detail": "GE-Proton11-5",
+      "module": ""
+    },
+    {
+      "check": "hide-cursor extension",
+      "ok": false,
+      "detail": "hide-cursor@elcste.com not enabled",
+      "module": ""
+    },
+    {
+      "check": "uv",
+      "ok": false,
+      "detail": "not found",
+      "module": "tracker-md"
+    }
+  ],
+  "config": {
+    "schema": 1,
+    "paths": {
+      "games_root": "/mnt/games/PC",
+      "prefixes_root": "/mnt/games/prefixes",
+      "recordings_root": "/mnt/recordings/games",
+      "journal_root": "/home/yasso/Documents/notes/games/journal"
+    },
+    "launch": {
+      "proton": "proton-ge",
+      "esync": true,
+      "fsync": true,
+      "mangohud": true
+    },
+    "desktop": {
+      "profile": "auto",
+      "hide_cursor": true
+    },
+    "proton": {
+      "proton-ge": "~/.local/share/lutris/runners/wine/proton-ge",
+      "proton-em": "~/.local/share/lutris/runners/wine/proton-em",
+      "proton-cachyos": "~/.local/share/lutris/runners/wine/proton-cachyos"
+    },
+    "modules": {
+      "enabled": [
+        "gog",
+        "capture",
+        "journal"
+      ],
+      "capture": {
+        "codec": "av1_10bit"
+      }
+    }
+  }
+}
