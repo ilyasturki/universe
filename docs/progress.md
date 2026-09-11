@@ -7,9 +7,9 @@ Source de vérité de la session de livraison du MVP (docs/plan-v3.html). Relire
 | Piste | État | Notes |
 |---|---|---|
 | V · Vérifier | fait | 5/5 tests passés, chacun avec un enseignement (voir Phase 0) ; aucune brique remplacée |
-| C · Cœur | en cours | docs/api.md figé (JSON strings) ; crate Rust à écrire |
-| H · Hôte | à faire | PySide6 + port Reprise ; démarre dès que api.md est figé (faux `api` en attendant le démon) |
-| M · Modules | à faire | capture, journal, gog, métadonnées (Media1 dans le cœur) |
+| C · Cœur | fait (à durcir) | crate `universe` : config, game.toml, sessions, journal, index, modules, lanceur, migration Lutris, media, D-Bus (8 interfaces), CLI. Vérifié en env isolé : migrate (53 jeux), play/stop Technomancer (scope + sessions.jsonl + status), gog scan (9 titres gog), media refresh (SGDB+RAWG+Steam) |
+| H · Hôte | en cours | agent opus : port Reprise + hôte + client QtDBus + écrans, sur faux `api` puis contre le démon |
+| M · Modules | en cours | gog ✓ (26 tests, Absolute Drift installé pour de vrai), capture ✓ (12 tests, mkv et screenshot réels), journal (agent opus en cours), tracker-md (agent sonnet en cours), métadonnées ✓ dans le cœur (media.rs) |
 | L · Livrer | à faire | flake, module home-manager, module NixOS, doctor, tracker-md, README |
 
 ## Décisions
@@ -40,7 +40,17 @@ Source de vérité de la session de livraison du MVP (docs/plan-v3.html). Relire
 - **T5 gogdl : OK, avec un danger découvert.** `goggame-<id>.info`/`.hashdb` sont des fichiers ordinaires du dépôt GOG (`isGogDepot`) : réécrits par tout `download/update/repair` réussi (mtime change, contenu = celui du build servi) → le suivi des mises à jour par comparaison `buildId` local vs `content-system.gog.com/products/<id>/os/windows/builds?generation=2` (branch==null, dernier date_published) tient. **Danger : le cache interne de gogdl (`~/.config/heroic_gogdl/manifests/<id>`, global par id, indépendant de --path) était périmé (build 2023) → `gogdl update` a calculé un faux diff, tronqué des fichiers réels puis bloqué (hang 5 min)** ; l'agent a réparé Mini Metro (`GOGDL_CONFIG_PATH=<neuf> gogdl repair … --path`, 171 fichiers, tailles et .info identiques à la sauvegarde). Règles pour le module gog : (1) `GOGDL_CONFIG_PATH=$XDG_DATA_HOME/universe/modules/gog/gogdl` dédié ; (2) décider soi-même du besoin de mise à jour (buildId) et n'appeler `update` que si nécessaire ; (3) toujours sous timeout, tuer sur `[TASK_EXEC] CRITICAL` ; (4) stdout de download/update n'est pas du JSON (progression sur stderr : `Progress: ([\d.]+) (\d+)/(\d+)`) ; `info`, `import`, `auth` impriment du JSON pur. `download` ajoute le dossier du jeu à --path, `update/repair` non. Bibliothèque : 17 titres, `id` numérique, `dlcCount` toujours 0 → DLC installés = `.info` avec `rootGameId != gameId`. Recherche : `https://catalog.gog.com/v1/catalog?query=like:<q>&productType=in:game&limit=N` (public). Rapport : scratchpad/phase0/test-5.md.
 - **T3 gsr KMS : OK.** `systemd-run --user --unit=… --collect gpu-screen-recorder -w DP-1 -cursor no -f 60 -fm vfr -c mkv -k av1_10bit -ac opus -a default_output [-a default_input] -o …` depuis une unité transitoire, sans dialogue, pendant un mpv plein écran : 5/5 mkv valides (av1 4K60, opus). Connecteur `DP-1` identique dans /sys/class/drm, `gpu-screen-recorder --list-monitors`, Mutter DisplayConfig et `QScreen::name()`. SIGTERM par défaut de `systemctl stop` finalise le mkv. L'unité hérite WAYLAND_DISPLAY/DBUS/XDG_RUNTIME_DIR/PATH (/run/wrappers/bin pour gsr-kms-server). Découverte des sorties : `--list-monitors` (pas `--list-capture-options` sans argument, qui échoue). Non tranché : effet visuel de `-cursor no` (curseur déjà caché par Mutter pendant le test). Rapport : scratchpad/phase0/test-3.md.
 
+## Décisions d'implémentation (cœur)
+
+- Env isolé de test : `source scratchpad/uni-env.sh` (UNIVERSE_DATA_HOME/CONFIG_HOME/STATE_HOME/CACHE_HOME sous scratchpad/uni, UNIVERSE_MODULES_PATH=repo/modules) ; démon : `setsid ./target/debug/universed`. Tuer avec `pkill -x universed` (jamais `pkill -f`, qui tue le shell).
+- Le lanceur : `systemd-run --user --scope --collect --unit=universe-game-<id>-<session> -- umu-run <exe>` avec env sur le process enfant et cwd = dossier de l'exe ; fin de partie = cgroup.events vide (poll 1 s via `systemctl --user show -p ControlGroup`). Session écrite puis hooks session-end (bloquants, hors handler D-Bus → pas d'interblocage avec Recording1.File), puis SessionEnded ; post-process après RecordingFiled ou après 45 s de grâce (`[modules.core] post_process_grace_s`), une seule fois par session.
+- Migration Lutris : id = slug(title) (pas le slug Lutris, parqué dans `source.lutris_slug` et `[lutris]`), source gog seulement si manifeste + service gog ; overrides cherchés sous les deux slugs (pas de renommage dans ~/Dotfiles). Heures : une ligne `import-lutris` = reliquat non couvert par les mkv importés.
+- Scan gog : le cœur appelle `library` (cache) avant `scan` pour connaître `owned` ; un jeu est créé seulement si `installed && owned`, sinon seul un jeu existant est mis à jour.
+- `Modules1.List` expose le schéma ; `Library1.Set("capture.cursor")` = raccourci validé de `modules.capture.cursor`.
+- Différé (hors conditions) : complétions fish, man page, inotify sur les fichiers de vérité (rescan manuel / après chaque écriture via l'API), `Media1.Candidates` = SGDB seulement.
+
 ## Journal des tours
 
 - T1–T22 : lecture du plan, orientation, vérification des outils. Rien de codé.
 - T23–T35 : docs/api.md figé, phase 0 lancée et consignée (5/5 OK). Décisions : payloads JSON, cwd = dossier exe, proxy Python pour les filtres à expression, GOGDL_CONFIG_PATH dédié.
+- T36–T60 : agents H (opus), capture, journal (opus), gog lancés ; cœur écrit et vérifié en env isolé (conditions 2, 5-scan, 6 tenues hors flake). Commits : scaffold, daemon+cli, modules gog+capture. Reste : journal, tracker-md, hôte, flake (L), README, doctor réel, tests pytest globaux, conditions 3-4 à l'écran.

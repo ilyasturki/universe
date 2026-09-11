@@ -876,6 +876,9 @@ impl Core {
             let mut found = 0;
             for sid in ids {
                 let Ok(m) = core.source(&sid).await else { continue };
+                if let Err(e) = core.source_library(&sid, false).await {
+                    tracing::warn!("{sid}: library unavailable, scanning without ownership: {e}");
+                }
                 match core.run_verb(&m, "scan", &[], Some(&j)).await {
                     Ok(events) => {
                         for g in Self::game_events(&events) {
