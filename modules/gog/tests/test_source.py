@@ -12,7 +12,7 @@ import pytest
 MODULE_DIR = Path(__file__).resolve().parents[1]
 SOURCE = MODULE_DIR / "bin" / "source"
 
-SHIM = r'''#!/usr/bin/env python3
+SHIM = r'''#!SHIM_PYTHON
 import json, os, sys, time
 from pathlib import Path
 
@@ -93,7 +93,7 @@ def env(tmp_path, monkeypatch):
     shim_dir = tmp_path / "bin"
     shim_dir.mkdir()
     shim = shim_dir / "gogdl"
-    shim.write_text(SHIM)
+    shim.write_text(SHIM.replace("SHIM_PYTHON", sys.executable, 1))
     shim.chmod(shim.stat().st_mode | stat.S_IEXEC)
     log = tmp_path / "gogdl.log"
     games = tmp_path / "games"

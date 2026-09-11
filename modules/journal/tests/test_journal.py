@@ -41,7 +41,7 @@ def make_mkv(path, source, seconds):
 
 
 def write_shim(path, body):
-    path.write_text(f"#!/usr/bin/env bash\n{body}\n")
+    path.write_text(f"#!{shutil.which('bash')}\n{body}\n")
     path.chmod(path.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
 
 

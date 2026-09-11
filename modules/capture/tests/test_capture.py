@@ -2,6 +2,7 @@
 systemctl / busctl / ffprobe / gpu-screen-recorder / trash shims on PATH."""
 import json
 import os
+import shutil
 import stat
 import subprocess
 from pathlib import Path
@@ -18,7 +19,7 @@ SESSION_ID = "20260911-120000"
 
 
 def _write_shim(path, body):
-    path.write_text(f"#!/usr/bin/env bash\n{body}\n")
+    path.write_text(f"#!{shutil.which('bash')}\n{body}\n")
     path.chmod(path.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
 
 
