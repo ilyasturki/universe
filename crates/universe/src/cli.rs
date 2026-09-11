@@ -644,7 +644,18 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Cmd::Config { action, args } => {
             let settings = client.settings().await?;
             match action.as_str() {
-                "get" => print_json(&parse_json(&settings.get().await?)),
+                "get" => {
+                    let mut v = parse_json(&settings.get().await?);
+                    if let Some(key) = args.first() {
+                        for part in key.split('.') {
+                            v = v.get(part).cloned().unwrap_or(Value::Null);
+                        }
+                    }
+                    match v {
+                        Value::String(s) => println!("{s}"),
+                        other => print_json(&other),
+                    }
+                }
                 "set" => {
                     let (k, v) = (args.first().ok_or_else(|| anyhow::anyhow!("config set <key> <value>"))?, args.get(1).map(|s| s.as_str()).unwrap_or(""));
                     settings.set(k, v).await?;

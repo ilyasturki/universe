@@ -37,8 +37,7 @@ impl Library1 {
         Ok(self.0.remove(&id, purge).await?)
     }
     async fn rescan(&self) -> fdo::Result<()> {
-        self.0.reload_modules().await;
-        self.0.reload_all().await?;
+        self.0.reload_config().await?;
         let _ = self.0.source_scan("").await;
         Ok(())
     }
