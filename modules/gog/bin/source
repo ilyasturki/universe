@@ -1,0 +1,527 @@
+#!/usr/bin/env python3
+import json
+import os
+import queue
+import re
+import signal
+import subprocess
+import sys
+import threading
+import time
+import tomllib
+import urllib.error
+import urllib.parse
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
+
+AUTH_URL = "https://auth.gog.com/auth?client_id=46899977096215655&redirect_uri=https%3A%2F%2Fembed.gog.com%2Fon_login_success%3Forigin%3Dclient&response_type=code&layout=client2"
+LIBRARY_URL = "https://embed.gog.com/account/getFilteredProducts?mediaType=1&page={page}"
+USER_URL = "https://embed.gog.com/userData.json"
+CATALOG_URL = "https://catalog.gog.com/v1/catalog"
+BUILDS_URL = "https://content-system.gog.com/products/{id}/os/{platform}/builds?generation=2"
+USER_AGENT = "universe-gog/0.1"
+HTTP_TIMEOUT_S = 30
+GOGDL_JSON_TIMEOUT_S = 120
+KILL_GRACE_S = 10
+PROGRESS_INTERVAL_S = 1.0
+PROGRESS_RE = re.compile(r"Progress: ([\d.]+) (\d+)/(\d+)")
+CRITICAL_MARK = "[TASK_EXEC] CRITICAL"
+INFO_RE = re.compile(r"^goggame-(\d+)\.info$")
+SCAN_DEPTH = 5  # a .info can sit under a wine prefix: gog/<slug>/drive_c/GOG Games/<Game>/
+
+_child = None
+
+
+class SourceError(Exception):
+    pass
+
+
+def emit(event, **fields):
+    print(json.dumps({"event": event, **fields}), flush=True)
+
+
+def log(message):
+    print(f"gog: {message}", file=sys.stderr, flush=True)
+
+
+# ---------------------------------------------------------------- settings
+
+def module_dir():
+    return Path(os.environ.get("MODULE_DIR") or Path(__file__).resolve().parents[1])
+
+
+def data_dir():
+    raw = os.environ.get("MODULE_DATA_DIR")
+    if not raw:
+        xdg = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+        raw = os.path.join(xdg, "universe", "modules", "gog")
+    path = Path(raw)
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def to_bool(value):
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "on")
+    return bool(value)
+
+
+def load_settings():
+    with open(module_dir() / "module.toml", "rb") as f:
+        spec = tomllib.load(f)
+    settings = {s["key"]: s["default"] for s in spec.get("settings", [])}
+    raw = os.environ.get("MODULE_SETTINGS_JSON")
+    if raw:
+        settings.update(json.loads(raw))
+    for key in ("games_dir", "auth_path"):
+        settings[key] = os.path.expanduser(str(settings[key]))
+    dirs = settings["scan_dirs"]
+    if isinstance(dirs, str):
+        dirs = [d.strip() for d in dirs.split(",") if d.strip()]
+    settings["scan_dirs"] = [os.path.expanduser(d) for d in dirs]
+    settings["with_dlcs"] = to_bool(settings["with_dlcs"])
+    settings["install_timeout_s"] = int(settings["install_timeout_s"])
+    return settings
+
+
+def platform_args(settings):
+    return ["--platform", settings["platform"], "--with-dlcs" if settings["with_dlcs"] else "--skip-dlcs"]
+
+
+# -------------------------------------------------------------------- HTTP
+
+def fetch(url, token=None):
+    headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
+    if token:
+        headers["Authorization"] = f"Bearer {token}"
+    request = urllib.request.Request(url, headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_S) as response:
+            return json.load(response)
+    except (OSError, ValueError) as exc:
+        raise SourceError(f"GET {url.split('?')[0]}: {exc}") from exc
+
+
+# ------------------------------------------------------------------- gogdl
+
+def ensure_auth_file(path):
+    # gogdl json.loads() the file whenever the path exists, so it must hold at least "{}".
+    auth = Path(path)
+    auth.parent.mkdir(parents=True, exist_ok=True)
+    if not auth.exists() or auth.stat().st_size == 0:
+        auth.write_text("{}")
+
+
+def gogdl_command(settings, *args):
+    ensure_auth_file(settings["auth_path"])
+    return ["gogdl", "--auth-config-path", settings["auth_path"], *args]
+
+
+def gogdl_env():
+    env = dict(os.environ)
+    env["GOGDL_CONFIG_PATH"] = str(data_dir() / "gogdl")
+    return env
+
+
+def gogdl_json(settings, *args):
+    try:
+        proc = subprocess.run(gogdl_command(settings, *args), env=gogdl_env(), capture_output=True,
+                              text=True, timeout=GOGDL_JSON_TIMEOUT_S)
+    except FileNotFoundError:
+        raise SourceError("gogdl is not installed") from None
+    except subprocess.TimeoutExpired:
+        raise SourceError(f"gogdl {args[0]} timed out after {GOGDL_JSON_TIMEOUT_S}s") from None
+    for line in proc.stderr.splitlines():
+        log(line)
+    if proc.returncode != 0:
+        raise SourceError(f"gogdl {args[0]} failed (exit {proc.returncode})")
+    try:
+        return json.loads(proc.stdout)
+    except ValueError:
+        raise SourceError(f"gogdl {args[0]} printed no JSON") from None
+
+
+def kill_group(proc):
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    try:
+        proc.wait(timeout=KILL_GRACE_S)
+    except subprocess.TimeoutExpired:
+        try:
+            os.killpg(proc.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        proc.wait()
+
+
+def gogdl_stream(settings, *args, timeout):
+    global _child
+    try:
+        proc = subprocess.Popen(gogdl_command(settings, *args), env=gogdl_env(), stdout=subprocess.PIPE,
+                                stderr=subprocess.STDOUT, text=True, errors="replace", start_new_session=True)
+    except FileNotFoundError:
+        raise SourceError("gogdl is not installed") from None
+    _child = proc
+    lines = queue.Queue()
+
+    def pump():
+        for line in proc.stdout:
+            lines.put(line.rstrip("\n"))
+        lines.put(None)
+
+    threading.Thread(target=pump, daemon=True).start()
+    deadline = time.monotonic() + timeout
+    last_emit = 0.0
+    try:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                kill_group(proc)
+                raise SourceError(f"gogdl {args[0]} exceeded {timeout}s, killed")
+            try:
+                line = lines.get(timeout=min(remaining, PROGRESS_INTERVAL_S))
+            except queue.Empty:
+                continue
+            if line is None:
+                break
+            if CRITICAL_MARK in line:
+                log(line)
+                kill_group(proc)
+                raise SourceError(f"gogdl {args[0]} reported a fatal error, killed")
+            match = PROGRESS_RE.search(line)
+            if not match:
+                log(line)
+                continue
+            done, total = int(match.group(2)), int(match.group(3))
+            now = time.monotonic()
+            if now - last_emit >= PROGRESS_INTERVAL_S or done >= total:
+                emit("progress", done=done, total=total, message=f"{match.group(1)}%")
+                last_emit = now
+        code = proc.wait()
+    finally:
+        _child = None
+    if code != 0:
+        raise SourceError(f"gogdl {args[0]} failed (exit {code})")
+
+
+# ------------------------------------------------------------------ library
+
+def library_cache_path():
+    return data_dir() / "library.json"
+
+
+def load_library_cache():
+    try:
+        with open(library_cache_path()) as f:
+            products = json.load(f)
+    except (OSError, ValueError):
+        return None
+    return products if isinstance(products, list) else None
+
+
+def save_library_cache(products):
+    tmp = library_cache_path().with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(products))
+    tmp.replace(library_cache_path())
+
+
+def library_index(products):
+    return {str(p.get("id")): p for p in products or []}
+
+
+def access_token(settings):
+    creds = gogdl_json(settings, "auth")
+    token = creds.get("access_token") if isinstance(creds, dict) else None
+    if not token:
+        raise SourceError("not logged in to GOG (run login)")
+    return token
+
+
+def fetch_library(settings):
+    token = access_token(settings)
+    products, page = [], 1
+    while True:
+        data = fetch(LIBRARY_URL.format(page=page), token)
+        products.extend(data.get("products") or [])
+        if page >= int(data.get("totalPages") or 1):
+            return products
+        page += 1
+
+
+def product_year(product):
+    date = product.get("releaseDate") if product else None
+    if isinstance(date, dict):
+        date = date.get("date")
+    date = str(date or "")
+    return int(date[:4]) if date[:4].isdigit() else None
+
+
+def product_image(product):
+    image = product.get("image") if product else None
+    if image and image.startswith("//"):
+        return f"https:{image}.jpg"
+    return (product or {}).get("coverVertical") or image or None
+
+
+# ------------------------------------------------------------------- builds
+
+def fetch_build(settings, game_id):
+    data = fetch(BUILDS_URL.format(id=game_id, platform=settings["platform"]))
+    items = [b for b in data.get("items") or [] if b.get("branch") is None]
+    if not items:
+        return None
+    last = sorted(items, key=lambda b: b.get("date_published") or "")[-1]
+    return {"build": str(last.get("build_id")), "version": last.get("version_name") or "?",
+            "date": str(last.get("date_published") or "")[:10]}
+
+
+def fetch_builds(settings, game_ids):
+    def one(game_id):
+        try:
+            return game_id, fetch_build(settings, game_id)
+        except SourceError as exc:
+            log(str(exc))
+            return game_id, None
+
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        return dict(pool.map(one, game_ids))
+
+
+# --------------------------------------------------------------------- scan
+
+def find_info_files(root):
+    stack = [(Path(root), 1)]
+    while stack:
+        folder, depth = stack.pop()
+        try:
+            with os.scandir(folder) as it:
+                entries = sorted(it, key=lambda e: e.name)
+        except OSError:
+            continue
+        infos = [Path(e.path) for e in entries if e.is_file() and INFO_RE.match(e.name)]
+        if infos:
+            yield folder, infos
+            continue
+        if depth >= SCAN_DEPTH:
+            continue
+        for entry in entries:
+            if entry.is_dir(follow_symlinks=False) and not entry.name.startswith("."):
+                stack.append((Path(entry.path), depth + 1))
+
+
+def read_info(path):
+    with open(path, encoding="utf-8-sig") as f:
+        return json.load(f)
+
+
+def primary_exe(info):
+    for task in info.get("playTasks") or []:
+        if task.get("isPrimary") and task.get("type") == "FileTask":
+            return task.get("path") or None
+    return None
+
+
+def scan_installs(settings, roots=None):
+    installs, seen = [], set()
+    if roots is None:
+        roots = list(dict.fromkeys([*settings["scan_dirs"], settings["games_dir"]]))
+    for root in roots:
+        for folder, paths in sorted(find_info_files(root)):
+            infos = []
+            for path in paths:
+                try:
+                    infos.append(read_info(path))
+                except (OSError, ValueError) as exc:
+                    log(f"unreadable {path}: {exc}")
+            bases = [i for i in infos if i.get("gameId") and str(i["gameId"]) == str(i.get("rootGameId"))]
+            if not bases:
+                log(f"{folder}: no base game, skipped")
+                continue
+            for base in bases:
+                game_id = str(base["gameId"])
+                if game_id in seen:
+                    log(f"{folder}: {game_id} already found elsewhere, skipped")
+                    continue
+                seen.add(game_id)
+                dlcs = sorted(str(i["gameId"]) for i in infos
+                              if i is not base and i.get("gameId") and str(i.get("rootGameId")) == game_id)
+                build = base.get("buildId")
+                installs.append({"id": game_id, "title": base.get("name") or game_id, "dir": str(folder),
+                                 "exe": primary_exe(base), "build": str(build) if build else None, "dlcs": dlcs})
+    return installs
+
+
+def find_install(settings, game_id, roots):
+    return next((i for i in scan_installs(settings, roots) if i["id"] == game_id), None)
+
+
+def game_event(game_id, title, owned, install=None, product=None):
+    emit("game", id=game_id, title=title, owned=owned, installed=install is not None,
+         dir=install["dir"] if install else None, exe=install["exe"] if install else None,
+         build=install["build"] if install else None, dlcs=install["dlcs"] if install else [],
+         release_year=product_year(product), image=product_image(product))
+
+
+def owned_status(game_id, index):
+    return (game_id in index) if index is not None else None
+
+
+# -------------------------------------------------------------------- verbs
+
+def require_id(args, verb):
+    if not args or not args[0].strip():
+        raise SourceError(f"usage: {verb} <id>")
+    return args[0].strip()
+
+
+def cmd_login(settings, args):
+    if not args:
+        emit("login_url", url=AUTH_URL)
+        emit("done")
+        return
+    creds = gogdl_json(settings, "auth", "--code", args[0])
+    if not isinstance(creds, dict) or creds.get("error") or not creds.get("access_token"):
+        raise SourceError("GOG rejected the authorization code")
+    user = fetch(USER_URL, creds["access_token"])
+    emit("logged_in", user=user.get("username") or "")
+    emit("done")
+
+
+def cmd_library(settings, args):
+    try:
+        products = fetch_library(settings)
+        save_library_cache(products)
+    except SourceError as exc:
+        products = load_library_cache()
+        if products is None:
+            raise
+        log(f"{exc}; showing the cached library")
+    installs = {i["id"]: i for i in scan_installs(settings)}
+    for product in products:
+        game_id = str(product.get("id"))
+        game_event(game_id, product.get("title") or game_id, True, installs.get(game_id), product)
+    emit("done")
+
+
+def cmd_search(settings, args):
+    text = " ".join(args).strip()
+    if not text:
+        raise SourceError("usage: search <text>")
+    query = urllib.parse.urlencode({"query": f"like:{text}", "productType": "in:game", "limit": "20"},
+                                   quote_via=urllib.parse.quote)
+    data = fetch(f"{CATALOG_URL}?{query}")
+    library = load_library_cache()
+    index = library_index(library) if library is not None else None
+    installs = {i["id"]: i for i in scan_installs(settings)}
+    for product in data.get("products") or []:
+        game_id = str(product.get("id"))
+        game_event(game_id, product.get("title") or game_id, owned_status(game_id, index),
+                   installs.get(game_id), product)
+    emit("done")
+
+
+def cmd_info(settings, args):
+    game_id = require_id(args, "info")
+    emit("info", data=gogdl_json(settings, "info", game_id, *platform_args(settings)))
+    emit("done")
+
+
+def cmd_install(settings, args):
+    game_id = require_id(args, "install")
+    games_dir = settings["games_dir"]
+    os.makedirs(games_dir, exist_ok=True)
+    library = load_library_cache()
+    index = library_index(library) if library is not None else None
+    if index is not None and game_id not in index:
+        log(f"{game_id} is not in the cached library; gogdl may refuse it")
+    gogdl_stream(settings, "download", game_id, *platform_args(settings), "--path", games_dir,
+                 timeout=settings["install_timeout_s"])
+    install = find_install(settings, game_id, [games_dir])
+    if install is None:
+        raise SourceError(f"gogdl finished but no goggame-{game_id}.info under {games_dir}")
+    game_event(game_id, install["title"], True, install, (index or {}).get(game_id))
+    emit("done")
+
+
+def cmd_update(settings, args):
+    installs = scan_installs(settings)
+    library = load_library_cache()
+    index = library_index(library) if library is not None else None
+    if not args:
+        remotes = fetch_builds(settings, [i["id"] for i in installs])
+        for install in installs:
+            remote = remotes.get(install["id"])
+            if remote is None:
+                log(f"{install['title']}: no build published for {settings['platform']}, skipped")
+            elif install["build"] == remote["build"]:
+                continue
+            elif owned_status(install["id"], index) is False:
+                log(f"{install['title']}: {remote['version']} available but not in the library, skipped")
+            else:
+                emit("update", id=install["id"], title=install["title"], local_build=install["build"],
+                     remote_build=remote["build"], version=remote["version"], date=remote["date"])
+        emit("done")
+        return
+    game_id = require_id(args, "update")
+    install = next((i for i in installs if i["id"] == game_id), None)
+    if install is None:
+        raise SourceError(f"{game_id} is not installed under {', '.join(settings['scan_dirs'])}")
+    if owned_status(game_id, index) is False:
+        raise SourceError(f"{install['title']} is not in the GOG library, refusing to update")
+    remote = fetch_build(settings, game_id)
+    if remote is None:
+        raise SourceError(f"no build published for {game_id} on {settings['platform']}")
+    if install["build"] == remote["build"]:
+        log(f"{install['title']} is already current ({remote['version']})")
+        emit("done")
+        return
+    log(f"{install['title']}: {install['build'] or 'unknown'} -> {remote['build']} ({remote['version']})")
+    gogdl_stream(settings, "update", game_id, *platform_args(settings), "--path", install["dir"],
+                 timeout=settings["install_timeout_s"])
+    after = find_install(settings, game_id, [install["dir"]])
+    if after is None or after["build"] != remote["build"]:
+        raise SourceError(f"gogdl finished but {install['title']} is at build "
+                          f"{after['build'] if after else 'unknown'}, expected {remote['build']}")
+    game_event(game_id, after["title"], True, after, (index or {}).get(game_id))
+    emit("done")
+
+
+def cmd_scan(settings, args):
+    library = load_library_cache()
+    index = library_index(library) if library is not None else None
+    for install in scan_installs(settings):
+        game_event(install["id"], install["title"], owned_status(install["id"], index), install,
+                   (index or {}).get(install["id"]))
+    emit("done")
+
+
+VERBS = {"login": cmd_login, "library": cmd_library, "search": cmd_search, "info": cmd_info,
+         "install": cmd_install, "update": cmd_update, "scan": cmd_scan}
+
+
+def on_signal(signum, frame):
+    if _child is not None:
+        kill_group(_child)
+    sys.exit(128 + signum)
+
+
+def main(argv):
+    if not argv or argv[0] not in VERBS:
+        log(f"usage: source {{{'|'.join(VERBS)}}} [args]")
+        return 2
+    try:
+        settings = load_settings()
+        VERBS[argv[0]](settings, argv[1:])
+    except SourceError as exc:
+        log(str(exc))
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, on_signal)
+    signal.signal(signal.SIGINT, on_signal)
+    sys.exit(main(sys.argv[1:]))

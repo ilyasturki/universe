@@ -1,0 +1,55 @@
+api = 1
+id = "gog"
+name = "GOG"
+kind = ["source"]
+version = "0.1.0"
+
+[requires]
+core = ">=0.1"
+bins = ["gogdl"]
+
+[source]
+exe = "bin/source"
+
+[[settings]]
+key = "games_dir"
+type = "path"
+default = "/mnt/games/PC"
+label = "Dossier d'installation"
+scope = "global"
+
+[[settings]]
+key = "scan_dirs"
+type = "string"
+default = "/mnt/games/PC,/mnt/games/gog"
+label = "Dossiers scannés (séparés par des virgules)"
+scope = "global"
+
+[[settings]]
+key = "platform"
+type = "enum"
+default = "windows"
+label = "Plateforme des dépôts"
+scope = "global"
+choices = ["windows", "linux"]
+
+[[settings]]
+key = "with_dlcs"
+type = "bool"
+default = true
+label = "Installer les DLC possédés"
+scope = "global"
+
+[[settings]]
+key = "auth_path"
+type = "path"
+default = "~/.config/gogdl/auth.json"
+label = "Fichier de jetons gogdl"
+scope = "global"
+
+[[settings]]
+key = "install_timeout_s"
+type = "int"
+default = 7200
+label = "Délai maximal d'une installation ou mise à jour (s)"
+scope = "global"

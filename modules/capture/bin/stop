@@ -1,0 +1,103 @@
+#!/usr/bin/env python3
+"""session-end hook (blocking, short): stops the recorder, files or trashes the mkv."""
+import os
+import shutil
+import subprocess
+import sys
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _common import log, load_settings, bus_and_object  # noqa: E402
+
+STABLE_WINDOW_S = 15
+
+
+def stop_unit(unit):
+    result = subprocess.run(["systemctl", "--user", "stop", unit], capture_output=True, text=True)
+    if result.returncode != 0 and "not loaded" not in result.stderr.lower():
+        log(f"systemctl stop {unit} failed: {result.stderr.strip()}")
+
+
+def wait_stable(path, budget_s):
+    deadline = time.monotonic() + budget_s
+    prev_size = None
+    stable_reads = 0
+    while time.monotonic() < deadline:
+        if not os.path.exists(path):
+            time.sleep(1)
+            continue
+        size = os.path.getsize(path)
+        stable_reads = stable_reads + 1 if size == prev_size else 0
+        prev_size = size
+        if stable_reads >= 2:
+            return True
+        time.sleep(1)
+    return os.path.exists(path)
+
+
+def probe_duration(path):
+    result = subprocess.run(
+        ["ffprobe", "-i", path, "-show_entries", "format=duration", "-v", "quiet", "-of", "csv=p=0"],
+        capture_output=True, text=True,
+    )
+    return float(result.stdout.strip())
+
+
+def discard(path):
+    if shutil.which("trash"):
+        subprocess.run(["trash", path], check=False)
+    else:
+        subprocess.run(["rm", "-f", path], check=False)
+
+
+def cleanup_companion(pending_dir, session_id):
+    companion = os.path.join(pending_dir, f"{session_id}.json")
+    if os.path.exists(companion):
+        os.remove(companion)
+
+
+def main():
+    session_id = os.environ["SESSION_ID"]
+    settings = load_settings()
+    min_duration_s = settings.get("min_duration_s", 240)
+
+    data_dir = os.environ["MODULE_DATA_DIR"]
+    pending_dir = os.path.join(data_dir, "pending")
+    path = os.path.join(pending_dir, f"{session_id}.mkv")
+
+    stop_unit(f"universe-capture-{session_id}.service")
+
+    if not os.path.exists(path):
+        log(f"no recording file for session {session_id}, nothing to do")
+        return 0
+
+    wait_stable(path, STABLE_WINDOW_S)
+
+    try:
+        duration = probe_duration(path)
+    except (ValueError, OSError) as e:
+        log(f"ffprobe could not read a duration from {path}: {e}")
+        return 1
+    log(f"recording duration: {duration:.1f}s (min {min_duration_s}s)")
+
+    if duration < min_duration_s:
+        log(f"recording shorter than {min_duration_s}s, discarding")
+        discard(path)
+        cleanup_companion(pending_dir, session_id)
+        return 0
+
+    bus, obj = bus_and_object()
+    cmd = ["busctl", "--user", "call", bus, obj,
+           "io.github.ilyasturki.Universe.Recording1", "File", "ss", session_id, path]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        log(f"Recording1.File failed ({result.returncode}): {result.stderr.strip()} — left in pending/: {path}")
+        return 1
+
+    log(f"filed via Recording1.File: {result.stdout.strip()}")
+    cleanup_companion(pending_dir, session_id)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+"""post-launch hook (async): starts gpu-screen-recorder under a transient unit."""
+import json
+import os
+import subprocess
+import sys
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _common import log, load_settings, resolve_screen, audio_args, quality_opts  # noqa: E402
+
+
+def main():
+    settings = load_settings()
+    if not settings.get("enabled", True):
+        log("disabled for this game, not recording")
+        return 0
+
+    session_id = os.environ["SESSION_ID"]
+    data_dir = os.environ["MODULE_DATA_DIR"]
+    pending_dir = os.path.join(data_dir, "pending")
+    os.makedirs(pending_dir, exist_ok=True)
+
+    try:
+        screen = resolve_screen()
+    except Exception as e:
+        log(f"could not resolve a screen to capture: {e}")
+        return 1
+
+    cursor = "yes" if settings.get("cursor") else "no"
+    fps = str(settings.get("fps", 60))
+    codec = settings.get("codec", "av1_10bit")
+    output_path = os.path.join(pending_dir, f"{session_id}.mkv")
+    unit = f"universe-capture-{session_id}"
+
+    cmd = [
+        "systemd-run", "--user", f"--unit={unit}", "--collect",
+        "-p", "CPUWeight=100", "-p", "MemoryHigh=4G",
+        # bounds `systemctl stop`'s wait below bin/stop's own 15s stability budget;
+        # default TimeoutStopSec (90s) would blow session-end's timeout_s=20 if gsr hangs.
+        "-p", "TimeoutStopSec=10",
+        "gpu-screen-recorder",
+        "-w", screen,
+        "-cursor", cursor,
+        "-f", fps,
+        "-fm", "vfr",
+        "-c", "mkv",
+        "-k", codec,
+        "-ac", "opus",
+        "-tune", "quality",
+        "-bm", "cbr",
+        "-q", "20000",
+        *audio_args(settings.get("audio")),
+        "-ffmpeg-video-opts", quality_opts(settings.get("quality")),
+        "-o", output_path,
+    ]
+    log(f"starting {unit} on {screen}: {' '.join(cmd)}")
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        log(f"systemd-run failed ({result.returncode}): {result.stderr.strip()}")
+        return 1
+
+    with open(os.path.join(pending_dir, f"{session_id}.json"), "w") as f:
+        json.dump({
+            "unit": f"{unit}.service",
+            "output": output_path,
+            "started_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        }, f)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

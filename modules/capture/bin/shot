@@ -1,0 +1,67 @@
+#!/usr/bin/env python3
+"""screenshot hook (on demand): gpu-screen-recorder -o *.png|*.jpg takes a screenshot."""
+import os
+import signal
+import subprocess
+import sys
+import tempfile
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _common import log, resolve_screen  # noqa: E402
+
+TAKE_TIMEOUT_S = 15
+
+
+def take(screen, path):
+    # gpu-screen-recorder's own process exits right after writing the file, but its
+    # gsr-kms-server helper is left running (reparented, not tied to the parent's
+    # lifetime) — a pipe for stderr would block on that orphan forever, so use a
+    # real file, then start_new_session + killpg to reap the helper too.
+    with tempfile.TemporaryFile(mode="w+") as errf:
+        proc = subprocess.Popen(
+            ["gpu-screen-recorder", "-w", screen, "-o", path],
+            stdout=subprocess.DEVNULL, stderr=errf, start_new_session=True,
+        )
+        try:
+            proc.wait(timeout=TAKE_TIMEOUT_S)
+        except subprocess.TimeoutExpired:
+            log(f"gpu-screen-recorder -o {path} did not exit within {TAKE_TIMEOUT_S}s")
+        try:
+            os.killpg(proc.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        errf.seek(0)
+        stderr = errf.read()
+    ok = proc.returncode == 0 and os.path.exists(path) and os.path.getsize(path) > 0
+    return ok, stderr
+
+
+def main():
+    try:
+        screen = resolve_screen()
+    except Exception as e:
+        log(f"could not resolve a screen to capture: {e}")
+        return 1
+
+    journal_dir = os.environ.get("JOURNAL_DIR")
+    if journal_dir:
+        target_dir = os.path.join(journal_dir, "attachments")
+    else:
+        target_dir = os.path.join(os.environ["MODULE_DATA_DIR"], "screenshots")
+    os.makedirs(target_dir, exist_ok=True)
+
+    stem = time.strftime("%Y%m%d-%H%M%S")
+    for ext in ("png", "jpg"):
+        path = os.path.join(target_dir, f"{stem}.{ext}")
+        ok, stderr = take(screen, path)
+        if ok:
+            print(path)
+            return 0
+        log(f"gpu-screen-recorder -o {path} failed: {stderr.strip()}")
+
+    return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

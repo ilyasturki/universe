@@ -1,0 +1,70 @@
+api = 1
+id = "capture"
+name = "Capture vidéo"
+kind = ["hooks"]
+version = "0.1.0"
+
+[requires]
+core = ">=0.1"
+bins = ["gpu-screen-recorder"]
+
+[hooks]
+post-launch = "bin/start"
+session-end = "bin/stop"
+screenshot  = "bin/shot"
+timeout_s   = 20
+
+[limits]
+cpu_weight  = 100
+memory_high = "4G"
+
+[[settings]]
+key = "enabled"
+type = "bool"
+default = true
+label = "Enregistrer la partie"
+scope = "game"
+
+[[settings]]
+key = "cursor"
+type = "bool"
+default = false
+label = "Curseur visible dans l'enregistrement"
+scope = "game"
+
+[[settings]]
+key = "codec"
+type = "enum"
+default = "av1_10bit"
+label = "Codec vidéo"
+scope = "global"
+choices = ["av1_10bit", "av1", "hevc", "h264"]
+
+[[settings]]
+key = "fps"
+type = "int"
+default = 60
+label = "Images par seconde"
+scope = "global"
+
+[[settings]]
+key = "audio"
+type = "enum"
+default = "output+input"
+label = "Pistes audio capturées"
+scope = "global"
+choices = ["output", "output+input", "none"]
+
+[[settings]]
+key = "min_duration_s"
+type = "int"
+default = 240
+label = "Durée minimale conservée (s)"
+scope = "global"
+
+[[settings]]
+key = "quality"
+type = "string"
+default = "qvbr"
+label = "Préréglage qualité"
+scope = "global"
