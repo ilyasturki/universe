@@ -172,14 +172,32 @@ async fn wait_job(client: &Client, job: &str, json: bool) -> anyhow::Result<bool
     let sources = client.sources().await?;
     let mut progress = sources.receive_progress().await?;
     let mut finished = sources.receive_job_finished().await?;
-    let jobs: Value = parse_json(&sources.jobs().await?);
-    if let Some(j) = jobs.as_array().and_then(|a| a.iter().find(|j| j["id"] == job)) {
-        if j["finished"].as_bool() == Some(true) {
-            return Ok(j["ok"].as_bool().unwrap_or(false));
-        }
+    let finished_in_table = || async {
+        let jobs: Value = parse_json(&sources.jobs().await?);
+        let j = jobs.as_array().and_then(|a| a.iter().find(|j| j["id"] == job)).cloned();
+        anyhow::Ok(j.filter(|j| j["finished"].as_bool() == Some(true)))
+    };
+    if let Some(j) = finished_in_table().await? {
+        return Ok(j["ok"].as_bool().unwrap_or(false));
     }
+    let mut poll = tokio::time::interval(std::time::Duration::from_secs(2));
+    poll.tick().await;
     loop {
         tokio::select! {
+            _ = poll.tick() => {
+                if let Some(j) = finished_in_table().await? {
+                    let ok = j["ok"].as_bool().unwrap_or(false);
+                    let message = j["message"].as_str().unwrap_or_default();
+                    if json {
+                        print_json(&serde_json::json!({"job": job, "ok": ok, "message": message}));
+                    } else if ok {
+                        println!("{} {}", "done".green(), message);
+                    } else {
+                        println!("{} {}", "failed".red(), message);
+                    }
+                    return Ok(ok);
+                }
+            }
             Some(p) = progress.next() => {
                 let a = p.args()?;
                 if a.job_id == job && !json {

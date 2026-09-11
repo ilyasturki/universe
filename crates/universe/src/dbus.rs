@@ -215,6 +215,8 @@ impl Settings1 {
 
 /// Serves every interface at the object path and relays core events as D-Bus signals until the process ends.
 pub async fn serve(core: Arc<Core>) -> zbus::Result<zbus::Connection> {
+    // Subscribed before the bus name is taken: a job finished during the startup login probe must still signal.
+    let mut rx = core.events.subscribe();
     let conn = zbus::connection::Builder::session()?
         .name(BUS_NAME)?
         .serve_at(OBJECT_PATH, Library1(core.clone()))?
@@ -228,8 +230,6 @@ pub async fn serve(core: Arc<Core>) -> zbus::Result<zbus::Connection> {
         .build()
         .await?;
     let _ = core.conn.set(conn.clone());
-    core.load_source_caches().await;
-    let mut rx = core.events.subscribe();
     let c2 = conn.clone();
     tokio::spawn(async move {
         loop {
@@ -243,6 +243,7 @@ pub async fn serve(core: Arc<Core>) -> zbus::Result<zbus::Connection> {
             }
         }
     });
+    core.load_source_caches().await;
     Ok(conn)
 }
 
