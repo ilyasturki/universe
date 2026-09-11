@@ -1,0 +1,43 @@
+[package]
+name = "universe"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Universe: a gamepad-first game launcher core (daemon, D-Bus API, CLI)"
+
+[[bin]]
+name = "universe"
+path = "src/main.rs"
+
+[[bin]]
+name = "universed"
+path = "src/daemon_main.rs"
+
+[dependencies]
+anyhow = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["full"] }
+zbus = { version = "5", default-features = false, features = ["tokio"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+toml = "0.8"
+toml_edit = "0.22"
+rusqlite = { version = "0.32", features = ["bundled"] }
+clap = { version = "4", features = ["derive", "env"] }
+chrono = { version = "0.4", features = ["serde"] }
+dirs = "5"
+unicode-normalization = "0.1"
+regex = "1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "blocking"] }
+semver = "1"
+serde_yaml = "0.9"
+notify = "6"
+comfy-table = "7"
+owo-colors = "4"
+shell-words = "1"
+urlencoding = "2"
+
+[dev-dependencies]
+tempfile = "3"
