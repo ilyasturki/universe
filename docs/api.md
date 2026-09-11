@@ -43,7 +43,7 @@ Version figée pour le MVP (api = 1). Tout client (interface, CLI, module daemon
 
 | Membre | Signature | Rôle |
 |---|---|---|
-| `List()` | `→ s` | JSON `[{id, name, available, logged_in, games_dir}]` |
+| `List()` | `→ s` | JSON `[{id, name, available, enabled, missing, logged_in, user, games_dir, library_cached}]` |
 | `LoginUrl(source)` | `s → s` | URL à ouvrir (l'interface l'affiche avec un QR) |
 | `Login(source, code)` | `ss → s` | job_id ; verbe `login <code>` |
 | `Library(source)` | `s → s` | JSON `[SourceGame]` (cache hors ligne, rafraîchi par `library`) |
@@ -203,6 +203,7 @@ Codes de retour : 0 ok ; autre = erreur journalisée, la partie continue (pre-la
 | Verbe | Argument | Événements |
 |---|---|---|
 | `login` | `[code]` | sans code : `{"event":"login_url","url":…}` ; avec : `{"event":"logged_in","user":…}` |
+| `status` | — | `{"event":"logged_in","user":…}` si la session est valide, sinon seulement `done` ; appelé au démarrage du démon et exposé dans `List` |
 | `library` | | `{"event":"game", …}` par titre possédé |
 | `search` | `<texte>` | `{"event":"game", …}` |
 | `info` | `<id>` | `{"event":"info","data":{…}}` |

@@ -23,9 +23,8 @@ while args and args[0].startswith("--"):
     args = args[2:]
 verb = args[0]
 if verb == "auth":
-    print(json.dumps({"access_token": "tok", "refresh_token": "r", "expires_in": 3600, "loginTime": 1}
-                     if "--code" not in args or args[args.index("--code") + 1] == "good"
-                     else {"error": True}))
+    ok = ("--code" not in args or args[args.index("--code") + 1] == "good") and os.environ.get("SHIM_MODE") != "noauth"
+    print(json.dumps({"access_token": "tok", "refresh_token": "r", "expires_in": 3600, "loginTime": 1} if ok else {"error": True}))
 elif verb == "info":
     print(json.dumps({"buildId": "B2", "folder_name": "Mini Metro", "size": {"en-US": {"disk_size": 1000}}}))
 elif verb in ("download", "update"):
@@ -163,6 +162,19 @@ def test_login_code(src, env, capsys, monkeypatch):
     assert call["args"] == ["--auth-config-path", str(env["tmp"] / "auth" / "auth.json"), "auth", "--code", "good"]
     assert call["config"] == str(env["data"] / "gogdl")
     assert (env["tmp"] / "auth" / "auth.json").read_text() == "{}"
+
+
+def test_status_logged_in(src, env, capsys, monkeypatch):
+    fake_fetch(monkeypatch, src, {src.USER_URL: {"username": "Yasso"}})
+    code, events, _ = run(src, capsys, "status")
+    assert code == 0
+    assert events == [{"event": "logged_in", "user": "Yasso"}, {"event": "done"}]
+
+
+def test_status_logged_out(src, env, capsys, monkeypatch):
+    monkeypatch.setenv("SHIM_MODE", "noauth")
+    code, events, _ = run(src, capsys, "status")
+    assert code == 0 and events == [{"event": "done"}]
 
 
 def test_login_bad_code(src, env, capsys, monkeypatch):

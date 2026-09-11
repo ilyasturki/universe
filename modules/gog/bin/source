@@ -390,6 +390,20 @@ def cmd_login(settings, args):
     emit("done")
 
 
+def cmd_status(settings, args):
+    try:
+        token = access_token(settings)
+    except SourceError:
+        emit("done")
+        return
+    try:
+        user = fetch(USER_URL, token).get("username") or ""
+    except Exception:
+        user = ""
+    emit("logged_in", user=user)
+    emit("done")
+
+
 def cmd_library(settings, args):
     try:
         products = fetch_library(settings)
@@ -498,7 +512,7 @@ def cmd_scan(settings, args):
     emit("done")
 
 
-VERBS = {"login": cmd_login, "library": cmd_library, "search": cmd_search, "info": cmd_info,
+VERBS = {"login": cmd_login, "status": cmd_status, "library": cmd_library, "search": cmd_search, "info": cmd_info,
          "install": cmd_install, "update": cmd_update, "scan": cmd_scan}
 
 

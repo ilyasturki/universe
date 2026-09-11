@@ -60,6 +60,7 @@ pub struct Core {
     pub current: Mutex<Option<Current>>,
     pub jobs: Mutex<BTreeMap<String, Job>>,
     pub source_libraries: Mutex<BTreeMap<String, Vec<serde_json::Map<String, serde_json::Value>>>>,
+    pub source_logins: Mutex<BTreeMap<String, String>>,
     pub events: broadcast::Sender<Event>,
     pub conn: tokio::sync::OnceCell<zbus::Connection>,
     job_seq: AtomicU64,
@@ -81,6 +82,7 @@ impl Core {
             current: Mutex::new(None),
             jobs: Mutex::new(BTreeMap::new()),
             source_libraries: Mutex::new(BTreeMap::new()),
+            source_logins: Mutex::new(BTreeMap::new()),
             events: tx,
             conn: tokio::sync::OnceCell::new(),
             job_seq: AtomicU64::new(1),
@@ -104,6 +106,24 @@ impl Core {
                 }
             }
         }
+        drop(caches);
+        let sources: Vec<Module> = modules.iter().filter(|m| m.is_source() && m.active()).cloned().collect();
+        drop(modules);
+        for m in sources {
+            self.refresh_login(&m).await;
+        }
+    }
+
+    async fn refresh_login(&self, m: &Module) {
+        let user = match self.run_verb(m, "status", &[], None).await {
+            Ok(ev) => ev.into_iter().find_map(|e| if let SourceEvent::LoggedIn { user } = e { Some(user) } else { None }),
+            Err(_) => None,
+        };
+        let mut logins = self.source_logins.lock().await;
+        match user {
+            Some(u) => logins.insert(m.id().to_string(), u),
+            None => logins.remove(m.id()),
+        };
     }
 
     // ----- library -----
@@ -695,6 +715,7 @@ impl Core {
         let cfg = self.config.read().await.clone();
         let modules = self.modules.read().await;
         let caches = self.source_libraries.lock().await;
+        let logins = self.source_logins.lock().await;
         let list: Vec<serde_json::Value> = modules
             .iter()
             .filter(|m| m.is_source())
@@ -704,6 +725,7 @@ impl Core {
                     "id": m.id(), "name": m.manifest.name, "available": m.available, "enabled": m.enabled,
                     "missing": m.missing, "games_dir": s.get("games_dir").cloned().unwrap_or(serde_json::Value::Null),
                     "library_cached": caches.get(m.id()).map(|v| v.len()).unwrap_or(0),
+                    "logged_in": logins.contains_key(m.id()), "user": logins.get(m.id()).cloned().unwrap_or_default(),
                 })
             })
             .collect();
@@ -754,6 +776,7 @@ impl Core {
             match core.run_verb(&m, "login", &[code], Some(&j)).await {
                 Ok(ev) => {
                     let user = ev.iter().find_map(|e| if let SourceEvent::LoggedIn { user } = e { Some(user.clone()) } else { None }).unwrap_or_default();
+                    core.source_logins.lock().await.insert(m.id().to_string(), user.clone());
                     core.job_finish(&j, true, &user).await
                 }
                 Err(e) => core.job_finish(&j, false, &e.to_string()).await,
