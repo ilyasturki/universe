@@ -92,4 +92,4 @@ just test / just check     # cargo + pytest / flake packages + sandboxed checks
 just clean                 # trash .dev/
 ```
 
-`docs/plan-v3.html` is the original design (v3, with a daemon); `docs/api.md` the core API, process model and module contract (v4, without); `docs/progress.md` the state of the work.
+`docs/api.md` is the core API, the process model and the module contract; `docs/frontends.md` is what a frontend binds to.

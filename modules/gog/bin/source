@@ -120,6 +120,7 @@ def gogdl_command(settings, *args):
 
 def gogdl_env():
     env = dict(os.environ)
+    # gogdl's manifest cache is keyed by id alone, ignores --path, and a stale one truncates real files.
     env["GOGDL_CONFIG_PATH"] = str(data_dir() / "gogdl")
     return env
 

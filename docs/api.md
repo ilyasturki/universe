@@ -1,219 +1,299 @@
-# Universe — API du cœur et protocole des modules
+# Universe — core API and module protocol
 
-Version 4 (api = 1). Le cœur est une bibliothèque Rust (`crates/universe`, `universe::core::Core`) ; il n'y a **aucun processus Universe en arrière-plan**. Trois façons d'y accéder, toutes en-process :
+`api = 1`. The core is a Rust library (`crates/universe`, `universe::core::Core`). **No Universe
+process runs in the background.** There are three ways into it, all in-process:
 
-- la crate Rust elle-même ;
-- le module Python `universe_core` (`crates/universe-py`, PyO3) : `Core()` ouvre le cœur, chaque méthode rend la main pendant l'appel (`detach`) ; c'est ce que l'hôte PySide6 lie ;
-- la CLI `universe` (`--json` partout) : la même bibliothèque, un processus par commande ; c'est ce que les hooks et systemd appellent.
+- **the crate** — `Core::open().await`, every method `async`;
+- **`universe_core`** — the Python module built from `crates/universe-py` (PyO3). `Core()` opens the
+  core; every method releases the GIL for the duration of the call. This is what the PySide6 host
+  binds;
+- **the `universe` CLI** — the same library, one process per command, `--json` on every command.
+  This is what hooks and systemd call.
 
-Les données lourdes sont des chaînes JSON ; les interfaces ci-dessous (`Library1`, `Session1`, …) nomment les groupes de méthodes : `Library1.List` = `Core::list_json` = `universe_core.Core.list_json()` = `universe ls --json`.
+Heavy payloads are JSON strings. Each table below gives all three spellings of the same operation;
+a dash means the surface doesn't expose it.
 
-## Modèle de processus
+## Process model
 
-- Une partie est une **unité systemd transitoire** `universe-game-<id>-<session>.service` (`ExitType=cgroup` : elle vit tant qu'un processus du jeu vit). Son `ExecStopPost=universe session-end <id> <session>` s'exécute quand le cgroup se vide, quoi qu'il soit arrivé au lanceur : ligne `sessions.jsonl`, extension curseur restaurée, `post_command`, hooks `session-end`, puis hooks `post-process`.
-- `state/current-session.json` (O_EXCL) est le marqueur de la partie en cours ; `Session1.Current` = marqueur dont l'unité est encore active. À chaque ouverture, le cœur **réconcilie** : marqueur sans unité active → `session-end` depuis les horodatages de `journalctl`.
-- Les hooks asynchrones (`post-launch`, `post-process`) sont des unités transitoires. Un hook `post-launch` qui lance un processus devant durer toute la partie (l'enregistreur) le met dans sa propre unité avec `BindsTo=$SESSION_UNIT After=$SESSION_UNIT` : il s'arrête avec le jeu même si rien d'autre ne tourne.
-- Les travaux longs (`install`, `update`, `scan`, `Media1.Refresh`) s'exécutent dans le processus appelant, avec un rappel de progression ; fermer l'interface les interrompt.
-- Erreurs : `Kind ∈ NotFound, Ambiguous, Busy, Invalid, Unavailable, Io` ; `universe_core.UniverseError(kind, message)`, `universe: <kind>: <message>` sur stderr de la CLI (code 1).
-- Identifiants : `id` = slug (`sanitizeGameName(title)`), nom du dossier `games/<id>/`. `session_id` = `AAAAMMJJ-HHMMSS`. `job_id` = `job-<n>` (attribué par l'hôte).
+- A play session is a **transient systemd unit**, `universe-game-<id>-<session>.service`, with
+  `ExitType=cgroup` — it lives as long as any process of the game lives. Its
+  `ExecStopPost=universe session-end <id> <session>` runs when the cgroup empties, whatever became
+  of the launcher: it appends the `sessions.jsonl` line, restores the cursor extension, runs
+  `post_command`, the `session-end` hooks, then the `post-process` hooks.
+- `state/current-session.json` (written `O_EXCL`) is the marker for the running session; the current
+  session is the marker whose unit is still active. On every open the core **reconciles**: a marker
+  with no live unit is closed from `journalctl` timestamps.
+- Asynchronous hooks (`post-launch`, `post-process`) run as transient units. A `post-launch` hook
+  that starts a process meant to last the whole session (the recorder) must put it in its own unit
+  with `BindsTo=$SESSION_UNIT After=$SESSION_UNIT`, so it stops with the game even if nothing else
+  is watching.
+- Long jobs (`install`, `update`, `scan`, media refresh) run **in the calling process** with a
+  progress callback. Closing the frontend interrupts them.
+- Errors: `Kind ∈ NotFound, Ambiguous, Busy, Invalid, Unavailable, Io`. Python raises
+  `universe_core.UniverseError(kind, message)`; the CLI prints `universe: <kind>: <message>` on
+  stderr and exits 1.
+- Identifiers: `id` is a slug derived from the title and names the `games/<id>/` directory.
+  `session_id` is `YYYYMMDD-HHMMSS`.
 
-## Library1 — `io.github.ilyasturki.Universe.Library1`
+## Library
 
-| Membre | Signature | Rôle |
-|---|---|---|
-| `List()` | `→ s` | JSON `[Game]` ; jeux non cachés d'abord, dernière partie en premier |
-| `Get(id)` | `s → s` | JSON `Game` résolu (défauts globaux fusionnés, stats de sessions, médias, modules actifs) |
-| `Resolve(query)` | `s → as` | ids candidats : exact › mot entier › sous-chaîne › chemin. Vide = inconnu, >1 = ambigu |
-| `Set(id, key, value)` | `sss → ()` | écrit une clé du `game.toml`. `key` pointée : `launch.proton`, `launch.env.FOO`, `desktop.hide_cursor`, `hidden`, `favorite`, `tags`, `sort_title`, `metadata.sgdb_id`, `capture.cursor` (raccourci de `modules.capture.cursor`, validé contre le schéma du module). `value` : chaîne ; booléens `true/false`, listes séparées par des virgules, `""` supprime la clé |
-| `Remove(id, purge)` | `sb → ()` | corbeille (`trash`) du préfixe si `purge`, parcage des enregistrements et du journal dans `.archive/`, `game.toml` marqué `removed_at` |
-| `Rescan()` | `→ ()` | relit `games/*/game.toml`, reconstruit l'index, déclenche `scan` des sources |
-| `ImportLutris(apply)` | `b → s` | JSON rapport : jeux importés, diff d'environnement par jeu (`{id, lutris_env, universe_env, added, removed, changed}`), heures importées. `apply=false` = simulation |
-| **changement** `LibraryChanged(ids)` | `as` | l'hôte le déduit d'une veille (`inotify`) sur `games/` et `games/<id>/{,journal,media}` : ce que la CLI, `session-end` et les hooks écrivent apparaît sans autre canal |
+| Rust | Python | CLI | Role |
+|---|---|---|---|
+| `list_json()` | `list_json()` | `universe ls [--all]` | JSON `[Game]`; unhidden first, last played first. `--json` always prints every game — `--all` only stops the table from hiding the hidden ones |
+| `get(id)` | `get_json(id)` | `universe info <name> --json` | resolved `Game`: global defaults merged in, session stats, media, active modules |
+| `resolve(query)` | `resolve(query)` | — | candidate ids: exact › whole word › substring › path. Empty means unknown, more than one means ambiguous |
+| `set(id, key, value)` | `set(id, key, value)` | `universe set <name> k=v …` | writes one `game.toml` key |
+| `remove(id, purge)` | `remove(id, purge)` | `universe rm <name> [--purge]` | parks recordings and journal under `.archive/`, marks `removed_at`; `purge` also trashes the prefix |
+| `reload_all()` | `reload()` | `universe rescan` | rereads config and `games/*/game.toml`, rebuilds the index, runs each source's `scan` |
+| `reload_game(id)` | `reload_game(id)` | — | rereads one game |
+| `import_lutris(apply)` | `import_lutris(apply)` | `universe migrate [--apply]` | JSON report: imported games, per-game env diff (`{id, lutris_env, universe_env, added, removed, changed}`), imported hours. Without `apply` it only reports |
 
-`Game` (JSON) = contenu du `game.toml` + `{"stats": {"hours": f, "play_count": n, "last_played": "RFC3339"|null}, "media": {"box_front": path|null, "tile", "background", "logo", "screenshots": [path]}, "modules": {"capture": {enabled, cursor}, "journal": {...}}, "removed": b}`.
+`set` takes dotted keys: `launch.proton`, `launch.env.FOO`, `desktop.hide_cursor`, `hidden`,
+`favorite`, `tags`, `sort_title`, `metadata.sgdb_id`, and `capture.cursor` as a validated shorthand
+for `modules.capture.cursor`. Values are strings: `true`/`false` for booleans, comma-separated for
+lists, `""` deletes the key.
 
-## Session1 — `io.github.ilyasturki.Universe.Session1`
+`Game` (JSON) is the contents of `game.toml` plus:
 
-| Membre | Signature | Rôle |
-|---|---|---|
-| `Launch(id, screen)` | `ss → s` | hooks pre-launch, marqueur, `systemd-run` (service, `ExitType=cgroup`, `ExecStopPost`), hooks post-launch ; rend la main aussitôt. `screen` = nom du connecteur (`DP-1`) ou `""` (profil). Retourne `session_id`. Erreur `Busy` si une partie tourne |
-| `Stop(session_id)` | `s → ()` | `systemctl --user stop` de l'unité |
-| `Screenshot()` | `→ s` | hook `screenshot` du module qui le déclare ; chemin du PNG |
-| `Sessions(id)` | `s → s` | JSON `[Session]` du `sessions.jsonl`, dernière en premier |
-| `SessionEnd(id, session_id)` | CLI `universe session-end <id> <session>` | clôt la partie (idempotent) ; lancé par systemd, ou par la réconciliation |
-| **propriété** `Current` | `s` | JSON `{session_id, id, title, unit, screen, started_at}` ou `""` |
-| **changement** `SessionStarted` / `SessionEnded(session_id, id, duration_s)` | | l'hôte les déduit : `Launch` réussi, puis `Current` vide (sondé toutes les 2 s, et à tout changement de `state/`) |
+```json
+{"stats": {"hours": 12.5, "play_count": 7, "last_played": "RFC3339 or null"},
+ "media": {"box_front": "path|null", "tile": null, "background": null, "logo": null,
+           "screenshots": ["path"]},
+ "modules": {"capture": {"enabled": true, "cursor": false}},
+ "removed": false}
+```
 
-`Session` (JSONL, une ligne) : `{"session":"20260910-213045","game":"the-technomancer","started_at":"RFC3339","ended_at":"RFC3339","duration_s":1234,"source":"universe"|"import-recording"|"import-lutris","unit":"universe-game-<id>-<session>.service","screen":"DP-1","exit":0,"recording":"path"|null}`. `exit` = code du processus principal, `-1` si tué par un signal (`Stop`).
+There is no change notification: the files are the truth, so a frontend watches `games/`,
+`games/<id>/{,journal,media}` and `state/` and rereads. Everything the CLI, `session-end` and the
+hooks write shows up that way, with no other channel.
 
-## Sources1 — `io.github.ilyasturki.Universe.Sources1`
+## Sessions
 
-| Membre | Signature | Rôle |
-|---|---|---|
-| `List()` | `→ s` | JSON `[{id, name, available, enabled, missing, logged_in, user, games_dir, library_cached}]` |
-| `LoginUrl(source)` | `s → s` | URL à ouvrir (l'interface l'affiche avec un QR) |
-| `Login(source, code)` | `ss → s` | verbe `login <code>` ; retourne l'utilisateur (l'hôte en fait un job) |
-| `Library(source)` | `s → s` | JSON `[SourceGame]` (cache hors ligne, rafraîchi par `library`) |
-| `Search(source, query)` | `ss → s` | JSON `[SourceGame]` |
-| `Info(source, game_id)` | `ss → s` | JSON libre du verbe `info` |
-| `Install(source, game_id, progress)` | `ss → s` | id du jeu installé ; `progress(done, total, message)` rappelé en cours de route |
-| `Update(source, game_id, progress)` | `ss → u` | nombre mis à jour ; `game_id=""` = tout ce qui est en attente |
-| `Updates()` | `→ s` | JSON `[{id, title, local_build, remote_build, version, date}]` |
-| `Scan(source, progress)` | `s → u` | jeux entrés dans la bibliothèque ; `source=""` = toutes |
-| `Jobs()` | `→ s` | JSON `[Job]` — tenu par l'hôte, qui exécute ces appels sur un fil et relaie `progress` / `jobFinished` à QML |
+| Rust | Python | CLI | Role |
+|---|---|---|---|
+| `launch(id, screen)` | `launch(id, screen)` | `universe play <name> [--screen DP-1] [--no-wait]` | pre-launch hooks, marker, `systemd-run`, post-launch hooks; returns the `session_id` at once. `screen` is a DRM connector name or `""` for the profile default. `Busy` if a session is already running |
+| `stop(session_id)` | `stop(session_id)` | `universe stop` | `systemctl --user stop` on the unit |
+| `screenshot()` | `screenshot()` | `universe screenshot` | runs the `screenshot` hook of whichever module declares one; returns the PNG path |
+| `current()` / `current_json()` | `current_json()` | `universe status` | `{session_id, id, title, unit, screen, started_at}`, or `""`. The CLI wraps it: `status --json` prints `{"current": … or null, "recent": [the last 10 sessions]}` |
+| `sessions_json(id)` | `sessions_json(id)` | `universe sessions <name>` | JSON `[Session]` from `sessions.jsonl`, last first |
+| `session_end(id, session_id, exit, ended)` | — | `universe session-end <id> <session>` | closes the session, idempotent. Run by systemd's `ExecStopPost`, or by reconciliation |
 
-`SourceGame` = `{"id": "1434554947", "title": "Mini Metro", "owned": true, "installed": true, "dir": path|null, "build": s|null, "remote_build": s|null}`.
+One `sessions.jsonl` line:
 
-## Media1 — `io.github.ilyasturki.Universe.Media1`
+```json
+{"session":"20260910-213045","game":"the-technomancer","started_at":"RFC3339",
+ "ended_at":"RFC3339","duration_s":1234,"source":"universe",
+ "unit":"universe-game-the-technomancer-20260910-213045.service","screen":"DP-1",
+ "exit":0,"recording":"path or null"}
+```
 
-| Membre | Signature | Rôle |
-|---|---|---|
-| `Refresh(id, force, progress)` | `sb → (u, u)` | (changés, total) ; SteamGridDB, RAWG, captures Steam, overrides ; `id=""` = tous |
-| `SetSlot(id, slot, path)` | `sss → ()` | copie dans `media/<slot>.<ext>` ; `slot ∈ box_front, tile, background, logo, screenshot` |
-| `Unset(id, slot)` | `ss → ()` | |
-| `Candidates(id, slot)` | `ss → s` | JSON `[{provider, url|path, score}]` (cache `.sync.json`) |
-| `Pin(id, provider, provider_id)` | `sss → ()` | `provider ∈ sgdb, rawg, steam` → `metadata.<provider>_id` |
+`source ∈ universe, import-recording, import-lutris`. `exit` is the main process's exit code, `-1`
+when it was killed by a signal (a `stop`).
 
-## Recording1 — `io.github.ilyasturki.Universe.Recording1`
+## Sources
 
-| Membre | Signature | Rôle |
-|---|---|---|
-| `File(session_id, path)` | CLI `universe recording-file <session> <path>` | classe le mkv : `<recordings_root>/<id>/<session>.mkv` (déplacement même FS, sinon copie), écrit `recording` dans la session, imprime le chemin final. Appelé par le hook `session-end` du module capture, donc avant les hooks post-process |
-| `List(id)` | `s → s` | JSON `[{session, path, size, duration_s, created_at}]` |
+| Rust | Python | CLI | Role |
+|---|---|---|---|
+| `sources_json()` | `sources_json()` | `universe sources` | `[{id, name, available, enabled, missing, logged_in, user, games_dir, library_cached}]` |
+| `source_login_url(source)` | `login_url(source)` | `universe login <source>` | URL to open |
+| `source_login(source, code)` | `login(source, code)` | `universe login <source> <code>` | returns the user name |
+| `source_library(source, refresh)` | `library_json(source, refresh)` | `universe library [source] [--refresh]` | `[SourceGame]`, served from cache unless `refresh` |
+| `source_search(source, query)` | `search_json(source, query)` | `universe search <query> [--source]` | `[SourceGame]` |
+| `source_info(source, game_id)` | `info_json(source, game_id)` | — | the source's raw `info` payload |
+| `source_install(source, game_id, progress)` | `install(source, game_id, progress)` | `universe install <id> [--source]` | id of the installed game |
+| `source_update(source, game_id, progress)` | `update(source, game_id, progress)` | `universe update [name] [-y]` | how many were updated; `game_id=""` updates everything pending |
+| `source_updates()` | `updates_json()` | `universe update` | `[{id, title, local_build, remote_build, version, date}]` |
+| `source_scan(source, progress)` | `scan(source, progress)` | `universe scan [source]` | how many games entered the library; `source=""` scans all |
 
-## Journal1 — `io.github.ilyasturki.Universe.Journal1`
+`progress` is called `(done, total, message)` as the job runs.
 
-| Membre | Signature | Rôle |
-|---|---|---|
-| `AddEntry(session_id, json)` | CLI `universe journal-add <session> <json>` | valide le schéma (§7), écrit `journal/<session>.json`. Appelé par le hook `post-process` du module journal |
-| `List(id)` | `s → s` | JSON `[Entry]`, dernière en premier |
-| `Render(id)` | `s → s` | rend la note Markdown (`<journal_root>/<id>/<Titre>.md`), retourne le chemin |
+`SourceGame` = `{"id": "1434554947", "title": "Mini Metro", "owned": true, "installed": true,
+"dir": "path|null", "build": "…|null", "remote_build": "…|null"}`.
 
-`Entry` = `{"session","game","written_at","lang","title","provider","paragraphs":[s],"next_up":s,"images":[relpath]}`.
+## Media
 
-## Modules1 — `io.github.ilyasturki.Universe.Modules1`
+| Rust | Python | CLI | Role |
+|---|---|---|---|
+| `media_refresh(id, force, progress)` | `media_refresh(id, force, progress)` | `universe media <name> refresh` | `(changed, total)` from SteamGridDB, RAWG, Steam screenshots and the overrides directory; `id=""` does every game |
+| `media_set_slot(id, slot, path)` | `media_set_slot(…)` | `universe media <name> set <slot> <path>` | copies into `media/<slot>.<ext>` |
+| `media_unset(id, slot)` | `media_unset(id, slot)` | `universe media <name> unset <slot>` | |
+| `media_candidates(id, slot)` | `media_candidates_json(…)` | `universe media <name> candidates <slot>` | `[{provider, url or path, score}]`, cached in `.sync.json` |
+| `media_pin(id, provider, provider_id)` | `media_pin(…)` | `universe media <name> pin <provider> <id>` | `provider ∈ sgdb, rawg, steam` → `metadata.<provider>_id` |
 
-| Membre | Signature | Rôle |
-|---|---|---|
-| `List()` | `→ s` | JSON `[{id, name, kind: [..], version, dir, enabled, available, missing: [bin], hooks: {..}, verbs: [..], settings: [Setting], frontend_qml: path|null}]` |
-| `Enable(id, enabled)` | `sb → ()` | écrit `[modules] enabled` de `config.toml` |
-| `GetSettings(module, game_id)` | `ss → s` | JSON fusionné (global puis jeu) ; `game_id=""` = global seul |
-| `SetSetting(module, game_id, key, value)` | `ssss → ()` | validé contre `[[settings]]` ; `game_id=""` écrit `config.toml [modules.<id>]`, sinon `game.toml [modules.<id>]` |
-| `Doctor()` | `→ s` | JSON `[{check, ok, detail, module}]` : binaires requis, gsr-kms-server, Proton, extension curseur, jetons |
+`slot ∈ box_front, tile, background, logo, screenshot`.
 
-`Setting` = `{"key","type": "bool"|"string"|"int"|"enum"|"path","default","label","scope": "global"|"game","choices": [..]}`.
+## Recordings
 
-## Settings1 — `io.github.ilyasturki.Universe.Settings1`
+| Rust | Python | CLI | Role |
+|---|---|---|---|
+| `file_recording(session_id, path)` | `file_recording(session_id, path)` | `universe recording-file <session> <path>` | files the mkv as `<recordings_root>/<id>/<session>.mkv` (rename within a filesystem, copy across), writes `recording` into the session line, prints the final path |
+| `recordings_json(id)` | `recordings_json(id)` | `universe recordings <name>` | `[{session, path, size, duration_s, created_at}]` |
 
-| Membre | Signature | Rôle |
-|---|---|---|
-| `Get()` | `→ s` | JSON de `config.toml` résolu (chemins absolus, défauts appliqués) |
-| `Set(key, value)` | `ss → ()` | clé pointée de `config.toml` (`launch.proton`, `paths.recordings_root`, `desktop.profile`) |
-| `Version` | `s` | version du cœur (`universe_core.version()`, `universe --version`) |
+`recording-file` is called by the capture module's `session-end` hook, so it lands before any
+`post-process` hook runs.
 
-## config.toml (défauts)
+## Journal
+
+| Rust | Python | CLI | Role |
+|---|---|---|---|
+| `add_entry(session_id, json)` | `add_entry(session_id, json)` | `universe journal-add <session> <entry>` | validates the schema, writes `journal/<session>.json` |
+| `journal_json(id)` | `journal_json(id)` | `universe journal <name>` | `[Entry]`, last first |
+| `render_journal(id)` | `render_journal(id)` | `universe journal <name> --render` | renders `<journal_root>/<id>/<Title>.md`, returns the path |
+
+`Entry` = `{"session", "game", "written_at", "lang", "title", "provider", "paragraphs": [],
+"next_up": "", "images": ["relative path"]}`. `journal-add` is called by the journal module's
+`post-process` hook.
+
+## Modules
+
+| Rust | Python | CLI | Role |
+|---|---|---|---|
+| `modules_json()` | `modules_json()` | `universe module ls` | see below |
+| `enable_module(id, enabled)` | `enable_module(id, enabled)` | `universe module enable\|disable <id>` | writes `[modules] enabled` in `config.toml` |
+| `module_settings_json(module, game_id)` | `module_settings_json(…)` | `universe module settings <id> [game]` | global settings merged with the game's; `game_id=""` is global only |
+| `set_module_setting(module, game_id, key, value)` | `set_module_setting(…)` | `universe module set <id> k=v [--game g]` | validated against `[[settings]]`. `game_id=""` writes `config.toml [modules.<id>]`, otherwise `game.toml [modules.<id>]` |
+| `doctor_json()` | `doctor_json()` | `universe doctor` | `[{check, ok, detail, module}]`: required binaries, `gsr-kms-server`, Proton, cursor extension, tokens |
+
+A module entry is `{id, name, kind: [], version, dir, enabled, available, missing: [bin],
+hooks: {}, verbs: [], settings: [Setting], frontend_qml: "path or null"}`, and
+`Setting` = `{"key", "type": "bool|string|int|enum|path", "default", "label",
+"scope": "global|game", "choices": []}`.
+
+## Settings
+
+| Rust | Python | CLI | Role |
+|---|---|---|---|
+| `settings_json()` | `settings_json()` | `universe config get` | resolved `config.toml`: absolute paths, defaults applied |
+| `set_setting(key, value)` | `set_setting(key, value)` | `universe config set <key> <value>` | dotted `config.toml` key (`launch.proton`, `paths.recordings_root`, `desktop.profile`) |
+| — | `version()`, `data_home()`, `state_home()` | `universe --version` | |
+
+## config.toml
+
+Defaults as the core ships them:
 
 ```toml
 schema = 1
+
 [paths]
-games_root = "/mnt/games/PC"         # où les sources installent
+games_root = "/mnt/games/PC"         # where sources install
 prefixes_root = "/mnt/games/prefixes"
 recordings_root = "/mnt/recordings/games"
 journal_root = "~/Documents/notes/games/journal"
 overrides = "~/Dotfiles/home/config/pegasus-art"
+
 [launch]
-proton = "proton-ge"                 # nom sous proton/ ou chemin
+proton = "proton-ge"                 # a name under [proton], or a path
 esync = true
 fsync = true
 mangohud = true
+
 [desktop]
 profile = "auto"                     # auto | gnome | none
 hide_cursor = true
-cursor_extension = "hide-cursor@elcste.com"  # activée le temps de la partie, remise dans son état d'avant après
-[proton]                             # nom → chemin
+cursor_extension = "hide-cursor@elcste.com"   # enabled for the session, restored to its prior state after
+
+[proton]                             # name → path
 proton-ge = "~/.local/share/lutris/runners/wine/proton-ge"
+
 [modules]
 enabled = ["gog", "capture", "journal", "tracker-md"]
+
 [modules.capture]
 codec = "av1_10bit"
+
 [keys]
-sgdb = ""                            # ou fichier keys/sgdb
+sgdb = ""                            # or sgdb_file, pointing at a file holding the key
 rawg = ""
 ```
 
-## Protocole des modules
+## Module protocol
 
-Un module est un dossier `modules/<id>/` (système : `$out/share/universe/modules/<id>` ; utilisateur : `$XDG_CONFIG_HOME/universe/modules/<id>`, qui écrase le système sur le même id) contenant `module.toml` et ses exécutables. Le cœur n'en charge jamais le code.
+A module is a directory `modules/<id>/` — system-wide under `$out/share/universe/modules/<id>`,
+per-user under `$XDG_CONFIG_HOME/universe/modules/<id>`, where a user module overrides a system one
+with the same id. It holds a `module.toml` and its executables. **The core never loads module
+code**; it only runs the executables.
 
 ```toml
 api = 1
 id = "capture"
-name = "Capture vidéo"
-kind = ["hooks"]                  # hooks | source ; cumulables
+name = "Video capture"
+kind = ["hooks"]                  # hooks | source; a module may be both
 version = "0.1.0"
 
 [requires]
 core = ">=0.1"
-bins = ["gpu-screen-recorder"]    # un binaire absent = module « indisponible », jamais lancé
+bins = ["gpu-screen-recorder"]    # a missing binary makes the module "unavailable" and it is never run
 
-[hooks]                           # chemins relatifs au dossier du module
-pre-launch   = "bin/pre"          # bloquant, avant l'unité du jeu ; peut écrire UNIVERSE_ENV_FILE
-post-launch  = "bin/start"        # asynchrone (unité transitoire) ; ce qui doit durer la partie : sa propre unité BindsTo=$SESSION_UNIT
-session-end  = "bin/stop"         # bloquant court, dans l'ExecStopPost de l'unité du jeu ; classe l'enregistrement
-post-process = "bin/process"      # asynchrone (unité transitoire), après les hooks session-end
-screenshot   = "bin/shot"         # à la demande : Session1.Screenshot()
-timeout_s    = 20                 # pour les hooks bloquants ; la somme borne TimeoutStopSec de l'unité du jeu
+[hooks]                           # paths relative to the module directory
+pre-launch   = "bin/pre"          # blocking, before the game's unit; may write UNIVERSE_ENV_FILE
+post-launch  = "bin/start"        # async (transient unit); anything that must last the session goes in its own unit with BindsTo=$SESSION_UNIT
+session-end  = "bin/stop"         # short and blocking, inside the game unit's ExecStopPost; this is where a recording is filed
+post-process = "bin/process"      # async (transient unit), after the session-end hooks
+screenshot   = "bin/shot"         # on demand
+timeout_s    = 20                 # for blocking hooks; the sum bounds the game unit's TimeoutStopSec
 
-[limits]                          # unités transitoires des hooks asynchrones
-cpu_weight   = 100                # défaut 20
-memory_high  = "4G"               # défaut 2G
+[limits]                          # applied to the transient units of async hooks
+cpu_weight   = 100                # default 20
+memory_high  = "4G"               # default 2G
 
-[source]                          # kind source
-exe = "bin/source"                # lancé : bin/source <verbe> [args]
+[source]                          # kind = source
+exe = "bin/source"                # run as: bin/source <verb> [args]
 
 [frontend]
-qml = "ui/Page.qml"               # facultatif : écran ajouté à l'interface
+qml = "ui/Page.qml"               # optional: a screen added to the frontend
 
 [[settings]]
-key = "enabled"                   # réservé : toujours présent, scope game
+key = "enabled"                   # reserved: always present, game scope
 type = "bool"
 default = true
-label = "Enregistrer la partie"
-scope = "game"                    # global (config.toml [modules.<id>]) | game (game.toml [modules.<id>])
+label = "Record the session"
+scope = "game"                    # global → config.toml [modules.<id>]; game → game.toml [modules.<id>]
 ```
 
-### Environnement des hooks
+### Hook environment
 
-| Variable | Valeur | Hooks |
+| Variable | Value | Hooks |
 |---|---|---|
-| `GAME_ID`, `GAME_SLUG`, `GAME_TITLE`, `GAME_DIR`, `GAME_EXE`, `GAME_TOML` | identité et chemins (TOML en lecture seule) | tous |
-| `SESSION_ID`, `SESSION_UNIT`, `SESSION_SCREEN`, `SESSION_STARTED_AT`, `SESSION_ENDED_AT`, `SESSION_DURATION_S` | la partie ; `SESSION_SCREEN` = connecteur DRM | selon le hook |
-| `RECORDING_PATH`, `JOURNAL_DIR` | mkv classé (vide si aucun), `games/<id>/journal` | post-process, tous |
-| `MODULE_SETTINGS_JSON` | réglages globaux fusionnés avec ceux du jeu | tous |
-| `UNIVERSE_ENV_FILE` | lignes `CLÉ=VALEUR` ajoutées à l'env du jeu, avant `launch.env` | pre-launch |
-| `MODULE_DIR`, `MODULE_DATA_DIR` | dossier du module, `$XDG_DATA_HOME/universe/modules/<id>` | tous |
-| `UNIVERSE_BIN`, `UNIVERSE_{DATA,CONFIG,STATE,CACHE}_HOME`, `UNIVERSE_MODULES_PATH`, `PATH` | la CLI à rappeler (`recording-file`, `journal-add`) et l'environnement pour qu'elle ouvre le même cœur | tous |
-| `UNIVERSE_GAME_JSON` | `Library1.Get(id)` sérialisé | tous |
+| `GAME_ID`, `GAME_SLUG`, `GAME_TITLE`, `GAME_DIR`, `GAME_EXE`, `GAME_TOML` | identity and paths (the TOML is read-only) | all |
+| `SESSION_ID`, `SESSION_UNIT`, `SESSION_SCREEN`, `SESSION_STARTED_AT`, `SESSION_ENDED_AT`, `SESSION_DURATION_S` | the session; `SESSION_SCREEN` is a DRM connector | as applicable |
+| `RECORDING_PATH` | the filed mkv, empty if there is none | `post-process` |
+| `JOURNAL_DIR` | `games/<id>/journal` | all |
+| `MODULE_SETTINGS_JSON` | global settings merged with the game's | all |
+| `UNIVERSE_ENV_FILE` | write `KEY=VALUE` lines here to add them to the game's environment, ahead of `launch.env` | `pre-launch` |
+| `MODULE_DIR`, `MODULE_DATA_DIR` | the module's directory, `$XDG_DATA_HOME/universe/modules/<id>` | all |
+| `UNIVERSE_BIN`, `UNIVERSE_{DATA,CONFIG,STATE,CACHE}_HOME`, `UNIVERSE_MODULES_PATH`, `PATH` | the CLI to call back (`recording-file`, `journal-add`) and the environment that makes it open the same core | all |
+| `UNIVERSE_GAME_JSON` | the resolved `Game`, serialized | all |
 
-Codes de retour : 0 ok ; autre = erreur journalisée, la partie continue (pre-launch ≠ 0 annule le lancement).
+Exit codes: 0 is success; anything else is logged and the session continues — except a `pre-launch`
+hook, where a non-zero exit cancels the launch.
 
-### Protocole des sources
+### Source protocol
 
-`bin/source <verbe> [args]`, env `MODULE_SETTINGS_JSON` + `MODULE_DATA_DIR` ; une ligne JSON par événement sur stdout, erreurs sur stderr, code de retour.
+`bin/source <verb> [args]`, with `MODULE_SETTINGS_JSON` and `MODULE_DATA_DIR` in the environment.
+One JSON object per line on stdout, human-readable logs on stderr, meaningful exit code.
+**Every verb ends with `{"event":"done"}`**, `login` included.
 
-| Verbe | Argument | Événements |
+| Verb | Argument | Events |
 |---|---|---|
-| `login` | `[code]` | sans code : `{"event":"login_url","url":…}` ; avec : `{"event":"logged_in","user":…}` |
-| `status` | — | `{"event":"logged_in","user":…}` si la session est valide, sinon seulement `done` ; sondé une fois par processus, au premier `List` |
-| `library` | | `{"event":"game", …}` par titre possédé |
-| `search` | `<texte>` | `{"event":"game", …}` |
+| `login` | `[code]` | without a code: `{"event":"login_url","url":…}`; with one: `{"event":"logged_in","user":…}` |
+| `status` | — | `{"event":"logged_in","user":…}` if the session is valid, otherwise just `done`. Probed once per process, on the first listing |
+| `library` | | `{"event":"game", …}` per owned title |
+| `search` | `<text>` | `{"event":"game", …}` |
 | `info` | `<id>` | `{"event":"info","data":{…}}` |
-| `install` | `<id>` | `progress` puis `game` (installé) |
-| `update` | `[id]` | sans id : `{"event":"update","id","title","local_build","remote_build","version","date"}` par mise à jour en attente ; avec id : `progress` puis `game` |
-| `scan` | | `{"event":"game", …}` par installation trouvée (`owned` croisé avec la bibliothèque en cache) |
+| `install` | `<id>` | `progress` lines, then the installed `game` |
+| `update` | `[id]` | without an id: `{"event":"update","id","title","local_build","remote_build","version","date"}` per pending update; with one: `progress` then `game` |
+| `scan` | | `{"event":"game", …}` per installation found, `owned` crossed with the cached library |
 
-`{"event":"game","id":"1434554947","title":"Mini Metro","dir":"/mnt/games/PC/Mini Metro","exe":"MiniMetro.exe","build":"5904…","owned":true,"installed":true,"release_year":2015,"dlcs":[]}`, `{"event":"progress","done":123,"total":456,"message":"…"}`, `{"event":"done"}`.
+```json
+{"event":"game","id":"1434554947","title":"Mini Metro","dir":"/mnt/games/PC/Mini Metro",
+ "exe":"MiniMetro.exe","build":"5904…","owned":true,"installed":true,
+ "release_year":2015,"dlcs":[]}
+{"event":"progress","done":123,"total":456,"message":"27.0%"}
+{"event":"done"}
+```
 
-## Contrat de l'interface (hôte PySide6)
+`exe` is relative to `dir`. `owned` may be `null` when the module cannot tell.
 
-L'hôte expose à QML un objet `api` : `api.keys.is{Accept,Cancel,Filters,Details,PageUp,PageDown,PrevPage,NextPage,Menu}(event)`, `api.allGames` (modèle, rôles `title, sortTitle, favorite, playTime, playCount, lastPlayed, releaseYear, developerList, publisherList, genreList, players, description, summary, assets{boxFront,tile,background,logo,screenshotList}, id, hidden, tags, source`), `api.collections`, `api.memory.{get,set,has}`, `game.launch()` → `Session1.Launch`, et `api.universe` (`CoreClient`, le cœur en-process via `universe_core` : `sessions(id)`, `recordings(id)`, `journal(id)`, `modules()`, `settings(id)`, `set(id,key,value)`, `sources`, `install`, `update`, `login`, `doctor`). Signaux Qt `sessionStarted/Ended`, `libraryChanged`, `recordingFiled`, `entryWritten`, `progress`, `jobFinished` : les deux premiers viennent de `Launch` et de la sonde de `Current`, les trois suivants de la veille de fichiers, les derniers des travaux exécutés sur un fil de l'hôte.
+---
+
+Writing a frontend on top of this API: [`frontends.md`](frontends.md).

@@ -189,6 +189,7 @@ impl Game {
         if !self.launch.working_dir.is_empty() {
             return paths::expand(&self.launch.working_dir);
         }
+        // Some titles exit cleanly in 1-2 s when launched from anywhere but the exe's own directory.
         self.exe_path().parent().map(|p| p.to_path_buf()).unwrap_or_default()
     }
 
