@@ -4,8 +4,6 @@ import os
 import subprocess
 import sys
 
-DEFAULT_BUS = "io.github.ilyasturki.Universe"
-DEFAULT_OBJECT = "/io/github/ilyasturki/Universe"
 # Overridden by GSR's -ffmpeg-video-opts last, right before avcodec_open2, so
 # these keys win over GSR's own choices even though -bm cbr is also set.
 QVBR_OPTS = "rc_mode=QVBR;global_quality=95;b=16000000;maxrate=32000000;bufsize=64000000"
@@ -68,8 +66,5 @@ def quality_opts(setting):
     return setting
 
 
-def bus_and_object():
-    return (
-        os.environ.get("UNIVERSE_BUS") or DEFAULT_BUS,
-        os.environ.get("UNIVERSE_OBJECT") or DEFAULT_OBJECT,
-    )
+def universe_bin():
+    return os.environ.get("UNIVERSE_BIN") or "universe"

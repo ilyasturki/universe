@@ -33,9 +33,12 @@ def main():
     output_path = os.path.join(pending_dir, f"{session_id}.mkv")
     unit = f"universe-capture-{session_id}"
 
+    game_unit = os.environ.get("SESSION_UNIT")
+    bind_to_game = ["-p", f"BindsTo={game_unit}", "-p", f"After={game_unit}"] if game_unit else []
     cmd = [
         "systemd-run", "--user", f"--unit={unit}", "--collect",
         "-p", "CPUWeight=100", "-p", "MemoryHigh=4G",
+        *bind_to_game,
         # bounds `systemctl stop`'s wait below bin/stop's own 15s stability budget;
         # default TimeoutStopSec (90s) would blow session-end's timeout_s=20 if gsr hangs.
         "-p", "TimeoutStopSec=10",

@@ -106,8 +106,8 @@ def test_dhash_and_review_normalization():
 def fakebin(tmp_path):
     bindir = tmp_path / "fakebin"
     bindir.mkdir()
-    write_shim(bindir / "busctl", f'''printf "%s\\n" "$@" > "{bindir}/busctl.args"
-if [ "${{FAKE_BUSCTL_EXIT:-0}}" != "0" ]; then echo "${{FAKE_BUSCTL_STDERR:-Failed to connect to bus: No such file or directory}}" >&2; exit "${{FAKE_BUSCTL_EXIT}}"; fi
+    write_shim(bindir / "universe", f'''printf "%s\\n" "$@" > "{bindir}/universe.args"
+if [ "${{FAKE_UNIVERSE_EXIT:-0}}" != "0" ]; then echo "${{FAKE_UNIVERSE_STDERR:-universe: io: No such file or directory}}" >&2; exit "${{FAKE_UNIVERSE_EXIT}}"; fi
 exit 0''')
     return bindir
 
@@ -118,6 +118,7 @@ def run_process(tmp_path, fakebin, settings, extra_env=None, recording=None):
     env = dict(os.environ)
     env.update({
         "PATH": f"{fakebin}:{env.get('PATH', '')}",
+        "UNIVERSE_BIN": str(fakebin / "universe"),
         "GAME_ID": "testgame", "GAME_SLUG": "testgame", "GAME_TITLE": "Test Game: Redux",
         "SESSION_ID": SID, "SESSION_STARTED_AT": "2026-09-11T12:00:00+02:00",
         "SESSION_ENDED_AT": "2026-09-11T12:03:20+02:00", "SESSION_DURATION_S": "200",
@@ -142,9 +143,9 @@ def test_stub_pipeline_writes_entry_note_and_memory(tmp_path, fakebin):
         "ended_at": "2026-09-11T12:03:20+02:00", "duration_s": 200, "source": "daemon", "recording": str(rec),
     }) + "\n")
 
-    res, journal_dir = run_process(tmp_path, fakebin, {}, {"FAKE_BUSCTL_EXIT": "1"}, recording=rec)
+    res, journal_dir = run_process(tmp_path, fakebin, {}, {"FAKE_UNIVERSE_EXIT": "1"}, recording=rec)
     assert res.returncode == 0, res.stderr
-    assert "bus unavailable" in res.stderr
+    assert "core unavailable" in res.stderr
 
     entry = json.loads((journal_dir / f"{SID}.json").read_text())
     assert validate_entry(entry) == []
@@ -161,9 +162,9 @@ def test_stub_pipeline_writes_entry_note_and_memory(tmp_path, fakebin):
     assert frames == [f"attachments/{SID}-{n}.png" for n in range(1, len(frames) + 1)]
     assert all((journal_dir / f).stat().st_size > 0 for f in entry["images"])
 
-    args = (fakebin / "busctl.args").read_text().splitlines()
-    assert args[:8] == ["--user", "call", "io.github.ilyasturki.Universe", "/io/github/ilyasturki/Universe", "io.github.ilyasturki.Universe.Journal1", "AddEntry", "ss", SID]
-    assert json.loads(args[8]) == entry
+    args = (fakebin / "universe.args").read_text().splitlines()
+    assert args[:2] == ["journal-add", SID]
+    assert json.loads(args[2]) == entry
 
     memory = json.loads((tmp_path / "data" / "memory" / "testgame.json").read_text())
     assert memory["profile"] == "arcade" and memory["language"] == "en" and "Stub Hero" in memory["entities"]["characters"]
@@ -178,7 +179,7 @@ def test_stub_pipeline_writes_entry_note_and_memory(tmp_path, fakebin):
     assert list((tmp_path / "data" / "work").iterdir()) == []
 
     # a second run finds the entry and does nothing
-    res2, _ = run_process(tmp_path, fakebin, {}, {"FAKE_BUSCTL_EXIT": "1"}, recording=rec)
+    res2, _ = run_process(tmp_path, fakebin, {}, {"FAKE_UNIVERSE_EXIT": "1"}, recording=rec)
     assert res2.returncode == 0 and "already exists" in res2.stderr
     assert note_path.read_text() == text
 
@@ -187,22 +188,22 @@ def test_stub_pipeline_hands_off_to_the_core(tmp_path, fakebin):
     res, journal_dir = run_process(tmp_path, fakebin, {"markdown_export": False})
     assert res.returncode == 0, res.stderr
     assert not (journal_dir / f"{SID}.json").exists()
-    assert "Journal1.AddEntry" in res.stderr and not (tmp_path / "root").exists()
-    entry = json.loads((fakebin / "busctl.args").read_text().splitlines()[8])
+    assert "journal-add" in res.stderr and not (tmp_path / "root").exists()
+    entry = json.loads((fakebin / "universe.args").read_text().splitlines()[2])
     assert entry["provider"] == "none" and entry["images"] == [] and entry["title"] == ""
     assert entry["paragraphs"] == ["This session’s recording holds no picture and no screenshot covers it, so there is nothing to summarize."]
 
 
 def test_core_rejection_writes_nothing(tmp_path, fakebin):
-    res, journal_dir = run_process(tmp_path, fakebin, {}, {"FAKE_BUSCTL_EXIT": "1", "FAKE_BUSCTL_STDERR": "Call failed: io.github.ilyasturki.Universe.Error.Invalid: bad"})
+    res, journal_dir = run_process(tmp_path, fakebin, {}, {"FAKE_UNIVERSE_EXIT": "1", "FAKE_UNIVERSE_STDERR": "universe: invalid: bad"})
     assert res.returncode == 1 and not (journal_dir / f"{SID}.json").exists()
     assert not (tmp_path / "data" / "memory").exists() and not (tmp_path / "root").exists()
 
 
 def test_disabled_and_forced_language(tmp_path, fakebin):
     res, journal_dir = run_process(tmp_path, fakebin, {"enabled": False})
-    assert res.returncode == 0 and not (fakebin / "busctl.args").exists()
-    res, journal_dir = run_process(tmp_path, fakebin, {"language": "fr"}, {"FAKE_BUSCTL_EXIT": "1"})
+    assert res.returncode == 0 and not (fakebin / "universe.args").exists()
+    res, journal_dir = run_process(tmp_path, fakebin, {"language": "fr"}, {"FAKE_UNIVERSE_EXIT": "1"})
     assert res.returncode == 0, res.stderr
     entry = json.loads((journal_dir / f"{SID}.json").read_text())
     assert entry["lang"] == "fr" and entry["paragraphs"][0].startswith("L'enregistrement de cette session est vide")

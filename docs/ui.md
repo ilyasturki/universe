@@ -1,3 +1,5 @@
+> v4 (2026-09-11) : le démon et le client QtDBus décrits ici ont disparu ; `api.universe` est `CoreClient` (cœur en-process via `universe_core`, veille de fichiers pour les changements). Ce rapport reste celui du portage (T4).
+
 # Interface — `ui/` (piste H)
 
 Hôte PySide6 (Qt 6.11) autour du thème Reprise (`~/Projects/pegasus-ui`), porté en Qt 6 et

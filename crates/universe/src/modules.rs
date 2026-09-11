@@ -80,7 +80,7 @@ pub struct Module {
     pub missing: Vec<String>,
 }
 
-pub const HOOKS: [&str; 6] = ["pre-launch", "post-launch", "session-end", "post-process", "screenshot", "daemon"];
+pub const HOOKS: [&str; 5] = ["pre-launch", "post-launch", "session-end", "post-process", "screenshot"];
 
 impl Module {
     pub fn id(&self) -> &str {
@@ -303,16 +303,20 @@ pub async fn run_blocking(module: &Module, hook: &str, env: &HookEnv) -> crate::
     }
 }
 
-/// Async hook (post-launch, post-process, daemon): a transient unit with the manifest limits; returns the unit name.
-pub fn run_async(module: &Module, hook: &str, env: &HookEnv, session_id: &str) -> crate::Result<Option<String>> {
+/// Async hook (post-launch, post-process): a transient unit with the manifest limits; returns the unit name.
+/// `bind_to` (post-launch) ties the unit to the game's so it is stopped with it whatever happens to the caller.
+pub fn run_async(module: &Module, hook: &str, env: &HookEnv, session_id: &str, bind_to: Option<&str>) -> crate::Result<Option<String>> {
     let Some(exe) = module.hook(hook) else { return Ok(None) };
     std::fs::create_dir_all(module.data_dir())?;
-    let unit = format!("universe-{}-{}-{}", module.id(), hook, if session_id.is_empty() { "daemon".into() } else { session_id.to_string() });
+    let unit = format!("universe-{}-{}-{}", module.id(), hook, session_id);
     let mut cmd = std::process::Command::new("systemd-run");
     cmd.arg("--user").arg("--collect").arg("--quiet").arg(format!("--unit={unit}"))
         .arg(format!("--property=CPUWeight={}", module.manifest.limits.cpu_weight))
         .arg(format!("--property=MemoryHigh={}", module.manifest.limits.memory_high))
         .arg(format!("--working-directory={}", module.dir.display()));
+    if let Some(game_unit) = bind_to {
+        cmd.arg(format!("--property=BindsTo={game_unit}")).arg(format!("--property=After={game_unit}"));
+    }
     for (k, v) in &env.vars {
         cmd.arg(format!("--setenv={k}={v}"));
     }
@@ -353,8 +357,7 @@ where
         .env("MODULE_SETTINGS_JSON", serde_json::Value::Object(settings.clone()).to_string())
         .env("MODULE_DIR", &module.dir)
         .env("MODULE_DATA_DIR", module.data_dir())
-        .env("UNIVERSE_BUS", crate::BUS_NAME)
-        .env("UNIVERSE_OBJECT", crate::OBJECT_PATH)
+        .env("UNIVERSE_BIN", paths::self_exe())
         .current_dir(&module.dir)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())

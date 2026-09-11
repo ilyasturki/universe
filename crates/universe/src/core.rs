@@ -1,10 +1,8 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
 
 use serde::{Deserialize, Serialize};
-use tokio::sync::{broadcast, Mutex, RwLock};
+use tokio::sync::{Mutex, RwLock};
 
 use crate::config::Config;
 use crate::game::Game;
@@ -16,19 +14,8 @@ use crate::paths;
 use crate::sessions::{self, Session};
 use crate::{Error, Result};
 
-#[derive(Debug, Clone)]
-pub enum Event {
-    LibraryChanged(Vec<String>),
-    SessionStarted { session: String, id: String },
-    SessionEnded { session: String, id: String, duration_s: u32 },
-    CurrentChanged(String),
-    RecordingFiled { session: String, id: String, path: String },
-    EntryWritten { session: String, id: String },
-    Progress { job: String, done: u64, total: u64, message: String },
-    JobFinished { job: String, ok: bool, message: String },
-    MediaChanged(String),
-    ModulesChanged,
-}
+/// Two lifetimes so a caller can reborrow the same callback across several awaited calls.
+pub type Progress<'a, 'b> = &'a mut (dyn FnMut(u64, u64, &str) + 'b);
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Current {
@@ -40,16 +27,65 @@ pub struct Current {
     pub started_at: String,
 }
 
-#[derive(Debug, Clone, Serialize, Default)]
-pub struct Job {
-    pub id: String,
-    pub kind: String,
-    pub target: String,
-    pub done: u64,
-    pub total: u64,
-    pub message: String,
-    pub finished: bool,
-    pub ok: bool,
+/// state/current-session.json: everything `session-end` needs to close the session from a process that never saw the launch.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct Marker {
+    #[serde(flatten)]
+    pub current: Current,
+    pub cursor_was_active: bool,
+    pub post_command: String,
+    pub cwd: String,
+    pub env: BTreeMap<String, String>,
+    pub hook_env: Vec<(String, String)>,
+}
+
+pub fn read_marker() -> Option<Marker> {
+    let s = std::fs::read_to_string(paths::current_session_file()).ok()?;
+    serde_json::from_str(&s).ok()
+}
+
+fn write_marker(m: &Marker) -> Result<()> {
+    let p = paths::current_session_file();
+    std::fs::create_dir_all(p.parent().unwrap())?;
+    let mut f = match std::fs::OpenOptions::new().write(true).create_new(true).open(&p) {
+        Ok(f) => f,
+        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+            let other = read_marker().map(|m| format!("{} ({})", m.current.title, m.current.session_id)).unwrap_or_else(|| "another launch".into());
+            return Err(Error::Busy(format!("{other} is running")));
+        }
+        Err(e) => return Err(e.into()),
+    };
+    use std::io::Write;
+    f.write_all(serde_json::to_string(m)?.as_bytes())?;
+    Ok(())
+}
+
+fn remove_marker() {
+    let _ = std::fs::remove_file(paths::current_session_file());
+}
+
+/// Environment the game unit needs beyond the game's own: our binary and dirs for the hooks and `ExecStopPost`, the desktop for the game.
+fn passthrough_env() -> BTreeMap<String, String> {
+    let mut env = BTreeMap::new();
+    for k in ["PATH", "HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS", "WAYLAND_DISPLAY", "DISPLAY", "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE", "UNIVERSE_DATA_HOME", "UNIVERSE_CONFIG_HOME", "UNIVERSE_STATE_HOME", "UNIVERSE_CACHE_HOME", "UNIVERSE_MODULES_PATH", "RUST_LOG"] {
+        if let Ok(v) = std::env::var(k) {
+            env.insert(k.to_string(), v);
+        }
+    }
+    env.insert("UNIVERSE_BIN".into(), paths::self_exe().to_string_lossy().to_string());
+    env
+}
+
+fn load_source_caches(modules: &[Module]) -> BTreeMap<String, Vec<serde_json::Map<String, serde_json::Value>>> {
+    let mut caches = BTreeMap::new();
+    for m in modules.iter().filter(|m| m.is_source()) {
+        if let Ok(s) = std::fs::read_to_string(m.data_dir().join("library.json")) {
+            if let Ok(v) = serde_json::from_str(&s) {
+                caches.insert(m.id().to_string(), v);
+            }
+        }
+    }
+    caches
 }
 
 pub struct Core {
@@ -57,61 +93,36 @@ pub struct Core {
     pub modules: RwLock<Vec<Module>>,
     pub games: RwLock<Vec<Resolved>>,
     pub index: Mutex<Index>,
-    pub current: Mutex<Option<Current>>,
-    pub jobs: Mutex<BTreeMap<String, Job>>,
     pub source_libraries: Mutex<BTreeMap<String, Vec<serde_json::Map<String, serde_json::Value>>>>,
     pub source_logins: Mutex<BTreeMap<String, String>>,
-    pub events: broadcast::Sender<Event>,
-    pub conn: tokio::sync::OnceCell<zbus::Connection>,
-    job_seq: AtomicU64,
-    post_processed: Mutex<Vec<String>>,
+    logins_probed: Mutex<bool>,
 }
 
 impl Core {
-    pub fn new(config: Config) -> Result<Arc<Core>> {
+    pub fn new(config: Config) -> Result<Core> {
         let modules = modules::discover(&config);
         let games = library::load_all(&config, &modules);
-        let mut index = Index::open(&paths::index_file()).or_else(|_| Index::open_memory())?;
+        let mut index = Index::open_memory()?;
         index.rebuild(&games)?;
-        let (tx, _) = broadcast::channel(256);
-        let core = Arc::new(Core {
+        let caches = load_source_caches(&modules);
+        Ok(Core {
             config: RwLock::new(config),
             modules: RwLock::new(modules),
             games: RwLock::new(games),
             index: Mutex::new(index),
-            current: Mutex::new(None),
-            jobs: Mutex::new(BTreeMap::new()),
-            source_libraries: Mutex::new(BTreeMap::new()),
+            source_libraries: Mutex::new(caches),
             source_logins: Mutex::new(BTreeMap::new()),
-            events: tx,
-            conn: tokio::sync::OnceCell::new(),
-            job_seq: AtomicU64::new(1),
-            post_processed: Mutex::new(vec![]),
-        });
+            logins_probed: Mutex::new(false),
+        })
+    }
+
+    /// The one entry point: config, library, cached source libraries, then the session left open by a dead launcher, if any.
+    pub async fn open() -> Result<Core> {
+        let config = Config::load()?;
+        std::fs::create_dir_all(paths::games_dir())?;
+        let core = Core::new(config)?;
+        core.reconcile().await?;
         Ok(core)
-    }
-
-    fn emit(&self, e: Event) {
-        let _ = self.events.send(e);
-    }
-
-    pub async fn load_source_caches(&self) {
-        let modules = self.modules.read().await;
-        let mut caches = self.source_libraries.lock().await;
-        for m in modules.iter().filter(|m| m.is_source()) {
-            let p = m.data_dir().join("library.json");
-            if let Ok(s) = std::fs::read_to_string(&p) {
-                if let Ok(v) = serde_json::from_str::<Vec<serde_json::Map<String, serde_json::Value>>>(&s) {
-                    caches.insert(m.id().to_string(), v);
-                }
-            }
-        }
-        drop(caches);
-        let sources: Vec<Module> = modules.iter().filter(|m| m.is_source() && m.active()).cloned().collect();
-        drop(modules);
-        for m in sources {
-            self.refresh_login(&m).await;
-        }
     }
 
     async fn refresh_login(&self, m: &Module) {
@@ -126,6 +137,19 @@ impl Core {
         };
     }
 
+    /// Login probes reach the network: once per process, on the first call that reports them.
+    async fn ensure_logins(&self) {
+        let mut probed = self.logins_probed.lock().await;
+        if *probed {
+            return;
+        }
+        let sources: Vec<Module> = self.modules.read().await.iter().filter(|m| m.is_source() && m.active()).cloned().collect();
+        for m in sources {
+            self.refresh_login(&m).await;
+        }
+        *probed = true;
+    }
+
     // ----- library -----
 
     pub async fn reload_all(&self) -> Result<()> {
@@ -134,7 +158,6 @@ impl Core {
         let games = library::load_all(&config, &modules);
         self.index.lock().await.rebuild(&games)?;
         *self.games.write().await = games;
-        self.emit(Event::LibraryChanged(vec![]));
         Ok(())
     }
 
@@ -152,8 +175,6 @@ impl Core {
             self.index.lock().await.remove(id)?;
         }
         library::sort_default(&mut games);
-        drop(games);
-        self.emit(Event::LibraryChanged(vec![id.to_string()]));
         Ok(())
     }
 
@@ -253,24 +274,31 @@ impl Core {
 
     // ----- sessions -----
 
+    /// The running session: a marker whose unit systemd still reports as active.
+    pub async fn current(&self) -> Option<Current> {
+        let m = read_marker()?;
+        if launcher::is_active(&m.current.unit).await {
+            Some(m.current)
+        } else {
+            None
+        }
+    }
+
     pub async fn current_json(&self) -> String {
-        match self.current.lock().await.as_ref() {
-            Some(c) => serde_json::to_string(c).unwrap_or_default(),
+        match self.current().await {
+            Some(c) => serde_json::to_string(&c).unwrap_or_default(),
             None => String::new(),
         }
     }
 
-    async fn set_current(&self, c: Option<Current>) {
-        let json = c.as_ref().map(|c| serde_json::to_string(c).unwrap_or_default()).unwrap_or_default();
-        *self.current.lock().await = c;
-        let p = paths::current_session_file();
-        let _ = std::fs::create_dir_all(p.parent().unwrap());
-        if json.is_empty() {
-            let _ = std::fs::remove_file(&p);
-        } else {
-            let _ = std::fs::write(&p, &json);
+    /// A marker without an active unit is a session whose `session-end` never ran (crash, reboot): close it now.
+    pub async fn reconcile(&self) -> Result<()> {
+        let Some(m) = read_marker() else { return Ok(()) };
+        if launcher::is_active(&m.current.unit).await {
+            return Ok(());
         }
-        self.emit(Event::CurrentChanged(json));
+        tracing::warn!("session {} of {} was left open; closing it", m.current.session_id, m.current.id);
+        self.session_end(&m.current.id, &m.current.session_id, None, None).await
     }
 
     fn hook_env_base(&self, r: &Resolved, cfg: &Config) -> HookEnv {
@@ -282,8 +310,9 @@ impl Core {
         env.set("GAME_EXE", r.game.exe_path().to_string_lossy().to_string());
         env.set("GAME_TOML", r.game.toml_path().to_string_lossy().to_string());
         env.set("JOURNAL_DIR", r.game.journal_dir().to_string_lossy().to_string());
-        env.set("UNIVERSE_BUS", crate::BUS_NAME);
-        env.set("UNIVERSE_OBJECT", crate::OBJECT_PATH);
+        for (k, v) in passthrough_env() {
+            env.set(&k, v);
+        }
         env.set("UNIVERSE_GAME_JSON", r.to_json().to_string());
         env.set("UNIVERSE_RECORDINGS_ROOT", cfg.recordings_root().to_string_lossy().to_string());
         env.set("UNIVERSE_JOURNAL_ROOT", cfg.journal_root().to_string_lossy().to_string());
@@ -308,8 +337,20 @@ impl Core {
             .collect()
     }
 
-    pub async fn launch(self: &Arc<Self>, id: &str, screen: &str) -> Result<String> {
-        if let Some(c) = self.current.lock().await.as_ref() {
+    async fn shell_conn(&self) -> Option<zbus::Connection> {
+        match zbus::Connection::session().await {
+            Ok(c) => Some(c),
+            Err(e) => {
+                tracing::warn!("session bus: {e}");
+                None
+            }
+        }
+    }
+
+    /// Starts the game as a transient service and returns; systemd runs `universe session-end` when its cgroup empties.
+    pub async fn launch(&self, id: &str, screen: &str) -> Result<String> {
+        self.reconcile().await?;
+        if let Some(c) = self.current().await {
             return Err(Error::Busy(format!("{} is running ({})", c.title, c.session_id)));
         }
         let r = self.get(id).await?;
@@ -320,11 +361,11 @@ impl Core {
         let started = chrono::Local::now();
         let session_id = sessions::session_id(started);
         let screen = crate::desktop::pick_screen(screen);
-        let unit = launcher::unit_name(id, &session_id);
+        let unit = format!("{}.service", launcher::unit_name(id, &session_id));
 
         let mut base = self.hook_env_base(&r, &cfg);
         base.set("SESSION_ID", session_id.clone());
-        base.set("SESSION_UNIT", format!("{unit}.scope"));
+        base.set("SESSION_UNIT", unit.clone());
         base.set("SESSION_SCREEN", screen.clone());
         base.set("SESSION_STARTED_AT", started.to_rfc3339());
 
@@ -358,118 +399,126 @@ impl Core {
         let profile = crate::desktop::detect(&cfg);
         let mut cursor_was_active = false;
         if r.effective.hide_cursor {
-            if let Some(conn) = self.conn.get() {
-                cursor_was_active = crate::desktop::cursor_extension_enable(conn, profile, &cfg.desktop.cursor_extension).await;
+            if let Some(conn) = self.shell_conn().await {
+                cursor_was_active = crate::desktop::cursor_extension_enable(&conn, profile, &cfg.desktop.cursor_extension).await;
             }
         }
+        let marker = Marker {
+            current: Current { session_id: session_id.clone(), id: id.into(), title: r.game.title.clone(), unit: unit.clone(), screen: screen.clone(), started_at: started.to_rfc3339() },
+            cursor_was_active,
+            post_command: plan.post_command.clone(),
+            cwd: plan.cwd.to_string_lossy().to_string(),
+            env: plan.env.clone(),
+            hook_env: base.vars.clone(),
+        };
+        write_marker(&marker)?;
         tracing::info!("launch {id}: {}", plan.command_line());
-        let mut running = launcher::spawn(&plan)?;
-        let current = Current { session_id: session_id.clone(), id: id.into(), title: r.game.title.clone(), unit: format!("{unit}.scope"), screen: screen.clone(), started_at: started.to_rfc3339() };
-        self.set_current(Some(current)).await;
-        self.emit(Event::SessionStarted { session: session_id.clone(), id: id.into() });
-
+        let stop_post = vec![paths::self_exe().to_string_lossy().to_string(), "session-end".into(), id.into(), session_id.clone()];
+        let budget: u64 = 60 + self.hook_modules(&r, "session-end").await.iter().map(|m| m.timeout().as_secs()).sum::<u64>();
+        if let Err(e) = launcher::spawn(&plan, &stop_post, &passthrough_env(), budget).await {
+            remove_marker();
+            if r.effective.hide_cursor {
+                if let Some(conn) = self.shell_conn().await {
+                    crate::desktop::cursor_extension_restore(&conn, profile, &cfg.desktop.cursor_extension, cursor_was_active).await;
+                }
+            }
+            return Err(e);
+        }
         for m in self.hook_modules(&r, "post-launch").await {
             let env = self.module_env(&m, &r, &cfg, &base);
-            if let Err(e) = modules::run_async(&m, "post-launch", &env, &session_id) {
+            if let Err(e) = modules::run_async(&m, "post-launch", &env, &session_id, Some(&unit)) {
                 tracing::warn!("post-launch {}: {e}", m.id());
             }
         }
-
-        let core = Arc::clone(self);
-        let sid = session_id.clone();
-        let gid = id.to_string();
-        tokio::spawn(async move {
-            let cgroup = launcher::cgroup_dir(&running.unit).await;
-            let stderr = running.child.stderr.take();
-            let exit = launcher::wait_empty(cgroup.as_deref(), &mut running.child).await;
-            if let Some(mut e) = stderr {
-                use tokio::io::AsyncReadExt;
-                let mut s = String::new();
-                let _ = e.read_to_string(&mut s).await;
-                if !s.trim().is_empty() {
-                    tracing::info!("{}: {}", running.unit, s.trim());
-                }
-            }
-            core.finish_session(&gid, &sid, &plan, exit, &base, started, cursor_was_active).await;
-        });
         Ok(session_id)
     }
 
-    async fn finish_session(self: &Arc<Self>, id: &str, session_id: &str, plan: &launcher::Plan, exit: i32, base: &HookEnv, started: chrono::DateTime<chrono::Local>, cursor_was_active: bool) {
-        let ended = chrono::Local::now();
-        let duration_s = (ended - started).num_seconds().max(0) as u64;
-        let cfg = self.config.read().await.clone();
+    /// Closes a session: run by systemd's `ExecStopPost`, or by `reconcile` for one that was left open. Idempotent.
+    pub async fn session_end(&self, id: &str, session_id: &str, exit: Option<i32>, ended: Option<chrono::DateTime<chrono::Local>>) -> Result<()> {
+        let marker = read_marker().filter(|m| m.current.session_id == session_id);
         let r = match self.get(id).await {
             Ok(r) => r,
-            Err(_) => return,
+            Err(e) => {
+                if marker.is_some() {
+                    remove_marker();
+                }
+                return Err(e);
+            }
         };
+        if sessions::read(&r.game.sessions_path()).unwrap_or_default().iter().any(|s| s.session == session_id) {
+            if marker.is_some() {
+                remove_marker();
+            }
+            return Ok(());
+        }
+        let cfg = self.config.read().await.clone();
+        let unit = marker.as_ref().map(|m| m.current.unit.clone()).unwrap_or_else(|| format!("{}.service", launcher::unit_name(id, session_id)));
+        let log = launcher::unit_log(&unit).await;
+        let started = marker
+            .as_ref()
+            .and_then(|m| chrono::DateTime::parse_from_rfc3339(&m.current.started_at).ok().map(|t| t.with_timezone(&chrono::Local)))
+            .or(log.started)
+            .or_else(|| sessions::parse_session_id(session_id))
+            .unwrap_or_else(chrono::Local::now);
+        let ended = ended.or(log.ended).unwrap_or_else(chrono::Local::now);
+        let exit = exit.or(log.exit).unwrap_or(-1);
+        let duration_s = (ended - started).num_seconds().max(0) as u64;
+        let screen = marker.as_ref().map(|m| m.current.screen.clone()).unwrap_or_default();
         let session = Session {
             session: session_id.into(),
             game: id.into(),
             started_at: started.to_rfc3339(),
             ended_at: ended.to_rfc3339(),
             duration_s,
-            source: "daemon".into(),
-            unit: format!("{}.scope", plan.unit),
-            screen: base.vars.iter().find(|(k, _)| k == "SESSION_SCREEN").map(|(_, v)| v.clone()).unwrap_or_default(),
+            source: "universe".into(),
+            unit: unit.clone(),
+            screen: screen.clone(),
             exit,
             recording: None,
         };
-        if let Err(e) = sessions::append(&r.game.sessions_path(), &session) {
-            tracing::error!("sessions.jsonl: {e}");
-        }
-        if r.effective.hide_cursor {
-            if let Some(conn) = self.conn.get() {
-                crate::desktop::cursor_extension_restore(conn, crate::desktop::detect(&cfg), &cfg.desktop.cursor_extension, cursor_was_active).await;
+        sessions::append(&r.game.sessions_path(), &session)?;
+        remove_marker();
+
+        if let Some(m) = &marker {
+            if r.effective.hide_cursor {
+                if let Some(conn) = self.shell_conn().await {
+                    crate::desktop::cursor_extension_restore(&conn, crate::desktop::detect(&cfg), &cfg.desktop.cursor_extension, m.cursor_was_active).await;
+                }
             }
+            let _ = launcher::run_shell(&m.post_command, &m.env, Path::new(&m.cwd)).await;
         }
-        let _ = launcher::run_shell(&plan.post_command, &plan.env, &plan.cwd).await;
-        let mut env_end = base.clone();
+        let mut env_end = match &marker {
+            Some(m) => HookEnv { vars: m.hook_env.clone() },
+            None => {
+                let mut e = self.hook_env_base(&r, &cfg);
+                e.set("SESSION_ID", session_id);
+                e.set("SESSION_UNIT", unit.clone());
+                e.set("SESSION_SCREEN", screen);
+                e.set("SESSION_STARTED_AT", started.to_rfc3339());
+                e
+            }
+        };
         env_end.set("SESSION_ENDED_AT", ended.to_rfc3339());
         env_end.set("SESSION_DURATION_S", duration_s.to_string());
-        let mut expects_recording = false;
         for m in self.hook_modules(&r, "session-end").await {
             let env = self.module_env(&m, &r, &cfg, &env_end);
             if let Err(e) = modules::run_blocking(&m, "session-end", &env).await {
                 tracing::warn!("session-end {}: {e}", m.id());
             }
-            expects_recording = true;
         }
-        self.set_current(None).await;
-        let _ = self.reload_game(id).await;
-        self.emit(Event::SessionEnded { session: session_id.into(), id: id.into(), duration_s: duration_s as u32 });
-
-        if !expects_recording {
-            self.post_process(id, session_id, "").await;
-        } else {
-            let core = Arc::clone(self);
-            let (gid, sid) = (id.to_string(), session_id.to_string());
-            let grace = cfg.modules.settings.get("core").and_then(|t| t.get("post_process_grace_s")).and_then(|v| v.as_integer()).unwrap_or(45) as u64;
-            tokio::spawn(async move {
-                tokio::time::sleep(std::time::Duration::from_secs(grace)).await;
-                core.post_process(&gid, &sid, "").await;
-            });
-        }
+        self.reload_game(id).await?;
+        self.post_process(id, session_id).await;
+        Ok(())
     }
 
-    /// post-process hooks run once per session: after RecordingFiled, or after the grace period without one.
-    async fn post_process(self: &Arc<Self>, id: &str, session_id: &str, recording: &str) {
-        {
-            let mut done = self.post_processed.lock().await;
-            if done.iter().any(|s| s == session_id) {
-                return;
-            }
-            done.push(session_id.to_string());
-            if done.len() > 64 {
-                done.remove(0);
-            }
-        }
+    /// post-process hooks, once the session-end hooks have filed the recording (or not).
+    async fn post_process(&self, id: &str, session_id: &str) {
         let Ok(r) = self.get(id).await else { return };
         let cfg = self.config.read().await.clone();
-        let sess = sessions::read(&r.game.sessions_path()).unwrap_or_default().into_iter().find(|s| s.session == session_id);
+        let sess = r.sessions.iter().find(|s| s.session == session_id).cloned();
         let mut env = self.hook_env_base(&r, &cfg);
         env.set("SESSION_ID", session_id);
-        env.set("RECORDING_PATH", recording);
+        env.set("RECORDING_PATH", sess.as_ref().and_then(|s| s.recording.clone()).unwrap_or_default());
         if let Some(s) = sess {
             env.set("SESSION_STARTED_AT", s.started_at);
             env.set("SESSION_ENDED_AT", s.ended_at);
@@ -478,23 +527,22 @@ impl Core {
         }
         for m in self.hook_modules(&r, "post-process").await {
             let menv = self.module_env(&m, &r, &cfg, &env);
-            if let Err(e) = modules::run_async(&m, "post-process", &menv, session_id) {
+            if let Err(e) = modules::run_async(&m, "post-process", &menv, session_id, None) {
                 tracing::warn!("post-process {}: {e}", m.id());
             }
         }
     }
 
     pub async fn stop(&self, session_id: &str) -> Result<()> {
-        let cur = self.current.lock().await.clone();
-        let Some(c) = cur else { return Err(Error::NotFound("no session running".into())) };
+        let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
         if !session_id.is_empty() && c.session_id != session_id {
             return Err(Error::NotFound(session_id.into()));
         }
-        launcher::stop_unit(c.unit.trim_end_matches(".scope")).await
+        launcher::stop_unit(&c.unit).await
     }
 
     pub async fn screenshot(&self) -> Result<String> {
-        let cur = self.current.lock().await.clone();
+        let cur = self.current().await;
         let cfg = self.config.read().await.clone();
         let (r, env) = match cur {
             Some(c) => {
@@ -534,25 +582,22 @@ impl Core {
     // ----- recordings & journal -----
 
     async fn game_of_session(&self, session_id: &str) -> Option<String> {
-        if let Some(c) = self.current.lock().await.as_ref() {
-            if c.session_id == session_id {
-                return Some(c.id.clone());
+        if let Some(m) = read_marker() {
+            if m.current.session_id == session_id {
+                return Some(m.current.id);
             }
         }
         let games = self.games.read().await;
         games.iter().find(|g| g.sessions.iter().any(|s| s.session == session_id)).map(|g| g.game.id.clone())
     }
 
-    pub async fn file_recording(self: &Arc<Self>, session_id: &str, path: &str) -> Result<String> {
+    pub async fn file_recording(&self, session_id: &str, path: &str) -> Result<String> {
         let id = self.game_of_session(session_id).await.ok_or_else(|| Error::NotFound(format!("session {session_id}")))?;
         let r = self.get(&id).await?;
         let cfg = self.config.read().await.clone();
         let dest = crate::recording::file(&r.game, session_id, Path::new(path), &cfg.recordings_root())?;
         self.reload_game(&id).await?;
-        let ds = dest.to_string_lossy().to_string();
-        self.emit(Event::RecordingFiled { session: session_id.into(), id: id.clone(), path: ds.clone() });
-        self.post_process(&id, session_id, &ds).await;
-        Ok(ds)
+        Ok(dest.to_string_lossy().to_string())
     }
 
     pub async fn recordings_json(&self, id: &str) -> Result<String> {
@@ -572,9 +617,7 @@ impl Core {
         let r = self.get(&id).await?;
         entry.game = id.clone();
         crate::journal::write(&r.game.journal_dir(), &entry)?;
-        self.reload_game(&id).await?;
-        self.emit(Event::EntryWritten { session: session_id.into(), id });
-        Ok(())
+        self.reload_game(&id).await
     }
 
     pub async fn journal_json(&self, id: &str) -> Result<String> {
@@ -602,7 +645,6 @@ impl Core {
     pub async fn reload_modules(&self) {
         let cfg = self.config.read().await.clone();
         *self.modules.write().await = modules::discover(&cfg);
-        self.emit(Event::ModulesChanged);
     }
 
     pub async fn enable_module(&self, id: &str, enabled: bool) -> Result<()> {
@@ -669,36 +711,7 @@ impl Core {
         serde_json::to_string(&crate::doctor::run(&cfg, &modules)).unwrap_or_default()
     }
 
-    // ----- jobs & sources -----
-
-    async fn new_job(&self, kind: &str, target: &str) -> String {
-        let n = self.job_seq.fetch_add(1, Ordering::SeqCst);
-        let id = format!("job-{n}");
-        self.jobs.lock().await.insert(id.clone(), Job { id: id.clone(), kind: kind.into(), target: target.into(), ..Default::default() });
-        id
-    }
-
-    async fn job_progress(&self, job: &str, done: u64, total: u64, message: &str) {
-        if let Some(j) = self.jobs.lock().await.get_mut(job) {
-            j.done = done;
-            j.total = total;
-            j.message = message.into();
-        }
-        self.emit(Event::Progress { job: job.into(), done, total, message: message.into() });
-    }
-
-    async fn job_finish(&self, job: &str, ok: bool, message: &str) {
-        if let Some(j) = self.jobs.lock().await.get_mut(job) {
-            j.finished = true;
-            j.ok = ok;
-            j.message = message.into();
-        }
-        self.emit(Event::JobFinished { job: job.into(), ok, message: message.into() });
-    }
-
-    pub async fn jobs_json(&self) -> String {
-        serde_json::to_string(&self.jobs.lock().await.values().collect::<Vec<_>>()).unwrap_or_default()
-    }
+    // ----- sources -----
 
     pub async fn source(&self, id: &str) -> Result<Module> {
         let modules = self.modules.read().await;
@@ -713,6 +726,7 @@ impl Core {
     }
 
     pub async fn sources_json(&self) -> String {
+        self.ensure_logins().await;
         let cfg = self.config.read().await.clone();
         let modules = self.modules.read().await;
         let caches = self.source_libraries.lock().await;
@@ -733,31 +747,18 @@ impl Core {
         serde_json::Value::Array(list).to_string()
     }
 
-    /// Runs a verb to completion, collecting events; `progress` job updates are forwarded when a job id is given.
-    async fn run_verb(&self, m: &Module, verb: &str, args: &[String], job: Option<&str>) -> Result<Vec<SourceEvent>> {
+    /// Runs a verb to completion, collecting events; `progress` events are forwarded as they arrive.
+    async fn run_verb(&self, m: &Module, verb: &str, args: &[String], mut progress: Option<Progress<'_, '_>>) -> Result<Vec<SourceEvent>> {
         let cfg = self.config.read().await.clone();
         let settings = m.merged_settings(&cfg, None);
-        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<(u64, u64, String)>();
-        let core_events = self.events.clone();
-        let job_id = job.map(|s| s.to_string());
-        let fwd = tokio::spawn(async move {
-            while let Some((d, t, msg)) = rx.recv().await {
-                if let Some(j) = &job_id {
-                    let _ = core_events.send(Event::Progress { job: j.clone(), done: d, total: t, message: msg });
-                }
-            }
-        });
         let mut events = Vec::new();
-        let res = modules::run_source(m, &settings, verb, args, |ev| {
-            if let SourceEvent::Progress { done, total, message } = &ev {
-                let _ = tx.send((*done, *total, message.clone()));
+        modules::run_source(m, &settings, verb, args, |ev| {
+            if let (SourceEvent::Progress { done, total, message }, Some(p)) = (&ev, progress.as_mut()) {
+                p(*done, *total, message);
             }
             events.push(ev);
         })
-        .await;
-        drop(tx);
-        let _ = fwd.await;
-        res?;
+        .await?;
         Ok(events)
     }
 
@@ -767,23 +768,13 @@ impl Core {
         events.iter().find_map(|e| if let SourceEvent::LoginUrl { url } = e { Some(url.clone()) } else { None }).ok_or_else(|| Error::Io("no login_url event".into()))
     }
 
-    pub async fn source_login(self: &Arc<Self>, source: &str, code: &str) -> Result<String> {
+    /// Returns the user name reported by the source.
+    pub async fn source_login(&self, source: &str, code: &str) -> Result<String> {
         let m = self.source(source).await?;
-        let job = self.new_job("login", source).await;
-        let core = Arc::clone(self);
-        let code = code.to_string();
-        let j = job.clone();
-        tokio::spawn(async move {
-            match core.run_verb(&m, "login", &[code], Some(&j)).await {
-                Ok(ev) => {
-                    let user = ev.iter().find_map(|e| if let SourceEvent::LoggedIn { user } = e { Some(user.clone()) } else { None }).unwrap_or_default();
-                    core.source_logins.lock().await.insert(m.id().to_string(), user.clone());
-                    core.job_finish(&j, true, &user).await
-                }
-                Err(e) => core.job_finish(&j, false, &e.to_string()).await,
-            }
-        });
-        Ok(job)
+        let ev = self.run_verb(&m, "login", &[code.to_string()], None).await?;
+        let user = ev.iter().find_map(|e| if let SourceEvent::LoggedIn { user } = e { Some(user.clone()) } else { None }).unwrap_or_default();
+        self.source_logins.lock().await.insert(m.id().to_string(), user.clone());
+        Ok(user)
     }
 
     fn game_events(events: &[SourceEvent]) -> Vec<serde_json::Map<String, serde_json::Value>> {
@@ -887,64 +878,42 @@ impl Core {
         Ok(Some(game.id))
     }
 
-    pub async fn source_scan(self: &Arc<Self>, source: &str) -> Result<String> {
+    /// Scans the installed games of one source (all active ones when empty); returns how many entered the library.
+    pub async fn source_scan(&self, source: &str, mut progress: Option<Progress<'_, '_>>) -> Result<usize> {
         let ids: Vec<String> = if source.is_empty() {
             self.modules.read().await.iter().filter(|m| m.is_source() && m.active()).map(|m| m.id().to_string()).collect()
         } else {
             vec![self.source(source).await?.id().to_string()]
         };
-        let job = self.new_job("scan", source).await;
-        let core = Arc::clone(self);
-        let j = job.clone();
-        tokio::spawn(async move {
-            let mut found = 0;
-            for sid in ids {
-                let Ok(m) = core.source(&sid).await else { continue };
-                if let Err(e) = core.source_library(&sid, false).await {
-                    tracing::warn!("{sid}: library unavailable, scanning without ownership: {e}");
-                }
-                match core.run_verb(&m, "scan", &[], Some(&j)).await {
-                    Ok(events) => {
-                        for g in Self::game_events(&events) {
-                            if let Ok(Some(_)) = core.apply_source_game(&sid, &g, true).await {
-                                found += 1;
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        core.job_finish(&j, false, &e.to_string()).await;
-                        return;
-                    }
+        let mut found = 0;
+        for sid in ids {
+            let m = self.source(&sid).await?;
+            if let Err(e) = self.source_library(&sid, false).await {
+                tracing::warn!("{sid}: library unavailable, scanning without ownership: {e}");
+            }
+            let events = self.run_verb(&m, "scan", &[], progress.as_deref_mut()).await?;
+            for g in Self::game_events(&events) {
+                if let Ok(Some(_)) = self.apply_source_game(&sid, &g, true).await {
+                    found += 1;
                 }
             }
-            core.job_finish(&j, true, &format!("{found} game(s)")).await;
-        });
-        Ok(job)
+        }
+        Ok(found)
     }
 
-    pub async fn source_install(self: &Arc<Self>, source: &str, game_id: &str) -> Result<String> {
+    /// Installs a title; returns its library id.
+    pub async fn source_install(&self, source: &str, game_id: &str, progress: Option<Progress<'_, '_>>) -> Result<String> {
         let m = self.source(source).await?;
-        let job = self.new_job("install", game_id).await;
-        let core = Arc::clone(self);
-        let (j, gid, src) = (job.clone(), game_id.to_string(), source.to_string());
-        tokio::spawn(async move {
-            match core.run_verb(&m, "install", &[gid.clone()], Some(&j)).await {
-                Ok(events) => {
-                    let mut msg = String::new();
-                    for g in Self::game_events(&events) {
-                        let mut g = g;
-                        g.entry("owned".to_string()).or_insert(serde_json::Value::Bool(true));
-                        g.entry("installed".to_string()).or_insert(serde_json::Value::Bool(true));
-                        if let Ok(Some(id)) = core.apply_source_game(&src, &g, true).await {
-                            msg = id;
-                        }
-                    }
-                    core.job_finish(&j, true, &msg).await;
-                }
-                Err(e) => core.job_finish(&j, false, &e.to_string()).await,
+        let events = self.run_verb(&m, "install", &[game_id.to_string()], progress).await?;
+        let mut id = String::new();
+        for mut g in Self::game_events(&events) {
+            g.entry("owned".to_string()).or_insert(serde_json::Value::Bool(true));
+            g.entry("installed".to_string()).or_insert(serde_json::Value::Bool(true));
+            if let Ok(Some(i)) = self.apply_source_game(source, &g, true).await {
+                id = i;
             }
-        });
-        Ok(job)
+        }
+        Ok(id)
     }
 
     pub async fn source_updates(&self) -> Result<String> {
@@ -962,94 +931,64 @@ impl Core {
         Ok(serde_json::Value::Array(out).to_string())
     }
 
-    pub async fn source_update(self: &Arc<Self>, source: &str, game_id: &str) -> Result<String> {
+    /// Updates one title, or every pending one when `game_id` is empty; returns how many were updated.
+    pub async fn source_update(&self, source: &str, game_id: &str, mut progress: Option<Progress<'_, '_>>) -> Result<usize> {
         let m = self.source(source).await?;
-        let job = self.new_job("update", game_id).await;
-        let core = Arc::clone(self);
-        let (j, gid, src) = (job.clone(), game_id.to_string(), source.to_string());
-        tokio::spawn(async move {
-            let targets: Vec<String> = if gid.is_empty() {
-                match core.run_verb(&m, "update", &[], Some(&j)).await {
-                    Ok(ev) => ev.iter().filter_map(|e| if let SourceEvent::Update(u) = e { u.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()) } else { None }).collect(),
-                    Err(e) => {
-                        core.job_finish(&j, false, &e.to_string()).await;
-                        return;
-                    }
-                }
-            } else {
-                vec![gid]
-            };
-            let mut n = 0;
-            for t in targets {
-                match core.run_verb(&m, "update", &[t.clone()], Some(&j)).await {
-                    Ok(events) => {
-                        for g in Self::game_events(&events) {
-                            let _ = core.apply_source_game(&src, &g, false).await;
-                        }
-                        n += 1;
-                    }
-                    Err(e) => {
-                        core.job_finish(&j, false, &format!("{t}: {e}")).await;
-                        return;
-                    }
-                }
+        let targets: Vec<String> = if game_id.is_empty() {
+            let ev = self.run_verb(&m, "update", &[], progress.as_deref_mut()).await?;
+            ev.iter().filter_map(|e| if let SourceEvent::Update(u) = e { u.get("id").and_then(|v| v.as_str()).map(|s| s.to_string()) } else { None }).collect()
+        } else {
+            vec![game_id.to_string()]
+        };
+        let mut n = 0;
+        for t in targets {
+            let events = self.run_verb(&m, "update", &[t.clone()], progress.as_deref_mut()).await.map_err(|e| Error::Io(format!("{t}: {e}")))?;
+            for g in Self::game_events(&events) {
+                let _ = self.apply_source_game(source, &g, false).await;
             }
-            core.job_finish(&j, true, &format!("{n} updated")).await;
-        });
-        Ok(job)
+            n += 1;
+        }
+        Ok(n)
     }
 
     // ----- media -----
 
-    pub async fn media_refresh(self: &Arc<Self>, id: &str, force: bool) -> Result<String> {
+    /// Refreshes the artwork of one game, or of the whole library when `id` is empty; returns (changed, total).
+    pub async fn media_refresh(&self, id: &str, force: bool, mut progress: Option<Progress<'_, '_>>) -> Result<(usize, usize)> {
         let ids: Vec<String> = if id.is_empty() { self.games.read().await.iter().filter(|g| g.game.removed_at.is_empty()).map(|g| g.game.id.clone()).collect() } else { vec![self.resolve_one(id).await?] };
-        let job = self.new_job("media", id).await;
-        let core = Arc::clone(self);
-        let j = job.clone();
-        tokio::spawn(async move {
-            let cfg = core.config.read().await.clone();
-            let total = ids.len() as u64;
-            let mut ok = 0;
-            for (i, gid) in ids.iter().enumerate() {
-                let Ok(r) = core.get(gid).await else { continue };
-                core.job_progress(&j, i as u64, total, &r.game.title).await;
-                match tokio::task::spawn_blocking({
-                    let cfg = cfg.clone();
-                    let game = r.game.clone();
-                    move || crate::media::refresh(&cfg, &game, force)
-                })
-                .await
-                {
-                    Ok(Ok(changed)) => {
-                        if changed {
-                            ok += 1;
-                            let _ = core.reload_game(gid).await;
-                            core.emit(Event::MediaChanged(gid.clone()));
-                        }
-                    }
-                    Ok(Err(e)) => tracing::warn!("media {gid}: {e}"),
-                    Err(e) => tracing::warn!("media {gid}: {e}"),
-                }
+        let cfg = self.config.read().await.clone();
+        let total = ids.len();
+        let mut changed = 0;
+        for (i, gid) in ids.iter().enumerate() {
+            let Ok(r) = self.get(gid).await else { continue };
+            if let Some(p) = progress.as_mut() {
+                p(i as u64, total as u64, &r.game.title);
             }
-            core.job_finish(&j, true, &format!("{ok}/{total} updated")).await;
-        });
-        Ok(job)
+            let cfg = cfg.clone();
+            let game = r.game.clone();
+            match tokio::task::spawn_blocking(move || crate::media::refresh(&cfg, &game, force)).await {
+                Ok(Ok(true)) => {
+                    changed += 1;
+                    let _ = self.reload_game(gid).await;
+                }
+                Ok(Ok(false)) => {}
+                Ok(Err(e)) => tracing::warn!("media {gid}: {e}"),
+                Err(e) => tracing::warn!("media {gid}: {e}"),
+            }
+        }
+        Ok((changed, total))
     }
 
     pub async fn media_set_slot(&self, id: &str, slot: &str, path: &str) -> Result<()> {
         let r = self.get(id).await?;
         crate::media::set_slot(&r.game, slot, Path::new(path))?;
-        self.reload_game(id).await?;
-        self.emit(Event::MediaChanged(id.into()));
-        Ok(())
+        self.reload_game(id).await
     }
 
     pub async fn media_unset(&self, id: &str, slot: &str) -> Result<()> {
         let r = self.get(id).await?;
         crate::media::unset(&r.game, slot)?;
-        self.reload_game(id).await?;
-        self.emit(Event::MediaChanged(id.into()));
-        Ok(())
+        self.reload_game(id).await
     }
 
     pub async fn media_candidates(&self, id: &str, slot: &str) -> Result<String> {

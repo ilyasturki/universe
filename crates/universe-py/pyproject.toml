@@ -1,0 +1,12 @@
+[build-system]
+requires = ["maturin>=1.7,<2"]
+build-backend = "maturin"
+
+[project]
+name = "universe-core"
+version = "0.1.0"
+description = "Python bindings to the Universe core"
+requires-python = ">=3.11"
+
+[tool.maturin]
+module-name = "universe_core"

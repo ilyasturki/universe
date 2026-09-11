@@ -38,6 +38,12 @@ pub fn session_id(t: chrono::DateTime<chrono::Local>) -> String {
     t.format("%Y%m%d-%H%M%S").to_string()
 }
 
+pub fn parse_session_id(id: &str) -> Option<chrono::DateTime<chrono::Local>> {
+    use chrono::TimeZone;
+    let naive = chrono::NaiveDateTime::parse_from_str(id, "%Y%m%d-%H%M%S").ok()?;
+    chrono::Local.from_local_datetime(&naive).single()
+}
+
 pub fn read(path: &Path) -> crate::Result<Vec<Session>> {
     let f = match std::fs::File::open(path) {
         Ok(f) => f,

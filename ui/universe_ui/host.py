@@ -67,7 +67,7 @@ def qt_plugin_paths():
 
 def parse_args(argv):
     parser = argparse.ArgumentParser(prog="universe-ui", description="Universe game launcher UI")
-    parser.add_argument("--fake", action="store_true", help="fixture library, no daemon")
+    parser.add_argument("--fake", action="store_true", help="fixture library, no core")
     parser.add_argument("--fake-launch", action="store_true", help="fake session runs `sleep 2` (implies --fake)")
     parser.add_argument("--fullscreen", action="store_true")
     parser.add_argument("--screenshot", metavar="PATH", help="grab the window to PATH, then quit")
@@ -87,9 +87,9 @@ def build_client(args):
         from .universe_client import FakeClient
 
         return FakeClient(fake_launch=args.fake_launch)
-    from .universe_client import UniverseClient
+    from .universe_client import CoreClient
 
-    return UniverseClient()
+    return CoreClient()
 
 
 def run(argv=None):

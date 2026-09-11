@@ -1,7 +1,9 @@
 import pytest
 
-from conftest import wait_for
-from universe_ui.universe_client import ERROR_PREFIX, SERVICE, UniverseClient, UniverseError, _json
+from pathlib import Path
+
+from conftest import pump, wait_for
+from universe_ui.universe_client import UniverseError, _json
 
 
 def test_json_tolerance():
@@ -12,36 +14,38 @@ def test_json_tolerance():
     assert _json(42, None) == 42
 
 
-def test_error_and_reply_unpacking(app):
-    from PySide6.QtDBus import QDBusMessage
+def test_core_client_reads_writes_and_watches(app):
+    universe_core = pytest.importorskip("universe_core")
+    from universe_ui.universe_client import CoreClient
 
-    with pytest.raises(UniverseError) as info:
-        UniverseClient._unpack(QDBusMessage.createError(ERROR_PREFIX + "NotFound", "no such game"))
-    assert info.value.kind == "NotFound"
-    assert info.value.message == "no such game"
+    games = Path(universe_core.data_home()) / "games"
+    (games / "sample").mkdir(parents=True, exist_ok=True)
+    (games / "sample" / "game.toml").write_text('schema = 1\nid = "sample"\ntitle = "Sample"\n')
+    client = CoreClient()
+    assert [g["id"] for g in client.list()] == ["sample"]
+    assert client.currentSession is None
 
-    with pytest.raises(UniverseError) as info:
-        UniverseClient._unpack(QDBusMessage.createError("org.freedesktop.DBus.Error.ServiceUnknown", ""))
-    assert info.value.kind == "org.freedesktop.DBus.Error.ServiceUnknown"
+    seen = []
+    client.error.connect(lambda kind, message: seen.append(kind))
+    assert client.game("nope") == {} and seen == ["NotFound"]
+    assert client.set("sample", "favorite", "true") and client.game("sample")["favorite"] is True
 
-    with pytest.raises(UniverseError) as info:
-        UniverseClient._unpack(QDBusMessage.createError("org.freedesktop.DBus.Error.Failed",
-                                                        ERROR_PREFIX + "Busy: busy: a game is running"))
-    assert (info.value.kind, info.value.message) == ("Busy", "busy: a game is running")
-
-    call = QDBusMessage.createMethodCall("a.b", "/a", "a.b.I", "M")
-    assert UniverseClient._unpack(call.createReply('{"x": 1}')) == '{"x": 1}'
-    assert UniverseClient._unpack(call.createReply()) is None
-
-
-def test_bus_subscriptions_bind(app):
-    from PySide6.QtDBus import QDBusConnection
-
-    bus = QDBusConnection.sessionBus()
-    if not bus.isConnected() or not bus.interface().isServiceRegistered(SERVICE):
-        pytest.skip("universed is not on the session bus (a method call would activate it)")
-    client = UniverseClient()
-    assert client.connected and all(client.connected.values()), client.connected
+    # another process writes a journal entry: the watch reloads the game and tells the screens
+    written = []
+    client.entryWritten.connect(lambda session_id, ident: written.append(ident))
+    (games / "sample" / "journal").mkdir()
+    pump(700)  # the new directory is itself a change; the watch on it starts here
+    written.clear()
+    (games / "sample" / "journal" / "20260911-120000.json").write_text(
+        '{"session": "20260911-120000", "game": "sample", "written_at": "2026-09-11T12:10:00+02:00", "lang": "en",'
+        ' "title": "First", "provider": "stub", "paragraphs": ["p"], "next_up": "", "images": []}'
+    )
+    for _ in range(30):
+        pump(100)
+        if "sample" in written:
+            break
+    assert "sample" in written
+    assert [e["title"] for e in client.journal("sample")] == ["First"]
 
 
 def test_list_resolves_defaults(fake):

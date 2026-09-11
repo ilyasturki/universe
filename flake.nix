@@ -1,5 +1,5 @@
 {
-  description = "Universe: a gamepad-first game launcher for Linux (core in Rust, UI in Qt 6 via PySide6, modules)";
+  description = "Universe: a gamepad-first game launcher for Linux (core in Rust, UI in Qt 6 via PySide6, modules; no daemon)";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
@@ -10,27 +10,34 @@
       lib = pkgs.lib;
       version = "0.1.0";
 
+      rustSrc = lib.cleanSourceWith {
+        src = ./.;
+        filter = path: type:
+          let rel = lib.removePrefix (toString ./. + "/") (toString path);
+          in lib.hasPrefix "crates" rel || rel == "Cargo.toml" || rel == "Cargo.lock" || rel == "crates";
+      };
+
       core = pkgs.rustPlatform.buildRustPackage {
         pname = "universe-core";
         inherit version;
-        src = lib.cleanSourceWith {
-          src = ./.;
-          filter = path: type:
-            let rel = lib.removePrefix (toString ./. + "/") (toString path);
-            in lib.hasPrefix "crates" rel || rel == "Cargo.toml" || rel == "Cargo.lock" || rel == "crates";
-        };
+        src = rustSrc;
         cargoLock.lockFile = ./Cargo.lock;
+        cargoBuildFlags = [ "-p" "universe" ];
+        cargoTestFlags = [ "-p" "universe" ];
         nativeBuildInputs = [ pkgs.pkg-config ];
-        buildInputs = [ ];
-        postInstall = ''
-          mkdir -p $out/share/dbus-1/services
-          cat > $out/share/dbus-1/services/io.github.ilyasturki.Universe.service <<SVC
-          [D-BUS Service]
-          Name=io.github.ilyasturki.Universe
-          Exec=$out/bin/universed
-          SVC
-        '';
         meta.mainProgram = "universe";
+      };
+
+      # The core as a Python module (`import universe_core`): what the host links.
+      corePy = pkgs.python3Packages.buildPythonPackage {
+        pname = "universe-core";
+        inherit version;
+        pyproject = true;
+        src = rustSrc;
+        cargoDeps = pkgs.rustPlatform.importCargoLock { lockFile = ./Cargo.lock; };
+        nativeBuildInputs = with pkgs.rustPlatform; [ cargoSetupHook maturinBuildHook ];
+        buildAndTestSubdir = "crates/universe-py";
+        pythonImportsCheck = [ "universe_core" ];
       };
 
       moduleNames = builtins.filter (n: builtins.pathExists (./modules + "/${n}/module.toml"))
@@ -57,8 +64,8 @@
         paths = builtins.attrValues modulePkgs;
       };
 
-      # Runtime tools the shipped modules call by name.
-      moduleRuntime = with pkgs; [ gpu-screen-recorder gogdl ffmpeg trash-cli util-linux ];
+      # No gpu-screen-recorder here: it must match the host's setcap gsr-kms-server (nixos.nix pins that package).
+      moduleRuntime = with pkgs; [ gogdl ffmpeg trash-cli util-linux ];
 
       ui = pkgs.python3Packages.buildPythonApplication {
         pname = "universe-ui";
@@ -66,13 +73,17 @@
         pyproject = true;
         src = ./ui;
         build-system = [ pkgs.python3Packages.setuptools ];
-        dependencies = with pkgs.python3Packages; [ pyside6 pysdl2 qrcode ];
+        dependencies = with pkgs.python3Packages; [ pyside6 pysdl2 qrcode corePy ];
         nativeBuildInputs = [ pkgs.qt6.wrapQtAppsHook ];
         buildInputs = with pkgs.qt6; [ qtbase qtdeclarative qt5compat qtmultimedia qtwayland qtsvg ];
         dontWrapQtApps = false;
+        # The hooks and systemd's ExecStopPost need the CLI; a Python process has no argv[0] to find it by.
         preFixup = ''
           qtWrapperArgs+=(--prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath [ pkgs.SDL2 ]})
           qtWrapperArgs+=(--set QT_FORCE_STDERR_LOGGING 1)
+          qtWrapperArgs+=(--set UNIVERSE_BIN ${universe}/bin/universe)
+          qtWrapperArgs+=(--set UNIVERSE_MODULES_PATH ${modulesPkg}/share/universe/modules)
+          qtWrapperArgs+=(--prefix PATH : ${lib.makeBinPath (moduleRuntime ++ [ pkgs.umu-launcher pkgs.systemd ])})
         '';
         postFixup = ''
           for f in $out/bin/*; do wrapQtApp "$f"; done
@@ -86,12 +97,9 @@
         paths = [ core modulesPkg ];
         nativeBuildInputs = [ pkgs.makeWrapper ];
         postBuild = ''
-          for b in universe universed; do
-            wrapProgram $out/bin/$b \
-              --set UNIVERSE_MODULES_PATH "${modulesPkg}/share/universe/modules" \
-              --prefix PATH : "${lib.makeBinPath (moduleRuntime ++ [ pkgs.umu-launcher pkgs.systemd ])}"
-          done
-          sed -i "s|Exec=.*|Exec=$out/bin/universed|" $out/share/dbus-1/services/io.github.ilyasturki.Universe.service
+          wrapProgram $out/bin/universe \
+            --set UNIVERSE_MODULES_PATH "${modulesPkg}/share/universe/modules" \
+            --prefix PATH : "${lib.makeBinPath (moduleRuntime ++ [ pkgs.umu-launcher pkgs.systemd ])}"
         '';
         meta.mainProgram = "universe";
       };
@@ -100,7 +108,7 @@
         name = "universe-pytest-ui";
         src = ./ui;
         dontWrapQtApps = true;
-        nativeBuildInputs = [ (pkgs.python3.withPackages (ps: [ ps.pyside6 ps.pysdl2 ps.qrcode ps.pytest ])) pkgs.qt6.qt5compat pkgs.qt6.qtmultimedia pkgs.qt6.qtdeclarative ];
+        nativeBuildInputs = [ (pkgs.python3.withPackages (ps: [ ps.pyside6 ps.pysdl2 ps.qrcode ps.pytest corePy ])) pkgs.qt6.qt5compat pkgs.qt6.qtmultimedia pkgs.qt6.qtdeclarative pkgs.systemd ];
         buildPhase = ''
           export HOME=$TMPDIR QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 LC_ALL=C.UTF-8 TZ=Europe/Paris TZDIR=${pkgs.tzdata}/share/zoneinfo
           export QML2_IMPORT_PATH=${pkgs.qt6.qtdeclarative}/lib/qt-6/qml:${pkgs.qt6.qt5compat}/lib/qt-6/qml:${pkgs.qt6.qtmultimedia}/lib/qt-6/qml
@@ -123,7 +131,7 @@
     in {
       packages.${system} = {
         inherit core universe;
-        universed = universe;
+        universe-core-py = corePy;
         modules = modulesPkg;
         universe-ui = ui;
         default = universe;
@@ -131,7 +139,6 @@
 
       apps.${system} = {
         default = { type = "app"; program = "${universe}/bin/universe"; meta.description = "Universe launcher CLI"; };
-        universed = { type = "app"; program = "${universe}/bin/universed"; meta.description = "Universe daemon"; };
         universe-ui = { type = "app"; program = "${ui}/bin/universe-ui"; meta.description = "Universe Qt UI"; };
       };
 
@@ -153,7 +160,7 @@
         pytest-modules = pytestModules;
       };
 
-      nixosModules.default = import ./nix/nixos.nix { universePkg = universe; uiPkg = ui; };
+      nixosModules.default = import ./nix/nixos.nix { universePkg = universe; uiPkg = ui; gsrPkg = pkgs.gpu-screen-recorder; };
       homeModules.default = import ./nix/home-manager.nix { universePkg = universe; uiPkg = ui; };
     };
 }

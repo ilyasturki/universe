@@ -12,7 +12,10 @@ os.environ.setdefault("QT_FORCE_STDERR_LOGGING", "1")
 def xdg(tmp_path_factory):
     root = tmp_path_factory.mktemp("xdg")
     for name in ("XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_DATA_HOME", "XDG_CONFIG_HOME"):
-        os.environ[name] = str(root / name.split("_")[1].lower())
+        kind = name.split("_")[1].lower()
+        os.environ[name] = str(root / kind)
+        # a justfile or shell may point the core at a dev library; the tests get their own
+        os.environ[f"UNIVERSE_{kind.upper()}_HOME"] = str(root / kind / "universe")
     return root
 
 

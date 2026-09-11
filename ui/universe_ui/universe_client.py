@@ -1,8 +1,8 @@
-"""QtDBus client for io.github.ilyasturki.Universe (docs/api.md), and a fixture-backed twin.
+"""The core as QML sees it (`api.universe`): in-process through `universe_core` (PyO3), and a
+fixture-backed twin.
 
-Payloads are JSON strings on the bus; every method here hands QML plain dicts and lists.
-Signals are relayed as Qt signals. The daemon's absence surfaces as `error`, never as an
-exception in QML.
+Payloads are JSON strings from the core; every method here hands QML plain dicts and lists.
+Failures surface as `error`, never as an exception in QML.
 """
 
 import json
@@ -10,35 +10,21 @@ import os
 import shutil
 import subprocess
 import tempfile
+import threading
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 
 import shiboken6
 from PySide6.QtCore import (
-    SLOT,
     Property,
+    QFileSystemWatcher,
     QObject,
     QProcess,
     QTimer,
     Signal,
     Slot,
 )
-
-SERVICE = "io.github.ilyasturki.Universe"
-PATH = "/io/github/ilyasturki/Universe"
-IFACES = {
-    "Library1": SERVICE + ".Library1",
-    "Session1": SERVICE + ".Session1",
-    "Sources1": SERVICE + ".Sources1",
-    "Media1": SERVICE + ".Media1",
-    "Recording1": SERVICE + ".Recording1",
-    "Journal1": SERVICE + ".Journal1",
-    "Modules1": SERVICE + ".Modules1",
-    "Settings1": SERVICE + ".Settings1",
-}
-PROPERTIES = "org.freedesktop.DBus.Properties"
-ERROR_PREFIX = SERVICE + ".Error."
 
 
 class UniverseError(Exception):
@@ -334,134 +320,234 @@ class UniverseClientBase(QObject):
             return ""
 
 
-class UniverseClient(UniverseClientBase):
-    """The real thing: method calls over the session bus, signals via typed slots (T4)."""
+class CoreClient(UniverseClientBase):
+    """The core in this process (`universe_core`). Calls block on the library; what other processes
+    write — the CLI, systemd's `session-end`, the hooks — surfaces through watches on games/ and state/."""
 
-    def __init__(self, bus=None, parent=None):
+    _deliver = Signal(object)
+
+    def __init__(self, parent=None):
         super().__init__(parent)
-        from PySide6.QtDBus import QDBusConnection
+        import universe_core
 
-        self._bus = bus or QDBusConnection.sessionBus()
-        self.connected = {}
-        self._watchers = []
-        self._subscribe()
+        self._mod = universe_core
+        self._core = universe_core.Core()
+        self._data = Path(universe_core.data_home())
+        self._state = Path(universe_core.state_home())
+        self._job_seq = 0
+        self._jobs = {}
+        self._tracked = None
+        self._deliver.connect(lambda fn: fn())
+        self._dirty = set()
+        self._debounce = QTimer(self)
+        self._debounce.setSingleShot(True)
+        self._debounce.setInterval(300)
+        self._debounce.timeout.connect(self._flush)
+        self._poll = QTimer(self)
+        self._poll.setInterval(2000)
+        self._poll.timeout.connect(self._poll_session)
+        self._watcher = QFileSystemWatcher(self)
+        self._watcher.directoryChanged.connect(self._mark)
+        self._rewatch()
         self.refreshCurrent()
+        if self._current:
+            self._track(self._current["session_id"], self._current["id"])
 
-    # A wrong SLOT signature loses the signal silently; `connected` records what bound.
-    def _subscribe(self):
-        bus = self._bus
-        subs = [
-            ("Session1", "SessionStarted", "_onSessionStarted(QString,QString)"),
-            ("Session1", "SessionEnded", "_onSessionEnded(QString,QString,uint)"),
-            ("Library1", "LibraryChanged", "_onLibraryChanged(QStringList)"),
-            ("Recording1", "RecordingFiled", "_onRecordingFiled(QString,QString,QString)"),
-            ("Journal1", "EntryWritten", "_onEntryWritten(QString,QString)"),
-            ("Sources1", "Progress", "_onProgress(QString,qulonglong,qulonglong,QString)"),
-            ("Sources1", "JobFinished", "_onJobFinished(QString,bool,QString)"),
-            ("Media1", "MediaChanged", "_onMediaChanged(QString)"),
-            ("Modules1", "ModulesChanged", "_onModulesChanged()"),
-        ]
-        for iface, name, slot in subs:
-            self.connected[name] = bus.connect(SERVICE, PATH, IFACES[iface], name, self, SLOT(slot))
-        self.connected["PropertiesChanged"] = bus.connect(
-            SERVICE, PATH, PROPERTIES, "PropertiesChanged", self, SLOT("_onPropertiesChanged(QDBusMessage)")
-        )
-
-    @Slot(str, str)
-    def _onSessionStarted(self, session_id, ident):
-        self.refreshCurrent()
-        self.sessionStarted.emit(session_id, ident)
-
-    @Slot(str, str, "uint")
-    def _onSessionEnded(self, session_id, ident, duration):
-        self.refreshCurrent()
-        self.sessionEnded.emit(session_id, ident, int(duration))
-
-    @Slot("QStringList")
-    def _onLibraryChanged(self, ids):
-        self.libraryChanged.emit(list(ids))
-
-    @Slot(str, str, str)
-    def _onRecordingFiled(self, session_id, ident, path):
-        self.recordingFiled.emit(session_id, ident, path)
-
-    @Slot(str, str)
-    def _onEntryWritten(self, session_id, ident):
-        self.entryWritten.emit(session_id, ident)
-
-    @Slot(str, "qulonglong", "qulonglong", str)
-    def _onProgress(self, job_id, done, total, message):
-        self.progress.emit(job_id, int(done), int(total), message)
-
-    @Slot(str, bool, str)
-    def _onJobFinished(self, job_id, ok, message):
-        self.jobFinished.emit(job_id, bool(ok), message)
-
-    @Slot(str)
-    def _onMediaChanged(self, ident):
-        self.mediaChanged.emit(ident)
-
-    @Slot()
-    def _onModulesChanged(self):
-        self.modulesChanged.emit()
-
-    # The a{sv} payload is not readable from PySide6 (T4); re-read the property instead.
-    @Slot("QDBusMessage")
-    def _onPropertiesChanged(self, message):
-        args = message.arguments()
-        if args and args[0] == IFACES["Session1"]:
-            self.refreshCurrent()
-
-    def _message(self, iface, method, args):
-        from PySide6.QtDBus import QDBusMessage
-
-        msg = QDBusMessage.createMethodCall(SERVICE, PATH, IFACES[iface], method)
-        msg.setArguments(list(args))
-        return msg
-
-    @staticmethod
-    def _unpack(reply):
-        from PySide6.QtDBus import QDBusMessage
-
-        if reply.type() == QDBusMessage.MessageType.ErrorMessage:
-            name = reply.errorName() or ""
-            message = reply.errorMessage() or name
-            kind = name[len(ERROR_PREFIX):] if name.startswith(ERROR_PREFIX) else name
-            # universed 0.1 folds the kind into a generic Failed error's message.
-            if message.startswith(ERROR_PREFIX):
-                head, _, rest = message.partition(": ")
-                kind, message = head[len(ERROR_PREFIX):], rest or message
-            raise UniverseError(kind, message)
-        args = reply.arguments()
-        return args[0] if args else None
+    # -- transport -------------------------------------------------------------------------
 
     def _call(self, iface, method, *args):
-        return self._unpack(self._bus.call(self._message(iface, method, args)))
+        fn = _CORE_CALLS.get((iface, method))
+        if fn is None:
+            raise UniverseError("Unavailable", f"{iface}.{method} is not provided by the core")
+        try:
+            return fn(self, *args)
+        except self._mod.UniverseError as e:
+            kind, message = (list(e.args) + ["", ""])[:2]
+            raise UniverseError(kind or "Io", message or kind) from None
 
     # Launch blocks on pre-launch hooks (up to 20 s): keep the event loop, hence the animation, alive.
     def _call_async(self, iface, method, args, on_reply, on_error):
-        from PySide6.QtDBus import QDBusPendingCallWatcher
-
-        watcher = QDBusPendingCallWatcher(self._bus.asyncCall(self._message(iface, method, args)), self)
-        self._watchers.append(watcher)
-
-        def finished(w):
-            self._watchers.remove(w)
-            w.deleteLater()
+        def run():
             try:
-                on_reply(self._unpack(w.reply()))
+                value = self._call(iface, method, *args)
             except UniverseError as e:
-                on_error(e)
+                self._deliver.emit(lambda: on_error(e))
+                return
+            self._deliver.emit(lambda: on_reply(value))
 
-        watcher.finished.connect(finished)
+        threading.Thread(target=run, daemon=True, name=f"{iface}.{method}").start()
 
     def _property(self, iface, name):
-        from PySide6.QtDBus import QDBusMessage
+        if (iface, name) == ("Session1", "Current"):
+            return self._core.current_json()
+        if (iface, name) == ("Settings1", "Version"):
+            return self._mod.version()
+        raise UniverseError("Unavailable", f"{iface}.{name}")
 
-        msg = QDBusMessage.createMethodCall(SERVICE, PATH, PROPERTIES, "Get")
-        msg.setArguments([IFACES[iface], name])
-        value = self._unpack(self._bus.call(msg))
-        return value.variant() if hasattr(value, "variant") else value
+    # -- the running session ---------------------------------------------------------------
+
+    def _launched(self, session_id, ident):
+        self._deliver.emit(lambda: self._track(session_id, ident))
+        return session_id
+
+    def _track(self, session_id, ident):
+        self._tracked = (session_id, ident)
+        self.refreshCurrent()
+        self.sessionStarted.emit(session_id, ident)
+        self._poll.start()
+
+    # systemd owns the game; the session is over once `session-end` has run and the unit is gone.
+    def _poll_session(self):
+        if not self._tracked:
+            self._poll.stop()
+            return
+        if self._core.current_json():
+            return
+        session_id, ident = self._tracked
+        self._tracked = None
+        self._poll.stop()
+        try:
+            self._core.reload_game(ident)
+        except self._mod.UniverseError:
+            pass
+        sessions = _json(self._guarded("[]", "Session1", "Sessions", ident, decode=False), [])
+        line = next((s for s in sessions if s.get("session") == session_id), {})
+        self.refreshCurrent()
+        self.sessionEnded.emit(session_id, ident, int(line.get("duration_s") or 0))
+        self.libraryChanged.emit([ident])
+        if line.get("recording"):
+            self.recordingFiled.emit(session_id, ident, line["recording"])
+
+    # -- file watches ----------------------------------------------------------------------
+
+    def _rewatch(self):
+        games = self._data / "games"
+        for d in (games, self._state):
+            d.mkdir(parents=True, exist_ok=True)
+        wanted = {str(games), str(self._state)}
+        for d in games.iterdir():
+            if d.is_dir():
+                wanted.update(str(p) for p in (d, d / "journal", d / "media") if p.is_dir())
+        have = set(self._watcher.directories())
+        new = sorted(wanted - have)
+        if new:
+            self._watcher.addPaths(new)
+
+    def _mark(self, path):
+        self._dirty.add(path)
+        self._debounce.start()
+
+    def _flush(self):
+        dirty, self._dirty = self._dirty, set()
+        games = self._data / "games"
+        ids, whole, state = set(), False, False
+        for p in dirty:
+            path = Path(p)
+            if path == self._state:
+                state = True
+            elif path == games:
+                whole = True
+            else:
+                try:
+                    ids.add(path.relative_to(games).parts[0])
+                except ValueError:
+                    pass
+        self._rewatch()
+        if whole:
+            self._guarded(None, "Library1", "Rescan", decode=False)
+            self.libraryChanged.emit([])
+        for ident in sorted(ids):
+            try:
+                self._core.reload_game(ident)
+            except self._mod.UniverseError:
+                continue
+            self.libraryChanged.emit([ident])
+            self.recordingFiled.emit("", ident, "")
+            self.entryWritten.emit("", ident)
+        if state:
+            self.refreshCurrent()
+            if self._current and not self._tracked:
+                self._track(self._current["session_id"], self._current["id"])
+
+    # -- jobs: the work runs in this process, on a thread; closing the UI aborts it -----------
+
+    def _job(self, kind, target, work):
+        self._job_seq += 1
+        job = f"job-{self._job_seq}"
+        self._jobs[job] = {"id": job, "kind": kind, "target": target, "done": 0, "total": 0, "message": "", "finished": False, "ok": False}
+
+        def progress(done, total, message):
+            self._deliver.emit(lambda: self._job_progress(job, done, total, message))
+
+        def run():
+            try:
+                message, ok = str(work(progress)), True
+            except self._mod.UniverseError as e:
+                message, ok = (e.args[1] if len(e.args) > 1 else str(e)), False
+            except Exception as e:  # noqa: BLE001 — a job always reports its end
+                message, ok = str(e), False
+            self._deliver.emit(lambda: self._job_finished(job, ok, message))
+
+        threading.Thread(target=run, daemon=True, name=job).start()
+        return job
+
+    def _job_progress(self, job, done, total, message):
+        entry = self._jobs.get(job)
+        if entry:
+            entry.update(done=int(done), total=int(total), message=message)
+        self.progress.emit(job, int(done), int(total), message)
+
+    def _job_finished(self, job, ok, message):
+        entry = self._jobs.get(job)
+        if entry:
+            entry.update(finished=True, ok=bool(ok), message=message)
+        self.jobFinished.emit(job, bool(ok), message)
+        self.libraryChanged.emit([])
+
+
+_CORE_CALLS = {
+    ("Library1", "List"): lambda s: s._core.list_json(),
+    ("Library1", "Get"): lambda s, ident: s._core.get_json(ident),
+    ("Library1", "Resolve"): lambda s, query: s._core.resolve(query),
+    ("Library1", "Set"): lambda s, ident, key, value: s._core.set(ident, key, value),
+    ("Library1", "Remove"): lambda s, ident, purge: s._core.remove(ident, _bus_bool(purge)),
+    ("Library1", "Rescan"): lambda s: s._core.reload(),
+    ("Library1", "ImportLutris"): lambda s, apply: s._core.import_lutris(_bus_bool(apply)),
+    ("Session1", "Launch"): lambda s, ident, screen: s._launched(s._core.launch(ident, screen), ident),
+    ("Session1", "Stop"): lambda s, session_id: s._core.stop(session_id),
+    ("Session1", "Screenshot"): lambda s: s._core.screenshot(),
+    ("Session1", "Sessions"): lambda s, ident: s._core.sessions_json(ident),
+    ("Sources1", "List"): lambda s: s._core.sources_json(),
+    ("Sources1", "LoginUrl"): lambda s, source: s._core.login_url(source),
+    ("Sources1", "Login"): lambda s, source, code: s._job("login", source, lambda p: s._core.login(source, code)),
+    ("Sources1", "Library"): lambda s, source: s._core.library_json(source, False),
+    ("Sources1", "RefreshLibrary"): lambda s, source: s._core.library_json(source, True),
+    ("Sources1", "Search"): lambda s, source, query: s._core.search_json(source, query),
+    ("Sources1", "Info"): lambda s, source, game_id: s._core.info_json(source, game_id),
+    ("Sources1", "Install"): lambda s, source, game_id: s._job("install", game_id, lambda p: s._core.install(source, game_id, p)),
+    ("Sources1", "Update"): lambda s, source, game_id: s._job("update", game_id, lambda p: "%d updated" % s._core.update(source, game_id, p)),
+    ("Sources1", "Updates"): lambda s: s._core.updates_json(),
+    ("Sources1", "Scan"): lambda s, source: s._job("scan", source, lambda p: "%d game(s)" % s._core.scan(source, p)),
+    ("Sources1", "Jobs"): lambda s: json.dumps(list(s._jobs.values())),
+    ("Media1", "Refresh"): lambda s, ident, force: s._job("media", ident, lambda p: "%d/%d updated" % s._core.media_refresh(ident, _bus_bool(force), p)),
+    ("Media1", "SetSlot"): lambda s, ident, slot, path: s._core.media_set_slot(ident, slot, path),
+    ("Media1", "Unset"): lambda s, ident, slot: s._core.media_unset(ident, slot),
+    ("Media1", "Candidates"): lambda s, ident, slot: s._core.media_candidates_json(ident, slot),
+    ("Media1", "Pin"): lambda s, ident, provider, provider_id: s._core.media_pin(ident, provider, provider_id),
+    ("Recording1", "List"): lambda s, ident: s._core.recordings_json(ident),
+    ("Recording1", "File"): lambda s, session_id, path: s._core.file_recording(session_id, path),
+    ("Journal1", "List"): lambda s, ident: s._core.journal_json(ident),
+    ("Journal1", "Render"): lambda s, ident: s._core.render_journal(ident),
+    ("Journal1", "AddEntry"): lambda s, session_id, payload: s._core.add_entry(session_id, payload),
+    ("Modules1", "List"): lambda s: s._core.modules_json(),
+    ("Modules1", "Enable"): lambda s, ident, enabled: (s._core.enable_module(ident, _bus_bool(enabled)), s.modulesChanged.emit())[0],
+    ("Modules1", "GetSettings"): lambda s, module, game_id: s._core.module_settings_json(module, game_id),
+    ("Modules1", "SetSetting"): lambda s, module, game_id, key, value: s._core.set_module_setting(module, game_id, key, value),
+    ("Modules1", "Doctor"): lambda s: s._core.doctor_json(),
+    ("Settings1", "Get"): lambda s: s._core.settings_json(),
+    ("Settings1", "Set"): lambda s, key, value: s._core.set_setting(key, value),
+    ("Settings1", "Reload"): lambda s: s._core.reload(),
+}
 
 
 # ---------------------------------------------------------------------------------------------

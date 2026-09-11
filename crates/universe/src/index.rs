@@ -1,5 +1,4 @@
 use rusqlite::{params, Connection};
-use std::path::Path;
 
 use crate::library::Resolved;
 
@@ -10,17 +9,6 @@ pub struct Index {
 }
 
 impl Index {
-    pub fn open(path: &Path) -> crate::Result<Index> {
-        if let Some(p) = path.parent() {
-            std::fs::create_dir_all(p)?;
-        }
-        let conn = Connection::open(path)?;
-        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")?;
-        let idx = Index { conn };
-        idx.ensure_schema()?;
-        Ok(idx)
-    }
-
     pub fn open_memory() -> crate::Result<Index> {
         let idx = Index { conn: Connection::open_in_memory()? };
         idx.ensure_schema()?;

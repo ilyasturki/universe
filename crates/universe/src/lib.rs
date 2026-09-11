@@ -13,13 +13,9 @@ pub mod sessions;
 pub mod slug;
 pub mod desktop;
 pub mod core;
-pub mod dbus;
-pub mod client;
 pub mod cli;
 pub mod doctor;
 
-pub const BUS_NAME: &str = "io.github.ilyasturki.Universe";
-pub const OBJECT_PATH: &str = "/io/github/ilyasturki/Universe";
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[derive(Debug, thiserror::Error)]
@@ -64,23 +60,5 @@ impl From<rusqlite::Error> for Error {
     }
 }
 
-impl Error {
-    pub fn dbus_name(&self) -> &'static str {
-        match self {
-            Error::NotFound(_) => "io.github.ilyasturki.Universe.Error.NotFound",
-            Error::Ambiguous(_) => "io.github.ilyasturki.Universe.Error.Ambiguous",
-            Error::Busy(_) => "io.github.ilyasturki.Universe.Error.Busy",
-            Error::Invalid(_) => "io.github.ilyasturki.Universe.Error.Invalid",
-            Error::Unavailable(_) => "io.github.ilyasturki.Universe.Error.Unavailable",
-            Error::Io(_) => "io.github.ilyasturki.Universe.Error.Io",
-        }
-    }
-}
-
-impl From<Error> for zbus::fdo::Error {
-    fn from(e: Error) -> Self {
-        zbus::fdo::Error::Failed(format!("{}: {}", e.dbus_name(), e))
-    }
-}
 
 pub type Result<T> = std::result::Result<T, Error>;

@@ -3,15 +3,11 @@ name = "universe"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description = "Universe: a gamepad-first game launcher core (daemon, D-Bus API, CLI)"
+description = "Universe: a gamepad-first game launcher core (library and CLI)"
 
 [[bin]]
 name = "universe"
 path = "src/main.rs"
-
-[[bin]]
-name = "universed"
-path = "src/daemon_main.rs"
 
 [dependencies]
 anyhow = "1"
@@ -33,13 +29,10 @@ tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "blocking"] }
 semver = "1"
 serde_yaml = "0.9"
-notify = "6"
 comfy-table = "7"
 owo-colors = "4"
 shell-words = "1"
 urlencoding = "2"
-libc = "0.2"
-futures-util = "0.3"
 
 [dev-dependencies]
 tempfile = "3"

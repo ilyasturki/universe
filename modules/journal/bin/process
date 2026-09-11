@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""post-process hook: writes the session's journal entry and hands it to Journal1.AddEntry."""
+"""post-process hook: writes the session's journal entry and hands it to `universe journal-add`."""
 import json
 import os
 import shutil
@@ -11,7 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import images as img  # noqa: E402
 import prompt as pr  # noqa: E402
 import providers  # noqa: E402
-from _common import (add_entry_via_bus, date_fr, heure_fr, journal_lang, labels, load_settings, log,  # noqa: E402
+from _common import (add_entry_via_core, date_fr, heure_fr, journal_lang, labels, load_settings, log,  # noqa: E402
                      parse_rfc3339, parse_session_id, read_entries, read_sessions, rfc3339_local, sanitize_game_name,
                      validate_entry, write_entry_file)
 from note import write_note  # noqa: E402
@@ -108,15 +108,15 @@ def read_json_env(name):
 def deliver(entry, journal_dir):
     sid = entry["session"]
     payload = json.dumps(entry, ensure_ascii=False)
-    outcome = add_entry_via_bus(sid, payload)
+    outcome = add_entry_via_core(sid, payload)
     if outcome == "ok":
-        log("entry handed to the core via Journal1.AddEntry")
+        log("entry handed to the core via universe journal-add")
         return True
     if outcome == "invalid":
         log("the core rejected the entry; nothing written")
         return False
     path = write_entry_file(journal_dir, entry)
-    log(f"warning: bus unavailable, wrote {path} directly")
+    log(f"warning: core unavailable, wrote {path} directly")
     return True
 
 

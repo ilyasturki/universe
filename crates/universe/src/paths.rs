@@ -51,12 +51,22 @@ pub fn modules_data_dir(id: &str) -> PathBuf {
     data_home().join("modules").join(id)
 }
 
-pub fn index_file() -> PathBuf {
-    cache_home().join("index.db")
-}
-
 pub fn current_session_file() -> PathBuf {
     state_home().join("current-session.json")
+}
+
+/// The CLI for hooks and ExecStopPost: $UNIVERSE_BIN, else argv[0] (makeWrapper's `exec -a "$0"` keeps the wrapper path where current_exe() would not).
+pub fn self_exe() -> PathBuf {
+    if let Some(p) = std::env::var_os("UNIVERSE_BIN").filter(|p| !p.is_empty()) {
+        return PathBuf::from(p);
+    }
+    let argv0 = std::env::args_os().next().map(PathBuf::from).unwrap_or_default();
+    let resolved = if argv0.components().count() > 1 {
+        std::env::current_dir().ok().map(|d| d.join(&argv0))
+    } else {
+        std::env::var_os("PATH").and_then(|p| std::env::split_paths(&p).map(|d| d.join(&argv0)).find(|p| p.is_file()))
+    };
+    resolved.filter(|p| p.is_file()).or_else(|| std::env::current_exe().ok()).unwrap_or(argv0)
 }
 
 /// System module dirs: $UNIVERSE_MODULES_PATH (colon-separated) then XDG_DATA_DIRS/universe/modules.

@@ -6,9 +6,6 @@ import sys
 import unicodedata
 from datetime import datetime, timedelta
 
-DEFAULT_BUS = "io.github.ilyasturki.Universe"
-DEFAULT_OBJECT = "/io/github/ilyasturki/Universe"
-JOURNAL_IFACE = "io.github.ilyasturki.Universe.Journal1"
 
 SETTINGS_DEFAULTS = {
     "enabled": True,
@@ -46,11 +43,8 @@ def load_settings():
     return settings
 
 
-def bus_and_object():
-    return (
-        os.environ.get("UNIVERSE_BUS") or DEFAULT_BUS,
-        os.environ.get("UNIVERSE_OBJECT") or DEFAULT_OBJECT,
-    )
+def universe_bin():
+    return os.environ.get("UNIVERSE_BIN") or "universe"
 
 
 # --- session ids and dates ---------------------------------------------------
@@ -272,22 +266,21 @@ def write_entry_file(journal_dir, entry):
     return path
 
 
-def add_entry_via_bus(sid, entry_json):
+def add_entry_via_core(sid, entry_json):
     """-> 'ok' | 'invalid' (the core rejected the entry) | 'unavailable'."""
-    bus, obj = bus_and_object()
-    cmd = ["busctl", "--user", "call", bus, obj, JOURNAL_IFACE, "AddEntry", "ss", sid, entry_json]
+    cmd = [universe_bin(), "journal-add", sid, entry_json]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
     except FileNotFoundError:
-        log("busctl not found")
+        log(f"{cmd[0]} not found")
         return "unavailable"
     except subprocess.TimeoutExpired:
-        log("Journal1.AddEntry timed out")
+        log("universe journal-add timed out")
         return "unavailable"
     if result.returncode == 0:
         return "ok"
     err = (result.stderr or "").strip()
-    log(f"Journal1.AddEntry failed ({result.returncode}): {err}")
-    if ".Error.Invalid" in err:
+    log(f"universe journal-add failed ({result.returncode}): {err}")
+    if "invalid:" in err:
         return "invalid"
     return "unavailable"

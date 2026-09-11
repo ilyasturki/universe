@@ -103,27 +103,32 @@ pub fn plan(r: &Resolved, config: &Config, session_id: &str, extra_env: &BTreeMa
     })
 }
 
-pub struct Running {
-    pub child: tokio::process::Child,
-    pub unit: String,
+/// A transient service, not a scope: env and cwd are passed explicitly, `ExitType=cgroup` ends it with the last game
+/// process, and systemd then runs `stop_post` (`universe session-end …`) whatever happened to the launcher.
+pub async fn spawn(plan: &Plan, stop_post: &[String], passthrough: &BTreeMap<String, String>, timeout_stop_s: u64) -> crate::Result<()> {
+    let mut cmd = tokio::process::Command::new("systemd-run");
+    cmd.args(["--user", "--collect", "--quiet"])
+        .arg(format!("--unit={}", plan.unit))
+        .arg("--property=ExitType=cgroup")
+        .arg(format!("--property=TimeoutStopSec={timeout_stop_s}"))
+        .arg(format!("--property=ExecStopPost={}", unit_quote(stop_post)));
+    if plan.cwd.is_dir() {
+        cmd.arg(format!("--working-directory={}", plan.cwd.display()));
+    }
+    for (k, v) in passthrough.iter().chain(plan.env.iter()) {
+        cmd.arg(format!("--setenv={k}={v}"));
+    }
+    cmd.arg("--").arg(&plan.program).args(&plan.args).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped());
+    let out = cmd.output().await.map_err(|e| crate::Error::Io(format!("systemd-run: {e}")))?;
+    if !out.status.success() {
+        return Err(crate::Error::Io(format!("systemd-run: {}", String::from_utf8_lossy(&out.stderr).trim())));
+    }
+    Ok(())
 }
 
-/// `systemd-run --user --scope`: the command runs from this process's context, so env and cwd are set on the child (T1).
-pub fn spawn(plan: &Plan) -> crate::Result<Running> {
-    let mut cmd = tokio::process::Command::new("systemd-run");
-    cmd.arg("--user").arg("--scope").arg("--collect").arg("--quiet").arg(format!("--unit={}", plan.unit))
-        .arg("--")
-        .arg(&plan.program)
-        .args(&plan.args)
-        .envs(plan.env.iter())
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped());
-    if plan.cwd.is_dir() {
-        cmd.current_dir(&plan.cwd);
-    }
-    let child = cmd.spawn().map_err(|e| crate::Error::Io(format!("systemd-run: {e}")))?;
-    Ok(Running { child, unit: plan.unit.clone() })
+/// Unit-file quoting for an Exec= line: double quotes, backslash escapes.
+fn unit_quote(parts: &[String]) -> String {
+    parts.iter().map(|p| format!("\"{}\"", p.replace('\\', "\\\\").replace('"', "\\\""))).collect::<Vec<_>>().join(" ")
 }
 
 pub async fn run_shell(command: &str, env: &BTreeMap<String, String>, cwd: &Path) -> crate::Result<i32> {
@@ -139,66 +144,52 @@ pub async fn run_shell(command: &str, env: &BTreeMap<String, String>, cwd: &Path
     Ok(st.code().unwrap_or(-1))
 }
 
-pub fn cgroup_root() -> PathBuf {
-    PathBuf::from("/sys/fs/cgroup")
-}
-
-/// Resolves the scope's cgroup dir via `systemctl --user show -p ControlGroup`; retries while the unit settles.
-pub async fn cgroup_dir(unit: &str) -> Option<PathBuf> {
-    for _ in 0..20 {
-        let out = tokio::process::Command::new("systemctl")
-            .args(["--user", "show", "-p", "ControlGroup", "--value", &format!("{unit}.scope")])
-            .output()
-            .await
-            .ok()?;
-        let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-        if !s.is_empty() {
-            return Some(cgroup_root().join(s.trim_start_matches('/')));
-        }
-        tokio::time::sleep(Duration::from_millis(250)).await;
+/// `deactivating` counts: `ExecStopPost` is still running the session's end.
+pub async fn is_active(unit: &str) -> bool {
+    let out = tokio::process::Command::new("systemctl").args(["--user", "is-active", unit]).output().await;
+    match out {
+        Ok(o) => matches!(String::from_utf8_lossy(&o.stdout).trim(), "active" | "activating" | "deactivating" | "reloading"),
+        Err(_) => false,
     }
-    None
 }
 
-pub fn populated(cgroup: &Path) -> Option<bool> {
-    let s = std::fs::read_to_string(cgroup.join("cgroup.events")).ok()?;
-    Some(s.lines().any(|l| l.trim() == "populated 1"))
+#[derive(Debug, Default, Clone)]
+pub struct UnitLog {
+    pub started: Option<chrono::DateTime<chrono::Local>>,
+    pub ended: Option<chrono::DateTime<chrono::Local>>,
+    pub exit: Option<i32>,
 }
 
-/// Waits until the scope's cgroup is empty (or gone), polling cgroup.events (T1: the file disappears right after populated 0).
-pub async fn wait_empty(cgroup: Option<&Path>, child: &mut tokio::process::Child) -> i32 {
-    let mut exit = -1;
-    let mut child_done = false;
-    loop {
-        if !child_done {
-            match child.try_wait() {
-                Ok(Some(st)) => {
-                    exit = st.code().unwrap_or(-1);
-                    child_done = true;
-                }
-                Ok(None) => {}
-                Err(_) => child_done = true,
+/// What the journal remembers of a unit: the start, the end and the main process's exit status.
+pub async fn unit_log(unit: &str) -> UnitLog {
+    let out = tokio::process::Command::new("journalctl").args(["--user", "-u", unit, "-o", "json", "--no-pager", "-q"]).output().await;
+    match out {
+        Ok(o) => parse_unit_log(&String::from_utf8_lossy(&o.stdout)),
+        Err(_) => UnitLog::default(),
+    }
+}
+
+pub fn parse_unit_log(json_lines: &str) -> UnitLog {
+    let mut log = UnitLog::default();
+    for line in json_lines.lines() {
+        let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else { continue };
+        let Some(msg) = v["MESSAGE"].as_str() else { continue };
+        let ts = v["__REALTIME_TIMESTAMP"].as_str().and_then(|s| s.parse::<i64>().ok()).and_then(|us| chrono::DateTime::from_timestamp_micros(us)).map(|t| t.with_timezone(&chrono::Local));
+        if msg.starts_with("Started ") && log.started.is_none() {
+            log.started = ts;
+        } else if msg.contains("Deactivated successfully") || msg.contains("Failed with result") || msg.starts_with("Stopped ") || msg.contains("Consumed ") {
+            log.ended = ts;
+        } else if let Some(rest) = msg.split("status=").nth(1) {
+            if msg.contains("Main process exited") {
+                log.exit = rest.split(|c: char| !c.is_ascii_digit()).next().and_then(|n| n.parse().ok());
             }
         }
-        let alive = match cgroup {
-            Some(cg) => populated(cg).unwrap_or(false),
-            None => !child_done,
-        };
-        if !alive && (child_done || cgroup.is_some()) {
-            break;
-        }
-        tokio::time::sleep(Duration::from_millis(1000)).await;
     }
-    if !child_done {
-        if let Ok(Some(st)) = child.try_wait() {
-            exit = st.code().unwrap_or(-1);
-        }
-    }
-    exit
+    log
 }
 
 pub async fn stop_unit(unit: &str) -> crate::Result<()> {
-    let out = tokio::process::Command::new("systemctl").args(["--user", "stop", &format!("{unit}.scope")]).output().await?;
+    let out = tokio::process::Command::new("systemctl").args(["--user", "stop", unit]).output().await?;
     let err = String::from_utf8_lossy(&out.stderr);
     if !out.status.success() && !err.contains("not loaded") && !err.contains("could not be found") {
         return Err(crate::Error::Io(format!("systemctl stop {unit}: {}", err.trim())));
@@ -211,6 +202,19 @@ mod tests {
     use super::*;
     use crate::game::Game;
     use crate::library::Effective;
+
+    #[test]
+    fn unit_log_from_journal_lines() {
+        let lines = concat!(
+            r#"{"MESSAGE":"Started [systemd-run] umu-run","__REALTIME_TIMESTAMP":"1789147978000000"}"#, "\n",
+            r#"{"MESSAGE":"universe-game-x.service: Main process exited, code=exited, status=3/NOTIMPLEMENTED","__REALTIME_TIMESTAMP":"1789147979000000"}"#, "\n",
+            r#"{"MESSAGE":"universe-game-x.service: Failed with result 'exit-code'.","__REALTIME_TIMESTAMP":"1789147980000000"}"#, "\n",
+            r#"{"MESSAGE":"universe-game-x.service: Consumed 17.224s CPU time over 54.416s wall clock time, 1.6G memory peak.","__REALTIME_TIMESTAMP":"1789147981000000"}"#, "\n",
+        );
+        let log = parse_unit_log(lines);
+        assert_eq!(log.exit, Some(3));
+        assert_eq!((log.ended.unwrap() - log.started.unwrap()).num_seconds(), 3);
+    }
 
     #[test]
     fn plan_sets_umu_env() {

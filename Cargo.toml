@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/universe"]
+members = ["crates/universe", "crates/universe-py"]
 resolver = "2"
 
 [workspace.package]

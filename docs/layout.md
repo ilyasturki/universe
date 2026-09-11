@@ -1,7 +1,7 @@
 # Dépôt — disposition
 
 ```
-Cargo.toml, crates/universe/     cœur Rust : lib + bins `universe` (CLI) et `universed` (démon)
+Cargo.toml, crates/universe/     cœur Rust : lib + bin `universe` (CLI) ; crates/universe-py/ : module Python `universe_core` (PyO3)
 ui/                              hôte PySide6 : paquet `universe_ui/` (python + qml/), tests/, pyproject.toml
 modules/<id>/                    modules livrés : module.toml + bin/* (+ tests/)
 nix/                             module home-manager, module NixOS

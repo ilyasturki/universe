@@ -1,6 +1,6 @@
 # Universe
 
-A gamepad-first game launcher for Linux. A Rust core (`universed` daemon + `universe` CLI) owns the library, launches games through [umu-run](https://github.com/Open-Wine-Components/umu-launcher) in systemd scopes, records sessions and playtime, and exposes everything over D-Bus (`io.github.ilyasturki.Universe`). A Qt 6 / PySide6 host (`universe-ui`) renders the [Reprise](https://github.com/ilyasturki/pegasus-theme-reprise) interface on top of it. Everything else — GOG installs, dialog-free recording, an AI play journal, a Markdown tracker — is a module.
+A gamepad-first game launcher for Linux. A Rust core (a library, the `universe` CLI and a Python module for the host) owns the library, launches games through [umu-run](https://github.com/Open-Wine-Components/umu-launcher) as transient systemd units, and records sessions and playtime. There is no daemon: systemd runs `universe session-end` when the game's cgroup empties, whatever happened to the process that launched it. A Qt 6 / PySide6 host (`universe-ui`) renders the [Reprise](https://github.com/ilyasturki/pegasus-theme-reprise) interface on top of the core, in-process. Everything else — GOG installs, dialog-free recording, an AI play journal, a Markdown tracker — is a module.
 
 Plain files are the truth: one `game.toml`, one `sessions.jsonl` and a `journal/` per game under `$XDG_DATA_HOME/universe/games/<id>/`. SQLite is only a rebuildable index.
 
@@ -11,14 +11,14 @@ Plain files are the truth: one `game.toml`, one `sessions.jsonl` and a `journal/
 inputs.universe.url = "github:ilyasturki/universe";
 ```
 
-NixOS side (KMS capture helper, D-Bus service, packages):
+NixOS side (KMS capture helper, packages):
 
 ```nix
 imports = [ universe.nixosModules.default ];
-programs.universe.enable = true;          # programs.gpu-screen-recorder + dbus service
+programs.universe.enable = true;          # programs.gpu-screen-recorder + packages
 ```
 
-Home-manager side (config.toml, `universed` user service, enabled modules):
+Home-manager side (config.toml, enabled modules):
 
 ```nix
 imports = [ universe.homeModules.default ];
@@ -38,9 +38,9 @@ programs.universe = {
 };
 ```
 
-Without home-manager: `nix profile install github:ilyasturki/universe`, then write `~/.config/universe/config.toml` (defaults in `docs/api.md`). The CLI starts `universed` on demand.
+Without home-manager: `nix profile install github:ilyasturki/universe`, then write `~/.config/universe/config.toml` (defaults in `docs/api.md`).
 
-Packages: `universe` (default: core wrapped with the shipped modules and their runtime on `PATH`), `universe-ui`, `core`, `modules`, `modules-<id>`. `nix run .#universe-ui` starts the host.
+Packages: `universe` (default: core wrapped with the shipped modules and their runtime on `PATH`), `universe-ui`, `core`, `universe-core-py` (the `universe_core` Python module), `modules`, `modules-<id>`. `nix run .#universe-ui` starts the host.
 
 ## Use
 
@@ -69,7 +69,7 @@ universe ls --json | jq '.[] | select(.stats.hours > 10) | .title'
 | Module | Kind | Needs | Notes |
 |---|---|---|---|
 | `gog` | source | `gogdl` | login via `universe gog login`; a dedicated `GOGDL_CONFIG_PATH` under the module's data dir |
-| `capture` | hooks | `gpu-screen-recorder` + its setcap `gsr-kms-server` (`programs.gpu-screen-recorder.enable` on NixOS) | KMS capture of the output the game runs on, no portal dialog; `cursor` per game |
+| `capture` | hooks | `gpu-screen-recorder` + its setcap `gsr-kms-server`, both from the host system and the same nixpkgs (the NixOS module enables and pins `programs.gpu-screen-recorder`) | KMS capture of the output the game runs on, no portal dialog; `cursor` per game |
 | `journal` | hooks | `ffmpeg`, `codex` (or `provider = "claude"` / `"stub"`) | one Markdown entry per session from frames and screenshots |
 | `tracker-md` | hooks | — | keeps a Markdown tracker's Hours column and journal links in sync |
 | metadata | core | SteamGridDB and RAWG keys in `[keys]` | artwork slots `box_front`, `tile`, `background`, `logo`, screenshots |
@@ -80,17 +80,16 @@ Third-party modules: drop a directory with a `module.toml` under `~/.local/share
 
 ## Develop
 
-A `justfile` wraps everything in `nix develop` and points the daemon at an isolated `.dev/` (its own config, data, recordings, journal), so nothing touches `~/.config/universe`:
+A `justfile` wraps everything in `nix develop` and points the core at an isolated `.dev/` (its own config, data, recordings, journal), so nothing touches `~/.config/universe`:
 
 ```sh
 just setup                 # build, create .dev/config/config.toml, run doctor
 just cli migrate --apply   # any CLI command against .dev/ (gog login, gog scan, media <id> refresh, launch <id>…)
-just ui                    # PySide6 host on the dev daemon (add --fullscreen)
-just ui-fake               # host on a fixture library, no daemon
-just daemon                # daemon in the foreground with logs; `just logs` tails a spawned one
-just restart               # kill the daemon after a rebuild; the next call respawns it
+just cli play <game>       # a game is a transient systemd unit; `just logs` follows them
+just ui                    # PySide6 host on the in-process core (add --fullscreen)
+just ui-fake               # host on a fixture library, no core
 just test / just check     # cargo + pytest / flake packages + sandboxed checks
 just clean                 # trash .dev/
 ```
 
-`docs/plan-v3.html` is the design; `docs/api.md` the D-Bus and module contract; `docs/progress.md` the state of the work.
+`docs/plan-v3.html` is the original design (v3, with a daemon); `docs/api.md` the core API, process model and module contract (v4, without); `docs/progress.md` the state of the work.

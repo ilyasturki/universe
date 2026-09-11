@@ -1,6 +1,6 @@
 # Module `journal`
 
-Hook `post-process` : après chaque partie, une entrée de journal (JSON, champs fixes) rédigée par un modèle à partir des captures de la session et d'images extraites de l'enregistrement, déposée au cœur par `Journal1.AddEntry`, puis, si `markdown_export`, la note Obsidian du jeu rendue dans `<journal_root>/<id>/`. Port de `~/NixOs/bin/game-session-summary.mjs` (le prompt, la sélection d'images et la mémoire par jeu sont repris tels quels ; la plomberie handoff/unités est abandonnée, voir la fin).
+Hook `post-process` : après chaque partie, une entrée de journal (JSON, champs fixes) rédigée par un modèle à partir des captures de la session et d'images extraites de l'enregistrement, déposée au cœur par `universe journal-add`, puis, si `markdown_export`, la note Obsidian du jeu rendue dans `<journal_root>/<id>/`. Port de `~/NixOs/bin/game-session-summary.mjs` (le prompt, la sélection d'images et la mémoire par jeu sont repris tels quels ; la plomberie handoff/unités est abandonnée, voir la fin).
 
 Python 3 stdlib + `ffmpeg`/`ffprobe` ; aucun code chargé par le cœur.
 
@@ -10,7 +10,7 @@ modules/journal/
   bin/process      hook post-process
   bin/render       note Markdown depuis les entrées JSON (idempotent)
   bin/migrate      note Markdown existante -> entrées JSON
-  bin/_common.py   réglages, dates, libellés par langue, slug, sessions.jsonl, busctl
+  bin/_common.py   réglages, dates, libellés par langue, slug, sessions.jsonl, appel de la CLI
   bin/images.py    captures de la session, extraction et tri des images
   bin/prompt.py    SYSTEM_PROMPT, schéma de sortie, brief, acceptation, mémoire
   bin/providers.py codex | claude | stub
@@ -34,7 +34,7 @@ modules/journal/
 
 ## Déroulé de `bin/process`
 
-Env lu : `GAME_ID` (repli `GAME_SLUG`, puis slug du titre), `GAME_TITLE`, `SESSION_ID`, `SESSION_STARTED_AT`/`ENDED_AT`/`DURATION_S` (repli : l'id de session et la durée), `RECORDING_PATH` (vide = captures seules), `JOURNAL_DIR`, `MODULE_DATA_DIR`, `MODULE_SETTINGS_JSON`, `UNIVERSE_BUS`/`UNIVERSE_OBJECT`, `UNIVERSE_GAME_JSON` (repli pour les statistiques).
+Env lu : `GAME_ID` (repli `GAME_SLUG`, puis slug du titre), `GAME_TITLE`, `SESSION_ID`, `SESSION_STARTED_AT`/`ENDED_AT`/`DURATION_S` (repli : l'id de session et la durée), `RECORDING_PATH` (vide = captures seules), `JOURNAL_DIR`, `MODULE_DATA_DIR`, `MODULE_SETTINGS_JSON`, `UNIVERSE_BIN` (la CLI à rappeler), `UNIVERSE_GAME_JSON` (repli pour les statistiques).
 
 1. `enabled = false` → sortie 0. `JOURNAL_DIR/<session>.json` déjà présent → sortie 0 (`--force` régénère).
 2. Mur de quota codex (`MODULE_DATA_DIR/codex-limit.json`, posé par un run précédent) encore actif → sortie 75 sans toucher à ffmpeg.
@@ -44,7 +44,7 @@ Env lu : `GAME_ID` (repli `GAME_SLUG`, puis slug du titre), `GAME_TITLE`, `SESSI
 6. Brief : `SYSTEM_PROMPT` + jeu, date/heures/durée, rang de la session et temps cumulé (depuis `games/<id>/sessions.jsonl`, sinon `UNIVERSE_GAME_JSON.stats`, sinon le nombre d'entrées), mémoire du jeu, entrée précédente (paragraphes, 1500 caractères), une ligne par image (capture / auto-extraite / derniers instants, heure), consigne sur le profil `narrative`/`arcade`. `language ≠ auto` ajoute une règle qui impose la langue.
 7. Sortie du modèle validée : préambule et clôtures retirés, tirets longs → virgules, un « je vais vérifier… » rejeté comme non-entrée, `next` sans étiquette, titre sur une ligne ≤ 80 caractères. Verdict `images.gallery`/`unusable` normalisé (numéros hors bornes ou contradictoires ignorés, les images non citées restent utilisables en dernier).
 8. Galerie : captures gardées (jamais toutes rejetées) + images extraites dans l'ordre du modèle jusqu'à 6 au total, une place tenue pour une image des derniers instants. Les images gardées sont copiées en `JOURNAL_DIR/attachments/<session>-<n>.png` (les anciennes `<session>-*.png` sont supprimées avant) ; le nom ne matche pas le motif des captures, un re-run ne se les réinjecte pas.
-9. Entrée construite (ci-dessous) et déposée : `busctl --user call <bus> <objet> io.github.ilyasturki.Universe.Journal1 AddEntry ss <session> <json>`. Bus absent ou nom non activable → `JOURNAL_DIR/<session>.json` écrit directement, avertissement, sortie 0 (le cœur réindexe les fichiers). Réponse `…Error.Invalid` → rien d'écrit, sortie 1.
+9. Entrée construite (ci-dessous) et déposée : `$UNIVERSE_BIN journal-add <session> <json>`. CLI absente ou en échec → `JOURNAL_DIR/<session>.json` écrit directement, avertissement, sortie 0 (le cœur réindexe les fichiers). Réponse `invalid:` → rien d'écrit, sortie 1.
 10. Mémoire fusionnée et écrite (seulement après un dépôt réussi) dans `MODULE_DATA_DIR/memory/<id>.json` (amorcée depuis l'ancien `<journal_root>/<id>/.game-memory.json` s'il n'y a rien d'autre) : union des entités, synopsis conservé s'il rétrécit de plus de 20 %, profil figé à la première lecture, langue relue à chaque session.
 11. `markdown_export` → rendu de la note (voir `bin/render`). Le dossier de travail `MODULE_DATA_DIR/work/<session>-*/` est supprimé en sortie.
 
@@ -134,7 +134,7 @@ Vérifié sur des copies de notes réelles dans le scratchpad : `migrate` puis `
 nix shell --impure --expr 'let pkgs = import <nixpkgs> {}; in pkgs.python3.withPackages (ps: [ ps.pytest ])' -c python3 -m pytest modules/journal -q
 ```
 
-Sélection des captures (PNG synthétiques, fenêtre et fichiers étrangers), extraction depuis un mkv `testsrc` (ordre, queue, PNG écrits, hachages distincts), dédoublonnage (`smptebars` → 1 image, noir → 0), stub de bout en bout via `bin/process` sous-processus avec un `busctl` factice (entrée validée champ par champ, images copiées, mémoire, note, second run sans effet, remise au cœur sans fichier, refus `Error.Invalid`, `enabled=false`, langue imposée), aller-retour `render` → `migrate` → mêmes entrées et sessions, formes anciennes, composition exacte des arguments `codex exec` et mur de quota (subprocess remplacé).
+Sélection des captures (PNG synthétiques, fenêtre et fichiers étrangers), extraction depuis un mkv `testsrc` (ordre, queue, PNG écrits, hachages distincts), dédoublonnage (`smptebars` → 1 image, noir → 0), stub de bout en bout via `bin/process` sous-processus avec un `universe` factice (entrée validée champ par champ, images copiées, mémoire, note, second run sans effet, remise au cœur sans fichier, refus `Error.Invalid`, `enabled=false`, langue imposée), aller-retour `render` → `migrate` → mêmes entrées et sessions, formes anciennes, composition exacte des arguments `codex exec` et mur de quota (subprocess remplacé).
 
 ## Ce qui a été abandonné du script zx, et pourquoi
 
@@ -143,7 +143,7 @@ Sélection des captures (PNG synthétiques, fenêtre et fichiers étrangers), ex
 - Seconde passe de tri des images de remplacement (`reviewImages`) et réserve de candidats : elle ne servait qu'à combler une galerie courte quand le modèle rejetait des images, au prix d'un second appel ; la galerie reste plus courte dans ce cas.
 - ImageMagick : écart-type et hachage sortent de la même passe `ffmpeg` (gris 9×8), dHash à la place de l'aHash.
 - Ancres `captureStart`/`sessionEnd` reconstruites depuis le mtime du mkv : le cœur donne début, fin et durée ; les décalages dans le mkv partent de `SESSION_STARTED_AT` (une session dont le portail a retardé la capture décalera l'heure affichée des images extraites, la durée sondée par `ffprobe` limite l'échantillonnage à ce que le fichier contient).
-- Numérotation des entrées d'après l'index NNN du recorder : conservée quand le nom du mkv en porte un, rang parmi les sessions enregistrées sinon (les mkv classés par `Recording1.File` s'appellent `<session>.mkv`).
+- Numérotation des entrées d'après l'index NNN du recorder : conservée quand le nom du mkv en porte un, rang parmi les sessions enregistrées sinon (les mkv classés par `universe recording-file` s'appellent `<session>.mkv`).
 - Retrait de la ligne « **Reprise :** » des anciennes notes, renumérotation : hors périmètre, c'est la note rendue qui fait foi désormais.
 
 ## Questions ouvertes pour le cœur
@@ -154,7 +154,7 @@ Sélection des captures (PNG synthétiques, fenêtre et fichiers étrangers), ex
 4. `sessions.jsonl` est lu à `dirname(JOURNAL_DIR)/sessions.jsonl` ; le hook injecte sa propre session depuis l'env si elle n'y est pas encore. Les spans migrés (`.migrated-sessions.jsonl`, `source: "import-journal"`) attendent d'être absorbés dans `sessions.jsonl` à la migration des notes.
 5. Le hook rend 75 sur mur de quota et 1 sur échec du modèle sans rien écrire : le cœur voudra peut-être relancer `post-process` plus tard pour ces sessions (aujourd'hui : `process --force`).
 6. Le cœur doit ignorer `journal/.migrated-sessions.jsonl` et `*.json.tmp` en réindexant `journal/*.json` (les entrées s'appellent strictement `AAAAMMJJ-HHMMSS.json`).
-7. Pendant l'essai réel un `universed` de debug tenait déjà `io.github.ilyasturki.Universe` ; l'essai a utilisé `UNIVERSE_BUS=io.github.ilyasturki.UniverseSmoke` pour retomber sur l'écriture directe. Le module respecte `UNIVERSE_BUS`/`UNIVERSE_OBJECT`.
+7. (v3) L'essai réel avait utilisé un nom de bus factice pour retomber sur l'écriture directe ; en v4 le module rappelle `UNIVERSE_BIN`, l'écriture directe reste le repli.
 
 ## Essai réel codex (frontière prouvée)
 

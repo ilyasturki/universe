@@ -1,5 +1,5 @@
 """Runs bin/start, bin/stop, bin/shot as subprocesses against fake systemd-run /
-systemctl / busctl / ffprobe / gpu-screen-recorder / trash shims on PATH."""
+systemctl / universe / ffprobe / gpu-screen-recorder / trash shims on PATH."""
 import json
 import os
 import shutil
@@ -13,8 +13,6 @@ MODULE_DIR = Path(__file__).resolve().parents[1]
 BIN_DIR = MODULE_DIR / "bin"
 
 QVBR_OPTS = "rc_mode=QVBR;global_quality=95;b=16000000;maxrate=32000000;bufsize=64000000"
-BUS = "io.github.ilyasturki.Universe"
-OBJECT = "/io/github/ilyasturki/Universe"
 SESSION_ID = "20260911-120000"
 
 
@@ -35,9 +33,9 @@ def fakebin(tmp_path):
 if [ "$1" = "stop" ]; then exit "${{FAKE_SYSTEMCTL_STOP_EXIT:-0}}"; fi
 if [ "$1" = "is-active" ]; then echo "${{FAKE_IS_ACTIVE:-active}}"; exit 0; fi
 exit 0''')
-    _write_shim(bindir / "busctl", f'''printf "%s\\n" "$@" > "{logs}/busctl.args"
-if [ "${{FAKE_BUSCTL_EXIT:-0}}" != "0" ]; then echo "Failed to activate service" >&2; exit "${{FAKE_BUSCTL_EXIT}}"; fi
-echo "s \\"/mnt/recordings/games/fake/session.mkv\\""
+    _write_shim(bindir / "universe", f'''printf "%s\\n" "$@" > "{logs}/universe.args"
+if [ "${{FAKE_UNIVERSE_EXIT:-0}}" != "0" ]; then echo "universe: not found: session" >&2; exit "${{FAKE_UNIVERSE_EXIT}}"; fi
+echo "/mnt/recordings/games/fake/session.mkv"
 exit 0''')
     _write_shim(bindir / "ffprobe", 'echo "${FAKE_DURATION:-300}"\nexit 0\n')
     _write_shim(bindir / "trash", f'printf "%s\\n" "$@" > "{logs}/trash.args"\nrm -f "$1"\nexit 0\n')
@@ -56,8 +54,7 @@ def env_for(tmp_path, fakebin, settings, session_id=SESSION_ID, extra=None):
     env["SESSION_ID"] = session_id
     env["MODULE_DATA_DIR"] = str(tmp_path / "data")
     env["MODULE_DIR"] = str(MODULE_DIR)
-    env["UNIVERSE_BUS"] = BUS
-    env["UNIVERSE_OBJECT"] = OBJECT
+    env["UNIVERSE_BIN"] = str(fakebin["bin"] / "universe")
     env["MODULE_SETTINGS_JSON"] = json.dumps(settings)
     env.setdefault("SESSION_SCREEN", "DP-1")
     if extra:
@@ -98,6 +95,18 @@ def test_start_composes_gsr_command(tmp_path, fakebin):
     assert flag_values(args, "-a") == ["default_output"]
     assert flag_values(args, "-ffmpeg-video-opts") == [QVBR_OPTS]
     assert flag_values(args, "-o") == [pending_path(tmp_path)]
+
+
+def test_start_binds_recorder_to_game_unit(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {"enabled": True})
+    env["SESSION_UNIT"] = "universe-game-x-1.service"
+    result = run("start", env)
+    assert result.returncode == 0, result.stderr
+
+    args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
+    assert flag_values(args, "-p") == [
+        "CPUWeight=100", "MemoryHigh=4G", "BindsTo=universe-game-x-1.service", "After=universe-game-x-1.service", "TimeoutStopSec=10",
+    ]
 
 
 def test_start_cursor_off_and_audio_both(tmp_path, fakebin):
@@ -161,31 +170,27 @@ def test_stop_short_recording_is_trashed(tmp_path, fakebin):
     assert result.returncode == 0, result.stderr
     assert (fakebin["logs"] / "trash.args").read_text().splitlines() == [str(mkv)]
     assert not mkv.exists()
-    assert not (fakebin["logs"] / "busctl.args").exists()
+    assert not (fakebin["logs"] / "universe.args").exists()
     assert not (tmp_path / "data" / "pending" / f"{SESSION_ID}.json").exists()
 
 
-def test_stop_long_recording_files_via_dbus(tmp_path, fakebin):
+def test_stop_long_recording_files_via_cli(tmp_path, fakebin):
     mkv = _seed_pending(tmp_path)
     env = env_for(tmp_path, fakebin, {"min_duration_s": 240},
                    extra={"FAKE_DURATION": "999"})
     result = run("stop", env)
     assert result.returncode == 0, result.stderr
 
-    args = (fakebin["logs"] / "busctl.args").read_text().splitlines()
-    assert args == [
-        "--user", "call", BUS, OBJECT,
-        "io.github.ilyasturki.Universe.Recording1", "File", "ss",
-        SESSION_ID, str(mkv),
-    ]
-    assert mkv.exists()  # the fake bus call does not itself move the file
+    args = (fakebin["logs"] / "universe.args").read_text().splitlines()
+    assert args == ["recording-file", SESSION_ID, str(mkv)]
+    assert mkv.exists()  # the fake CLI does not itself move the file
     assert not (tmp_path / "data" / "pending" / f"{SESSION_ID}.json").exists()
 
 
-def test_stop_dbus_failure_leaves_file_and_exits_nonzero(tmp_path, fakebin):
+def test_stop_cli_failure_leaves_file_and_exits_nonzero(tmp_path, fakebin):
     mkv = _seed_pending(tmp_path)
     env = env_for(tmp_path, fakebin, {"min_duration_s": 240},
-                   extra={"FAKE_DURATION": "999", "FAKE_BUSCTL_EXIT": "1"})
+                   extra={"FAKE_DURATION": "999", "FAKE_UNIVERSE_EXIT": "1"})
     result = run("stop", env)
     assert result.returncode == 1
     assert "left in pending" in result.stderr
@@ -193,11 +198,15 @@ def test_stop_dbus_failure_leaves_file_and_exits_nonzero(tmp_path, fakebin):
     assert (tmp_path / "data" / "pending" / f"{SESSION_ID}.json").exists()
 
 
-def test_stop_no_recording_is_a_noop(tmp_path, fakebin):
+def test_stop_no_recording_is_a_noop_and_drops_the_companion(tmp_path, fakebin):
     env = env_for(tmp_path, fakebin, {})
+    companion = Path(env["MODULE_DATA_DIR"]) / "pending" / f"{SESSION_ID}.json"
+    companion.parent.mkdir(parents=True, exist_ok=True)
+    companion.write_text("{}")
     result = run("stop", env)
     assert result.returncode == 0, result.stderr
-    assert not (fakebin["logs"] / "busctl.args").exists()
+    assert not (fakebin["logs"] / "universe.args").exists()
+    assert not companion.exists()
 
 
 # --- bin/shot --------------------------------------------------------------
