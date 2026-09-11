@@ -9,6 +9,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+log = logging.getLogger("universe.host")
+
 QML_DIR = Path(__file__).parent / "qml"
 STORE_QT_MODULES = ("QtQml", "QtQuick", "QtMultimedia", "QtGui", "QtCore")
 
@@ -128,6 +130,7 @@ def run(argv=None):
         return 1
     window = engine.rootObjects()[0]
     api.attachWindow(window)
+    window.activeChanged.connect(lambda: log.info("window active=%s", window.isActive()))
     if not args.fullscreen:
         try:
             w, h = (int(v) for v in args.size.lower().split("x"))

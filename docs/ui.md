@@ -35,7 +35,10 @@ Options : `--fullscreen`, `--size WxH` (1920x1080 par défaut), `--no-gamepad`,
 `--screenshot PATH --after MS` (capture `grabWindow()` puis quitte), `--quit-after MS`,
 `--keys "Right Right Return Wait I"` avec `--key-gap MS`/`--key-delay MS` (touches postées à la
 fenêtre : noms `A B X Y LB RB LT RT Start Up Down Left Right Return Esc`, `Wait` marque une pause,
-`Hold:A`/`Release:A` séparent un appui).
+`Wait:N` en marque N, `Hold:A`/`Release:A` séparent un appui, `Shot:chemin.png` capture la fenêtre).
+Les touches postées pendant qu'un jeu a le focus sont ignorées par Qt (pas d'item actif) : le
+script ne peut pas piloter l'hôte derrière le jeu, la manette non plus (`focusWindow()` est nul),
+ce qui est le comportement voulu tant qu'il n'y a pas d'overlay.
 
 Chemins Qt : le shell nix ne pose ni `QML2_IMPORT_PATH` ni chemins de greffons ; `host.py` les
 déduit alors de `ldd` sur les `.so` de PySide6 (qtbase, qtdeclarative, qtmultimedia) et y ajoute

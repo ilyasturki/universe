@@ -179,7 +179,8 @@ KEY_NAMES = {
 
 
 class KeyScript(QObject):
-    """Posts a scripted key sequence, one name per gap: `Wait` idles, `Hold:A`/`Release:A` split a press."""
+    """Posts a scripted key sequence, one name per gap: `Wait` idles, `Wait:N` idles N gaps,
+    `Hold:A`/`Release:A` split a press, `Shot:path.png` grabs the window."""
 
     def __init__(self, script, gap_ms, window, parent=None):
         super().__init__(parent)
@@ -197,9 +198,15 @@ class KeyScript(QObject):
             self._timer.stop()
             return
         name = self._queue.pop(0)
-        if name == "Wait":
-            return
         phase, _, bare = name.partition(":")
+        if phase == "Wait":
+            if bare.isdigit() and int(bare) > 1:
+                self._queue[0:0] = ["Wait"] * (int(bare) - 1)
+            return
+        if phase == "Shot":
+            ok = self._window.grabWindow().save(bare)
+            log.info("shot %s %s", "saved" if ok else "FAILED", bare)
+            return
         if not bare:
             phase, bare = "click", name
         key = KEY_NAMES.get(bare)
