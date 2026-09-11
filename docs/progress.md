@@ -9,8 +9,8 @@ Source de vérité de la session de livraison du MVP (docs/plan-v3.html). Relire
 | V · Vérifier | fait | 5/5 tests passés, chacun avec un enseignement (voir Phase 0) ; aucune brique remplacée |
 | C · Cœur | fait (à durcir) | crate `universe` : config, game.toml, sessions, journal, index, modules, lanceur, migration Lutris, media, D-Bus (8 interfaces), CLI. Vérifié en env isolé : migrate (53 jeux), play/stop Technomancer (scope + sessions.jsonl + status), gog scan (9 titres gog), media refresh (SGDB+RAWG+Steam) |
 | H · Hôte | en cours | agent opus : port Reprise + hôte + client QtDBus + écrans, sur faux `api` puis contre le démon |
-| M · Modules | en cours | gog ✓ (26 tests, Absolute Drift installé pour de vrai), capture ✓ (12 tests, mkv et screenshot réels), journal (agent opus en cours), tracker-md (agent sonnet en cours), métadonnées ✓ dans le cœur (media.rs) |
-| L · Livrer | en cours | flake ✓ (`nix build .#universe` exit 0, commit 23a15f6 : core, modules, universe wrappé, universe-ui, checks core+pytest, overlay, devShell), nix/nixos.nix ✓, nix/home-manager.nix ✓. Reste : README, `universe doctor` en env réel, `.#universe-ui` une fois `ui/` intégré, tracker-md |
+| M · Modules | fait | gog ✓ (26 tests, Absolute Drift installé pour de vrai), capture ✓ (12 tests, mkv et screenshot réels), journal ✓ (13 tests, smoke réel codex sur un mkv Mario Kart : entrée + note rendue ; commit 462707b), tracker-md ✓ (23 tests), métadonnées ✓ dans le cœur (media.rs). `pytest modules` : 74 passed |
+| L · Livrer | en cours | flake ✓ (`nix build .#universe` exit 0, commit 23a15f6 : core, modules, universe wrappé, universe-ui, checks core+pytest, overlay, devShell), nix/nixos.nix ✓, nix/home-manager.nix ✓. README ✓ (6b8c552), `universe doctor` → all good (env isolé, mêmes binaires que l'env réel). Reste : `.#universe-ui` une fois `ui/` intégré, `nix flake check` |
 
 ## Décisions
 
@@ -53,5 +53,6 @@ Source de vérité de la session de livraison du MVP (docs/plan-v3.html). Relire
 
 - T1–T22 : lecture du plan, orientation, vérification des outils. Rien de codé.
 - T23–T35 : docs/api.md figé, phase 0 lancée et consignée (5/5 OK). Décisions : payloads JSON, cwd = dossier exe, proxy Python pour les filtres à expression, GOGDL_CONFIG_PATH dédié.
+- T64–T70 : README, paquets par module dans le flake (`modules-<id>`), fix `rescan` (recharge la config) et `config get <clé>`. Modules journal et tracker-md relus et intégrés : `journal_root` du module = `UNIVERSE_JOURNAL_ROOT` du cœur par défaut (réglage dupliqué supprimé). Config isolée : recordings_root/journal_root/tracker root sous scratchpad/uni (copie du tracker) pour ne jamais écrire dans ~/Documents pendant la recette ; `min_duration_s = 20`. Décision : recette dans l'env isolé, le passage en env réel = `programs.universe.enable` (home-manager) qui touche ~/NixOs, laissé à l'utilisateur.
 - T61–T63 : flake écrit et construit (`heroic-gogdl` → `gogdl` ; `sed -i` sur le fichier de service dans le symlinkJoin remplace le lien par un fichier, Exec pointe bien sur le `universed` wrappé). Commit 23a15f6. Agents H, journal, tracker-md toujours en cours.
 - T36–T60 : agents H (opus), capture, journal (opus), gog lancés ; cœur écrit et vérifié en env isolé (conditions 2, 5-scan, 6 tenues hors flake). Commits : scaffold, daemon+cli, modules gog+capture. Reste : journal, tracker-md, hôte, flake (L), README, doctor réel, tests pytest globaux, conditions 3-4 à l'écran.
