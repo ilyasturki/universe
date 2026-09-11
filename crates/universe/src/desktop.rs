@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use crate::config::Config;
 
 /// The four desktop-dependent operations (plan §6). GNOME is the only profile in the MVP.
@@ -65,19 +67,47 @@ pub fn pick_screen(requested: &str) -> String {
     connected_outputs().into_iter().next().unwrap_or_default()
 }
 
-/// Toggles the GNOME Shell extension that hides the cursor after inactivity (plan §6).
-pub async fn set_cursor_hidden(conn: &zbus::Connection, profile: Profile, extension: &str, hidden: bool) -> bool {
-    if profile != Profile::Gnome || extension.is_empty() {
-        return false;
-    }
-    let proxy = match zbus::Proxy::new(conn, "org.gnome.Shell", "/org/gnome/Shell", "org.gnome.Shell.Extensions").await {
-        Ok(p) => p,
+/// Enables the cursor-hiding GNOME Shell extension for the session (plan §6); returns whether it was already active.
+pub async fn cursor_extension_enable(conn: &zbus::Connection, profile: Profile, extension: &str) -> bool {
+    let Some(proxy) = extensions_proxy(conn, profile, extension).await else { return false };
+    let was_active = match proxy.call::<_, _, HashMap<String, zbus::zvariant::OwnedValue>>("GetExtensionInfo", &(extension,)).await {
+        // ExtensionState.ACTIVE = 1 (js/misc/extensionUtils.js)
+        Ok(info) => info.get("state").and_then(|v| f64::try_from(v).ok()) == Some(1.0),
         Err(e) => {
-            tracing::warn!("gnome shell extensions proxy: {e}");
-            return false;
+            tracing::warn!("GetExtensionInfo({extension}): {e}");
+            false
         }
     };
-    let method = if hidden { "EnableExtension" } else { "DisableExtension" };
+    if !was_active {
+        call_bool(&proxy, "EnableExtension", extension).await;
+    }
+    was_active
+}
+
+/// Disables the extension again unless it was active before the session.
+pub async fn cursor_extension_restore(conn: &zbus::Connection, profile: Profile, extension: &str, was_active: bool) {
+    if was_active {
+        return;
+    }
+    if let Some(proxy) = extensions_proxy(conn, profile, extension).await {
+        call_bool(&proxy, "DisableExtension", extension).await;
+    }
+}
+
+async fn extensions_proxy(conn: &zbus::Connection, profile: Profile, extension: &str) -> Option<zbus::Proxy<'static>> {
+    if profile != Profile::Gnome || extension.is_empty() {
+        return None;
+    }
+    match zbus::Proxy::new(conn, "org.gnome.Shell", "/org/gnome/Shell", "org.gnome.Shell.Extensions").await {
+        Ok(p) => Some(p),
+        Err(e) => {
+            tracing::warn!("gnome shell extensions proxy: {e}");
+            None
+        }
+    }
+}
+
+async fn call_bool(proxy: &zbus::Proxy<'_>, method: &str, extension: &str) -> bool {
     match tokio::time::timeout(std::time::Duration::from_secs(5), proxy.call::<_, _, bool>(method, &(extension,))).await {
         Ok(Ok(ok)) => ok,
         Ok(Err(e)) => {

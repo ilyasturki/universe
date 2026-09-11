@@ -356,9 +356,10 @@ impl Core {
         launcher::run_shell(&plan.pre_command, &plan.env, &plan.cwd).await?;
 
         let profile = crate::desktop::detect(&cfg);
+        let mut cursor_was_active = false;
         if r.effective.hide_cursor {
             if let Some(conn) = self.conn.get() {
-                crate::desktop::set_cursor_hidden(conn, profile, &cfg.desktop.cursor_extension, true).await;
+                cursor_was_active = crate::desktop::cursor_extension_enable(conn, profile, &cfg.desktop.cursor_extension).await;
             }
         }
         tracing::info!("launch {id}: {}", plan.command_line());
@@ -389,12 +390,12 @@ impl Core {
                     tracing::info!("{}: {}", running.unit, s.trim());
                 }
             }
-            core.finish_session(&gid, &sid, &plan, exit, &base, started).await;
+            core.finish_session(&gid, &sid, &plan, exit, &base, started, cursor_was_active).await;
         });
         Ok(session_id)
     }
 
-    async fn finish_session(self: &Arc<Self>, id: &str, session_id: &str, plan: &launcher::Plan, exit: i32, base: &HookEnv, started: chrono::DateTime<chrono::Local>) {
+    async fn finish_session(self: &Arc<Self>, id: &str, session_id: &str, plan: &launcher::Plan, exit: i32, base: &HookEnv, started: chrono::DateTime<chrono::Local>, cursor_was_active: bool) {
         let ended = chrono::Local::now();
         let duration_s = (ended - started).num_seconds().max(0) as u64;
         let cfg = self.config.read().await.clone();
@@ -419,7 +420,7 @@ impl Core {
         }
         if r.effective.hide_cursor {
             if let Some(conn) = self.conn.get() {
-                crate::desktop::set_cursor_hidden(conn, crate::desktop::detect(&cfg), &cfg.desktop.cursor_extension, false).await;
+                crate::desktop::cursor_extension_restore(conn, crate::desktop::detect(&cfg), &cfg.desktop.cursor_extension, cursor_was_active).await;
             }
         }
         let _ = launcher::run_shell(&plan.post_command, &plan.env, &plan.cwd).await;

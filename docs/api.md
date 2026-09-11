@@ -128,7 +128,7 @@ mangohud = true
 [desktop]
 profile = "auto"                     # auto | gnome | none
 hide_cursor = true
-cursor_extension = "hide-cursor@elcste.com"
+cursor_extension = "hide-cursor@elcste.com"  # activée le temps de la partie, remise dans son état d'avant après
 [proton]                             # nom → chemin
 proton-ge = "~/.local/share/lutris/runners/wine/proton-ge"
 [modules]

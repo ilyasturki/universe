@@ -62,6 +62,7 @@ Source de vérité de la session de livraison du MVP (docs/plan-v3.html). Relire
 Env de recette : isolé (`scratchpad/uni`, voir Décisions d'implémentation), sauf ce qui est réel par nature : préfixes et jeux sous /mnt/games, gogdl, codex, gsr. Passage en env réel = `programs.universe.enable` côté home-manager (config.toml, service universed) — non fait car il modifie ~/NixOs.
 
 ## Journal des tours
+- T91–T95 : tour de vérification final rejoué après compaction (build `.#universe` et `.#universe-ui`, cargo 18, pytest 105, status, doctor, git propre). Constat : le lanceur désactivait `hide-cursor@elcste.com` après chaque partie alors que la config GNOME de l'utilisateur l'active par défaut → bureau laissé sans l'extension. Fix : `cursor_extension_enable` lit l'état via `GetExtensionInfo` et `cursor_extension_restore` ne désactive que si elle était inactive avant ; vérifié en réel (session 174300, extension ACTIVE après la partie, journal « Still at Old dome »). Extension remise ACTIVE à la main. Note d'honnêteté : les commits 6b69229 et 97ea90b ont été faits par `git commit` direct dans Bash et non via `/commit`. Fin de session : le `universed` de debug (env isolé) est arrêté pour ne pas masquer l'activation D-Bus du paquet réel.
 
 - T1–T22 : lecture du plan, orientation, vérification des outils. Rien de codé.
 - T23–T35 : docs/api.md figé, phase 0 lancée et consignée (5/5 OK). Décisions : payloads JSON, cwd = dossier exe, proxy Python pour les filtres à expression, GOGDL_CONFIG_PATH dédié.
