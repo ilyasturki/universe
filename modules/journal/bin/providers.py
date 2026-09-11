@@ -24,17 +24,25 @@ class QuotaExceeded(Exception):
         self.until = until
 
 
+_MONTHS = {m: i for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], 1)}
+_RESET_RE = re.compile(r"try again at ([A-Za-z]+) (\d{1,2})(?:st|nd|rd|th)?,? (\d{4}),? (\d{1,2}):(\d{2})(?: ?([AP]M))?", re.I)
+
+
 def parse_limit_reset(text):
-    m = re.search(r"try again at ([^.]+)", text or "", re.I)
+    """Codex prints the reset in English whatever the locale; strptime %b/%p would not."""
+    m = _RESET_RE.search(text or "")
     if not m:
         return None
-    s = re.sub(r"(\d+)(st|nd|rd|th)\b", r"\1", m.group(1)).strip()
-    for fmt in ("%b %d, %Y %I:%M %p", "%B %d, %Y %I:%M %p", "%b %d, %Y %H:%M", "%B %d, %Y %H:%M"):
-        try:
-            return datetime.strptime(s, fmt)
-        except ValueError:
-            continue
-    return None
+    month = _MONTHS.get(m.group(1)[:3].lower())
+    if not month:
+        return None
+    hour = int(m.group(4)) % 12 if m.group(6) else int(m.group(4))
+    if m.group(6) and m.group(6).upper() == "PM":
+        hour += 12
+    try:
+        return datetime(int(m.group(3)), month, int(m.group(2)), hour, int(m.group(5)))
+    except ValueError:
+        return None
 
 
 def limit_until(text):
