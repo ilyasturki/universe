@@ -7,10 +7,10 @@ Source de vérité de la session de livraison du MVP (docs/plan-v3.html). Relire
 | Piste | État | Notes |
 |---|---|---|
 | V · Vérifier | fait | 5/5 tests passés, chacun avec un enseignement (voir Phase 0) ; aucune brique remplacée |
-| C · Cœur | fait (à durcir) | crate `universe` : config, game.toml, sessions, journal, index, modules, lanceur, migration Lutris, media, D-Bus (8 interfaces), CLI. Vérifié en env isolé : migrate (53 jeux), play/stop Technomancer (scope + sessions.jsonl + status), gog scan (9 titres gog), media refresh (SGDB+RAWG+Steam) |
-| H · Hôte | en cours | agent opus : port Reprise + hôte + client QtDBus + écrans, sur faux `api` puis contre le démon |
+| C · Cœur | fait | crate `universe` : config, game.toml, sessions, journal, index, modules, lanceur, migration Lutris, media, D-Bus (8 interfaces), CLI. Vérifié en env isolé : migrate (53 jeux), play/stop Technomancer (scope + sessions.jsonl + status), gog scan (9 titres gog), media refresh (SGDB+RAWG+Steam) |
+| H · Hôte | fait | `ui/` : hôte PySide6 (host.py, client QtDBus + FakeClient, modèles/proxys Python, manette SDL2, écrans settings/sources/media), port Reprise en Qt 6 (Home, Library, Favourites, Detail, recherche, clavier virtuel, menu contextuel, réglages par jeu, enregistrements, journal, Settings : Modules/Install/Updates/Login/Doctor). 29 tests. Recette à l'écran (GNOME Wayland, plein écran, démon réel, bibliothèque migrée de Lutris) : lancement de The Technomancer depuis l'hôte → scope + capture, focus rendu à l'hôte à la fin (`window active=True` journalisé), tous les écrans capturés (scratchpad/accept/*.png). Commits 7c1947b, be5baa4 |
 | M · Modules | fait | gog ✓ (26 tests, Absolute Drift installé pour de vrai), capture ✓ (12 tests, mkv et screenshot réels), journal ✓ (13 tests, smoke réel codex sur un mkv Mario Kart : entrée + note rendue ; commit 462707b), tracker-md ✓ (23 tests), métadonnées ✓ dans le cœur (media.rs). `pytest modules` : 74 passed |
-| L · Livrer | en cours | flake ✓ (`nix build .#universe` exit 0, commit 23a15f6 : core, modules, universe wrappé, universe-ui, checks core+pytest, overlay, devShell), nix/nixos.nix ✓, nix/home-manager.nix ✓. README ✓ (6b8c552), `universe doctor` → all good (env isolé, mêmes binaires que l'env réel). Reste : `.#universe-ui` une fois `ui/` intégré, `nix flake check` |
+| L · Livrer | fait | flake (`nix build .#universe` et `.#universe-ui` exit 0, `nix flake check` : core 18 tests + pytest 103 en sandbox), paquets `modules-<id>`, nix/nixos.nix, nix/home-manager.nix, README (installation par le flake, prérequis par module), `universe doctor` → all good. Commits 23a15f6, 6b8c552, baea0f8 |
 
 ## Décisions
 
@@ -49,10 +49,23 @@ Source de vérité de la session de livraison du MVP (docs/plan-v3.html). Relire
 - `Modules1.List` expose le schéma ; `Library1.Set("capture.cursor")` = raccourci validé de `modules.capture.cursor`.
 - Différé (hors conditions) : complétions fish, man page, inotify sur les fichiers de vérité (rescan manuel / après chaque écriture via l'API), `Media1.Candidates` = SGDB seulement.
 
+## Recette finale (conditions du goal)
+
+1. `nix build .#universe` exit 0 ; `cargo test` 18 passed ; `pytest` 103 passed (et `nix flake check` vert).
+2. `universe play technomancer` (T-era, session 20260911-161250) et lancement depuis l'hôte (session 20260911-172520, 124 s) : scope `universe-game-the-technomancer-<session>.scope` via umu-run, ligne dans `sessions.jsonl` avec `recording`, `universe status` la liste.
+3. Hôte PySide6 plein écran sous GNOME Wayland, 55 jeux migrés de Lutris (jaquettes SGDB), lancement depuis Home, focus rendu à la fin, écrans réglages par jeu / enregistrements / journal / installer capturés.
+4. La partie lancée depuis l'hôte a produit `recordings/the-technomancer/20260911-172520.mkv` (107 Mo) puis, via post-process → codex (2 min 27), l'entrée « Old Dome on Hold » (`journal/20260911-172520.json`) rendue en Markdown dans `<journal_root>/the-technomancer/The Technomancer.md` ; tracker-md a mis à jour Hours dans la copie du tracker.
+5. `universe gog scan` : 9 titres gog ; `universe install 1207658661` : ARMA Cold War Assault Remastered (1,4 Go) installé dans /mnt/games/PC en 24 s, exe détecté, game.toml créé.
+6. `universe media <id> refresh` : box_front/tile/background/logo depuis SGDB, métadonnées RAWG, captures Steam (Technomancer et ARMA).
+7. `universe doctor` → all good ; README décrit l'installation par le flake (NixOS + home-manager) et les prérequis par module.
+
+Env de recette : isolé (`scratchpad/uni`, voir Décisions d'implémentation), sauf ce qui est réel par nature : préfixes et jeux sous /mnt/games, gogdl, codex, gsr. Passage en env réel = `programs.universe.enable` côté home-manager (config.toml, service universed) — non fait car il modifie ~/NixOs.
+
 ## Journal des tours
 
 - T1–T22 : lecture du plan, orientation, vérification des outils. Rien de codé.
 - T23–T35 : docs/api.md figé, phase 0 lancée et consignée (5/5 OK). Décisions : payloads JSON, cwd = dossier exe, proxy Python pour les filtres à expression, GOGDL_CONFIG_PATH dédié.
+- T71–T90 : `nix flake check` vert (dontWrapQtApps, patchShebangs, TZ/tzdata, runtime des modules ; shims de tests sans `/usr/bin/env`). Fix journal : parse de la limite codex sans strptime (locale FR posée par Qt faisait échouer le test en suite complète). Verbe `status` ajouté au protocole des sources (`logged_in`/`user` dans `Sources1.List`, écran Login « Signed in : yes »). Hôte : jetons `Shot:` et `Wait:N` pour les scripts de touches, journal de `window active`. Constat : les touches postées pendant qu'un jeu a le focus sont ignorées (pas d'item actif) — voulu, la recette pilote donc l'arrêt par `universe stop` puis les écrans après le retour. Recette complète (voir section dédiée), ARMA installé pour de vrai.
 - T64–T70 : README, paquets par module dans le flake (`modules-<id>`), fix `rescan` (recharge la config) et `config get <clé>`. Modules journal et tracker-md relus et intégrés : `journal_root` du module = `UNIVERSE_JOURNAL_ROOT` du cœur par défaut (réglage dupliqué supprimé). Config isolée : recordings_root/journal_root/tracker root sous scratchpad/uni (copie du tracker) pour ne jamais écrire dans ~/Documents pendant la recette ; `min_duration_s = 20`. Décision : recette dans l'env isolé, le passage en env réel = `programs.universe.enable` (home-manager) qui touche ~/NixOs, laissé à l'utilisateur.
 - T61–T63 : flake écrit et construit (`heroic-gogdl` → `gogdl` ; `sed -i` sur le fichier de service dans le symlinkJoin remplace le lien par un fichier, Exec pointe bien sur le `universed` wrappé). Commit 23a15f6. Agents H, journal, tracker-md toujours en cours.
 - T36–T60 : agents H (opus), capture, journal (opus), gog lancés ; cœur écrit et vérifié en env isolé (conditions 2, 5-scan, 6 tenues hors flake). Commits : scaffold, daemon+cli, modules gog+capture. Reste : journal, tracker-md, hôte, flake (L), README, doctor réel, tests pytest globaux, conditions 3-4 à l'écran.
