@@ -33,23 +33,28 @@
         meta.mainProgram = "universe";
       };
 
-      modulesPkg = pkgs.stdenvNoCC.mkDerivation {
-        pname = "universe-modules";
+      moduleNames = builtins.filter (n: builtins.pathExists (./modules + "/${n}/module.toml"))
+        (builtins.attrNames (builtins.readDir ./modules));
+
+      mkModule = name: pkgs.stdenvNoCC.mkDerivation {
+        pname = "universe-module-${name}";
         inherit version;
-        src = ./modules;
+        src = ./modules + "/${name}";
         nativeBuildInputs = [ pkgs.python3 ];
         buildInputs = [ pkgs.python3 ];
         installPhase = ''
-          mkdir -p $out/share/universe/modules
-          for m in */; do
-            m=''${m%/}
-            [ -f "$m/module.toml" ] || continue
-            mkdir -p "$out/share/universe/modules/$m"
-            cp -r "$m"/. "$out/share/universe/modules/$m/"
-            rm -rf "$out/share/universe/modules/$m/tests" "$out/share/universe/modules/$m/__pycache__"
-          done
-          patchShebangs $out/share/universe/modules
+          mkdir -p $out/share/universe/modules/${name}
+          cp -r . $out/share/universe/modules/${name}/
+          rm -rf $out/share/universe/modules/${name}/tests $out/share/universe/modules/${name}/__pycache__
+          patchShebangs $out/share/universe/modules/${name}
         '';
+      };
+
+      modulePkgs = lib.genAttrs moduleNames mkModule;
+
+      modulesPkg = pkgs.symlinkJoin {
+        name = "universe-modules-${version}";
+        paths = builtins.attrValues modulePkgs;
       };
 
       # Runtime tools the shipped modules call by name.
@@ -107,10 +112,11 @@
     in {
       packages.${system} = {
         inherit core universe;
+        universed = universe;
         modules = modulesPkg;
         universe-ui = ui;
         default = universe;
-      };
+      } // lib.mapAttrs' (n: v: lib.nameValuePair "modules-${n}" v) modulePkgs;
 
       apps.${system} = {
         default = { type = "app"; program = "${universe}/bin/universe"; };
