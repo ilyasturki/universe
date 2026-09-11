@@ -1,0 +1,82 @@
+#!/usr/bin/env python3
+"""Split a legacy Markdown journal note into Entry JSON files, one per session.
+
+  migrate <note.md> <journal-dir> [--game <id>] [--no-images] [--force]
+
+Writes <journal-dir>/<session>.json for every `<!-- session: id -->` block, the
+session spans the note carried into <journal-dir>/.migrated-sessions.jsonl (the
+core has them once the recordings are imported), and copies the images the note
+references from beside it into <journal-dir>/<relpath>."""
+import argparse
+import json
+import os
+import shutil
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _common import MIGRATED_SESSIONS, log, validate_entry, write_entry_file  # noqa: E402
+from note import parse_note  # noqa: E402
+
+
+def main(argv):
+    ap = argparse.ArgumentParser()
+    ap.add_argument("note")
+    ap.add_argument("journal_dir")
+    ap.add_argument("--game", help="game id (default: slug of the note's title)")
+    ap.add_argument("--no-images", action="store_true")
+    ap.add_argument("--force", action="store_true", help="overwrite existing entries")
+    a = ap.parse_args(argv)
+
+    with open(a.note, encoding="utf-8") as f:
+        text = f.read()
+    title, entries, sessions = parse_note(text, a.game)
+    if not entries:
+        log(f"no session block in {a.note}")
+        return 1
+    os.makedirs(a.journal_dir, exist_ok=True)
+    note_dir = os.path.dirname(os.path.abspath(a.note))
+
+    written = skipped = copied = 0
+    for entry in entries:
+        errors = validate_entry(entry)
+        if errors:
+            log(f"skipping {entry['session']}: {errors}")
+            continue
+        path = os.path.join(a.journal_dir, f"{entry['session']}.json")
+        if os.path.exists(path) and not a.force:
+            skipped += 1
+            continue
+        write_entry_file(a.journal_dir, entry)
+        written += 1
+        if a.no_images:
+            continue
+        for rel in entry["images"]:
+            src, dst = os.path.join(note_dir, rel), os.path.join(a.journal_dir, rel)
+            if os.path.isabs(rel) or ".." in rel.split("/") or not os.path.isfile(src) or os.path.exists(dst):
+                continue
+            os.makedirs(os.path.dirname(dst), exist_ok=True)
+            shutil.copyfile(src, dst)
+            copied += 1
+
+    sidecar = os.path.join(a.journal_dir, MIGRATED_SESSIONS)
+    known = set()
+    try:
+        with open(sidecar, encoding="utf-8") as f:
+            for line in f:
+                try:
+                    known.add(json.loads(line)["session"])
+                except (ValueError, KeyError):
+                    pass
+    except OSError:
+        pass
+    with open(sidecar, "a", encoding="utf-8") as f:
+        for s in sessions:
+            if s["session"] not in known:
+                f.write(json.dumps(s, ensure_ascii=False) + "\n")
+
+    log(f"{title!r}: {written} entries written, {skipped} already present, {copied} images copied -> {a.journal_dir}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

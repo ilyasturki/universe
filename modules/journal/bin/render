@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+"""Render a game's Markdown note from its Entry JSON files. Idempotent.
+
+  render [<slug>] [--journal-dir D] [--journal-root R] [--title T] [--sessions F]
+
+Env fallbacks: GAME_ID/GAME_SLUG, GAME_TITLE, JOURNAL_DIR, MODULE_SETTINGS_JSON."""
+import argparse
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _common import load_settings, log, read_entries, read_sessions, sanitize_game_name  # noqa: E402
+from note import parse_frontmatter, resolve_note_path, write_note  # noqa: E402
+
+
+def game_title(journal_dir, note_dir, slug):
+    toml_path = os.path.join(os.path.dirname(os.path.abspath(journal_dir)), "game.toml")
+    try:
+        import tomllib
+        with open(toml_path, "rb") as f:
+            title = tomllib.load(f).get("title")
+        if title:
+            return str(title)
+    except (OSError, ValueError, ImportError):
+        pass
+    try:
+        with open(resolve_note_path(note_dir, slug), encoding="utf-8") as f:
+            fm, _ = parse_frontmatter(f.read())
+        if fm.get("game"):
+            return fm["game"]
+    except OSError:
+        pass
+    return slug
+
+
+def main(argv):
+    ap = argparse.ArgumentParser()
+    ap.add_argument("slug", nargs="?")
+    ap.add_argument("--journal-dir")
+    ap.add_argument("--journal-root")
+    ap.add_argument("--title")
+    ap.add_argument("--sessions")
+    a = ap.parse_args(argv)
+    settings = load_settings()
+
+    slug = a.slug or os.environ.get("GAME_ID") or os.environ.get("GAME_SLUG")
+    journal_dir = a.journal_dir or os.environ.get("JOURNAL_DIR")
+    if not journal_dir:
+        if not slug:
+            ap.error("a slug or --journal-dir is required")
+        data_home = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
+        journal_dir = os.path.join(data_home, "universe", "games", slug, "journal")
+    title = a.title or os.environ.get("GAME_TITLE")
+    if not slug:
+        slug = sanitize_game_name(title) if title else os.path.basename(os.path.dirname(os.path.abspath(journal_dir)))
+    journal_root = a.journal_root or settings["journal_root"]
+    note_dir = os.path.join(journal_root, slug)
+    if not title:
+        title = game_title(journal_dir, note_dir, slug)
+
+    entries = read_entries(journal_dir)
+    if not entries:
+        log(f"no entry in {journal_dir}; nothing to render")
+        return 1
+    sessions = read_sessions(journal_dir, a.sessions)
+    path, changed = write_note(entries, sessions, title, journal_dir, note_dir)
+    log(f"{'wrote' if changed else 'unchanged'} {path} ({len(entries)} entries)")
+    print(path)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

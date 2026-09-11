@@ -60,15 +60,13 @@
       # Runtime tools the shipped modules call by name.
       moduleRuntime = with pkgs; [ gpu-screen-recorder gogdl ffmpeg trash-cli util-linux ];
 
-      pythonWithUi = pkgs.python3.withPackages (ps: [ ps.pyside6 ps.pysdl2 ]);
-
       ui = pkgs.python3Packages.buildPythonApplication {
         pname = "universe-ui";
         inherit version;
         pyproject = true;
         src = ./ui;
         build-system = [ pkgs.python3Packages.setuptools ];
-        dependencies = with pkgs.python3Packages; [ pyside6 pysdl2 ];
+        dependencies = with pkgs.python3Packages; [ pyside6 pysdl2 qrcode ];
         nativeBuildInputs = [ pkgs.qt6.wrapQtAppsHook ];
         buildInputs = with pkgs.qt6; [ qtbase qtdeclarative qt5compat qtmultimedia qtwayland qtsvg ];
         dontWrapQtApps = false;
@@ -101,7 +99,7 @@
       pytestCheck = pkgs.stdenvNoCC.mkDerivation {
         name = "universe-pytest";
         src = ./.;
-        nativeBuildInputs = [ (pkgs.python3.withPackages (ps: [ ps.pyside6 ps.pysdl2 ps.pytest ])) pkgs.ffmpeg pkgs.qt6.qt5compat pkgs.qt6.qtmultimedia pkgs.qt6.qtdeclarative ];
+        nativeBuildInputs = [ (pkgs.python3.withPackages (ps: [ ps.pyside6 ps.pysdl2 ps.qrcode ps.pytest ])) pkgs.ffmpeg pkgs.qt6.qt5compat pkgs.qt6.qtmultimedia pkgs.qt6.qtdeclarative ];
         buildPhase = ''
           export HOME=$TMPDIR QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1
           export QML2_IMPORT_PATH=${pkgs.qt6.qtdeclarative}/lib/qt-6/qml:${pkgs.qt6.qt5compat}/lib/qt-6/qml:${pkgs.qt6.qtmultimedia}/lib/qt-6/qml
@@ -127,7 +125,7 @@
       overlays.default = final: prev: { universe = universe; universe-ui = ui; universe-core = core; universe-modules = modulesPkg; };
 
       devShells.${system}.default = pkgs.mkShell {
-        packages = with pkgs; [ cargo rustc clippy rustfmt rust-analyzer pkg-config ruff (python3.withPackages (ps: [ ps.pyside6 ps.pysdl2 ps.pytest ])) qt6.qtdeclarative qt6.qt5compat qt6.qtmultimedia SDL2 ] ++ moduleRuntime;
+        packages = with pkgs; [ cargo rustc clippy rustfmt rust-analyzer pkg-config ruff (python3.withPackages (ps: [ ps.pyside6 ps.pysdl2 ps.qrcode ps.pytest ])) qt6.qtdeclarative qt6.qt5compat qt6.qtmultimedia SDL2 ] ++ moduleRuntime;
         shellHook = ''
           export UNIVERSE_MODULES_PATH="$PWD/modules"
           export QML2_IMPORT_PATH="${pkgs.qt6.qtdeclarative}/lib/qt-6/qml:${pkgs.qt6.qt5compat}/lib/qt-6/qml:${pkgs.qt6.qtmultimedia}/lib/qt-6/qml"

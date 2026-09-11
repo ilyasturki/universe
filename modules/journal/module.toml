@@ -1,0 +1,61 @@
+api = 1
+id = "journal"
+name = "Journal de jeu"
+kind = ["hooks"]
+version = "0.1.0"
+
+[requires]
+core = ">=0.1"
+bins = ["ffmpeg", "codex"]
+
+[hooks]
+post-process = "bin/process"
+timeout_s    = 20
+
+[limits]
+cpu_weight  = 20
+memory_high = "4G"
+
+[[settings]]
+key = "enabled"
+type = "bool"
+default = true
+label = "Écrire une entrée de journal après chaque partie"
+scope = "game"
+
+[[settings]]
+key = "language"
+type = "enum"
+default = "auto"
+label = "Langue de l'entrée (auto = celle du jeu à l'écran)"
+scope = "game"
+choices = ["auto", "fr", "en", "es", "de", "it", "pt", "ja"]
+
+[[settings]]
+key = "provider"
+type = "enum"
+default = "codex"
+label = "Modèle qui rédige"
+scope = "global"
+choices = ["codex", "claude", "stub"]
+
+[[settings]]
+key = "model"
+type = "string"
+default = "gpt-5.6-sol"
+label = "Nom du modèle passé au fournisseur"
+scope = "global"
+
+[[settings]]
+key = "markdown_export"
+type = "bool"
+default = true
+label = "Rendre la note Markdown pour Obsidian"
+scope = "global"
+
+[[settings]]
+key = "max_images"
+type = "int"
+default = 40
+label = "Images maximum envoyées au modèle"
+scope = "global"
