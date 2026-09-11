@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use comfy_table::{presets::UTF8_FULL_CONDENSED, Cell, Table};
+use comfy_table::{presets::UTF8_FULL_CONDENSED, Attribute, Cell, ColumnConstraint, ContentArrangement, Table};
 use futures_util::StreamExt;
 use owo_colors::OwoColorize;
 use serde_json::Value;
@@ -126,7 +126,8 @@ pub enum Cmd {
 fn table(headers: &[&str]) -> Table {
     let mut t = Table::new();
     t.load_preset(UTF8_FULL_CONDENSED);
-    t.set_header(headers.iter().map(|h| Cell::new(h.bold().to_string())));
+    t.set_content_arrangement(ContentArrangement::Dynamic);
+    t.set_header(headers.iter().map(|h| Cell::new(h).add_attribute(Attribute::Bold)));
     t
 }
 
@@ -237,14 +238,17 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 print_json(&list);
                 return Ok(());
             }
-            let mut t = table(&["Title", "Source", "Hours", "Last played", "Id"]);
+            let mut t = table(&["Title", "Source", "Hours", "Last played"]);
+            for i in 1..=3 {
+                t.column_mut(i).unwrap().set_constraint(ColumnConstraint::ContentWidth);
+            }
             for g in list.as_array().cloned().unwrap_or_default() {
                 if !all && g["hidden"].as_bool() == Some(true) {
                     continue;
                 }
                 let title = if g["favorite"].as_bool() == Some(true) { format!("★ {}", s(&g, "title")) } else { s(&g, "title") };
-                let title = if g["hidden"].as_bool() == Some(true) { title.dimmed().to_string() } else { title };
-                t.add_row(vec![title, s(&g["source"], "kind"), hours(&g), day(&s(&g["stats"], "last_played")), s(&g, "id")]);
+                let title = if g["hidden"].as_bool() == Some(true) { Cell::new(title).add_attribute(Attribute::Dim) } else { Cell::new(title) };
+                t.add_row(vec![title, Cell::new(s(&g["source"], "kind")), Cell::new(hours(&g)), Cell::new(day(&s(&g["stats"], "last_played")))]);
             }
             println!("{t}");
         }
