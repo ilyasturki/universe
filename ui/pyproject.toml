@@ -18,3 +18,7 @@ include = ["universe_ui*"]
 
 [tool.setuptools.package-data]
 universe_ui = ["qml/**/*", "fixtures/*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

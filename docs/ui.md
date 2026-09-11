@@ -16,7 +16,7 @@ ui/
     screens/                données des écrans ajoutés : settings.py, sources.py, media.py
     fixtures/               library.json (8 jeux + 1 caché, sessions, clips, journal, modules, sources) et art.py
     qml/                    theme.qml, core/, ui/, pages/, sound/, assets/ (thème porté + écrans ajoutés)
-  tests/                    pytest (offscreen), fichiers test_ui_*.py
+  tests/                    pytest (offscreen)
 ```
 
 ## Lancer
@@ -50,15 +50,14 @@ lié à un autre qtbase est refusé). Dès que `QML2_IMPORT_PATH` ou `QML_IMPORT
 `/run/current-system/sw/lib` pour que QtMultimedia trouve pipewire (sons et lecteur vidéo). Sur
 un écran en DPR 2 la capture fait 3840×2160.
 
-Tests, commande exacte (`ps.qrcode` ajouté à celle du plan ; `pytest.ini` à la racine ajoute
-déjà `-q`, la sortie est donc une ligne de points) :
+Tests, commande exacte (`ps.qrcode` ajouté à celle du plan ; la config pytest est dans
+`ui/pyproject.toml`) :
 
 ```sh
 cd ui && nix shell --impure --expr 'let pkgs = import <nixpkgs> {}; in pkgs.python3.withPackages (ps: [ ps.pyside6 ps.pytest ps.pysdl2 ps.qrcode ])' -c python3 -m pytest -q
 ```
 
-Les fichiers s'appellent `test_ui_*.py` : `pytest.ini` collecte `ui/tests` et `modules/*/tests`
-sans paquets, les noms de base doivent donc être uniques sur tout le dépôt. `conftest.py` force
+`conftest.py` force
 `QT_QPA_PLATFORM=offscreen` et détourne `XDG_STATE_HOME`/`XDG_CACHE_HOME`/`XDG_DATA_HOME`
 vers un dossier temporaire : rien n'est écrit dans l'état de l'utilisateur. La suite passe aussi
 avec `QML2_IMPORT_PATH` posé (mode du `nix flake check`). Le seul test qui touche le bus

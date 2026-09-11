@@ -53,7 +53,8 @@ shell:
 
 test:
     @{{ nix }} cargo test
-    @{{ nix }} python3 -m pytest -q
+    @{{ nix }} python3 -m pytest -q ui
+    @{{ nix }} python3 -m pytest -q modules
 
 # Build the flake packages and run the sandboxed checks
 check:

@@ -1,18 +1,11 @@
-"""Offscreen Qt, fixtures for the fake client, and XDG dirs pointed away from the user's state.
-
-Files are named test_ui_* because the repo's pytest.ini collects ui/tests and modules/*/tests
-in one run without packages, so basenames must be unique across all of them.
-"""
+"""Offscreen Qt, fixtures for the fake client, and XDG dirs pointed away from the user's state."""
 
 import os
-import sys
-from pathlib import Path
 
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QT_FORCE_STDERR_LOGGING", "1")
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 
 @pytest.fixture(scope="session")
