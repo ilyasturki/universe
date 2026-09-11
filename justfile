@@ -14,7 +14,7 @@ nix := "nix develop --quiet --command"
 ui_py := "env PYTHONPATH=" + justfile_directory() / "ui" + " python3 -m universe_ui"
 
 # First run: build, create .dev/ with a ready config.toml, run doctor
-setup: build env
+setup: build _env
     @{{ nix }} target/debug/universe doctor
 
 # Build the daemon and the CLI (debug)
@@ -22,11 +22,11 @@ build:
     @{{ nix }} cargo build
 
 # The CLI against .dev/ (the daemon is spawned on demand): just cli migrate --apply, just cli gog scan…
-cli *args: build env
+cli *args: build _env
     @{{ nix }} target/debug/universe {{ args }}
 
 # Host UI on the dev daemon; flags pass through (--fullscreen, --no-gamepad, --keys "…")
-ui *args: build env
+ui *args: build _env
     @{{ nix }} target/debug/universe status >/dev/null
     @{{ nix }} {{ ui_py }} {{ args }}
 
@@ -35,7 +35,7 @@ ui-fake *args:
     @{{ nix }} {{ ui_py }} --fake {{ args }}
 
 # Run the daemon in the foreground with logs (the CLI otherwise spawns it silently)
-daemon: build env
+daemon: build _env
     -pkill -x universed
     @{{ nix }} target/debug/universed
 
@@ -46,10 +46,6 @@ restart:
 # Follow the log of a CLI-spawned daemon
 logs:
     tail -n 50 -f "{{ dev }}/state/universed.log"
-
-# Open the dev shell (cargo, PySide6, Qt paths, module runtime on PATH)
-shell:
-    nix develop
 
 test:
     @{{ nix }} cargo test
@@ -65,7 +61,7 @@ check:
 clean: restart
     trash "{{ dev }}"
 
-env:
+_env:
     #!/usr/bin/env bash
     set -euo pipefail
     mkdir -p "{{ dev }}"/{data,config,state,cache,recordings,journal}
