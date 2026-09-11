@@ -80,11 +80,17 @@ Third-party modules: drop a directory with a `module.toml` under `~/.local/share
 
 ## Develop
 
+A `justfile` wraps everything in `nix develop` and points the daemon at an isolated `.dev/` (its own config, data, recordings, journal), so nothing touches `~/.config/universe`:
+
 ```sh
-nix develop                    # cargo, PySide6, Qt 6 QML paths, module runtime
-cargo test
-python -m pytest               # ui/tests + modules/*/tests
-nix build .#universe && nix flake check
+just setup                 # build, create .dev/config/config.toml, run doctor
+just cli migrate --apply   # any CLI command against .dev/ (gog login, gog scan, media <id> refresh, launch <id>…)
+just ui                    # PySide6 host on the dev daemon (add --fullscreen)
+just ui-fake               # host on a fixture library, no daemon
+just daemon                # daemon in the foreground with logs; `just logs` tails a spawned one
+just restart               # kill the daemon after a rebuild; the next call respawns it
+just test / just check     # cargo + pytest / flake packages + sandboxed checks
+just clean                 # trash .dev/
 ```
 
 `docs/plan-v3.html` is the design; `docs/api.md` the D-Bus and module contract; `docs/progress.md` the state of the work.

@@ -127,10 +127,11 @@
       overlays.default = final: prev: { universe = universe; universe-ui = ui; universe-core = core; universe-modules = modulesPkg; };
 
       devShells.${system}.default = pkgs.mkShell {
-        packages = with pkgs; [ cargo rustc clippy rustfmt rust-analyzer pkg-config ruff (python3.withPackages (ps: [ ps.pyside6 ps.pysdl2 ps.qrcode ps.pytest ])) qt6.qtdeclarative qt6.qt5compat qt6.qtmultimedia SDL2 ] ++ moduleRuntime;
+        packages = with pkgs; [ cargo rustc clippy rustfmt rust-analyzer pkg-config ruff (python3.withPackages (ps: [ ps.pyside6 ps.pysdl2 ps.qrcode ps.pytest ])) qt6.qtdeclarative qt6.qt5compat qt6.qtmultimedia qt6.qtsvg SDL2 ] ++ moduleRuntime;
         shellHook = ''
           export UNIVERSE_MODULES_PATH="$PWD/modules"
           export QML2_IMPORT_PATH="${pkgs.qt6.qtdeclarative}/lib/qt-6/qml:${pkgs.qt6.qt5compat}/lib/qt-6/qml:${pkgs.qt6.qtmultimedia}/lib/qt-6/qml"
+          export QT_PLUGIN_PATH="${pkgs.qt6.qtsvg}/lib/qt-6/plugins"
           export QT_FORCE_STDERR_LOGGING=1
         '';
       };
