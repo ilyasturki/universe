@@ -1,0 +1,740 @@
+<title>Universe MVP</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  :root {
+    --ground: #0e0f13;
+    --ground-2: #14161c;
+    --surface: rgba(255,255,255,0.06);
+    --surface-2: rgba(255,255,255,0.10);
+    --line: rgba(242,243,245,0.16);
+    --line-strong: rgba(242,243,245,0.32);
+    --text: #f2f3f5;
+    --text-2: rgba(242,243,245,0.70);
+    --text-3: rgba(242,243,245,0.48);
+    --accent: #8fc1ff;
+    --accent-ink: #0e0f13;
+    --accent-soft: rgba(143,193,255,0.14);
+    --warn: #e6b04a;
+    --warn-soft: rgba(230,176,74,0.14);
+    --code-bg: rgba(255,255,255,0.07);
+    --sans: "Archivo", "Helvetica Neue", Arial, sans-serif;
+    --mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --ground: #f6f6f4; --ground-2: #eeeeeb;
+      --surface: rgba(16,17,22,0.04); --surface-2: rgba(16,17,22,0.07);
+      --line: rgba(16,17,22,0.14); --line-strong: rgba(16,17,22,0.30);
+      --text: #101116; --text-2: rgba(16,17,22,0.72); --text-3: rgba(16,17,22,0.50);
+      --accent: #1a56c4; --accent-ink: #ffffff; --accent-soft: rgba(26,86,196,0.10);
+      --warn: #9a6a0b; --warn-soft: rgba(154,106,11,0.10);
+      --code-bg: rgba(16,17,22,0.06);
+    }
+  }
+  :root[data-theme="light"] {
+    --ground: #f6f6f4; --ground-2: #eeeeeb;
+    --surface: rgba(16,17,22,0.04); --surface-2: rgba(16,17,22,0.07);
+    --line: rgba(16,17,22,0.14); --line-strong: rgba(16,17,22,0.30);
+    --text: #101116; --text-2: rgba(16,17,22,0.72); --text-3: rgba(16,17,22,0.50);
+    --accent: #1a56c4; --accent-ink: #ffffff; --accent-soft: rgba(26,86,196,0.10);
+    --warn: #9a6a0b; --warn-soft: rgba(154,106,11,0.10);
+    --code-bg: rgba(16,17,22,0.06);
+  }
+
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--ground); color: var(--text); font-family: var(--sans); font-size: 16px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+  a { color: var(--accent); text-decoration: none; border-bottom: 1px solid transparent; }
+  a:hover, a:focus-visible { border-bottom-color: currentColor; outline: none; }
+  a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  .page { max-width: 1080px; margin: 0 auto; padding: 48px 24px 96px; }
+  .prose { max-width: 70ch; }
+
+  header.masthead { display: grid; gap: 14px; padding-bottom: 32px; border-bottom: 1px solid var(--line); margin-bottom: 40px; }
+  .eyebrow { font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text-3); font-weight: 600; }
+  h1 { font-size: clamp(34px, 5vw, 56px); line-height: 1.02; margin: 0; font-weight: 700; letter-spacing: -0.02em; text-wrap: balance; }
+  .lede { font-size: 19px; line-height: 1.45; color: var(--text-2); max-width: 62ch; margin: 0; text-wrap: pretty; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 22px; font-size: 13px; color: var(--text-3); }
+  .meta b { color: var(--text-2); font-weight: 600; }
+
+  nav.toc { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 6px 24px; margin: 0 0 48px; padding: 0; list-style: none; font-size: 14px; }
+  nav.toc a { color: var(--text-2); display: flex; gap: 10px; padding: 4px 0; }
+  nav.toc a span { color: var(--text-3); font-variant-numeric: tabular-nums; min-width: 1.6em; }
+
+  section { margin: 0 0 64px; }
+  h2 { font-size: 28px; line-height: 1.15; margin: 0 0 18px; letter-spacing: -0.015em; font-weight: 700; text-wrap: balance; display: flex; gap: 14px; align-items: baseline; }
+  h2 .num { color: var(--text-3); font-size: 15px; font-weight: 600; font-variant-numeric: tabular-nums; letter-spacing: 0.06em; }
+  h3 { font-size: 19px; margin: 32px 0 10px; font-weight: 600; letter-spacing: -0.005em; }
+  h4 { font-size: 16px; margin: 22px 0 8px; font-weight: 600; }
+  p { margin: 0 0 14px; text-wrap: pretty; }
+  ul, ol { margin: 0 0 14px; padding-left: 1.3em; }
+  li { margin: 0 0 8px; }
+  li > ul { margin-top: 6px; }
+  strong { font-weight: 600; }
+  small, .small { font-size: 13.5px; color: var(--text-2); }
+
+  code { font-family: var(--mono); font-size: 0.86em; background: var(--code-bg); padding: 0.1em 0.38em; border-radius: 4px; }
+  pre { font-family: var(--mono); font-size: 13px; line-height: 1.5; background: var(--code-bg); border: 1px solid var(--line); border-radius: 8px; padding: 14px 16px; overflow-x: auto; margin: 0 0 16px; }
+  pre code { background: none; padding: 0; font-size: inherit; }
+
+  .verdict { display: grid; gap: 14px; margin: 0 0 28px; }
+  .verdict .item { display: grid; grid-template-columns: 44px 1fr; gap: 14px; padding: 18px 20px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+  .verdict .item .k { font-family: var(--mono); font-size: 13px; color: var(--accent); font-weight: 500; padding-top: 3px; }
+  .verdict .item h3 { margin: 0 0 6px; font-size: 18px; }
+  .verdict .item p { margin: 0; color: var(--text-2); }
+  .verdict .item p + p { margin-top: 8px; }
+
+  .split { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; margin: 0 0 20px; }
+  .card { padding: 16px 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
+  .card h4 { margin: 0 0 8px; }
+  .card p, .card li { color: var(--text-2); }
+  .card ul { margin-bottom: 0; }
+  .card.lead { border-color: var(--accent); background: var(--accent-soft); }
+  .card.warn { border-color: var(--warn); background: var(--warn-soft); }
+
+  .callout { border-left: 3px solid var(--accent); padding: 10px 18px; margin: 18px 0 22px; background: var(--accent-soft); border-radius: 0 10px 10px 0; }
+  .callout.warn { border-left-color: var(--warn); background: var(--warn-soft); }
+  .callout p:last-child { margin-bottom: 0; }
+
+  .tablewrap { overflow-x: auto; margin: 0 0 22px; border: 1px solid var(--line); border-radius: 10px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; vertical-align: top; padding: 10px 12px; border-bottom: 1px solid var(--line); }
+  th { font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--text-3); font-weight: 600; background: var(--surface); white-space: nowrap; }
+  tbody tr:last-child td { border-bottom: none; }
+  td.num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+  tr.lead td { background: var(--accent-soft); }
+  tr.lead td:first-child { border-left: 3px solid var(--accent); }
+  tr.total td { font-weight: 600; border-top: 1px solid var(--line-strong); }
+  td code { white-space: normal; overflow-wrap: anywhere; }
+
+  .pill { display: inline-block; font-size: 11.5px; font-weight: 600; letter-spacing: 0.05em; text-transform: uppercase; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line-strong); color: var(--text-2); white-space: nowrap; }
+  .pill.ok { border-color: var(--accent); color: var(--accent); }
+  .pill.warn { border-color: var(--warn); color: var(--warn); }
+
+  figure { margin: 22px 0 28px; }
+  figure svg { max-width: 100%; height: auto; display: block; color: var(--text); font-family: var(--sans); }
+  figcaption { font-size: 13.5px; color: var(--text-2); margin-top: 10px; max-width: 70ch; }
+  .diag-box { fill: var(--surface-2); stroke: var(--line-strong); }
+  .diag-box.lead { stroke: var(--accent); fill: var(--accent-soft); }
+  .diag-box.soft { fill: var(--surface); stroke: var(--line); }
+  .diag-label { font-size: 12px; fill: currentColor; }
+  .diag-title { font-size: 13px; font-weight: 600; fill: currentColor; }
+  .diag-muted { font-size: 11px; fill: var(--text-3); }
+  .diag-line { stroke: currentColor; stroke-width: 1.3; fill: none; }
+  .diag-line.lead { stroke: var(--accent); stroke-width: 1.8; }
+  .diag-line.dash { stroke-dasharray: 4 4; }
+  .diag-accent-text { font-size: 12px; fill: var(--accent); font-weight: 600; }
+
+  ol.steps { counter-reset: step; list-style: none; padding: 0; }
+  ol.steps li { counter-increment: step; position: relative; padding: 12px 0 12px 44px; margin: 0; border-top: 1px solid var(--line); }
+  ol.steps li::before { content: counter(step); position: absolute; left: 0; top: 15px; font-family: var(--mono); font-size: 13px; color: var(--accent); }
+  ol.steps li:last-child { border-bottom: 1px solid var(--line); }
+
+  dl.parking { margin: 0; display: grid; gap: 0; }
+  dl.parking div { display: grid; grid-template-columns: 200px 1fr; gap: 16px; padding: 12px 0; border-top: 1px solid var(--line); }
+  dl.parking div:last-child { border-bottom: 1px solid var(--line); }
+  dl.parking dt { font-weight: 600; margin: 0; }
+  dl.parking dd { margin: 0; color: var(--text-2); }
+  dl.parking dd .pill { margin-right: 6px; }
+
+  .sources { font-size: 13.5px; columns: 2; column-gap: 32px; }
+  .sources li { break-inside: avoid; margin-bottom: 6px; }
+  @media (max-width: 720px) { .sources { columns: 1; } .verdict .item { grid-template-columns: 1fr; } dl.parking div { grid-template-columns: 1fr; gap: 4px; } }
+  @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto !important; } }
+</style>
+
+<div class="page">
+<header class="masthead">
+  <div class="eyebrow">Universe — étude v3 · 11 septembre 2026</div>
+  <h1>Universe MVP</h1>
+  <p class="lede">Un cœur en Rust, l'interface en Qt 6, GNOME d'abord sans lui appartenir, des fichiers qu'on peut lire, et des modules pour tout ce qui n'est pas lancer un jeu : la capture, le journal, GOG lui-même. Ce plan remplace <a href="https://claude.ai/code/artifact/141f025a-e57b-467c-bbcd-cc480ab94eb9">l'étude v1</a> partout où ils divergent. « Universe » est le nom de travail.</p>
+  <div class="meta">
+    <span><b>Cible</b> Linux, NixOS en premier, moi d'abord</span>
+    <span><b>Périmètre</b> GOG via umu, sans émulation</span>
+    <span><b>Budget</b> ≈ 80 jours, cinq jalons livrables</span>
+    <span><b>Vérifié</b> sur cette machine : Qt 6.11.1, PySide6 6.11.0, rustc 1.97, gamescope 3.16.23, gsr 5.13.8</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <a href="#decisions"><span>1</span>Les décisions</a>
+  <a href="#mvp"><span>2</span>Ce que le MVP fait</a>
+  <a href="#corrections"><span>3</span>Ce que j'ai corrigé</a>
+  <a href="#archi"><span>4</span>Architecture et D-Bus</a>
+  <a href="#pile"><span>5</span>La pile, mesurée</a>
+  <a href="#bureau"><span>6</span>Bureau et session</a>
+  <a href="#donnees"><span>7</span>Données</a>
+  <a href="#modules"><span>8</span>Modules</a>
+  <a href="#cli"><span>9</span>La CLI</a>
+  <a href="#nix"><span>10</span>Nix</a>
+  <a href="#absorption"><span>11</span>game, pegasus-sync, tracker</a>
+  <a href="#jalons"><span>12</span>Jalons et coût</a>
+  <a href="#parking"><span>13</span>Ce qui attend</a>
+  <a href="#risques"><span>14</span>Non vérifié</a>
+  <a href="#sources"><span>15</span>Sources</a>
+</nav>
+
+<section id="decisions">
+  <h2><span class="num">01</span>Les décisions</h2>
+  <div class="verdict">
+    <div class="item"><div class="k">pile</div><div>
+      <h3>Cœur en Rust, interface en PySide6, zéro C++.</h3>
+      <p>Le cœur (démon <code>universed</code>, lanceur, API D-Bus, données, CLI <code>universe</code>) est un binaire Rust : c'est la pièce que l'interface, la CLI et les modules consomment, et zbus génère une API typée. L'interface QML est hébergée par PySide6, la seule liaison Qt complète sans C++ ; la mesure dit que ça coûte 70 ms et 24 Mo au démarrage, sur une interface dont le plafond est ailleurs (§5).</p>
+    </div></div>
+    <div class="item"><div class="k">bureau</div><div>
+      <h3>GNOME 50 d'abord, sans dépendance : des profils de bureau.</h3>
+      <p>GNOME est ton chemin quotidien et le plus rapide à tester, donc le MVP tourne dessus. Mais le cœur ne dépend d'aucun bureau : les quatre points qui en dépendent (trouver l'écran du jeu, cacher le curseur, rendre le focus, dessiner un overlay) passent par un profil, GNOME dans le MVP, Hyprland, niri, KDE et une session gamescope dédiée dans les tranches suivantes (§6).</p>
+    </div></div>
+    <div class="item"><div class="k">données</div><div>
+      <h3>Fichiers en vérité, SQLite en index, journal en JSON rendu en Markdown.</h3>
+      <p>Un TOML par jeu, un JSONL de sessions, une entrée de journal en JSON par partie ; la note Markdown est un rendu pour Obsidian, jamais lue par l'interface. SQLite est un index jetable dans le cache. Une seule clé, celle qui nomme déjà tes enregistrements.</p>
+    </div></div>
+    <div class="item"><div class="k">modules</div><div>
+      <h3>Capture, journal et GOG sont des modules, comme tout ce qui n'est pas lancer un jeu.</h3>
+      <p>Un module est un dossier avec un manifeste TOML et des exécutables ; trois sortes : <em>hooks</em> (appelés autour de la partie), <em>daemon</em> (client D-Bus long-vécu), <em>source</em> (un fournisseur de jeux, protocole JSON en sous-processus). Le cœur n'en charge jamais le code. GOG est la première source ; Steam, Epic ou itch en seront d'autres, écrites par n'importe qui (§8).</p>
+    </div></div>
+    <div class="item"><div class="k">lancer</div><div>
+      <h3>umu-run direct, un scope systemd par partie, Lutris et <code>game</code> absorbés.</h3>
+      <p>Le cœur lance <code>umu-run</code> avec <code>GAMEID</code> et <code>STORE</code> résolus hors ligne, pose toujours <code>WINEPREFIX</code>, et lit la fin de partie dans <code>cgroup.events</code>. Le temps de jeu appartient au cœur.</p>
+    </div></div>
+  </div>
+  <p class="small prose">Noms de travail : <code>universe</code> (CLI), <code>universed</code> (démon), <code>universe-ui</code> (l'interface QML, ex-thème Pegasus). Bus D-Bus <code>io.github.ilyasturki.Universe</code> tant qu'il n'y a pas de domaine : un nom D-Bus est un DNS inversé, il faut posséder le domaine qu'il cite, et <code>io.github.&lt;compte&gt;</code> est la convention pour un projet hébergé sur GitHub.</p>
+</section>
+
+<section id="mvp">
+  <h2><span class="num">02</span>Ce que le MVP fait</h2>
+  <div class="prose">
+    <ul>
+      <li><strong>Bibliothèque.</strong> Les jeux GOG installés, reconnus par leur <code>goggame-&lt;id&gt;.info</code> <em>et</em> par leur présence dans ta bibliothèque GOG (un manifeste seul ne prouve rien, les repacks en ont un), plus les jeux Proton importés de Lutris ; jaquettes, héros, captures et métadonnées récupérés automatiquement.</li>
+      <li><strong>Lancement.</strong> Depuis l'interface à la manette ou depuis la CLI, par umu-run, dans un scope systemd ; l'interface reste ouverte et reprend le focus à la sortie.</li>
+      <li><strong>Sessions et temps de jeu.</strong> Une ligne par partie dans <code>sessions.jsonl</code>, les heures Lutris importées sans double compte.</li>
+      <li><strong>Module capture.</strong> gpu-screen-recorder en KMS sur l'écran du jeu, sans dialogue, curseur capturé seulement si le jeu le demande, capture d'écran à la demande. Désactivable globalement ou par jeu.</li>
+      <li><strong>Module journal.</strong> Le pipeline actuel (codex par défaut) écrit une entrée JSON par partie, affichée dans l'interface, et rend la note Markdown pour Obsidian si tu le veux. Désactivable de même.</li>
+      <li><strong>Module source GOG.</strong> Connexion, bibliothèque, recherche, installation, mises à jour, archive, suppression : ce que <code>game</code> fait aujourd'hui, depuis l'interface et la CLI.</li>
+      <li><strong>Réglages par jeu.</strong> Liste ci-dessous ; défauts globaux dans <code>config.toml</code>, surcharge dans le <code>game.toml</code>.</li>
+      <li><strong>Modules tiers.</strong> Le runtime, la page « Modules » générique, et <code>tracker-md</code>, qui alimente ton tracker Markdown.</li>
+      <li><strong>Nix.</strong> Un flake avec paquets, module NixOS et module home-manager qui génère la config et remplace <code>home/gaming/*.nix</code> tranche par tranche.</li>
+    </ul>
+    <div class="callout"><p><strong>Une règle, pas deux clients.</strong> Toute opération est une méthode D-Bus du cœur ; l'interface et la CLI sont deux clients minces de la même API, donc à parité par construction : installer, mettre à jour, archiver, supprimer, régler, tout ce que Lutris permet se fait à la manette dans l'interface et au clavier dans la CLI. Aucune opération n'existe « seulement en CLI » ou « seulement dans l'interface ». La seule friction connue est la connexion GOG, qui passe par un navigateur et un code : l'interface affiche l'URL et un QR, et prend le code sur un clavier virtuel à la manette.</p></div>
+  </div>
+  <h3>Les réglages par jeu</h3>
+  <div class="split">
+    <div class="card"><h4>Lancement (cœur)</h4><ul>
+      <li>exécutable, arguments, dossier de travail</li>
+      <li>préfixe, version de Proton, <code>win64</code></li>
+      <li>esync, fsync, surcharges de DLL</li>
+      <li>variables d'environnement (le jeu a le dernier mot)</li>
+      <li>commandes avant et après</li>
+      <li>MangoHud</li>
+    </ul></div>
+    <div class="card"><h4>Bureau et bibliothèque (cœur)</h4><ul>
+      <li>cacher le curseur pendant la partie</li>
+      <li>caché, favori, étiquettes, titre de tri</li>
+      <li>épinglage des identifiants SteamGridDB et RAWG</li>
+    </ul></div>
+    <div class="card"><h4>Modules (chacun son schéma)</h4><ul>
+      <li>capture : activer, capturer le curseur</li>
+      <li>journal : activer, langue à l'écran</li>
+      <li>toute clé déclarée par un autre module actif, sous <code>[modules.&lt;id&gt;]</code></li>
+    </ul></div>
+  </div>
+  <p class="small prose">Hors MVP, notés en §13 : manettes unifiées, appairage Bluetooth, remap, autres bureaux et session dédiée, overlay, émulation, autres sources, extrait vidéo, galerie web, statuts du tracker dans l'app.</p>
+</section>
+
+<section id="corrections">
+  <h2><span class="num">03</span>Ce que j'ai corrigé</h2>
+  <div class="prose">
+    <p><strong>Gamescope vit.</strong> Dépôt poussé le 10 septembre 2026, commits de l'équipe Valve toute la semaine, tags 3.16.26 à 3.16.28 fin août, embarqué dans SteamOS 3.8 et la Steam Machine. La rumeur vient très probablement du fork de l'Open Gaming Collective, que Bazzite livre depuis janvier 2026 sous un numéro de build qui n'est pas un tag Valve, et de l'idée, vraie, que gamescope <em>imbriqué</em> sur un bureau moderne ne sert plus à rien.</p>
+    <p><strong>Le chemin sans dialogue existe déjà chez toi.</strong> Le sélecteur de portail passe en premier par choix (pour suivre un jeu déplacé vers la TV) ; ton <code>resolve-capture-target.js</code> nomme ensuite le connecteur DRM et lance gsr en KMS. Sans la bascule TV, il ne reste que ce second chemin, moins GameShot et ses cinq secondes d'attente.</p>
+    <p><strong>Un manifeste GOG sur disque ne prouve rien, et je m'étais trompé.</strong> J'avais lu le <code>goggame-1423049311.info</code> de Cyberpunk comme la preuve d'une installation GOG ; c'est un repack, caché exprès, et les repacks embarquent les manifestes de GOG. Le vrai décompte, croisé avec ta bibliothèque GOG : treize manifestes de base sur disque, huit possédés (Arkham Origins, Control, Dead Cells, Dishonored, LEGO Batman, Mini Metro, Mirror's Edge, The Technomancer), cinq repacks, et Lutris n'en marque que trois comme GOG. Conséquence : la source GOG ne dit <code>gog</code> que si le manifeste <em>et</em> la bibliothèque du compte (en cache, hors ligne) concordent ; un manifeste orphelin garde ce que Lutris en disait, et ce qui était caché reste caché.</p>
+    <p><strong>Python coûte 70 ms et 24 Mo, pas plus.</strong> Sur la même scène QML, l'hôte Rust construit pour l'occasion démarre en 133 ms contre 203 ms pour PySide6. Pegasus, en C++, met aujourd'hui 479 ms parce qu'il charge 46 jaquettes 4K. Le langage de l'hôte n'est pas la variable qui compte ; celui du cœur, si, et il sera Rust.</p>
+    <p><strong>Ce sont trois systèmes à absorber, pas deux.</strong> <code>game</code> (gogdl, versions, archive), <code>pegasus-sync</code> (artwork, métadonnées, stats Pegasus) et le tracker Markdown, dont la colonne Heures est remontée depuis pga.db. La v1 ignorait le troisième.</p>
+  </div>
+</section>
+
+<section id="archi">
+  <h2><span class="num">04</span>Architecture et D-Bus</h2>
+  <figure>
+    <svg viewBox="0 0 920 480" role="img" aria-label="L'interface et la CLI parlent au cœur Rust par D-Bus et lisent ses fichiers ; le cœur pilote le système et lance les modules ; les modules contribuent des enregistrements, des entrées de journal et des jeux par la même API.">
+      <defs>
+        <marker id="arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker>
+        <marker id="arr-lead" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="var(--accent)"/></marker>
+      </defs>
+      <rect x="20" y="20" width="220" height="200" rx="10" class="diag-box soft"/>
+      <text x="36" y="44" class="diag-title">Clients</text>
+      <rect x="36" y="58" width="188" height="44" rx="8" class="diag-box lead"/>
+      <text x="48" y="77" class="diag-title">universe-ui</text>
+      <text x="48" y="93" class="diag-muted">QML Qt 6, hôte PySide6</text>
+      <rect x="36" y="112" width="188" height="40" rx="8" class="diag-box lead"/>
+      <text x="48" y="131" class="diag-title">universe (CLI)</text>
+      <text x="48" y="146" class="diag-muted">toute l'API, --json, scriptable</text>
+      <rect x="36" y="162" width="188" height="40" rx="8" class="diag-box"/>
+      <text x="48" y="181" class="diag-label">GTK, Windows…</text>
+      <text x="48" y="196" class="diag-muted">plus tard, même API</text>
+
+      <rect x="330" y="20" width="260" height="290" rx="10" class="diag-box lead"/>
+      <text x="346" y="44" class="diag-title">universed · Rust, un binaire</text>
+      <rect x="346" y="58" width="228" height="72" rx="8" class="diag-box"/>
+      <text x="358" y="77" class="diag-label">D-Bus io.github.ilyasturki.Universe</text>
+      <text x="358" y="93" class="diag-muted">Library1 · Session1 · Sources1</text>
+      <text x="358" y="108" class="diag-muted">Media1 · Recording1 · Journal1</text>
+      <text x="358" y="123" class="diag-muted">Modules1 · Settings1</text>
+      <rect x="346" y="138" width="228" height="74" rx="8" class="diag-box"/>
+      <text x="358" y="157" class="diag-label">démon tokio + zbus</text>
+      <text x="358" y="173" class="diag-muted">lanceur umu, scopes, profils de bureau</text>
+      <text x="358" y="188" class="diag-muted">runtime de modules, scrapers</text>
+      <text x="358" y="203" class="diag-muted">index SQLite (cache), inotify</text>
+      <rect x="346" y="220" width="228" height="84" rx="8" class="diag-box soft"/>
+      <text x="358" y="239" class="diag-label">Fichiers, la vérité</text>
+      <text x="358" y="255" class="diag-muted">games/&lt;slug&gt;/game.toml</text>
+      <text x="358" y="269" class="diag-muted">games/&lt;slug&gt;/sessions.jsonl</text>
+      <text x="358" y="283" class="diag-muted">games/&lt;slug&gt;/journal/&lt;session&gt;.json</text>
+      <text x="358" y="297" class="diag-muted">games/&lt;slug&gt;/media/</text>
+
+      <rect x="680" y="20" width="220" height="290" rx="10" class="diag-box soft"/>
+      <text x="696" y="44" class="diag-title">Système</text>
+      <text x="696" y="70" class="diag-label">umu-run + Proton</text>
+      <text x="696" y="92" class="diag-label">systemd --user (scopes)</text>
+      <text x="696" y="114" class="diag-label">GNOME Shell, Mutter (profil)</text>
+      <text x="696" y="136" class="diag-label">SteamGridDB, RAWG, Steam</text>
+      <text x="696" y="170" class="diag-muted">via les modules :</text>
+      <text x="696" y="188" class="diag-muted">gpu-screen-recorder (capture)</text>
+      <text x="696" y="204" class="diag-muted">codex exec (journal)</text>
+      <text x="696" y="220" class="diag-muted">gogdl, API GOG (source gog)</text>
+      <text x="696" y="236" class="diag-muted">tracker Markdown (tracker-md)</text>
+      <text x="696" y="262" class="diag-muted">plus tard : InputPlumber, BlueZ,</text>
+      <text x="696" y="278" class="diag-muted">gamescope, Steam, Epic, itch…</text>
+
+      <rect x="330" y="350" width="260" height="110" rx="10" class="diag-box soft"/>
+      <text x="346" y="374" class="diag-title">Modules · hors process</text>
+      <text x="346" y="394" class="diag-label">module.toml + exécutables</text>
+      <text x="346" y="412" class="diag-muted">gog (source) · capture (hooks)</text>
+      <text x="346" y="428" class="diag-muted">journal (hooks) · tracker-md (hooks)</text>
+      <text x="346" y="444" class="diag-muted">plus tard : inputplumber, overlay…</text>
+
+      <line x1="240" y1="80" x2="330" y2="80" class="diag-line lead" marker-end="url(#arr-lead)"/>
+      <text x="285" y="72" text-anchor="middle" class="diag-accent-text">appels</text>
+      <line x1="330" y1="100" x2="240" y2="100" class="diag-line lead" marker-end="url(#arr-lead)"/>
+      <text x="285" y="114" text-anchor="middle" class="diag-accent-text">signaux</text>
+      <line x1="240" y1="262" x2="346" y2="262" class="diag-line dash" marker-end="url(#arr)"/>
+      <text x="292" y="254" text-anchor="middle" class="diag-muted">lecture seule</text>
+
+      <line x1="590" y1="150" x2="680" y2="150" class="diag-line" marker-end="url(#arr)"/>
+      <text x="635" y="142" text-anchor="middle" class="diag-label">lance</text>
+      <line x1="680" y1="172" x2="590" y2="172" class="diag-line" marker-end="url(#arr)"/>
+      <text x="635" y="186" text-anchor="middle" class="diag-muted">cgroup.events</text>
+
+      <line x1="440" y1="310" x2="440" y2="350" class="diag-line" marker-end="url(#arr)"/>
+      <text x="432" y="334" text-anchor="end" class="diag-label">hooks, verbes source</text>
+      <line x1="480" y1="350" x2="480" y2="310" class="diag-line dash" marker-end="url(#arr)"/>
+      <text x="488" y="334" class="diag-muted">File, AddEntry, SetSlot</text>
+    </svg>
+    <figcaption>Une seule frontière publique : l'API D-Bus du cœur et ses fichiers. L'interface, la CLI et un futur frontend GTK sont des clients ; les modules aussi, lancés par le cœur, jamais chargés dedans, et ils rendent leurs résultats par la même API.</figcaption>
+  </figure>
+  <h3>D-Bus, ce que ça implique</h3>
+  <div class="prose">
+    <p>D-Bus n'est pas un langage, c'est le bus de messages du bureau Linux : un processus y possède un nom, expose des objets à des chemins, et chaque objet a des interfaces avec des méthodes, des propriétés et des signaux, décrites en XML et typées par des signatures (<code>s</code> chaîne, <code>i</code> entier, <code>b</code> booléen, <code>as</code> liste de chaînes, <code>a{sv}</code> dictionnaire). C'est ce que parlent déjà InputPlumber, BlueZ, systemd et GNOME Shell, donc le cœur doit le parler de toute façon ; exposer sa propre API au même endroit est la suite naturelle.</p>
+    <ul>
+      <li><strong>Qui écrit quoi.</strong> Le cœur implémente les interfaces en Rust avec zbus, qui génère propriétés, signaux et introspection depuis une <code>impl</code>. L'interface les appelle depuis Python avec le module QtDBus de PySide6, sans dépendance de plus. La CLI partage une crate cliente avec le cœur. Un module <code>daemon</code> peut être écrit en n'importe quel langage qui a une bibliothèque D-Bus, et ils en ont tous.</li>
+      <li><strong>Ce que ça change pour l'interface.</strong> Chaque action est un appel de méthode asynchrone (moins d'une milliseconde en local) ; chaque mise à jour arrive par un signal (<code>SessionEnded</code>, <code>LibraryChanged</code>) que l'interface écoute au lieu de sonder. Les données lourdes (bibliothèque, médias) ne passent pas par le bus : l'interface lit l'index et les fichiers, le bus lui dit quand relire.</li>
+      <li><strong>Cycle de vie.</strong> Le démon démarre à la demande (un fichier de service D-Bus) ou comme service <code>systemd --user</code> ; s'il redémarre, il retrouve la partie en cours par son unité systemd.</li>
+      <li><strong>Inspectable.</strong> <code>busctl --user introspect io.github.ilyasturki.Universe /io/github/ilyasturki/Universe</code>, ou d-spy, montrent toute l'API ; un script shell peut appeler <code>Session1.Launch</code> sans la CLI.</li>
+      <li><strong>Le prix.</strong> Linux seulement (accepté : Windows demanderait un autre transport), et une API à versionner avec soin (<code>Library1</code>, <code>Library2</code>) parce que des clients tiers en dépendront.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="pile">
+  <h2><span class="num">05</span>La pile, mesurée</h2>
+  <div class="prose">
+    <p>Trois hôtes ont été construits et mesurés hors écran sur cette machine, médiane de trois lancements : le <code>qml</code> C++ de Qt, PySide6, et une sonde Rust cxx-qt 0.10 compilée contre Qt 6.11.1 (modèle à 15 rôles, flou, son, injection manette, objet <code>memory</code>). Pegasus avec le thème actuel et ta vraie bibliothèque sert d'étalon.</p>
+  </div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Hôte</th><th>Scène</th><th>Premier frame</th><th>RSS</th><th>Lignes d'hôte</th></tr></thead>
+    <tbody>
+      <tr><td><code>qml</code> C++ 6.11.1</td><td>fenêtre + texte</td><td class="num">57 ms</td><td class="num">69 Mo</td><td class="num">0</td></tr>
+      <tr><td>PySide6 6.11.0</td><td>fenêtre + texte</td><td class="num">119 ms</td><td class="num">90 Mo</td><td class="num">8</td></tr>
+      <tr><td>Rust cxx-qt 0.10</td><td>scène type interface</td><td class="num">133 ms</td><td class="num">143 Mo</td><td class="num">340</td></tr>
+      <tr class="lead"><td>PySide6 6.11.0</td><td>même scène</td><td class="num">203 ms</td><td class="num">167 Mo</td><td class="num">73</td></tr>
+      <tr><td>Pegasus C++ Qt 5.15</td><td>thème actuel, 46 jeux, art 4K</td><td class="num">479 ms</td><td class="num">201 Mo</td><td>—</td></tr>
+    </tbody>
+  </table></div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Instancier la bibliothèque (15 rôles lus par ligne)</th><th>Python</th><th>Rust</th><th>ListModel QML</th></tr></thead>
+    <tbody>
+      <tr><td>57 lignes, ta taille réelle</td><td class="num">3 ms</td><td class="num">1 ms</td><td class="num">1 ms</td></tr>
+      <tr><td>500 lignes</td><td class="num">19 ms</td><td class="num">5 ms</td><td class="num">5 ms</td></tr>
+      <tr><td>2 000 lignes</td><td class="num">70 ms</td><td class="num">20 ms</td><td class="num">18 ms</td></tr>
+    </tbody>
+  </table></div>
+  <div class="prose">
+    <p>Ce que ça dit : le graphe de scène, le rendu, le décodage d'images et le JIT QML sont en C++ quel que soit l'hôte. Python ajoute un import (86 ms à chaud, dont shiboken), une vingtaine de Mo, et 1,7 µs par accès au modèle. Pegasus est aujourd'hui 2,4 fois plus lent au premier frame que l'hôte Python le plus lourd mesuré, parce qu'il charge 46 jaquettes, pas parce qu'il est en C++.</p>
+    <p><strong>Pourquoi PySide6 pour l'hôte.</strong> L'hôte fait quatre choses : injecter des <code>QKeyEvent</code> sur la fenêtre focalisée, exposer <code>api</code> et ses modèles, sous-classer des modèles et des proxies, fournir des images. PySide6 a tout, et le port du thème tient en une journée (cinq imports, six proxies, quatorze handlers). cxx-qt-lib 0.10 n'a ni <code>QKeyEvent</code>, ni <code>postEvent</code>, ni <code>QQmlContext</code> : la sonde n'a marché qu'avec le module QtTest, et la même surface y prend 340 lignes contre 73. Ni Rust ni Go n'hébergent le QML proprement aujourd'hui ; C++ le ferait, mais tu ne veux pas en écrire, et le gain serait de 70 ms. Le calcul change si KDAB publie ces trois symboles.</p>
+    <p><strong>Pourquoi Rust pour le cœur.</strong> L'API D-Bus est le produit : zbus 5 génère propriétés, signaux et <code>PropertiesChanged</code> depuis une <code>impl</code> typée, quand dbus-fast demande de les émettre à la main et godbus une table de pointeurs sans introspection. Un binaire sans interpréteur se publie en PKGBUILD, COPR ou <code>buildRustPackage</code>, et n'impose pas Qt à un frontend GTK. L'écosystème est complet : tokio, evdev asynchrone, rusqlite embarqué, inotify sur <code>cgroup.events</code>, unités transitoires typées par zbus_systemd. Le cœur est le processus qui tient la session pendant des heures et parse ce qui vient du réseau et des modules ; c'est là que la sûreté mémoire compte, et c'est le langage que tu as déjà publié. Ce que Rust n'achète pas : de la vitesse perceptible, le démon dort. Ce qu'il coûte : les scripts Python et zx existants deviennent des modules hors process et se portent quand on les touche.</p>
+    <p><strong>GOG.</strong> gogdl 1.3.0 est fait pour être piloté par une autre application, ne dépend que de <code>requests</code>, est dans nixpkgs et vit par Heroic. Le module source l'appelle en sous-processus (<code>info</code>, <code>download</code>, <code>import</code>, <code>redist</code>), ce qui garde aussi la frontière GPL. Le réécrire coûterait quinze à vingt-cinq jours et une dette à chaque changement de GOG.</p>
+  </div>
+</section>
+
+<section id="bureau">
+  <h2><span class="num">06</span>Bureau et session</h2>
+  <figure>
+    <svg viewBox="0 0 960 250" role="img" aria-label="Le lancement traverse les hooks, le scope systemd et le module capture ; la fin de partie est lue dans cgroup.events, puis le journal et les hooks de fin tournent pendant que l'interface reprend le focus.">
+      <defs>
+        <marker id="arr2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="currentColor"/></marker>
+      </defs>
+      <rect x="10" y="30" width="140" height="78" rx="8" class="diag-box lead"/>
+      <text x="22" y="52" class="diag-title">Interface</text>
+      <text x="22" y="70" class="diag-muted">Launch(slug, écran)</text>
+      <text x="22" y="86" class="diag-muted">écran figé, pas de splash</text>
+
+      <rect x="170" y="30" width="140" height="78" rx="8" class="diag-box"/>
+      <text x="182" y="52" class="diag-title">Avant</text>
+      <text x="182" y="70" class="diag-muted">hooks pre-launch</text>
+      <text x="182" y="86" class="diag-muted">curseur caché (profil)</text>
+      <text x="182" y="102" class="diag-muted">current-session.json</text>
+
+      <rect x="330" y="30" width="140" height="78" rx="8" class="diag-box"/>
+      <text x="342" y="52" class="diag-title">Jeu</text>
+      <text x="342" y="70" class="diag-muted">scope systemd</text>
+      <text x="342" y="86" class="diag-muted">umu-run + Proton</text>
+      <text x="342" y="102" class="diag-muted">MangoHud</text>
+
+      <rect x="490" y="30" width="140" height="78" rx="8" class="diag-box"/>
+      <text x="502" y="52" class="diag-title">Module capture</text>
+      <text x="502" y="70" class="diag-muted">post-launch : unité gsr</text>
+      <text x="502" y="86" class="diag-muted">-w $SESSION_SCREEN</text>
+      <text x="502" y="102" class="diag-muted">-cursor selon le jeu</text>
+
+      <rect x="650" y="30" width="140" height="78" rx="8" class="diag-box"/>
+      <text x="662" y="52" class="diag-title">Fin</text>
+      <text x="662" y="70" class="diag-muted">cgroup.events → 0</text>
+      <text x="662" y="86" class="diag-muted">gsr stoppé, curseur rendu</text>
+      <text x="662" y="102" class="diag-muted">sessions.jsonl +1 ligne</text>
+
+      <rect x="810" y="30" width="140" height="78" rx="8" class="diag-box lead"/>
+      <text x="822" y="52" class="diag-title">Interface</text>
+      <text x="822" y="70" class="diag-muted">focus rendu (profil)</text>
+      <text x="822" y="86" class="diag-muted">SessionEnded</text>
+
+      <line x1="150" y1="69" x2="170" y2="69" class="diag-line" marker-end="url(#arr2)"/>
+      <line x1="310" y1="69" x2="330" y2="69" class="diag-line" marker-end="url(#arr2)"/>
+      <line x1="470" y1="69" x2="490" y2="69" class="diag-line" marker-end="url(#arr2)"/>
+      <line x1="630" y1="69" x2="650" y2="69" class="diag-line" marker-end="url(#arr2)"/>
+      <line x1="790" y1="69" x2="810" y2="69" class="diag-line" marker-end="url(#arr2)"/>
+
+      <rect x="330" y="150" width="460" height="78" rx="8" class="diag-box soft"/>
+      <text x="342" y="172" class="diag-title">Après, en arrière-plan</text>
+      <text x="342" y="190" class="diag-muted">capture : Recording1.File → module journal (post-process) : Journal1.AddEntry</text>
+      <text x="342" y="206" class="diag-muted">tracker-md (session-end) : Heures et lien journal dans les tables Markdown</text>
+      <line x1="720" y1="108" x2="720" y2="150" class="diag-line dash" marker-end="url(#arr2)"/>
+      <text x="728" y="134" class="diag-muted">unités transitoires</text>
+    </svg>
+    <figcaption>La partie est une unité systemd : sa fin est un fichier qui change, pas un processus qu'on surveille. Tout ce qui suit la partie tourne à part et ne retarde jamais le retour à l'interface.</figcaption>
+  </figure>
+  <h3>Les profils de bureau</h3>
+  <div class="prose"><p>Quatre choses dépendent du bureau, et seulement quatre. Le cœur les demande à un profil, choisi par <code>XDG_CURRENT_DESKTOP</code> et forçable dans <code>config.toml</code>. GNOME est écrit dans le MVP ; chaque autre ligne est une tranche d'un à trois jours, non vérifiée à ce stade sauf gamescope.</p></div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Profil</th><th>Écran du jeu</th><th>Curseur caché</th><th>Focus rendu</th><th>Overlay (plus tard)</th></tr></thead>
+    <tbody>
+      <tr class="lead"><td>GNOME (MVP)</td><td>écran de l'interface (<code>QScreen::name()</code>), sinon <code>Mutter.DisplayConfig</code>, sinon le seul connecteur branché</td><td><code>org.gnome.Shell.Extensions</code> active <code>hide-cursor@elcste.com</code> le temps de la partie</td><td>règle MRU de Mutter, rien à faire</td><td>extension Shell, des jours, à suivre à chaque GNOME</td></tr>
+      <tr><td>Hyprland</td><td><code>hyprctl monitors -j</code></td><td><code>cursor:inactive_timeout</code> par <code>hyprctl keyword</code></td><td><code>hyprctl dispatch focuswindow</code></td><td>wlr-layer-shell : plus simple que GNOME</td></tr>
+      <tr><td>niri</td><td><code>niri msg outputs</code></td><td><code>cursor.hide-after-inactive-ms</code></td><td><code>niri msg action focus-window</code></td><td>wlr-layer-shell : plus simple que GNOME</td></tr>
+      <tr><td>KDE Plasma</td><td><code>kscreen-doctor</code></td><td>à trouver (script KWin ?)</td><td>script KWin</td><td>effet ou script KWin en QML</td></tr>
+      <tr><td>Session gamescope dédiée</td><td>une seule sortie</td><td><code>--hide-cursor-delay</code>, déjà dans <code>os/gaming/pegasus.nix</code></td><td>atomes <code>GAMESCOPECTRL_BASELAYER_*</code></td><td>atomes <code>STEAM_OVERLAY</code>, quelques heures, mécanisme lu dans OpenGamepadUI</td></tr>
+    </tbody>
+  </table></div>
+  <div class="prose">
+    <p>La session gamescope n'est donc pas « un module » : c'est un profil de bureau plus un paquet de session pour GDM, et elle vaut le coup quand l'un de ces points arrive : l'overlay, le HDR Proton (prouvé sur SteamOS 3.8, non vérifié sous Mutter 50), FSR1 et cap FPS par jeu, le démarrage console sans bureau. Elle exige en plus un serveur de notifications et un agent BlueZ, que GNOME fournit gratuitement. Aucune alternative ne la bat comme session dédiée : cage n'a pas de layer-shell, gnome-kiosk n'a ni HDR ni empilement contrôlable, Plasma Bigscreen est un autre bureau.</p>
+    <p><strong>La capture, forme finale.</strong> Le module capture lance une unité transitoire par session et l'arrête à la disparition du scope :</p>
+  </div>
+  <pre><code>gpu-screen-recorder -w "$SESSION_SCREEN" -cursor "$CURSOR" -f 60 -fm vfr -c mkv -k av1_10bit \
+  -ac opus -a default_output -a default_input -o "$OUT"</code></pre>
+  <div class="prose">
+    <p>L'écran vient de l'interface qui lance (Mutter ouvre la fenêtre du jeu sur l'écran de la fenêtre qui la lance ; à confirmer au test 3), avec la normalisation <code>HDMI-1</code> vers <code>HDMI-A-1</code> que ton résolveur documente. Les options d'encodage sont à recopier depuis <code>game-recording.nix</code> au moment du port. Si le jeu change d'écran en cours de partie, l'enregistrement reste sur le premier : accepté.</p>
+    <p><strong>Ce qui disparaît</strong> : le sélecteur de portail et ses soixante secondes, <code>await-game-window.js</code>, <code>resolve-capture-target.js</code>, l'extension GameShot, <code>-s 3840x2160</code>, <code>GI_TYPELIB_PATH</code>, le splash et ses deux scripts (l'interface ne se ferme plus), les hooks Lutris, le patch de Pegasus.</p>
+    <p><strong>Focus sous GNOME.</strong> À la disparition d'une fenêtre, Mutter rend le focus à la fenêtre la plus récemment focalisée, donc à l'interface, sans qu'elle demande rien. Ce qu'on ne peut pas faire sous GNOME : forcer l'interface au-dessus d'un jeu encore ouvert, d'où l'extension pour l'overlay.</p>
+  </div>
+</section>
+
+<section id="donnees">
+  <h2><span class="num">07</span>Données</h2>
+  <pre><code>$XDG_DATA_HOME/universe/
+  games/&lt;slug&gt;/game.toml            vérité : identité, source, lancement, métadonnées, [modules.*]
+  games/&lt;slug&gt;/sessions.jsonl       vérité : une ligne par partie close, jamais réécrite
+  games/&lt;slug&gt;/journal/&lt;session&gt;.json   vérité : une entrée par partie ; attachments/ à côté
+  games/&lt;slug&gt;/media/               box-front, tile, background, logo, screenshots/, .sync.json (cache)
+  overrides/&lt;slug&gt;/                 tes visuels à toi ; ici, pointé sur ~/Dotfiles/home/config/pegasus-art
+  proton/&lt;nom&gt;/                     liens vers les arbres Proton
+  modules/&lt;id&gt;/                     seul dossier où un module écrit
+$XDG_CONFIG_HOME/universe/
+  config.toml                       généré par home-manager chez toi : chemins, défauts, [modules] enabled
+  modules/&lt;id&gt;/module.toml          modules de l'utilisateur (écrasent ceux du système sur un même id)
+  gog/auth.json · keys/              jetons gogdl, clés SteamGridDB et RAWG
+$XDG_STATE_HOME/universe/current-session.json
+$XDG_CACHE_HOME/universe/index.db            l'index SQLite, jetable, reconstruit en une seconde
+&lt;recordings_root&gt;/&lt;slug&gt;/&lt;session&gt;.mkv        /mnt/recordings/games, anciens fichiers gardés tels quels
+&lt;journal_root&gt;/&lt;slug&gt;/&lt;Titre&gt;.md             rendu Markdown pour Obsidian, écrit par le module journal</code></pre>
+  <h3>Un <code>game.toml</code>, valeurs réelles de The Technomancer</h3>
+  <pre><code>schema = 1
+id = "the-technomancer"          # = slug(title), nom du dossier, immuable
+title = "The Technomancer"
+platform = "windows"
+release_year = 2016
+hidden = false
+favorite = false
+tags = []
+
+[source]
+kind = "gog"                     # manifeste sur disque ET présent dans ta bibliothèque GOG
+gog_id = "1972906591"
+dir = "/mnt/games/PC/The Technomancer"
+build_id = "52654527801265271"   # lu dans goggame-&lt;id&gt;.info ; le fichier gagne
+dlcs = []
+
+[launch]
+backend = "proton"
+exe = "/mnt/games/PC/The Technomancer/TheTechnomancer.exe"   # tâche primaire du manifeste
+prefix = "/mnt/games/gog/the-technomancer"                    # préfixe hérité de Lutris
+proton = "proton-ge"
+arch = "win64"
+esync = true
+fsync = true
+env = { WINE_CPU_TOPOLOGY = "4:0,1,2,3" }                     # system.env du yml Lutris
+umu_id = ""                      # aucune ligne (gog, 1972906591) dans umu-database.csv → GAMEID=umu-default, sans STORE
+mangohud = true
+
+[desktop]
+hide_cursor = true
+
+[metadata]                       # vide : ni tracker ni pin ; rempli au premier Media1.Refresh
+rawg_id = 0
+sgdb_id = 0
+
+[modules.capture]
+enabled = true
+cursor = false
+
+[modules.journal]
+enabled = true
+language = "en"</code></pre>
+  <h3>Une entrée de journal</h3>
+  <pre><code>{"session":"20260910-213045","game":"the-technomancer","written_at":"2026-09-10T22:19:40+02:00",
+ "lang":"en","title":"Into the Dome","provider":"codex",
+ "paragraphs":["Zachariah reached the Source after three failed runs at the Ophir gate…","…"],
+ "next_up":"Return to the Exchange and talk to Amelia before the ASC patrol resets.",
+ "images":["attachments/20260910-213045-1.png","attachments/20260910-213045-2.png"]}</code></pre>
+  <div class="prose">
+    <p><strong>Le journal n'est plus du Markdown.</strong> Tu avais raison : l'interface ne doit pas rendre du texte libre. L'entrée est du JSON à champs fixes (titre, langue, paragraphes en chaînes nues, images, prochaine étape), que l'interface affiche comme des données et que la CLI imprime. La note Markdown par jeu, avec son frontmatter et ses marqueurs <code>&lt;!-- session: id --&gt;</code>, devient un <em>rendu</em> écrit par le module journal quand <code>markdown_export</code> est actif, au même <code>journal_root</code>, pour qu'Obsidian et le lien du tracker continuent de marcher. La migration découpe les notes existantes sur leurs marqueurs en entrées JSON, ce que le pipeline actuel sait déjà faire.</p>
+    <p><strong>Les sessions.</strong> Trois provenances : <code>daemon</code>, <code>import-recording</code> (une ligne par mkv existant, durée lue dans le nom), <code>import-lutris</code> (le reliquat des heures pga.db non couvertes par des enregistrements, jamais négatif). Ainsi la somme ne descend jamais sous Lutris, et le <code>max()</code> du tracker reste vrai. L'identifiant garde le contrat <code>AAAAMMJJ-HHMMSS</code> de <code>game-session.mjs</code>.</p>
+    <p><strong>Le slug.</strong> <code>sanitizeGameName(title)</code>, transcrit tel quel depuis <code>game-session.mjs</code>, parce que c'est lui qui a nommé tes dossiers d'enregistrement et de journal. Le slug Lutris disparaît : <code>resident-evil-4-remake</code> devient <code>resident-evil-4</code>, et la migration renomme les dossiers d'overrides. Le tracker a la même fonction ; les deux doivent rester alignées.</p>
+    <p><strong>L'index.</strong> Tables dérivées des fichiers seulement (jeux aplatis, statistiques de sessions, enregistrements, médias, entrées de journal, FTS5 sur titres et genres), un seul écrivain, les clients en lecture seule. Reconstruit si la version change, si le fichier manque ou si un TOML ne parse pas ; entretenu par inotify sinon. Si l'index et le fichier divergent, le fichier gagne.</p>
+  </div>
+</section>
+
+<section id="modules">
+  <h2><span class="num">08</span>Modules</h2>
+  <div class="prose">
+    <p>Sept systèmes de plugins ont été lus (Decky, OpenGamepadUI, Playnite, Lutris, Cartridges, umu-protonfixes, les portails XDG et MPRIS). Ce qu'on garde : les rôles et la liste d'événements de session de Playnite, le schéma d'options déclaratif de Lutris, la règle « local écrase global » de protonfixes, la découverte par préfixe de nom de MPRIS, et pour les sources le protocole en sous-processus des <em>remote helpers</em> de git. Ce qu'on refuse : le code chargé dans le processus hôte avec ses privilèges, qui est le modèle de Decky et d'OGUI.</p>
+  </div>
+  <pre><code>api = 1
+id = "capture"
+name = "Capture vidéo"
+kind = "hooks"                    # hooks | daemon | source ; un module peut en cumuler
+
+[requires]
+core = "&gt;=0.1"
+bins = ["gpu-screen-recorder"]    # absent = module « indisponible », jamais chargé
+
+[hooks]                           # chemins relatifs au dossier du module
+post-launch  = "bin/start"        # asynchrone : lance l'unité gsr, rend la main
+session-end  = "bin/stop"         # bloquant court : arrête l'unité, classe le mkv, appelle Recording1.File
+screenshot   = "bin/shot"         # à la demande : Session1.Screenshot() passe par ici
+timeout_s    = 20
+
+[limits]                          # unités transitoires des hooks asynchrones ; défaut CPUWeight=20, MemoryHigh=2G
+cpu_weight   = 100                # la capture ne doit pas être bridée
+memory_high  = "4G"
+
+[[settings]]
+key = "enabled"
+type = "bool"
+default = true
+label = "Enregistrer la partie"
+scope = "game"                    # global (config.toml) | game (game.toml [modules.capture])
+
+[[settings]]
+key = "cursor"
+type = "bool"
+default = false
+label = "Capturer le curseur"
+scope = "game"</code></pre>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Variable</th><th>Valeur</th><th>Hooks</th></tr></thead>
+    <tbody>
+      <tr><td><code>GAME_ID</code>, <code>GAME_SLUG</code>, <code>GAME_TITLE</code>, <code>GAME_DIR</code>, <code>GAME_EXE</code>, <code>GAME_TOML</code></td><td>identité et chemins du jeu (TOML en lecture seule)</td><td>tous</td></tr>
+      <tr><td><code>SESSION_ID</code>, <code>SESSION_UNIT</code>, <code>SESSION_SCREEN</code>, <code>SESSION_STARTED_AT</code>, <code>SESSION_ENDED_AT</code>, <code>SESSION_DURATION_S</code></td><td>la partie, le connecteur DRM de son écran</td><td>selon le hook</td></tr>
+      <tr><td><code>RECORDING_PATH</code>, <code>JOURNAL_DIR</code></td><td>mkv classé (vide si non enregistré), dossier du journal</td><td>post-process, tous</td></tr>
+      <tr><td><code>MODULE_SETTINGS_JSON</code></td><td>réglages globaux fusionnés avec ceux du jeu</td><td>tous</td></tr>
+      <tr><td><code>UNIVERSE_ENV_FILE</code></td><td>des lignes <code>CLÉ=VALEUR</code> écrites là entrent dans l'env du jeu, avant <code>launch.env</code></td><td>pre-launch</td></tr>
+      <tr><td><code>MODULE_DIR</code>, <code>MODULE_DATA_DIR</code>, <code>UNIVERSE_BUS</code></td><td>dossier du module, seul dossier où il écrit, nom du bus</td><td>tous</td></tr>
+    </tbody>
+  </table></div>
+  <div class="prose">
+    <p><strong>Six hooks</strong> : <code>pre-launch</code> (bloquant, avant le scope), <code>post-launch</code> (asynchrone), <code>session-end</code> (bloquant court), <code>post-process</code> (asynchrone, après <code>RecordingFiled</code>), <code>screenshot</code> (à la demande), <code>daemon</code> (long-vécu, lancé avec le cœur). Les hooks asynchrones tournent dans des unités transitoires dont les limites sont celles du manifeste. Un module <code>daemon</code> est un client D-Bus ordinaire du cœur ; s'il expose quelque chose aux clients, il possède un nom sous <code>io.github.ilyasturki.Universe.Module.&lt;id&gt;</code>, que l'interface découvre comme un lecteur MPRIS.</p>
+    <p><strong>Les modules contribuent des données par l'API, jamais par les fichiers.</strong> Trois méthodes existent pour ça : <code>Recording1.File(session_id, path)</code> (la capture classe un mkv), <code>Journal1.AddEntry(session_id, json)</code> (le journal dépose une entrée), <code>Media1.SetSlot(slug, slot, path)</code> (un visuel). Le cœur valide, écrit le fichier de vérité, met l'index à jour, émet le signal.</p>
+    <p><strong>Une source est un sous-processus qui parle JSON.</strong> Le cœur lance <code>bin/source &lt;verbe&gt;</code> avec <code>MODULE_SETTINGS_JSON</code> et lit une ligne JSON par événement sur la sortie standard : <code>{"event":"game", "id":…, "title":…, "dir":…, "exe":…, "build":…, "owned":true}</code>, <code>{"event":"progress","done":…,"total":…}</code>, <code>{"event":"done"}</code> ; erreurs sur stderr et code de retour. Sept verbes : <code>login [code]</code>, <code>library</code>, <code>search &lt;texte&gt;</code>, <code>info &lt;id&gt;</code>, <code>install &lt;id&gt;</code>, <code>update &lt;id&gt;</code>, <code>scan</code>. Une source s'écrit dans n'importe quel langage sans toucher à D-Bus ; le cœur expose la progression sur <code>Sources1</code> pour l'interface et la CLI. GOG est la première source, livrée avec le cœur et active par défaut ; elle enveloppe gogdl et les deux endpoints GOG que ton script <code>game</code> appelle déjà.</p>
+  </div>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Module livré</th><th>Sorte</th><th>Hooks ou verbes</th><th>Réglages</th><th>Prérequis système</th></tr></thead>
+    <tbody>
+      <tr><td><code>gog</code></td><td>source</td><td>les sept verbes</td><td><code>games_dir</code>, <code>scan_dirs</code>, <code>auth</code></td><td><code>gogdl</code></td></tr>
+      <tr><td><code>capture</code></td><td>hooks</td><td><code>post-launch</code>, <code>session-end</code>, <code>screenshot</code></td><td><code>enabled</code> et <code>cursor</code> par jeu ; codec, fps, audio globaux</td><td><code>gpu-screen-recorder</code> + <code>gsr-kms-server</code> setcap</td></tr>
+      <tr><td><code>journal</code></td><td>hooks</td><td><code>post-process</code></td><td><code>enabled</code> et <code>language</code> par jeu ; <code>provider</code> (codex, anthropic, ollama), <code>markdown_export</code>, <code>journal_root</code></td><td><code>codex</code>, le script zx actuel</td></tr>
+      <tr><td><code>tracker-md</code></td><td>hooks</td><td><code>session-end</code></td><td><code>root</code>, <code>create_missing</code>, <code>vibes_map</code></td><td><code>uv</code></td></tr>
+    </tbody>
+  </table></div>
+  <div class="prose">
+    <p><strong>Ce que le cœur expose</strong> : les signaux (<code>SessionStarted</code>, <code>SessionEnded</code>, <code>RecordingFiled</code>, <code>EntryWritten</code>, <code>LibraryChanged</code>), <code>Library1.Get(slug)</code> en JSON résolu, l'état de session, <code>SetModuleSetting</code> validé contre le schéma, et <code>Modules1.List()</code> pour que tout client rende la page « Modules » et les réglages par jeu sans rien savoir du module. Un <code>[frontend.qml] screen</code> facultatif ajoute un écran à l'interface ; un frontend GTK l'ignore.</p>
+    <p><strong>Ce qu'il interdit</strong> : écrire dans les fichiers de vérité ou l'index autrement que par l'API, lancer ou arrêter un jeu, toucher au dossier d'un autre module, demander root ou une règle polkit, bloquer au-delà du délai, prendre un nom hors de son préfixe. Le premier module qui demandera un type de réglage de plus le demandera pour une bonne raison, et ce sera <code>api = 2</code>.</p>
+  </div>
+</section>
+
+<section id="cli">
+  <h2><span class="num">09</span>La CLI</h2>
+  <div class="prose">
+    <p>Le modèle est ton script <code>game</code> : une aide groupée par usage, une résolution des noms en quatre passes (exact, mot entier, sous-chaîne, chemin), des tables colorées. On y ajoute le choix interactif quand un nom est ambigu, <code>--json</code> partout pour les scripts, <code>--yes</code> sur les verbes destructifs, les complétions fish d'abord (puis bash, zsh), une page de manuel, et <code>doctor</code> qui vérifie les prérequis de chaque module activé. Elle est construite avec clap dans la crate du cœur et partage sa crate cliente : rien d'autre à installer.</p>
+  </div>
+  <pre><code>universe                          # sans argument : la bibliothèque, dernière partie en premier
+universe play technomancer        # exact › mot › sous-chaîne › chemin ; choix interactif si ambigu
+universe ls --json | jq '.[] | select(.hours &gt; 10) | .title'
+universe info technomancer        # source, build, préfixe, heures, dernière partie, modules actifs
+universe search witcher           # puis : universe install 1207658930
+universe update                   # builds GOG en attente, puis confirmation
+universe rm technomancer --yes    # corbeille, préfixe, enregistrements et journal parqués
+universe set technomancer proton=proton-em capture.cursor=true
+universe sessions technomancer    # une ligne par partie, --json pour le détail
+universe journal technomancer     # entrées, dernière en premier ; --open pour la note rendue
+universe media technomancer set tile ./cover.png
+universe module ls · enable capture · disable journal
+universe doctor                   # gsr-kms-server, gogdl, codex, extension curseur, Proton
+universe completions fish &gt; ~/.config/fish/completions/universe.fish</code></pre>
+</section>
+
+<section id="nix">
+  <h2><span class="num">10</span>Nix</h2>
+  <div class="prose">
+    <p>Tu es le premier utilisateur, sur NixOS : le flake n'est pas un emballage de fin de projet, c'est la façon dont le projet s'installe chez toi dès le jalon 1, et chaque module livré déclare ses prérequis système au même endroit.</p>
+  </div>
+  <pre><code>packages.x86_64-linux.{universed, universe, universe-ui, modules-gog, modules-capture, modules-journal, modules-tracker-md, default}
+nixosModules.default          # programs.universe.enable : gsr-kms-server (programs.gpu-screen-recorder), fichier de service D-Bus,
+                              # plus tard udev/polkit pour InputPlumber et le paquet de session gamescope
+homeManagerModules.default    # programs.universe : options → config.toml généré, modules activés et réglés,
+                              # service systemd --user universed, paquets sur le PATH, complétions fish
+overlays.default
+devShells.default             # cargo, python + PySide6, qt6 (wrapQtAppsHook), ruff, clippy
+checks                        # cargo test, pytest, clippy, ruff, et le rendu hors écran de l'interface</code></pre>
+  <div class="prose">
+    <p>Deux faits déjà vérifiés : le PySide6 de nixpkgs pose <code>dontWrapQtApps</code>, donc <code>universe-ui</code> passe par <code>qt6Packages.wrapQtAppsHook</code> ; et <code>gsr-kms-server</code> n'existe que par <code>programs.gpu-screen-recorder.enable</code>, ce que le module NixOS activera quand le module capture l'est. Le module home-manager remplace <code>home/gaming/pegasus.nix</code>, <code>game-recording.nix</code>, <code>game-session-summary.nix</code> et <code>lutris.nix</code> tranche par tranche, jalon après jalon ; les options reprennent celles qui existent (<code>recording.source</code>, <code>summary.enable</code>, <code>journalRoot</code>) pour que la migration soit un renommage. Boucle de dev : <code>nix develop</code>, <code>cargo run</code> pour le démon, <code>python -m universe_ui</code> avec le QML lu depuis le dépôt.</p>
+  </div>
+</section>
+
+<section id="absorption">
+  <h2><span class="num">11</span>Ce que deviennent <code>game</code>, <code>pegasus-sync</code> et le tracker</h2>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Aujourd'hui</th><th>Demain</th><th>Note</th></tr></thead>
+    <tbody>
+      <tr><td><code>game install/info/update/library/search/login</code> (gogdl)</td><td><span class="pill ok">module</span> source <code>gog</code></td><td>identité = manifeste confirmé par la bibliothèque du compte ; <code>update</code> est un alias de <code>download</code> ; login : URL et QR à l'écran, code au clavier virtuel ou dans la CLI</td></tr>
+      <tr><td><code>game list</code> (versions, builds GOG en attente)</td><td><span class="pill ok">module</span> verbe <code>update</code> sans id</td><td>même requête sans authentification que gogdl, en cache</td></tr>
+      <tr><td><code>game archive/restore/remove</code></td><td><span class="pill ok">cœur</span> <code>SetHidden</code>, <code>Remove</code></td><td>parcage des enregistrements et du journal conservé ; toujours <code>trash</code></td></tr>
+      <tr><td><code>game pin/link/seen/final</code>, repacks, Switch, PS3</td><td><span class="pill">parqué</span></td><td>importés en clés réservées du TOML pour ne rien perdre</td></tr>
+      <tr><td>SteamGridDB, RAWG, captures Steam, overrides, épinglage</td><td><span class="pill ok">cœur</span> <code>Media1</code></td><td>ports en Rust ; overrides par slug sanitisé après migration</td></tr>
+      <tr><td>Enregistrement (<code>game-recording.nix</code>, GameShot, scripts gjs)</td><td><span class="pill ok">module</span> <code>capture</code></td><td>KMS sur l'écran de l'interface, sans dialogue</td></tr>
+      <tr><td>Journal (<code>game-session-summary.nix</code>, <code>game-journal.mjs</code>)</td><td><span class="pill ok">module</span> <code>journal</code></td><td>le script zx devient le fournisseur codex ; sortie JSON, Markdown en rendu</td></tr>
+      <tr><td>Extrait vidéo coupé dans tes enregistrements</td><td><span class="pill">parqué</span> module <code>trailer</code></td><td>un <code>post-process</code> d'une journée quand tu le voudras</td></tr>
+      <tr><td>Galerie web <code>--gallery</code></td><td><span class="pill">parqué</span></td><td>l'API <code>Candidates/SetSlot/Unset</code> reste ; deviendra un écran à la manette</td></tr>
+      <tr><td><code>metadata.pegasus.txt</code>, <code>stats.db</code>, <code>game_dirs.txt</code>, pga.db</td><td><span class="pill warn">supprimé</span></td><td>dès que l'interface tourne sur le cœur</td></tr>
+      <tr><td>Tracker : colonne Heures depuis pga.db, lien journal</td><td><span class="pill ok">module</span> <code>tracker-md</code></td><td><code>Heures = max(existant, Σ sessions)</code>, même règle, nouvelle source</td></tr>
+      <tr><td>Tracker : <code>games.json</code>, HowLongToBeat</td><td>partagé</td><td>le cœur pousse les métadonnées des jeux installés ; le tracker garde HLTB et ses ~110 jeux non installés</td></tr>
+      <tr><td>Hooks Lutris, splash, patch Pegasus</td><td><span class="pill warn">supprimé</span></td><td>remplacés par le cœur et le profil GNOME</td></tr>
+    </tbody>
+  </table></div>
+</section>
+
+<section id="jalons">
+  <h2><span class="num">12</span>Jalons et coût</h2>
+  <div class="prose"><p>Cinq tests d'une heure avant d'écrire une ligne du plan, puis cinq jalons dont chacun remplace un morceau de l'existant, s'installe par le flake, et se joue au quotidien.</p></div>
+  <h3>Phase 0, cinq tests</h3>
+  <ol class="steps">
+    <li><strong><code>umu-run</code> seul sur The Technomancer</strong>, avec l'environnement exact de §7, sans Lutris. Vérifie la commande que le cœur exécutera.</li>
+    <li><strong>L'hôte PySide6 à l'écran</strong>, sous GNOME Wayland, avec le thème chargé et la manette injectée ; ouvrir une fenêtre plein écran depuis lui, la fermer, constater que le focus revient. Tout a été mesuré hors écran jusqu'ici.</li>
+    <li><strong><code>gpu-screen-recorder -w &lt;écran de l'hôte&gt; -cursor no</code> depuis une unité transitoire</strong> pendant qu'une fenêtre lancée par l'hôte tourne. Vérifie le chemin KMS, le flag curseur, et que Mutter ouvre la fenêtre sur l'écran de l'hôte.</li>
+    <li><strong>Un service zbus avec une propriété et un signal, lu par QtDBus de PySide6.</strong> La frontière entre les deux langages n'a pas été testée.</li>
+    <li><strong><code>gogdl update</code> sur un petit titre possédé</strong>, pour voir si <code>goggame-&lt;id&gt;.info</code> est réécrit avec le nouveau build. Le suivi des mises à jour en dépend.</li>
+  </ol>
+  <h3>Les jalons</h3>
+  <div class="tablewrap"><table>
+    <thead><tr><th>Jalon</th><th>Contenu</th><th>Ce qu'il remplace</th><th>Jours</th></tr></thead>
+    <tbody>
+      <tr><td><strong>0 · Tester</strong></td><td>les cinq tests, et le squelette Rust + PySide6 qui en sort</td><td>—</td><td class="num">2–3</td></tr>
+      <tr><td><strong>1 · Jouer</strong></td><td>cœur (config, <code>game.toml</code>, <code>sessions.jsonl</code>, index, API D-Bus, profil GNOME), CLI complète, lanceur umu + scope + hooks + curseur, migration Lutris avec diff d'environnement, hôte (port du thème, modèles, manette, client D-Bus, lancement), premier flake avec le module home-manager</td><td>Lutris et Pegasus pour lancer</td><td class="num">35–42</td></tr>
+      <tr><td><strong>2 · Se souvenir</strong></td><td>runtime de modules (hooks, limites, réglages), modules <code>capture</code> et <code>journal</code> (entrées JSON, rendu Markdown, frontière codex), heures ; écrans enregistrements et journal par jeu</td><td><code>game-recording.nix</code>, <code>game-session-summary.nix</code>, GameShot</td><td class="num">14–17</td></tr>
+      <tr><td><strong>3 · Installer</strong></td><td>runtime des sources (protocole JSON), module <code>gog</code> (scan croisé avec la bibliothèque, mises à jour), archive et suppression ; écrans installer et mettre à jour, clavier virtuel pour la connexion</td><td><code>game</code></td><td class="num">8–10</td></tr>
+      <tr><td><strong>4 · Habiller</strong></td><td>SteamGridDB, RAWG, captures Steam, overrides, épinglage ; écran réglages par jeu</td><td><code>pegasus-sync</code></td><td class="num">6–8</td></tr>
+      <tr><td><strong>5 · Ouvrir</strong></td><td><code>tracker-md</code>, page Modules générique, module NixOS, prérequis par module, <code>doctor</code>, README et première version publiée</td><td>le skill du tracker ; le reste de <code>home/gaming/*.nix</code></td><td class="num">8–10</td></tr>
+      <tr class="total"><td>Total</td><td></td><td></td><td class="num">73–90</td></tr>
+    </tbody>
+  </table></div>
+  <div class="prose">
+    <p>Le budget dépasse les 55–65 jours de la v1 alors que le périmètre est plus petit. Ça vient des choix pris depuis : le cœur en Rust plutôt qu'en Python, l'absorption de <code>game</code> et de <code>pegasus-sync</code> au lieu de scripts laissés à côté, le runtime de modules avec ses trois sortes et les écrans nouveaux, la CLI complète et le flake dès le premier jalon ; en face, InputPlumber, BlueZ et la session gamescope sortent. Le jeu est quotidien dès la fin du jalon 2, avec capture et journal.</p>
+  </div>
+</section>
+
+<section id="parking">
+  <h2><span class="num">13</span>Ce qui attend, et de quoi ça dépend</h2>
+  <dl class="parking">
+    <div><dt>Hyprland, niri, KDE</dt><dd><span class="pill">profil</span> une tranche d'un à trois jours chacun, quatre fonctions à écrire par profil (§6) ; layer-shell rend l'overlay plus simple qu'en GNOME sur Hyprland et niri.</dd></div>
+    <div><dt>Session gamescope dédiée</dt><dd><span class="pill">profil + paquet</span> la session existe déjà dans <code>os/gaming/pegasus.nix</code> ; il manque l'environnement d'activation D-Bus, le lien à <code>graphical-session.target</code>, un serveur de notifications, un agent BlueZ : 2–3 jours, puis 2,5. Déclencheurs : overlay, HDR Proton, FSR1 et cap FPS, démarrage console.</dd></div>
+    <div><dt>Overlay à la manette</dt><dd><span class="pill">module daemon</span> dépend d'un profil qui sait empiler (gamescope : quelques heures ; Hyprland et niri : layer-shell ; GNOME : extension Shell, des jours). Dépend aussi d'InputPlumber possédant toutes les manettes pour intercepter Guide, ce qui change l'identité de la manette pour chaque jeu : à décider avant. La pause est <code>systemctl --user freeze</code> du scope ; les jeux en ligne et Unreal supportent mal le dégel.</dd></div>
+    <div><dt>Autres sources</dt><dd><span class="pill">module source</span> Steam (bibliothèque locale, <code>steam://</code>), Epic et Amazon (legendary, nile), itch, Humble : chacune est le protocole de §8 dans le langage de son auteur.</dd></div>
+    <div><dt>Manettes unifiées</dt><dd><span class="pill">module</span> <code>inputplumber</code> : <code>pre-launch</code> charge le profil du jeu, <code>session-end</code> le profil par défaut. Sa raison d'être est l'émulation ; le service passe en gestion permanente le jour où on l'active.</dd></div>
+    <div><dt>Remap des boutons</dt><dd><span class="pill">module</span> écran QML du module <code>inputplumber</code>, capture d'une source par D-Bus.</dd></div>
+    <div><dt>Appairage Bluetooth</dt><dd><span class="pill">module</span> sous GNOME, d'après les symboles de <code>libgnome-bluetooth-ui</code>, l'agent d'appairage vit dans le panneau Réglages tant qu'il est ouvert ; un écran à la manette demande un agent au module. Non vérifié : si BlueZ appaire une manette « just works » sans agent. Indispensable seulement hors GNOME.</dd></div>
+    <div><dt>Émulation</dt><dd><span class="pill">backend</span> les jeux Lutris à <code>main_file</code> sont importés avec <code>backend = "emulator"</code>, non lançables tant que le backend n'existe pas. Rien n'est perdu.</dd></div>
+    <div><dt>Repacks, Switch, PS3</dt><dd><span class="pill">module</span> suivi de versions de <code>game</code> parqué avec ses données en clés réservées du TOML.</dd></div>
+    <div><dt>Extrait vidéo</dt><dd><span class="pill">module</span> <code>trailer</code>, port de <code>make_recording_clip</code> en <code>post-process</code>, une journée.</dd></div>
+    <div><dt>Galerie de visuels</dt><dd><span class="pill">interface</span> écran de choix d'artwork à la manette au-dessus de <code>Media1.Candidates</code>.</dd></div>
+    <div><dt>Statuts et notes du tracker</dt><dd><span class="pill">interface</span> playing, played, backlog, note, vibes dans l'app, si un jour tu veux quitter Obsidian pour ça.</dd></div>
+    <div><dt>Bascule TV en partie</dt><dd><span class="pill">jamais ?</span> signal <code>MonitorsChanged</code> + segments mkvmerge de la v1, si ça redevient une exigence.</dd></div>
+    <div><dt>Frontend GTK, Windows</dt><dd><span class="pill">plus tard</span> l'API D-Bus et les fichiers sont conçus pour ; Windows demanderait un autre transport que D-Bus.</dd></div>
+  </dl>
+</section>
+
+<section id="risques">
+  <h2><span class="num">14</span>Non vérifié</h2>
+  <div class="prose">
+    <ul>
+      <li>Les trois hôtes n'ont été mesurés qu'hors écran ; ni Wayland, ni frame pacing réel. Le test 2 existe pour ça.</li>
+      <li>Que Mutter ouvre la fenêtre du jeu sur l'écran de l'interface qui lance : test 3.</li>
+      <li>Les lignes Hyprland, niri et KDE du tableau des profils sont écrites de mémoire de leurs docs, pas vérifiées.</li>
+      <li>Contention du GIL sous charge (manette + vidéo) : non mesurée ; <code>postEvent</code> est thread-safe.</li>
+      <li><code>gogdl update</code> réécrit-il <code>goggame-&lt;id&gt;.info</code> ? Le script <code>game</code> le suppose ; test 5.</li>
+      <li>Le freezer cgroup sur Wine et Proton : aucun bug documenté, mais les retours de SIGSTOP (plugin Decky) montrent des jeux Unreal qui ne reprennent pas.</li>
+      <li>Le HDR Proton sous Mutter 50 ; le comportement d'un client PipeWire gelé ; <code>-cursor no</code> sur le chemin KMS d'après le manuel seulement.</li>
+      <li>Les coûts sont estimés sur le code lu, pas sur un prototype ; la fourchette est large exprès.</li>
+    </ul>
+  </div>
+</section>
+
+<section id="sources">
+  <h2><span class="num">15</span>Sources</h2>
+  <ul class="sources">
+    <li>Gamescope : <a href="https://github.com/ValveSoftware/gamescope">dépôt</a> (poussé 2026-09-10, tags 3.16.26–28 fin août), <a href="https://github.com/OpenGamingCollective">Open Gaming Collective</a>, changelog Bazzite 44.20260908, <a href="https://github.com/CachyOS/CachyOS-PKGBUILDS/issues/326">CachyOS #326</a>, <a href="https://release.gnome.org/50/">GNOME 50</a>, Mutter <code>src/core/window.c</code> (focus MRU), <a href="https://github.com/cage-kiosk/cage/issues/95">cage #95</a>, blog gnome-kiosk 50.</li>
+    <li>Overlay et pause : OpenGamepadUI <code>card_ui_overlay_mode.gd</code>, <code>overlay_mode_input_manager.gd</code>, <code>x11_client.rs</code> ; gamescope <code>steamcompmgr.cpp</code> ; <a href="https://shadowblip.github.io/InputPlumber/usage/">InputPlumber InterceptMode</a> ; <code>man systemctl</code> 260 (freeze) ; <code>cgroup-v2.rst</code> ; SDH-PauseGames #19, #32.</li>
+    <li>Pile : <a href="https://github.com/KDAB/cxx-qt">cxx-qt</a> (v0.10.0 2026-08-24, <code>crates/cxx-qt-lib/src</code>), qmetaobject-rs README, <a href="https://github.com/mappu/miqt">miqt</a> v0.14.0, <a href="https://docs.rs/zbus">zbus 5.19</a>, <a href="https://dbus-fast.readthedocs.io/">dbus-fast</a>, <a href="https://pkg.go.dev/github.com/godbus/dbus/v5/prop">godbus prop</a>, nixpkgs PySide6 (<code>dontWrapQtApps</code>) ; sondes et harnais dans <code>research/probe-rust/</code> et <code>research/probe/</code>.</li>
+    <li>GOG et umu : <a href="https://github.com/Heroic-Games-Launcher/heroic-gogdl">heroic-gogdl</a> 1.3.0, <a href="https://github.com/Open-Wine-Components/umu-launcher">umu-launcher</a> 1.4.0 (<code>umu_run.py</code>), <a href="https://github.com/Open-Wine-Components/umu-database">umu-database</a>, <code>protonfixes/fix.py</code> et <code>umu-database.csv</code> du GE-Proton installé ; <code>game library</code> (bibliothèque du compte, 17 titres, 8 installés).</li>
+    <li>Modules : <a href="https://github.com/SteamDeckHomebrew/decky-plugin-template">decky-plugin-template</a>, OpenGamepadUI <code>plugin.gd</code>, <a href="https://api.playnite.link/docs/tutorials/extensions/intro.html">Playnite extensions</a>, Lutris <code>runners/runner.py</code>, <code>services/base.py</code>, Cartridges <code>importer/</code>, <a href="https://flatpak.github.io/xdg-desktop-portal/docs/writing-a-new-backend.html">portails XDG</a>, <a href="https://specifications.freedesktop.org/mpris/latest/">MPRIS</a>, <a href="https://git-scm.com/docs/gitremote-helpers">git remote helpers</a>.</li>
+    <li>Chez toi : <code>~/Dotfiles/home/scripts/game</code>, <code>pegasus-sync.py</code>, <code>~/Documents/notes/games/</code>, <code>~/NixOs/bin/lib/game-session.mjs</code>, <code>~/NixOs/home/gaming/game-recording.nix</code>, <code>~/NixOs/bin/resolve-capture-target.js</code>, <code>~/NixOs/os/gaming/pegasus.nix</code>, les 55 yml Lutris, pga.db, <code>/mnt/games/**/goggame-*.info</code>, <code>gnome-extensions list</code>, <code>gpu-screen-recorder --help</code>, <code>gdbus introspect org.gnome.Shell</code>.</li>
+    <li>Détail par thème dans le scratchpad de session : <code>research/05-stack.md</code>, <code>06-session-2026.md</code>, <code>07-modules-data.md</code>, et la v1 (<code>01</code> à <code>04</code>).</li>
+  </ul>
+</section>
+</div>
