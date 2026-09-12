@@ -20,6 +20,8 @@ toml = "0.8"
 toml_edit = "0.22"
 rusqlite = { version = "0.32", features = ["bundled"] }
 clap = { version = "4", features = ["derive", "env"] }
+clap_complete = "4"
+clap_mangen = "0.3"
 chrono = { version = "0.4", features = ["serde"] }
 dirs = "5"
 unicode-normalization = "0.1"

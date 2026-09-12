@@ -26,7 +26,12 @@
         cargoTestFlags = [ "-p" "universe" ];
         # chrono ignores TZDIR, so the zone is given as a file
         preCheck = "export TZ=${pkgs.tzdata}/share/zoneinfo/Europe/Paris";
-        nativeBuildInputs = [ pkgs.pkg-config ];
+        nativeBuildInputs = [ pkgs.pkg-config pkgs.installShellFiles ];
+        postInstall = ''
+          $out/bin/universe __generate gen
+          installShellCompletion --fish gen/universe.fish
+          installManPage gen/man/*.1
+        '';
         meta.mainProgram = "universe";
       };
 
@@ -88,7 +93,12 @@
         src = ./ui;
         build-system = [ pkgs.python3Packages.setuptools ];
         dependencies = with pkgs.python3Packages; [ pyside6 pysdl2 qrcode corePy ];
-        nativeBuildInputs = [ pkgs.qt6.wrapQtAppsHook pkgs.copyDesktopItems ];
+        nativeBuildInputs = [ pkgs.qt6.wrapQtAppsHook pkgs.copyDesktopItems pkgs.installShellFiles pkgs.scdoc ];
+        postInstall = ''
+          scdoc < universe-ui.1.scd > universe-ui.1
+          installManPage universe-ui.1
+          installShellCompletion --fish completions/universe-ui.fish
+        '';
         buildInputs = with pkgs.qt6; [ qtbase qtdeclarative qt5compat qtmultimedia qtwayland qtsvg ];
         dontWrapQtApps = false;
         desktopItems = [ uiDesktopItem ];

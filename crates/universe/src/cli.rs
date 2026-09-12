@@ -7,8 +7,26 @@ use crate::core::Core;
 use crate::launcher;
 use crate::sessions;
 
+const AFTER_HELP: &str = "\
+Games are named by id, whole word, substring or path; an ambiguous name asks on a terminal and fails elsewhere.
+A game runs as the transient unit universe-game-<id>-<session>.service; `universe session-end` closes it when its cgroup empties.
+
+Files:
+  ~/.config/universe/config.toml — paths, launch defaults, enabled modules, [modules.<id>] settings, keys
+  ~/.local/share/universe/games/<id>/ — game.toml, sessions.jsonl, journal/, media/
+  ~/.config/universe/modules/<id>/ — user modules, overriding the shipped ones
+  ~/.local/share/universe/modules/<id>/ — module data: caches, logins
+  ~/.local/state/universe/current-session.json — the running session
+
+Environment:
+  UNIVERSE_CONFIG_HOME, UNIVERSE_DATA_HOME, UNIVERSE_STATE_HOME, UNIVERSE_CACHE_HOME — replace the XDG directories
+  UNIVERSE_MODULES_PATH — extra module roots, colon-separated
+  RUST_LOG — tracing filter, warn by default
+
+Errors are printed as `universe: <kind>: <message>` on stderr with exit status 1; --json works on every command.";
+
 #[derive(Parser, Debug)]
-#[command(name = "universe", version, about = "Universe: launch, record and remember your games")]
+#[command(name = "universe", version, about = "Universe: launch, record and remember your games", after_long_help = AFTER_HELP)]
 pub struct Cli {
     /// Print raw JSON instead of tables
     #[arg(long, global = true)]
@@ -21,15 +39,19 @@ pub struct Cli {
 pub enum Cmd {
     /// Library, last played first (default command)
     Ls {
+        /// Show hidden games too
         #[arg(long)]
         all: bool,
     },
     /// Launch a game (exact › word › substring › path) and wait for it to end
     #[command(alias = "launch")]
     Play {
+        /// Game: exact id, then whole word, substring or path
         name: String,
+        /// DRM connector the game runs on, e.g. DP-1 (default: the desktop profile decides)
         #[arg(long, default_value = "")]
         screen: String,
+        /// Return once launched instead of waiting for the session to end
         #[arg(long)]
         no_wait: bool,
     },
@@ -38,82 +60,124 @@ pub enum Cmd {
     /// Current session and last sessions
     Status,
     /// Source, build, prefix, hours, modules
-    Info { name: String },
+    Info {
+        /// Game: exact id, then whole word, substring or path
+        name: String,
+    },
     /// Search a source's catalogue
     Search {
         query: String,
+        /// Source module
         #[arg(long, default_value = "gog")]
         source: String,
     },
     /// Install a title from a source
     Install {
+        /// Id in the source's catalogue
         id: String,
+        /// Source module
         #[arg(long, default_value = "gog")]
         source: String,
     },
     /// Pending updates, or update one game
     Update {
+        /// Game: exact id, then whole word, substring or path; lists pending updates when omitted
         name: Option<String>,
+        /// Do not ask before updating
         #[arg(long, short)]
         yes: bool,
+        /// Source module
         #[arg(long, default_value = "gog")]
         source: String,
     },
     /// Remove a game: parks recordings and journal; --purge trashes the prefix
     Rm {
+        /// Game: exact id, then whole word, substring or path
         name: String,
+        /// Do not ask for confirmation
         #[arg(long, short)]
         yes: bool,
+        /// Also trash the Wine prefix
         #[arg(long)]
         purge: bool,
     },
     /// Set game keys: proton=proton-em capture.cursor=true hidden=true
-    Set { name: String, pairs: Vec<String> },
+    Set {
+        /// Game: exact id, then whole word, substring or path
+        name: String,
+        /// key=value; launch keys (proton, exe, prefix, args…) need no `launch.` prefix
+        pairs: Vec<String>,
+    },
     /// Sessions of a game
-    Sessions { name: String },
+    Sessions {
+        /// Game: exact id, then whole word, substring or path
+        name: String,
+    },
     /// Journal entries of a game
     Journal {
+        /// Game: exact id, then whole word, substring or path
         name: String,
         /// Render the Markdown note and print its path
         #[arg(long)]
         render: bool,
+        /// Render, then open the note with xdg-open
         #[arg(long)]
         open: bool,
     },
     /// Recordings of a game
-    Recordings { name: String },
-    /// Artwork: refresh, set <slot> <path>, unset <slot>, candidates <slot>, pin <sgdb|rawg|steam> <id>
-    Media { name: String, action: String, args: Vec<String> },
-    /// Modules: ls, enable <id>, disable <id>, settings <id> [game], set <id> key=value [--game g]
+    Recordings {
+        /// Game: exact id, then whole word, substring or path
+        name: String,
+    },
+    /// Artwork of a game (`all` refreshes every game)
+    Media {
+        /// Game: exact id, then whole word, substring or path, or `all`
+        name: String,
+        #[command(subcommand)]
+        action: MediaCmd,
+    },
+    /// Modules and their settings
     Module {
-        action: String,
-        args: Vec<String>,
-        #[arg(long, default_value = "")]
-        game: String,
+        #[command(subcommand)]
+        action: ModuleCmd,
     },
     /// Sources and their state
     Sources,
     /// Log into a source (prints the URL, then takes the code)
-    Login { source: String, code: Option<String> },
+    Login {
+        /// Source module
+        source: String,
+        /// The code= value from the address bar after logging in
+        code: Option<String>,
+    },
     /// Owned titles of a source
     Library {
+        /// Source module
         #[arg(default_value = "gog")]
         source: String,
+        /// Fetch again instead of reading the cache
         #[arg(long)]
         refresh: bool,
     },
     /// Scan installed games of the sources (all by default)
     #[command(alias = "gog-scan")]
-    Scan { source: Option<String> },
+    Scan {
+        /// Source module; every source when omitted
+        source: Option<String>,
+    },
     /// Import the Lutris library (report only without --apply)
     Migrate {
+        /// Write the games and their hours instead of reporting
         #[arg(long)]
         apply: bool,
     },
     /// Check prerequisites of the core and enabled modules
     Doctor,
-    /// Global config: get | set <key> <value>
-    Config { action: String, args: Vec<String> },
+    /// Global config
+    Config {
+        #[command(subcommand)]
+        action: ConfigCmd,
+    },
     /// Take a screenshot through the module that provides one
     Screenshot,
     /// Reload config and rescan the library
@@ -127,8 +191,126 @@ pub enum Cmd {
     /// Add a journal entry to the session (journal module's post-process hook)
     #[command(name = "journal-add", hide = true)]
     JournalAdd { session: String, entry: String },
-    /// GOG shortcuts: gog scan | gog library | gog search <q> | gog login [code]
-    Gog { verb: String, args: Vec<String> },
+    /// GOG shortcuts
+    Gog {
+        #[command(subcommand)]
+        verb: GogCmd,
+    },
+    /// Completion candidates for the shell: games | sources | modules
+    #[command(name = "__complete", hide = true)]
+    Complete { what: String },
+    /// Write the Fish completions and the man pages under <dir>
+    #[command(name = "__generate", hide = true)]
+    Generate { dir: std::path::PathBuf },
+}
+
+const MEDIA_SLOTS: [&str; 5] = ["box_front", "tile", "background", "logo", "screenshot"];
+
+#[derive(Subcommand, Debug)]
+pub enum MediaCmd {
+    /// Fetch artwork from SteamGridDB, RAWG and Steam
+    Refresh {
+        /// Fetch again even when every slot is filled
+        #[arg(long)]
+        force: bool,
+    },
+    /// Copy a file into a slot
+    Set {
+        #[arg(value_parser = MEDIA_SLOTS)]
+        slot: String,
+        /// Image file, copied into the game's media directory
+        path: std::path::PathBuf,
+    },
+    /// Clear a slot
+    Unset {
+        #[arg(value_parser = MEDIA_SLOTS)]
+        slot: String,
+    },
+    /// List the candidates of a slot
+    Candidates {
+        #[arg(default_value = "box_front", value_parser = MEDIA_SLOTS)]
+        slot: String,
+    },
+    /// Pin the game to a provider id
+    Pin {
+        #[arg(value_parser = ["sgdb", "rawg", "steam"])]
+        provider: String,
+        /// The game's id at the provider
+        id: String,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ModuleCmd {
+    /// Installed modules
+    #[command(alias = "list")]
+    Ls,
+    /// Enable a module
+    Enable {
+        /// Module id
+        id: String,
+    },
+    /// Disable a module
+    Disable {
+        /// Module id
+        id: String,
+    },
+    /// Settings of a module, global or merged with a game's
+    Settings {
+        /// Module id
+        id: String,
+        /// Game: exact id, then whole word, substring or path: merge its overrides
+        game: Option<String>,
+    },
+    /// Set module settings: key=value…, globally or for --game
+    Set {
+        /// Module id
+        id: String,
+        /// key=value, validated against the module's settings
+        pairs: Vec<String>,
+        /// Write into this game's game.toml instead of config.toml
+        #[arg(long)]
+        game: Option<String>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ConfigCmd {
+    /// Resolved config, or one dotted key
+    Get {
+        /// Dotted key, e.g. launch.proton
+        key: Option<String>,
+    },
+    /// Write a dotted key (an empty value deletes it)
+    Set {
+        /// Dotted key, e.g. launch.proton
+        key: String,
+        /// Empty deletes the key
+        #[arg(default_value = "")]
+        value: String,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum GogCmd {
+    /// Cross installed folders with the owned library
+    Scan,
+    /// Owned titles
+    Library {
+        /// Fetch again instead of reading the cache
+        #[arg(long)]
+        refresh: bool,
+    },
+    /// Search the catalogue
+    Search {
+        /// Search terms
+        query: Vec<String>,
+    },
+    /// Log in (prints the URL, then takes the code)
+    Login {
+        /// The code= value from the address bar after logging in
+        code: Option<String>,
+    },
 }
 
 fn table(headers: &[&str]) -> Table {
@@ -199,6 +381,12 @@ fn report(json: bool, ok: bool, message: &str) {
 pub async fn run(cli: Cli) -> anyhow::Result<()> {
     let json = cli.json;
     let cmd = cli.cmd.unwrap_or(Cmd::Ls { all: false });
+    // Shell helpers stay off Core::open: a Tab must not reconcile a session or probe logins.
+    match &cmd {
+        Cmd::Complete { what } => return complete(what),
+        Cmd::Generate { dir } => return generate(dir),
+        _ => {}
+    }
     let core = Core::open().await?;
     match cmd {
         Cmd::SessionEnd { id, session } => {
@@ -453,40 +641,39 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
             println!("{t}");
         }
-        Cmd::Media { name, action, args } => {
-            match action.as_str() {
-                "refresh" => {
+        Cmd::Media { name, action } => {
+            match action {
+                MediaCmd::Refresh { force } => {
                     let id = if name == "all" { String::new() } else { pick(&core, &name).await? };
                     let mut p = progress_printer(json);
-                    let (changed, total) = core.media_refresh(&id, args.iter().any(|a| a == "--force"), Some(&mut p)).await?;
+                    let (changed, total) = core.media_refresh(&id, force, Some(&mut p)).await?;
                     report(json, true, &format!("{changed}/{total} updated"));
                 }
-                "set" => {
+                MediaCmd::Set { slot, path } => {
                     let id = pick(&core, &name).await?;
-                    let path = std::fs::canonicalize(args.get(1).ok_or_else(|| anyhow::anyhow!("media set <slot> <path>"))?)?;
-                    core.media_set_slot(&id, &args[0], &path.to_string_lossy()).await?;
-                    println!("{id}: {} set", args[0]);
+                    let path = std::fs::canonicalize(path)?;
+                    core.media_set_slot(&id, &slot, &path.to_string_lossy()).await?;
+                    println!("{id}: {slot} set");
                 }
-                "unset" => {
+                MediaCmd::Unset { slot } => {
                     let id = pick(&core, &name).await?;
-                    core.media_unset(&id, args.first().ok_or_else(|| anyhow::anyhow!("media unset <slot>"))?).await?;
+                    core.media_unset(&id, &slot).await?;
                 }
-                "candidates" => {
+                MediaCmd::Candidates { slot } => {
                     let id = pick(&core, &name).await?;
-                    let list = parse_json(&core.media_candidates(&id, args.first().map(|s| s.as_str()).unwrap_or("box_front")).await?);
+                    let list = parse_json(&core.media_candidates(&id, &slot).await?);
                     print_json(&list);
                 }
-                "pin" => {
+                MediaCmd::Pin { provider, id: pid } => {
                     let id = pick(&core, &name).await?;
-                    core.media_pin(&id, args.first().ok_or_else(|| anyhow::anyhow!("media pin <provider> <id>"))?, args.get(1).ok_or_else(|| anyhow::anyhow!("media pin <provider> <id>"))?).await?;
+                    core.media_pin(&id, &provider, &pid).await?;
                     println!("pinned");
                 }
-                other => anyhow::bail!("unknown media action {other}"),
             }
         }
-        Cmd::Module { action, args, game } => {
-            match action.as_str() {
-                "ls" | "list" => {
+        Cmd::Module { action } => {
+            match action {
+                ModuleCmd::Ls => {
                     let list = parse_json(&core.modules_json().await);
                     if json {
                         print_json(&list);
@@ -499,26 +686,26 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     }
                     println!("{t}");
                 }
-                "enable" | "disable" => {
-                    let id = args.first().ok_or_else(|| anyhow::anyhow!("module {action} <id>"))?;
-                    core.enable_module(id, action == "enable").await?;
-                    println!("{id} {action}d");
+                ModuleCmd::Enable { id } => {
+                    core.enable_module(&id, true).await?;
+                    println!("{id} enabled");
                 }
-                "settings" => {
-                    let id = args.first().ok_or_else(|| anyhow::anyhow!("module settings <id> [game]"))?;
-                    let gid = match args.get(1) { Some(g) => pick(&core, g).await?, None => game.clone() };
-                    print_json(&parse_json(&core.module_settings_json(id, &gid).await?));
+                ModuleCmd::Disable { id } => {
+                    core.enable_module(&id, false).await?;
+                    println!("{id} disabled");
                 }
-                "set" => {
-                    let id = args.first().ok_or_else(|| anyhow::anyhow!("module set <id> key=value"))?;
-                    let gid = if game.is_empty() { String::new() } else { pick(&core, &game).await? };
-                    for p in &args[1..] {
+                ModuleCmd::Settings { id, game } => {
+                    let gid = match game { Some(g) => pick(&core, &g).await?, None => String::new() };
+                    print_json(&parse_json(&core.module_settings_json(&id, &gid).await?));
+                }
+                ModuleCmd::Set { id, pairs, game } => {
+                    let gid = match game { Some(g) => pick(&core, &g).await?, None => String::new() };
+                    for p in &pairs {
                         let (k, v) = p.split_once('=').ok_or_else(|| anyhow::anyhow!("expected key=value"))?;
-                        core.set_module_setting(id, &gid, k, v).await?;
+                        core.set_module_setting(&id, &gid, k, v).await?;
                         println!("{id}.{k} = {v}{}", if gid.is_empty() { String::new() } else { format!(" ({gid})") });
                     }
                 }
-                other => anyhow::bail!("unknown module action {other}"),
             }
         }
         Cmd::Sources => {
@@ -578,9 +765,9 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 println!("{t}");
             }
         }
-        Cmd::Gog { verb, args } => {
-            match verb.as_str() {
-                "scan" => {
+        Cmd::Gog { verb } => {
+            match verb {
+                GogCmd::Scan => {
                     let mut p = progress_printer(json);
                     let n = core.source_scan("gog", Some(&mut p)).await?;
                     report(json, true, &format!("{n} game(s)"));
@@ -597,10 +784,9 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     }
                     println!("{t}");
                 }
-                "library" => return Box::pin(run(Cli { json, cmd: Some(Cmd::Library { source: "gog".into(), refresh: args.iter().any(|a| a == "--refresh") }) })).await,
-                "search" => return Box::pin(run(Cli { json, cmd: Some(Cmd::Search { query: args.join(" "), source: "gog".into() }) })).await,
-                "login" => return Box::pin(run(Cli { json, cmd: Some(Cmd::Login { source: "gog".into(), code: args.first().cloned() }) })).await,
-                other => anyhow::bail!("unknown gog verb {other}"),
+                GogCmd::Library { refresh } => return Box::pin(run(Cli { json, cmd: Some(Cmd::Library { source: "gog".into(), refresh }) })).await,
+                GogCmd::Search { query } => return Box::pin(run(Cli { json, cmd: Some(Cmd::Search { query: query.join(" "), source: "gog".into() }) })).await,
+                GogCmd::Login { code } => return Box::pin(run(Cli { json, cmd: Some(Cmd::Login { source: "gog".into(), code }) })).await,
             }
         }
         Cmd::Migrate { apply } => {
@@ -648,11 +834,11 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
             println!("{}", "all good".green());
         }
-        Cmd::Config { action, args } => {
-            match action.as_str() {
-                "get" => {
+        Cmd::Config { action } => {
+            match action {
+                ConfigCmd::Get { key } => {
                     let mut v = parse_json(&core.settings_json().await);
-                    if let Some(key) = args.first() {
+                    if let Some(key) = key {
                         for part in key.split('.') {
                             v = v.get(part).cloned().unwrap_or(Value::Null);
                         }
@@ -662,12 +848,10 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                         other => print_json(&other),
                     }
                 }
-                "set" => {
-                    let (k, v) = (args.first().ok_or_else(|| anyhow::anyhow!("config set <key> <value>"))?, args.get(1).map(|s| s.as_str()).unwrap_or(""));
-                    core.set_setting(k, v).await?;
-                    println!("{k} = {v}");
+                ConfigCmd::Set { key, value } => {
+                    core.set_setting(&key, &value).await?;
+                    println!("{key} = {value}");
                 }
-                other => anyhow::bail!("unknown config action {other}"),
             }
         }
         Cmd::Screenshot => println!("{}", core.screenshot().await?),
@@ -675,7 +859,155 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             core.reload_config().await?;
             println!("rescanned");
         }
+        Cmd::Complete { .. } | Cmd::Generate { .. } => unreachable!(),
     }
+    Ok(())
+}
+
+/// One candidate per line, `value<TAB>description`: Fish shows the description.
+fn complete(what: &str) -> anyhow::Result<()> {
+    match what {
+        "games" => {
+            let Ok(rd) = std::fs::read_dir(crate::paths::games_dir()) else { return Ok(()) };
+            let mut games: Vec<(String, String)> = rd
+                .flatten()
+                .filter_map(|e| crate::game::Game::load(&e.path().join("game.toml")).ok())
+                .filter(|g| g.removed_at.is_empty())
+                .map(|g| (g.id, g.title))
+                .collect();
+            games.sort();
+            for (id, title) in games {
+                println!("{id}\t{title}");
+            }
+        }
+        "sources" | "modules" => {
+            let config = crate::config::Config::load()?;
+            for m in crate::modules::discover(&config) {
+                if what == "sources" && !m.is_source() {
+                    continue;
+                }
+                println!("{}\t{}", m.id(), m.manifest.name);
+            }
+        }
+        other => anyhow::bail!("unknown completion set {other}"),
+    }
+    Ok(())
+}
+
+const GAME_KEYS: [&str; 22] = [
+    "proton=", "exe=", "prefix=", "args=", "working_dir=", "esync=", "fsync=", "mangohud=", "umu_id=", "store=", "pre_command=", "post_command=", "arch=", "backend=", "hide_cursor=",
+    "hidden=", "favorite=", "tags=", "sort_title=", "metadata.sgdb_id=", "capture.cursor=", "launch.env.",
+];
+
+/// Positional completions clap's static Fish output cannot express: `(subcommand path, position of the
+/// positional counted from that subcommand, candidates)`. `games`/`sources`/`modules` call the binary.
+const POSITIONALS: &[(&str, usize, &str)] = &[
+    ("play", 1, "games"),
+    ("info", 1, "games"),
+    ("set", 1, "games"),
+    ("rm", 1, "games"),
+    ("sessions", 1, "games"),
+    ("journal", 1, "games"),
+    ("recordings", 1, "games"),
+    ("update", 1, "games"),
+    ("media", 1, "games all"),
+    ("media set", 1, "box_front tile background logo screenshot"),
+    ("media set", 2, "FILES"),
+    ("media unset", 1, "box_front tile background logo screenshot"),
+    ("media candidates", 1, "box_front tile background logo screenshot"),
+    ("media pin", 1, "sgdb rawg steam"),
+    ("module enable", 1, "modules"),
+    ("module disable", 1, "modules"),
+    ("module settings", 1, "modules"),
+    ("module settings", 2, "games"),
+    ("module set", 1, "modules"),
+    ("login", 1, "sources"),
+    ("library", 1, "sources"),
+    ("scan", 1, "sources"),
+    ("config get", 1, "CONFIG_KEYS"),
+    ("config set", 1, "CONFIG_KEYS"),
+];
+
+const CONFIG_KEYS: [&str; 16] = [
+    "paths.games_root", "paths.prefixes_root", "paths.recordings_root", "paths.journal_root", "paths.overrides", "launch.proton", "launch.esync", "launch.fsync", "launch.mangohud",
+    "desktop.profile", "desktop.hide_cursor", "desktop.cursor_extension", "keys.sgdb", "keys.sgdb_file", "keys.rawg", "keys.rawg_file",
+];
+
+fn generate(dir: &std::path::Path) -> anyhow::Result<()> {
+    use clap::CommandFactory;
+    let mut cmd = Cli::command().disable_help_subcommand(true);
+    cmd.build();
+    let hidden: Vec<String> = cmd.get_subcommands().filter(|c| c.is_hide_set()).map(|c| format!("{}\"", c.get_name())).collect();
+    fn valued_options(cmd: &clap::Command, out: &mut Vec<String>) {
+        for a in cmd.get_arguments() {
+            if let (Some(l), true) = (a.get_long(), a.get_action().takes_values()) {
+                out.push(format!("--{l}"));
+            }
+        }
+        cmd.get_subcommands().for_each(|c| valued_options(c, out));
+    }
+    let mut valued = Vec::new();
+    valued_options(&cmd, &mut valued);
+    valued.sort();
+    valued.dedup();
+
+    let mut buf = Vec::new();
+    clap_complete::generate(clap_complete::shells::Fish, &mut cmd, "universe", &mut buf);
+    let generated = String::from_utf8(buf)?;
+    // clap_complete lists hidden subcommands for Fish; it also knows nothing of positionals' values.
+    let mut fish: String = generated.lines().filter(|l| !hidden.iter().any(|h| l.contains(h.as_str()))).map(|l| format!("{l}\n")).collect();
+    fish.push_str("\n# positionals\n");
+    fish.push_str("complete -c universe -f\n");
+    fish.push_str("# `__universe_at 'media set' 2`: the cursor is on the 2nd positional after `media <name> set` (`2+`: the 2nd or later); options and their values are skipped\n");
+    fish.push_str(&format!(
+        concat!(
+            "function __universe_at\n",
+            "    set -l want (string split ' ' -- $argv[1])\n",
+            "    set -l n (string trim -r -c + -- $argv[2])\n",
+            "    set -l seen 0\n",
+            "    set -l pos 0\n",
+            "    set -l skip 0\n",
+            "    for t in (commandline -opc)[2..]\n",
+            "        if test $skip = 1; set skip 0; continue; end\n",
+            "        if string match -q -- '-*' $t\n",
+            "            contains -- $t {valued}; and set skip 1\n",
+            "            continue\n",
+            "        end\n",
+            "        set -l next (math $seen + 1)\n",
+            "        if test $seen -lt (count $want); and test \"$t\" = \"$want[$next]\"\n",
+            "            set seen $next\n",
+            "            set pos 0\n",
+            "        else if test $seen = 0\n",
+            "            return 1\n",
+            "        else\n",
+            "            set pos (math $pos + 1)\n",
+            "        end\n",
+            "    end\n",
+            "    test $seen = (count $want); or return 1\n",
+            "    if string match -q '*+' -- $argv[2]; test $pos -ge (math $n - 1); else; test $pos = (math $n - 1); end\n",
+            "end\n",
+        ),
+        valued = valued.join(" ")
+    ));
+    for (path, n, what) in POSITIONALS {
+        let cond = format!("__universe_at '{path}' {n}");
+        match *what {
+            "FILES" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -F\n")),
+            "CONFIG_KEYS" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"{}\"\n", CONFIG_KEYS.join(" "))),
+            "games" | "sources" | "modules" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"(universe __complete {what})\"\n")),
+            "games all" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"(universe __complete games) all\"\n")),
+            literal => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"{literal}\"\n")),
+        }
+    }
+    fish.push_str(&format!("complete -c universe -n \"__universe_at set 2+\" -f -a \"{}\"\n", GAME_KEYS.join(" ")));
+    fish.push_str("complete -c universe -n \"__fish_seen_subcommand_from search install update\" -l source -x -a \"(universe __complete sources)\"\n");
+    fish.push_str("complete -c universe -n \"__fish_seen_subcommand_from module\" -l game -x -a \"(universe __complete games)\"\n");
+    std::fs::create_dir_all(dir)?;
+    std::fs::write(dir.join("universe.fish"), fish)?;
+
+    let man = dir.join("man");
+    std::fs::create_dir_all(&man)?;
+    clap_mangen::generate_to(cmd, &man)?;
     Ok(())
 }
 
