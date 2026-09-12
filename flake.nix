@@ -69,6 +69,18 @@
       # No gpu-screen-recorder here: it must match the host's setcap gsr-kms-server (nixos.nix pins that package).
       moduleRuntime = with pkgs; [ gogdl ffmpeg trash-cli util-linux ];
 
+      uiDesktopItem = pkgs.makeDesktopItem {
+        name = "universe-ui";
+        desktopName = "Universe";
+        genericName = "Game Launcher";
+        comment = "Gamepad-first game library";
+        exec = "universe-ui";
+        icon = "universe-ui";
+        terminal = false;
+        categories = [ "Game" ];
+        startupNotify = true;
+      };
+
       ui = pkgs.python3Packages.buildPythonApplication {
         pname = "universe-ui";
         inherit version;
@@ -76,9 +88,10 @@
         src = ./ui;
         build-system = [ pkgs.python3Packages.setuptools ];
         dependencies = with pkgs.python3Packages; [ pyside6 pysdl2 qrcode corePy ];
-        nativeBuildInputs = [ pkgs.qt6.wrapQtAppsHook ];
+        nativeBuildInputs = [ pkgs.qt6.wrapQtAppsHook pkgs.copyDesktopItems ];
         buildInputs = with pkgs.qt6; [ qtbase qtdeclarative qt5compat qtmultimedia qtwayland qtsvg ];
         dontWrapQtApps = false;
+        desktopItems = [ uiDesktopItem ];
         # The hooks and systemd's ExecStopPost need the CLI; a Python process has no argv[0] to find it by.
         preFixup = ''
           qtWrapperArgs+=(--prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath [ pkgs.SDL2 pkgs.pipewire ]})

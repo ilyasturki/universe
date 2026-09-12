@@ -69,7 +69,7 @@ def parse_args(argv):
     parser = argparse.ArgumentParser(prog="universe-ui", description="Universe game launcher UI")
     parser.add_argument("--fake", action="store_true", help="fixture library, no core")
     parser.add_argument("--fake-launch", action="store_true", help="fake session runs `sleep 2` (implies --fake)")
-    parser.add_argument("--fullscreen", action="store_true")
+    parser.add_argument("--windowed", action="store_true", help="a window instead of fullscreen (--size and --screenshot imply it)")
     parser.add_argument("--screenshot", metavar="PATH", help="grab the window to PATH, then quit")
     parser.add_argument("--after", type=int, default=3000, metavar="MS", help="delay before --screenshot")
     parser.add_argument("--quit-after", type=int, default=0, metavar="MS", help="quit after MS (0 = never)")
@@ -78,8 +78,11 @@ def parse_args(argv):
                         help="key names to post once loaded, e.g. 'Right Right Return' (Wait idles one gap)")
     parser.add_argument("--key-gap", type=int, default=120, metavar="MS")
     parser.add_argument("--key-delay", type=int, default=1200, metavar="MS", help="delay before the first key")
-    parser.add_argument("--size", default="1920x1080", help="window size when not fullscreen")
-    return parser.parse_args(argv)
+    parser.add_argument("--size", metavar="WxH", help="window size, implies --windowed (default 1920x1080)")
+    args = parser.parse_args(argv)
+    args.fullscreen = not (args.windowed or args.size or args.screenshot)
+    args.size = args.size or "1920x1080"
+    return args
 
 
 def build_client(args):
@@ -95,7 +98,8 @@ def build_client(args):
 def run(argv=None):
     args = parse_args(sys.argv[1:] if argv is None else argv)
     os.environ.setdefault("QT_FORCE_STDERR_LOGGING", "1")
-    os.environ.setdefault("QT_LOGGING_RULES", "qt.multimedia.ffmpeg.info=false")
+    # With a desktop file name set, Qt's portal app-id registration warns when the process already has one.
+    os.environ.setdefault("QT_LOGGING_RULES", "qt.multimedia.ffmpeg.info=false;qt.qpa.services.warning=false")
     # Probing VDPAU makes libvdpau try its nvidia fallback and complain on stderr when no driver is installed.
     os.environ.setdefault("QT_FFMPEG_DECODING_HW_DEVICE_TYPES", "vaapi")
     os.environ.setdefault("QT_FFMPEG_ENCODING_HW_DEVICE_TYPES", "vaapi")
@@ -117,6 +121,7 @@ def run(argv=None):
     app = QGuiApplication(sys.argv[:1])
     app.setApplicationName("universe-ui")
     app.setOrganizationName("universe")
+    app.setDesktopFileName("universe-ui")
 
     from . import models  # noqa: F401  (registers the Universe QML module)
     from .api import Api

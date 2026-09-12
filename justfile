@@ -26,7 +26,7 @@ build:
 cli *args: build env
     @{{ nix }} target/debug/universe {{ args }}
 
-# Host UI on the in-process core; flags pass through (--fullscreen, --no-gamepad, --keys "…")
+# Host UI on the in-process core; flags pass through (--windowed, --no-gamepad, --keys "…")
 ui *args: build env
     @{{ nix }} {{ ui_py }} {{ args }}
 

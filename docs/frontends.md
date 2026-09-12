@@ -37,7 +37,7 @@ One context property, `api`:
 | `api.memory` | `get`/`set`/`has`/`unset`, persisted to `$XDG_STATE_HOME/universe/ui-memory.json` |
 | `api.universe` | the client: every core call, plus the signals below |
 | `api.screens` | data for the added screens (settings, sources, media) |
-| `api.fullscreen` | whether the host was started fullscreen |
+| `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed`, `--size` and `--screenshot` turn it off) |
 
 A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `playTime`,
 `playCount`, `lastPlayed`, `releaseYear`, `developerList`, `publisherList`, `genreList`, `players`,
@@ -106,12 +106,12 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
 ## Running and testing the shipped host
 
 ```sh
-nix run .#universe-ui                  # add --fullscreen
+nix run .#universe-ui                  # fullscreen; add --windowed
 just ui                                # against .dev/
 just ui-fake                           # against fixtures, no core
 ```
 
-Options: `--fullscreen`, `--size WxH` (default 1920x1080), `--no-gamepad`, `--fake`,
+Options: `--windowed`, `--size WxH` (1920x1080, implies `--windowed`), `--no-gamepad`, `--fake`,
 `--fake-launch`, `--screenshot PATH --after MS`, `--quit-after MS`, and `--keys "Right Right Return
 Wait I"` with `--key-gap MS` / `--key-delay MS`. Key names are `A B X Y LB RB LT RT Start Up Down
 Left Right Return Esc`; `Wait` pauses, `Wait:N` pauses N times, `Hold:A` / `Release:A` split a

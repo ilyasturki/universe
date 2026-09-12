@@ -86,7 +86,7 @@ A `justfile` wraps everything in `nix develop` and points the core at an isolate
 just setup                 # build, create .dev/config/config.toml, run doctor
 just cli migrate --apply   # any CLI command against .dev/ (gog login, gog scan, media <id> refresh, launch <id>…)
 just cli play <game>       # a game is a transient systemd unit; `just logs` follows them
-just ui                    # PySide6 host on the in-process core (add --fullscreen)
+just ui                    # PySide6 host on the in-process core (add --windowed)
 just ui-fake               # host on a fixture library, no core
 just test / just check     # cargo + pytest / flake packages + sandboxed checks
 just clean                 # trash .dev/
