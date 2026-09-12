@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use serde::Serialize;
 
@@ -148,6 +148,7 @@ pub struct Report {
     pub skipped: Vec<String>,
     pub updated: Vec<String>,
     pub hours_imported: BTreeMap<String, f64>,
+    pub media_imported: Vec<String>,
     pub env_diffs: Vec<EnvDiff>,
     pub applied: bool,
 }
@@ -308,6 +309,9 @@ pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
             game.save()?;
         }
         crate::recording::import_existing(&game, &config.recordings_root())?;
+        if import_pegasus_media(&game, &paths::expand(&config.lutris.pegasus_library))? {
+            report.media_imported.push(game.id.clone());
+        }
         let sessions = sessions::read(&game.sessions_path())?;
         if !sessions.iter().any(|s| s.source == "import-lutris") && imp.playtime_h > 0.0 {
             let covered: u64 = sessions.iter().filter(|s| s.source == "import-recording").map(|s| s.duration_s).sum();
@@ -328,14 +332,42 @@ pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
     Ok(report)
 }
 
-pub fn overrides_candidates(config: &Config, game: &Game) -> Vec<PathBuf> {
-    let root = config.overrides_dir();
-    let mut v = vec![root.join(&game.id)];
-    if !game.source.lutris_slug.is_empty() && game.source.lutris_slug != game.id {
-        v.push(root.join(&game.source.lutris_slug));
+/// Copies the art pegasus-sync fetched (`<root>/<platform>/media/<slug>/`) into `games/<id>/media/`, once: an
+/// existing media dir is left alone. Only the slots the core reads; flat `screenshotNN.*` land in `screenshots/`.
+fn import_pegasus_media(game: &Game, root: &Path) -> crate::Result<bool> {
+    let dest = game.media_dir();
+    if dest.exists() {
+        return Ok(false);
     }
-    v
+    let mut slugs = vec![game.id.as_str()];
+    if !game.source.lutris_slug.is_empty() && game.source.lutris_slug != game.id {
+        slugs.push(game.source.lutris_slug.as_str());
+    }
+    let Ok(platforms) = std::fs::read_dir(root) else { return Ok(false) };
+    let Some(src) = platforms.flatten().map(|e| e.path().join("media")).flat_map(|m| slugs.iter().map(move |s| m.join(s)).collect::<Vec<_>>()).find(|p| p.is_dir()) else {
+        return Ok(false);
+    };
+    let mut copied = false;
+    for e in std::fs::read_dir(&src)?.flatten() {
+        let p = e.path();
+        let (Some(stem), Some(ext)) = (p.file_stem().and_then(|s| s.to_str()), p.extension().and_then(|s| s.to_str())) else { continue };
+        if !matches!(ext.to_ascii_lowercase().as_str(), "png" | "jpg" | "jpeg" | "webp") {
+            continue;
+        }
+        let target = match stem {
+            "boxFront" | "tile" | "background" | "logo" => dest.join(e.file_name()),
+            s if s.starts_with("screenshot") => dest.join("screenshots").join(e.file_name()),
+            _ => continue,
+        };
+        if let Some(parent) = target.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::copy(&p, &target)?;
+        copied = true;
+    }
+    Ok(copied)
 }
+
 
 #[cfg(test)]
 mod tests {
@@ -366,6 +398,27 @@ mod tests {
         let d = diff("x", "X", &imp.lutris_env, &BTreeMap::from([("WINE_CPU_TOPOLOGY".to_string(), "4:0,1,2,3".to_string()), ("NEW".to_string(), "1".to_string())]));
         assert_eq!(d.added, vec!["NEW"]);
         assert_eq!(d.removed, vec!["PROTON_ENABLE_WAYLAND"]);
+    }
+
+    #[test]
+    fn pegasus_media_lands_in_slots_and_screenshots() {
+        let dir = tempfile::tempdir().unwrap();
+        let src = dir.path().join("pegasus/windows/media/old-slug");
+        std::fs::create_dir_all(&src).unwrap();
+        for f in ["boxFront.png", "tile.jpg", "steam.png", "marquee.png", "screenshot01.png", "video.mp4"] {
+            std::fs::write(src.join(f), b"x").unwrap();
+        }
+        let mut g = Game::new("New");
+        g.source.lutris_slug = "old-slug".into();
+        std::env::set_var("UNIVERSE_DATA_HOME", dir.path());
+        assert!(import_pegasus_media(&g, &dir.path().join("pegasus")).unwrap());
+        let media = g.media_dir();
+        assert!(media.join("boxFront.png").exists());
+        assert!(media.join("tile.jpg").exists());
+        assert!(media.join("screenshots/screenshot01.png").exists());
+        assert!(!media.join("steam.png").exists());
+        assert!(!media.join("marquee.png").exists());
+        assert!(!import_pegasus_media(&g, &dir.path().join("pegasus")).unwrap());
     }
 
     #[test]

@@ -46,7 +46,7 @@ a dash means the surface doesn't expose it.
 | `remove(id, purge)` | `remove(id, purge)` | `universe rm <name> [--purge]` | parks recordings and journal under `.archive/`, marks `removed_at`; `purge` also trashes the prefix |
 | `reload_all()` | `reload()` | `universe rescan` | rereads config and `games/*/game.toml`, rebuilds the index, runs each source's `scan` |
 | `reload_game(id)` | `reload_game(id)` | — | rereads one game |
-| `import_lutris(apply)` | `import_lutris(apply)` | `universe migrate [--apply]` | JSON report: imported games, per-game env diff (`{id, lutris_env, universe_env, added, removed, changed}`), imported hours. Without `apply` it only reports |
+| `import_lutris(apply)` | `import_lutris(apply)` | `universe migrate [--apply]` | JSON report: imported games, per-game env diff (`{id, lutris_env, universe_env, added, removed, changed}`), imported hours, games whose art was copied from `[lutris] pegasus_library` (`<platform>/media/<slug>/`, once, never over an existing `media/`). Without `apply` it only reports |
 
 `set` takes dotted keys: `launch.proton`, `launch.env.FOO`, `desktop.hide_cursor`, `hidden`,
 `favorite`, `tags`, `sort_title`, `metadata.sgdb_id`, and `capture.cursor` as a validated shorthand
@@ -200,6 +200,12 @@ enabled = ["gog", "capture", "journal", "tracker-md"]
 
 [modules.capture]
 codec = "av1_10bit"
+
+[lutris]                             # what `universe migrate` reads
+config_dir = "~/.config/lutris"
+pga_db = "~/.local/share/lutris/pga.db"
+runners_dir = "~/.local/share/lutris/runners/wine"
+pegasus_library = "~/.local/share/pegasus-library"   # art fetched by pegasus-sync, copied into media/ on migrate
 
 [keys]
 sgdb = ""                            # or sgdb_file, pointing at a file holding the key

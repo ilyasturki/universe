@@ -59,7 +59,11 @@ impl Resolved {
 pub fn media_of(game: &Game, overrides: &Path) -> (Vec<(String, String)>, Vec<String>) {
     let mut media = Vec::new();
     let mut shots = Vec::new();
-    let dirs = [overrides.join(&game.id), game.media_dir()];
+    let mut dirs = vec![overrides.join(&game.id)];
+    if !game.source.lutris_slug.is_empty() && game.source.lutris_slug != game.id {
+        dirs.push(overrides.join(&game.source.lutris_slug));
+    }
+    dirs.push(game.media_dir());
     for dir in dirs {
         let Ok(rd) = std::fs::read_dir(&dir) else { continue };
         for e in rd.flatten() {
