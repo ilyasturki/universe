@@ -17,7 +17,7 @@ FocusScope {
 
     readonly property var hints: sheet.open ? sheet.hints
         : picker.open ? picker.hints
-        : [ { glyph: "A", label: list.currentRow && list.currentRow.type === "bool" ? "Toggle" : "Change" },
+        : [ { glyph: "A", label: cards.currentRow && cards.currentRow.type === "bool" ? "Toggle" : "Change" },
             { glyph: "dpad", label: "Navigate" },
             { glyph: "B", label: "Back" } ]
 
@@ -33,7 +33,7 @@ FocusScope {
             Sound.panel();
             var opts = row.choices.map(function(c) { return { label: c }; });
             picker.pendingIndex = index;
-            picker.show(list, opts, Math.max(0, row.choices.indexOf(row.value)));
+            picker.show(cards, opts, Math.max(0, row.choices.indexOf(row.value)));
         } else {
             Sound.panel();
             sheet.pendingIndex = index;
@@ -46,49 +46,109 @@ FocusScope {
         color: Theme.ground
     }
 
+    // The game's art behind the top of the page, settling into the ground. Faded as one
+    // layer: item opacity would thin the gradient too and let the art's edge through.
+    Item {
+        anchors.top: parent.top
+        anchors.left: parent.left
+        anchors.right: parent.right
+        height: Theme.dp(560)
+        opacity: 0.55
+        layer.enabled: true
+
+        BackgroundStage {
+            anchors.fill: parent
+            game: page.game
+            blurRadius: 30
+            zoomEnabled: false
+            overscan: 1.06
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            gradient: Gradient {
+                GradientStop { position: 0.00; color: Qt.rgba(0.055, 0.059, 0.075, 0.30) }
+                GradientStop { position: 0.45; color: Qt.rgba(0.055, 0.059, 0.075, 0.70) }
+                GradientStop { position: 0.75; color: Qt.rgba(0.055, 0.059, 0.075, 0.94) }
+                GradientStop { position: 1.00; color: Theme.ground }
+            }
+        }
+    }
+
     Item {
         id: header
 
         anchors.top: parent.top
-        anchors.topMargin: Theme.dp(44)
+        anchors.topMargin: Theme.dp(36)
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.leftMargin: page.sideMargin
         anchors.rightMargin: page.sideMargin
-        height: title.height + Theme.dp(10) + subtitle.height
+        height: Theme.dp(88)
 
-        Text {
-            id: title
-            text: "Settings"
-            color: Theme.text
-            font.family: Theme.sans
-            font.weight: Font.Bold
-            font.pixelSize: Theme.dp(46)
+        CoverCard {
+            id: tile
+            width: Theme.dp(88)
+            height: width
+            game: page.game
+            cornerRadius: Theme.dp(14)
+            selected: true
+            selectedScale: 1.0
+            ringOpacity: 0
+            showHeart: false
         }
 
-        Text {
-            id: subtitle
-            anchors.top: title.bottom
-            anchors.topMargin: Theme.dp(10)
-            text: page.game ? page.game.title : ""
-            color: Theme.textSecondary
-            font.family: Theme.sans
-            font.pixelSize: Theme.dp(24)
+        Column {
+            anchors.left: tile.right
+            anchors.leftMargin: Theme.dp(28)
+            anchors.right: parent.right
+            anchors.verticalCenter: parent.verticalCenter
+            spacing: Theme.dp(4)
+
+            CapsLabel {
+                text: "GAME SETTINGS"
+            }
+
+            Row {
+                width: parent.width
+                spacing: Theme.dp(20)
+
+                Text {
+                    id: title
+                    text: page.game ? page.game.title : ""
+                    color: Theme.text
+                    font.family: Theme.sans
+                    font.weight: Font.Bold
+                    font.pixelSize: Theme.dp(42)
+                    elide: Text.ElideRight
+                    width: Math.min(implicitWidth, parent.width - meta.width - parent.spacing)
+                }
+
+                GameMetaLine {
+                    id: meta
+                    anchors.bottom: title.bottom
+                    anchors.bottomMargin: Theme.dp(6)
+                    game: page.game
+                    showYear: false
+                }
+            }
         }
     }
 
-    SettingsList {
-        id: list
+    SettingsCards {
+        id: cards
 
         anchors.top: header.bottom
-        anchors.topMargin: Theme.dp(20)
+        anchors.topMargin: Theme.dp(32)
         anchors.bottom: hintBar.top
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.leftMargin: page.sideMargin - Theme.dp(22)
-        anchors.rightMargin: page.sideMargin - Theme.dp(22)
+        anchors.leftMargin: page.sideMargin
+        anchors.rightMargin: page.sideMargin
         focus: true
+        compact: true
         rows: page.form.rows
+        groups: page.form.groups
         dimmed: picker.open || sheet.open
 
         onActivated: function(index, row) { page.activate(index, row); }
@@ -109,16 +169,16 @@ FocusScope {
 
         property int pendingIndex: -1
 
-        // Drops beside the focused row rather than under a chip.
-        x: page.width / 2 - width / 2
-        y: Math.min(page.height - height - Theme.dp(120),
-                    list.y + Theme.dp(60) + Math.max(0, (list.index - 1)) * (list.rowHeight + Theme.dp(4)))
+        // Drops from the focused row, its right edge on the row's value.
+        x: cards.x + cards.focusRect.x + cards.focusRect.width - Theme.dp(16) - width
+        y: Math.min(hintBar.y - height - Theme.dp(20),
+                    cards.y + cards.focusRect.y + cards.focusRect.height + Theme.dp(8))
         z: 2
 
         onChosen: function(index) {
             var choices = page.form.row(pendingIndex).choices || [];
             picker.hide();
-            list.forceActiveFocus();
+            cards.forceActiveFocus();
             if (index >= 0 && index < choices.length) {
                 Sound.sort();
                 page.form.setValue(pendingIndex, choices[index]);
@@ -126,7 +186,7 @@ FocusScope {
         }
         onDismissed: {
             picker.hide();
-            list.forceActiveFocus();
+            cards.forceActiveFocus();
         }
     }
 
@@ -150,8 +210,8 @@ FocusScope {
 
         onAccepted: function(value) {
             page.form.setValue(pendingIndex, value);
-            list.forceActiveFocus();
+            cards.forceActiveFocus();
         }
-        onDismissed: list.forceActiveFocus()
+        onDismissed: cards.forceActiveFocus()
     }
 }

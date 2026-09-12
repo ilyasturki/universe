@@ -52,7 +52,7 @@ def test_list_resolves_defaults(fake):
     rows = fake.list()
     assert [r["id"] for r in rows][:2] == ["the-technomancer", "mini-metro"]
     control = fake.game("control")
-    assert control["launch"]["proton"] == "proton-ge"
+    assert "proton" not in control["launch"] and control["effective"]["proton"] == "proton-ge"
     assert control["modules"]["capture"]["enabled"] is True
     assert control["stats"]["play_count"] == 8
     assert fake.game("mirrors-edge")["stats"]["last_played"] is None

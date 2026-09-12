@@ -4,7 +4,7 @@ import "../sound"
 import "../ui"
 
 // The Settings tab: modules and their global settings, a source's library to install from,
-// pending updates, the login flow, and doctor's checks. One generic list, five row sources.
+// pending updates, the login flow, and doctor's checks. One set of cards, five row sources.
 FocusScope {
     id: page
 
@@ -39,66 +39,101 @@ FocusScope {
             [ { glyph: "dpad", label: "Navigate" }, { glyph: "LT RT", label: "Section" }, { glyph: "LB RB", label: "Tabs" } ])
 
     readonly property string acceptLabel: {
-        var row = list.currentRow;
+        var row = cards.currentRow;
         if (!row || row.type === "info")
             return "";
         if (row.type === "bool")
             return "Toggle";
+        if (row.type === "search")
+            return "Search";
         if (row.type === "action")
-            return row.display && section === 1 ? row.display : "Select";
+            return row.action !== undefined ? row.action : "Select";
         return "Change";
     }
 
     readonly property real sideMargin: Theme.dp(80)
 
-    readonly property string sourceName: {
+    readonly property var currentSource: {
         for (var i = 0; i < sources.sources.length; i++)
             if (sources.sources[i].id === sources.source)
-                return sources.sources[i].name;
-        return sources.source;
+                return sources.sources[i];
+        return null;
+    }
+    readonly property string sourceName: currentSource ? currentSource.name : sources.source
+    readonly property bool loggedIn: currentSource ? currentSource.logged_in === true : false
+
+    // The source's module card carries its version and kind; the login card borrows them.
+    readonly property string sourceMeta: {
+        var groups = modulesForm.groups;
+        for (var i = 0; i < groups.length; i++)
+            if (groups[i].title === sourceName)
+                return groups[i].meta;
+        return "";
     }
 
-    readonly property bool loggedIn: {
-        for (var i = 0; i < sources.sources.length; i++)
-            if (sources.sources[i].id === sources.source)
-                return sources.sources[i].logged_in === true;
-        return false;
-    }
+    function games(n) { return n + (n === 1 ? " game" : " games"); }
 
-    // The rows the list shows for the open section, built from the host's data.
-    readonly property var rows: {
-        var out = [];
+    // The rows and the cards that arrange them for the open section, from the host's data.
+    readonly property var content: {
+        var rows = [], groups = [];
         if (section === 0)
-            return modulesForm.rows;
+            return { rows: modulesForm.rows, groups: modulesForm.groups };
         if (section === 1) {
-            out.push({ section: sourceName, key: "search", label: "Search " + sourceName, type: "action",
-                       display: sources.query || "", choices: [], detail: "" });
+            rows.push({ section: sourceName, key: "search", label: "Search " + sourceName, type: "search",
+                        display: sources.query || "", choices: [], detail: "" });
+            groups.push({ span: true, rows: [0] });
+            var installed = [], owned = [], all = [];
             for (var i = 0; i < sources.rows.length; i++) {
                 var g = sources.rows[i];
-                out.push({ section: sourceName, key: "game", label: g.title, type: "action",
-                           display: g.status, choices: [], detail: "", row: i, installed: g.installed, pending: g.pending });
+                var installable = g.pending || !g.installed;
+                rows.push({ section: sourceName, key: "game", label: g.title, type: "action",
+                            display: g.status, choices: [], detail: "", row: i, installed: g.installed,
+                            pending: g.pending, action: installable ? g.action : "" });
+                all.push(rows.length - 1);
+                (g.installed ? installed : owned).push(rows.length - 1);
             }
-            return out;
+            if (sources.query)
+                groups.push({ title: "Results", meta: games(all.length) + " · “" + sources.query + "”", rows: all });
+            else {
+                var where = currentSource && currentSource.games_dir ? " · " + currentSource.games_dir : "";
+                groups.push({ title: "Installed", meta: games(installed.length) + where, rows: installed });
+                groups.push({ title: "Owned, not installed", meta: games(owned.length), rows: owned });
+            }
+            return { rows: rows, groups: groups };
         }
         if (section === 2) {
-            if (sources.updates.length === 0)
-                out.push({ section: "Updates", key: "", label: "Everything is up to date", type: "info", value: true, detail: "" });
-            else
-                out.push({ section: "Updates", key: "all", label: "Update everything", type: "action", display: sources.updates.length + " pending", detail: "" });
-            for (var j = 0; j < sources.updates.length; j++) {
-                var u = sources.updates[j];
-                out.push({ section: "Updates", key: "update", label: u.title, type: "action",
-                           display: (u.version ? u.version + " · " : "") + (u.date || ""), detail: "", row: j });
+            var n = sources.updates.length;
+            if (n === 0) {
+                rows.push({ section: "Updates", key: "", label: "Everything is up to date", type: "info", value: true, detail: "" });
+                groups.push({ title: "Updates", rows: [0] });
+                return { rows: rows, groups: groups };
             }
-            return out;
+            rows.push({ section: "Updates", key: "all", label: "Update everything", type: "action", display: n + " pending", detail: "" });
+            for (var j = 0; j < n; j++) {
+                var u = sources.updates[j];
+                rows.push({ section: "Updates", key: "update", label: u.title, type: "action",
+                            display: (u.version ? u.version + " · " : "") + (u.date || ""), detail: "", row: j });
+            }
+            groups.push({ title: "Pending", meta: n + (n === 1 ? " update" : " updates"),
+                          rows: rows.map(function(r, i) { return i; }) });
+            return { rows: rows, groups: groups };
         }
         if (section === 3) {
-            out.push({ section: sourceName, key: "", label: "Signed in", type: "info", value: loggedIn, detail: loggedIn ? "yes" : "no" });
-            out.push({ section: sourceName, key: "link", label: "Get a sign-in link", type: "action", display: login.url ? "ready" : "", detail: "" });
-            out.push({ section: sourceName, key: "code", label: "Enter the code", type: "action", display: "", detail: "" });
-            return out;
+            rows.push({ section: sourceName, key: "", label: "Signed in", type: "info", value: loggedIn, detail: loggedIn ? "yes" : "no" });
+            rows.push({ section: sourceName, key: "link", label: "Get a sign-in link", type: "action", display: login.url ? "ready" : "", detail: "" });
+            rows.push({ section: sourceName, key: "code", label: "Enter the code", type: "action", display: "", detail: "" });
+            groups.push({ title: sourceName, meta: sourceMeta, rows: [0, 1, 2] });
+            return { rows: rows, groups: groups };
         }
-        return modulesForm.doctor;
+        return { rows: modulesForm.doctor, groups: modulesForm.doctorGroups };
+    }
+
+    readonly property int checksPassed: {
+        var n = 0;
+        for (var i = 0; i < modulesForm.doctor.length; i++)
+            if (modulesForm.doctor[i].value)
+                n++;
+        return n;
     }
 
     function leave() {
@@ -124,7 +159,7 @@ FocusScope {
             } else if (row.type === "enum") {
                 Sound.panel();
                 picker.pendingIndex = index;
-                picker.show(list, row.choices.map(function(c) { return { label: c }; }), Math.max(0, row.choices.indexOf(row.value)));
+                picker.show(cards, row.choices.map(function(c) { return { label: c }; }), Math.max(0, row.choices.indexOf(row.value)));
             } else {
                 Sound.panel();
                 sheet.pendingIndex = index;
@@ -166,9 +201,10 @@ FocusScope {
         sources.load();
     }
 
+    // The cards' rows rebind on the same signal; the cursor resets once they have.
     onSectionChanged: {
-        list.index = 0;
         refresh();
+        Qt.callLater(cards.reset);
     }
 
     Connections {
@@ -233,9 +269,9 @@ FocusScope {
 
                     Chip {
                         label: modelData
-                        trailing: index === 2 && page.sources.updates.length > 0 ? page.sources.updates.length.toString() : ""
+                        badge: index === 2 && page.sources.updates.length > 0 ? page.sources.updates.length.toString() : ""
+                        active: index === page.section
                         focused: chipBar.activeFocus && index === page.section
-                        opacity: index === page.section || chipBar.activeFocus ? 1.0 : 0.6
                     }
                 }
             }
@@ -245,7 +281,7 @@ FocusScope {
             Keys.onUpPressed: page.chromeRequested()
             Keys.onDownPressed: function(event) {
                 Sound.panel();
-                list.forceActiveFocus();
+                cards.forceActiveFocus();
             }
 
             Keys.onPressed: function(event) {
@@ -254,88 +290,137 @@ FocusScope {
                 if (api.keys.isAccept(event)) {
                     event.accepted = true;
                     Sound.panel();
-                    list.forceActiveFocus();
+                    cards.forceActiveFocus();
                     return;
                 }
                 if (api.keys.isCancel(event)) {
                     event.accepted = true;
                     Sound.cancel();
-                    list.forceActiveFocus();
+                    cards.forceActiveFocus();
                     return;
                 }
             }
         }
     }
 
-    // A running job: its message and a bar, above whatever section is open.
-    Rectangle {
-        id: jobBar
+    // Above the cards: a running job's message and bar, and on Doctor the tally of checks.
+    Column {
+        id: above
 
         anchors.top: header.bottom
-        anchors.topMargin: Theme.dp(24)
+        anchors.topMargin: Theme.dp(30)
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.leftMargin: page.sideMargin
         anchors.rightMargin: page.sideMargin
-        height: visible ? Theme.dp(64) : 0
-        radius: Theme.dp(14)
-        color: Theme.surface
-        visible: page.sources.job !== null && page.sources.job !== undefined
-
-        readonly property var job: page.sources.job
-        readonly property real fraction: job && job.total > 0 ? job.done / job.total : 0
-
-        Text {
-            anchors.left: parent.left
-            anchors.leftMargin: Theme.dp(22)
-            anchors.right: parent.right
-            anchors.rightMargin: Theme.dp(22)
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.verticalCenterOffset: -Theme.dp(6)
-            text: jobBar.job ? jobBar.job.message + (jobBar.job.ok === true ? " ✓" : jobBar.job.ok === false ? " ✗" : "") : ""
-            color: Theme.text
-            font.family: Theme.sans
-            font.weight: Font.Medium
-            font.pixelSize: Theme.dp(21)
-            elide: Text.ElideRight
-        }
+        spacing: Theme.dp(32)
 
         Rectangle {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            anchors.margins: Theme.dp(10)
-            height: Theme.dp(5)
-            radius: height / 2
-            color: Qt.rgba(1, 1, 1, 0.15)
+            id: jobBar
+
+            width: parent.width
+            height: Theme.dp(64)
+            radius: Theme.dp(14)
+            color: Theme.surface
+            visible: page.sources.job !== null && page.sources.job !== undefined
+
+            readonly property var job: page.sources.job
+            readonly property real fraction: job && job.total > 0 ? job.done / job.total : 0
+
+            Text {
+                anchors.left: parent.left
+                anchors.leftMargin: Theme.dp(22)
+                anchors.right: parent.right
+                anchors.rightMargin: Theme.dp(22)
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenterOffset: -Theme.dp(6)
+                text: jobBar.job ? jobBar.job.message + (jobBar.job.ok === true ? " ✓" : jobBar.job.ok === false ? " ✗" : "") : ""
+                color: Theme.text
+                font.family: Theme.sans
+                font.weight: Font.Medium
+                font.pixelSize: Theme.dp(21)
+                elide: Text.ElideRight
+            }
 
             Rectangle {
                 anchors.left: parent.left
-                anchors.top: parent.top
+                anchors.right: parent.right
                 anchors.bottom: parent.bottom
-                width: parent.width * (jobBar.job && jobBar.job.ok !== null && jobBar.job.ok !== undefined ? 1 : jobBar.fraction)
+                anchors.margins: Theme.dp(10)
+                height: Theme.dp(5)
                 radius: height / 2
-                color: Theme.text
+                color: Qt.rgba(1, 1, 1, 0.15)
 
-                Behavior on width {
-                    NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
+                Rectangle {
+                    anchors.left: parent.left
+                    anchors.top: parent.top
+                    anchors.bottom: parent.bottom
+                    width: parent.width * (jobBar.job && jobBar.job.ok !== null && jobBar.job.ok !== undefined ? 1 : jobBar.fraction)
+                    radius: height / 2
+                    color: Theme.text
+
+                    Behavior on width {
+                        NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
+                    }
+                }
+            }
+        }
+
+        Row {
+            id: tally
+
+            visible: page.section === 4 && page.modulesForm.doctor.length > 0
+            height: Theme.dp(30)
+            spacing: Theme.dp(28)
+
+            Repeater {
+                model: {
+                    var passed = page.checksPassed, failed = page.modulesForm.doctor.length - passed;
+                    return [
+                        { count: passed, text: passed + (passed === 1 ? " check passes" : " checks pass"), color: "#5fd48a" },
+                        { count: failed, text: failed + (failed === 1 ? " needs attention" : " need attention"), color: "#e0655a" }
+                    ];
+                }
+
+                Row {
+                    visible: modelData.count > 0
+                    spacing: Theme.dp(12)
+                    anchors.verticalCenter: parent.verticalCenter
+
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Theme.dp(14)
+                        height: width
+                        radius: width / 2
+                        color: modelData.color
+                    }
+
+                    Text {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: modelData.text
+                        color: Theme.text
+                        font.family: Theme.sans
+                        font.weight: Font.Medium
+                        font.pixelSize: Theme.dp(22)
+                    }
                 }
             }
         }
     }
 
-    SettingsList {
-        id: list
+    SettingsCards {
+        id: cards
 
-        anchors.top: jobBar.bottom
-        anchors.topMargin: Theme.dp(20)
+        anchors.top: above.bottom
+        anchors.topMargin: above.height > 0 ? Theme.dp(32) : 0
         anchors.bottom: parent.bottom
         anchors.left: parent.left
-        anchors.leftMargin: page.sideMargin - Theme.dp(22)
-        anchors.right: page.section === 3 ? loginPane.left : parent.right
-        anchors.rightMargin: page.section === 3 ? Theme.dp(40) : page.sideMargin - Theme.dp(22)
+        anchors.right: parent.right
+        anchors.leftMargin: page.sideMargin
+        anchors.rightMargin: page.sideMargin
         focus: true
-        rows: page.rows
+        rows: page.content.rows
+        groups: page.content.groups
         dimmed: picker.open || sheet.open
 
         onActivated: function(index, row) { page.activate(index, row); }
@@ -355,43 +440,91 @@ FocusScope {
         }
     }
 
-    Column {
-        id: loginPane
+    // The sign-in link as a card in the right column: the code to scan, the link, the state.
+    Item {
+        id: loginCard
 
-        anchors.top: jobBar.bottom
-        anchors.topMargin: Theme.dp(20)
-        anchors.right: parent.right
-        anchors.rightMargin: page.sideMargin
-        width: Theme.dp(640)
-        spacing: Theme.dp(20)
-        visible: page.section === 3
+        x: cards.x + cards.columnX(1)
+        y: cards.y
+        width: cards.columnWidth
+        height: Math.max(Theme.dp(74), loginHead.height) + loginBody.height + Theme.dp(8) * 2 + 2
+        visible: page.section === 3 && (page.login.url !== "" || page.login.status !== "")
 
-        QrCode {
-            width: Theme.dp(360)
-            height: width
-            matrix: page.login.matrix
-            visible: page.login.url !== ""
+        Rectangle {
+            anchors.fill: parent
+            radius: Theme.dp(24)
+            color: Qt.rgba(1, 1, 1, 0.04)
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.10)
         }
 
         Text {
-            width: parent.width
-            text: page.login.url
-            color: Theme.textSecondary
-            font.family: Theme.sans
-            font.pixelSize: Theme.dp(18)
-            wrapMode: Text.WrapAnywhere
-            maximumLineCount: 4
-            elide: Text.ElideRight
-        }
-
-        Text {
-            width: parent.width
-            text: page.login.status
+            id: loginHead
+            x: Theme.dp(8) + 1 + Theme.dp(18)
+            y: Theme.dp(8) + 1
+            height: Theme.dp(74)
+            verticalAlignment: Text.AlignVCenter
+            text: "Sign-in link"
             color: Theme.text
             font.family: Theme.sans
-            font.weight: Font.Medium
-            font.pixelSize: Theme.dp(22)
-            wrapMode: Text.WordWrap
+            font.weight: Font.Bold
+            font.pixelSize: Theme.dp(27)
+        }
+
+        Row {
+            id: loginBody
+
+            x: Theme.dp(8) + 1 + Theme.dp(16)
+            y: loginHead.y + loginHead.height
+            width: parent.width - x * 2
+            height: Math.max(qr.height, loginText.height) + Theme.dp(36)
+            spacing: Theme.dp(28)
+
+            QrCode {
+                id: qr
+                y: Theme.dp(18)
+                width: Theme.dp(300)
+                height: width
+                matrix: page.login.matrix
+                visible: page.login.url !== ""
+            }
+
+            Column {
+                id: loginText
+                y: Theme.dp(18)
+                width: parent.width - (qr.visible ? qr.width + parent.spacing : 0)
+                spacing: Theme.dp(14)
+
+                Text {
+                    width: parent.width
+                    text: "Scan to sign in on your phone"
+                    color: Theme.text
+                    font.family: Theme.sans
+                    font.weight: Font.Medium
+                    font.pixelSize: Theme.dp(22)
+                }
+
+                Text {
+                    width: parent.width
+                    text: page.login.url
+                    color: Theme.textSecondary
+                    font.family: Theme.sans
+                    font.pixelSize: Theme.dp(18)
+                    lineHeight: 1.3
+                    wrapMode: Text.WrapAnywhere
+                    maximumLineCount: 5
+                    elide: Text.ElideRight
+                }
+
+                Text {
+                    width: parent.width
+                    text: page.login.status
+                    color: Theme.textMuted
+                    font.family: Theme.sans
+                    font.pixelSize: Theme.dp(20)
+                    wrapMode: Text.WordWrap
+                }
+            }
         }
     }
 
@@ -400,15 +533,16 @@ FocusScope {
 
         property int pendingIndex: -1
 
-        x: page.width / 2 - width / 2
-        y: Math.min(page.height - height - Theme.dp(120),
-                    list.y + Theme.dp(60) + Math.max(0, (list.index - 1)) * (list.rowHeight + Theme.dp(4)))
+        // Drops from the focused row, its right edge on the row's value.
+        x: cards.x + cards.focusRect.x + cards.focusRect.width - Theme.dp(16) - width
+        y: Math.min(page.height - height - Theme.dp(20),
+                    cards.y + cards.focusRect.y + cards.focusRect.height + Theme.dp(8))
         z: 3
 
         onChosen: function(index) {
             var choices = page.modulesForm.row(pendingIndex).choices || [];
             picker.hide();
-            list.forceActiveFocus();
+            cards.forceActiveFocus();
             if (index >= 0 && index < choices.length) {
                 Sound.sort();
                 page.modulesForm.setValue(pendingIndex, choices[index]);
@@ -416,7 +550,7 @@ FocusScope {
         }
         onDismissed: {
             picker.hide();
-            list.forceActiveFocus();
+            cards.forceActiveFocus();
         }
     }
 
@@ -436,7 +570,7 @@ FocusScope {
         z: 5
 
         onAccepted: function(value) {
-            list.forceActiveFocus();
+            cards.forceActiveFocus();
             if (pendingKind === "module")
                 page.modulesForm.setValue(pendingIndex, value);
             else if (pendingKind === "search")
@@ -444,7 +578,7 @@ FocusScope {
             else if (pendingKind === "code")
                 page.login.submit(value);
         }
-        onDismissed: list.forceActiveFocus()
+        onDismissed: cards.forceActiveFocus()
     }
 
     // Triggers cycle the section from anywhere, as they cycle the collection in the library.

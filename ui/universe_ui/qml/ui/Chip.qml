@@ -6,8 +6,11 @@ Item {
 
     property string label: ""
     property string trailing: ""
+    property string badge: ""
     property bool showSortIcon: false
     property bool focused: false
+    // The chosen one of a set: filled white, the way a focused row is.
+    property bool active: false
 
     implicitHeight: Theme.dp(45)
     implicitWidth: body.width + Theme.dp(48)
@@ -15,9 +18,9 @@ Item {
     Rectangle {
         anchors.fill: parent
         radius: height / 2
-        color: root.focused ? Qt.rgba(1, 1, 1, 0.16) : Theme.surface
+        color: root.active ? Theme.text : root.focused ? Qt.rgba(1, 1, 1, 0.16) : Theme.surface
         border.width: 1
-        border.color: Qt.rgba(1, 1, 1, 0.14)
+        border.color: root.active ? Theme.text : Qt.rgba(1, 1, 1, 0.14)
 
         Behavior on color {
             ColorAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
@@ -60,11 +63,30 @@ Item {
 
         Text {
             text: root.label
-            color: Qt.rgba(0.949, 0.953, 0.961, 0.86)
+            color: root.active ? Theme.onLight : Qt.rgba(0.949, 0.953, 0.961, 0.86)
             font.family: Theme.sans
-            font.weight: Font.Medium
+            font.weight: root.active ? Font.DemiBold : Font.Medium
             font.pixelSize: Theme.dp(21)
             anchors.verticalCenter: parent.verticalCenter
+        }
+
+        Rectangle {
+            visible: root.badge !== ""
+            width: Math.max(height, badgeText.width + Theme.dp(16))
+            height: Theme.dp(26)
+            radius: height / 2
+            color: root.active ? Theme.onLight : Qt.rgba(1, 1, 1, 0.14)
+            anchors.verticalCenter: parent.verticalCenter
+
+            Text {
+                id: badgeText
+                anchors.centerIn: parent
+                text: root.badge
+                color: Theme.text
+                font.family: Theme.sans
+                font.weight: Font.DemiBold
+                font.pixelSize: Theme.dp(17)
+            }
         }
 
         Text {

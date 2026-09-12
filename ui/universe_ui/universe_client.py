@@ -603,9 +603,15 @@ class FakeClient(UniverseClientBase):
         out = json.loads(json.dumps(game))
         out.setdefault("stats", {"hours": 0, "play_count": 0, "last_played": None})
         out.setdefault("removed", False)
+        # As the core does: the game keeps only what it sets, `effective` fills the rest.
         launch = out.setdefault("launch", {})
-        for key, default in (self._config.get("launch") or {}).items():
-            launch.setdefault(key, default)
+        desktop = out.setdefault("desktop", {})
+        defaults = {**(self._config.get("launch") or {}), **(self._config.get("desktop") or {})}
+        out["effective"] = {
+            key: (launch if key != "hide_cursor" else desktop).get(key, default)
+            for key, default in defaults.items()
+            if key in ("proton", "esync", "fsync", "mangohud", "hide_cursor")
+        }
         modules = out.setdefault("modules", {})
         for module in self._data.get("modules", []):
             merged = modules.setdefault(module["id"], {})
