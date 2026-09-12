@@ -1,14 +1,14 @@
 """SDL2 game controllers → the keyboard events the theme already handles.
 
 `Mapper` is pure state (testable without hardware); `GamepadThread` feeds it SDL events and
-posts QKeyEvents to the focused window. Nothing is posted while a game holds the screen,
-since there is no focus window then.
+hands the transitions to the main thread, which posts QKeyEvents to the focused window.
+Nothing is posted while a game holds the screen, since there is no focus window then.
 """
 
 import logging
 import time
 
-from PySide6.QtCore import QCoreApplication, QEvent, QObject, QThread, QTimer, Qt
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, QThread, QTimer, Qt, Signal, Slot
 from PySide6.QtGui import QGuiApplication, QKeyEvent
 
 log = logging.getLogger("universe.gamepad")
@@ -113,10 +113,18 @@ def post_key(key, pressed, autorepeat=False, window=None):
 
 
 class GamepadThread(QThread):
+    # QKeyEvent's constructor parents the primary QInputDevice to the app on first use, so events are built on the main thread.
+    key = Signal(int, bool, bool)
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self._running = False
         self.mapper = Mapper()
+        self.key.connect(self._post, Qt.ConnectionType.QueuedConnection)
+
+    @Slot(int, bool, bool)
+    def _post(self, key, pressed, autorepeat):
+        post_key(Qt.Key(key), pressed, autorepeat)
 
     def stop(self):
         self._running = False
@@ -140,7 +148,7 @@ class GamepadThread(QThread):
                 while sdl2.SDL_PollEvent(event):
                     self._handle(sdl2, event, controllers)
                 for key, pressed, repeat in self.mapper.tick():
-                    post_key(key, pressed, repeat)
+                    self.key.emit(key, pressed, repeat)
                 sdl2.SDL_WaitEventTimeout(None, 20)
         finally:
             for c in controllers.values():
@@ -162,10 +170,10 @@ class GamepadThread(QThread):
                 sdl2.SDL_GameControllerClose(controller)
         elif t in (sdl2.SDL_CONTROLLERBUTTONDOWN, sdl2.SDL_CONTROLLERBUTTONUP):
             for key, pressed, repeat in self.mapper.button(event.cbutton.button, t == sdl2.SDL_CONTROLLERBUTTONDOWN):
-                post_key(key, pressed, repeat)
+                self.key.emit(key, pressed, repeat)
         elif t == sdl2.SDL_CONTROLLERAXISMOTION:
             for key, pressed, repeat in self.mapper.axis(event.caxis.axis, event.caxis.value):
-                post_key(key, pressed, repeat)
+                self.key.emit(key, pressed, repeat)
 
 
 KEY_NAMES = {

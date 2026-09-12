@@ -95,6 +95,10 @@ def build_client(args):
 def run(argv=None):
     args = parse_args(sys.argv[1:] if argv is None else argv)
     os.environ.setdefault("QT_FORCE_STDERR_LOGGING", "1")
+    os.environ.setdefault("QT_LOGGING_RULES", "qt.multimedia.ffmpeg.info=false")
+    # Probing VDPAU makes libvdpau try its nvidia fallback and complain on stderr when no driver is installed.
+    os.environ.setdefault("QT_FFMPEG_DECODING_HW_DEVICE_TYPES", "vaapi")
+    os.environ.setdefault("QT_FFMPEG_ENCODING_HW_DEVICE_TYPES", "vaapi")
     logging.basicConfig(level=logging.INFO, format="%(name)s: %(message)s")
 
     from PySide6.QtCore import QCoreApplication, QTimer, QUrl

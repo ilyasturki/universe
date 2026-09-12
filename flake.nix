@@ -24,6 +24,7 @@
         cargoLock.lockFile = ./Cargo.lock;
         cargoBuildFlags = [ "-p" "universe" ];
         cargoTestFlags = [ "-p" "universe" ];
+        preCheck = "export TZ=Europe/Paris TZDIR=${pkgs.tzdata}/share/zoneinfo";
         nativeBuildInputs = [ pkgs.pkg-config ];
         meta.mainProgram = "universe";
       };
@@ -79,7 +80,7 @@
         dontWrapQtApps = false;
         # The hooks and systemd's ExecStopPost need the CLI; a Python process has no argv[0] to find it by.
         preFixup = ''
-          qtWrapperArgs+=(--prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath [ pkgs.SDL2 ]})
+          qtWrapperArgs+=(--prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath [ pkgs.SDL2 pkgs.pipewire ]})
           qtWrapperArgs+=(--set QT_FORCE_STDERR_LOGGING 1)
           qtWrapperArgs+=(--set UNIVERSE_BIN ${universe}/bin/universe)
           qtWrapperArgs+=(--set UNIVERSE_MODULES_PATH ${modulesPkg}/share/universe/modules)
@@ -149,7 +150,8 @@
         shellHook = ''
           export UNIVERSE_MODULES_PATH="$PWD/modules"
           export QML2_IMPORT_PATH="${pkgs.qt6.qtdeclarative}/lib/qt-6/qml:${pkgs.qt6.qt5compat}/lib/qt-6/qml:${pkgs.qt6.qtmultimedia}/lib/qt-6/qml"
-          export QT_PLUGIN_PATH="${pkgs.qt6.qtsvg}/lib/qt-6/plugins"
+          export QT_PLUGIN_PATH="${pkgs.qt6.qtsvg}/lib/qt-6/plugins:${pkgs.qt6.qtmultimedia}/lib/qt-6/plugins"
+          export LD_LIBRARY_PATH="${lib.makeLibraryPath [ pkgs.pipewire ]}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           export QT_FORCE_STDERR_LOGGING=1
         '';
       };
