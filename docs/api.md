@@ -174,12 +174,12 @@ Defaults as the core ships them:
 ```toml
 schema = 1
 
-[paths]
-games_root = "/mnt/games/PC"         # where sources install
-prefixes_root = "/mnt/games/prefixes"
-recordings_root = "/mnt/recordings/games"
-journal_root = "~/Documents/notes/games/journal"
-overrides = "~/Dotfiles/home/config/pegasus-art"
+[paths]                              # defaults follow XDG and xdg-user-dirs
+games_root = "~/Games"               # $XDG_GAMES_DIR: where sources install
+prefixes_root = "~/.local/share/universe/prefixes"
+recordings_root = "~/Videos/universe"            # $XDG_VIDEOS_DIR/universe
+journal_root = "~/Documents/universe/journal"    # $XDG_DOCUMENTS_DIR/universe/journal
+overrides = "~/.config/universe/overrides"       # hand-picked art: <id>/{boxFront,tile,background,logo}.*, <id>/screenshots/
 
 [launch]
 proton = "proton-ge"                 # a name under [proton], or a path
@@ -276,6 +276,7 @@ hook, where a non-zero exit cancels the launch.
 ### Source protocol
 
 `bin/source <verb> [args]`, with `MODULE_SETTINGS_JSON` and `MODULE_DATA_DIR` in the environment.
+A `games_dir` setting whose manifest default is empty arrives filled with `paths.games_root`.
 One JSON object per line on stdout, human-readable logs on stderr, meaningful exit code.
 **Every verb ends with `{"event":"done"}`**, `login` included.
 

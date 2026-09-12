@@ -400,8 +400,8 @@ def test_settings_defaults_from_toml(src, monkeypatch):
     monkeypatch.delenv("MODULE_SETTINGS_JSON", raising=False)
     monkeypatch.setenv("MODULE_DIR", str(MODULE_DIR))
     settings = src.load_settings()
-    assert settings["games_dir"] == "/mnt/games/PC"
-    assert settings["scan_dirs"] == ["/mnt/games/PC", "/mnt/games/gog"]
+    assert settings["games_dir"] == os.path.expanduser("~/Games")
+    assert settings["scan_dirs"] == [settings["games_dir"]]
     assert settings["platform"] == "windows" and settings["with_dlcs"] is True
     assert settings["auth_path"] == os.path.expanduser("~/.config/gogdl/auth.json")
     assert settings["install_timeout_s"] == 7200

@@ -15,7 +15,7 @@ timeout_s   = 10
 [[settings]]
 key = "root"
 type = "path"
-default = "~/Documents/notes/games"
+default = "~/Documents/universe"
 label = "Markdown tracker root"
 scope = "global"
 

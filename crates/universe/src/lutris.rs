@@ -309,7 +309,7 @@ pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
             game.save()?;
         }
         crate::recording::import_existing(&game, &config.recordings_root())?;
-        if import_pegasus_media(&game, &paths::expand(&config.lutris.pegasus_library))? {
+        if import_pegasus_media(&game.media_dir(), &game, &paths::expand(&config.lutris.pegasus_library))? {
             report.media_imported.push(game.id.clone());
         }
         let sessions = sessions::read(&game.sessions_path())?;
@@ -334,8 +334,7 @@ pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
 
 /// Copies the art pegasus-sync fetched (`<root>/<platform>/media/<slug>/`) into `games/<id>/media/`, once: an
 /// existing media dir is left alone. Only the slots the core reads; flat `screenshotNN.*` land in `screenshots/`.
-fn import_pegasus_media(game: &Game, root: &Path) -> crate::Result<bool> {
-    let dest = game.media_dir();
+fn import_pegasus_media(dest: &Path, game: &Game, root: &Path) -> crate::Result<bool> {
     if dest.exists() {
         return Ok(false);
     }
@@ -410,15 +409,14 @@ mod tests {
         }
         let mut g = Game::new("New");
         g.source.lutris_slug = "old-slug".into();
-        std::env::set_var("UNIVERSE_DATA_HOME", dir.path());
-        assert!(import_pegasus_media(&g, &dir.path().join("pegasus")).unwrap());
-        let media = g.media_dir();
+        let media = dir.path().join("games/new/media");
+        assert!(import_pegasus_media(&media, &g, &dir.path().join("pegasus")).unwrap());
         assert!(media.join("boxFront.png").exists());
         assert!(media.join("tile.jpg").exists());
         assert!(media.join("screenshots/screenshot01.png").exists());
         assert!(!media.join("steam.png").exists());
         assert!(!media.join("marquee.png").exists());
-        assert!(!import_pegasus_media(&g, &dir.path().join("pegasus")).unwrap());
+        assert!(!import_pegasus_media(&media, &g, &dir.path().join("pegasus")).unwrap());
     }
 
     #[test]

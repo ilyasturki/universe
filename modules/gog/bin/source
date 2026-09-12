@@ -74,12 +74,14 @@ def load_settings():
     raw = os.environ.get("MODULE_SETTINGS_JSON")
     if raw:
         settings.update(json.loads(raw))
+    if not settings["games_dir"]:
+        settings["games_dir"] = "~/Games"
     for key in ("games_dir", "auth_path"):
         settings[key] = os.path.expanduser(str(settings[key]))
     dirs = settings["scan_dirs"]
     if isinstance(dirs, str):
         dirs = [d.strip() for d in dirs.split(",") if d.strip()]
-    settings["scan_dirs"] = [os.path.expanduser(d) for d in dirs]
+    settings["scan_dirs"] = [os.path.expanduser(d) for d in dirs] or [settings["games_dir"]]
     settings["with_dlcs"] = to_bool(settings["with_dlcs"])
     settings["install_timeout_s"] = int(settings["install_timeout_s"])
     return settings

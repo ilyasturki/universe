@@ -14,15 +14,15 @@ exe = "bin/source"
 [[settings]]
 key = "games_dir"
 type = "path"
-default = "/mnt/games/PC"
-label = "Install folder"
+default = ""
+label = "Install folder (empty: paths.games_root)"
 scope = "global"
 
 [[settings]]
 key = "scan_dirs"
 type = "string"
-default = "/mnt/games/PC,/mnt/games/gog"
-label = "Scanned folders (comma-separated)"
+default = ""
+label = "Scanned folders (comma-separated, empty: the install folder)"
 scope = "global"
 
 [[settings]]

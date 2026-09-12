@@ -35,6 +35,22 @@ pub fn cache_home() -> PathBuf {
         .unwrap_or_else(|| xdg("XDG_CACHE_HOME", ".cache").join("universe"))
 }
 
+/// xdg-user-dirs: `$XDG_<NAME>_DIR`, else the entry in `~/.config/user-dirs.dirs`, else `~/<fallback>`.
+pub fn user_dir(name: &str, fallback: &str) -> PathBuf {
+    let var = format!("XDG_{name}_DIR");
+    if let Some(p) = std::env::var_os(&var).map(PathBuf::from).filter(|p| p.is_absolute()) {
+        return p;
+    }
+    let file = xdg("XDG_CONFIG_HOME", ".config").join("user-dirs.dirs");
+    let listed = std::fs::read_to_string(file).ok().and_then(|text| {
+        text.lines().find_map(|l| {
+            let (k, v) = l.trim().split_once('=')?;
+            (k == var).then(|| v.trim_matches('"').replace("$HOME", &home().to_string_lossy()))
+        })
+    });
+    listed.map(PathBuf::from).filter(|p| p.is_absolute()).unwrap_or_else(|| home().join(fallback))
+}
+
 pub fn config_file() -> PathBuf {
     config_home().join("config.toml")
 }

@@ -14,7 +14,7 @@ SETTINGS_DEFAULTS = {
     "provider": "codex",
     "model": "gpt-5.6-sol",
     "markdown_export": True,
-    "journal_root": "~/Documents/notes/games/journal",
+    "journal_root": "~/Documents/universe/journal",
     "max_images": 40,
 }
 

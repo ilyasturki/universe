@@ -94,11 +94,11 @@ impl Default for Config {
 impl Default for Paths {
     fn default() -> Self {
         Paths {
-            games_root: "/mnt/games/PC".into(),
-            prefixes_root: "/mnt/games/prefixes".into(),
-            recordings_root: "/mnt/recordings/games".into(),
-            journal_root: "~/Documents/notes/games/journal".into(),
-            overrides: "~/Dotfiles/home/config/pegasus-art".into(),
+            games_root: paths::user_dir("GAMES", "Games").to_string_lossy().into(),
+            prefixes_root: paths::data_home().join("prefixes").to_string_lossy().into(),
+            recordings_root: paths::user_dir("VIDEOS", "Videos").join("universe").to_string_lossy().into(),
+            journal_root: paths::user_dir("DOCUMENTS", "Documents").join("universe/journal").to_string_lossy().into(),
+            overrides: paths::config_home().join("overrides").to_string_lossy().into(),
         }
     }
 }
@@ -266,6 +266,7 @@ mod tests {
         assert!(c.launch.esync);
         assert_eq!(c.modules.enabled, vec!["gog"]);
         assert_eq!(c.modules.settings["capture"]["codec"].as_str(), Some("hevc"));
-        assert_eq!(c.paths.games_root, "/mnt/games/PC");
+        assert!(c.paths.games_root.ends_with("/Games"), "{}", c.paths.games_root);
+        assert!(c.paths.prefixes_root.ends_with("/prefixes"));
     }
 }

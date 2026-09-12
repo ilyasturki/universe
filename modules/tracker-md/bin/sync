@@ -12,7 +12,7 @@ import unicodedata
 from pathlib import Path
 
 SETTINGS_DEFAULTS = {
-    "root": "~/Documents/notes/games",
+    "root": "~/Documents/universe",
     "create_missing": False,
     "update_metadata": True,
     "journal_link": True,

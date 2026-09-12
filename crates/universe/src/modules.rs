@@ -158,6 +158,9 @@ impl Module {
         for s in &self.manifest.settings {
             out.insert(s.key.clone(), toml_to_json(&s.default));
         }
+        if out.get("games_dir").and_then(|v| v.as_str()) == Some("") {
+            out.insert("games_dir".into(), serde_json::Value::String(config.games_root().to_string_lossy().into()));
+        }
         if let Some(t) = config.modules.settings.get(self.id()) {
             for (k, v) in t {
                 out.insert(k.clone(), toml_to_json(v));

@@ -68,6 +68,7 @@ env:
     [paths]
     recordings_root = "{{ dev }}/recordings"
     journal_root = "{{ dev }}/journal"
+    overrides = "~/Dotfiles/home/config/pegasus-art"   # hand-picked art; drop the line to test without
     [modules]
     enabled = ["gog", "capture", "journal"]
     [modules.capture]
