@@ -101,6 +101,14 @@ pub enum Cmd {
         #[arg(long)]
         purge: bool,
     },
+    /// Uninstall a game: trashes its install folder, keeps it in the library
+    Uninstall {
+        /// Game: exact id, then whole word, substring or path
+        name: String,
+        /// Do not ask for confirmation
+        #[arg(long, short)]
+        yes: bool,
+    },
     /// Set game keys: proton=proton-em capture.cursor=true hidden=true
     Set {
         /// Game: exact id, then whole word, substring or path
@@ -576,6 +584,13 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 println!("removed {id}");
             }
         }
+        Cmd::Uninstall { name, yes } => {
+            let id = pick(&core, &name).await?;
+            if yes || confirm(&format!("trash the install folder of {id}?")) {
+                core.uninstall(&id).await?;
+                println!("uninstalled {id}");
+            }
+        }
         Cmd::Set { name, pairs } => {
             let id = pick(&core, &name).await?;
             for p in pairs {
@@ -906,6 +921,7 @@ const POSITIONALS: &[(&str, usize, &str)] = &[
     ("info", 1, "games"),
     ("set", 1, "games"),
     ("rm", 1, "games"),
+    ("uninstall", 1, "games"),
     ("sessions", 1, "games"),
     ("journal", 1, "games"),
     ("recordings", 1, "games"),

@@ -231,6 +231,33 @@ impl Core {
         self.reload_game(id).await
     }
 
+    /// Trashes the install folder; the game stays in the library with its hours, journal and
+    /// recordings, marked not installed until a source installs it again.
+    pub async fn uninstall(&self, id: &str) -> Result<()> {
+        let r = self.get(id).await?;
+        let dir = paths::expand(&r.game.source.dir);
+        if r.game.source.dir.is_empty() || !dir.is_dir() {
+            return Err(Error::Invalid(format!("{id} has no install folder")));
+        }
+        // Never a root, a home, a games root or a folder another game lives in: only its own.
+        let config = self.config.read().await.clone();
+        let home = paths::home();
+        let shared = self.games.read().await.iter().any(|x| x.game.id != id && !x.game.source.dir.is_empty() && paths::expand(&x.game.source.dir).starts_with(&dir));
+        if dir.parent().is_none() || dir == home || dir == config.games_root() || home.starts_with(&dir) || shared {
+            return Err(Error::Invalid(format!("refusing to trash {}", dir.display())));
+        }
+        let st = std::process::Command::new("trash").arg(&dir).status();
+        if !st.map(|s| s.success()).unwrap_or(false) {
+            return Err(Error::Io(format!("trash {} failed", dir.display())));
+        }
+        // Cleared so the next install sets them afresh, wherever it lands.
+        let toml = r.game.toml_path();
+        for key in ["source.dir", "source.build_id", "launch.exe"] {
+            crate::game::set_key(&toml, key, "")?;
+        }
+        self.reload_game(id).await
+    }
+
     pub async fn remove(&self, id: &str, purge: bool) -> Result<()> {
         let r = self.get(id).await?;
         let config = self.config.read().await.clone();
@@ -675,6 +702,15 @@ impl Core {
         let m = modules.iter().find(|m| m.id() == module).ok_or_else(|| Error::NotFound(format!("module {module}")))?;
         let game = if game_id.is_empty() { None } else { Some(self.get(game_id).await?.game) };
         Ok(serde_json::Value::Object(m.merged_settings(&cfg, game.as_ref())).to_string())
+    }
+
+    /// The choices of one global setting, listed live by the module when it declares `choices_exec`.
+    pub async fn module_setting_choices(&self, module: &str, key: &str) -> Result<String> {
+        let cfg = self.config.read().await.clone();
+        let m = self.modules.read().await.iter().find(|m| m.id() == module).cloned().ok_or_else(|| Error::NotFound(format!("module {module}")))?;
+        let settings = m.merged_settings(&cfg, None);
+        let list = modules::setting_choices(&m, &settings, key).await?;
+        Ok(serde_json::to_string(&list)?)
     }
 
     pub async fn set_module_setting(&self, module: &str, game_id: &str, key: &str, value: &str) -> Result<()> {

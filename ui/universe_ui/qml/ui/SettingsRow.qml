@@ -1,8 +1,10 @@
 import QtQuick
+import Qt5Compat.GraphicalEffects
 import "../core"
 
 // One setting inside a card: its label, and by type a switch, a value with a chevron,
 // or a check's detail and status dot. Focused, it is the one white row on the screen.
+// A row with an `image` (a game of a source) shows it as a small cover before the label.
 Item {
     id: row
 
@@ -13,7 +15,12 @@ Item {
     property bool separator: false
 
     readonly property bool info: entry.type === "info"
+    readonly property bool hasImage: entry.image !== undefined && entry.image !== null && String(entry.image) !== ""
     readonly property color onFocus: Qt.rgba(0.063, 0.067, 0.086, 0.7)
+    // A value or a detail leaves the label at least a third of the row.
+    readonly property real valueMax: Math.max(Theme.dp(120), width * 0.6 - (hasImage ? thumb.width : 0))
+    // The software scenegraph (offscreen tests) drops every ShaderEffect: corners go square there.
+    readonly property bool software: GraphicsInfo.api === GraphicsInfo.Software
 
     Rectangle {
         anchors.left: parent.left
@@ -36,9 +43,52 @@ Item {
         }
     }
 
+    Item {
+        id: thumb
+
+        anchors.left: parent.left
+        anchors.leftMargin: Theme.dp(10)
+        anchors.verticalCenter: parent.verticalCenter
+        height: parent.height - Theme.dp(12)
+        width: Math.round(height * 2 / 3)
+        visible: row.hasImage
+        layer.enabled: visible && !row.software
+        layer.smooth: true
+        layer.effect: row.software ? null : thumbEffect
+
+        Component {
+            id: thumbEffect
+            OpacityMask { maskSource: thumbMask }
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            radius: Theme.dp(6)
+            color: Theme.cardBase
+        }
+
+        Image {
+            anchors.fill: parent
+            source: row.hasImage ? row.entry.image : ""
+            asynchronous: true
+            fillMode: Image.PreserveAspectCrop
+            sourceSize.height: 256
+            smooth: true
+        }
+    }
+
+    Rectangle {
+        id: thumbMask
+        anchors.fill: thumb
+        radius: Theme.dp(6)
+        color: "white"
+        antialiasing: true
+        visible: false
+    }
+
     Text {
         anchors.left: parent.left
-        anchors.leftMargin: Theme.dp(18)
+        anchors.leftMargin: row.hasImage ? thumb.width + Theme.dp(24) : Theme.dp(18)
         anchors.right: control.left
         anchors.rightMargin: Theme.dp(20)
         anchors.verticalCenter: parent.verticalCenter
@@ -100,7 +150,7 @@ Item {
                 font.family: Theme.sans
                 font.pixelSize: Theme.dp(21)
                 elide: Text.ElideMiddle
-                width: Math.min(implicitWidth, Theme.dp(460))
+                width: Math.min(implicitWidth, row.valueMax)
             }
 
             Canvas {
@@ -138,7 +188,7 @@ Item {
                 font.family: Theme.sans
                 font.pixelSize: Theme.dp(20)
                 elide: Text.ElideMiddle
-                width: Math.min(implicitWidth, Theme.dp(520))
+                width: Math.min(implicitWidth, row.valueMax)
             }
 
             Rectangle {

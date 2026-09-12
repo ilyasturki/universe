@@ -7,7 +7,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import log, load_settings, resolve_screen, audio_args, quality_opts  # noqa: E402
+from _common import log, load_settings, resolve_screen, resolve_fps, audio_args, quality_opts  # noqa: E402
 
 
 def main():
@@ -28,7 +28,7 @@ def main():
         return 1
 
     cursor = "yes" if settings.get("cursor") else "no"
-    fps = str(settings.get("fps", 60))
+    fps = str(resolve_fps(settings.get("fps", 60), screen))
     codec = settings.get("codec", "av1_10bit")
     output_path = os.path.join(pending_dir, f"{session_id}.mkv")
     unit = f"universe-capture-{session_id}"

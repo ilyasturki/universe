@@ -38,6 +38,11 @@ if [ "${{FAKE_UNIVERSE_EXIT:-0}}" != "0" ]; then echo "universe: not found: sess
 echo "/mnt/recordings/games/fake/session.mkv"
 exit 0''')
     _write_shim(bindir / "ffprobe", 'echo "${FAKE_DURATION:-300}"\nexit 0\n')
+    # Mutter's GetCurrentState as busctl --json=short prints it: DP-1 at 120 Hz, HDMI-A-1 at 60 Hz.
+    _write_shim(bindir / "busctl", f'''printf "%s\\n" "$@" > "{logs}/busctl.args"
+if [ "${{FAKE_BUSCTL_EXIT:-0}}" != "0" ]; then exit "${{FAKE_BUSCTL_EXIT}}"; fi
+echo '{{"type":"ua((ssss)a(siiddada{{sv}})a{{sv}})a(iiduba(ssss)a{{sv}})a{{sv}}","data":[1,[[["DP-1","GSM","LG","0x1"],[["3840x2160@59.997",3840,2160,59.997,1.5,[1.0],{{}}],["3840x2160@119.88",3840,2160,119.88,1.5,[1.0],{{"is-current":{{"type":"b","data":true}}}}]],{{}}],[["HDMI-A-1","DEL","Dell","0x2"],[["2560x1440@59.951",2560,1440,59.951,1.0,[1.0],{{"is-current":{{"type":"b","data":true}}}}]],{{}}]],[],{{}}]}}'
+exit 0''')
     _write_shim(bindir / "trash", f'printf "%s\\n" "$@" > "{logs}/trash.args"\nrm -f "$1"\nexit 0\n')
     _write_shim(bindir / "gpu-screen-recorder", f'''printf "%s\\n" "$@" >> "{logs}/gsr.args"
 if [ "$1" = "--list-monitors" ]; then echo "${{FAKE_MONITOR:-DP-1|3840x2160}}"; exit 0; fi
@@ -132,6 +137,29 @@ def test_start_custom_quality_passthrough(tmp_path, fakebin):
     assert result.returncode == 0, result.stderr
     args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
     assert flag_values(args, "-ffmpeg-video-opts") == ["rc_mode=CQP;qp=20"]
+
+
+def test_start_fps_auto_takes_the_screens_refresh_rate(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {"fps": "auto"})
+    result = run("start", env)
+    assert result.returncode == 0, result.stderr
+    args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
+    assert flag_values(args, "-f") == ["120"]
+    assert "GetCurrentState" in (fakebin["logs"] / "busctl.args").read_text()
+
+    env = env_for(tmp_path, fakebin, {"fps": "auto"}, extra={"SESSION_SCREEN": "HDMI-A-1"})
+    assert run("start", env).returncode == 0
+    args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
+    assert flag_values(args, "-f") == ["60"]
+
+
+def test_start_fps_auto_falls_back_to_60_without_mutter(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {"fps": "auto"}, extra={"FAKE_BUSCTL_EXIT": "1"})
+    result = run("start", env)
+    assert result.returncode == 0, result.stderr
+    assert "fps auto" in result.stderr
+    args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
+    assert flag_values(args, "-f") == ["60"]
 
 
 def test_start_resolves_screen_when_unset(tmp_path, fakebin):

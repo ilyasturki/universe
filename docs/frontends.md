@@ -19,7 +19,7 @@ ui/
     models.py               Game, GameListModel and the QML proxies (import Universe)
     universe_client.py      CoreClient (the real core) and FakeClient (fixtures)
     gamepad.py              SDL2 → QKeyEvent
-    screens/                data for the added screens: settings.py, sources.py, media.py
+    screens/                data for the added screens: settings.py, sources.py, media.py, paths.py
     fixtures/               library.json and generated artwork, for --fake
     qml/                    the ported theme plus the added screens
   tests/                    pytest, offscreen
@@ -36,7 +36,7 @@ One context property, `api`:
 | `api.collections` | collections, one per platform |
 | `api.memory` | `get`/`set`/`has`/`unset`, persisted to `$XDG_STATE_HOME/universe/ui-memory.json` |
 | `api.universe` | the client: every core call, plus the signals below |
-| `api.screens` | data for the added screens (settings, sources, media) |
+| `api.screens` | data for the added screens (settings, sources, media, the folder picker) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed`, `--size` and `--screenshot` turn it off) |
 
 A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `playTime`,

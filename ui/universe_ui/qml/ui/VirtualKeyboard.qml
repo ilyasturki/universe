@@ -16,6 +16,8 @@ Item {
     property bool showDone: false
     property bool symbols: false
     property bool shift: false
+    // Digits and a minus only, on keys twice as wide, for an integer.
+    property bool numeric: false
 
     readonly property real keyUnit: (width - keyGap * 9) / 10
     readonly property real indent: (keyUnit + keyGap) / 2
@@ -29,7 +31,21 @@ Item {
         return s.split("").map(function(c) { return { label: c, value: c }; });
     }
 
+    function wide(key) {
+        key.wide = true;
+        return key;
+    }
+
     readonly property var rows: {
+        if (numeric)
+            return [
+                { indent: 4, keys: chars("123").map(wide) },
+                { indent: 4, keys: chars("456").map(wide) },
+                { indent: 4, keys: chars("789").map(wide) },
+                { indent: 4, keys: [wide({ label: "-", value: "-" }), wide({ label: "0", value: "0" }),
+                                    wide({ label: "⌫", value: "", action: "backspace" })] },
+                { indent: 6, keys: [{ label: "clear", value: "", action: "clear" }, { label: "done", value: "", action: "done" }] }
+            ];
         var bottom = [];
         if (showDone)
             bottom.push({ label: "⇧", value: "", action: "shift" });
@@ -48,12 +64,18 @@ Item {
         ];
     }
 
-    readonly property real clearWidth: keyUnit * 2 + keyGap
-    readonly property real bottomFixed: clearWidth + keyGap
-                                        + (showDone ? (clearWidth + keyGap) * 2 : 0)
-                                        + (symbols ? (keyUnit + keyGap) * 5 : 0)
+    // With the path symbols in, the bottom row only fits with single-width shift, clear and done.
+    readonly property real clearWidth: symbols ? keyUnit : keyUnit * 2 + keyGap
+    readonly property real bottomFixed: {
+        var keys = rows[rows.length - 1].keys, w = 0;
+        for (var i = 0; i < keys.length; i++)
+            w += (keys[i].action === "space" ? 0 : keyWidth(keys[i])) + (i > 0 ? keyGap : 0);
+        return w;
+    }
 
     function keyWidth(key) {
+        if (key.wide)
+            return keyUnit * 2 + keyGap;
         if (key.action === "backspace")
             return width - indent - keyUnit * 7 - keyGap * 7;
         if (key.action === "clear" || key.action === "done" || key.action === "shift")
@@ -61,6 +83,11 @@ Item {
         if (key.action === "space")
             return width - bottomFixed;
         return keyUnit;
+    }
+
+    onNumericChanged: {
+        rowIndex = numeric ? 0 : 1;
+        colIndex = 0;
     }
 
     function press() {

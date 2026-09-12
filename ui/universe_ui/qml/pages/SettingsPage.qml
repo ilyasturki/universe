@@ -11,6 +11,7 @@ FocusScope {
     focus: true
 
     signal chromeRequested()
+    signal settingsRequested(var game)
 
     readonly property var currentGame: null
     readonly property bool ownsBackdrop: false
@@ -31,11 +32,12 @@ FocusScope {
     readonly property var sources: api.screens.sources
     readonly property var login: api.screens.login
 
-    readonly property var hints: sheet.open ? sheet.hints
-        : picker.open ? picker.hints
+    readonly property var hints: editor.open ? editor.hints
+        : menu.open ? menu.hints
         : chipBar.activeFocus
         ? [ { glyph: "A", label: "Open" }, { glyph: "dpad", label: "Section" }, { glyph: "LB RB", label: "Tabs" } ]
         : (acceptLabel !== "" ? [ { glyph: "A", label: acceptLabel } ] : []).concat(
+            refreshable ? [ { glyph: "Y", label: "Refresh" } ] : [],
             [ { glyph: "dpad", label: "Navigate" }, { glyph: "LT RT", label: "Section" }, { glyph: "LB RB", label: "Tabs" } ])
 
     readonly property string acceptLabel: {
@@ -50,6 +52,9 @@ FocusScope {
             return row.action !== undefined ? row.action : "Select";
         return "Change";
     }
+
+    // The sections that reach the network keep what they fetched; Y fetches again.
+    readonly property bool refreshable: section >= 1 && section <= 3
 
     readonly property real sideMargin: Theme.dp(80)
 
@@ -73,6 +78,17 @@ FocusScope {
 
     function games(n) { return n + (n === 1 ? " game" : " games"); }
 
+    // The library's own cover when the game is in it, else the store's picture.
+    function artOf(g) {
+        var game = g.game_id ? api.allGames.byId(g.game_id) : null;
+        if (game) {
+            var art = String(game.assets.boxFront) !== "" ? game.assets.boxFront : game.assets.tile;
+            if (String(art) !== "")
+                return art;
+        }
+        return g.image || "";
+    }
+
     // The rows and the cards that arrange them for the open section, from the host's data.
     readonly property var content: {
         var rows = [], groups = [];
@@ -85,18 +101,18 @@ FocusScope {
             var installed = [], owned = [], all = [];
             for (var i = 0; i < sources.rows.length; i++) {
                 var g = sources.rows[i];
-                var installable = g.pending || !g.installed;
                 rows.push({ section: sourceName, key: "game", label: g.title, type: "action",
                             display: g.status, choices: [], detail: "", row: i, installed: g.installed,
-                            pending: g.pending, action: installable ? g.action : "" });
+                            pending: g.pending, gameId: g.game_id, image: page.artOf(g), action: "Options" });
                 all.push(rows.length - 1);
                 (g.installed ? installed : owned).push(rows.length - 1);
             }
+            var busy = sources.busy ? (all.length > 0 ? " · refreshing…" : "loading…") : "";
             if (sources.query)
-                groups.push({ title: "Results", meta: games(all.length) + " · “" + sources.query + "”", rows: all });
+                groups.push({ title: "Results", meta: games(all.length) + " · “" + sources.query + "”" + busy, rows: all });
             else {
                 var where = currentSource && currentSource.games_dir ? " · " + currentSource.games_dir : "";
-                groups.push({ title: "Installed", meta: games(installed.length) + where, rows: installed });
+                groups.push({ title: "Installed", meta: (all.length > 0 || !busy ? games(installed.length) + where : "") + busy, rows: installed });
                 groups.push({ title: "Owned, not installed", meta: games(owned.length), rows: owned });
             }
             return { rows: rows, groups: groups };
@@ -104,7 +120,8 @@ FocusScope {
         if (section === 2) {
             var n = sources.updates.length;
             if (n === 0) {
-                rows.push({ section: "Updates", key: "", label: "Everything is up to date", type: "info", value: true, detail: "" });
+                rows.push({ section: "Updates", key: "", label: sources.busy ? "Checking…" : "Everything is up to date",
+                            type: "info", value: true, detail: "" });
                 groups.push({ title: "Updates", rows: [0] });
                 return { rows: rows, groups: groups };
             }
@@ -137,18 +154,31 @@ FocusScope {
     }
 
     function leave() {
-        picker.hide();
+        editor.hide();
+        if (menu.open)
+            menu.hide();
     }
 
+    // Modules and Doctor read the core in-process; the sources keep their last fetch (see load).
     function refresh() {
         if (section === 0)
             modulesForm.load();
-        else if (section === 1 || section === 2)
-            sources.load();
-        else if (section === 3)
+        else if (refreshable)
             sources.load();
         else
             modulesForm.loadDoctor();
+    }
+
+    function refreshNow() {
+        if (refreshable) {
+            Sound.enter();
+            sources.refresh();
+        } else if (section === 4) {
+            Sound.enter();
+            modulesForm.loadDoctor();
+        } else {
+            Sound.edge();
+        }
     }
 
     function activate(index, row) {
@@ -156,26 +186,18 @@ FocusScope {
             if (row.type === "bool") {
                 modulesForm.toggle(index);
                 Sound.favourite(!row.value);
-            } else if (row.type === "enum") {
-                Sound.panel();
-                picker.pendingIndex = index;
-                picker.show(cards, row.choices.map(function(c) { return { label: c }; }), Math.max(0, row.choices.indexOf(row.value)));
             } else {
                 Sound.panel();
-                sheet.pendingIndex = index;
-                sheet.pendingKind = "module";
-                sheet.show(row.label, row.value, row.type === "path");
+                editor.edit(index, row);
             }
         } else if (section === 1) {
             if (row.key === "search") {
                 Sound.panel();
-                sheet.pendingKind = "search";
-                sheet.show("Search " + sourceName, sources.query, false);
-            } else if (row.installed && !row.pending) {
-                Sound.edge();
+                editor.prompt("search", "Search " + sourceName, sources.query);
             } else {
-                Sound.enter();
-                sources.install(row.row);
+                Sound.panel();
+                menu.row = row;
+                menu.show(page.gameActions(row), cards, cards.focusRect, row.label);
             }
         } else if (section === 2) {
             Sound.enter();
@@ -189,10 +211,63 @@ FocusScope {
                 login.begin(sources.source);
             } else if (row.key === "code") {
                 Sound.panel();
-                sheet.pendingKind = "code";
-                sheet.show("Code from " + sourceName, "", false);
+                editor.prompt("code", "Code from " + sourceName, "");
             }
         }
+    }
+
+    // What a game of the source can have done to it: installed, or, once it is, updated,
+    // configured (when the library lists it), uninstalled, removed.
+    function gameActions(row) {
+        var out = [];
+        if (!row.installed) {
+            out.push({ icon: "download", label: "Install", action: "install" });
+            return out;
+        }
+        if (row.pending)
+            out.push({ icon: "refresh", label: "Update", action: "update" });
+        if (row.gameId && api.allGames.byId(row.gameId))
+            out.push({ icon: "sliders", label: "Game settings", action: "settings" });
+        if (row.gameId) {
+            out.push({ icon: "trash", label: "Uninstall…", action: "uninstall", danger: true });
+            out.push({ icon: "eye-off", label: "Remove from library…", action: "remove", danger: true });
+        }
+        return out;
+    }
+
+    function gameAction(action) {
+        var row = menu.row;
+        if (!row)
+            return;
+        if (action === "install" || action === "update") {
+            Sound.enter();
+            sources.install(row.row);
+        } else if (action === "settings") {
+            // The cards get the focus back first: the sub-screen takes it next, and
+            // returns it to the page, where the cursor must still be a row.
+            cards.forceActiveFocus();
+            page.settingsRequested(api.allGames.byId(row.gameId));
+            return;
+        } else if (action === "uninstall") {
+            Sound.panel();
+            menu.show([ { icon: "", label: "Keep it", action: "" },
+                        { icon: "trash", label: "Trash the install folder", action: "uninstall!", danger: true } ],
+                      cards, cards.focusRect, "Uninstall " + row.label + "?");
+            return;
+        } else if (action === "remove") {
+            Sound.panel();
+            menu.show([ { icon: "", label: "Keep it", action: "" },
+                        { icon: "eye-off", label: "Remove from the library", action: "remove!", danger: true } ],
+                      cards, cards.focusRect, "Remove " + row.label + "?");
+            return;
+        } else if (action === "uninstall!") {
+            Sound.enter();
+            sources.uninstall(row.gameId);
+        } else if (action === "remove!") {
+            Sound.enter();
+            sources.remove(row.gameId);
+        }
+        cards.forceActiveFocus();
     }
 
     Component.onCompleted: {
@@ -421,7 +496,7 @@ FocusScope {
         focus: true
         rows: page.content.rows
         groups: page.content.groups
-        dimmed: picker.open || sheet.open
+        dimmed: editor.open
 
         onActivated: function(index, row) { page.activate(index, row); }
         onEscapedUp: {
@@ -436,6 +511,9 @@ FocusScope {
                 event.accepted = true;
                 Sound.cancel();
                 chipBar.forceActiveFocus();
+            } else if (api.keys.isFilters(event)) {
+                event.accepted = true;
+                page.refreshNow();
             }
         }
     }
@@ -528,57 +606,40 @@ FocusScope {
         }
     }
 
-    ChipPicker {
-        id: picker
+    ValueEditor {
+        id: editor
 
-        property int pendingIndex: -1
-
-        // Drops from the focused row, its right edge on the row's value.
-        x: cards.x + cards.focusRect.x + cards.focusRect.width - Theme.dp(16) - width
-        y: Math.min(page.height - height - Theme.dp(20),
-                    cards.y + cards.focusRect.y + cards.focusRect.height + Theme.dp(8))
+        anchors.fill: parent
+        cards: cards
         z: 3
 
-        onChosen: function(index) {
-            var choices = page.modulesForm.row(pendingIndex).choices || [];
-            picker.hide();
-            cards.forceActiveFocus();
-            if (index >= 0 && index < choices.length) {
-                Sound.sort();
-                page.modulesForm.setValue(pendingIndex, choices[index]);
-            }
+        onAccepted: function(index, value) {
+            page.modulesForm.setValue(index, value);
         }
-        onDismissed: {
-            picker.hide();
-            cards.forceActiveFocus();
+        onPrompted: function(tag, value) {
+            if (tag === "search")
+                page.sources.search(value);
+            else if (tag === "code")
+                page.login.submit(value);
         }
+        onClosed: cards.forceActiveFocus()
+    }
+
+    ActionMenu {
+        id: menu
+
+        property var row: null
+
+        anchors.fill: parent
+        z: 4
+
+        onChosen: function(action) { page.gameAction(action); }
+        onDismissed: cards.forceActiveFocus()
     }
 
     Toast {
         id: toast
-        z: 4
-    }
-
-    KeyboardSheet {
-        id: sheet
-
-        property int pendingIndex: -1
-        property string pendingKind: ""
-
-        anchors.fill: parent
-        anchors.bottomMargin: -Theme.dp(Theme.hintBarHeight)
-        z: 5
-
-        onAccepted: function(value) {
-            cards.forceActiveFocus();
-            if (pendingKind === "module")
-                page.modulesForm.setValue(pendingIndex, value);
-            else if (pendingKind === "search")
-                page.sources.search(value);
-            else if (pendingKind === "code")
-                page.login.submit(value);
-        }
-        onDismissed: cards.forceActiveFocus()
+        z: 6
     }
 
     // Triggers cycle the section from anywhere, as they cycle the collection in the library.
@@ -588,7 +649,7 @@ FocusScope {
     }
 
     Keys.onReleased: function(event) {
-        if (event.isAutoRepeat || sheet.open || picker.open)
+        if (event.isAutoRepeat || editor.open || menu.open)
             return;
         if (api.keys.isPageUp(event)) {
             event.accepted = true;

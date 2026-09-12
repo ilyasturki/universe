@@ -44,6 +44,7 @@ a dash means the surface doesn't expose it.
 | `resolve(query)` | `resolve(query)` | — | candidate ids: exact › whole word › substring › path. Empty means unknown, more than one means ambiguous |
 | `set(id, key, value)` | `set(id, key, value)` | `universe set <name> k=v …` | writes one `game.toml` key |
 | `remove(id, purge)` | `remove(id, purge)` | `universe rm <name> [--purge]` | parks recordings and journal under `.archive/`, marks `removed_at`; `purge` also trashes the prefix |
+| `uninstall(id)` | `uninstall(id)` | `universe uninstall <name>` | trashes `source.dir` and clears `source.dir`, `source.build_id` and `launch.exe`; the game stays in the library, not installed. Refuses a root, a home or the games root |
 | `reload_all()` | `reload()` | `universe rescan` | rereads config and `games/*/game.toml`, rebuilds the index, runs each source's `scan` |
 | `reload_game(id)` | `reload_game(id)` | — | rereads one game |
 | `import_lutris(apply)` | `import_lutris(apply)` | `universe migrate [--apply]` | JSON report: imported games, per-game env diff (`{id, lutris_env, universe_env, added, removed, changed}`), imported hours, games whose art was copied from `[lutris] pegasus_library` (`<platform>/media/<slug>/`, once, never over an existing `media/`). Without `apply` it only reports |
@@ -152,12 +153,18 @@ when it was killed by a signal (a `stop`).
 | `enable_module(id, enabled)` | `enable_module(id, enabled)` | `universe module enable\|disable <id>` | writes `[modules] enabled` in `config.toml` |
 | `module_settings_json(module, game_id)` | `module_settings_json(…)` | `universe module settings <id> [game]` | global settings merged with the game's; `game_id=""` is global only |
 | `set_module_setting(module, game_id, key, value)` | `set_module_setting(…)` | `universe module set <id> k=v [--game g]` | validated against `[[settings]]`. `game_id=""` writes `config.toml [modules.<id>]`, otherwise `game.toml [modules.<id>]` |
+| `module_setting_choices(module, key)` | `module_setting_choices_json(…)` | — | the global setting's choices; a setting with `choices_exec` gets them from the module, live (see below) |
 | `doctor_json()` | `doctor_json()` | `universe doctor` | `[{check, ok, detail, module}]`: required binaries, `gsr-kms-server`, Proton, cursor extension, tokens |
 
 A module entry is `{id, name, kind: [], version, dir, enabled, available, missing: [bin],
 hooks: {}, verbs: [], settings: [Setting], frontend_qml: "path or null"}`, and
 `Setting` = `{"key", "type": "bool|string|int|enum|path", "default", "label",
-"scope": "global|game", "choices": []}`.
+"scope": "global|game", "choices": [], "dynamic": bool}`. `choices` binds an `enum`; on an `int`
+or a `string` it lists suggestions, any value stays accepted — except that an `int` also
+takes a listed non-numeric name (`"auto"`), which the module resolves itself. `dynamic` is
+set when the manifest names a `choices_exec`: `<module dir>/<choices_exec> <key>`, run with
+`MODULE_SETTINGS_JSON`, `MODULE_DIR` and `MODULE_DATA_DIR`, prints the choices as a JSON
+array of strings (20 s at most).
 
 ## Settings
 
@@ -254,6 +261,20 @@ type = "bool"
 default = true
 label = "Record the session"
 scope = "game"                    # global → config.toml [modules.<id>]; game → game.toml [modules.<id>]
+
+[[settings]]
+key = "fps"
+type = "int"
+default = 60
+choices = ["auto", "120", "60"]   # suggestions on an int or a string; a name among them is a value too
+label = "Frame rate"
+
+[[settings]]
+key = "model"
+type = "string"
+default = "gpt-5.6-sol"
+choices_exec = "bin/choices"      # `bin/choices model` prints the current choices as a JSON array
+label = "Model"
 ```
 
 ### Hook environment

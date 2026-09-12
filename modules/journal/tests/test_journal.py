@@ -434,3 +434,34 @@ def test_acceptance_of_model_fields():
     merged = pr.merge_memory({"synopsis": "A long synopsis about the whole story so far.", "entities": {"characters": ["Zach"], "places": [], "bosses": []}, "language": "en", "profile": "narrative"},
                              {"synopsis": "Short.", "entities": {"characters": ["zach", "Amelia"], "places": ["Ophir"], "bosses": []}, "language": "french", "profile": "arcade"})
     assert merged == {"synopsis": "A long synopsis about the whole story so far.", "entities": {"characters": ["Zach", "Amelia"], "places": ["Ophir"], "bosses": []}, "language": "fr", "profile": "narrative"}
+
+
+# --- bin/choices -------------------------------------------------------------------------
+
+def run_choices(tmp_path, settings, codex_body):
+    bindir = tmp_path / "fakebin"
+    bindir.mkdir(exist_ok=True)
+    write_shim(bindir / "codex", codex_body)
+    env = dict(os.environ)
+    env.update({"PATH": f"{bindir}:{env.get('PATH', '')}", "MODULE_SETTINGS_JSON": json.dumps(settings)})
+    return subprocess.run([sys.executable, str(BIN_DIR / "choices"), "model"], env=env, capture_output=True, text=True)
+
+
+def test_choices_lists_the_providers_models(tmp_path):
+    catalog = {"models": [
+        {"slug": "gpt-5.6-sol", "visibility": "list", "priority": 4},
+        {"slug": "gpt-reserve", "visibility": "hide", "priority": 3},
+        {"slug": "gpt-6-astra", "visibility": "list", "priority": 1},
+    ]}
+    res = run_choices(tmp_path, {"provider": "codex"}, f"[ \"$1 $2\" = 'debug models' ] || exit 2\necho '{json.dumps(catalog)}'\nexit 0")
+    assert res.returncode == 0, res.stderr
+    assert json.loads(res.stdout) == ["gpt-6-astra", "gpt-5.6-sol"]
+
+    res = run_choices(tmp_path, {"provider": "claude"}, "exit 2")
+    assert json.loads(res.stdout) == ["fable", "opus", "sonnet", "haiku"]
+
+    res = run_choices(tmp_path, {"provider": "stub"}, "exit 2")
+    assert json.loads(res.stdout) == []
+
+    res = run_choices(tmp_path, {"provider": "codex"}, "exit 1")
+    assert res.returncode == 0 and json.loads(res.stdout) == [] and "codex debug models failed" in res.stderr

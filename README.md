@@ -57,6 +57,7 @@ universe gog login             # prints the URL, takes the code
 universe gog scan              # cross installed folders with the owned library
 universe install 1434554947    # GOG id
 universe update                # pending GOG updates (build id vs GOG builds endpoint)
+universe uninstall technomancer   # trashes the install folder, keeps the hours and the journal
 universe media technomancer refresh   # SteamGridDB + RAWG + Steam screenshots
 universe journal technomancer --render
 universe module ls · enable capture · settings journal
@@ -71,7 +72,7 @@ universe ls --json | jq '.[] | select(.stats.hours > 10) | .title'
 | Module | Kind | Needs | Notes |
 |---|---|---|---|
 | `gog` | source | `gogdl` | login via `universe gog login`; a dedicated `GOGDL_CONFIG_PATH` under the module's data dir |
-| `capture` | hooks | `gpu-screen-recorder` + its setcap `gsr-kms-server`, both from the host system and the same nixpkgs (the NixOS module enables and pins `programs.gpu-screen-recorder`) | KMS capture of the output the game runs on, no portal dialog; `cursor` per game |
+| `capture` | hooks | `gpu-screen-recorder` + its setcap `gsr-kms-server`, both from the host system and the same nixpkgs (the NixOS module enables and pins `programs.gpu-screen-recorder`) | KMS capture of the output the game runs on, no portal dialog; `cursor` per game; `fps = "auto"` follows the output's refresh rate (read from Mutter, 60 elsewhere) |
 | `journal` | hooks | `ffmpeg`, `codex` (or `provider = "claude"` / `"stub"`) | one Markdown entry per session from frames and screenshots |
 | `tracker-md` | hooks | — | keeps a Markdown tracker's Hours column and journal links in sync |
 | metadata | core | SteamGridDB and RAWG keys in `[keys]` | artwork slots `box_front`, `tile`, `background`, `logo`, screenshots |

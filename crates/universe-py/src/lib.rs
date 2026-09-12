@@ -70,6 +70,9 @@ impl Core {
     fn remove(&self, py: Python<'_>, id: String, purge: bool) -> PyResult<()> {
         self.run(py, |c| async move { c.remove(&id, purge).await })
     }
+    fn uninstall(&self, py: Python<'_>, id: String) -> PyResult<()> {
+        self.run(py, |c| async move { c.uninstall(&id).await })
+    }
     fn reload(&self, py: Python<'_>) -> PyResult<()> {
         self.run(py, |c| c.reload_config())
     }
@@ -188,6 +191,9 @@ impl Core {
     }
     fn module_settings_json(&self, py: Python<'_>, module: String, game_id: String) -> PyResult<String> {
         self.run(py, |c| async move { c.module_settings_json(&module, &game_id).await })
+    }
+    fn module_setting_choices_json(&self, py: Python<'_>, module: String, key: String) -> PyResult<String> {
+        self.run(py, |c| async move { c.module_setting_choices(&module, &key).await })
     }
     fn set_module_setting(&self, py: Python<'_>, module: String, game_id: String, key: String, value: String) -> PyResult<()> {
         self.run(py, |c| async move { c.set_module_setting(&module, &game_id, &key, &value).await })

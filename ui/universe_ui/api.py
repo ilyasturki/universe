@@ -238,7 +238,7 @@ class Api(QObject):
         self._keys = Keys(self)
         self._memory = Memory(memory_path, self)
         self._library = Library(client, self)
-        self._screens = Screens(client, self)
+        self._screens = Screens(client, self.screenHz, self)
         self._window = None
         self._fullscreen = fullscreen
 
@@ -254,6 +254,12 @@ class Api(QObject):
         window = self._window
         screen = window.screen() if window is not None else None
         return screen.name() if screen is not None else ""
+
+    def screenHz(self):
+        """The refresh rate of the screen the window is on, 0 when there is none yet."""
+        window = self._window
+        screen = window.screen() if window is not None else None
+        return int(round(screen.refreshRate())) if screen is not None else 0
 
     @property
     def library(self):

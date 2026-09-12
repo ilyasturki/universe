@@ -10,6 +10,7 @@ FocusScope {
     property string title: ""
     property string text: ""
     property bool symbols: false
+    property bool numeric: false
     property bool secret: false
 
     signal accepted(string value)
@@ -26,10 +27,12 @@ FocusScope {
     readonly property real pad: Theme.dp(28)
     readonly property real fieldHeight: Theme.dp(66)
 
-    function show(label, value, withSymbols) {
+    // mode: "text", "path" (adds the path symbols) or "number" (a keypad); true stands for "path".
+    function show(label, value, mode) {
         title = label;
         text = value === undefined || value === null ? "" : String(value);
-        symbols = withSymbols === true;
+        symbols = mode === true || mode === "path";
+        numeric = mode === "number";
         keyboard.shift = false;
         open = true;
         forceActiveFocus();
@@ -174,6 +177,7 @@ FocusScope {
             keyGap: Theme.dp(9)
             showDone: true
             symbols: sheet.symbols
+            numeric: sheet.numeric
 
             onCharEntered: function(value) {
                 Sound.type();

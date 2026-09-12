@@ -2,24 +2,18 @@ import QtQuick
 import "../core"
 import "../sound"
 
-// The game menu a held A opens: a popover beside the focused cover, which stays
-// lit above the scrim as a live copy so its ring and badge come with it.
+// A menu of actions beside a focused row: the row stays lit above the scrim as a live copy,
+// the panel slides in on the side with room. Items: [{ icon, label, action, danger }].
 FocusScope {
     id: menu
 
     property bool open: false
-    property var game: null
-    property Item anchorItem: null
+    property string title: ""
+    property var items: []
     property int index: 0
 
-    signal playRequested(var game, Item art)
-    signal detailRequested(var game)
-    signal favouriteRequested(var game)
-    signal settingsRequested(var game)
-    signal recordingsRequested(var game)
-    signal journalRequested(var game)
-    signal stopRequested()
-    signal closed()
+    signal chosen(string action)
+    signal dismissed()
 
     readonly property var hints: [
         { glyph: "A", label: "Select" },
@@ -27,32 +21,13 @@ FocusScope {
         { glyph: "dpad", label: "Navigate" }
     ]
 
-    readonly property var session: api.universe.currentSession
-    readonly property bool sessionRunning: session !== null && session !== undefined && session.session_id !== undefined
-
-    readonly property var items: {
-        var out = [];
-        if (sessionRunning)
-            out.push({ icon: "stop", label: "Stop " + session.title, action: "stop" });
-        else
-            out.push({ icon: "play", label: game && game.playTime > 0 ? "Continue" : "Play", action: "play" });
-        out.push({ icon: "info", label: "Details", action: "details" });
-        out.push({ icon: game && game.favorite ? "heart" : "heart-outline",
-                   label: game && game.favorite ? "Remove from favourites" : "Add to favourites", action: "favourite" });
-        out.push({ icon: "sliders", label: "Game settings", action: "settings" });
-        out.push({ icon: "film", label: "Recordings", action: "recordings" });
-        out.push({ icon: "book", label: "Journal", action: "journal" });
-        return out;
-    }
-
-    // The anchor's rect, taken once at show(): a hold outlasts any slide the page had going.
+    // The row's rect in the menu's coordinates, taken once at show().
     property real ax: 0
     property real ay: 0
     property real aw: 0
     property real ah: 0
-    // Covers the ring and halo, and the 5% a grid cover grows by.
-    readonly property real copyMargin: Theme.dp(26)
-    readonly property real gap: Theme.dp(44)
+    readonly property real copyMargin: Theme.dp(6)
+    readonly property real gap: Theme.dp(28)
     readonly property bool onRight: ax + aw + gap + panel.width <= width - Theme.dp(40)
     property real slide: open ? 0.0 : 1.0
 
@@ -63,44 +38,41 @@ FocusScope {
         NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
     }
 
-    function show(g, anchor) {
-        game = g;
-        anchorItem = anchor;
+    function show(list, anchor, rect, heading) {
+        items = list;
+        title = heading || "";
         index = 0;
-        var p = anchor.mapToItem(menu, 0, 0);
+        var p = anchor.mapToItem(menu, rect.x, rect.y);
         ax = p.x;
         ay = p.y;
-        aw = anchor.width;
-        ah = anchor.height;
+        aw = rect.width;
+        ah = rect.height;
+        copy.sourceRect = Qt.rect(rect.x - copyMargin, rect.y - copyMargin, rect.width + copyMargin * 2, rect.height + copyMargin * 2);
         copy.sourceItem = anchor;
+        shown++;
         open = true;
         forceActiveFocus();
     }
 
     function hide() {
         open = false;
-        closed();
+        focus = false;
     }
 
-    function activate() {
-        var g = game;
-        var art = anchorItem;
-        var action = items[index].action;
+    function cancel() {
+        Sound.cancel();
         hide();
-        if (action === "play")
-            playRequested(g, art);
-        else if (action === "stop")
-            stopRequested();
-        else if (action === "details")
-            detailRequested(g);
-        else if (action === "favourite")
-            favouriteRequested(g);
-        else if (action === "settings")
-            settingsRequested(g);
-        else if (action === "recordings")
-            recordingsRequested(g);
-        else if (action === "journal")
-            journalRequested(g);
+        dismissed();
+    }
+
+    // A handler may show() a follow-up (a confirmation) in place; the menu closes otherwise.
+    property int shown: 0
+
+    function activate() {
+        var was = shown;
+        chosen(items[index].action);
+        if (shown === was)
+            hide();
     }
 
     onVisibleChanged: {
@@ -127,7 +99,6 @@ FocusScope {
         y: menu.ay - menu.copyMargin
         width: menu.aw + menu.copyMargin * 2
         height: menu.ah + menu.copyMargin * 2
-        sourceRect: Qt.rect(-menu.copyMargin, -menu.copyMargin, width, height)
         opacity: menu.open ? 1.0 : 0.0
 
         Behavior on opacity {
@@ -138,8 +109,8 @@ FocusScope {
     Rectangle {
         id: panel
 
-        width: Theme.dp(440)
-        height: rows.height + Theme.dp(24)
+        width: Theme.dp(460)
+        height: rows.height + Theme.dp(24) + (heading.visible ? heading.height + Theme.dp(8) : 0)
         radius: Theme.dp(24)
         color: "#1b1d24"
         border.width: 1
@@ -151,13 +122,35 @@ FocusScope {
         scale: 1.0 - menu.slide * 0.04
         transformOrigin: menu.onRight ? Item.Left : Item.Right
 
-        Column {
-            id: rows
+        Text {
+            id: heading
 
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.margins: Theme.dp(12)
+            anchors.leftMargin: Theme.dp(34)
+            anchors.rightMargin: Theme.dp(34)
+            height: visible ? Theme.dp(44) : 0
+            verticalAlignment: Text.AlignVCenter
+            visible: menu.title !== ""
+            text: menu.title
+            color: Theme.textSecondary
+            font.family: Theme.sans
+            font.weight: Font.Medium
+            font.pixelSize: Theme.dp(21)
+            elide: Text.ElideRight
+        }
+
+        Column {
+            id: rows
+
+            anchors.top: heading.visible ? heading.bottom : parent.top
+            anchors.topMargin: heading.visible ? Theme.dp(8) : Theme.dp(12)
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: Theme.dp(12)
+            anchors.rightMargin: Theme.dp(12)
             spacing: Theme.dp(4)
 
             Repeater {
@@ -167,12 +160,13 @@ FocusScope {
                     id: row
 
                     readonly property bool focused: index === menu.index
-                    readonly property color ink: focused ? Theme.onLight : Theme.text
+                    readonly property bool danger: modelData.danger === true
+                    readonly property color ink: focused ? Theme.onLight : danger ? "#e0655a" : Theme.text
 
                     width: rows.width
                     height: Theme.dp(66)
                     radius: Theme.dp(16)
-                    color: focused ? Theme.text : "transparent"
+                    color: focused ? (danger ? "#e0655a" : Theme.text) : "transparent"
 
                     Behavior on color {
                         ColorAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
@@ -186,13 +180,14 @@ FocusScope {
                         anchors.verticalCenter: parent.verticalCenter
                         width: Theme.dp(26)
                         height: Theme.dp(26)
-                        kind: modelData.icon
+                        visible: modelData.icon !== undefined && modelData.icon !== ""
+                        kind: modelData.icon || ""
                         tint: row.ink
                     }
 
                     Text {
-                        anchors.left: glyph.right
-                        anchors.leftMargin: Theme.dp(18)
+                        anchors.left: glyph.visible ? glyph.right : parent.left
+                        anchors.leftMargin: glyph.visible ? Theme.dp(18) : Theme.dp(22)
                         anchors.right: parent.right
                         anchors.rightMargin: Theme.dp(20)
                         anchors.verticalCenter: parent.verticalCenter
@@ -210,14 +205,8 @@ FocusScope {
 
     Keys.onPressed: function(event) {
         event.accepted = true;
-        // The A that opened the menu is still down; its repeats must not pick an item.
         if (event.isAutoRepeat)
             return;
-        if (api.keys.isMenu(event)) {
-            Sound.cancel();
-            hide();
-            return;
-        }
         if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
             var next = Math.max(0, Math.min(items.length - 1, index + (event.key === Qt.Key_Up ? -1 : 1)));
             next === index ? Sound.edge() : Sound.tick();
@@ -232,9 +221,8 @@ FocusScope {
             activate();
             return;
         }
-        if (api.keys.isCancel(event)) {
-            Sound.cancel();
-            hide();
+        if (api.keys.isCancel(event) || api.keys.isMenu(event)) {
+            cancel();
             return;
         }
     }

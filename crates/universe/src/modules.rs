@@ -64,10 +64,11 @@ pub struct Setting {
     pub label: String,
     pub scope: String,
     pub choices: Vec<String>,
+    pub choices_exec: String,
 }
 impl Default for Setting {
     fn default() -> Self {
-        Setting { key: String::new(), kind: "string".into(), default: toml::Value::String(String::new()), label: String::new(), scope: "global".into(), choices: vec![] }
+        Setting { key: String::new(), kind: "string".into(), default: toml::Value::String(String::new()), label: String::new(), scope: "global".into(), choices: vec![], choices_exec: String::new() }
     }
 }
 
@@ -144,6 +145,7 @@ impl Module {
                 "label": s.label,
                 "scope": if s.scope.is_empty() { "global" } else { s.scope.as_str() },
                 "choices": s.choices,
+                "dynamic": !s.choices_exec.is_empty(),
             }));
         }
         serde_json::Value::Array(list)
@@ -193,7 +195,9 @@ impl Module {
                 "true" | "false" => Ok(value.into()),
                 _ => Err(crate::Error::Invalid(format!("{key} must be true or false"))),
             },
-            "int" => value.parse::<i64>().map(|_| value.into()).map_err(|_| crate::Error::Invalid(format!("{key} must be an integer"))),
+            // A listed non-numeric choice is a named value ("auto") the module resolves itself.
+            "int" if value.parse::<i64>().is_ok() || s.choices.iter().any(|c| c == value) => Ok(value.into()),
+            "int" => Err(crate::Error::Invalid(format!("{key} must be an integer"))),
             "enum" => {
                 if s.choices.iter().any(|c| c == value) {
                     Ok(value.into())
@@ -397,6 +401,36 @@ where
     Ok(())
 }
 
+/// The choices a setting's `choices_exec` prints (a JSON array of strings); the static list when
+/// there is none. Run as `<exec> <key>` in the source's environment, bounded to 20 s.
+pub async fn setting_choices(module: &Module, settings: &serde_json::Map<String, serde_json::Value>, key: &str) -> crate::Result<Vec<String>> {
+    let s = module.manifest.settings.iter().find(|s| s.key == key).ok_or_else(|| crate::Error::Invalid(format!("{}: unknown setting {key}", module.id())))?;
+    if s.choices_exec.is_empty() {
+        return Ok(s.choices.clone());
+    }
+    let exe = module.dir.join(&s.choices_exec);
+    std::fs::create_dir_all(module.data_dir())?;
+    let mut cmd = tokio::process::Command::new(&exe);
+    cmd.arg(key)
+        .env("MODULE_SETTINGS_JSON", serde_json::Value::Object(settings.clone()).to_string())
+        .env("MODULE_DIR", &module.dir)
+        .env("MODULE_DATA_DIR", module.data_dir())
+        .current_dir(&module.dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
+    let child = cmd.spawn().map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
+    let out = tokio::time::timeout(Duration::from_secs(20), child.wait_with_output())
+        .await
+        .map_err(|_| crate::Error::Io(format!("{} {key}: choices timed out", module.id())))??;
+    if !out.status.success() {
+        let err = String::from_utf8_lossy(&out.stderr);
+        return Err(crate::Error::Io(format!("{} {key}: choices failed ({}): {}", module.id(), out.status.code().unwrap_or(-1), err.trim())));
+    }
+    serde_json::from_slice(&out.stdout).map_err(|e| crate::Error::Io(format!("{} {key}: bad choices: {e}", module.id())))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -424,6 +458,16 @@ key = "codec"
 type = "enum"
 default = "av1_10bit"
 choices = ["av1_10bit", "hevc"]
+[[settings]]
+key = "fps"
+type = "int"
+default = 60
+choices = ["auto", "60"]
+[[settings]]
+key = "model"
+type = "string"
+default = "m"
+choices_exec = "bin/choices"
 "#).unwrap();
         let module = Module { available: false, missing: vec!["x".into()], enabled: true, dir: PathBuf::from("/m"), manifest: m };
         let cfg: Config = toml::from_str("[modules.capture]\ncodec = \"hevc\"").unwrap();
@@ -436,10 +480,53 @@ choices = ["av1_10bit", "hevc"]
         assert!(module.validate_setting("codec", "vp9", false).is_err());
         assert!(module.validate_setting("codec", "hevc", true).is_err());
         assert!(module.validate_setting("cursor", "true", true).is_ok());
+        // An int takes a number or one of its listed names, nothing else.
+        assert!(module.validate_setting("fps", "144", false).is_ok());
+        assert!(module.validate_setting("fps", "auto", false).is_ok());
+        assert!(module.validate_setting("fps", "fast", false).is_err());
         assert_eq!(module.timeout(), Duration::from_secs(5));
         assert_eq!(module.hook("post-launch"), Some(PathBuf::from("/m/bin/start")));
         let j = module.to_json();
         assert_eq!(j["settings"][0]["key"], "enabled");
+        assert_eq!(j["settings"][3]["dynamic"], false);
+        assert_eq!(j["settings"][4]["dynamic"], true);
+    }
+
+    #[tokio::test]
+    async fn setting_choices_run_the_module_or_stay_static() {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(dir.path().join("bin")).unwrap();
+        let exe = dir.path().join("bin/choices");
+        // Echoes the provider it was handed, as `["provider:codex"]`.
+        std::fs::write(&exe, r##"#!/bin/sh
+[ "$1" = model ] || exit 2
+provider=$(printf '%s' "$MODULE_SETTINGS_JSON" | sed 's/.*"provider":"\([a-z]*\)".*/\1/')
+printf '["provider:%s"]\n' "$provider"
+"##).unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let m: Manifest = toml::from_str(r#"
+id = "journal"
+kind = ["hooks"]
+[[settings]]
+key = "provider"
+type = "enum"
+default = "codex"
+choices = ["codex", "claude"]
+[[settings]]
+key = "model"
+type = "string"
+default = "m"
+choices_exec = "bin/choices"
+"#).unwrap();
+        let module = Module { available: true, missing: vec![], enabled: true, dir: dir.path().to_path_buf(), manifest: m };
+        let cfg: Config = toml::from_str("").unwrap();
+        let settings = module.merged_settings(&cfg, None);
+        assert_eq!(setting_choices(&module, &settings, "provider").await.unwrap(), vec!["codex", "claude"]);
+        let listed = setting_choices(&module, &settings, "model").await.unwrap();
+        assert_eq!(listed.len(), 1);
+        assert!(listed[0].contains("provider:codex"), "{listed:?}");
+        assert!(setting_choices(&module, &settings, "nope").await.is_err());
     }
 
     #[test]

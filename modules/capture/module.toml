@@ -44,8 +44,9 @@ choices = ["av1_10bit", "av1", "hevc", "h264"]
 key = "fps"
 type = "int"
 default = 60
-label = "Frames per second"
+label = "Frame rate (auto: the screen's)"
 scope = "global"
+choices = ["auto", "120", "90", "60", "30"]
 
 [[settings]]
 key = "audio"
@@ -66,5 +67,6 @@ scope = "global"
 key = "quality"
 type = "string"
 default = "qvbr"
-label = "Quality preset"
+label = "Quality (qvbr, or raw ffmpeg video options)"
 scope = "global"
+choices = ["qvbr"]

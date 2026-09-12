@@ -6,6 +6,8 @@ cards: {title, meta, warning, caps, control, off, rows}, `rows` and `control` in
 flat row list. QML picks the control by type and calls setValue(index, value) with the result.
 """
 
+import json
+
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
 
@@ -19,11 +21,11 @@ def _display(kind, value, choices=None):
     return str(value)
 
 
-def _row(section, key, label, kind, value, choices=None, module="", detail="", inherited=False):
+def _row(section, key, label, kind, value, choices=None, module="", detail="", inherited=False, dynamic=False):
     return {
         "section": section, "key": key, "label": label, "type": kind, "value": value,
         "display": _display(kind, value, choices), "choices": list(choices or []), "module": module,
-        "detail": detail, "inherited": inherited,
+        "detail": detail, "inherited": inherited, "dynamic": dynamic,
     }
 
 
@@ -96,8 +98,8 @@ CORE_ROWS = [
     ("Desktop and library", "hidden", "Hidden", "bool"),
     ("Desktop and library", "sort_title", "Sort title", "string"),
     ("Desktop and library", "tags", "Tags", "string"),
-    ("Artwork", "metadata.sgdb_id", "SteamGridDB id", "string"),
-    ("Artwork", "metadata.rawg_id", "RAWG id", "string"),
+    ("Artwork", "metadata.sgdb_id", "SteamGridDB id", "int"),
+    ("Artwork", "metadata.rawg_id", "RAWG id", "int"),
 ]
 
 
@@ -187,18 +189,59 @@ class GameSettingsForm(RowsForm):
 
 class ModulesForm(RowsForm):
     """Every module as a card: its enable toggle in the header, its global settings below;
-    then Doctor's checks, one card per module."""
+    then Doctor's checks, one card per module. A setting the module lists live (`dynamic`)
+    gets its choices off the UI thread, once per state of the module's settings."""
 
     doctorChanged = Signal()
 
-    def __init__(self, client, parent=None):
+    def __init__(self, client, screen_hz=lambda: 0, parent=None):
         super().__init__(client, parent)
+        self._screen_hz = screen_hz
         self._doctor = []
         self._doctor_groups = []
+        self._dynamic = {}
+        self._pending = set()
+        self._loading = False
         client.modulesChanged.connect(self.load)
+
+    def _choices(self, ident, key, setting, values):
+        choices = [str(c) for c in setting.get("choices") or []]
+        if setting.get("dynamic"):
+            choices = self._dynamic.get(self._dynamic_key(ident, key, values), choices)
+        # Recording above the screen's rate captures nothing more; the rates it can't reach go.
+        if ident == "capture" and key == "fps":
+            hz = self._screen_hz() or 0
+            if hz > 0:
+                choices = [c for c in choices if not c.isdigit() or int(c) <= max(hz, 30)]
+        return choices
+
+    @staticmethod
+    def _dynamic_key(ident, key, values):
+        return (ident, key, json.dumps(values, sort_keys=True, default=str))
+
+    def _fetch_dynamic(self, ident, key, values):
+        cache_key = self._dynamic_key(ident, key, values)
+        if cache_key in self._dynamic or cache_key in self._pending:
+            return
+        self._pending.add(cache_key)
+
+        def done(choices):
+            self._pending.discard(cache_key)
+            self._dynamic[cache_key] = [str(c) for c in choices or []]
+            if not self._loading:
+                self.load()
+
+        self._client.runAsync(lambda: self._client.settingChoices(ident, key), done)
 
     @Slot()
     def load(self):
+        self._loading = True
+        try:
+            self._set_rows(*self._build())
+        finally:
+            self._loading = False
+
+    def _build(self):
         rows = []
         groups = []
         for module in self._client.modules() or []:
@@ -217,11 +260,15 @@ class ModulesForm(RowsForm):
                     if setting.get("scope") != "global":
                         continue
                     key = setting["key"]
+                    dynamic = bool(setting.get("dynamic"))
+                    if dynamic:
+                        self._fetch_dynamic(ident, key, values)
                     group["rows"].append(len(rows))
                     rows.append(_row(name, key, setting.get("label", key), setting.get("type", "string"),
-                                     values.get(key, setting.get("default")), setting.get("choices"), ident))
+                                     values.get(key, setting.get("default")), self._choices(ident, key, setting, values),
+                                     ident, dynamic=dynamic))
             groups.append(group)
-        self._set_rows(rows, groups)
+        return rows, groups
 
     @Slot()
     def loadDoctor(self):

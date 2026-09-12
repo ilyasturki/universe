@@ -15,8 +15,7 @@ FocusScope {
 
     signal closeRequested()
 
-    readonly property var hints: sheet.open ? sheet.hints
-        : picker.open ? picker.hints
+    readonly property var hints: editor.open ? editor.hints
         : [ { glyph: "A", label: cards.currentRow && cards.currentRow.type === "bool" ? "Toggle" : "Change" },
             { glyph: "dpad", label: "Navigate" },
             { glyph: "B", label: "Back" } ]
@@ -29,15 +28,9 @@ FocusScope {
         if (row.type === "bool") {
             form.toggle(index);
             Sound.favourite(!row.value);
-        } else if (row.type === "enum") {
-            Sound.panel();
-            var opts = row.choices.map(function(c) { return { label: c }; });
-            picker.pendingIndex = index;
-            picker.show(cards, opts, Math.max(0, row.choices.indexOf(row.value)));
         } else {
             Sound.panel();
-            sheet.pendingIndex = index;
-            sheet.show(row.label, row.value, row.type === "path");
+            editor.edit(index, row);
         }
     }
 
@@ -149,7 +142,7 @@ FocusScope {
         compact: true
         rows: page.form.rows
         groups: page.form.groups
-        dimmed: picker.open || sheet.open
+        dimmed: editor.open
 
         onActivated: function(index, row) { page.activate(index, row); }
         onEscapedUp: Sound.edge()
@@ -164,54 +157,28 @@ FocusScope {
         }
     }
 
-    ChipPicker {
-        id: picker
-
-        property int pendingIndex: -1
-
-        // Drops from the focused row, its right edge on the row's value.
-        x: cards.x + cards.focusRect.x + cards.focusRect.width - Theme.dp(16) - width
-        y: Math.min(hintBar.y - height - Theme.dp(20),
-                    cards.y + cards.focusRect.y + cards.focusRect.height + Theme.dp(8))
-        z: 2
-
-        onChosen: function(index) {
-            var choices = page.form.row(pendingIndex).choices || [];
-            picker.hide();
-            cards.forceActiveFocus();
-            if (index >= 0 && index < choices.length) {
-                Sound.sort();
-                page.form.setValue(pendingIndex, choices[index]);
-            }
-        }
-        onDismissed: {
-            picker.hide();
-            cards.forceActiveFocus();
-        }
-    }
-
     HintBar {
         id: hintBar
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.right: parent.right
+        // Above the sheets, whose panels reach under it.
+        z: 3
         sideMargin: page.sideMargin
         showClock: true
         hints: page.hints
     }
 
-    KeyboardSheet {
-        id: sheet
-
-        property int pendingIndex: -1
+    ValueEditor {
+        id: editor
 
         anchors.fill: parent
-        z: 3
+        cards: cards
+        overhang: 0
+        floor: hintBar.y
+        z: 2
 
-        onAccepted: function(value) {
-            page.form.setValue(pendingIndex, value);
-            cards.forceActiveFocus();
-        }
-        onDismissed: cards.forceActiveFocus()
+        onAccepted: function(index, value) { page.form.setValue(index, value); }
+        onClosed: cards.forceActiveFocus()
     }
 }

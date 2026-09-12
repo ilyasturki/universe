@@ -395,6 +395,7 @@ FocusScope {
                         target: pageLoader.item
                         ignoreUnknownSignals: true
                         function onDetailRequested(game) { root.openDetail(game); }
+                        function onSettingsRequested(game) { root.openSub("pages/GameSettingsPage.qml", game); }
                         function onTabRequested(index) {
                             Sound.enter();
                             root.goToTab(index);

@@ -84,6 +84,10 @@ class UniverseClientBase(QObject):
     def _property(self, iface, name):
         raise NotImplementedError
 
+    def runAsync(self, work, on_done):
+        """`work()` off the UI thread when the transport can block on the network, `on_done(result)` back on it."""
+        on_done(work())
+
     def _guarded(self, default, iface, method, *args, decode=True):
         try:
             value = self._call(iface, method, *args)
@@ -135,7 +139,21 @@ class UniverseClientBase(QObject):
 
     @Slot(str, bool, result=bool)
     def remove(self, ident, purge):
-        return self._guarded(None, "Library1", "Remove", ident, bool(purge), decode=False) is not False
+        try:
+            self._call("Library1", "Remove", ident, bool(purge))
+        except UniverseError as e:
+            self.error.emit(e.kind, e.message)
+            return False
+        return True
+
+    @Slot(str, result=bool)
+    def uninstall(self, ident):
+        try:
+            self._call("Library1", "Uninstall", ident)
+        except UniverseError as e:
+            self.error.emit(e.kind, e.message)
+            return False
+        return True
 
     @Slot()
     def rescan(self):
@@ -274,6 +292,10 @@ class UniverseClientBase(QObject):
     def getSettings(self, module, game_id):
         return self._guarded({}, "Modules1", "GetSettings", module, game_id)
 
+    @Slot(str, str, result="QVariant")
+    def settingChoices(self, module, key):
+        return list(self._guarded([], "Modules1", "SettingChoices", module, key) or [])
+
     @Slot(str, str, str, str, result=bool)
     def setSetting(self, module, game_id, key, value):
         try:
@@ -376,6 +398,13 @@ class CoreClient(UniverseClientBase):
             self._deliver.emit(lambda: on_reply(value))
 
         threading.Thread(target=run, daemon=True, name=f"{iface}.{method}").start()
+
+    def runAsync(self, work, on_done):
+        def run():
+            result = work()
+            self._deliver.emit(lambda: on_done(result))
+
+        threading.Thread(target=run, daemon=True, name="runAsync").start()
 
     def _property(self, iface, name):
         if (iface, name) == ("Session1", "Current"):
@@ -511,6 +540,7 @@ _CORE_CALLS = {
     ("Library1", "Resolve"): lambda s, query: s._core.resolve(query),
     ("Library1", "Set"): lambda s, ident, key, value: s._core.set(ident, key, value),
     ("Library1", "Remove"): lambda s, ident, purge: s._core.remove(ident, _bus_bool(purge)),
+    ("Library1", "Uninstall"): lambda s, ident: s._core.uninstall(ident),
     ("Library1", "Rescan"): lambda s: s._core.reload(),
     ("Library1", "ImportLutris"): lambda s, apply: s._core.import_lutris(_bus_bool(apply)),
     ("Session1", "Launch"): lambda s, ident, screen: s._launched(s._core.launch(ident, screen), ident),
@@ -542,6 +572,7 @@ _CORE_CALLS = {
     ("Modules1", "List"): lambda s: s._core.modules_json(),
     ("Modules1", "Enable"): lambda s, ident, enabled: (s._core.enable_module(ident, _bus_bool(enabled)), s.modulesChanged.emit())[0],
     ("Modules1", "GetSettings"): lambda s, module, game_id: s._core.module_settings_json(module, game_id),
+    ("Modules1", "SettingChoices"): lambda s, module, key: s._core.module_setting_choices_json(module, key),
     ("Modules1", "SetSetting"): lambda s, module, game_id, key, value: s._core.set_module_setting(module, game_id, key, value),
     ("Modules1", "Doctor"): lambda s: s._core.doctor_json(),
     ("Settings1", "Get"): lambda s: s._core.settings_json(),
@@ -673,6 +704,16 @@ class FakeClient(UniverseClientBase):
 
     def _Library1_Remove(self, ident, purge):
         self._game(ident)["removed"] = True
+        self.libraryChanged.emit([ident])
+
+    def _Library1_Uninstall(self, ident):
+        self._game(ident)
+        entries = [e for entries in self._data.get("source_library", {}).values() for e in entries if e.get("game_id") == ident]
+        if not any(e.get("installed") for e in entries):
+            raise UniverseError("Invalid", f"{ident} has no install folder")
+        for entry in entries:
+            entry["installed"] = False
+            entry["dir"] = None
         self.libraryChanged.emit([ident])
 
     def _Library1_Rescan(self):
@@ -909,6 +950,13 @@ class FakeClient(UniverseClientBase):
             merged.update(self._game(game_id).get("modules", {}).get(module_id, {}))
         return json.dumps(merged)
 
+    # The fixture lists a dynamic setting's choices under `dynamic_choices`, keyed by provider-like values.
+    def _Modules1_SettingChoices(self, module_id, key):
+        for setting in self._module(module_id).get("settings", []):
+            if setting["key"] == key:
+                return json.dumps(setting.get("dynamic_choices") or setting.get("choices") or [])
+        raise UniverseError("Invalid", f"{module_id} has no setting '{key}'")
+
     def _Modules1_SetSetting(self, module_id, game_id, key, value):
         module = self._module(module_id)
         schema = {s["key"]: s for s in module.get("settings", [])}
@@ -918,7 +966,12 @@ class FakeClient(UniverseClientBase):
         if kind == "bool":
             value = _bus_bool(value)
         elif kind == "int":
-            value = int(value)
+            # As the core: a listed non-numeric choice is a named value the module resolves.
+            if value not in (schema[key].get("choices") or []):
+                try:
+                    value = int(value)
+                except ValueError:
+                    raise UniverseError("Invalid", f"{key} must be an integer") from None
         elif kind == "enum" and value not in (schema[key].get("choices") or []):
             raise UniverseError("Invalid", f"'{value}' is not a choice of {key}")
         if game_id:

@@ -428,8 +428,15 @@
           "key": "fps",
           "type": "int",
           "default": 60,
-          "label": "Frame rate",
-          "scope": "global"
+          "label": "Frame rate (auto: the screen's)",
+          "scope": "global",
+          "choices": [
+            "auto",
+            "120",
+            "90",
+            "60",
+            "30"
+          ]
         },
         {
           "key": "microphone",
@@ -485,6 +492,20 @@
             "codex",
             "anthropic",
             "ollama"
+          ]
+        },
+        {
+          "key": "model",
+          "type": "string",
+          "default": "gpt-5.6-sol",
+          "label": "Model",
+          "scope": "global",
+          "choices": [],
+          "dynamic": true,
+          "dynamic_choices": [
+            "gpt-6-astra",
+            "gpt-5.6-sol",
+            "gpt-5.5"
           ]
         },
         {
@@ -591,7 +612,9 @@
         "installed": true,
         "dir": "/mnt/games/PC/The Technomancer",
         "build": "52654527801265271",
-        "remote_build": "52654527801265271"
+        "remote_build": "52654527801265271",
+        "game_id": "the-technomancer",
+        "image": "https://images.gog-statics.com/1972906591.jpg"
       },
       {
         "id": "1434554947",
@@ -600,7 +623,9 @@
         "installed": true,
         "dir": "/mnt/games/PC/Mini Metro",
         "build": "59049085453457155",
-        "remote_build": "59049085453457156"
+        "remote_build": "59049085453457156",
+        "game_id": "mini-metro",
+        "image": "https://images.gog-statics.com/1434554947.jpg"
       },
       {
         "id": "1237807960",
@@ -609,7 +634,9 @@
         "installed": true,
         "dir": "/mnt/games/PC/Dead Cells",
         "build": "1",
-        "remote_build": "1"
+        "remote_build": "1",
+        "game_id": "dead-cells",
+        "image": "https://images.gog-statics.com/1237807960.jpg"
       },
       {
         "id": "2010311939",
@@ -618,7 +645,9 @@
         "installed": true,
         "dir": "/mnt/games/PC/Control",
         "build": "7",
-        "remote_build": "7"
+        "remote_build": "7",
+        "game_id": "control",
+        "image": "https://images.gog-statics.com/2010311939.jpg"
       },
       {
         "id": "1207658930",
@@ -627,7 +656,8 @@
         "installed": false,
         "dir": null,
         "build": null,
-        "remote_build": "9"
+        "remote_build": "9",
+        "image": "https://images.gog-statics.com/1207658930.jpg"
       },
       {
         "id": "1207666883",
@@ -636,7 +666,8 @@
         "installed": false,
         "dir": null,
         "build": null,
-        "remote_build": "3"
+        "remote_build": "3",
+        "image": "https://images.gog-statics.com/1207666883.jpg"
       },
       {
         "id": "1441974651",
@@ -645,7 +676,8 @@
         "installed": false,
         "dir": null,
         "build": null,
-        "remote_build": "5"
+        "remote_build": "5",
+        "image": "https://images.gog-statics.com/1441974651.jpg"
       }
     ]
   },

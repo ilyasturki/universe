@@ -50,6 +50,41 @@ def resolve_screen():
     raise RuntimeError("gpu-screen-recorder --list-monitors returned no monitor")
 
 
+def screen_refresh_hz(screen):
+    """The current mode's refresh rate of a DRM connector, from Mutter's DisplayConfig; None off GNOME."""
+    try:
+        out = subprocess.run(
+            ["busctl", "--user", "--json=short", "call", "org.gnome.Mutter.DisplayConfig",
+             "/org/gnome/Mutter/DisplayConfig", "org.gnome.Mutter.DisplayConfig", "GetCurrentState"],
+            capture_output=True, text=True, check=True, timeout=5,
+        ).stdout
+        monitors = json.loads(out)["data"][1]
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, IndexError, TypeError):
+        return None
+    for monitor in monitors:
+        if monitor[0][0] != screen:
+            continue
+        for mode in monitor[1]:
+            props = mode[6] if len(mode) > 6 and isinstance(mode[6], dict) else {}
+            if (props.get("is-current") or {}).get("data") is True:
+                return round(float(mode[3]))
+    return None
+
+
+def resolve_fps(setting, screen):
+    if setting != "auto":
+        try:
+            return int(setting)
+        except (TypeError, ValueError):
+            log(f"fps {setting!r} is not a number, using {SETTINGS_DEFAULTS['fps']}")
+            return SETTINGS_DEFAULTS["fps"]
+    hz = screen_refresh_hz(screen)
+    if hz is None:
+        log(f"fps auto: no refresh rate for {screen}, using {SETTINGS_DEFAULTS['fps']}")
+        return SETTINGS_DEFAULTS["fps"]
+    return hz
+
+
 def audio_args(setting):
     if setting == "output":
         return ["-a", "default_output"]
