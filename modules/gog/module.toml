@@ -15,21 +15,21 @@ exe = "bin/source"
 key = "games_dir"
 type = "path"
 default = "/mnt/games/PC"
-label = "Dossier d'installation"
+label = "Install folder"
 scope = "global"
 
 [[settings]]
 key = "scan_dirs"
 type = "string"
 default = "/mnt/games/PC,/mnt/games/gog"
-label = "Dossiers scannés (séparés par des virgules)"
+label = "Scanned folders (comma-separated)"
 scope = "global"
 
 [[settings]]
 key = "platform"
 type = "enum"
 default = "windows"
-label = "Plateforme des dépôts"
+label = "Depot platform"
 scope = "global"
 choices = ["windows", "linux"]
 
@@ -37,19 +37,19 @@ choices = ["windows", "linux"]
 key = "with_dlcs"
 type = "bool"
 default = true
-label = "Installer les DLC possédés"
+label = "Install owned DLCs"
 scope = "global"
 
 [[settings]]
 key = "auth_path"
 type = "path"
 default = "~/.config/gogdl/auth.json"
-label = "Fichier de jetons gogdl"
+label = "gogdl token file"
 scope = "global"
 
 [[settings]]
 key = "install_timeout_s"
 type = "int"
 default = 7200
-label = "Délai maximal d'une installation ou mise à jour (s)"
+label = "Maximum install or update time (s)"
 scope = "global"

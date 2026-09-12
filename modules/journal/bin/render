@@ -9,7 +9,7 @@ import os
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import load_settings, log, read_entries, read_sessions, sanitize_game_name  # noqa: E402
+from _common import load_settings, log, read_entries, read_sessions, sanitize_game_name, use_system_locale  # noqa: E402
 from note import parse_frontmatter, resolve_note_path, write_note  # noqa: E402
 
 
@@ -41,6 +41,7 @@ def main(argv):
     ap.add_argument("--title")
     ap.add_argument("--sessions")
     a = ap.parse_args(argv)
+    use_system_locale()
     settings = load_settings()
 
     slug = a.slug or os.environ.get("GAME_ID") or os.environ.get("GAME_SLUG")

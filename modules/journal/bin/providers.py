@@ -14,8 +14,8 @@ RETRIES = 1
 # The quota wall lasts days; transient failures ("Reconnecting") must stay on the retry path.
 LIMIT_RE = re.compile(r"hit your usage limit", re.I)
 LIMIT_FALLBACK_HOURS = 6
-IMAGE_INTRO = "Images de CETTE session, JOINTES A CE MESSAGE dans cet ordre chronologique exact :"
-IMAGE_INTRO_PATHS = "Images de CETTE session, à LIRE une par une avec l'outil Read, dans cet ordre chronologique exact :"
+IMAGE_INTRO = "Images of THIS session, ATTACHED TO THIS MESSAGE in this exact chronological order:"
+IMAGE_INTRO_PATHS = "Images of THIS session, to READ one by one with the Read tool, in this exact chronological order:"
 
 
 class QuotaExceeded(Exception):

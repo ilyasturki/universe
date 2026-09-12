@@ -1,4 +1,5 @@
-"""The Obsidian note, rendered from Entry JSON and parsed back (format of game-session-summary.mjs buildEntry)."""
+"""The Obsidian note, rendered from Entry JSON and parsed back (format of game-session-summary.mjs buildEntry).
+The meta line follows the LC_TIME of the environment; the parser also reads the legacy French form."""
 import json
 import os
 import re
@@ -6,12 +7,12 @@ import shutil
 from datetime import timedelta
 from urllib.parse import quote, unquote
 
-from _common import (LABELS, date_fr, duree_fr, game_note_name, heure_fr, journal_lang, labels, parse_duree_fr,
+from _common import (LABELS, fmt_date, fmt_duration, fmt_time, game_note_name, journal_lang, labels, parse_duration,
                      parse_session_id, rfc3339_local, sanitize_game_name, session_span)
 
 SHOT_IMAGE_RE = re.compile(r"(?:^|/)\d{8}-\d{6}\.(?:png|jpe?g)$", re.I)
 MARKER_RE = re.compile(r"<!-- session: (\d{8}-\d{6}) -->")
-META_RE = re.compile(r"^(\d{2})/(\d{2})/(\d{4}) · (\d{2})h(\d{2}) à (\d{2})h(\d{2}) · (.+)$")
+META_RE = re.compile(r"^(?P<date>.+?) · (?P<sh>\d{2})[:h](?P<sm>\d{2})(?:–| à )(?P<eh>\d{2})[:h](?P<em>\d{2}) · (?P<duration>.+)$")
 HEADER_RE = re.compile(r"^## (?:#(\d+) · )?(.*)$")
 IMAGE_LINE_RE = re.compile(r"^!\[[^\]]*\]\((.+?)\)\s*$")
 COLONS = r"[ \u00a0\u202f]?[:\uff1a]"
@@ -95,7 +96,7 @@ def render_block(entry, sessions, entries):
     sid = entry["session"]
     lab = labels(entry.get("lang"))
     start, end, duration = session_span(sessions.get(sid), sid)
-    meta = f"{date_fr(start)} · {heure_fr(start)} à {heure_fr(end)} · {duree_fr(duration)}"
+    meta = f"{fmt_date(start)} · {fmt_time(start)}–{fmt_time(end)} · {fmt_duration(duration)}"
     n = entry_number(entry, sessions, entries)
     prefix = f"#{n} · " if n else ""
     title = entry.get("title") or ""
@@ -295,10 +296,10 @@ def parse_block(block, title, game, doc_lang):
     start = parse_session_id(sid)
     mm = META_RE.match(meta) if meta else None
     if mm:
-        end = start.replace(hour=int(mm.group(6)), minute=int(mm.group(7)), second=0)
+        end = start.replace(hour=int(mm["eh"]), minute=int(mm["em"]), second=0)
         if end < start.replace(second=0):
             end += timedelta(days=1)
-        duration = parse_duree_fr(mm.group(8))
+        duration = parse_duration(mm["duration"])
     else:
         end, duration = start, 0
     entry = {

@@ -628,11 +628,10 @@ impl Core {
     pub async fn render_journal(&self, id: &str) -> Result<String> {
         let r = self.get(id).await?;
         let cfg = self.config.read().await.clone();
-        let dir = cfg.journal_root().join(id);
-        std::fs::create_dir_all(&dir)?;
-        let path = dir.join(format!("{}.md", crate::slug::note_name(&r.game.title)));
-        let cover = r.media.iter().find(|(s, _)| s == "box_front").map(|(_, p)| p.clone());
-        std::fs::write(&path, crate::journal::render_markdown(&r.game.title, &r.journal, cover.as_deref()))?;
+        let note_dir = cfg.journal_root().join(id);
+        let journal_dir = r.game.journal_dir();
+        let sessions = crate::journal::sessions_for_note(&r.sessions, &journal_dir);
+        let path = crate::journal::write_note(&r.game.title, &r.journal, &sessions, &journal_dir, &note_dir, &crate::journal::Locale::from_env())?;
         Ok(path.to_string_lossy().into())
     }
 

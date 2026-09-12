@@ -134,7 +134,7 @@ impl Module {
         let mut list: Vec<serde_json::Value> = Vec::new();
         let has_enabled = self.manifest.settings.iter().any(|s| s.key == "enabled");
         if !has_enabled && self.is_hooks() {
-            list.push(serde_json::json!({"key": "enabled", "type": "bool", "default": true, "label": "Activer", "scope": "game", "choices": []}));
+            list.push(serde_json::json!({"key": "enabled", "type": "bool", "default": true, "label": "Enable", "scope": "game", "choices": []}));
         }
         for s in &self.manifest.settings {
             list.push(serde_json::json!({

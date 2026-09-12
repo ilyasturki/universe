@@ -1977,6 +1977,7 @@ dependencies = [
  "clap",
  "comfy-table",
  "dirs",
+ "libc",
  "owo-colors",
  "regex",
  "reqwest",

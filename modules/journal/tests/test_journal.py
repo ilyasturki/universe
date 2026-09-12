@@ -1,6 +1,7 @@
 """Journal module: image curation, the stub pipeline end to end, the Markdown
 round trip (entries -> note -> migrate -> entries) and codex argument composition."""
 import json
+import locale
 import os
 import shutil
 import stat
@@ -23,6 +24,13 @@ from _common import read_entries, read_sessions, validate_entry  # noqa: E402
 
 SID = "20260911-120000"
 needs_ffmpeg = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not on PATH")
+
+
+# The meta line follows LC_TIME; pin it so the asserts hold under any shell locale.
+@pytest.fixture(autouse=True)
+def c_locale(monkeypatch):
+    monkeypatch.setenv("LC_ALL", "C.UTF-8")
+    locale.setlocale(locale.LC_TIME, "C")
 
 
 def ffmpeg(*args):
@@ -172,7 +180,7 @@ def test_stub_pipeline_writes_entry_note_and_memory(tmp_path, fakebin):
     note_path = tmp_path / "root" / "testgame" / "Test Game Redux.md"
     text = note_path.read_text()
     assert text.startswith('---\ngame: "Test Game: Redux"\nsessions: 1\nfirst_played: 2026-09-11\nlast_played: 2026-09-11\ncover: attachments/20260911-120130.png\n---\n\n# Journal: Test Game: Redux\n\n')
-    assert f"## #1 · Stub session of Test Game: Redux\n*11/09/2026 · 12h00 à 12h03 · 3 min*\n<!-- session: {SID} -->\n\n" in text
+    assert f"## #1 · Stub session of Test Game: Redux\n*09/11/26 · 12:00–12:03 · 3 min*\n<!-- session: {SID} -->\n\n" in text
     assert "\n\n**Next up:** Resume at the first checkpoint and keep going.\n\n**Recording:** [rec.mkv](file://" in text
     assert "\n\n*Frames from the recording*\n\n![](attachments/" in text
     assert all((note_path.parent / f).exists() for f in entry["images"])
@@ -208,7 +216,7 @@ def test_disabled_and_forced_language(tmp_path, fakebin):
     entry = json.loads((journal_dir / f"{SID}.json").read_text())
     assert entry["lang"] == "fr" and entry["paragraphs"][0].startswith("L'enregistrement de cette session est vide")
     text = (tmp_path / "root" / "testgame" / "Test Game Redux.md").read_text()
-    assert "# Journal : Test Game: Redux\n\n## 11/09/2026 · 12h00 à 12h03 · 3 min\n<!-- session:" in text
+    assert "# Journal : Test Game: Redux\n\n## 09/11/26 · 12:00–12:03 · 3 min\n<!-- session:" in text
     assert "*L'enregistrement de cette session est vide" in text
 
 
@@ -263,11 +271,11 @@ def test_render_then_migrate_round_trip(tmp_path):
     note_path = Path(res.stdout.strip())
     text = note_path.read_text()
     assert note_path == tmp_path / "root" / "sample" / "Sample The Game.md"
-    assert "\n## #4 · Into the Dome\n*01/03/2026 · 21h00 à 22h30 · 1 h 30 min*\n" in text
+    assert "\n## #4 · Into the Dome\n*03/01/26 · 21:00–22:30 · 1 h 30 min*\n" in text
     assert "\n## #3 · Trois contrats et Port-péril\n" in text and "\n**Reprise :** Tu reprendras" in text and "\n**Enregistrement :** [003-" in text
-    assert "\n## #2 · 10/01/2026 · 00h05 à 00h07 · 2 min\n<!-- session: 20260110-000500 -->\n\n**Recording:** [002-" in text
-    assert "\n## #1 · 20/12/2025 · 12h00 à 12h01 · 1 min\n<!-- session: 20251220-120000 -->\n\n*This session’s recording" in text
-    assert "\n## First Glimpse\n*01/12/2025 · 23h00 à 00h10 · 1 h 10 min*\n" in text
+    assert "\n## #2 · 01/10/26 · 00:05–00:07 · 2 min\n<!-- session: 20260110-000500 -->\n\n**Recording:** [002-" in text
+    assert "\n## #1 · 12/20/25 · 12:00–12:01 · 1 min\n<!-- session: 20251220-120000 -->\n\n*This session’s recording" in text
+    assert "\n## First Glimpse\n*12/01/25 · 23:00–00:10 · 1 h 10 min*\n" in text
     assert "![](attachments/20260301-211500.png)\n\n*Frames from the recording*\n\n![](attachments/20260301-210000-1.png)\n![](attachments/frames/frame-20260301-210000-02.jpg)\n" in text
 
     out_dir = tmp_path / "migrated"
@@ -351,7 +359,12 @@ def test_migrate_legacy_note_shapes(tmp_path):
     assert sessions["20260425-000349"]["recording"] is None and sessions["20240309-185826"]["duration_s"] == 5280
     title, parsed, parsed_sessions = note.parse_note(LEGACY_NOTE)
     rendered = note.render_note(parsed, {s["session"]: s for s in parsed_sessions}, title)
-    assert rendered == LEGACY_NOTE.replace("# Journal: Dishonored: Definitive Edition\n## First", "# Journal: Dishonored: Definitive Edition\n\n## First")
+    # the legacy meta lines come back in the current format, everything else byte for byte
+    expected = (LEGACY_NOTE.replace("# Journal: Dishonored: Definitive Edition\n## First", "# Journal: Dishonored: Definitive Edition\n\n## First")
+                .replace("25/04/2026 · 00h03 à 00h03", "04/25/26 · 00:03–00:03")
+                .replace("22/12/2025 · 22h19 à 22h25", "12/22/25 · 22:19–22:25")
+                .replace("09/03/2024 · 18h58 à 20h27", "03/09/24 · 18:58–20:27"))
+    assert rendered == expected
 
 
 # --- codex provider ------------------------------------------------------------------------
@@ -385,8 +398,8 @@ def test_codex_exec_arguments(tmp_path, monkeypatch):
                          "-c", "model_reasoning_effort=high", "-c", "model_verbosity=medium", "-c", "project_doc_max_bytes=0",
                          "-c", "tools.web_search=true", "-c", "mcp_servers={}", "-i", "/tmp/a.png", "-i", "/tmp/b.png",
                          "--output-schema", schema, "-o", outp]
-    assert args[-1].startswith(pr.SYSTEM_PROMPT + "\n\n---\n\nJeu : Test\nSession : 11/09/2026, de 12h00 a 12h30 (30 min)\nHistorique : 1re session")
-    assert "- image 1 : image auto-extraite de l'enregistrement, vers 12h01\n- image 2 : image auto-extraite de l'enregistrement, DERNIERS INSTANTS de la session, vers 12h02" in args[-1]
+    assert args[-1].startswith(pr.SYSTEM_PROMPT + "\n\n---\n\nGame: Test\nSession: 2026-09-11, 12:00 to 12:30 (30 min)\nHistory: 1st session")
+    assert "- image 1: image auto-extracted from the recording, around 12:01\n- image 2: image auto-extracted from the recording, FINAL MOMENTS of the session, around 12:02" in args[-1]
     assert kw["cwd"] == str(tmp_path) and kw["timeout"] == providers.TIMEOUT_S
     assert json.loads(Path(schema).read_text()) == pr.OUTPUT_SCHEMA
 

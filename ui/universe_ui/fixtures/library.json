@@ -350,29 +350,29 @@
         "session": "20260909-213045",
         "game": "the-technomancer",
         "written_at": "2026-09-09T22:46:00+02:00",
-        "lang": "fr",
-        "title": "Les égouts de Noctis",
+        "lang": "en",
+        "title": "The Noctis sewers",
         "provider": "codex",
         "paragraphs": [
-          "Zachariah descend dans les égouts sous Noctis pour retrouver le contact d'Amelia. Les mutants y sont plus nombreux que prévu et la première rencontre coûte trois soins.",
-          "Le style guerrier tient mieux qu'avant : le bâton électrifié à pleine charge fait tomber les molosses en deux coups. La compétence de bouclier n'a pas encore servi.",
-          "Fin de séance sur le retour à la surface, Niesha se dispute avec Andrew au camp."
+          "Zachariah goes down into the sewers under Noctis to find Amelia's contact. The mutants are more numerous than expected and the first encounter costs three heals.",
+          "The warrior style holds up better than before: the fully charged electrified staff drops the hounds in two hits. The shield skill has not been used yet.",
+          "The session ends on the way back to the surface, with Niesha arguing with Andrew at the camp."
         ],
-        "next_up": "Parler à Amelia, puis rapporter le sérum à la base de l'Abondance avant que la police secrète ne rattrape le groupe.",
+        "next_up": "Talk to Amelia, then bring the serum back to the Abundance base before the secret police catch up with the group.",
         "images": []
       },
       {
         "session": "20260907-224100",
         "game": "the-technomancer",
         "written_at": "2026-09-07T23:59:00+02:00",
-        "lang": "fr",
-        "title": "Ophir, première nuit",
+        "lang": "en",
+        "title": "Ophir, first night",
         "provider": "codex",
         "paragraphs": [
-          "Arrivée à Ophir après l'initiation. Le dôme est plus grand que dans mes souvenirs, et le marché de la Source vend enfin des plans d'armure.",
-          "Deux quêtes secondaires terminées pour Scott, une troisième abandonnée : les gardes du secteur des officiers ne laissent pas passer."
+          "Arrival in Ophir after the initiation. The dome is bigger than I remembered, and the Source market finally sells armour blueprints.",
+          "Two side quests done for Scott, a third abandoned: the guards of the officers' district will not let anyone through."
         ],
-        "next_up": "Trouver un moyen d'entrer dans le secteur des officiers.",
+        "next_up": "Find a way into the officers' district.",
         "images": []
       }
     ]
@@ -380,7 +380,7 @@
   "modules": [
     {
       "id": "capture",
-      "name": "Capture vidéo",
+      "name": "Video capture",
       "kind": [
         "hooks"
       ],
@@ -443,7 +443,7 @@
     },
     {
       "id": "journal",
-      "name": "Journal",
+      "name": "Play journal",
       "kind": [
         "hooks"
       ],

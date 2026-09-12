@@ -11,9 +11,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import images as img  # noqa: E402
 import prompt as pr  # noqa: E402
 import providers  # noqa: E402
-from _common import (add_entry_via_core, date_fr, heure_fr, journal_lang, labels, load_settings, log,  # noqa: E402
+from _common import (add_entry_via_core, fmt_date, fmt_time, journal_lang, labels, load_settings, log,  # noqa: E402
                      parse_rfc3339, parse_session_id, read_entries, read_sessions, rfc3339_local, sanitize_game_name,
-                     validate_entry, write_entry_file)
+                     use_system_locale, validate_entry, write_entry_file)
 from note import write_note  # noqa: E402
 
 EX_TEMPFAIL = 75
@@ -154,6 +154,7 @@ def make_entry(sid, game_id, lang, title, provider, paragraphs, next_up, image_r
 
 
 def main(argv):
+    use_system_locale()
     force = "--force" in argv
     settings = load_settings()
     if not settings.get("enabled", True):
@@ -163,7 +164,7 @@ def main(argv):
     sid = env("SESSION_ID")
     start_id = parse_session_id(sid)
     if not start_id:
-        log(f"SESSION_ID {sid!r} is not AAAAMMJJ-HHMMSS")
+        log(f"SESSION_ID {sid!r} is not YYYYMMDD-HHMMSS")
         return 1
     game_id = env("GAME_ID") or env("GAME_SLUG") or sanitize_game_name(env("GAME_TITLE"))
     title = env("GAME_TITLE") or game_id
@@ -207,7 +208,7 @@ def main(argv):
     if provider == "codex":
         until = active_limit(data_dir)
         if until:
-            log(f"codex usage limit in effect until {date_fr(until)} {heure_fr(until)}; deferring, no work done")
+            log(f"codex usage limit in effect until {fmt_date(until)} {fmt_time(until)}; deferring, no work done")
             return EX_TEMPFAIL
 
     shots = img.select_screenshots(attachments, start, end)
@@ -246,7 +247,7 @@ def main(argv):
                                      images=fed, work_dir=work_dir, forced_lang=forced_lang)
         except providers.QuotaExceeded as e:
             record_limit(data_dir, e.until)
-            log(f"codex usage limit reached; journal paused until {date_fr(e.until)} {heure_fr(e.until)}")
+            log(f"codex usage limit reached; journal paused until {fmt_date(e.until)} {fmt_time(e.until)}")
             return EX_TEMPFAIL
         result = pr.accept_result(raw)
         if not result:

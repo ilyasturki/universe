@@ -1,4 +1,5 @@
 import json
+import locale
 import os
 import re
 import subprocess
@@ -82,15 +83,23 @@ def rfc3339_local(d):
     return d.isoformat(timespec="seconds")
 
 
-def date_fr(d):
-    return d.strftime("%d/%m/%Y")
+def use_system_locale():
+    """Dates render in the LC_TIME of the environment; an unknown locale falls back to C."""
+    try:
+        locale.setlocale(locale.LC_TIME, "")
+    except locale.Error:
+        pass
 
 
-def heure_fr(d):
-    return d.strftime("%Hh%M")
+def fmt_date(d):
+    return d.strftime("%x")
 
 
-def duree_fr(total_sec):
+def fmt_time(d):
+    return d.strftime("%H:%M")
+
+
+def fmt_duration(total_sec):
     total_min = max(1, round((total_sec or 0) / 60))
     h, m = divmod(total_min, 60)
     if h and m:
@@ -100,8 +109,8 @@ def duree_fr(total_sec):
     return f"{m} min"
 
 
-# The space before the unit tells "1 h 23 min" apart from the "14h30" time range.
-def parse_duree_fr(s):
+# The space before the unit tells "1 h 23 min" apart from the legacy "14h30" time range.
+def parse_duration(s):
     h = re.search(r"(\d+)\s+h\b", str(s or ""))
     m = re.search(r"(\d+)\s+min\b", str(s or ""))
     return (int(h.group(1)) if h else 0) * 3600 + (int(m.group(1)) if m else 0) * 60
@@ -150,6 +159,9 @@ LANG_NAMES = {
     "ja": ["japonais", "japanese", "japonés", "japones", "japanisch", "giapponese", "japonês", "日本語", "nihongo"],
 }
 LANG_BY_NAME = {n: code for code, names in LANG_NAMES.items() for n in names}
+
+# What the brief calls each language when the user forces one.
+LANG_ENGLISH = {"en": "English", "fr": "French", "es": "Spanish", "de": "German", "it": "Italian", "pt": "Portuguese", "ja": "Japanese"}
 
 
 def journal_lang(lang):
@@ -228,7 +240,7 @@ def validate_entry(entry):
         if k in entry and (not isinstance(entry[k], list) or not all(isinstance(x, str) for x in entry[k])):
             errors.append(f"{k} must be a list of strings")
     if "session" in entry and not SESSION_ID_RE.match(str(entry["session"])):
-        errors.append("session must be AAAAMMJJ-HHMMSS")
+        errors.append("session must be YYYYMMDD-HHMMSS")
     extra = set(entry) - set(ENTRY_KEYS)
     if extra:
         errors.append(f"unexpected keys: {sorted(extra)}")

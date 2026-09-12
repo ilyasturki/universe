@@ -1,6 +1,6 @@
 api = 1
 id = "tracker-md"
-name = "Tracker Markdown"
+name = "Markdown tracker"
 kind = ["hooks"]
 version = "0.1.0"
 
@@ -16,26 +16,26 @@ timeout_s   = 10
 key = "root"
 type = "path"
 default = "~/Documents/notes/games"
-label = "Racine du tracker Markdown"
+label = "Markdown tracker root"
 scope = "global"
 
 [[settings]]
 key = "create_missing"
 type = "bool"
 default = false
-label = "Ajouter une ligne dans playing.md quand le jeu n'a aucune ligne"
+label = "Add a row to playing.md when the game has none"
 scope = "global"
 
 [[settings]]
 key = "update_metadata"
 type = "bool"
 default = true
-label = "Compléter .data/games.json avec les champs manquants"
+label = "Fill the missing fields in .data/games.json"
 scope = "global"
 
 [[settings]]
 key = "journal_link"
 type = "bool"
 default = true
-label = "Écrire le lien Journal quand le dossier existe"
+label = "Write the Journal link when the folder exists"
 scope = "global"

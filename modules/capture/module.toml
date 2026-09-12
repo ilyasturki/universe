@@ -1,6 +1,6 @@
 api = 1
 id = "capture"
-name = "Capture vidéo"
+name = "Video capture"
 kind = ["hooks"]
 version = "0.1.0"
 
@@ -22,21 +22,21 @@ memory_high = "4G"
 key = "enabled"
 type = "bool"
 default = true
-label = "Enregistrer la partie"
+label = "Record the session"
 scope = "game"
 
 [[settings]]
 key = "cursor"
 type = "bool"
 default = false
-label = "Curseur visible dans l'enregistrement"
+label = "Show the cursor in the recording"
 scope = "game"
 
 [[settings]]
 key = "codec"
 type = "enum"
 default = "av1_10bit"
-label = "Codec vidéo"
+label = "Video codec"
 scope = "global"
 choices = ["av1_10bit", "av1", "hevc", "h264"]
 
@@ -44,14 +44,14 @@ choices = ["av1_10bit", "av1", "hevc", "h264"]
 key = "fps"
 type = "int"
 default = 60
-label = "Images par seconde"
+label = "Frames per second"
 scope = "global"
 
 [[settings]]
 key = "audio"
 type = "enum"
 default = "output+input"
-label = "Pistes audio capturées"
+label = "Audio tracks captured"
 scope = "global"
 choices = ["output", "output+input", "none"]
 
@@ -59,12 +59,12 @@ choices = ["output", "output+input", "none"]
 key = "min_duration_s"
 type = "int"
 default = 240
-label = "Durée minimale conservée (s)"
+label = "Minimum duration kept (s)"
 scope = "global"
 
 [[settings]]
 key = "quality"
 type = "string"
 default = "qvbr"
-label = "Préréglage qualité"
+label = "Quality preset"
 scope = "global"

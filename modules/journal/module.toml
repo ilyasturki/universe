@@ -1,6 +1,6 @@
 api = 1
 id = "journal"
-name = "Journal de jeu"
+name = "Play journal"
 kind = ["hooks"]
 version = "0.1.0"
 
@@ -20,14 +20,14 @@ memory_high = "4G"
 key = "enabled"
 type = "bool"
 default = true
-label = "Écrire une entrée de journal après chaque partie"
+label = "Write a journal entry after each session"
 scope = "game"
 
 [[settings]]
 key = "language"
 type = "enum"
 default = "auto"
-label = "Langue de l'entrée (auto = celle du jeu à l'écran)"
+label = "Entry language (auto = the game's on-screen language)"
 scope = "game"
 choices = ["auto", "fr", "en", "es", "de", "it", "pt", "ja"]
 
@@ -35,7 +35,7 @@ choices = ["auto", "fr", "en", "es", "de", "it", "pt", "ja"]
 key = "provider"
 type = "enum"
 default = "codex"
-label = "Modèle qui rédige"
+label = "Writing model"
 scope = "global"
 choices = ["codex", "claude", "stub"]
 
@@ -43,19 +43,19 @@ choices = ["codex", "claude", "stub"]
 key = "model"
 type = "string"
 default = "gpt-5.6-sol"
-label = "Nom du modèle passé au fournisseur"
+label = "Model name passed to the provider"
 scope = "global"
 
 [[settings]]
 key = "markdown_export"
 type = "bool"
 default = true
-label = "Rendre la note Markdown pour Obsidian"
+label = "Render the Markdown note for Obsidian"
 scope = "global"
 
 [[settings]]
 key = "max_images"
 type = "int"
 default = 40
-label = "Images maximum envoyées au modèle"
+label = "Maximum images sent to the model"
 scope = "global"

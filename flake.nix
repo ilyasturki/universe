@@ -24,7 +24,8 @@
         cargoLock.lockFile = ./Cargo.lock;
         cargoBuildFlags = [ "-p" "universe" ];
         cargoTestFlags = [ "-p" "universe" ];
-        preCheck = "export TZ=Europe/Paris TZDIR=${pkgs.tzdata}/share/zoneinfo";
+        # chrono ignores TZDIR, so the zone is given as a file
+        preCheck = "export TZ=${pkgs.tzdata}/share/zoneinfo/Europe/Paris";
         nativeBuildInputs = [ pkgs.pkg-config ];
         meta.mainProgram = "universe";
       };
