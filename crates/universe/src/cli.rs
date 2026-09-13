@@ -923,6 +923,13 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     println!("  hours {k}: {v}");
                 }
             }
+            if n("runners_promoted") > 0 {
+                println!("  runners: {} emulator game(s) {} their runner instead of backend = \"emulator\"", n("runners_promoted"), if apply { "now name" } else { "would name" });
+            }
+            for h in report["runners"].as_array().cloned().unwrap_or_default() {
+                let args = h["args"].as_array().map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(" ")).unwrap_or_default();
+                println!("  [runners.{}] {} {}{}", s(&h, "runner"), s(&h, "program"), args, if s(&h, "wrapped") == "true" { " (Lutris wrapper dropped)".dimmed().to_string() } else { String::new() });
+            }
             let mut t = table(&["Game", "Added", "Removed", "Changed"]);
             for d in report["env_diffs"].as_array().cloned().unwrap_or_default() {
                 let j = |k: &str| d[k].as_array().map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(", ")).unwrap_or_default();

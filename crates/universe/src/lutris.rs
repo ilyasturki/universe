@@ -94,6 +94,56 @@ fn yaml_map(v: &serde_yaml::Value, path: &[&str]) -> BTreeMap<String, String> {
         .unwrap_or_default()
 }
 
+#[derive(Debug, Clone, Serialize, Default, PartialEq)]
+pub struct RunnerHint {
+    pub runner: String,
+    pub lutris_runner: String,
+    pub executable: String,
+    pub program: String,
+    pub args: Vec<String>,
+    pub wrapped: bool,
+}
+
+pub fn runner_hints(lutris_dir: &Path) -> Vec<RunnerHint> {
+    let mut out = Vec::new();
+    let Ok(rd) = std::fs::read_dir(lutris_dir.join("runners")) else { return out };
+    let mut files: Vec<std::path::PathBuf> = rd.flatten().map(|e| e.path()).filter(|p| p.extension().and_then(|e| e.to_str()) == Some("yml")).collect();
+    files.sort();
+    for f in files {
+        let lutris_runner = f.file_stem().map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+        let Some(spec) = crate::runners::spec(&lutris_runner) else { continue };
+        if spec.kind != crate::runners::Kind::Emulator {
+            continue;
+        }
+        let yml: serde_yaml::Value = std::fs::read_to_string(&f).ok().and_then(|s| serde_yaml::from_str(&s).ok()).unwrap_or(serde_yaml::Value::Null);
+        let Some(executable) = yaml_str(&yml, &[&lutris_runner, "runner_executable"]) else { continue };
+        let (program, args, wrapped) = see_through(Path::new(&executable));
+        out.push(RunnerHint { runner: spec.id.into(), lutris_runner, executable, program, args, wrapped });
+    }
+    out
+}
+
+fn see_through(exe: &Path) -> (String, Vec<String>, bool) {
+    let itself = (exe.to_string_lossy().to_string(), vec![], false);
+    let mut magic = [0u8; 2];
+    if std::fs::File::open(exe).and_then(|mut f| std::io::Read::read_exact(&mut f, &mut magic)).is_err() || &magic != b"#!" {
+        return itself;
+    }
+    let Ok(text) = std::fs::read_to_string(exe) else { return itself };
+    let Some(line) = text.lines().find(|l| l.trim_start().starts_with("exec ")) else { return itself };
+    let Ok(words) = shell_words::split(line.trim_start().trim_start_matches("exec ")) else { return itself };
+    let mut words: Vec<String> = words.into_iter().filter(|w| w != "\"$@\"" && w != "$@").collect();
+    // emu-pad: the user's InputPlumber wrapper; the core does that itself now.
+    let wrapped = words.first().map(|w| w.ends_with("emu-pad")).unwrap_or(false);
+    if wrapped {
+        words.remove(0);
+    }
+    match words.split_first() {
+        Some((program, rest)) => (program.clone(), rest.to_vec(), wrapped),
+        None => itself,
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct GogManifest {
     pub game_id: String,
@@ -144,6 +194,8 @@ pub struct EnvDiff {
 
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct Report {
+    pub runners_promoted: Vec<String>,
+    pub runners: Vec<RunnerHint>,
     pub imported: Vec<String>,
     pub skipped: Vec<String>,
     pub updated: Vec<String>,
@@ -226,7 +278,8 @@ pub fn convert(p: &PgaGame, lutris_dir: &Path, global_env: &BTreeMap<String, Str
         }
     } else {
         g.platform = if p.platform.is_empty() { p.runner.clone() } else { p.platform.clone() };
-        g.launch.backend = "emulator".into();
+        g.launch.runner = crate::runners::canonical(&p.runner);
+        g.launch.arch = String::new();
         g.launch.exe = yaml_str(&yml, &["game", "main_file"]).unwrap_or_default();
         g.launch.working_dir = yaml_str(&yml, &["game", "working_dir"]).unwrap_or_default();
         g.launch.env = yaml_map(&yml, &["system", "env"]);
@@ -277,6 +330,7 @@ pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
     let global_env = lutris_global_env(&lutris_dir);
     let mut report = Report { applied: apply, ..Default::default() };
     let modules: Vec<crate::modules::Module> = vec![];
+    let mut located = std::collections::HashMap::new();
     for p in read_pga(&pga)? {
         if p.name.trim().is_empty() {
             continue;
@@ -287,8 +341,14 @@ pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
         let game = if existed {
             match Game::load(&toml_path) {
                 Ok(g) => {
+                    if g.launch.runner.is_empty() && g.launch.backend == "emulator" && !imp.game.launch.runner.is_empty() {
+                        report.runners_promoted.push(g.id.clone());
+                        if apply {
+                            crate::game::set_key(&toml_path, "launch.runner", &imp.game.launch.runner)?;
+                        }
+                    }
                     report.skipped.push(g.id.clone());
-                    g
+                    Game::load(&toml_path).unwrap_or(g)
                 }
                 Err(_) => imp.game.clone(),
             }
@@ -296,7 +356,7 @@ pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
             report.imported.push(imp.game.id.clone());
             imp.game.clone()
         };
-        let r = crate::library::resolve(game.clone(), config, &modules);
+        let r = crate::library::resolve_with(game.clone(), config, &modules, &mut located);
         let mut env_for_diff = r.effective.env.clone();
         if r.effective.mangohud {
             env_for_diff.insert("MANGOHUD".into(), "1".into());
@@ -326,6 +386,22 @@ pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
             report.hours_imported.insert(game.id.clone(), (remainder as f64 / 36.0).round() / 100.0);
             if existed {
                 report.updated.push(game.id.clone());
+            }
+        }
+    }
+    report.runners = runner_hints(&lutris_dir);
+    if apply {
+        for h in &report.runners {
+            let spec = crate::runners::spec(&h.runner).expect("hints only name shipped runners");
+            let located = crate::runners::locate(spec, config);
+            let known = config.runners.get(spec.id);
+            if located.program.is_empty() && known.and_then(|t| t.get("exe")).is_none() && Path::new(&h.program).is_file() {
+                Config::set_key(&paths::config_file(), &format!("runners.{}.exe", spec.id), &h.program)?;
+            }
+            let fullscreen: Vec<&str> = spec.options.iter().filter(|o| o.key == "fullscreen").flat_map(|o| o.argument.split_whitespace()).collect();
+            let args: Vec<String> = h.args.iter().filter(|a| !fullscreen.contains(&a.as_str())).cloned().collect();
+            if !args.is_empty() && known.and_then(|t| t.get("args")).is_none() {
+                Config::set_key(&paths::config_file(), &format!("runners.{}.args", spec.id), &shell_words::join(&args))?;
             }
         }
     }
@@ -424,7 +500,31 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let p = PgaGame { name: "F-Zero GX".into(), slug: "f-zero-gx".into(), runner: "dolphin".into(), platform: "Nintendo GameCube".into(), hidden: false, playtime_h: 4.3, lastplayed: 0, service: String::new(), service_id: String::new(), configpath: "none".into(), directory: String::new(), year: 0 };
         let g = convert(&p, dir.path(), &BTreeMap::new()).game;
-        assert_eq!(g.launch.backend, "emulator");
+        assert_eq!(g.launch.runner, "dolphin");
+        assert!(g.launch.backend.is_empty());
         assert_eq!(g.platform, "Nintendo GameCube");
+    }
+
+    #[test]
+    fn wrapper_scripts_are_seen_through() {
+        let dir = tempfile::tempdir().unwrap();
+        let w = dir.path().join("ryujinx-yasso");
+        std::fs::write(&w, "#!/bin/bash\nexec /nix/store/x-emu-pad /nix/store/y/bin/Ryujinx --fullscreen --profile \"Yasso\" \"$@\"\n").unwrap();
+        let (program, args, wrapped) = see_through(&w);
+        assert_eq!(program, "/nix/store/y/bin/Ryujinx");
+        assert_eq!(args, vec!["--fullscreen", "--profile", "Yasso"]);
+        assert!(wrapped);
+        let plain = dir.path().join("dolphin-emu");
+        std::fs::write(&plain, b"\x7fELF").unwrap();
+        assert_eq!(see_through(&plain), (plain.to_string_lossy().to_string(), vec![], false));
+        let runners = dir.path().join("runners");
+        std::fs::create_dir_all(&runners).unwrap();
+        std::fs::write(runners.join("yuzu.yml"), format!("yuzu:\n  runner_executable: {}\n", w.display())).unwrap();
+        std::fs::write(runners.join("wine.yml"), "wine:\n  version: x\n").unwrap();
+        let hints = runner_hints(dir.path());
+        assert_eq!(hints.len(), 1);
+        assert_eq!(hints[0].runner, "eden");
+        assert_eq!(hints[0].lutris_runner, "yuzu");
+        assert_eq!(hints[0].args, vec!["--fullscreen", "--profile", "Yasso"]);
     }
 }
