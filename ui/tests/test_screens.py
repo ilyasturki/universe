@@ -139,7 +139,7 @@ def test_path_browser(api, tmp_path):
     paths.enter(1)
     assert paths.path == str(tmp_path / "games" / "Zeta") and paths.entries == []
     assert [s["label"] for s in paths.shortcuts][:1] == ["Home"] and paths.shortcuts[-1]["path"] == "/"
-    assert paths.display(str(tmp_path)) == str(tmp_path)
+    assert paths.display("/mnt/games") == "/mnt/games", "outside home, verbatim (tmp_path sits under HOME in the nix sandbox)"
     assert paths.display("/") == "/"
     paths.go("/")
     assert paths.atRoot and paths.up() is False
