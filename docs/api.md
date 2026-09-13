@@ -285,7 +285,9 @@ A slot with only a press macro fires on the key down; with a hold macro too, pre
 before `hold_ms` and hold once at `hold_ms`. `volume_up`, `volume_down` and `mute` go straight to
 the PulseAudio server (PipeWire's included) through libpulse: the default sink's volume moves by
 `volume_step` percent of the normal level on every channel, clamped to [0, 100 %], `mute` toggles
-the sink; no key is typed, so nothing reaches the game. `keys` types through uinput; `mangohud`
+the sink; no key is typed, so nothing reaches the game. On GNOME the new level (and a screenshot's
+`camera-photo-symbolic`) shows on the shell's OSD through `org.universe.Windows.ShowOSD` on the
+Universe extension; without it the macro runs silently. `keys` types through uinput; `mangohud`
 sends MangoHud's own `toggle_hud` (from `~/.config/MangoHud/MangoHud.conf`, `Shift_R+F12` by
 default) and holds it 200 ms.
 

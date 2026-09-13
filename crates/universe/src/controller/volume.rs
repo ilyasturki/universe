@@ -48,8 +48,15 @@ fn wait<T: ?Sized>(ml: &mut Mainloop, op: &Operation<T>, since: Instant) -> Resu
     Ok(())
 }
 
+/// The sink after a change: the loudest channel as a percent of normal, and whether it is muted.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Level {
+    pub percent: u8,
+    pub muted: bool,
+}
+
 /// Blocking: connects to the default server, applies the change to the default sink, disconnects.
-pub fn apply(change: Change, percent: u8) -> Result<(), String> {
+pub fn apply(change: Change, percent: u8) -> Result<Level, String> {
     let since = Instant::now();
     let mut ml = Mainloop::new().ok_or("mainloop")?;
     let mut ctx = Context::new(&ml, "universe").ok_or("context")?;
@@ -84,20 +91,24 @@ pub fn apply(change: Change, percent: u8) -> Result<(), String> {
         let done = done.clone();
         Box::new(move |ok| *done.borrow_mut() = Some(ok))
     };
-    let op = match change {
-        Change::ToggleMute => ctx.introspect().set_sink_mute_by_name(&name, !mute, Some(cb)),
+    let muted = match change {
+        Change::ToggleMute => !mute,
         Change::Up | Change::Down => {
             for v in volume.get_mut() {
                 v.0 = step(v.0, percent, change == Change::Up);
             }
-            ctx.introspect().set_sink_volume_by_name(&name, &volume, Some(cb))
+            mute
         }
+    };
+    let op = match change {
+        Change::ToggleMute => ctx.introspect().set_sink_mute_by_name(&name, muted, Some(cb)),
+        Change::Up | Change::Down => ctx.introspect().set_sink_volume_by_name(&name, &volume, Some(cb)),
     };
     wait(&mut ml, &op, since)?;
     let ok = *done.borrow();
     ctx.disconnect();
     match ok {
-        Some(true) => Ok(()),
+        Some(true) => Ok(Level { percent: (u64::from(volume.max().0) * 100 / u64::from(NORMAL)) as u8, muted }),
         _ => Err(format!("{name}: {change:?} refused")),
     }
 }

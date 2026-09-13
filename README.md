@@ -38,7 +38,7 @@ programs.universe = {
 };
 ```
 
-Enabling `capture` also installs its GNOME Shell extension for window recording; **log out once** to let GNOME load it (until then the module records the screen).
+The home-manager module also installs Universe's GNOME Shell extension (window recording for `capture`, the volume and screenshot OSD for the controller macros); **log out once** to let GNOME load it (until then `capture` records the screen and the macros show nothing).
 
 `settings = null` installs the packages and leaves `~/.config/universe/config.toml` to you: the core edits that file in place (`universe config set`, `universe module enable`, the UI's settings), which a symlink into the store refuses.
 
@@ -83,7 +83,7 @@ Pads and emulators: every emulator has an `inputplumber` option, on by default, 
 
 ## Controller macros
 
-The spare buttons of a pad — the Edge's paddles and Fn buttons, the Elite's paddles, the Pro 3's back buttons — carry macros: volume, mute, a screenshot, the MangoHud toggle, stopping the game on a long hold, any key combo, any command. The Settings tab has a Controller section that lists each button with its macros, learns a button by pressing it, and draws the pad live — every press, stick and trigger pull — in its test view. Nothing is grabbed: the engine reads the pad over evdev next to the game, so the game keeps rumble, the lightbar and every button it already saw. It runs only while the launcher is open or a session is running (`universe controller watch`, one instance at a time through a lock), never on the bare desktop. Pads can come and go while it runs, several pads each fire their family's macros, and a bind made anywhere reaches the running instance within its next scan. Paddle codes are not trusted: they differ between USB and Bluetooth and between drivers, so a slot is checked against what the pad advertises on every connect, and a button the seeds got wrong is fixed by pressing it (`universe controller learn xbox-elite paddle_p1`). The DualSense Edge's paddles reach evdev from kernel 7.2. An Elite Series 2 only reports its paddles on profile slot 0 (LED off) over Bluetooth (xpadneo) and on the in-tree xpad driver over USB; xone has no such gating. Volume and mute go straight to PulseAudio (PipeWire's server included) through libpulse, by `controller.volume_step` percent per press, so no synthetic key leaks into the game; key macros and the MangoHud toggle type through uinput: enable `hardware.uinput` and put your user in the `uinput` group (the NixOS module does the first).
+The spare buttons of a pad — the Edge's paddles and Fn buttons, the Elite's paddles, the Pro 3's back buttons — carry macros: volume, mute, a screenshot, the MangoHud toggle, stopping the game on a long hold, any key combo, any command. The Settings tab has a Controller section that lists each button with its macros, learns a button by pressing it, and draws the pad live — every press, stick and trigger pull — in its test view. Nothing is grabbed: the engine reads the pad over evdev next to the game, so the game keeps rumble, the lightbar and every button it already saw. It runs only while the launcher is open or a session is running (`universe controller watch`, one instance at a time through a lock), never on the bare desktop. Pads can come and go while it runs, several pads each fire their family's macros, and a bind made anywhere reaches the running instance within its next scan. Paddle codes are not trusted: they differ between USB and Bluetooth and between drivers, so a slot is checked against what the pad advertises on every connect, and a button the seeds got wrong is fixed by pressing it (`universe controller learn xbox-elite paddle_p1`). The DualSense Edge's paddles reach evdev from kernel 7.2. An Elite Series 2 only reports its paddles on profile slot 0 (LED off) over Bluetooth (xpadneo) and on the in-tree xpad driver over USB; xone has no such gating. Volume and mute go straight to PulseAudio (PipeWire's server included) through libpulse, by `controller.volume_step` percent per press, so no synthetic key leaks into the game, and volume, mute and screenshot show GNOME's own OSD through the Universe shell extension; key macros and the MangoHud toggle type through uinput: enable `hardware.uinput` and put your user in the `uinput` group (the NixOS module does the first).
 
 ## Modules and their prerequisites
 
@@ -98,8 +98,8 @@ The spare buttons of a pad — the Edge's paddles and Fn buttons, the Elite's pa
 | runners | core | the emulator on `PATH` (or `[runners.<id>] exe`); `inputplumber` for the pad option | `universe runner ls`; one doctor check per runner in use |
 
 Cursor hiding on GNOME toggles the `hide-cursor@elcste.com` shell extension around the session.
-Window capture uses the `universe@ilyasturki.github.io` shell extension, installed by the home-manager
-module when `capture` is enabled; GNOME loads it after the next logout, until then capture records the screen.
+Window capture and the macro OSD use the `universe@ilyasturki.github.io` shell extension, installed by the
+home-manager module; GNOME loads it after the next logout, until then capture records the screen.
 
 Third-party modules: drop a directory with a `module.toml` under `~/.local/share/universe/modules/` (user modules override shipped ones). The manifest, the hook environment and the source protocol (JSON lines) are frozen in `docs/api.md`.
 

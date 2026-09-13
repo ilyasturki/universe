@@ -296,6 +296,16 @@ impl Typist {
     }
 }
 
+/// The OSD's failure is reported once per run: it repeats on every held volume press otherwise.
+async fn osd(icon: &str, label: Option<&str>, level: Option<f64>) {
+    static REPORTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if let Err(e) = crate::desktop::show_osd(icon, label, level).await {
+        if !REPORTED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            tracing::warn!("no OSD: {e} (installed extensions load after a logout)");
+        }
+    }
+}
+
 struct Watcher {
     core: Arc<Core>,
     cfg: ControllerConfig,
@@ -463,9 +473,20 @@ impl Watcher {
         };
         if let Some(change) = change {
             let percent = self.cfg.volume_step;
-            tokio::task::spawn_blocking(move || {
-                if let Err(e) = super::volume::apply(change, percent) {
-                    tracing::warn!("{change:?}: {e}");
+            tokio::spawn(async move {
+                match tokio::task::spawn_blocking(move || super::volume::apply(change, percent)).await {
+                    Ok(Ok(level)) => {
+                        let icon = match level.percent {
+                            _ if level.muted => "audio-volume-muted-symbolic",
+                            0 => "audio-volume-muted-symbolic",
+                            1..=33 => "audio-volume-low-symbolic",
+                            34..=66 => "audio-volume-medium-symbolic",
+                            _ => "audio-volume-high-symbolic",
+                        };
+                        osd(icon, None, Some(f64::from(level.percent) / 100.0)).await;
+                    }
+                    Ok(Err(e)) => tracing::warn!("{change:?}: {e}"),
+                    Err(e) => tracing::warn!("{change:?}: {e}"),
                 }
             });
             return;
@@ -491,7 +512,10 @@ impl Watcher {
             "screenshot" => {
                 tokio::spawn(async move {
                     match core.screenshot().await {
-                        Ok(p) => tracing::info!("screenshot {p}"),
+                        Ok(p) => {
+                            tracing::info!("screenshot {p}");
+                            osd("camera-photo-symbolic", Some("Screenshot"), None).await;
+                        }
                         Err(e) => tracing::warn!("screenshot: {e}"),
                     }
                 });

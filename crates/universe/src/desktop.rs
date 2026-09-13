@@ -149,6 +149,28 @@ pub fn extension_installed(extension: &str) -> bool {
     dirs.split(':').any(|d| std::path::Path::new(d).join("gnome-shell/extensions").join(extension).exists())
 }
 
+/// GNOME Shell's media-key OSD through the Universe extension (org.gnome.Shell.ShowOSD refuses callers other
+/// than gsd), drawn over a fullscreen game: `level` in [0, 1] shows the bar. An extension the shell has
+/// loaded but not enabled (capture never ran) is enabled on the first call; one it has not loaded (no
+/// logout since the install) or no GNOME at all is an error, and the caller decides how loudly.
+pub async fn show_osd(icon: &str, label: Option<&str>, level: Option<f64>) -> Result<(), String> {
+    let args = (icon, label.unwrap_or(""), level.unwrap_or(-1.0));
+    let call = async {
+        let conn = zbus::Connection::session().await.map_err(|e| e.to_string())?;
+        let proxy = zbus::Proxy::new(&conn, "org.universe.Windows", "/org/universe/Windows", "org.universe.Windows").await.map_err(|e| e.to_string())?;
+        let Err(first) = proxy.call_method("ShowOSD", &args).await else { return Ok(()) };
+        let Some(ext) = extensions_proxy(&conn, Profile::Gnome, UNIVERSE_EXTENSION).await else { return Err(first.to_string()) };
+        if !call_bool(&ext, "EnableExtension", UNIVERSE_EXTENSION).await {
+            return Err(format!("{first}; the shell has not loaded {UNIVERSE_EXTENSION}"));
+        }
+        proxy.call_method("ShowOSD", &args).await.map(|_| ()).map_err(|e| e.to_string())
+    };
+    match tokio::time::timeout(std::time::Duration::from_secs(5), call).await {
+        Ok(r) => r,
+        Err(_) => Err("gnome-shell did not answer".into()),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -1,4 +1,5 @@
 import Gio from 'gi://Gio';
+import * as Main from 'resource:///org/gnome/shell/ui/main.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 const BUS_NAME = 'org.universe.Windows';
@@ -9,6 +10,11 @@ const IFACE = `
   <interface name="org.universe.Windows">
     <method name="List">
       <arg type="s" name="windows" direction="out"/>
+    </method>
+    <method name="ShowOSD">
+      <arg type="s" name="icon" direction="in"/>
+      <arg type="s" name="label" direction="in"/>
+      <arg type="d" name="level" direction="in"/>
     </method>
   </interface>
 </node>`;
@@ -57,5 +63,11 @@ export default class UniverseExtension extends Extension {
             });
         }
         return JSON.stringify(windows);
+    }
+
+    // The shell's own media-key OSD, on every monitor; org.gnome.Shell.ShowOSD refuses callers other
+    // than gsd. A negative level draws no bar, an empty label none.
+    ShowOSD(icon, label, level) {
+        Main.osdWindowManager.show(-1, Gio.ThemedIcon.new(icon), label || null, level < 0 ? null : level);
     }
 }
