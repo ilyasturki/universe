@@ -64,10 +64,14 @@ fn remove_marker() {
     let _ = std::fs::remove_file(paths::current_session_file());
 }
 
+fn in_cgroup_of(unit: &str) -> bool {
+    std::fs::read_to_string("/proc/self/cgroup").map(|s| s.lines().any(|l| l.rsplit('/').next() == Some(unit))).unwrap_or(false)
+}
+
 /// Environment the game unit needs beyond the game's own: our binary and dirs for the hooks and `ExecStopPost`, the desktop for the game.
 fn passthrough_env() -> BTreeMap<String, String> {
     let mut env = BTreeMap::new();
-    for k in ["PATH", "HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS", "WAYLAND_DISPLAY", "DISPLAY", "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE", "UNIVERSE_DATA_HOME", "UNIVERSE_CONFIG_HOME", "UNIVERSE_STATE_HOME", "UNIVERSE_CACHE_HOME", "UNIVERSE_MODULES_PATH", "RUST_LOG"] {
+    for k in ["PATH", "HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS", "WAYLAND_DISPLAY", "DISPLAY", "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE", "GST_PLUGIN_SYSTEM_PATH_1_0", "GI_TYPELIB_PATH", "UNIVERSE_DATA_HOME", "UNIVERSE_CONFIG_HOME", "UNIVERSE_STATE_HOME", "UNIVERSE_CACHE_HOME", "UNIVERSE_MODULES_PATH", "RUST_LOG"] {
         if let Ok(v) = std::env::var(k) {
             env.insert(k.to_string(), v);
         }
@@ -115,6 +119,7 @@ pub struct Core {
     pub source_libraries: Mutex<BTreeMap<String, Vec<serde_json::Map<String, serde_json::Value>>>>,
     pub source_logins: Mutex<BTreeMap<String, String>>,
     logins_probed: Mutex<bool>,
+    scope: std::sync::Mutex<Option<String>>,
 }
 
 impl Core {
@@ -132,6 +137,7 @@ impl Core {
             source_libraries: Mutex::new(caches),
             source_logins: Mutex::new(BTreeMap::new()),
             logins_probed: Mutex::new(false),
+            scope: std::sync::Mutex::new(None),
         })
     }
 
@@ -393,6 +399,36 @@ impl Core {
         }
     }
 
+    /// Moves this process into `universe-launcher-<pid>.scope` under the user manager; every game launched
+    /// afterwards is bound to it, so it goes down with the launcher. Idempotent: the name is remembered.
+    pub async fn adopt_scope(&self) -> Result<String> {
+        if let Some(name) = self.scope.lock().unwrap().clone() {
+            return Ok(name);
+        }
+        let pid = std::process::id();
+        let name = format!("universe-launcher-{pid}.scope");
+        let conn = zbus::Connection::session().await.map_err(|e| Error::Unavailable(format!("session bus: {e}")))?;
+        let proxy = zbus::Proxy::new(&conn, "org.freedesktop.systemd1", "/org/freedesktop/systemd1", "org.freedesktop.systemd1.Manager").await.map_err(|e| Error::Unavailable(format!("systemd: {e}")))?;
+        let props: Vec<(&str, zbus::zvariant::Value)> = vec![("PIDs", vec![pid].into()), ("Description", "Universe launcher".into())];
+        let aux: Vec<(String, Vec<(String, zbus::zvariant::Value)>)> = vec![];
+        match proxy.call::<_, _, zbus::zvariant::OwnedObjectPath>("StartTransientUnit", &(name.as_str(), "fail", props, aux)).await {
+            Ok(_) => {}
+            // The scope survives from an earlier core of this process; it only counts if we are in it.
+            Err(e) if e.to_string().contains("UnitExists") && in_cgroup_of(&name) => {}
+            Err(e) => return Err(Error::Unavailable(format!("StartTransientUnit({name}): {e}"))),
+        }
+        // The reply only queues the start job; the move into the scope's cgroup lands when it runs.
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !in_cgroup_of(&name) {
+            if std::time::Instant::now() > deadline {
+                return Err(Error::Unavailable(format!("{name}: this process was not moved into it")));
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+        }
+        *self.scope.lock().unwrap() = Some(name.clone());
+        Ok(name)
+    }
+
     /// Starts the game as a transient service and returns; systemd runs `universe session-end` when its cgroup empties.
     pub async fn launch(&self, id: &str, screen: &str) -> Result<String> {
         self.reconcile().await?;
@@ -461,7 +497,8 @@ impl Core {
         tracing::info!("launch {id}: {}", plan.command_line());
         let stop_post = vec![paths::self_exe().to_string_lossy().to_string(), "session-end".into(), id.into(), session_id.clone()];
         let budget: u64 = 60 + self.hook_modules(&r, "session-end").await.iter().map(|m| m.timeout().as_secs()).sum::<u64>();
-        if let Err(e) = launcher::spawn(&plan, &stop_post, &passthrough_env(), budget).await {
+        let scope = self.scope.lock().unwrap().clone();
+        if let Err(e) = launcher::spawn(&plan, &stop_post, &passthrough_env(), budget, scope.as_deref()).await {
             remove_marker();
             if r.effective.hide_cursor {
                 if let Some(conn) = self.shell_conn().await {
@@ -1125,5 +1162,23 @@ impl Core {
             _ => return Err(Error::Invalid(format!("unknown provider {provider}"))),
         };
         self.set(id, key, provider_id).await
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    // Needs a user systemd and a session bus: `cargo test -- --ignored adopt_scope`.
+    #[tokio::test]
+    #[ignore]
+    async fn adopt_scope_moves_the_process_and_is_idempotent() {
+        let core = Core::new(Config::default()).unwrap();
+        let name = core.adopt_scope().await.unwrap();
+        assert_eq!(name, format!("universe-launcher-{}.scope", std::process::id()));
+        assert_eq!(core.adopt_scope().await.unwrap(), name);
+        assert!(in_cgroup_of(&name), "{}", std::fs::read_to_string("/proc/self/cgroup").unwrap());
+        let out = std::process::Command::new("systemctl").args(["--user", "is-active", &name]).output().unwrap();
+        assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "active");
     }
 }

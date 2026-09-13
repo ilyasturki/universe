@@ -93,6 +93,9 @@ impl Core {
     fn stop(&self, py: Python<'_>, session_id: String) -> PyResult<()> {
         self.run(py, |c| async move { c.stop(&session_id).await })
     }
+    fn adopt_scope(&self, py: Python<'_>) -> PyResult<String> {
+        self.run(py, |c| c.adopt_scope())
+    }
     fn screenshot(&self, py: Python<'_>) -> PyResult<String> {
         self.run(py, |c| c.screenshot())
     }

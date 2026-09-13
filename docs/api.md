@@ -20,6 +20,11 @@ a dash means the surface doesn't expose it.
   `ExecStopPost=universe session-end <id> <session>` runs when the cgroup empties, whatever became
   of the launcher: it appends the `sessions.jsonl` line, restores the cursor extension, runs
   `post_command`, the `session-end` hooks, then the `post-process` hooks.
+- **Who owns the game's lifetime** depends on the launcher. One that called `adopt_scope()` — the UI,
+  and `universe play` without `--no-wait` — was moved into `universe-launcher-<pid>.scope`, and every
+  game it launches carries `BindsTo=` + `After=` that scope: the game goes down with the launcher
+  (a crash, a kill, Ctrl-C), `session-end` still runs. `universe play --no-wait`, hooks and anything
+  else that never adopted a scope leave the game to systemd alone: it outlives them.
 - `state/current-session.json` (written `O_EXCL`) is the marker for the running session; the current
   session is the marker whose unit is still active. On every open the core **reconciles**: a marker
   with no live unit is closed from `journalctl` timestamps.
@@ -79,8 +84,9 @@ hooks write shows up that way, with no other channel.
 |---|---|---|---|
 | `launch(id, screen)` | `launch(id, screen)` | `universe play <name> [--screen DP-1] [--no-wait]` | pre-launch hooks, marker, `systemd-run`, post-launch hooks; returns the `session_id` at once. `screen` is a DRM connector name or `""` for the profile default. `Busy` if a session is already running |
 | `stop(session_id)` | `stop(session_id)` | `universe stop` | `systemctl --user stop` on the unit |
+| `adopt_scope()` | `adopt_scope()` | — (`universe play` does it unless `--no-wait`) | moves the calling process into the transient scope `universe-launcher-<pid>.scope` (`StartTransientUnit` on the user manager) and returns its name; every later `launch` binds the game to it. Idempotent. `Unavailable` without a user systemd |
 | `screenshot()` | `screenshot()` | `universe screenshot` | runs the `screenshot` hook of whichever module declares one; returns the PNG path |
-| `current()` / `current_json()` | `current_json()` | `universe status` | `{session_id, id, title, unit, screen, started_at}`, or `""`. The CLI wraps it: `status --json` prints `{"current": … or null, "recent": [the last 10 sessions]}` |
+| `current()` / `current_json()` | `current_json()` | `universe status` | `{session_id, id, title, unit, screen, started_at}`, or `""`. The CLI wraps it: `status --json` prints `{"current": … or null, "recent": [the last 10 sessions], "pending_journals": [see Journal]}` |
 | `sessions_json(id)` | `sessions_json(id)` | `universe sessions <name>` | JSON `[Session]` from `sessions.jsonl`, last first |
 | `session_end(id, session_id, exit, ended)` | — | `universe session-end <id> <session>` | closes the session, idempotent. Run by systemd's `ExecStopPost`, or by reconciliation |
 

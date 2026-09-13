@@ -103,22 +103,31 @@ pub fn plan(r: &Resolved, config: &Config, session_id: &str, extra_env: &BTreeMa
     })
 }
 
-/// A transient service, not a scope: env and cwd are passed explicitly, `ExitType=cgroup` ends it with the last game
-/// process, and systemd then runs `stop_post` (`universe session-end …`) whatever happened to the launcher.
-pub async fn spawn(plan: &Plan, stop_post: &[String], passthrough: &BTreeMap<String, String>, timeout_stop_s: u64) -> crate::Result<()> {
-    let mut cmd = tokio::process::Command::new("systemd-run");
-    cmd.args(["--user", "--collect", "--quiet"])
-        .arg(format!("--unit={}", plan.unit))
-        .arg("--property=ExitType=cgroup")
-        .arg(format!("--property=TimeoutStopSec={timeout_stop_s}"))
-        .arg(format!("--property=ExecStopPost={}", unit_quote(stop_post)));
+/// The `systemd-run` invocation: `ExitType=cgroup` ends the unit with the last game process; `bind_to` (the
+/// launcher's scope) takes the game down with the launcher, `BindsTo=` plus `After=` so the bond holds from the start.
+pub fn systemd_run_args(plan: &Plan, stop_post: &[String], passthrough: &BTreeMap<String, String>, timeout_stop_s: u64, bind_to: Option<&str>) -> Vec<String> {
+    let mut args: Vec<String> = vec!["--user".into(), "--collect".into(), "--quiet".into(), format!("--unit={}", plan.unit), "--property=ExitType=cgroup".into(), format!("--property=TimeoutStopSec={timeout_stop_s}"), format!("--property=ExecStopPost={}", unit_quote(stop_post))];
+    if let Some(scope) = bind_to {
+        args.push(format!("--property=BindsTo={scope}"));
+        args.push(format!("--property=After={scope}"));
+    }
     if plan.cwd.is_dir() {
-        cmd.arg(format!("--working-directory={}", plan.cwd.display()));
+        args.push(format!("--working-directory={}", plan.cwd.display()));
     }
     for (k, v) in passthrough.iter().chain(plan.env.iter()) {
-        cmd.arg(format!("--setenv={k}={v}"));
+        args.push(format!("--setenv={k}={v}"));
     }
-    cmd.arg("--").arg(&plan.program).args(&plan.args).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped());
+    args.push("--".into());
+    args.push(plan.program.clone());
+    args.extend(plan.args.iter().cloned());
+    args
+}
+
+/// A transient service, not a scope: env and cwd are passed explicitly, and systemd runs `stop_post`
+/// (`universe session-end …`) when the cgroup empties, whatever happened to the launcher.
+pub async fn spawn(plan: &Plan, stop_post: &[String], passthrough: &BTreeMap<String, String>, timeout_stop_s: u64, bind_to: Option<&str>) -> crate::Result<()> {
+    let mut cmd = tokio::process::Command::new("systemd-run");
+    cmd.args(systemd_run_args(plan, stop_post, passthrough, timeout_stop_s, bind_to)).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped());
     let out = cmd.output().await.map_err(|e| crate::Error::Io(format!("systemd-run: {e}")))?;
     if !out.status.success() {
         return Err(crate::Error::Io(format!("systemd-run: {}", String::from_utf8_lossy(&out.stderr).trim())));
@@ -214,6 +223,26 @@ mod tests {
         let log = parse_unit_log(lines);
         assert_eq!(log.exit, Some(3));
         assert_eq!((log.ended.unwrap() - log.started.unwrap()).num_seconds(), 3);
+    }
+
+    #[test]
+    fn systemd_run_binds_to_the_launcher_scope_only_when_asked() {
+        let plan = Plan { unit: "universe-game-x-20260911-120000".into(), program: "umu-run".into(), args: vec!["/g/x.exe".into(), "-w".into()], cwd: "/nonexistent".into(), env: BTreeMap::from([("WINEPREFIX".to_string(), "/p".to_string())]), pre_command: String::new(), post_command: String::new() };
+        let stop_post = vec!["/usr/bin/universe".to_string(), "session-end".into(), "x".into(), "20260911-120000".into()];
+        let passthrough = BTreeMap::from([("PATH".to_string(), "/bin".to_string())]);
+        let plain = systemd_run_args(&plan, &stop_post, &passthrough, 80, None);
+        assert_eq!(&plain[..3], &["--user", "--collect", "--quiet"]);
+        assert!(plain.contains(&"--unit=universe-game-x-20260911-120000".to_string()));
+        assert!(plain.contains(&"--property=ExitType=cgroup".to_string()));
+        assert!(plain.contains(&"--property=TimeoutStopSec=80".to_string()));
+        assert!(plain.contains(&"--property=ExecStopPost=\"/usr/bin/universe\" \"session-end\" \"x\" \"20260911-120000\"".to_string()));
+        assert!(!plain.iter().any(|a| a.starts_with("--property=BindsTo=") || a.starts_with("--property=After=") || a.starts_with("--working-directory=")));
+        assert!(plain.contains(&"--setenv=PATH=/bin".to_string()) && plain.contains(&"--setenv=WINEPREFIX=/p".to_string()));
+        assert_eq!(&plain[plain.len() - 4..], &["--", "umu-run", "/g/x.exe", "-w"]);
+        let bound = systemd_run_args(&plan, &stop_post, &passthrough, 80, Some("universe-launcher-4242.scope"));
+        assert!(bound.contains(&"--property=BindsTo=universe-launcher-4242.scope".to_string()));
+        assert!(bound.contains(&"--property=After=universe-launcher-4242.scope".to_string()));
+        assert_eq!(bound.len(), plain.len() + 2);
     }
 
     #[test]

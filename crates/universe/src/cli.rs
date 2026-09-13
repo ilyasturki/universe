@@ -45,7 +45,7 @@ pub enum Cmd {
         #[arg(long)]
         all: bool,
     },
-    /// Launch a game (exact › word › substring › path) and wait for it to end
+    /// Launch a game (exact › word › substring or path) and wait for it to end; the game ends with this command (Ctrl-C stops it)
     #[command(alias = "launch")]
     Play {
         /// Game: exact id, then whole word, substring or path
@@ -53,7 +53,7 @@ pub enum Cmd {
         /// DRM connector the game runs on, e.g. DP-1 (default: the desktop profile decides)
         #[arg(long, default_value = "")]
         screen: String,
-        /// Return once launched instead of waiting for the session to end
+        /// Return once launched and leave the game to systemd instead of waiting for the session to end
         #[arg(long)]
         no_wait: bool,
     },
@@ -498,6 +498,10 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         }
         Cmd::Play { name, screen, no_wait } => {
             let id = pick(&core, &name).await?;
+            // The game is bound to this process's scope: it goes down with us, cleanly on Ctrl-C.
+            if !no_wait {
+                core.adopt_scope().await?;
+            }
             let sid = core.launch(&id, &screen).await?;
             if json {
                 print_json(&serde_json::json!({"session": sid, "id": id}));
@@ -508,8 +512,29 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 return Ok(());
             }
             let unit = format!("{}.service", launcher::unit_name(&id, &sid));
+            use tokio::signal::unix::{signal, SignalKind};
+            let (mut int, mut term) = (signal(SignalKind::interrupt())?, signal(SignalKind::terminate())?);
+            let mut stopping = false;
             while launcher::is_active(&unit).await {
-                tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                let signalled = tokio::select! {
+                    _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => false,
+                    _ = int.recv() => true,
+                    _ = term.recv() => true,
+                };
+                if signalled && stopping {
+                    // A second signal: the scope takes the game down with us, ExecStopPost still closes the session.
+                    std::process::exit(130);
+                }
+                if signalled {
+                    stopping = true;
+                    if !json {
+                        eprintln!("stopping {id}…");
+                    }
+                    match core.stop("").await {
+                        Ok(()) | Err(crate::Error::NotFound(_)) => {}
+                        Err(e) => eprintln!("universe: {e}"),
+                    }
+                }
             }
             let path = core.get(&id).await?.game.sessions_path();
             for _ in 0..30 {
