@@ -10,6 +10,7 @@ use crate::sessions;
 
 const AFTER_HELP: &str = "\
 Games are named by id, whole word, substring or path; an ambiguous name asks on a terminal and fails elsewhere.
+A game starts through its runner: proton (umu-run), wine, linux, or an emulator (`universe runner ls`); `universe add <file> --runner <id>` adds one.
 A game runs as the transient unit universe-game-<id>-<session>.service; `universe session-end` closes it when its cgroup empties.
 
 Files:
@@ -111,11 +112,33 @@ pub enum Cmd {
         #[arg(long, short)]
         yes: bool,
     },
-    /// Set game keys: proton=proton-em capture.cursor=true hidden=true
+    /// Add a game by its file: a program, or a ROM, image or folder for an emulator
+    Add {
+        /// The game file (a .exe for proton/wine, a native program for linux, a ROM or image for an emulator)
+        file: std::path::PathBuf,
+        /// Runner id: proton, wine, linux, dolphin, eden, ryujinx, rpcs3, melonds, mgba, pcsx2, duckstation, cemu, azahar, ppsspp, xemu, xenia, shadps4, vita3k, mupen64plus, snes9x, flycast, scummvm, dosbox, mame (an alias such as yuzu or citra works)
+        #[arg(long, short)]
+        runner: String,
+        /// Title; the file's name, cleaned of release tags, when omitted
+        #[arg(long, short, default_value = "")]
+        title: String,
+        /// Platform; the runner's first when omitted (Dolphin: "Nintendo GameCube" or "Nintendo Wii")
+        #[arg(long, short, default_value = "")]
+        platform: String,
+        /// Fetch artwork right away
+        #[arg(long)]
+        media: bool,
+    },
+    /// Runners: what starts a game (proton, wine, linux and the emulators), where each was found, their options
+    Runner {
+        #[command(subcommand)]
+        action: RunnerCmd,
+    },
+    /// Set game keys: runner=dolphin proton=proton-em options.fullscreen=false capture.cursor=true hidden=true
     Set {
         /// Game: exact id, then whole word, substring or path
         name: String,
-        /// key=value; launch keys (proton, exe, prefix, args…) need no `launch.` prefix
+        /// key=value; launch keys (runner, exe, proton, prefix, args…) need no `launch.` prefix, a runner option is options.<key>
         pairs: Vec<String>,
     },
     /// Sessions of a game
@@ -252,6 +275,25 @@ pub enum MediaCmd {
         provider: String,
         /// The game's id at the provider
         id: String,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum RunnerCmd {
+    /// Every runner: its platforms, where its program was found, whether it is usable
+    #[command(alias = "list")]
+    Ls,
+    /// One runner's options and their current global values
+    Options {
+        /// Runner id
+        id: String,
+    },
+    /// Set a runner's global keys: exe=/path args="--flag" fullscreen=false inputplumber=false (an empty value resets)
+    Set {
+        /// Runner id
+        id: String,
+        /// key=value, validated against the runner's options
+        pairs: Vec<String>,
     },
 }
 
@@ -482,8 +524,8 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 print_json(&list);
                 return Ok(());
             }
-            let mut t = table(&["Title", "Source", "Hours", "Last played"]);
-            for i in 1..=3 {
+            let mut t = table(&["Title", "Runner", "Source", "Hours", "Last played"]);
+            for i in 1..=4 {
                 t.column_mut(i).unwrap().set_constraint(ColumnConstraint::ContentWidth);
             }
             for g in list.as_array().cloned().unwrap_or_default() {
@@ -492,7 +534,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 }
                 let title = if g["favorite"].as_bool() == Some(true) { format!("★ {}", s(&g, "title")) } else { s(&g, "title") };
                 let title = if g["hidden"].as_bool() == Some(true) { Cell::new(title).add_attribute(Attribute::Dim) } else { Cell::new(title) };
-                t.add_row(vec![title, Cell::new(s(&g["source"], "kind")), Cell::new(hours(&g)), Cell::new(day(&s(&g["stats"], "last_played"), &loc))]);
+                t.add_row(vec![title, Cell::new(s(&g["effective"], "runner")), Cell::new(s(&g["source"], "kind")), Cell::new(hours(&g)), Cell::new(day(&s(&g["stats"], "last_played"), &loc))]);
             }
             println!("{t}");
         }
@@ -594,9 +636,15 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
             println!("{}  {}", s(&g, "title").bold(), s(&g, "id").dimmed());
             println!("  source     {} {}  build {}", s(&g["source"], "kind"), s(&g["source"], "gog_id"), s(&g["source"], "build_id"));
+            println!("  runner     {} ({}) · {}", s(&g["effective"], "runner"), s(&g["effective"], "runner_name"), if s(&g["effective"], "runner_path").is_empty() { "not found".to_string() } else { s(&g["effective"], "runner_path") });
+            println!("  platform   {}", s(&g, "platform"));
             println!("  exe        {}", s(&g["launch"], "exe"));
-            println!("  prefix     {}", s(&g["launch"], "prefix"));
-            println!("  proton     {} ({})", s(&g["effective"], "proton"), s(&g["effective"], "proton_path"));
+            if s(&g["effective"], "runner_kind") == "emulator" {
+                println!("  options    {}", g["effective"]["options"]);
+            } else {
+                println!("  prefix     {}", s(&g["launch"], "prefix"));
+                println!("  proton     {} ({})", s(&g["effective"], "proton"), s(&g["effective"], "proton_path"));
+            }
             println!("  esync/fsync/mangohud  {}/{}/{}", g["effective"]["esync"], g["effective"]["fsync"], g["effective"]["mangohud"]);
             println!("  env        {}", g["effective"]["env"]);
             println!("  hours      {}  plays {}  last {}", hours(&g), g["stats"]["play_count"], when(&s(&g["stats"], "last_played"), &loc));
@@ -690,13 +738,34 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 println!("uninstalled {id}");
             }
         }
+        Cmd::Add { file, runner, title, platform, media } => {
+            let payload = serde_json::json!({"title": title, "runner": runner, "exe": file.to_string_lossy(), "platform": platform});
+            let id = core.add_game(&payload.to_string()).await?;
+            let g = core.get(&id).await?;
+            if media {
+                let mut p = progress_printer(json);
+                if let Err(e) = core.media_refresh(&id, false, Some(&mut p)).await {
+                    eprintln!("media: {e}");
+                }
+            }
+            if json {
+                print_json(&core.get(&id).await?.to_json());
+            } else {
+                println!("{} {} · {} · {}", "added".green(), id, g.effective.runner_name, g.effective.platform);
+                if g.effective.runner_path.is_empty() && g.effective.runner_kind != "linux" {
+                    println!("{}", format!("{} was not found: install it or `universe runner set {} exe=…`", g.effective.runner_name, g.effective.runner).yellow());
+                }
+            }
+        }
+        Cmd::Runner { action } => return runner(core, action, json).await,
         Cmd::Set { name, pairs } => {
             let id = pick(&core, &name).await?;
             for p in pairs {
                 let (k, v) = p.split_once('=').ok_or_else(|| anyhow::anyhow!("expected key=value, got {p}"))?;
                 let k = match k {
-                    "proton" | "exe" | "prefix" | "args" | "working_dir" | "esync" | "fsync" | "mangohud" | "umu_id" | "store" | "pre_command" | "post_command" | "arch" | "backend" => format!("launch.{k}"),
+                    "runner" | "runner_exe" | "proton" | "exe" | "prefix" | "args" | "working_dir" | "esync" | "fsync" | "mangohud" | "umu_id" | "store" | "pre_command" | "post_command" | "arch" => format!("launch.{k}"),
                     "hide_cursor" => "desktop.hide_cursor".into(),
+                    _ if k.starts_with("options.") => format!("launch.{k}"),
                     _ => k.to_string(),
                 };
                 core.set(&id, &k, v).await?;
@@ -1068,9 +1137,61 @@ async fn controller(core: Core, action: ControllerCmd, json: bool) -> anyhow::Re
     Ok(())
 }
 
+async fn runner(core: Core, action: RunnerCmd, json: bool) -> anyhow::Result<()> {
+    match action {
+        RunnerCmd::Ls => {
+            let list = parse_json(&core.runners_json().await);
+            if json {
+                print_json(&list);
+                return Ok(());
+            }
+            let mut t = table(&["Id", "Name", "Platforms", "Program", "Found"]);
+            for r in list.as_array().cloned().unwrap_or_default() {
+                let platforms = r["platforms"].as_array().map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(", ")).unwrap_or_default();
+                let program = if s(&r, "path").is_empty() { if s(&r, "kind") == "linux" { "the game itself".to_string() } else { "not found".to_string() } } else { s(&r, "path") };
+                let program = if r["available"].as_bool() == Some(true) { Cell::new(program) } else { Cell::new(program).add_attribute(Attribute::Dim) };
+                t.add_row(vec![Cell::new(s(&r, "id")), Cell::new(s(&r, "name")), Cell::new(platforms), program, Cell::new(s(&r, "source"))]);
+            }
+            println!("{t}");
+        }
+        RunnerCmd::Options { id } => {
+            let list = parse_json(&core.runners_json().await);
+            let Some(r) = list.as_array().and_then(|a| a.iter().find(|r| s(r, "id") == crate::runners::canonical(&id))).cloned() else { anyhow::bail!("unknown runner {id}") };
+            if json {
+                print_json(&r);
+                return Ok(());
+            }
+            println!("{}  {}", s(&r, "name").bold(), s(&r, "id").dimmed());
+            println!("  exe   {}", if s(&r, "exe").is_empty() { format!("{} (detected)", s(&r, "path")).dimmed().to_string() } else { s(&r, "exe") });
+            println!("  args  {}", s(&r, "args"));
+            let mut t = table(&["Option", "Type", "Value", "Label"]);
+            for o in r["options"].as_array().cloned().unwrap_or_default() {
+                t.add_row(vec![s(&o, "key"), s(&o, "type"), o["value"].to_string().trim_matches('"').to_string(), s(&o, "label")]);
+            }
+            println!("{t}");
+        }
+        RunnerCmd::Set { id, pairs } => {
+            for p in &pairs {
+                let (k, v) = p.split_once('=').ok_or_else(|| anyhow::anyhow!("expected key=value, got {p}"))?;
+                core.set_runner_setting(&id, k, v).await?;
+                println!("runners.{}.{k} = {v}", crate::runners::canonical(&id));
+            }
+            if pairs.is_empty() {
+                anyhow::bail!("nothing to set: key=value…");
+            }
+        }
+    }
+    Ok(())
+}
+
 /// One candidate per line, `value<TAB>description`: Fish shows the description.
 fn complete(what: &str) -> anyhow::Result<()> {
     match what {
+        "runners" => {
+            for r in crate::runners::RUNNERS {
+                println!("{}\t{}", r.id, r.name);
+            }
+        }
         "games" => {
             let Ok(rd) = std::fs::read_dir(crate::paths::games_dir()) else { return Ok(()) };
             let mut games: Vec<(String, String)> = rd
@@ -1114,15 +1235,18 @@ fn complete(what: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-const GAME_KEYS: [&str; 22] = [
-    "proton=", "exe=", "prefix=", "args=", "working_dir=", "esync=", "fsync=", "mangohud=", "umu_id=", "store=", "pre_command=", "post_command=", "arch=", "backend=", "hide_cursor=",
-    "hidden=", "favorite=", "tags=", "sort_title=", "metadata.sgdb_id=", "capture.cursor=", "launch.env.",
+const GAME_KEYS: [&str; 25] = [
+    "runner=", "runner_exe=", "exe=", "proton=", "prefix=", "args=", "working_dir=", "esync=", "fsync=", "mangohud=", "umu_id=", "store=", "pre_command=", "post_command=", "arch=", "hide_cursor=",
+    "hidden=", "favorite=", "tags=", "sort_title=", "platform=", "metadata.sgdb_id=", "capture.cursor=", "launch.env.", "options.",
 ];
 
 /// Positional completions clap's static Fish output cannot express: `(subcommand path, position of the
 /// positional counted from that subcommand, candidates)`. `games`/`sources`/`modules` call the binary.
 const POSITIONALS: &[(&str, usize, &str)] = &[
     ("play", 1, "games"),
+    ("add", 1, "FILES"),
+    ("runner options", 1, "runners"),
+    ("runner set", 1, "runners"),
     ("info", 1, "games"),
     ("set", 1, "games"),
     ("rm", 1, "games"),
@@ -1160,8 +1284,8 @@ const POSITIONALS: &[(&str, usize, &str)] = &[
     ("controller forget", 2, "buttons"),
 ];
 
-const CONFIG_KEYS: [&str; 20] = [
-    "paths.games_root", "paths.prefixes_root", "paths.recordings_root", "paths.journal_root", "paths.overrides", "launch.proton", "launch.esync", "launch.fsync", "launch.mangohud",
+const CONFIG_KEYS: [&str; 21] = [
+    "paths.games_root", "paths.prefixes_root", "paths.recordings_root", "paths.journal_root", "paths.overrides", "launch.proton", "launch.esync", "launch.fsync", "launch.mangohud", "runners.",
     "desktop.profile", "desktop.hide_cursor", "desktop.cursor_extension", "keys.sgdb", "keys.sgdb_file", "keys.rawg", "keys.rawg_file",
     "controller.enabled", "controller.hold_ms", "controller.volume_step", "controller.mangohud_toggle",
 ];
@@ -1227,13 +1351,14 @@ fn generate(dir: &std::path::Path) -> anyhow::Result<()> {
         match *what {
             "FILES" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -F\n")),
             "CONFIG_KEYS" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"{}\"\n", CONFIG_KEYS.join(" "))),
-            "games" | "sources" | "modules" | "families" | "buttons" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"(universe __complete {what})\"\n")),
+            "games" | "sources" | "modules" | "families" | "buttons" | "runners" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"(universe __complete {what})\"\n")),
             "games all" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"(universe __complete games) all\"\n")),
             literal => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"{literal}\"\n")),
         }
     }
     fish.push_str(&format!("complete -c universe -n \"__universe_at set 2+\" -f -a \"{}\"\n", GAME_KEYS.join(" ")));
     fish.push_str("complete -c universe -n \"__fish_seen_subcommand_from search install update\" -l source -x -a \"(universe __complete sources)\"\n");
+    fish.push_str("complete -c universe -n \"__fish_seen_subcommand_from add\" -s r -l runner -x -a \"(universe __complete runners)\"\n");
     fish.push_str("complete -c universe -n \"__fish_seen_subcommand_from module\" -l game -x -a \"(universe __complete games)\"\n");
     std::fs::create_dir_all(dir)?;
     std::fs::write(dir.join("universe.fish"), fish)?;
