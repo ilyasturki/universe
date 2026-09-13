@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "universe_ui"
-version = "0.0.0"
+version = "0.0.1"
 description = "Gamepad-first launcher UI for Universe (PySide6 host; the Reprise and Switch 2 looks)"
 requires-python = ">=3.11"
 license = { text = "MIT" }

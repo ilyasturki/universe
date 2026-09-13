@@ -392,10 +392,10 @@ api = 1
 id = "capture"
 name = "Video capture"
 kind = ["hooks"]                  # hooks | source; a module may be both
-version = "0.0.0"
+version = "0.0.1"
 
 [requires]
-core = "=0.0.0"
+core = "=0.0.1"
 bins = ["gpu-screen-recorder"]    # a missing binary makes the module "unavailable" and it is never run
 
 [hooks]                           # paths relative to the module directory

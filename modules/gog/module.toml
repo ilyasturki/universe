@@ -2,10 +2,10 @@ api = 1
 id = "gog"
 name = "GOG"
 kind = ["source"]
-version = "0.0.0"
+version = "0.0.1"
 
 [requires]
-core = "=0.0.0"
+core = "=0.0.1"
 bins = ["gogdl"]
 
 [source]
