@@ -6,7 +6,7 @@ version = "0.0.0"
 
 [requires]
 core = "=0.0.0"
-bins = ["gpu-screen-recorder"]
+bins = ["gpu-screen-recorder", "gst-launch-1.0"]
 
 [hooks]
 post-launch = "bin/start"
@@ -24,6 +24,14 @@ type = "bool"
 default = true
 label = "Record the session"
 scope = "game"
+
+[[settings]]
+key = "source"
+type = "enum"
+default = "window"
+label = "Capture"
+scope = "game"
+choices = ["window", "screen"]
 
 [[settings]]
 key = "cursor"

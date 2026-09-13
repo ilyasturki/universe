@@ -1,5 +1,6 @@
 """Runs bin/start, bin/stop, bin/shot as subprocesses against fake systemd-run /
 systemctl / universe / ffprobe / gpu-screen-recorder / trash shims on PATH."""
+import importlib.util
 import json
 import os
 import shutil
@@ -11,6 +12,11 @@ import pytest
 
 MODULE_DIR = Path(__file__).resolve().parents[1]
 BIN_DIR = MODULE_DIR / "bin"
+
+# Loaded under a unique name so it does not shadow other modules' bin/_common.py.
+_spec = importlib.util.spec_from_file_location("capture_common", BIN_DIR / "_common.py")
+_common = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_common)
 
 QVBR_OPTS = "rc_mode=QVBR;global_quality=95;b=16000000;maxrate=32000000;bufsize=64000000"
 SESSION_ID = "20260911-120000"
@@ -38,8 +44,16 @@ if [ "${{FAKE_UNIVERSE_EXIT:-0}}" != "0" ]; then echo "universe: not found: sess
 echo "/mnt/recordings/games/fake/session.mkv"
 exit 0''')
     _write_shim(bindir / "ffprobe", 'echo "${FAKE_DURATION:-300}"\nexit 0\n')
+    _write_shim(bindir / "ffmpeg", f'''printf "%s\\n" "$@" >> "{logs}/ffmpeg.args"
+out="${{@: -1}}"
+echo fake > "$out"
+exit 0''')
     # Mutter's GetCurrentState as busctl --json=short prints it: DP-1 at 120 Hz, HDMI-A-1 at 60 Hz.
-    _write_shim(bindir / "busctl", f'''printf "%s\\n" "$@" > "{logs}/busctl.args"
+    _write_shim(bindir / "busctl", f'''printf "%s\\n" "$@" >> "{logs}/busctl.args"
+case "$*" in
+  *NameHasOwner*) echo "b ${{FAKE_NAME_OWNED:-false}}"; exit 0;;
+  *EnableExtension*) echo "b true"; exit 0;;
+esac
 if [ "${{FAKE_BUSCTL_EXIT:-0}}" != "0" ]; then exit "${{FAKE_BUSCTL_EXIT}}"; fi
 echo '{{"type":"ua((ssss)a(siiddada{{sv}})a{{sv}})a(iiduba(ssss)a{{sv}})a{{sv}}","data":[1,[[["DP-1","GSM","LG","0x1"],[["3840x2160@59.997",3840,2160,59.997,1.5,[1.0],{{}}],["3840x2160@119.88",3840,2160,119.88,1.5,[1.0],{{"is-current":{{"type":"b","data":true}}}}]],{{}}],[["HDMI-A-1","DEL","Dell","0x2"],[["2560x1440@59.951",2560,1440,59.951,1.0,[1.0],{{"is-current":{{"type":"b","data":true}}}}]],{{}}]],[],{{}}]}}'
 exit 0''')
@@ -62,9 +76,24 @@ def env_for(tmp_path, fakebin, settings, session_id=SESSION_ID, extra=None):
     env["UNIVERSE_BIN"] = str(fakebin["bin"] / "universe")
     env["MODULE_SETTINGS_JSON"] = json.dumps(settings)
     env.setdefault("SESSION_SCREEN", "DP-1")
+    # Deterministic across hosts: no shell extension unless a test installs one, so
+    # the default source=window still falls back to the gsr screen path.
+    home = tmp_path / "home"
+    home.mkdir(exist_ok=True)
+    env["HOME"] = str(home)
+    env["XDG_DATA_DIRS"] = str(tmp_path / "datadirs")
+    env["XDG_CURRENT_DESKTOP"] = "GNOME"
+    env.pop("GST_PLUGIN_SYSTEM_PATH_1_0", None)
     if extra:
         env.update(extra)
     return env
+
+
+def install_fake_extension(env):
+    uuid = "universe@ilyasturki.github.io"
+    ext_dir = Path(env["HOME"]) / ".local/share/gnome-shell/extensions" / uuid
+    ext_dir.mkdir(parents=True, exist_ok=True)
+    (ext_dir / "metadata.json").write_text(json.dumps({"uuid": uuid}))
 
 
 def run(script, env):
@@ -257,3 +286,193 @@ def test_shot_falls_back_to_module_data_dir(tmp_path, fakebin):
     path = Path(result.stdout.strip())
     assert path.parent == tmp_path / "data" / "screenshots"
     assert path.exists()
+
+
+# --- bin/start window mode ------------------------------------------------
+
+def test_start_window_mode_runs_record_window_unit(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {"source": "window"},
+                  extra={"FAKE_NAME_OWNED": "true", "SESSION_UNIT": "universe-game-x-1.service"})
+    install_fake_extension(env)
+    result = run("start", env)
+    assert result.returncode == 0, result.stderr
+
+    args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
+    assert f"--unit=universe-capture-{SESSION_ID}" in args
+    assert args[-1] == str(BIN_DIR / "record-window")
+    assert "KillMode=mixed" in flag_values(args, "-p")
+    assert "KillSignal=SIGINT" in flag_values(args, "-p")
+    assert "BindsTo=universe-game-x-1.service" in flag_values(args, "-p")
+    env_flags = flag_values(args, "-E")
+    assert f"SESSION_ID={SESSION_ID}" in env_flags
+    assert any(e.startswith("MODULE_SETTINGS_JSON=") for e in env_flags)
+    assert any(e.startswith("PATH=") for e in env_flags)
+    assert "gpu-screen-recorder" not in args
+
+    companion = json.loads((tmp_path / "data" / "pending" / f"{SESSION_ID}.json").read_text())
+    assert companion["mode"] == "window"
+
+
+def test_start_window_falls_back_to_gsr_when_extension_not_loaded(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {"source": "window"}, extra={"FAKE_NAME_OWNED": "false"})
+    install_fake_extension(env)
+    result = run("start", env)
+    assert result.returncode == 0, result.stderr
+    assert "log out once" in result.stderr
+
+    args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
+    assert "gpu-screen-recorder" in args
+    assert str(BIN_DIR / "record-window") not in args
+    companion = json.loads((tmp_path / "data" / "pending" / f"{SESSION_ID}.json").read_text())
+    assert companion["mode"] == "screen"
+
+
+def test_start_window_falls_back_to_gsr_when_extension_missing(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {"source": "window"})
+    result = run("start", env)
+    assert result.returncode == 0, result.stderr
+    args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
+    assert "gpu-screen-recorder" in args
+
+
+def test_start_screen_source_skips_the_extension(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {"source": "screen"}, extra={"FAKE_NAME_OWNED": "true"})
+    install_fake_extension(env)
+    result = run("start", env)
+    assert result.returncode == 0, result.stderr
+    args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
+    assert "gpu-screen-recorder" in args
+    busctl_log = fakebin["logs"] / "busctl.args"
+    assert "NameHasOwner" not in (busctl_log.read_text() if busctl_log.exists() else "")
+
+
+def test_start_window_not_on_gnome_uses_gsr(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {"source": "window"}, extra={"XDG_CURRENT_DESKTOP": "KDE"})
+    install_fake_extension(env)
+    result = run("start", env)
+    assert result.returncode == 0, result.stderr
+    args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
+    assert "gpu-screen-recorder" in args
+
+
+# --- bin/stop segment consolidation ---------------------------------------
+
+def _seed_segments(tmp_path, indices, session_id=SESSION_ID):
+    pending = tmp_path / "data" / "pending"
+    pending.mkdir(parents=True, exist_ok=True)
+    paths = []
+    for i in indices:
+        p = pending / f"{session_id}-{i}.mkv"
+        p.write_bytes(f"segment {i}".encode())
+        paths.append(p)
+    return paths
+
+
+def test_stop_single_segment_is_renamed(tmp_path, fakebin):
+    _seed_segments(tmp_path, [0])
+    (tmp_path / "data" / "pending" / f"{SESSION_ID}.json").write_text("{}")
+    env = env_for(tmp_path, fakebin, {"min_duration_s": 240}, extra={"FAKE_DURATION": "999"})
+    result = run("stop", env)
+    assert result.returncode == 0, result.stderr
+    final = tmp_path / "data" / "pending" / f"{SESSION_ID}.mkv"
+    assert final.exists()
+    assert not (tmp_path / "data" / "pending" / f"{SESSION_ID}-0.mkv").exists()
+    args = (fakebin["logs"] / "universe.args").read_text().splitlines()
+    assert args == ["recording-file", SESSION_ID, str(final)]
+
+
+def test_stop_multiple_segments_are_concatenated(tmp_path, fakebin):
+    segs = _seed_segments(tmp_path, [0, 1, 2])
+    (tmp_path / "data" / "pending" / f"{SESSION_ID}.json").write_text("{}")
+    env = env_for(tmp_path, fakebin, {"min_duration_s": 240}, extra={"FAKE_DURATION": "999"})
+    result = run("stop", env)
+    assert result.returncode == 0, result.stderr
+
+    ff = (fakebin["logs"] / "ffmpeg.args").read_text().splitlines()
+    assert "concat" in ff and "-safe" in ff and "0" in ff and "copy" in ff
+    final = tmp_path / "data" / "pending" / f"{SESSION_ID}.mkv"
+    assert str(final) in ff
+    for s in segs:
+        assert not s.exists()
+
+
+# --- pure helpers ----------------------------------------------------------
+
+def test_gsr_args_matches_the_screen_path():
+    args = _common.gsr_args(
+        {"cursor": True, "codec": "hevc", "fps": 30, "audio": "output", "quality": "qvbr"},
+        "DP-1", "/out.mkv")
+    assert args[0] == "gpu-screen-recorder"
+    assert args[args.index("-w") + 1] == "DP-1"
+    assert args[args.index("-cursor") + 1] == "yes"
+    assert args[args.index("-f") + 1] == "30"
+    assert args[args.index("-k") + 1] == "hevc"
+    assert args[args.index("-o") + 1] == "/out.mkv"
+
+
+def test_gst_window_args_av1_10bit_is_p010():
+    args = _common.gst_window_args(42, {"codec": "av1_10bit", "audio": "none", "quality": "qvbr"}, 60, "/o.mkv")
+    joined = " ".join(args)
+    assert "path=42" in args
+    assert "vaav1enc" in args
+    assert "video/x-raw(memory:VAMemory),format=P010_10LE" in args
+    assert "max-rate=60" in args
+    assert "location=/o.mkv" in args
+    assert "pulsesrc" not in joined  # audio none
+
+
+def test_gst_window_args_codec_and_format_map():
+    for codec, enc, fmt in [("av1", "vaav1enc", "NV12"), ("hevc", "vah265enc", "NV12"),
+                            ("h264", "vah264enc", "NV12")]:
+        args = _common.gst_window_args(1, {"codec": codec, "audio": "none"}, None, "/o.mkv")
+        assert enc in args
+        assert f"video/x-raw(memory:VAMemory),format={fmt}" in args
+        assert "videorate" not in args  # fps None: no cap
+
+
+def test_gst_window_args_audio_branches():
+    none = _common.gst_window_args(1, {"audio": "none"}, 60, "/o.mkv")
+    one = _common.gst_window_args(1, {"audio": "output"}, 60, "/o.mkv")
+    two = _common.gst_window_args(1, {"audio": "output+input"}, 60, "/o.mkv")
+    assert none.count("pulsesrc") == 0
+    assert one.count("pulsesrc") == 1
+    assert "device=@DEFAULT_MONITOR@" in one
+    assert two.count("pulsesrc") == 2
+    assert "device=@DEFAULT_SOURCE@" in two
+
+
+def test_gst_window_args_raw_quality_is_ignored():
+    args = _common.gst_window_args(1, {"quality": "rc_mode=CQP;qp=20", "audio": "none"}, 60, "/o.mkv")
+    assert "rate-control=vbr" in args
+    assert "bitrate=16000" in args
+
+
+def test_cursor_mode():
+    assert _common.cursor_mode({"cursor": True}) == _common.CURSOR_EMBEDDED == 1
+    assert _common.cursor_mode({"cursor": False}) == _common.CURSOR_HIDDEN == 0
+
+
+def test_cgroup_matches():
+    unit_cg = "/user.slice/user-1000.slice/user@1000.service/app.slice/universe-game-x.service"
+    exact = f"0::{unit_cg}\n"
+    child = f"0::{unit_cg}/sub\n"
+    other = "0::/user.slice/user-1000.slice/user@1000.service/app.slice/other.service\n"
+    assert _common.cgroup_matches(exact, unit_cg)
+    assert _common.cgroup_matches(child, unit_cg)
+    assert not _common.cgroup_matches(other, unit_cg)
+    assert not _common.cgroup_matches(exact, None)
+
+
+def test_segment_paths_are_numerically_sorted(tmp_path):
+    for i in (0, 1, 2, 10):
+        (tmp_path / f"{SESSION_ID}-{i}.mkv").write_bytes(b"x")
+    (tmp_path / f"{SESSION_ID}.mkv").write_bytes(b"x")  # not a segment
+    (tmp_path / f"{SESSION_ID}-bad.mkv").write_bytes(b"x")
+    paths = _common.segment_paths(str(tmp_path), SESSION_ID)
+    assert [Path(p).name for p in paths] == [
+        f"{SESSION_ID}-0.mkv", f"{SESSION_ID}-1.mkv", f"{SESSION_ID}-2.mkv", f"{SESSION_ID}-10.mkv"]
+
+
+def test_concat_list_lines():
+    lines = _common.concat_list_lines(["/a/b-0.mkv", "/a/b-1.mkv"])
+    assert lines == ["file '/a/b-0.mkv'", "file '/a/b-1.mkv'"]

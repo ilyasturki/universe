@@ -1,0 +1,213 @@
+#!/usr/bin/env python3
+"""Records the game's cgroup toplevel through Mutter's ScreenCast, one segment per window; the screen if none appears."""
+import json
+import os
+import signal
+import subprocess
+import sys
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from _common import (  # noqa: E402
+    WINDOWS_BUS_NAME, log, load_settings, resolve_screen, resolve_fps, gsr_args,
+    cursor_mode, gst_window_args, unit_cgroup, pid_in_unit, segment_path,
+)
+
+WINDOW_WAIT_S = 60
+POLL_S = 0.5
+WATCH_S = 2.0
+
+_interrupted = False
+
+
+def _on_sigint(signum, frame):
+    global _interrupted
+    _interrupted = True
+
+
+def exec_screen_fallback(settings, reason):
+    log(reason)
+    try:
+        screen = resolve_screen()
+    except Exception as e:
+        log(f"could not resolve a screen to capture: {e}")
+        sys.exit(1)
+    args = gsr_args(settings, screen, os.path.join(
+        os.environ["MODULE_DATA_DIR"], "pending", f"{os.environ['SESSION_ID']}.mkv"))
+    os.execvp(args[0], args)
+
+
+class Windows:
+    """org.universe.Windows.List() over a held session-bus connection."""
+
+    def __init__(self, conn):
+        from jeepney import DBusAddress
+        self._conn = conn
+        self._addr = DBusAddress("/org/universe/Windows", bus_name=WINDOWS_BUS_NAME,
+                                 interface=WINDOWS_BUS_NAME)
+
+    def list(self):
+        from jeepney import new_method_call
+        from jeepney.wrappers import unwrap_msg
+        try:
+            reply = self._conn.send_and_get_reply(
+                new_method_call(self._addr, "List", "", ()), timeout=5)
+            return json.loads(unwrap_msg(reply)[0])
+        except Exception as e:
+            log(f"Windows.List failed: {e}")
+            return []
+
+
+def cgroup_windows(windows, unit_cg):
+    return [w for w in windows if w.get("pid") and pid_in_unit(w["pid"], unit_cg)]
+
+
+def visible(w):
+    return not w.get("hidden") and not w.get("minimized")
+
+
+def pick_window(windows, unit_cg):
+    """The largest visible toplevel of the game's cgroup, else None."""
+    mine = [w for w in cgroup_windows(windows, unit_cg) if visible(w)]
+    if not mine:
+        return None
+    return max(mine, key=lambda w: (w.get("width", 0) * w.get("height", 0)))
+
+
+def wait_for_window(windows, unit_cg):
+    deadline = time.monotonic() + WINDOW_WAIT_S
+    while time.monotonic() < deadline and not _interrupted:
+        w = pick_window(windows.list(), unit_cg)
+        if w:
+            return w
+        time.sleep(POLL_S)
+    return None
+
+
+def open_stream(conn, sess, window_id, mode):
+    """RecordWindow + Start; returns the PipeWire node id."""
+    from jeepney import MatchRule, new_method_call, message_bus
+    from jeepney.io.blocking import Proxy
+    from jeepney.wrappers import unwrap_msg
+    props = {"window-id": ("t", window_id), "cursor-mode": ("u", mode)}
+    stream_path = unwrap_msg(conn.send_and_get_reply(
+        new_method_call(sess, "RecordWindow", "a{sv}", (props,))))[0]
+    rule = MatchRule(type="signal", interface="org.gnome.Mutter.ScreenCast.Stream",
+                     member="PipeWireStreamAdded", path=stream_path)
+    Proxy(message_bus, conn).AddMatch(rule)
+    with conn.filter(rule) as queue:
+        unwrap_msg(conn.send_and_get_reply(new_method_call(sess, "Start", "", ())))
+        msg = conn.recv_until_filtered(queue, timeout=10)
+    return msg.body[0]
+
+
+def record_segment(conn, window_id, settings, fps, out_path, windows, unit_cg):
+    """Records one window to out_path. Returns the id of a replacement window, or None."""
+    from jeepney import DBusAddress, new_method_call
+    from jeepney.wrappers import unwrap_msg
+    create = DBusAddress("/org/gnome/Mutter/ScreenCast", bus_name="org.gnome.Mutter.ScreenCast",
+                         interface="org.gnome.Mutter.ScreenCast")
+    session_path = unwrap_msg(conn.send_and_get_reply(
+        new_method_call(create, "CreateSession", "a{sv}", ({},))))[0]
+    sess = DBusAddress(session_path, bus_name="org.gnome.Mutter.ScreenCast",
+                       interface="org.gnome.Mutter.ScreenCast.Session")
+    node_id = open_stream(conn, sess, window_id, cursor_mode(settings))
+
+    args = gst_window_args(node_id, settings, fps, out_path)
+    log(" ".join(args))
+    gst = subprocess.Popen(args)
+
+    replacement = None
+    gst_exited = False
+    next_watch = time.monotonic() + WATCH_S
+    while True:
+        if _interrupted:
+            break
+        try:
+            gst.wait(timeout=0.25)
+            gst_exited = True
+            log(f"gst-launch exited on its own ({gst.returncode}) — window stream ended")
+            break
+        except subprocess.TimeoutExpired:
+            pass
+        if time.monotonic() >= next_watch:
+            next_watch = time.monotonic() + WATCH_S
+            current = windows.list()
+            still_here = any(w.get("id") == window_id and visible(w) for w in current)
+            if not still_here:
+                replacement = pick_window(current, unit_cg)
+                if replacement and replacement.get("id") != window_id:
+                    log(f"recorded window {window_id} gone, switching to {replacement['id']}")
+                    break
+
+    _finalise(gst)
+    conn.send_and_get_reply(new_method_call(sess, "Stop", "", ()))
+    # The window vanished with the stream; pick up a new game window if one is up.
+    if gst_exited and replacement is None and not _interrupted:
+        replacement = pick_window(windows.list(), unit_cg)
+    if replacement and replacement.get("id") != window_id:
+        return replacement["id"]
+    return None
+
+
+def _finalise(gst):
+    if gst.poll() is None:
+        gst.send_signal(signal.SIGINT)
+        try:
+            gst.wait(timeout=15)
+        except subprocess.TimeoutExpired:
+            log("gst-launch did not finalise within 15s, killing")
+            gst.kill()
+            gst.wait()
+
+
+def main():
+    settings = load_settings()
+    session_id = os.environ["SESSION_ID"]
+    pending_dir = os.path.join(os.environ["MODULE_DATA_DIR"], "pending")
+    os.makedirs(pending_dir, exist_ok=True)
+
+    unit_cg = unit_cgroup(os.environ.get("SESSION_UNIT"))
+    screen = (os.environ.get("SESSION_SCREEN") or "").strip()
+    fps_setting = settings.get("fps", 60)
+    fps = None if fps_setting == "auto" else resolve_fps(fps_setting, screen)
+
+    signal.signal(signal.SIGINT, _on_sigint)
+    signal.signal(signal.SIGTERM, _on_sigint)
+
+    try:
+        import jeepney  # noqa: F401
+        from jeepney.io.blocking import open_dbus_connection
+    except ImportError as e:
+        exec_screen_fallback(settings, f"jeepney unavailable ({e}), recording the screen")
+
+    conn = open_dbus_connection(bus="SESSION")
+    windows = Windows(conn)
+
+    window = wait_for_window(windows, unit_cg)
+    if _interrupted:
+        return 0
+    if window is None:
+        conn.close()
+        exec_screen_fallback(settings, "no window in 60 s, recording the screen")
+
+    window_id = window["id"]
+    index = 0
+    while window_id is not None and not _interrupted:
+        out_path = segment_path(pending_dir, session_id, index)
+        try:
+            window_id = record_segment(conn, window_id, settings, fps, out_path, windows, unit_cg)
+        except Exception as e:
+            log(f"segment {index} failed: {e}")
+            if index == 0:
+                conn.close()
+                exec_screen_fallback(settings, "window capture failed, recording the screen")
+            break
+        index += 1
+
+    conn.close()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

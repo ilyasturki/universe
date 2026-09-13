@@ -1,4 +1,4 @@
-{ universePkg, uiPkg }:
+{ universePkg, uiPkg, extensionPkg }:
 { config, lib, pkgs, ... }:
 let
   cfg = config.programs.universe;
@@ -12,6 +12,11 @@ in {
     enable = lib.mkEnableOption "Universe game launcher (user side: config.toml, enabled modules, packages)";
     package = lib.mkOption { type = lib.types.package; default = universePkg; };
     ui = lib.mkOption { type = lib.types.package; default = uiPkg; };
+    shellExtension = lib.mkOption {
+      type = lib.types.package;
+      default = extensionPkg;
+      description = "The 'universe@ilyasturki.github.io' GNOME Shell extension the capture module uses to list windows for window-only recording. Installed when the capture module is enabled; GNOME loads it after the next logout.";
+    };
     settings = lib.mkOption {
       type = lib.types.nullOr tomlFormat.type;
       default = { };
@@ -21,7 +26,8 @@ in {
     modules.enabled = lib.mkOption { type = lib.types.listOf lib.types.str; default = [ "gog" "capture" "journal" ]; };
   };
   config = lib.mkIf cfg.enable {
-    home.packages = [ cfg.package cfg.ui ];
+    home.packages = [ cfg.package cfg.ui ]
+      ++ lib.optional (builtins.elem "capture" cfg.modules.enabled) cfg.shellExtension;
     xdg.configFile."universe/config.toml" = lib.mkIf (cfg.settings != null) { source = tomlFormat.generate "universe-config.toml" settings; };
   };
 }

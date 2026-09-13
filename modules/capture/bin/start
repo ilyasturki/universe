@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""post-launch hook (async): starts gpu-screen-recorder under a transient unit."""
+"""post-launch hook (async): starts the window recorder (bin/record-window) or gpu-screen-recorder under a transient unit."""
 import json
 import os
 import subprocess
@@ -7,7 +7,71 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import log, load_settings, resolve_screen, resolve_fps, audio_args, quality_opts  # noqa: E402
+from _common import (  # noqa: E402
+    EXTENSION_UUID, WINDOWS_BUS_NAME, log, load_settings, resolve_screen, gsr_args,
+    is_gnome, extension_installed, enable_extension, bus_name_has_owner,
+)
+
+
+def bind_args():
+    game_unit = os.environ.get("SESSION_UNIT")
+    if not game_unit:
+        return []
+    return ["-p", f"BindsTo={game_unit}", "-p", f"After={game_unit}"]
+
+
+def run_systemd(cmd):
+    log(" ".join(cmd))
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        log(f"systemd-run failed ({result.returncode}): {result.stderr.strip()}")
+        return False
+    return True
+
+
+def write_companion(pending_dir, session_id, unit, output_path, mode):
+    with open(os.path.join(pending_dir, f"{session_id}.json"), "w") as f:
+        json.dump({
+            "unit": f"{unit}.service",
+            "output": output_path,
+            "mode": mode,
+            "started_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        }, f)
+
+
+def start_window(unit, pending_dir, session_id):
+    record_window = os.path.join(os.path.dirname(os.path.abspath(__file__)), "record-window")
+    passthrough = ["SESSION_ID", "SESSION_UNIT", "SESSION_SCREEN", "MODULE_SETTINGS_JSON",
+                   "MODULE_DATA_DIR", "PATH", "GST_PLUGIN_SYSTEM_PATH_1_0"]
+    env_args = []
+    for key in passthrough:
+        val = os.environ.get(key)
+        if val is not None:
+            env_args += ["-E", f"{key}={val}"]
+    cmd = [
+        "systemd-run", "--user", f"--unit={unit}", "--collect",
+        "-p", "CPUWeight=100", "-p", "MemoryHigh=4G",
+        *bind_args(),
+        "-p", "TimeoutStopSec=10",
+        # gst-launch -e finalises on SIGINT, and only one may reach it: record-window forwards it (KillMode=mixed).
+        "-p", "KillMode=mixed", "-p", "KillSignal=SIGINT",
+        *env_args,
+        record_window,
+    ]
+    return run_systemd(cmd)
+
+
+def start_screen(unit, screen, settings, output_path):
+    cmd = [
+        "systemd-run", "--user", f"--unit={unit}", "--collect",
+        "-p", "CPUWeight=100", "-p", "MemoryHigh=4G",
+        *bind_args(),
+        # bounds `systemctl stop`'s wait below bin/stop's own 15s stability budget;
+        # default TimeoutStopSec (90s) would blow session-end's timeout_s=20 if gsr hangs.
+        "-p", "TimeoutStopSec=10",
+        *gsr_args(settings, screen, output_path),
+    ]
+    return run_systemd(cmd)
 
 
 def main():
@@ -27,48 +91,32 @@ def main():
         log(f"could not resolve a screen to capture: {e}")
         return 1
 
-    cursor = "yes" if settings.get("cursor") else "no"
-    fps = str(resolve_fps(settings.get("fps", 60), screen))
-    codec = settings.get("codec", "av1_10bit")
-    output_path = os.path.join(pending_dir, f"{session_id}.mkv")
     unit = f"universe-capture-{session_id}"
+    output_path = os.path.join(pending_dir, f"{session_id}.mkv")
+    source = settings.get("source", "window")
 
-    game_unit = os.environ.get("SESSION_UNIT")
-    bind_to_game = ["-p", f"BindsTo={game_unit}", "-p", f"After={game_unit}"] if game_unit else []
-    cmd = [
-        "systemd-run", "--user", f"--unit={unit}", "--collect",
-        "-p", "CPUWeight=100", "-p", "MemoryHigh=4G",
-        *bind_to_game,
-        # bounds `systemctl stop`'s wait below bin/stop's own 15s stability budget;
-        # default TimeoutStopSec (90s) would blow session-end's timeout_s=20 if gsr hangs.
-        "-p", "TimeoutStopSec=10",
-        "gpu-screen-recorder",
-        "-w", screen,
-        "-cursor", cursor,
-        "-f", fps,
-        "-fm", "vfr",
-        "-c", "mkv",
-        "-k", codec,
-        "-ac", "opus",
-        "-tune", "quality",
-        "-bm", "cbr",
-        "-q", "20000",
-        *audio_args(settings.get("audio")),
-        "-ffmpeg-video-opts", quality_opts(settings.get("quality")),
-        "-o", output_path,
-    ]
-    log(f"starting {unit} on {screen}: {' '.join(cmd)}")
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        log(f"systemd-run failed ({result.returncode}): {result.stderr.strip()}")
+    if source == "window" and is_gnome():
+        if extension_installed():
+            enable_extension()
+            # EnableExtension runs the extension's enable() asynchronously in the shell,
+            # so the well-known name can lag the call by a moment on the first launch.
+            deadline = time.monotonic() + 3
+            owned = bus_name_has_owner(WINDOWS_BUS_NAME)
+            while not owned and time.monotonic() < deadline:
+                time.sleep(0.25)
+                owned = bus_name_has_owner(WINDOWS_BUS_NAME)
+            if owned:
+                if not start_window(unit, pending_dir, session_id):
+                    return 1
+                write_companion(pending_dir, session_id, unit, output_path, "window")
+                return 0
+            log(f"{EXTENSION_UUID} installed but not loaded (log out once to load it); recording the screen")
+        else:
+            log(f"{EXTENSION_UUID} not installed; recording the screen")
+
+    if not start_screen(unit, screen, settings, output_path):
         return 1
-
-    with open(os.path.join(pending_dir, f"{session_id}.json"), "w") as f:
-        json.dump({
-            "unit": f"{unit}.service",
-            "output": output_path,
-            "started_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-        }, f)
+    write_companion(pending_dir, session_id, unit, output_path, "screen")
     return 0
 
 

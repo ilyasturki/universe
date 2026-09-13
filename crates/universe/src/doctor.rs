@@ -17,7 +17,7 @@ fn which(bin: &str) -> Option<String> {
     dirs.iter().map(|d| d.join(bin)).find(|p| p.is_file()).map(|p| p.to_string_lossy().into())
 }
 
-pub fn run(config: &Config, modules: &[Module]) -> Vec<Check> {
+pub async fn run(config: &Config, modules: &[Module], shell: Option<&zbus::Connection>) -> Vec<Check> {
     let mut out = Vec::new();
     let mut push = |check: &str, ok: bool, detail: String, module: &str| out.push(Check { check: check.into(), ok, detail, module: module.into() });
 
@@ -30,6 +30,28 @@ pub fn run(config: &Config, modules: &[Module]) -> Vec<Check> {
     push("proton", proton.is_some(), proton.map(|p| p.to_string_lossy().into()).unwrap_or_else(|| format!("{} not found", config.launch.proton)), "core");
     let ext_ok = crate::desktop::extension_installed(&config.desktop.cursor_extension);
     push("cursor-extension", ext_ok || !config.desktop.hide_cursor, format!("{} {}", config.desktop.cursor_extension, if ext_ok { "installed" } else { "missing" }), "core");
+    if crate::desktop::detect(config) == crate::desktop::Profile::Gnome {
+        let uuid = crate::desktop::UNIVERSE_EXTENSION;
+        let (ok, detail) = if !crate::desktop::extension_installed(uuid) {
+            (false, "window capture falls back to the screen: the home-manager module installs the universe shell extension; log out to load it".to_string())
+        } else {
+            let proxy = match shell {
+                Some(conn) => crate::desktop::extensions_proxy(conn, crate::desktop::Profile::Gnome, uuid).await,
+                None => None,
+            };
+            let state = match &proxy {
+                Some(p) => crate::desktop::extension_state(p, uuid).await,
+                None => None,
+            };
+            match state {
+                Some(s) if crate::desktop::extension_is_active(s) => (true, format!("{uuid} active")),
+                Some(Some(_)) => (false, format!("installed but not enabled: gnome-extensions enable {uuid}")),
+                Some(None) => (false, "installed, log out to load it".to_string()),
+                None => (false, "installed; gnome shell unreachable".to_string()),
+            }
+        };
+        push("universe-extension", ok, detail, "core");
+    }
     push("recordings_root", config.recordings_root().is_dir(), config.recordings_root().to_string_lossy().into(), "core");
     push("journal_root", config.journal_root().is_dir(), config.journal_root().to_string_lossy().into(), "core");
     push("key-sgdb", config.api_key("sgdb").is_some(), if config.api_key("sgdb").is_some() { "present".into() } else { format!("missing ({})", config.keys.sgdb_file) }, "media");
@@ -45,14 +67,14 @@ pub fn run(config: &Config, modules: &[Module]) -> Vec<Check> {
             push("gsr-kms-server", which("gsr-kms-server").is_some(), which("gsr-kms-server").unwrap_or_else(|| "missing (programs.gpu-screen-recorder.enable)".into()), "capture");
         }
         if m.is_source() && m.id() == "gog" {
-            let auth = crate::paths::expand(&m.merged_settings(config, None).get("auth_path").and_then(|v| v.as_str()).unwrap_or("~/.config/gogdl/auth.json").to_string());
+            let auth = crate::paths::expand(m.merged_settings(config, None).get("auth_path").and_then(|v| v.as_str()).unwrap_or("~/.config/gogdl/auth.json"));
             let logged = std::fs::read_to_string(&auth).map(|s| s.contains("refresh_token")).unwrap_or(false);
             push("gog-auth", logged, if logged { auth.to_string_lossy().into() } else { "not logged in (universe login gog)".into() }, "gog");
         }
     }
     if config.controller.enabled {
         let uinput = std::fs::OpenOptions::new().write(true).open("/dev/uinput").is_ok();
-        push("uinput", uinput, if uinput { "/dev/uinput writable".into() } else { "/dev/uinput not writable: hardware.uinput.enable and the uinput group".into() }, "controller");
+        push("uinput", uinput, if uinput { "/dev/uinput writable".into() } else { "/dev/uinput not writable (key and MangoHud macros): hardware.uinput.enable and the uinput group".into() }, "controller");
         let pads = crate::controller::watch::enumerate_json(&config.controller);
         let detail = if pads.is_empty() {
             "no pad connected".to_string()

@@ -38,6 +38,8 @@ programs.universe = {
 };
 ```
 
+Enabling `capture` also installs its GNOME Shell extension for window recording; **log out once** to let GNOME load it (until then the module records the screen).
+
 `settings = null` installs the packages and leaves `~/.config/universe/config.toml` to you: the core edits that file in place (`universe config set`, `universe module enable`, the UI's settings), which a symlink into the store refuses.
 
 Without home-manager: `nix profile install github:ilyasturki/universe`, then write `~/.config/universe/config.toml` (defaults in `docs/api.md`).
@@ -78,11 +80,13 @@ The spare buttons of a pad — the Edge's paddles and Fn buttons, the Elite's pa
 | Module | Kind | Needs | Notes |
 |---|---|---|---|
 | `gog` | source | `gogdl` | login via `universe gog login`; a dedicated `GOGDL_CONFIG_PATH` under the module's data dir |
-| `capture` | hooks | `gpu-screen-recorder` + its setcap `gsr-kms-server`, both from the host system and the same nixpkgs (the NixOS module enables and pins `programs.gpu-screen-recorder`) | KMS capture of the output the game runs on, no portal dialog; `cursor` per game; `fps = "auto"` follows the output's refresh rate (read from Mutter, 60 elsewhere) |
+| `capture` | hooks | `gpu-screen-recorder` + its setcap `gsr-kms-server` (screen source); `gst-launch-1.0` + the `universe@ilyasturki.github.io` shell extension (window source, GNOME) | `source = "window"` (default) records just the game's window through Mutter's ScreenCast, dialog-free, following it across workspaces and occlusion; `source = "screen"` (or off GNOME / extension not loaded / no window in 60 s) falls back to KMS screen capture. `cursor` per game; `fps = "auto"` follows the output's refresh rate (read from Mutter, 60 elsewhere) |
 | `journal` | hooks | `ffmpeg`, `codex` (or `provider = "claude"` / `"stub"`) | one Markdown entry per session from frames and screenshots |
 | metadata | core | SteamGridDB and RAWG keys in `[keys]` | artwork slots `box_front`, `tile`, `background`, `logo`, screenshots |
 
 Cursor hiding on GNOME toggles the `hide-cursor@elcste.com` shell extension around the session.
+Window capture uses the `universe@ilyasturki.github.io` shell extension, installed by the home-manager
+module when `capture` is enabled; GNOME loads it after the next logout, until then capture records the screen.
 
 Third-party modules: drop a directory with a `module.toml` under `~/.local/share/universe/modules/` (user modules override shipped ones). The manifest, the hook environment and the source protocol (JSON lines) are frozen in `docs/api.md`.
 

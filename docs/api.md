@@ -144,17 +144,45 @@ when it was killed by a signal (a `stop`).
 `recording-file` is called by the capture module's `session-end` hook, so it lands before any
 `post-process` hook runs.
 
+The capture module records either the game's **window** (`source = "window"`, the default) or the
+whole **screen** (`source = "screen"`). Window capture needs GNOME and the `universe@ilyasturki.github.io`
+shell extension (shipped by the home-manager module, loaded after one logout): the module enables it,
+lists the game's toplevels through it, and records the largest one through Mutter's private
+`org.gnome.Mutter.ScreenCast` into `<session>-N.mkv` segments (a new segment when the window is
+replaced), which `session-end` concatenates into `<session>.mkv`. It follows the window across
+workspaces and occlusion, and starts a fresh segment on a new window. Off GNOME, with the extension
+absent or not yet loaded, or when no game window appears within 60 s, it falls back to the
+gpu-screen-recorder screen path. Window capture is the monitor's resolution with the window composited
+on it (exact for a fullscreen game).
+
 ## Journal
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `add_entry(session_id, json)` | `add_entry(session_id, json)` | `universe journal-add <session> <entry>` | validates the schema, writes `journal/<session>.json` |
-| `journal_json(id)` | `journal_json(id)` | `universe journal <name>` | `[Entry]`, last first |
-| `render_journal(id)` | `render_journal(id)` | `universe journal <name> --render` | renders `<journal_root>/<id>/<Title>.md`, returns the path |
+| `add_entry(session_id, json)` | `add_entry(session_id, json)` | `universe journal-add <session> <entry>` | validates the schema, fills `started_at`/`ended_at`/`duration_s` from the session line when the entry lacks them, writes `journal/<session>.json` |
+| `journal_json(id)` | `journal_json(id)` | `universe journal <name>` | `[Entry]`, last first, read from disk on every call; the state files below are entries too |
+| `pending_journals_json()` | `pending_journals_json()` | `universe status` (a `journal: writing <title>…` line; `pending_journals` in `--json`) | `[{game, title, session, started_at}]` for every `pending` entry across the library; `title` is the game's |
+| `render_journal(id)` | `render_journal(id)` | `universe journal <name> --render` | renders `<journal_root>/<id>/<Title>.md` from the `written` entries, returns the path |
 
-`Entry` = `{"session", "game", "written_at", "lang", "title", "provider", "paragraphs": [],
-"next_up": "", "images": ["relative path"]}`. `journal-add` is called by the journal module's
-`post-process` hook.
+`Entry` = `{"session", "game", "written_at", "started_at", "ended_at", "duration_s", "lang",
+"title", "provider", "paragraphs": [], "next_up": "", "images": ["relative path"],
+"state": "written"}`. `started_at`, `ended_at` and `duration_s` are the session's span; an entry
+written before the core stamped them gets them at read time from `sessions.jsonl` (or the module's
+migration sidecar), so every listing has one shape. `journal-add` is called by the journal module's
+`post-process` hook, which also passes `started_at`, `ended_at` and `duration_s` so an entry it
+writes itself (core unavailable) is self-contained. While the hook runs the session is
+`journal/<session>.pending.json` (`{"session", "game", "started_at", "provider"}`); the file is
+removed once the entry is in, or replaced by `<session>.failed.json` (`{"session", "game",
+"written_at", "reason"}`, the reason being "codex quota reached", "provider error: …" or "no
+images") when the run ends without one. A session with neither a recording nor a screenshot gets
+no entry and no failed file.
+
+The core lists those files as entries, sorted with the real ones: `state ∈ written, pending,
+failed`. A `pending` entry has the file's `started_at` and `provider`, an empty title and no
+paragraphs; a `failed` one has the file's `written_at` and `paragraphs = [reason]`. A pending file
+whose mtime is more than 30 minutes old lists as `failed` with the reason `timed out`. A written
+entry hides the failed one of the same session, a failed one the pending one. Dotfiles and anything
+that is not `*.json` are ignored, and `render_journal` only renders `written` entries.
 
 ## Modules
 
@@ -265,6 +293,7 @@ proton-ge = "~/.local/share/lutris/runners/wine/proton-ge"
 enabled = ["gog", "capture", "journal"]
 
 [modules.capture]
+source = "window"                    # window (GNOME + the Universe shell extension) | screen (gpu-screen-recorder)
 codec = "av1_10bit"
 
 [lutris]                             # what `universe migrate` reads

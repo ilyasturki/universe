@@ -2,6 +2,12 @@ use std::collections::HashMap;
 
 use crate::config::Config;
 
+/// The Universe GNOME Shell extension: window capture and the like; the home-manager module installs it.
+pub const UNIVERSE_EXTENSION: &str = "universe@ilyasturki.github.io";
+
+// ExtensionState.ACTIVE (js/misc/extensionUtils.js)
+const EXTENSION_ACTIVE: f64 = 1.0;
+
 /// The four desktop-dependent operations (plan §6). GNOME is the only profile in the MVP.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Profile {
@@ -70,18 +76,31 @@ pub fn pick_screen(requested: &str) -> String {
 /// Enables the cursor-hiding GNOME Shell extension for the session (plan §6); returns whether it was already active.
 pub async fn cursor_extension_enable(conn: &zbus::Connection, profile: Profile, extension: &str) -> bool {
     let Some(proxy) = extensions_proxy(conn, profile, extension).await else { return false };
-    let was_active = match proxy.call::<_, _, HashMap<String, zbus::zvariant::OwnedValue>>("GetExtensionInfo", &(extension,)).await {
-        // ExtensionState.ACTIVE = 1 (js/misc/extensionUtils.js)
-        Ok(info) => info.get("state").and_then(|v| f64::try_from(v).ok()) == Some(1.0),
-        Err(e) => {
-            tracing::warn!("GetExtensionInfo({extension}): {e}");
-            false
-        }
-    };
+    let was_active = extension_is_active(extension_state(&proxy, extension).await.flatten());
     if !was_active {
         call_bool(&proxy, "EnableExtension", extension).await;
     }
     was_active
+}
+
+/// What the shell knows of an extension: `None` when it cannot be asked, `Some(None)` when it has not
+/// loaded it (`GetExtensionInfo` answers an empty dict), else the ExtensionState.
+pub async fn extension_state(proxy: &zbus::Proxy<'_>, extension: &str) -> Option<Option<f64>> {
+    match tokio::time::timeout(std::time::Duration::from_secs(5), proxy.call::<_, _, HashMap<String, zbus::zvariant::OwnedValue>>("GetExtensionInfo", &(extension,))).await {
+        Ok(Ok(info)) => Some(info.get("state").and_then(|v| f64::try_from(v).ok())),
+        Ok(Err(e)) => {
+            tracing::warn!("GetExtensionInfo({extension}): {e}");
+            None
+        }
+        Err(_) => {
+            tracing::warn!("GetExtensionInfo({extension}): timeout");
+            None
+        }
+    }
+}
+
+pub fn extension_is_active(state: Option<f64>) -> bool {
+    state == Some(EXTENSION_ACTIVE)
 }
 
 /// Disables the extension again unless it was active before the session.
@@ -94,7 +113,7 @@ pub async fn cursor_extension_restore(conn: &zbus::Connection, profile: Profile,
     }
 }
 
-async fn extensions_proxy(conn: &zbus::Connection, profile: Profile, extension: &str) -> Option<zbus::Proxy<'static>> {
+pub async fn extensions_proxy(conn: &zbus::Connection, profile: Profile, extension: &str) -> Option<zbus::Proxy<'static>> {
     if profile != Profile::Gnome || extension.is_empty() {
         return None;
     }

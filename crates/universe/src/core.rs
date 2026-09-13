@@ -877,7 +877,8 @@ impl Core {
     pub async fn doctor_json(&self) -> String {
         let cfg = self.config.read().await.clone();
         let modules = self.modules.read().await.clone();
-        serde_json::to_string(&crate::doctor::run(&cfg, &modules)).unwrap_or_default()
+        let conn = if crate::desktop::detect(&cfg) == crate::desktop::Profile::Gnome { self.shell_conn().await } else { None };
+        serde_json::to_string(&crate::doctor::run(&cfg, &modules, conn.as_ref()).await).unwrap_or_default()
     }
 
     // ----- sources -----
