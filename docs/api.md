@@ -189,7 +189,7 @@ array of strings (20 s at most).
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `controller_state_json()` | `controller_state_json()` | `universe controller ls` | `{enabled, hold_ms, volume_step, mangohud_toggle, families: [{id, name, slots: [{id, label, codes, extra}]}], macros: [Macro], presets: [{id, label, hold_only}]}`; the CLI adds `devices`, the pads readable now with every slot's code or `bound: false` |
+| `controller_state_json()` | `controller_state_json()` | `universe controller ls` | `{enabled, hold_ms, volume_step (a percent, number), mangohud_toggle, families: [{id, name, slots: [{id, label, codes, extra}]}], macros: [Macro], presets: [{id, label, hold_only}]}`; the CLI adds `devices`, the pads readable now with every slot's code or `bound: false` |
 | `controller_pads_json()` | `controller_pads_json()` | — | the `devices` list alone, in the shape `watch` announces; for a frontend whose watcher waits on the lock |
 | `set_controller_macro(json)` | same | `universe controller bind <family> <button> <press\|hold> <action> [--keys K] [--command C]` | validates, replaces the macro with the same family, button and trigger |
 | `remove_controller_macro(family, button, trigger)` | same | `universe controller unbind <family> <button> [trigger]` | an empty trigger removes both |
@@ -201,9 +201,12 @@ array of strings (20 s at most).
 "command", "keys": "Super_L+F12", "command": "…"}`. `stop` is hold-only. `volume_up` and
 `volume_down` repeat while held (400 ms, then every 100 ms), unless the slot also carries a hold.
 A slot with only a press macro fires on the key down; with a hold macro too, press fires on a release
-before `hold_ms` and hold once at `hold_ms`. Keys type through uinput; `mangohud` sends MangoHud's
-own `toggle_hud` (from `~/.config/MangoHud/MangoHud.conf`, `Shift_R+F12` by default) and holds it
-200 ms; `volume_step = "precise"` sends Shift with the volume key (GNOME's fine step).
+before `hold_ms` and hold once at `hold_ms`. `volume_up`, `volume_down` and `mute` go straight to
+the PulseAudio server (PipeWire's included) through libpulse: the default sink's volume moves by
+`volume_step` percent of the normal level on every channel, clamped to [0, 100 %], `mute` toggles
+the sink; no key is typed, so nothing reaches the game. `keys` types through uinput; `mangohud`
+sends MangoHud's own `toggle_hud` (from `~/.config/MangoHud/MangoHud.conf`, `Shift_R+F12` by
+default) and holds it 200 ms.
 
 Families: `dualsense-edge` (fn_left, fn_right, paddle_left, paddle_right), `dualsense`,
 `dualshock4`, `xbox-elite` (paddle_p1…p4), `xbox` (share), `switch-pro` (capture), `8bitdo-pro-3`
@@ -277,7 +280,7 @@ rawg = ""
 [controller]
 enabled = true
 hold_ms = 600                        # a press this long is a hold
-volume_step = "precise"              # Shift + the volume key (GNOME's fine step); "normal" for the plain key
+volume_step = 2                      # percent of the normal volume per press, 1–100 ("precise" = 2, "normal" = 6 still read)
 mangohud_toggle = ""                 # empty: toggle_hud from ~/.config/MangoHud/MangoHud.conf, else Shift_R+F12
 # [controller.buttons.xbox-elite]    # learned codes: a slot's list replaces its seeds, [] leaves it unbound
 # paddle_p1 = ["BTN_GRIPR", "BTN_TRIGGER_HAPPY5"]

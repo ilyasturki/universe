@@ -4,6 +4,7 @@
 
 pub mod engine;
 pub mod keys;
+pub mod volume;
 pub mod watch;
 
 use std::collections::BTreeMap;
@@ -74,7 +75,9 @@ impl Macro {
 pub struct ControllerConfig {
     pub enabled: bool,
     pub hold_ms: u64,
-    pub volume_step: String,
+    /// percent of the normal volume per volume macro
+    #[serde(deserialize_with = "de_volume_step")]
+    pub volume_step: u8,
     pub mangohud_toggle: String,
     /// family → slot → learned codes, first present on the pad wins
     pub buttons: BTreeMap<String, BTreeMap<String, Vec<String>>>,
@@ -84,7 +87,34 @@ pub struct ControllerConfig {
 
 impl Default for ControllerConfig {
     fn default() -> Self {
-        ControllerConfig { enabled: true, hold_ms: 600, volume_step: "precise".into(), mangohud_toggle: String::new(), buttons: BTreeMap::new(), macros: None }
+        ControllerConfig { enabled: true, hold_ms: 600, volume_step: 2, mangohud_toggle: String::new(), buttons: BTreeMap::new(), macros: None }
+    }
+}
+
+// "precise" and "normal" are the uinput-era spellings (Shift + key, bare key), kept readable.
+const LEGACY_VOLUME_STEPS: [(&str, u8); 2] = [("precise", 2), ("normal", 6)];
+
+fn de_volume_step<'de, D: serde::Deserializer<'de>>(d: D) -> Result<u8, D::Error> {
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum Raw {
+        Percent(u8),
+        Legacy(String),
+    }
+    match Raw::deserialize(d)? {
+        Raw::Percent(p) => Ok(p),
+        Raw::Legacy(s) => volume_step_value(&s).map(|v| v.parse().unwrap()).map_err(serde::de::Error::custom),
+    }
+}
+
+/// The config.toml value for `controller.volume_step`: a percent from 1 to 100, or a legacy name mapped to its percent.
+pub fn volume_step_value(value: &str) -> crate::Result<String> {
+    if let Some((_, p)) = LEGACY_VOLUME_STEPS.iter().find(|(name, _)| *name == value) {
+        return Ok(p.to_string());
+    }
+    match value.parse::<u8>() {
+        Ok(p) if (1..=100).contains(&p) => Ok(p.to_string()),
+        _ => Err(crate::Error::Invalid(format!("controller.volume_step: a percent from 1 to 100, not '{value}'"))),
     }
 }
 
@@ -512,6 +542,20 @@ mod tests {
         let cfg: ControllerConfig = toml::from_str("[[macros]]\nfamily = \"*\"\nbutton = \"guide\"\ntrigger = \"hold\"\naction = \"stop\"\n").unwrap();
         assert_eq!(cfg.macros_for("dualsense", "guide")[0].action, "stop");
         assert!(cfg.macros_for("dualsense-edge", "fn_left").is_empty(), "written macros replace the seeds");
+    }
+
+    #[test]
+    fn volume_step_reads_percents_and_the_legacy_names() {
+        let cfg: ControllerConfig = toml::from_str("").unwrap();
+        assert_eq!(cfg.volume_step, 2);
+        assert_eq!(toml::from_str::<ControllerConfig>("volume_step = 5").unwrap().volume_step, 5);
+        assert_eq!(toml::from_str::<ControllerConfig>("volume_step = \"precise\"").unwrap().volume_step, 2);
+        assert_eq!(toml::from_str::<ControllerConfig>("volume_step = \"normal\"").unwrap().volume_step, 6);
+        assert!(toml::from_str::<ControllerConfig>("volume_step = \"loud\"").is_err());
+        assert_eq!(volume_step_value("normal").unwrap(), "6");
+        assert_eq!(volume_step_value("10").unwrap(), "10");
+        assert!(volume_step_value("0").is_err() && volume_step_value("101").is_err() && volume_step_value("precise!").is_err());
+        assert_eq!(state_json(&cfg)["volume_step"], 2);
     }
 
     #[test]

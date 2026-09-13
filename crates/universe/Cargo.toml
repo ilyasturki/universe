@@ -37,6 +37,7 @@ shell-words = "1"
 urlencoding = "2"
 libc = "0.2"
 evdev = { version = "0.13.2", features = ["tokio"] }
+libpulse-binding = "2.30"
 
 [dev-dependencies]
 tempfile = "3"

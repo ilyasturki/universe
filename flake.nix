@@ -27,6 +27,7 @@
         # chrono ignores TZDIR, so the zone is given as a file
         preCheck = "export TZ=${pkgs.tzdata}/share/zoneinfo/Europe/Paris";
         nativeBuildInputs = [ pkgs.pkg-config pkgs.installShellFiles ];
+        buildInputs = [ pkgs.libpulseaudio ];
         postInstall = ''
           $out/bin/universe __generate gen
           installShellCompletion --fish gen/universe.fish
@@ -42,7 +43,8 @@
         pyproject = true;
         src = rustSrc;
         cargoDeps = pkgs.rustPlatform.importCargoLock { lockFile = ./Cargo.lock; };
-        nativeBuildInputs = with pkgs.rustPlatform; [ cargoSetupHook maturinBuildHook ];
+        nativeBuildInputs = with pkgs.rustPlatform; [ cargoSetupHook maturinBuildHook pkgs.pkg-config ];
+        buildInputs = [ pkgs.libpulseaudio ];
         buildAndTestSubdir = "crates/universe-py";
         pythonImportsCheck = [ "universe_core" ];
       };

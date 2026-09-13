@@ -455,12 +455,22 @@ impl Watcher {
     fn fire(&mut self, f: Fire) {
         let (id, slot, m) = (f.device, f.slot, f.action);
         self.out.emit(serde_json::json!({"event": "macro", "id": id, "slot": slot, "trigger": f.trigger, "action": m.action, "keys": m.keys, "command": m.command}));
+        let change = match m.action.as_str() {
+            "volume_up" => Some(super::volume::Change::Up),
+            "volume_down" => Some(super::volume::Change::Down),
+            "mute" => Some(super::volume::Change::ToggleMute),
+            _ => None,
+        };
+        if let Some(change) = change {
+            let percent = self.cfg.volume_step;
+            tokio::task::spawn_blocking(move || {
+                if let Err(e) = super::volume::apply(change, percent) {
+                    tracing::warn!("{change:?}: {e}");
+                }
+            });
+            return;
+        }
         let combo = match m.action.as_str() {
-            "volume_up" | "volume_down" => {
-                let key = if m.action == "volume_up" { KeyCode::KEY_VOLUMEUP } else { KeyCode::KEY_VOLUMEDOWN }.code();
-                Some((if self.cfg.volume_step == "normal" { vec![key] } else { vec![KeyCode::KEY_LEFTSHIFT.code(), key] }, COMBO_HOLD))
-            }
-            "mute" => Some((vec![KeyCode::KEY_MUTE.code()], COMBO_HOLD)),
             "mangohud" => keys::parse_combo(&keys::mangohud_toggle(&self.cfg)).ok().map(|c| (c.codes, MANGOHUD_HOLD)),
             "keys" => keys::parse_combo(&m.keys).ok().map(|c| (c.codes, COMBO_HOLD)),
             _ => None,

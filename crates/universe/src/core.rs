@@ -817,7 +817,8 @@ impl Core {
     }
 
     pub async fn set_setting(&self, key: &str, value: &str) -> Result<()> {
-        Config::set_key(&paths::config_file(), key, value)?;
+        let value = if key == "controller.volume_step" { crate::controller::volume_step_value(value)? } else { value.to_string() };
+        Config::set_key(&paths::config_file(), key, &value)?;
         self.reload_config().await
     }
 

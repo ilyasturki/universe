@@ -1020,7 +1020,7 @@ async fn controller(core: Core, action: ControllerCmd, json: bool) -> anyhow::Re
                 }
                 println!("{t}");
             }
-            println!("{} enabled {} · hold {} ms · volume {} · mangohud {}", "engine".bold(), cfg.enabled, cfg.hold_ms, cfg.volume_step, s(&state, "mangohud_toggle"));
+            println!("{} enabled {} · hold {} ms · volume step {}% · mangohud {}", "engine".bold(), cfg.enabled, cfg.hold_ms, cfg.volume_step, s(&state, "mangohud_toggle"));
             let mut t = table(&["Family", "Button", "Trigger", "Action", "Keys / command"]);
             for m in cfg.macros() {
                 t.add_row(vec![m.family, m.button, m.trigger, m.action, format!("{}{}", m.keys, m.command)]);
