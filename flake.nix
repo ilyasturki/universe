@@ -98,6 +98,8 @@
           scdoc < universe-ui.1.scd > universe-ui.1
           installManPage universe-ui.1
           installShellCompletion --fish completions/universe-ui.fish
+          install -Dm644 icons/hicolor/scalable/apps/universe-ui.svg $out/share/icons/hicolor/scalable/apps/universe-ui.svg
+          install -Dm644 icons/hicolor/symbolic/apps/universe-ui-symbolic.svg $out/share/icons/hicolor/symbolic/apps/universe-ui-symbolic.svg
         '';
         buildInputs = with pkgs.qt6; [ qtbase qtdeclarative qt5compat qtmultimedia qtwayland qtsvg ];
         dontWrapQtApps = false;

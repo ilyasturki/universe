@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+<defs>
+<linearGradient id="g2-side" gradientUnits="userSpaceOnUse" x1="64" y1="62" x2="64" y2="115"><stop offset="0" stop-color="#26252d"/><stop offset="1" stop-color="#0f0f13"/></linearGradient>
+<linearGradient id="g2-bevel" gradientUnits="userSpaceOnUse" x1="30" y1="26" x2="98" y2="100"><stop offset="0" stop-color="#77757f"/><stop offset="0.5" stop-color="#454352"/><stop offset="1" stop-color="#232229"/></linearGradient>
+<radialGradient id="g2-dome" gradientUnits="userSpaceOnUse" cx="50" cy="46" r="58"><stop offset="0" stop-color="#4d4b59"/><stop offset="0.5" stop-color="#34323e"/><stop offset="1" stop-color="#1d1c23"/></radialGradient>
+<linearGradient id="g2-rim" gradientUnits="userSpaceOnUse" x1="30" y1="20" x2="96" y2="100"><stop offset="0" stop-color="#ffffff" stop-opacity="0.35"/><stop offset="0.6" stop-color="#ffffff" stop-opacity="0.0"/></linearGradient>
+<radialGradient id="g2-spec" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#ffffff" stop-opacity="0.17"/><stop offset="1" stop-color="#ffffff" stop-opacity="0.0"/></radialGradient>
+<radialGradient id="g2-ao" cx="0.5" cy="0.5" r="0.5"><stop offset="0.6" stop-color="#000000" stop-opacity="0.4"/><stop offset="1" stop-color="#000000" stop-opacity="0.0"/></radialGradient>
+<radialGradient id="g2-pl" gradientUnits="userSpaceOnUse" cx="64" cy="60" r="23" fx="55" fy="50"><stop offset="0" stop-color="#8ff0a4"/><stop offset="0.3" stop-color="#57e389"/><stop offset="0.72" stop-color="#2ec27e"/><stop offset="1" stop-color="#1c8a55"/></radialGradient>
+<radialGradient id="g2-plspec" cx="0.5" cy="0.5" r="0.5"><stop offset="0" stop-color="#ffffff" stop-opacity="0.45"/><stop offset="1" stop-color="#ffffff" stop-opacity="0.0"/></radialGradient>
+<linearGradient id="g2-ring" gradientUnits="userSpaceOnUse" x1="64" y1="50" x2="64" y2="70"><stop offset="0" stop-color="#c0bfbc"/><stop offset="0.55" stop-color="#f6f5f4"/><stop offset="1" stop-color="#ffffff"/></linearGradient>
+<clipPath id="g2-front"><rect x="0" y="60" width="128" height="80"/></clipPath>
+<clipPath id="g2-plc"><circle cx="64" cy="60" r="23"/></clipPath>
+</defs>
+<circle cx="64" cy="69" r="46" fill="url(#g2-side)"/>
+<circle cx="64" cy="62" r="46" fill="url(#g2-bevel)"/>
+<circle cx="64" cy="62" r="45.3" fill="none" stroke="url(#g2-rim)" stroke-width="1.4"/>
+<circle cx="64" cy="62" r="42" fill="#131317" fill-opacity="0.85"/>
+<circle cx="64" cy="62" r="41.2" fill="url(#g2-dome)"/>
+<ellipse cx="50" cy="44" rx="24" ry="13" fill="url(#g2-spec)" transform="rotate(-32 50 44)"/>
+<ellipse cx="64" cy="65" rx="27" ry="25" fill="url(#g2-ao)"/>
+<g transform="rotate(-25 64 60)"><path d="M26.5 60a37.5 10 0 1 0 75.0 0a37.5 10 0 1 0 -75.0 0ZM29.700000000000003 59.1a34.3 7.5 0 1 0 68.6 0a34.3 7.5 0 1 0 -68.6 0Z" fill="url(#g2-ring)" fill-rule="evenodd"/></g>
+<circle cx="64" cy="60" r="23" fill="url(#g2-pl)"/>
+<ellipse cx="57" cy="51" rx="6.5" ry="4" fill="url(#g2-plspec)" transform="rotate(-35 57 51)"/>
+<g clip-path="url(#g2-plc)"><g transform="rotate(-25 64 60)"><path d="M26.5 60a37.5 10 0 1 0 75.0 0a37.5 10 0 1 0 -75.0 0ZM29.700000000000003 59.1a34.3 7.5 0 1 0 68.6 0a34.3 7.5 0 1 0 -68.6 0Z" fill="#000000" fill-opacity="0.3" fill-rule="evenodd" transform="translate(0 2.6)" clip-path="url(#g2-front)"/></g></g>
+<g transform="rotate(-25 64 60)"><path d="M26.5 60a37.5 10 0 1 0 75.0 0a37.5 10 0 1 0 -75.0 0ZM29.700000000000003 59.1a34.3 7.5 0 1 0 68.6 0a34.3 7.5 0 1 0 -68.6 0Z" fill="url(#g2-ring)" fill-rule="evenodd" clip-path="url(#g2-front)"/></g>
+</svg>
