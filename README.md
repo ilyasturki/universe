@@ -99,6 +99,7 @@ just ui-fake               # host on a fixture library, no core
 just seed [id…]            # copy real games (journal, media, recording refs) into .dev/ to test the player and the journal
 just test / just check     # cargo + pytest / flake packages + sandboxed checks
 just clean                 # trash .dev/ and .venv/
+just bump patch|minor|major|X.Y.Z   # release: rewrite every version copy from Cargo.toml, commit, tag vX.Y.Z (no push)
 ```
 
 `docs/api.md` is the core API, the process model and the module contract; `docs/frontends.md` is what a frontend binds to.

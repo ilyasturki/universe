@@ -2,10 +2,10 @@ api = 1
 id = "journal"
 name = "Play journal"
 kind = ["hooks"]
-version = "0.1.0"
+version = "0.0.0"
 
 [requires]
-core = ">=0.1"
+core = "=0.0.0"
 bins = ["ffmpeg", "codex"]
 
 [hooks]

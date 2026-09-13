@@ -8,7 +8,7 @@
       system = "x86_64-linux";
       pkgs = nixpkgs.legacyPackages.${system};
       lib = pkgs.lib;
-      version = "0.1.0";
+      version = (fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version;
 
       rustSrc = lib.cleanSourceWith {
         src = ./.;

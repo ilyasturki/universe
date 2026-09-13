@@ -112,3 +112,31 @@ env:
     min_duration_s = 20
     EOF
     echo "wrote $cfg"
+
+# Release: rewrite every copy of the version, commit `chore(release): vX.Y.Z`, tag vX.Y.Z (no push).
+# Cargo.toml [workspace.package] is the source: flake.nix and universe-py read it; ui/pyproject.toml,
+# modules/*/module.toml and the docs example are copies nix can't reach from Cargo.toml, so they are rewritten.
+bump level:
+    #!/usr/bin/env -S nix develop --quiet --command bash
+    set -euo pipefail
+    cd "{{ justfile_directory() }}"
+    cur="$(sed -n '/^\[workspace.package\]/,/^\[/{s/^version = "\(.*\)"$/\1/p}' Cargo.toml)"
+    IFS=. read -r maj min pat <<< "$cur"
+    case "{{ level }}" in
+        major) new="$((maj + 1)).0.0" ;;
+        minor) new="$maj.$((min + 1)).0" ;;
+        patch) new="$maj.$min.$((pat + 1))" ;;
+        *) new="{{ level }}" ;;
+    esac
+    [[ "$new" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "bump: '{{ level }}' is not patch|minor|major|X.Y.Z" >&2; exit 1; }
+    [[ "$new" != "$cur" ]] || { echo "bump: already at $cur" >&2; exit 1; }
+    git diff --quiet && git diff --cached --quiet || { echo "bump: working tree is not clean" >&2; exit 1; }
+    ! git rev-parse -q --verify "refs/tags/v$new" >/dev/null || { echo "bump: tag v$new exists" >&2; exit 1; }
+    copies=(ui/pyproject.toml modules/*/module.toml docs/api.md)
+    sed -i "/^\[workspace.package\]/,/^\[/s/^version = \"$cur\"$/version = \"$new\"/" Cargo.toml
+    sed -i "s/^version = \"$cur\"$/version = \"$new\"/; s/^core = \"=$cur\"$/core = \"=$new\"/" "${copies[@]}"
+    cargo update --workspace --offline --quiet
+    git add Cargo.toml Cargo.lock "${copies[@]}"
+    git commit --quiet -m "chore(release): v$new"
+    git tag -a "v$new" -m "v$new"
+    echo "$cur -> $new: committed and tagged v$new (not pushed)"

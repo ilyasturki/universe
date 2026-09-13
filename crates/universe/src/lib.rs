@@ -63,3 +63,24 @@ impl From<rusqlite::Error> for Error {
 
 
 pub type Result<T> = std::result::Result<T, Error>;
+
+#[cfg(test)]
+mod version_tests {
+    // The checked-in copies `just bump` rewrites; absent under nix, which builds crates/ alone.
+    #[test]
+    fn copies_match_cargo_version() {
+        let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+        let Ok(modules) = std::fs::read_dir(root.join("modules")) else { return };
+        let mut files = vec![root.join("ui/pyproject.toml"), root.join("docs/api.md")];
+        files.extend(modules.flatten().map(|d| d.path().join("module.toml")).filter(|p| p.exists()));
+        let version = format!("version = \"{}\"", super::VERSION);
+        let core = format!("core = \"={}\"", super::VERSION);
+        for f in files {
+            let s = std::fs::read_to_string(&f).unwrap();
+            assert!(s.lines().any(|l| l == version), "{}: no `{version}`", f.display());
+            if f.ends_with("module.toml") || f.ends_with("api.md") {
+                assert!(s.lines().any(|l| l == core), "{}: no `{core}`", f.display());
+            }
+        }
+    }
+}

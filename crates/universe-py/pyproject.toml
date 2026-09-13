@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "universe-core"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Python bindings to the Universe core"
 requires-python = ">=3.11"
 
