@@ -83,11 +83,9 @@ pub fn file(game: &Game, session_id: &str, src: &Path, recordings_root: &Path) -
     std::fs::create_dir_all(&dir)?;
     let ext = src.extension().and_then(|s| s.to_str()).unwrap_or("mkv");
     let dest = dir.join(format!("{session_id}.{ext}"));
-    if dest != src {
-        if std::fs::rename(src, &dest).is_err() {
-            std::fs::copy(src, &dest)?;
-            std::fs::remove_file(src)?;
-        }
+    if dest != src && std::fs::rename(src, &dest).is_err() {
+        std::fs::copy(src, &dest)?;
+        std::fs::remove_file(src)?;
     }
     let ds = dest.to_string_lossy().to_string();
     let found = sessions::update(&game.sessions_path(), session_id, |s| s.recording = Some(ds.clone()))?;

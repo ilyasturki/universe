@@ -107,7 +107,7 @@ fn sgdb_assets(key: &str, endpoint: &str, game_id: u64, dims: Option<&str>) -> c
         .map(|r| Candidate { provider: "sgdb".into(), url: r["url"].as_str().unwrap_or("").into(), score: r["upvotes"].as_i64().unwrap_or(0) * 1000 + r["score"].as_i64().unwrap_or(0), slot: String::new() })
         .filter(|c| !c.url.is_empty())
         .collect();
-    rows.sort_by(|a, b| b.score.cmp(&a.score));
+    rows.sort_by_key(|c| std::cmp::Reverse(c.score));
     Ok(rows)
 }
 

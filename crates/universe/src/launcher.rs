@@ -174,7 +174,7 @@ pub fn parse_unit_log(json_lines: &str) -> UnitLog {
     for line in json_lines.lines() {
         let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else { continue };
         let Some(msg) = v["MESSAGE"].as_str() else { continue };
-        let ts = v["__REALTIME_TIMESTAMP"].as_str().and_then(|s| s.parse::<i64>().ok()).and_then(|us| chrono::DateTime::from_timestamp_micros(us)).map(|t| t.with_timezone(&chrono::Local));
+        let ts = v["__REALTIME_TIMESTAMP"].as_str().and_then(|s| s.parse::<i64>().ok()).and_then(chrono::DateTime::from_timestamp_micros).map(|t| t.with_timezone(&chrono::Local));
         if msg.starts_with("Started ") && log.started.is_none() {
             log.started = ts;
         } else if msg.contains("Deactivated successfully") || msg.contains("Failed with result") || msg.starts_with("Stopped ") || msg.contains("Consumed ") {

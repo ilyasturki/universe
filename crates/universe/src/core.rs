@@ -1059,7 +1059,7 @@ impl Core {
         };
         let mut n = 0;
         for t in targets {
-            let events = self.run_verb(&m, "update", &[t.clone()], progress.as_deref_mut()).await.map_err(|e| Error::Io(format!("{t}: {e}")))?;
+            let events = self.run_verb(&m, "update", std::slice::from_ref(&t), progress.as_deref_mut()).await.map_err(|e| Error::Io(format!("{t}: {e}")))?;
             for g in Self::game_events(&events) {
                 let _ = self.apply_source_game(source, &g, false).await;
             }

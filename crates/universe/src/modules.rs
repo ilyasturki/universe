@@ -493,6 +493,7 @@ choices_exec = "bin/choices"
     }
 
     #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
     async fn setting_choices_run_the_module_or_stay_static() {
         let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let dir = tempfile::tempdir().unwrap();

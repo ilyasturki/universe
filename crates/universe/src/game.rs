@@ -59,13 +59,13 @@ pub struct Launch {
     pub mangohud: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Desktop {
     pub hide_cursor: Option<bool>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Metadata {
     pub rawg_id: u64,
@@ -128,29 +128,6 @@ impl Default for Launch {
             umu_id: String::new(),
             store: String::new(),
             mangohud: None,
-        }
-    }
-}
-
-impl Default for Desktop {
-    fn default() -> Self {
-        Desktop { hide_cursor: None }
-    }
-}
-
-impl Default for Metadata {
-    fn default() -> Self {
-        Metadata {
-            rawg_id: 0,
-            sgdb_id: 0,
-            steam_appid: 0,
-            developers: vec![],
-            publishers: vec![],
-            genres: vec![],
-            summary: String::new(),
-            description: String::new(),
-            metacritic: 0,
-            players: 0,
         }
     }
 }
