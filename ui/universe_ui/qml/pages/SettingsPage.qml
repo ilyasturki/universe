@@ -27,6 +27,7 @@ FocusScope {
     property bool menuOpen: false
 
     readonly property var sections: ["Modules", "Install", "Updates", "Login", "Doctor", "Controller"]
+    readonly property var sectionIcons: ["grid", "download", "refresh", "user", "pulse", "gamepad"]
     property int section: 0
 
     readonly property var modulesForm: api.screens.modules
@@ -38,11 +39,16 @@ FocusScope {
     // pressed to find its row does not take a screenshot.
     readonly property bool controllerOpen: section === 5 && activeFocus
     readonly property bool learning: section === 5 && controller.learning !== ""
+    // The live view: the pad alone on the page, its presses muted as keys (see Api), left by
+    // holding Circle/B or pressing Start and Select together, both read from the watcher.
+    readonly property bool testing: section === 5 && controller.testing
+    property var held: ({})
     property string pendingSlot: ""
     property string pendingTrigger: ""
 
     readonly property var hints: editor.open ? editor.hints
         : menu.open ? menu.hints
+        : testing ? [ { glyph: "B", label: "Hold to finish" }, { glyph: "Start Select", label: "Finish" } ]
         : learning ? [ { glyph: "B", label: "Stop learning" } ]
         : chipBar.activeFocus
         ? [ { glyph: "A", label: "Open" }, { glyph: "dpad", label: "Section" }, { glyph: "LB RB", label: "Tabs" } ]
@@ -231,7 +237,10 @@ FocusScope {
                 editor.prompt("code", "Code from " + sourceName, "");
             }
         } else if (section === 5) {
-            if (row.type === "enum") {
+            if (row.key === "test") {
+                if (controller.setTesting(true))
+                    Sound.enter();
+            } else if (row.type === "enum") {
                 Sound.panel();
                 editor.edit(index, row);
             } else if (row.type === "action") {
@@ -319,6 +328,32 @@ FocusScope {
             controller.resume();
     }
 
+    onTestingChanged: {
+        art.clear();
+        held = ({});
+        holdOut.stop();
+        if (testing) {
+            tester.forceActiveFocus();
+            return;
+        }
+        var rows = controller.rows;
+        for (var i = 0; i < rows.length; i++)
+            if (rows[i].key === "test") {
+                cards.index = i;
+                break;
+            }
+        cards.forceActiveFocus();
+    }
+
+    Timer {
+        id: holdOut
+        interval: 1000
+        onTriggered: {
+            Sound.cancel();
+            page.controller.setTesting(false);
+        }
+    }
+
     // What a game of the source can have done to it: installed, or, once it is, updated,
     // configured (when the library lists it), uninstalled, removed.
     function gameActions(row) {
@@ -398,26 +433,36 @@ FocusScope {
         }
     }
 
-    // A press on the pad lights its button and, with nothing open over the cards, moves the
-    // cursor to its row: the pad itself is the fastest way to find a button.
+    // A press on the pad lights its button; in the live view it also counts towards the way out.
     Connections {
         target: page.controller
         function onButtonPressed(id, slot, pressed) {
             if (page.section !== 5 || id !== page.controller.current)
                 return;
             art.press(slot, pressed);
-            if (!pressed || editor.open || menu.open || page.learning)
+            if (!page.testing)
                 return;
-            var rows = page.controller.rows;
-            for (var i = 0; i < rows.length; i++) {
-                if (rows[i].slot === slot) {
-                    if (cards.index !== i) {
-                        cards.index = i;
-                        Sound.tick();
-                    }
-                    return;
-                }
+            var next = {};
+            for (var k in page.held)
+                if (k !== slot)
+                    next[k] = true;
+            if (pressed)
+                next[slot] = true;
+            page.held = next;
+            if (slot === "east") {
+                if (pressed)
+                    holdOut.restart();
+                else
+                    holdOut.stop();
             }
+            if (pressed && next.start && next.select) {
+                Sound.cancel();
+                page.controller.setTesting(false);
+            }
+        }
+        function onAxisMoved(id, axis, value) {
+            if (page.section === 5 && id === page.controller.current)
+                art.axis(axis, value);
         }
         function onUnknownPressed(id, code) {
             if (page.section === 5 && !page.learning && id === page.controller.current)
@@ -465,13 +510,10 @@ FocusScope {
             width: chips.width
             height: chips.height
 
+            // Round trip: past the last section comes the first.
             function step(d) {
-                var next = Math.max(0, Math.min(page.sections.length - 1, page.section + d));
-                if (next === page.section) {
-                    Sound.edge();
-                    return;
-                }
-                page.section = next;
+                var n = page.sections.length;
+                page.section = (page.section + d + n) % n;
                 Sound.tick();
             }
 
@@ -484,6 +526,7 @@ FocusScope {
 
                     Chip {
                         label: modelData
+                        icon: page.sectionIcons[index]
                         badge: index === 2 && page.sources.updates.length > 0 ? page.sources.updates.length.toString() : ""
                         active: index === page.section
                         focused: chipBar.activeFocus && index === page.section
@@ -637,6 +680,12 @@ FocusScope {
         rows: page.content.rows
         groups: page.content.groups
         dimmed: editor.open
+        opacity: page.testing ? 0.0 : 1.0
+        visible: opacity > 0.01
+
+        Behavior on opacity {
+            NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic }
+        }
 
         onActivated: function(index, row) { page.activate(index, row); }
         onEscapedUp: {
@@ -750,20 +799,45 @@ FocusScope {
         }
     }
 
-    // The pad, beside its rows: the button of the focused row lit, presses flashing live.
+    // The pad, beside its rows: the button of the focused row lit, presses flashing live. The
+    // live view gives it the whole width.
     ControllerArt {
         id: art
 
-        x: cards.x + cards.columnX(1)
+        x: page.testing ? cards.x : cards.x + cards.columnX(1)
         y: cards.y
-        width: cards.columnWidth
-        height: Math.min(implicitHeight, cards.height)
+        width: page.testing ? cards.width : cards.columnWidth
+        height: page.testing ? cards.height : Math.min(implicitHeight, cards.height)
         visible: page.section === 5
         family: page.controller.family
         connected: page.controller.connected
+        testing: page.testing
+        rows: page.controller.rows
         focusedSlot: page.section === 5 && cards.cursorShown && cards.currentRow && cards.currentRow.slot ? cards.currentRow.slot : ""
         learningSlot: page.learning ? page.controller.learning : ""
         unbound: page.controller.unboundSlots
+
+        Behavior on x { NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic } }
+        Behavior on width { NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic } }
+        Behavior on height { NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic } }
+    }
+
+    // Holds the keyboard while the pad is on show: Escape leaves, everything else stays put.
+    FocusScope {
+        id: tester
+
+        anchors.fill: cards
+
+        Keys.onPressed: function(event) {
+            event.accepted = true;
+            if (event.isAutoRepeat)
+                return;
+            if (api.keys.isCancel(event)) {
+                Sound.cancel();
+                page.controller.setTesting(false);
+            }
+        }
+        Keys.onReleased: function(event) { event.accepted = true; }
     }
 
     ValueEditor {

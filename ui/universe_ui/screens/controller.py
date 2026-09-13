@@ -3,7 +3,8 @@ state, and the rows the cards show for the current pad.
 
 The watcher is `universe controller watch --json --wait`, a child of the host for its lifetime:
 events in on stdout, commands out on stdin. `FakeWatcher` scripts the same stream for --fake and
-the tests. A row is the settings row shape plus `slot`, `bound`, `code`, `extra`, `press`, `hold`.
+the tests. A row is the settings row shape plus `slot`, `family`, `bound`, `code`, `extra`,
+`press`, `hold`; the test row (`key` "test") opens the live view of the pad.
 """
 
 import json
@@ -18,6 +19,7 @@ from .settings import _group, _row
 log = logging.getLogger("universe.controller")
 
 TRIGGERS = ("press", "hold")
+AXES = ("lx", "ly", "rx", "ry", "lt", "rt")
 BUS_NAMES = {"bluetooth": "Bluetooth", "usb": "USB"}
 PASSIVE_TEXT = "Macros are running in the game session"
 PASSIVE_DETAIL = "Live presses and learning resume when it ends"
@@ -95,6 +97,7 @@ class FakeWatcher(QObject):
         self._family = family
         self._unbound = set(unbound)
         self._families = {}
+        self.ident = "event30"
         self.commands = []
         self.started = False
 
@@ -122,6 +125,12 @@ class FakeWatcher(QObject):
     def emit(self, line):
         self.event.emit(dict(line))
 
+    def press(self, slot, down=True):
+        self.emit({"event": "button", "id": self.ident, "slot": slot, "code": "", "pressed": bool(down)})
+
+    def axis(self, name, value):
+        self.emit({"event": "axis", "id": self.ident, "axis": name, "value": float(value)})
+
     def exit(self, code=1):
         self.started = False
         self.emit({"event": "off", "code": code})
@@ -136,7 +145,9 @@ class ControllerScreen(QObject):
     stateChanged = Signal()
     rowsChanged = Signal()
     statusChanged = Signal()
+    testingChanged = Signal()
     buttonPressed = Signal(str, str, bool)
+    axisMoved = Signal(str, str, float)
     unknownPressed = Signal(str, str)
     learned = Signal(str, str, str)
     macroFired = Signal(str, str, str)
@@ -154,6 +165,7 @@ class ControllerScreen(QObject):
         self._groups = []
         self._status = "off"
         self._learning = ""
+        self._testing = False
         self._suspended = False
         self._passive = False
         self._wanted = ""
@@ -250,6 +262,10 @@ class ControllerScreen(QObject):
             self._remove(ident)
         elif kind == "button":
             self.buttonPressed.emit(ident, str(line.get("slot") or ""), bool(line.get("pressed")))
+        elif kind == "axis":
+            axis = str(line.get("axis") or "")
+            if axis in AXES:
+                self.axisMoved.emit(ident, axis, float(line.get("value") or 0.0))
         elif kind == "unknown":
             self.unknownPressed.emit(ident, str(line.get("code") or ""))
         elif kind == "macro":
@@ -265,6 +281,7 @@ class ControllerScreen(QObject):
         elif kind == "waiting":
             self._status = kind
             self._passive = True
+            self._stop_testing()
             self._enumerate()
             self._rebuild()
             self.statusChanged.emit()
@@ -280,6 +297,7 @@ class ControllerScreen(QObject):
             self._status = kind
             self._passive = False
             self._stop_learning()
+            self._stop_testing()
             self._clear_devices()
             self._rebuild()
             self.statusChanged.emit()
@@ -292,6 +310,16 @@ class ControllerScreen(QObject):
             return False
         self._learning = ""
         self.statusChanged.emit()
+        return True
+
+    # The live view ends with whatever it was showing: the pad gone, the watcher gone or waiting.
+    def _stop_testing(self):
+        if not self._testing:
+            return False
+        self._testing = False
+        if self._watcher is not None:
+            self._watcher.send({"cmd": "axes", "on": False})
+        self.testingChanged.emit()
         return True
 
     def _clear_devices(self):
@@ -329,6 +357,8 @@ class ControllerScreen(QObject):
             self._current = self._devices[0]["id"] if self._devices else ""
             if self._devices:
                 self._remember(self._devices[0]["family"])
+            else:
+                self._stop_testing()
             self.currentChanged.emit()
         if self._learning and not self._devices:
             self._learning = ""
@@ -401,14 +431,18 @@ class ControllerScreen(QObject):
             if len(self._devices) > 1:
                 names = [d["name"] for d in self._devices]
                 rows.append(_row(name, "device", "Controller", "enum", device["name"], choices=names))
+            if self._status == "ready" and not self._passive:
+                row = _row(name, "test", "Test the buttons", "action", "Buttons, sticks and triggers")
+                row.update(family=device["family"], icon="gamepad", action="Start")
+                rows.append(row)
             for slot in slots:
                 binding = device["slots"].get(slot["id"]) or {}
                 bound = bool(binding.get("bound"))
                 press = self._macro(device["family"], slot["id"], "press")
                 hold = self._macro(device["family"], slot["id"], "hold")
                 row = _row(name, slot["id"], str(slot.get("label") or slot["id"]), "action", self._display(bound, press, hold))
-                row.update(slot=slot["id"], bound=bound, code=str(binding.get("code") or ""), extra=bool(slot.get("extra")),
-                           press=press, hold=hold, action="Configure")
+                row.update(slot=slot["id"], family=device["family"], bound=bound, code=str(binding.get("code") or ""),
+                           extra=bool(slot.get("extra")), press=press, hold=hold, action="Configure")
                 rows.append(row)
             extras = sum(1 for s in slots if s.get("extra"))
             meta = [BUS_NAMES.get(device["bus"], device["bus"])]
@@ -489,6 +523,22 @@ class ControllerScreen(QObject):
         if self._watcher is not None:
             self._watcher.send({"cmd": "cancel"})
 
+    # The live view: the watcher streams the sticks and triggers while it is on; the host mutes the
+    # pad's keys for as long as it is (see Api).
+    @Slot(bool, result=bool)
+    def setTesting(self, on):
+        if not on:
+            return self._stop_testing()
+        if self._testing:
+            return True
+        if self._device() is None or self._watcher is None or self._passive or self._status != "ready":
+            self.message.emit(PASSIVE_DETAIL if self._passive else "No controller connected")
+            return False
+        self._testing = True
+        self._watcher.send({"cmd": "axes", "on": True})
+        self.testingChanged.emit()
+        return True
+
     @Slot()
     def suspend(self):
         self._suspended = True
@@ -499,6 +549,7 @@ class ControllerScreen(QObject):
     def resume(self):
         self._suspended = False
         self.cancelLearn()
+        self._stop_testing()
         if self._watcher is not None:
             self._watcher.send({"cmd": "resume"})
 
@@ -516,6 +567,7 @@ class ControllerScreen(QObject):
         self._wanted = ""
         self._remember(device["family"])
         self.cancelLearn()
+        self._stop_testing()
         self._rebuild()
         self.currentChanged.emit()
         self.devicesChanged.emit()
@@ -540,3 +592,4 @@ class ControllerScreen(QObject):
     status = Property(str, lambda self: self._status, notify=statusChanged)
     passive = Property(bool, lambda self: self._passive, notify=statusChanged)
     learning = Property(str, lambda self: self._learning, notify=statusChanged)
+    testing = Property(bool, lambda self: self._testing, notify=testingChanged)

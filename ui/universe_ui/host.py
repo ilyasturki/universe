@@ -153,7 +153,7 @@ def run(argv=None):
         from .gamepad import GamepadThread
         from .screens.controller import FakeWatcher, Watcher
 
-        gamepad = GamepadThread(app)
+        gamepad = GamepadThread(app, pad=api.pad)
         gamepad.stick.connect(api.pad.set, Qt.ConnectionType.QueuedConnection)
         gamepad.start()
         if args.fake or args.fake_launch:
@@ -170,7 +170,8 @@ def run(argv=None):
 
         # Keys only reach an active window; a bare X server hands focus to nobody by itself.
         window.requestActivate()
-        KeyScript(args.keys, args.key_gap, window, pad=api.pad, parent=app).start(args.key_delay)
+        fake_pad = watcher if gamepad is not None and (args.fake or args.fake_launch) else None
+        KeyScript(args.keys, args.key_gap, window, pad=api.pad, watcher=fake_pad, parent=app).start(args.key_delay)
 
     def grab():
         image = window.grabWindow()

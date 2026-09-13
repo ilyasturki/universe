@@ -201,6 +201,7 @@ const SONY: [Slot; 17] = standard!("Cross", "Circle", "Triangle", "Square", "L1"
 const SONY_DS4: [Slot; 17] = standard!("Cross", "Circle", "Triangle", "Square", "L1", "R1", "L2", "R2", "Share", "Options", "PS", "L3", "R3");
 const XBOX: [Slot; 17] = standard!("A", "B", "Y", "X", "LB", "RB", "LT", "RT", "View", "Menu", "Xbox", "LS", "RS");
 const SWITCH: [Slot; 17] = standard!("B", "A", "X", "Y", "L", "R", "ZL", "ZR", "Minus", "Plus", "Home", "LS", "RS");
+const EIGHTBITDO: [Slot; 17] = standard!("B", "A", "X", "Y", "L1", "R1", "L2", "R2", "Select", "Start", "Home", "L3", "R3");
 
 pub struct Family {
     pub id: &'static str,
@@ -230,8 +231,8 @@ const FAMILY_SPECS: [FamilySpec; 8] = [
         extras: &[
             extra("fn_left", "Left Fn", &["BTN_TRIGGER_HAPPY1"]),
             extra("fn_right", "Right Fn", &["BTN_TRIGGER_HAPPY2"]),
-            extra("paddle_left", "Left paddle", &["BTN_TRIGGER_HAPPY3"]),
-            extra("paddle_right", "Right paddle", &["BTN_TRIGGER_HAPPY4"]),
+            extra("paddle_left", "Left back button (LB)", &["BTN_TRIGGER_HAPPY3"]),
+            extra("paddle_right", "Right back button (RB)", &["BTN_TRIGGER_HAPPY4"]),
         ],
         ids: &[(0x054c, 0x0df2)],
         name_hints: &["dualsense edge"],
@@ -256,7 +257,7 @@ const FAMILY_SPECS: [FamilySpec; 8] = [
     FamilySpec {
         id: "8bitdo-pro-3",
         name: "8BitDo Pro 3",
-        standard: &SONY_DS4,
+        standard: &EIGHTBITDO,
         extras: &[
             extra("paddle_l4", "L4", &[]),
             extra("paddle_r4", "R4", &[]),

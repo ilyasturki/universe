@@ -98,13 +98,45 @@ struct Pad {
     slots: BTreeMap<String, Option<Source>>,
     by_source: BTreeMap<Source, String>,
     axis_down: BTreeSet<(u16, bool)>,
+    axis_last: BTreeMap<&'static str, i32>,
     cmd: mpsc::Sender<PadCmd>,
+}
+
+/// The stick or trigger an absolute axis stands for, as the page names them; hats are buttons.
+fn axis_name(code: u16) -> Option<&'static str> {
+    match code {
+        0 => Some("lx"),
+        1 => Some("ly"),
+        3 => Some("rx"),
+        4 => Some("ry"),
+        2 | 10 => Some("lt"),
+        5 | 9 => Some("rt"),
+        _ => None,
+    }
+}
+
+/// A stick axis as -1..1 about the centre of its range, a trigger as 0..1 across it.
+fn axis_value(name: &str, value: i32, (min, max): (i32, i32)) -> f64 {
+    let span = f64::from(max) - f64::from(min);
+    if span <= 0.0 {
+        return 0.0;
+    }
+    let v = if name == "lt" || name == "rt" { (f64::from(value) - f64::from(min)) / span } else { (f64::from(value) - (f64::from(min) + f64::from(max)) / 2.0) / (span / 2.0) };
+    v.clamp(-1.0, 1.0)
 }
 
 impl Pad {
     fn resolve(&mut self, cfg: &ControllerConfig) {
         self.slots = resolve_slots(cfg, &self.family, &self.keys, &self.axes);
         self.by_source = self.slots.iter().filter_map(|(s, src)| src.map(|src| (src, s.clone()))).collect();
+    }
+
+    /// The live sample the page shows while it streams axes, once it moved a hundredth.
+    fn axis_sample(&mut self, code: u16, value: i32) -> Option<serde_json::Value> {
+        let name = axis_name(code)?;
+        let range = self.ranges.get(&code).copied().unwrap_or((-1, 1));
+        let q = (axis_value(name, value, range) * 100.0).round() as i32;
+        (self.axis_last.insert(name, q) != Some(q)).then(|| serde_json::json!({"event": "axis", "id": self.id, "axis": name, "value": f64::from(q) / 100.0}))
     }
 
     fn json(&self) -> serde_json::Value {
@@ -274,6 +306,7 @@ struct Watcher {
     tx: mpsc::Sender<DevEvent>,
     typist: Arc<Mutex<Typist>>,
     suspended: bool,
+    axes: bool,
     learning: Option<(String, String, Instant)>,
     started: Instant,
     config_mtime: Option<std::time::SystemTime>,
@@ -316,7 +349,7 @@ impl Watcher {
             let c = describe(&dev);
             let bus = bus_name(&dev);
             let (ctx, crx) = mpsc::channel(4);
-            let mut pad = Pad { id: id.clone(), path, name: c.name, family: c.family, bus, keys: c.keys, axes: c.axes, ranges: c.ranges, slots: BTreeMap::new(), by_source: BTreeMap::new(), axis_down: BTreeSet::new(), cmd: ctx };
+            let mut pad = Pad { id: id.clone(), path, name: c.name, family: c.family, bus, keys: c.keys, axes: c.axes, ranges: c.ranges, slots: BTreeMap::new(), by_source: BTreeMap::new(), axis_down: BTreeSet::new(), axis_last: BTreeMap::new(), cmd: ctx };
             pad.resolve(&self.cfg);
             pad_task(id.clone(), dev, self.tx.clone(), crx);
             self.out.emit(pad.json());
@@ -349,24 +382,28 @@ impl Watcher {
 
     async fn input(&mut self, id: String, ev: InputEvent) -> bool {
         let Some(pad) = self.pads.get_mut(&id) else { return true };
-        // Sticks and unowned trigger axes never reach the page: only hats and axes a slot resolved to.
-        let transitions: Vec<(Source, bool)> = match ev.destructure() {
+        // Sticks and unowned trigger axes reach the page only as samples while it asked for them;
+        // as presses, only hats and axes a slot resolved to.
+        let (transitions, sample): (Vec<(Source, bool)>, Option<serde_json::Value>) = match ev.destructure() {
             EventSummary::Key(_, key, value) => {
                 if value == 2 {
                     return true;
                 }
-                vec![(Source::Key(key.code()), value != 0)]
+                (vec![(Source::Key(key.code()), value != 0)], None)
             }
             EventSummary::AbsoluteAxis(_, axis, value) => {
                 let code = axis.0;
+                let sample = if self.axes { pad.axis_sample(code, value) } else { None };
                 let owned = (16..=17).contains(&code) || pad.by_source.keys().any(|s| matches!(s, Source::Axis { code: c, .. } if *c == code));
-                if !owned {
-                    return true;
-                }
-                pad.axis(code, value)
+                (if owned { pad.axis(code, value) } else { vec![] }, sample)
             }
             _ => return true,
         };
+        if let Some(sample) = sample {
+            if !self.out.emit(sample) {
+                return false;
+            }
+        }
         for (source, down) in transitions {
             if let Some((lid, slot, since)) = self.learning.clone() {
                 if since.elapsed() > LEARN_TIMEOUT {
@@ -488,6 +525,12 @@ impl Watcher {
                 self.engine.clear();
             }
             "resume" => self.suspended = false,
+            "axes" => {
+                self.axes = v["on"].as_bool().unwrap_or(false);
+                for p in self.pads.values_mut() {
+                    p.axis_last.clear();
+                }
+            }
             "reload" => self.reload().await,
             "learn" => {
                 let id = v["id"].as_str().unwrap_or("").to_string();
@@ -520,7 +563,7 @@ pub async fn watch(core: Arc<Core>, opts: WatchOptions) -> crate::Result<()> {
     };
     let cfg = core.config.read().await.controller.clone();
     let (tx, mut rx) = mpsc::channel::<DevEvent>(256);
-    let mut w = Watcher { core, engine: Engine::new(cfg.hold_ms), cfg, out, pads: BTreeMap::new(), ignored: BTreeSet::new(), tx, typist: Arc::new(Mutex::new(Typist { dev: None })), suspended: false, learning: None, started: Instant::now(), config_mtime: config_mtime() };
+    let mut w = Watcher { core, engine: Engine::new(cfg.hold_ms), cfg, out, pads: BTreeMap::new(), ignored: BTreeSet::new(), tx, typist: Arc::new(Mutex::new(Typist { dev: None })), suspended: false, axes: false, learning: None, started: Instant::now(), config_mtime: config_mtime() };
     if !w.out.emit(serde_json::json!({"event": "ready", "enabled": w.cfg.enabled})) {
         return Ok(());
     }
@@ -624,5 +667,23 @@ pub async fn learn_once(cfg: &ControllerConfig, family: &Family, slot: &str) -> 
             },
             _ = &mut deadline => return Err(crate::Error::Io("no button pressed within 30 s".into())),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn axes_normalize_by_their_range() {
+        assert_eq!(axis_name(0), Some("lx"));
+        assert_eq!(axis_name(9), Some("rt"));
+        assert_eq!(axis_name(16), None, "hats are buttons");
+        assert_eq!(axis_value("lx", 255, (0, 255)), 1.0);
+        assert!((axis_value("ly", 128, (0, 255)) - 0.0039).abs() < 0.001, "a DualSense stick rests a hair off centre");
+        assert_eq!(axis_value("rx", -32768, (-32768, 32767)), -1.0);
+        assert_eq!(axis_value("lt", 0, (0, 1023)), 0.0);
+        assert_eq!(axis_value("rt", 1023, (0, 1023)), 1.0);
+        assert_eq!(axis_value("lt", 5, (0, 0)), 0.0, "an empty range is at rest");
     }
 }

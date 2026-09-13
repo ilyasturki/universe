@@ -911,7 +911,7 @@
           },
           {
             "id": "paddle_left",
-            "label": "Left paddle",
+            "label": "Left back button (LB)",
             "codes": [
               "BTN_TRIGGER_HAPPY3"
             ],
@@ -919,7 +919,7 @@
           },
           {
             "id": "paddle_right",
-            "label": "Right paddle",
+            "label": "Right back button (RB)",
             "codes": [
               "BTN_TRIGGER_HAPPY4"
             ],
@@ -1361,7 +1361,7 @@
           },
           {
             "id": "paddle_p1",
-            "label": "Paddle P1 (right upper)",
+            "label": "P1 (right upper)",
             "codes": [
               "BTN_GRIPR",
               "BTN_TRIGGER_HAPPY5"
@@ -1370,7 +1370,7 @@
           },
           {
             "id": "paddle_p2",
-            "label": "Paddle P2 (right lower)",
+            "label": "P2 (right lower)",
             "codes": [
               "BTN_GRIPR2",
               "BTN_TRIGGER_HAPPY6"
@@ -1379,7 +1379,7 @@
           },
           {
             "id": "paddle_p3",
-            "label": "Paddle P3 (left upper)",
+            "label": "P3 (left upper)",
             "codes": [
               "BTN_GRIPL",
               "BTN_TRIGGER_HAPPY7"
@@ -1388,7 +1388,7 @@
           },
           {
             "id": "paddle_p4",
-            "label": "Paddle P4 (left lower)",
+            "label": "P4 (left lower)",
             "codes": [
               "BTN_GRIPL2",
               "BTN_TRIGGER_HAPPY8"
@@ -1703,7 +1703,7 @@
         "slots": [
           {
             "id": "south",
-            "label": "A",
+            "label": "B",
             "codes": [
               "BTN_SOUTH"
             ],
@@ -1711,7 +1711,7 @@
           },
           {
             "id": "east",
-            "label": "B",
+            "label": "A",
             "codes": [
               "BTN_EAST"
             ],
@@ -1719,7 +1719,7 @@
           },
           {
             "id": "north",
-            "label": "Y",
+            "label": "X",
             "codes": [
               "BTN_NORTH"
             ],
@@ -1727,7 +1727,7 @@
           },
           {
             "id": "west",
-            "label": "X",
+            "label": "Y",
             "codes": [
               "BTN_WEST"
             ],
@@ -1735,7 +1735,7 @@
           },
           {
             "id": "lb",
-            "label": "LB",
+            "label": "L1",
             "codes": [
               "BTN_TL"
             ],
@@ -1743,7 +1743,7 @@
           },
           {
             "id": "rb",
-            "label": "RB",
+            "label": "R1",
             "codes": [
               "BTN_TR"
             ],
@@ -1751,7 +1751,7 @@
           },
           {
             "id": "lt",
-            "label": "LT",
+            "label": "L2",
             "codes": [
               "BTN_TL2"
             ],
@@ -1759,7 +1759,7 @@
           },
           {
             "id": "rt",
-            "label": "RT",
+            "label": "R2",
             "codes": [
               "BTN_TR2"
             ],
@@ -1783,7 +1783,7 @@
           },
           {
             "id": "guide",
-            "label": "Guide",
+            "label": "Home",
             "codes": [
               "BTN_MODE"
             ],
@@ -1791,7 +1791,7 @@
           },
           {
             "id": "ls",
-            "label": "LS",
+            "label": "L3",
             "codes": [
               "BTN_THUMBL"
             ],
@@ -1799,7 +1799,7 @@
           },
           {
             "id": "rs",
-            "label": "RS",
+            "label": "R3",
             "codes": [
               "BTN_THUMBR"
             ],
@@ -1855,7 +1855,7 @@
           },
           {
             "id": "paddle_pl",
-            "label": "PL paddle",
+            "label": "PL",
             "codes": [
               "BTN_TRIGGER_HAPPY3"
             ],
@@ -1863,7 +1863,7 @@
           },
           {
             "id": "paddle_pr",
-            "label": "PR paddle",
+            "label": "PR",
             "codes": [
               "BTN_TRIGGER_HAPPY4"
             ],

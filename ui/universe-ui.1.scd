@@ -42,7 +42,8 @@ UI never loses a session.
 	Quit after _MS_ milliseconds; 0 never (default).
 
 *--keys* _LIST_
-	Key names posted once loaded, e.g. 'Right Right Return'. *Wait* idles one gap.
+	Key names posted once loaded, e.g. 'Right Right Return'. *Wait* idles one gap;
+	with *--fake*, *Press:slot*, *Unpress:slot* and *Axis:lx=0.6* play the fake pad.
 
 *--key-gap* _MS_
 	Gap between posted keys (default 120).

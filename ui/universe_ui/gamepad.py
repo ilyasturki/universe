@@ -138,14 +138,18 @@ class GamepadThread(QThread):
     key = Signal(int, bool, bool)
     stick = Signal(str, float)
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, pad=None):
         super().__init__(parent)
         self._running = False
+        self._pad = pad
         self.mapper = Mapper()
         self.key.connect(self._post, Qt.ConnectionType.QueuedConnection)
 
+    # A muted pad posts no press; a release still lands, so nothing stays held across the mute.
     @Slot(int, bool, bool)
     def _post(self, key, pressed, autorepeat):
+        if pressed and self._pad is not None and self._pad.muted:
+            return
         post_key(Qt.Key(key), pressed, autorepeat)
 
     def stop(self):
@@ -213,13 +217,15 @@ KEY_NAMES = {
 
 class KeyScript(QObject):
     """Posts a scripted key sequence, one name per gap: `Wait` idles, `Wait:N` idles N gaps,
-    `Hold:A`/`Release:A` split a press, `Stick:rightX=0.6` tilts a stick, `Shot:path.png` grabs the window."""
+    `Hold:A`/`Release:A` split a press, `Stick:rightX=0.6` tilts a stick, `Shot:path.png` grabs the
+    window; with a fake watcher, `Press:slot`/`Unpress:slot` and `Axis:lx=0.6` play the pad."""
 
-    def __init__(self, script, gap_ms, window, pad=None, parent=None):
+    def __init__(self, script, gap_ms, window, pad=None, watcher=None, parent=None):
         super().__init__(parent)
         self._queue = [k for k in script.split() if k]
         self._window = window
         self._pad = pad
+        self._watcher = watcher
         self._timer = QTimer(self)
         self._timer.setInterval(gap_ms)
         self._timer.timeout.connect(self._step)
@@ -245,6 +251,15 @@ class KeyScript(QObject):
             axis, _, value = bare.partition("=")
             if self._pad is not None:
                 self._pad.set(axis, float(value or 0))
+            return
+        if phase in ("Press", "Unpress"):
+            if self._watcher is not None:
+                self._watcher.press(bare, phase == "Press")
+            return
+        if phase == "Axis":
+            axis, _, value = bare.partition("=")
+            if self._watcher is not None:
+                self._watcher.axis(axis, float(value or 0))
             return
         if not bare:
             phase, bare = "click", name

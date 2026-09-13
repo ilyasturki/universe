@@ -16,6 +16,10 @@ Item {
 
     readonly property bool info: entry.type === "info"
     readonly property bool hasImage: entry.image !== undefined && entry.image !== null && String(entry.image) !== ""
+    // A controller row carries its slot and family: the button is drawn before its name.
+    readonly property bool hasGlyph: entry.slot !== undefined && String(entry.slot) !== "" && entry.family !== undefined
+    readonly property bool hasIcon: !hasGlyph && entry.icon !== undefined && String(entry.icon) !== ""
+    readonly property real labelInset: hasImage ? thumb.width + Theme.dp(24) : hasGlyph || hasIcon ? Theme.dp(18) + lead.width + Theme.dp(16) : Theme.dp(18)
     readonly property color onFocus: Qt.rgba(0.063, 0.067, 0.086, 0.7)
     // A value or a detail leaves the label at least a third of the row.
     readonly property real valueMax: Math.max(Theme.dp(120), width * 0.6 - (hasImage ? thumb.width : 0))
@@ -86,9 +90,40 @@ Item {
         visible: false
     }
 
+    Item {
+        id: lead
+
+        anchors.left: parent.left
+        anchors.leftMargin: Theme.dp(18)
+        anchors.verticalCenter: parent.verticalCenter
+        width: row.hasGlyph ? glyph.implicitWidth : row.hasIcon ? icon.width : 0
+        height: parent.height
+        visible: row.hasGlyph || row.hasIcon
+
+        PadGlyph {
+            id: glyph
+            anchors.verticalCenter: parent.verticalCenter
+            visible: row.hasGlyph
+            family: row.hasGlyph ? String(row.entry.family) : "xbox"
+            slot: row.hasGlyph ? String(row.entry.slot) : "south"
+            unit: Theme.dp(row.compact ? 26 : 28)
+            ink: row.focused ? Theme.onLight : Theme.text
+        }
+
+        MenuGlyph {
+            id: icon
+            anchors.verticalCenter: parent.verticalCenter
+            visible: row.hasIcon
+            width: Theme.dp(row.compact ? 24 : 26)
+            height: width
+            kind: row.hasIcon ? String(row.entry.icon) : ""
+            tint: row.focused ? Theme.onLight : Theme.text
+        }
+    }
+
     Text {
         anchors.left: parent.left
-        anchors.leftMargin: row.hasImage ? thumb.width + Theme.dp(24) : Theme.dp(18)
+        anchors.leftMargin: row.labelInset
         anchors.right: control.left
         anchors.rightMargin: Theme.dp(20)
         anchors.verticalCenter: parent.verticalCenter

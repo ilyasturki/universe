@@ -76,6 +76,35 @@ def test_post_key_needs_a_focus_window(app):
     assert gamepad.post_key(Qt.Key.Key_Return, True) is False
 
 
+def test_a_muted_pad_posts_releases_only(app, monkeypatch):
+    from universe_ui.api import Pad
+
+    posted = []
+    monkeypatch.setattr(gamepad, "post_key", lambda key, pressed, autorepeat=False, window=None: posted.append((key, pressed)))
+    pad = Pad()
+    thread = gamepad.GamepadThread(pad=pad)
+    thread._post(int(Qt.Key.Key_Return), True, False)
+    pad.muted = True
+    thread._post(int(Qt.Key.Key_Escape), True, False)
+    thread._post(int(Qt.Key.Key_Return), False, False)
+    pad.muted = False
+    thread._post(int(Qt.Key.Key_Escape), True, False)
+    assert posted == [(Qt.Key.Key_Return, True), (Qt.Key.Key_Return, False), (Qt.Key.Key_Escape, True)]
+
+
+def test_key_script_plays_a_fake_pad(app):
+    from universe_ui.screens.controller import FakeWatcher
+
+    watcher = FakeWatcher("xbox")
+    lines = []
+    watcher.event.connect(lines.append)
+    script = gamepad.KeyScript("Press:south Axis:lx=-0.5 Unpress:south", 1, None, watcher=watcher)
+    for _ in range(3):
+        script._step()
+    assert [(l["event"], l.get("slot") or l.get("axis"), l.get("pressed", l.get("value"))) for l in lines] == [
+        ("button", "south", True), ("axis", "lx", -0.5), ("button", "south", False)]
+
+
 def test_key_script_names_cover_the_pad():
     for name in ("A", "B", "X", "Y", "LB", "RB", "LT", "RT", "Start", "Up", "Down", "Left", "Right"):
         assert name in gamepad.KEY_NAMES

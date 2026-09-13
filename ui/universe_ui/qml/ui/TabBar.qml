@@ -31,12 +31,10 @@ FocusScope {
         forceActiveFocus();
     }
 
+    // Round trip: the glass follows the last tab, the first tab follows the glass.
     function step(d) {
-        var next = Math.max(0, Math.min(searchIndex, index + d));
-        if (next === index) {
-            Sound.edge();
-            return;
-        }
+        var n = searchIndex + 1;
+        var next = (index + d + n) % n;
         index = next;
         if (next < searchIndex && next !== currentIndex) {
             Sound.space();

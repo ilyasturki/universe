@@ -132,6 +132,50 @@ Canvas {
             ctx.lineTo(10 * s, 18 * s);
             ctx.lineTo(19.5 * s, 6.5 * s);
             ctx.stroke();
+        } else if (kind === "grid") {
+            [[3, 3], [13.5, 3], [3, 13.5], [13.5, 13.5]].forEach(function(p) {
+                ctx.beginPath();
+                ctx.roundedRect(p[0] * s, p[1] * s, 7.5 * s, 7.5 * s, 1.5 * s, 1.5 * s);
+                ctx.stroke();
+            });
+        } else if (kind === "user") {
+            ctx.arc(12 * s, 8 * s, 4 * s, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(4 * s, 21 * s);
+            ctx.bezierCurveTo(4 * s, 15 * s, 20 * s, 15 * s, 20 * s, 21 * s);
+            ctx.stroke();
+        } else if (kind === "pulse") {
+            ctx.moveTo(2.5 * s, 12 * s);
+            ctx.lineTo(7 * s, 12 * s);
+            ctx.lineTo(9.5 * s, 5 * s);
+            ctx.lineTo(13.5 * s, 19 * s);
+            ctx.lineTo(16 * s, 12 * s);
+            ctx.lineTo(21.5 * s, 12 * s);
+            ctx.stroke();
+        } else if (kind === "gamepad") {
+            ctx.moveTo(7 * s, 6 * s);
+            ctx.lineTo(17 * s, 6 * s);
+            ctx.bezierCurveTo(21 * s, 6 * s, 22.5 * s, 10 * s, 22 * s, 15 * s);
+            ctx.bezierCurveTo(21.6 * s, 19 * s, 18 * s, 19.5 * s, 16.5 * s, 16.5 * s);
+            ctx.lineTo(15.5 * s, 14.5 * s);
+            ctx.lineTo(8.5 * s, 14.5 * s);
+            ctx.lineTo(7.5 * s, 16.5 * s);
+            ctx.bezierCurveTo(6 * s, 19.5 * s, 2.4 * s, 19 * s, 2 * s, 15 * s);
+            ctx.bezierCurveTo(1.5 * s, 10 * s, 3 * s, 6 * s, 7 * s, 6 * s);
+            ctx.closePath();
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(7.5 * s, 8.5 * s);
+            ctx.lineTo(7.5 * s, 12.5 * s);
+            ctx.moveTo(5.5 * s, 10.5 * s);
+            ctx.lineTo(9.5 * s, 10.5 * s);
+            ctx.stroke();
+            [[15.5, 9.2], [17.8, 11.5]].forEach(function(p) {
+                ctx.beginPath();
+                ctx.arc(p[0] * s, p[1] * s, 1.1 * s, 0, Math.PI * 2);
+                ctx.fill();
+            });
         } else if (kind === "keyboard") {
             ctx.roundedRect(3 * s, 6 * s, 18 * s, 12 * s, 2 * s, 2 * s);
             ctx.stroke();

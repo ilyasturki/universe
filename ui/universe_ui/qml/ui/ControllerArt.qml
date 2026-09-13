@@ -1,22 +1,23 @@
 import QtQuick
 import "../core"
-import "ControllerHotspots.js" as Hotspots
 
-// The current pad drawn flat, a hotspot over every button: lit for the focused row, a flash
-// on a live press, a pulse while a button is being learned, dashed when the slot has no
-// button on this connection. Sits in the right column of the Controller section.
+// The current pad in its card: lit for the focused row, a flash on a live press, a pulse while a
+// button is being learned, dashed when the slot has no button on this connection. In the live
+// view it fills the page, with the last press named under it.
 Item {
     id: art
 
     property string family: "dualsense"
     property bool connected: false
+    property bool testing: false
     property string focusedSlot: ""
     property string learningSlot: ""
     property var unbound: []
+    property var rows: []
     property var pressed: ({})
+    property var axes: ({})
+    property string lastSlot: ""
 
-    readonly property string drawn: Hotspots.has(family) ? family : "generic"
-    readonly property var spots: Hotspots.slots(drawn)
     readonly property real pad: Theme.dp(8)
     readonly property real inset: Theme.dp(20)
 
@@ -30,11 +31,34 @@ Item {
         if (down)
             next[slot] = true;
         pressed = next;
+        if (down)
+            lastSlot = slot;
     }
 
-    onFamilyChanged: pressed = ({})
+    function axis(name, value) {
+        var next = {};
+        for (var k in axes)
+            next[k] = axes[k];
+        next[name] = value;
+        axes = next;
+    }
 
-    // The learn pulse, shared by the one hotspot that shows it.
+    function clear() {
+        pressed = ({});
+        axes = ({});
+        lastSlot = "";
+    }
+
+    function labelOf(slot) {
+        for (var i = 0; i < rows.length; i++)
+            if (rows[i].slot === slot)
+                return rows[i].label;
+        return slot;
+    }
+
+    onFamilyChanged: clear()
+
+    // The learn pulse, shared by the one button that shows it.
     property real pulse: 0.15
     SequentialAnimation on pulse {
         running: art.learningSlot !== ""
@@ -57,97 +81,26 @@ Item {
         x: art.inset
         y: art.pad + 1 + Theme.dp(6)
         width: parent.width - art.inset * 2
-        height: Math.round(width * 0.62)
+        height: art.testing ? Math.max(0, art.height - y - caption.height - Theme.dp(24)) : Math.round(width * 0.66)
 
-        Image {
-            id: img
-
+        PadArt {
             anchors.fill: parent
-            source: Qt.resolvedUrl("../assets/controllers/" + art.drawn + ".svg")
-            fillMode: Image.PreserveAspectFit
-            sourceSize.width: width
-            sourceSize.height: height
-            smooth: true
-            opacity: art.connected ? 1.0 : 0.32
+            family: art.family
+            focusedSlot: art.focusedSlot
+            learningSlot: art.learningSlot
+            unbound: art.connected ? art.unbound : []
+            pressed: art.pressed
+            axes: art.axes
+            pulse: art.pulse
+            opacity: art.connected ? 1.0 : 0.38
 
             Behavior on opacity {
                 NumberAnimation { duration: Theme.durScene; easing.type: Easing.OutCubic }
             }
         }
-
-        Item {
-            id: overlay
-
-            x: (img.width - img.paintedWidth) / 2
-            y: (img.height - img.paintedHeight) / 2
-            width: img.paintedWidth
-            height: img.paintedHeight
-            visible: art.connected
-
-            Repeater {
-                model: art.spots
-
-                Item {
-                    id: spot
-
-                    readonly property string slot: modelData.slot
-                    readonly property bool lit: art.focusedSlot === slot
-                    readonly property bool down: art.pressed[slot] === true
-                    readonly property bool learning: art.learningSlot === slot
-                    readonly property bool missing: art.unbound.indexOf(slot) !== -1
-                    readonly property real radius: modelData.r * overlay.width
-
-                    x: modelData.x * overlay.width
-                    y: modelData.y * overlay.height
-                    width: modelData.w * overlay.width
-                    height: modelData.h * overlay.height
-
-                    Rectangle {
-                        anchors.fill: parent
-                        anchors.margins: -Theme.dp(3)
-                        radius: Math.min(spot.radius + Theme.dp(3), Math.min(width, height) / 2)
-                        color: Theme.text
-                        opacity: spot.down ? 0.8 : spot.lit ? 0.3 : spot.learning ? art.pulse : 0.0
-                        border.width: spot.lit || spot.down || spot.learning ? Theme.dp(2) : 0
-                        border.color: Theme.text
-
-                        Behavior on opacity {
-                            NumberAnimation { duration: spot.down ? 30 : Theme.durQuick; easing.type: Easing.OutCubic }
-                        }
-                    }
-
-                    Canvas {
-                        anchors.fill: parent
-                        anchors.margins: -Theme.dp(6)
-                        visible: spot.missing && !spot.lit && !spot.down && !spot.learning
-                        onVisibleChanged: requestPaint()
-                        onWidthChanged: requestPaint()
-                        onPaint: {
-                            var ctx = getContext("2d");
-                            ctx.reset();
-                            ctx.strokeStyle = Qt.rgba(0.949, 0.953, 0.961, 0.45);
-                            ctx.lineWidth = Theme.dp(1.5);
-                            ctx.setLineDash([Theme.dp(4), Theme.dp(4)]);
-                            var r = Math.min(spot.radius + Theme.dp(6), Math.min(width, height) / 2);
-                            ctx.beginPath();
-                            ctx.moveTo(r, 0);
-                            ctx.lineTo(width - r, 0);
-                            ctx.arcTo(width, 0, width, r, r);
-                            ctx.lineTo(width, height - r);
-                            ctx.arcTo(width, height, width - r, height, r);
-                            ctx.lineTo(r, height);
-                            ctx.arcTo(0, height, 0, height - r, r);
-                            ctx.lineTo(0, r);
-                            ctx.arcTo(0, 0, r, 0, r);
-                            ctx.stroke();
-                        }
-                    }
-                }
-            }
-        }
     }
 
-    Text {
+    Column {
         id: caption
 
         anchors.top: frame.bottom
@@ -156,15 +109,43 @@ Item {
         anchors.right: parent.right
         anchors.leftMargin: art.inset
         anchors.rightMargin: art.inset
-        horizontalAlignment: Text.AlignHCenter
-        text: !art.connected ? "Connect a controller"
-            : art.learningSlot !== "" ? "Press the button on the controller"
-            : art.unbound.length > 0 ? "Dashed buttons have no code on this connection: learn them"
-            : "Press a button on the pad to jump to it"
-        color: art.connected && art.learningSlot === "" ? Theme.textMuted : Theme.textSecondary
-        font.family: Theme.sans
-        font.weight: art.connected ? Font.Normal : Font.Medium
-        font.pixelSize: Theme.dp(art.connected ? 19 : 24)
-        wrapMode: Text.WordWrap
+        spacing: Theme.dp(6)
+
+        Row {
+            anchors.horizontalCenter: parent.horizontalCenter
+            visible: art.testing && art.lastSlot !== ""
+            spacing: Theme.dp(14)
+
+            PadGlyph {
+                anchors.verticalCenter: parent.verticalCenter
+                family: art.family
+                slot: art.lastSlot
+                unit: Theme.dp(34)
+            }
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: art.labelOf(art.lastSlot)
+                color: Theme.text
+                font.family: Theme.sans
+                font.weight: Font.DemiBold
+                font.pixelSize: Theme.dp(26)
+            }
+        }
+
+        Text {
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
+            text: !art.connected ? "Connect a controller"
+                : art.testing ? "Every press shows here and nowhere else"
+                : art.learningSlot !== "" ? "Press the button on the controller"
+                : art.unbound.length > 0 ? "Dashed buttons have no code on this connection: learn them"
+                : "Press a button on the pad to see it light up"
+            color: art.connected && art.learningSlot === "" ? Theme.textMuted : Theme.textSecondary
+            font.family: Theme.sans
+            font.weight: art.connected ? Font.Normal : Font.Medium
+            font.pixelSize: Theme.dp(art.connected ? 19 : 24)
+            wrapMode: Text.WordWrap
+        }
     }
 }

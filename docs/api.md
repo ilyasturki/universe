@@ -215,8 +215,10 @@ line: out — `{"event":"ready"}`, `{"event":"device","id":"event30","name","fam
 "bus","slots":{"<slot>":{"code","bound"}}}`, `gone {id}`, `button {id, slot, code, pressed}`,
 `unknown {id, code}` (a key no slot owns), `macro {id, slot, trigger, action, keys, command}`,
 `learned {family, slot, code, from}`, `learn_timeout`, `waiting` / `busy` (the lock), `error
-{message}`; in — `{"cmd":"suspend"}` (report, do not fire), `resume`, `reload` (config changed),
-`learn {id, slot}`, `cancel`, `rumble {id}`, `quit`. Stdin's end stops a `--json` watcher. A
+{message}`, and while `axes` is on, `axis {id, axis, value}` (`lx ly rx ry` as -1..1, `lt rt` as
+0..1, a hundredth's resolution, on change); in — `{"cmd":"suspend"}` (report, do not fire),
+`resume`, `axes {on}` (stream the sticks and triggers: the page's test mode), `reload` (config
+changed), `learn {id, slot}`, `cancel`, `rumble {id}`, `quit`. Stdin's end stops a `--json` watcher. A
 watcher also reloads by itself when `config.toml`'s mtime moves (checked on the 2 s scan), so a
 bind from a terminal or from a launcher whose own watcher is waiting reaches the one holding the
 pads. Either reload rereads config.toml and the module list only, never the library, so pad

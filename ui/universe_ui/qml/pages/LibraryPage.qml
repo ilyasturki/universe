@@ -148,12 +148,7 @@ FocusScope {
             property int index: 0
 
             function step(d) {
-                var next = Math.max(0, Math.min(1, index + d));
-                if (next === index) {
-                    Sound.edge();
-                    return;
-                }
-                index = next;
+                index = (index + d + 2) % 2;
                 Sound.tick();
             }
 

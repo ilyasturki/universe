@@ -95,13 +95,16 @@ class Keys(QObject):
 
 
 class Pad(QObject):
-    """`api.pad`: the sticks the theme reads as values; 0 with no controller."""
+    """`api.pad`: the sticks the theme reads as values; 0 with no controller. `muted` keeps the pad's
+    presses from becoming keys while the controller section shows them live."""
 
     changed = Signal()
+    mutedChanged = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._axes = {"rightX": 0.0, "rightY": 0.0}
+        self._muted = False
 
     @Slot(str, float)
     def set(self, name, value):
@@ -109,8 +112,15 @@ class Pad(QObject):
             self._axes[name] = value
             self.changed.emit()
 
+    @Slot(bool)
+    def setMuted(self, muted):
+        if self._muted != bool(muted):
+            self._muted = bool(muted)
+            self.mutedChanged.emit()
+
     rightX = Property(float, lambda self: self._axes["rightX"], notify=changed)
     rightY = Property(float, lambda self: self._axes["rightY"], notify=changed)
+    muted = Property(bool, lambda self: self._muted, setMuted, notify=mutedChanged)
 
 
 class Memory(QObject):
@@ -259,6 +269,8 @@ class Api(QObject):
         self._memory = Memory(memory_path, self)
         self._library = Library(client, self)
         self._screens = Screens(client, self.screenHz, self, memory=self._memory)
+        controller = self._screens.controller
+        controller.testingChanged.connect(lambda: self._pad.setMuted(controller.testing))
         self._window = None
         self._fullscreen = fullscreen
 

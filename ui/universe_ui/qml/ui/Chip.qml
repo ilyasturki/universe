@@ -5,6 +5,7 @@ Item {
     id: root
 
     property string label: ""
+    property string icon: ""
     property string trailing: ""
     property string badge: ""
     property bool showSortIcon: false
@@ -59,6 +60,15 @@ Item {
                     }
                 }
             }
+        }
+
+        MenuGlyph {
+            visible: root.icon !== ""
+            width: Theme.dp(22)
+            height: width
+            anchors.verticalCenter: parent.verticalCenter
+            kind: root.icon
+            tint: root.active ? Theme.onLight : Qt.rgba(0.949, 0.953, 0.961, 0.72)
         }
 
         Text {
