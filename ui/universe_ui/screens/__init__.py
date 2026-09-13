@@ -2,6 +2,7 @@
 
 from PySide6.QtCore import Property, QObject
 
+from .controller import ControllerScreen
 from .media import JournalList, RecordingsList
 from .paths import PathBrowser
 from .settings import GameSettingsForm, ModulesForm
@@ -9,7 +10,7 @@ from .sources import LoginFlow, SourcesBrowser
 
 
 class Screens(QObject):
-    def __init__(self, client, screen_hz=lambda: 0, parent=None):
+    def __init__(self, client, screen_hz=lambda: 0, parent=None, memory=None):
         super().__init__(parent)
         self._gameSettings = GameSettingsForm(client, self)
         self._modules = ModulesForm(client, screen_hz, self)
@@ -18,9 +19,11 @@ class Screens(QObject):
         self._recordings = RecordingsList(client, self)
         self._journal = JournalList(client, self)
         self._paths = PathBrowser(client, self)
+        self._controller = ControllerScreen(client, memory, self)
 
     def shutdown(self):
         self._recordings.shutdown()
+        self._controller.shutdown()
 
     gameSettings = Property(QObject, lambda self: self._gameSettings, constant=True)
     modules = Property(QObject, lambda self: self._modules, constant=True)
@@ -29,3 +32,4 @@ class Screens(QObject):
     recordings = Property(QObject, lambda self: self._recordings, constant=True)
     journal = Property(QObject, lambda self: self._journal, constant=True)
     paths = Property(QObject, lambda self: self._paths, constant=True)
+    controller = Property(QObject, lambda self: self._controller, constant=True)

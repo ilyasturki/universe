@@ -207,6 +207,20 @@ impl Core {
     fn doctor_json(&self, py: Python<'_>) -> String {
         self.run_infallible(py, |c| c.doctor_json())
     }
+
+    // -- controller --
+    fn controller_state_json(&self, py: Python<'_>) -> String {
+        self.run_infallible(py, |c| c.controller_state_json())
+    }
+    fn set_controller_macro(&self, py: Python<'_>, json: String) -> PyResult<()> {
+        self.run(py, |c| async move { c.set_controller_macro(&json).await })
+    }
+    fn remove_controller_macro(&self, py: Python<'_>, family: String, button: String, trigger: String) -> PyResult<()> {
+        self.run(py, |c| async move { c.remove_controller_macro(&family, &button, &trigger).await })
+    }
+    fn set_controller_button(&self, py: Python<'_>, family: String, slot: String, codes_json: String) -> PyResult<()> {
+        self.run(py, |c| async move { c.set_controller_button(&family, &slot, &codes_json).await })
+    }
 }
 
 #[pyfunction]

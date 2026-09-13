@@ -1,0 +1,9 @@
+#!/bin/sh
+# Stands in for `universe controller watch --json --wait`: announces one pad, then echoes every
+# command it is sent back as an event, so a test can see both directions of the pipe.
+[ "$1 $2" = "controller watch" ] || { echo "unexpected: $*" >&2; exit 2; }
+echo '{"event":"ready"}'
+echo '{"event":"device","id":"event9","name":"Stub pad","family":"xbox","bus":"usb","slots":{"south":{"code":"BTN_SOUTH","bound":true},"share":{"code":null,"bound":false}}}'
+while read -r line; do
+    echo "{\"event\":\"echo\",\"command\":$line}"
+done

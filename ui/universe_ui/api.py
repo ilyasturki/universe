@@ -238,7 +238,7 @@ class Api(QObject):
         self._keys = Keys(self)
         self._memory = Memory(memory_path, self)
         self._library = Library(client, self)
-        self._screens = Screens(client, self.screenHz, self)
+        self._screens = Screens(client, self.screenHz, self, memory=self._memory)
         self._window = None
         self._fullscreen = fullscreen
 

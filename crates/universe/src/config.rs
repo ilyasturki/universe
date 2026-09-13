@@ -15,6 +15,7 @@ pub struct Config {
     pub modules: ModulesConfig,
     pub keys: Keys,
     pub lutris: LutrisConfig,
+    pub controller: crate::controller::ControllerConfig,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -87,6 +88,7 @@ impl Default for Config {
             modules: ModulesConfig::default(),
             keys: Keys::default(),
             lutris: LutrisConfig::default(),
+            controller: crate::controller::ControllerConfig::default(),
         }
     }
 }

@@ -1,4 +1,5 @@
 pub mod config;
+pub mod controller;
 pub mod game;
 pub mod index;
 pub mod journal;

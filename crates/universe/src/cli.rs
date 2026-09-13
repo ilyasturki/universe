@@ -17,6 +17,7 @@ Files:
   ~/.config/universe/modules/<id>/ — user modules, overriding the shipped ones
   ~/.local/share/universe/modules/<id>/ — module data: caches, logins
   ~/.local/state/universe/current-session.json — the running session
+  $XDG_RUNTIME_DIR/universe/controller.lock — held by the one controller watcher (the launcher's, or a session's)
 
 Environment:
   UNIVERSE_CONFIG_HOME, UNIVERSE_DATA_HOME, UNIVERSE_STATE_HOME, UNIVERSE_CACHE_HOME — replace the XDG directories
@@ -188,6 +189,11 @@ pub enum Cmd {
     },
     /// Take a screenshot through the module that provides one
     Screenshot,
+    /// Controller macros: paddles and spare buttons bound to actions
+    Controller {
+        #[command(subcommand)]
+        action: ControllerCmd,
+    },
     /// Reload config and rescan the library
     Rescan,
     /// Close a session: run by systemd's ExecStopPost when the game's cgroup empties
@@ -297,6 +303,55 @@ pub enum ConfigCmd {
         #[arg(default_value = "")]
         value: String,
     },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ControllerCmd {
+    /// Connected pads with their buttons, then the macros and presets
+    #[command(alias = "list")]
+    Ls,
+    /// Run the macro engine (the launcher and a game's unit start it themselves)
+    Watch {
+        /// One JSON object per line on stdout, commands on stdin
+        #[arg(long)]
+        json: bool,
+        /// Wait for the running watcher to end instead of exiting at once
+        #[arg(long)]
+        wait: bool,
+    },
+    /// Bind an action to a button
+    Bind {
+        /// Family: dualsense-edge, xbox-elite, … or `*` for every pad
+        family: String,
+        /// Button: paddle_left, fn_right, guide, …
+        button: String,
+        /// press or hold
+        #[arg(value_parser = crate::controller::TRIGGERS)]
+        trigger: String,
+        /// volume_up, volume_down, mute, screenshot, mangohud, stop, keys, command
+        action: String,
+        /// For `keys`: the combo, e.g. Super_L+F12
+        #[arg(long, default_value = "")]
+        keys: String,
+        /// For `command`: run with sh -c
+        #[arg(long, default_value = "")]
+        command: String,
+    },
+    /// Remove a button's macro (both triggers when none is given)
+    Unbind {
+        family: String,
+        button: String,
+        #[arg(value_parser = crate::controller::TRIGGERS)]
+        trigger: Option<String>,
+    },
+    /// Press a button on the pad: its code becomes the slot's
+    Learn {
+        family: String,
+        /// The slot the pressed button will drive
+        slot: String,
+    },
+    /// Forget a learned button (the shipped codes apply again)
+    Forget { family: String, slot: String },
 }
 
 #[derive(Subcommand, Debug)]
@@ -870,11 +925,87 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
         }
         Cmd::Screenshot => println!("{}", core.screenshot().await?),
+        Cmd::Controller { action } => return controller(core, action, json).await,
         Cmd::Rescan => {
             core.reload_config().await?;
             println!("rescanned");
         }
         Cmd::Complete { .. } | Cmd::Generate { .. } => unreachable!(),
+    }
+    Ok(())
+}
+
+async fn controller(core: Core, action: ControllerCmd, json: bool) -> anyhow::Result<()> {
+    use crate::controller;
+    match action {
+        ControllerCmd::Watch { json: as_json, wait } => {
+            controller::watch::watch(std::sync::Arc::new(core), controller::watch::WatchOptions { json: as_json, wait }).await?;
+        }
+        ControllerCmd::Ls => {
+            let cfg = core.config.read().await.controller.clone();
+            let mut state = controller::state_json(&cfg);
+            state["devices"] = Value::Array(controller::watch::enumerate_json(&cfg));
+            if json {
+                print_json(&state);
+                return Ok(());
+            }
+            let devices = state["devices"].as_array().cloned().unwrap_or_default();
+            if devices.is_empty() {
+                println!("{}", "no pad connected".dimmed());
+            }
+            for d in &devices {
+                println!("{} {} · {} · {}", s(d, "id").dimmed(), s(d, "name").bold(), s(d, "family_name"), s(d, "bus"));
+                let family = s(d, "family");
+                let mut t = table(&["Button", "Code", "Press", "Hold"]);
+                let fam = controller::family_by_id(&family);
+                let order: Vec<String> = fam.as_ref().map(|f| f.slots.iter().map(|s| s.id.to_string()).collect()).unwrap_or_default();
+                for slot in order {
+                    let entry = &d["slots"][&slot];
+                    let label = fam.as_ref().and_then(|f| f.slots.iter().find(|s| s.id == slot)).map(|s| s.label).unwrap_or(&slot);
+                    let macros = cfg.macros_for(&family, &slot);
+                    let of = |t: &str| macros.iter().find(|m| m.trigger == t).map(|m| if m.keys.is_empty() && m.command.is_empty() { m.action.clone() } else { format!("{} {}{}", m.action, m.keys, m.command) }).unwrap_or_default();
+                    let code = if entry["bound"] == true { s(entry, "code") } else { "unbound".to_string() };
+                    t.add_row(vec![Cell::new(label), if entry["bound"] == true { Cell::new(code) } else { Cell::new(code).add_attribute(Attribute::Dim) }, Cell::new(of("press")), Cell::new(of("hold"))]);
+                }
+                println!("{t}");
+            }
+            println!("{} enabled {} · hold {} ms · volume {} · mangohud {}", "engine".bold(), cfg.enabled, cfg.hold_ms, cfg.volume_step, s(&state, "mangohud_toggle"));
+            let mut t = table(&["Family", "Button", "Trigger", "Action", "Keys / command"]);
+            for m in cfg.macros() {
+                t.add_row(vec![m.family, m.button, m.trigger, m.action, format!("{}{}", m.keys, m.command)]);
+            }
+            println!("{t}");
+        }
+        ControllerCmd::Bind { family, button, trigger, action, keys, command } => {
+            let m = controller::Macro { family, button, trigger, action, keys, command };
+            core.set_controller_macro(&serde_json::to_string(&m)?).await?;
+            report(json, true, "bound");
+        }
+        ControllerCmd::Unbind { family, button, trigger } => {
+            core.remove_controller_macro(&family, &button, trigger.as_deref().unwrap_or("")).await?;
+            report(json, true, "unbound");
+        }
+        ControllerCmd::Learn { family, slot } => {
+            let fam = controller::family_by_id(&family).ok_or_else(|| anyhow::anyhow!("unknown family {family}"))?;
+            if !fam.slots.iter().any(|s| s.id == slot) {
+                anyhow::bail!("{} has no button {slot}", fam.name);
+            }
+            if !json {
+                eprintln!("press the button for {} on the {}…", slot, fam.name);
+            }
+            let cfg = core.config.read().await.controller.clone();
+            let (code, from) = controller::watch::learn_once(&cfg, &fam, &slot).await?;
+            core.reload_config().await?;
+            if json {
+                print_json(&serde_json::json!({"family": family, "slot": slot, "code": code, "from": from}));
+            } else {
+                println!("{slot} = {code}{}", from.map(|f| format!(" (taken from {f})")).unwrap_or_default());
+            }
+        }
+        ControllerCmd::Forget { family, slot } => {
+            core.set_controller_button(&family, &slot, "null").await?;
+            report(json, true, "forgotten");
+        }
     }
     Ok(())
 }
@@ -893,6 +1024,22 @@ fn complete(what: &str) -> anyhow::Result<()> {
             games.sort();
             for (id, title) in games {
                 println!("{id}\t{title}");
+            }
+        }
+        "families" => {
+            for f in crate::controller::families() {
+                println!("{}\t{}", f.id, f.name);
+            }
+            println!("*\tevery pad");
+        }
+        "buttons" => {
+            let mut seen = std::collections::BTreeSet::new();
+            for f in crate::controller::families() {
+                for s in f.slots {
+                    if seen.insert(s.id) {
+                        println!("{}\t{}", s.id, s.label);
+                    }
+                }
             }
         }
         "sources" | "modules" => {
@@ -942,11 +1089,23 @@ const POSITIONALS: &[(&str, usize, &str)] = &[
     ("scan", 1, "sources"),
     ("config get", 1, "CONFIG_KEYS"),
     ("config set", 1, "CONFIG_KEYS"),
+    ("controller bind", 1, "families"),
+    ("controller bind", 2, "buttons"),
+    ("controller bind", 3, "press hold"),
+    ("controller bind", 4, "volume_up volume_down mute screenshot mangohud stop keys command"),
+    ("controller unbind", 1, "families"),
+    ("controller unbind", 2, "buttons"),
+    ("controller unbind", 3, "press hold"),
+    ("controller learn", 1, "families"),
+    ("controller learn", 2, "buttons"),
+    ("controller forget", 1, "families"),
+    ("controller forget", 2, "buttons"),
 ];
 
-const CONFIG_KEYS: [&str; 16] = [
+const CONFIG_KEYS: [&str; 20] = [
     "paths.games_root", "paths.prefixes_root", "paths.recordings_root", "paths.journal_root", "paths.overrides", "launch.proton", "launch.esync", "launch.fsync", "launch.mangohud",
     "desktop.profile", "desktop.hide_cursor", "desktop.cursor_extension", "keys.sgdb", "keys.sgdb_file", "keys.rawg", "keys.rawg_file",
+    "controller.enabled", "controller.hold_ms", "controller.volume_step", "controller.mangohud_toggle",
 ];
 
 fn generate(dir: &std::path::Path) -> anyhow::Result<()> {
@@ -1010,7 +1169,7 @@ fn generate(dir: &std::path::Path) -> anyhow::Result<()> {
         match *what {
             "FILES" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -F\n")),
             "CONFIG_KEYS" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"{}\"\n", CONFIG_KEYS.join(" "))),
-            "games" | "sources" | "modules" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"(universe __complete {what})\"\n")),
+            "games" | "sources" | "modules" | "families" | "buttons" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"(universe __complete {what})\"\n")),
             "games all" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"(universe __complete games) all\"\n")),
             literal => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"{literal}\"\n")),
         }

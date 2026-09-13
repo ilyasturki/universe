@@ -342,6 +342,33 @@ class UniverseClientBase(QObject):
             return ""
 
 
+    # -- Controller1 -----------------------------------------------------------------------
+
+    @Slot(result="QVariant")
+    def controllerState(self):
+        return self._guarded({}, "Controller1", "State")
+
+    @Slot(str, result=bool)
+    def controllerBind(self, payload):
+        return self._done("Controller1", "Bind", payload)
+
+    @Slot(str, str, str, result=bool)
+    def controllerUnbind(self, family, button, trigger):
+        return self._done("Controller1", "Unbind", family, button, trigger)
+
+    @Slot(str, str, str, result=bool)
+    def controllerSetButton(self, family, slot, codes):
+        return self._done("Controller1", "SetButton", family, slot, codes)
+
+    def _done(self, iface, method, *args):
+        try:
+            self._call(iface, method, *args)
+        except UniverseError as e:
+            self.error.emit(e.kind, e.message)
+            return False
+        return True
+
+
 class CoreClient(UniverseClientBase):
     """The core in this process (`universe_core`). Calls block on the library; what other processes
     write — the CLI, systemd's `session-end`, the hooks — surfaces through watches on games/ and state/."""
@@ -386,6 +413,8 @@ class CoreClient(UniverseClientBase):
         except self._mod.UniverseError as e:
             kind, message = (list(e.args) + ["", ""])[:2]
             raise UniverseError(kind or "Io", message or kind) from None
+        except AttributeError as e:
+            raise UniverseError("Unavailable", f"{iface}.{method}: {e}") from None
 
     # Launch blocks on pre-launch hooks (up to 20 s): keep the event loop, hence the animation, alive.
     def _call_async(self, iface, method, args, on_reply, on_error):
@@ -578,6 +607,10 @@ _CORE_CALLS = {
     ("Settings1", "Get"): lambda s: s._core.settings_json(),
     ("Settings1", "Set"): lambda s, key, value: s._core.set_setting(key, value),
     ("Settings1", "Reload"): lambda s: s._core.reload(),
+    ("Controller1", "State"): lambda s: s._core.controller_state_json(),
+    ("Controller1", "Bind"): lambda s, payload: s._core.set_controller_macro(payload),
+    ("Controller1", "Unbind"): lambda s, family, button, trigger: s._core.remove_controller_macro(family, button, trigger),
+    ("Controller1", "SetButton"): lambda s, family, slot, codes: s._core.set_controller_button(family, slot, codes),
 }
 
 
@@ -993,6 +1026,51 @@ class FakeClient(UniverseClientBase):
         for part in parts[:-1]:
             node = node.setdefault(part, {})
         node[parts[-1]] = value
+
+    # -- Controller1 -------------------------------------------------------------------------
+
+    def _controller(self):
+        return self._data.setdefault("controller", {"families": [], "macros": [], "presets": []})
+
+    def _controller_family(self, ident):
+        for family in self._controller().get("families", []):
+            if family["id"] == ident:
+                return family
+        raise UniverseError("NotFound", f"no controller family '{ident}'")
+
+    def _Controller1_State(self):
+        return json.dumps(self._controller())
+
+    def _Controller1_Bind(self, payload):
+        macro = _json(payload, {})
+        state = self._controller()
+        presets = {p["id"]: p for p in state.get("presets", [])}
+        family, button = str(macro.get("family") or ""), str(macro.get("button") or "")
+        trigger, action = str(macro.get("trigger") or ""), str(macro.get("action") or "")
+        if trigger not in ("press", "hold"):
+            raise UniverseError("Invalid", f"trigger must be press or hold, not '{trigger}'")
+        if action not in presets:
+            raise UniverseError("Invalid", f"unknown action '{action}'")
+        if presets[action].get("hold_only") and trigger != "hold":
+            raise UniverseError("Invalid", f"{action} fires on a hold only")
+        if family != "*" and button not in {s["id"] for s in self._controller_family(family)["slots"]}:
+            raise UniverseError("NotFound", f"{family} has no button '{button}'")
+        entry = {"family": family, "button": button, "trigger": trigger, "action": action,
+                 "keys": str(macro.get("keys") or ""), "command": str(macro.get("command") or "")}
+        state["macros"] = [m for m in state.get("macros", []) if (m["family"], m["button"], m["trigger"]) != (family, button, trigger)]
+        state["macros"].append(entry)
+
+    def _Controller1_Unbind(self, family, button, trigger):
+        state = self._controller()
+        state["macros"] = [m for m in state.get("macros", [])
+                           if not (m["family"] == family and m["button"] == button and (not trigger or m["trigger"] == trigger))]
+
+    def _Controller1_SetButton(self, family, slot, codes):
+        for entry in self._controller_family(family)["slots"]:
+            if entry["id"] == slot:
+                entry["codes"] = [str(c) for c in _json(codes, [])]
+                return
+        raise UniverseError("NotFound", f"{family} has no slot '{slot}'")
 
 
 def _epoch(value):

@@ -782,5 +782,1389 @@
         "codec": "av1_10bit"
       }
     }
+  },
+  "controller": {
+    "enabled": true,
+    "hold_ms": 600,
+    "volume_step": "precise",
+    "mangohud_toggle": "Super_L+F12",
+    "families": [
+      {
+        "id": "dualsense-edge",
+        "name": "DualSense Edge",
+        "slots": [
+          {
+            "id": "south",
+            "label": "Cross",
+            "codes": [
+              "BTN_SOUTH"
+            ],
+            "extra": false
+          },
+          {
+            "id": "east",
+            "label": "Circle",
+            "codes": [
+              "BTN_EAST"
+            ],
+            "extra": false
+          },
+          {
+            "id": "north",
+            "label": "Triangle",
+            "codes": [
+              "BTN_NORTH"
+            ],
+            "extra": false
+          },
+          {
+            "id": "west",
+            "label": "Square",
+            "codes": [
+              "BTN_WEST"
+            ],
+            "extra": false
+          },
+          {
+            "id": "lb",
+            "label": "L1",
+            "codes": [
+              "BTN_TL"
+            ],
+            "extra": false
+          },
+          {
+            "id": "rb",
+            "label": "R1",
+            "codes": [
+              "BTN_TR"
+            ],
+            "extra": false
+          },
+          {
+            "id": "lt",
+            "label": "L2",
+            "codes": [
+              "BTN_TL2"
+            ],
+            "extra": false
+          },
+          {
+            "id": "rt",
+            "label": "R2",
+            "codes": [
+              "BTN_TR2"
+            ],
+            "extra": false
+          },
+          {
+            "id": "select",
+            "label": "Create",
+            "codes": [
+              "BTN_SELECT"
+            ],
+            "extra": false
+          },
+          {
+            "id": "start",
+            "label": "Options",
+            "codes": [
+              "BTN_START"
+            ],
+            "extra": false
+          },
+          {
+            "id": "guide",
+            "label": "PS",
+            "codes": [
+              "BTN_MODE"
+            ],
+            "extra": false
+          },
+          {
+            "id": "ls",
+            "label": "L3",
+            "codes": [
+              "BTN_THUMBL"
+            ],
+            "extra": false
+          },
+          {
+            "id": "rs",
+            "label": "R3",
+            "codes": [
+              "BTN_THUMBR"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_up",
+            "label": "D-pad up",
+            "codes": [
+              "BTN_DPAD_UP"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_down",
+            "label": "D-pad down",
+            "codes": [
+              "BTN_DPAD_DOWN"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_left",
+            "label": "D-pad left",
+            "codes": [
+              "BTN_DPAD_LEFT"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_right",
+            "label": "D-pad right",
+            "codes": [
+              "BTN_DPAD_RIGHT"
+            ],
+            "extra": false
+          },
+          {
+            "id": "fn_left",
+            "label": "Left Fn",
+            "codes": [
+              "BTN_TRIGGER_HAPPY1"
+            ],
+            "extra": true
+          },
+          {
+            "id": "fn_right",
+            "label": "Right Fn",
+            "codes": [
+              "BTN_TRIGGER_HAPPY2"
+            ],
+            "extra": true
+          },
+          {
+            "id": "paddle_left",
+            "label": "Left paddle",
+            "codes": [
+              "BTN_TRIGGER_HAPPY3"
+            ],
+            "extra": true
+          },
+          {
+            "id": "paddle_right",
+            "label": "Right paddle",
+            "codes": [
+              "BTN_TRIGGER_HAPPY4"
+            ],
+            "extra": true
+          }
+        ]
+      },
+      {
+        "id": "dualsense",
+        "name": "DualSense",
+        "slots": [
+          {
+            "id": "south",
+            "label": "Cross",
+            "codes": [
+              "BTN_SOUTH"
+            ],
+            "extra": false
+          },
+          {
+            "id": "east",
+            "label": "Circle",
+            "codes": [
+              "BTN_EAST"
+            ],
+            "extra": false
+          },
+          {
+            "id": "north",
+            "label": "Triangle",
+            "codes": [
+              "BTN_NORTH"
+            ],
+            "extra": false
+          },
+          {
+            "id": "west",
+            "label": "Square",
+            "codes": [
+              "BTN_WEST"
+            ],
+            "extra": false
+          },
+          {
+            "id": "lb",
+            "label": "L1",
+            "codes": [
+              "BTN_TL"
+            ],
+            "extra": false
+          },
+          {
+            "id": "rb",
+            "label": "R1",
+            "codes": [
+              "BTN_TR"
+            ],
+            "extra": false
+          },
+          {
+            "id": "lt",
+            "label": "L2",
+            "codes": [
+              "BTN_TL2"
+            ],
+            "extra": false
+          },
+          {
+            "id": "rt",
+            "label": "R2",
+            "codes": [
+              "BTN_TR2"
+            ],
+            "extra": false
+          },
+          {
+            "id": "select",
+            "label": "Create",
+            "codes": [
+              "BTN_SELECT"
+            ],
+            "extra": false
+          },
+          {
+            "id": "start",
+            "label": "Options",
+            "codes": [
+              "BTN_START"
+            ],
+            "extra": false
+          },
+          {
+            "id": "guide",
+            "label": "PS",
+            "codes": [
+              "BTN_MODE"
+            ],
+            "extra": false
+          },
+          {
+            "id": "ls",
+            "label": "L3",
+            "codes": [
+              "BTN_THUMBL"
+            ],
+            "extra": false
+          },
+          {
+            "id": "rs",
+            "label": "R3",
+            "codes": [
+              "BTN_THUMBR"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_up",
+            "label": "D-pad up",
+            "codes": [
+              "BTN_DPAD_UP"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_down",
+            "label": "D-pad down",
+            "codes": [
+              "BTN_DPAD_DOWN"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_left",
+            "label": "D-pad left",
+            "codes": [
+              "BTN_DPAD_LEFT"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_right",
+            "label": "D-pad right",
+            "codes": [
+              "BTN_DPAD_RIGHT"
+            ],
+            "extra": false
+          },
+          {
+            "id": "mute",
+            "label": "Mute",
+            "codes": [
+              "KEY_MICMUTE"
+            ],
+            "extra": true
+          }
+        ]
+      },
+      {
+        "id": "dualshock4",
+        "name": "DualShock 4",
+        "slots": [
+          {
+            "id": "south",
+            "label": "Cross",
+            "codes": [
+              "BTN_SOUTH"
+            ],
+            "extra": false
+          },
+          {
+            "id": "east",
+            "label": "Circle",
+            "codes": [
+              "BTN_EAST"
+            ],
+            "extra": false
+          },
+          {
+            "id": "north",
+            "label": "Triangle",
+            "codes": [
+              "BTN_NORTH"
+            ],
+            "extra": false
+          },
+          {
+            "id": "west",
+            "label": "Square",
+            "codes": [
+              "BTN_WEST"
+            ],
+            "extra": false
+          },
+          {
+            "id": "lb",
+            "label": "L1",
+            "codes": [
+              "BTN_TL"
+            ],
+            "extra": false
+          },
+          {
+            "id": "rb",
+            "label": "R1",
+            "codes": [
+              "BTN_TR"
+            ],
+            "extra": false
+          },
+          {
+            "id": "lt",
+            "label": "L2",
+            "codes": [
+              "BTN_TL2"
+            ],
+            "extra": false
+          },
+          {
+            "id": "rt",
+            "label": "R2",
+            "codes": [
+              "BTN_TR2"
+            ],
+            "extra": false
+          },
+          {
+            "id": "select",
+            "label": "Share",
+            "codes": [
+              "BTN_SELECT"
+            ],
+            "extra": false
+          },
+          {
+            "id": "start",
+            "label": "Options",
+            "codes": [
+              "BTN_START"
+            ],
+            "extra": false
+          },
+          {
+            "id": "guide",
+            "label": "PS",
+            "codes": [
+              "BTN_MODE"
+            ],
+            "extra": false
+          },
+          {
+            "id": "ls",
+            "label": "L3",
+            "codes": [
+              "BTN_THUMBL"
+            ],
+            "extra": false
+          },
+          {
+            "id": "rs",
+            "label": "R3",
+            "codes": [
+              "BTN_THUMBR"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_up",
+            "label": "D-pad up",
+            "codes": [
+              "BTN_DPAD_UP"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_down",
+            "label": "D-pad down",
+            "codes": [
+              "BTN_DPAD_DOWN"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_left",
+            "label": "D-pad left",
+            "codes": [
+              "BTN_DPAD_LEFT"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_right",
+            "label": "D-pad right",
+            "codes": [
+              "BTN_DPAD_RIGHT"
+            ],
+            "extra": false
+          }
+        ]
+      },
+      {
+        "id": "xbox-elite",
+        "name": "Xbox Elite Series 2",
+        "slots": [
+          {
+            "id": "south",
+            "label": "A",
+            "codes": [
+              "BTN_SOUTH"
+            ],
+            "extra": false
+          },
+          {
+            "id": "east",
+            "label": "B",
+            "codes": [
+              "BTN_EAST"
+            ],
+            "extra": false
+          },
+          {
+            "id": "north",
+            "label": "Y",
+            "codes": [
+              "BTN_NORTH"
+            ],
+            "extra": false
+          },
+          {
+            "id": "west",
+            "label": "X",
+            "codes": [
+              "BTN_WEST"
+            ],
+            "extra": false
+          },
+          {
+            "id": "lb",
+            "label": "LB",
+            "codes": [
+              "BTN_TL"
+            ],
+            "extra": false
+          },
+          {
+            "id": "rb",
+            "label": "RB",
+            "codes": [
+              "BTN_TR"
+            ],
+            "extra": false
+          },
+          {
+            "id": "lt",
+            "label": "LT",
+            "codes": [
+              "BTN_TL2"
+            ],
+            "extra": false
+          },
+          {
+            "id": "rt",
+            "label": "RT",
+            "codes": [
+              "BTN_TR2"
+            ],
+            "extra": false
+          },
+          {
+            "id": "select",
+            "label": "View",
+            "codes": [
+              "BTN_SELECT"
+            ],
+            "extra": false
+          },
+          {
+            "id": "start",
+            "label": "Menu",
+            "codes": [
+              "BTN_START"
+            ],
+            "extra": false
+          },
+          {
+            "id": "guide",
+            "label": "Xbox",
+            "codes": [
+              "BTN_MODE"
+            ],
+            "extra": false
+          },
+          {
+            "id": "ls",
+            "label": "LS",
+            "codes": [
+              "BTN_THUMBL"
+            ],
+            "extra": false
+          },
+          {
+            "id": "rs",
+            "label": "RS",
+            "codes": [
+              "BTN_THUMBR"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_up",
+            "label": "D-pad up",
+            "codes": [
+              "BTN_DPAD_UP"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_down",
+            "label": "D-pad down",
+            "codes": [
+              "BTN_DPAD_DOWN"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_left",
+            "label": "D-pad left",
+            "codes": [
+              "BTN_DPAD_LEFT"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_right",
+            "label": "D-pad right",
+            "codes": [
+              "BTN_DPAD_RIGHT"
+            ],
+            "extra": false
+          },
+          {
+            "id": "paddle_p1",
+            "label": "Paddle P1 (right upper)",
+            "codes": [
+              "BTN_GRIPR",
+              "BTN_TRIGGER_HAPPY5"
+            ],
+            "extra": true
+          },
+          {
+            "id": "paddle_p2",
+            "label": "Paddle P2 (right lower)",
+            "codes": [
+              "BTN_GRIPR2",
+              "BTN_TRIGGER_HAPPY6"
+            ],
+            "extra": true
+          },
+          {
+            "id": "paddle_p3",
+            "label": "Paddle P3 (left upper)",
+            "codes": [
+              "BTN_GRIPL",
+              "BTN_TRIGGER_HAPPY7"
+            ],
+            "extra": true
+          },
+          {
+            "id": "paddle_p4",
+            "label": "Paddle P4 (left lower)",
+            "codes": [
+              "BTN_GRIPL2",
+              "BTN_TRIGGER_HAPPY8"
+            ],
+            "extra": true
+          }
+        ]
+      },
+      {
+        "id": "xbox",
+        "name": "Xbox controller",
+        "slots": [
+          {
+            "id": "south",
+            "label": "A",
+            "codes": [
+              "BTN_SOUTH"
+            ],
+            "extra": false
+          },
+          {
+            "id": "east",
+            "label": "B",
+            "codes": [
+              "BTN_EAST"
+            ],
+            "extra": false
+          },
+          {
+            "id": "north",
+            "label": "Y",
+            "codes": [
+              "BTN_NORTH"
+            ],
+            "extra": false
+          },
+          {
+            "id": "west",
+            "label": "X",
+            "codes": [
+              "BTN_WEST"
+            ],
+            "extra": false
+          },
+          {
+            "id": "lb",
+            "label": "LB",
+            "codes": [
+              "BTN_TL"
+            ],
+            "extra": false
+          },
+          {
+            "id": "rb",
+            "label": "RB",
+            "codes": [
+              "BTN_TR"
+            ],
+            "extra": false
+          },
+          {
+            "id": "lt",
+            "label": "LT",
+            "codes": [
+              "BTN_TL2"
+            ],
+            "extra": false
+          },
+          {
+            "id": "rt",
+            "label": "RT",
+            "codes": [
+              "BTN_TR2"
+            ],
+            "extra": false
+          },
+          {
+            "id": "select",
+            "label": "View",
+            "codes": [
+              "BTN_SELECT"
+            ],
+            "extra": false
+          },
+          {
+            "id": "start",
+            "label": "Menu",
+            "codes": [
+              "BTN_START"
+            ],
+            "extra": false
+          },
+          {
+            "id": "guide",
+            "label": "Xbox",
+            "codes": [
+              "BTN_MODE"
+            ],
+            "extra": false
+          },
+          {
+            "id": "ls",
+            "label": "LS",
+            "codes": [
+              "BTN_THUMBL"
+            ],
+            "extra": false
+          },
+          {
+            "id": "rs",
+            "label": "RS",
+            "codes": [
+              "BTN_THUMBR"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_up",
+            "label": "D-pad up",
+            "codes": [
+              "BTN_DPAD_UP"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_down",
+            "label": "D-pad down",
+            "codes": [
+              "BTN_DPAD_DOWN"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_left",
+            "label": "D-pad left",
+            "codes": [
+              "BTN_DPAD_LEFT"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_right",
+            "label": "D-pad right",
+            "codes": [
+              "BTN_DPAD_RIGHT"
+            ],
+            "extra": false
+          },
+          {
+            "id": "share",
+            "label": "Share",
+            "codes": [
+              "KEY_RECORD"
+            ],
+            "extra": true
+          }
+        ]
+      },
+      {
+        "id": "switch-pro",
+        "name": "Switch Pro Controller",
+        "slots": [
+          {
+            "id": "south",
+            "label": "B",
+            "codes": [
+              "BTN_SOUTH"
+            ],
+            "extra": false
+          },
+          {
+            "id": "east",
+            "label": "A",
+            "codes": [
+              "BTN_EAST"
+            ],
+            "extra": false
+          },
+          {
+            "id": "north",
+            "label": "X",
+            "codes": [
+              "BTN_NORTH"
+            ],
+            "extra": false
+          },
+          {
+            "id": "west",
+            "label": "Y",
+            "codes": [
+              "BTN_WEST"
+            ],
+            "extra": false
+          },
+          {
+            "id": "lb",
+            "label": "L",
+            "codes": [
+              "BTN_TL"
+            ],
+            "extra": false
+          },
+          {
+            "id": "rb",
+            "label": "R",
+            "codes": [
+              "BTN_TR"
+            ],
+            "extra": false
+          },
+          {
+            "id": "lt",
+            "label": "ZL",
+            "codes": [
+              "BTN_TL2"
+            ],
+            "extra": false
+          },
+          {
+            "id": "rt",
+            "label": "ZR",
+            "codes": [
+              "BTN_TR2"
+            ],
+            "extra": false
+          },
+          {
+            "id": "select",
+            "label": "Minus",
+            "codes": [
+              "BTN_SELECT"
+            ],
+            "extra": false
+          },
+          {
+            "id": "start",
+            "label": "Plus",
+            "codes": [
+              "BTN_START"
+            ],
+            "extra": false
+          },
+          {
+            "id": "guide",
+            "label": "Home",
+            "codes": [
+              "BTN_MODE"
+            ],
+            "extra": false
+          },
+          {
+            "id": "ls",
+            "label": "LS",
+            "codes": [
+              "BTN_THUMBL"
+            ],
+            "extra": false
+          },
+          {
+            "id": "rs",
+            "label": "RS",
+            "codes": [
+              "BTN_THUMBR"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_up",
+            "label": "D-pad up",
+            "codes": [
+              "BTN_DPAD_UP"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_down",
+            "label": "D-pad down",
+            "codes": [
+              "BTN_DPAD_DOWN"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_left",
+            "label": "D-pad left",
+            "codes": [
+              "BTN_DPAD_LEFT"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_right",
+            "label": "D-pad right",
+            "codes": [
+              "BTN_DPAD_RIGHT"
+            ],
+            "extra": false
+          },
+          {
+            "id": "capture",
+            "label": "Capture",
+            "codes": [
+              "BTN_Z"
+            ],
+            "extra": true
+          }
+        ]
+      },
+      {
+        "id": "8bitdo-pro-3",
+        "name": "8BitDo Pro 3",
+        "slots": [
+          {
+            "id": "south",
+            "label": "A",
+            "codes": [
+              "BTN_SOUTH"
+            ],
+            "extra": false
+          },
+          {
+            "id": "east",
+            "label": "B",
+            "codes": [
+              "BTN_EAST"
+            ],
+            "extra": false
+          },
+          {
+            "id": "north",
+            "label": "Y",
+            "codes": [
+              "BTN_NORTH"
+            ],
+            "extra": false
+          },
+          {
+            "id": "west",
+            "label": "X",
+            "codes": [
+              "BTN_WEST"
+            ],
+            "extra": false
+          },
+          {
+            "id": "lb",
+            "label": "LB",
+            "codes": [
+              "BTN_TL"
+            ],
+            "extra": false
+          },
+          {
+            "id": "rb",
+            "label": "RB",
+            "codes": [
+              "BTN_TR"
+            ],
+            "extra": false
+          },
+          {
+            "id": "lt",
+            "label": "LT",
+            "codes": [
+              "BTN_TL2"
+            ],
+            "extra": false
+          },
+          {
+            "id": "rt",
+            "label": "RT",
+            "codes": [
+              "BTN_TR2"
+            ],
+            "extra": false
+          },
+          {
+            "id": "select",
+            "label": "Select",
+            "codes": [
+              "BTN_SELECT"
+            ],
+            "extra": false
+          },
+          {
+            "id": "start",
+            "label": "Start",
+            "codes": [
+              "BTN_START"
+            ],
+            "extra": false
+          },
+          {
+            "id": "guide",
+            "label": "Guide",
+            "codes": [
+              "BTN_MODE"
+            ],
+            "extra": false
+          },
+          {
+            "id": "ls",
+            "label": "LS",
+            "codes": [
+              "BTN_THUMBL"
+            ],
+            "extra": false
+          },
+          {
+            "id": "rs",
+            "label": "RS",
+            "codes": [
+              "BTN_THUMBR"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_up",
+            "label": "D-pad up",
+            "codes": [
+              "BTN_DPAD_UP"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_down",
+            "label": "D-pad down",
+            "codes": [
+              "BTN_DPAD_DOWN"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_left",
+            "label": "D-pad left",
+            "codes": [
+              "BTN_DPAD_LEFT"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_right",
+            "label": "D-pad right",
+            "codes": [
+              "BTN_DPAD_RIGHT"
+            ],
+            "extra": false
+          },
+          {
+            "id": "paddle_l4",
+            "label": "L4",
+            "codes": [
+              "BTN_TRIGGER_HAPPY1"
+            ],
+            "extra": true
+          },
+          {
+            "id": "paddle_r4",
+            "label": "R4",
+            "codes": [
+              "BTN_TRIGGER_HAPPY2"
+            ],
+            "extra": true
+          },
+          {
+            "id": "paddle_pl",
+            "label": "PL paddle",
+            "codes": [
+              "BTN_TRIGGER_HAPPY3"
+            ],
+            "extra": true
+          },
+          {
+            "id": "paddle_pr",
+            "label": "PR paddle",
+            "codes": [
+              "BTN_TRIGGER_HAPPY4"
+            ],
+            "extra": true
+          },
+          {
+            "id": "star",
+            "label": "Star",
+            "codes": [
+              "BTN_TRIGGER_HAPPY5"
+            ],
+            "extra": true
+          }
+        ]
+      },
+      {
+        "id": "generic",
+        "name": "Controller",
+        "slots": [
+          {
+            "id": "south",
+            "label": "A",
+            "codes": [
+              "BTN_SOUTH"
+            ],
+            "extra": false
+          },
+          {
+            "id": "east",
+            "label": "B",
+            "codes": [
+              "BTN_EAST"
+            ],
+            "extra": false
+          },
+          {
+            "id": "north",
+            "label": "Y",
+            "codes": [
+              "BTN_NORTH"
+            ],
+            "extra": false
+          },
+          {
+            "id": "west",
+            "label": "X",
+            "codes": [
+              "BTN_WEST"
+            ],
+            "extra": false
+          },
+          {
+            "id": "lb",
+            "label": "LB",
+            "codes": [
+              "BTN_TL"
+            ],
+            "extra": false
+          },
+          {
+            "id": "rb",
+            "label": "RB",
+            "codes": [
+              "BTN_TR"
+            ],
+            "extra": false
+          },
+          {
+            "id": "lt",
+            "label": "LT",
+            "codes": [
+              "BTN_TL2"
+            ],
+            "extra": false
+          },
+          {
+            "id": "rt",
+            "label": "RT",
+            "codes": [
+              "BTN_TR2"
+            ],
+            "extra": false
+          },
+          {
+            "id": "select",
+            "label": "Select",
+            "codes": [
+              "BTN_SELECT"
+            ],
+            "extra": false
+          },
+          {
+            "id": "start",
+            "label": "Start",
+            "codes": [
+              "BTN_START"
+            ],
+            "extra": false
+          },
+          {
+            "id": "guide",
+            "label": "Guide",
+            "codes": [
+              "BTN_MODE"
+            ],
+            "extra": false
+          },
+          {
+            "id": "ls",
+            "label": "LS",
+            "codes": [
+              "BTN_THUMBL"
+            ],
+            "extra": false
+          },
+          {
+            "id": "rs",
+            "label": "RS",
+            "codes": [
+              "BTN_THUMBR"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_up",
+            "label": "D-pad up",
+            "codes": [
+              "BTN_DPAD_UP"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_down",
+            "label": "D-pad down",
+            "codes": [
+              "BTN_DPAD_DOWN"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_left",
+            "label": "D-pad left",
+            "codes": [
+              "BTN_DPAD_LEFT"
+            ],
+            "extra": false
+          },
+          {
+            "id": "dpad_right",
+            "label": "D-pad right",
+            "codes": [
+              "BTN_DPAD_RIGHT"
+            ],
+            "extra": false
+          }
+        ]
+      }
+    ],
+    "macros": [
+      {
+        "family": "dualsense-edge",
+        "button": "fn_left",
+        "trigger": "press",
+        "action": "screenshot",
+        "keys": "",
+        "command": ""
+      },
+      {
+        "family": "dualsense-edge",
+        "button": "fn_right",
+        "trigger": "press",
+        "action": "mangohud",
+        "keys": "",
+        "command": ""
+      },
+      {
+        "family": "dualsense-edge",
+        "button": "paddle_right",
+        "trigger": "press",
+        "action": "volume_up",
+        "keys": "",
+        "command": ""
+      },
+      {
+        "family": "dualsense-edge",
+        "button": "paddle_left",
+        "trigger": "press",
+        "action": "volume_down",
+        "keys": "",
+        "command": ""
+      },
+      {
+        "family": "xbox-elite",
+        "button": "paddle_p1",
+        "trigger": "press",
+        "action": "mangohud",
+        "keys": "",
+        "command": ""
+      },
+      {
+        "family": "xbox-elite",
+        "button": "paddle_p2",
+        "trigger": "press",
+        "action": "volume_up",
+        "keys": "",
+        "command": ""
+      },
+      {
+        "family": "xbox-elite",
+        "button": "paddle_p3",
+        "trigger": "press",
+        "action": "screenshot",
+        "keys": "",
+        "command": ""
+      },
+      {
+        "family": "xbox-elite",
+        "button": "paddle_p4",
+        "trigger": "press",
+        "action": "volume_down",
+        "keys": "",
+        "command": ""
+      }
+    ],
+    "presets": [
+      {
+        "id": "volume_up",
+        "label": "Volume up",
+        "hold_only": false
+      },
+      {
+        "id": "volume_down",
+        "label": "Volume down",
+        "hold_only": false
+      },
+      {
+        "id": "mute",
+        "label": "Mute",
+        "hold_only": false
+      },
+      {
+        "id": "screenshot",
+        "label": "Screenshot",
+        "hold_only": false
+      },
+      {
+        "id": "mangohud",
+        "label": "Toggle MangoHud",
+        "hold_only": false
+      },
+      {
+        "id": "stop",
+        "label": "Stop the game",
+        "hold_only": true
+      },
+      {
+        "id": "keys",
+        "label": "Key combo…",
+        "hold_only": false
+      },
+      {
+        "id": "command",
+        "label": "Command…",
+        "hold_only": false
+      }
+    ]
   }
 }

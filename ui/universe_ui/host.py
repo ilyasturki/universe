@@ -151,9 +151,16 @@ def run(argv=None):
     gamepad = None
     if not args.no_gamepad:
         from .gamepad import GamepadThread
+        from .screens.controller import FakeWatcher, Watcher
 
         gamepad = GamepadThread(app)
         gamepad.start()
+        if args.fake or args.fake_launch:
+            unbound = [s for s in os.environ.get("UNIVERSE_FAKE_UNBOUND", "").split(",") if s]
+            watcher = FakeWatcher(os.environ.get("UNIVERSE_FAKE_PAD") or "dualsense-edge", unbound, parent=app)
+        else:
+            watcher = Watcher(app)
+        api.screens.controller.start(watcher)
 
     exit_code = {"value": 0}
 

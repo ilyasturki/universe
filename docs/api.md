@@ -29,6 +29,11 @@ a dash means the surface doesn't expose it.
   is watching.
 - Long jobs (`install`, `update`, `scan`, media refresh) run **in the calling process** with a
   progress callback. Closing the frontend interrupts them.
+- The one exception to "nothing in the background" is the **controller watcher**
+  (`universe controller watch`), which lives exactly as long as the launcher or a session does: the
+  UI starts one for its lifetime, `launch` starts one bound to the game's unit
+  (`universe-controller-<session>`, `BindsTo=` the game), and a lock (`$XDG_RUNTIME_DIR/universe/
+  controller.lock`) hands the pads over between them. Once both are gone nothing runs.
 - Errors: `Kind ∈ NotFound, Ambiguous, Busy, Invalid, Unavailable, Io`. Python raises
   `universe_core.UniverseError(kind, message)`; the CLI prints `universe: <kind>: <message>` on
   stderr and exits 1.
@@ -174,6 +179,44 @@ array of strings (20 s at most).
 | `set_setting(key, value)` | `set_setting(key, value)` | `universe config set <key> <value>` | dotted `config.toml` key (`launch.proton`, `paths.recordings_root`, `desktop.profile`) |
 | — | `version()`, `data_home()`, `state_home()` | `universe --version` | |
 
+## Controller
+
+| Rust | Python | CLI | Role |
+|---|---|---|---|
+| `controller_state_json()` | `controller_state_json()` | `universe controller ls` | `{enabled, hold_ms, volume_step, mangohud_toggle, families: [{id, name, slots: [{id, label, codes, extra}]}], macros: [Macro], presets: [{id, label, hold_only}]}`; the CLI adds `devices`, the pads readable now with every slot's code or `bound: false` |
+| `set_controller_macro(json)` | same | `universe controller bind <family> <button> <press\|hold> <action> [--keys K] [--command C]` | validates, replaces the macro with the same family, button and trigger |
+| `remove_controller_macro(family, button, trigger)` | same | `universe controller unbind <family> <button> [trigger]` | an empty trigger removes both |
+| `set_controller_button(family, slot, codes_json)` | same | `universe controller learn <family> <slot>` · `forget` | the codes a slot answers to: a JSON list (empty leaves it unbound), `null` restores the seeds. `learn` reads the pad instead: the next button pressed becomes the slot's, taken from whichever slot had it |
+| — | — | `universe controller watch [--json] [--wait]` | the engine |
+
+`Macro` = `{"family": "dualsense-edge" | "*", "button": "paddle_left", "trigger": "press" | "hold",
+"action": "volume_up" | "volume_down" | "mute" | "screenshot" | "mangohud" | "stop" | "keys" |
+"command", "keys": "Super_L+F12", "command": "…"}`. `stop` is hold-only. `volume_up` and
+`volume_down` repeat while held (400 ms, then every 100 ms), unless the slot also carries a hold.
+A slot with only a press macro fires on the key down; with a hold macro too, press fires on a release
+before `hold_ms` and hold once at `hold_ms`. Keys type through uinput; `mangohud` sends MangoHud's
+own `toggle_hud` (from `~/.config/MangoHud/MangoHud.conf`, `Shift_R+F12` by default) and holds it
+200 ms; `volume_step = "precise"` sends Shift with the volume key (GNOME's fine step).
+
+Families: `dualsense-edge` (fn_left, fn_right, paddle_left, paddle_right), `dualsense`,
+`dualshock4`, `xbox-elite` (paddle_p1…p4), `xbox` (share), `switch-pro` (capture), `8bitdo-pro-3`
+(paddle_l4, paddle_r4, paddle_pl, paddle_pr, star), `generic`; every family has the standard slots
+`south east north west lb rb lt rt select start guide ls rs dpad_up dpad_down dpad_left dpad_right`.
+A slot's codes are candidates: on every connect the first one the pad advertises in its capabilities
+wins, so the Edge's paddles (`BTN_TRIGGER_HAPPY1…4`, kernel ≥ 7.2) and the Elite's (`BTN_GRIP*` over
+xpadneo or xone, `BTN_TRIGGER_HAPPY5…8` on older drivers) resolve without a hardcoded number, and a
+slot with no code present is reported unbound.
+
+`watch` reads every `/dev/input/event*` that advertises `BTN_GAMEPAD` **without grabbing it** (a
+game, SDL or Proton reads the same node untouched), rescans every 2 s (hotplug, and pads
+InputPlumber hides by chmod 000 are dropped while hidden), and with `--json` speaks one object per
+line: out — `{"event":"ready"}`, `{"event":"device","id":"event30","name","family","family_name",
+"bus","slots":{"<slot>":{"code","bound"}}}`, `gone {id}`, `button {id, slot, code, pressed}`,
+`unknown {id, code}` (a key no slot owns), `macro {id, slot, trigger, action, keys, command}`,
+`learned {family, slot, code, from}`, `learn_timeout`, `waiting` / `busy` (the lock), `error
+{message}`; in — `{"cmd":"suspend"}` (report, do not fire), `resume`, `reload` (config changed),
+`learn {id, slot}`, `cancel`, `rumble {id}`, `quit`. Stdin's end stops a `--json` watcher.
+
 ## config.toml
 
 Defaults as the core ships them:
@@ -217,6 +260,19 @@ pegasus_library = "~/.local/share/pegasus-library"   # art fetched by pegasus-sy
 [keys]
 sgdb = ""                            # or sgdb_file, pointing at a file holding the key
 rawg = ""
+
+[controller]
+enabled = true
+hold_ms = 600                        # a press this long is a hold
+volume_step = "precise"              # Shift + the volume key (GNOME's fine step); "normal" for the plain key
+mangohud_toggle = ""                 # empty: toggle_hud from ~/.config/MangoHud/MangoHud.conf, else Shift_R+F12
+# [controller.buttons.xbox-elite]    # learned codes: a slot's list replaces its seeds, [] leaves it unbound
+# paddle_p1 = ["BTN_GRIPR", "BTN_TRIGGER_HAPPY5"]
+# [[controller.macros]]              # absent: the seeded workflow (Edge: Fn = screenshot / MangoHud,
+# family = "dualsense-edge"          # paddles = volume; Elite P1…P4 = MangoHud, volume up, screenshot,
+# button = "paddle_left"             # volume down; Pro 3 R4 / PR / PL); `macros = []` is none at all
+# trigger = "press"
+# action = "volume_down"
 ```
 
 ## Module protocol

@@ -76,6 +76,25 @@ fn passthrough_env() -> BTreeMap<String, String> {
     env
 }
 
+/// The macro engine for a launch the UI did not make: bound to the game's unit, it waits on the
+/// watcher lock, so it only reads the pads once no launcher does.
+fn spawn_controller_watch(session_id: &str, game_unit: &str) -> Result<()> {
+    let mut cmd = std::process::Command::new("systemd-run");
+    cmd.args(["--user", "--collect", "--quiet"])
+        .arg(format!("--unit=universe-controller-{session_id}"))
+        .arg(format!("--property=BindsTo={game_unit}"))
+        .arg(format!("--property=After={game_unit}"));
+    for (k, v) in passthrough_env() {
+        cmd.arg(format!("--setenv={k}={v}"));
+    }
+    cmd.arg(paths::self_exe()).args(["controller", "watch", "--wait"]);
+    let status = cmd.stdin(std::process::Stdio::null()).status().map_err(|e| Error::Io(format!("systemd-run: {e}")))?;
+    if !status.success() {
+        return Err(Error::Io("systemd-run failed for the controller watcher".into()));
+    }
+    Ok(())
+}
+
 fn load_source_caches(modules: &[Module]) -> BTreeMap<String, Vec<serde_json::Map<String, serde_json::Value>>> {
     let mut caches = BTreeMap::new();
     for m in modules.iter().filter(|m| m.is_source()) {
@@ -457,6 +476,11 @@ impl Core {
                 tracing::warn!("post-launch {}: {e}", m.id());
             }
         }
+        if cfg.controller.enabled {
+            if let Err(e) = spawn_controller_watch(&session_id, &unit) {
+                tracing::warn!("controller watch: {e}");
+            }
+        }
         Ok(session_id)
     }
 
@@ -737,6 +761,52 @@ impl Core {
 
     pub async fn set_setting(&self, key: &str, value: &str) -> Result<()> {
         Config::set_key(&paths::config_file(), key, value)?;
+        self.reload_config().await
+    }
+
+    // ----- controller -----
+
+    pub async fn controller_state_json(&self) -> String {
+        crate::controller::state_json(&self.config.read().await.controller).to_string()
+    }
+
+    /// Adds or replaces the macro with the same family, button and trigger.
+    pub async fn set_controller_macro(&self, json: &str) -> Result<()> {
+        let m: crate::controller::Macro = serde_json::from_str(json)?;
+        m.validate()?;
+        let cfg = self.config.read().await.clone();
+        let mut list = cfg.controller.macros();
+        crate::controller::upsert_macro(&mut list, m);
+        crate::controller::write_macros(&list)?;
+        self.reload_config().await
+    }
+
+    /// Removes one macro; an empty trigger removes both of the button's.
+    pub async fn remove_controller_macro(&self, family: &str, button: &str, trigger: &str) -> Result<()> {
+        let cfg = self.config.read().await.clone();
+        let mut list = cfg.controller.macros();
+        let before = list.len();
+        list.retain(|m| !(m.family == family && m.button == button && (trigger.is_empty() || m.trigger == trigger)));
+        if list.len() == before {
+            return Err(Error::NotFound(format!("no macro on {family} {button} {trigger}")));
+        }
+        crate::controller::write_macros(&list)?;
+        self.reload_config().await
+    }
+
+    /// The codes a slot answers to, learned by hand; `[]` leaves it unbound, `null` restores the seeds.
+    pub async fn set_controller_button(&self, family: &str, slot: &str, codes_json: &str) -> Result<()> {
+        let f = crate::controller::family_by_id(family).ok_or_else(|| Error::NotFound(format!("family {family}")))?;
+        if !f.slots.iter().any(|s| s.id == slot) {
+            return Err(Error::NotFound(format!("{} has no button {slot}", f.name)));
+        }
+        let codes: Option<Vec<String>> = serde_json::from_str(codes_json)?;
+        if let Some(list) = &codes {
+            for c in list {
+                crate::controller::keys::parse_source(c).ok_or_else(|| Error::Invalid(format!("unknown code {c}")))?;
+            }
+        }
+        crate::controller::write_button(family, slot, codes.as_deref())?;
         self.reload_config().await
     }
 

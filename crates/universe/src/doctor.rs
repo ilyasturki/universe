@@ -50,6 +50,27 @@ pub fn run(config: &Config, modules: &[Module]) -> Vec<Check> {
             push("gog-auth", logged, if logged { auth.to_string_lossy().into() } else { "not logged in (universe login gog)".into() }, "gog");
         }
     }
+    if config.controller.enabled {
+        let uinput = std::fs::OpenOptions::new().write(true).open("/dev/uinput").is_ok();
+        push("uinput", uinput, if uinput { "/dev/uinput writable".into() } else { "/dev/uinput not writable: hardware.uinput.enable and the uinput group".into() }, "controller");
+        let pads = crate::controller::watch::enumerate_json(&config.controller);
+        let detail = if pads.is_empty() {
+            "no pad connected".to_string()
+        } else {
+            pads.iter().map(|p| format!("{} ({}, {})", p["name"].as_str().unwrap_or(""), p["family_name"].as_str().unwrap_or(""), p["bus"].as_str().unwrap_or(""))).collect::<Vec<_>>().join("; ")
+        };
+        push("pads", true, detail, "controller");
+        let mut unbound: Vec<String> = Vec::new();
+        for p in &pads {
+            let name = p["family_name"].as_str().unwrap_or("");
+            for (k, v) in p["slots"].as_object().into_iter().flatten() {
+                if v["bound"] == false {
+                    unbound.push(format!("{name} {k}"));
+                }
+            }
+        }
+        push("pad-buttons", unbound.is_empty(), if unbound.is_empty() { "every button of every pad answers".into() } else { format!("not seen on this connection, learn them: {}", unbound.join(", ")) }, "controller");
+    }
     let enabled_missing: Vec<&str> = config.modules.enabled.iter().filter(|e| !modules.iter().any(|m| m.id() == e.as_str())).map(|s| s.as_str()).collect();
     push("modules", enabled_missing.is_empty(), if enabled_missing.is_empty() { format!("{} found", modules.len()) } else { format!("enabled but not found: {}", enabled_missing.join(", ")) }, "core");
     out

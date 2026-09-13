@@ -62,8 +62,14 @@ universe media technomancer refresh   # SteamGridDB + RAWG + Steam screenshots
 universe journal technomancer --render
 universe module ls · enable capture · settings journal
 universe doctor                # prerequisites of the core and every enabled module
+universe controller ls         # connected pads, every button and what it does
+universe controller bind xbox-elite paddle_p1 hold stop    # a macro; `learn` when a paddle is not recognised
 universe ls --json | jq '.[] | select(.stats.hours > 10) | .title'
 ```
+
+## Controller macros
+
+The spare buttons of a pad — the Edge's paddles and Fn buttons, the Elite's paddles, the Pro 3's back buttons — carry macros: volume, mute, a screenshot, the MangoHud toggle, stopping the game on a long hold, any key combo, any command. The Settings tab has a Controller section that draws the pad and lets you bind each button by pressing it. Nothing is grabbed: the engine reads the pad over evdev next to the game, so the game keeps rumble, the lightbar and every button it already saw. It runs only while the launcher is open or a session is running (`universe controller watch`, one instance at a time through a lock), never on the bare desktop. Paddle codes are not trusted: they differ between USB and Bluetooth and between drivers, so a slot is checked against what the pad advertises on every connect, and a button the seeds got wrong is fixed by pressing it (`universe controller learn xbox-elite paddle_p1`). The DualSense Edge's paddles reach evdev from kernel 7.2. An Elite Series 2 only reports its paddles on profile slot 0 (LED off) over Bluetooth (xpadneo) and on the in-tree xpad driver over USB; xone has no such gating. Key macros type through uinput: enable `hardware.uinput` and put your user in the `uinput` group (the NixOS module does the first).
 
 ## Modules and their prerequisites
 

@@ -1,0 +1,442 @@
+"""The Controller section: the pads the watcher sees and their live presses, the core's macro
+state, and the rows the cards show for the current pad.
+
+The watcher is `universe controller watch --json --wait`, a child of the host for its lifetime:
+events in on stdout, commands out on stdin. `FakeWatcher` scripts the same stream for --fake and
+the tests. A row is the settings row shape plus `slot`, `bound`, `code`, `extra`, `press`, `hold`.
+"""
+
+import json
+import logging
+import os
+import shutil
+
+from PySide6.QtCore import Property, QObject, QProcess, Signal, Slot
+
+from .settings import _group, _row
+
+log = logging.getLogger("universe.controller")
+
+TRIGGERS = ("press", "hold")
+BUS_NAMES = {"bluetooth": "Bluetooth", "usb": "USB"}
+
+
+class Watcher(QObject):
+    """`universe controller watch --json --wait` as a child process."""
+
+    event = Signal(object)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._process = None
+        self._buffer = b""
+
+    def start(self, families=None):
+        program = os.environ.get("UNIVERSE_BIN") or shutil.which("universe")
+        if not program:
+            log.warning("no universe binary: controller macros are off")
+            return False
+        self._process = QProcess(self)
+        self._process.setProcessChannelMode(QProcess.ProcessChannelMode.ForwardedErrorChannel)
+        self._process.readyReadStandardOutput.connect(self._read)
+        self._process.finished.connect(self._finished)
+        self._process.start(program, ["controller", "watch", "--json", "--wait"])
+        return True
+
+    def _finished(self, code, status):
+        log.info("controller watcher ended (%s)", code)
+
+    def _read(self):
+        self._buffer += bytes(self._process.readAllStandardOutput().data())
+        while b"\n" in self._buffer:
+            line, self._buffer = self._buffer.split(b"\n", 1)
+            try:
+                payload = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(payload, dict):
+                self.event.emit(payload)
+
+    def send(self, command):
+        if self._process is None or self._process.state() == QProcess.ProcessState.NotRunning:
+            return False
+        self._process.write((json.dumps(command) + "\n").encode())
+        return True
+
+    def stop(self):
+        if self._process is None:
+            return
+        process, self._process = self._process, None
+        process.finished.disconnect(self._finished)
+        process.closeWriteChannel()
+        process.terminate()
+        if not process.waitForFinished(2000):
+            process.kill()
+            process.waitForFinished(1000)
+
+
+class FakeWatcher(QObject):
+    """The watcher's stream from the fixture: one pad of `family` (none for "none"), every slot
+    bound but the `unbound` ones, no presses until a test scripts them with emit(). Commands
+    sent to it pile up in `commands`."""
+
+    event = Signal(object)
+
+    def __init__(self, family="dualsense-edge", unbound=(), parent=None):
+        super().__init__(parent)
+        self._family = family
+        self._unbound = set(unbound)
+        self._families = {}
+        self.commands = []
+        self.started = False
+
+    def start(self, families=None):
+        self._families = dict(families or {})
+        self.started = True
+        self.emit({"event": "ready"})
+        if self._family != "none":
+            self.emit(self.device())
+        return True
+
+    def device(self, ident="event30", family=None, bus="bluetooth"):
+        family = family or self._family
+        spec = self._families.get(family) or {"name": family, "slots": []}
+        slots = {}
+        for slot in spec.get("slots") or []:
+            codes = [] if slot["id"] in self._unbound else (slot.get("codes") or [])
+            slots[slot["id"]] = {"code": codes[0] if codes else None, "bound": bool(codes)}
+        return {"event": "device", "id": ident, "name": spec.get("name") or family, "family": family, "bus": bus, "slots": slots}
+
+    def send(self, command):
+        self.commands.append(dict(command))
+        return True
+
+    def emit(self, line):
+        self.event.emit(dict(line))
+
+    def stop(self):
+        self.started = False
+
+
+class ControllerScreen(QObject):
+    devicesChanged = Signal()
+    currentChanged = Signal()
+    stateChanged = Signal()
+    rowsChanged = Signal()
+    statusChanged = Signal()
+    buttonPressed = Signal(str, str, bool)
+    unknownPressed = Signal(str, str)
+    learned = Signal(str, str, str)
+    macroFired = Signal(str, str, str)
+    message = Signal(str)
+
+    def __init__(self, client, memory=None, parent=None):
+        super().__init__(parent)
+        self._client = client
+        self._memory = memory
+        self._watcher = None
+        self._devices = []
+        self._current = ""
+        self._state = {}
+        self._rows = []
+        self._groups = []
+        self._status = "off"
+        self._learning = ""
+        self._suspended = False
+        remembered = memory.get("controllerFamily") if memory is not None else None
+        self._last_family = str(remembered) if remembered else "dualsense"
+        self._rebuild()
+
+    def start(self, watcher):
+        self.load()
+        self._watcher = watcher
+        watcher.event.connect(self._on_event)
+        if not watcher.start(self._families()):
+            self._watcher = None
+            return False
+        if self._suspended:
+            watcher.send({"cmd": "suspend"})
+        return True
+
+    def shutdown(self):
+        if self._watcher is not None:
+            self._watcher.stop()
+            self._watcher = None
+
+    # -- state -------------------------------------------------------------------------------
+
+    @Slot()
+    def load(self):
+        self._state = dict(self._client.controllerState() or {})
+        self._rebuild()
+        self.stateChanged.emit()
+
+    def _families(self):
+        return {f["id"]: f for f in self._state.get("families") or [] if f.get("id")}
+
+    def _presets(self):
+        return {p["id"]: p for p in self._state.get("presets") or [] if p.get("id")}
+
+    def _macro(self, family, slot, trigger):
+        for m in self._state.get("macros") or []:
+            if m.get("button") == slot and m.get("trigger") == trigger and m.get("family") in (family, "*"):
+                return m
+        return None
+
+    def _device(self, ident=None):
+        ident = self._current if ident is None else ident
+        return next((d for d in self._devices if d["id"] == ident), None)
+
+    def _remember(self, family):
+        if not family:
+            return
+        self._last_family = family
+        if self._memory is not None:
+            self._memory.set("controllerFamily", family)
+
+    # -- the watcher's stream ----------------------------------------------------------------
+
+    def _on_event(self, line):
+        kind = line.get("event")
+        ident = str(line.get("id") or "")
+        if kind == "device":
+            self._upsert(line)
+        elif kind == "gone":
+            self._remove(ident)
+        elif kind == "button":
+            self.buttonPressed.emit(ident, str(line.get("slot") or ""), bool(line.get("pressed")))
+        elif kind == "unknown":
+            self.unknownPressed.emit(ident, str(line.get("code") or ""))
+        elif kind == "macro":
+            self.macroFired.emit(str(line.get("slot") or ""), str(line.get("trigger") or ""), str(line.get("action") or ""))
+        elif kind == "learned":
+            self._learned(line)
+        elif kind in ("waiting", "ready"):
+            self._status = kind
+            self.statusChanged.emit()
+
+    def _upsert(self, line):
+        ident = str(line.get("id") or "")
+        entry = {"id": ident, "name": str(line.get("name") or ident), "family": str(line.get("family") or "generic"),
+                 "bus": str(line.get("bus") or ""), "slots": dict(line.get("slots") or {})}
+        for i, d in enumerate(self._devices):
+            if d["id"] == ident:
+                self._devices[i] = entry
+                break
+        else:
+            self._devices.append(entry)
+        if self._device() is None:
+            self._current = ident
+            self.currentChanged.emit()
+        if self._current == ident:
+            self._remember(entry["family"])
+        self._rebuild()
+        self.devicesChanged.emit()
+
+    def _remove(self, ident):
+        before = len(self._devices)
+        self._devices = [d for d in self._devices if d["id"] != ident]
+        if len(self._devices) == before:
+            return
+        if self._current == ident:
+            self._current = self._devices[0]["id"] if self._devices else ""
+            if self._devices:
+                self._remember(self._devices[0]["family"])
+            self.currentChanged.emit()
+        if self._learning and not self._devices:
+            self._learning = ""
+            self.statusChanged.emit()
+        self._rebuild()
+        self.devicesChanged.emit()
+
+    # The watcher re-announces the device after a learn; the slots are patched here too, so a
+    # stream that does not is still right on screen.
+    def _learned(self, line):
+        family, slot, code = str(line.get("family") or ""), str(line.get("slot") or ""), str(line.get("code") or "")
+        previous = line.get("from")
+        for device in self._devices:
+            if device["family"] != family:
+                continue
+            device["slots"][slot] = {"code": code, "bound": True}
+            if previous and previous != slot:
+                device["slots"][previous] = {"code": None, "bound": False}
+        self._learning = ""
+        self.statusChanged.emit()
+        # The watcher wrote config.toml from its own process; this one's core rereads it first.
+        self._client.rescan()
+        self.load()
+        self.learned.emit(family, slot, code)
+
+    # -- rows --------------------------------------------------------------------------------
+
+    def _label(self, macro):
+        action = str(macro.get("action") or "")
+        if action == "keys":
+            return str(macro.get("keys") or "Key combo")
+        if action == "command":
+            return "Command"
+        return str(self._presets().get(action, {}).get("label") or action)
+
+    def _display(self, bound, press, hold):
+        if not bound:
+            return "Unbound"
+        parts = []
+        if press:
+            parts.append("Press · " + self._label(press))
+        if hold:
+            parts.append("Hold · " + self._label(hold))
+        return " / ".join(parts) or "—"
+
+    def _rebuild(self):
+        rows, groups = [], []
+        device = self._device()
+        if device is None:
+            rows.append(_row("Controller", "", "No controller connected", "info", False,
+                             detail="Connect a pad over USB or Bluetooth"))
+            groups.append(_group("Controller", [0], meta="Macros wait for a pad"))
+        else:
+            family = self._families().get(device["family"])
+            if family is not None:
+                slots = list(family.get("slots") or [])
+                slots = [s for s in slots if s.get("extra")] + [s for s in slots if not s.get("extra")]
+                name = str(family.get("name") or device["name"])
+            else:
+                slots = [{"id": s, "label": s.replace("_", " ").capitalize(), "codes": [], "extra": True} for s in device["slots"]]
+                name = device["name"]
+            if len(self._devices) > 1:
+                names = [d["name"] for d in self._devices]
+                rows.append(_row(name, "device", "Controller", "enum", device["name"], choices=names))
+            for slot in slots:
+                binding = device["slots"].get(slot["id"]) or {}
+                bound = bool(binding.get("bound"))
+                press = self._macro(device["family"], slot["id"], "press")
+                hold = self._macro(device["family"], slot["id"], "hold")
+                row = _row(name, slot["id"], str(slot.get("label") or slot["id"]), "action", self._display(bound, press, hold))
+                row.update(slot=slot["id"], bound=bound, code=str(binding.get("code") or ""), extra=bool(slot.get("extra")),
+                           press=press, hold=hold, action="Configure")
+                rows.append(row)
+            extras = sum(1 for s in slots if s.get("extra"))
+            meta = [BUS_NAMES.get(device["bus"], device["bus"])]
+            if device["name"] != name:
+                meta.insert(0, device["name"])
+            meta.append(f"{extras} extra button" + ("" if extras == 1 else "s"))
+            groups.append(_group(name, list(range(len(rows))), meta=" · ".join(m for m in meta if m)))
+        self._rows = rows
+        self._groups = groups
+        self.rowsChanged.emit()
+
+    @Slot(int, result="QVariant")
+    def row(self, index):
+        return self._rows[index] if 0 <= index < len(self._rows) else {}
+
+    @Slot(int, "QVariant", result=bool)
+    def setValue(self, index, value):
+        row = self.row(index)
+        if row.get("key") != "device":
+            return False
+        device = next((d for d in self._devices if d["name"] == str(value)), None)
+        if device is None:
+            return False
+        self.setCurrent(device["id"])
+        return True
+
+    # -- what the page does --------------------------------------------------------------------
+
+    @Slot(str, str, str, str, str, result=bool)
+    def bind(self, slot, trigger, action, keys, command):
+        device = self._device()
+        if device is None:
+            self.message.emit("No controller connected")
+            return False
+        if trigger not in TRIGGERS or not action:
+            return False
+        if self._presets().get(action, {}).get("hold_only") and trigger != "hold":
+            self.message.emit(self._presets()[action].get("label", action) + " only fires on a hold")
+            return False
+        payload = {"family": device["family"], "button": slot, "trigger": trigger, "action": action,
+                   "keys": keys or "", "command": command or ""}
+        if not self._client.controllerBind(json.dumps(payload)):
+            return False
+        self.load()
+        self.reload()
+        return True
+
+    @Slot(str, str, result=bool)
+    def unbind(self, slot, trigger):
+        device = self._device()
+        if device is None:
+            return False
+        if not self._client.controllerUnbind(device["family"], slot, trigger or ""):
+            return False
+        self.load()
+        self.reload()
+        return True
+
+    @Slot(str, result=bool)
+    def learn(self, slot):
+        device = self._device()
+        if device is None or self._watcher is None:
+            self.message.emit("No controller connected")
+            return False
+        self._learning = slot
+        self.statusChanged.emit()
+        return bool(self._watcher.send({"cmd": "learn", "id": device["id"], "slot": slot}))
+
+    @Slot()
+    def cancelLearn(self):
+        if not self._learning:
+            return
+        self._learning = ""
+        self.statusChanged.emit()
+        if self._watcher is not None:
+            self._watcher.send({"cmd": "cancel"})
+
+    @Slot()
+    def suspend(self):
+        self._suspended = True
+        if self._watcher is not None:
+            self._watcher.send({"cmd": "suspend"})
+
+    @Slot()
+    def resume(self):
+        self._suspended = False
+        self.cancelLearn()
+        if self._watcher is not None:
+            self._watcher.send({"cmd": "resume"})
+
+    @Slot()
+    def reload(self):
+        if self._watcher is not None:
+            self._watcher.send({"cmd": "reload"})
+
+    @Slot(str)
+    def setCurrent(self, ident):
+        device = self._device(ident)
+        if device is None or ident == self._current:
+            return
+        self._current = ident
+        self._remember(device["family"])
+        self.cancelLearn()
+        self._rebuild()
+        self.currentChanged.emit()
+        self.devicesChanged.emit()
+
+    def _family(self):
+        device = self._device()
+        return device["family"] if device is not None else self._last_family
+
+    def _unbound(self):
+        return [r["slot"] for r in self._rows if "slot" in r and not r["bound"]]
+
+    devices = Property("QVariantList", lambda self: [dict(d) for d in self._devices], notify=devicesChanged)
+    current = Property(str, lambda self: self._current, setCurrent, notify=currentChanged)
+    state = Property("QVariant", lambda self: dict(self._state), notify=stateChanged)
+    presets = Property("QVariantList", lambda self: list(self._state.get("presets") or []), notify=stateChanged)
+    rows = Property("QVariantList", lambda self: list(self._rows), notify=rowsChanged)
+    groups = Property("QVariantList", lambda self: list(self._groups), notify=rowsChanged)
+    count = Property(int, lambda self: len(self._rows), notify=rowsChanged)
+    unboundSlots = Property("QVariantList", _unbound, notify=rowsChanged)
+    family = Property(str, _family, notify=devicesChanged)
+    connected = Property(bool, lambda self: self._device() is not None, notify=devicesChanged)
+    status = Property(str, lambda self: self._status, notify=statusChanged)
+    learning = Property(str, lambda self: self._learning, notify=statusChanged)

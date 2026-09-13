@@ -4,7 +4,8 @@ import "../sound"
 import "../ui"
 
 // The Settings tab: modules and their global settings, a source's library to install from,
-// pending updates, the login flow, and doctor's checks. One set of cards, five row sources.
+// pending updates, the login flow, doctor's checks, and the controller's macros. One set of
+// cards, six row sources.
 FocusScope {
     id: page
 
@@ -25,15 +26,24 @@ FocusScope {
     readonly property bool ownsAccept: true
     property bool menuOpen: false
 
-    readonly property var sections: ["Modules", "Install", "Updates", "Login", "Doctor"]
+    readonly property var sections: ["Modules", "Install", "Updates", "Login", "Doctor", "Controller"]
     property int section: 0
 
     readonly property var modulesForm: api.screens.modules
     readonly property var sources: api.screens.sources
     readonly property var login: api.screens.login
+    readonly property var controller: api.screens.controller
+
+    // The watcher reports instead of firing while the section is on screen, so a paddle
+    // pressed to find its row does not take a screenshot.
+    readonly property bool controllerOpen: section === 5 && activeFocus
+    readonly property bool learning: section === 5 && controller.learning !== ""
+    property string pendingSlot: ""
+    property string pendingTrigger: ""
 
     readonly property var hints: editor.open ? editor.hints
         : menu.open ? menu.hints
+        : learning ? [ { glyph: "B", label: "Stop learning" } ]
         : chipBar.activeFocus
         ? [ { glyph: "A", label: "Open" }, { glyph: "dpad", label: "Section" }, { glyph: "LB RB", label: "Tabs" } ]
         : (acceptLabel !== "" ? [ { glyph: "A", label: acceptLabel } ] : []).concat(
@@ -142,6 +152,8 @@ FocusScope {
             groups.push({ title: sourceName, meta: sourceMeta, rows: [0, 1, 2] });
             return { rows: rows, groups: groups };
         }
+        if (section === 5)
+            return { rows: controller.rows, groups: controller.groups };
         return { rows: modulesForm.doctor, groups: modulesForm.doctorGroups };
     }
 
@@ -165,6 +177,8 @@ FocusScope {
             modulesForm.load();
         else if (refreshable)
             sources.load();
+        else if (section === 5)
+            controller.load();
         else
             modulesForm.loadDoctor();
     }
@@ -176,6 +190,9 @@ FocusScope {
         } else if (section === 4) {
             Sound.enter();
             modulesForm.loadDoctor();
+        } else if (section === 5) {
+            Sound.enter();
+            controller.load();
         } else {
             Sound.edge();
         }
@@ -213,7 +230,93 @@ FocusScope {
                 Sound.panel();
                 editor.prompt("code", "Code from " + sourceName, "");
             }
+        } else if (section === 5) {
+            if (row.type === "enum") {
+                Sound.panel();
+                editor.edit(index, row);
+            } else if (row.type === "action") {
+                Sound.panel();
+                menu.row = row;
+                menu.show(page.slotActions(row), cards, cards.focusRect, row.label);
+            } else {
+                Sound.edge();
+            }
         }
+    }
+
+    // What a button of the pad can be given: a macro on press or on hold, its button learned
+    // (first when the slot has none on this connection), a macro cleared.
+    function slotActions(row) {
+        var out = [];
+        if (!row.bound)
+            out.push({ icon: "keyboard", label: "Learn the button", action: "learn" });
+        out.push({ icon: "play", label: "On press…", action: "press" });
+        out.push({ icon: "stop", label: "On hold…", action: "hold" });
+        if (row.press)
+            out.push({ icon: "trash", label: "Clear press", action: "clear-press", danger: true });
+        if (row.hold)
+            out.push({ icon: "trash", label: "Clear hold", action: "clear-hold", danger: true });
+        if (row.bound)
+            out.push({ icon: "keyboard", label: "Learn the button again", action: "learn" });
+        return out;
+    }
+
+    function presetActions(trigger) {
+        var out = [];
+        var presets = controller.presets;
+        for (var i = 0; i < presets.length; i++) {
+            var p = presets[i];
+            if (p.hold_only && trigger !== "hold")
+                continue;
+            if (p.id === "keys" || p.id === "command")
+                continue;
+            out.push({ icon: p.id === "stop" ? "stop" : p.id === "screenshot" ? "film" : "", label: p.label, action: "preset:" + p.id });
+        }
+        out.push({ icon: "keyboard", label: "Key combo…", action: "keys" });
+        out.push({ icon: "folder", label: "Command…", action: "command" });
+        return out;
+    }
+
+    function slotAction(action) {
+        var row = menu.row;
+        if (!row)
+            return;
+        if (action === "learn") {
+            if (controller.learn(row.key)) {
+                Sound.enter();
+                toast.show("Press the button on the controller…");
+            }
+        } else if (action === "press" || action === "hold") {
+            Sound.panel();
+            pendingSlot = row.key;
+            pendingTrigger = action;
+            menu.show(page.presetActions(action), cards, cards.focusRect,
+                      row.label + " · " + (action === "press" ? "On press" : "On hold"));
+            return;
+        } else if (action.indexOf("preset:") === 0) {
+            Sound.enter();
+            controller.bind(pendingSlot, pendingTrigger, action.substring(7), "", "");
+        } else if (action === "keys" || action === "command") {
+            Sound.panel();
+            var current = pendingTrigger === "hold" ? row.hold : row.press;
+            var value = current && current.action === action ? current[action] : "";
+            editor.prompt(action, (action === "keys" ? "Key combo for " : "Command for ") + row.label, value);
+            return;
+        } else if (action === "clear-press") {
+            Sound.cancel();
+            controller.unbind(row.key, "press");
+        } else if (action === "clear-hold") {
+            Sound.cancel();
+            controller.unbind(row.key, "hold");
+        }
+        cards.forceActiveFocus();
+    }
+
+    onControllerOpenChanged: {
+        if (controllerOpen)
+            controller.suspend();
+        else
+            controller.resume();
     }
 
     // What a game of the source can have done to it: installed, or, once it is, updated,
@@ -293,6 +396,43 @@ FocusScope {
             toast.show(text);
             page.sources.load();
         }
+    }
+
+    // A press on the pad lights its button and, with nothing open over the cards, moves the
+    // cursor to its row: the pad itself is the fastest way to find a button.
+    Connections {
+        target: page.controller
+        function onButtonPressed(id, slot, pressed) {
+            if (page.section !== 5 || id !== page.controller.current)
+                return;
+            art.press(slot, pressed);
+            if (!pressed || editor.open || menu.open || page.learning)
+                return;
+            var rows = page.controller.rows;
+            for (var i = 0; i < rows.length; i++) {
+                if (rows[i].slot === slot) {
+                    if (cards.index !== i) {
+                        cards.index = i;
+                        Sound.tick();
+                    }
+                    return;
+                }
+            }
+        }
+        function onUnknownPressed(id, code) {
+            if (page.section === 5 && !page.learning)
+                toast.show(code + " is not one of the pad's buttons yet: learn it from a row");
+        }
+        function onLearned(family, slot, code) {
+            var rows = page.controller.rows;
+            for (var i = 0; i < rows.length; i++)
+                if (rows[i].slot === slot) {
+                    toast.show(rows[i].label + " is now " + code);
+                    return;
+                }
+            toast.show(slot + " is now " + code);
+        }
+        function onMessage(text) { toast.show(text); }
     }
 
     Item {
@@ -507,7 +647,11 @@ FocusScope {
         Keys.onPressed: function(event) {
             if (event.isAutoRepeat)
                 return;
-            if (api.keys.isCancel(event)) {
+            if (api.keys.isCancel(event) && page.learning) {
+                event.accepted = true;
+                Sound.cancel();
+                page.controller.cancelLearn();
+            } else if (api.keys.isCancel(event)) {
                 event.accepted = true;
                 Sound.cancel();
                 chipBar.forceActiveFocus();
@@ -606,6 +750,22 @@ FocusScope {
         }
     }
 
+    // The pad, beside its rows: the button of the focused row lit, presses flashing live.
+    ControllerArt {
+        id: art
+
+        x: cards.x + cards.columnX(1)
+        y: cards.y
+        width: cards.columnWidth
+        height: Math.min(implicitHeight, cards.height)
+        visible: page.section === 5
+        family: page.controller.family
+        connected: page.controller.connected
+        focusedSlot: page.section === 5 && cards.cursorShown && cards.currentRow && cards.currentRow.slot ? cards.currentRow.slot : ""
+        learningSlot: page.learning ? page.controller.learning : ""
+        unbound: page.controller.unboundSlots
+    }
+
     ValueEditor {
         id: editor
 
@@ -614,13 +774,18 @@ FocusScope {
         z: 3
 
         onAccepted: function(index, value) {
-            page.modulesForm.setValue(index, value);
+            if (page.section === 5)
+                page.controller.setValue(index, value);
+            else
+                page.modulesForm.setValue(index, value);
         }
         onPrompted: function(tag, value) {
             if (tag === "search")
                 page.sources.search(value);
             else if (tag === "code")
                 page.login.submit(value);
+            else if ((tag === "keys" || tag === "command") && value !== "")
+                page.controller.bind(page.pendingSlot, page.pendingTrigger, tag, tag === "keys" ? value : "", tag === "command" ? value : "");
         }
         onClosed: cards.forceActiveFocus()
     }
@@ -633,7 +798,12 @@ FocusScope {
         anchors.fill: parent
         z: 4
 
-        onChosen: function(action) { page.gameAction(action); }
+        onChosen: function(action) {
+            if (page.section === 5)
+                page.slotAction(action);
+            else
+                page.gameAction(action);
+        }
         onDismissed: cards.forceActiveFocus()
     }
 

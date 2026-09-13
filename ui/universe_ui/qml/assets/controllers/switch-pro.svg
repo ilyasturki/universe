@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 620">
+<g fill="#f2f3f5" stroke="#f2f3f5" stroke-linejoin="round" stroke-linecap="round">
+<rect x="198" y="44" width="92" height="42" rx="14" fill-opacity="0.04" stroke-opacity="0.85"/>
+<rect x="710" y="44" width="92" height="42" rx="14" fill-opacity="0.04" stroke-opacity="0.85"/>
+<rect x="168" y="84" width="152" height="32" rx="12" fill-opacity="0.05" stroke-opacity="0.85"/>
+<rect x="680" y="84" width="152" height="32" rx="12" fill-opacity="0.05" stroke-opacity="0.85"/>
+<path d="M 292 118 C 350 102, 650 102, 708 118 C 770 132, 810 166, 830 222 C 866 312, 880 442, 856 526 C 838 574, 786 590, 748 558 C 718 528, 704 482, 664 464 C 608 440, 560 452, 500 452 C 440 452, 392 440, 336 464 C 296 482, 282 528, 252 558 C 214 590, 162 574, 144 526 C 120 442, 134 312, 170 222 C 190 166, 230 132, 292 118 Z" fill-opacity="0.05" stroke-opacity="0.85" stroke-width="2"/>
+<circle cx="256" cy="232" r="50" fill-opacity="0.05" stroke-opacity="0.85" stroke-width="2"/>
+<circle cx="256" cy="232" r="34" fill-opacity="0.08" stroke-opacity="0.7" stroke-width="2"/>
+<circle cx="256" cy="232" r="6" fill-opacity="0.25" stroke-opacity="0.4" stroke-width="1"/>
+<circle cx="616" cy="372" r="50" fill-opacity="0.05" stroke-opacity="0.85" stroke-width="2"/>
+<circle cx="616" cy="372" r="34" fill-opacity="0.08" stroke-opacity="0.7" stroke-width="2"/>
+<circle cx="616" cy="372" r="6" fill-opacity="0.25" stroke-opacity="0.4" stroke-width="1"/>
+<path d="M 372 324 h 24 v 36 h 36 v 24 h -36 v 36 h -24 v -36 h -36 v -24 h 36 Z" fill-opacity="0.05" stroke-opacity="0.85" stroke-width="2"/>
+<circle cx="744" cy="178" r="23" fill-opacity="0.05" stroke-opacity="0.85" stroke-width="2"/>
+<circle cx="744" cy="286" r="23" fill-opacity="0.05" stroke-opacity="0.85" stroke-width="2"/>
+<circle cx="690" cy="232" r="23" fill-opacity="0.05" stroke-opacity="0.85" stroke-width="2"/>
+<circle cx="798" cy="232" r="23" fill-opacity="0.05" stroke-opacity="0.85" stroke-width="2"/>
+<path d="M 398 186 h 24" fill="none" stroke-opacity="0.85" stroke-width="3"/>
+<path d="M 578 186 h 24 M 590 174 v 24" fill="none" stroke-opacity="0.85" stroke-width="3"/>
+<circle cx="560" cy="272" r="17" fill-opacity="0.05" stroke-opacity="0.85" stroke-width="2"/>
+<rect x="426" y="258" width="28" height="28" rx="6" fill-opacity="0.08" stroke-opacity="0.85"/>
+<circle cx="440" cy="272" r="5" fill-opacity="0.3" stroke-opacity="0.5" stroke-width="1"/>
+</g>
+</svg>
