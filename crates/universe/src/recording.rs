@@ -131,6 +131,7 @@ mod tests {
 
     #[test]
     fn import_and_file() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let data = tempfile::tempdir().unwrap();
         std::env::set_var("UNIVERSE_DATA_HOME", data.path());
         let rec = tempfile::tempdir().unwrap();

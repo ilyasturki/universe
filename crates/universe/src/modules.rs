@@ -494,7 +494,9 @@ choices_exec = "bin/choices"
 
     #[tokio::test]
     async fn setting_choices_run_the_module_or_stay_static() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("UNIVERSE_DATA_HOME", dir.path().join("data"));
         std::fs::create_dir_all(dir.path().join("bin")).unwrap();
         let exe = dir.path().join("bin/choices");
         // Echoes the provider it was handed, as `["provider:codex"]`.
