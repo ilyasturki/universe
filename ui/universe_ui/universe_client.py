@@ -8,6 +8,7 @@ Failures surface as `error`, never as an exception in QML.
 import json
 import logging
 import os
+import re
 import shutil
 import subprocess
 import tempfile
@@ -165,6 +166,21 @@ class UniverseClientBase(QObject):
     @Slot(bool, result="QVariant")
     def importLutris(self, apply):
         return self._guarded({}, "Library1", "ImportLutris", bool(apply))
+
+    @Slot(str, str, str, result=str)
+    def addGame(self, runner, path, title):
+        payload = json.dumps({"runner": runner, "exe": path, "title": title})
+        return str(self._guarded("", "Library1", "Add", payload, decode=False) or "")
+
+    # -- Runners1 --------------------------------------------------------------------------
+
+    @Slot(result="QVariant")
+    def runners(self):
+        return self._guarded([], "Runners1", "List")
+
+    @Slot(str, str, str, result=bool)
+    def setRunnerSetting(self, runner, key, value):
+        return self._done("Runners1", "Set", runner, key, str(value))
 
     # -- Session1 --------------------------------------------------------------------------
 
@@ -594,6 +610,9 @@ _CORE_CALLS = {
     ("Library1", "Uninstall"): lambda s, ident: s._core.uninstall(ident),
     ("Library1", "Rescan"): lambda s: s._core.reload(),
     ("Library1", "ImportLutris"): lambda s, apply: s._core.import_lutris(_bus_bool(apply)),
+    ("Library1", "Add"): lambda s, payload: (lambda ident: (s.libraryChanged.emit([ident]), ident)[1])(s._core.add_game(payload)),
+    ("Runners1", "List"): lambda s: s._core.runners_json(),
+    ("Runners1", "Set"): lambda s, runner, key, value: s._core.set_runner_setting(runner, key, value),
     ("Session1", "Launch"): lambda s, ident, screen: s._launched(s._core.launch(ident, screen), ident),
     ("Session1", "Stop"): lambda s, session_id: s._core.stop(session_id),
     ("Session1", "AdoptScope"): lambda s: s._core.adopt_scope(),
@@ -701,6 +720,17 @@ class FakeClient(UniverseClientBase):
             for key, default in defaults.items()
             if key in ("proton", "esync", "fsync", "mangohud", "hide_cursor")
         }
+        runner = self._runner_of(launch)
+        spec = self._runner(runner) or {"id": runner, "name": runner, "kind": "", "platforms": [], "path": "", "options": []}
+        options = {o["key"]: o.get("value", o.get("default")) for o in spec.get("options") or []}
+        options.update(launch.get("options") or {})
+        out["effective"].update({
+            "runner": spec["id"], "runner_name": spec.get("name", runner), "runner_kind": spec.get("kind", ""),
+            "runner_path": launch.get("runner_exe") or spec.get("path") or "",
+            "platform": out.get("platform") or (spec.get("platforms") or [""])[0],
+            "options": options, "inputplumber": bool(options.get("inputplumber")),
+        })
+        out.setdefault("platform", out["effective"]["platform"])
         modules = out.setdefault("modules", {})
         for module in self._data.get("modules", []):
             merged = modules.setdefault(module["id"], {})
@@ -708,6 +738,16 @@ class FakeClient(UniverseClientBase):
                 if setting.get("scope") == "game":
                     merged.setdefault(setting["key"], setting.get("default"))
         return out
+
+    def _runner_of(self, launch):
+        runner = str(launch.get("runner") or "") or {"wine": "wine", "native": "linux"}.get(str(launch.get("backend") or ""), "proton")
+        for spec in self._data.get("runners", []):
+            if runner == spec["id"] or runner in (spec.get("aliases") or []):
+                return spec["id"]
+        return runner
+
+    def _runner(self, ident):
+        return next((r for r in self._data.get("runners", []) if r["id"] == ident), None)
 
     # -- transport ---------------------------------------------------------------------------
 
@@ -779,6 +819,55 @@ class FakeClient(UniverseClientBase):
 
     def _Library1_ImportLutris(self, apply):
         return json.dumps({"imported": [], "env_diff": [], "hours": 0, "applied": _bus_bool(apply)})
+
+    def _Library1_Add(self, payload):
+        entry = _json(payload, {})
+        runner = self._runner_of({"runner": entry.get("runner", "")})
+        spec = self._runner(runner)
+        if spec is None:
+            raise UniverseError("Invalid", f"unknown runner '{entry.get('runner')}'")
+        path = str(entry.get("exe") or "")
+        if not path:
+            raise UniverseError("Invalid", "a game file is needed")
+        title = str(entry.get("title") or "").strip() or os.path.splitext(os.path.basename(path))[0]
+        ident = re.sub(r"[^a-z0-9]+", "-", title.casefold()).strip("-")
+        if any(g["id"] == ident for g in self._data["games"]):
+            raise UniverseError("Invalid", f"{ident} is already in the library")
+        self._data["games"].append({
+            "id": ident, "title": title, "source": "manual", "favorite": False, "hidden": False,
+            "platform": entry.get("platform") or (spec.get("platforms") or [""])[0],
+            "launch": {"runner": runner, "exe": path}, "metadata": {}, "media": {"screenshots": []},
+        })
+        self.libraryChanged.emit([ident])
+        return ident
+
+    # -- Runners1 ----------------------------------------------------------------------------
+
+    def _Runners1_List(self):
+        return json.dumps(self._data.get("runners", []))
+
+    def _Runners1_Set(self, runner, key, value):
+        spec = self._runner(self._runner_of({"runner": runner}))
+        if spec is None:
+            raise UniverseError("NotFound", f"runner {runner}")
+        if key == "exe":
+            spec["exe"] = value
+            spec["path"] = value or spec.get("detected", "")
+            spec["source"] = "config" if value else ("path" if spec.get("detected") else "")
+            spec["available"] = bool(spec["path"])
+            return
+        if key == "args":
+            spec["args"] = value
+            return
+        option = next((o for o in spec.get("options", []) if o["key"] == key), None)
+        if option is None:
+            raise UniverseError("Invalid", f"{spec['id']}: unknown option {key}")
+        if option.get("type") == "bool":
+            if value not in ("true", "false", ""):
+                raise UniverseError("Invalid", f"{key} must be true or false")
+            option["value"] = option.get("default") if value == "" else value == "true"
+        else:
+            option["value"] = value if value != "" else option.get("default")
 
     # -- Session1 ----------------------------------------------------------------------------
 

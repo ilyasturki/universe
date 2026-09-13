@@ -203,6 +203,25 @@ FocusScope {
                         }
                     }
 
+                    Rectangle {
+                        visible: page.game !== null && page.game.runner !== ""
+                        height: Theme.dp(41)
+                        width: runnerBadge.width + Theme.dp(36)
+                        radius: height / 2
+                        color: Qt.rgba(1, 1, 1, 0.10)
+                        border.width: 1
+                        border.color: Theme.surfaceBorder
+
+                        RunnerBadge {
+                            id: runnerBadge
+                            anchors.centerIn: parent
+                            runner: page.game ? page.game.runner : ""
+                            name: page.game ? page.game.runnerName : ""
+                            size: Theme.dp(24)
+                            labelSize: Theme.dp(20)
+                        }
+                    }
+
                     Repeater {
                         model: page.game
                             ? page.game.genreList.slice(0, 3).concat(

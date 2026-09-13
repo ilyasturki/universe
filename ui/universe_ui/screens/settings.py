@@ -7,8 +7,12 @@ flat row list. QML picks the control by type and calls setValue(index, value) wi
 """
 
 import json
+import os
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
+
+ASSETS = os.path.join(os.path.dirname(os.path.dirname(__file__)), "qml", "assets", "runners")
+LOGOS = {os.path.splitext(f)[0]: f"assets/runners/{f}" for f in sorted(os.listdir(ASSETS))}
 
 
 def _display(kind, value, choices=None):
@@ -51,6 +55,10 @@ def _dig(data, dotted, default=None):
     return node
 
 
+def runner_logo(runner_id):
+    return LOGOS.get(runner_id, "")
+
+
 def _to_bus(kind, value):
     if kind == "bool":
         return "true" if value else "false"
@@ -87,12 +95,6 @@ class RowsForm(QObject):
 
 # Core keys Library1.Set accepts, grouped as the page shows them. Proton choices come from config.
 CORE_ROWS = [
-    ("Launch", "launch.proton", "Proton", "enum"),
-    ("Launch", "launch.esync", "Esync", "bool"),
-    ("Launch", "launch.fsync", "Fsync", "bool"),
-    ("Launch", "launch.mangohud", "MangoHud", "bool"),
-    ("Launch", "launch.args", "Arguments", "string"),
-    ("Launch", "launch.working_dir", "Working directory", "path"),
     ("Desktop and library", "desktop.hide_cursor", "Hide the cursor while playing", "bool"),
     ("Desktop and library", "favorite", "Favourite", "bool"),
     ("Desktop and library", "hidden", "Hidden", "bool"),
@@ -101,6 +103,11 @@ CORE_ROWS = [
     ("Artwork", "metadata.sgdb_id", "SteamGridDB id", "int"),
     ("Artwork", "metadata.rawg_id", "RAWG id", "int"),
 ]
+LAUNCH_ROWS = {
+    "proton": [("launch.proton", "Proton", "enum"), ("launch.esync", "Esync", "bool"), ("launch.fsync", "Fsync", "bool"), ("launch.prefix", "Wine prefix", "path")],
+    "wine": [("launch.prefix", "Wine prefix", "path")],
+}
+COMMON_LAUNCH_ROWS = [("launch.mangohud", "MangoHud", "bool"), ("launch.args", "Arguments", "string"), ("launch.working_dir", "Working directory", "path")]
 
 
 class GameSettingsForm(RowsForm):
@@ -120,10 +127,11 @@ class GameSettingsForm(RowsForm):
         config = self._client.config() or {}
         self._title = str(game.get("title") or game_id)
         self.titleChanged.emit()
-        rows = []
-        groups = []
         effective = game.get("effective") or {}
-        for section, key, label, kind in CORE_ROWS:
+        rows, runner_kind = self._launch_rows(game, effective)
+        groups = [_group("Launch", range(len(rows)), caps=True)]
+        launch = [("Launch", key, label, kind) for key, label, kind in LAUNCH_ROWS.get(runner_kind, []) + COMMON_LAUNCH_ROWS]
+        for section, key, label, kind in launch + CORE_ROWS:
             value = _dig(game, key)
             # A launch or desktop key the game leaves empty takes the global value.
             inherited = False
@@ -163,12 +171,43 @@ class GameSettingsForm(RowsForm):
                 groups.append(group)
         self._set_rows(rows, groups)
 
+    def _launch_rows(self, game, effective):
+        runners = list(self._client.runners() or [])
+        runner_id = str(effective.get("runner") or "proton")
+        spec = next((r for r in runners if r["id"] == runner_id), None) or {"id": runner_id, "name": runner_id, "kind": "", "platforms": [], "options": []}
+        kind = spec.get("kind") or ""
+        rows = []
+        names = [r["name"] for r in runners] or [spec["name"]]
+        picker = _row("Launch", "launch.runner", "Runner", "enum", spec["name"], names)
+        picker["choiceValues"] = [r["id"] for r in runners] or [runner_id]
+        picker["icon"] = runner_logo(runner_id)
+        rows.append(picker)
+        rows.append(_row("Launch", "launch.exe", "File" if kind == "emulator" else "Program", "path", _dig(game, "launch.exe") or ""))
+        if kind == "emulator":
+            platforms = list(spec.get("platforms") or [])
+            if len(platforms) > 1:
+                rows.append(_row("Launch", "platform", "Platform", "enum", game.get("platform") or platforms[0], platforms))
+            rows.append(_row("Launch", "launch.runner_exe", spec["name"] + " program", "path", _dig(game, "launch.runner_exe") or effective.get("runner_path") or "",
+                             inherited=not _dig(game, "launch.runner_exe")))
+            options = effective.get("options") or {}
+            own = _dig(game, "launch.options") or {}
+            for option in spec.get("options") or []:
+                key = option["key"]
+                value = options.get(key, option.get("default"))
+                if option.get("type") == "bool":
+                    value = bool(value)
+                rows.append(_row("Launch", f"launch.options.{key}", option.get("label", key), option.get("type", "string"),
+                                 value, option.get("choices"), inherited=key not in own))
+        return rows, kind
+
     @Slot(int, "QVariant", result=bool)
     def setValue(self, index, value):
         if not (0 <= index < len(self._rows)):
             return False
         row = self._rows[index]
         payload = _to_bus(row["type"], value)
+        if row.get("choiceValues") and payload in row["choices"]:
+            payload = row["choiceValues"][row["choices"].index(payload)]
         if row["module"]:
             ok = self._client.setSetting(row["module"], self._game_id, row["key"], payload)
         else:

@@ -47,6 +47,19 @@ def test_core_client_reads_writes_and_watches(app):
     assert "sample" in written
     assert [e["title"] for e in client.journal("sample")] == ["First"]
 
+    runners = {r["id"]: r for r in client.runners()}
+    assert runners["linux"]["kind"] == "linux" and "Nintendo Wii" in runners["dolphin"]["platforms"]
+    assert client.setRunnerSetting("dolphin", "batch", "false") and runners != {r["id"]: r for r in client.runners()}
+    assert client.setRunnerSetting("dolphin", "nope", "1") is False and seen[-1] == "Invalid"
+    rom = games.parent / "F-Zero GX.iso"
+    rom.write_bytes(b"")
+    ident = client.addGame("yuzu", str(rom), "")
+    assert ident == "f-zero-gx"
+    game = client.game(ident)
+    assert game["effective"]["runner"] == "eden" and game["platform"] == "Nintendo Switch"
+    assert game["effective"]["options"]["fullscreen"] is True
+    assert client.addGame("dolphin", str(rom), "F-Zero GX") == "" and seen[-1] == "Invalid"
+
 
 def test_list_resolves_defaults(fake):
     rows = fake.list()
@@ -67,6 +80,8 @@ def test_errors_are_signalled_not_raised(fake):
     assert seen[-1][0] == "Invalid"
     assert fake.setSetting("capture", "", "codec", "hevc") is True
     assert fake.getSettings("capture", "")["codec"] == "hevc"
+    assert fake.setRunnerSetting("dolphin", "nope", "1") is False and seen[-1][0] == "Invalid"
+    assert fake.setRunnerSetting("nope", "exe", "/x") is False and seen[-1][0] == "NotFound"
 
 
 def test_settings_merges_game_scope(fake):

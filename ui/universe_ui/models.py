@@ -141,6 +141,9 @@ class Game(QObject):
         self._summary = str(meta.get("summary") or "")
         self._source = _source_kind(raw.get("source"))
         self._platform = str(raw.get("platform") or "")
+        effective = raw.get("effective") or {}
+        self._runner = str(effective.get("runner") or "")
+        self._runnerName = str(effective.get("runner_name") or self._runner)
         self._tags = _as_list(raw.get("tags"))
         self._extra = _extras(meta)
         self._assets.update(raw.get("media"))
@@ -189,6 +192,8 @@ class Game(QObject):
     summary = Property(str, lambda self: self._summary, notify=changed)
     source = Property(str, lambda self: self._source, notify=changed)
     platform = Property(str, lambda self: self._platform, notify=changed)
+    runner = Property(str, lambda self: self._runner, notify=changed)
+    runnerName = Property(str, lambda self: self._runnerName, notify=changed)
     tags = Property("QVariantList", lambda self: list(self._tags), notify=changed)
     assets = Property(QObject, lambda self: self._assets, constant=True)
     collections = Property(QObject, lambda self: self._collections, notify=changed)

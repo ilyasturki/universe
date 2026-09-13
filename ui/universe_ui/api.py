@@ -33,6 +33,9 @@ PLATFORM_SHORT = {
     "sony playstation 2": "ps2", "sony playstation 3": "ps3", "sony playstation 4": "ps4",
     "sony playstation 5": "ps5", "sony playstation portable": "psp", "psp": "psp",
     "sony playstation vita": "vita", "ps vita": "vita", "xbox": "xbox", "microsoft xbox": "xbox",
+    "sony playstation": "ps1", "playstation": "ps1", "nintendo game boy advance": "gba", "nintendo game boy": "gb",
+    "nintendo 64": "n64", "nintendo snes": "snes", "super nintendo": "snes", "sega dreamcast": "dreamcast",
+    "microsoft xbox 360": "xbox360", "xbox 360": "xbox360", "ms-dos": "dos", "dos": "dos", "arcade": "arcade", "scummvm": "scummvm",
 }
 PLATFORM_NAMES = {"windows": "Windows", "linux": "Linux", "mac": "macOS", "steam": "Steam"}
 

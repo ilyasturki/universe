@@ -4,7 +4,8 @@ import "../core"
 
 // One setting inside a card: its label, and by type a switch, a value with a chevron,
 // or a check's detail and status dot. Focused, it is the one white row on the screen.
-// A row with an `image` (a game of a source) shows it as a small cover before the label.
+// A row with an `image` (a game of a source) shows it as a small cover before the label; one
+// with an `icon` (a runner's logo) shows it whole, in a square.
 Item {
     id: row
 
@@ -18,8 +19,11 @@ Item {
     readonly property bool hasImage: entry.image !== undefined && entry.image !== null && String(entry.image) !== ""
     // A controller row carries its slot and family: the button is drawn before its name.
     readonly property bool hasGlyph: entry.slot !== undefined && String(entry.slot) !== "" && entry.family !== undefined
-    readonly property bool hasIcon: !hasGlyph && entry.icon !== undefined && String(entry.icon) !== ""
-    readonly property real labelInset: hasImage ? thumb.width + Theme.dp(24) : hasGlyph || hasIcon ? Theme.dp(18) + lead.width + Theme.dp(16) : Theme.dp(18)
+    // An icon naming a file (a runner's logo) is drawn whole in a square; a bare name is a menu glyph.
+    readonly property bool iconIsFile: entry.icon !== undefined && entry.icon !== null && String(entry.icon).indexOf("/") >= 0
+    readonly property bool hasMark: !hasImage && iconIsFile && mark.status === Image.Ready
+    readonly property bool hasIcon: !hasGlyph && !iconIsFile && entry.icon !== undefined && String(entry.icon) !== ""
+    readonly property real labelInset: hasImage ? thumb.width + Theme.dp(24) : hasMark ? mark.width + Theme.dp(28) : hasGlyph || hasIcon ? Theme.dp(18) + lead.width + Theme.dp(16) : Theme.dp(18)
     readonly property color onFocus: Qt.rgba(0.063, 0.067, 0.086, 0.7)
     // A value or a detail leaves the label at least a third of the row.
     readonly property real valueMax: Math.max(Theme.dp(120), width * 0.6 - (hasImage ? thumb.width : 0))
@@ -119,6 +123,22 @@ Item {
             kind: row.hasIcon ? String(row.entry.icon) : ""
             tint: row.focused ? Theme.onLight : Theme.text
         }
+    }
+
+    Image {
+        id: mark
+        anchors.left: parent.left
+        anchors.leftMargin: Theme.dp(16)
+        anchors.verticalCenter: parent.verticalCenter
+        height: parent.height - Theme.dp(22)
+        width: height
+        source: !row.hasImage && row.iconIsFile ? Qt.resolvedUrl("../" + row.entry.icon) : ""
+        asynchronous: true
+        fillMode: Image.PreserveAspectFit
+        sourceSize.height: 128
+        smooth: true
+        mipmap: true
+        visible: row.hasMark
     }
 
     Text {

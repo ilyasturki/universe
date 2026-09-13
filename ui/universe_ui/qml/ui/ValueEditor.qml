@@ -58,7 +58,7 @@ FocusScope {
     // A key named as a file, or a value with an extension, picks files; the rest pick folders.
     function isFile(row) {
         var key = String(row.key || "");
-        if (/(_path|_file|file)$/.test(key))
+        if (/(_path|_file|file|exe)$/.test(key))
             return true;
         var base = String(row.value || "").split("/").pop();
         return base.indexOf(".") > 0;

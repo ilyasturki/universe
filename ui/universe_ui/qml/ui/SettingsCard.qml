@@ -7,8 +7,9 @@ import "../core"
 Item {
     id: card
 
-    // { title, meta, warning, caps, control, off, rows }
+    // { title, meta, warning, caps, control, off, rows, icon }
     property var group: ({})
+    readonly property bool hasIcon: group.icon !== undefined && group.icon !== null && String(group.icon) !== "" && logo.status === Image.Ready
     property var rows: []
     property int cursor: -1
     property bool active: false
@@ -52,9 +53,25 @@ Item {
             ColorAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
         }
 
+        Image {
+            id: logo
+            anchors.left: parent.left
+            anchors.leftMargin: Theme.dp(16)
+            anchors.verticalCenter: parent.verticalCenter
+            height: parent.height - Theme.dp(24)
+            width: height
+            source: card.group.icon ? Qt.resolvedUrl("../" + card.group.icon) : ""
+            asynchronous: true
+            fillMode: Image.PreserveAspectFit
+            sourceSize.height: 128
+            smooth: true
+            mipmap: true
+            visible: card.hasIcon
+        }
+
         Column {
             anchors.left: parent.left
-            anchors.leftMargin: Theme.dp(18)
+            anchors.leftMargin: card.hasIcon ? logo.width + Theme.dp(30) : Theme.dp(18)
             anchors.right: toggle.visible ? toggle.left : parent.right
             anchors.rightMargin: Theme.dp(20)
             anchors.verticalCenter: parent.verticalCenter

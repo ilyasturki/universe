@@ -76,8 +76,11 @@
       "source": "gog",
       "favorite": false,
       "launch": {
-        "exe": "/mnt/games/PC/Mini Metro/MiniMetro.exe",
-        "proton": "proton-ge"
+        "runner": "yuzu",
+        "exe": "/mnt/games/switch/Mini Metro.nsp",
+        "options": {
+          "fullscreen": false
+        }
       },
       "gog": {
         "id": "1434554947",
@@ -236,7 +239,11 @@
         "play_count": 2,
         "last_played": "2026-05-03T16:20:00+02:00"
       },
-      "platform": "Nintendo Wii"
+      "platform": "Nintendo Wii",
+      "launch": {
+        "runner": "dolphin",
+        "exe": "/mnt/games/wii/LEGO Batman.rvz"
+      }
     },
     {
       "id": "batman-arkham-origins",
@@ -2130,5 +2137,192 @@
         "hold_only": false
       }
     ]
-  }
+  },
+  "runners": [
+    {
+      "id": "proton",
+      "name": "Proton",
+      "kind": "proton",
+      "aliases": [
+        "umu"
+      ],
+      "platforms": [
+        "windows"
+      ],
+      "exe": "",
+      "args": "",
+      "path": "/run/current-system/sw/bin/umu-run",
+      "detected": "/run/current-system/sw/bin/umu-run",
+      "source": "path",
+      "available": true,
+      "options": []
+    },
+    {
+      "id": "wine",
+      "name": "Wine",
+      "kind": "wine",
+      "platforms": [
+        "windows"
+      ],
+      "exe": "",
+      "args": "",
+      "path": "/run/current-system/sw/bin/wine",
+      "detected": "/run/current-system/sw/bin/wine",
+      "source": "path",
+      "available": true,
+      "options": []
+    },
+    {
+      "id": "linux",
+      "name": "Linux",
+      "kind": "linux",
+      "aliases": [
+        "native"
+      ],
+      "platforms": [
+        "linux"
+      ],
+      "exe": "",
+      "args": "",
+      "path": "",
+      "detected": "",
+      "source": "path",
+      "available": true,
+      "options": []
+    },
+    {
+      "id": "dolphin",
+      "name": "Dolphin",
+      "kind": "emulator",
+      "platforms": [
+        "Nintendo GameCube",
+        "Nintendo Wii"
+      ],
+      "exe": "",
+      "args": "",
+      "path": "/run/current-system/sw/bin/dolphin-emu",
+      "detected": "/run/current-system/sw/bin/dolphin-emu",
+      "source": "path",
+      "available": true,
+      "options": [
+        {
+          "key": "batch",
+          "type": "bool",
+          "default": true,
+          "label": "Batch mode (quit with the game)",
+          "value": true
+        },
+        {
+          "key": "user_directory",
+          "type": "path",
+          "default": "",
+          "label": "User directory",
+          "value": ""
+        },
+        {
+          "key": "inputplumber",
+          "type": "bool",
+          "default": true,
+          "label": "Manage pads with InputPlumber",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": "eden",
+      "name": "Eden",
+      "kind": "emulator",
+      "aliases": [
+        "yuzu",
+        "citron",
+        "sudachi",
+        "suyu"
+      ],
+      "platforms": [
+        "Nintendo Switch"
+      ],
+      "exe": "",
+      "args": "",
+      "path": "/run/current-system/sw/bin/eden",
+      "detected": "/run/current-system/sw/bin/eden",
+      "source": "path",
+      "available": true,
+      "options": [
+        {
+          "key": "fullscreen",
+          "type": "bool",
+          "default": true,
+          "label": "Fullscreen",
+          "value": true
+        },
+        {
+          "key": "inputplumber",
+          "type": "bool",
+          "default": true,
+          "label": "Manage pads with InputPlumber",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": "rpcs3",
+      "name": "RPCS3",
+      "kind": "emulator",
+      "platforms": [
+        "Sony PlayStation 3"
+      ],
+      "exe": "",
+      "args": "",
+      "path": "",
+      "detected": "",
+      "source": "",
+      "available": false,
+      "options": [
+        {
+          "key": "nogui",
+          "type": "bool",
+          "default": true,
+          "label": "No GUI (quit with the game)",
+          "value": true
+        },
+        {
+          "key": "inputplumber",
+          "type": "bool",
+          "default": true,
+          "label": "Manage pads with InputPlumber",
+          "value": true
+        }
+      ]
+    },
+    {
+      "id": "melonds",
+      "name": "melonDS",
+      "kind": "emulator",
+      "platforms": [
+        "Nintendo DS"
+      ],
+      "exe": "/home/yasso/.local/share/lutris/runners/melonds/melonDS-x86_64.AppImage",
+      "args": "--fullscreen",
+      "path": "/home/yasso/.local/share/lutris/runners/melonds/melonDS-x86_64.AppImage",
+      "detected": "",
+      "source": "config",
+      "available": true,
+      "options": [
+        {
+          "key": "fullscreen",
+          "type": "bool",
+          "default": true,
+          "label": "Fullscreen",
+          "value": false
+        },
+        {
+          "key": "inputplumber",
+          "type": "bool",
+          "default": true,
+          "label": "Manage pads with InputPlumber",
+          "value": true
+        }
+      ]
+    }
+  ]
 }

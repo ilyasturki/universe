@@ -3,9 +3,9 @@ import "../core"
 import "../sound"
 import "../ui"
 
-// The Settings tab: modules and their global settings, a source's library to install from,
-// pending updates, the login flow, doctor's checks, and the controller's macros. One set of
-// cards, six row sources.
+// The Settings tab: modules and their global settings, the runners (where each was found, its
+// options, a game added through it), a source's library to install from, pending updates, the
+// login flow, doctor's checks, and the controller's macros. One set of cards, seven row sources.
 FocusScope {
     id: page
 
@@ -26,22 +26,30 @@ FocusScope {
     readonly property bool ownsAccept: true
     property bool menuOpen: false
 
-    readonly property var sections: ["Modules", "Install", "Updates", "Login", "Doctor", "Controller"]
-    readonly property var sectionIcons: ["grid", "download", "refresh", "user", "pulse", "gamepad"]
+    readonly property var sections: ["Modules", "Runners", "Install", "Updates", "Login", "Doctor", "Controller"]
+    readonly property var sectionIcons: ["grid", "play", "download", "refresh", "user", "pulse", "gamepad"]
+    readonly property int modulesSection: 0
+    readonly property int runnersSection: 1
+    readonly property int installSection: 2
+    readonly property int updatesSection: 3
+    readonly property int loginSection: 4
+    readonly property int doctorSection: 5
+    readonly property int controllerSection: 6
     property int section: 0
 
     readonly property var modulesForm: api.screens.modules
+    readonly property var runners: api.screens.runners
     readonly property var sources: api.screens.sources
     readonly property var login: api.screens.login
     readonly property var controller: api.screens.controller
 
     // The watcher reports instead of firing while the section is on screen, so a paddle
     // pressed to find its row does not take a screenshot.
-    readonly property bool controllerOpen: section === 5 && activeFocus
-    readonly property bool learning: section === 5 && controller.learning !== ""
+    readonly property bool controllerOpen: section === controllerSection && activeFocus
+    readonly property bool learning: section === controllerSection && controller.learning !== ""
     // The live view: the pad alone on the page, its presses muted as keys (see Api), left by
     // holding Circle/B or pressing Start and Select together, both read from the watcher.
-    readonly property bool testing: section === 5 && controller.testing
+    readonly property bool testing: section === controllerSection && controller.testing
     property var held: ({})
     property string pendingSlot: ""
     property string pendingTrigger: ""
@@ -70,7 +78,7 @@ FocusScope {
     }
 
     // The sections that reach the network keep what they fetched; Y fetches again.
-    readonly property bool refreshable: section >= 1 && section <= 3
+    readonly property bool refreshable: section >= installSection && section <= loginSection
 
     readonly property real sideMargin: Theme.dp(80)
 
@@ -108,9 +116,11 @@ FocusScope {
     // The rows and the cards that arrange them for the open section, from the host's data.
     readonly property var content: {
         var rows = [], groups = [];
-        if (section === 0)
+        if (section === modulesSection)
             return { rows: modulesForm.rows, groups: modulesForm.groups };
-        if (section === 1) {
+        if (section === runnersSection)
+            return { rows: runners.rows, groups: runners.groups };
+        if (section === installSection) {
             rows.push({ section: sourceName, key: "search", label: "Search " + sourceName, type: "search",
                         display: sources.query || "", choices: [], detail: "" });
             groups.push({ span: true, rows: [0] });
@@ -133,7 +143,7 @@ FocusScope {
             }
             return { rows: rows, groups: groups };
         }
-        if (section === 2) {
+        if (section === updatesSection) {
             var n = sources.updates.length;
             if (n === 0) {
                 rows.push({ section: "Updates", key: "", label: sources.busy ? "Checking…" : "Everything is up to date",
@@ -151,14 +161,14 @@ FocusScope {
                           rows: rows.map(function(r, i) { return i; }) });
             return { rows: rows, groups: groups };
         }
-        if (section === 3) {
+        if (section === loginSection) {
             rows.push({ section: sourceName, key: "", label: "Signed in", type: "info", value: loggedIn, detail: loggedIn ? "yes" : "no" });
             rows.push({ section: sourceName, key: "link", label: "Get a sign-in link", type: "action", display: login.url ? "ready" : "", detail: "" });
             rows.push({ section: sourceName, key: "code", label: "Enter the code", type: "action", display: "", detail: "" });
             groups.push({ title: sourceName, meta: sourceMeta, rows: [0, 1, 2] });
             return { rows: rows, groups: groups };
         }
-        if (section === 5)
+        if (section === controllerSection)
             return { rows: controller.rows, groups: controller.groups };
         return { rows: modulesForm.doctor, groups: modulesForm.doctorGroups };
     }
@@ -179,11 +189,13 @@ FocusScope {
 
     // Modules and Doctor read the core in-process; the sources keep their last fetch (see load).
     function refresh() {
-        if (section === 0)
+        if (section === modulesSection)
             modulesForm.load();
+        else if (section === runnersSection)
+            runners.load();
         else if (refreshable)
             sources.load();
-        else if (section === 5)
+        else if (section === controllerSection)
             controller.load();
         else
             modulesForm.loadDoctor();
@@ -193,19 +205,22 @@ FocusScope {
         if (refreshable) {
             Sound.enter();
             sources.refresh();
-        } else if (section === 4) {
+        } else if (section === doctorSection) {
             Sound.enter();
             modulesForm.loadDoctor();
-        } else if (section === 5) {
+        } else if (section === controllerSection) {
             Sound.enter();
             controller.load();
+        } else if (section === runnersSection) {
+            Sound.enter();
+            runners.load();
         } else {
             Sound.edge();
         }
     }
 
     function activate(index, row) {
-        if (section === 0) {
+        if (section === modulesSection) {
             if (row.type === "bool") {
                 modulesForm.toggle(index);
                 Sound.favourite(!row.value);
@@ -213,7 +228,15 @@ FocusScope {
                 Sound.panel();
                 editor.edit(index, row);
             }
-        } else if (section === 1) {
+        } else if (section === runnersSection) {
+            if (row.type === "bool") {
+                runners.toggle(index);
+                Sound.favourite(!row.value);
+            } else {
+                Sound.panel();
+                editor.edit(index, row.key === "add_file" ? { type: "path", key: "add_file", label: "Game file for " + row.section, value: "" } : row);
+            }
+        } else if (section === installSection) {
             if (row.key === "search") {
                 Sound.panel();
                 editor.prompt("search", "Search " + sourceName, sources.query);
@@ -222,13 +245,13 @@ FocusScope {
                 menu.row = row;
                 menu.show(page.gameActions(row), cards, cards.focusRect, row.label);
             }
-        } else if (section === 2) {
+        } else if (section === updatesSection) {
             Sound.enter();
             if (row.key === "all")
                 sources.updateAll();
             else
                 sources.update(row.row);
-        } else if (section === 3) {
+        } else if (section === loginSection) {
             if (row.key === "link") {
                 Sound.enter();
                 login.begin(sources.source);
@@ -236,7 +259,7 @@ FocusScope {
                 Sound.panel();
                 editor.prompt("code", "Code from " + sourceName, "");
             }
-        } else if (section === 5) {
+        } else if (section === controllerSection) {
             if (row.key === "test") {
                 if (controller.setTesting(true))
                     Sound.enter();
@@ -410,6 +433,7 @@ FocusScope {
 
     Component.onCompleted: {
         modulesForm.load();
+        runners.load();
         modulesForm.loadDoctor();
         sources.load();
     }
@@ -426,6 +450,11 @@ FocusScope {
     }
 
     Connections {
+        target: page.runners
+        function onMessage(text) { toast.show(text); }
+    }
+
+    Connections {
         target: page.login
         function onFinished(ok, text) {
             toast.show(text);
@@ -437,7 +466,7 @@ FocusScope {
     Connections {
         target: page.controller
         function onButtonPressed(id, slot, pressed) {
-            if (page.section !== 5 || id !== page.controller.current)
+            if (page.section !== page.controllerSection || id !== page.controller.current)
                 return;
             art.press(slot, pressed);
             if (!page.testing)
@@ -461,11 +490,11 @@ FocusScope {
             }
         }
         function onAxisMoved(id, axis, value) {
-            if (page.section === 5 && id === page.controller.current)
+            if (page.section === page.controllerSection && id === page.controller.current)
                 art.axis(axis, value);
         }
         function onUnknownPressed(id, code) {
-            if (page.section === 5 && !page.learning && id === page.controller.current)
+            if (page.section === page.controllerSection && !page.learning && id === page.controller.current)
                 toast.show(code + " is not one of the pad's buttons yet: learn it from a row");
         }
         function onLearned(family, slot, code) {
@@ -527,7 +556,7 @@ FocusScope {
                     Chip {
                         label: modelData
                         icon: page.sectionIcons[index]
-                        badge: index === 2 && page.sources.updates.length > 0 ? page.sources.updates.length.toString() : ""
+                        badge: index === page.updatesSection && page.sources.updates.length > 0 ? page.sources.updates.length.toString() : ""
                         active: index === page.section
                         focused: chipBar.activeFocus && index === page.section
                     }
@@ -627,7 +656,7 @@ FocusScope {
         Row {
             id: tally
 
-            visible: page.section === 4 && page.modulesForm.doctor.length > 0
+            visible: page.section === page.doctorSection && page.modulesForm.doctor.length > 0
             height: Theme.dp(30)
             spacing: Theme.dp(28)
 
@@ -719,7 +748,7 @@ FocusScope {
         y: cards.y
         width: cards.columnWidth
         height: Math.max(Theme.dp(74), loginHead.height) + loginBody.height + Theme.dp(8) * 2 + 2
-        visible: page.section === 3 && (page.login.url !== "" || page.login.status !== "")
+        visible: page.section === page.loginSection && (page.login.url !== "" || page.login.status !== "")
 
         Rectangle {
             anchors.fill: parent
@@ -808,12 +837,12 @@ FocusScope {
         y: cards.y
         width: page.testing ? cards.width : cards.columnWidth
         height: page.testing ? cards.height : Math.min(implicitHeight, cards.height)
-        visible: page.section === 5
+        visible: page.section === page.controllerSection
         family: page.controller.family
         connected: page.controller.connected
         testing: page.testing
         rows: page.controller.rows
-        focusedSlot: page.section === 5 && cards.cursorShown && cards.currentRow && cards.currentRow.slot ? cards.currentRow.slot : ""
+        focusedSlot: page.section === page.controllerSection && cards.cursorShown && cards.currentRow && cards.currentRow.slot ? cards.currentRow.slot : ""
         learningSlot: page.learning ? page.controller.learning : ""
         unbound: page.controller.unboundSlots
 
@@ -848,9 +877,14 @@ FocusScope {
         z: 3
 
         onAccepted: function(index, value) {
-            if (page.section === 5)
+            if (page.section === page.controllerSection)
                 page.controller.setValue(index, value);
-            else
+            else if (page.section === page.runnersSection) {
+                // callLater: the sheet's closed() follows accepted() and would close a prompt opened now.
+                var add = page.runners.row(index).key === "add_file";
+                if (page.runners.setValue(index, value) && add)
+                    Qt.callLater(function() { editor.prompt("add-title", "Title of the game", page.runners.pendingTitle()); });
+            } else
                 page.modulesForm.setValue(index, value);
         }
         onPrompted: function(tag, value) {
@@ -858,6 +892,12 @@ FocusScope {
                 page.sources.search(value);
             else if (tag === "code")
                 page.login.submit(value);
+            else if (tag === "add-title") {
+                if (page.runners.addGame(value) !== "")
+                    Sound.enter();
+                else
+                    Sound.edge();
+            }
             else if ((tag === "keys" || tag === "command") && value !== "")
                 page.controller.bind(page.pendingSlot, page.pendingTrigger, tag, tag === "keys" ? value : "", tag === "command" ? value : "");
         }
@@ -873,7 +913,7 @@ FocusScope {
         z: 4
 
         onChosen: function(action) {
-            if (page.section === 5)
+            if (page.section === page.controllerSection)
                 page.slotAction(action);
             else
                 page.gameAction(action);
