@@ -82,6 +82,17 @@ impl Core {
     fn import_lutris(&self, py: Python<'_>, apply: bool) -> PyResult<String> {
         self.run(py, |c| c.import_lutris(apply))
     }
+    fn add_game(&self, py: Python<'_>, json: String) -> PyResult<String> {
+        self.run(py, |c| async move { c.add_game(&json).await })
+    }
+
+    // -- runners --
+    fn runners_json(&self, py: Python<'_>) -> String {
+        self.run_infallible(py, |c| c.runners_json())
+    }
+    fn set_runner_setting(&self, py: Python<'_>, runner: String, key: String, value: String) -> PyResult<()> {
+        self.run(py, |c| async move { c.set_runner_setting(&runner, &key, &value).await })
+    }
 
     // -- session --
     fn current_json(&self, py: Python<'_>) -> String {
