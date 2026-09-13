@@ -33,6 +33,8 @@ pub struct Marker {
     #[serde(flatten)]
     pub current: Current,
     pub cursor_was_active: bool,
+    #[serde(default)]
+    pub inputplumber: bool,
     pub post_command: String,
     pub cwd: String,
     pub env: BTreeMap<String, String>,
@@ -560,6 +562,8 @@ impl Core {
         let plan = launcher::plan(&r, &cfg, &session_id, &extra_env)?;
         launcher::run_shell(&plan.pre_command, &plan.env, &plan.cwd).await?;
 
+        let inputplumber = r.effective.inputplumber && tokio::task::spawn_blocking(crate::inputplumber::engage).await.unwrap_or(false);
+
         let profile = crate::desktop::detect(&cfg);
         let mut cursor_was_active = false;
         if r.effective.hide_cursor {
@@ -570,18 +574,27 @@ impl Core {
         let marker = Marker {
             current: Current { session_id: session_id.clone(), id: id.into(), title: r.game.title.clone(), unit: unit.clone(), screen: screen.clone(), started_at: started.to_rfc3339() },
             cursor_was_active,
+            inputplumber,
             post_command: plan.post_command.clone(),
             cwd: plan.cwd.to_string_lossy().to_string(),
             env: plan.env.clone(),
             hook_env: base.vars.clone(),
         };
-        write_marker(&marker)?;
+        if let Err(e) = write_marker(&marker) {
+            if inputplumber {
+                let _ = tokio::task::spawn_blocking(crate::inputplumber::release).await;
+            }
+            return Err(e);
+        }
         tracing::info!("launch {id}: {}", plan.command_line());
         let stop_post = vec![paths::self_exe().to_string_lossy().to_string(), "session-end".into(), id.into(), session_id.clone()];
         let budget: u64 = 60 + self.hook_modules(&r, "session-end").await.iter().map(|m| m.timeout().as_secs()).sum::<u64>();
         let scope = self.scope.lock().unwrap().clone();
         if let Err(e) = launcher::spawn(&plan, &stop_post, &passthrough_env(), budget, scope.as_deref()).await {
             remove_marker();
+            if inputplumber {
+                let _ = tokio::task::spawn_blocking(crate::inputplumber::release).await;
+            }
             if r.effective.hide_cursor {
                 if let Some(conn) = self.shell_conn().await {
                     crate::desktop::cursor_extension_restore(&conn, profile, &cfg.desktop.cursor_extension, cursor_was_active).await;
@@ -650,6 +663,9 @@ impl Core {
         remove_marker();
 
         if let Some(m) = &marker {
+            if m.inputplumber {
+                let _ = tokio::task::spawn_blocking(crate::inputplumber::release).await;
+            }
             if r.effective.hide_cursor {
                 if let Some(conn) = self.shell_conn().await {
                     crate::desktop::cursor_extension_restore(&conn, crate::desktop::detect(&cfg), &cfg.desktop.cursor_extension, m.cursor_was_active).await;
@@ -960,7 +976,8 @@ impl Core {
         let cfg = self.config.read().await.clone();
         let modules = self.modules.read().await.clone();
         let conn = if crate::desktop::detect(&cfg) == crate::desktop::Profile::Gnome { self.shell_conn().await } else { None };
-        serde_json::to_string(&crate::doctor::run(&cfg, &modules, conn.as_ref()).await).unwrap_or_default()
+        let runners: Vec<String> = self.games.read().await.iter().filter(|g| g.game.removed_at.is_empty()).map(|g| g.effective.runner.clone()).collect();
+        serde_json::to_string(&crate::doctor::run(&cfg, &modules, conn.as_ref(), &runners).await).unwrap_or_default()
     }
 
     // ----- sources -----

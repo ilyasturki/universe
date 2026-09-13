@@ -12,12 +12,10 @@ pub struct Check {
 }
 
 fn which(bin: &str) -> Option<String> {
-    let mut dirs: Vec<std::path::PathBuf> = std::env::var_os("PATH").map(|p| std::env::split_paths(&p).collect()).unwrap_or_default();
-    dirs.push("/run/wrappers/bin".into());
-    dirs.iter().map(|d| d.join(bin)).find(|p| p.is_file()).map(|p| p.to_string_lossy().into())
+    crate::runners::on_path(bin).map(|p| p.to_string_lossy().into())
 }
 
-pub async fn run(config: &Config, modules: &[Module], shell: Option<&zbus::Connection>) -> Vec<Check> {
+pub async fn run(config: &Config, modules: &[Module], shell: Option<&zbus::Connection>, game_runners: &[String]) -> Vec<Check> {
     let mut out = Vec::new();
     let mut push = |check: &str, ok: bool, detail: String, module: &str| out.push(Check { check: check.into(), ok, detail, module: module.into() });
 
@@ -54,6 +52,26 @@ pub async fn run(config: &Config, modules: &[Module], shell: Option<&zbus::Conne
     }
     push("recordings_root", config.recordings_root().is_dir(), config.recordings_root().to_string_lossy().into(), "core");
     push("journal_root", config.journal_root().is_dir(), config.journal_root().to_string_lossy().into(), "core");
+    let used: std::collections::BTreeSet<&String> = game_runners.iter().chain(config.runners.keys()).collect();
+    let mut inputplumber_wanted = false;
+    for id in used {
+        let Some(spec) = crate::runners::spec(id) else {
+            push(&format!("runner-{id}"), false, "not a runner Universe ships".into(), "runners");
+            continue;
+        };
+        if spec.kind == crate::runners::Kind::Linux || spec.kind == crate::runners::Kind::Proton {
+            continue;
+        }
+        let located = crate::runners::locate(spec, config);
+        let ok = !located.program.is_empty() && std::path::Path::new(&located.program).is_file();
+        push(&format!("runner-{}", spec.id), ok, if ok { format!("{} ({})", located.program, located.source) } else { format!("{} not found: install it or set runners.{}.exe", spec.name, spec.id) }, "runners");
+        inputplumber_wanted |= spec.kind == crate::runners::Kind::Emulator && spec.merged_options(config, None).get("inputplumber").and_then(|v| v.as_bool()).unwrap_or(false);
+    }
+    if inputplumber_wanted {
+        let installed = crate::inputplumber::installed();
+        let reachable = installed && crate::inputplumber::reachable();
+        push("inputplumber", reachable, if reachable { "daemon reachable".into() } else if installed { "daemon not reachable on the system bus (services.inputplumber)".into() } else { "inputplumber not on PATH; emulators run on the raw pads (runners.<id>.inputplumber = false to stop asking)".into() }, "runners");
+    }
     push("key-sgdb", config.api_key("sgdb").is_some(), if config.api_key("sgdb").is_some() { "present".into() } else { format!("missing ({})", config.keys.sgdb_file) }, "media");
     push("key-rawg", config.api_key("rawg").is_some(), if config.api_key("rawg").is_some() { "present".into() } else { format!("missing ({})", config.keys.rawg_file) }, "media");
     for m in modules {

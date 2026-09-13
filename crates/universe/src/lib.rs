@@ -1,6 +1,7 @@
 pub mod config;
 pub mod controller;
 pub mod game;
+pub mod inputplumber;
 pub mod index;
 pub mod journal;
 pub mod launcher;
