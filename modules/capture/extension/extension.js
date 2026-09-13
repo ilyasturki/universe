@@ -66,8 +66,14 @@ export default class UniverseExtension extends Extension {
     }
 
     // The shell's own media-key OSD, on every monitor; org.gnome.Shell.ShowOSD refuses callers other
-    // than gsd. A negative level draws no bar, an empty label none.
+    // than gsd. A negative level draws no bar, an empty label none. Shell 50 renamed show(-1, …) showAll.
     ShowOSD(icon, label, level) {
-        Main.osdWindowManager.show(-1, Gio.ThemedIcon.new(icon), label || null, level < 0 ? null : level);
+        const manager = Main.osdWindowManager;
+        const gicon = Gio.ThemedIcon.new(icon);
+        const bar = level < 0 ? null : level;
+        if (manager.showAll)
+            manager.showAll(gicon, label || null, bar, 1);
+        else
+            manager.show(-1, gicon, label || null, bar, 1);
     }
 }
