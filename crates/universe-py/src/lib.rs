@@ -181,6 +181,9 @@ impl Core {
     fn render_journal(&self, py: Python<'_>, id: String) -> PyResult<String> {
         self.run(py, |c| async move { c.render_journal(&id).await })
     }
+    fn pending_journals_json(&self, py: Python<'_>) -> String {
+        self.run_infallible(py, |c| c.pending_journals_json())
+    }
     fn add_entry(&self, py: Python<'_>, session_id: String, json: String) -> PyResult<()> {
         self.run(py, |c| async move { c.add_entry(&session_id, &json).await })
     }

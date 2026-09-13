@@ -3,19 +3,34 @@ use chrono::{DateTime, Datelike, Local, Timelike};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+/// A journal module that has not written `<sid>.json` this long after its `<sid>.pending.json` is taken for dead.
+const PENDING_TIMEOUT: Duration = Duration::from_secs(30 * 60);
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Entry {
     pub session: String,
     pub game: String,
     pub written_at: String,
+    pub started_at: String,
+    pub ended_at: String,
+    pub duration_s: i64,
     pub lang: String,
     pub title: String,
     pub provider: String,
     pub paragraphs: Vec<String>,
     pub next_up: String,
     pub images: Vec<String>,
+    /// `written` | `pending` | `failed`: the file's kind, never read from its contents
+    pub state: String,
+}
+
+impl Default for Entry {
+    fn default() -> Self {
+        Entry { session: String::new(), game: String::new(), written_at: String::new(), started_at: String::new(), ended_at: String::new(), duration_s: 0, lang: String::new(), title: String::new(), provider: String::new(), paragraphs: vec![], next_up: String::new(), images: vec![], state: "written".into() }
+    }
 }
 
 impl Entry {
@@ -35,30 +50,101 @@ impl Entry {
     }
 }
 
+fn read_json(p: &Path) -> crate::Result<serde_json::Value> {
+    Ok(serde_json::from_str(&std::fs::read_to_string(p)?)?)
+}
+
+fn field(v: &serde_json::Value, key: &str) -> String {
+    v[key].as_str().unwrap_or("").to_string()
+}
+
+/// `<sid>.pending.json` (`{session, game, started_at, provider}`) while a module writes the entry; one older than
+/// `PENDING_TIMEOUT` (by mtime) is listed as failed.
+fn pending_entry(p: &Path, sid: &str) -> crate::Result<Entry> {
+    let v = read_json(p)?;
+    let age = std::fs::metadata(p).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).unwrap_or_default();
+    let timed_out = age > PENDING_TIMEOUT;
+    Ok(Entry {
+        session: sid.into(),
+        game: field(&v, "game"),
+        started_at: field(&v, "started_at"),
+        provider: field(&v, "provider"),
+        paragraphs: if timed_out { vec!["timed out".into()] } else { vec![] },
+        state: if timed_out { "failed" } else { "pending" }.into(),
+        ..Entry::default()
+    })
+}
+
+/// `<sid>.failed.json` (`{session, game, written_at, reason}`): the reason is the entry's one paragraph.
+fn failed_entry(p: &Path, sid: &str) -> crate::Result<Entry> {
+    let v = read_json(p)?;
+    let reason = field(&v, "reason");
+    Ok(Entry { session: sid.into(), game: field(&v, "game"), written_at: field(&v, "written_at"), paragraphs: if reason.is_empty() { vec![] } else { vec![reason] }, state: "failed".into(), ..Entry::default() })
+}
+
+/// Every entry of the directory, the state files included, last session first; a session with a written
+/// entry hides its failed one, a failed one its pending one.
 pub fn read_all(journal_dir: &Path) -> crate::Result<Vec<Entry>> {
-    let mut out = Vec::new();
+    let (mut written, mut failed, mut pending) = (Vec::new(), Vec::new(), Vec::new());
     let rd = match std::fs::read_dir(journal_dir) {
         Ok(r) => r,
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(out),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(written),
         Err(e) => return Err(e.into()),
     };
     for e in rd.flatten() {
         let p = e.path();
-        if p.extension().and_then(|s| s.to_str()) != Some("json") {
+        let Some(name) = p.file_name().and_then(|s| s.to_str()) else { continue };
+        if name.starts_with('.') || !name.ends_with(".json") {
             continue;
         }
-        match std::fs::read_to_string(&p).map_err(crate::Error::from).and_then(|s| serde_json::from_str::<Entry>(&s).map_err(Into::into)) {
-            Ok(mut en) => {
+        let parsed = if let Some(sid) = name.strip_suffix(".pending.json") {
+            pending_entry(&p, sid).map(|en| pending.push(en))
+        } else if let Some(sid) = name.strip_suffix(".failed.json") {
+            failed_entry(&p, sid).map(|en| failed.push(en))
+        } else {
+            read_json(&p).and_then(|v| serde_json::from_value::<Entry>(v).map_err(Into::into)).map(|mut en| {
                 if en.session.is_empty() {
-                    en.session = p.file_stem().map(|s| s.to_string_lossy().into()).unwrap_or_default();
+                    en.session = name.trim_end_matches(".json").to_string();
                 }
-                out.push(en)
-            }
-            Err(err) => tracing::warn!("{}: {err}", p.display()),
+                en.state = "written".into();
+                written.push(en)
+            })
+        };
+        if let Err(err) = parsed {
+            tracing::warn!("{}: {err}", p.display());
+        }
+    }
+    let mut out = written;
+    for en in failed.into_iter().chain(pending) {
+        if !out.iter().any(|w| w.session == en.session) {
+            out.push(en);
         }
     }
     out.sort_by(|a, b| b.session.cmp(&a.session));
     Ok(out)
+}
+
+/// Entries written before the core stamped them get their span from the session they belong to.
+pub fn fill_timing(entries: &mut [Entry], sessions: &HashMap<String, Session>) {
+    for en in entries {
+        let Some(s) = sessions.get(&en.session) else { continue };
+        if en.started_at.is_empty() {
+            en.started_at = s.started_at.clone();
+        }
+        if en.ended_at.is_empty() {
+            en.ended_at = s.ended_at.clone();
+        }
+        if en.duration_s == 0 {
+            en.duration_s = s.duration_s as i64;
+        }
+    }
+}
+
+/// `read_all` with the timing filled from `sessions` and the migration sidecar: the shape every listing serves.
+pub fn load(journal_dir: &Path, sessions: &[Session]) -> Vec<Entry> {
+    let mut entries = read_all(journal_dir).unwrap_or_default();
+    fill_timing(&mut entries, &sessions_for_note(sessions, journal_dir));
+    entries
 }
 
 pub fn write(journal_dir: &Path, entry: &Entry) -> crate::Result<std::path::PathBuf> {
@@ -180,10 +266,10 @@ fn parse_rfc3339(s: &str) -> Option<DateTime<Local>> {
     DateTime::parse_from_rfc3339(s.trim()).ok().map(|t| t.with_timezone(&Local))
 }
 
-fn session_span(session: Option<&Session>, sid: &str) -> (DateTime<Local>, DateTime<Local>, u64) {
-    let start = session.and_then(|s| parse_rfc3339(&s.started_at)).or_else(|| crate::sessions::parse_session_id(sid)).unwrap_or_else(Local::now);
-    let duration = session.map(|s| s.duration_s).unwrap_or(0);
-    let end = session.and_then(|s| parse_rfc3339(&s.ended_at)).unwrap_or_else(|| start + chrono::Duration::seconds(duration as i64));
+fn session_span(session: Option<&Session>, entry: &Entry) -> (DateTime<Local>, DateTime<Local>, u64) {
+    let start = session.and_then(|s| parse_rfc3339(&s.started_at)).or_else(|| parse_rfc3339(&entry.started_at)).or_else(|| crate::sessions::parse_session_id(&entry.session)).unwrap_or_else(Local::now);
+    let duration = session.map(|s| s.duration_s).filter(|d| *d > 0).unwrap_or(entry.duration_s.max(0) as u64);
+    let end = session.and_then(|s| parse_rfc3339(&s.ended_at)).or_else(|| parse_rfc3339(&entry.ended_at)).unwrap_or_else(|| start + chrono::Duration::seconds(duration as i64));
     (start, end, duration)
 }
 
@@ -280,7 +366,7 @@ fn entry_number(entry: &Entry, sessions: &HashMap<String, Session>, entries: &[E
 fn render_block(entry: &Entry, sessions: &HashMap<String, Session>, entries: &[Entry], loc: &Locale) -> String {
     let lab = labels(&entry.lang);
     let session = sessions.get(&entry.session);
-    let (start, end, duration) = session_span(session, &entry.session);
+    let (start, end, duration) = session_span(session, entry);
     let meta = format!("{} · {}–{} · {}", loc.date(&start), fmt_time(&start), fmt_time(&end), fmt_duration(duration));
     let prefix = entry_number(entry, sessions, entries).map(|n| format!("#{n} · ")).unwrap_or_default();
     let head = if entry.title.is_empty() { format!("## {prefix}{meta}") } else { format!("## {prefix}{}\n*{meta}*", entry.title) };
@@ -324,9 +410,10 @@ fn frontmatter(title: &str, body: &str) -> String {
     format!("---\n{}\n---\n\n", lines.join("\n"))
 }
 
-/// The Obsidian note, newest session first; byte for byte what the journal module renders.
+/// The Obsidian note, newest session first; byte for byte what the journal module renders. Pending and failed
+/// entries stay out of it.
 pub fn render_note(title: &str, entries: &[Entry], sessions: &HashMap<String, Session>, loc: &Locale) -> String {
-    let mut entries: Vec<Entry> = entries.to_vec();
+    let mut entries: Vec<Entry> = entries.iter().filter(|e| e.state == "written").cloned().collect();
     entries.sort_by(|a, b| b.session.cmp(&a.session));
     let lab = labels(entries.first().map(|e| e.lang.as_str()).unwrap_or("en"));
     let blocks: Vec<String> = entries.iter().map(|e| render_block(e, sessions, &entries, loc)).collect();
@@ -412,13 +499,13 @@ mod tests {
         Entry {
             session: session.into(),
             game: "sample".into(),
-            written_at: String::new(),
             lang: lang.into(),
             title: title.into(),
             provider: provider.into(),
             paragraphs: paragraphs.iter().map(|s| s.to_string()).collect(),
             next_up: next_up.into(),
             images: images.iter().map(|s| s.to_string()).collect(),
+            ..Entry::default()
         }
     }
 
@@ -519,8 +606,48 @@ You reached the title screen.
 
     #[test]
     fn note_matches_the_module_renderer() {
-        let (entries, sessions) = sample();
+        let (mut entries, sessions) = sample();
         assert_eq!(render_note("Sample: The Game", &entries, &sessions, &Locale::posix()), MODULE_NOTE);
+        entries.push(Entry { session: "20260401-100000".into(), state: "pending".into(), ..Entry::default() });
+        entries.push(Entry { session: "20260402-100000".into(), state: "failed".into(), paragraphs: vec!["timed out".into()], ..Entry::default() });
+        assert_eq!(render_note("Sample: The Game", &entries, &sessions, &Locale::posix()), MODULE_NOTE, "state files never reach the note");
+    }
+
+    #[test]
+    fn entry_timing_from_the_session_then_its_own_stamps() {
+        let (mut entries, sessions) = sample();
+        entries.push(Entry { session: "20260501-200000".into(), title: "Stamped".into(), started_at: "2026-05-01T20:00:00+02:00".into(), ended_at: "2026-05-01T20:45:00+02:00".into(), duration_s: 2700, ..Entry::default() });
+        fill_timing(&mut entries, &sessions);
+        assert_eq!(entries[0].started_at, "2026-03-01T21:00:00+01:00");
+        assert_eq!(entries[0].ended_at, "2026-03-01T22:30:00+01:00");
+        assert_eq!(entries[0].duration_s, 5400);
+        assert_eq!(entries[5].duration_s, 2700, "an entry's own stamps stay");
+        let md = render_note("Sample", &entries, &sessions, &Locale::posix());
+        assert!(md.contains("## Stamped\n*05/01/26 · 20:00–20:45 · 45 min*"), "{md}");
+    }
+
+    #[test]
+    fn state_files_list_as_entries() {
+        let dir = tempfile::tempdir().unwrap();
+        let journal_dir = dir.path().join("journal");
+        std::fs::create_dir_all(&journal_dir).unwrap();
+        write(&journal_dir, &Entry { session: "20260910-100000".into(), title: "Written".into(), ..Entry::default() }).unwrap();
+        std::fs::write(journal_dir.join("20260910-110000.pending.json"), r#"{"session":"20260910-110000","game":"x","started_at":"2026-09-10T11:00:00+02:00","provider":"codex"}"#).unwrap();
+        std::fs::write(journal_dir.join("20260910-120000.failed.json"), r#"{"session":"20260910-120000","game":"x","written_at":"2026-09-10T12:30:00+02:00","reason":"codex: rate limited"}"#).unwrap();
+        std::fs::write(journal_dir.join("20260910-120000.pending.json"), r#"{"session":"20260910-120000","game":"x"}"#).unwrap();
+        std::fs::write(journal_dir.join("20260910-130000.pending.json"), r#"{"session":"20260910-130000","game":"x","started_at":"2026-09-10T13:00:00+02:00"}"#).unwrap();
+        let stale = std::fs::OpenOptions::new().write(true).open(journal_dir.join("20260910-130000.pending.json")).unwrap();
+        stale.set_modified(std::time::SystemTime::now() - Duration::from_secs(31 * 60)).unwrap();
+        std::fs::write(journal_dir.join(".game-memory.json"), "{}").unwrap();
+        std::fs::write(journal_dir.join("notes.txt"), "x").unwrap();
+        let all = read_all(&journal_dir).unwrap();
+        let states: Vec<(&str, &str)> = all.iter().map(|e| (e.session.as_str(), e.state.as_str())).collect();
+        assert_eq!(states, vec![("20260910-130000", "failed"), ("20260910-120000", "failed"), ("20260910-110000", "pending"), ("20260910-100000", "written")]);
+        assert_eq!(all[0].paragraphs, vec!["timed out"]);
+        assert_eq!(all[1].paragraphs, vec!["codex: rate limited"]);
+        assert_eq!(all[1].written_at, "2026-09-10T12:30:00+02:00");
+        assert_eq!((all[2].started_at.as_str(), all[2].provider.as_str(), all[2].title.as_str()), ("2026-09-10T11:00:00+02:00", "codex", ""));
+        assert!(all[2].paragraphs.is_empty());
     }
 
     #[test]

@@ -49,7 +49,7 @@ impl Resolved {
         v["effective"] = serde_json::to_value(&self.effective).unwrap();
         v["installed"] = serde_json::Value::Bool(self.game.is_installed());
         v["removed"] = serde_json::Value::Bool(!self.game.removed_at.is_empty());
-        v["journal_count"] = serde_json::json!(self.journal.len());
+        v["journal_count"] = serde_json::json!(self.journal.iter().filter(|e| e.state == "written").count());
         v["recording_count"] = serde_json::json!(self.sessions.iter().filter(|s| s.recording.is_some()).count());
         v["dir"] = serde_json::json!(self.game.dir());
         v
@@ -109,7 +109,7 @@ pub fn resolve(game: Game, config: &Config, modules: &[crate::modules::Module]) 
     let sessions = sessions::read(&game.sessions_path()).unwrap_or_default();
     let stats = sessions::stats(&sessions);
     let (media, screenshots) = media_of(&game, &config.overrides_dir());
-    let journal = crate::journal::read_all(&game.journal_dir()).unwrap_or_default();
+    let journal = crate::journal::load(&game.journal_dir(), &sessions);
     let mut mods = BTreeMap::new();
     for m in modules.iter().filter(|m| m.active() && m.is_hooks()) {
         mods.insert(m.id().to_string(), m.merged_settings(config, Some(&game)));

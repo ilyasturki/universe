@@ -704,13 +704,27 @@ impl Core {
         let id = if entry.game.is_empty() { self.game_of_session(session_id).await } else { Some(entry.game.clone()) }.ok_or_else(|| Error::NotFound(format!("session {session_id}")))?;
         let r = self.get(&id).await?;
         entry.game = id.clone();
-        crate::journal::write(&r.game.journal_dir(), &entry)?;
+        let journal_dir = r.game.journal_dir();
+        crate::journal::fill_timing(std::slice::from_mut(&mut entry), &crate::journal::sessions_for_note(&r.sessions, &journal_dir));
+        crate::journal::write(&journal_dir, &entry)?;
         self.reload_game(&id).await
     }
 
+    /// Read from disk on every call: a pending entry's timeout is judged now, not at the last reload.
     pub async fn journal_json(&self, id: &str) -> Result<String> {
         let r = self.get(id).await?;
-        Ok(serde_json::to_string(&r.journal)?)
+        Ok(serde_json::to_string(&crate::journal::load(&r.game.journal_dir(), &r.sessions))?)
+    }
+
+    pub async fn pending_journals_json(&self) -> String {
+        let games = self.games.read().await;
+        let mut out = Vec::new();
+        for r in games.iter() {
+            for e in crate::journal::read_all(&r.game.journal_dir()).unwrap_or_default().into_iter().filter(|e| e.state == "pending") {
+                out.push(serde_json::json!({"game": r.game.id, "title": r.game.title, "session": e.session, "started_at": e.started_at}));
+            }
+        }
+        serde_json::Value::Array(out).to_string()
     }
 
     pub async fn render_journal(&self, id: &str) -> Result<String> {

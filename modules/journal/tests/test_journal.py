@@ -110,14 +110,22 @@ def test_dhash_and_review_normalization():
 
 # --- the stub pipeline, end to end ------------------------------------------------------
 
+SHOT = "20260911-120130.png"
+
+
 @pytest.fixture
 def fakebin(tmp_path):
     bindir = tmp_path / "fakebin"
     bindir.mkdir()
     write_shim(bindir / "universe", f'''printf "%s\\n" "$@" > "{bindir}/universe.args"
+cat "$JOURNAL_DIR"/*.pending.json > "{bindir}/pending-at-add.json" 2>/dev/null
 if [ "${{FAKE_UNIVERSE_EXIT:-0}}" != "0" ]; then echo "${{FAKE_UNIVERSE_STDERR:-universe: io: No such file or directory}}" >&2; exit "${{FAKE_UNIVERSE_EXIT}}"; fi
 exit 0''')
     return bindir
+
+
+def fake_codex(fakebin, stderr):
+    write_shim(fakebin / "codex", f'echo run >> "{fakebin}/codex.calls"\necho "{stderr}" >&2\nexit 1')
 
 
 def run_process(tmp_path, fakebin, settings, extra_env=None, recording=None):
@@ -137,6 +145,31 @@ def run_process(tmp_path, fakebin, settings, extra_env=None, recording=None):
     env.update(extra_env or {})
     res = subprocess.run([sys.executable, str(BIN_DIR / "process")], env=env, capture_output=True, text=True)
     return res, journal_dir
+
+
+def add_shot(tmp_path, name=SHOT):
+    att = tmp_path / "games" / "testgame" / "journal" / "attachments"
+    att.mkdir(parents=True, exist_ok=True)
+    (att / name).write_bytes(b"png")  # never decoded: selection keys on the name
+
+
+def state_files(journal_dir):
+    return sorted(p.name for p in journal_dir.iterdir() if p.name.endswith((".pending.json", ".failed.json", ".tmp")))
+
+
+def pending_seen_by_core(fakebin):
+    pending = json.loads((fakebin / "pending-at-add.json").read_text())
+    assert pending == {"session": SID, "game": "testgame", "started_at": pending["started_at"], "provider": "stub"}
+    assert datetime.fromisoformat(pending["started_at"]).tzinfo is not None
+    return pending
+
+
+def failed_file(journal_dir):
+    failed = json.loads((journal_dir / f"{SID}.failed.json").read_text())
+    assert failed == {"session": SID, "game": "testgame", "written_at": failed["written_at"], "reason": failed["reason"]}
+    assert datetime.fromisoformat(failed["written_at"]).tzinfo is not None
+    assert state_files(journal_dir) == [f"{SID}.failed.json"]
+    return failed["reason"]
 
 
 @needs_ffmpeg
@@ -163,6 +196,8 @@ def test_stub_pipeline_writes_entry_note_and_memory(tmp_path, fakebin):
     assert [p for p in entry["paragraphs"] if p.startswith("- ")] == ["- **Main quest:** Reached the first checkpoint.", "- **Exploration:** Looked at every image, all of them."]
     assert entry["next_up"] == "Resume at the first checkpoint and keep going."
     assert entry["written_at"][:10] == datetime.now().strftime("%Y-%m-%d") and entry["written_at"][19] in "+-"
+    assert datetime.fromisoformat(entry["started_at"]) == datetime.fromisoformat("2026-09-11T12:00:00+02:00")
+    assert datetime.fromisoformat(entry["ended_at"]) == datetime.fromisoformat("2026-09-11T12:03:20+02:00") and entry["duration_s"] == 200
     shots = [i for i in entry["images"] if note.SHOT_IMAGE_RE.search(i)]
     frames = [i for i in entry["images"] if not note.SHOT_IMAGE_RE.search(i)]
     assert shots == ["attachments/20260911-120130.png", "attachments/20260911-120245.png"]
@@ -173,6 +208,8 @@ def test_stub_pipeline_writes_entry_note_and_memory(tmp_path, fakebin):
     args = (fakebin / "universe.args").read_text().splitlines()
     assert args[:2] == ["journal-add", SID]
     assert json.loads(args[2]) == entry
+    pending_seen_by_core(fakebin)
+    assert state_files(journal_dir) == []
 
     memory = json.loads((tmp_path / "data" / "memory" / "testgame.json").read_text())
     assert memory["profile"] == "arcade" and memory["language"] == "en" and "Stub Hero" in memory["entities"]["characters"]
@@ -189,35 +226,87 @@ def test_stub_pipeline_writes_entry_note_and_memory(tmp_path, fakebin):
     # a second run finds the entry and does nothing
     res2, _ = run_process(tmp_path, fakebin, {}, {"FAKE_UNIVERSE_EXIT": "1"}, recording=rec)
     assert res2.returncode == 0 and "already exists" in res2.stderr
-    assert note_path.read_text() == text
+    assert note_path.read_text() == text and state_files(journal_dir) == []
 
 
 def test_stub_pipeline_hands_off_to_the_core(tmp_path, fakebin):
+    add_shot(tmp_path)
     res, journal_dir = run_process(tmp_path, fakebin, {"markdown_export": False})
     assert res.returncode == 0, res.stderr
     assert not (journal_dir / f"{SID}.json").exists()
     assert "journal-add" in res.stderr and not (tmp_path / "root").exists()
     entry = json.loads((fakebin / "universe.args").read_text().splitlines()[2])
-    assert entry["provider"] == "none" and entry["images"] == [] and entry["title"] == ""
-    assert entry["paragraphs"] == ["This session’s recording holds no picture and no screenshot covers it, so there is nothing to summarize."]
+    assert validate_entry(entry) == []
+    assert entry["provider"] == "stub" and entry["images"] == [f"attachments/{SHOT}"] and entry["title"] == "Stub session of Test Game: Redux"
+    assert datetime.fromisoformat(entry["started_at"]) == datetime.fromisoformat("2026-09-11T12:00:00+02:00")
+    assert datetime.fromisoformat(entry["ended_at"]) == datetime.fromisoformat("2026-09-11T12:03:20+02:00") and entry["duration_s"] == 200
+    pending_seen_by_core(fakebin)
+    assert state_files(journal_dir) == []
 
 
-def test_core_rejection_writes_nothing(tmp_path, fakebin):
+def test_no_recording_and_no_screenshot_writes_nothing(tmp_path, fakebin):
+    res, journal_dir = run_process(tmp_path, fakebin, {})
+    assert res.returncode == 0, res.stderr
+    assert "nothing to journal" in res.stderr
+    assert not (fakebin / "universe.args").exists() and not (tmp_path / "root").exists()
+    assert list(journal_dir.iterdir()) == []
+
+
+def test_core_rejection_marks_the_session_failed(tmp_path, fakebin):
+    add_shot(tmp_path)
     res, journal_dir = run_process(tmp_path, fakebin, {}, {"FAKE_UNIVERSE_EXIT": "1", "FAKE_UNIVERSE_STDERR": "universe: invalid: bad"})
     assert res.returncode == 1 and not (journal_dir / f"{SID}.json").exists()
     assert not (tmp_path / "data" / "memory").exists() and not (tmp_path / "root").exists()
+    assert failed_file(journal_dir) == "the core rejected the entry"
+
+
+def test_codex_quota_marks_the_session_failed_and_defers(tmp_path, fakebin):
+    add_shot(tmp_path)
+    fake_codex(fakebin, "You have hit your usage limit.")
+    res, journal_dir = run_process(tmp_path, fakebin, {"provider": "codex"})
+    assert res.returncode == 75 and "usage limit reached" in res.stderr
+    assert not (fakebin / "universe.args").exists() and (fakebin / "codex.calls").read_text() == "run\n"
+    assert failed_file(journal_dir) == "codex quota reached"
+    assert (tmp_path / "data" / "codex-limit.json").exists()
+
+    # while the limit holds a rerun defers without calling codex, and the failed file is rewritten
+    (journal_dir / f"{SID}.failed.json").write_text("{}")
+    res, _ = run_process(tmp_path, fakebin, {"provider": "codex"})
+    assert res.returncode == 75 and "deferring" in res.stderr
+    assert (fakebin / "codex.calls").read_text() == "run\n"
+    assert failed_file(journal_dir) == "codex quota reached"
+
+
+def test_model_failure_marks_the_session_failed(tmp_path, fakebin):
+    add_shot(tmp_path)
+    fake_codex(fakebin, "Reconnecting... 5/5")
+    res, journal_dir = run_process(tmp_path, fakebin, {"provider": "codex"})
+    assert res.returncode == 1 and not (fakebin / "universe.args").exists()
+    assert failed_file(journal_dir) == "the model produced no usable entry"
+    assert len((fakebin / "codex.calls").read_text().splitlines()) == providers.RETRIES + 1
+
+
+@needs_ffmpeg
+def test_blank_recording_marks_the_session_failed(tmp_path, fakebin):
+    rec = tmp_path / "rec.mkv"
+    make_mkv(rec, "color=c=black", 60)
+    res, journal_dir = run_process(tmp_path, fakebin, {}, recording=rec)
+    assert res.returncode == 1 and "holds no picture" in res.stderr
+    assert not (fakebin / "universe.args").exists()
+    assert failed_file(journal_dir) == "no images"
 
 
 def test_disabled_and_forced_language(tmp_path, fakebin):
+    add_shot(tmp_path)
     res, journal_dir = run_process(tmp_path, fakebin, {"enabled": False})
-    assert res.returncode == 0 and not (fakebin / "universe.args").exists()
+    assert res.returncode == 0 and not (fakebin / "universe.args").exists() and state_files(journal_dir) == []
     res, journal_dir = run_process(tmp_path, fakebin, {"language": "fr"}, {"FAKE_UNIVERSE_EXIT": "1"})
     assert res.returncode == 0, res.stderr
     entry = json.loads((journal_dir / f"{SID}.json").read_text())
-    assert entry["lang"] == "fr" and entry["paragraphs"][0].startswith("L'enregistrement de cette session est vide")
+    assert entry["lang"] == "fr" and entry["images"] == [f"attachments/{SHOT}"]
     text = (tmp_path / "root" / "testgame" / "Test Game Redux.md").read_text()
-    assert "# Journal : Test Game: Redux\n\n## 09/11/26 · 12:00–12:03 · 3 min\n<!-- session:" in text
-    assert "*L'enregistrement de cette session est vide" in text
+    assert "# Journal : Test Game: Redux\n\n## Stub session of Test Game: Redux\n*09/11/26 · 12:00–12:03 · 3 min*\n<!-- session:" in text
+    assert "\n**Reprise :** Resume at the first checkpoint and keep going.\n" in text
 
 
 # --- render <-> migrate round trip ------------------------------------------------------------

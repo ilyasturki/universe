@@ -554,6 +554,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         }
         Cmd::Status => {
             let cur = core.current_json().await;
+            let pending = parse_json(&core.pending_journals_json().await);
             let list = parse_json(&core.list_json().await);
             let mut recent: Vec<Value> = Vec::new();
             for g in list.as_array().cloned().unwrap_or_default() {
@@ -563,10 +564,10 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     recent.push(sess);
                 }
             }
-            recent.sort_by(|a, b| s(b, "ended_at").cmp(&s(a, "ended_at")));
+            recent.sort_by_key(|r| std::cmp::Reverse(s(r, "ended_at")));
             recent.truncate(10);
             if json {
-                print_json(&serde_json::json!({"current": if cur.is_empty() { Value::Null } else { parse_json(&cur) }, "recent": recent}));
+                print_json(&serde_json::json!({"current": if cur.is_empty() { Value::Null } else { parse_json(&cur) }, "recent": recent, "pending_journals": pending}));
                 return Ok(());
             }
             if cur.is_empty() {
@@ -574,6 +575,9 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             } else {
                 let c = parse_json(&cur);
                 println!("{} {} · session {} · {} · since {}", "running".green(), s(&c, "title"), s(&c, "session_id"), s(&c, "unit"), when(&s(&c, "started_at"), &loc));
+            }
+            for p in pending.as_array().cloned().unwrap_or_default() {
+                println!("{} writing {}… (session {})", "journal:".yellow(), s(&p, "title"), s(&p, "session"));
             }
             let mut t = table(&["Session", "Game", "Duration", "Source", "Recording"]);
             for r in recent {
@@ -728,7 +732,14 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 return Ok(());
             }
             for e in list.as_array().cloned().unwrap_or_default() {
-                println!("{} {} {}", s(&e, "session").dimmed(), s(&e, "title").bold(), format!("[{}]", s(&e, "lang")).dimmed());
+                let state = s(&e, "state");
+                let tag = match state.as_str() {
+                    "pending" => "writing…".yellow().to_string(),
+                    "failed" => "failed".red().to_string(),
+                    _ => format!("[{}]", s(&e, "lang")).dimmed().to_string(),
+                };
+                let duration = e["duration_s"].as_u64().filter(|d| *d > 0).map(|d| fmt_duration(d).dimmed().to_string()).unwrap_or_default();
+                println!("{} {} {} {}", s(&e, "session").dimmed(), s(&e, "title").bold(), tag, duration);
                 for p in e["paragraphs"].as_array().cloned().unwrap_or_default() {
                     println!("  {}", p.as_str().unwrap_or(""));
                 }

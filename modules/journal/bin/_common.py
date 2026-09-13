@@ -139,13 +139,13 @@ def game_note_name(title):
 # --- languages and labels -------------------------------------------------------
 
 LABELS = {
-    "fr": {"journal": "Journal", "recording": "Enregistrement", "next": "Reprise", "frames": "Images extraites de l'enregistrement", "no_images": "L'enregistrement de cette session est vide et aucune capture ne la couvre : il n'y a rien à résumer.", "colon": " :"},
-    "en": {"journal": "Journal", "recording": "Recording", "next": "Next up", "frames": "Frames from the recording", "no_images": "This session’s recording holds no picture and no screenshot covers it, so there is nothing to summarize.", "colon": ":"},
-    "es": {"journal": "Diario", "recording": "Grabación", "next": "Retomar", "frames": "Imágenes extraídas de la grabación", "no_images": "La grabación de esta sesión no tiene imagen y ninguna captura la cubre, así que no hay nada que resumir.", "colon": ":"},
-    "de": {"journal": "Journal", "recording": "Aufnahme", "next": "Weiter", "frames": "Bilder aus der Aufnahme", "no_images": "Die Aufnahme dieser Sitzung enthält kein Bild und kein Screenshot deckt sie ab, es gibt also nichts zusammenzufassen.", "colon": ":"},
-    "it": {"journal": "Diario", "recording": "Registrazione", "next": "Ripresa", "frames": "Immagini estratte dalla registrazione", "no_images": "La registrazione di questa sessione non ha immagini e nessuna cattura la copre, quindi non c’è nulla da riassumere.", "colon": ":"},
-    "pt": {"journal": "Diário", "recording": "Gravação", "next": "Retomar", "frames": "Imagens extraídas da gravação", "no_images": "A gravação desta sessão não tem imagem e nenhuma captura a cobre, portanto não há nada a resumir.", "colon": ":"},
-    "ja": {"journal": "日誌", "recording": "録画", "next": "次回", "frames": "録画から抽出した画像", "no_images": "このセッションの録画に映像がなく、これを補うスクリーンショットもないため、まとめる内容がありません。", "colon": "："},
+    "fr": {"journal": "Journal", "recording": "Enregistrement", "next": "Reprise", "frames": "Images extraites de l'enregistrement", "colon": " :"},
+    "en": {"journal": "Journal", "recording": "Recording", "next": "Next up", "frames": "Frames from the recording", "colon": ":"},
+    "es": {"journal": "Diario", "recording": "Grabación", "next": "Retomar", "frames": "Imágenes extraídas de la grabación", "colon": ":"},
+    "de": {"journal": "Journal", "recording": "Aufnahme", "next": "Weiter", "frames": "Bilder aus der Aufnahme", "colon": ":"},
+    "it": {"journal": "Diario", "recording": "Registrazione", "next": "Ripresa", "frames": "Immagini estratte dalla registrazione", "colon": ":"},
+    "pt": {"journal": "Diário", "recording": "Gravação", "next": "Retomar", "frames": "Imagens extraídas da gravação", "colon": ":"},
+    "ja": {"journal": "日誌", "recording": "録画", "next": "次回", "frames": "録画から抽出した画像", "colon": "："},
 }
 JOURNAL_LANGUAGES = list(LABELS)
 
@@ -226,6 +226,7 @@ def session_span(session, sid):
 # --- entries ---------------------------------------------------------------------
 
 ENTRY_KEYS = ("session", "game", "written_at", "lang", "title", "provider", "paragraphs", "next_up", "images")
+OPTIONAL_ENTRY_KEYS = ("started_at", "ended_at", "duration_s")
 
 
 def validate_entry(entry):
@@ -233,15 +234,17 @@ def validate_entry(entry):
     for k in ENTRY_KEYS:
         if k not in entry:
             errors.append(f"missing {k}")
-    for k in ("session", "game", "written_at", "lang", "title", "provider", "next_up"):
+    for k in ("session", "game", "written_at", "lang", "title", "provider", "next_up", "started_at", "ended_at"):
         if k in entry and not isinstance(entry[k], str):
             errors.append(f"{k} must be a string")
     for k in ("paragraphs", "images"):
         if k in entry and (not isinstance(entry[k], list) or not all(isinstance(x, str) for x in entry[k])):
             errors.append(f"{k} must be a list of strings")
+    if "duration_s" in entry and (isinstance(entry["duration_s"], bool) or not isinstance(entry["duration_s"], int)):
+        errors.append("duration_s must be an integer")
     if "session" in entry and not SESSION_ID_RE.match(str(entry["session"])):
         errors.append("session must be YYYYMMDD-HHMMSS")
-    extra = set(entry) - set(ENTRY_KEYS)
+    extra = set(entry) - set(ENTRY_KEYS) - set(OPTIONAL_ENTRY_KEYS)
     if extra:
         errors.append(f"unexpected keys: {sorted(extra)}")
     return errors

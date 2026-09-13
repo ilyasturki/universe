@@ -5,19 +5,27 @@ import os
 import shutil
 import sys
 import tempfile
+import traceback
 from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import images as img  # noqa: E402
 import prompt as pr  # noqa: E402
 import providers  # noqa: E402
-from _common import (add_entry_via_core, fmt_date, fmt_time, journal_lang, labels, load_settings, log,  # noqa: E402
+from _common import (add_entry_via_core, fmt_date, fmt_time, journal_lang, load_settings, log,  # noqa: E402
                      parse_rfc3339, parse_session_id, read_entries, read_sessions, rfc3339_local, sanitize_game_name,
                      use_system_locale, validate_entry, write_entry_file)
 from note import write_note  # noqa: E402
 
 EX_TEMPFAIL = 75
 LIMIT_FILE = "codex-limit.json"
+
+
+class Failed(Exception):
+    def __init__(self, reason, code=1):
+        super().__init__(reason)
+        self.reason = reason
+        self.code = code
 
 
 def env(name, default=""):
@@ -41,6 +49,31 @@ def write_json(path, data):
     os.replace(tmp, path)
 
 
+def remove(path):
+    try:
+        os.remove(path)
+    except OSError:
+        pass
+
+
+def now_rfc3339():
+    return rfc3339_local(datetime.now().astimezone())
+
+
+def state_path(journal_dir, sid, state):
+    return os.path.join(journal_dir, f"{sid}.{state}.json")
+
+
+def mark_pending(journal_dir, sid, game_id, provider):
+    write_json(state_path(journal_dir, sid, "pending"), {"session": sid, "game": game_id, "started_at": now_rfc3339(), "provider": provider})
+    remove(state_path(journal_dir, sid, "failed"))
+
+
+def mark_failed(journal_dir, sid, game_id, reason):
+    write_json(state_path(journal_dir, sid, "failed"), {"session": sid, "game": game_id, "written_at": now_rfc3339(), "reason": reason})
+    remove(state_path(journal_dir, sid, "pending"))
+
+
 def memory_path(data_dir, game_id):
     return os.path.join(data_dir, "memory", f"{game_id}.json")
 
@@ -59,10 +92,7 @@ def active_limit(data_dir):
     until = parse_rfc3339((saved or {}).get("until"))
     if until and until > datetime.now():
         return until
-    try:
-        os.remove(os.path.join(data_dir, LIMIT_FILE))
-    except OSError:
-        pass
+    remove(os.path.join(data_dir, LIMIT_FILE))
     return None
 
 
@@ -111,13 +141,11 @@ def deliver(entry, journal_dir):
     outcome = add_entry_via_core(sid, payload)
     if outcome == "ok":
         log("entry handed to the core via universe journal-add")
-        return True
+        return
     if outcome == "invalid":
-        log("the core rejected the entry; nothing written")
-        return False
+        raise Failed("the core rejected the entry")
     path = write_entry_file(journal_dir, entry)
     log(f"warning: core unavailable, wrote {path} directly")
-    return True
 
 
 def clear_session_frames(attachments, sid):
@@ -139,11 +167,14 @@ def persist_frames(frames, attachments, sid):
     return rels
 
 
-def make_entry(sid, game_id, lang, title, provider, paragraphs, next_up, image_rels):
+def make_entry(sid, game_id, start, end, duration_s, lang, title, provider, paragraphs, next_up, image_rels):
     return {
         "session": sid,
         "game": game_id,
-        "written_at": rfc3339_local(datetime.now().astimezone()),
+        "started_at": rfc3339_local(start),
+        "ended_at": rfc3339_local(end),
+        "duration_s": duration_s,
+        "written_at": now_rfc3339(),
         "lang": journal_lang(lang),
         "title": title or "",
         "provider": provider,
@@ -167,7 +198,6 @@ def main(argv):
         log(f"SESSION_ID {sid!r} is not YYYYMMDD-HHMMSS")
         return 1
     game_id = env("GAME_ID") or env("GAME_SLUG") or sanitize_game_name(env("GAME_TITLE"))
-    title = env("GAME_TITLE") or game_id
     journal_dir = env("JOURNAL_DIR")
     data_dir = env("MODULE_DATA_DIR")
     if not journal_dir or not data_dir:
@@ -176,12 +206,34 @@ def main(argv):
     os.makedirs(journal_dir, exist_ok=True)
     os.makedirs(data_dir, exist_ok=True)
 
-    entry_path = os.path.join(journal_dir, f"{sid}.json")
-    if os.path.exists(entry_path) and not force:
+    if os.path.exists(os.path.join(journal_dir, f"{sid}.json")) and not force:
         log(f"entry for {sid} already exists, nothing to do (--force to regenerate)")
         return 0
 
     provider = str(settings.get("provider") or "codex")
+    mark_pending(journal_dir, sid, game_id, provider)
+    reason = "crashed"
+    try:
+        journal_session(settings, sid, start_id, game_id, provider, journal_dir, data_dir)
+        reason = None
+    except Failed as e:
+        log(f"no entry for {sid}: {e.reason}")
+        reason = e.reason
+        return e.code
+    except Exception as e:
+        reason = f"error: {e}"
+        raise
+    finally:
+        pending = state_path(journal_dir, sid, "pending")
+        if reason is None:
+            remove(pending)
+        elif os.path.exists(pending):
+            mark_failed(journal_dir, sid, game_id, reason)
+    return 0
+
+
+def journal_session(settings, sid, start_id, game_id, provider, journal_dir, data_dir):
+    title = env("GAME_TITLE") or game_id
     forced_lang = None if str(settings.get("language") or "auto") == "auto" else journal_lang(settings["language"])
     max_images = int(settings["max_images"])
     recording = env("RECORDING_PATH")
@@ -196,23 +248,26 @@ def main(argv):
     if not duration_s:
         duration_s = max(0, int((end - start).total_seconds()))
 
+    attachments = os.path.join(journal_dir, "attachments")
+    log(f"journaling {title!r} ({game_id}) session {sid}, provider {provider}")
+    shots = img.select_screenshots(attachments, start, end)
+    if not recording and not shots:
+        log("no recording and no screenshot for this session; nothing to journal")
+        return
+    log(f"{len(shots)} screenshot(s) in the session window")
+
+    if provider == "codex":
+        until = active_limit(data_dir)
+        if until:
+            log(f"codex usage limit in effect until {fmt_date(until)} {fmt_time(until)}; deferring, no work done")
+            raise Failed("codex quota reached", EX_TEMPFAIL)
+
     sessions = read_sessions(journal_dir)
     sessions.setdefault(sid, {"session": sid, "game": game_id, "started_at": rfc3339_local(start), "ended_at": rfc3339_local(end),
                               "duration_s": duration_s, "source": "hook-env", "recording": recording or None})
     entries = read_entries(journal_dir)
     memory = read_memory(data_dir, game_id, legacy_dir)
     known_lang = forced_lang or (memory or {}).get("language") or (entries[0].get("lang") if entries else None)
-    attachments = os.path.join(journal_dir, "attachments")
-    log(f"journaling {title!r} ({game_id}) session {sid}, provider {provider}")
-
-    if provider == "codex":
-        until = active_limit(data_dir)
-        if until:
-            log(f"codex usage limit in effect until {fmt_date(until)} {fmt_time(until)}; deferring, no work done")
-            return EX_TEMPFAIL
-
-    shots = img.select_screenshots(attachments, start, end)
-    log(f"{len(shots)} screenshot(s) in the session window")
 
     work_root = os.path.join(data_dir, "work")
     os.makedirs(work_root, exist_ok=True)
@@ -230,10 +285,8 @@ def main(argv):
         fed = sorted(img.even_sample(shots, max_images) + frames, key=lambda im: im.t)
 
         if not fed:
-            lang = journal_lang(known_lang)
-            entry = make_entry(sid, game_id, lang, "", "none", [labels(lang)["no_images"]], "", [])
-            log(f"no image for this session ({'the recording holds no picture' if recording else 'no recording'}); writing a placeholder entry")
-            return finish(entry, journal_dir, settings, title, game_id, sessions)
+            log("the recording holds no picture and no screenshot covers the session")
+            raise Failed("no images")
 
         prev = previous_entry_text(entries, sid)
         number, total = play_stats(sessions, entries, sid, duration_s)
@@ -248,11 +301,13 @@ def main(argv):
         except providers.QuotaExceeded as e:
             record_limit(data_dir, e.until)
             log(f"codex usage limit reached; journal paused until {fmt_date(e.until)} {fmt_time(e.until)}")
-            return EX_TEMPFAIL
+            raise Failed("codex quota reached", EX_TEMPFAIL)
+        except Exception as e:
+            traceback.print_exc()
+            raise Failed(f"provider error: {e}")
         result = pr.accept_result(raw)
         if not result:
-            log("the model produced no usable entry; nothing written")
-            return 1
+            raise Failed("the model produced no usable entry")
 
         merged = pr.merge_memory(memory, result["memory"], warn=log)
         lang = forced_lang or journal_lang((merged or {}).get("language") or known_lang)
@@ -260,21 +315,20 @@ def main(argv):
         kept_shots, picked = img.pick_gallery(fed, order, unusable, shots, frames)
         rels = [os.path.relpath(s.file, journal_dir) for s in kept_shots] + persist_frames(picked, attachments, sid)
         paragraphs = pr.paragraphs_from_body(result["body"])
-        entry = make_entry(sid, game_id, lang, result["title"], provider, paragraphs, result["next"], rels)
-        return finish(entry, journal_dir, settings, title, game_id, sessions, memory=merged, data_dir=data_dir)
+        entry = make_entry(sid, game_id, start, end, duration_s, lang, result["title"], provider, paragraphs, result["next"], rels)
     finally:
         shutil.rmtree(work_dir, ignore_errors=True)
+    finish(entry, journal_dir, settings, title, game_id, sessions, merged, data_dir)
 
 
-def finish(entry, journal_dir, settings, title, game_id, sessions, memory=None, data_dir=None):
+def finish(entry, journal_dir, settings, title, game_id, sessions, memory, data_dir):
     errors = validate_entry(entry)
     if errors:
-        log(f"internal error, entry invalid: {errors}")
-        return 1
-    if not deliver(entry, journal_dir):
-        return 1
+        raise Failed(f"internal error, entry invalid: {errors}")
+    deliver(entry, journal_dir)
+    remove(state_path(journal_dir, entry["session"], "pending"))
     log(f"journal entry written{': ' + repr(entry['title']) if entry['title'] else ''}")
-    if memory and data_dir:
+    if memory:
         write_json(memory_path(data_dir, game_id), memory)
     if settings.get("markdown_export", True):
         entries = [e for e in read_entries(journal_dir) if e["session"] != entry["session"]] + [entry]
@@ -283,7 +337,6 @@ def finish(entry, journal_dir, settings, title, game_id, sessions, memory=None, 
             log(f"markdown note {'updated' if changed else 'unchanged'}: {path}")
         except OSError as e:
             log(f"markdown render failed: {e}")
-    return 0
 
 
 if __name__ == "__main__":
