@@ -35,9 +35,9 @@ One context property, `api`:
 | `api.allGames` | the library model |
 | `api.collections` | collections, one per platform |
 | `api.memory` | `get`/`set`/`has`/`unset`, persisted to `$XDG_STATE_HOME/universe/ui-memory.json` |
-| `api.universe` | the client: every core call, plus the signals below |
+| `api.universe` | the client: every core call, plus the signals below. `adoptScope()` and `pendingJournals()` wrap `adopt_scope` and `pending_journals_json`; a core without them gets a log line, not a toast |
 | `api.pad` | `rightX` / `rightY`: the right stick as a value, 0 without a controller |
-| `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller) |
+| `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed`, `--size` and `--screenshot` turn it off) |
 
 A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `playTime`,
@@ -60,15 +60,47 @@ it this way, and any frontend needs the equivalent:
 | Signal | Derived from |
 |---|---|
 | `sessionStarted` | a successful `launch` |
-| `sessionEnded` | the current-session marker going empty — polled every 2 s while a session is tracked, since systemd owns the game |
+| `sessionEnded` | the current-session marker going empty — polled every 2 s while a session is tracked, since the game is a systemd unit, not a child. `currentSessionChanged` fires first; the theme's running view follows that property, and only the toast and the stats refresh follow the signal |
 | `libraryChanged`, `mediaChanged`, `entryWritten`, `recordingFiled` | a `QFileSystemWatcher` on `games/`, `games/<id>/{,journal,media}` and `state/`, debounced 300 ms |
 | `progress`, `jobFinished` | the job's own callback — install, update, scan and media refresh run on a host thread |
 | `launched`, `launchFailed`, `error` | the call's result |
+
+A frontend decides who owns the game's lifetime. `adopt_scope()`, called once at startup, moves the
+frontend into `universe-launcher-<pid>.scope`; every game it launches from then on is bound to that
+scope and goes down with the frontend, `session-end` included. `host.py` calls `adoptScope()` once
+the client exists — not with `--fake`, nor for `--screenshot` — so closing `universe-ui` closes the
+game; a frontend that never calls it leaves the game to systemd, as `universe play --no-wait` and
+the hooks do. The host also quits cleanly on SIGINT and SIGTERM (a wakeup-fd `QSocketNotifier`
+lets the Python handlers run under the Qt loop) and, with a session running, calls `stop("")`
+before `api.shutdown()`, so `session-end` has run before the scope goes. No confirmation is asked.
 
 Two consequences worth knowing before you design around them. **`launch` blocks on the pre-launch
 hooks** — up to the summed `timeout_s` of every blocking hook, 20 s by default — so it must not run
 on the UI thread if you want the launch animation to keep moving. And **long jobs die with the
 process**: closing the frontend mid-install interrupts it, by design.
+
+## Launch and the running view
+
+`launchGame` raises `ui/LaunchOverlay.qml` over the page: the poster (`ui/LaunchFrame.qml`) fades
+in over `Theme.durLaunch` as the page fades out, holds 450 ms, dips its art to plain ground over
+300 ms — whatever the compositor animates between this window and the splash is then black on
+black — and calls `launch()`. From there the overlay follows `api.universe.currentSession`, not a
+timer: while it is set the poster stays as the running view — the art back up under a dim, the
+logo, "PLAYING · elapsed" above it, one focused pill "Quit <title>" and a hint bar with the
+clock. The overlay holds the focus. Accept held for one second fills the pill and calls
+`stop(session_id)` ("Stopping…" until the session goes); a release, or the window losing focus,
+cancels the hold, and every other key does nothing. When the pad in hand has a `stop` hold macro
+bound (`api.screens.controller.state.macros`), the hint bar names its button too. A session
+already running when the host starts (`CoreClient` tracks the marker at construction) shows the
+running view at once, resolved through `api.allGames.byId`.
+
+When `currentSession` empties — up to 2 s after the game exits, the poll interval — the overlay
+signals `ended(game)`: the theme drops `launching` and opens the game's `DetailPage` under the
+fading poster, so its stats and its journal are one press away; the journal entry the module is
+writing shows up there as a pending row. `launchFailed` still aborts the poster to a toast
+(`finished` then `failed`). A session the CLI started is tracked the same way (the `state/`
+watch), so the overlay covers the page for it too; the game menu's "Stop <title>" item is no
+longer reachable.
 
 ## Qt and QML notes
 
@@ -92,7 +124,8 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
   icons. On screen nothing changes.
 - **Keys posted while a game holds focus are dropped** by Qt: there is no active item, so
   `--keys` scripting cannot drive the host behind a running game, and neither can the gamepad
-  (`focusWindow()` is null). That is the wanted behaviour until there is an overlay.
+  (`focusWindow()` is null). That is the wanted behaviour: the running view is operable once the
+  game has handed the focus back (Alt-Tab, or its own exit).
 - **Collections are platforms.** The theme labels a collection by its `shortName` and looks for
   `assets/platforms/<shortName>.svg`; the core gives a platform string, which `api.py` maps
   (`windows`, `switch`, `wii`, `gamecube`, `nds`, `ps3`, …) and falls back to the source id.

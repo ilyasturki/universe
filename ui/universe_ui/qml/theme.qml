@@ -103,11 +103,6 @@ FocusScope {
     function launchGame(game) {
         if (!game || launchOverlay.running)
             return;
-        if (api.universe.currentSession) {
-            Sound.edge();
-            toast.show(api.universe.currentSession.title + " is still running");
-            return;
-        }
         launching = true;
         Sound.enter();
         Sound.launch();
@@ -175,6 +170,21 @@ FocusScope {
             return;
         Sound.cancel();
         api.universe.stop(session.session_id);
+    }
+
+    // Back from a session: the game's page, where its stats and journal are one press away.
+    function returnFromSession(game) {
+        launching = false;
+        if (activePage && activePage.leave)
+            activePage.leave();
+        if (game) {
+            detailGame = game;
+            detailOpen = true;
+            if (detailLoader.item)
+                detailLoader.item.forceActiveFocus();
+        } else {
+            restoreFocus();
+        }
     }
 
     function openMenu(game, anchor) {
@@ -590,6 +600,7 @@ FocusScope {
 
     LaunchOverlay {
         id: launchOverlay
+        objectName: "launchOverlay"
         anchors.fill: parent
         onFinished: {
             root.launching = false;
@@ -597,6 +608,7 @@ FocusScope {
             if (root.activePage && root.activePage.leave)
                 root.activePage.leave();
         }
+        onEnded: function(game) { root.returnFromSession(game); }
         onFailed: function(game, message) { toast.show("Could not launch" + (game ? " " + game.title : "") + (message ? ": " + message : "")); }
     }
 
@@ -673,7 +685,7 @@ FocusScope {
         event.accepted = true;
         root.acceptHeld = false;
         holdTimer.stop();
-        if (root.launching || root.detailOpen || root.menuOpen || !root.focusTarget)
+        if (root.launching || launchOverlay.running || root.detailOpen || root.menuOpen || !root.focusTarget)
             return;
         launchGame(root.focusTarget.currentGame);
     }

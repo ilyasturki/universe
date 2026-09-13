@@ -5,6 +5,8 @@ import argparse
 import glob
 import logging
 import os
+import signal
+import socket
 import subprocess
 import sys
 from pathlib import Path
@@ -95,6 +97,31 @@ def build_client(args):
     return CoreClient()
 
 
+def quit_on_signals(app, on_signal=None):
+    """SIGINT and SIGTERM end the Qt loop instead of stranding a KeyboardInterrupt in a slot."""
+    from PySide6.QtCore import QSocketNotifier
+
+    on_signal = on_signal or app.quit
+    # Python runs a handler only between bytecodes: the wakeup fd makes Qt call into Python at once.
+    reader, writer = socket.socketpair()
+    reader.setblocking(False)
+    writer.setblocking(False)
+    signal.set_wakeup_fd(writer.fileno())
+    notifier = QSocketNotifier(reader.fileno(), QSocketNotifier.Type.Read, app)
+    notifier.sockets = (reader, writer)
+
+    def drain():
+        try:
+            reader.recv(64)
+        except OSError:
+            pass
+
+    notifier.activated.connect(drain)
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        signal.signal(sig, lambda signum, frame: on_signal())
+    return notifier
+
+
 def run(argv=None):
     args = parse_args(sys.argv[1:] if argv is None else argv)
     os.environ.setdefault("QT_FORCE_STDERR_LOGGING", "1")
@@ -127,7 +154,10 @@ def run(argv=None):
     from .api import Api
 
     client = build_client(args)
+    if not (args.fake or args.fake_launch or args.screenshot):
+        client.adoptScope()
     api = Api(client, fullscreen=args.fullscreen, parent=app)
+    quit_on_signals(app)
 
     engine = QQmlApplicationEngine()
     for p in import_paths:
@@ -188,5 +218,8 @@ def run(argv=None):
     rc = app.exec()
     if gamepad is not None:
         gamepad.stop()
+    # The scope is ours now: the game goes with the launcher, and stopping it first lets session-end run.
+    if client.currentSession:
+        client.stop("")
     api.shutdown()
     return rc or exit_code["value"]

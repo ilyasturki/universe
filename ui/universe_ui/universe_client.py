@@ -6,6 +6,7 @@ Failures surface as `error`, never as an exception in QML.
 """
 
 import json
+import logging
 import os
 import shutil
 import subprocess
@@ -25,6 +26,8 @@ from PySide6.QtCore import (
     Signal,
     Slot,
 )
+
+log = logging.getLogger("universe.client")
 
 
 class UniverseError(Exception):
@@ -178,6 +181,14 @@ class UniverseClientBase(QObject):
     @Slot(str)
     def stop(self, session_id):
         self._guarded(None, "Session1", "Stop", session_id, decode=False)
+
+    # Quiet on purpose: an older core has neither call, and a toast for that would be noise.
+    def adoptScope(self):
+        try:
+            return str(self._call("Session1", "AdoptScope") or "")
+        except UniverseError as e:
+            log.warning("adopt_scope: %s", e.message)
+            return ""
 
     @Slot(result=str)
     def screenshot(self):
@@ -577,6 +588,7 @@ _CORE_CALLS = {
     ("Library1", "ImportLutris"): lambda s, apply: s._core.import_lutris(_bus_bool(apply)),
     ("Session1", "Launch"): lambda s, ident, screen: s._launched(s._core.launch(ident, screen), ident),
     ("Session1", "Stop"): lambda s, session_id: s._core.stop(session_id),
+    ("Session1", "AdoptScope"): lambda s: s._core.adopt_scope(),
     ("Session1", "Screenshot"): lambda s: s._core.screenshot(),
     ("Session1", "Sessions"): lambda s, ident: s._core.sessions_json(ident),
     ("Sources1", "List"): lambda s: s._core.sources_json(),
@@ -821,6 +833,9 @@ class FakeClient(UniverseClientBase):
             self._process.kill()
         elif self._current:
             self._end_session(-15)
+
+    def _Session1_AdoptScope(self):
+        return ""
 
     def _Session1_Screenshot(self):
         return os.path.join(self._art_dir, "screenshot.png")

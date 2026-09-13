@@ -17,6 +17,8 @@ Item {
 
     property alias artOpacity: art.opacity
     property alias artScale: art.scale
+    // Ground over the art, under the logo: the running view's dim.
+    property real dim: 0.0
     readonly property int heroStatus: hero.status
 
     readonly property bool heroMissing: String(heroSource) === "" || hero.status === Image.Error
@@ -30,7 +32,7 @@ Item {
     readonly property real boxHeight: Theme.dp(720)
     readonly property real logoWidth: Theme.dp(480)
     readonly property real logoHeight: Theme.dp(150)
-    readonly property real captionBottom: Theme.dp(72)
+    property real captionBottom: Theme.dp(72)
 
     Rectangle {
         anchors.fill: parent
@@ -177,6 +179,12 @@ Item {
                 GradientStop { position: 0.55; color: Qt.rgba(0.055, 0.059, 0.075, 0.00) }
                 GradientStop { position: 1.00; color: Qt.rgba(0.055, 0.059, 0.075, 0.62) }
             }
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            color: Theme.ground
+            opacity: frame.dim
         }
 
         Image {

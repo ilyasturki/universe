@@ -5,11 +5,13 @@ Rectangle {
     id: root
 
     property string label: "Play"
-    // "play" | "info" | "library" | ""
+    // "play" | "info" | "library" | "stop" | ""
     property string icon: "play"
     property bool ghost: false
     property bool focused: false
     property bool dimmed: false
+    // 0..1 of the width shaded, left to right: the progress of a hold.
+    property real fill: 0.0
 
     readonly property color ink: root.ghost ? Theme.text : Theme.onLight
 
@@ -39,10 +41,41 @@ Rectangle {
         }
     }
 
+    Item {
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        width: parent.width * root.fill
+        clip: true
+        visible: root.fill > 0
+
+        Rectangle {
+            width: root.width
+            height: root.height
+            radius: root.radius
+            color: root.ink
+            opacity: 0.18
+        }
+    }
+
     Row {
         id: content
         anchors.centerIn: parent
         spacing: Theme.dp(16)
+
+        Canvas {
+            visible: root.icon === "stop"
+            width: Theme.dp(22); height: Theme.dp(22)
+            anchors.verticalCenter: parent.verticalCenter
+            onPaint: {
+                var ctx = getContext("2d");
+                ctx.reset();
+                ctx.fillStyle = root.ink;
+                ctx.beginPath();
+                ctx.roundedRect(0, 0, width, height, width * 0.18, height * 0.18);
+                ctx.fill();
+            }
+        }
 
         Canvas {
             visible: root.icon === "play"
