@@ -19,9 +19,9 @@ ui/
     models.py               Game, GameListModel and the QML proxies (import Universe)
     universe_client.py      CoreClient (the real core) and FakeClient (fixtures)
     gamepad.py              SDL2 → QKeyEvent
-    screens/                data for the added screens: settings.py, sources.py, media.py, paths.py, controller.py
+    screens/                data for the added screens: settings.py, sources.py, media.py, paths.py, controller.py, runners.py
     fixtures/               library.json and generated artwork, for --fake
-    qml/                    the ported theme plus the added screens; ui/Pad*.qml and PadGeometry.js draw the pads
+    qml/                    the ported theme plus the added screens; ui/Pad*.qml and PadGeometry.js draw the pads, assets/runners/ holds the runner logos (SOURCES.md says where each is from)
   tests/                    pytest, offscreen
 ```
 
@@ -42,8 +42,9 @@ One context property, `api`:
 
 A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `playTime`,
 `playCount`, `lastPlayed`, `releaseYear`, `developerList`, `publisherList`, `genreList`, `players`,
-`description`, `summary`, `source`, `platform`, `tags`, `extra`, `raw`, `collections`, and
-`assets` (`boxFront`, `tile`, `background`, `logo`, `screenshotList`), plus `launch()`.
+`description`, `summary`, `source`, `platform`, `runner`, `runnerName`, `tags`, `extra`, `raw`,
+`collections`, and `assets` (`boxFront`, `tile`, `background`, `logo`, `screenshotList`), plus
+`launch()`.
 
 `api.screens.recordings` samples 16 frames per recording with ffmpeg into
 `$XDG_CACHE_HOME/universe/frames/<sha1 of the path>/NN.jpg` (`stats.json` keeps the probed duration and
@@ -163,6 +164,18 @@ releases still land, so nothing stays held across it. The hint bar names buttons
 (`ButtonGlyph`: `A`, `LB RB`, `Start Select`, `dpad`) and draws them the way the connected pad
 prints them (`PadGlyph`, from `PadNames.js`: × ○ △ □ and L1/R1 on a DualSense, B/A and L/R on a
 Switch pad); with no pad the watcher sees, they stay Xbox letters.
+
+## The runners section
+
+`api.screens.runners` is the Runners section of the Settings tab. `load()` reads `Runners1.List`
+and builds one card per runner: its logo (`assets/runners/<id>.svg|png`, `logo(id)` says which
+exists), its platforms and where its program was found in the header, then rows for the program
+(`exe`, a path; inherited when detected), the arguments, each option by its type, and an "Add a
+game…" action. `setValue(index, value)` writes through `Runners1.Set`; on the add row it keeps the
+picked file and `pendingTitle()` proposes a title from it, which `addGame(title)` sends to
+`Library1.Add`. The game settings page's Launch group follows the runner: a Runner picker (names
+shown, ids written), then the rows the runner takes. The detail page shows the runner's logo next
+to the platform.
 
 ## The controller section
 

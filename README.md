@@ -1,6 +1,6 @@
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="brand/universe-lockup-dark.svg"><img src="brand/universe-lockup.svg" width="420" alt="Universe"></picture></p>
 
-A gamepad-first game launcher for Linux. A Rust core (a library, the `universe` CLI and a Python module for the host) owns the library, launches games through [umu-run](https://github.com/Open-Wine-Components/umu-launcher) as transient systemd units, and records sessions and playtime. There is no daemon: systemd runs `universe session-end` when the game's cgroup empties, whatever happened to the process that launched it. A launcher that adopts a scope (the UI, `universe play` without `--no-wait`) binds the game to itself, so closing it takes the game down cleanly; `universe play --no-wait` and hooks leave the game to systemd. A Qt 6 / PySide6 host (`universe-ui`) renders the [Reprise](https://github.com/ilyasturki/pegasus-theme-reprise) interface on top of the core, in-process. Everything else — GOG installs, dialog-free recording, an AI play journal — is a module.
+A gamepad-first game launcher for Linux. A Rust core (a library, the `universe` CLI and a Python module for the host) owns the library, launches games through their runner — Proton via [umu-run](https://github.com/Open-Wine-Components/umu-launcher), Wine, the program itself, or an emulator — as transient systemd units, and records sessions and playtime. There is no daemon: systemd runs `universe session-end` when the game's cgroup empties, whatever happened to the process that launched it. A launcher that adopts a scope (the UI, `universe play` without `--no-wait`) binds the game to itself, so closing it takes the game down cleanly; `universe play --no-wait` and hooks leave the game to systemd. A Qt 6 / PySide6 host (`universe-ui`) renders the [Reprise](https://github.com/ilyasturki/pegasus-theme-reprise) interface on top of the core, in-process. Everything else — GOG installs, dialog-free recording, an AI play journal — is a module.
 
 Plain files are the truth: one `game.toml`, one `sessions.jsonl` and a `journal/` per game under `$XDG_DATA_HOME/universe/games/<id>/`. SQLite is only a rebuildable index.
 
@@ -55,6 +55,10 @@ universe play technomancer     # exact › word › substring › path; interact
 universe status                # current session, last sessions
 universe info technomancer
 universe set technomancer proton=proton-em capture.cursor=true
+universe add "/mnt/games/gamecube/F-Zero GX.iso" --runner dolphin   # a ROM, image or folder; --title, --platform, --media
+universe runner ls             # every runner, where its program was found
+universe runner set dolphin exe=/opt/dolphin/dolphin-emu batch=false   # a runner's program, arguments and options
+universe set f-zero-gx options.batch=true platform="Nintendo Wii"      # per game
 universe gog login             # prints the URL, takes the code
 universe gog scan              # cross installed folders with the owned library
 universe install 1434554947    # GOG id
@@ -68,6 +72,14 @@ universe controller ls         # connected pads, every button and what it does
 universe controller bind xbox-elite paddle_p1 hold stop    # a macro; `learn` when a paddle is not recognised
 universe ls --json | jq '.[] | select(.stats.hours > 10) | .title'
 ```
+
+## Runners
+
+A game starts through its runner, as in Lutris: `proton` (umu-run), `wine`, `linux`, or an emulator — Dolphin, Eden (yuzu, Citron, Sudachi), Ryujinx, RPCS3, PCSX2, DuckStation, Cemu, Azahar (Citra), melonDS, mGBA, PPSSPP, xemu, Xenia, shadPS4, Vita3K, Mupen64Plus, Snes9x, Flycast, ScummVM, DOSBox, MAME. The core finds each emulator on `PATH` (or in Lutris's runners directory) and you can point it at another program: `universe runner set <id> exe=…`, or the Runners section of the Settings tab, which shows every runner with its logo, where it was found, its program, arguments and options, and adds a game through it from a file picker. Each emulator ships the flags that start it fullscreen and make it quit with the game, so the session ends when the game does; those are options, global or per game. `platform` on a game (Dolphin: GameCube or Wii) picks the tile icon and the collection. Recordings and the journal work for an emulated game exactly as for a Proton one.
+
+Pads and emulators: every emulator has an `inputplumber` option, on by default, that makes the core take the pads over with [InputPlumber](https://github.com/ShadowBlip/InputPlumber) for the session (one composite device the emulator sees, the raw nodes hidden) and give them back at its end; the macro engine follows the pad onto the composite device; whether the paddles still reach it there is not verified. It needs the InputPlumber daemon on the system (`services.inputplumber` on NixOS) and its CLI on `PATH`; `universe doctor` says.
+
+`universe migrate` turns Lutris's emulator games into runner games and reads Lutris's runner configs: a wrapper script around a pad tool is seen through, the emulator behind it and its extra arguments (a Ryujinx `--profile`) go to `[runners.<id>]`.
 
 ## Controller macros
 
@@ -83,6 +95,7 @@ The spare buttons of a pad — the Edge's paddles and Fn buttons, the Elite's pa
 | `capture` | hooks | `gpu-screen-recorder` + its setcap `gsr-kms-server` (screen source); `gst-launch-1.0` + the `universe@ilyasturki.github.io` shell extension (window source, GNOME) | `source = "window"` (default) records just the game's window through Mutter's ScreenCast, dialog-free, following it across workspaces and occlusion; `source = "screen"` (or off GNOME / extension not loaded / no window in 60 s) falls back to KMS screen capture. `cursor` per game; `fps = "auto"` follows the output's refresh rate (read from Mutter, 60 elsewhere) |
 | `journal` | hooks | `ffmpeg`, `codex` (or `provider = "claude"` / `"stub"`) | one Markdown entry per session from frames and screenshots |
 | metadata | core | SteamGridDB and RAWG keys in `[keys]` | artwork slots `box_front`, `tile`, `background`, `logo`, screenshots |
+| runners | core | the emulator on `PATH` (or `[runners.<id>] exe`); `inputplumber` for the pad option | `universe runner ls`; one doctor check per runner in use |
 
 Cursor hiding on GNOME toggles the `hide-cursor@elcste.com` shell extension around the session.
 Window capture uses the `universe@ilyasturki.github.io` shell extension, installed by the home-manager

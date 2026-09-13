@@ -57,12 +57,15 @@ a dash means the surface doesn't expose it.
 | `uninstall(id)` | `uninstall(id)` | `universe uninstall <name>` | trashes `source.dir` and clears `source.dir`, `source.build_id` and `launch.exe`; the game stays in the library, not installed. Refuses a root, a home or the games root |
 | `reload_all()` | `reload()` | `universe rescan` | rereads config and `games/*/game.toml`, rebuilds the index, runs each source's `scan` |
 | `reload_game(id)` | `reload_game(id)` | — | rereads one game |
-| `import_lutris(apply)` | `import_lutris(apply)` | `universe migrate [--apply]` | JSON report: imported games, per-game env diff (`{id, lutris_env, universe_env, added, removed, changed}`), imported hours, games whose art was copied from `[lutris] pegasus_library` (`<platform>/media/<slug>/`, once, never over an existing `media/`). Without `apply` it only reports |
+| `import_lutris(apply)` | `import_lutris(apply)` | `universe migrate [--apply]` | JSON report: imported games, per-game env diff (`{id, lutris_env, universe_env, added, removed, changed}`), imported hours, games whose art was copied from `[lutris] pegasus_library` (`<platform>/media/<slug>/`, once, never over an existing `media/`), `runners_promoted` (emulator games from before runners that now name theirs) and `runners` (what Lutris's runner configs say: a wrapper script is seen through, the program is written to `[runners.<id>] exe` when it is not on PATH, its extra arguments to `args`). Without `apply` it only reports |
+| `add_game(json)` | `add_game(json)` | `universe add <file> --runner <id> [--title T] [--platform P] [--media]` | `{"runner", "exe", "title"?, "platform"?}` → the new id. The title defaults to the file's name cleaned of release tags; the platform to the runner's first. Refuses an id already in the library |
 
-`set` takes dotted keys: `launch.proton`, `launch.env.FOO`, `desktop.hide_cursor`, `hidden`,
-`favorite`, `tags`, `sort_title`, `metadata.sgdb_id`, and `capture.cursor` as a validated shorthand
-for `modules.capture.cursor`. Values are strings: `true`/`false` for booleans, comma-separated for
-lists, `""` deletes the key.
+`set` takes dotted keys: `launch.runner`, `launch.exe`, `launch.proton`, `launch.env.FOO`,
+`launch.options.<key>` (validated against the runner's options), `desktop.hide_cursor`, `hidden`,
+`favorite`, `tags`, `sort_title`, `platform`, `metadata.sgdb_id`, and `capture.cursor` as a
+validated shorthand for `modules.capture.cursor`. Values are strings: `true`/`false` for booleans,
+comma-separated for lists, `""` deletes the key. A runner is written under its shipped id (`yuzu` →
+`eden`), and writing one retires the pre-runner `launch.backend` key.
 
 `Game` (JSON) is the contents of `game.toml` plus:
 
@@ -71,8 +74,17 @@ lists, `""` deletes the key.
  "media": {"box_front": "path|null", "tile": null, "background": null, "logo": null,
            "screenshots": ["path"]},
  "modules": {"capture": {"enabled": true, "cursor": false}},
+ "effective": {"runner": "dolphin", "runner_name": "Dolphin", "runner_kind": "emulator",
+               "runner_path": "/…/bin/dolphin-emu", "platform": "Nintendo GameCube",
+               "options": {"batch": true, "user_directory": "", "inputplumber": true}, "inputplumber": true,
+               "proton": "proton-ge", "proton_path": "…", "esync": true, "fsync": true, "mangohud": true,
+               "hide_cursor": true, "env": {}},
  "removed": false}
 ```
+
+`effective` is what the launch will use: the game's own keys over the global defaults, the runner
+resolved (`runner_path` empty when its program was not found), the platform the runner implies when
+the game sets none.
 
 There is no change notification: the files are the truth, so a frontend watches `games/`,
 `games/<id>/{,journal,media}` and `state/` and rereads. Everything the CLI, `session-end` and the
@@ -121,6 +133,47 @@ when it was killed by a signal (a `stop`).
 
 `SourceGame` = `{"id": "1434554947", "title": "Mini Metro", "owned": true, "installed": true,
 "dir": "path|null", "build": "…|null", "remote_build": "…|null"}`.
+
+## Runners
+
+A runner is what starts a game: `proton` (through umu-run), `wine`, `linux` (the program itself),
+or an emulator. Each is a spec the core ships — id, name, aliases, the binaries to look for, the
+platforms it emulates, the file extensions it takes, the flags that make it start fullscreen and
+quit with the game, and typed options — with a program the core detects or the user sets.
+
+| Rust | Python | CLI | Role |
+|---|---|---|---|
+| `runners_json()` | `runners_json()` | `universe runner ls` · `runner options <id>` | `[Runner]`, see below |
+| `set_runner_setting(id, key, value)` | `set_runner_setting(…)` | `universe runner set <id> k=v …` | writes `config.toml [runners.<id>] <key>`: `exe`, `args`, or an option, validated by type; `""` resets it |
+
+`Runner` = `{"id": "dolphin", "name": "Dolphin", "kind": "proton|wine|linux|emulator", "aliases": ["…"],
+"lutris": "dolphin", "binaries": ["dolphin-emu"], "platforms": ["Nintendo GameCube", "Nintendo Wii"],
+"extensions": ["iso", …], "exe": "the configured program or empty", "args": "extra arguments, shell-quoted",
+"path": "the program that will run, empty when none was found", "source": "config|path|lutris|",
+"available": true, "options": [{"key", "type": "bool|path", "default", "label", "choices": [],
+"value": the global value}]}`.
+
+A few runners spell the file their own way: `xenia` is a Windows build run through Proton, `mame`
+gets `-rompath <dir> <name>`, `dosbox` takes a program or a `.conf` (`-conf`), `scummvm` the game's
+folder. Ids, aliases and platforms: `universe runner ls`.
+
+The program: `[runners.<id>] exe` if set (a path, or a name on PATH), else the spec's binaries on
+PATH in order, else an executable of that name or an AppImage under
+`~/.local/share/lutris/runners/<lutris id>/`. A game may name its own with `launch.runner_exe`.
+Flatpak installs are not looked for: `flatpak run` moves the app into its own scope, which the
+session's `ExitType=cgroup` would take for the game ending.
+
+The command line of an emulator: `[runners.<id>] args`, the option flags in the spec's order, the
+file flag and the game file (`launch.exe`: a ROM, an image, an EBOOT.BIN, a folder), then
+`launch.args`. `MANGOHUD=1` and `launch.env` apply as for Proton.
+
+Every emulator carries the `inputplumber` option (default true): before the game unit starts, the
+core restarts the InputPlumber system unit, enables `manage-all` and waits for the first composite
+device (7-9 s on a fresh daemon), so the emulator sees one composite pad and the raw nodes are
+hidden; `session-end` gives the pads back (`manage-all` off, then a wait for `/dev/inputplumber/
+by-hidden` to empty). The marker remembers that it was engaged, so a `session-end` run by systemd
+alone releases it. The controller watcher reads the composite device like any pad. Without
+`inputplumber` on PATH the option is skipped and doctor says so.
 
 ## Media
 
@@ -193,7 +246,7 @@ that is not `*.json` are ignored, and `render_journal` only renders `written` en
 | `module_settings_json(module, game_id)` | `module_settings_json(…)` | `universe module settings <id> [game]` | global settings merged with the game's; `game_id=""` is global only |
 | `set_module_setting(module, game_id, key, value)` | `set_module_setting(…)` | `universe module set <id> k=v [--game g]` | validated against `[[settings]]`. `game_id=""` writes `config.toml [modules.<id>]`, otherwise `game.toml [modules.<id>]` |
 | `module_setting_choices(module, key)` | `module_setting_choices_json(…)` | — | the global setting's choices; a setting with `choices_exec` gets them from the module, live (see below) |
-| `doctor_json()` | `doctor_json()` | `universe doctor` | `[{check, ok, detail, module}]`: required binaries, `gsr-kms-server`, Proton, cursor extension, tokens |
+| `doctor_json()` | `doctor_json()` | `universe doctor` | `[{check, ok, detail, module}]`: required binaries, `gsr-kms-server`, Proton, cursor extension, tokens, one `runner-<id>` check per runner a library game uses (its program resolved), `inputplumber` when an emulator wants it |
 
 A module entry is `{id, name, kind: [], version, dir, enabled, available, missing: [bin],
 hooks: {}, verbs: [], settings: [Setting], frontend_qml: "path or null"}`, and
@@ -288,6 +341,11 @@ cursor_extension = "hide-cursor@elcste.com"   # enabled for the session, restore
 
 [proton]                             # name → path
 proton-ge = "~/.local/share/lutris/runners/wine/proton-ge"
+
+# [runners.dolphin]                  # per runner: the program, extra arguments, its options
+# exe = "/opt/dolphin/dolphin-emu"   # empty or absent: detected (PATH, then Lutris's runners dir)
+# args = "--config Dolphin.Display.Fullscreen=True"
+# batch = true
 
 [modules]
 enabled = ["gog", "capture", "journal"]
