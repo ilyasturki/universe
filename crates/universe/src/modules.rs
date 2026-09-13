@@ -226,9 +226,7 @@ fn which(bin: &str) -> bool {
     if bin.contains('/') {
         return Path::new(bin).exists();
     }
-    let mut dirs: Vec<PathBuf> = std::env::var_os("PATH").map(|p| std::env::split_paths(&p).collect()).unwrap_or_default();
-    dirs.push(PathBuf::from("/run/wrappers/bin"));
-    dirs.iter().any(|d| d.join(bin).is_file())
+    crate::runners::on_path(bin).is_some()
 }
 
 /// User modules override system modules on the same id.

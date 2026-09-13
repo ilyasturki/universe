@@ -10,6 +10,7 @@ pub mod media;
 pub mod modules;
 pub mod paths;
 pub mod recording;
+pub mod runners;
 pub mod sessions;
 pub mod slug;
 pub mod desktop;

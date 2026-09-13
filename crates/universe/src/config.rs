@@ -12,6 +12,8 @@ pub struct Config {
     pub launch: LaunchDefaults,
     pub desktop: DesktopConfig,
     pub proton: BTreeMap<String, String>,
+    /// [runners.<id>]: `exe`, `args`, and the runner's options.
+    pub runners: BTreeMap<String, toml::Table>,
     pub modules: ModulesConfig,
     pub keys: Keys,
     pub lutris: LutrisConfig,
@@ -85,6 +87,7 @@ impl Default for Config {
                 ("proton-em".into(), "~/.local/share/lutris/runners/wine/proton-em".into()),
                 ("proton-cachyos".into(), "~/.local/share/lutris/runners/wine/proton-cachyos".into()),
             ]),
+            runners: BTreeMap::new(),
             modules: ModulesConfig::default(),
             keys: Keys::default(),
             lutris: LutrisConfig::default(),

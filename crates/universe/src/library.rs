@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::{Path, PathBuf};
 
 use serde::Serialize;
@@ -25,6 +25,13 @@ pub struct Resolved {
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Effective {
+    pub runner: String,
+    pub runner_name: String,
+    pub runner_kind: String,
+    pub runner_path: String,
+    pub platform: String,
+    pub options: serde_json::Map<String, serde_json::Value>,
+    pub inputplumber: bool,
     pub proton: String,
     pub proton_path: String,
     pub esync: bool,
@@ -48,6 +55,7 @@ impl Resolved {
         v["modules"] = serde_json::to_value(&self.modules).unwrap();
         v["effective"] = serde_json::to_value(&self.effective).unwrap();
         v["installed"] = serde_json::Value::Bool(self.game.is_installed());
+        v["platform"] = serde_json::Value::String(self.effective.platform.clone());
         v["removed"] = serde_json::Value::Bool(!self.game.removed_at.is_empty());
         v["journal_count"] = serde_json::json!(self.journal.iter().filter(|e| e.state == "written").count());
         v["recording_count"] = serde_json::json!(self.sessions.iter().filter(|s| s.recording.is_some()).count());
@@ -106,6 +114,11 @@ fn is_image(p: &Path) -> bool {
 }
 
 pub fn resolve(game: Game, config: &Config, modules: &[crate::modules::Module]) -> Resolved {
+    resolve_with(game, config, modules, &mut HashMap::new())
+}
+
+/// `located` memoises each runner's program across the games of one load.
+pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Module], located: &mut HashMap<String, String>) -> Resolved {
     let sessions = sessions::read(&game.sessions_path()).unwrap_or_default();
     let stats = sessions::stats(&sessions);
     let (media, screenshots) = media_of(&game, &config.overrides_dir());
@@ -117,7 +130,22 @@ pub fn resolve(game: Game, config: &Config, modules: &[crate::modules::Module]) 
     let proton = if game.launch.proton.is_empty() { config.launch.proton.clone() } else { game.launch.proton.clone() };
     let mut env = config.launch.env.clone();
     env.extend(game.launch.env.clone());
+    let runner = game.runner_id();
+    let spec = crate::runners::spec(&runner);
+    let runner_path = if !game.launch.runner_exe.is_empty() {
+        paths::expand(&game.launch.runner_exe).to_string_lossy().into()
+    } else {
+        spec.map(|s| located.entry(s.id.into()).or_insert_with(|| crate::runners::locate(s, config).program).clone()).unwrap_or_default()
+    };
+    let options = spec.map(|s| s.merged_options(config, Some(&game))).unwrap_or_default();
     let effective = Effective {
+        runner_name: spec.map(|s| s.name.to_string()).unwrap_or_else(|| runner.clone()),
+        runner_kind: spec.map(|s| s.kind.as_str().to_string()).unwrap_or_default(),
+        runner_path,
+        platform: if game.platform.is_empty() { spec.map(|s| s.default_platform().to_string()).unwrap_or_default() } else { game.platform.clone() },
+        inputplumber: options.get("inputplumber").and_then(|v| v.as_bool()).unwrap_or(false),
+        options,
+        runner,
         proton_path: config.proton_path(&proton).map(|p| p.to_string_lossy().into()).unwrap_or_default(),
         proton,
         esync: game.launch.esync.unwrap_or(config.launch.esync),
@@ -132,13 +160,14 @@ pub fn resolve(game: Game, config: &Config, modules: &[crate::modules::Module]) 
 pub fn load_all(config: &Config, modules: &[crate::modules::Module]) -> Vec<Resolved> {
     let mut out = Vec::new();
     let Ok(rd) = std::fs::read_dir(paths::games_dir()) else { return out };
+    let mut located = HashMap::new();
     for e in rd.flatten() {
         let p = e.path().join("game.toml");
         if !p.is_file() {
             continue;
         }
         match Game::load(&p) {
-            Ok(g) => out.push(resolve(g, config, modules)),
+            Ok(g) => out.push(resolve_with(g, config, modules, &mut located)),
             Err(err) => tracing::warn!("{}: {err}", p.display()),
         }
     }

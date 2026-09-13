@@ -85,7 +85,7 @@ fn insert_game(tx: &rusqlite::Transaction, r: &Resolved) -> crate::Result<()> {
         "INSERT INTO games (id, title, sort_title, platform, release_year, hidden, favorite, removed, source_kind, source_id, installed, hours, play_count, last_played, genres, json)
          VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
         params![
-            g.id, g.title, if g.sort_title.is_empty() { &g.title } else { &g.sort_title }, g.platform, g.release_year, g.hidden as i32, g.favorite as i32,
+            g.id, g.title, if g.sort_title.is_empty() { &g.title } else { &g.sort_title }, r.effective.platform, g.release_year, g.hidden as i32, g.favorite as i32,
             (!g.removed_at.is_empty()) as i32, g.source.kind, g.source.gog_id, g.is_installed() as i32, r.stats.hours, r.stats.play_count as i64,
             r.stats.last_played, g.metadata.genres.join(", "), r.to_json().to_string()
         ],

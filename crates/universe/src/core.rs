@@ -68,6 +68,22 @@ fn in_cgroup_of(unit: &str) -> bool {
     std::fs::read_to_string("/proc/self/cgroup").map(|s| s.lines().any(|l| l.rsplit('/').next() == Some(unit))).unwrap_or(false)
 }
 
+pub fn title_of(path: &Path) -> String {
+    let stem = if path.is_dir() { path.file_name() } else { path.file_stem() }.map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
+    let mut s = stem.replace('_', " ");
+    for (open, close) in [('[', ']'), ('(', ')')] {
+        while let (Some(a), Some(b)) = (s.find(open), s.find(close)) {
+            if b < a {
+                break;
+            }
+            s.replace_range(a..=b, " ");
+        }
+    }
+    let is_version = |w: &str| w.len() > 1 && w.starts_with('v') && w[1..].chars().all(|c| c.is_ascii_digit() || c == '.') && w[1..].starts_with(|c: char| c.is_ascii_digit());
+    let words: Vec<&str> = s.split_whitespace().filter(|w| !is_version(w)).collect();
+    words.join(" ").trim_end_matches(['-', ' ']).trim().to_string()
+}
+
 /// Environment the game unit needs beyond the game's own: our binary and dirs for the hooks and `ExecStopPost`, the desktop for the game.
 fn passthrough_env() -> BTreeMap<String, String> {
     let mut env = BTreeMap::new();
@@ -252,8 +268,74 @@ impl Core {
                 m.validate_setting(skey, value, true)?;
             }
         }
-        crate::game::set_key(&r.game.toml_path(), &real_key, value)?;
+        let mut value = value.to_string();
+        if real_key == "launch.runner" && !value.is_empty() {
+            value = crate::runners::spec(&value).ok_or_else(|| Error::Invalid(format!("unknown runner {value}")))?.id.into();
+        }
+        if let Some(okey) = real_key.strip_prefix("launch.options.") {
+            let spec = crate::runners::spec(&r.game.runner_id()).ok_or_else(|| Error::Invalid(format!("{id} has no known runner")))?;
+            if !value.is_empty() {
+                spec.validate_option(okey, &value)?;
+            }
+        }
+        crate::game::set_key(&r.game.toml_path(), &real_key, &value)?;
         self.reload_game(id).await
+    }
+
+    pub async fn add_game(&self, json: &str) -> Result<String> {
+        let v: serde_json::Value = serde_json::from_str(json)?;
+        let field = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").trim().to_string();
+        let spec = crate::runners::spec(&field("runner")).ok_or_else(|| Error::Invalid(format!("unknown runner '{}'", field("runner"))))?;
+        let exe = field("exe");
+        if exe.is_empty() {
+            return Err(Error::Invalid("a game file is needed".into()));
+        }
+        let path = paths::expand(&exe);
+        let path = if path.is_absolute() { path } else { std::env::current_dir().map(|d| d.join(&path)).unwrap_or(path) };
+        if spec.file_required && !path.exists() {
+            return Err(Error::NotFound(path.to_string_lossy().into()));
+        }
+        let title = if field("title").is_empty() { title_of(&path) } else { field("title") };
+        if title.is_empty() {
+            return Err(Error::Invalid("a title is needed".into()));
+        }
+        let mut g = Game::new(&title);
+        if g.id.is_empty() {
+            return Err(Error::Invalid(format!("'{title}' makes no id")));
+        }
+        if g.toml_path().exists() {
+            return Err(Error::Invalid(format!("{} is already in the library", g.id)));
+        }
+        g.launch.runner = spec.id.into();
+        g.launch.exe = path.to_string_lossy().into();
+        g.platform = if field("platform").is_empty() { spec.default_platform().into() } else { field("platform") };
+        if spec.kind == crate::runners::Kind::Emulator {
+            g.launch.arch = String::new();
+        }
+        if matches!(spec.kind, crate::runners::Kind::Proton | crate::runners::Kind::Wine) {
+            let cfg = self.config.read().await.clone();
+            g.launch.prefix = cfg.prefixes_root().join(&g.id).to_string_lossy().into();
+            g.source.dir = path.parent().map(|p| p.to_string_lossy().into()).unwrap_or_default();
+        }
+        g.save()?;
+        self.reload_game(&g.id).await?;
+        Ok(g.id)
+    }
+
+    // ----- runners -----
+
+    pub async fn runners_json(&self) -> String {
+        let cfg = self.config.read().await.clone();
+        serde_json::Value::Array(crate::runners::RUNNERS.iter().map(|s| crate::runners::to_json(s, &cfg)).collect()).to_string()
+    }
+
+    pub async fn set_runner_setting(&self, runner: &str, key: &str, value: &str) -> Result<()> {
+        let spec = crate::runners::spec(runner).ok_or_else(|| Error::NotFound(format!("runner {runner}")))?;
+        if !matches!(key, "exe" | "args") && !value.is_empty() {
+            spec.validate_option(key, value)?;
+        }
+        Config::set_key(&paths::config_file(), &format!("runners.{}.{key}", spec.id), value)?;
+        self.reload_config().await
     }
 
     /// Trashes the install folder; the game stays in the library with its hours, journal and
@@ -1196,5 +1278,13 @@ mod tests {
         assert!(in_cgroup_of(&name), "{}", std::fs::read_to_string("/proc/self/cgroup").unwrap());
         let out = std::process::Command::new("systemctl").args(["--user", "is-active", &name]).output().unwrap();
         assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "active");
+    }
+
+    #[test]
+    fn titles_from_files() {
+        assert_eq!(title_of(Path::new("/g/F-Zero GX.iso")), "F-Zero GX");
+        assert_eq!(title_of(Path::new("/s/SUPER MARIO ODYSSEY v1.0.3 Eur SuperXCi - CLC.xci")), "SUPER MARIO ODYSSEY Eur SuperXCi - CLC");
+        assert_eq!(title_of(Path::new("/r/Pokemon - HeartGold Version (USA) [rev 1].nds")), "Pokemon - HeartGold Version");
+        assert_eq!(title_of(Path::new("/r/mario_kart_wii.wbfs")), "mario kart wii");
     }
 }

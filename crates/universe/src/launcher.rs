@@ -29,14 +29,45 @@ pub fn unit_name(id: &str, session_id: &str) -> String {
     format!("universe-game-{id}-{session_id}")
 }
 
-/// Builds the umu-run invocation from the resolved game: WINEPREFIX always set, GAMEID/STORE resolved offline.
+fn prefix_of(g: &crate::game::Game, config: &Config) -> PathBuf {
+    if g.launch.prefix.is_empty() { config.prefixes_root().join(&g.id) } else { crate::paths::expand(&g.launch.prefix) }
+}
+
+fn proton_env(g: &crate::game::Game, r: &Resolved, config: &Config, env: &mut BTreeMap<String, String>) -> crate::Result<()> {
+    let prefix = prefix_of(g, config);
+    std::fs::create_dir_all(&prefix)?;
+    env.insert("WINEPREFIX".into(), prefix.to_string_lossy().into());
+    let proton = r.effective.proton_path.clone();
+    if proton.is_empty() {
+        return Err(crate::Error::Unavailable(format!("{}: Proton '{}' not found", g.id, r.effective.proton)));
+    }
+    env.insert("PROTONPATH".into(), proton);
+    env.insert("GAMEID".into(), if g.launch.umu_id.is_empty() { "umu-default".into() } else { g.launch.umu_id.clone() });
+    if !g.launch.store.is_empty() {
+        env.insert("STORE".into(), g.launch.store.clone());
+    }
+    if !r.effective.esync {
+        env.insert("PROTON_NO_ESYNC".into(), "1".into());
+    }
+    if !r.effective.fsync {
+        env.insert("PROTON_NO_FSYNC".into(), "1".into());
+    }
+    if !g.launch.dll_overrides.is_empty() {
+        let s: Vec<String> = g.launch.dll_overrides.iter().map(|(k, v)| format!("{k}={v}")).collect();
+        env.insert("WINEDLLOVERRIDES".into(), s.join(";"));
+    }
+    Ok(())
+}
+
 pub fn plan(r: &Resolved, config: &Config, session_id: &str, extra_env: &BTreeMap<String, String>) -> crate::Result<Plan> {
+    use crate::runners::{self, Kind};
     let g = &r.game;
     if g.launch.exe.is_empty() {
         return Err(crate::Error::Invalid(format!("{}: no executable", g.id)));
     }
+    let spec = runners::spec(&r.effective.runner).ok_or_else(|| crate::Error::Unavailable(format!("{}: runner '{}' is not one Universe ships", g.id, r.effective.runner)))?;
     let exe = g.exe_path();
-    if !exe.exists() {
+    if spec.file_required && !exe.exists() {
         return Err(crate::Error::NotFound(format!("{}: {} missing", g.id, exe.display())));
     }
     let mut env: BTreeMap<String, String> = BTreeMap::new();
@@ -46,46 +77,35 @@ pub fn plan(r: &Resolved, config: &Config, session_id: &str, extra_env: &BTreeMa
     for (k, v) in &config.launch.env {
         env.insert(k.clone(), v.clone());
     }
-    let (program, args) = match g.launch.backend.as_str() {
-        "proton" => {
-            let prefix = if g.launch.prefix.is_empty() { config.prefixes_root().join(&g.id) } else { crate::paths::expand(&g.launch.prefix) };
-            std::fs::create_dir_all(&prefix)?;
-            env.insert("WINEPREFIX".into(), prefix.to_string_lossy().into());
-            let proton = r.effective.proton_path.clone();
-            if proton.is_empty() {
-                return Err(crate::Error::Unavailable(format!("{}: Proton '{}' not found", g.id, r.effective.proton)));
-            }
-            env.insert("PROTONPATH".into(), proton);
-            env.insert("GAMEID".into(), if g.launch.umu_id.is_empty() { "umu-default".into() } else { g.launch.umu_id.clone() });
-            if !g.launch.store.is_empty() {
-                env.insert("STORE".into(), g.launch.store.clone());
-            }
-            if !r.effective.esync {
-                env.insert("PROTON_NO_ESYNC".into(), "1".into());
-            }
-            if !r.effective.fsync {
-                env.insert("PROTON_NO_FSYNC".into(), "1".into());
-            }
-            if !g.launch.dll_overrides.is_empty() {
-                let s: Vec<String> = g.launch.dll_overrides.iter().map(|(k, v)| format!("{k}={v}")).collect();
-                env.insert("WINEDLLOVERRIDES".into(), s.join(";"));
-            }
-            let mut args = vec![exe.to_string_lossy().to_string()];
-            args.extend(g.launch.args.iter().cloned());
-            (config.launch.umu_run.clone(), args)
+    let file = exe.to_string_lossy().to_string();
+    let (program, mut args) = match spec.kind {
+        Kind::Proton => {
+            proton_env(g, r, config, &mut env)?;
+            (if g.launch.runner_exe.is_empty() { config.launch.umu_run.clone() } else { r.effective.runner_path.clone() }, vec![file])
         }
-        "wine" => {
-            let prefix = if g.launch.prefix.is_empty() { config.prefixes_root().join(&g.id) } else { crate::paths::expand(&g.launch.prefix) };
-            env.insert("WINEPREFIX".into(), prefix.to_string_lossy().into());
-            let mut args = vec![exe.to_string_lossy().to_string()];
-            args.extend(g.launch.args.iter().cloned());
-            ("wine".into(), args)
+        Kind::Wine => {
+            env.insert("WINEPREFIX".into(), prefix_of(g, config).to_string_lossy().into());
+            let program = if r.effective.runner_path.is_empty() { "wine".to_string() } else { r.effective.runner_path.clone() };
+            (program, vec![file])
         }
-        "native" => {
-            (exe.to_string_lossy().to_string(), g.launch.args.clone())
+        Kind::Linux => (file, vec![]),
+        Kind::Emulator => {
+            let mut args = runners::global_args(spec, config);
+            args.extend(spec.option_args(&r.effective.options));
+            args.extend(runners::file_args(spec, &exe));
+            if r.effective.runner_path.is_empty() {
+                return Err(crate::Error::Unavailable(format!("{}: {} not found (install it or set runners.{}.exe)", g.id, spec.name, spec.id)));
+            }
+            if spec.via_proton {
+                proton_env(g, r, config, &mut env)?;
+                args.insert(0, r.effective.runner_path.clone());
+                (config.launch.umu_run.clone(), args)
+            } else {
+                (r.effective.runner_path.clone(), args)
+            }
         }
-        other => return Err(crate::Error::Unavailable(format!("{}: backend '{other}' has no launcher yet", g.id))),
     };
+    args.extend(g.launch.args.iter().cloned());
     if r.effective.mangohud {
         env.insert("MANGOHUD".into(), "1".into());
     }
@@ -197,11 +217,29 @@ pub fn parse_unit_log(json_lines: &str) -> UnitLog {
     log
 }
 
+// --no-block, then a second SIGTERM after ~3 s: Dolphin takes the first as a "quit?" prompt and
+// only exits on the second.
 pub async fn stop_unit(unit: &str) -> crate::Result<()> {
-    let out = tokio::process::Command::new("systemctl").args(["--user", "stop", unit]).output().await?;
+    let out = tokio::process::Command::new("systemctl").args(["--user", "stop", "--no-block", unit]).output().await?;
     let err = String::from_utf8_lossy(&out.stderr);
-    if !out.status.success() && !err.contains("not loaded") && !err.contains("could not be found") {
+    if !out.status.success() {
+        if err.contains("not loaded") || err.contains("could not be found") {
+            return Ok(());
+        }
         return Err(crate::Error::Io(format!("systemctl stop {unit}: {}", err.trim())));
+    }
+    for _ in 0..10 {
+        tokio::time::sleep(Duration::from_millis(300)).await;
+        if !is_active(unit).await {
+            return Ok(());
+        }
+    }
+    let _ = tokio::process::Command::new("systemctl").args(["--user", "kill", "--signal=SIGTERM", "--kill-whom=main", unit]).output().await;
+    for _ in 0..20 {
+        tokio::time::sleep(Duration::from_millis(500)).await;
+        if !is_active(unit).await {
+            return Ok(());
+        }
     }
     Ok(())
 }
@@ -257,7 +295,7 @@ mod tests {
         g.launch.dll_overrides.insert("d3d11".into(), "n,b".into());
         let r = Resolved {
             game: g,
-            effective: Effective { proton: "proton-ge".into(), proton_path: "/nix/store/proton".into(), esync: true, fsync: false, mangohud: true, hide_cursor: true, env: BTreeMap::new() },
+            effective: Effective { runner: "proton".into(), proton: "proton-ge".into(), proton_path: "/nix/store/proton".into(), esync: true, fsync: false, mangohud: true, hide_cursor: true, ..Default::default() },
             ..Default::default()
         };
         let cfg = Config::default();
@@ -276,5 +314,68 @@ mod tests {
         assert_eq!(p.env["PROTON_ENABLE_WAYLAND"], "1");
         assert_eq!(p.cwd, dir.path());
         assert!(dir.path().join("pfx").is_dir());
+    }
+
+    #[test]
+    fn plan_for_an_emulator() {
+        let dir = tempfile::tempdir().unwrap();
+        let rom = dir.path().join("F-Zero GX.iso");
+        std::fs::write(&rom, b"").unwrap();
+        let emu = dir.path().join("dolphin-emu");
+        std::fs::write(&emu, b"#!/bin/sh\n").unwrap();
+        let mut g = Game::new("F-Zero GX");
+        g.launch.runner = "dolphin".into();
+        g.launch.exe = rom.to_string_lossy().into();
+        g.launch.args = vec!["--extra".into()];
+        let mut cfg = Config::default();
+        let mut t = toml::Table::new();
+        t.insert("exe".into(), toml::Value::String(emu.to_string_lossy().into()));
+        t.insert("args".into(), toml::Value::String("--config Dolphin.Display.Fullscreen=True".into()));
+        cfg.runners.insert("dolphin".into(), t);
+        let r = crate::library::resolve(g, &cfg, &[]);
+        assert_eq!(r.effective.runner, "dolphin");
+        assert_eq!(r.effective.runner_path, emu.to_string_lossy());
+        assert_eq!(r.effective.platform, "Nintendo GameCube");
+        assert!(r.effective.inputplumber);
+        let p = plan(&r, &cfg, "20260913-120000", &BTreeMap::new()).unwrap();
+        assert_eq!(p.program, emu.to_string_lossy());
+        assert_eq!(p.args, vec!["--config", "Dolphin.Display.Fullscreen=True", "--batch", "-e", &rom.to_string_lossy().to_string(), "--extra"]);
+        assert_eq!(p.env["MANGOHUD"], "1");
+        assert!(!p.env.contains_key("WINEPREFIX"));
+        assert_eq!(p.cwd, dir.path());
+    }
+
+    #[test]
+    fn plan_runs_xenia_through_umu() {
+        let dir = tempfile::tempdir().unwrap();
+        let iso = dir.path().join("a.iso");
+        std::fs::write(&iso, b"").unwrap();
+        let mut g = Game::new("A");
+        g.launch.runner = "xenia".into();
+        g.launch.exe = iso.to_string_lossy().into();
+        g.launch.runner_exe = "/x/xenia_canary.exe".into();
+        g.launch.prefix = dir.path().join("pfx").to_string_lossy().into();
+        let cfg = Config::default();
+        let mut r = crate::library::resolve(g, &cfg, &[]);
+        r.effective.proton_path = "/p".into();
+        let p = plan(&r, &cfg, "s", &BTreeMap::new()).unwrap();
+        assert_eq!(p.program, cfg.launch.umu_run);
+        assert_eq!(p.args[..2], ["/x/xenia_canary.exe", "--fullscreen"]);
+        assert_eq!(p.env["PROTONPATH"], "/p");
+    }
+
+    #[test]
+    fn plan_refuses_a_missing_runner() {
+        let dir = tempfile::tempdir().unwrap();
+        let rom = dir.path().join("a.nsp");
+        std::fs::write(&rom, b"").unwrap();
+        let mut g = Game::new("A");
+        g.launch.runner = "eden".into();
+        g.launch.exe = rom.to_string_lossy().into();
+        let cfg = Config::default();
+        let mut r = crate::library::resolve(g, &cfg, &[]);
+        r.effective.runner_path.clear();
+        let err = plan(&r, &cfg, "s", &BTreeMap::new()).unwrap_err();
+        assert!(matches!(err, crate::Error::Unavailable(_)), "{err}");
     }
 }
