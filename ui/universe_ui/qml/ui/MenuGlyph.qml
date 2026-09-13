@@ -176,6 +176,77 @@ Canvas {
                 ctx.arc(p[0] * s, p[1] * s, 1.1 * s, 0, Math.PI * 2);
                 ctx.fill();
             });
+        } else if (kind === "search") {
+            ctx.arc(11 * s, 11 * s, 7 * s, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(16.5 * s, 16.5 * s);
+            ctx.lineTo(21 * s, 21 * s);
+            ctx.stroke();
+        } else if (kind === "volume-up" || kind === "volume-down" || kind === "mute") {
+            ctx.moveTo(3 * s, 9.5 * s);
+            ctx.lineTo(6.5 * s, 9.5 * s);
+            ctx.lineTo(11.5 * s, 5.5 * s);
+            ctx.lineTo(11.5 * s, 18.5 * s);
+            ctx.lineTo(6.5 * s, 14.5 * s);
+            ctx.lineTo(3 * s, 14.5 * s);
+            ctx.closePath();
+            ctx.stroke();
+            if (kind === "mute") {
+                ctx.beginPath();
+                ctx.moveTo(15.5 * s, 9.5 * s);
+                ctx.lineTo(20.5 * s, 14.5 * s);
+                ctx.moveTo(20.5 * s, 9.5 * s);
+                ctx.lineTo(15.5 * s, 14.5 * s);
+                ctx.stroke();
+            } else {
+                ctx.beginPath();
+                ctx.arc(11.5 * s, 12 * s, 4.5 * s, -Math.PI * 0.3, Math.PI * 0.3);
+                ctx.stroke();
+                if (kind === "volume-up") {
+                    ctx.beginPath();
+                    ctx.arc(11.5 * s, 12 * s, 8.5 * s, -Math.PI * 0.3, Math.PI * 0.3);
+                    ctx.stroke();
+                }
+            }
+        } else if (kind === "camera") {
+            ctx.moveTo(3 * s, 8 * s);
+            ctx.lineTo(8 * s, 8 * s);
+            ctx.lineTo(9.8 * s, 5 * s);
+            ctx.lineTo(14.2 * s, 5 * s);
+            ctx.lineTo(16 * s, 8 * s);
+            ctx.lineTo(21 * s, 8 * s);
+            ctx.lineTo(21 * s, 19 * s);
+            ctx.lineTo(3 * s, 19 * s);
+            ctx.closePath();
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(12 * s, 13.2 * s, 3.4 * s, 0, Math.PI * 2);
+            ctx.stroke();
+        } else if (kind === "gauge") {
+            ctx.arc(12 * s, 14.5 * s, 8.5 * s, Math.PI * 1.0, Math.PI * 2.0);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(12 * s, 14.5 * s);
+            ctx.lineTo(16.8 * s, 9.2 * s);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(12 * s, 14.5 * s, 1.5 * s, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(3.5 * s, 19.5 * s);
+            ctx.lineTo(20.5 * s, 19.5 * s);
+            ctx.stroke();
+        } else if (kind === "terminal") {
+            ctx.roundedRect(3 * s, 5 * s, 18 * s, 14 * s, 2 * s, 2 * s);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(6.5 * s, 9.5 * s);
+            ctx.lineTo(9.5 * s, 12 * s);
+            ctx.lineTo(6.5 * s, 14.5 * s);
+            ctx.moveTo(11.5 * s, 15 * s);
+            ctx.lineTo(16.5 * s, 15 * s);
+            ctx.stroke();
         } else if (kind === "keyboard") {
             ctx.roundedRect(3 * s, 6 * s, 18 * s, 12 * s, 2 * s, 2 * s);
             ctx.stroke();

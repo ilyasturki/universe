@@ -46,7 +46,10 @@ Item {
 
     function mix(a, b, t) { return Qt.rgba(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t, a.a + (b.a - a.a) * t); }
 
-    readonly property color markColor: mix(Qt.rgba(Theme.text.r, Theme.text.g, Theme.text.b, ink), onDown, glow)
+    // A trigger's mark goes dark once its pull has filled past the middle, where the mark sits.
+    readonly property color markColor: mix(Qt.rgba(Theme.text.r, Theme.text.g, Theme.text.b, ink), onDown,
+                                           spec.kind === "trigger" ? Math.max(glow, pull >= 0.5 ? 1 : 0) : glow)
+    readonly property real lean: 0.5
 
     Canvas {
         id: canvas
@@ -105,7 +108,7 @@ Item {
                 Draw.circle(ctx, cx, cy, R);
                 ctx.fill();
                 ctx.stroke();
-                var lean = R * 0.36;
+                var lean = R * button.lean;
                 var px = cx + button.leanX * lean, py = cy + button.leanY * lean;
                 paintPath(function() { Draw.circle(ctx, px, py, R * 0.66); });
                 ctx.beginPath();
@@ -148,17 +151,35 @@ Item {
                 ctx.lineWidth = Math.max(1, Theme.dp(1.8));
                 ctx.stroke();
             } else if (s.kind === "trigger") {
+                // The pull is the fill, rising from the bottom; a press past the half only
+                // brightens the outline, so the gauge stays readable all the way down.
                 var tw = s.w * k, th = s.h * k;
-                paintPath(function() { Draw.roundRect(ctx, cx - tw / 2, cy - th / 2, tw, th, th * 0.32); });
-                if (button.pull > 0.01 && g < 0.99) {
-                    // The pull, from the top down.
+                var body = function() { Draw.roundRect(ctx, cx - tw / 2, cy - th / 2, tw, th, th * 0.32); };
+                if (button.lit) {
                     ctx.save();
-                    Draw.roundRect(ctx, cx - tw / 2, cy - th / 2, tw, th, th * 0.32);
-                    ctx.clip();
-                    ctx.fillStyle = Qt.rgba(white.r, white.g, white.b, 0.55);
-                    ctx.fillRect(cx - tw / 2, cy - th / 2, tw, th * button.pull);
+                    ctx.lineWidth = Theme.dp(8);
+                    ctx.strokeStyle = Qt.rgba(1, 1, 1, 0.12);
+                    body();
+                    ctx.stroke();
                     ctx.restore();
                 }
+                body();
+                ctx.fillStyle = Theme.ground;
+                ctx.fill();
+                ctx.fillStyle = Qt.rgba(white.r, white.g, white.b, fillA);
+                ctx.fill();
+                if (button.pull > 0.005) {
+                    ctx.save();
+                    body();
+                    ctx.clip();
+                    ctx.fillStyle = Qt.rgba(white.r, white.g, white.b, 0.92);
+                    ctx.fillRect(cx - tw / 2, cy + th / 2 - th * button.pull, tw, th * button.pull);
+                    ctx.restore();
+                }
+                body();
+                ctx.lineWidth = button.lit || g > 0.5 ? Theme.dp(2.5) : line;
+                ctx.strokeStyle = stroke;
+                ctx.stroke();
             } else if (s.kind === "paddle") {
                 var pw = s.w * k, ph = s.h * k;
                 paintPath(function() { Draw.paddle(ctx, cx, m, pw, ph); });
@@ -208,8 +229,8 @@ Item {
 
     Text {
         anchors.centerIn: parent
-        anchors.horizontalCenterOffset: button.spec.kind === "stick" ? button.leanX * button.spec.r * button.k * 0.36 : 0
-        anchors.verticalCenterOffset: button.spec.kind === "stick" ? button.leanY * button.spec.r * button.k * 0.36 : 0
+        anchors.horizontalCenterOffset: button.spec.kind === "stick" ? button.leanX * button.spec.r * button.k * button.lean : 0
+        anchors.verticalCenterOffset: button.spec.kind === "stick" ? button.leanY * button.spec.r * button.k * button.lean : 0
         visible: button.glyph.symbol === "" && button.glyph.text !== "" && button.spec.kind !== "arm"
         text: button.glyph.text
         color: button.markColor

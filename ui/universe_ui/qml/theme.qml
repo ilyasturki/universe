@@ -384,6 +384,8 @@ FocusScope {
             anchors.right: parent.right
             tabs: root.tabNames
             currentIndex: root.tabIndex
+            // The glass searches the library: the pages that show games have it, Settings does not.
+            showSearch: root.tabNames[root.tabIndex] !== "Settings"
             focus: root.focusOwner === "chrome"
 
             onTabRequested: function(index) { root.goToTab(index); }

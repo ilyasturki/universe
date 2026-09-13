@@ -23,6 +23,7 @@ def test_rows_follow_the_watcher_and_the_macros(api, fake):
     assert "device" not in rows, "one pad needs no picker row"
     assert rows["paddle_left"]["display"] == "Press · Volume down"
     assert rows["fn_left"]["display"] == "Press · Screenshot"
+    assert rows["fn_left"]["press"]["label"] == "Screenshot" and rows["fn_left"]["hold"] is None, "the chip prints the macro's label"
     assert rows["south"]["display"] == "—" and rows["south"]["label"] == "Cross"
     assert rows["paddle_left"]["extra"] is True and rows["paddle_left"]["bound"] is True
     assert rows["paddle_left"]["label"] == "Left back button (LB)" and rows["paddle_left"]["family"] == "dualsense-edge"
@@ -56,6 +57,7 @@ def test_bind_unbind_and_learn(api, fake):
 
     assert screen.bind("paddle_left", "hold", "stop", "", "") is True
     assert rows_by_key(screen)["paddle_left"]["display"] == "Press · Volume down / Hold · Stop the game"
+    assert rows_by_key(screen)["paddle_left"]["hold"]["label"] == "Stop the game"
     assert watcher.commands[-1] == {"cmd": "reload"}, "the watcher rereads the config after a write"
     macros = {(m["button"], m["trigger"]): m for m in fake.controllerState()["macros"]}
     assert macros[("paddle_left", "hold")]["action"] == "stop" and macros[("paddle_left", "hold")]["family"] == "dualsense-edge"

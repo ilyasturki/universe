@@ -7,11 +7,13 @@ FocusScope {
 
     property var tabs: []
     property int currentIndex: 0
-    // Runs one past the tabs: the last slot is the search glass.
+    // Runs one past the tabs: the last slot is the search glass, on the pages that have games.
     property int index: 0
+    property bool showSearch: true
 
     readonly property int searchIndex: tabs.length
     readonly property bool onSearch: index === searchIndex
+    readonly property int slots: showSearch ? searchIndex + 1 : searchIndex
 
     signal tabRequested(int index)
     signal searchRequested()
@@ -27,13 +29,13 @@ FocusScope {
     implicitHeight: Theme.dp(Theme.tabBarHeight)
 
     function enter() {
-        index = Math.max(0, Math.min(searchIndex, currentIndex));
+        index = Math.max(0, Math.min(slots - 1, currentIndex));
         forceActiveFocus();
     }
 
     // Round trip: the glass follows the last tab, the first tab follows the glass.
     function step(d) {
-        var n = searchIndex + 1;
+        var n = slots;
         var next = (index + d + n) % n;
         index = next;
         if (next < searchIndex && next !== currentIndex) {
@@ -49,6 +51,11 @@ FocusScope {
     onCurrentIndexChanged: {
         underline.retarget();
         if (activeFocus && index < searchIndex)
+            index = currentIndex;
+    }
+    // The glass leaves with the page that had it; a cursor on it steps back to the tab.
+    onShowSearchChanged: {
+        if (!showSearch && index >= searchIndex)
             index = currentIndex;
     }
 
@@ -241,6 +248,12 @@ FocusScope {
             anchors.verticalCenter: parent.verticalCenter
             width: Theme.dp(26)
             height: Theme.dp(26)
+            visible: opacity > 0.01
+            opacity: root.showSearch ? 1.0 : 0.0
+
+            Behavior on opacity {
+                NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic }
+            }
 
             onPaint: {
                 var ctx = getContext("2d");

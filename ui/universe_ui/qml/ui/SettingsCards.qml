@@ -2,21 +2,23 @@ import QtQuick
 import "../core"
 import "../sound"
 
-// Settings as cards in two columns, driven by the flat rows the host builds and the groups
-// that arrange them: { title, meta, warning, caps, control, off, span, rows }, `rows` and
-// `control` indexing the flat list. A spanning group is a bar across both columns (search).
-// The cursor walks a column and crosses to the nearest row; the page decides what A opens.
+// Settings as cards in one or two columns, driven by the flat rows the host builds and the
+// groups that arrange them: { title, meta, warning, caps, control, off, rows }, `rows` and
+// `control` indexing the flat list. The cursor walks a column and crosses to the nearest row;
+// the page decides what A opens, and where Left goes past the first column.
 FocusScope {
     id: cards
 
     property var rows: []
     property var groups: []
+    property int columns: 2
     property int index: 0
     property bool compact: false
     property bool dimmed: false
 
     signal activated(int index, var row)
     signal escapedUp()
+    signal escapedLeft()
 
     readonly property var currentRow: index >= 0 && index < rows.length ? rows[index] : null
     // The white row stays while a picker or the keyboard opened from it holds the focus.
@@ -25,16 +27,13 @@ FocusScope {
     readonly property real gap: Theme.dp(compact ? 24 : 32)
     readonly property real pad: Theme.dp(compact ? 6 : 8)
     readonly property real rowHeight: Theme.dp(compact ? 60 : 66)
-    readonly property real barHeight: Theme.dp(66)
-    readonly property real columnWidth: (width - gap) / 2
+    readonly property real columnWidth: (width - gap * (columns - 1)) / columns
     // The focused stop, in the cards' own coordinates, for whatever the page drops from it.
     readonly property rect focusRect: {
         var s = stopOf(index);
         if (!s)
             return Qt.rect(0, 0, 0, 0);
-        var x = s.col < 0 ? 0 : columnX(s.col) + 1 + pad;
-        var w = s.col < 0 ? width : columnWidth - 2 - pad * 2;
-        return Qt.rect(x, s.y0 - view.contentY, w, s.y1 - s.y0);
+        return Qt.rect(columnX(s.col) + 1 + pad, s.y0 - view.contentY, columnWidth - 2 - pad * 2, s.y1 - s.y0);
     }
 
     function columnX(c) { return c * (columnWidth + gap); }
@@ -48,28 +47,24 @@ FocusScope {
     }
 
     function cardHeight(g) {
-        return g.span ? barHeight : pad * 2 + headerHeight(g) + g.rows.length * rowHeight + 2;
+        return pad * 2 + headerHeight(g) + g.rows.length * rowHeight + 2;
     }
 
-    // Spanning groups stack at the top; each card then joins the shorter column, so the
-    // columns end close together. Every focus stop gets its y range and the y to reveal
-    // (the card's top for a card's first stop, so its header comes into view with it).
+    // Each card joins the shortest column, so the columns end close together. Every focus
+    // stop gets its y range and the y to reveal (the card's top for a card's first stop, so
+    // its header comes into view with it).
     readonly property var layout: {
-        var bars = [], cardsOut = [], lead = [], stops = [[], []], y = 0, i, r;
-        for (i = 0; i < groups.length; i++) {
-            var g = groups[i];
-            if (!g.span)
-                continue;
-            bars.push({ group: i, y: y });
-            lead.push({ row: g.rows[0], col: -1, top: y, y0: y, y1: y + barHeight, lead: true });
-            y += barHeight + gap;
+        var cardsOut = [], stops = [], tops = [], c, i, r;
+        for (c = 0; c < columns; c++) {
+            stops.push([]);
+            tops.push(0);
         }
-        var tops = [y, y];
         for (i = 0; i < groups.length; i++) {
             var group = groups[i];
-            if (group.span)
-                continue;
-            var c = tops[1] < tops[0] ? 1 : 0;
+            c = 0;
+            for (var k = 1; k < columns; k++)
+                if (tops[k] < tops[c])
+                    c = k;
             var top = tops[c];
             cardsOut.push({ group: i, col: c, y: top });
             var cy = top + 1 + pad;
@@ -83,26 +78,32 @@ FocusScope {
             }
             tops[c] = top + cardHeight(group) + gap;
         }
-        var height = Math.max(tops[0], tops[1], y);
-        return { bars: bars, cards: cardsOut, lead: lead, stops: stops, height: height > 0 ? height - gap : 0 };
+        var height = Math.max.apply(null, tops);
+        return { cards: cardsOut, stops: stops, height: height > 0 ? height - gap : 0 };
     }
 
     function stopOf(row) {
-        var lists = [layout.lead, layout.stops[0], layout.stops[1]];
-        for (var l = 0; l < lists.length; l++)
-            for (var i = 0; i < lists[l].length; i++)
-                if (lists[l][i].row === row)
-                    return lists[l][i];
+        for (var c = 0; c < layout.stops.length; c++)
+            for (var i = 0; i < layout.stops[c].length; i++)
+                if (layout.stops[c][i].row === row)
+                    return layout.stops[c][i];
         return null;
     }
 
+    // Where the cursor lands on a fresh section: the first row that is not a search field,
+    // which is reached by going up from it.
     function firstStop() {
-        if (layout.lead.length > 0)
-            return layout.lead[0];
-        for (var c = 0; c < 2; c++)
-            if (layout.stops[c].length > 0)
-                return layout.stops[c][0];
-        return null;
+        var fallback = null;
+        for (var c = 0; c < layout.stops.length; c++)
+            for (var i = 0; i < layout.stops[c].length; i++) {
+                var s = layout.stops[c][i];
+                if (!fallback)
+                    fallback = s;
+                var row = rows[s.row];
+                if (!row || row.type !== "search")
+                    return s;
+            }
+        return fallback;
     }
 
     function reset() {
@@ -110,13 +111,8 @@ FocusScope {
         index = s ? s.row : 0;
     }
 
-    // The column the cursor last stood in, so leaving the search bar comes back to it.
-    property int lastColumn: 0
-
     function go(stop) {
         index = stop.row;
-        if (stop.col >= 0)
-            lastColumn = stop.col;
         Sound.tick();
     }
 
@@ -129,38 +125,26 @@ FocusScope {
                 Sound.edge();
             return;
         }
-        var list = s.lead ? layout.lead : layout.stops[s.col];
+        var list = layout.stops[s.col];
         var pos = list.indexOf(s) + d;
         if (pos >= 0 && pos < list.length) {
             go(list[pos]);
             return;
         }
-        if (s.lead) {
-            if (d < 0) {
-                cards.escapedUp();
-                return;
-            }
-            var col = layout.stops[lastColumn].length > 0 ? lastColumn : 1 - lastColumn;
-            if (layout.stops[col].length > 0)
-                go(layout.stops[col][0]);
-            else
-                Sound.edge();
-            return;
-        }
-        if (d < 0) {
-            if (layout.lead.length > 0)
-                go(layout.lead[layout.lead.length - 1]);
-            else
-                cards.escapedUp();
-            return;
-        }
-        Sound.edge();
+        if (d < 0)
+            cards.escapedUp();
+        else
+            Sound.edge();
     }
 
     function cross(d) {
         var s = stopOf(index);
-        var col = s && !s.lead ? s.col + d : -1;
-        if (col < 0 || col > 1 || layout.stops[col].length === 0) {
+        var col = s ? s.col + d : -1;
+        if (col < 0) {
+            cards.escapedLeft();
+            return;
+        }
+        if (col >= columns || layout.stops[col].length === 0) {
             Sound.edge();
             return;
         }
@@ -256,18 +240,6 @@ FocusScope {
                 pad: cards.pad
                 headerHeight: cards.headerHeight(group)
                 rowHeight: cards.rowHeight
-            }
-        }
-
-        Repeater {
-            model: cards.layout.bars
-
-            SettingsSearchBar {
-                y: modelData.y
-                width: cards.width
-                height: cards.barHeight
-                entry: cards.rows[cards.groups[modelData.group].rows[0]] || ({})
-                focused: cards.index === cards.groups[modelData.group].rows[0] && cards.cursorShown
             }
         }
     }

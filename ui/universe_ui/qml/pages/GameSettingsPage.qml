@@ -77,6 +77,7 @@ FocusScope {
 
         onActivated: function(index, row) { page.activate(index, row); }
         onEscapedUp: Sound.edge()
+        onEscapedLeft: Sound.edge()
 
         Keys.onPressed: function(event) {
             if (event.isAutoRepeat)

@@ -1,9 +1,9 @@
 """The pads draw offscreen: every family's art builds a button per slot the core lists, and every
-slot has a glyph, with no QML errors."""
+slot has a glyph, with no QML errors. The live view and the settings cards keep their layout rules."""
 
 import pytest
 from PySide6.QtCore import QUrl
-from PySide6.QtQml import QQmlComponent, QQmlEngine
+from PySide6.QtQml import QQmlComponent, QQmlEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem  # noqa: F401  (down-casts created objects, for childItems)
 
 from conftest import pump
@@ -35,6 +35,22 @@ def create(engine, name, **props):
     assert item is not None, component.errorString()
     engine.made.append(item)
     return item
+
+
+def call(engine, item, expression):
+    """Runs a QML expression with `item` as its scope: the way to call a function with arguments."""
+    result = QQmlExpression(engine.rootContext(), item, expression).evaluate()
+    return result[0] if isinstance(result, tuple) else result
+
+
+def descendant(item, prop):
+    for child in item.childItems():
+        if child.property(prop) is not None:
+            return child
+        found = descendant(child, prop)
+        if found is not None:
+            return found
+    return None
 
 
 def slots_of(fake, family):
@@ -73,4 +89,42 @@ def test_hint_glyphs_follow_the_pad(engine, fake):
     fake_api.screens.controller.start(FakeWatcher("dualsense-edge"))
     assert glyph.property("family") == "dualsense-edge"
     pair = create(engine, "ButtonGlyph.qml", glyph="Start Select")
-    assert pair.property("names").toVariant() == ["Start", "Select"]
+    assert pair.property("names").toVariant() == ["Start", "Select"] and pair.property("chord") is False
+    chord = create(engine, "ButtonGlyph.qml", glyph="Start+Select")
+    assert chord.property("names").toVariant() == ["Start", "Select"] and chord.property("chord") is True
+
+
+def test_live_view_names_a_pulled_trigger(engine, fake):
+    art = create(engine, "ControllerArt.qml", family="dualsense-edge", connected=True, width=1200, height=800)
+    pump(50)
+    pad = descendant(art, "geo")
+    before = pad.height()
+    call(engine, art, "axis('rt', 0.4)")
+    assert art.property("lastSlot") == "rt" and abs(art.property("lastPull") - 0.4) < 1e-6
+    call(engine, art, "press('south', true)")
+    assert art.property("lastSlot") == "south" and art.property("lastPull") == 0
+    pump(50)
+    assert pad.height() == before, "the caption's room is reserved: a press does not resize the pad"
+    call(engine, art, "clear()")
+    assert art.property("lastSlot") == ""
+
+
+def test_cards_land_past_the_search_row_and_leave_left(engine, fake):
+    rows = [
+        {"type": "search", "label": "Search GOG", "display": ""},
+        {"type": "action", "label": "A game", "display": "Installed"},
+        {"type": "action", "label": "Another", "display": "Owned"},
+    ]
+    groups = [{"title": "Installed", "rows": [0, 1]}, {"title": "Owned", "rows": [2]}]
+    cards = create(engine, "SettingsCards.qml", rows=rows, groups=groups, columns=1, width=1200, height=800)
+    pump(50)
+    call(engine, cards, "reset()")
+    assert cards.property("index") == 1, "the search field is reached by going up, not landed on"
+    layout = cards.property("layout").toVariant()
+    assert {c["col"] for c in layout["cards"]} == {0}, "one column: every card in it"
+    left = []
+    cards.escapedLeft.connect(lambda: left.append(True))
+    call(engine, cards, "cross(-1)")
+    assert left == [True]
+    call(engine, cards, "step(-1)")
+    assert cards.property("index") == 0

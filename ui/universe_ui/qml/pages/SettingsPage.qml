@@ -2,10 +2,12 @@ import QtQuick
 import "../core"
 import "../sound"
 import "../ui"
+import "../ui/Macros.js" as Macros
 
-// The Settings tab: modules and their global settings, the runners (where each was found, its
-// options, a game added through it), a source's library to install from, pending updates, the
-// login flow, doctor's checks, and the controller's macros. One set of cards, seven row sources.
+// The Settings tab: a sidebar of sections and one column of cards beside it. Modules and their
+// global settings, the runners (where each was found, its options, a game added through it), a
+// source's library to install from, pending updates, the login flow, doctor's checks, and the
+// controller's macros. One set of cards, seven row sources.
 FocusScope {
     id: page
 
@@ -47,7 +49,7 @@ FocusScope {
     // pressed to find its row does not take a screenshot.
     readonly property bool controllerOpen: section === controllerSection && activeFocus
     readonly property bool learning: section === controllerSection && controller.learning !== ""
-    // The live view: the pad alone on the page, its presses muted as keys (see Api), left by
+    // The live view: the pad alone in the column, its presses muted as keys (see Api), left by
     // holding Circle/B or pressing Start and Select together, both read from the watcher.
     readonly property bool testing: section === controllerSection && controller.testing
     property var held: ({})
@@ -56,13 +58,13 @@ FocusScope {
 
     readonly property var hints: editor.open ? editor.hints
         : menu.open ? menu.hints
-        : testing ? [ { glyph: "B", label: "Hold to finish" }, { glyph: "Start Select", label: "Finish" } ]
+        : testing ? [ { glyph: "B", label: "Hold to finish" }, { glyph: "Start+Select", label: "Finish" } ]
         : learning ? [ { glyph: "B", label: "Stop learning" } ]
-        : chipBar.activeFocus
-        ? [ { glyph: "A", label: "Open" }, { glyph: "dpad", label: "Section" }, { glyph: "LB RB", label: "Tabs" } ]
+        : side.activeFocus
+        ? [ { glyph: "A", label: "Open" }, { glyph: "B", label: "Back" }, { glyph: "dpad", label: "Section" }, { glyph: "LB RB", label: "Tabs" } ]
         : (acceptLabel !== "" ? [ { glyph: "A", label: acceptLabel } ] : []).concat(
-            refreshable ? [ { glyph: "Y", label: "Refresh" } ] : [],
-            [ { glyph: "dpad", label: "Navigate" }, { glyph: "LT RT", label: "Section" }, { glyph: "LB RB", label: "Tabs" } ])
+            refreshable ? [ { glyph: "X", label: "Refresh" } ] : [],
+            [ { glyph: "B", label: "Sections" }, { glyph: "dpad", label: "Navigate" }, { glyph: "LT RT", label: "Section" }, { glyph: "LB RB", label: "Tabs" } ])
 
     readonly property string acceptLabel: {
         var row = cards.currentRow;
@@ -77,10 +79,16 @@ FocusScope {
         return "Change";
     }
 
-    // The sections that reach the network keep what they fetched; Y fetches again.
+    // The sections that reach the network keep what they fetched; X fetches again.
     readonly property bool refreshable: section >= installSection && section <= loginSection
 
+    // The sidebar at the left margin; the column of cards centred in what is left, capped so a
+    // row's label and its value stay within one glance.
     readonly property real sideMargin: Theme.dp(80)
+    readonly property real sideWidth: Theme.dp(300)
+    readonly property real mainRoom: width - sideMargin * 2 - sideWidth - Theme.dp(56)
+    readonly property real mainWidth: Math.min(mainRoom, Theme.dp(1280))
+    readonly property real mainX: sideMargin + sideWidth + Theme.dp(56) + (mainRoom - mainWidth) / 2
 
     readonly property var currentSource: {
         for (var i = 0; i < sources.sources.length; i++)
@@ -121,9 +129,9 @@ FocusScope {
         if (section === runnersSection)
             return { rows: runners.rows, groups: runners.groups };
         if (section === installSection) {
-            rows.push({ section: sourceName, key: "search", label: "Search " + sourceName, type: "search",
+            // The search field is the first row of the first card; the cursor lands past it.
+            rows.push({ section: sourceName, key: "search", label: "Search " + sourceName, type: "search", icon: "search",
                         display: sources.query || "", choices: [], detail: "" });
-            groups.push({ span: true, rows: [0] });
             var installed = [], owned = [], all = [];
             for (var i = 0; i < sources.rows.length; i++) {
                 var g = sources.rows[i];
@@ -135,10 +143,10 @@ FocusScope {
             }
             var busy = sources.busy ? (all.length > 0 ? " · refreshing…" : "loading…") : "";
             if (sources.query)
-                groups.push({ title: "Results", meta: games(all.length) + " · “" + sources.query + "”" + busy, rows: all });
+                groups.push({ title: "Results", meta: games(all.length) + " · “" + sources.query + "”" + busy, rows: [0].concat(all) });
             else {
                 var where = currentSource && currentSource.games_dir ? " · " + currentSource.games_dir : "";
-                groups.push({ title: "Installed", meta: (all.length > 0 || !busy ? games(installed.length) + where : "") + busy, rows: installed });
+                groups.push({ title: "Installed", meta: (all.length > 0 || !busy ? games(installed.length) + where : "") + busy, rows: [0].concat(installed) });
                 groups.push({ title: "Owned, not installed", meta: games(owned.length), rows: owned });
             }
             return { rows: rows, groups: groups };
@@ -168,8 +176,23 @@ FocusScope {
             groups.push({ title: sourceName, meta: sourceMeta, rows: [0, 1, 2] });
             return { rows: rows, groups: groups };
         }
-        if (section === controllerSection)
-            return { rows: controller.rows, groups: controller.groups };
+        if (section === controllerSection) {
+            if (!learning)
+                return { rows: controller.rows, groups: controller.groups };
+            // The row being learned says so in place of its chips, for as long as it listens.
+            var listening = controller.rows.map(function(r) {
+                if (r.slot !== controller.learning)
+                    return r;
+                var out = {};
+                for (var k in r)
+                    out[k] = r[k];
+                out.display = "Press the button on the pad…";
+                out.press = null;
+                out.hold = null;
+                return out;
+            });
+            return { rows: listening, groups: controller.groups };
+        }
         return { rows: modulesForm.doctor, groups: modulesForm.doctorGroups };
     }
 
@@ -302,10 +325,10 @@ FocusScope {
                 continue;
             if (p.id === "keys" || p.id === "command")
                 continue;
-            out.push({ icon: p.id === "stop" ? "stop" : p.id === "screenshot" ? "film" : "", label: p.label, action: "preset:" + p.id });
+            out.push({ icon: Macros.icon(p.id), label: p.label, action: "preset:" + p.id });
         }
-        out.push({ icon: "keyboard", label: "Key combo…", action: "keys" });
-        out.push({ icon: "folder", label: "Command…", action: "command" });
+        out.push({ icon: Macros.icon("keys"), label: "Key combo…", action: "keys" });
+        out.push({ icon: Macros.icon("command"), label: "Command…", action: "command" });
         return out;
     }
 
@@ -444,6 +467,13 @@ FocusScope {
         Qt.callLater(cards.reset);
     }
 
+    // Triggers cycle the section from anywhere, as they cycle the collection in the library.
+    function stepSection(d) {
+        var n = sections.length;
+        section = (section + d + n) % n;
+        Sound.tick();
+    }
+
     Connections {
         target: page.sources
         function onMessage(text) { toast.show(text); }
@@ -462,15 +492,13 @@ FocusScope {
         }
     }
 
-    // A press on the pad lights its button; in the live view it also counts towards the way out.
+    // In the live view a press lights its button on the art and counts towards the way out.
     Connections {
         target: page.controller
         function onButtonPressed(id, slot, pressed) {
-            if (page.section !== page.controllerSection || id !== page.controller.current)
+            if (!page.testing || id !== page.controller.current)
                 return;
             art.press(slot, pressed);
-            if (!page.testing)
-                return;
             var next = {};
             for (var k in page.held)
                 if (k !== slot)
@@ -490,7 +518,7 @@ FocusScope {
             }
         }
         function onAxisMoved(id, axis, value) {
-            if (page.section === page.controllerSection && id === page.controller.current)
+            if (page.testing && id === page.controller.current)
                 art.axis(axis, value);
         }
         function onUnknownPressed(id, code) {
@@ -509,97 +537,49 @@ FocusScope {
         function onMessage(text) { toast.show(text); }
     }
 
-    Item {
-        id: header
+    Text {
+        id: titleText
 
-        z: 2
-        anchors.top: parent.top
-        anchors.topMargin: Theme.dp(34)
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.leftMargin: page.sideMargin
-        anchors.rightMargin: page.sideMargin
-        height: titleText.height + Theme.dp(18) + chips.height
+        x: page.sideMargin
+        y: Theme.dp(34)
+        text: "Settings"
+        color: Theme.text
+        font.family: Theme.sans
+        font.weight: Font.Bold
+        font.pixelSize: Theme.dp(50)
+    }
 
-        Text {
-            id: titleText
-            text: "Settings"
-            color: Theme.text
-            font.family: Theme.sans
-            font.weight: Font.Bold
-            font.pixelSize: Theme.dp(58)
+    SectionList {
+        id: side
+
+        x: page.sideMargin
+        y: titleText.y + titleText.height + Theme.dp(26)
+        width: page.sideWidth
+        focus: true
+        sections: page.sections
+        icons: page.sectionIcons
+        badges: page.sections.map(function(name, i) {
+            return i === page.updatesSection && page.sources.updates.length > 0 ? page.sources.updates.length.toString() : "";
+        })
+        current: page.section
+        opacity: page.testing ? 0.35 : 1.0
+
+        Behavior on opacity {
+            NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic }
         }
 
-        FocusScope {
-            id: chipBar
-
-            anchors.top: titleText.bottom
-            anchors.topMargin: Theme.dp(18)
-            anchors.left: parent.left
-            width: chips.width
-            height: chips.height
-
-            // Round trip: past the last section comes the first.
-            function step(d) {
-                var n = page.sections.length;
-                page.section = (page.section + d + n) % n;
-                Sound.tick();
-            }
-
-            Row {
-                id: chips
-                spacing: Theme.dp(14)
-
-                Repeater {
-                    model: page.sections
-
-                    Chip {
-                        label: modelData
-                        icon: page.sectionIcons[index]
-                        badge: index === page.updatesSection && page.sources.updates.length > 0 ? page.sources.updates.length.toString() : ""
-                        active: index === page.section
-                        focused: chipBar.activeFocus && index === page.section
-                    }
-                }
-            }
-
-            Keys.onLeftPressed: chipBar.step(-1)
-            Keys.onRightPressed: chipBar.step(1)
-            Keys.onUpPressed: page.chromeRequested()
-            Keys.onDownPressed: function(event) {
-                Sound.panel();
-                cards.forceActiveFocus();
-            }
-
-            Keys.onPressed: function(event) {
-                if (event.isAutoRepeat)
-                    return;
-                if (api.keys.isAccept(event)) {
-                    event.accepted = true;
-                    Sound.panel();
-                    cards.forceActiveFocus();
-                    return;
-                }
-                if (api.keys.isCancel(event)) {
-                    event.accepted = true;
-                    Sound.cancel();
-                    cards.forceActiveFocus();
-                    return;
-                }
-            }
-        }
+        onRequested: function(index) { page.section = index; }
+        onEntered: cards.forceActiveFocus()
+        onEscapedUp: page.chromeRequested()
     }
 
     // Above the cards: a running job's message and bar, and on Doctor the tally of checks.
     Column {
         id: above
 
-        anchors.top: header.bottom
-        anchors.topMargin: Theme.dp(30)
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.leftMargin: page.sideMargin
-        anchors.rightMargin: page.sideMargin
+        x: page.mainX
+        y: side.y
+        width: page.mainWidth
         spacing: Theme.dp(32)
 
         Rectangle {
@@ -698,14 +678,11 @@ FocusScope {
     SettingsCards {
         id: cards
 
-        anchors.top: above.bottom
-        anchors.topMargin: above.height > 0 ? Theme.dp(32) : 0
-        anchors.bottom: parent.bottom
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.leftMargin: page.sideMargin
-        anchors.rightMargin: page.sideMargin
-        focus: true
+        x: page.mainX
+        y: above.y + above.height + (above.height > 0 ? Theme.dp(32) : 0)
+        width: page.mainWidth
+        height: page.height - y
+        columns: 1
         rows: page.content.rows
         groups: page.content.groups
         dimmed: editor.open
@@ -717,9 +694,10 @@ FocusScope {
         }
 
         onActivated: function(index, row) { page.activate(index, row); }
-        onEscapedUp: {
+        onEscapedUp: page.chromeRequested()
+        onEscapedLeft: {
             Sound.panel();
-            chipBar.forceActiveFocus();
+            side.forceActiveFocus();
         }
 
         Keys.onPressed: function(event) {
@@ -732,21 +710,21 @@ FocusScope {
             } else if (api.keys.isCancel(event)) {
                 event.accepted = true;
                 Sound.cancel();
-                chipBar.forceActiveFocus();
-            } else if (api.keys.isFilters(event)) {
+                side.forceActiveFocus();
+            } else if (api.keys.isDetails(event)) {
                 event.accepted = true;
                 page.refreshNow();
             }
         }
     }
 
-    // The sign-in link as a card in the right column: the code to scan, the link, the state.
+    // The sign-in link as a card under the login rows: the code to scan, the link, the state.
     Item {
         id: loginCard
 
-        x: cards.x + cards.columnX(1)
-        y: cards.y
-        width: cards.columnWidth
+        x: page.mainX
+        y: cards.y + cards.layout.height + Theme.dp(32)
+        width: page.mainWidth
         height: Math.max(Theme.dp(74), loginHead.height) + loginBody.height + Theme.dp(8) * 2 + 2
         visible: page.section === page.loginSection && (page.login.url !== "" || page.login.status !== "")
 
@@ -828,27 +806,22 @@ FocusScope {
         }
     }
 
-    // The pad, beside its rows: the button of the focused row lit, presses flashing live. The
-    // live view gives it the whole width.
+    // The live view: the pad takes the column, every press and pull shown on it.
     ControllerArt {
         id: art
 
-        x: page.testing ? cards.x : cards.x + cards.columnX(1)
+        x: page.mainX
         y: cards.y
-        width: page.testing ? cards.width : cards.columnWidth
-        height: page.testing ? cards.height : Math.min(implicitHeight, cards.height)
-        visible: page.section === page.controllerSection
+        width: page.mainWidth
+        height: cards.height
+        visible: opacity > 0.01
+        opacity: page.testing ? 1.0 : 0.0
         family: page.controller.family
         connected: page.controller.connected
-        testing: page.testing
         rows: page.controller.rows
-        focusedSlot: page.section === page.controllerSection && cards.cursorShown && cards.currentRow && cards.currentRow.slot ? cards.currentRow.slot : ""
-        learningSlot: page.learning ? page.controller.learning : ""
         unbound: page.controller.unboundSlots
 
-        Behavior on x { NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic } }
-        Behavior on width { NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic } }
-        Behavior on height { NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic } }
+        Behavior on opacity { NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic } }
     }
 
     // Holds the keyboard while the pad is on show: Escape leaves, everything else stays put.
@@ -926,7 +899,6 @@ FocusScope {
         z: 6
     }
 
-    // Triggers cycle the section from anywhere, as they cycle the collection in the library.
     Keys.onPressed: function(event) {
         if (api.keys.isPageUp(event) || api.keys.isPageDown(event))
             event.accepted = true;
@@ -937,10 +909,10 @@ FocusScope {
             return;
         if (api.keys.isPageUp(event)) {
             event.accepted = true;
-            chipBar.step(-1);
+            page.stepSection(-1);
         } else if (api.keys.isPageDown(event)) {
             event.accepted = true;
-            chipBar.step(1);
+            page.stepSection(1);
         }
     }
 }

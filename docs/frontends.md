@@ -161,9 +161,23 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
 
 `api.pad.muted` (set by `Api` while the controller section's live view is on) drops the presses;
 releases still land, so nothing stays held across it. The hint bar names buttons the Xbox way
-(`ButtonGlyph`: `A`, `LB RB`, `Start Select`, `dpad`) and draws them the way the connected pad
+(`ButtonGlyph`: `A`, `LB RB`, `Start+Select`, `dpad` — a space lists buttons that each do the
+thing, a `+` joins a chord and is drawn between them) and draws them the way the connected pad
 prints them (`PadGlyph`, from `PadNames.js`: × ○ △ □ and L1/R1 on a DualSense, B/A and L/R on a
 Switch pad); with no pad the watcher sees, they stay Xbox letters.
+
+## The Settings tab
+
+`pages/SettingsPage.qml` is a sidebar (`ui/SectionList.qml`: Modules, Runners, Install, Updates,
+Login, Doctor, Controller) beside one column of `ui/SettingsCards.qml` (`columns: 1`; the game
+settings page keeps two). Up and Down in the sidebar switch the section as they go, Right or A
+enter the cards, Left or B come back, L2/R2 cycle the section from anywhere, and □ refreshes the
+sections that fetch (Install, Updates, Login, Doctor). A source's search is the first row of its
+first card, reached by going up: the cursor lands on the first game (`SettingsCards.reset` skips
+`type: "search"` rows). The tab bar's search glass shows only on the tabs that list games
+(`TabBar.showSearch`), so Settings has none. A row's `icon` names a `MenuGlyph` kind; a pad
+button's row prints its `press` and `hold` macros as chips (`PRESS`/`HOLD`, the action's glyph
+from `ui/Macros.js`, the macro's `label`).
 
 ## The runners section
 
@@ -188,8 +202,9 @@ to the platform.
 `controllerFamily`), `connected`, `status` (`off`, `waiting`, `ready`), `passive`, `learning`,
 `testing`, the `rows`/`groups` of one card (a Controller picker row when two pads are connected,
 a "Test the buttons" row while the watcher is `ready`, then a row per button of the family — each
-with its `slot` and `family`, so the row draws the button's glyph — the extras (back buttons, Fn)
-first, then the standard buttons) and `bind`, `unbind`, `learn`, `cancelLearn`, `setTesting`,
+with its `slot` and `family`, so the row draws the button's glyph, and its `press` and `hold`
+macros, each carrying its `label` — the extras (back buttons, Fn) first, then the standard
+buttons) and `bind`, `unbind`, `learn`, `cancelLearn`, `setTesting`,
 `suspend`, `resume`. Macros and families come from the core's `Controller1.State`; a write goes
 through `Controller1.Bind`/`Unbind` and is followed by a `reload` to the watcher.
 
@@ -202,21 +217,27 @@ reconnects under a new node becomes current again; a learn the watcher times out
 learning state with a message.
 
 The page suspends the watcher while the section has the focus, so a back button pressed while
-looking at its row fires nothing; a press lights the button on the art and nothing else, since
-the SDL mapper is still turning the pad into keys. The live view (`setTesting(true)`, from the
-test row) is where presses are looked at: the art takes the page, the mapper is muted, the watcher
+looking at its row fires nothing, and nothing shows either: the SDL mapper is still turning the
+pad into keys, and the rows are for binding. The live view (`setTesting(true)`, from the test
+row) is where presses are looked at: the pad takes the column, the mapper is muted, the watcher
 streams the sticks and triggers (`axes {on}` → `axis {id, axis, value}`, `lx ly rx ry` as -1..1 and
-`lt rt` as 0..1), and the last press is named under the pad. It ends on a Circle/B held for a
-second or Start and Select together (both read from the watcher's `button` events), on Escape,
-or by itself when the section is left, the shown pad goes, another is picked, or the watcher
-stops or turns passive; `Api` mutes `api.pad` for exactly as long as `testing` is true.
+`lt rt` as 0..1), and the last thing touched is named under the pad — a trigger as soon as it
+moves, with its pull in percent. It ends on a Circle/B held for a second or Start and Select
+together (both read from the watcher's `button` events), on Escape, or by itself when the section
+is left, the shown pad goes, another is picked, or the watcher stops or turns passive; `Api` mutes
+`api.pad` for exactly as long as `testing` is true.
 
 The art is `ui/ControllerArt.qml` around `ui/PadArt.qml`: `ui/PadGeometry.js` holds each family's
 body (an SVG path) and buttons on a 1000 × 700 sheet, one canvas draws the body and a `PadButton`
-sits on every button — lit for the focused row, white on a press, pulsing while learned, dashed
-without a code, a stick leaning with its axes, a trigger filling with its pull. Two bodies serve
-the families: Sony's (DualSense Edge, DualSense, DualShock 4, 8BitDo Pro 3) and Xbox's (Elite,
-Xbox, Switch Pro, generic), each family adding its own extras.
+sits on every button — white on a press, a stick leaning with its axes, a trigger filling from the
+bottom with its pull (a press past the half only brightens its outline, so the gauge reads all the
+way down; dashed when the slot has no code on this connection — `PadArt` also takes
+`focusedSlot` and `learningSlot`, which the live view leaves empty). While a button is being
+learned, its row says so in place of its chips. The caption under the pad keeps its height from
+the start, so the first press does
+not resize the pad, and spells both ways out with the pad's own glyphs. Two bodies serve the
+families: Sony's (DualSense Edge, DualSense, DualShock 4, 8BitDo Pro 3) and Xbox's (Elite, Xbox,
+Switch Pro, generic), each family adding its own extras.
 
 With `--fake` a `FakeWatcher` stands in: one DualSense Edge with every button bound, or the pad
 named by `UNIVERSE_FAKE_PAD` (a family id, or `none` for the empty state), with the slots listed in

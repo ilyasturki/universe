@@ -1,27 +1,25 @@
 import QtQuick
 import "../core"
 
-// The current pad in its card: lit for the focused row, a flash on a live press, a pulse while a
-// button is being learned, dashed when the slot has no button on this connection. In the live
-// view it fills the page, with the last press named under it.
+// The live view of the current pad: a flash on every press, the sticks leaning, the triggers
+// filling with their pull, a button with no code on this connection dashed. The last thing
+// touched is named under the pad, a trigger with its pull, and the ways out are spelled out
+// beneath. The caption keeps its height from the start, so the first press does not resize the pad.
 Item {
     id: art
 
     property string family: "dualsense"
     property bool connected: false
-    property bool testing: false
-    property string focusedSlot: ""
-    property string learningSlot: ""
-    property var unbound: []
     property var rows: []
+    property var unbound: []
     property var pressed: ({})
     property var axes: ({})
     property string lastSlot: ""
 
     readonly property real pad: Theme.dp(8)
     readonly property real inset: Theme.dp(20)
-
-    implicitHeight: pad * 2 + 2 + frame.height + caption.height + Theme.dp(20)
+    readonly property bool lastIsTrigger: lastSlot === "lt" || lastSlot === "rt"
+    readonly property real lastPull: lastIsTrigger ? (axes[lastSlot] || 0) : 0
 
     function press(slot, down) {
         var next = {};
@@ -35,12 +33,15 @@ Item {
             lastSlot = slot;
     }
 
+    // A trigger names itself as soon as it moves, so a light pull reads under the pad too.
     function axis(name, value) {
         var next = {};
         for (var k in axes)
             next[k] = axes[k];
         next[name] = value;
         axes = next;
+        if ((name === "lt" || name === "rt") && value > 0.02)
+            lastSlot = name;
     }
 
     function clear() {
@@ -58,15 +59,6 @@ Item {
 
     onFamilyChanged: clear()
 
-    // The learn pulse, shared by the one button that shows it.
-    property real pulse: 0.15
-    SequentialAnimation on pulse {
-        running: art.learningSlot !== ""
-        loops: Animation.Infinite
-        NumberAnimation { to: 0.55; duration: 500; easing.type: Easing.InOutSine }
-        NumberAnimation { to: 0.15; duration: 500; easing.type: Easing.InOutSine }
-    }
-
     Rectangle {
         anchors.fill: parent
         radius: Theme.dp(24)
@@ -81,17 +73,14 @@ Item {
         x: art.inset
         y: art.pad + 1 + Theme.dp(6)
         width: parent.width - art.inset * 2
-        height: art.testing ? Math.max(0, art.height - y - caption.height - Theme.dp(24)) : Math.round(width * 0.66)
+        height: Math.max(0, art.height - y - caption.height - Theme.dp(24))
 
         PadArt {
             anchors.fill: parent
             family: art.family
-            focusedSlot: art.focusedSlot
-            learningSlot: art.learningSlot
             unbound: art.connected ? art.unbound : []
             pressed: art.pressed
             axes: art.axes
-            pulse: art.pulse
             opacity: art.connected ? 1.0 : 0.38
 
             Behavior on opacity {
@@ -109,43 +98,117 @@ Item {
         anchors.right: parent.right
         anchors.leftMargin: art.inset
         anchors.rightMargin: art.inset
-        spacing: Theme.dp(6)
+        spacing: Theme.dp(10)
 
+        // The last press, or "Press anything" until there is one: the same height either way.
+        Item {
+            width: parent.width
+            height: Theme.dp(40)
+
+            Row {
+                anchors.centerIn: parent
+                visible: art.lastSlot !== ""
+                spacing: Theme.dp(14)
+
+                PadGlyph {
+                    anchors.verticalCenter: parent.verticalCenter
+                    family: art.family
+                    slot: art.lastSlot
+                    unit: Theme.dp(34)
+                }
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: art.labelOf(art.lastSlot)
+                    color: Theme.text
+                    font.family: Theme.sans
+                    font.weight: Font.DemiBold
+                    font.pixelSize: Theme.dp(26)
+                }
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: art.lastIsTrigger
+                    text: "· " + Math.round(art.lastPull * 100) + " %"
+                    color: Theme.textSecondary
+                    font.family: Theme.sans
+                    font.weight: Font.Medium
+                    font.pixelSize: Theme.dp(26)
+                }
+            }
+
+            Text {
+                anchors.centerIn: parent
+                visible: art.lastSlot === ""
+                text: !art.connected ? "Connect a controller" : "Press anything on the pad"
+                color: art.connected ? Theme.textSecondary : Theme.text
+                font.family: Theme.sans
+                font.weight: Font.Medium
+                font.pixelSize: Theme.dp(24)
+            }
+        }
+
+        // The ways out, with the pad's own glyphs: a held Circle/B, or Start and Select together.
         Row {
             anchors.horizontalCenter: parent.horizontalCenter
-            visible: art.testing && art.lastSlot !== ""
-            spacing: Theme.dp(14)
+            spacing: Theme.dp(12)
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: "Presses show here and nowhere else · hold"
+                color: Theme.textMuted
+                font.family: Theme.sans
+                font.pixelSize: Theme.dp(19)
+            }
 
             PadGlyph {
                 anchors.verticalCenter: parent.verticalCenter
                 family: art.family
-                slot: art.lastSlot
-                unit: Theme.dp(34)
+                slot: "east"
+                unit: Theme.dp(26)
+                ink: Theme.textSecondary
             }
 
             Text {
                 anchors.verticalCenter: parent.verticalCenter
-                text: art.labelOf(art.lastSlot)
-                color: Theme.text
+                text: "or press"
+                color: Theme.textMuted
+                font.family: Theme.sans
+                font.pixelSize: Theme.dp(19)
+            }
+
+            PadGlyph {
+                anchors.verticalCenter: parent.verticalCenter
+                family: art.family
+                slot: "start"
+                unit: Theme.dp(26)
+                ink: Theme.textSecondary
+            }
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: "+"
+                color: Theme.textSecondary
                 font.family: Theme.sans
                 font.weight: Font.DemiBold
-                font.pixelSize: Theme.dp(26)
+                font.pixelSize: Theme.dp(20)
             }
-        }
 
-        Text {
-            width: parent.width
-            horizontalAlignment: Text.AlignHCenter
-            text: !art.connected ? "Connect a controller"
-                : art.testing ? "Every press shows here and nowhere else"
-                : art.learningSlot !== "" ? "Press the button on the controller"
-                : art.unbound.length > 0 ? "Dashed buttons have no code on this connection: learn them"
-                : "Press a button on the pad to see it light up"
-            color: art.connected && art.learningSlot === "" ? Theme.textMuted : Theme.textSecondary
-            font.family: Theme.sans
-            font.weight: art.connected ? Font.Normal : Font.Medium
-            font.pixelSize: Theme.dp(art.connected ? 19 : 24)
-            wrapMode: Text.WordWrap
+            PadGlyph {
+                anchors.verticalCenter: parent.verticalCenter
+                family: art.family
+                slot: "select"
+                unit: Theme.dp(26)
+                ink: Theme.textSecondary
+            }
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: "to finish"
+                color: Theme.textMuted
+                font.family: Theme.sans
+                font.pixelSize: Theme.dp(19)
+            }
         }
     }
 }

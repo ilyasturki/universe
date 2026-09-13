@@ -4,7 +4,8 @@ state, and the rows the cards show for the current pad.
 The watcher is `universe controller watch --json --wait`, a child of the host for its lifetime:
 events in on stdout, commands out on stdin. `FakeWatcher` scripts the same stream for --fake and
 the tests. A row is the settings row shape plus `slot`, `family`, `bound`, `code`, `extra`,
-`press`, `hold`; the test row (`key` "test") opens the live view of the pad.
+`press`, `hold` (each macro with its `label`); the test row (`key` "test") opens the live view of
+the pad.
 """
 
 import json
@@ -234,10 +235,11 @@ class ControllerScreen(QObject):
     def _presets(self):
         return {p["id"]: p for p in self._state.get("presets") or [] if p.get("id")}
 
+    # The row's macro carries what the chip prints for it.
     def _macro(self, family, slot, trigger):
         for m in self._state.get("macros") or []:
             if m.get("button") == slot and m.get("trigger") == trigger and m.get("family") in (family, "*"):
-                return m
+                return dict(m, label=self._label(m))
         return None
 
     def _device(self, ident=None):

@@ -1,11 +1,13 @@
 import QtQuick
 import Qt5Compat.GraphicalEffects
 import "../core"
+import "Macros.js" as Macros
 
 // One setting inside a card: its label, and by type a switch, a value with a chevron,
 // or a check's detail and status dot. Focused, it is the one white row on the screen.
 // A row with an `image` (a game of a source) shows it as a small cover before the label; one
-// with an `icon` (a runner's logo) shows it whole, in a square.
+// with an `icon` (a runner's logo) shows it whole, in a square. A pad button's row prints its
+// macros as chips, one per trigger.
 Item {
     id: row
 
@@ -16,6 +18,17 @@ Item {
     property bool separator: false
 
     readonly property bool info: entry.type === "info"
+    // A button with no code on this connection says "Unbound" instead: its macros cannot fire.
+    readonly property var macros: {
+        var out = [];
+        if (entry.bound === false)
+            return out;
+        if (entry.press)
+            out.push({ tag: "PRESS", macro: entry.press });
+        if (entry.hold)
+            out.push({ tag: "HOLD", macro: entry.hold });
+        return out;
+    }
     readonly property bool hasImage: entry.image !== undefined && entry.image !== null && String(entry.image) !== ""
     // A controller row carries its slot and family: the button is drawn before its name.
     readonly property bool hasGlyph: entry.slot !== undefined && String(entry.slot) !== "" && entry.family !== undefined
@@ -199,13 +212,68 @@ Item {
 
             Text {
                 anchors.verticalCenter: parent.verticalCenter
-                visible: text !== ""
+                visible: text !== "" && row.macros.length === 0
                 text: row.entry.display || ""
                 color: row.focused ? row.onFocus : Theme.textSecondary
                 font.family: Theme.sans
                 font.pixelSize: Theme.dp(21)
                 elide: Text.ElideMiddle
                 width: Math.min(implicitWidth, row.valueMax)
+            }
+
+            // One chip per trigger: its tag, the action's glyph, what it does.
+            Row {
+                visible: row.macros.length > 0
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Theme.dp(10)
+
+                Repeater {
+                    model: row.macros
+
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: chip.width + Theme.dp(24)
+                        height: Theme.dp(38)
+                        radius: height / 2
+                        color: row.focused ? Qt.rgba(0.063, 0.067, 0.086, 0.08) : Qt.rgba(1, 1, 1, 0.07)
+                        border.width: 1
+                        border.color: row.focused ? Qt.rgba(0.063, 0.067, 0.086, 0.14) : Qt.rgba(1, 1, 1, 0.12)
+
+                        Row {
+                            id: chip
+                            anchors.centerIn: parent
+                            spacing: Theme.dp(9)
+
+                            CapsLabel {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: modelData.tag
+                                size: Theme.dp(14)
+                                tracking: 0.1
+                                color: row.focused ? Qt.rgba(0.063, 0.067, 0.086, 0.55) : Theme.textMuted
+                            }
+
+                            MenuGlyph {
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: kind !== ""
+                                width: Theme.dp(20)
+                                height: width
+                                kind: Macros.icon(modelData.macro.action)
+                                tint: row.focused ? Theme.onLight : Theme.text
+                            }
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                text: modelData.macro.label || ""
+                                color: row.focused ? Theme.onLight : Theme.text
+                                font.family: Theme.sans
+                                font.weight: Font.Medium
+                                font.pixelSize: Theme.dp(19)
+                                elide: Text.ElideRight
+                                width: Math.min(implicitWidth, Theme.dp(260))
+                            }
+                        }
+                    }
+                }
             }
 
             Canvas {
