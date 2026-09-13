@@ -9,6 +9,15 @@ def _expand(path):
     return os.path.abspath(os.path.expanduser(str(path or "") or "~"))
 
 
+def universe_home(kind, fallback):
+    """$UNIVERSE_<KIND>_HOME, else $XDG_<KIND>_HOME/universe, else ~/<fallback>/universe — as universe(1) resolves them."""
+    base = os.environ.get(f"UNIVERSE_{kind}_HOME")
+    if base:
+        return base
+    xdg = os.environ.get(f"XDG_{kind}_HOME") or os.path.join(os.path.expanduser("~"), *fallback.split("/"))
+    return os.path.join(xdg, "universe")
+
+
 def _mounts():
     out = []
     for root in ("/mnt", os.path.join("/run/media", os.environ.get("USER", ""))):

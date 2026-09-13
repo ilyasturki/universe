@@ -10,6 +10,8 @@ from datetime import datetime
 import shiboken6
 from PySide6.QtCore import Property, QObject, QProcess, Qt, QUrl, Signal, Slot
 
+from .paths import universe_home
+
 
 def _when(value):
     try:
@@ -37,11 +39,7 @@ def _size(n):
 
 
 def _cache_dir():
-    base = os.environ.get("UNIVERSE_CACHE_HOME")
-    if not base:
-        xdg = os.environ.get("XDG_CACHE_HOME") or os.path.join(os.path.expanduser("~"), ".cache")
-        base = os.path.join(xdg, "universe")
-    path = os.path.join(base, "frames")
+    path = os.path.join(universe_home("CACHE", ".cache"), "frames")
     os.makedirs(path, exist_ok=True)
     return path
 
@@ -282,8 +280,7 @@ def markdown_blocks(paragraphs):
 
 
 def _journal_dir(game_id):
-    data = os.environ.get("XDG_DATA_HOME") or os.path.join(os.path.expanduser("~"), ".local", "share")
-    return os.path.join(data, "universe", "games", game_id, "journal")
+    return os.path.join(universe_home("DATA", ".local/share"), "games", game_id, "journal")
 
 
 class JournalList(QObject):

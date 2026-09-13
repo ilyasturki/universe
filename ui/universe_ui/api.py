@@ -8,6 +8,7 @@ from PySide6.QtCore import Property, QObject, Qt, Signal, Slot
 
 from .models import Collection, CollectionGames, Game, GameListModel, ObjectListModel, collection_key
 from .screens import Screens
+from .screens.paths import universe_home
 
 # Pegasus's default keyboard bindings, which tools/shot and the theme's hints assume.
 KEYS = {
@@ -113,13 +114,12 @@ class Pad(QObject):
 
 
 class Memory(QObject):
-    """`api.memory`: small persisted key/value store, $XDG_STATE_HOME/universe/ui-memory.json."""
+    """`api.memory`: small persisted key/value store, $UNIVERSE_STATE_HOME/ui-memory.json."""
 
     def __init__(self, path=None, parent=None):
         super().__init__(parent)
         if path is None:
-            state = os.environ.get("XDG_STATE_HOME") or os.path.join(os.path.expanduser("~"), ".local", "state")
-            path = os.path.join(state, "universe", "ui-memory.json")
+            path = os.path.join(universe_home("STATE", ".local/state"), "ui-memory.json")
         self._path = Path(path)
         self._data = {}
         try:
