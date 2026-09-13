@@ -9,7 +9,7 @@ use crate::journal::Entry;
 use crate::sessions::{Session, Stats};
 use crate::{paths, sessions};
 
-pub const MEDIA_SLOTS: [&str; 4] = ["box_front", "tile", "background", "logo"];
+pub const MEDIA_SLOTS: [&str; 5] = ["box_front", "square", "tile", "background", "logo"];
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Resolved {
@@ -96,6 +96,7 @@ pub fn media_of(game: &Game, overrides: &Path) -> (Vec<(String, String)>, Vec<St
             let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("");
             let slot = match stem {
                 "box_front" | "boxFront" | "cover" | "boxart" => "box_front",
+                "square" | "icon" => "square",
                 "tile" | "banner" | "grid" => "tile",
                 "background" | "hero" | "fanart" => "background",
                 "logo" => "logo",

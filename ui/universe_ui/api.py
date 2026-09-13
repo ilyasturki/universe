@@ -9,6 +9,7 @@ from PySide6.QtCore import Property, QObject, Qt, Signal, Slot
 from .models import Collection, CollectionGames, Game, GameListModel, ObjectListModel, collection_key
 from .screens import Screens
 from .screens.paths import universe_home
+from .themes import ThemeSelector
 
 # Pegasus's default keyboard bindings, which tools/shot and the theme's hints assume.
 KEYS = {
@@ -264,12 +265,13 @@ class Library(QObject):
 class Api(QObject):
     fullscreenChanged = Signal()
 
-    def __init__(self, client, memory_path=None, fullscreen=False, parent=None):
+    def __init__(self, client, memory_path=None, fullscreen=False, theme="", parent=None):
         super().__init__(parent)
         self._client = client
         self._keys = Keys(self)
         self._pad = Pad(self)
         self._memory = Memory(memory_path, self)
+        self._theme = ThemeSelector(self._memory, theme, self)
         self._library = Library(client, self)
         self._screens = Screens(client, self.screenHz, self, memory=self._memory)
         controller = self._screens.controller
@@ -307,4 +309,5 @@ class Api(QObject):
     collections = Property(QObject, lambda self: self._library.collections, constant=True)
     universe = Property(QObject, lambda self: self._client, constant=True)
     screens = Property(QObject, lambda self: self._screens, constant=True)
+    theme = Property(QObject, lambda self: self._theme, constant=True)
     fullscreen = Property(bool, lambda self: self._fullscreen, notify=fullscreenChanged)

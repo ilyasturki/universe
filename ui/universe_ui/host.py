@@ -81,6 +81,7 @@ def parse_args(argv):
     parser.add_argument("--key-gap", type=int, default=120, metavar="MS")
     parser.add_argument("--key-delay", type=int, default=1200, metavar="MS", help="delay before the first key")
     parser.add_argument("--size", metavar="WxH", help="window size, implies --windowed (default 1920x1080)")
+    parser.add_argument("--theme", default="", metavar="ID", help="the look for this run: reprise, switch2-white or switch2-black")
     args = parser.parse_args(argv)
     args.fullscreen = not (args.windowed or args.size or args.screenshot)
     args.size = args.size or "1920x1080"
@@ -156,7 +157,7 @@ def run(argv=None):
     client = build_client(args)
     if not (args.fake or args.fake_launch or args.screenshot):
         client.adoptScope()
-    api = Api(client, fullscreen=args.fullscreen, parent=app)
+    api = Api(client, fullscreen=args.fullscreen, theme=args.theme, parent=app)
     quit_on_signals(app)
 
     engine = QQmlApplicationEngine()

@@ -20,6 +20,8 @@ class Screens(QObject):
         self._recordings = RecordingsList(client, self)
         self._journal = JournalList(client, self)
         self._pendingJournals = PendingJournals(client, self)
+        self._album = RecordingsList(client, self)
+        self._news = JournalList(client, self)
         self._paths = PathBrowser(client, self)
         self._controller = ControllerScreen(client, memory, self)
         self._runners = RunnersForm(client, self)
@@ -27,6 +29,7 @@ class Screens(QObject):
     def shutdown(self):
         self._recordings.shutdown()
         self._pendingJournals.shutdown()
+        self._album.shutdown()
         self._controller.shutdown()
 
     gameSettings = Property(QObject, lambda self: self._gameSettings, constant=True)
@@ -36,6 +39,8 @@ class Screens(QObject):
     recordings = Property(QObject, lambda self: self._recordings, constant=True)
     journal = Property(QObject, lambda self: self._journal, constant=True)
     pendingJournals = Property(QObject, lambda self: self._pendingJournals, constant=True)
+    album = Property(QObject, lambda self: self._album, constant=True)
+    news = Property(QObject, lambda self: self._news, constant=True)
     paths = Property(QObject, lambda self: self._paths, constant=True)
     controller = Property(QObject, lambda self: self._controller, constant=True)
     runners = Property(QObject, lambda self: self._runners, constant=True)

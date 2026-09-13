@@ -28,8 +28,8 @@ FocusScope {
     readonly property bool ownsAccept: true
     property bool menuOpen: false
 
-    readonly property var sections: ["Modules", "Runners", "Install", "Updates", "Login", "Doctor", "Controller"]
-    readonly property var sectionIcons: ["grid", "play", "download", "refresh", "user", "pulse", "gamepad"]
+    readonly property var sections: ["Modules", "Runners", "Install", "Updates", "Login", "Doctor", "Controller", "Themes"]
+    readonly property var sectionIcons: ["grid", "play", "download", "refresh", "user", "pulse", "gamepad", "sun"]
     readonly property int modulesSection: 0
     readonly property int runnersSection: 1
     readonly property int installSection: 2
@@ -37,6 +37,7 @@ FocusScope {
     readonly property int loginSection: 4
     readonly property int doctorSection: 5
     readonly property int controllerSection: 6
+    readonly property int themesSection: 7
     property int section: 0
 
     readonly property var modulesForm: api.screens.modules
@@ -90,12 +91,7 @@ FocusScope {
     readonly property real mainWidth: Math.min(mainRoom, Theme.dp(1280))
     readonly property real mainX: sideMargin + sideWidth + Theme.dp(56) + (mainRoom - mainWidth) / 2
 
-    readonly property var currentSource: {
-        for (var i = 0; i < sources.sources.length; i++)
-            if (sources.sources[i].id === sources.source)
-                return sources.sources[i];
-        return null;
-    }
+    readonly property var currentSource: sources.current
     readonly property string sourceName: currentSource ? currentSource.name : sources.source
     readonly property bool loggedIn: currentSource ? currentSource.logged_in === true : false
 
@@ -193,6 +189,12 @@ FocusScope {
             });
             return { rows: listening, groups: controller.groups };
         }
+        if (section === themesSection) {
+            rows.push({ section: "Themes", key: "theme", label: "Theme", type: "enum", value: api.theme.name, display: api.theme.name,
+                        choices: api.theme.themes.map(function(t) { return t.name; }), detail: "" });
+            groups.push({ title: "Look", meta: "Changes at once, no restart", rows: [0] });
+            return { rows: rows, groups: groups };
+        }
         return { rows: modulesForm.doctor, groups: modulesForm.doctorGroups };
     }
 
@@ -282,6 +284,9 @@ FocusScope {
                 Sound.panel();
                 editor.prompt("code", "Code from " + sourceName, "");
             }
+        } else if (section === themesSection) {
+            Sound.panel();
+            editor.edit(index, row);
         } else if (section === controllerSection) {
             if (row.key === "test") {
                 if (controller.setTesting(true))
@@ -850,7 +855,12 @@ FocusScope {
         z: 3
 
         onAccepted: function(index, value) {
-            if (page.section === page.controllerSection)
+            if (page.section === page.themesSection) {
+                var theme = api.theme.themes.filter(function(t) { return t.name === value; })[0];
+                // The switch rebuilds this tree; let the editor finish closing first.
+                if (theme)
+                    Qt.callLater(function() { api.theme.set(theme.id); });
+            } else if (page.section === page.controllerSection)
                 page.controller.setValue(index, value);
             else if (page.section === page.runnersSection) {
                 // callLater: the sheet's closed() follows accepted() and would close a prompt opened now.

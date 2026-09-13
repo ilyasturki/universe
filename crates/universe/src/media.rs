@@ -10,6 +10,13 @@ use crate::library::MEDIA_SLOTS;
 const SGDB: &str = "https://www.steamgriddb.com/api/v2";
 const RAWG: &str = "https://api.rawg.io/api";
 const STEAM_APPDETAILS: &str = "https://store.steampowered.com/api/appdetails";
+const SGDB_PLAN: [(&str, &str, Option<&str>); 5] = [
+    ("box_front", "grids", Some("600x900")),
+    ("square", "grids", Some("1024x1024,512x512")),
+    ("tile", "grids", Some("920x430,460x215")),
+    ("background", "heroes", None),
+    ("logo", "logos", None),
+];
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Candidate {
@@ -201,8 +208,7 @@ pub fn refresh(config: &Config, game: &Game, force: bool) -> crate::Result<bool>
         }
         if sgdb_id > 0 {
             cache.sgdb_id = sgdb_id;
-            let plan = [("box_front", "grids", Some("600x900")), ("tile", "grids", Some("920x430,460x215")), ("background", "heroes", None), ("logo", "logos", None)];
-            for (slot, endpoint, dims) in plan {
+            for (slot, endpoint, dims) in SGDB_PLAN {
                 if !force && slot_present(&g, config, slot) {
                     continue;
                 }
@@ -282,12 +288,8 @@ pub fn candidates(config: &Config, game: &Game, slot: &str) -> crate::Result<Vec
     if id == 0 {
         return Ok(vec![]);
     }
-    let (endpoint, dims) = match slot {
-        "box_front" => ("grids", Some("600x900")),
-        "tile" => ("grids", Some("920x430,460x215")),
-        "background" => ("heroes", None),
-        "logo" => ("logos", None),
-        _ => return Err(crate::Error::Invalid(format!("unknown slot {slot}"))),
+    let Some(&(_, endpoint, dims)) = SGDB_PLAN.iter().find(|(s, _, _)| *s == slot) else {
+        return Err(crate::Error::Invalid(format!("unknown slot {slot}")));
     };
     let mut list = sgdb_assets(&key, endpoint, id, dims)?;
     for c in list.iter_mut() {

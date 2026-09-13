@@ -124,16 +124,24 @@ class RecordingsList(QObject):
         self._frames = {}
         self._queue = []
         self._running = {}
-        client.recordingFiled.connect(lambda session, ident, path: ident == self._game_id and self.load(ident))
+        self._all = False
+        client.recordingFiled.connect(lambda session, ident, path: self.loadAll() if self._all else ident == self._game_id and self.load(ident))
 
     @Slot(str)
     def load(self, game_id):
         self._game_id = game_id
         self.gameIdChanged.emit()
         self._queue.clear()
+        self._all = False
+        self._show(self._rows_of(game_id))
+
+    def _rows_of(self, game_id, title=""):
+        recordings = self._client.recordings(game_id) or []
+        if not recordings:
+            return []
         journal = {str(e.get("session") or "") for e in self._client.journal(game_id) or []}
         rows = []
-        for rec in self._client.recordings(game_id) or []:
+        for rec in recordings:
             path = str(rec.get("path") or "")
             session = str(rec.get("session") or "")
             rows.append({
@@ -142,15 +150,33 @@ class RecordingsList(QObject):
                 "size": rec.get("size") or 0, "sizeText": _size(rec.get("size")),
                 "duration_s": rec.get("duration_s") or 0, "durationText": _duration(rec.get("duration_s")),
                 "dateText": _when(rec.get("created_at")), "hasJournal": session in journal,
+                "created_at": str(rec.get("created_at") or ""), "gameId": game_id, "gameTitle": title,
             })
             if path and session and session not in self._frames:
                 self._frames[session] = Frames(path)
+        return rows
+
+    def _show(self, rows):
         self._rows = rows
         self.rowsChanged.emit()
         self.framesChanged.emit()
         for row in rows:
             self._want_thumbnail(row["session"])
         self._pump()
+
+    @Slot()
+    def loadAll(self):
+        self._game_id = ""
+        self.gameIdChanged.emit()
+        self._queue.clear()
+        self._all = True
+        rows = [r for g in _visible_games(self._client) for r in self._rows_of(str(g.get("id") or ""), str(g.get("title") or g.get("id") or ""))]
+        rows.sort(key=lambda r: r["created_at"], reverse=True)
+        self._show(rows)
+
+    @Slot()
+    def unload(self):
+        self._all = False
 
     # The picked row gets all its frames, ahead of the other rows' thumbnails. In thumbnail order,
     # so the one shown in the list is settled before the rest of the mosaic arrives.
@@ -283,6 +309,10 @@ def _journal_dir(game_id):
     return os.path.join(universe_home("DATA", ".local/share"), "games", game_id, "journal")
 
 
+def _visible_games(client):
+    return [g for g in client.list() or [] if not (g.get("removed") or g.get("hidden"))]
+
+
 class JournalList(QObject):
     rowsChanged = Signal()
     gameIdChanged = Signal()
@@ -292,17 +322,27 @@ class JournalList(QObject):
         self._client = client
         self._game_id = ""
         self._rows = []
-        client.entryWritten.connect(lambda session, ident: ident == self._game_id and self.load(ident))
+        self._all = False
+        client.entryWritten.connect(lambda session, ident: self.loadAll() if self._all else ident == self._game_id and self.load(ident))
 
     @Slot(str)
     def load(self, game_id):
         self._game_id = game_id
         self.gameIdChanged.emit()
-        game_dir = (self._client.game(game_id) or {}).get("dir") or ""
+        self._all = False
+        self._rows = self._rows_of(game_id)
+        self.rowsChanged.emit()
+
+    def _rows_of(self, game_id, game=None):
+        entries = self._client.journal(game_id) or []
+        if not entries:
+            return []
+        game = game if game is not None else (self._client.game(game_id) or {})
+        game_dir = game.get("dir") or ""
         base = os.path.join(game_dir, "journal") if game_dir else _journal_dir(game_id)
         recorded = {str(r.get("session") or "") for r in self._client.recordings(game_id) or []}
         rows = []
-        for entry in self._client.journal(game_id) or []:
+        for entry in entries:
             images = []
             for rel in entry.get("images") or []:
                 path = rel if os.path.isabs(str(rel)) else os.path.join(base, str(rel))
@@ -321,11 +361,26 @@ class JournalList(QObject):
                 "paragraphs": paragraphs, "blocks": markdown_blocks(paragraphs),
                 "next_up": str(entry.get("next_up") or ""), "images": images,
                 "hasRecording": str(entry.get("session") or "") in recorded,
+                "written_at": str(entry.get("written_at") or ""),
+                "gameId": game_id, "gameTitle": str(game.get("title") or game_id),
             })
         # Session ids are timestamps: a pending entry sorts among the written ones by when it was played.
         rows.sort(key=lambda r: r["session"], reverse=True)
+        return rows
+
+    @Slot()
+    def loadAll(self):
+        self._game_id = ""
+        self.gameIdChanged.emit()
+        self._all = True
+        rows = [r for g in _visible_games(self._client) for r in self._rows_of(str(g.get("id") or ""), g)]
+        rows.sort(key=lambda r: r["session"], reverse=True)
         self._rows = rows
         self.rowsChanged.emit()
+
+    @Slot()
+    def unload(self):
+        self._all = False
 
     @Slot(result=str)
     def render(self):

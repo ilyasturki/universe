@@ -1,3 +1,4 @@
 # Apart from core on purpose: the launch splash imports core from a Qt that
 # has no QtMultimedia, and a module loads every singleton it lists.
 singleton Sound 1.0 Sound.qml
+SoundPool 1.0 SoundPool.qml

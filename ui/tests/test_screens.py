@@ -221,6 +221,18 @@ def test_pending_journals_announce_each_session_once(api, fake):
                          ("resolved", "20260913-100000", "the-technomancer", "failed", "codex timed out")]
 
 
+def test_album_and_news_span_every_game(api):
+    album = api.screens.album
+    album.loadAll()
+    assert album.count == 2 and album.gameId == ""
+    assert album.rows[0]["gameTitle"] == "The Technomancer" and album.rows[0]["gameId"] == "the-technomancer"
+    assert album.rows[0]["created_at"] >= album.rows[1]["created_at"], "newest first"
+    news = api.screens.news
+    news.loadAll()
+    assert news.count == 2 and news.rows[0]["gameTitle"] == "The Technomancer" and news.gameId == ""
+    assert news.rows[0]["written_at"] >= news.rows[1]["written_at"]
+
+
 def test_journal_paragraphs_become_markdown_blocks():
     from universe_ui.screens.media import markdown_blocks
 

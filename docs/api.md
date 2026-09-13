@@ -71,7 +71,7 @@ comma-separated for lists, `""` deletes the key. A runner is written under its s
 
 ```json
 {"stats": {"hours": 12.5, "play_count": 7, "last_played": "RFC3339 or null"},
- "media": {"box_front": "path|null", "tile": null, "background": null, "logo": null,
+ "media": {"box_front": "path|null", "square": null, "tile": null, "background": null, "logo": null,
            "screenshots": ["path"]},
  "modules": {"capture": {"enabled": true, "cursor": false}},
  "effective": {"runner": "dolphin", "runner_name": "Dolphin", "runner_kind": "emulator",
@@ -185,7 +185,7 @@ alone releases it. The controller watcher reads the composite device like any pa
 | `media_candidates(id, slot)` | `media_candidates_json(…)` | `universe media <name> candidates <slot>` | `[{provider, url or path, score}]`, cached in `.sync.json` |
 | `media_pin(id, provider, provider_id)` | `media_pin(…)` | `universe media <name> pin <provider> <id>` | `provider ∈ sgdb, rawg, steam` → `metadata.<provider>_id` |
 
-`slot ∈ box_front, tile, background, logo, screenshot`.
+`slot ∈ box_front, square, tile, background, logo, screenshot`. `square` is the 1:1 grid (SteamGridDB 1024×1024, then 512×512), the Switch 2 theme's tile; `tile` stays the 920×430 banner.
 
 ## Recordings
 
@@ -326,7 +326,7 @@ games_root = "~/Games"               # $XDG_GAMES_DIR: where sources install
 prefixes_root = "~/.local/share/universe/prefixes"
 recordings_root = "~/Videos/universe"            # $XDG_VIDEOS_DIR/universe
 journal_root = "~/Documents/universe/journal"    # $XDG_DOCUMENTS_DIR/universe/journal
-overrides = "~/.config/universe/overrides"       # hand-picked art: <id>/{boxFront,tile,background,logo}.*, <id>/screenshots/
+overrides = "~/.config/universe/overrides"       # hand-picked art: <id>/{boxFront,square,tile,background,logo}.*, <id>/screenshots/
 
 [launch]
 proton = "proton-ge"                 # a name under [proton], or a path

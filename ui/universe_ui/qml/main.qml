@@ -7,12 +7,12 @@ Window {
     width: 1920
     height: 1080
     visibility: api.fullscreen ? Window.FullScreen : Window.Windowed
-    color: "#0e0f13"
+    color: api.theme.ground
     title: "Universe"
 
     Loader {
         anchors.fill: parent
-        source: "theme.qml"
+        source: api.theme.entry
         focus: true
     }
 }

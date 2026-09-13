@@ -247,6 +247,16 @@ Canvas {
             ctx.moveTo(11.5 * s, 15 * s);
             ctx.lineTo(16.5 * s, 15 * s);
             ctx.stroke();
+        } else if (kind === "sun") {
+            ctx.arc(12 * s, 12 * s, 4 * s, 0, Math.PI * 2);
+            ctx.stroke();
+            for (var r = 0; r < 8; r++) {
+                var a = r * Math.PI / 4;
+                ctx.beginPath();
+                ctx.moveTo((12 + Math.cos(a) * 7) * s, (12 + Math.sin(a) * 7) * s);
+                ctx.lineTo((12 + Math.cos(a) * 10) * s, (12 + Math.sin(a) * 10) * s);
+                ctx.stroke();
+            }
         } else if (kind === "keyboard") {
             ctx.roundedRect(3 * s, 6 * s, 18 * s, 12 * s, 2 * s, 2 * s);
             ctx.stroke();

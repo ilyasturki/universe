@@ -84,6 +84,7 @@ class GameAssets(QObject):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._box = QUrl()
+        self._square = QUrl()
         self._tile = QUrl()
         self._background = QUrl()
         self._logo = QUrl()
@@ -92,6 +93,7 @@ class GameAssets(QObject):
     def update(self, media):
         media = media or {}
         self._box = _file_url(media.get("box_front"))
+        self._square = _file_url(media.get("square"))
         self._tile = _file_url(media.get("tile"))
         self._background = _file_url(media.get("background"))
         self._logo = _file_url(media.get("logo"))
@@ -99,6 +101,7 @@ class GameAssets(QObject):
         self.changed.emit()
 
     boxFront = Property(QUrl, lambda self: self._box, notify=changed)
+    square = Property(QUrl, lambda self: self._square, notify=changed)
     tile = Property(QUrl, lambda self: self._tile, notify=changed)
     background = Property(QUrl, lambda self: self._background, notify=changed)
     logo = Property(QUrl, lambda self: self._logo, notify=changed)

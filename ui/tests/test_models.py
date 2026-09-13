@@ -38,7 +38,7 @@ def test_game_decodes_variants(app):
         "stats": {"hours": 1.5, "play_count": "3", "last_played": "2026-09-09T22:41:00+02:00"},
         "metadata": {"developer": "A, B", "genres": ["Action"], "release_year": "2016",
                      "extra": {"metacritic": 61}},
-        "media": {"box_front": "/tmp/box.png", "screenshots": ["/tmp/a.png", "http://x/b.png"]},
+        "media": {"box_front": "/tmp/box.png", "square": "/tmp/sq.png", "screenshots": ["/tmp/a.png", "http://x/b.png"]},
         "tags": "rpg, sci-fi",
     }, None)
     assert game.playTime == 5400
@@ -49,7 +49,7 @@ def test_game_decodes_variants(app):
     assert game.releaseYear == 2016
     assert game.extra == {"metacritic": [61]}
     assert game.tags == ["rpg", "sci-fi"]
-    assert game.assets.boxFront.isLocalFile()
+    assert game.assets.boxFront.isLocalFile() and game.assets.square.isLocalFile()
     assert [u.toString() for u in game.assets.screenshotList] == ["file:///tmp/a.png", "http://x/b.png"]
 
 

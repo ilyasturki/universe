@@ -25,6 +25,10 @@ running view; holding A for a second quits the game.
 *--size* _WxH_
 	Window size (default 1920x1080).
 
+*--theme* _ID_
+	The look for this run: *reprise*, *switch2-white* or *switch2-black*. Without it
+	the host starts in the look last picked in Settings › Themes, Reprise at first.
+
 *--no-gamepad*
 	Do not open the SDL2 gamepad; keyboard only.
 

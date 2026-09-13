@@ -8,6 +8,7 @@ from PySide6.QtGui import QColor, QFont, QFontMetricsF, QImage, QLinearGradient,
 
 SLOTS = {
     "box_front": (600, 900),
+    "square": (600, 600),
     "tile": (600, 600),
     "background": (1920, 1080),
     "logo": (960, 300),
@@ -40,7 +41,7 @@ def _paint(path, size, ident, title, kind):
         step = max(40, w // 12)
         for x in range(-h, w, step):
             p.drawLine(x, h, x + h, 0)
-    if kind in ("box_front", "tile", "logo"):
+    if kind in ("box_front", "square", "tile", "logo"):
         font = QFont("Archivo", max(18, w // (14 if kind == "logo" else 9)))
         font.setBold(True)
         margin = w // 12

@@ -87,9 +87,8 @@ class SourcesBrowser(QObject):
             sources, source, updates, games = result
             self._sources = sources
             self.sourcesChanged.emit()
-            if source != self._source:
-                self._source = source
-                self.sourceChanged.emit()
+            self._source = source
+            self.sourceChanged.emit()
             self._updates = updates
             self.updatesChanged.emit()
             self._games = games
@@ -243,6 +242,7 @@ class SourcesBrowser(QObject):
 
     sources = Property("QVariantList", lambda self: list(self._sources), notify=sourcesChanged)
     source = Property(str, lambda self: self._source, notify=sourceChanged)
+    current = Property("QVariant", lambda self: next((dict(s) for s in self._sources if s.get("id") == self._source), None), notify=sourceChanged)
     rows = Property("QVariantList", lambda self: list(self._rows), notify=rowsChanged)
     updates = Property("QVariantList", lambda self: list(self._updates), notify=updatesChanged)
     query = Property(str, lambda self: self._query, notify=queryChanged)

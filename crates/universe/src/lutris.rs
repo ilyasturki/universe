@@ -430,7 +430,7 @@ fn import_pegasus_media(dest: &Path, game: &Game, root: &Path) -> crate::Result<
             continue;
         }
         let target = match stem {
-            "boxFront" | "tile" | "background" | "logo" => dest.join(e.file_name()),
+            "boxFront" | "square" | "tile" | "background" | "logo" => dest.join(e.file_name()),
             s if s.starts_with("screenshot") => dest.join("screenshots").join(e.file_name()),
             _ => continue,
         };

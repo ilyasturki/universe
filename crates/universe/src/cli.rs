@@ -242,7 +242,7 @@ pub enum Cmd {
     Generate { dir: std::path::PathBuf },
 }
 
-const MEDIA_SLOTS: [&str; 5] = ["box_front", "tile", "background", "logo", "screenshot"];
+const MEDIA_SLOTS: [&str; 6] = ["box_front", "square", "tile", "background", "logo", "screenshot"];
 
 #[derive(Subcommand, Debug)]
 pub enum MediaCmd {
@@ -1256,10 +1256,10 @@ const POSITIONALS: &[(&str, usize, &str)] = &[
     ("recordings", 1, "games"),
     ("update", 1, "games"),
     ("media", 1, "games all"),
-    ("media set", 1, "box_front tile background logo screenshot"),
+    ("media set", 1, "box_front square tile background logo screenshot"),
     ("media set", 2, "FILES"),
-    ("media unset", 1, "box_front tile background logo screenshot"),
-    ("media candidates", 1, "box_front tile background logo screenshot"),
+    ("media unset", 1, "box_front square tile background logo screenshot"),
+    ("media candidates", 1, "box_front square tile background logo screenshot"),
     ("media pin", 1, "sgdb rawg steam"),
     ("module enable", 1, "modules"),
     ("module disable", 1, "modules"),

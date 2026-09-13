@@ -6,20 +6,21 @@ from conftest import pump
 from universe_ui import host
 
 GROUND = (0x0E, 0x0F, 0x13)
+WHITE_GROUND = (0xEB, 0xEB, 0xEB)
 
 
-def lit_fraction(image):
+def lit_fraction(image, ground=GROUND):
     small = image.scaled(96, 54)
     lit = 0
     for y in range(small.height()):
         for x in range(small.width()):
             c = small.pixelColor(x, y)
-            if abs(c.red() - GROUND[0]) + abs(c.green() - GROUND[1]) + abs(c.blue() - GROUND[2]) > 60:
+            if abs(c.red() - ground[0]) + abs(c.green() - ground[1]) + abs(c.blue() - ground[2]) > 60:
                 lit += 1
     return lit / (small.width() * small.height())
 
 
-def test_theme_renders_a_frame(api):
+def render(api, width=1280, height=720, settle=2500):
     engine = QQmlApplicationEngine()
     for p in host.qml_import_paths() if host.qt_paths_unset() else []:
         engine.addImportPath(p)
@@ -28,12 +29,28 @@ def test_theme_renders_a_frame(api):
     assert engine.rootObjects(), "main.qml failed to load"
     window = engine.rootObjects()[0]
     api.attachWindow(window)
-    window.setWidth(1280)
-    window.setHeight(720)
-    pump(2500)
+    window.setWidth(width)
+    window.setHeight(height)
+    pump(settle)
     image = window.grabWindow()
+    return engine, window, image
+
+
+def test_themes_render_and_switch_live(api):
+    engine, window, image = render(api)
     assert image.width() == 1280 and image.height() == 720
     assert lit_fraction(image) > 0.05
+    api.theme.set("switch2-white")
+    pump(2500)
+    image = window.grabWindow()
+    assert lit_fraction(image, WHITE_GROUND) > 0.05
+    assert image.pixelColor(4, 4).getRgb()[:3] == WHITE_GROUND
+    api.theme.set("switch2-black")
+    pump(400)
+    assert window.grabWindow().pixelColor(4, 4).red() < 0x40, "black ground after the palette switch"
+    api.theme.set("reprise")
+    pump(1500)
+    assert lit_fraction(window.grabWindow()) > 0.05
     window.close()
     pump(50)
 

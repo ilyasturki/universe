@@ -5,8 +5,9 @@ speak, no schema to negotiate, and no second implementation to keep in step — 
 links the Rust crate, or imports `universe_core` (the PyO3 module) and calls the same methods the
 CLI calls. [`api.md`](api.md) is the full surface.
 
-The shipped frontend, `universe-ui`, lives in `ui/`: a PySide6 host around the
-[Reprise](https://github.com/ilyasturki/pegasus-theme-reprise) QML theme. What follows is its
+The shipped frontend, `universe-ui`, lives in `ui/`: a PySide6 host around two QML looks, the
+[Reprise](https://github.com/ilyasturki/pegasus-theme-reprise) theme and the Switch 2 HOME menu
+(`qml/switch2/`, see its README). What follows is its
 contract and the parts of it that were expensive to get right; a GTK or Windows frontend owes none
 of it except the "Changes" section, which is a property of the core.
 
@@ -21,6 +22,7 @@ ui/
     gamepad.py              SDL2 → QKeyEvent
     screens/                data for the added screens: settings.py, sources.py, media.py, paths.py, controller.py, runners.py
     fixtures/               library.json and generated artwork, for --fake
+    themes.py               the looks the host can load and the one on screen (api.theme)
     qml/                    the ported theme plus the added screens; ui/Pad*.qml and PadGeometry.js draw the pads, assets/runners/ holds the runner logos (SOURCES.md says where each is from)
   tests/                    pytest, offscreen
 ```
@@ -39,11 +41,12 @@ One context property, `api`:
 | `api.pad` | `rightX` / `rightY`: the right stick as a value, 0 without a controller |
 | `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed`, `--size` and `--screenshot` turn it off) |
+| `api.theme` | the looks: `themes` (`id`, `name`, `variant`, `entry`, `ground`), `current`, `set(id)`, `fontPath` |
 
 A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `playTime`,
 `playCount`, `lastPlayed`, `releaseYear`, `developerList`, `publisherList`, `genreList`, `players`,
 `description`, `summary`, `source`, `platform`, `runner`, `runnerName`, `tags`, `extra`, `raw`,
-`collections`, and `assets` (`boxFront`, `tile`, `background`, `logo`, `screenshotList`), plus
+`collections`, and `assets` (`boxFront`, `square`, `tile`, `background`, `logo`, `screenshotList`), plus
 `launch()`.
 
 `api.screens.recordings` samples 16 frames per recording with ffmpeg into
@@ -65,6 +68,17 @@ the module's 30-min timeout show up); `appeared(session, title)` and
 `resolved(session, game, state, text)` fire once per session and become the "Journal: writing …",
 "Journal: <title>" and "Journal failed: <reason>" toasts, and the tab bar pulses a book next to
 the session badge while the count is not zero.
+
+## Themes
+
+`main.qml` is a window with one `Loader` whose source is `api.theme.entry`, so a theme is a root
+QML file under `qml/` and switching one for another rebuilds the tree in place: no restart, the
+navigation comes back at the home screen. `Basic White` and `Basic Black` share `switch2/theme.qml`
+and differ by `api.theme.variant`, which the theme's palette reads — that switch is a binding. The
+choice lives in `ui-memory.json` (`theme`), `--theme ID` overrides it for one run, and both looks
+offer it in Settings › Themes. A theme calls the same `api` and the same `api.screens` objects;
+`api.screens.album` and `api.screens.news` are the recordings and journal lists across every
+game (`loadAll()`), which the Switch 2 look shows as its Album and News.
 
 ## Changes
 
