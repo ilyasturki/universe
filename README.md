@@ -1,6 +1,6 @@
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="brand/universe-lockup-dark.svg"><img src="brand/universe-lockup.svg" width="420" alt="Universe"></picture></p>
 
-A gamepad-first game launcher for Linux. A Rust core (a library, the `universe` CLI and a Python module for the host) owns the library, launches games through [umu-run](https://github.com/Open-Wine-Components/umu-launcher) as transient systemd units, and records sessions and playtime. There is no daemon: systemd runs `universe session-end` when the game's cgroup empties, whatever happened to the process that launched it. A Qt 6 / PySide6 host (`universe-ui`) renders the [Reprise](https://github.com/ilyasturki/pegasus-theme-reprise) interface on top of the core, in-process. Everything else — GOG installs, dialog-free recording, an AI play journal, a Markdown tracker — is a module.
+A gamepad-first game launcher for Linux. A Rust core (a library, the `universe` CLI and a Python module for the host) owns the library, launches games through [umu-run](https://github.com/Open-Wine-Components/umu-launcher) as transient systemd units, and records sessions and playtime. There is no daemon: systemd runs `universe session-end` when the game's cgroup empties, whatever happened to the process that launched it. A Qt 6 / PySide6 host (`universe-ui`) renders the [Reprise](https://github.com/ilyasturki/pegasus-theme-reprise) interface on top of the core, in-process. Everything else — GOG installs, dialog-free recording, an AI play journal — is a module.
 
 Plain files are the truth: one `game.toml`, one `sessions.jsonl` and a `journal/` per game under `$XDG_DATA_HOME/universe/games/<id>/`. SQLite is only a rebuildable index.
 
@@ -24,7 +24,7 @@ Home-manager side (config.toml, enabled modules):
 imports = [ universe.homeModules.default ];
 programs.universe = {
   enable = true;
-  modules.enabled = [ "gog" "capture" "journal" "tracker-md" ];
+  modules.enabled = [ "gog" "capture" "journal" ];
   settings = {
     paths.games_root = "/mnt/games/PC";
     paths.prefixes_root = "/mnt/games/prefixes";
@@ -80,7 +80,6 @@ The spare buttons of a pad — the Edge's paddles and Fn buttons, the Elite's pa
 | `gog` | source | `gogdl` | login via `universe gog login`; a dedicated `GOGDL_CONFIG_PATH` under the module's data dir |
 | `capture` | hooks | `gpu-screen-recorder` + its setcap `gsr-kms-server`, both from the host system and the same nixpkgs (the NixOS module enables and pins `programs.gpu-screen-recorder`) | KMS capture of the output the game runs on, no portal dialog; `cursor` per game; `fps = "auto"` follows the output's refresh rate (read from Mutter, 60 elsewhere) |
 | `journal` | hooks | `ffmpeg`, `codex` (or `provider = "claude"` / `"stub"`) | one Markdown entry per session from frames and screenshots |
-| `tracker-md` | hooks | — | keeps a Markdown tracker's Hours column and journal links in sync |
 | metadata | core | SteamGridDB and RAWG keys in `[keys]` | artwork slots `box_front`, `tile`, `background`, `logo`, screenshots |
 
 Cursor hiding on GNOME toggles the `hide-cursor@elcste.com` shell extension around the session.

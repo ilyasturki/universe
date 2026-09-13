@@ -97,7 +97,5 @@ env:
     enabled = ["gog", "capture", "journal"]
     [modules.capture]
     min_duration_s = 20
-    # [modules.tracker-md]
-    # root = "~/Documents/notes/games"   # writes Hours into the real tracker; enable on purpose
     EOF
     echo "wrote $cfg"

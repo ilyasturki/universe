@@ -558,41 +558,6 @@
         }
       ],
       "frontend_qml": null
-    },
-    {
-      "id": "tracker-md",
-      "name": "Markdown tracker",
-      "kind": [
-        "hooks"
-      ],
-      "version": "0.1.0",
-      "dir": "/home/yasso/.config/universe/modules/tracker-md",
-      "enabled": false,
-      "available": false,
-      "missing": [
-        "uv"
-      ],
-      "hooks": {
-        "session-end": "bin/update"
-      },
-      "verbs": [],
-      "settings": [
-        {
-          "key": "root",
-          "type": "path",
-          "default": "~/Documents/notes/games",
-          "label": "Tracker folder",
-          "scope": "global"
-        },
-        {
-          "key": "create_missing",
-          "type": "bool",
-          "default": false,
-          "label": "Create missing rows",
-          "scope": "global"
-        }
-      ],
-      "frontend_qml": null
     }
   ],
   "sources": [
@@ -743,12 +708,6 @@
       "ok": false,
       "detail": "hide-cursor@elcste.com not enabled",
       "module": ""
-    },
-    {
-      "check": "uv",
-      "ok": false,
-      "detail": "not found",
-      "module": "tracker-md"
     }
   ],
   "config": {

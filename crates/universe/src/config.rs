@@ -131,7 +131,7 @@ impl Default for DesktopConfig {
 impl Default for ModulesConfig {
     fn default() -> Self {
         ModulesConfig {
-            enabled: vec!["gog".into(), "capture".into(), "journal".into(), "tracker-md".into()],
+            enabled: vec!["gog".into(), "capture".into(), "journal".into()],
             settings: BTreeMap::new(),
         }
     }

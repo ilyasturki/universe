@@ -34,13 +34,15 @@ def test_game_settings_form(api, fake):
 
 
 def test_modules_form(api, fake):
+    journal_module = next(m for m in fake._data["modules"] if m["id"] == "journal")
+    journal_module.update(enabled=False, available=False, missing=["ffmpeg"])
     form = api.screens.modules
     form.load()
     rows = form.rows
-    tracker = next(g for g in form.groups if g["title"] == "Markdown tracker")
-    assert "missing uv" in tracker["warning"] and tracker["off"] is True and tracker["rows"] == []
-    enabled = tracker["control"]
-    assert rows[enabled]["module"] == "tracker-md" and rows[enabled]["key"] == "enabled"
+    journal = next(g for g in form.groups if g["title"] == "Play journal")
+    assert "missing ffmpeg" in journal["warning"] and journal["off"] is True and journal["rows"] == []
+    enabled = journal["control"]
+    assert rows[enabled]["module"] == "journal" and rows[enabled]["key"] == "enabled"
     assert rows[enabled]["value"] is False
     capture = next(g for g in form.groups if g["title"] == "Video capture")
     assert capture["meta"] == "v0.1.0 · hooks" and capture["warning"] == "" and capture["off"] is False

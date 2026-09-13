@@ -18,7 +18,7 @@ in {
       example = { paths.recordings_root = "/mnt/recordings/games"; launch.proton = "proton-ge"; modules.capture.codec = "av1_10bit"; };
       description = "Contents of config.toml (see docs/api.md). Paths, launch defaults, [modules.<id>] settings, keys. null leaves config.toml to the user: the core writes it in place (`universe config set`, module enable, the UI settings), which a store symlink refuses.";
     };
-    modules.enabled = lib.mkOption { type = lib.types.listOf lib.types.str; default = [ "gog" "capture" "journal" "tracker-md" ]; };
+    modules.enabled = lib.mkOption { type = lib.types.listOf lib.types.str; default = [ "gog" "capture" "journal" ]; };
   };
   config = lib.mkIf cfg.enable {
     home.packages = [ cfg.package cfg.ui ];

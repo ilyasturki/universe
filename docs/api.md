@@ -251,7 +251,7 @@ cursor_extension = "hide-cursor@elcste.com"   # enabled for the session, restore
 proton-ge = "~/.local/share/lutris/runners/wine/proton-ge"
 
 [modules]
-enabled = ["gog", "capture", "journal", "tracker-md"]
+enabled = ["gog", "capture", "journal"]
 
 [modules.capture]
 codec = "av1_10bit"
