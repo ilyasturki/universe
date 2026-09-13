@@ -4,6 +4,7 @@ use owo_colors::OwoColorize;
 use serde_json::Value;
 
 use crate::core::Core;
+use crate::journal::Locale;
 use crate::launcher;
 use crate::sessions;
 
@@ -401,8 +402,21 @@ fn hours(v: &Value) -> String {
     }
 }
 
-fn day(rfc: &str) -> String {
-    rfc.get(0..10).unwrap_or("").to_string()
+fn local(ts: &str) -> Option<chrono::DateTime<chrono::Local>> {
+    let ts = ts.trim();
+    if let Ok(t) = chrono::DateTime::parse_from_rfc3339(ts) {
+        return Some(t.with_timezone(&chrono::Local));
+    }
+    let d = chrono::NaiveDate::parse_from_str(ts, "%Y-%m-%d").ok()?;
+    d.and_hms_opt(0, 0, 0)?.and_local_timezone(chrono::Local).single()
+}
+
+fn day(ts: &str, loc: &Locale) -> String {
+    local(ts).map(|t| loc.date(&t)).unwrap_or_else(|| ts.get(0..10).unwrap_or("").to_string())
+}
+
+fn when(ts: &str, loc: &Locale) -> String {
+    local(ts).map(|t| loc.datetime(&t)).unwrap_or_else(|| ts.to_string())
 }
 
 fn parse_json(s: &str) -> Value {
@@ -444,6 +458,7 @@ fn report(json: bool, ok: bool, message: &str) {
 pub async fn run(cli: Cli) -> anyhow::Result<()> {
     let json = cli.json;
     let cmd = cli.cmd.unwrap_or(Cmd::Ls { all: false });
+    let loc = Locale::from_env();
     // Shell helpers stay off Core::open: a Tab must not reconcile a session or probe logins.
     match &cmd {
         Cmd::Complete { what } => return complete(what),
@@ -477,7 +492,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 }
                 let title = if g["favorite"].as_bool() == Some(true) { format!("★ {}", s(&g, "title")) } else { s(&g, "title") };
                 let title = if g["hidden"].as_bool() == Some(true) { Cell::new(title).add_attribute(Attribute::Dim) } else { Cell::new(title) };
-                t.add_row(vec![title, Cell::new(s(&g["source"], "kind")), Cell::new(hours(&g)), Cell::new(day(&s(&g["stats"], "last_played")))]);
+                t.add_row(vec![title, Cell::new(s(&g["source"], "kind")), Cell::new(hours(&g)), Cell::new(day(&s(&g["stats"], "last_played"), &loc))]);
             }
             println!("{t}");
         }
@@ -533,7 +548,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 println!("{}", "no session running".dimmed());
             } else {
                 let c = parse_json(&cur);
-                println!("{} {} · session {} · {} · since {}", "running".green(), s(&c, "title"), s(&c, "session_id"), s(&c, "unit"), s(&c, "started_at"));
+                println!("{} {} · session {} · {} · since {}", "running".green(), s(&c, "title"), s(&c, "session_id"), s(&c, "unit"), when(&s(&c, "started_at"), &loc));
             }
             let mut t = table(&["Session", "Game", "Duration", "Source", "Recording"]);
             for r in recent {
@@ -555,7 +570,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             println!("  proton     {} ({})", s(&g["effective"], "proton"), s(&g["effective"], "proton_path"));
             println!("  esync/fsync/mangohud  {}/{}/{}", g["effective"]["esync"], g["effective"]["fsync"], g["effective"]["mangohud"]);
             println!("  env        {}", g["effective"]["env"]);
-            println!("  hours      {}  plays {}  last {}", hours(&g), g["stats"]["play_count"], s(&g["stats"], "last_played"));
+            println!("  hours      {}  plays {}  last {}", hours(&g), g["stats"]["play_count"], when(&s(&g["stats"], "last_played"), &loc));
             println!("  media      {}", g["media"]);
             println!("  modules    {}", g["modules"]);
             println!("  journal    {} entries · recordings {}", g["journal_count"], g["recording_count"]);
@@ -616,7 +631,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     }
                     let mut t = table(&["Id", "Title", "Local", "Remote", "Version", "Date"]);
                     for u in &list {
-                        t.add_row(vec![s(u, "id"), s(u, "title"), s(u, "local_build"), s(u, "remote_build"), s(u, "version"), s(u, "date")]);
+                        t.add_row(vec![s(u, "id"), s(u, "title"), s(u, "local_build"), s(u, "remote_build"), s(u, "version"), day(&s(u, "date"), &loc)]);
                     }
                     println!("{t}");
                     if yes || confirm("download?") {
@@ -668,7 +683,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
             let mut t = table(&["Session", "Started", "Duration", "Source", "Recording"]);
             for r in list.as_array().cloned().unwrap_or_default() {
-                t.add_row(vec![s(&r, "session"), s(&r, "started_at"), fmt_duration(r["duration_s"].as_u64().unwrap_or(0)), s(&r, "source"), s(&r, "recording")]);
+                t.add_row(vec![s(&r, "session"), when(&s(&r, "started_at"), &loc), fmt_duration(r["duration_s"].as_u64().unwrap_or(0)), s(&r, "source"), s(&r, "recording")]);
             }
             println!("{t}");
         }

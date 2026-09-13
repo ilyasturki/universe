@@ -134,8 +134,17 @@ impl Locale {
 
     /// `%x` of the locale, the same bytes glibc gives Python's strftime.
     pub fn date(&self, t: &DateTime<Local>) -> String {
+        self.fmt(c"%x", "%Y-%m-%d", t)
+    }
+
+    /// `%c` of the locale: date and time.
+    pub fn datetime(&self, t: &DateTime<Local>) -> String {
+        self.fmt(c"%c", "%Y-%m-%d %H:%M:%S", t)
+    }
+
+    fn fmt(&self, spec: &std::ffi::CStr, fallback: &str, t: &DateTime<Local>) -> String {
         if self.0.is_null() {
-            return t.format("%Y-%m-%d").to_string();
+            return t.format(fallback).to_string();
         }
         let tm = libc::tm {
             tm_sec: t.second() as _,
@@ -151,9 +160,9 @@ impl Locale {
             tm_zone: std::ptr::null(),
         };
         let mut buf = [0u8; 128];
-        let n = unsafe { libc::strftime_l(buf.as_mut_ptr().cast(), buf.len(), c"%x".as_ptr(), &tm, self.0) };
+        let n = unsafe { libc::strftime_l(buf.as_mut_ptr().cast(), buf.len(), spec.as_ptr(), &tm, self.0) };
         if n == 0 {
-            return t.format("%Y-%m-%d").to_string();
+            return t.format(fallback).to_string();
         }
         String::from_utf8_lossy(&buf[..n]).into_owned()
     }
