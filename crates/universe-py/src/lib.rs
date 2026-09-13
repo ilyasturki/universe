@@ -212,6 +212,9 @@ impl Core {
     fn controller_state_json(&self, py: Python<'_>) -> String {
         self.run_infallible(py, |c| c.controller_state_json())
     }
+    fn controller_pads_json(&self, py: Python<'_>) -> String {
+        self.run_infallible(py, |c| c.controller_pads_json())
+    }
     fn set_controller_macro(&self, py: Python<'_>, json: String) -> PyResult<()> {
         self.run(py, |c| async move { c.set_controller_macro(&json).await })
     }

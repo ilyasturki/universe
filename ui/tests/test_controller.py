@@ -126,6 +126,88 @@ def test_two_pads_and_hotplug(api, fake):
     assert screen.bind("south", "press", "screenshot", "", "") is False
 
 
+def test_learn_timeout_and_error_clear_learning(api, fake):
+    screen = api.screens.controller
+    watcher = FakeWatcher("dualsense-edge")
+    screen.start(watcher)
+    messages = []
+    screen.message.connect(messages.append)
+    assert screen.learn("paddle_left") is True and screen.learning == "paddle_left"
+    watcher.emit({"event": "learn_timeout"})
+    assert screen.learning == "" and messages == ["No button pressed: learning stopped"]
+    assert screen.learn("paddle_left") is True
+    watcher.emit({"event": "error", "message": "cannot learn paddle_left on event30"})
+    assert screen.learning == "" and messages[-1] == "cannot learn paddle_left on event30"
+    watcher.emit({"event": "learn_timeout"})
+    assert len(messages) == 2, "a timeout with nothing to stop says nothing"
+
+
+def test_waiting_lists_the_cores_pads_passively(api, fake):
+    screen = api.screens.controller
+    watcher = FakeWatcher("none")
+    screen.start(watcher)
+    assert not screen.connected and not screen.passive
+    watcher.emit({"event": "waiting"})
+    assert screen.status == "waiting" and screen.passive and screen.connected
+    assert screen.current == "event30" and screen.family == "dualsense-edge"
+    first = screen.rows[0]
+    assert first["type"] == "info" and first["label"] == "Macros are running in the game session"
+    assert "device" not in rows_by_key(screen)
+    assert rows_by_key(screen)["paddle_left"]["display"] == "Press · Volume down"
+    messages = []
+    screen.message.connect(messages.append)
+    assert screen.learn("paddle_left") is False and screen.learning == ""
+    assert messages == ["Live presses and learning resume when it ends"]
+    assert screen.bind("paddle_left", "hold", "stop", "", "") is True, "binding writes the config the holder rereads"
+    stop = next(p["label"] for p in screen.presets if p["id"] == "stop")
+    assert rows_by_key(screen)["paddle_left"]["display"] == "Press · Volume down / Hold · " + stop
+    assert watcher.commands[-1] == {"cmd": "reload"}
+    watcher.emit({"event": "ready"})
+    assert screen.status == "ready" and not screen.passive and not screen.connected
+    assert [r["type"] for r in screen.rows] == ["info"]
+    watcher.emit(watcher.device("event31", "dualsense-edge"))
+    assert screen.connected and screen.rows[0]["type"] != "info"
+    assert screen.learn("paddle_left") is True
+
+
+def test_watcher_restarts_after_it_dies(api, fake):
+    screen = api.screens.controller
+    screen.restart_ms = 0
+    watcher = FakeWatcher("dualsense-edge")
+    screen.start(watcher)
+    assert screen.learn("paddle_left") is True
+    watcher.exit(3)
+    assert screen.status == "off" and not screen.connected and screen.learning == ""
+    assert not watcher.started
+    first = screen.rows[0]
+    assert first["type"] == "info" and first["label"] == "Controller macros stopped"
+    assert screen.learn("paddle_left") is False
+    pump(50)
+    assert watcher.started and screen.status == "ready" and screen.connected
+    screen.shutdown()
+    assert not watcher.started
+    watcher.exit(1)
+    assert screen.status == "off" and [r["type"] for r in screen.rows] == ["info"]
+    pump(50)
+    assert not watcher.started, "no restart after shutdown"
+
+
+def test_reconnect_returns_to_the_shown_pad(api, fake):
+    screen = api.screens.controller
+    watcher = FakeWatcher("dualsense-edge")
+    screen.start(watcher)
+    watcher.emit(watcher.device("event40", "xbox-elite", "usb"))
+    assert screen.current == "event30"
+    watcher.emit({"event": "gone", "id": "event30"})
+    assert screen.current == "event40"
+    watcher.emit(watcher.device("event31", "dualsense-edge"))
+    assert screen.current == "event31" and screen.family == "dualsense-edge"
+    assert screen.setValue(0, "Xbox Elite Series 2") is True and screen.current == "event40"
+    watcher.emit({"event": "gone", "id": "event31"})
+    watcher.emit(watcher.device("event32", "dualsense-edge"))
+    assert screen.current == "event40", "a pad picked by hand keeps the page"
+
+
 def test_fake_client_controller_calls(fake):
     state = fake.controllerState()
     assert [f["id"] for f in state["families"]][:2] == ["dualsense-edge", "dualsense"]

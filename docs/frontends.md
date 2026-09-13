@@ -117,13 +117,22 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
 `api.screens.controller` is the Controller section of the Settings tab. The host starts
 `universe controller watch --json --wait` as a child for its lifetime (`$UNIVERSE_BIN`, else
 `universe` on `PATH`) and reads its event lines: `device`, `gone`, `button`, `unknown`, `macro`,
-`learned`, `waiting`, `ready`; it writes `suspend`, `resume`, `reload`, `learn` and `cancel`
-commands on its stdin. The screen exposes `devices`, `current`, `family` (the current pad's, else
-the last one seen, kept in `api.memory` as `controllerFamily`), `connected`, `status`, `learning`,
-the `rows`/`groups` of one card (a Controller picker row when two pads are connected, then a row
-per button of the family, the extras — paddles, Fn — first, then the standard buttons) and `bind`, `unbind`, `learn`,
-`cancelLearn`, `suspend`, `resume`. Macros and families come from the core's `Controller1.State`;
-a write goes through `Controller1.Bind`/`Unbind` and is followed by a `reload` to the watcher.
+`learned`, `learn_timeout`, `error`, `waiting`, `ready`; it writes `suspend`, `resume`, `reload`,
+`learn` and `cancel` commands on its stdin. The screen exposes `devices`, `current`, `family` (the
+current pad's, else the last one seen, kept in `api.memory` as `controllerFamily`), `connected`,
+`status` (`off`, `waiting`, `ready`), `passive`, `learning`, the `rows`/`groups` of one card (a
+Controller picker row when two pads are connected, then a row per button of the family, the extras
+— paddles, Fn — first, then the standard buttons) and `bind`, `unbind`, `learn`, `cancelLearn`,
+`suspend`, `resume`. Macros and families come from the core's `Controller1.State`; a write goes
+through `Controller1.Bind`/`Unbind` and is followed by a `reload` to the watcher.
+
+While another watcher holds the pads (a game launched from the CLI is running) the child reports
+`waiting`: the screen turns passive, lists the pads from `Controller1.Pads` under an info row
+saying macros run in the game session, binds as usual (the holder reloads on the config's mtime)
+and refuses `learn` until `ready`. A watcher that exits reports `off`: the card says so and the
+screen restarts it after `restart_ms`, doubling up to 30 s until it stays up. A shown pad that
+reconnects under a new node becomes current again; a learn the watcher times out clears the
+learning state with a message.
 
 The page suspends the watcher while the section has the focus, so a paddle pressed to find its row
 fires nothing; a press moves the cursor to the button's row and lights it on the art. The art is

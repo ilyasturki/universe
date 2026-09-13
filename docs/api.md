@@ -184,6 +184,7 @@ array of strings (20 s at most).
 | Rust | Python | CLI | Role |
 |---|---|---|---|
 | `controller_state_json()` | `controller_state_json()` | `universe controller ls` | `{enabled, hold_ms, volume_step, mangohud_toggle, families: [{id, name, slots: [{id, label, codes, extra}]}], macros: [Macro], presets: [{id, label, hold_only}]}`; the CLI adds `devices`, the pads readable now with every slot's code or `bound: false` |
+| `controller_pads_json()` | `controller_pads_json()` | — | the `devices` list alone, in the shape `watch` announces; for a frontend whose watcher waits on the lock |
 | `set_controller_macro(json)` | same | `universe controller bind <family> <button> <press\|hold> <action> [--keys K] [--command C]` | validates, replaces the macro with the same family, button and trigger |
 | `remove_controller_macro(family, button, trigger)` | same | `universe controller unbind <family> <button> [trigger]` | an empty trigger removes both |
 | `set_controller_button(family, slot, codes_json)` | same | `universe controller learn <family> <slot>` · `forget` | the codes a slot answers to: a JSON list (empty leaves it unbound), `null` restores the seeds. `learn` reads the pad instead: the next button pressed becomes the slot's, taken from whichever slot had it |
@@ -215,7 +216,11 @@ line: out — `{"event":"ready"}`, `{"event":"device","id":"event30","name","fam
 `unknown {id, code}` (a key no slot owns), `macro {id, slot, trigger, action, keys, command}`,
 `learned {family, slot, code, from}`, `learn_timeout`, `waiting` / `busy` (the lock), `error
 {message}`; in — `{"cmd":"suspend"}` (report, do not fire), `resume`, `reload` (config changed),
-`learn {id, slot}`, `cancel`, `rumble {id}`, `quit`. Stdin's end stops a `--json` watcher.
+`learn {id, slot}`, `cancel`, `rumble {id}`, `quit`. Stdin's end stops a `--json` watcher. A
+watcher also reloads by itself when `config.toml`'s mtime moves (checked on the 2 s scan), so a
+bind from a terminal or from a launcher whose own watcher is waiting reaches the one holding the
+pads. Either reload rereads config.toml and the module list only, never the library, so pad
+events are not held up behind a rescan.
 
 ## config.toml
 

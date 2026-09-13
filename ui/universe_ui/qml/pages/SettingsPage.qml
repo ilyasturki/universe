@@ -420,7 +420,7 @@ FocusScope {
             }
         }
         function onUnknownPressed(id, code) {
-            if (page.section === 5 && !page.learning)
+            if (page.section === 5 && !page.learning && id === page.controller.current)
                 toast.show(code + " is not one of the pad's buttons yet: learn it from a row");
         }
         function onLearned(family, slot, code) {

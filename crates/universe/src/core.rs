@@ -714,10 +714,16 @@ impl Core {
     }
 
     pub async fn reload_config(&self) -> Result<()> {
+        self.reload_settings().await?;
+        self.reload_all().await
+    }
+
+    /// config.toml and the module list only, not the library: what the controller watcher needs, without a rescan stalling it.
+    pub async fn reload_settings(&self) -> Result<()> {
         let cfg = Config::load()?;
         *self.config.write().await = cfg;
         self.reload_modules().await;
-        self.reload_all().await
+        Ok(())
     }
 
     pub async fn module_settings_json(&self, module: &str, game_id: &str) -> Result<String> {
@@ -768,6 +774,12 @@ impl Core {
 
     pub async fn controller_state_json(&self) -> String {
         crate::controller::state_json(&self.config.read().await.controller).to_string()
+    }
+
+    /// The pads readable right now, as `watch` would announce them; for a frontend whose watcher waits on the lock.
+    pub async fn controller_pads_json(&self) -> String {
+        let cfg = self.config.read().await.controller.clone();
+        serde_json::Value::Array(crate::controller::watch::enumerate_json(&cfg)).to_string()
     }
 
     /// Adds or replaces the macro with the same family, button and trigger.

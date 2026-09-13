@@ -11,7 +11,7 @@ import logging
 import os
 import shutil
 
-from PySide6.QtCore import Property, QObject, QProcess, Signal, Slot
+from PySide6.QtCore import Property, QObject, QProcess, QTimer, Signal, Slot
 
 from .settings import _group, _row
 
@@ -19,6 +19,10 @@ log = logging.getLogger("universe.controller")
 
 TRIGGERS = ("press", "hold")
 BUS_NAMES = {"bluetooth": "Bluetooth", "usb": "USB"}
+PASSIVE_TEXT = "Macros are running in the game session"
+PASSIVE_DETAIL = "Live presses and learning resume when it ends"
+RESTART_MS = 2000
+RESTART_MAX_MS = 30000
 
 
 class Watcher(QObject):
@@ -45,6 +49,10 @@ class Watcher(QObject):
 
     def _finished(self, code, status):
         log.info("controller watcher ended (%s)", code)
+        if self._process is not None:
+            self._process.deleteLater()
+            self._process = None
+        self.event.emit({"event": "off", "code": code})
 
     def _read(self):
         self._buffer += bytes(self._process.readAllStandardOutput().data())
@@ -114,6 +122,10 @@ class FakeWatcher(QObject):
     def emit(self, line):
         self.event.emit(dict(line))
 
+    def exit(self, code=1):
+        self.started = False
+        self.emit({"event": "off", "code": code})
+
     def stop(self):
         self.started = False
 
@@ -143,6 +155,10 @@ class ControllerScreen(QObject):
         self._status = "off"
         self._learning = ""
         self._suspended = False
+        self._passive = False
+        self._wanted = ""
+        self.restart_ms = RESTART_MS
+        self._restart_delay = RESTART_MS
         remembered = memory.get("controllerFamily") if memory is not None else None
         self._last_family = str(remembered) if remembered else "dualsense"
         self._rebuild()
@@ -151,12 +167,23 @@ class ControllerScreen(QObject):
         self.load()
         self._watcher = watcher
         watcher.event.connect(self._on_event)
-        if not watcher.start(self._families()):
+        return self._launch()
+
+    def _launch(self):
+        if self._watcher is None:
+            return False
+        if not self._watcher.start(self._families()):
             self._watcher = None
             return False
         if self._suspended:
-            watcher.send({"cmd": "suspend"})
+            self._watcher.send({"cmd": "suspend"})
         return True
+
+    def _restart(self):
+        if self._watcher is None or self._status != "off":
+            return
+        if not self._launch():
+            self._rebuild()
 
     def shutdown(self):
         if self._watcher is not None:
@@ -168,8 +195,26 @@ class ControllerScreen(QObject):
     @Slot()
     def load(self):
         self._state = dict(self._client.controllerState() or {})
+        if self._passive:
+            self._enumerate()
         self._rebuild()
         self.stateChanged.emit()
+
+    # Another watcher owns the pads: the core lists them as that watcher would announce them.
+    def _enumerate(self):
+        self._devices = [self._entry(p) for p in self._client.controllerPads() or [] if p.get("id")]
+        if self._device() is None:
+            self._current = self._devices[0]["id"] if self._devices else ""
+            if self._devices:
+                self._remember(self._devices[0]["family"])
+            self.currentChanged.emit()
+        self.devicesChanged.emit()
+
+    @staticmethod
+    def _entry(line):
+        ident = str(line.get("id") or "")
+        return {"id": ident, "name": str(line.get("name") or ident), "family": str(line.get("family") or "generic"),
+                "bus": str(line.get("bus") or ""), "slots": dict(line.get("slots") or {})}
 
     def _families(self):
         return {f["id"]: f for f in self._state.get("families") or [] if f.get("id")}
@@ -211,22 +256,63 @@ class ControllerScreen(QObject):
             self.macroFired.emit(str(line.get("slot") or ""), str(line.get("trigger") or ""), str(line.get("action") or ""))
         elif kind == "learned":
             self._learned(line)
-        elif kind in ("waiting", "ready"):
+        elif kind == "learn_timeout":
+            if self._stop_learning():
+                self.message.emit("No button pressed: learning stopped")
+        elif kind == "error":
+            self._stop_learning()
+            self.message.emit(str(line.get("message") or "Controller error"))
+        elif kind == "waiting":
             self._status = kind
+            self._passive = True
+            self._enumerate()
+            self._rebuild()
             self.statusChanged.emit()
+        elif kind == "ready":
+            self._status = kind
+            self._restart_delay = self.restart_ms
+            if self._passive:
+                self._passive = False
+                self._clear_devices()
+            self._rebuild()
+            self.statusChanged.emit()
+        elif kind == "off":
+            self._status = kind
+            self._passive = False
+            self._stop_learning()
+            self._clear_devices()
+            self._rebuild()
+            self.statusChanged.emit()
+            if self._watcher is not None:
+                QTimer.singleShot(self._restart_delay, self._restart)
+                self._restart_delay = min(max(self._restart_delay, 1) * 2, RESTART_MAX_MS)
+
+    def _stop_learning(self):
+        if not self._learning:
+            return False
+        self._learning = ""
+        self.statusChanged.emit()
+        return True
+
+    def _clear_devices(self):
+        self._devices = []
+        self._current = ""
+        self.currentChanged.emit()
+        self.devicesChanged.emit()
 
     def _upsert(self, line):
         ident = str(line.get("id") or "")
-        entry = {"id": ident, "name": str(line.get("name") or ident), "family": str(line.get("family") or "generic"),
-                 "bus": str(line.get("bus") or ""), "slots": dict(line.get("slots") or {})}
+        entry = self._entry(line)
         for i, d in enumerate(self._devices):
             if d["id"] == ident:
                 self._devices[i] = entry
                 break
         else:
             self._devices.append(entry)
-        if self._device() is None:
+        # The shown pad came back under a new node: stay on it rather than on the fallback.
+        if self._device() is None or (self._wanted and entry["name"] == self._wanted):
             self._current = ident
+            self._wanted = ""
             self.currentChanged.emit()
         if self._current == ident:
             self._remember(entry["family"])
@@ -234,11 +320,12 @@ class ControllerScreen(QObject):
         self.devicesChanged.emit()
 
     def _remove(self, ident):
-        before = len(self._devices)
-        self._devices = [d for d in self._devices if d["id"] != ident]
-        if len(self._devices) == before:
+        gone = self._device(ident)
+        if gone is None:
             return
+        self._devices = [d for d in self._devices if d["id"] != ident]
         if self._current == ident:
+            self._wanted = gone["name"] if self._devices else ""
             self._current = self._devices[0]["id"] if self._devices else ""
             if self._devices:
                 self._remember(self._devices[0]["family"])
@@ -290,7 +377,13 @@ class ControllerScreen(QObject):
     def _rebuild(self):
         rows, groups = [], []
         device = self._device()
-        if device is None:
+        if device is None and self._status == "off" and self._watcher is not None:
+            rows.append(_row("Controller", "", "Controller macros stopped", "info", False, detail="Restarting the watcher"))
+            groups.append(_group("Controller", [0], meta="Macros are off until it is back"))
+        elif device is None and self._passive:
+            rows.append(_row("Controller", "", "No controller connected", "info", False, detail=PASSIVE_TEXT))
+            groups.append(_group("Controller", [0], meta="Macros wait for a pad"))
+        elif device is None:
             rows.append(_row("Controller", "", "No controller connected", "info", False,
                              detail="Connect a pad over USB or Bluetooth"))
             groups.append(_group("Controller", [0], meta="Macros wait for a pad"))
@@ -303,6 +396,8 @@ class ControllerScreen(QObject):
             else:
                 slots = [{"id": s, "label": s.replace("_", " ").capitalize(), "codes": [], "extra": True} for s in device["slots"]]
                 name = device["name"]
+            if self._passive:
+                rows.append(_row(name, "", PASSIVE_TEXT, "info", False, detail=PASSIVE_DETAIL))
             if len(self._devices) > 1:
                 names = [d["name"] for d in self._devices]
                 rows.append(_row(name, "device", "Controller", "enum", device["name"], choices=names))
@@ -378,6 +473,9 @@ class ControllerScreen(QObject):
         if device is None or self._watcher is None:
             self.message.emit("No controller connected")
             return False
+        if self._passive or self._status != "ready":
+            self.message.emit(PASSIVE_DETAIL if self._passive else "Controller macros are not running")
+            return False
         self._learning = slot
         self.statusChanged.emit()
         return bool(self._watcher.send({"cmd": "learn", "id": device["id"], "slot": slot}))
@@ -415,6 +513,7 @@ class ControllerScreen(QObject):
         if device is None or ident == self._current:
             return
         self._current = ident
+        self._wanted = ""
         self._remember(device["family"])
         self.cancelLearn()
         self._rebuild()
@@ -439,4 +538,5 @@ class ControllerScreen(QObject):
     family = Property(str, _family, notify=devicesChanged)
     connected = Property(bool, lambda self: self._device() is not None, notify=devicesChanged)
     status = Property(str, lambda self: self._status, notify=statusChanged)
+    passive = Property(bool, lambda self: self._passive, notify=statusChanged)
     learning = Property(str, lambda self: self._learning, notify=statusChanged)

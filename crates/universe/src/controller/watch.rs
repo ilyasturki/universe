@@ -276,6 +276,11 @@ struct Watcher {
     suspended: bool,
     learning: Option<(String, String, Instant)>,
     started: Instant,
+    config_mtime: Option<std::time::SystemTime>,
+}
+
+fn config_mtime() -> Option<std::time::SystemTime> {
+    std::fs::metadata(paths::config_file()).and_then(|m| m.modified()).ok()
 }
 
 impl Watcher {
@@ -328,10 +333,11 @@ impl Watcher {
     }
 
     async fn reload(&mut self) {
-        if let Err(e) = self.core.reload_config().await {
+        if let Err(e) = self.core.reload_settings().await {
             tracing::warn!("reload: {e}");
         }
         self.cfg = self.core.config.read().await.controller.clone();
+        self.config_mtime = config_mtime();
         self.engine.hold_ms = self.cfg.hold_ms;
         let ids: Vec<String> = self.pads.keys().cloned().collect();
         for id in ids {
@@ -514,7 +520,7 @@ pub async fn watch(core: Arc<Core>, opts: WatchOptions) -> crate::Result<()> {
     };
     let cfg = core.config.read().await.controller.clone();
     let (tx, mut rx) = mpsc::channel::<DevEvent>(256);
-    let mut w = Watcher { core, engine: Engine::new(cfg.hold_ms), cfg, out, pads: BTreeMap::new(), ignored: BTreeSet::new(), tx, typist: Arc::new(Mutex::new(Typist { dev: None })), suspended: false, learning: None, started: Instant::now() };
+    let mut w = Watcher { core, engine: Engine::new(cfg.hold_ms), cfg, out, pads: BTreeMap::new(), ignored: BTreeSet::new(), tx, typist: Arc::new(Mutex::new(Typist { dev: None })), suspended: false, learning: None, started: Instant::now(), config_mtime: config_mtime() };
     if !w.out.emit(serde_json::json!({"event": "ready", "enabled": w.cfg.enabled})) {
         return Ok(());
     }
@@ -552,6 +558,11 @@ pub async fn watch(core: Arc<Core>, opts: WatchOptions) -> crate::Result<()> {
             },
             _ = scan.tick() => {
                 w.scan();
+                // A bind from the launcher or a terminal reaches a watcher it has no pipe to.
+                if config_mtime() != w.config_mtime {
+                    w.reload().await;
+                    tracing::info!("config.toml changed: reloaded");
+                }
                 if w.learning.as_ref().map(|(_, _, since)| since.elapsed() > LEARN_TIMEOUT).unwrap_or(false) {
                     w.learning = None;
                     w.out.emit(serde_json::json!({"event": "learn_timeout"}));

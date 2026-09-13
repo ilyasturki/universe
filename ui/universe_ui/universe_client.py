@@ -348,6 +348,9 @@ class UniverseClientBase(QObject):
     def controllerState(self):
         return self._guarded({}, "Controller1", "State")
 
+    def controllerPads(self):
+        return self._guarded([], "Controller1", "Pads")
+
     @Slot(str, result=bool)
     def controllerBind(self, payload):
         return self._done("Controller1", "Bind", payload)
@@ -608,6 +611,7 @@ _CORE_CALLS = {
     ("Settings1", "Set"): lambda s, key, value: s._core.set_setting(key, value),
     ("Settings1", "Reload"): lambda s: s._core.reload(),
     ("Controller1", "State"): lambda s: s._core.controller_state_json(),
+    ("Controller1", "Pads"): lambda s: s._core.controller_pads_json(),
     ("Controller1", "Bind"): lambda s, payload: s._core.set_controller_macro(payload),
     ("Controller1", "Unbind"): lambda s, family, button, trigger: s._core.remove_controller_macro(family, button, trigger),
     ("Controller1", "SetButton"): lambda s, family, slot, codes: s._core.set_controller_button(family, slot, codes),
@@ -1043,6 +1047,18 @@ class FakeClient(UniverseClientBase):
 
     def _Controller1_State(self):
         return json.dumps(self._controller())
+
+    def _Controller1_Pads(self):
+        pads = []
+        for pad in self._controller().get("devices", []):
+            family = self._controller_family(pad["family"])
+            slots = {}
+            for slot in family.get("slots", []):
+                codes = slot.get("codes") or []
+                slots[slot["id"]] = {"code": codes[0] if codes else None, "bound": bool(codes)}
+            pads.append({"id": pad["id"], "name": family["name"], "family": family["id"], "family_name": family["name"],
+                         "bus": pad.get("bus", "usb"), "slots": slots})
+        return json.dumps(pads)
 
     def _Controller1_Bind(self, payload):
         macro = _json(payload, {})
