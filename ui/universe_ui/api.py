@@ -93,6 +93,25 @@ class Keys(QObject):
         return self._is(event, "Menu")
 
 
+class Pad(QObject):
+    """`api.pad`: the sticks the theme reads as values; 0 with no controller."""
+
+    changed = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._axes = {"rightX": 0.0, "rightY": 0.0}
+
+    @Slot(str, float)
+    def set(self, name, value):
+        if name in self._axes and self._axes[name] != value:
+            self._axes[name] = value
+            self.changed.emit()
+
+    rightX = Property(float, lambda self: self._axes["rightX"], notify=changed)
+    rightY = Property(float, lambda self: self._axes["rightY"], notify=changed)
+
+
 class Memory(QObject):
     """`api.memory`: small persisted key/value store, $XDG_STATE_HOME/universe/ui-memory.json."""
 
@@ -236,6 +255,7 @@ class Api(QObject):
         super().__init__(parent)
         self._client = client
         self._keys = Keys(self)
+        self._pad = Pad(self)
         self._memory = Memory(memory_path, self)
         self._library = Library(client, self)
         self._screens = Screens(client, self.screenHz, self, memory=self._memory)
@@ -266,6 +286,7 @@ class Api(QObject):
         return self._library
 
     keys = Property(QObject, lambda self: self._keys, constant=True)
+    pad = Property(QObject, lambda self: self._pad, constant=True)
     memory = Property(QObject, lambda self: self._memory, constant=True)
     allGames = Property(QObject, lambda self: self._library.allGames, constant=True)
     collections = Property(QObject, lambda self: self._library.collections, constant=True)

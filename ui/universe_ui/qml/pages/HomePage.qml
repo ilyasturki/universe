@@ -29,7 +29,8 @@ FocusScope {
     readonly property real scrimMid: 0
     readonly property real scrimBottom: 0
     readonly property Item focusedArtItem: rail.currentItem ? rail.currentItem.artItem : null
-    readonly property Item menuAnchor: rail.activeFocus && !tileSelected ? focusedArtItem : null
+    // Start acts on the card whether the rail or the hero actions hold focus; the Library tile is no game.
+    readonly property Item menuAnchor: tileSelected ? null : focusedArtItem
     // Read by tools/shot: the tile and the Details button consume A themselves.
     readonly property bool ownsAccept: tileSelected || (heroActions.activeFocus && heroActions.index === 1)
     // Set by the shell; the rail keeps its ring lit while the menu holds focus.

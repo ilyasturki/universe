@@ -4,7 +4,7 @@ import "../core"
 Item {
     id: root
 
-    // "A" | "B" | "X" | "Y" | "LB RB" | "LT RT" | "dpad"
+    // "A" | "B" | "X" | "Y" | "RS" | "LB RB" | "LT RT" | "dpad"
     property string glyph: "A"
     readonly property bool isPair: glyph.indexOf(" ") !== -1
     readonly property real unit: Theme.dp(30)

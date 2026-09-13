@@ -37,6 +37,7 @@ One context property, `api`:
 | `api.collections` | collections, one per platform |
 | `api.memory` | `get`/`set`/`has`/`unset`, persisted to `$XDG_STATE_HOME/universe/ui-memory.json` |
 | `api.universe` | the client: every core call, plus the signals below |
+| `api.pad` | `rightX` / `rightY`: the right stick as a value, 0 without a controller |
 | `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed`, `--size` and `--screenshot` turn it off) |
 
@@ -44,6 +45,12 @@ A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `p
 `playCount`, `lastPlayed`, `releaseYear`, `developerList`, `publisherList`, `genreList`, `players`,
 `description`, `summary`, `source`, `platform`, `tags`, `extra`, `raw`, `collections`, and
 `assets` (`boxFront`, `tile`, `background`, `logo`, `screenshotList`), plus `launch()`.
+
+`api.screens.recordings` samples 16 frames per recording with ffmpeg into
+`$XDG_CACHE_HOME/universe/frames/<sha1 of the path>/NN.jpg` (`stats.json` keeps the probed duration and
+each frame's 8×8 gray stddev, so the list thumbnail is the first frame that is not black or a fade).
+Two extractions run at a time; the picked row's frames go first, the others' thumbnails after.
+`frameMap[session]` carries `thumbnail`, `frames` (`""` until extracted), `complete` and `duration`.
 
 ## Changes
 
@@ -101,8 +108,9 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
 | X / Y | I / F | Details / Filters |
 | LB / RB | Q / E | previous / next tab |
 | LT / RT | PageUp / PageDown | collection, section, keyboard page |
-| Start, Guide | F1 | context menu of the focused game, else the Settings tab |
+| Start, Guide | F1 | context menu of the game on screen, whichever part of the page has focus |
 | d-pad, left stick | arrows | navigation |
+| right stick | `api.pad.rightX` / `rightY` | analog, past a 0.18 deadzone: scrubs the recording player |
 
 ## The controller section
 
@@ -138,7 +146,7 @@ Options: `--windowed`, `--size WxH` (1920x1080, implies `--windowed`), `--no-gam
 `--fake-launch`, `--screenshot PATH --after MS`, `--quit-after MS`, and `--keys "Right Right Return
 Wait I"` with `--key-gap MS` / `--key-delay MS`. Key names are `A B X Y LB RB LT RT Start Up Down
 Left Right Return Esc`; `Wait` pauses, `Wait:N` pauses N times, `Hold:A` / `Release:A` split a
-press, `Shot:path.png` grabs the window.
+press, `Stick:rightX=0.6` tilts a stick, `Shot:path.png` grabs the window.
 
 `just test` runs the suite. `conftest.py` forces `QT_QPA_PLATFORM=offscreen` and redirects
 `XDG_{STATE,CACHE,DATA}_HOME` to a temporary directory, so tests never touch real user state.

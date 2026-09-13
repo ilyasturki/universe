@@ -42,6 +42,10 @@ AXIS_KEYS = {
     AXIS_TRIGGERRIGHT: (None, Qt.Key.Key_PageDown),
 }
 
+# The right stick reaches the theme as a value, not a key: it scrubs the recording player.
+STICKS = {AXIS_RIGHTX: "rightX", AXIS_RIGHTY: "rightY"}
+STICK_DEADZONE = 0.18
+
 REPEATING = {Qt.Key.Key_Up, Qt.Key.Key_Down, Qt.Key.Key_Left, Qt.Key.Key_Right}
 AXIS_PRESS, AXIS_RELEASE = 0.5, 0.3
 REPEAT_DELAY, REPEAT_INTERVAL = 0.35, 0.09
@@ -54,6 +58,7 @@ class Mapper:
         self._clock = clock
         self._axis = {}
         self._held = {}
+        self._stick = {}
 
     def button(self, button, pressed):
         key = BUTTON_KEYS.get(button)
@@ -81,6 +86,22 @@ class Mapper:
         if direction != 0 and keys[(direction + 1) // 2] is not None:
             out += self._transition(keys[(direction + 1) // 2], True)
         return out
+
+    def stick(self, axis, value):
+        """(name, value) for a stick axis the theme reads as analog, -1..1 past the deadzone; None if unchanged."""
+        name = STICKS.get(axis)
+        if name is None:
+            return None
+        value = max(-1.0, min(1.0, value / 32767.0))
+        magnitude = abs(value)
+        if magnitude < STICK_DEADZONE:
+            value = 0.0
+        else:
+            value = (magnitude - STICK_DEADZONE) / (1.0 - STICK_DEADZONE) * (1 if value > 0 else -1)
+        if self._stick.get(name, 0.0) == value:
+            return None
+        self._stick[name] = value
+        return name, value
 
     def _transition(self, key, pressed):
         if pressed:
@@ -115,6 +136,7 @@ def post_key(key, pressed, autorepeat=False, window=None):
 class GamepadThread(QThread):
     # QKeyEvent's constructor parents the primary QInputDevice to the app on first use, so events are built on the main thread.
     key = Signal(int, bool, bool)
+    stick = Signal(str, float)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -174,6 +196,9 @@ class GamepadThread(QThread):
         elif t == sdl2.SDL_CONTROLLERAXISMOTION:
             for key, pressed, repeat in self.mapper.axis(event.caxis.axis, event.caxis.value):
                 self.key.emit(key, pressed, repeat)
+            moved = self.mapper.stick(event.caxis.axis, event.caxis.value)
+            if moved is not None:
+                self.stick.emit(*moved)
 
 
 KEY_NAMES = {
@@ -188,12 +213,13 @@ KEY_NAMES = {
 
 class KeyScript(QObject):
     """Posts a scripted key sequence, one name per gap: `Wait` idles, `Wait:N` idles N gaps,
-    `Hold:A`/`Release:A` split a press, `Shot:path.png` grabs the window."""
+    `Hold:A`/`Release:A` split a press, `Stick:rightX=0.6` tilts a stick, `Shot:path.png` grabs the window."""
 
-    def __init__(self, script, gap_ms, window, parent=None):
+    def __init__(self, script, gap_ms, window, pad=None, parent=None):
         super().__init__(parent)
         self._queue = [k for k in script.split() if k]
         self._window = window
+        self._pad = pad
         self._timer = QTimer(self)
         self._timer.setInterval(gap_ms)
         self._timer.timeout.connect(self._step)
@@ -214,6 +240,11 @@ class KeyScript(QObject):
         if phase == "Shot":
             ok = self._window.grabWindow().save(bare)
             log.info("shot %s %s", "saved" if ok else "FAILED", bare)
+            return
+        if phase == "Stick":
+            axis, _, value = bare.partition("=")
+            if self._pad is not None:
+                self._pad.set(axis, float(value or 0))
             return
         if not bare:
             phase, bare = "click", name

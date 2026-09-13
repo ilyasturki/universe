@@ -20,7 +20,7 @@ FocusScope {
     readonly property real scrimMid: 0.74
     readonly property real scrimBottom: 0.95
     readonly property Item focusedArtItem: grid.focusedArtItem
-    readonly property Item menuAnchor: chipBar.activeFocus ? null : grid.focusedArtItem
+    readonly property Item menuAnchor: grid.focusedArtItem
     // Read by tools/shot: up here A opens a list instead of launching a game.
     readonly property bool ownsAccept: chipBar.activeFocus
 

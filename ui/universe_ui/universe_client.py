@@ -940,15 +940,18 @@ class FakeClient(UniverseClientBase):
         ffmpeg = shutil.which("ffmpeg")
         if ffmpeg:
             subprocess.run(
-                [ffmpeg, "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=640x360:rate=30:duration=3",
-                 "-f", "lavfi", "-i", "sine=frequency=440:duration=3", "-c:v", "libx264", "-preset", "ultrafast",
+                [ffmpeg, "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=640x360:rate=30:duration=20",
+                 "-f", "lavfi", "-i", "sine=frequency=440:duration=20", "-c:v", "libx264", "-preset", "ultrafast",
                  "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", out],
                 capture_output=True, timeout=30,
             )
         return out
 
+    # Entries without pictures borrow the game's painted screenshots, so the strip has something to show.
     def _Journal1_List(self, ident):
-        return json.dumps(self._data.get("journal", {}).get(ident, []))
+        entries = self._data.get("journal", {}).get(ident, [])
+        shots = (self._game(ident) or {}).get("media", {}).get("screenshots") or []
+        return json.dumps([dict(e, images=e.get("images") or shots) for e in entries])
 
     def _Journal1_Render(self, ident):
         return os.path.join(self._art_dir, f"{ident}.md")

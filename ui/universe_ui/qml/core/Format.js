@@ -40,6 +40,15 @@ function sessions(count) {
     return count + (count === 1 ? " session" : " sessions");
 }
 
+// 1:02:03, or 4:05 under an hour: a player's counter.
+function clockTime(seconds) {
+    var s = Math.max(0, Math.floor(seconds || 0));
+    var h = Math.floor(s / 3600);
+    var m = Math.floor((s % 3600) / 60);
+    var rest = ("0" + (s % 60)).slice(-2);
+    return h > 0 ? h + ":" + ("0" + m).slice(-2) + ":" + rest : m + ":" + rest;
+}
+
 function clock() {
     var d = new Date();
     return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);

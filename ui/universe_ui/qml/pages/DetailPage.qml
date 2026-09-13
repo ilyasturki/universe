@@ -521,82 +521,11 @@ FocusScope {
         hints: page.hints
     }
 
-    Rectangle {
-        id: lightboxView
-
+    Lightbox {
         anchors.fill: parent
-        color: Qt.rgba(0.02, 0.02, 0.03, 0.94)
-        opacity: page.lightbox ? 1.0 : 0.0
-        visible: opacity > 0.01
-
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-        }
-
-        Item {
-            id: lightStage
-
-            anchors.fill: parent
-            anchors.margins: Theme.dp(48)
-            anchors.bottomMargin: Theme.dp(96)
-            clip: true
-            scale: page.lightbox ? 1.0 : 0.96
-
-            readonly property real pitch: width + Theme.dp(64)
-
-            Behavior on scale {
-                NumberAnimation { duration: Theme.durScene; easing.type: Easing.OutCubic }
-            }
-
-            Item {
-                id: lightStrip
-
-                width: parent.width
-                height: parent.height
-                x: -page.shotIndex * lightStage.pitch
-
-                Behavior on x {
-                    // Off while closed: opening lands on the shot, it does not slide to it.
-                    enabled: page.lightbox
-                    NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic }
-                }
-
-                // Three slots keyed by residue, as the home logos are: the slot that
-                // just left the screen picks up the shot two steps ahead.
-                Repeater {
-                    model: 3
-
-                    Image {
-                        readonly property int base: page.shotIndex - 1
-                        readonly property int at: base + (((index - base) % 3) + 3) % 3
-
-                        x: at * lightStage.pitch
-                        width: lightStage.width
-                        height: lightStage.height
-                        source: at >= 0 && at < page.screenshots.length ? page.screenshots[at] : ""
-                        fillMode: Image.PreserveAspectFit
-                        asynchronous: true
-                        mipmap: true
-                        opacity: at === page.shotIndex ? 1.0 : 0.4
-
-                        Behavior on opacity {
-                            NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic }
-                        }
-                    }
-                }
-            }
-        }
-
-        Text {
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: Theme.dp(34)
-            anchors.horizontalCenter: parent.horizontalCenter
-            text: (page.shotIndex + 1) + " / " + page.screenshots.length
-            color: Theme.textSecondary
-            font.family: Theme.sans
-            font.weight: Font.Medium
-            font.pixelSize: Theme.dp(22)
-        }
+        images: page.screenshots
+        index: page.shotIndex
+        open: page.lightbox
     }
 
     Keys.onPressed: function(event) {

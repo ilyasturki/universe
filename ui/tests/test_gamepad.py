@@ -42,6 +42,20 @@ def test_axis_hysteresis():
     assert m.axis(gamepad.AXIS_RIGHTX, 32767) == []
 
 
+def test_right_stick_is_analog_past_the_deadzone():
+    m = Mapper(Clock())
+    assert m.stick(gamepad.AXIS_LEFTX, 32767) is None
+    assert m.stick(gamepad.AXIS_RIGHTX, 3000) is None
+    assert m.stick(gamepad.AXIS_RIGHTX, 32767) == ("rightX", 1.0)
+    assert m.stick(gamepad.AXIS_RIGHTX, 32767) is None
+    name, value = m.stick(gamepad.AXIS_RIGHTX, -16384)
+    assert name == "rightX" and -0.40 < value < -0.38
+    assert m.stick(gamepad.AXIS_RIGHTX, 1000) == ("rightX", 0.0)
+    assert m.stick(gamepad.AXIS_RIGHTY, -32767) == ("rightY", -1.0)
+    # The keys stay untouched: the right stick never presses anything.
+    assert m.axis(gamepad.AXIS_RIGHTX, 32767) == []
+
+
 def test_autorepeat_only_for_arrows():
     clock = Clock()
     m = Mapper(clock)

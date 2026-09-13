@@ -105,7 +105,7 @@ def run(argv=None):
     os.environ.setdefault("QT_FFMPEG_ENCODING_HW_DEVICE_TYPES", "vaapi")
     logging.basicConfig(level=logging.INFO, format="%(name)s: %(message)s")
 
-    from PySide6.QtCore import QCoreApplication, QTimer, QUrl
+    from PySide6.QtCore import QCoreApplication, Qt, QTimer, QUrl
     from PySide6.QtGui import QGuiApplication
     from PySide6.QtQml import QQmlApplicationEngine
     from PySide6.QtQuick import QQuickWindow  # noqa: F401  (down-casts rootObjects() so grabWindow exists)
@@ -154,6 +154,7 @@ def run(argv=None):
         from .screens.controller import FakeWatcher, Watcher
 
         gamepad = GamepadThread(app)
+        gamepad.stick.connect(api.pad.set, Qt.ConnectionType.QueuedConnection)
         gamepad.start()
         if args.fake or args.fake_launch:
             unbound = [s for s in os.environ.get("UNIVERSE_FAKE_UNBOUND", "").split(",") if s]
@@ -167,7 +168,9 @@ def run(argv=None):
     if args.keys:
         from .gamepad import KeyScript
 
-        KeyScript(args.keys, args.key_gap, window, parent=app).start(args.key_delay)
+        # Keys only reach an active window; a bare X server hands focus to nobody by itself.
+        window.requestActivate()
+        KeyScript(args.keys, args.key_gap, window, pad=api.pad, parent=app).start(args.key_delay)
 
     def grab():
         image = window.grabWindow()

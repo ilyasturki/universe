@@ -19,6 +19,11 @@ FocusScope {
     property bool subOpen: false
     property var subGame: null
     property string subSource: ""
+    // The session the sub page opens on; recordings and journal jump to each other by it.
+    property string subSession: ""
+    // One level of history: the page a jump left, restored by the next close.
+    property var subReturn: null
+    property bool subSwapping: false
     // "page" | "chrome" | "search": one owner, so no two focus bindings race.
     property string focusOwner: "page"
 
@@ -115,13 +120,48 @@ FocusScope {
         Sound.enter();
         subGame = game;
         subSource = source;
+        subSession = "";
+        subReturn = null;
         subOpen = true;
         if (subLoader.item)
             subLoader.item.forceActiveFocus();
     }
 
+    // Recordings ↔ journal of the same game: the page fades, the source swaps, the session carries over.
+    // Jumping back to the page a jump came from is the return itself, so B then leaves.
+    function jumpSub(source, session) {
+        if (!subOpen || subSwapping || source === subSource)
+            return;
+        Sound.enter();
+        subReturn = subReturn && subReturn.source === source ? null
+                  : { source: subSource, session: subLoader.item && subLoader.item.currentSession ? subLoader.item.currentSession : "" };
+        subSwapping = true;
+        subSwap.target = { source: source, session: session };
+        subSwap.restart();
+    }
+
+    readonly property Timer subSwap: Timer {
+        property var target: null
+        interval: Theme.durQuick
+        onTriggered: {
+            root.subSession = target.session;
+            root.subSource = target.source;
+            root.subSwapping = false;
+            if (subLoader.item)
+                subLoader.item.forceActiveFocus();
+        }
+    }
+
     function closeSub() {
         Sound.cancel();
+        if (subReturn) {
+            var back = subReturn;
+            subReturn = null;
+            subSwapping = true;
+            subSwap.target = back;
+            subSwap.restart();
+            return;
+        }
         subOpen = false;
         if (detailOpen && detailLoader.item)
             detailLoader.item.forceActiveFocus();
@@ -484,6 +524,18 @@ FocusScope {
         }
     }
 
+    // Under the sub page: a jump fades one page out and the next in over this, not over the tabs.
+    Rectangle {
+        anchors.fill: parent
+        color: Theme.ground
+        opacity: root.subOpen && !root.launching ? 1.0 : 0.0
+        visible: opacity > 0.01
+
+        Behavior on opacity {
+            NumberAnimation { duration: Theme.durScene; easing.type: Easing.OutCubic }
+        }
+    }
+
     Loader {
         id: subLoader
 
@@ -491,13 +543,15 @@ FocusScope {
         active: root.subOpen || subLoader.opacity > 0.01
         source: root.subSource
         focus: root.subOpen
-        opacity: root.subOpen && !root.launching ? 1.0 : 0.0
+        opacity: root.subOpen && !root.launching && !root.subSwapping ? 1.0 : 0.0
         visible: opacity > 0.01
         transform: Translate { y: root.subOpen ? 0 : Theme.dp(48)
                                Behavior on y { NumberAnimation { duration: Theme.durScene; easing.type: Easing.OutCubic } } }
 
         onLoaded: {
             item.game = Qt.binding(function() { return root.subGame; });
+            if ("session" in item)
+                item.session = Qt.binding(function() { return root.subSession; });
             item.forceActiveFocus();
         }
 
@@ -505,10 +559,12 @@ FocusScope {
             target: subLoader.item
             ignoreUnknownSignals: true
             function onCloseRequested() { root.closeSub(); }
+            function onJumpRequested(source, session) { root.jumpSub(source, session); }
         }
 
         Behavior on opacity {
-            NumberAnimation { duration: Theme.durScene; easing.type: Easing.OutCubic }
+            // A jump is a quick dip; opening and closing take the scene's time.
+            NumberAnimation { duration: root.subSwapping ? Theme.durQuick : Theme.durScene; easing.type: Easing.OutCubic }
         }
     }
 
@@ -566,7 +622,7 @@ FocusScope {
         if (event.isAutoRepeat)
             return;
 
-        // Start opens the game menu; with nothing to act on it goes to the Settings tab.
+        // Start opens the menu of the game on screen, whichever of the page's parts has focus.
         if (api.keys.isMenu(event)) {
             event.accepted = true;
             if (root.menuOpen)
@@ -574,10 +630,8 @@ FocusScope {
             var t = root.focusTarget;
             if (t && t.currentGame && t.menuAnchor)
                 openMenu(t.currentGame, t.menuAnchor);
-            else {
-                Sound.space();
-                goToTab(root.tabIndex === tabNames.length - 1 ? 0 : tabNames.length - 1);
-            }
+            else
+                Sound.edge();
             return;
         }
         if (api.keys.isPrevPage(event)) {

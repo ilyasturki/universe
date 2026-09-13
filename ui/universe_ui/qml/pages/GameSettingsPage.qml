@@ -39,36 +39,14 @@ FocusScope {
         color: Theme.ground
     }
 
-    // The game's art behind the top of the page, settling into the ground. Faded as one
-    // layer: item opacity would thin the gradient too and let the art's edge through.
-    Item {
+    GameBackdrop {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        height: Theme.dp(560)
-        opacity: 0.55
-        layer.enabled: true
-
-        BackgroundStage {
-            anchors.fill: parent
-            game: page.game
-            blurRadius: 30
-            zoomEnabled: false
-            overscan: 1.06
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            gradient: Gradient {
-                GradientStop { position: 0.00; color: Qt.rgba(0.055, 0.059, 0.075, 0.30) }
-                GradientStop { position: 0.45; color: Qt.rgba(0.055, 0.059, 0.075, 0.70) }
-                GradientStop { position: 0.75; color: Qt.rgba(0.055, 0.059, 0.075, 0.94) }
-                GradientStop { position: 1.00; color: Theme.ground }
-            }
-        }
+        game: page.game
     }
 
-    Item {
+    GameHeader {
         id: header
 
         anchors.top: parent.top
@@ -77,55 +55,8 @@ FocusScope {
         anchors.right: parent.right
         anchors.leftMargin: page.sideMargin
         anchors.rightMargin: page.sideMargin
-        height: Theme.dp(88)
-
-        CoverCard {
-            id: tile
-            width: Theme.dp(88)
-            height: width
-            game: page.game
-            cornerRadius: Theme.dp(14)
-            selected: true
-            selectedScale: 1.0
-            ringOpacity: 0
-            showHeart: false
-        }
-
-        Column {
-            anchors.left: tile.right
-            anchors.leftMargin: Theme.dp(28)
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
-            spacing: Theme.dp(4)
-
-            CapsLabel {
-                text: "GAME SETTINGS"
-            }
-
-            Row {
-                width: parent.width
-                spacing: Theme.dp(20)
-
-                Text {
-                    id: title
-                    text: page.game ? page.game.title : ""
-                    color: Theme.text
-                    font.family: Theme.sans
-                    font.weight: Font.Bold
-                    font.pixelSize: Theme.dp(42)
-                    elide: Text.ElideRight
-                    width: Math.min(implicitWidth, parent.width - meta.width - parent.spacing)
-                }
-
-                GameMetaLine {
-                    id: meta
-                    anchors.bottom: title.bottom
-                    anchors.bottomMargin: Theme.dp(6)
-                    game: page.game
-                    showYear: false
-                }
-            }
-        }
+        game: page.game
+        label: "GAME SETTINGS"
     }
 
     SettingsCards {

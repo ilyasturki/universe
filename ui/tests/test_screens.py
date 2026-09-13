@@ -168,3 +168,41 @@ def test_journal_and_recordings(api):
     assert recordings.count == 2
     row = recordings.rows[0]
     assert row["url"].startswith("file://") and row["durationText"] == "1 h 10" and row["sizeText"] == "2.0 GB"
+    assert row["hasJournal"] is True and entry["hasRecording"] is True
+
+
+def test_journal_paragraphs_become_markdown_blocks():
+    from universe_ui.screens.media import markdown_blocks
+
+    assert markdown_blocks(["Intro.", "- **A:** one", "- **B:** two", "Outro.", "1. first", "2. second"]) == [
+        "Intro.", "- **A:** one\n- **B:** two", "Outro.", "1. first\n2. second"]
+    assert markdown_blocks([]) == []
+
+
+def test_recording_frames_are_sampled_from_the_file(api):
+    import shutil
+
+    from universe_ui.screens import media
+
+    if not (shutil.which("ffmpeg") and shutil.which("ffprobe")):
+        pytest.skip("ffmpeg and ffprobe sample the frames")
+    recordings = api.screens.recordings
+    recordings.load("the-technomancer")
+    session = recordings.rows[0]["session"]
+    recordings.select(session)
+    for _ in range(80):
+        if recordings.frameMap[session]["complete"]:
+            break
+        assert wait_for(recordings.framesChanged, 10000) is not None
+    frames = recordings.frameMap[session]
+    assert frames["complete"] and all(f.startswith("file://") for f in frames["frames"])
+    # The fixture claims 1 h 10; the clip is 20 s, and the seeks follow the file.
+    assert 19.5 < frames["duration"] < 20.5
+    assert frames["thumbnail"] == frames["frames"][media.THUMB_ORDER[0]]
+    assert media.frame_stddev(frames["frames"][0][7:]) >= media.FLAT_STDDEV
+
+    # A second list reads the cache back without ffmpeg.
+    again = media.RecordingsList(api.universe)
+    again.load("the-technomancer")
+    assert again.frameMap[session]["complete"]
+    again.shutdown()

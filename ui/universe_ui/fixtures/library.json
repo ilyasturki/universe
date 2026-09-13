@@ -355,7 +355,9 @@
         "provider": "codex",
         "paragraphs": [
           "Zachariah goes down into the sewers under Noctis to find Amelia's contact. The mutants are more numerous than expected and the first encounter costs three heals.",
-          "The warrior style holds up better than before: the fully charged electrified staff drops the hounds in two hits. The shield skill has not been used yet.",
+          "- **Main quest:** Reached the sewers' second level and cleared the mutant nest under the market.",
+          "- **Side quest:** Found Amelia's contact, who wants a serum sample before talking.",
+          "The warrior style holds up better than before: the fully charged *electrified* staff drops the hounds in two hits. The shield skill has not been used yet.",
           "The session ends on the way back to the surface, with Niesha arguing with Andrew at the camp."
         ],
         "next_up": "Talk to Amelia, then bring the serum back to the Abundance base before the secret police catch up with the group.",
