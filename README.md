@@ -88,7 +88,7 @@ Third-party modules: drop a directory with a `module.toml` under `~/.local/share
 
 ## Develop
 
-A `justfile` wraps everything in `nix develop` and points the core at an isolated `.dev/` (its own config, data, recordings, journal), so nothing touches `~/.config/universe`:
+A `justfile` wraps everything in `nix develop` and points the core at an isolated `.dev/` (its own config, data, recordings, journal), so nothing touches `~/.config/universe`. The host runs from `.venv/`, a venv on the dev shell's Python where `maturin develop` installs `universe_core` and `universe_ui` is installed editable (`just develop`, run by `ui` and `test`):
 
 ```sh
 just setup                 # build, create .dev/config/config.toml, run doctor
@@ -98,7 +98,7 @@ just ui                    # PySide6 host on the in-process core (add --windowed
 just ui-fake               # host on a fixture library, no core
 just seed [id…]            # copy real games (journal, media, recording refs) into .dev/ to test the player and the journal
 just test / just check     # cargo + pytest / flake packages + sandboxed checks
-just clean                 # trash .dev/
+just clean                 # trash .dev/ and .venv/
 ```
 
 `docs/api.md` is the core API, the process model and the module contract; `docs/frontends.md` is what a frontend binds to.

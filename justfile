@@ -10,29 +10,43 @@ export UNIVERSE_CACHE_HOME := dev / "cache"
 export UNIVERSE_MODULES_PATH := justfile_directory() / "modules"
 export UNIVERSE_BIN := justfile_directory() / "target/debug/universe"
 export RUST_LOG := env("RUST_LOG", "info")
+export VIRTUAL_ENV := justfile_directory() / ".venv"
 
 nix := "nix develop --quiet --command"
-ui_py := "env PYTHONPATH=" + justfile_directory() / "ui" + ":" + dev / "py" + " python3 -m universe_ui"
+python := VIRTUAL_ENV / "bin/python"
+ui_bin := VIRTUAL_ENV / "bin/universe-ui"
 
 # First run: build, create .dev/ with a ready config.toml, run doctor
 setup: build env
     @{{ nix }} target/debug/universe doctor
 
-# Build the CLI and the Python module of the core (debug)
+# Build the CLI (debug)
 build:
     @{{ nix }} cargo build
+
+# .venv on the dev shell's Python: the core extension via maturin, universe_ui editable
+develop:
+    #!/usr/bin/env -S nix develop --quiet --command bash
+    set -euo pipefail
+    home="$(dirname "$(command -v python3)")"
+    if ! grep -qxF "home = $home" "$VIRTUAL_ENV/pyvenv.cfg" 2>/dev/null; then
+        rm -rf "$VIRTUAL_ENV"
+        python3 -m venv --system-site-packages "$VIRTUAL_ENV"
+    fi
+    env -u RUST_LOG maturin develop --quiet -m crates/universe-py/Cargo.toml
+    "$VIRTUAL_ENV/bin/pip" install --quiet --no-index --no-build-isolation --no-deps -e ui
 
 # The CLI against .dev/: just cli migrate --apply, just cli gog scan, just cli play <game>…
 cli *args: build env
     @{{ nix }} target/debug/universe {{ args }}
 
 # Host UI on the in-process core; flags pass through (--windowed, --no-gamepad, --keys "…")
-ui *args: build env
-    @{{ nix }} {{ ui_py }} {{ args }}
+ui *args: build develop env
+    @{{ nix }} {{ ui_bin }} {{ args }}
 
 # Host UI on a fixture library, no core — for UI work
-ui-fake *args:
-    @{{ nix }} {{ ui_py }} --fake {{ args }}
+ui-fake *args: develop
+    @{{ nix }} {{ ui_bin }} --fake {{ args }}
 
 # Follow the units of games, hooks and session ends
 logs:
@@ -42,9 +56,9 @@ logs:
 shell:
     nix develop
 
-test: build env
+test: build develop env
     @{{ nix }} cargo test
-    @{{ nix }} env PYTHONPATH={{ dev }}/py python3 -m pytest -q ui
+    @{{ nix }} {{ python }} -m pytest -q ui
     @{{ nix }} python3 -m pytest -q modules
 
 # Build the flake packages and run the sandboxed checks
@@ -76,15 +90,14 @@ seed *ids: env
         echo "seeded $id ($(grep -c '"recording":"/' "$dest/sessions.jsonl" 2>/dev/null || echo 0) recordings, $(ls "$dest/journal"/*.json 2>/dev/null | wc -l) entries)"
     done
 
-# Trash .dev/ (config, data, recordings, journal)
+# Trash .dev/ (config, data, recordings, journal) and .venv
 clean:
-    trash "{{ dev }}"
+    trash "{{ dev }}" "{{ VIRTUAL_ENV }}"
 
 env:
     #!/usr/bin/env bash
     set -euo pipefail
-    mkdir -p "{{ dev }}"/{data,config,state,cache,recordings,journal,py}
-    ln -sfn "{{ justfile_directory() }}/target/debug/libuniverse_core.so" "{{ dev }}/py/universe_core.so"
+    mkdir -p "{{ dev }}"/{data,config,state,cache,recordings,journal}
     cfg="{{ dev }}/config/config.toml"
     [ -e "$cfg" ] && exit 0
     cat > "$cfg" <<EOF

@@ -1,5 +1,7 @@
 [workspace]
 members = ["crates/universe", "crates/universe-py"]
+# universe-py is built by maturin against the venv interpreter; a bare cargo build would rebuild pyo3 with another
+default-members = ["crates/universe"]
 resolver = "2"
 
 [workspace.package]
