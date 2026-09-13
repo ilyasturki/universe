@@ -140,6 +140,7 @@ named by `UNIVERSE_FAKE_PAD` (a family id, or `none` for the empty state), with 
 nix run .#universe-ui                  # fullscreen; add --windowed
 just ui                                # against .dev/
 just ui-fake                           # against fixtures, no core
+just seed [id…]                        # real games in .dev/: journal and media copied, recordings read in place
 ```
 
 Options: `--windowed`, `--size WxH` (1920x1080, implies `--windowed`), `--no-gamepad`, `--fake`,

@@ -52,6 +52,30 @@ check:
     nix build .#universe .#universe-ui --no-link
     nix flake check
 
+# game.toml, sessions.jsonl, media/ and journal/ are copied from ~/.local/share/universe; the
+# recordings stay where they are (sessions.jsonl points at them by absolute path, nothing in dev writes there).
+# Copy real games into .dev/ to test the recording player and the journal: just seed [id…]
+seed *ids: env
+    #!/usr/bin/env bash
+    set -euo pipefail
+    cfg="{{ dev }}/config/config.toml"
+    if grep -E '^\s*recordings_root\s*=' "$cfg" | grep -qv '{{ dev }}/'; then
+        echo "recordings_root in $cfg leaves {{ dev }}/: refusing to seed" >&2; exit 1
+    fi
+    src="${XDG_DATA_HOME:-$HOME/.local/share}/universe/games"
+    ids="{{ ids }}"
+    [ -n "$ids" ] || ids="super-mario-bros-wonder xenoblade-chronicles-x-definitive-edition assassins-creed-mirage"
+    for id in $ids; do
+        [ -d "$src/$id" ] || { echo "no such game: $src/$id" >&2; exit 1; }
+        dest="{{ dev }}/data/games/$id"
+        rm -rf "$dest"
+        mkdir -p "$dest"
+        for f in game.toml sessions.jsonl media journal; do
+            [ -e "$src/$id/$f" ] && cp -r "$src/$id/$f" "$dest/"
+        done
+        echo "seeded $id ($(grep -c '"recording":"/' "$dest/sessions.jsonl" 2>/dev/null || echo 0) recordings, $(ls "$dest/journal"/*.json 2>/dev/null | wc -l) entries)"
+    done
+
 # Trash .dev/ (config, data, recordings, journal)
 clean:
     trash "{{ dev }}"
