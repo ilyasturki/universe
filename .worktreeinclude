@@ -1,0 +1,6 @@
+# .dev/config and .dev/py stay out: config.toml and the .so symlink hold main-checkout paths, `just env` regenerates them
+.dev/cache/
+.dev/data/
+.dev/journal/
+.dev/recordings/
+.dev/state/
