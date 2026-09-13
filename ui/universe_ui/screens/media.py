@@ -8,7 +8,7 @@ import shutil
 from datetime import datetime
 
 import shiboken6
-from PySide6.QtCore import Property, QObject, QProcess, Qt, QUrl, Signal, Slot
+from PySide6.QtCore import Property, QObject, QProcess, Qt, QTimer, QUrl, Signal, Slot
 
 from .paths import universe_home
 
@@ -307,15 +307,23 @@ class JournalList(QObject):
             for rel in entry.get("images") or []:
                 path = rel if os.path.isabs(str(rel)) else os.path.join(base, str(rel))
                 images.append(QUrl.fromLocalFile(path).toString())
+            state = str(entry.get("state") or "written")
             paragraphs = [str(p) for p in entry.get("paragraphs") or []]
+            duration = int(entry.get("duration_s") or 0)
             rows.append({
-                "session": str(entry.get("session") or ""), "title": str(entry.get("title") or "Untitled"),
-                "dateText": _when(entry.get("written_at")), "lang": str(entry.get("lang") or ""),
-                "provider": str(entry.get("provider") or ""),
+                "session": str(entry.get("session") or ""),
+                "title": str(entry.get("title") or ("" if state == "pending" else "Journal failed" if state == "failed" else "Untitled")),
+                "state": state, "reason": paragraphs[0] if state == "failed" and paragraphs else "",
+                "started_at": str(entry.get("started_at") or ""),
+                "dateText": _when(entry.get("written_at") or entry.get("started_at")),
+                "duration_s": duration, "durationText": _duration(duration) if duration else "",
+                "lang": str(entry.get("lang") or ""), "provider": str(entry.get("provider") or ""),
                 "paragraphs": paragraphs, "blocks": markdown_blocks(paragraphs),
                 "next_up": str(entry.get("next_up") or ""), "images": images,
                 "hasRecording": str(entry.get("session") or "") in recorded,
             })
+        # Session ids are timestamps: a pending entry sorts among the written ones by when it was played.
+        rows.sort(key=lambda r: r["session"], reverse=True)
         self._rows = rows
         self.rowsChanged.emit()
 
@@ -326,3 +334,65 @@ class JournalList(QObject):
     rows = Property("QVariantList", lambda self: [dict(r) for r in self._rows], notify=rowsChanged)
     count = Property(int, lambda self: len(self._rows), notify=rowsChanged)
     gameId = Property(str, lambda self: self._game_id, notify=gameIdChanged)
+
+
+POLL_MS = 10000
+
+
+class PendingJournals(QObject):
+    """`api.screens.pendingJournals`: the entries being written, across all games. Refreshed by the
+    journal watcher, a session's end, and a 10 s poll while any is pending (elapsed time, the
+    module's timeout). `appeared` and `resolved` fire once per session."""
+
+    changed = Signal()
+    appeared = Signal(str, str)
+    resolved = Signal(str, str, str, str)
+
+    def __init__(self, client, parent=None):
+        super().__init__(parent)
+        self._client = client
+        self._rows = []
+        self._announced = set()
+        self._timer = QTimer(self)
+        self._timer.setInterval(POLL_MS)
+        self._timer.timeout.connect(self.refresh)
+        client.entryWritten.connect(lambda session, ident: self.refresh())
+        client.sessionEnded.connect(lambda session, ident, duration: self.refresh())
+        self.refresh()
+
+    @Slot()
+    def refresh(self):
+        rows = []
+        for entry in self._client.pendingJournals() or []:
+            rows.append({"game": str(entry.get("game") or ""), "title": str(entry.get("title") or ""),
+                         "session": str(entry.get("session") or ""), "started_at": str(entry.get("started_at") or "")})
+        before = {r["session"]: r for r in self._rows}
+        now = {r["session"]: r for r in rows}
+        self._rows = rows
+        if rows:
+            self._timer.start()
+        else:
+            self._timer.stop()
+        self.changed.emit()
+        for session, row in now.items():
+            if session not in self._announced:
+                self._announced.add(session)
+                self.appeared.emit(session, row["title"])
+        for session, row in before.items():
+            if session not in now:
+                self._resolve(session, row["game"])
+
+    def _resolve(self, session, game):
+        entry = next((e for e in self._client.journal(game) or [] if str(e.get("session") or "") == session), None)
+        if entry is None:
+            return
+        state = str(entry.get("state") or "written")
+        paragraphs = [str(p) for p in entry.get("paragraphs") or []]
+        text = (paragraphs[0] if paragraphs else "") if state == "failed" else str(entry.get("title") or "Untitled")
+        self.resolved.emit(session, game, state, text)
+
+    def shutdown(self):
+        self._timer.stop()
+
+    rows = Property("QVariantList", lambda self: [dict(r) for r in self._rows], notify=changed)
+    count = Property(int, lambda self: len(self._rows), notify=changed)

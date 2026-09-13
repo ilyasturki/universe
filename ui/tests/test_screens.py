@@ -173,6 +173,54 @@ def test_journal_and_recordings(api):
     assert row["hasJournal"] is True and entry["hasRecording"] is True
 
 
+def test_journal_rows_carry_state_and_duration(api, fake):
+    entries = fake._data["journal"]["the-technomancer"]
+    entries.insert(0, {"session": "20260912-200000", "game": "the-technomancer", "state": "pending",
+                       "started_at": "2026-09-12T20:00:00+02:00", "written_at": "", "title": "", "paragraphs": [], "images": []})
+    entries.append({"session": "20260905-190000", "game": "the-technomancer", "state": "failed", "duration_s": 2520,
+                    "started_at": "2026-09-05T19:00:00+02:00", "written_at": "2026-09-05T19:50:00+02:00", "title": "",
+                    "paragraphs": ["codex timed out after 30 min"], "images": []})
+    journal = api.screens.journal
+    journal.load("the-technomancer")
+    rows = journal.rows
+    assert [r["state"] for r in rows] == ["pending", "written", "written", "failed"]
+    pending, first, second, failed = rows
+    assert pending["title"] == "" and pending["durationText"] == "" and pending["reason"] == ""
+    assert pending["started_at"] == "2026-09-12T20:00:00+02:00" and "20:00" in pending["dateText"]
+    assert first["durationText"] == "1 h 10" and first["duration_s"] == 4215 and second["durationText"] == "1 h 17"
+    assert failed["title"] == "Journal failed" and failed["reason"] == "codex timed out after 30 min"
+    assert failed["durationText"] == "42 min" and failed["blocks"] == ["codex timed out after 30 min"]
+
+
+def test_pending_journals_announce_each_session_once(api, fake):
+    pending = api.screens.pendingJournals
+    assert pending.count == 0
+    seen = []
+    pending.appeared.connect(lambda session, title: seen.append(("appeared", session, title)))
+    pending.resolved.connect(lambda session, game, state, text: seen.append(("resolved", session, game, state, text)))
+    entries = fake._data["journal"]["the-technomancer"]
+    entries.insert(0, {"session": "20260912-200000", "game": "the-technomancer", "state": "pending",
+                       "started_at": "2026-09-12T20:00:00+02:00", "title": "", "paragraphs": [], "images": []})
+    fake.entryWritten.emit("20260912-200000", "the-technomancer")
+    assert pending.count == 1 and pending.rows[0]["title"] == "The Technomancer"
+    fake.entryWritten.emit("", "the-technomancer")
+    fake.sessionEnded.emit("20260912-200000", "the-technomancer", 60)
+    assert seen == [("appeared", "20260912-200000", "The Technomancer")]
+
+    entries[0].update(state="written", title="Back to Noctis", paragraphs=["p"], written_at="2026-09-12T20:50:00+02:00")
+    fake.entryWritten.emit("20260912-200000", "the-technomancer")
+    assert pending.count == 0
+    assert seen[-1] == ("resolved", "20260912-200000", "the-technomancer", "written", "Back to Noctis")
+
+    entries.insert(0, {"session": "20260913-100000", "game": "the-technomancer", "state": "pending",
+                       "started_at": "2026-09-13T10:00:00+02:00", "title": "", "paragraphs": [], "images": []})
+    fake.sessionEnded.emit("20260913-100000", "the-technomancer", 60)
+    entries[0].update(state="failed", paragraphs=["codex timed out"])
+    fake.entryWritten.emit("20260913-100000", "the-technomancer")
+    assert seen[-2:] == [("appeared", "20260913-100000", "The Technomancer"),
+                         ("resolved", "20260913-100000", "the-technomancer", "failed", "codex timed out")]
+
+
 def test_journal_paragraphs_become_markdown_blocks():
     from universe_ui.screens.media import markdown_blocks
 

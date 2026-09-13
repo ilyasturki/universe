@@ -51,6 +51,20 @@ each frame's 8×8 gray stddev, so the list thumbnail is the first frame that is 
 Two extractions run at a time; the picked row's frames go first, the others' thumbnails after.
 `frameMap[session]` carries `thumbnail`, `frames` (`""` until extracted), `complete` and `duration`.
 
+`api.screens.journal` maps a game's entries to rows — `session`, `title`, `state`, `reason`,
+`started_at`, `dateText`, `duration_s`, `durationText`, `paragraphs`, `blocks`, `next_up`,
+`images`, `hasRecording` — sorted by session id, last first. `state` is `written`, `pending` (the
+module is still writing: no title, no paragraphs; the row pulses with the time since `started_at`
+and cannot be opened) or `failed` (`reason` is the module's message, its one paragraph).
+`durationText` is the session's length — `42 min`, `1 h 05` — next to the date in the row and in
+the article header; the date is `written_at`, or `started_at` while there is none.
+`api.screens.pendingJournals` is `pending_journals_json()` as `rows` and `count`, refreshed on
+`entryWritten`, on `sessionEnded` and every 10 s while any is pending (so the elapsed time and
+the module's 30-min timeout show up); `appeared(session, title)` and
+`resolved(session, game, state, text)` fire once per session and become the "Journal: writing …",
+"Journal: <title>" and "Journal failed: <reason>" toasts, and the tab bar pulses a book next to
+the session badge while the count is not zero.
+
 ## Changes
 
 The core pushes nothing — the files are the truth, and anything may write them: the CLI, systemd's

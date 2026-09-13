@@ -626,8 +626,14 @@ FocusScope {
         }
     }
 
+    Connections {
+        target: api.screens.pendingJournals
+        function onAppeared(session, title) { toast.show("Journal: writing " + title + "…"); }
+        function onResolved(session, id, state, text) { toast.show(state === "failed" ? "Journal failed: " + text : "Journal: " + text); }
+    }
+
     Keys.onPressed: function(event) {
-        if (root.launching || root.subOpen) {
+        if (root.launching || root.subOpen || launchOverlay.running) {
             event.accepted = true;
             return;
         }

@@ -19,6 +19,15 @@ FocusScope {
     readonly property var current: index >= 0 && index < rows.length ? rows[index] : null
     readonly property string currentSession: current ? current.session : ""
     readonly property var images: current ? current.images : []
+    readonly property bool currentPending: current !== null && current.state === "pending"
+    readonly property bool anyPending: {
+        for (var i = 0; i < rows.length; i++)
+            if (rows[i].state === "pending")
+                return true;
+        return false;
+    }
+    // Ticks while an entry is being written, so its elapsed time moves.
+    property double now: Date.now()
 
     // 0 entries, 1 the text, 2 the screenshots
     property int mode: 0
@@ -39,7 +48,8 @@ FocusScope {
         } else if (mode === 1) {
             out.push({ glyph: "dpad", label: "Scroll" });
         } else {
-            out.push({ glyph: "A", label: "Read" });
+            if (!currentPending)
+                out.push({ glyph: "A", label: "Read" });
             out.push({ glyph: "dpad", label: "Navigate" });
         }
         if (current && current.hasRecording)
@@ -112,12 +122,35 @@ FocusScope {
     }
 
     function read() {
-        if (!current) {
+        if (!current || currentPending) {
             Sound.edge();
             return;
         }
         Sound.panel();
         mode = 1;
+    }
+
+    function elapsedText(startedAt) {
+        var s = Math.round((page.now - Date.parse(startedAt)) / 1000);
+        if (isNaN(s))
+            return "";
+        s = Math.max(0, s);
+        if (s < 60)
+            return s + " s";
+        if (s < 3600)
+            return Math.floor(s / 60) + " min";
+        return Math.floor(s / 3600) + " h " + ("0" + Math.floor((s % 3600) / 60)).slice(-2);
+    }
+
+    function whenText(entry) {
+        return entry.dateText + (entry.durationText !== "" ? "  ·  " + entry.durationText : "");
+    }
+
+    Timer {
+        interval: 1000
+        running: page.anyPending
+        repeat: true
+        onTriggered: page.now = Date.now()
     }
 
     function leave() {
@@ -255,6 +288,8 @@ FocusScope {
         delegate: Rectangle {
             readonly property bool focused: index === page.index
             readonly property bool lit: focused && !page.reading
+            readonly property bool pending: modelData.state === "pending"
+            readonly property bool failed: modelData.state === "failed"
 
             width: list.width
             height: Theme.dp(96)
@@ -265,17 +300,37 @@ FocusScope {
                 ColorAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
             }
 
-            Column {
+            Rectangle {
+                id: pulse
                 anchors.left: parent.left
+                anchors.leftMargin: Theme.dp(22)
+                anchors.verticalCenter: parent.verticalCenter
+                width: Theme.dp(12)
+                height: width
+                radius: width / 2
+                visible: pending
+                color: lit ? Theme.onLight : Theme.text
+
+                SequentialAnimation on opacity {
+                    running: pending
+                    loops: Animation.Infinite
+                    NumberAnimation { to: 0.25; duration: 900; easing.type: Easing.InOutQuad }
+                    NumberAnimation { to: 1.0; duration: 900; easing.type: Easing.InOutQuad }
+                }
+            }
+
+            Column {
+                anchors.left: pending ? pulse.right : parent.left
                 anchors.right: recordingMark.visible ? recordingMark.left : parent.right
                 anchors.margins: Theme.dp(22)
+                anchors.leftMargin: pending ? Theme.dp(16) : Theme.dp(22)
                 anchors.verticalCenter: parent.verticalCenter
                 spacing: Theme.dp(6)
 
                 Text {
                     width: parent.width
-                    text: modelData.title
-                    color: lit ? Theme.onLight : Theme.text
+                    text: pending ? "Writing the entry…" : modelData.title
+                    color: lit ? Theme.onLight : (pending ? Theme.textSecondary : Theme.text)
                     font.family: Theme.sans
                     font.weight: Font.DemiBold
                     font.pixelSize: Theme.dp(24)
@@ -284,7 +339,9 @@ FocusScope {
 
                 Text {
                     width: parent.width
-                    text: modelData.dateText
+                    text: pending ? page.elapsedText(modelData.started_at)
+                        : failed ? modelData.reason
+                        : page.whenText(modelData)
                     color: lit ? Qt.rgba(0.063, 0.067, 0.086, 0.7) : Theme.textSecondary
                     font.family: Theme.sans
                     font.pixelSize: Theme.dp(20)
@@ -333,8 +390,8 @@ FocusScope {
 
             Text {
                 width: parent.width
-                text: page.current ? page.current.title : ""
-                color: Theme.text
+                text: page.current ? (page.currentPending ? "Writing the entry…" : page.current.title) : ""
+                color: page.currentPending ? Theme.textSecondary : Theme.text
                 font.family: Theme.sans
                 font.weight: Font.Bold
                 font.pixelSize: Theme.dp(38)
@@ -342,8 +399,21 @@ FocusScope {
             }
 
             CapsLabel {
-                text: page.current ? page.current.dateText : ""
+                text: page.current ? page.whenText(page.current) : ""
                 tracking: 0.11
+            }
+
+            Text {
+                width: parent.width
+                visible: page.currentPending
+                text: page.current && page.currentPending
+                    ? "The journal module is writing this entry — " + page.elapsedText(page.current.started_at) + " so far. It shows up here when it is done."
+                    : ""
+                color: Theme.textMuted
+                font.family: Theme.sans
+                font.pixelSize: Theme.dp(24)
+                lineHeight: 1.5
+                wrapMode: Text.WordWrap
             }
 
             Repeater {

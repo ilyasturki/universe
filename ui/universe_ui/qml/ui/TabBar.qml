@@ -213,6 +213,24 @@ FocusScope {
             anchors.verticalCenter: parent.verticalCenter
         }
 
+        MenuGlyph {
+            id: journalMark
+
+            anchors.verticalCenter: parent.verticalCenter
+            width: Theme.dp(24)
+            height: width
+            visible: api.screens.pendingJournals.count > 0
+            kind: "book"
+            tint: Theme.textSecondary
+
+            SequentialAnimation on opacity {
+                running: journalMark.visible
+                loops: Animation.Infinite
+                NumberAnimation { to: 0.35; duration: 900; easing.type: Easing.InOutQuad }
+                NumberAnimation { to: 1.0; duration: 900; easing.type: Easing.InOutQuad }
+            }
+        }
+
         Canvas {
             id: glass
 

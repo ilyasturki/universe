@@ -289,6 +289,14 @@ class UniverseClientBase(QObject):
         payload = entry if isinstance(entry, str) else json.dumps(entry)
         self._guarded(None, "Journal1", "AddEntry", session_id, payload, decode=False)
 
+    @Slot(result="QVariant")
+    def pendingJournals(self):
+        try:
+            return _json(self._call("Journal1", "Pending"), [])
+        except UniverseError as e:
+            log.warning("pending_journals: %s", e.message)
+            return []
+
     # -- Modules1 / Settings1 --------------------------------------------------------------
 
     @Slot(result="QVariant")
@@ -613,6 +621,7 @@ _CORE_CALLS = {
     ("Journal1", "List"): lambda s, ident: s._core.journal_json(ident),
     ("Journal1", "Render"): lambda s, ident: s._core.render_journal(ident),
     ("Journal1", "AddEntry"): lambda s, session_id, payload: s._core.add_entry(session_id, payload),
+    ("Journal1", "Pending"): lambda s: s._core.pending_journals_json(),
     ("Modules1", "List"): lambda s: s._core.modules_json(),
     ("Modules1", "Enable"): lambda s, ident, enabled: (s._core.enable_module(ident, _bus_bool(enabled)), s.modulesChanged.emit())[0],
     ("Modules1", "GetSettings"): lambda s, module, game_id: s._core.module_settings_json(module, game_id),
@@ -827,6 +836,7 @@ class FakeClient(UniverseClientBase):
         self.currentSessionChanged.emit()
         self.libraryChanged.emit([current["id"]])
         self.sessionEnded.emit(current["session_id"], current["id"], duration)
+        self._pend_journal(current["id"], current["session_id"])
 
     def _Session1_Stop(self, session_id):
         if self._process is not None:
@@ -966,11 +976,41 @@ class FakeClient(UniverseClientBase):
             )
         return out
 
-    # Entries without pictures borrow the game's painted screenshots, so the strip has something to show.
+    # Entries without pictures borrow the game's painted screenshots, so the strip has something to show;
+    # as the core does, each carries its session's times and a state.
     def _Journal1_List(self, ident):
         entries = self._data.get("journal", {}).get(ident, [])
         shots = (self._game(ident) or {}).get("media", {}).get("screenshots") or []
-        return json.dumps([dict(e, images=e.get("images") or shots) for e in entries])
+        sessions = {s.get("session"): s for s in self._data.get("sessions", {}).get(ident, [])}
+        out = []
+        for e in entries:
+            line = sessions.get(e.get("session")) or {}
+            out.append({"state": "written", "started_at": line.get("started_at") or "", "ended_at": line.get("ended_at") or "",
+                        "duration_s": line.get("duration_s") or 0, **e, "images": e.get("images") or shots})
+        return json.dumps(out)
+
+    def _Journal1_Pending(self):
+        return json.dumps([{"game": game, "title": self._game(game)["title"], "session": e.get("session"), "started_at": e.get("started_at")}
+                           for game, entries in self._data.get("journal", {}).items()
+                           for e in entries if e.get("state") == "pending"])
+
+    # What the journal module does after a session: a pending file, then the entry a few seconds later.
+    def _pend_journal(self, ident, session_id):
+        entries = self._data.setdefault("journal", {}).setdefault(ident, [])
+        entries.insert(0, {"session": session_id, "game": ident, "state": "pending", "started_at": _now(),
+                           "written_at": "", "lang": "en", "title": "", "provider": "fake", "paragraphs": [], "next_up": "", "images": []})
+        self.entryWritten.emit(session_id, ident)
+
+        def write():
+            if not shiboken6.isValid(self):
+                return
+            for e in entries:
+                if e["session"] == session_id:
+                    e.update(state="written", written_at=_now(), title="A short session",
+                             paragraphs=["A quick look around, nothing decided yet."])
+            self.entryWritten.emit(session_id, ident)
+
+        QTimer.singleShot(8000, write)
 
     def _Journal1_Render(self, ident):
         return os.path.join(self._art_dir, f"{ident}.md")
