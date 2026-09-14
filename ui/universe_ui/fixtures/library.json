@@ -867,7 +867,17 @@
       "fsr4_upgrade": false,
       "xess_upgrade": false,
       "optiscaler": false,
-      "mangohud": true
+      "mangohud": true,
+      "gamescope": true,
+      "gamescope_args": "",
+      "gamescope_bin": "gamescope",
+      "gamescope_resolution": "auto",
+      "gamescope_refresh": "auto",
+      "gamescope_scaler": "",
+      "gamescope_filter": "",
+      "gamescope_sharpness": null,
+      "gamescope_fps_limit": null,
+      "gamescope_adaptive_sync": false
     },
     "desktop": {
       "profile": "auto",
@@ -2466,5 +2476,11 @@
         }
       ]
     }
-  ]
+  ],
+  "screen": {
+    "screen": "DP-1",
+    "width": 2560,
+    "height": 1440,
+    "refresh": 144
+  }
 }

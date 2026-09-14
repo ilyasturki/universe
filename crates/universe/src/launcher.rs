@@ -97,7 +97,9 @@ fn wrap(wrapper: &str, program: String, args: Vec<String>) -> (String, Vec<Strin
     }
 }
 
-pub fn plan(r: &Resolved, config: &Config, session_id: &str, extra_env: &BTreeMap<String, String>) -> crate::Result<Plan> {
+/// `screen` is the session screen's current mode, what gamescope's size flags follow; `None` (no
+/// screen could be read) leaves gamescope's own defaults.
+pub fn plan(r: &Resolved, config: &Config, session_id: &str, extra_env: &BTreeMap<String, String>, screen: Option<crate::gamescope::Mode>) -> crate::Result<Plan> {
     use crate::runners::{self, Kind};
     let g = &r.game;
     if g.launch.exe.is_empty() {
@@ -154,7 +156,7 @@ pub fn plan(r: &Resolved, config: &Config, session_id: &str, extra_env: &BTreeMa
     }
     let (program, args) = match &gamescope {
         Some(bin) => {
-            let mut wrap = gamescope_args(config, r);
+            let mut wrap = gamescope_args(config, r, screen);
             if r.effective.mangohud {
                 wrap.push("--mangoapp".into());
             }
@@ -193,9 +195,12 @@ pub fn plan(r: &Resolved, config: &Config, session_id: &str, extra_env: &BTreeMa
     })
 }
 
-/// Fullscreen on the session's screen, every client stretched to it; then the global and the game's own arguments.
-fn gamescope_args(config: &Config, r: &Resolved) -> Vec<String> {
+/// Fullscreen on the session's screen, every client stretched to it, the size and rate flags the
+/// fields stand for; then the global and the game's own arguments, which win (gamescope takes
+/// the last of a repeated flag).
+fn gamescope_args(config: &Config, r: &Resolved, screen: Option<crate::gamescope::Mode>) -> Vec<String> {
     let mut args: Vec<String> = vec!["-f".into(), "--force-windows-fullscreen".into()];
+    args.extend(crate::gamescope::args(&r.effective.gamescope_fields, screen));
     for extra in [&config.launch.gamescope_args, &r.effective.gamescope_args] {
         args.extend(shell_words::split(extra).unwrap_or_else(|_| vec![extra.clone()]).into_iter().filter(|a| !a.is_empty()));
     }
@@ -379,7 +384,7 @@ mod tests {
         };
         let mut cfg = Config::default();
         cfg.launch.gamescope = false;
-        let p = plan(&r, &cfg, "20260911-120000", &BTreeMap::from([("FROM_HOOK".to_string(), "1".to_string())])).unwrap();
+        let p = plan(&r, &cfg, "20260911-120000", &BTreeMap::from([("FROM_HOOK".to_string(), "1".to_string())]), None).unwrap();
         assert!(!p.gamescope);
         assert_eq!(p.unit, "universe-game-sample-20260911-120000");
         assert_eq!(p.program, "umu-run");
@@ -416,7 +421,7 @@ mod tests {
         cfg.launch.env.insert("PROTON_ENABLE_WAYLAND".into(), "1".into());
         let mut r = crate::library::resolve(g, &cfg, &[]);
         r.effective.proton_path = "/p".into();
-        let p = plan(&r, &cfg, "s", &BTreeMap::new()).unwrap();
+        let p = plan(&r, &cfg, "s", &BTreeMap::new(), None).unwrap();
         assert_eq!(p.program, "gamemoderun");
         assert_eq!(p.args, vec!["taskset", "-c", "0-7", "umu-run", &exe.to_string_lossy().to_string()]);
         assert!(!p.env.contains_key("PROTON_ENABLE_WAYLAND"), "the field off beats the seed");
@@ -440,7 +445,7 @@ mod tests {
         let mut cfg = Config::default();
         cfg.launch.gamescope = false;
         let r = crate::library::resolve(g, &cfg, &[]);
-        let p = plan(&r, &cfg, "s", &BTreeMap::new()).unwrap();
+        let p = plan(&r, &cfg, "s", &BTreeMap::new(), None).unwrap();
         assert!(p.program.ends_with("wine"));
         assert_eq!(p.env["WINEARCH"], "win64");
         assert_eq!(p.env["WINEESYNC"], "0");
@@ -472,7 +477,7 @@ mod tests {
         assert_eq!(r.effective.runner_path, emu.to_string_lossy());
         assert_eq!(r.effective.platform, "Nintendo GameCube");
         assert!(r.effective.inputplumber);
-        let p = plan(&r, &cfg, "20260913-120000", &BTreeMap::new()).unwrap();
+        let p = plan(&r, &cfg, "20260913-120000", &BTreeMap::new(), None).unwrap();
         assert_eq!(p.program, emu.to_string_lossy());
         assert_eq!(p.args, vec!["--config", "Dolphin.Display.Fullscreen=True", "--batch", "-e", &rom.to_string_lossy().to_string(), "--extra"]);
         assert_eq!(p.env["MANGOHUD"], "1");
@@ -494,7 +499,7 @@ mod tests {
         cfg.launch.gamescope = false;
         let mut r = crate::library::resolve(g, &cfg, &[]);
         r.effective.proton_path = "/p".into();
-        let p = plan(&r, &cfg, "s", &BTreeMap::new()).unwrap();
+        let p = plan(&r, &cfg, "s", &BTreeMap::new(), None).unwrap();
         assert_eq!(p.program, cfg.launch.umu_run);
         assert_eq!(p.args[..2], ["/x/xenia_canary.exe", "--fullscreen"]);
         assert_eq!(p.env["PROTONPATH"], "/p");
@@ -518,10 +523,11 @@ mod tests {
         let mut r = crate::library::resolve(g, &cfg, &[]);
         r.effective.proton_path = "/p".into();
         assert!(r.effective.gamescope);
-        let p = plan(&r, &cfg, "s", &BTreeMap::new()).unwrap();
+        let screen = Some(crate::gamescope::Mode { width: 3840, height: 2160, refresh: 60 });
+        let p = plan(&r, &cfg, "s", &BTreeMap::new(), screen).unwrap();
         assert!(p.gamescope);
         assert_eq!(p.program, bin.to_string_lossy());
-        let mut want: Vec<String> = ["-f", "--force-windows-fullscreen", "--adaptive-sync", "-r", "120", "--mangoapp", "--"].map(String::from).into();
+        let mut want: Vec<String> = ["-f", "--force-windows-fullscreen", "-W", "3840", "-H", "2160", "-w", "3840", "-h", "2160", "-r", "60", "--adaptive-sync", "-r", "120", "--mangoapp", "--"].map(String::from).into();
         if let Some(setpriv) = crate::runners::on_path("setpriv") {
             want.extend([setpriv.to_string_lossy().to_string(), "--ambient-caps=-all".into(), "--inh-caps=-all".into(), "--".into()]);
         }
@@ -532,11 +538,19 @@ mod tests {
         assert_eq!(p.env["PROTONPATH"], "/p");
 
         r.effective.gamescope_args = "--expose-wayland".into();
-        let p = plan(&r, &cfg, "s", &BTreeMap::new()).unwrap();
+        let p = plan(&r, &cfg, "s", &BTreeMap::new(), None).unwrap();
         assert_eq!(p.env["PROTON_ENABLE_WAYLAND"], "1");
+        assert_eq!(p.args[2], "--adaptive-sync", "no screen known: gamescope keeps its own size");
+
+        r.game.launch.gamescope_resolution = "1920x1080".into();
+        r.game.launch.gamescope_scaler = "integer".into();
+        cfg.launch.gamescope_fps_limit = Some(60);
+        let r2 = crate::library::resolve(r.game.clone(), &cfg, &[]);
+        let p = plan(&r2, &cfg, "s", &BTreeMap::new(), screen).unwrap();
+        assert_eq!(p.args[2..15], ["-W", "3840", "-H", "2160", "-w", "1920", "-h", "1080", "-r", "60", "-S", "integer", "--framerate-limit"], "the game's fields over the global ones, the output the screen");
 
         r.effective.hdr = true;
-        let p = plan(&r, &cfg, "s", &BTreeMap::new()).unwrap();
+        let p = plan(&r, &cfg, "s", &BTreeMap::new(), None).unwrap();
         assert!(p.args.contains(&"--hdr-enabled".to_string()) && p.env["PROTON_ENABLE_HDR"] == "1");
 
         r.game.launch.gamescope = Some(false);
@@ -555,7 +569,7 @@ mod tests {
         let mut cfg = Config::default();
         cfg.launch.gamescope_bin = dir.path().join("nope/gamescope").to_string_lossy().into();
         let r = crate::library::resolve(g, &cfg, &[]);
-        let p = plan(&r, &cfg, "s", &BTreeMap::new()).unwrap();
+        let p = plan(&r, &cfg, "s", &BTreeMap::new(), None).unwrap();
         assert!(!p.gamescope);
         assert_eq!(p.program, exe.to_string_lossy());
         assert_eq!(p.env["MANGOHUD"], "1");
@@ -572,7 +586,7 @@ mod tests {
         let cfg = Config::default();
         let mut r = crate::library::resolve(g, &cfg, &[]);
         r.effective.runner_path.clear();
-        let err = plan(&r, &cfg, "s", &BTreeMap::new()).unwrap_err();
+        let err = plan(&r, &cfg, "s", &BTreeMap::new(), None).unwrap_err();
         assert!(matches!(err, crate::Error::Unavailable(_)), "{err}");
     }
 }

@@ -22,7 +22,7 @@ def test_game_settings_form(api, fake):
     assert capture["enabled"]["value"] is True and capture["enabled"]["type"] == "bool"
     assert "codec" not in capture, "global settings do not belong to a game"
     groups = {g["title"]: g for g in form.groups}
-    assert [g["title"] for g in form.groups][:3] == ["Launch", "Desktop and library", "Artwork"]
+    assert [g["title"] for g in form.groups][:4] == ["Launch", "Gamescope", "Desktop and library", "Artwork"]
     assert groups["Launch"]["caps"] is True and groups["Video capture"]["caps"] is False
     assert groups["Video capture"]["meta"] == "v0.1.0 · hooks"
     assert sorted(i for g in form.groups for i in g["rows"]) == list(range(len(form.rows)))
@@ -33,23 +33,21 @@ def test_game_settings_form(api, fake):
     assert form.rows[index]["value"] is False
 
 
-def test_modules_form(api, fake):
+def test_modules_list(api, fake):
     journal_module = next(m for m in fake._data["modules"] if m["id"] == "journal")
     journal_module.update(enabled=False, available=False, missing=["ffmpeg"])
     form = api.screens.modules
     form.load()
-    rows = form.rows
-    journal = next(g for g in form.groups if g["title"] == "Play journal")
-    assert "missing ffmpeg" in journal["warning"] and journal["off"] is True and journal["rows"] == []
-    enabled = journal["control"]
-    assert rows[enabled]["module"] == "journal" and rows[enabled]["key"] == "enabled"
-    assert rows[enabled]["value"] is False
-    capture = next(g for g in form.groups if g["title"] == "Video capture")
-    assert capture["meta"] == "v0.1.0 · hooks" and capture["warning"] == "" and capture["off"] is False
-    assert [rows[i]["key"] for i in capture["rows"]] == ["codec", "quality", "fps", "size", "container", "audio", "audio_codec", "audio_bitrate", "min_duration_s", "window_wait_s"]
-    codec = next(i for i, r in enumerate(rows) if r["module"] == "capture" and r["key"] == "codec")
-    assert form.setValue(codec, "av1") is True
-    assert fake.getSettings("capture", "")["codec"] == "av1"
+    assert [r["module"] for r in form.rows] == ["capture", "journal", "gog"], "the manifests' order"
+    assert all(r["type"] == "action" and r["key"] == "module" for r in form.rows)
+    assert [(g["title"], [form.rows[i]["module"] for i in g["rows"]], g["off"]) for g in form.groups] == [("", ["capture", "gog"], False), ("Off", ["journal"], True)]
+    capture = form.rows[form.indexOf("capture")]
+    assert capture["label"] == "Video capture" and capture["value"] is True and capture["display"] == "On" and capture["meta"] == "v0.1.0 · hooks"
+    journal = form.rows[form.indexOf("journal")]
+    assert journal["value"] is False and journal["display"] == "Unavailable" and journal["detail"] == "Cannot be enabled: missing ffmpeg"
+    form.toggle(form.indexOf("capture"))
+    assert form.rows[form.indexOf("capture")]["value"] is False and form.rows[form.indexOf("capture")]["display"] == "Off"
+    assert next(m for m in fake.modules() if m["id"] == "capture")["enabled"] is False
     form.loadDoctor()
     assert form.doctor and all("value" in r for r in form.doctor)
     doctor = {g["title"]: g for g in form.doctorGroups}
@@ -57,21 +55,106 @@ def test_modules_form(api, fake):
     assert form.doctor[doctor["GOG"]["rows"][0]]["label"] == "gogdl on PATH"
 
 
-def test_modules_form_choices(api, fake):
+def test_module_form(api, fake):
+    journal_module = next(m for m in fake._data["modules"] if m["id"] == "journal")
+    journal_module.update(enabled=False, available=False, missing=["ffmpeg"])
+    form = api.screens.module
+    form.load("journal")
+    assert form.info["name"] == "Play journal" and "missing ffmpeg" in form.info["warning"] and form.info["enabled"] is False
+    assert [r["key"] for r in form.rows] == ["enabled"], "off: the switch alone"
+    assert form.rows[0]["value"] is False and form.rows[0]["disabled"] is True
+    assert form.groups == [{"title": "", "meta": "", "warning": "", "caps": False, "control": -1, "off": False, "rows": [0]}], "the page header carries the name and the warning"
+    form.load("capture")
+    assert form.info["meta"] == "v0.1.0 · hooks" and form.info["warning"] == "" and form.info["kind"] == ["hooks"]
+    rows = form.rows
+    assert rows[0]["key"] == "enabled" and rows[0]["value"] is True and rows[0]["disabled"] is False
+    settings = next(g for g in form.groups if g["title"] == "Settings")
+    assert [rows[i]["key"] for i in settings["rows"]] == ["codec", "quality", "fps", "size", "container", "audio", "audio_codec", "audio_bitrate", "min_duration_s", "window_wait_s"]
+    codec = next(i for i, r in enumerate(rows) if r["key"] == "codec")
+    assert form.setValue(codec, "av1") is True
+    assert fake.getSettings("capture", "")["codec"] == "av1"
+    form.toggle(0)
+    assert form.info["enabled"] is False and [r["key"] for r in form.rows] == ["enabled"]
+    form.load("nope")
+    assert form.rows == [] and form.info == {}
+
+
+def test_module_form_choices(api, fake):
     """Listed choices come with the row; a dynamic setting's arrive from the module, and the
     frame rates above the screen's refresh rate go."""
-    form = api.screens.modules
+    form = api.screens.module
     form._screen_hz = lambda: 90
-    form.load()
+    form.load("capture")
     rows = rows_by_key(form, "capture")
     assert rows["fps"]["type"] == "int" and rows["fps"]["choices"] == ["auto", "90", "60", "30"]
+    form.load("journal")
     journal = rows_by_key(form, "journal")
     assert journal["model"]["dynamic"] is True
     assert journal["model"]["choices"] == ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.5"]
+    form.load("capture")
     fps = next(i for i, r in enumerate(form.rows) if r["module"] == "capture" and r["key"] == "fps")
     assert form.setValue(fps, "auto") is True
     assert fake.getSettings("capture", "")["fps"] == "auto"
     assert form.rows[fps]["display"] == "auto"
+
+
+def test_launch_form(api, fake):
+    form = api.screens.launch
+    form.load()
+    assert form.screen == "DP-1 2560×1440 @ 144 Hz"
+    assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups] == [
+        ("Gamescope", ["launch.gamescope", "launch.gamescope_resolution", "launch.gamescope_refresh", "launch.gamescope_scaler", "launch.gamescope_filter",
+                       "launch.gamescope_sharpness", "launch.gamescope_fps_limit", "launch.gamescope_adaptive_sync", "launch.gamescope_args"]),
+        ("Overlay and cursor", ["launch.mangohud", "desktop.hide_cursor"]),
+        ("Proton", ["launch.proton", "launch.esync", "launch.fsync", "launch.ntsync", "launch.wayland", "launch.hdr", "launch.dlss_upgrade",
+                    "launch.fsr4_upgrade", "launch.xess_upgrade", "launch.optiscaler"]),
+    ]
+    assert form.groups[0]["meta"] == form.screen
+    rows = rows_by_key(form)
+    assert rows["launch.gamescope"]["value"] is True
+    assert rows["launch.gamescope_resolution"]["type"] == "string" and rows["launch.gamescope_resolution"]["value"] == "auto"
+    assert rows["launch.gamescope_resolution"]["choices"] == ["auto", "2560x1440", "1920x1080", "1280x720"], "the screen, then the standard heights at its aspect"
+    assert rows["launch.gamescope_refresh"]["choices"] == ["auto", "144", "120", "100", "90", "75", "60", "50", "48", "40", "30"]
+    assert rows["launch.gamescope_scaler"]["type"] == "enum" and rows["launch.gamescope_scaler"]["value"] == "default"
+    assert rows["launch.gamescope_scaler"]["choices"] == ["default", "auto", "integer", "fit", "fill", "stretch"]
+    assert rows["launch.gamescope_scaler"]["choiceValues"] == ["", "auto", "integer", "fit", "fill", "stretch"]
+    assert rows["launch.gamescope_sharpness"]["value"] == "default" and rows["launch.gamescope_fps_limit"]["value"] == "none"
+    assert rows["launch.gamescope_adaptive_sync"]["value"] is False and rows["launch.gamescope_args"]["value"] == ""
+    assert rows["launch.proton"]["value"] == "proton-ge" and rows["launch.proton"]["choices"] == ["proton-cachyos", "proton-em", "proton-ge"]
+    assert rows["desktop.hide_cursor"]["value"] is True and rows["launch.esync"]["value"] is True
+
+    index = next(i for i, r in enumerate(form.rows) if r["key"] == "launch.gamescope_scaler")
+    assert form.setValue(index, "integer") is True
+    assert fake.config()["launch"]["gamescope_scaler"] == "integer"
+    assert form.setValue(index, "default") is True
+    assert "gamescope_scaler" not in fake.config()["launch"], "the sentinel clears the key"
+    index = next(i for i, r in enumerate(form.rows) if r["key"] == "launch.gamescope_sharpness")
+    assert form.setValue(index, "7") is True, "a typed value passes through"
+    assert fake.config()["launch"]["gamescope_sharpness"] == 7
+    form.load()
+    assert rows_by_key(form)["launch.gamescope_sharpness"]["value"] == "7"
+    index = next(i for i, r in enumerate(form.rows) if r["key"] == "launch.gamescope")
+    form.toggle(index)
+    assert fake.config()["launch"]["gamescope"] is False
+
+
+def test_game_settings_gamescope_group(api, fake):
+    form = api.screens.gameSettings
+    form.load("the-technomancer")
+    group = next(g for g in form.groups if g["title"] == "Gamescope")
+    assert [form.rows[i]["key"] for i in group["rows"]] == [
+        "launch.gamescope", "launch.gamescope_resolution", "launch.gamescope_refresh", "launch.gamescope_scaler", "launch.gamescope_filter",
+        "launch.gamescope_sharpness", "launch.gamescope_fps_limit", "launch.gamescope_adaptive_sync", "launch.gamescope_args"]
+    rows = rows_by_key(form, "")
+    assert rows["launch.gamescope_resolution"]["value"] == "auto" and rows["launch.gamescope_resolution"]["inherited"] is True
+    assert rows["launch.gamescope_resolution"]["choices"][:2] == ["auto", "2560x1440"]
+    assert rows["launch.gamescope_scaler"]["value"] == "default" and rows["launch.gamescope_scaler"]["inherited"] is True
+    assert rows["launch.gamescope_adaptive_sync"]["value"] is False and rows["launch.gamescope_adaptive_sync"]["inherited"] is True
+    index = next(i for i, r in enumerate(form.rows) if r["key"] == "launch.gamescope_resolution")
+    assert form.setValue(index, "1920x1080") is True
+    assert fake.game("the-technomancer")["launch"]["gamescope_resolution"] == "1920x1080"
+    rows = rows_by_key(form, "")
+    assert rows["launch.gamescope_resolution"]["value"] == "1920x1080" and rows["launch.gamescope_resolution"]["inherited"] is False
 
 
 def test_sources_browser_statuses(api):

@@ -47,6 +47,15 @@ pub struct LaunchDefaults {
     pub gamescope: bool,
     pub gamescope_args: String,
     pub gamescope_bin: String,
+    /// `auto` (the screen's mode) or `WxH`: what the game renders at; the output is always the screen.
+    pub gamescope_resolution: String,
+    /// `auto` (the screen's rate) or Hz.
+    pub gamescope_refresh: String,
+    pub gamescope_scaler: String,
+    pub gamescope_filter: String,
+    pub gamescope_sharpness: Option<u32>,
+    pub gamescope_fps_limit: Option<u32>,
+    pub gamescope_adaptive_sync: bool,
     pub env: BTreeMap<String, String>,
     pub umu_run: String,
 }
@@ -135,6 +144,13 @@ impl Default for LaunchDefaults {
             gamescope: true,
             gamescope_args: String::new(),
             gamescope_bin: "gamescope".into(),
+            gamescope_resolution: "auto".into(),
+            gamescope_refresh: "auto".into(),
+            gamescope_scaler: String::new(),
+            gamescope_filter: String::new(),
+            gamescope_sharpness: None,
+            gamescope_fps_limit: None,
+            gamescope_adaptive_sync: false,
             env: BTreeMap::new(),
             umu_run: "umu-run".into(),
         }

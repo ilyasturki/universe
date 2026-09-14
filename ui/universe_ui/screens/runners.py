@@ -97,8 +97,10 @@ class RunnerForm(RowsForm):
         self._runner = {"id": ident, "name": name, "meta": meta, "warning": warning, "icon": runner_logo(ident)}
         rows, groups = [], []
         if runner.get("kind") != "linux":
-            rows.append(_row(name, "exe", "Program", "path", runner.get("exe") or "", module=ident,
-                             detail=found if not runner.get("exe") else "", inherited=not runner.get("exe") and bool(found)))
+            # Not set: the program the core found stands in the row, its origin under it.
+            own = runner.get("exe") or ""
+            origin = {"path": "Found on PATH", "lutris": "Found in Lutris's runners"}.get(source, "Found") if found and not own else ""
+            rows.append(_row(name, "exe", "Program", "path", own or found, module=ident, detail=origin, inherited=not own and bool(found)))
             rows.append(_row(name, "args", "Arguments", "string", runner.get("args") or "", module=ident))
             groups.append(_group("", list(range(len(rows)))))
         own = runner.get("gamescope")

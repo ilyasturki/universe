@@ -273,7 +273,7 @@ class Api(QObject):
         self._memory = Memory(memory_path, self)
         self._theme = ThemeSelector(self._memory, theme, self)
         self._library = Library(client, self)
-        self._screens = Screens(client, self.screenHz, self, memory=self._memory)
+        self._screens = Screens(client, self.screenHz, self, memory=self._memory, screen_name=self.screenName)
         controller = self._screens.controller
         controller.testingChanged.connect(lambda: self._pad.setMuted(controller.testing))
         self._window = None

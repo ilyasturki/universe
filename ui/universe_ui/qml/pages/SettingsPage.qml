@@ -4,10 +4,10 @@ import "../sound"
 import "../ui"
 import "../ui/Macros.js" as Macros
 
-// The Settings tab: a sidebar of sections and one column of cards beside it. The runners (a list;
-// each opens its own page), modules and their global settings, a source's library to install
-// from, pending updates, the login flow, the controller's macros, the look, doctor's checks. One
-// set of cards, eight row sources.
+// The Settings tab: a sidebar of sections and one column of cards beside it. The runners and the
+// modules (lists; each opens its own page), what every game launches with, a source's library to
+// install from, pending updates, the login flow, the controller's macros, the look, doctor's
+// checks. One set of cards, nine row sources.
 FocusScope {
     id: page
 
@@ -16,6 +16,7 @@ FocusScope {
     signal chromeRequested()
     signal settingsRequested(var game)
     signal runnerRequested(string runner)
+    signal moduleRequested(string module)
     signal artworkRequested(var game, string slot)
 
     readonly property var currentGame: null
@@ -30,22 +31,24 @@ FocusScope {
     readonly property bool ownsAccept: true
     property bool menuOpen: false
 
-    readonly property var sections: ["Runners", "Modules", "Install", "Updates", "Login", "Controller", "Themes", "Doctor", "Artwork", "Quit"]
-    readonly property var sectionIcons: ["play", "grid", "download", "refresh", "user", "gamepad", "sun", "pulse", "image", "power"]
+    readonly property var sections: ["Runners", "Launch", "Modules", "Install", "Updates", "Login", "Controller", "Themes", "Doctor", "Artwork", "Quit"]
+    readonly property var sectionIcons: ["play", "sliders", "grid", "download", "refresh", "user", "gamepad", "sun", "pulse", "image", "power"]
     readonly property int runnersSection: 0
-    readonly property int modulesSection: 1
-    readonly property int installSection: 2
-    readonly property int updatesSection: 3
-    readonly property int loginSection: 4
-    readonly property int controllerSection: 5
-    readonly property int themesSection: 6
-    readonly property int doctorSection: 7
+    readonly property int launchSection: 1
+    readonly property int modulesSection: 2
+    readonly property int installSection: 3
+    readonly property int updatesSection: 4
+    readonly property int loginSection: 5
+    readonly property int controllerSection: 6
+    readonly property int themesSection: 7
+    readonly property int doctorSection: 8
     // Its own column, not cards: ArtworkOverview.qml.
-    readonly property int artworkSection: 8
-    readonly property int quitSection: 9
+    readonly property int artworkSection: 9
+    readonly property int quitSection: 10
     property int section: 0
 
     readonly property var modulesForm: api.screens.modules
+    readonly property var launch: api.screens.launch
     readonly property var runners: api.screens.runners
     readonly property var sources: api.screens.sources
     readonly property var login: api.screens.login
@@ -61,8 +64,9 @@ FocusScope {
     property var held: ({})
     property string pendingSlot: ""
     property string pendingTrigger: ""
-    // The runner whose page is open: the list reloads under it and the cursor finds it again.
+    // The runner or module whose page is open: the list reloads under it and the cursor finds it again.
     property string openedRunner: ""
+    property string openedModule: ""
 
     readonly property var hints: editor.open ? editor.hints
         : menu.open ? menu.hints
@@ -71,6 +75,10 @@ FocusScope {
         : learning ? [ { glyph: "B", label: "Stop learning" } ]
         : side.activeFocus
         ? [ { glyph: "A", label: "Open" }, { glyph: "B", label: "Back" }, { glyph: "LT RT", label: "Section" }, { glyph: "LB RB", label: "Tabs" } ]
+        : section === modulesSection
+        ? [ { glyph: "A", label: "Open" },
+            { glyph: "Y", label: cards.currentRow && cards.currentRow.value === true ? "Disable" : "Enable", dim: !cards.currentRow || (cards.currentRow.warning !== "" && cards.currentRow.value !== true) },
+            { glyph: "B", label: "Sections" }, { glyph: "LT RT", label: "Section" }, { glyph: "LB RB", label: "Tabs" } ]
         : [ { glyph: "A", label: acceptLabel !== "" ? acceptLabel : "Select", dim: acceptLabel === "" },
             { glyph: "X", label: "Refresh", dim: !refreshable },
             { glyph: "B", label: "Sections" }, { glyph: "LT RT", label: "Section" }, { glyph: "LB RB", label: "Tabs" } ]
@@ -103,12 +111,12 @@ FocusScope {
     readonly property string sourceName: currentSource ? currentSource.name : sources.source
     readonly property bool loggedIn: currentSource ? currentSource.logged_in === true : false
 
-    // The source's module card carries its version and kind; the login card borrows them.
+    // The source's module row carries its version and kind; the login card borrows them.
     readonly property string sourceMeta: {
-        var groups = modulesForm.groups;
-        for (var i = 0; i < groups.length; i++)
-            if (groups[i].title === sourceName)
-                return groups[i].meta;
+        var rows = modulesForm.rows;
+        for (var i = 0; i < rows.length; i++)
+            if (rows[i].module === sources.source)
+                return rows[i].meta || "";
         return "";
     }
 
@@ -133,6 +141,8 @@ FocusScope {
             return { rows: rows, groups: groups };
         if (section === modulesSection)
             return { rows: modulesForm.rows, groups: modulesForm.groups };
+        if (section === launchSection)
+            return { rows: launch.rows, groups: launch.groups };
         if (section === runnersSection)
             return { rows: runners.rows, groups: runners.groups };
         if (section === installSection) {
@@ -228,10 +238,12 @@ FocusScope {
             menu.hide();
     }
 
-    // Modules and Doctor read the core in-process; the sources keep their last fetch (see load).
+    // Modules, Launch and Doctor read the core in-process; the sources keep their last fetch (see load).
     function refresh() {
         if (section === modulesSection)
             modulesForm.load();
+        else if (section === launchSection)
+            launch.load();
         else if (section === runnersSection)
             runners.load();
         else if (refreshable)
@@ -263,10 +275,26 @@ FocusScope {
         }
     }
 
+    // Y on a module's row switches it in place; A opens its page.
+    function toggleModule() {
+        var row = cards.currentRow;
+        if (section !== modulesSection || !row || (row.warning !== "" && row.value !== true)) {
+            Sound.edge();
+            return;
+        }
+        Sound.favourite(!row.value);
+        modulesForm.toggle(cards.index);
+    }
+
     function activate(index, row) {
         if (section === modulesSection) {
+            // The module's page takes the focus next and hands it back here, on this row.
+            cards.forceActiveFocus();
+            openedModule = row.module;
+            page.moduleRequested(row.module);
+        } else if (section === launchSection) {
             if (row.type === "bool") {
-                modulesForm.toggle(index);
+                launch.toggle(index);
                 Sound.favourite(!row.value);
             } else {
                 Sound.panel();
@@ -393,13 +421,21 @@ FocusScope {
     }
 
     onActiveFocusChanged: {
-        if (!activeFocus || openedRunner === "")
+        if (!activeFocus)
             return;
-        runners.load();
-        var i = runners.indexOf(openedRunner);
-        openedRunner = "";
-        if (i >= 0)
-            cards.index = i;
+        if (openedRunner !== "") {
+            runners.load();
+            var i = runners.indexOf(openedRunner);
+            openedRunner = "";
+            if (i >= 0)
+                cards.index = i;
+        } else if (openedModule !== "") {
+            modulesForm.load();
+            var j = modulesForm.indexOf(openedModule);
+            openedModule = "";
+            if (j >= 0)
+                cards.index = j;
+        }
     }
 
     onControllerOpenChanged: {
@@ -770,6 +806,9 @@ FocusScope {
             } else if (api.keys.isDetails(event)) {
                 event.accepted = true;
                 page.refreshNow();
+            } else if (api.keys.isFilters(event) && page.section === page.modulesSection) {
+                event.accepted = true;
+                page.toggleModule();
             }
         }
     }
@@ -913,8 +952,8 @@ FocusScope {
                     Qt.callLater(function() { api.theme.set(theme.id); });
             } else if (page.section === page.controllerSection)
                 page.controller.setValue(index, value);
-            else
-                page.modulesForm.setValue(index, value);
+            else if (page.section === page.launchSection)
+                page.launch.setValue(index, value);
         }
         onPrompted: function(tag, value) {
             if (tag === "search")

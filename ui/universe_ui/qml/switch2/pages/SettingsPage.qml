@@ -13,12 +13,14 @@ FocusScope {
     focus: true
 
     readonly property var modulesForm: api.screens.modules
+    readonly property var launch: api.screens.launch
     readonly property var runners: api.screens.runners
     readonly property var sources: api.screens.sources
     readonly property var login: api.screens.login
 
     readonly property var sections: [
         { id: "runners", label: "Runners", group: 0 },
+        { id: "launch", label: "Launch", group: 0 },
         { id: "modules", label: "Modules", group: 0 },
         { id: "updates", label: "Updates", detail: sources.updates.length > 0 ? sources.updates.length + " pending" : "", group: 0 },
         { id: "signin", label: "Sign-in", group: 0 },
@@ -31,8 +33,9 @@ FocusScope {
     readonly property string sectionId: sections[section].id
     property string zone: "list"
     readonly property bool folderOpen: folder.open
-    // The runner whose page is open: the list reloads under it and the cursor finds it again.
+    // The runner or module whose page is open: the list reloads under it and the cursor finds it again.
     property string openedRunner: ""
+    property string openedModule: ""
 
     readonly property var hints: {
         if (folderOpen)
@@ -40,10 +43,12 @@ FocusScope {
         var out = [];
         if (sectionId === "runners" || sectionId === "updates" || sectionId === "signin" || sectionId === "doctor")
             out.push({ glyph: "Y", label: "Refresh" });
-        out.push({ glyph: "B", label: "Back" });
         var row = rows.currentRow;
+        if (sectionId === "modules" && zone === "rows" && row && !row.heading)
+            out.push({ glyph: "X", label: row.value === true ? "Disable" : "Enable", dim: row.dim === true });
+        out.push({ glyph: "B", label: "Back" });
         var label = zone !== "rows" ? "OK" : !row || row.heading || row.type === "info" || row.type === "static" || row.disabled ? "OK"
-                  : row.type === "bool" ? "Toggle" : row.type === "radio" || row.type === "action" ? "Select" : "Change";
+                  : row.type === "bool" ? "Toggle" : row.type === "radio" ? "Select" : row.type === "action" ? (sectionId === "modules" ? "Open" : "Select") : "Change";
         out.push({ glyph: "A", label: label });
         return out;
     }
@@ -65,25 +70,34 @@ FocusScope {
 
     Component.onCompleted: {
         runners.load();
+        launch.load();
         modulesForm.load();
         modulesForm.loadDoctor();
         sources.load();
     }
 
     onActiveFocusChanged: {
-        if (!activeFocus || openedRunner === "")
+        if (!activeFocus)
             return;
-        runners.load();
-        var i = rowOfRunner(openedRunner);
-        openedRunner = "";
-        if (i >= 0)
-            rows.index = i;
+        if (openedRunner !== "") {
+            runners.load();
+            var i = rowOf("runner", openedRunner);
+            openedRunner = "";
+            if (i >= 0)
+                rows.index = i;
+        } else if (openedModule !== "") {
+            modulesForm.load();
+            var j = rowOf("module", openedModule);
+            openedModule = "";
+            if (j >= 0)
+                rows.index = j;
+        }
     }
 
-    function rowOfRunner(id) {
+    function rowOf(field, id) {
         var list = content;
         for (var i = 0; i < list.length; i++)
-            if (list[i].runner === id)
+            if (list[i][field] === id)
                 return i;
         return -1;
     }
@@ -103,24 +117,29 @@ FocusScope {
             }
             return out;
         }
-        if (sectionId === "modules") {
-            var groups = modulesForm.groups, all = modulesForm.rows;
-            for (i = 0; i < groups.length; i++) {
-                var g = groups[i];
-                out.push({ heading: true, label: g.title, display: g.meta || "" });
-                if (g.control >= 0) {
-                    var control = Details.withDetail(all[g.control], "");
-                    control.form = g.control;
-                    control.detail = g.warning ? "Cannot be enabled: " + g.warning.replace(/^unavailable:?\s*/, "") : Details.enabledSentence(g.title, g.meta);
-                    control.disabled = g.warning !== "" && !control.value;
-                    out.push(control);
+        if (sectionId === "launch") {
+            var lg = launch.groups, lr = launch.rows;
+            for (i = 0; i < lg.length; i++) {
+                out.push({ heading: true, label: lg[i].title, display: lg[i].meta || "" });
+                for (j = 0; j < lg[i].rows.length; j++) {
+                    var l = Details.withDetail(lr[lg[i].rows[j]], "");
+                    l.form = lg[i].rows[j];
+                    out.push(l);
                 }
-                if (g.off)
-                    continue;
-                for (j = 0; j < g.rows.length; j++) {
-                    var r = Details.withDetail(all[g.rows[j]], all[g.rows[j]].module);
-                    r.form = g.rows[j];
-                    out.push(r);
+            }
+            return out;
+        }
+        if (sectionId === "modules") {
+            var mg = modulesForm.groups, mr = modulesForm.rows;
+            for (i = 0; i < mg.length; i++) {
+                if (mg[i].title)
+                    out.push({ heading: true, label: mg[i].title, display: "" });
+                for (j = 0; j < mg[i].rows.length; j++) {
+                    var m = mr[mg[i].rows[j]];
+                    // A module that cannot run is opened all the same: its page says what is missing.
+                    out.push({ label: m.label, type: "action", action: "module", module: m.module, value: m.value, display: m.display,
+                               detail: m.warning && !m.value ? m.detail : Details.enabledSentence(m.label, m.kind.join(" · ")),
+                               form: mg[i].rows[j], dim: m.warning !== "" && m.value !== true });
                 }
             }
             return out;
@@ -190,13 +209,19 @@ FocusScope {
             shell.push("pages/RunnerPage.qml", { runner: row.runner });
             return;
         }
-        if (sectionId === "modules") {
+        if (sectionId === "launch") {
             if (row.type === "bool") {
-                modulesForm.toggle(row.form);
+                launch.toggle(row.form);
                 Sound.select();
             } else {
-                rows.edit(row, function(value) { modulesForm.setValue(row.form, value); });
+                rows.edit(row, function(value) { launch.setValue(row.form, value); });
             }
+            return;
+        }
+        if (sectionId === "modules") {
+            Sound.ok();
+            openedModule = row.module;
+            shell.push("pages/ModulePage.qml", { module: row.module });
             return;
         }
         if (sectionId === "updates") {
@@ -242,6 +267,17 @@ FocusScope {
         Sound.edge();
     }
 
+    // X on a module's row switches it in place; A opens its page.
+    function toggleModule() {
+        var row = rows.currentRow;
+        if (sectionId !== "modules" || zone !== "rows" || !row || row.heading || row.dim === true) {
+            Sound.edge();
+            return;
+        }
+        Sound.select();
+        modulesForm.toggle(row.form);
+    }
+
     function refreshNow() {
         if (sectionId === "runners") {
             Sound.ok();
@@ -283,6 +319,9 @@ FocusScope {
         } else if (api.keys.isFilters(event)) {
             event.accepted = true;
             page.refreshNow();
+        } else if (api.keys.isDetails(event) && page.sectionId === "modules") {
+            event.accepted = true;
+            page.toggleModule();
         }
     }
 

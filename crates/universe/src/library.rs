@@ -46,6 +46,8 @@ pub struct Effective {
     pub mangohud: bool,
     pub gamescope: bool,
     pub gamescope_args: String,
+    #[serde(flatten)]
+    pub gamescope_fields: crate::gamescope::Fields,
     pub hide_cursor: bool,
     pub env: BTreeMap<String, String>,
 }
@@ -156,6 +158,22 @@ pub fn is_image(p: &Path) -> bool {
     matches!(p.extension().and_then(|s| s.to_str()).map(|s| s.to_ascii_lowercase()).as_deref(), Some("png" | "jpg" | "jpeg" | "webp"))
 }
 
+/// The game's gamescope fields over the global ones, a field left empty taking `[launch]`'s.
+fn gamescope_fields_of(game: &Game, config: &Config) -> crate::gamescope::Fields {
+    let l = &game.launch;
+    let d = &config.launch;
+    let pick = |own: &str, global: &str| if own.is_empty() { global.to_string() } else { own.to_string() };
+    crate::gamescope::Fields {
+        resolution: pick(&l.gamescope_resolution, if d.gamescope_resolution.is_empty() { "auto" } else { &d.gamescope_resolution }),
+        refresh: pick(&l.gamescope_refresh, if d.gamescope_refresh.is_empty() { "auto" } else { &d.gamescope_refresh }),
+        scaler: pick(&l.gamescope_scaler, &d.gamescope_scaler),
+        filter: pick(&l.gamescope_filter, &d.gamescope_filter),
+        sharpness: l.gamescope_sharpness.or(d.gamescope_sharpness),
+        fps_limit: l.gamescope_fps_limit.or(d.gamescope_fps_limit),
+        adaptive_sync: l.gamescope_adaptive_sync.unwrap_or(d.gamescope_adaptive_sync),
+    }
+}
+
 pub fn resolve(game: Game, config: &Config, modules: &[crate::modules::Module]) -> Resolved {
     resolve_with(game, config, modules, &mut HashMap::new())
 }
@@ -204,6 +222,7 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
         mangohud: game.launch.mangohud.unwrap_or(config.launch.mangohud),
         gamescope,
         gamescope_args: game.launch.gamescope_args.clone(),
+        gamescope_fields: gamescope_fields_of(&game, config),
         hide_cursor: game.desktop.hide_cursor.unwrap_or(config.desktop.hide_cursor),
         env,
     };

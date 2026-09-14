@@ -43,6 +43,12 @@ pub async fn run(config: &Config, modules: &[Module], shell: Option<&zbus::Conne
         if config.launch.mangohud {
             push("mangoapp", which("mangoapp").is_some(), which("mangoapp").unwrap_or_else(|| "missing: no HUD inside gamescope (the mangohud package ships it)".into()), "core");
         }
+        let screen = crate::desktop::pick_screen("");
+        let mode = crate::desktop::screen_mode(&screen).await;
+        push("screen", mode.is_some(), match mode {
+            Some(m) => format!("{screen} {}×{} @ {} Hz: what gamescope's resolution follows on auto", m.width, m.height, m.refresh),
+            None => "no connected output found: gamescope keeps its own 1280×720 unless launch.gamescope_resolution is set".into(),
+        }, "core");
     }
     let proton = config.proton_path(&config.launch.proton);
     push("proton", proton.is_some(), proton.map(|p| p.to_string_lossy().into()).unwrap_or_else(|| format!("{} not found", config.launch.proton)), "core");

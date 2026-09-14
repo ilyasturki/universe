@@ -249,6 +249,9 @@ impl Core {
     fn set_setting(&self, py: Python<'_>, key: String, value: String) -> PyResult<()> {
         self.run(py, |c| async move { c.set_setting(&key, &value).await })
     }
+    fn screen_mode_json(&self, py: Python<'_>, screen: String) -> String {
+        self.run_infallible(py, |c| async move { c.screen_mode_json(&screen).await })
+    }
     fn doctor_json(&self, py: Python<'_>) -> String {
         self.run_infallible(py, |c| c.doctor_json())
     }

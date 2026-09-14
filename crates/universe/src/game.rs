@@ -73,6 +73,14 @@ pub struct Launch {
     pub mangohud: Option<bool>,
     pub gamescope: Option<bool>,
     pub gamescope_args: String,
+    /// The gamescope fields of `[launch]`, each empty one taking the global value.
+    pub gamescope_resolution: String,
+    pub gamescope_refresh: String,
+    pub gamescope_scaler: String,
+    pub gamescope_filter: String,
+    pub gamescope_sharpness: Option<u32>,
+    pub gamescope_fps_limit: Option<u32>,
+    pub gamescope_adaptive_sync: Option<bool>,
     pub options: BTreeMap<String, toml::Value>,
 }
 
@@ -157,6 +165,13 @@ impl Default for Launch {
             mangohud: None,
             gamescope: None,
             gamescope_args: String::new(),
+            gamescope_resolution: String::new(),
+            gamescope_refresh: String::new(),
+            gamescope_scaler: String::new(),
+            gamescope_filter: String::new(),
+            gamescope_sharpness: None,
+            gamescope_fps_limit: None,
+            gamescope_adaptive_sync: None,
             options: BTreeMap::new(),
         }
     }

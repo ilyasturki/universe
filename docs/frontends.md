@@ -203,8 +203,8 @@ dimmed (`dim: true`), never dropped; hints for what the pad makes obvious — mo
 
 ## The Settings tab
 
-`pages/SettingsPage.qml` is a sidebar (`ui/SectionList.qml`: Runners, Modules, Install, Updates,
-Login, Controller, Themes, Doctor, Artwork, Quit) beside one column of `ui/SettingsCards.qml`
+`pages/SettingsPage.qml` is a sidebar (`ui/SectionList.qml`: Runners, Launch, Modules, Install,
+Updates, Login, Controller, Themes, Doctor, Artwork, Quit) beside one column of `ui/SettingsCards.qml`
 (`columns: 1`; the game settings page keeps two). Quit is one row, confirmed in place (`Stay` /
 `Quit Universe`, which says when the running game closes with it), then `Qt.quit()` — the host
 stops the session and shuts the core down after the loop. Up and Down in the sidebar switch the section as they go, Right or A
@@ -234,6 +234,30 @@ through `remove_recording`, drops the row's cached frames and reloads the list o
 on a pending row) through `api.screens.journal.remove`, which cancels a pending entry's writer
 before trashing; the offer to take the recording along works the other way round.
 
+## The launch and modules sections
+
+`api.screens.launch` is Settings › Launch, what every game starts with, each row a `config.toml`
+key written through `Settings1.Set`: a Gamescope card — the switch, then the fields of
+`docs/api.md` § Gamescope as rows (`gamescope_resolution` and `gamescope_refresh` are
+`string`/`int` rows whose choices come from the screen the window is on, `Settings1.Screen` —
+`auto`, the screen's mode, the standard heights below it at its aspect ratio; the rates below its
+own — and take a typed value; scaler, filter, sharpness and frame rate limit list a `default` /
+`none` choice that clears the key, through `choiceValues`), then the raw arguments; the card's meta
+is the screen (`screen`: `DP-1 3840×2160 @ 60 Hz`). Then MangoHud and the cursor, then the
+Proton defaults. The game settings page has the same Gamescope group per game, each row
+inherited from the global one until set. `load()` reads the config again.
+
+`api.screens.modules` is Settings › Modules: one `action` row per module (`module`, its name,
+`value` whether it runs, `display` On / Off / Unavailable, `meta` version and kind, `warning`
+what is missing), the ones running first, the others in an "Off" card. A opens the module's page;
+△ (Y in Reprise, X in the Switch 2 look) toggles it in the list (`toggle(index)`, refused with a
+warning while it is off). `indexOf(id)` finds a module's row for the cursor to land on again.
+`pages/ModuleSettingsPage.qml` (`theme.qml` `openModule`; `switch2/pages/ModulePage.qml` on the
+stack) is on `api.screens.module`: `load(id)` builds its head (`info`: name, meta, warning,
+`enabled`) and cards for the switch (`enabled`, `disabled` while the module's programs are
+missing) and, once on, its global settings, a `dynamic` setting's choices fetched off the UI
+thread. Doctor's checks stay on `api.screens.modules` (`loadDoctor`, `doctor`, `doctorGroups`).
+
 ## The runners section
 
 `api.screens.runners` is the Runners section of the Settings tab: one row per runner, its logo
@@ -243,7 +267,8 @@ by name; the runners whose program was not found come last, in a dimmed "Not fou
 `indexOf(id)` finds a runner's row. A runner's row opens `pages/RunnerSettingsPage.qml` over the
 tab (`theme.qml` `openRunner`, the same loader as the game's sub pages), on `api.screens.runner`:
 `load(id)` builds its head (`info`: name, platforms and where its program was found, a warning)
-and cards for the program (`exe`, a path; inherited when detected) and arguments, each option by
+and cards for the program (`exe`, a path; the detected one shown as the value, inherited, its
+origin as the detail) and arguments, each option by
 its type, and an "Add a game…" action. `setValue(index, value)` writes through `Runners1.Set`; on
 the add row it keeps the picked file and `pendingTitle()` proposes a title from it, which
 `addGame(title)` sends to `Library1.Add`. Back on the tab, the list reloads and the cursor finds

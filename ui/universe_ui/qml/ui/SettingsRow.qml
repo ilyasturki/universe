@@ -45,6 +45,9 @@ Item {
     // The software scenegraph (offscreen tests) drops every ShaderEffect: corners go square there.
     readonly property bool software: GraphicsInfo.api === GraphicsInfo.Software
 
+    // A row that cannot be changed (a module missing its programs) fades, the cursor still lands on it.
+    opacity: entry.disabled === true && !focused ? 0.45 : 1.0
+
     Rectangle {
         anchors.left: parent.left
         anchors.right: parent.right

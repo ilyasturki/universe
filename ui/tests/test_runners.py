@@ -31,7 +31,9 @@ def test_runner_form_cards(api, fake):
     assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups] == \
         [("", ["exe", "args"]), ("", ["gamescope"]), ("Options", ["batch", "user_directory", "inputplumber"]), ("", ["add_file"])]
     rows = rows_of(form)
-    assert rows["exe"]["type"] == "path" and rows["exe"]["inherited"] is True and rows["exe"]["detail"].endswith("dolphin-emu")
+    assert rows["exe"]["type"] == "path" and rows["exe"]["inherited"] is True
+    assert rows["exe"]["value"].endswith("dolphin-emu") and rows["exe"]["display"] == rows["exe"]["value"], "the found program is the value shown"
+    assert rows["exe"]["detail"] == "Found on PATH"
     assert rows["gamescope"]["type"] == "bool" and rows["gamescope"]["inherited"] is True
     assert rows["batch"]["type"] == "bool" and rows["batch"]["value"] is True
     assert rows["add_file"]["type"] == "action" and rows["add_file"]["runner"] == "dolphin"
@@ -90,7 +92,7 @@ def test_game_settings_launch_group_by_runner(api, fake):
     form = api.screens.gameSettings
     form.load("mini-metro")
     assert launch_keys(form) == ["launch.runner", "launch.exe", "launch.runner_exe", "launch.options.fullscreen", "launch.options.inputplumber",
-                                 "launch.gamescope", "launch.gamescope_args", "launch.mangohud", "launch.wrapper", "launch.args", "launch.working_dir"]
+                                 "launch.mangohud", "launch.wrapper", "launch.args", "launch.working_dir"]
     rows = rows_of(form)
     assert rows["launch.runner"]["value"] == "Eden" and rows["launch.runner"]["icon"] == "assets/runners/eden.svg"
     assert rows["launch.runner"]["choices"][:4] == ["Proton", "Wine", "Linux", "Dolphin"]
@@ -109,7 +111,7 @@ def test_game_settings_launch_group_by_runner(api, fake):
     form.load("the-technomancer")
     assert launch_keys(form) == ["launch.runner", "launch.exe", "launch.proton", "launch.esync", "launch.fsync", "launch.ntsync", "launch.wayland", "launch.hdr",
                                  "launch.dlss_upgrade", "launch.fsr4_upgrade", "launch.xess_upgrade", "launch.optiscaler", "launch.prefix",
-                                 "launch.gamescope", "launch.gamescope_args", "launch.mangohud", "launch.wrapper", "launch.args", "launch.working_dir"]
+                                 "launch.mangohud", "launch.wrapper", "launch.args", "launch.working_dir"]
     rows = rows_of(form)
     assert rows["launch.runner"]["value"] == "Proton" and rows["launch.exe"]["label"] == "Program"
     assert rows["launch.wayland"]["value"] is True and rows["launch.wayland"]["inherited"] is True

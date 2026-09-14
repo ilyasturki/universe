@@ -4,18 +4,21 @@ from PySide6.QtCore import Property, QObject
 
 from .artwork import ArtworkForm, ArtworkOverview
 from .controller import ControllerScreen
+from .launch import LaunchForm
 from .media import JournalList, PendingJournals, RecordingsList
 from .paths import PathBrowser
 from .runners import RunnerForm, RunnersForm
-from .settings import GameSettingsForm, ModulesForm
+from .settings import GameSettingsForm, ModuleForm, ModulesForm
 from .sources import LoginFlow, SourcesBrowser
 
 
 class Screens(QObject):
-    def __init__(self, client, screen_hz=lambda: 0, parent=None, memory=None):
+    def __init__(self, client, screen_hz=lambda: 0, parent=None, memory=None, screen_name=lambda: ""):
         super().__init__(parent)
-        self._gameSettings = GameSettingsForm(client, self)
-        self._modules = ModulesForm(client, screen_hz, self)
+        self._gameSettings = GameSettingsForm(client, screen_name, self)
+        self._modules = ModulesForm(client, self)
+        self._module = ModuleForm(client, screen_hz, self)
+        self._launch = LaunchForm(client, screen_name, self)
         self._sources = SourcesBrowser(client, self)
         self._login = LoginFlow(client, self)
         self._recordings = RecordingsList(client, self)
@@ -38,6 +41,8 @@ class Screens(QObject):
 
     gameSettings = Property(QObject, lambda self: self._gameSettings, constant=True)
     modules = Property(QObject, lambda self: self._modules, constant=True)
+    module = Property(QObject, lambda self: self._module, constant=True)
+    launch = Property(QObject, lambda self: self._launch, constant=True)
     sources = Property(QObject, lambda self: self._sources, constant=True)
     login = Property(QObject, lambda self: self._login, constant=True)
     recordings = Property(QObject, lambda self: self._recordings, constant=True)

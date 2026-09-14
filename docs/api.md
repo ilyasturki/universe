@@ -61,7 +61,9 @@ a dash means the surface doesn't expose it.
 | `add_game(json)` | `add_game(json)` | `universe add <file> --runner <id> [--title T] [--platform P] [--media]` | `{"runner", "exe", "title"?, "platform"?}` → the new id. The title defaults to the file's name cleaned of release tags; the platform to the runner's first. Refuses an id already in the library |
 
 `set` takes dotted keys: `launch.runner`, `launch.exe`, `launch.proton`, `launch.gamescope`,
-`launch.gamescope_args`, `launch.esync`, `launch.fsync`, `launch.ntsync`, `launch.wayland`,
+`launch.gamescope_args`, `launch.gamescope_resolution`, `launch.gamescope_refresh`,
+`launch.gamescope_scaler`, `launch.gamescope_filter`, `launch.gamescope_sharpness`,
+`launch.gamescope_fps_limit`, `launch.gamescope_adaptive_sync` (validated as `[launch]`'s), `launch.esync`, `launch.fsync`, `launch.ntsync`, `launch.wayland`,
 `launch.hdr`, `launch.dlss_upgrade`, `launch.fsr4_upgrade`, `launch.xess_upgrade`,
 `launch.optiscaler` (a switch left empty takes `[launch]`'s), `launch.wrapper`,
 `launch.dll_overrides.d3d11`, `launch.env.FOO`,
@@ -83,7 +85,7 @@ comma-separated for lists, `""` deletes the key. A runner is written under its s
                "options": {"batch": true, "user_directory": "", "inputplumber": true}, "inputplumber": true,
                "proton": "proton-ge", "proton_path": "…", "esync": true, "fsync": true, "ntsync": true,
                "wayland": true, "hdr": false, "dlss_upgrade": false, "fsr4_upgrade": false, "xess_upgrade": false,
-               "optiscaler": false, "mangohud": true, "gamescope": true, "gamescope_args": "", "hide_cursor": true, "env": {}},
+               "optiscaler": false, "mangohud": true, "gamescope": true, "gamescope_args": "", "gamescope_resolution": "auto", "gamescope_refresh": "auto", "gamescope_scaler": "", "gamescope_filter": "", "gamescope_sharpness": null, "gamescope_fps_limit": null, "gamescope_adaptive_sync": false, "hide_cursor": true, "env": {}},
  "removed": false}
 ```
 
@@ -125,12 +127,34 @@ when it was killed by a signal (a `stop`).
 ### Gamescope
 
 Every runner's command runs inside gamescope by default: `gamescope -f --force-windows-fullscreen
-[launch.gamescope_args] [the game's gamescope_args] [--mangoapp] -- <program> <args…>`. One
-window, black until the game draws, whatever the game, Proton or umu put up first; every client
-inside is stretched to the screen, and the launcher hands over on that window. `launch.gamescope`
-(global), `[runners.<id>] gamescope` (per runner: an emulator that misbehaves under it) and the
-game's `launch.gamescope` switch it off, the game's own key winning; `launch.gamescope_bin` names
-the binary (`gamescope` on PATH, `/run/wrappers/bin` included). The game itself runs under
+-W <screen width> -H <screen height> -w <game width> -h <game height> -r <refresh> [-S scaler]
+[-F filter] [--sharpness N] [--framerate-limit N] [--adaptive-sync] [launch.gamescope_args]
+[the game's gamescope_args] [--mangoapp] -- <program> <args…>`. One window, black until the
+game draws, whatever the game, Proton or umu put up first; every client inside is stretched to
+the screen, and the launcher hands over on that window. Left to itself gamescope's nested screen
+is 1280×720 whatever the window covers, so the session screen's mode is passed explicitly: the
+output (`-W -H`) is always the screen, and the game's resolution and refresh follow it unless set.
+The mode is the connector's `is-current` one from Mutter's DisplayConfig (`GetCurrentState`,
+physical pixels — gamescope handles the desktop's scale itself), else its preferred DRM mode
+(`/sys/class/drm/*/modes`) at 60 Hz; no screen at all leaves gamescope's own defaults.
+`universe doctor` prints the mode it read. The fields, global in `[launch]` and per game in
+`game.toml`'s `[launch]` (a field left empty takes the global one), each a flag:
+
+| Field | Values | Flag |
+|---|---|---|
+| `gamescope_resolution` | `auto` (the screen) or `WxH`: what the game renders at, upscaled to the screen when smaller | `-w -h` |
+| `gamescope_refresh` | `auto` (the screen's rate) or Hz | `-r` |
+| `gamescope_scaler` | empty (gamescope's `auto`), `auto`, `integer`, `fit`, `fill`, `stretch` | `-S` |
+| `gamescope_filter` | empty (gamescope's `linear`), `linear`, `nearest`, `fsr`, `nis`, `pixel` | `-F` |
+| `gamescope_sharpness` | unset, or 0 (sharpest) to 20; for `fsr` and `nis` | `--sharpness` |
+| `gamescope_fps_limit` | unset or 0 (none), or frames per second; gamescope rounds it to a divisor of the refresh | `--framerate-limit` |
+| `gamescope_adaptive_sync` | `false` / `true`: variable refresh when the screen has it | `--adaptive-sync` |
+
+`gamescope_args` (global, then the game's) comes after these and wins: gamescope takes the last
+of a repeated flag, so `-w 1280 -h 720` there overrides the field. `launch.gamescope` (global),
+`[runners.<id>] gamescope` (per runner: an emulator that misbehaves under it) and the game's
+`launch.gamescope` switch it off, the game's own key winning; `launch.gamescope_bin` names the
+binary (`gamescope` on PATH, `/run/wrappers/bin` included). The game itself runs under
 `setpriv --ambient-caps=-all --inh-caps=-all` when util-linux is on PATH: a capability wrapper on
 gamescope (NixOS `capSysNice`) hands CAP_SYS_NICE down to the game, and bwrap — umu's runtime —
 refuses to start holding one. With gamescope off — or not found: a warning, and the game runs on
@@ -340,7 +364,8 @@ array of strings (20 s at most).
 | Rust | Python | CLI | Role |
 |---|---|---|---|
 | `settings_json()` | `settings_json()` | `universe config get` | resolved `config.toml`: absolute paths, defaults applied |
-| `set_setting(key, value)` | `set_setting(key, value)` | `universe config set <key> <value>` | dotted `config.toml` key (`launch.proton`, `paths.recordings_root`, `desktop.profile`) |
+| `set_setting(key, value)` | `set_setting(key, value)` | `universe config set <key> <value>` | dotted `config.toml` key (`launch.proton`, `paths.recordings_root`, `desktop.profile`); the `launch.gamescope_*` fields are validated |
+| `screen_mode_json(screen)` | `screen_mode_json(screen)` | — | `{screen, width, height, refresh}`: the connector's current mode as gamescope is told it (see Gamescope), `screen=""` for the profile default; zeros when none can be read |
 | — | `version()`, `data_home()`, `state_home()` | `universe --version` | |
 
 ## Controller
@@ -423,8 +448,15 @@ xess_upgrade = false
 optiscaler = false
 mangohud = true                      # --mangoapp inside gamescope, MANGOHUD=1 without
 gamescope = true                     # every game inside gamescope: one window, black until the game draws
-gamescope_args = ""                  # after -f --force-windows-fullscreen; --expose-wayland keeps PROTON_ENABLE_WAYLAND
+gamescope_args = ""                  # after the flags below, and over them; --expose-wayland keeps PROTON_ENABLE_WAYLAND
 gamescope_bin = "gamescope"          # a name on PATH (/run/wrappers/bin included) or a path
+gamescope_resolution = "auto"        # the screen's mode, or WxH: what the game renders at (-w -h); the output is always the screen
+gamescope_refresh = "auto"           # the screen's rate, or Hz (-r)
+gamescope_scaler = ""                # auto | integer | fit | fill | stretch (-S); empty: gamescope's default
+gamescope_filter = ""                # linear | nearest | fsr | nis | pixel (-F)
+# gamescope_sharpness = 2            # 0 (sharpest) to 20, for fsr and nis (--sharpness)
+# gamescope_fps_limit = 60           # frames per second (--framerate-limit); absent or 0: none
+gamescope_adaptive_sync = false      # --adaptive-sync: variable refresh when the screen has it
 
 [desktop]
 profile = "auto"                     # auto | gnome | none

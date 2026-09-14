@@ -75,6 +75,63 @@ pub fn pick_screen(requested: &str) -> String {
     connected_outputs().into_iter().next().unwrap_or_default()
 }
 
+/// The connector's current mode: from Mutter's DisplayConfig on GNOME, else its preferred DRM
+/// mode at 60 Hz; None when the connector is not there at all.
+pub async fn screen_mode(screen: &str) -> Option<crate::gamescope::Mode> {
+    if screen.is_empty() {
+        return None;
+    }
+    match tokio::time::timeout(std::time::Duration::from_secs(5), mutter_current_mode(screen)).await {
+        Ok(Ok(Some(mode))) => return Some(mode),
+        Ok(Ok(None)) => {}
+        Ok(Err(e)) => tracing::debug!("DisplayConfig.GetCurrentState: {e}"),
+        Err(_) => tracing::warn!("DisplayConfig.GetCurrentState: timeout"),
+    }
+    drm_preferred_mode(screen)
+}
+
+/// GetCurrentState's `is-current` mode of the monitor whose connector is `screen` (Mutter spells
+/// HDMI outputs without the `-A`, so both spellings match).
+async fn mutter_current_mode(screen: &str) -> zbus::Result<Option<crate::gamescope::Mode>> {
+    type Props = HashMap<String, zbus::zvariant::OwnedValue>;
+    type Mode = (String, i32, i32, f64, f64, Vec<f64>, Props);
+    type Monitor = ((String, String, String, String), Vec<Mode>, Props);
+    type Logical = (i32, i32, f64, u32, bool, Vec<(String, String, String, String)>, Props);
+    let conn = zbus::Connection::session().await?;
+    let proxy = zbus::Proxy::new(&conn, "org.gnome.Mutter.DisplayConfig", "/org/gnome/Mutter/DisplayConfig", "org.gnome.Mutter.DisplayConfig").await?;
+    let (_serial, monitors, _logical, _props): (u32, Vec<Monitor>, Vec<Logical>, Props) = proxy.call("GetCurrentState", &()).await?;
+    let wanted = screen.replace("-A-", "-");
+    for (info, modes, _) in monitors {
+        if info.0 != screen && info.0.replace("-A-", "-") != wanted {
+            continue;
+        }
+        for (_, w, h, hz, _, _, props) in modes {
+            let current = props.get("is-current").and_then(|v| bool::try_from(v).ok()).unwrap_or(false);
+            if current && w > 0 && h > 0 {
+                return Ok(Some(crate::gamescope::Mode { width: w as u32, height: h as u32, refresh: hz.round() as u32 }));
+            }
+        }
+    }
+    Ok(None)
+}
+
+/// The first line of the connector's `modes` is the preferred one, `WxH`; DRM lists no rate there.
+fn drm_preferred_mode(screen: &str) -> Option<crate::gamescope::Mode> {
+    let rd = std::fs::read_dir("/sys/class/drm").ok()?;
+    for e in rd.flatten() {
+        let name = e.file_name().to_string_lossy().to_string();
+        if name.split_once('-').map(|(_, c)| c) != Some(screen) {
+            continue;
+        }
+        let modes = std::fs::read_to_string(e.path().join("modes")).ok()?;
+        let first = modes.lines().next()?.trim();
+        if let Ok(Some((w, h))) = crate::gamescope::parse_resolution(first) {
+            return Some(crate::gamescope::Mode { width: w, height: h, refresh: 60 });
+        }
+    }
+    None
+}
+
 /// Enables the cursor-hiding GNOME Shell extension for the session (plan §6); returns whether it was already active.
 pub async fn cursor_extension_enable(conn: &zbus::Connection, profile: Profile, extension: &str) -> bool {
     let Some(proxy) = extensions_proxy(conn, profile, extension).await else { return false };

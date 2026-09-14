@@ -433,6 +433,11 @@ class UniverseClientBase(QObject):
             return False
         return True
 
+    @Slot(str, result="QVariant")
+    def screenMode(self, screen):
+        """`{screen, width, height, refresh}`: the mode gamescope is told, of `screen` or the default."""
+        return self._guarded({}, "Settings1", "Screen", screen or "")
+
     @Slot(result=str)
     def version(self):
         try:
@@ -754,6 +759,7 @@ _CORE_CALLS = {
     ("Modules1", "Doctor"): lambda s: s._core.doctor_json(),
     ("Settings1", "Get"): lambda s: s._core.settings_json(),
     ("Settings1", "Set"): lambda s, key, value: s._core.set_setting(key, value),
+    ("Settings1", "Screen"): lambda s, screen: s._core.screen_mode_json(screen),
     ("Settings1", "Reload"): lambda s: s._core.reload(),
     ("Controller1", "State"): lambda s: s._core.controller_state_json(),
     ("Controller1", "Pads"): lambda s: s._core.controller_pads_json(),
@@ -827,6 +833,12 @@ class FakeClient(UniverseClientBase):
             for key, default in defaults.items()
             if key in ("proton", "esync", "fsync", "ntsync", "wayland", "hdr", "dlss_upgrade", "fsr4_upgrade", "xess_upgrade", "optiscaler", "mangohud", "hide_cursor")
         }
+        # The gamescope fields: the game's own when set, else the global one (`auto` for the sizes).
+        for key in ("gamescope", "gamescope_resolution", "gamescope_refresh", "gamescope_scaler", "gamescope_filter", "gamescope_sharpness", "gamescope_fps_limit", "gamescope_adaptive_sync"):
+            own = launch.get(key)
+            fallback = defaults.get(key, "auto" if key in ("gamescope_resolution", "gamescope_refresh") else True if key == "gamescope" else False if key == "gamescope_adaptive_sync" else "" if key in ("gamescope_scaler", "gamescope_filter") else None)
+            out["effective"][key] = fallback if own in (None, "") else own
+        out["effective"]["gamescope_args"] = launch.get("gamescope_args") or ""
         runner = self._runner_of(launch)
         spec = self._runner(runner) or {"id": runner, "name": runner, "kind": "", "platforms": [], "path": "", "options": []}
         options = {o["key"]: o.get("value", o.get("default")) for o in spec.get("options") or []}
@@ -1363,7 +1375,18 @@ class FakeClient(UniverseClientBase):
         parts = key.split(".")
         for part in parts[:-1]:
             node = node.setdefault(part, {})
-        node[parts[-1]] = value
+        if value == "":
+            node.pop(parts[-1], None)
+        elif value in ("true", "false"):
+            node[parts[-1]] = value == "true"
+        else:
+            try:
+                node[parts[-1]] = int(value)
+            except ValueError:
+                node[parts[-1]] = value
+
+    def _Settings1_Screen(self, screen):
+        return json.dumps(self._data.get("screen") or {"screen": screen or "DP-1", "width": 2560, "height": 1440, "refresh": 144})
 
     # -- Controller1 -------------------------------------------------------------------------
 

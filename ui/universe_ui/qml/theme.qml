@@ -19,6 +19,7 @@ FocusScope {
     property bool subOpen: false
     property var subGame: null
     property string subRunner: ""
+    property string subModule: ""
     property string subSource: ""
     // The session the sub page opens on; recordings and journal jump to each other by it.
     property string subSession: ""
@@ -156,14 +157,30 @@ FocusScope {
             subLoader.item.forceActiveFocus();
     }
 
-    // A runner's page: no game under it, the settings tab's runner list waits behind.
+    // A runner's or a module's page: no game under it, the settings tab's list waits behind.
     function openRunner(runner) {
         if (!runner)
             return;
         Sound.enter();
         subGame = null;
         subRunner = runner;
+        subModule = "";
         subSource = "pages/RunnerSettingsPage.qml";
+        subSession = "";
+        subReturn = null;
+        subOpen = true;
+        if (subLoader.item)
+            subLoader.item.forceActiveFocus();
+    }
+
+    function openModule(module) {
+        if (!module)
+            return;
+        Sound.enter();
+        subGame = null;
+        subRunner = "";
+        subModule = module;
+        subSource = "pages/ModuleSettingsPage.qml";
         subSession = "";
         subReturn = null;
         subOpen = true;
@@ -486,6 +503,7 @@ FocusScope {
                         function onDetailRequested(game) { root.openDetail(game); }
                         function onSettingsRequested(game) { root.openSub("pages/GameSettingsPage.qml", game); }
                         function onRunnerRequested(runner) { root.openRunner(runner); }
+                        function onModuleRequested(module) { root.openModule(module); }
                         function onArtworkRequested(game, slot) { root.openSub("pages/ArtworkPage.qml", game, slot); }
                         function onTabRequested(index) {
                             Sound.enter();
@@ -607,6 +625,8 @@ FocusScope {
                 item.game = Qt.binding(function() { return root.subGame; });
             if ("runner" in item)
                 item.runner = Qt.binding(function() { return root.subRunner; });
+            if ("module" in item)
+                item.module = Qt.binding(function() { return root.subModule; });
             if ("session" in item)
                 item.session = Qt.binding(function() { return root.subSession; });
             if ("slot" in item)

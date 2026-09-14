@@ -28,6 +28,6 @@ projects; they are shown here to name the runner, as the projects show them in t
 | `snes9x.png` | Snes9x | the project's icon as Flathub's appstream serves it for `com.snes9x.Snes9x` (128 px) | Snes9x licence (non-commercial) |
 | `wine.svg` | Wine | gitlab.winehq.org/wine/wine, `programs/winecfg/logo.svg`, the viewBox narrowed to the first glass of the sprite | LGPL-2.1-or-later |
 | `linux.png` | Linux | Tux by Larry Ewing, lewing@isc.tamu.edu, drawn with GIMP (commons.wikimedia.org/wiki/File:Tux.png) | free with this credit |
+| `proton.svg` | Proton | Valve's Proton mark (February 2024), traced with potrace from commons.wikimedia.org/wiki/File:ProtonLogo.jpg and set white on the grey of Valve's own Proton store art | CC BY-SA 4.0 (the Commons file); the mark is Valve's |
 
-No file for Proton (Valve ships no standalone mark) and Vita3K (no icon in its repository or on
-Flathub): those runners are drawn as their name.
+No file for Vita3K (no icon in its repository or on Flathub): that runner is drawn as its name.

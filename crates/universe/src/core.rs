@@ -282,6 +282,9 @@ impl Core {
         if real_key == "launch.runner" && !value.is_empty() {
             value = crate::runners::spec(&value).ok_or_else(|| Error::Invalid(format!("unknown runner {value}")))?.id.into();
         }
+        if let Some(field) = real_key.strip_prefix("launch.") {
+            crate::gamescope::validate(field, &value)?;
+        }
         if let Some(okey) = real_key.strip_prefix("launch.options.") {
             let spec = crate::runners::spec(&r.game.runner_id()).ok_or_else(|| Error::Invalid(format!("{id} has no known runner")))?;
             if !value.is_empty() {
@@ -564,7 +567,8 @@ impl Core {
         }
         let _ = std::fs::remove_file(&env_file);
 
-        let plan = launcher::plan(&r, &cfg, &session_id, &extra_env)?;
+        let mode = crate::desktop::screen_mode(&screen).await;
+        let plan = launcher::plan(&r, &cfg, &session_id, &extra_env, mode)?;
         launcher::run_shell(&plan.pre_command, &plan.env, &plan.cwd).await?;
 
         let inputplumber = r.effective.inputplumber && tokio::task::spawn_blocking(crate::inputplumber::engage).await.unwrap_or(false);
@@ -1026,8 +1030,19 @@ impl Core {
         self.config.read().await.to_json().to_string()
     }
 
+    /// The screen's current mode as gamescope will be told it: `{screen, width, height, refresh}`,
+    /// zeros when no screen can be read. `screen` as `launch` takes it.
+    pub async fn screen_mode_json(&self, screen: &str) -> String {
+        let screen = crate::desktop::pick_screen(screen);
+        let mode = crate::desktop::screen_mode(&screen).await.unwrap_or_default();
+        serde_json::json!({ "screen": screen, "width": mode.width, "height": mode.height, "refresh": mode.refresh }).to_string()
+    }
+
     pub async fn set_setting(&self, key: &str, value: &str) -> Result<()> {
         let value = if key == "controller.volume_step" { crate::controller::volume_step_value(value)? } else { value.to_string() };
+        if let Some(field) = key.strip_prefix("launch.") {
+            crate::gamescope::validate(field, &value)?;
+        }
         Config::set_key(&paths::config_file(), key, &value)?;
         self.reload_config().await
     }

@@ -67,6 +67,72 @@ def _to_bus(kind, value):
     return "" if value is None else str(value)
 
 
+GAMESCOPE_SCALERS = ["auto", "integer", "fit", "fill", "stretch"]
+GAMESCOPE_FILTERS = ["linear", "nearest", "fsr", "nis", "pixel"]
+GAMESCOPE_SHARPNESS = ["0", "2", "5", "10", "15", "20"]
+GAMESCOPE_FPS_LIMITS = ["30", "40", "48", "60", "90", "120"]
+REFRESH_RATES = [240, 165, 144, 120, 100, 90, 75, 60, 50, 48, 40, 30]
+RESOLUTION_HEIGHTS = [2160, 1800, 1440, 1080, 720]
+
+
+def screen_label(mode):
+    """`3840×2160 @ 60 Hz`, or empty when the mode is unknown."""
+    w, h, hz = int(mode.get("width") or 0), int(mode.get("height") or 0), int(mode.get("refresh") or 0)
+    if not w or not h:
+        return ""
+    return f"{w}×{h}" + (f" @ {hz} Hz" if hz else "")
+
+
+def resolution_choices(mode):
+    """`auto`, the screen, then the standard heights below it at the screen's aspect ratio."""
+    w, h = int(mode.get("width") or 0), int(mode.get("height") or 0)
+    if not w or not h:
+        return ["auto", "1920x1080", "1280x720"]
+    out = ["auto"]
+    for hh in [h] + RESOLUTION_HEIGHTS:
+        if hh > h:
+            continue
+        ww = round(w * hh / h / 2) * 2
+        if f"{ww}x{hh}" not in out:
+            out.append(f"{ww}x{hh}")
+    return out
+
+
+def refresh_choices(mode):
+    """`auto`, the screen's rate, then the common rates below it: a game sees no more than the screen shows."""
+    hz = int(mode.get("refresh") or 0)
+    if not hz:
+        return ["auto"] + [str(r) for r in REFRESH_RATES]
+    return ["auto"] + [str(r) for r in sorted({hz, *[r for r in REFRESH_RATES if r < hz]}, reverse=True)]
+
+
+def gamescope_rows(mode):
+    """(key, label, kind, choices, choiceValues) of the gamescope fields; a `choiceValues` list
+    maps the choices to what is written, its first entry standing for the key left empty."""
+    return [
+        ("launch.gamescope_resolution", "Resolution", "string", resolution_choices(mode), None),
+        ("launch.gamescope_refresh", "Refresh rate", "int", refresh_choices(mode), None),
+        ("launch.gamescope_scaler", "Scaler", "enum", ["default"] + GAMESCOPE_SCALERS, [""] + GAMESCOPE_SCALERS),
+        ("launch.gamescope_filter", "Filter", "enum", ["default"] + GAMESCOPE_FILTERS, [""] + GAMESCOPE_FILTERS),
+        ("launch.gamescope_sharpness", "Sharpness", "int", ["default"] + GAMESCOPE_SHARPNESS, [""] + GAMESCOPE_SHARPNESS),
+        ("launch.gamescope_fps_limit", "Frame rate limit", "int", ["none"] + GAMESCOPE_FPS_LIMITS, [""] + GAMESCOPE_FPS_LIMITS),
+        ("launch.gamescope_adaptive_sync", "Adaptive sync", "bool", None, None),
+    ]
+
+
+def choice_row(section, key, label, kind, value, choices, values, inherited=False):
+    """A row whose listed choices may stand for other written values (`values`, see gamescope_rows)."""
+    if values:
+        empty = value in (None, "") or (key.endswith("fps_limit") and value == 0)
+        value = choices[0] if empty else choices[values.index(str(value))] if str(value) in values else str(value)
+    elif kind != "bool" and value is not None:
+        value = str(value)
+    row = _row(section, key, label, kind, value, choices, inherited=inherited)
+    if values:
+        row["choiceValues"] = list(values)
+    return row
+
+
 class RowsForm(QObject):
     rowsChanged = Signal()
     busyChanged = Signal()
@@ -106,15 +172,16 @@ LAUNCH_ROWS = {
     "proton": [("launch.proton", "Proton", "enum"), ("launch.esync", "Esync", "bool"), ("launch.fsync", "Fsync", "bool"), ("launch.ntsync", "NTSync", "bool"), ("launch.wayland", "Wayland", "bool"), ("launch.hdr", "HDR", "bool"), ("launch.dlss_upgrade", "DLSS upgrade", "bool"), ("launch.fsr4_upgrade", "FSR 4 upgrade", "bool"), ("launch.xess_upgrade", "XeSS upgrade", "bool"), ("launch.optiscaler", "OptiScaler", "bool"), ("launch.prefix", "Wine prefix", "path")],
     "wine": [("launch.esync", "Esync", "bool"), ("launch.fsync", "Fsync", "bool"), ("launch.prefix", "Wine prefix", "path")],
 }
-COMMON_LAUNCH_ROWS = [("launch.gamescope", "Gamescope", "bool"), ("launch.gamescope_args", "Gamescope arguments", "string"), ("launch.mangohud", "MangoHud", "bool"), ("launch.wrapper", "Wrapper command", "string"), ("launch.args", "Arguments", "string"), ("launch.working_dir", "Working directory", "path")]
+COMMON_LAUNCH_ROWS = [("launch.mangohud", "MangoHud", "bool"), ("launch.wrapper", "Wrapper command", "string"), ("launch.args", "Arguments", "string"), ("launch.working_dir", "Working directory", "path")]
 
 
 class GameSettingsForm(RowsForm):
     gameIdChanged = Signal()
     titleChanged = Signal()
 
-    def __init__(self, client, parent=None):
+    def __init__(self, client, screen_name=lambda: "", parent=None):
         super().__init__(client, parent)
+        self._screen_name = screen_name
         self._game_id = ""
         self._title = ""
 
@@ -130,8 +197,24 @@ class GameSettingsForm(RowsForm):
         rows, runner_kind = self._launch_rows(game, effective)
         groups = [_group("Launch", range(len(rows)), caps=True)]
         launch = [("Launch", key, label, kind) for key, label, kind in LAUNCH_ROWS.get(runner_kind, []) + COMMON_LAUNCH_ROWS]
-        for section, key, label, kind in launch + CORE_ROWS:
+        mode = self._client.screenMode(self._screen_name()) or {}
+        gamescope = [("Gamescope", "launch.gamescope", "Gamescope", "bool")]
+        gamescope += [("Gamescope", key, label, kind) for key, label, kind, _, _ in gamescope_rows(mode)]
+        gamescope.append(("Gamescope", "launch.gamescope_args", "Arguments", "string"))
+        listed = {key: (kind, choices, values) for key, _, kind, choices, values in gamescope_rows(mode)}
+        for section, key, label, kind in launch + gamescope + CORE_ROWS:
             value = _dig(game, key)
+            if key in listed:
+                # A field left empty takes the global one, `effective` says which; the choices carry the screen.
+                own = value
+                if own in (None, "") or (key.endswith("fps_limit") and own == 0):
+                    value = effective.get(key.split(".", 1)[1])
+                _, choices, values = listed[key]
+                if not groups or groups[-1]["title"] != section:
+                    groups.append(_group(section, [], caps=True))
+                groups[-1]["rows"].append(len(rows))
+                rows.append(choice_row(section, key, label, kind, value, choices, values, inherited=own in (None, "")))
+                continue
             # A launch or desktop key the game leaves empty takes the global value.
             inherited = False
             if value in (None, "") and key.startswith(("launch.", "desktop.")):
@@ -225,22 +308,100 @@ class GameSettingsForm(RowsForm):
     title = Property(str, lambda self: self._title, notify=titleChanged)
 
 
+def _module_state(module):
+    if not module.get("available", True):
+        missing = ", ".join(module.get("missing") or [])
+        return "unavailable" + (f": missing {missing}" if missing else "")
+    return ""
+
+
 class ModulesForm(RowsForm):
-    """Every module as a card: its enable toggle in the header, its global settings below;
-    then Doctor's checks, one card per module. A setting the module lists live (`dynamic`)
-    gets its choices off the UI thread, once per state of the module's settings."""
+    """Settings › Modules: one row per module, its name and whether it runs; the row opens the
+    module's page (ModuleForm), and the list toggles it in place. Then Doctor's checks, one card
+    per module."""
 
     doctorChanged = Signal()
+
+    def __init__(self, client, parent=None):
+        super().__init__(client, parent)
+        self._doctor = []
+        self._doctor_groups = []
+        client.modulesChanged.connect(self.load)
+
+    @Slot()
+    def load(self):
+        rows, on, off = [], [], []
+        for module in self._client.modules() or []:
+            ident = module["id"]
+            name = module.get("name", ident)
+            enabled = bool(module.get("enabled"))
+            warning = _module_state(module)
+            row = _row("Modules", "module", name, "action", enabled, module=ident)
+            row.update(display="On" if enabled else "Unavailable" if warning else "Off", action="Open", runner="",
+                       meta=_module_meta(module), warning=warning, kind=list(module.get("kind") or []),
+                       detail=warning.replace("unavailable", "Cannot be enabled", 1) if warning and not enabled else _module_meta(module))
+            (on if enabled else off).append(len(rows))
+            rows.append(row)
+        groups = [_group("", on)]
+        if off:
+            groups.append(_group("Off", off, caps=True, off=True))
+        self._set_rows(rows, groups)
+
+    @Slot(str, result=int)
+    def indexOf(self, ident):
+        return next((i for i, r in enumerate(self._rows) if r["module"] == ident), -1)
+
+    @Slot(int)
+    def toggle(self, index):
+        row = self.row(index)
+        if not row:
+            return
+        self._client.enableModule(row["module"], not row["value"])
+        self.load()
+
+    @Slot()
+    def loadDoctor(self):
+        names = {m["id"]: m.get("name", m["id"]) for m in self._client.modules() or []}
+        rows = []
+        groups = []
+        for check in self._client.doctor() or []:
+            ident = check.get("module") or ""
+            name = names.get(ident, ident) or "Core"
+            group = next((g for g in groups if g["title"] == name), None)
+            if group is None:
+                group = _group(name, [])
+                groups.append(group)
+            group["rows"].append(len(rows))
+            rows.append(_row(name, "", check.get("check", ""), "info", bool(check.get("ok")),
+                             detail=str(check.get("detail") or ""), module=ident))
+        groups.sort(key=lambda g: g["title"] != "Core")
+        for group in groups:
+            passed = sum(1 for i in group["rows"] if rows[i]["value"])
+            group["meta"] = f"{passed} of {len(group['rows'])} checks pass"
+        self._doctor = rows
+        self._doctor_groups = groups
+        self.doctorChanged.emit()
+
+    doctor = Property("QVariantList", lambda self: list(self._doctor), notify=doctorChanged)
+    doctorGroups = Property("QVariantList", lambda self: list(self._doctor_groups), notify=doctorChanged)
+
+
+class ModuleForm(RowsForm):
+    """One module's page: its enable switch, then its global settings. A setting the module
+    lists live (`dynamic`) gets its choices off the UI thread, once per state of the module's
+    settings."""
+
+    moduleChanged = Signal()
 
     def __init__(self, client, screen_hz=lambda: 0, parent=None):
         super().__init__(client, parent)
         self._screen_hz = screen_hz
-        self._doctor = []
-        self._doctor_groups = []
+        self._module = {}
+        self._ident = ""
         self._dynamic = {}
         self._pending = set()
         self._loading = False
-        client.modulesChanged.connect(self.load)
+        client.modulesChanged.connect(self.reload)
 
     def _choices(self, ident, key, setting, values):
         choices = [str(c) for c in setting.get("choices") or []]
@@ -267,69 +428,59 @@ class ModulesForm(RowsForm):
             self._pending.discard(cache_key)
             self._dynamic[cache_key] = [str(c) for c in choices or []]
             if not self._loading:
-                self.load()
+                self.reload()
 
         self._client.runAsync(lambda: self._client.settingChoices(ident, key), done)
 
     @Slot()
-    def load(self):
+    def reload(self):
+        if self._ident:
+            self.load(self._ident)
+
+    @Slot(str)
+    def load(self, ident):
+        self._ident = ident
         self._loading = True
         try:
-            self._set_rows(*self._build())
+            self._set_rows(*self._build(ident))
         finally:
             self._loading = False
+        self.moduleChanged.emit()
 
-    def _build(self):
-        rows = []
-        groups = []
-        for module in self._client.modules() or []:
-            ident = module["id"]
-            name = module.get("name", ident)
-            enabled = bool(module.get("enabled"))
-            warning = ""
-            if not module.get("available", True):
-                missing = ", ".join(module.get("missing") or [])
-                warning = "unavailable" + (f": missing {missing}" if missing else "")
-            group = _group(name, [], meta=_module_meta(module), warning=warning, control=len(rows), off=not enabled)
-            rows.append(_row(name, "enabled", "Enabled", "bool", enabled, module=ident))
-            if enabled:
-                values = self._client.getSettings(ident, "") or {}
-                for setting in module.get("settings") or []:
-                    if setting.get("scope") != "global":
-                        continue
-                    key = setting["key"]
-                    dynamic = bool(setting.get("dynamic"))
-                    if dynamic:
-                        self._fetch_dynamic(ident, key, values)
-                    group["rows"].append(len(rows))
-                    rows.append(_row(name, key, setting.get("label", key), setting.get("type", "string"),
-                                     values.get(key, setting.get("default")), self._choices(ident, key, setting, values),
-                                     ident, dynamic=dynamic))
-            groups.append(group)
+    def _build(self, ident):
+        module = next((m for m in self._client.modules() or [] if m["id"] == ident), None)
+        if module is None:
+            self._module = {}
+            return [], []
+        name = module.get("name", ident)
+        enabled = bool(module.get("enabled"))
+        warning = _module_state(module)
+        self._module = {"id": ident, "name": name, "meta": _module_meta(module), "warning": warning,
+                        "kind": list(module.get("kind") or []), "enabled": enabled}
+        control = _row(name, "enabled", "Enabled", "bool", enabled, module=ident)
+        control["disabled"] = bool(warning) and not enabled
+        rows = [control]
+        groups = [_group("", [0])]
+        if not enabled:
+            return rows, groups
+        values = self._client.getSettings(ident, "") or {}
+        settings = _group("Settings", [], caps=True)
+        for setting in module.get("settings") or []:
+            if setting.get("scope") != "global":
+                continue
+            key = setting["key"]
+            dynamic = bool(setting.get("dynamic"))
+            if dynamic:
+                self._fetch_dynamic(ident, key, values)
+            settings["rows"].append(len(rows))
+            rows.append(_row(name, key, setting.get("label", key), setting.get("type", "string"),
+                             values.get(key, setting.get("default")), self._choices(ident, key, setting, values),
+                             ident, dynamic=dynamic))
+        if settings["rows"]:
+            groups.append(settings)
         return rows, groups
 
-    @Slot()
-    def loadDoctor(self):
-        names = {m["id"]: m.get("name", m["id"]) for m in self._client.modules() or []}
-        rows = []
-        groups = []
-        for check in self._client.doctor() or []:
-            ident = check.get("module") or ""
-            name = names.get(ident, ident) or "Core"
-            group = next((g for g in groups if g["title"] == name), None)
-            if group is None:
-                group = _group(name, [])
-                groups.append(group)
-            group["rows"].append(len(rows))
-            rows.append(_row(name, "", check.get("check", ""), "info", bool(check.get("ok")),
-                             detail=str(check.get("detail") or ""), module=ident))
-        groups.sort(key=lambda g: g["title"] != "Core")
-        for group in groups:
-            passed = sum(1 for i in group["rows"] if rows[i]["value"])
-            group["meta"] = f"{passed} of {len(group['rows'])} checks pass"
-        self._doctor = rows
-        self._doctor_groups = groups
-        self.doctorChanged.emit()
+    info = Property("QVariant", lambda self: dict(self._module), notify=moduleChanged)
 
     @Slot(int, "QVariant", result=bool)
     def setValue(self, index, value):
@@ -342,7 +493,7 @@ class ModulesForm(RowsForm):
         else:
             ok = self._client.setSetting(row["module"], "", row["key"], _to_bus(row["type"], value))
         if ok:
-            self.load()
+            self.load(row["module"])
         return bool(ok)
 
     @Slot(int)
@@ -350,6 +501,3 @@ class ModulesForm(RowsForm):
         row = self.row(index)
         if row.get("type") == "bool":
             self.setValue(index, not row.get("value"))
-
-    doctor = Property("QVariantList", lambda self: list(self._doctor), notify=doctorChanged)
-    doctorGroups = Property("QVariantList", lambda self: list(self._doctor_groups), notify=doctorChanged)
