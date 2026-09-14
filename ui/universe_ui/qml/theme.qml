@@ -696,6 +696,11 @@ FocusScope {
     }
 
     Connections {
+        target: api.screens.controller
+        function onMacroNotice(text) { toast.show(text); }
+    }
+
+    Connections {
         target: api.screens.pendingJournals
         function onAppeared(session, title) { toast.show("Journal: writing " + title + "…"); }
         function onResolved(session, id, state, text) { toast.show(state === "failed" ? "Journal failed: " + text : "Journal: " + text); }

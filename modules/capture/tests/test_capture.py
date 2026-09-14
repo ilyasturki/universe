@@ -55,6 +55,7 @@ exit 0''')
 case "$*" in
   *NameHasOwner*) echo "b ${{FAKE_NAME_OWNED:-false}}"; exit 0;;
   *EnableExtension*) echo "b true"; exit 0;;
+  *" Screenshot "*) [ "${{FAKE_SHOT_OK:-true}}" = true ] && echo fake > "$8"; echo "b ${{FAKE_SHOT_OK:-true}}"; exit 0;;
 esac
 if [ "${{FAKE_BUSCTL_EXIT:-0}}" != "0" ]; then exit "${{FAKE_BUSCTL_EXIT}}"; fi
 echo '{{"type":"ua((ssss)a(siiddada{{sv}})a{{sv}})a(iiduba(ssss)a{{sv}})a{{sv}}","data":[1,[[["DP-1","GSM","LG","0x1"],[["3840x2160@59.997",3840,2160,59.997,1.5,[1.0],{{}}],["3840x2160@119.88",3840,2160,119.88,1.5,[1.0],{{"is-current":{{"type":"b","data":true}}}}]],{{}}],[["HDMI-A-1","DEL","Dell","0x2"],[["2560x1440@59.951",2560,1440,59.951,1.0,[1.0],{{"is-current":{{"type":"b","data":true}}}}]],{{}}]],[],{{}}]}}'
@@ -288,6 +289,45 @@ def test_shot_falls_back_to_module_data_dir(tmp_path, fakebin):
     path = Path(result.stdout.strip())
     assert path.parent == tmp_path / "data" / "screenshots"
     assert path.exists()
+
+
+def test_shot_grabs_in_the_shell_when_the_extension_is_loaded(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {"source": "window", "cursor": True},
+                  extra={"JOURNAL_DIR": "", "FAKE_NAME_OWNED": "true"})
+    install_fake_extension(env)
+    result = run("shot", env)
+    assert result.returncode == 0, result.stderr
+    path = Path(result.stdout.strip())
+    assert path.parent == tmp_path / "data" / "screenshots" and path.suffix == ".png"
+    calls = (fakebin["logs"] / "busctl.args").read_text()
+    assert f"Screenshot\nsbb\n{path}\ntrue\ntrue\n" in calls
+    assert not (fakebin["logs"] / "gsr.args").exists()
+
+
+def test_shot_screen_source_grabs_every_monitor(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {"source": "screen"}, extra={"JOURNAL_DIR": "", "FAKE_NAME_OWNED": "true"})
+    install_fake_extension(env)
+    result = run("shot", env)
+    assert result.returncode == 0, result.stderr
+    assert "\nsbb\n" + result.stdout.strip() + "\nfalse\nfalse\n" in (fakebin["logs"] / "busctl.args").read_text()
+
+
+def test_shot_falls_back_to_gsr_when_the_shell_refuses(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {}, extra={"JOURNAL_DIR": "", "FAKE_NAME_OWNED": "true", "FAKE_SHOT_OK": "false"})
+    install_fake_extension(env)
+    result = run("shot", env)
+    assert result.returncode == 0, result.stderr
+    assert "shell screenshot" in result.stderr
+    assert flag_values((fakebin["logs"] / "gsr.args").read_text().splitlines(), "-o") == [result.stdout.strip()]
+
+
+def test_shot_falls_back_to_gsr_when_the_extension_is_not_loaded(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {}, extra={"JOURNAL_DIR": "", "FAKE_NAME_OWNED": "false"})
+    install_fake_extension(env)
+    result = run("shot", env)
+    assert result.returncode == 0, result.stderr
+    assert "not loaded" in result.stderr
+    assert (fakebin["logs"] / "gsr.args").exists()
 
 
 # --- bin/start window mode ------------------------------------------------

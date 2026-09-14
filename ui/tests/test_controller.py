@@ -152,6 +152,27 @@ def test_learn_timeout_and_error_clear_learning(api, fake):
     assert len(messages) == 2, "a timeout with nothing to stop says nothing"
 
 
+def test_the_mangohud_macro_gets_a_toast_the_others_do_not(api, fake):
+    screen = api.screens.controller
+    watcher = FakeWatcher("dualsense-edge")
+    screen.start(watcher)
+    notices = []
+    screen.macroNotice.connect(notices.append)
+    fire = lambda action: watcher.emit({"event": "macro", "id": "event30", "slot": "fn_right", "trigger": "press", "action": action})
+    fire("mangohud")
+    assert notices == ["MangoHud: no game running"]
+    fire("volume_up")
+    fire("screenshot")
+    assert len(notices) == 1, "volume and the screenshot draw their own cue"
+
+    fake.launch("control", "DP-1")
+    fire("mangohud")
+    assert notices[-1] == "MangoHud toggled · Control"
+    fake.set("control", "launch.mangohud", "false")
+    fire("mangohud")
+    assert notices[-1] == "MangoHud is off for Control"
+
+
 def test_waiting_lists_the_cores_pads_passively(api, fake):
     screen = api.screens.controller
     watcher = FakeWatcher("none")

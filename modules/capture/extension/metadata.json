@@ -1,7 +1,7 @@
 {
   "uuid": "universe@ilyasturki.github.io",
   "name": "Universe",
-  "description": "Lists the shell's toplevel windows with their pid over the session bus (org.universe.Windows), so Universe's capture module can record the game's window without a portal dialog, and shows the shell's OSD for Universe's controller macros.",
+  "description": "Lists the shell's toplevel windows with their pid over the session bus (org.universe.Windows), so Universe's capture module can record the game's window without a portal dialog; takes its screenshots in-process with the shell's own flash and shutter; shows the shell's OSD for Universe's controller macros.",
   "shell-version": ["48", "49", "50"],
   "session-modes": ["user"],
   "url": "https://github.com/ilyasturki/universe"

@@ -1,5 +1,8 @@
 import Gio from 'gi://Gio';
+import GLib from 'gi://GLib';
+import Shell from 'gi://Shell';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
+import {Flashspot} from 'resource:///org/gnome/shell/ui/screenshot.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 const BUS_NAME = 'org.universe.Windows';
@@ -18,6 +21,12 @@ const IFACE = `
     </method>
     <method name="Activate">
       <arg type="t" name="id" direction="in"/>
+      <arg type="b" name="ok" direction="out"/>
+    </method>
+    <method name="Screenshot">
+      <arg type="s" name="path" direction="in"/>
+      <arg type="b" name="window" direction="in"/>
+      <arg type="b" name="cursor" direction="in"/>
       <arg type="b" name="ok" direction="out"/>
     </method>
   </interface>
@@ -79,6 +88,82 @@ export default class UniverseExtension extends Extension {
             return true;
         }
         return false;
+    }
+
+    // A screenshot in-process, written to `path` as a PNG: the focused window's client area, or every
+    // monitor. org.gnome.Shell.Screenshot refuses background callers, and a KMS grab out of process
+    // takes long enough that its cue lags the press. Mutter reads the framebuffer synchronously in
+    // screenshot*(): the pixels are taken once it returns, so the cue fires and the caller is answered
+    // right away, before the async PNG encode; a write that fails later is only a notification.
+    ScreenshotAsync([path, window, cursor], invocation) {
+        const reply = ok => invocation.return_value(new GLib.Variant('(b)', [ok]));
+        let stream;
+        try {
+            const file = Gio.File.new_for_path(path);
+            const parent = file.get_parent();
+            if (parent)
+                GLib.mkdir_with_parents(parent.get_path(), 0o755);
+            stream = file.replace(null, false, Gio.FileCreateFlags.REPLACE_DESTINATION, null);
+        } catch (e) {
+            logError(e, 'Universe: cannot open the screenshot file');
+            reply(false);
+            return;
+        }
+        const area = window ? this._focusedWindowRect() : this._primaryMonitorRect();
+        if (!area) {
+            try { stream.close(null); } catch { /* unusable */ }
+            reply(false);
+            return;
+        }
+        try {
+            const shooter = new Shell.Screenshot();
+            const finish = (o, res) => {
+                try {
+                    if (window)
+                        shooter.screenshot_window_finish(res);
+                    else
+                        shooter.screenshot_finish(res);
+                } catch (e) {
+                    logError(e, 'Universe: screenshot failed');
+                    Main.notifyError('Universe', 'Screenshot failed to save');
+                }
+                try { stream.close(null); } catch { /* unusable */ }
+            };
+            if (window)
+                shooter.screenshot_window(false, cursor, stream, finish);
+            else
+                shooter.screenshot(cursor, stream, finish);
+        } catch (e) {
+            logError(e, 'Universe: screenshot failed');
+            try { stream.close(null); } catch { /* unusable */ }
+            reply(false);
+            return;
+        }
+        this._screenshotCue(area);
+        reply(true);
+    }
+
+    _focusedWindowRect() {
+        const win = global.display.focus_window;
+        if (!win)
+            return null;
+        const r = win.get_frame_rect();
+        return {x: r.x, y: r.y, width: r.width, height: r.height};
+    }
+
+    _primaryMonitorRect() {
+        const m = Main.layoutManager.primaryMonitor;
+        return m ? {x: m.x, y: m.y, width: m.width, height: m.height} : null;
+    }
+
+    // GNOME's own screenshot cue, which the in-process grab skips: a flash over the area, the shutter.
+    _screenshotCue(area) {
+        try {
+            new Flashspot(area).fire();
+            global.display.get_sound_player().play_from_theme('screen-capture', 'Screenshot taken', null);
+        } catch (e) {
+            logError(e, 'Universe: screenshot cue failed');
+        }
     }
 
     // The shell's own media-key OSD, on every monitor; org.gnome.Shell.ShowOSD refuses callers other

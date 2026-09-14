@@ -483,7 +483,7 @@ impl Watcher {
                             34..=66 => "audio-volume-medium-symbolic",
                             _ => "audio-volume-high-symbolic",
                         };
-                        osd(icon, None, Some(f64::from(level.percent) / 100.0)).await;
+                        osd(icon, Some(&level.output), Some(f64::from(level.percent) / 100.0)).await;
                     }
                     Ok(Err(e)) => tracing::warn!("{change:?}: {e}"),
                     Err(e) => tracing::warn!("{change:?}: {e}"),
@@ -509,13 +509,11 @@ impl Watcher {
         }
         let core = self.core.clone();
         match m.action.as_str() {
+            // The cue (a flash, the shutter) is the capture's own, at grab time; an OSD after it would only lag.
             "screenshot" => {
                 tokio::spawn(async move {
                     match core.screenshot().await {
-                        Ok(p) => {
-                            tracing::info!("screenshot {p}");
-                            osd("camera-photo-symbolic", Some("Screenshot"), None).await;
-                        }
+                        Ok(p) => tracing::info!("screenshot {p}"),
                         Err(e) => tracing::warn!("screenshot: {e}"),
                     }
                 });

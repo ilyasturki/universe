@@ -276,6 +276,14 @@ properties of the VA encoder, window path) and `gsr_extra_args` (appended to the
 gpu-screen-recorder command, screen path). `-bm cbr` stays pinned on the screen path: it is the
 base the QVBR override needs.
 
+The module's `screenshot` hook grabs the frame in the shell through the extension
+(`org.universe.Windows.Screenshot(path, window, cursor)`): the focused window's client area with
+`source = "window"`, every monitor with `"screen"`, the cursor per `cursor`. Mutter reads the
+framebuffer synchronously, so the shell's own cue — a flash over the captured area and the shutter —
+fires and the hook returns at the press, before the PNG is encoded; a write that fails afterwards
+is a shell notification. Off GNOME or before the shell has loaded the extension it is a
+gpu-screen-recorder `-o` capture of the session's screen, with no cue.
+
 ## Journal
 
 | Rust | Python | CLI | Role |
@@ -354,11 +362,14 @@ A slot with only a press macro fires on the key down; with a hold macro too, pre
 before `hold_ms` and hold once at `hold_ms`. `volume_up`, `volume_down` and `mute` go straight to
 the PulseAudio server (PipeWire's included) through libpulse: the default sink's volume moves by
 `volume_step` percent of the normal level on every channel, clamped to [0, 100 %], `mute` toggles
-the sink; no key is typed, so nothing reaches the game. On GNOME the new level (and a screenshot's
-`camera-photo-symbolic`) shows on the shell's OSD through `org.universe.Windows.ShowOSD` on the
-Universe extension; without it the macro runs silently. `keys` types through uinput; `mangohud`
-sends MangoHud's own `toggle_hud` (from `~/.config/MangoHud/MangoHud.conf`, `Shift_R+F12` by
-default) and holds it 200 ms.
+the sink; no key is typed, so nothing reaches the game. On GNOME the new level shows on the shell's
+OSD through `org.universe.Windows.ShowOSD` on the Universe extension, labelled with the output as
+GNOME's own volume keys print it (the sink's active port, else the sink); without the extension the
+macro runs silently. `screenshot` has the capture's own cue (the capture module's flash and
+shutter). `keys` types through uinput; `mangohud` sends MangoHud's own `toggle_hud` (from
+`~/.config/MangoHud/MangoHud.conf`, `Shift_R+F12` by default) and holds it 200 ms; the launcher,
+which that key never reaches, shows a toast on the fire — "MangoHud toggled · <title>", "MangoHud is
+off for <title>" when the running game has it disabled, "MangoHud: no game running".
 
 Families: `dualsense-edge` (fn_left, fn_right, paddle_left, paddle_right), `dualsense`,
 `dualshock4`, `xbox-elite` (paddle_p1…p4), `xbox` (share), `switch-pro` (capture), `8bitdo-pro-3`

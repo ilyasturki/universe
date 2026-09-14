@@ -360,6 +360,11 @@ FocusScope {
         }
     }
 
+    Connections {
+        target: api.screens.controller
+        function onMacroNotice(text) { toast.show(text); }
+    }
+
     Keys.onPressed: function(event) {
         if (root.modal) {
             event.accepted = true;

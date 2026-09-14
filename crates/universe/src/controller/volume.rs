@@ -48,11 +48,13 @@ fn wait<T: ?Sized>(ml: &mut Mainloop, op: &Operation<T>, since: Instant) -> Resu
     Ok(())
 }
 
-/// The sink after a change: the loudest channel as a percent of normal, and whether it is muted.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// The sink after a change: the loudest channel as a percent of normal, whether it is muted, and the
+/// output's name as GNOME's own volume OSD prints it (the active port, else the sink).
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Level {
     pub percent: u8,
     pub muted: bool,
+    pub output: String,
 }
 
 /// Blocking: connects to the default server, applies the change to the default sink, disconnects.
@@ -75,17 +77,18 @@ pub fn apply(change: Change, percent: u8) -> Result<Level, String> {
     };
     wait(&mut ml, &op, since)?;
     let name = sink.borrow().clone().ok_or("no default sink")?;
-    let found: Rc<RefCell<Option<(ChannelVolumes, bool)>>> = Rc::new(RefCell::new(None));
+    let found: Rc<RefCell<Option<(ChannelVolumes, bool, String)>>> = Rc::new(RefCell::new(None));
     let op = {
         let found = found.clone();
         ctx.introspect().get_sink_info_by_name(&name, move |r| {
             if let ListResult::Item(i) = r {
-                *found.borrow_mut() = Some((i.volume, i.mute));
+                let output = i.active_port.as_ref().and_then(|p| p.description.as_deref()).or(i.description.as_deref()).unwrap_or_default().to_string();
+                *found.borrow_mut() = Some((i.volume, i.mute, output));
             }
         })
     };
     wait(&mut ml, &op, since)?;
-    let (mut volume, mute) = found.borrow().ok_or_else(|| format!("sink {name} not found"))?;
+    let (mut volume, mute, output) = found.borrow().clone().ok_or_else(|| format!("sink {name} not found"))?;
     let done: Rc<RefCell<Option<bool>>> = Rc::new(RefCell::new(None));
     let cb: Box<dyn FnMut(bool)> = {
         let done = done.clone();
@@ -108,7 +111,7 @@ pub fn apply(change: Change, percent: u8) -> Result<Level, String> {
     let ok = *done.borrow();
     ctx.disconnect();
     match ok {
-        Some(true) => Ok(Level { percent: (u64::from(volume.max().0) * 100 / u64::from(NORMAL)) as u8, muted }),
+        Some(true) => Ok(Level { percent: (u64::from(volume.max().0) * 100 / u64::from(NORMAL)) as u8, muted, output }),
         _ => Err(format!("{name}: {change:?} refused")),
     }
 }
@@ -134,7 +137,8 @@ mod tests {
     #[test]
     #[ignore]
     fn mute_round_trip() {
-        apply(Change::ToggleMute, 2).unwrap();
+        let level = apply(Change::ToggleMute, 2).unwrap();
+        assert!(!level.output.is_empty(), "the sink names its output for the OSD");
         apply(Change::ToggleMute, 2).unwrap();
     }
 }

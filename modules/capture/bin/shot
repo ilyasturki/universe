@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""screenshot hook (on demand): gpu-screen-recorder -o *.png|*.jpg takes a screenshot."""
+"""screenshot hook (on demand): the Universe shell extension grabs the frame in-process (flash and
+shutter at the press); gpu-screen-recorder -o *.png|*.jpg off GNOME or before the shell loads it."""
 import os
 import signal
 import subprocess
@@ -8,9 +9,48 @@ import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import log, resolve_screen  # noqa: E402
+from _common import (  # noqa: E402
+    EXTENSION_UUID,
+    WINDOWS_BUS_NAME,
+    bus_name_has_owner,
+    enable_extension,
+    extension_installed,
+    is_gnome,
+    load_settings,
+    log,
+    resolve_screen,
+)
 
 TAKE_TIMEOUT_S = 15
+
+
+def extension_ready():
+    """One bus round-trip on the usual press; the enable and its wait only when the name is not up."""
+    if not is_gnome() or not extension_installed():
+        return False
+    if bus_name_has_owner(WINDOWS_BUS_NAME):
+        return True
+    enable_extension()
+    deadline = time.monotonic() + 3
+    while not bus_name_has_owner(WINDOWS_BUS_NAME):
+        if time.monotonic() > deadline:
+            log(f"{EXTENSION_UUID} installed but not loaded (log out once to load it)")
+            return False
+        time.sleep(0.25)
+    return True
+
+
+def take_in_shell(path, window, cursor):
+    """org.universe.Windows.Screenshot: answers once the pixels are grabbed, the PNG lands a moment later."""
+    try:
+        r = subprocess.run(
+            ["busctl", "--user", "call", WINDOWS_BUS_NAME, "/org/universe/Windows", WINDOWS_BUS_NAME,
+             "Screenshot", "sbb", path, "true" if window else "false", "true" if cursor else "false"],
+            capture_output=True, text=True, timeout=TAKE_TIMEOUT_S, check=False,
+        )
+    except subprocess.TimeoutExpired:
+        return False, "gnome-shell did not answer"
+    return r.returncode == 0 and r.stdout.strip() == "b true", r.stderr
 
 
 def take(screen, path):
@@ -37,23 +77,34 @@ def take(screen, path):
     return ok, stderr
 
 
+def target_dir():
+    journal_dir = os.environ.get("JOURNAL_DIR")
+    if journal_dir:
+        return os.path.join(journal_dir, "attachments")
+    return os.path.join(os.environ["MODULE_DATA_DIR"], "screenshots")
+
+
 def main():
+    settings = load_settings()
+    directory = target_dir()
+    os.makedirs(directory, exist_ok=True)
+    stem = time.strftime("%Y%m%d-%H%M%S")
+
+    if extension_ready():
+        path = os.path.join(directory, f"{stem}.png")
+        ok, stderr = take_in_shell(path, settings.get("source", "window") == "window", bool(settings.get("cursor")))
+        if ok:
+            print(path)
+            return 0
+        log(f"shell screenshot {path} failed: {stderr.strip()}")
+
     try:
         screen = resolve_screen()
     except Exception as e:
         log(f"could not resolve a screen to capture: {e}")
         return 1
-
-    journal_dir = os.environ.get("JOURNAL_DIR")
-    if journal_dir:
-        target_dir = os.path.join(journal_dir, "attachments")
-    else:
-        target_dir = os.path.join(os.environ["MODULE_DATA_DIR"], "screenshots")
-    os.makedirs(target_dir, exist_ok=True)
-
-    stem = time.strftime("%Y%m%d-%H%M%S")
     for ext in ("png", "jpg"):
-        path = os.path.join(target_dir, f"{stem}.{ext}")
+        path = os.path.join(directory, f"{stem}.{ext}")
         ok, stderr = take(screen, path)
         if ok:
             print(path)

@@ -152,6 +152,7 @@ class ControllerScreen(QObject):
     unknownPressed = Signal(str, str)
     learned = Signal(str, str, str)
     macroFired = Signal(str, str, str)
+    macroNotice = Signal(str)
     message = Signal(str)
 
     def __init__(self, client, memory=None, parent=None):
@@ -271,7 +272,11 @@ class ControllerScreen(QObject):
         elif kind == "unknown":
             self.unknownPressed.emit(ident, str(line.get("code") or ""))
         elif kind == "macro":
-            self.macroFired.emit(str(line.get("slot") or ""), str(line.get("trigger") or ""), str(line.get("action") or ""))
+            action = str(line.get("action") or "")
+            self.macroFired.emit(str(line.get("slot") or ""), str(line.get("trigger") or ""), action)
+            notice = self._notice(action)
+            if notice:
+                self.macroNotice.emit(notice)
         elif kind == "learned":
             self._learned(line)
         elif kind == "learn_timeout":
@@ -306,6 +311,20 @@ class ControllerScreen(QObject):
             if self._watcher is not None:
                 QTimer.singleShot(self._restart_delay, self._restart)
                 self._restart_delay = min(max(self._restart_delay, 1) * 2, RESTART_MAX_MS)
+
+    # A macro whose effect is drawn by the game, not the launcher, gets a toast here: the MangoHud
+    # toggle types a key the launcher never sees, so a press with the launcher up looks like nothing.
+    def _notice(self, action):
+        if action != "mangohud":
+            return ""
+        current = self._client.currentSession
+        if not current or not current.get("session_id"):
+            return "MangoHud: no game running"
+        title = str(current.get("title") or current.get("id") or "")
+        game = self._client.game(str(current.get("id") or "")) or {}
+        if (game.get("effective") or {}).get("mangohud", True):
+            return f"MangoHud toggled · {title}"
+        return f"MangoHud is off for {title}"
 
     def _stop_learning(self):
         if not self._learning:
