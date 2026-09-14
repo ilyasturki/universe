@@ -34,8 +34,6 @@ pub struct Fields {
     pub filter: String,
     #[serde(rename = "gamescope_sharpness")]
     pub sharpness: Option<u32>,
-    #[serde(rename = "gamescope_fps_limit")]
-    pub fps_limit: Option<u32>,
     #[serde(rename = "gamescope_adaptive_sync")]
     pub adaptive_sync: bool,
 }
@@ -80,7 +78,7 @@ pub fn validate(key: &str, value: &str) -> crate::Result<()> {
             Ok(n) if n <= SHARPNESS_MAX => Ok(()),
             _ => Err(Error::Invalid(format!("gamescope_sharpness must be 0 (sharpest) to {SHARPNESS_MAX}"))),
         },
-        "gamescope_fps_limit" => value.parse::<u32>().map(|_| ()).map_err(|_| Error::Invalid("gamescope_fps_limit must be a whole number of frames per second (0: none)".into())),
+        "fps_limit" => crate::launcher::parse_fps_limit(value).map(|_| ()),
         "gamescope_adaptive_sync" | "gamescope" if !matches!(value, "true" | "false") => Err(Error::Invalid(format!("{key} must be true or false"))),
         _ => Ok(()),
     }
@@ -109,9 +107,6 @@ pub fn args(f: &Fields, screen: Option<Mode>) -> Vec<String> {
     }
     if let Some(n) = f.sharpness {
         out.extend(["--sharpness".into(), n.to_string()]);
-    }
-    if let Some(n) = f.fps_limit.filter(|n| *n > 0) {
-        out.extend(["--framerate-limit".into(), n.to_string()]);
     }
     if f.adaptive_sync {
         out.push("--adaptive-sync".into());
@@ -145,8 +140,8 @@ mod tests {
         assert!(validate("gamescope_filter", "").is_ok());
         assert!(validate("gamescope_sharpness", "20").is_ok());
         assert!(validate("gamescope_sharpness", "21").is_err());
-        assert!(validate("gamescope_fps_limit", "60").is_ok());
-        assert!(validate("gamescope_fps_limit", "sixty").is_err());
+        assert!(validate("fps_limit", "60").is_ok() && validate("fps_limit", "auto").is_ok() && validate("fps_limit", "none").is_ok());
+        assert!(validate("fps_limit", "sixty").is_err() && validate("fps_limit", "0").is_err());
         assert!(validate("gamescope_adaptive_sync", "yes").is_err());
         assert!(validate("gamescope_args", "anything -r 120").is_ok());
     }
@@ -156,15 +151,15 @@ mod tests {
         let screen = Some(Mode { width: 3840, height: 2160, refresh: 60 });
         let auto = Fields { resolution: "auto".into(), refresh: "auto".into(), ..Default::default() };
         assert_eq!(args(&auto, screen), ["-W", "3840", "-H", "2160", "-w", "3840", "-h", "2160", "-r", "60"]);
-        let set = Fields { resolution: "1920x1080".into(), refresh: "120".into(), scaler: "fit".into(), filter: "fsr".into(), sharpness: Some(0), fps_limit: Some(60), adaptive_sync: true };
-        assert_eq!(args(&set, screen), ["-W", "3840", "-H", "2160", "-w", "1920", "-h", "1080", "-r", "120", "-S", "fit", "-F", "fsr", "--sharpness", "0", "--framerate-limit", "60", "--adaptive-sync"]);
+        let set = Fields { resolution: "1920x1080".into(), refresh: "120".into(), scaler: "fit".into(), filter: "fsr".into(), sharpness: Some(0), adaptive_sync: true };
+        assert_eq!(args(&set, screen), ["-W", "3840", "-H", "2160", "-w", "1920", "-h", "1080", "-r", "120", "-S", "fit", "-F", "fsr", "--sharpness", "0", "--adaptive-sync"]);
     }
 
     #[test]
     fn no_screen_means_no_size_flags() {
         let auto = Fields::default();
         assert!(args(&auto, None).is_empty());
-        let set = Fields { resolution: "1280x720".into(), fps_limit: Some(0), ..Default::default() };
+        let set = Fields { resolution: "1280x720".into(), ..Default::default() };
         assert_eq!(args(&set, None), ["-w", "1280", "-h", "720"]);
     }
 }

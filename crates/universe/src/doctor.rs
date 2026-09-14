@@ -37,6 +37,9 @@ pub async fn run(config: &Config, modules: &[Module], shell: Option<&zbus::Conne
     for bin in ["umu-run", "systemd-run", "systemctl"] {
         push(bin, which(bin).is_some(), which(bin).unwrap_or_else(|| "missing".into()), "core");
     }
+    if config.launch.fps_limit != "none" {
+        push("mangohud", which("mangohud").is_some(), which("mangohud").unwrap_or_else(|| "missing: no frame rate limit (launch.fps_limit = \"none\" to stop asking)".into()), "core");
+    }
     if config.launch.gamescope {
         let bin = &config.launch.gamescope_bin;
         push("gamescope", which(bin).is_some(), which(bin).unwrap_or_else(|| format!("{bin} not found: games launch on the desktop (launch.gamescope = false to stop asking)")), "core");

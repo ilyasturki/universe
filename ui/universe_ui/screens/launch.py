@@ -1,9 +1,10 @@
 """Settings › Launch: what every game starts with — gamescope and its fields against the screen
-the launcher is on, the overlay and the cursor, the Proton defaults. Every row is a config.toml key."""
+the launcher is on, the overlay, MangoHud's frame rate limit and the cursor, the Proton defaults.
+Every row is a config.toml key."""
 
 from PySide6.QtCore import Property, Signal, Slot
 
-from .settings import RowsForm, _dig, _group, _row, _to_bus, choice_row, gamescope_rows, screen_label
+from .settings import RowsForm, _dig, _group, _row, _to_bus, choice_row, fps_limit_row, gamescope_rows, screen_label
 
 PROTON_ROWS = [
     ("launch.esync", "Esync", "bool"), ("launch.fsync", "Fsync", "bool"), ("launch.ntsync", "NTSync", "bool"),
@@ -44,6 +45,7 @@ class LaunchForm(RowsForm):
         add("Gamescope", _row("Launch", "launch.gamescope_args", "Arguments", "string", launch.get("gamescope_args") or ""))
         groups[0]["meta"] = self._screen
         add("Overlay and cursor", _row("Launch", "launch.mangohud", "MangoHud", "bool", bool(launch.get("mangohud", True))))
+        add("Overlay and cursor", fps_limit_row("Launch", launch.get("fps_limit"), mode, gamescope=bool(launch.get("gamescope", True)), gamescope_refresh=launch.get("gamescope_refresh")))
         add("Overlay and cursor", _row("Launch", "desktop.hide_cursor", "Hide the cursor while playing", "bool", bool(_dig(config, "desktop.hide_cursor", True))))
         choices = sorted((config.get("proton") or {}).keys())
         default = str(launch.get("proton") or "")

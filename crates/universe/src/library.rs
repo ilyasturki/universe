@@ -48,6 +48,8 @@ pub struct Effective {
     pub gamescope_args: String,
     #[serde(flatten)]
     pub gamescope_fields: crate::gamescope::Fields,
+    /// `auto` (the refresh the game sees), `none`, or frames per second.
+    pub fps_limit: String,
     pub hide_cursor: bool,
     pub env: BTreeMap<String, String>,
 }
@@ -169,7 +171,6 @@ fn gamescope_fields_of(game: &Game, config: &Config) -> crate::gamescope::Fields
         scaler: pick(&l.gamescope_scaler, &d.gamescope_scaler),
         filter: pick(&l.gamescope_filter, &d.gamescope_filter),
         sharpness: l.gamescope_sharpness.or(d.gamescope_sharpness),
-        fps_limit: l.gamescope_fps_limit.or(d.gamescope_fps_limit),
         adaptive_sync: l.gamescope_adaptive_sync.unwrap_or(d.gamescope_adaptive_sync),
     }
 }
@@ -223,6 +224,7 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
         gamescope,
         gamescope_args: game.launch.gamescope_args.clone(),
         gamescope_fields: gamescope_fields_of(&game, config),
+        fps_limit: [&game.launch.fps_limit, &config.launch.fps_limit].into_iter().find(|s| !s.is_empty()).cloned().unwrap_or_else(|| "auto".into()),
         hide_cursor: game.desktop.hide_cursor.unwrap_or(config.desktop.hide_cursor),
         env,
     };

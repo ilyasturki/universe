@@ -866,9 +866,9 @@ class FakeClient(UniverseClientBase):
             if key in ("proton", "esync", "fsync", "ntsync", "wayland", "hdr", "dlss_upgrade", "fsr4_upgrade", "xess_upgrade", "optiscaler", "mangohud", "hide_cursor")
         }
         # The gamescope fields: the game's own when set, else the global one (`auto` for the sizes).
-        for key in ("gamescope", "gamescope_resolution", "gamescope_refresh", "gamescope_scaler", "gamescope_filter", "gamescope_sharpness", "gamescope_fps_limit", "gamescope_adaptive_sync"):
+        for key in ("gamescope", "gamescope_resolution", "gamescope_refresh", "gamescope_scaler", "gamescope_filter", "gamescope_sharpness", "gamescope_adaptive_sync", "fps_limit"):
             own = launch.get(key)
-            fallback = defaults.get(key, "auto" if key in ("gamescope_resolution", "gamescope_refresh") else True if key == "gamescope" else False if key == "gamescope_adaptive_sync" else "" if key in ("gamescope_scaler", "gamescope_filter") else None)
+            fallback = defaults.get(key, "auto" if key in ("gamescope_resolution", "gamescope_refresh", "fps_limit") else True if key == "gamescope" else False if key == "gamescope_adaptive_sync" else "" if key in ("gamescope_scaler", "gamescope_filter") else None)
             out["effective"][key] = fallback if own in (None, "") else own
         out["effective"]["gamescope_args"] = launch.get("gamescope_args") or ""
         runner = self._runner_of(launch)

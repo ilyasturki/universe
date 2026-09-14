@@ -1,6 +1,6 @@
 use std::path::{Path, PathBuf};
 
-fn xdg(var: &str, fallback: &str) -> PathBuf {
+pub fn xdg(var: &str, fallback: &str) -> PathBuf {
     std::env::var_os(var)
         .map(PathBuf::from)
         .filter(|p| p.is_absolute())

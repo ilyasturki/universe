@@ -79,8 +79,8 @@ pub struct Launch {
     pub gamescope_scaler: String,
     pub gamescope_filter: String,
     pub gamescope_sharpness: Option<u32>,
-    pub gamescope_fps_limit: Option<u32>,
     pub gamescope_adaptive_sync: Option<bool>,
+    pub fps_limit: String,
     pub options: BTreeMap<String, toml::Value>,
 }
 
@@ -170,8 +170,8 @@ impl Default for Launch {
             gamescope_scaler: String::new(),
             gamescope_filter: String::new(),
             gamescope_sharpness: None,
-            gamescope_fps_limit: None,
             gamescope_adaptive_sync: None,
+            fps_limit: String::new(),
             options: BTreeMap::new(),
         }
     }
@@ -330,8 +330,12 @@ pub fn set_dotted(doc: &mut toml_edit::DocumentMut, key: &str, value: &str) -> c
     }
     // [runners.<id>] args is a shell-quoted string, not a list; [modules.<id>] enabled is a bool, only modules.enabled lists.
     let is_list = list_keys.contains(&last) && !key.starts_with("runners.") && (last != "enabled" || key == "modules.enabled");
+    // A rate is a string that may be a number: `auto` or `60`.
+    let is_rate = matches!(last, "gamescope_refresh" | "fps_limit") && key.starts_with("launch.");
     let v = if is_list && !value.starts_with('[') {
         parse_value(&format!("[{value}]"))
+    } else if is_rate {
+        value.into()
     } else {
         parse_value(value)
     };
@@ -423,7 +427,10 @@ configpath = "the-technomancer-1780794348"
         set_dotted(&mut doc, "tags", "rpg,indie").unwrap();
         set_dotted(&mut doc, "launch.env.FOO", "bar").unwrap();
         set_dotted(&mut doc, "launch.mangohud", "").unwrap();
+        set_dotted(&mut doc, "launch.fps_limit", "45").unwrap();
+        set_dotted(&mut doc, "launch.gamescope_refresh", "30").unwrap();
         let g: Game = toml::from_str(&doc.to_string()).unwrap();
+        assert_eq!((g.launch.fps_limit.as_str(), g.launch.gamescope_refresh.as_str()), ("45", "30"), "a rate typed as a number stays the string field it is");
         assert_eq!(g.launch.proton, "proton-em");
         assert_eq!(g.modules["capture"]["cursor"].as_bool(), Some(true));
         assert_eq!(g.modules["capture"]["enabled"].as_bool(), Some(false));

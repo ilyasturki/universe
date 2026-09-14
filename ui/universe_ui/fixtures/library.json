@@ -876,8 +876,8 @@
       "gamescope_scaler": "",
       "gamescope_filter": "",
       "gamescope_sharpness": null,
-      "gamescope_fps_limit": null,
-      "gamescope_adaptive_sync": false
+      "gamescope_adaptive_sync": false,
+      "fps_limit": "auto"
     },
     "desktop": {
       "profile": "auto",

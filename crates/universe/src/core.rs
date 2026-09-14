@@ -571,6 +571,9 @@ impl Core {
         let mode = crate::desktop::screen_mode(&screen).await;
         let splash = (!splash.is_empty()).then(|| std::path::PathBuf::from(splash));
         let plan = launcher::plan(&r, &cfg, &session_id, &extra_env, mode, splash.as_deref())?;
+        if let Some((path, text)) = &plan.mangohud_conf {
+            std::fs::write(path, text)?;
+        }
         launcher::run_shell(&plan.pre_command, &plan.env, &plan.cwd).await?;
 
         let inputplumber = r.effective.inputplumber && tokio::task::spawn_blocking(crate::inputplumber::engage).await.unwrap_or(false);

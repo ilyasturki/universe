@@ -245,11 +245,13 @@ key written through `Settings1.Set`: a Gamescope card — the switch, then the f
 `docs/api.md` § Gamescope as rows (`gamescope_resolution` and `gamescope_refresh` are
 `string`/`int` rows whose choices come from the screen the window is on, `Settings1.Screen` —
 `auto`, the screen's mode, the standard heights below it at its aspect ratio; the rates below its
-own — and take a typed value; scaler, filter, sharpness and frame rate limit list a `default` /
-`none` choice that clears the key, through `choiceValues`), then the raw arguments; the card's meta
-is the screen (`screen`: `DP-1 3840×2160 @ 60 Hz`). Then MangoHud and the cursor, then the
-Proton defaults. The game settings page has the same Gamescope group per game, each row
-inherited from the global one until set. `load()` reads the config again.
+own — and take a typed value; scaler, filter and sharpness list a `default` choice that clears
+the key, through `choiceValues`), then the raw arguments; the card's meta is the screen
+(`screen`: `DP-1 3840×2160 @ 60 Hz`). Then MangoHud, the frame rate limit (`launch.fps_limit`:
+`auto`, `none`, the screen's rate and the ones below it, or a typed number; `auto` displays as
+`auto · 60`, the rate it stands for) and the cursor, then the Proton defaults. The game settings
+page has the same Gamescope group per game and the limit after its MangoHud row, each inherited
+from the global one until set. `load()` reads the config again.
 
 `api.screens.modules` is Settings › Modules: one `action` row per module (`module`, its name,
 `value` whether it runs, `display` On / Off / Unavailable, `meta` version and kind, `warning`

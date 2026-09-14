@@ -63,7 +63,7 @@ a dash means the surface doesn't expose it.
 `set` takes dotted keys: `launch.runner`, `launch.exe`, `launch.proton`, `launch.gamescope`,
 `launch.gamescope_args`, `launch.gamescope_resolution`, `launch.gamescope_refresh`,
 `launch.gamescope_scaler`, `launch.gamescope_filter`, `launch.gamescope_sharpness`,
-`launch.gamescope_fps_limit`, `launch.gamescope_adaptive_sync` (validated as `[launch]`'s), `launch.esync`, `launch.fsync`, `launch.ntsync`, `launch.wayland`,
+`launch.gamescope_adaptive_sync`, `launch.fps_limit` (validated as `[launch]`'s), `launch.esync`, `launch.fsync`, `launch.ntsync`, `launch.wayland`,
 `launch.hdr`, `launch.dlss_upgrade`, `launch.fsr4_upgrade`, `launch.xess_upgrade`,
 `launch.optiscaler` (a switch left empty takes `[launch]`'s), `launch.wrapper`,
 `launch.dll_overrides.d3d11`, `launch.env.FOO`,
@@ -85,7 +85,7 @@ comma-separated for lists, `""` deletes the key. A runner is written under its s
                "options": {"batch": true, "user_directory": "", "inputplumber": true}, "inputplumber": true,
                "proton": "proton-ge", "proton_path": "…", "esync": true, "fsync": true, "ntsync": true,
                "wayland": true, "hdr": false, "dlss_upgrade": false, "fsr4_upgrade": false, "xess_upgrade": false,
-               "optiscaler": false, "mangohud": true, "gamescope": true, "gamescope_args": "", "gamescope_resolution": "auto", "gamescope_refresh": "auto", "gamescope_scaler": "", "gamescope_filter": "", "gamescope_sharpness": null, "gamescope_fps_limit": null, "gamescope_adaptive_sync": false, "hide_cursor": true, "env": {}},
+               "optiscaler": false, "mangohud": true, "gamescope": true, "gamescope_args": "", "gamescope_resolution": "auto", "gamescope_refresh": "auto", "gamescope_scaler": "", "gamescope_filter": "", "gamescope_sharpness": null, "gamescope_adaptive_sync": false, "fps_limit": "auto", "hide_cursor": true, "env": {}},
  "removed": false}
 ```
 
@@ -128,7 +128,7 @@ when it was killed by a signal (a `stop`).
 
 Every runner's command runs inside gamescope by default: `gamescope -f --force-composition
 -W <screen width> -H <screen height> -w <game width> -h <game height> -r <refresh> [-S scaler] [-F filter]
-[--sharpness N] [--framerate-limit N] [--adaptive-sync] [launch.gamescope_args] [the game's
+[--sharpness N] [--adaptive-sync] [launch.gamescope_args] [the game's
 gamescope_args] [--mangoapp] -- universe splash [--image <poster>] -- <program> <args…>`. One
 window, from gamescope's first frame to the game's last, whatever the game, Proton or umu put up
 first, and the launcher hands over on it. `--force-composition` keeps gamescope drawing its own
@@ -160,7 +160,6 @@ physical pixels — gamescope handles the desktop's scale itself), else its pref
 | `gamescope_scaler` | empty (gamescope's `auto`), `auto`, `integer`, `fit`, `fill`, `stretch` | `-S` |
 | `gamescope_filter` | empty (gamescope's `linear`), `linear`, `nearest`, `fsr`, `nis`, `pixel` | `-F` |
 | `gamescope_sharpness` | unset, or 0 (sharpest) to 20; for `fsr` and `nis` | `--sharpness` |
-| `gamescope_fps_limit` | unset or 0 (none), or frames per second; gamescope rounds it to a divisor of the refresh | `--framerate-limit` |
 | `gamescope_adaptive_sync` | `false` / `true`: variable refresh when the screen has it | `--adaptive-sync` |
 
 `gamescope_args` (global, then the game's) comes after these and wins: gamescope takes the last
@@ -175,6 +174,24 @@ the desktop as before — the plain command runs. Inside gamescope
 MangoHud is `--mangoapp` rather than `MANGOHUD=1`, `launch.hdr` adds `--hdr-enabled`, and
 `PROTON_ENABLE_WAYLAND` is dropped (Proton goes X11 through gamescope's Xwayland) unless the
 arguments carry `--expose-wayland`. `doctor` checks the binary, and `mangoapp` when MangoHud is on.
+
+### Frame rate limit
+
+`fps_limit` — `[launch]`'s, the game's own when set — is `auto`, `none`, or frames per second,
+and holds the game to it through MangoHud's limiter inside the game process, overlay or not:
+gamescope's `--framerate-limit` paces nothing on a nested gamescope (measured: an uncapped
+client stays uncapped, a vsynced one at the refresh, with or without its WSI layer), and its `-r`
+only paces clients that vsync. `auto` is the refresh the game sees: its `gamescope_refresh` when
+set, else the screen's; unknown (no screen read) means no limit. The launcher writes
+`<state>/MangoHud.conf` before each launch — `~/.config/MangoHud/MangoHud.conf`'s lines, so the
+layout and `fps_limit_method` hold, with `fps_limit` swapped for ours and `no_display` added unless
+the HUD is the game's own (desktop, MangoHud on) — and gives the game `MANGOHUD=1
+MANGOHUD_CONFIGFILE=<that>` through `env` in front of the program: after `setpriv`, never on the
+unit, where gamescope (a Vulkan client itself) and mangoapp would read it. Inside gamescope the
+layer limits and draws nothing while mangoapp shows the HUD. A native or emulator program (not one
+run through Proton) goes through the `mangohud` wrapper so an OpenGL game is limited too; Proton
+and Wine get the Vulkan layer alone, nothing preloaded into the runtime. No `mangohud` on PATH: a
+warning, no limit; `doctor` checks for it unless the limit is `none`.
 
 ### Proton and Wine
 
@@ -196,7 +213,7 @@ when `<runners_dir>/<version>/bin/wine` exists with no `proton` script beside it
 `system`, `proton` otherwise; `wine.proton_hdr` is `hdr`;
 `system.prefix_command`'s leading `VAR=val` words become `launch.env` (`WINEDLLOVERRIDES` its
 `dll_overrides`) and the rest `launch.wrapper`; a `PROTON_*` entry in `system.env` that has a switch
-becomes the switch. Lutris's `fps_limit` stays parked under `[lutris]`; its `fsr`, `battleye`, `eac`,
+becomes the switch. Lutris's `fps_limit` is `launch.fps_limit`; its `fsr`, `battleye`, `eac`,
 DXVK/VKD3D versions and registry options have no counterpart (Proton bundles its own DXVK, and reads
 none of those variables).
 
@@ -468,8 +485,8 @@ gamescope_refresh = "auto"           # the screen's rate, or Hz (-r)
 gamescope_scaler = ""                # auto | integer | fit | fill | stretch (-S); empty: gamescope's default
 gamescope_filter = ""                # linear | nearest | fsr | nis | pixel (-F)
 # gamescope_sharpness = 2            # 0 (sharpest) to 20, for fsr and nis (--sharpness)
-# gamescope_fps_limit = 60           # frames per second (--framerate-limit); absent or 0: none
 gamescope_adaptive_sync = false      # --adaptive-sync: variable refresh when the screen has it
+fps_limit = "auto"                   # MangoHud's limiter in the game: auto (the refresh the game sees), none, or frames per second
 
 [desktop]
 profile = "auto"                     # auto | gnome | none

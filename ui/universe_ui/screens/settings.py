@@ -70,7 +70,6 @@ def _to_bus(kind, value):
 GAMESCOPE_SCALERS = ["auto", "integer", "fit", "fill", "stretch"]
 GAMESCOPE_FILTERS = ["linear", "nearest", "fsr", "nis", "pixel"]
 GAMESCOPE_SHARPNESS = ["0", "2", "5", "10", "15", "20"]
-GAMESCOPE_FPS_LIMITS = ["30", "40", "48", "60", "90", "120"]
 REFRESH_RATES = [240, 165, 144, 120, 100, 90, 75, 60, 50, 48, 40, 30]
 RESOLUTION_HEIGHTS = [2160, 1800, 1440, 1080, 720]
 
@@ -115,15 +114,30 @@ def gamescope_rows(mode):
         ("launch.gamescope_scaler", "Scaler", "enum", ["default"] + GAMESCOPE_SCALERS, [""] + GAMESCOPE_SCALERS),
         ("launch.gamescope_filter", "Filter", "enum", ["default"] + GAMESCOPE_FILTERS, [""] + GAMESCOPE_FILTERS),
         ("launch.gamescope_sharpness", "Sharpness", "int", ["default"] + GAMESCOPE_SHARPNESS, [""] + GAMESCOPE_SHARPNESS),
-        ("launch.gamescope_fps_limit", "Frame rate limit", "int", ["none"] + GAMESCOPE_FPS_LIMITS, [""] + GAMESCOPE_FPS_LIMITS),
         ("launch.gamescope_adaptive_sync", "Adaptive sync", "bool", None, None),
     ]
+
+
+def fps_limit_choices(mode):
+    """`auto` (the refresh the game sees), `none`, then the rates the screen can show."""
+    return ["auto", "none"] + refresh_choices(mode)[1:]
+
+
+def fps_limit_row(section, value, mode, inherited=False, gamescope=True, gamescope_refresh="auto"):
+    """The MangoHud limiter's row; `auto` shows the rate it stands for: the gamescope one when set, else the screen's."""
+    row = choice_row(section, "launch.fps_limit", "Frame rate limit", "string", value or "auto", fps_limit_choices(mode), None, inherited=inherited)
+    hz = int(mode.get("refresh") or 0)
+    if gamescope and str(gamescope_refresh or "").isdigit():
+        hz = int(gamescope_refresh)
+    if row["value"] == "auto" and hz:
+        row["display"] = f"auto · {hz}"
+    return row
 
 
 def choice_row(section, key, label, kind, value, choices, values, inherited=False):
     """A row whose listed choices may stand for other written values (`values`, see gamescope_rows)."""
     if values:
-        empty = value in (None, "") or (key.endswith("fps_limit") and value == 0)
+        empty = value in (None, "")
         value = choices[0] if empty else choices[values.index(str(value))] if str(value) in values else str(value)
     elif kind != "bool" and value is not None:
         value = str(value)
@@ -172,7 +186,7 @@ LAUNCH_ROWS = {
     "proton": [("launch.proton", "Proton", "enum"), ("launch.esync", "Esync", "bool"), ("launch.fsync", "Fsync", "bool"), ("launch.ntsync", "NTSync", "bool"), ("launch.wayland", "Wayland", "bool"), ("launch.hdr", "HDR", "bool"), ("launch.dlss_upgrade", "DLSS upgrade", "bool"), ("launch.fsr4_upgrade", "FSR 4 upgrade", "bool"), ("launch.xess_upgrade", "XeSS upgrade", "bool"), ("launch.optiscaler", "OptiScaler", "bool"), ("launch.prefix", "Wine prefix", "path")],
     "wine": [("launch.esync", "Esync", "bool"), ("launch.fsync", "Fsync", "bool"), ("launch.prefix", "Wine prefix", "path")],
 }
-COMMON_LAUNCH_ROWS = [("launch.mangohud", "MangoHud", "bool"), ("launch.wrapper", "Wrapper command", "string"), ("launch.args", "Arguments", "string"), ("launch.working_dir", "Working directory", "path")]
+COMMON_LAUNCH_ROWS = [("launch.mangohud", "MangoHud", "bool"), ("launch.fps_limit", "Frame rate limit", "string"), ("launch.wrapper", "Wrapper command", "string"), ("launch.args", "Arguments", "string"), ("launch.working_dir", "Working directory", "path")]
 
 
 class GameSettingsForm(RowsForm):
@@ -204,10 +218,17 @@ class GameSettingsForm(RowsForm):
         listed = {key: (kind, choices, values) for key, _, kind, choices, values in gamescope_rows(mode)}
         for section, key, label, kind in launch + gamescope + CORE_ROWS:
             value = _dig(game, key)
+            if key == "launch.fps_limit":
+                if not groups or groups[-1]["title"] != section:
+                    groups.append(_group(section, [], caps=True))
+                groups[-1]["rows"].append(len(rows))
+                rows.append(fps_limit_row(section, value or effective.get("fps_limit"), mode, inherited=value in (None, ""),
+                                          gamescope=bool(effective.get("gamescope", True)), gamescope_refresh=effective.get("gamescope_refresh")))
+                continue
             if key in listed:
                 # A field left empty takes the global one, `effective` says which; the choices carry the screen.
                 own = value
-                if own in (None, "") or (key.endswith("fps_limit") and own == 0):
+                if own in (None, ""):
                     value = effective.get(key.split(".", 1)[1])
                 _, choices, values = listed[key]
                 if not groups or groups[-1]["title"] != section:

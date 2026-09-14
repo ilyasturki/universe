@@ -104,8 +104,8 @@ def test_launch_form(api, fake):
     assert form.screen == "DP-1 2560×1440 @ 144 Hz"
     assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups] == [
         ("Gamescope", ["launch.gamescope", "launch.gamescope_resolution", "launch.gamescope_refresh", "launch.gamescope_scaler", "launch.gamescope_filter",
-                       "launch.gamescope_sharpness", "launch.gamescope_fps_limit", "launch.gamescope_adaptive_sync", "launch.gamescope_args"]),
-        ("Overlay and cursor", ["launch.mangohud", "desktop.hide_cursor"]),
+                       "launch.gamescope_sharpness", "launch.gamescope_adaptive_sync", "launch.gamescope_args"]),
+        ("Overlay and cursor", ["launch.mangohud", "launch.fps_limit", "desktop.hide_cursor"]),
         ("Proton", ["launch.proton", "launch.esync", "launch.fsync", "launch.ntsync", "launch.wayland", "launch.hdr", "launch.dlss_upgrade",
                     "launch.fsr4_upgrade", "launch.xess_upgrade", "launch.optiscaler"]),
     ]
@@ -118,7 +118,9 @@ def test_launch_form(api, fake):
     assert rows["launch.gamescope_scaler"]["type"] == "enum" and rows["launch.gamescope_scaler"]["value"] == "default"
     assert rows["launch.gamescope_scaler"]["choices"] == ["default", "auto", "integer", "fit", "fill", "stretch"]
     assert rows["launch.gamescope_scaler"]["choiceValues"] == ["", "auto", "integer", "fit", "fill", "stretch"]
-    assert rows["launch.gamescope_sharpness"]["value"] == "default" and rows["launch.gamescope_fps_limit"]["value"] == "none"
+    assert rows["launch.gamescope_sharpness"]["value"] == "default"
+    assert rows["launch.fps_limit"]["value"] == "auto" and rows["launch.fps_limit"]["display"] == "auto · 144", "auto shows the rate it stands for"
+    assert rows["launch.fps_limit"]["choices"] == ["auto", "none", "144", "120", "100", "90", "75", "60", "50", "48", "40", "30"]
     assert rows["launch.gamescope_adaptive_sync"]["value"] is False and rows["launch.gamescope_args"]["value"] == ""
     assert rows["launch.proton"]["value"] == "proton-ge" and rows["launch.proton"]["choices"] == ["proton-cachyos", "proton-em", "proton-ge"]
     assert rows["desktop.hide_cursor"]["value"] is True and rows["launch.esync"]["value"] is True
@@ -136,6 +138,18 @@ def test_launch_form(api, fake):
     index = next(i for i, r in enumerate(form.rows) if r["key"] == "launch.gamescope")
     form.toggle(index)
     assert fake.config()["launch"]["gamescope"] is False
+    index = next(i for i, r in enumerate(form.rows) if r["key"] == "launch.fps_limit")
+    assert form.setValue(index, "none") is True
+    assert fake.config()["launch"]["fps_limit"] == "none"
+    assert rows_by_key(form)["launch.fps_limit"]["display"] == "none"
+    assert form.setValue(index, "auto") is True
+    index = next(i for i, r in enumerate(form.rows) if r["key"] == "launch.gamescope")
+    form.toggle(index)
+    index = next(i for i, r in enumerate(form.rows) if r["key"] == "launch.gamescope_refresh")
+    assert form.setValue(index, "30") is True
+    assert rows_by_key(form)["launch.fps_limit"]["display"] == "auto · 30", "auto follows the gamescope rate the game sees"
+    form.toggle(next(i for i, r in enumerate(form.rows) if r["key"] == "launch.gamescope"))
+    assert rows_by_key(form)["launch.fps_limit"]["display"] == "auto · 144", "on the desktop the gamescope rate means nothing"
 
 
 def test_game_settings_gamescope_group(api, fake):
@@ -144,8 +158,12 @@ def test_game_settings_gamescope_group(api, fake):
     group = next(g for g in form.groups if g["title"] == "Gamescope")
     assert [form.rows[i]["key"] for i in group["rows"]] == [
         "launch.gamescope", "launch.gamescope_resolution", "launch.gamescope_refresh", "launch.gamescope_scaler", "launch.gamescope_filter",
-        "launch.gamescope_sharpness", "launch.gamescope_fps_limit", "launch.gamescope_adaptive_sync", "launch.gamescope_args"]
+        "launch.gamescope_sharpness", "launch.gamescope_adaptive_sync", "launch.gamescope_args"]
     rows = rows_by_key(form, "")
+    assert rows["launch.fps_limit"]["value"] == "auto" and rows["launch.fps_limit"]["inherited"] is True and rows["launch.fps_limit"]["display"] == "auto · 144"
+    launch = next(g for g in form.groups if g["title"] == "Launch")
+    keys = [form.rows[i]["key"] for i in launch["rows"]]
+    assert keys.index("launch.fps_limit") == keys.index("launch.mangohud") + 1
     assert rows["launch.gamescope_resolution"]["value"] == "auto" and rows["launch.gamescope_resolution"]["inherited"] is True
     assert rows["launch.gamescope_resolution"]["choices"][:2] == ["auto", "2560x1440"]
     assert rows["launch.gamescope_scaler"]["value"] == "default" and rows["launch.gamescope_scaler"]["inherited"] is True

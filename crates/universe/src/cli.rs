@@ -679,6 +679,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             let on: Vec<&str> = ["wayland", "hdr", "dlss_upgrade", "fsr4_upgrade", "xess_upgrade", "optiscaler"].into_iter().filter(|k| g["effective"][k].as_bool() == Some(true)).collect();
             println!("  switches   {}{}", if on.is_empty() { "no switches on".to_string() } else { on.join(" ") }, if s(&g["launch"], "wrapper").is_empty() { String::new() } else { format!(" · wrapper {}", s(&g["launch"], "wrapper")) });
             println!("  gamescope  {} {}", g["effective"]["gamescope"], s(&g["effective"], "gamescope_args"));
+            println!("  fps limit  {}", s(&g["effective"], "fps_limit"));
             println!("  env        {}", g["effective"]["env"]);
             println!("  hours      {}  plays {}  last {}", hours(&g), g["stats"]["play_count"], when(&s(&g["stats"], "last_played"), &loc));
             println!("  media      {}", g["media"]);
@@ -796,7 +797,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             for p in pairs {
                 let (k, v) = p.split_once('=').ok_or_else(|| anyhow::anyhow!("expected key=value, got {p}"))?;
                 let k = match k {
-                    "runner" | "runner_exe" | "proton" | "exe" | "prefix" | "args" | "working_dir" | "esync" | "fsync" | "ntsync" | "wayland" | "hdr" | "dlss_upgrade" | "fsr4_upgrade" | "xess_upgrade" | "optiscaler" | "mangohud" | "gamescope" | "gamescope_args" | "gamescope_resolution" | "gamescope_refresh" | "gamescope_scaler" | "gamescope_filter" | "gamescope_sharpness" | "gamescope_fps_limit" | "gamescope_adaptive_sync" | "umu_id" | "store" | "wrapper" | "pre_command" | "post_command" | "arch" => format!("launch.{k}"),
+                    "runner" | "runner_exe" | "proton" | "exe" | "prefix" | "args" | "working_dir" | "esync" | "fsync" | "ntsync" | "wayland" | "hdr" | "dlss_upgrade" | "fsr4_upgrade" | "xess_upgrade" | "optiscaler" | "mangohud" | "gamescope" | "gamescope_args" | "gamescope_resolution" | "gamescope_refresh" | "gamescope_scaler" | "gamescope_filter" | "gamescope_sharpness" | "gamescope_adaptive_sync" | "fps_limit" | "umu_id" | "store" | "wrapper" | "pre_command" | "post_command" | "arch" => format!("launch.{k}"),
                     "hide_cursor" => "desktop.hide_cursor".into(),
                     _ if k.starts_with("options.") => format!("launch.{k}"),
                     _ => k.to_string(),
@@ -1326,7 +1327,7 @@ fn complete(what: &str) -> anyhow::Result<()> {
 }
 
 const GAME_KEYS: [&str; 42] = [
-    "runner=", "runner_exe=", "exe=", "proton=", "prefix=", "args=", "working_dir=", "esync=", "fsync=", "ntsync=", "wayland=", "hdr=", "dlss_upgrade=", "fsr4_upgrade=", "xess_upgrade=", "optiscaler=", "mangohud=", "gamescope=", "gamescope_args=", "gamescope_resolution=", "gamescope_refresh=", "gamescope_scaler=", "gamescope_filter=", "gamescope_sharpness=", "gamescope_fps_limit=", "gamescope_adaptive_sync=", "umu_id=", "store=", "wrapper=", "pre_command=", "post_command=", "arch=", "hide_cursor=",
+    "runner=", "runner_exe=", "exe=", "proton=", "prefix=", "args=", "working_dir=", "esync=", "fsync=", "ntsync=", "wayland=", "hdr=", "dlss_upgrade=", "fsr4_upgrade=", "xess_upgrade=", "optiscaler=", "mangohud=", "gamescope=", "gamescope_args=", "gamescope_resolution=", "gamescope_refresh=", "gamescope_scaler=", "gamescope_filter=", "gamescope_sharpness=", "gamescope_adaptive_sync=", "fps_limit=", "umu_id=", "store=", "wrapper=", "pre_command=", "post_command=", "arch=", "hide_cursor=",
     "hidden=", "favorite=", "tags=", "sort_title=", "platform=", "metadata.sgdb_id=", "capture.cursor=", "launch.env.", "options.",
 ];
 
@@ -1375,7 +1376,7 @@ const POSITIONALS: &[(&str, usize, &str)] = &[
 ];
 
 const CONFIG_KEYS: [&str; 38] = [
-    "paths.games_root", "paths.prefixes_root", "paths.recordings_root", "paths.journal_root", "paths.overrides", "launch.proton", "launch.esync", "launch.fsync", "launch.ntsync", "launch.wayland", "launch.hdr", "launch.dlss_upgrade", "launch.fsr4_upgrade", "launch.xess_upgrade", "launch.optiscaler", "launch.mangohud", "launch.gamescope", "launch.gamescope_args", "launch.gamescope_bin", "launch.gamescope_resolution", "launch.gamescope_refresh", "launch.gamescope_scaler", "launch.gamescope_filter", "launch.gamescope_sharpness", "launch.gamescope_fps_limit", "launch.gamescope_adaptive_sync", "runners.",
+    "paths.games_root", "paths.prefixes_root", "paths.recordings_root", "paths.journal_root", "paths.overrides", "launch.proton", "launch.esync", "launch.fsync", "launch.ntsync", "launch.wayland", "launch.hdr", "launch.dlss_upgrade", "launch.fsr4_upgrade", "launch.xess_upgrade", "launch.optiscaler", "launch.mangohud", "launch.gamescope", "launch.gamescope_args", "launch.gamescope_bin", "launch.gamescope_resolution", "launch.gamescope_refresh", "launch.gamescope_scaler", "launch.gamescope_filter", "launch.gamescope_sharpness", "launch.gamescope_adaptive_sync", "launch.fps_limit", "runners.",
     "desktop.profile", "desktop.hide_cursor", "desktop.cursor_extension", "keys.sgdb", "keys.sgdb_file", "keys.rawg", "keys.rawg_file",
     "controller.enabled", "controller.hold_ms", "controller.volume_step", "controller.mangohud_toggle",
 ];

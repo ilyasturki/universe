@@ -324,8 +324,8 @@ pub fn convert(p: &PgaGame, lutris_dir: &Path, runners_dir: &Path, global_env: &
             parked.insert("prefix_command".into(), toml::Value::String(pc));
         }
         lift_toggles(&mut g.launch);
-        if let Some(fps) = yaml_str(&yml, &["system", "fps_limit"]) {
-            parked.insert("fps_limit".into(), toml::Value::String(fps));
+        if let Some(fps) = yaml_str(&yml, &["system", "fps_limit"]).filter(|f| f.parse::<u32>().is_ok_and(|n| n > 0)) {
+            g.launch.fps_limit = fps;
         }
         let exe_dir = g.exe_path().parent().map(|p| p.to_path_buf()).unwrap_or_default();
         if let Some(m) = read_gog_manifest(&exe_dir) {
