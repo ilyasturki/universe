@@ -102,7 +102,7 @@ def test_a_launch_holds_the_poster_until_the_window_is_shown(api, fake):
     fake.sessionShown.connect(lambda sid, ok: shown.append(ok))
     QMetaObject.invokeMethod(root, "launchGame", Q_ARG("QVariant", api.allGames.byId("control")))
     assert overlay.property("running") is True and root.property("launching") is True
-    pump(600 + 450 + 300 + 120 + 100)
+    pump(600 + 450 + 100)
     assert overlay.property("waiting") is True and fake.currentSession["id"] == "control"
     pump(400 + 100)
     assert shown == [True]

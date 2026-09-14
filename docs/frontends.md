@@ -116,12 +116,12 @@ raises or hides itself — Mutter owns stacking and focus on Wayland — it time
 window and asks the shell extension to focus it.
 
 `launchGame` raises `ui/LaunchOverlay.qml` over the page: the poster (`ui/LaunchFrame.qml`) fades
-in over `Theme.durLaunch` as the page fades out, holds 450 ms, dips its art to plain ground over
-300 ms and calls `launch()`. The ground then holds (`waiting`) until `sessionShown` says the
-game's window is up and focused — the compositor's animation between the two is black on black —
-and the poster fades out under the game. `sessionShown` with `ok` false (no GNOME, no extension)
-holds 1500 ms instead; a session that ends before its window, or `launchFailed`, ends the poster
-at once (a toast for the failure). Every key is swallowed while it runs.
+in over `Theme.durLaunch` as the page fades out, holds 450 ms and calls `launch()`. The poster —
+art, logo and title — then holds (`waiting`) until `sessionShown` says the game's window is up and
+focused: gamescope's window maps over it, black until the game draws (the compositor animates that
+black over the art), and the poster fades out under it. `sessionShown` with `ok` false (no GNOME,
+no extension) holds 1500 ms instead; a session that ends before its window, or `launchFailed`,
+ends the poster at once (a toast for the failure). Every key is swallowed while it runs.
 
 From there the launcher is home again, with the game pinned first on the rail (`RecentGames.
 playingId`, played before or not) under a PLAYING mark, its hero pill reading "Resume", and the

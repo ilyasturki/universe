@@ -2,9 +2,9 @@ import QtQuick
 import "../core"
 import "../sound"
 
-// The launch poster. The page rises into it, the art dips to ground for the handover, and the
-// ground holds until the game's window is up and focused; the poster then leaves under it, and
-// the launcher is home again with the game pinned first, ready for when the desktop hands back.
+// The launch poster. The page rises into it, and the poster holds — art, logo and title — until
+// the game's window is up and focused; it then leaves under it, and the launcher is home again
+// with the game pinned first, ready for when the desktop hands back.
 FocusScope {
     id: overlay
 
@@ -14,11 +14,10 @@ FocusScope {
     // A launch is in progress: from the first frame of the poster to its last.
     readonly property bool running: sequence.running || waiting || settle.running || exit.running
     readonly property int holdMs: 450
-    readonly property int dipMs: 300
-    // Nobody could tell when the window came up (no shell extension): the ground holds this long.
+    // Nobody could tell when the window came up (no shell extension): the poster holds this long.
     readonly property int settleMs: 1500
 
-    // launch() was called; the poster sits on ground until the window is on screen.
+    // launch() was called; the poster holds until the window is on screen.
     property bool waiting: false
     property string launchedSession: ""
 
@@ -41,9 +40,7 @@ FocusScope {
         show(targetGame);
         launchedSession = "";
         frame.opacity = 0.0;
-        frame.artOpacity = 1.0;
         frame.artScale = 1.06;
-        frame.dim = 0.0;
         sequence.start();
         forceActiveFocus();
     }
@@ -53,8 +50,6 @@ FocusScope {
         waiting = false;
         launchedSession = "";
         frame.opacity = 0.0;
-        frame.artOpacity = 1.0;
-        frame.dim = 0.0;
         frame.heroSource = "";
         frame.boxSource = "";
         frame.logoSource = "";
@@ -139,20 +134,9 @@ FocusScope {
             }
         }
 
+        // The poster is on screen before the handover starts; gamescope's window then maps
+        // over it, black until the game draws.
         PauseAnimation { duration: overlay.holdMs }
-
-        // Down to plain ground before the handover: gamescope's window is black until the game
-        // draws, so whatever the compositor animates in between is black on black.
-        NumberAnimation {
-            target: frame
-            property: "artOpacity"
-            to: 0.0
-            duration: overlay.dipMs
-            easing.type: Easing.InOutQuad
-        }
-
-        // The ground frame must be on screen before the handover starts.
-        PauseAnimation { duration: 120 }
 
         ScriptAction {
             script: {

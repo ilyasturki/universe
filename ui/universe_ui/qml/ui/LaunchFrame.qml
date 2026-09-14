@@ -2,9 +2,8 @@ import QtQuick
 import Qt5Compat.GraphicalEffects
 import "../core"
 
-// The launch poster. The theme rises into it and fades its art down to ground
-// before launch(); gamescope's window then maps black over the ground and the
-// game draws into it, so nothing the compositor animates in between can show.
+// The launch poster. The theme rises into it and holds it through launch();
+// gamescope's window then maps over it, black until the game draws into it.
 Item {
     id: frame
 
@@ -13,10 +12,7 @@ Item {
     property url logoSource
     property string title
 
-    property alias artOpacity: art.opacity
     property alias artScale: art.scale
-    // Ground over the art, under the logo.
-    property real dim: 0.0
     readonly property int heroStatus: hero.status
 
     readonly property bool heroMissing: String(heroSource) === "" || hero.status === Image.Error
@@ -177,12 +173,6 @@ Item {
                 GradientStop { position: 0.55; color: Qt.rgba(0.055, 0.059, 0.075, 0.00) }
                 GradientStop { position: 1.00; color: Qt.rgba(0.055, 0.059, 0.075, 0.62) }
             }
-        }
-
-        Rectangle {
-            anchors.fill: parent
-            color: Theme.ground
-            opacity: frame.dim
         }
 
         Image {
