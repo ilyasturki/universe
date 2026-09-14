@@ -118,7 +118,7 @@ FocusScope {
     function artOf(g) {
         var game = g.game_id ? api.allGames.byId(g.game_id) : null;
         if (game) {
-            var slots = [game.assets.square, game.assets.tile, game.assets.boxFront];
+            var slots = [game.assets.square, game.assets.boxFront];
             for (var i = 0; i < slots.length; i++)
                 if (String(slots[i]) !== "")
                     return slots[i];

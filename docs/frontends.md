@@ -46,7 +46,7 @@ One context property, `api`:
 A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `playTime`,
 `playCount`, `lastPlayed`, `releaseYear`, `developerList`, `publisherList`, `genreList`, `players`,
 `description`, `summary`, `source`, `platform`, `runner`, `runnerName`, `tags`, `extra`, `raw`,
-`collections`, and `assets` (`boxFront`, `square`, `tile`, `background`, `logo`, `screenshotList`), plus
+`collections`, and `assets` (`boxFront`, `square`, `banner`, `background`, `logo`, `screenshotList`; `tile` is `square` under Pegasus's name), plus
 `launch()`.
 
 `api.screens.recordings` samples 16 frames per recording with ffmpeg into
@@ -252,9 +252,10 @@ to the platform.
 `api.screens.artwork` is one game's artwork page (Reprise: the Artwork entry of a game's menu, or a
 tile of the overview). `load(id)` reads `Media1.Status` into `slots` — one row per slot with `url`
 (what shows), `defaultUrl` and `overrideUrl` (the two layers, see `docs/api.md`), `kind`
-(`picked`, `fetched`, `guessed`, `missing`) and `kindLabel`, `originLabel` and `defaultOriginLabel`,
-`hasOverride`, `hasDefault`, `aspect` — plus `screenshots` (URLs, to see) and `shots` (their count
-and origin). `loadCandidates(slot)` fetches `Media1.Candidates` off the UI thread into `candidates`
+(`picked`, `default`, `missing`) and `kindLabel`, `originLabel` and `defaultOriginLabel`,
+`hasOverride`, `hasDefault`, `aspect`, `use` (where the themes show the slot) — and `entry`, the
+SteamGridDB entry the candidates come from ("Name (year)"), which heads the candidates so a wrong
+match is seen. `loadCandidates(slot)` fetches `Media1.Candidates` off the UI thread into `candidates`
 (`url` is the provider's, `thumb` what the grid shows, `votes`), `more` and `candidatesBusy`;
 `moreCandidates()` takes the next page. `apply(slot, url)` runs `Media1.SetUrl` on a thread and
 emits `mediaChanged` for the game once the pick landed, `removeOverride(slot)` runs `Media1.Unset`;
@@ -264,9 +265,10 @@ the candidates. Local URLs carry the file's mtime as a query (`models.file_url`)
 replaces a file at the same path repaints instead of showing the image cache's copy.
 
 `api.screens.artworkOverview` is the Artwork section of the Settings tab (`ArtworkOverview.qml`, a
-column of its own next to the sidebar): `slot` and `filter` (`all`, `missing`, `picked`, `fetched`)
+column of its own next to the sidebar): `slot` and `filter` (`all`, `missing`, `picked`, `default`)
 pick what `tiles` holds (`id`, `title`, `url`, `kind`), `counts` says how many games stand in each
-state for the slot, `refreshAll()` fetches the missing art of every game. `load()` reads
+state for the slot, `slotUse` where the slot shows, `refreshAll()` fetches the missing art of every
+game (the section's X, a button top right). `load()` reads
 `Media1.Status` for the whole library on a thread; a `mediaChanged` or `libraryChanged` reloads it
 after a short debounce while the section is on screen.
 

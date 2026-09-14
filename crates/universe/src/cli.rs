@@ -254,7 +254,7 @@ pub enum Cmd {
     Generate { dir: std::path::PathBuf },
 }
 
-const MEDIA_SLOTS: [&str; 6] = ["box_front", "square", "tile", "background", "logo", "screenshot"];
+const MEDIA_SLOTS: [&str; 6] = ["box_front", "square", "banner", "background", "logo", "screenshot"];
 
 #[derive(Subcommand, Debug)]
 pub enum MediaCmd {
@@ -881,13 +881,16 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                         print_json(&list);
                         return Ok(());
                     }
-                    let mut t = table(&["Game", "Slot", "Kind", "Origin", "Shows", "Default"]);
+                    let mut t = table(&["Game", "Entry", "Slot", "Kind", "Origin", "Shows", "Default"]);
                     for g in list.as_array().cloned().unwrap_or_default() {
+                        let entry = match (s(&g, "sgdb_name"), g["sgdb_id"].as_u64().unwrap_or(0)) {
+                            (name, id) if !name.is_empty() => format!("{name} ({id})"),
+                            (_, 0) => String::new(),
+                            (_, id) => id.to_string(),
+                        };
                         for slot in g["slots"].as_array().cloned().unwrap_or_default() {
-                            t.add_row(vec![s(&g, "id"), s(&slot, "slot"), s(&slot, "kind"), s(&slot, "origin"), s(&slot, "path"), if s(&slot, "override").is_empty() { String::new() } else { s(&slot, "default") }]);
+                            t.add_row(vec![s(&g, "id"), entry.clone(), s(&slot, "slot"), s(&slot, "kind"), s(&slot, "origin"), s(&slot, "path"), if s(&slot, "override").is_empty() { String::new() } else { s(&slot, "default") }]);
                         }
-                        let shots = &g["screenshots"];
-                        t.add_row(vec![s(&g, "id"), "screenshots".into(), s(shots, "kind"), s(shots, "origin"), format!("{} ({} picked)", shots["count"], shots["override_count"]), String::new()]);
                     }
                     println!("{t}");
                 }
@@ -1327,10 +1330,10 @@ const POSITIONALS: &[(&str, usize, &str)] = &[
     ("recordings", 1, "games"),
     ("update", 1, "games"),
     ("media", 1, "games all"),
-    ("media set", 1, "box_front square tile background logo screenshot"),
+    ("media set", 1, "box_front square banner background logo screenshot"),
     ("media set", 2, "FILES"),
-    ("media unset", 1, "box_front square tile background logo screenshot"),
-    ("media candidates", 1, "box_front square tile background logo screenshot"),
+    ("media unset", 1, "box_front square banner background logo screenshot"),
+    ("media candidates", 1, "box_front square banner background logo screenshot"),
     ("media pin", 1, "sgdb rawg steam"),
     ("module enable", 1, "modules"),
     ("module disable", 1, "modules"),

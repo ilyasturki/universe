@@ -5,7 +5,7 @@ import "../ui"
 
 // Settings › Artwork: one slot across the whole library. A row of slot chips, a row of filters
 // with their counts, then every game's art for that slot as a grid; A on a tile opens the game's
-// artwork page on that slot. Fills the Settings tab's main column.
+// artwork page on that slot, X fetches every game's missing art. Fills the Settings tab's main column.
 FocusScope {
     id: view
 
@@ -25,8 +25,7 @@ FocusScope {
 
     readonly property var slotNames: store.slotNames
     readonly property var filterNames: store.filterNames
-    // The action chip past the filters.
-    readonly property int fetchIndex: filterNames.length
+    readonly property bool fetching: store.job !== null && store.job !== undefined && (store.job.ok === null || store.job.ok === undefined)
     readonly property int columns: store.slot === "box_front" ? 6 : store.slot === "square" ? 5 : store.slot === "background" ? 3 : 4
     readonly property real cellWidth: Math.floor(width / columns)
     readonly property real artHeight: Math.round((cellWidth - Theme.dp(16)) / store.aspect)
@@ -35,11 +34,11 @@ FocusScope {
         var out = [];
         if (zone === "grid")
             out.push({ glyph: "A", label: "Open" });
-        else if (zone === "filters" && filterIndex === fetchIndex)
-            out.push({ glyph: "A", label: "Fetch missing art" });
         else
             out.push({ glyph: "A", label: "Show" });
         out.push({ glyph: "dpad", label: "Navigate" });
+        if (!fetching)
+            out.push({ glyph: "X", label: "Fetch missing art" });
         out.push({ glyph: "B", label: "Sections" });
         return out;
     }
@@ -84,9 +83,6 @@ FocusScope {
                 return;
             }
             view.openRequested(game, store.slot);
-        } else if (zone === "filters" && filterIndex === fetchIndex) {
-            Sound.enter();
-            store.refreshAll();
         } else if (zone === "filters") {
             Sound.enter();
             chooseFilter(filterIndex);
@@ -106,15 +102,13 @@ FocusScope {
             Sound.tick();
             chooseSlot(n);
         } else {
-            var m = Math.max(0, Math.min(fetchIndex, filterIndex + d));
+            var m = Math.max(0, Math.min(filterNames.length - 1, filterIndex + d));
             if (m === filterIndex) {
                 Sound.edge();
                 return;
             }
             Sound.tick();
-            filterIndex = m;
-            if (m < fetchIndex)
-                chooseFilter(m);
+            chooseFilter(m);
         }
     }
 
@@ -133,6 +127,13 @@ FocusScope {
         } else if (api.keys.isCancel(event)) {
             Sound.cancel();
             view.escapedLeft();
+        } else if (api.keys.isDetails(event)) {
+            if (fetching) {
+                Sound.edge();
+            } else {
+                Sound.enter();
+                store.refreshAll();
+            }
         } else if (event.key === Qt.Key_Up) {
             if (zone === "grid") {
                 if (gridIndex < columns) {
@@ -195,6 +196,39 @@ FocusScope {
         }
     }
 
+    // Where the slot shows, so "square" and "banner" mean something.
+    Text {
+        anchors.left: slotChips.right
+        anchors.leftMargin: Theme.dp(24)
+        anchors.right: fetchButton.left
+        anchors.rightMargin: Theme.dp(24)
+        anchors.verticalCenter: slotChips.verticalCenter
+        text: view.store.slotUse
+        color: Theme.textMuted
+        font.family: Theme.sans
+        font.pixelSize: Theme.dp(19)
+        elide: Text.ElideRight
+    }
+
+    // The one action of the section, on X from anywhere in it.
+    Row {
+        id: fetchButton
+        anchors.right: parent.right
+        anchors.verticalCenter: slotChips.verticalCenter
+        spacing: Theme.dp(10)
+        opacity: view.fetching ? 0.5 : 1.0
+
+        ButtonGlyph {
+            glyph: "X"
+            anchors.verticalCenter: parent.verticalCenter
+        }
+
+        Chip {
+            label: view.fetching ? "Fetching…" : "Fetch missing art"
+            icon: "download"
+        }
+    }
+
     Row {
         id: filterChips
         anchors.top: slotChips.bottom
@@ -210,12 +244,6 @@ FocusScope {
                 active: index === view.filterIndex && view.store.filter === modelData.filter
                 focused: view.zone === "filters" && index === view.filterIndex && view.activeFocus
             }
-        }
-
-        Chip {
-            label: "Fetch missing art"
-            icon: "download"
-            focused: view.zone === "filters" && view.filterIndex === view.fetchIndex && view.activeFocus
         }
     }
 
@@ -332,7 +360,7 @@ FocusScope {
                         width: Theme.dp(12)
                         height: width
                         radius: width / 2
-                        color: modelData.kind === "picked" ? "#5fd48a" : modelData.kind === "fetched" ? "#7fb2ff" : modelData.kind === "guessed" ? "#e0b45a" : "#e0655a"
+                        color: modelData.kind === "picked" ? "#5fd48a" : modelData.kind === "default" ? "#7fb2ff" : "#e0655a"
                         border.width: 1
                         border.color: Qt.rgba(0, 0, 0, 0.5)
                     }

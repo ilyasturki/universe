@@ -14,7 +14,7 @@ const STEAM_APPDETAILS: &str = "https://store.steampowered.com/api/appdetails";
 const SGDB_PLAN: [(&str, &str, Option<&str>); 5] = [
     ("box_front", "grids", Some("600x900")),
     ("square", "grids", Some("1024x1024,512x512")),
-    ("tile", "grids", Some("920x430,460x215")),
+    ("banner", "grids", Some("920x430,460x215")),
     ("background", "heroes", None),
     ("logo", "logos", None),
 ];
@@ -30,12 +30,14 @@ pub struct Candidate {
     pub slot: String,
 }
 
-/// One page of a slot's candidates; `more` says whether the provider has another page.
+/// One page of a slot's candidates; `more` says whether the provider has another page,
+/// `entry` which of the provider's games they belong to.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CandidatePage {
     pub items: Vec<Candidate>,
     pub page: u32,
     pub more: bool,
+    pub entry: Option<Hit>,
 }
 
 /// A provider's game, from a search by name: what a pin points at.
@@ -61,31 +63,27 @@ pub struct SlotStatus {
     pub origin: String,
     /// The provider that wrote the default, whether or not an override sits over it.
     pub default_origin: String,
-    /// picked | fetched | guessed | missing
+    /// picked | default | missing
     pub kind: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ShotsStatus {
-    pub count: usize,
-    pub override_count: usize,
-    pub origin: String,
-    pub kind: String,
-}
-
+/// A game's art and the SteamGridDB entry it is read from (`sgdb_name` empty until known).
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct MediaStatus {
     pub id: String,
     pub title: String,
     pub sgdb_id: u64,
+    pub sgdb_name: String,
+    pub sgdb_year: u32,
     pub slots: Vec<SlotStatus>,
-    pub screenshots: ShotsStatus,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 struct SyncCache {
     sgdb_id: u64,
+    sgdb_name: String,
+    sgdb_year: u32,
     rawg_id: u64,
     steam_appid: u64,
     rawg_miss: bool,
@@ -160,18 +158,40 @@ pub fn sgdb_hits(key: &str, title: &str) -> crate::Result<Vec<Hit>> {
         .collect())
 }
 
-/// SteamGridDB search: exact-name twins are disambiguated by release year (pegasus-sync rule).
-pub fn sgdb_search(key: &str, title: &str, year: u32) -> crate::Result<Option<u64>> {
+/// SteamGridDB search: the hit named like the title wins over autocomplete's first ("Donkey Kong
+/// Country Returns HD" over "…Returns"); exact-name twins are told apart by release year.
+pub fn sgdb_match(key: &str, title: &str, year: u32) -> crate::Result<Option<Hit>> {
     let hits = sgdb_hits(key, title)?;
-    let Some(head) = hits.first() else { return Ok(None) };
+    let want = name_key(title);
+    let same: Vec<&Hit> = hits.iter().filter(|h| name_key(&h.name) == want).collect();
+    let pool: Vec<&Hit> = if same.is_empty() { hits.iter().collect() } else { same };
+    let Some(head) = pool.first() else { return Ok(None) };
     let name = head.name.to_lowercase();
-    let twins: Vec<&Hit> = hits.iter().filter(|h| h.name.to_lowercase() == name).collect();
+    let twins: Vec<&&Hit> = pool.iter().filter(|h| h.name.to_lowercase() == name).collect();
     if year > 0 && twins.len() > 1 {
         if let Some(h) = twins.iter().find(|h| h.year == year) {
-            return Ok(Some(h.id));
+            return Ok(Some((**h).clone()));
         }
     }
-    Ok(Some(head.id))
+    Ok(Some((*head).clone()))
+}
+
+pub fn sgdb_search(key: &str, title: &str, year: u32) -> crate::Result<Option<u64>> {
+    Ok(sgdb_match(key, title, year)?.map(|h| h.id))
+}
+
+/// One SteamGridDB game by id, for the name of a pinned entry.
+fn sgdb_game(key: &str, id: u64) -> Option<Hit> {
+    let v = get_json(&format!("{SGDB}/games/id/{id}"), Some(key)).ok()?;
+    let d = &v["data"];
+    Some(Hit {
+        provider: "sgdb".into(),
+        id: d["id"].as_u64()?,
+        name: d["name"].as_str().unwrap_or("").to_string(),
+        year: d["release_date"].as_i64().map(epoch_year).unwrap_or(0),
+        verified: d["verified"].as_bool().unwrap_or(false),
+        current: true,
+    })
 }
 
 fn sgdb_assets(key: &str, endpoint: &str, game_id: u64, dims: Option<&str>, page: u32) -> crate::Result<(Vec<Candidate>, bool)> {
@@ -309,6 +329,55 @@ fn override_dirs(config: &Config, game: &Game) -> Vec<PathBuf> {
     dirs
 }
 
+/// The SteamGridDB entry a game is pinned to: `metadata.sgdb_id`, else pegasus-sync's
+/// `<overrides>/<id>/sgdb_id` file. Zero when unpinned.
+fn pinned_sgdb_id(config: &Config, game: &Game) -> u64 {
+    if game.metadata.sgdb_id > 0 {
+        return game.metadata.sgdb_id;
+    }
+    override_dirs(config, game).iter().find_map(|d| std::fs::read_to_string(d.join("sgdb_id")).ok()?.trim().parse().ok()).unwrap_or(0)
+}
+
+/// The entry candidates come from: the pin, else the cached or searched match; remembers the
+/// match and its name. Zero when SteamGridDB has nothing under the title.
+fn resolve_sgdb(config: &Config, game: &Game, cache: &mut SyncCache, key: &str) -> crate::Result<u64> {
+    let pinned = pinned_sgdb_id(config, game);
+    let mut found = None;
+    let id = if pinned > 0 {
+        pinned
+    } else if cache.sgdb_id > 0 {
+        cache.sgdb_id
+    } else if cache.sgdb_miss {
+        0
+    } else {
+        match sgdb_match(key, &game.title, game.release_year)? {
+            Some(h) => {
+                let id = h.id;
+                found = Some(h);
+                id
+            }
+            None => {
+                cache.sgdb_miss = true;
+                0
+            }
+        }
+    };
+    if id == 0 {
+        return Ok(0);
+    }
+    if cache.sgdb_id != id {
+        cache.sgdb_name.clear();
+        cache.sgdb_year = 0;
+    }
+    cache.sgdb_id = id;
+    cache.sgdb_miss = false;
+    if let Some(h) = found.or_else(|| if cache.sgdb_name.is_empty() { sgdb_game(key, id) } else { None }) {
+        cache.sgdb_name = h.name;
+        cache.sgdb_year = h.year;
+    }
+    Ok(id)
+}
+
 /// Fills missing slots and metadata from SteamGridDB, RAWG and Steam into media/; an override
 /// over a slot does not stop its default from being fetched. Pins in game.toml win. Returns true
 /// if anything changed.
@@ -320,15 +389,8 @@ pub fn refresh(config: &Config, game: &Game, force: bool) -> crate::Result<bool>
     let rawg_key = config.api_key("rawg");
 
     if let Some(key) = &sgdb_key {
-        let mut sgdb_id = g.metadata.sgdb_id;
-        if sgdb_id == 0 && !cache.sgdb_miss {
-            sgdb_id = if cache.sgdb_id > 0 { cache.sgdb_id } else { sgdb_search(key, &g.title, g.release_year)?.unwrap_or(0) };
-            if sgdb_id == 0 {
-                cache.sgdb_miss = true;
-            }
-        }
+        let sgdb_id = resolve_sgdb(config, &g, &mut cache, key)?;
         if sgdb_id > 0 {
-            cache.sgdb_id = sgdb_id;
             let (have, _) = scan_media_dir(&g.media_dir());
             for (slot, endpoint, dims) in SGDB_PLAN {
                 if !force && have.iter().any(|(s, _)| s == slot) {
@@ -401,45 +463,39 @@ pub fn refresh(config: &Config, game: &Game, force: bool) -> crate::Result<bool>
     Ok(changed)
 }
 
-fn resolved_sgdb_id(config: &Config, game: &Game, cache: &SyncCache) -> crate::Result<u64> {
-    if game.metadata.sgdb_id > 0 {
-        return Ok(game.metadata.sgdb_id);
-    }
-    if cache.sgdb_id > 0 {
-        return Ok(cache.sgdb_id);
-    }
-    let key = config.api_key("sgdb").ok_or_else(|| crate::Error::Unavailable("no SteamGridDB key".into()))?;
-    Ok(sgdb_search(&key, &game.title, game.release_year)?.unwrap_or(0))
+fn sgdb_key(config: &Config) -> crate::Result<String> {
+    config.api_key("sgdb").ok_or_else(|| crate::Error::Unavailable("no SteamGridDB key".into()))
 }
 
-/// One page of SteamGridDB's art for a slot, best first.
+/// One page of SteamGridDB's art for a slot, best first, with the entry it belongs to.
 pub fn candidates(config: &Config, game: &Game, slot: &str, page: u32) -> crate::Result<CandidatePage> {
-    let key = config.api_key("sgdb").ok_or_else(|| crate::Error::Unavailable("no SteamGridDB key".into()))?;
+    let key = sgdb_key(config)?;
     let Some(&(_, endpoint, dims)) = SGDB_PLAN.iter().find(|(s, _, _)| *s == slot) else {
         return Err(crate::Error::Invalid(format!("unknown slot {slot}")));
     };
     let mut cache = read_cache(game);
-    let id = resolved_sgdb_id(config, game, &cache)?;
-    if id == 0 {
-        return Ok(CandidatePage { items: vec![], page, more: false });
-    }
-    if cache.sgdb_id != id {
-        cache.sgdb_id = id;
-        cache.sgdb_miss = false;
+    let before = (cache.sgdb_id, cache.sgdb_name.clone(), cache.sgdb_miss);
+    let id = resolve_sgdb(config, game, &mut cache, &key)?;
+    if before != (cache.sgdb_id, cache.sgdb_name.clone(), cache.sgdb_miss) {
         let _ = write_cache(game, &cache);
+    }
+    if id == 0 {
+        return Ok(CandidatePage { items: vec![], page, more: false, entry: None });
     }
     let (mut items, more) = sgdb_assets(&key, endpoint, id, dims, page)?;
     for c in items.iter_mut() {
         c.slot = slot.into();
     }
-    Ok(CandidatePage { items, page, more })
+    let entry = Some(Hit { provider: "sgdb".into(), id, name: cache.sgdb_name.clone(), year: cache.sgdb_year, verified: false, current: true });
+    Ok(CandidatePage { items, page, more, entry })
 }
 
 /// SteamGridDB's games for a query (the title when empty), the pinned or resolved one marked.
 pub fn search(config: &Config, game: &Game, query: &str) -> crate::Result<Vec<Hit>> {
-    let key = config.api_key("sgdb").ok_or_else(|| crate::Error::Unavailable("no SteamGridDB key".into()))?;
+    let key = sgdb_key(config)?;
     let query = if query.trim().is_empty() { game.title.as_str() } else { query.trim() };
-    let current = if game.metadata.sgdb_id > 0 { game.metadata.sgdb_id } else { read_cache(game).sgdb_id };
+    let pinned = pinned_sgdb_id(config, game);
+    let current = if pinned > 0 { pinned } else { read_cache(game).sgdb_id };
     let mut hits = sgdb_hits(&key, query)?;
     for h in hits.iter_mut() {
         h.current = h.id == current;
@@ -520,19 +576,17 @@ pub fn unset(config: &Config, game: &Game, slot: &str) -> crate::Result<bool> {
 }
 
 /// Every slot of a game: what shows, what was fetched, what was picked, and where each came from.
+/// Offline: the entry's name is what a refresh or the candidates cached.
 pub fn status(config: &Config, game: &Game) -> MediaStatus {
     let cache = read_cache(game);
-    let (default, default_shots) = scan_media_dir(&game.media_dir());
+    let (default, _) = scan_media_dir(&game.media_dir());
     let mut picked: Vec<(String, String)> = Vec::new();
-    let mut picked_shots: Vec<String> = Vec::new();
     for dir in override_dirs(config, game) {
-        let (m, s) = scan_media_dir(&dir);
-        for (slot, path) in m {
+        for (slot, path) in scan_media_dir(&dir).0 {
             if !picked.iter().any(|(have, _)| *have == slot) {
                 picked.push((slot, path));
             }
         }
-        picked_shots.extend(s);
     }
     let slots = MEDIA_SLOTS
         .iter()
@@ -544,30 +598,22 @@ pub fn status(config: &Config, game: &Game) -> MediaStatus {
                 ("picked".to_string(), "picked")
             } else if default.is_empty() {
                 (String::new(), "missing")
-            } else if source.is_empty() {
-                (String::new(), "guessed")
             } else {
-                (source.clone(), "fetched")
+                (source.clone(), "default")
             };
             SlotStatus { slot: slot.to_string(), path: if over.is_empty() { default.clone() } else { over.clone() }, default, override_path: over, origin, default_origin: source, kind: kind.into() }
         })
         .collect();
-    let shots_source = cache.sources.get("screenshots").cloned().unwrap_or_default();
-    let (origin, kind) = if !picked_shots.is_empty() {
-        ("picked".to_string(), "picked")
-    } else if default_shots.is_empty() {
-        (String::new(), "missing")
-    } else if shots_source.is_empty() {
-        (String::new(), "guessed")
-    } else {
-        (shots_source, "fetched")
-    };
+    let pinned = pinned_sgdb_id(config, game);
+    let sgdb_id = if pinned > 0 { pinned } else { cache.sgdb_id };
+    let known = sgdb_id > 0 && cache.sgdb_id == sgdb_id;
     MediaStatus {
         id: game.id.clone(),
         title: game.title.clone(),
-        sgdb_id: if game.metadata.sgdb_id > 0 { game.metadata.sgdb_id } else { cache.sgdb_id },
+        sgdb_id,
+        sgdb_name: if known { cache.sgdb_name.clone() } else { String::new() },
+        sgdb_year: if known { cache.sgdb_year } else { 0 },
         slots,
-        screenshots: ShotsStatus { count: picked_shots.len() + default_shots.len(), override_count: picked_shots.len(), origin, kind: kind.into() },
     }
 }
 
@@ -613,10 +659,11 @@ mod tests {
 
         let st = status(&config, &game);
         let slot = |s: &str| st.slots.iter().find(|x| x.slot == s).unwrap().clone();
-        assert_eq!(slot("box_front").kind, "fetched");
+        assert_eq!(slot("box_front").kind, "default");
         assert_eq!(slot("box_front").origin, "pegasus");
-        assert_eq!(slot("logo").kind, "guessed");
-        assert_eq!(slot("tile").kind, "missing");
+        assert_eq!(slot("logo").kind, "default");
+        assert_eq!(slot("logo").origin, "");
+        assert_eq!(slot("banner").kind, "missing");
 
         let src = dir.path().join("pick.jpg");
         touch(&src);
@@ -641,9 +688,42 @@ mod tests {
         assert!(!unset(&config, &game, "box_front").unwrap());
         let st = status(&config, &game);
         let bf = st.slots.iter().find(|x| x.slot == "box_front").unwrap();
-        assert_eq!(bf.kind, "fetched");
+        assert_eq!(bf.kind, "default");
         assert!(bf.path.ends_with("boxFront.png"));
         assert!(game.media_dir().join("boxFront.png").exists());
+    }
+
+    // Pegasus's square is `tile`, its 920×430 banner `steam`; a pin file names the SteamGridDB entry.
+    #[test]
+    fn pegasus_stems_and_pin_file_are_read() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        let config = config_in(dir.path());
+        let game = game_in(dir.path(), "p");
+        touch(&game.media_dir().join("tile.jpg"));
+        touch(&dir.path().join("overrides/p-lutris/steam.png"));
+        touch(&dir.path().join("overrides/p-lutris/tile.png"));
+        std::fs::write(dir.path().join("overrides/p-lutris/sgdb_id"), "5332120\n").unwrap();
+
+        let st = status(&config, &game);
+        let slot = |s: &str| st.slots.iter().find(|x| x.slot == s).unwrap().clone();
+        assert_eq!(slot("square").kind, "picked");
+        assert!(slot("square").default.ends_with("tile.jpg"));
+        assert_eq!(slot("banner").kind, "picked");
+        assert!(slot("banner").path.ends_with("steam.png"));
+        assert_eq!(st.sgdb_id, 5332120);
+        assert_eq!(st.sgdb_name, "");
+
+        // A new pick under the core's stem replaces the Pegasus one; own stems win over aliases.
+        let src = dir.path().join("wide.png");
+        touch(&src);
+        set_slot(&config, &game, "banner", &src).unwrap();
+        assert!(!dir.path().join("overrides/p-lutris/steam.png").exists());
+        assert!(unset(&config, &game, "banner").unwrap());
+        assert_eq!(status(&config, &game).slots.iter().find(|x| x.slot == "banner").unwrap().kind, "missing");
+        touch(&game.media_dir().join("square.png"));
+        assert!(status(&config, &game).slots.iter().find(|x| x.slot == "square").unwrap().default.ends_with("square.png"));
+        assert!(set_slot(&config, &game, "cover", &src).is_err());
     }
 
     #[test]
@@ -656,11 +736,7 @@ mod tests {
         touch(&src);
         set_slot(&config, &game, "screenshot", &src).unwrap();
         assert!(dir.path().join("overrides/s/screenshots/mine.png").exists());
-        let st = status(&config, &game);
-        assert_eq!(st.screenshots.kind, "picked");
-        assert_eq!(st.screenshots.override_count, 1);
         assert!(unset(&config, &game, "screenshot").unwrap());
-        assert_eq!(status(&config, &game).screenshots.kind, "missing");
-        assert!(set_slot(&config, &game, "cover", &src).is_err());
+        assert!(!dir.path().join("overrides/s/screenshots").exists());
     }
 }

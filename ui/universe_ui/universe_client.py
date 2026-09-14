@@ -1086,21 +1086,29 @@ class FakeClient(UniverseClientBase):
     # -- Media1 ------------------------------------------------------------------------------
 
     def _Media1_Refresh(self, ident, force):
-        return self._start_job("Refreshing media", 5, on_done=lambda: self.mediaChanged.emit(ident))
+        ids = [ident] if ident else [g["id"] for g in self._data["games"] if not g.get("removed")]
+        return self._start_job("Refreshing media", 5, on_done=lambda: [self.mediaChanged.emit(i) for i in ids])
 
     # The fixture's two layers: `media` holds the painted defaults, `overrides` the picks over them.
     def _media_status(self, game):
         media = game.get("media") or {}
         overrides = game.get("overrides") or {}
         slots = []
-        for slot in ("box_front", "square", "tile", "background", "logo"):
+        for slot in ("box_front", "square", "banner", "background", "logo"):
             default, over = media.get(slot) or "", overrides.get(slot) or ""
-            kind = "picked" if over else "fetched" if default else "missing"
+            kind = "picked" if over else "default" if default else "missing"
             slots.append({"slot": slot, "path": over or default, "default": default, "override": over,
                           "origin": "picked" if over else "sgdb" if default else "", "default_origin": "sgdb" if default else "", "kind": kind})
-        shots = media.get("screenshots") or []
-        return {"id": game["id"], "title": game.get("title", game["id"]), "sgdb_id": int((game.get("metadata") or {}).get("sgdb_id") or 0),
-                "slots": slots, "screenshots": {"count": len(shots), "override_count": 0, "origin": "steam" if shots else "", "kind": "fetched" if shots else "missing"}}
+        entry = self._sgdb_entry(game)
+        return {"id": game["id"], "title": game.get("title", game["id"]), "sgdb_id": entry["id"], "sgdb_name": entry["name"], "sgdb_year": entry["year"], "slots": slots}
+
+    def _sgdb_entry(self, game):
+        title = game.get("title", game["id"])
+        pinned = int((game.get("metadata") or {}).get("sgdb_id") or 0)
+        base = 5000 + len(game["id"])
+        names = {base: (title, 2016), base + 1: (f"{title} Remastered", 2021), base + 2: (f"{title} II", 2019)}
+        name, year = names.get(pinned or base, (title, 2016))
+        return {"id": pinned or base, "name": name, "year": year}
 
     def _Media1_Status(self, ident):
         games = [self._game(ident)] if ident else [g for g in self._data["games"] if not g.get("removed")]
@@ -1130,16 +1138,19 @@ class FakeClient(UniverseClientBase):
     def _Media1_Candidates(self, ident, slot, page=0):
         from .fixtures.art import paint_candidates
 
-        items = [] if int(page) > 0 else paint_candidates(self._art_dir, ident, slot, self._game(ident).get("title", ident))
-        return json.dumps({"items": items, "page": int(page), "more": False})
+        game = self._game(ident)
+        items = [] if int(page) > 0 else paint_candidates(self._art_dir, ident, slot, game.get("title", ident))
+        entry = {"provider": "sgdb", "verified": True, "current": True, **self._sgdb_entry(game)}
+        return json.dumps({"items": items, "page": int(page), "more": False, "entry": entry})
 
     def _Media1_Search(self, ident, query):
         game = self._game(ident)
         title = game.get("title", ident)
-        current = int((game.get("metadata") or {}).get("sgdb_id") or 0) or 5000 + len(ident)
-        hits = [{"provider": "sgdb", "id": current, "name": title, "year": 2016, "verified": True, "current": True},
-                {"provider": "sgdb", "id": current + 1, "name": f"{title} Remastered", "year": 2021, "verified": False, "current": False},
-                {"provider": "sgdb", "id": current + 2, "name": f"{title} II", "year": 2019, "verified": True, "current": False}]
+        current = self._sgdb_entry(game)["id"]
+        base = 5000 + len(ident)
+        hits = [{"provider": "sgdb", "id": base, "name": title, "year": 2016, "verified": True, "current": current == base},
+                {"provider": "sgdb", "id": base + 1, "name": f"{title} Remastered", "year": 2021, "verified": False, "current": current == base + 1},
+                {"provider": "sgdb", "id": base + 2, "name": f"{title} II", "year": 2019, "verified": True, "current": current == base + 2}]
         q = (query or "").casefold()
         return json.dumps([h for h in hits if q in h["name"].casefold()])
 

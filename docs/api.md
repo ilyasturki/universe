@@ -71,7 +71,7 @@ comma-separated for lists, `""` deletes the key. A runner is written under its s
 
 ```json
 {"stats": {"hours": 12.5, "play_count": 7, "last_played": "RFC3339 or null"},
- "media": {"box_front": "path|null", "square": null, "tile": null, "background": null, "logo": null,
+ "media": {"box_front": "path|null", "square": null, "banner": null, "background": null, "logo": null,
            "screenshots": ["path"]},
  "modules": {"capture": {"enabled": true, "cursor": false}},
  "effective": {"runner": "dolphin", "runner_name": "Dolphin", "runner_kind": "emulator",
@@ -180,15 +180,15 @@ alone releases it. The controller watcher reads the composite device like any pa
 | Rust | Python | CLI | Role |
 |---|---|---|---|
 | `media_refresh(id, force, progress)` | `media_refresh(id, force, progress)` | `universe media <name> refresh` | `(changed, total)`: fills the empty slots of `media/` from SteamGridDB, RAWG and Steam screenshots (`force` refetches the filled ones); an override does not stop its slot's default from being fetched; `id=""` does every game |
-| `media_status(id)` | `media_status_json(id)` | `universe media <name> status` | `[{id, title, sgdb_id, slots: [{slot, path, default, override, origin, kind}], screenshots: {count, override_count, origin, kind}}]`; `path` is what shows, `default` the fetched file under `media/`, `override` the pick under the overrides directory; `kind ∈ picked, fetched, guessed, missing` (`guessed`: a default nobody recorded — from before provenance); `origin` is `picked` or the provider that wrote the default (`sgdb`, `steam`, `pegasus`), `default_origin` that provider whatever sits over it; `id=""` does every game |
+| `media_status(id)` | `media_status_json(id)` | `universe media <name> status` | `[{id, title, sgdb_id, sgdb_name, sgdb_year, slots: [{slot, path, default, override, origin, default_origin, kind}]}]`; `path` is what shows, `default` the fetched file under `media/`, `override` the pick under the overrides directory; `kind ∈ picked, default, missing`; `origin` is `picked` or the provider that wrote the default (`sgdb`, `steam`, `pegasus`; empty when nobody recorded it), `default_origin` that provider whatever sits over it; `sgdb_name` is the SteamGridDB entry the art comes from, as the last refresh or candidates call cached it (offline: empty until then); `id=""` does every game |
 | `media_set_slot(id, slot, path)` | `media_set_slot(…)` | `universe media <name> set <slot> <path>` | copies the file to `<overrides>/<id>/<slot>.<ext>` (a screenshot into `<overrides>/<id>/screenshots/`), replacing any file of that slot there, and returns the path; the default under `media/` stays |
 | `media_set_url(id, slot, url)` | `media_set_url(…)` | `universe media <name> set <slot> <url>` | the same from an http(s) URL, a candidate's |
 | `media_unset(id, slot)` | `media_unset(id, slot)` | `universe media <name> unset <slot>` | removes the override, so the slot shows its default again; `true` when there was one |
-| `media_candidates(id, slot, page)` | `media_candidates_json(id, slot, page=0)` | `universe media <name> candidates <slot> [--page N]` | `{items: [{provider, id, url, thumb, score, slot}], page, more}`: one page of SteamGridDB's art for the slot, best first, English and non-NSFW only; the game's SteamGridDB id is the pin, else `.sync.json`'s, else a search by title |
+| `media_candidates(id, slot, page)` | `media_candidates_json(id, slot, page=0)` | `universe media <name> candidates <slot> [--page N]` | `{items: [{provider, id, url, thumb, score, slot}], page, more, entry: {id, name, year}}`: one page of SteamGridDB's art for the slot, best first, English and non-NSFW only, and the entry it belongs to; the entry is the pin (`metadata.sgdb_id`, else pegasus-sync's `<overrides>/<id>/sgdb_id` file), else `.sync.json`'s, else a search by title — the hit named like the title, else autocomplete's first |
 | `media_search(id, query)` | `media_search_json(id, query)` | `universe media <name> search [query…]` | `[{provider, id, name, year, verified, current}]`: SteamGridDB's games for the query (the title when empty), `current` on the one the slots come from — to find the id to pin when the match is wrong |
 | `media_pin(id, provider, provider_id)` | `media_pin(…)` | `universe media <name> pin <provider> <id>` | `provider ∈ sgdb, rawg, steam` → `metadata.<provider>_id`; candidates and refresh follow it |
 
-`slot ∈ box_front, square, tile, background, logo, screenshot`. `square` is the 1:1 grid (SteamGridDB 1024×1024, then 512×512), the Switch 2 theme's tile; `tile` stays the 920×430 banner.
+`slot ∈ box_front, square, banner, background, logo, screenshot`. `square` is the 1:1 grid (SteamGridDB 1024×1024, then 512×512): Reprise's home rail and the Switch 2 tiles; `banner` the 920×430 grid, shown nowhere yet. On disk a slot is read under its own stem or Pegasus's and Lutris's, own stem first: `boxFront`, `cover`; `tile`, `icon` (Pegasus's square); `steam`, `grid` (Pegasus's banner); `hero`, `fanart`.
 
 Two layers per slot: the **default** under `games/<id>/media/`, which `refresh` fills and `.sync.json`'s `sources` attributes to its provider, and the **override** under `<paths.overrides>/<id>/`, which a pick writes and always shows first (`media_of`: overrides by id, then by the Lutris slug, then `media/`; a slot is read under its own stem or Pegasus's and Lutris's — `boxFront`, `cover`, `banner`, `hero`…). Removing the override falls back to the default, so a pick never loses what was fetched.
 
@@ -335,7 +335,7 @@ games_root = "~/Games"               # $XDG_GAMES_DIR: where sources install
 prefixes_root = "~/.local/share/universe/prefixes"
 recordings_root = "~/Videos/universe"            # $XDG_VIDEOS_DIR/universe
 journal_root = "~/Documents/universe/journal"    # $XDG_DOCUMENTS_DIR/universe/journal
-overrides = "~/.config/universe/overrides"       # picked art, shown over media/: <id>/{box_front,square,tile,background,logo}.*, <id>/screenshots/
+overrides = "~/.config/universe/overrides"       # picked art, shown over media/: <id>/{box_front,square,banner,background,logo}.*, <id>/screenshots/
 
 [launch]
 proton = "proton-ge"                 # a name under [proton], or a path

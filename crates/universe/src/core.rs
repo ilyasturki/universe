@@ -1353,8 +1353,8 @@ impl Core {
         Ok(serde_json::to_string(&hits)?)
     }
 
-    /// Every slot of one game, or of every game when `id` is empty: `[{id, title, sgdb_id, slots: [{slot, path,
-    /// default, override, origin, kind}], screenshots: {count, override_count, origin, kind}}]`.
+    /// Every slot of one game, or of every game when `id` is empty: `[{id, title, sgdb_id, sgdb_name, sgdb_year,
+    /// slots: [{slot, path, default, override, origin, default_origin, kind}]}]`.
     pub async fn media_status(&self, id: &str) -> Result<String> {
         let cfg = self.config.read().await.clone();
         let games: Vec<crate::game::Game> = if id.is_empty() {

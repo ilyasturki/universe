@@ -98,7 +98,7 @@ class GameAssets(QObject):
         super().__init__(parent)
         self._box = QUrl()
         self._square = QUrl()
-        self._tile = QUrl()
+        self._banner = QUrl()
         self._background = QUrl()
         self._logo = QUrl()
         self._shots = []
@@ -107,7 +107,7 @@ class GameAssets(QObject):
         media = media or {}
         self._box = _file_url(media.get("box_front"))
         self._square = _file_url(media.get("square"))
-        self._tile = _file_url(media.get("tile"))
+        self._banner = _file_url(media.get("banner"))
         self._background = _file_url(media.get("background"))
         self._logo = _file_url(media.get("logo"))
         self._shots = [_file_url(p) for p in (media.get("screenshots") or [])]
@@ -115,7 +115,9 @@ class GameAssets(QObject):
 
     boxFront = Property(QUrl, lambda self: self._box, notify=changed)
     square = Property(QUrl, lambda self: self._square, notify=changed)
-    tile = Property(QUrl, lambda self: self._tile, notify=changed)
+    banner = Property(QUrl, lambda self: self._banner, notify=changed)
+    # `tile` was the square under Pegasus's name; themes written against it keep working.
+    tile = Property(QUrl, lambda self: self._square, notify=changed)
     background = Property(QUrl, lambda self: self._background, notify=changed)
     logo = Property(QUrl, lambda self: self._logo, notify=changed)
     screenshotList = Property("QVariantList", lambda self: list(self._shots), notify=changed)

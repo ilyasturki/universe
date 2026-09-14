@@ -11,8 +11,7 @@ Rectangle {
     property bool onLight: false
 
     readonly property color tint: kind === "picked" ? "#5fd48a"
-                                : kind === "fetched" ? "#7fb2ff"
-                                : kind === "guessed" ? "#e0b45a"
+                                : kind === "default" ? "#7fb2ff"
                                 : "#e0655a"
 
     width: body.width + Theme.dp(22)

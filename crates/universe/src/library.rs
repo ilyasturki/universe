@@ -9,7 +9,7 @@ use crate::journal::Entry;
 use crate::sessions::{Session, Stats};
 use crate::{paths, sessions};
 
-pub const MEDIA_SLOTS: [&str; 5] = ["box_front", "square", "tile", "background", "logo"];
+pub const MEDIA_SLOTS: [&str; 5] = ["box_front", "square", "banner", "background", "logo"];
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Resolved {
@@ -65,11 +65,12 @@ impl Resolved {
 }
 
 /// The file stems a slot is read from: the core's name first, then Pegasus's and Lutris's.
+/// Pegasus's `tile` is the 1:1 grid and its `steam` the 920×430 banner.
 pub fn stems_of(slot: &str) -> &'static [&'static str] {
     match slot {
         "box_front" => &["box_front", "boxFront", "cover", "boxart"],
-        "square" => &["square", "icon"],
-        "tile" => &["tile", "banner", "grid"],
+        "square" => &["square", "tile", "icon"],
+        "banner" => &["banner", "steam", "grid"],
         "background" => &["background", "hero", "fanart"],
         "logo" => &["logo"],
         _ => &[],
@@ -93,9 +94,9 @@ pub fn media_dirs(game: &Game, overrides: &Path) -> Vec<PathBuf> {
 
 /// One directory's art: slot → file, and its `screenshots/` sorted.
 pub fn scan_media_dir(dir: &Path) -> (Vec<(String, String)>, Vec<String>) {
-    let mut media = Vec::new();
+    let mut media: Vec<(String, String, usize)> = Vec::new();
     let mut shots = Vec::new();
-    let Ok(rd) = std::fs::read_dir(dir) else { return (media, shots) };
+    let Ok(rd) = std::fs::read_dir(dir) else { return (Vec::new(), shots) };
     for e in rd.flatten() {
         let p = e.path();
         if p.is_dir() {
@@ -113,11 +114,14 @@ pub fn scan_media_dir(dir: &Path) -> (Vec<(String, String)>, Vec<String>) {
         }
         let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("");
         let Some(slot) = slot_of_stem(stem) else { continue };
-        if !media.iter().any(|(s, _): &(String, String)| s == slot) {
-            media.push((slot.to_string(), p.to_string_lossy().to_string()));
+        let rank = stems_of(slot).iter().position(|s| *s == stem).unwrap_or(usize::MAX);
+        match media.iter_mut().find(|(s, _, _)| s == slot) {
+            Some(have) if have.2 > rank => *have = (slot.to_string(), p.to_string_lossy().to_string(), rank),
+            Some(_) => {}
+            None => media.push((slot.to_string(), p.to_string_lossy().to_string(), rank)),
         }
     }
-    (media, shots)
+    (media.into_iter().map(|(s, p, _)| (s, p)).collect(), shots)
 }
 
 pub fn media_of(game: &Game, overrides: &Path) -> (Vec<(String, String)>, Vec<String>) {

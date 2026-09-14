@@ -4,7 +4,7 @@ import "../sound"
 import "../ui"
 
 // One game's artwork: the five slots on the left, each with what shows and where it came from;
-// on the right the focused slot large, the fetched default under a pick, and SteamGridDB's
+// on the right the focused slot large, the default under a pick, and SteamGridDB's
 // candidates for it. A on a candidate downloads it over the slot as an override; X takes an
 // override off again (the default under it comes back) or fetches what is missing; Y searches
 // SteamGridDB by name and pins the game to the right entry when the match was wrong.
@@ -50,7 +50,7 @@ FocusScope {
             out.push({ glyph: "X", label: "Remove override" });
         else if (current && current.kind === "missing")
             out.push({ glyph: "X", label: "Fetch missing" });
-        out.push({ glyph: "Y", label: "Wrong game?" });
+        out.push({ glyph: "Y", label: "Change entry" });
         out.push({ glyph: "B", label: inCands ? "Back to slots" : "Back" });
         return out;
     }
@@ -240,7 +240,7 @@ FocusScope {
         anchors.rightMargin: page.sideMargin
         game: page.game
         label: "ARTWORK"
-        detail: page.form.sgdbId > 0 ? "SteamGridDB #" + page.form.sgdbId : ""
+        detail: page.form.entry !== "" ? "SteamGridDB · " + page.form.entry : ""
     }
 
     // -- the slots ---------------------------------------------------------------------------
@@ -326,9 +326,8 @@ FocusScope {
 
                     Text {
                         width: parent.width
-                        text: modelData.kind === "picked" ? "Your pick" + (modelData.hasDefault ? " · a default under it" : "")
-                            : modelData.kind === "fetched" ? "From " + modelData.originLabel
-                            : modelData.kind === "guessed" ? "On disk, source unrecorded"
+                        text: modelData.kind === "picked" ? "Your pick" + (modelData.hasDefault ? " over the default" : "")
+                            : modelData.kind === "default" ? "Default" + (modelData.originLabel !== "" ? " from " + modelData.originLabel : "")
                             : "Nothing yet"
                         color: lit ? Qt.rgba(0.063, 0.067, 0.086, 0.7) : Theme.textSecondary
                         font.family: Theme.sans
@@ -345,65 +344,6 @@ FocusScope {
                     kind: modelData.kind
                     label: modelData.kindLabel
                     onLight: lit
-                }
-            }
-        }
-    }
-
-    // The screenshots, to see: what the journal and the detail page show, and where they came from.
-    Item {
-        id: shotsStrip
-
-        anchors.top: slotList.bottom
-        anchors.topMargin: Theme.dp(28)
-        anchors.left: slotList.left
-        width: slotList.width
-        height: shotsHead.height + Theme.dp(12) + shotsRow.height
-        visible: y + height < hintBar.y
-        opacity: slotList.opacity
-
-        Row {
-            id: shotsHead
-            spacing: Theme.dp(14)
-
-            CapsLabel {
-                text: "SCREENSHOTS"
-                anchors.verticalCenter: parent.verticalCenter
-            }
-
-            Text {
-                anchors.verticalCenter: parent.verticalCenter
-                text: page.form.shots.count > 0
-                    ? page.form.shots.count + (page.form.shots.kind === "picked" ? " · " + page.form.shots.overrideCount + " yours" : page.form.shots.originLabel !== "" ? " from " + page.form.shots.originLabel : "")
-                    : "none"
-                color: Theme.textMuted
-                font.family: Theme.sans
-                font.pixelSize: Theme.dp(19)
-            }
-        }
-
-        Row {
-            id: shotsRow
-            anchors.top: shotsHead.bottom
-            anchors.topMargin: Theme.dp(12)
-            spacing: Theme.dp(10)
-            height: Theme.dp(72)
-
-            Repeater {
-                model: page.form.screenshots.slice(0, 4)
-
-                RoundedMask {
-                    width: Theme.dp(128)
-                    height: Theme.dp(72)
-                    radius: Theme.dp(8)
-
-                    Image {
-                        anchors.fill: parent
-                        source: modelData
-                        fillMode: Image.PreserveAspectCrop
-                        asynchronous: true
-                        sourceSize.width: 300
-                    }
                 }
             }
         }
@@ -459,8 +399,7 @@ FocusScope {
                     text: page.current === null ? ""
                         : page.current.kind === "picked" ? "Showing your pick"
                         : page.current.kind === "missing" ? "Nothing in this slot"
-                        : page.current.kind === "guessed" ? "Showing what is on disk"
-                        : "Showing the " + page.current.originLabel + " default"
+                        : "Showing the default" + (page.current.originLabel !== "" ? " from " + page.current.originLabel : "")
                     color: Theme.text
                     font.family: Theme.sans
                     font.weight: Font.Bold
@@ -470,10 +409,19 @@ FocusScope {
 
                 Text {
                     width: parent.width
+                    text: page.current ? "Shows on: " + page.current.use : ""
+                    color: Theme.textSecondary
+                    font.family: Theme.sans
+                    font.pixelSize: Theme.dp(20)
+                    elide: Text.ElideRight
+                }
+
+                Text {
+                    width: parent.width
                     text: page.current === null ? ""
-                        : page.current.hasOverride ? (page.current.hasDefault ? "X takes the pick off and shows the default under it again." : "X takes the pick off; nothing was fetched under it.")
+                        : page.current.hasOverride ? (page.current.hasDefault ? "X takes the pick off and shows the default under it again." : "X takes the pick off; nothing under it.")
                         : page.current.kind === "missing" ? "Pick a candidate, or press X to fetch what SteamGridDB has."
-                        : "Pick a candidate to put your own over it; the default stays on disk under the pick."
+                        : "A pick goes over the default; the default stays under it for when the pick comes off."
                     color: Theme.textMuted
                     font.family: Theme.sans
                     font.pixelSize: Theme.dp(20)
@@ -487,7 +435,7 @@ FocusScope {
                     source: page.current ? page.current.defaultUrl : ""
                     logo: page.currentSlot === "logo"
                     caption: "Default"
-                    kind: "fetched"
+                    kind: "default"
                     kindLabel: page.current ? page.current.defaultOriginLabel : ""
                     dim: true
                 }
@@ -506,11 +454,23 @@ FocusScope {
                 anchors.verticalCenter: parent.verticalCenter
             }
 
+            // The entry the candidates belong to: a wrong match shows here, Y changes it.
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: page.form.entry !== ""
+                text: page.form.entry
+                color: Theme.text
+                font.family: Theme.sans
+                font.weight: Font.DemiBold
+                font.pixelSize: Theme.dp(20)
+                elide: Text.ElideRight
+            }
+
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 text: page.form.candidatesBusy && page.candidates.length === 0 ? "fetching…"
-                    : page.candidates.length === 0 ? (page.form.sgdbId > 0 ? "nothing for this slot" : "no match — press Y to search")
-                    : page.candidates.length + (page.form.more ? "+" : "") + " for " + (page.current ? page.current.label.toLowerCase() : "")
+                    : page.candidates.length === 0 ? (page.form.sgdbId > 0 ? "nothing for this slot" : "no match — Y searches by name")
+                    : page.candidates.length + (page.form.more ? "+" : "") + " for " + (page.current ? page.current.label.toLowerCase() : "") + " · Y if this is the wrong game"
                 color: Theme.textMuted
                 font.family: Theme.sans
                 font.pixelSize: Theme.dp(19)

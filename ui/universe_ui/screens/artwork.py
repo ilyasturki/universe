@@ -8,19 +8,21 @@ from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
 from ..models import file_url
 from ..universe_client import UniverseError
 
-# slot, label, width / height as the theme draws it
+# slot, label, width / height as the theme draws it, where the themes show it
 SLOTS = [
-    ("box_front", "Box front", 600 / 900),
-    ("square", "Square", 1.0),
-    ("tile", "Banner", 920 / 430),
-    ("background", "Background", 16 / 9),
-    ("logo", "Logo", 3.0),
+    ("box_front", "Box front", 600 / 900, "Details, launch, settings"),
+    ("square", "Square", 1.0, "Home rail, Switch 2 tiles"),
+    ("banner", "Banner", 920 / 430, "Wide; no view yet"),
+    ("background", "Background", 16 / 9, "Behind the home and details"),
+    ("logo", "Logo", 3.0, "Over the background, launch"),
 ]
-SLOT_LABELS = {slot: label for slot, label, _ in SLOTS}
-SLOT_ASPECTS = {slot: aspect for slot, _, aspect in SLOTS}
-KIND_LABELS = {"picked": "Picked", "fetched": "Fetched", "guessed": "On disk", "missing": "Missing"}
+SLOT_LABELS = {slot: label for slot, label, _, _ in SLOTS}
+SLOT_ASPECTS = {slot: aspect for slot, _, aspect, _ in SLOTS}
+SLOT_USES = {slot: use for slot, _, _, use in SLOTS}
+KIND_LABELS = {"picked": "Picked", "default": "Default", "missing": "Missing"}
 ORIGIN_LABELS = {"picked": "your pick", "sgdb": "SteamGridDB", "steam": "Steam", "pegasus": "Pegasus", "lutris": "Lutris"}
-FILTERS = ["all", "missing", "picked", "fetched"]
+FILTERS = ["all", "missing", "picked", "default"]
+FILTER_LABELS = {"all": "All", "missing": "Missing", "picked": "Picked", "default": "Default"}
 RELOAD_MS = 300
 
 
@@ -39,7 +41,7 @@ def _slot_row(raw):
     origin = str(raw.get("origin") or "")
     default_origin = str(raw.get("default_origin") or "")
     return {
-        "slot": slot, "label": SLOT_LABELS.get(slot, slot), "aspect": SLOT_ASPECTS.get(slot, 1.0),
+        "slot": slot, "label": SLOT_LABELS.get(slot, slot), "aspect": SLOT_ASPECTS.get(slot, 1.0), "use": SLOT_USES.get(slot, ""),
         "url": _url(raw.get("path")), "defaultUrl": _url(raw.get("default")), "overrideUrl": _url(raw.get("override")),
         "origin": origin, "originLabel": ORIGIN_LABELS.get(origin, origin),
         "defaultOriginLabel": ORIGIN_LABELS.get(default_origin, default_origin) or "Default",
@@ -83,9 +85,9 @@ class ArtworkForm(QObject):
         self._game_id = ""
         self._title = ""
         self._sgdb_id = 0
+        self._sgdb_name = ""
+        self._sgdb_year = 0
         self._slots = []
-        self._screenshots = []
-        self._shots = {}
         self._candidates = []
         self._candidates_slot = ""
         self._page = 0
@@ -126,17 +128,13 @@ class ArtworkForm(QObject):
         rows = self._client.mediaStatus(self._game_id) or []
         status = rows[0] if rows else {}
         self._title = str(status.get("title") or self._game_id)
-        self._sgdb_id = int(status.get("sgdb_id") or 0)
+        sgdb_id = int(status.get("sgdb_id") or 0)
+        # A pin names the entry before the core caches its name; keep it until the status knows.
+        if sgdb_id != self._sgdb_id or status.get("sgdb_name"):
+            self._sgdb_name = str(status.get("sgdb_name") or "")
+            self._sgdb_year = int(status.get("sgdb_year") or 0)
+        self._sgdb_id = sgdb_id
         self._slots = [_slot_row(s) for s in status.get("slots") or []]
-        shots = status.get("screenshots") or {}
-        kind = str(shots.get("kind") or "missing")
-        origin = str(shots.get("origin") or "")
-        self._shots = {
-            "count": int(shots.get("count") or 0), "overrideCount": int(shots.get("override_count") or 0),
-            "kind": kind, "kindLabel": KIND_LABELS.get(kind, kind), "origin": origin, "originLabel": ORIGIN_LABELS.get(origin, origin),
-        }
-        game = self._client.game(self._game_id) or {}
-        self._screenshots = [_url(p) for p in (game.get("media") or {}).get("screenshots") or []]
         self.slotsChanged.emit()
 
     def _on_media_changed(self, ident):
@@ -213,6 +211,12 @@ class ArtworkForm(QObject):
             self._candidates = self._candidates + items
             self._page = int(data.get("page") or page)
             self._more = bool(data.get("more"))
+            entry = data.get("entry") or {}
+            if entry and (int(entry.get("id") or 0) != self._sgdb_id or entry.get("name") != self._sgdb_name):
+                self._sgdb_id = int(entry.get("id") or 0)
+                self._sgdb_name = str(entry.get("name") or "")
+                self._sgdb_year = int(entry.get("year") or 0)
+                self.slotsChanged.emit()
             self.candidatesChanged.emit()
 
         self._run(work, done)
@@ -249,7 +253,7 @@ class ArtworkForm(QObject):
         if gone:
             self._client.mediaChanged.emit(self._game_id)
             row = self.slot(slot)
-            self.message.emit(f"{label}: back to the {row.get('originLabel') or 'fetched'} default" if row.get("hasDefault") else f"{label}: override removed, nothing under it")
+            self.message.emit(f"{label}: back to the default" + (f" from {row['originLabel']}" if row.get("originLabel") else "") if row.get("hasDefault") else f"{label}: pick removed, nothing under it")
         return gone
 
     # -- the wrong game ----------------------------------------------------------------------
@@ -282,7 +286,11 @@ class ArtworkForm(QObject):
             return
         self._sgdb_id = int(sgdb_id)
         self._hits = [dict(h, current=h["id"] == self._sgdb_id) for h in self._hits]
+        hit = next((h for h in self._hits if h["current"]), None)
+        self._sgdb_name = hit["name"] if hit else ""
+        self._sgdb_year = hit["year"] if hit else 0
         self.hitsChanged.emit()
+        self.slotsChanged.emit()
         self._client.libraryChanged.emit([self._game_id])
         slot = self._candidates_slot
         self._candidates_slot = ""
@@ -299,9 +307,9 @@ class ArtworkForm(QObject):
     gameId = Property(str, lambda self: self._game_id, notify=gameIdChanged)
     title = Property(str, lambda self: self._title, notify=slotsChanged)
     sgdbId = Property(int, lambda self: self._sgdb_id, notify=slotsChanged)
+    # The SteamGridDB entry the candidates come from, "Name (year)"; empty until a fetch named it.
+    entry = Property(str, lambda self: (self._sgdb_name + (f" ({self._sgdb_year})" if self._sgdb_year else "")) if self._sgdb_name else (f"entry {self._sgdb_id}" if self._sgdb_id else ""), notify=slotsChanged)
     slots = Property("QVariantList", lambda self: [dict(s) for s in self._slots], notify=slotsChanged)
-    screenshots = Property("QVariantList", lambda self: list(self._screenshots), notify=slotsChanged)
-    shots = Property("QVariantMap", lambda self: dict(self._shots), notify=slotsChanged)
     candidates = Property("QVariantList", lambda self: [dict(c) for c in self._candidates], notify=candidatesChanged)
     candidatesSlot = Property(str, lambda self: self._candidates_slot, notify=candidatesChanged)
     candidatesBusy = Property(bool, lambda self: self._candidates_busy, notify=candidatesChanged)
@@ -413,7 +421,7 @@ class ArtworkOverview(QObject):
         for row in self._rows:
             slot = row["slots"].get(self._slot) or {}
             kind = slot.get("kind") or "missing"
-            if self._filter != "all" and kind != self._filter and not (self._filter == "fetched" and kind == "guessed"):
+            if self._filter != "all" and kind != self._filter:
                 continue
             out.append({"id": row["id"], "title": row["title"], "url": slot.get("url") or "", "kind": kind,
                         "kindLabel": KIND_LABELS.get(kind, kind), "originLabel": slot.get("originLabel") or ""})
@@ -424,7 +432,7 @@ class ArtworkOverview(QObject):
         for row in self._rows:
             kind = (row["slots"].get(self._slot) or {}).get("kind") or "missing"
             counts["all"] += 1
-            counts["fetched" if kind == "guessed" else kind] = counts.get("fetched" if kind == "guessed" else kind, 0) + 1
+            counts[kind] = counts.get(kind, 0) + 1
         return counts
 
     @Slot()
@@ -458,8 +466,9 @@ class ArtworkOverview(QObject):
     slotLabel = Property(str, lambda self: SLOT_LABELS.get(self._slot, self._slot), notify=slotChanged)
     aspect = Property(float, lambda self: SLOT_ASPECTS.get(self._slot, 1.0), notify=slotChanged)
     filter = Property(str, lambda self: self._filter, setFilter, notify=filterChanged)
-    slotNames = Property("QVariantList", lambda self: [{"slot": s, "label": l} for s, l, _ in SLOTS], constant=True)
-    filterNames = Property("QVariantList", lambda self: [{"filter": f, "label": {"all": "All", "missing": "Missing", "picked": "Picked", "fetched": "Fetched"}[f]} for f in FILTERS], constant=True)
+    slotUse = Property(str, lambda self: SLOT_USES.get(self._slot, ""), notify=slotChanged)
+    slotNames = Property("QVariantList", lambda self: [{"slot": s, "label": l, "use": u} for s, l, _, u in SLOTS], constant=True)
+    filterNames = Property("QVariantList", lambda self: [{"filter": f, "label": FILTER_LABELS[f]} for f in FILTERS], constant=True)
     busy = Property(bool, lambda self: self._busy, notify=busyChanged)
     # {id, message, done, total, ok (None while running)} or None
     job = Property("QVariant", lambda self: dict(self._job) if self._job else None, notify=jobChanged)

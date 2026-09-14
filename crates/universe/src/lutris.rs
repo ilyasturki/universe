@@ -430,7 +430,7 @@ fn import_pegasus_media(dest: &Path, game: &Game, root: &Path) -> crate::Result<
             continue;
         }
         let target = match stem {
-            "boxFront" | "square" | "tile" | "background" | "logo" => dest.join(e.file_name()),
+            "boxFront" | "square" | "tile" | "steam" | "banner" | "background" | "logo" => dest.join(e.file_name()),
             s if s.starts_with("screenshot") => dest.join("screenshots").join(e.file_name()),
             _ => continue,
         };
@@ -491,8 +491,8 @@ mod tests {
         assert!(import_pegasus_media(&media, &g, &dir.path().join("pegasus")).unwrap());
         assert!(media.join("boxFront.png").exists());
         assert!(media.join("tile.jpg").exists());
+        assert!(media.join("steam.png").exists());
         assert!(media.join("screenshots/screenshot01.png").exists());
-        assert!(!media.join("steam.png").exists());
         assert!(!media.join("marquee.png").exists());
         assert!(!import_pegasus_media(&media, &g, &dir.path().join("pegasus")).unwrap());
     }

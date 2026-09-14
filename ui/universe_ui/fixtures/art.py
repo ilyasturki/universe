@@ -9,7 +9,7 @@ from PySide6.QtGui import QColor, QFont, QFontMetricsF, QImage, QLinearGradient,
 SLOTS = {
     "box_front": (600, 900),
     "square": (600, 600),
-    "tile": (600, 600),
+    "banner": (920, 430),
     "background": (1920, 1080),
     "logo": (960, 300),
     "screenshot": (1280, 720),
@@ -41,8 +41,8 @@ def _paint(path, size, ident, title, kind):
         step = max(40, w // 12)
         for x in range(-h, w, step):
             p.drawLine(x, h, x + h, 0)
-    if kind in ("box_front", "square", "tile", "logo"):
-        font = QFont("Archivo", max(18, w // (14 if kind == "logo" else 9)))
+    if kind in ("box_front", "square", "banner", "logo"):
+        font = QFont("Archivo", max(18, w // (14 if kind in ("logo", "banner") else 9)))
         font.setBold(True)
         margin = w // 12
         rect = QRectF(margin, margin, w - margin * 2, h - margin * 2)
