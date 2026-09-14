@@ -166,14 +166,24 @@ impl Core {
             c.media_refresh(&id, force, p.as_deref_mut()).await
         })
     }
-    fn media_set_slot(&self, py: Python<'_>, id: String, slot: String, path: String) -> PyResult<()> {
+    fn media_set_slot(&self, py: Python<'_>, id: String, slot: String, path: String) -> PyResult<String> {
         self.run(py, |c| async move { c.media_set_slot(&id, &slot, &path).await })
     }
-    fn media_unset(&self, py: Python<'_>, id: String, slot: String) -> PyResult<()> {
+    fn media_set_url(&self, py: Python<'_>, id: String, slot: String, url: String) -> PyResult<String> {
+        self.run(py, |c| async move { c.media_set_url(&id, &slot, &url).await })
+    }
+    fn media_unset(&self, py: Python<'_>, id: String, slot: String) -> PyResult<bool> {
         self.run(py, |c| async move { c.media_unset(&id, &slot).await })
     }
-    fn media_candidates_json(&self, py: Python<'_>, id: String, slot: String) -> PyResult<String> {
-        self.run(py, |c| async move { c.media_candidates(&id, &slot).await })
+    #[pyo3(signature = (id, slot, page=0))]
+    fn media_candidates_json(&self, py: Python<'_>, id: String, slot: String, page: u32) -> PyResult<String> {
+        self.run(py, |c| async move { c.media_candidates(&id, &slot, page).await })
+    }
+    fn media_search_json(&self, py: Python<'_>, id: String, query: String) -> PyResult<String> {
+        self.run(py, |c| async move { c.media_search(&id, &query).await })
+    }
+    fn media_status_json(&self, py: Python<'_>, id: String) -> PyResult<String> {
+        self.run(py, |c| async move { c.media_status(&id).await })
     }
     fn media_pin(&self, py: Python<'_>, id: String, provider: String, provider_id: String) -> PyResult<()> {
         self.run(py, |c| async move { c.media_pin(&id, &provider, &provider_id).await })

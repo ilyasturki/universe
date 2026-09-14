@@ -64,53 +64,82 @@ impl Resolved {
     }
 }
 
-pub fn media_of(game: &Game, overrides: &Path) -> (Vec<(String, String)>, Vec<String>) {
-    let mut media = Vec::new();
-    let mut shots = Vec::new();
+/// The file stems a slot is read from: the core's name first, then Pegasus's and Lutris's.
+pub fn stems_of(slot: &str) -> &'static [&'static str] {
+    match slot {
+        "box_front" => &["box_front", "boxFront", "cover", "boxart"],
+        "square" => &["square", "icon"],
+        "tile" => &["tile", "banner", "grid"],
+        "background" => &["background", "hero", "fanart"],
+        "logo" => &["logo"],
+        _ => &[],
+    }
+}
+
+pub fn slot_of_stem(stem: &str) -> Option<&'static str> {
+    MEDIA_SLOTS.into_iter().find(|s| stems_of(s).contains(&stem))
+}
+
+/// Where a game's art is read from, first match wins: the overrides by id, then by the Lutris
+/// slug, then the game's own media directory.
+pub fn media_dirs(game: &Game, overrides: &Path) -> Vec<PathBuf> {
     let mut dirs = vec![overrides.join(&game.id)];
     if !game.source.lutris_slug.is_empty() && game.source.lutris_slug != game.id {
         dirs.push(overrides.join(&game.source.lutris_slug));
     }
     dirs.push(game.media_dir());
-    for dir in dirs {
-        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
-        for e in rd.flatten() {
-            let p = e.path();
-            if p.is_dir() {
-                if p.file_name().and_then(|s| s.to_str()) == Some("screenshots") {
-                    if let Ok(rd2) = std::fs::read_dir(&p) {
-                        let mut list: Vec<String> = rd2.flatten().map(|e| e.path()).filter(|p| is_image(p)).map(|p| p.to_string_lossy().into()).collect();
-                        list.sort();
-                        for s in list {
-                            if !shots.contains(&s) {
-                                shots.push(s);
-                            }
-                        }
-                    }
+    dirs
+}
+
+/// One directory's art: slot → file, and its `screenshots/` sorted.
+pub fn scan_media_dir(dir: &Path) -> (Vec<(String, String)>, Vec<String>) {
+    let mut media = Vec::new();
+    let mut shots = Vec::new();
+    let Ok(rd) = std::fs::read_dir(dir) else { return (media, shots) };
+    for e in rd.flatten() {
+        let p = e.path();
+        if p.is_dir() {
+            if p.file_name().and_then(|s| s.to_str()) == Some("screenshots") {
+                if let Ok(rd2) = std::fs::read_dir(&p) {
+                    let mut list: Vec<String> = rd2.flatten().map(|e| e.path()).filter(|p| is_image(p)).map(|p| p.to_string_lossy().into()).collect();
+                    list.sort();
+                    shots.extend(list);
                 }
-                continue;
             }
-            if !is_image(&p) {
-                continue;
+            continue;
+        }
+        if !is_image(&p) {
+            continue;
+        }
+        let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+        let Some(slot) = slot_of_stem(stem) else { continue };
+        if !media.iter().any(|(s, _): &(String, String)| s == slot) {
+            media.push((slot.to_string(), p.to_string_lossy().to_string()));
+        }
+    }
+    (media, shots)
+}
+
+pub fn media_of(game: &Game, overrides: &Path) -> (Vec<(String, String)>, Vec<String>) {
+    let mut media: Vec<(String, String)> = Vec::new();
+    let mut shots: Vec<String> = Vec::new();
+    for dir in media_dirs(game, overrides) {
+        let (m, s) = scan_media_dir(&dir);
+        for (slot, path) in m {
+            if !media.iter().any(|(have, _)| *have == slot) {
+                media.push((slot, path));
             }
-            let stem = p.file_stem().and_then(|s| s.to_str()).unwrap_or("");
-            let slot = match stem {
-                "box_front" | "boxFront" | "cover" | "boxart" => "box_front",
-                "square" | "icon" => "square",
-                "tile" | "banner" | "grid" => "tile",
-                "background" | "hero" | "fanart" => "background",
-                "logo" => "logo",
-                _ => continue,
-            };
-            if !media.iter().any(|(s, _): &(String, String)| s == slot) {
-                media.push((slot.to_string(), p.to_string_lossy().to_string()));
+        }
+        for shot in s {
+            if !shots.contains(&shot) {
+                shots.push(shot);
             }
         }
     }
     (media, shots)
 }
 
-fn is_image(p: &Path) -> bool {
+pub fn is_image(p: &Path) -> bool {
     matches!(p.extension().and_then(|s| s.to_str()).map(|s| s.to_ascii_lowercase()).as_deref(), Some("png" | "jpg" | "jpeg" | "webp"))
 }
 

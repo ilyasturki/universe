@@ -65,6 +65,27 @@ def _paint(path, size, ident, title, kind):
     image.save(path)
 
 
+CANDIDATES = 6
+
+
+def paint_candidates(art_dir, ident, slot, title):
+    """Six painted takes on a slot, as SteamGridDB would offer: `{provider, id, url, thumb, score, slot}`."""
+    size = SLOTS.get(slot) or SLOTS["box_front"]
+    items = []
+    for n in range(CANDIDATES):
+        path = os.path.join(art_dir, f"{ident}-{slot}-candidate{n}.png")
+        _paint(path, size, f"{ident}/{slot}/{n}", f"{title}\n№ {n + 1}", slot)
+        items.append({"provider": "sgdb", "id": 100 + n, "url": path, "thumb": path, "score": (CANDIDATES - n) * 1000, "slot": slot})
+    return items
+
+
+def paint_candidate(art_dir, ident, slot, url):
+    size = SLOTS.get(slot) or SLOTS["box_front"]
+    path = os.path.join(art_dir, f"{ident}-{slot}-{hashlib.sha1(url.encode()).hexdigest()[:8]}.png")
+    _paint(path, size, url, url.rsplit("/", 1)[-1], slot)
+    return path
+
+
 def paint_library(games, art_dir):
     """Fill each game's `media` with painted files; `hidden` games get none, like an unscraped title."""
     os.makedirs(art_dir, exist_ok=True)

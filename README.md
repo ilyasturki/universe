@@ -64,7 +64,10 @@ universe gog scan              # cross installed folders with the owned library
 universe install 1434554947    # GOG id
 universe update                # pending GOG updates (build id vs GOG builds endpoint)
 universe uninstall technomancer   # trashes the install folder, keeps the hours and the journal
-universe media technomancer refresh   # SteamGridDB + RAWG + Steam screenshots
+universe media technomancer refresh   # SteamGridDB + RAWG + Steam screenshots, into the empty slots
+universe media technomancer status    # each slot: what shows, the fetched default, your pick over it
+universe media technomancer set logo https://…   # or a file: a pick, kept over what refresh fetches
+universe media technomancer search    # SteamGridDB's entries for the name, to `pin sgdb <id>` a wrong match
 universe journal technomancer --render
 universe module ls · enable capture · settings journal
 universe doctor                # prerequisites of the core and every enabled module
@@ -72,6 +75,10 @@ universe controller ls         # connected pads, every button and what it does
 universe controller bind xbox-elite paddle_p1 hold stop    # a macro; `learn` when a paddle is not recognised
 universe ls --json | jq '.[] | select(.stats.hours > 10) | .title'
 ```
+
+## Artwork
+
+Every slot — box front, square, banner, background, logo — has two layers: the **default** `refresh` fetches into `games/<id>/media/`, and your **pick**, an override under `paths.overrides/<id>/` that shows over it and survives every refresh. In Reprise, a game's menu has an Artwork page: the five slots with what each shows and where it came from (picked, fetched, on disk, missing), the focused one large with the default under a pick, and SteamGridDB's candidates for it — A puts one over the slot, X takes the pick off again, Y searches SteamGridDB by name and pins the game to the right entry when the match was wrong. Settings › Artwork is the same across the library: one slot at a time, every game's art as a grid, filtered by state, with a fetch of everything missing. The Switch 2 look keeps its Refresh artwork row and shows the picks like any other art.
 
 ## Runners
 

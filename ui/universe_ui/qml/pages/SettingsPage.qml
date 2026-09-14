@@ -16,6 +16,7 @@ FocusScope {
     signal chromeRequested()
     signal settingsRequested(var game)
     signal runnerRequested(string runner)
+    signal artworkRequested(var game, string slot)
 
     readonly property var currentGame: null
     readonly property bool ownsBackdrop: false
@@ -29,8 +30,8 @@ FocusScope {
     readonly property bool ownsAccept: true
     property bool menuOpen: false
 
-    readonly property var sections: ["Runners", "Modules", "Install", "Updates", "Login", "Controller", "Themes", "Doctor"]
-    readonly property var sectionIcons: ["play", "grid", "download", "refresh", "user", "gamepad", "sun", "pulse"]
+    readonly property var sections: ["Runners", "Modules", "Install", "Updates", "Login", "Controller", "Themes", "Doctor", "Artwork"]
+    readonly property var sectionIcons: ["play", "grid", "download", "refresh", "user", "gamepad", "sun", "pulse", "image"]
     readonly property int runnersSection: 0
     readonly property int modulesSection: 1
     readonly property int installSection: 2
@@ -39,6 +40,8 @@ FocusScope {
     readonly property int controllerSection: 5
     readonly property int themesSection: 6
     readonly property int doctorSection: 7
+    // Its own column, not cards: ArtworkOverview.qml.
+    readonly property int artworkSection: 8
     property int section: 0
 
     readonly property var modulesForm: api.screens.modules
@@ -62,6 +65,7 @@ FocusScope {
 
     readonly property var hints: editor.open ? editor.hints
         : menu.open ? menu.hints
+        : artwork.item && artwork.item.activeFocus ? artwork.item.hints
         : testing ? [ { glyph: "B", label: "Hold to finish" }, { glyph: "Start+Select", label: "Finish" } ]
         : learning ? [ { glyph: "B", label: "Stop learning" } ]
         : side.activeFocus
@@ -123,6 +127,8 @@ FocusScope {
     // The rows and the cards that arrange them for the open section, from the host's data.
     readonly property var content: {
         var rows = [], groups = [];
+        if (section === artworkSection)
+            return { rows: rows, groups: groups };
         if (section === modulesSection)
             return { rows: modulesForm.rows, groups: modulesForm.groups };
         if (section === runnersSection)
@@ -225,7 +231,10 @@ FocusScope {
             sources.load();
         else if (section === controllerSection)
             controller.load();
-        else
+        else if (section === artworkSection) {
+            if (artwork.item)
+                artwork.item.load();
+        } else
             modulesForm.loadDoctor();
     }
 
@@ -577,8 +586,34 @@ FocusScope {
         }
 
         onRequested: function(index) { page.section = index; }
-        onEntered: cards.forceActiveFocus()
+        onEntered: page.section === page.artworkSection && artwork.item ? artwork.item.forceActiveFocus() : cards.forceActiveFocus()
         onEscapedUp: page.chromeRequested()
+    }
+
+    Loader {
+        id: artwork
+
+        x: page.mainX
+        y: side.y
+        width: page.mainWidth
+        height: page.height - y
+        active: page.section === page.artworkSection
+        source: "ArtworkOverview.qml"
+        visible: active
+
+        onLoaded: item.load()
+
+        Connections {
+            target: artwork.item
+            ignoreUnknownSignals: true
+            function onOpenRequested(game, slot) { page.artworkRequested(game, slot); }
+            function onEscapedLeft() {
+                Sound.panel();
+                side.forceActiveFocus();
+            }
+            function onEscapedUp() { page.chromeRequested(); }
+            function onMessage(text) { toast.show(text); }
+        }
     }
 
     // Above the cards: a running job's message and bar, and on Doctor the tally of checks.
@@ -694,7 +729,7 @@ FocusScope {
         rows: page.content.rows
         groups: page.content.groups
         dimmed: editor.open
-        opacity: page.testing ? 0.0 : 1.0
+        opacity: page.testing || page.section === page.artworkSection ? 0.0 : 1.0
         visible: opacity > 0.01
 
         Behavior on opacity {

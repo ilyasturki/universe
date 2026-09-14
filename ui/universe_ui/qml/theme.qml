@@ -22,6 +22,8 @@ FocusScope {
     property string subSource: ""
     // The session the sub page opens on; recordings and journal jump to each other by it.
     property string subSession: ""
+    // The artwork slot the sub page opens on, from the overview.
+    property string subSlot: ""
     // One level of history: the page a jump left, restored by the next close.
     property var subReturn: null
     property bool subSwapping: false
@@ -110,7 +112,7 @@ FocusScope {
         launchOverlay.begin(game);
     }
 
-    function openSub(source, game) {
+    function openSub(source, game, slot) {
         if (!game)
             return;
         Sound.enter();
@@ -118,6 +120,7 @@ FocusScope {
         subRunner = "";
         subSource = source;
         subSession = "";
+        subSlot = slot === undefined ? "" : slot;
         subReturn = null;
         subOpen = true;
         if (subLoader.item)
@@ -466,6 +469,7 @@ FocusScope {
                         function onDetailRequested(game) { root.openDetail(game); }
                         function onSettingsRequested(game) { root.openSub("pages/GameSettingsPage.qml", game); }
                         function onRunnerRequested(runner) { root.openRunner(runner); }
+                        function onArtworkRequested(game, slot) { root.openSub("pages/ArtworkPage.qml", game, slot); }
                         function onTabRequested(index) {
                             Sound.enter();
                             root.goToTab(index);
@@ -585,6 +589,8 @@ FocusScope {
                 item.runner = Qt.binding(function() { return root.subRunner; });
             if ("session" in item)
                 item.session = Qt.binding(function() { return root.subSession; });
+            if ("slot" in item)
+                item.slot = Qt.binding(function() { return root.subSlot; });
             item.forceActiveFocus();
         }
 
@@ -608,6 +614,7 @@ FocusScope {
         onDetailRequested: function(game) { root.openDetail(game); }
         onFavouriteRequested: root.toggleFavourite(game)
         onSettingsRequested: root.openSub("pages/GameSettingsPage.qml", game)
+        onArtworkRequested: root.openSub("pages/ArtworkPage.qml", game)
         onRecordingsRequested: root.openSub("pages/RecordingsPage.qml", game)
         onJournalRequested: root.openSub("pages/JournalPage.qml", game)
         onStopRequested: root.stopSession()

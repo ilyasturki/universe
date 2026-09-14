@@ -2,6 +2,7 @@
 
 from PySide6.QtCore import Property, QObject
 
+from .artwork import ArtworkForm, ArtworkOverview
 from .controller import ControllerScreen
 from .media import JournalList, PendingJournals, RecordingsList
 from .paths import PathBrowser
@@ -26,6 +27,8 @@ class Screens(QObject):
         self._controller = ControllerScreen(client, memory, self)
         self._runners = RunnersForm(client, self)
         self._runner = RunnerForm(client, self)
+        self._artwork = ArtworkForm(client, self)
+        self._artworkOverview = ArtworkOverview(client, self)
 
     def shutdown(self):
         self._recordings.shutdown()
@@ -46,3 +49,5 @@ class Screens(QObject):
     controller = Property(QObject, lambda self: self._controller, constant=True)
     runners = Property(QObject, lambda self: self._runners, constant=True)
     runner = Property(QObject, lambda self: self._runner, constant=True)
+    artwork = Property(QObject, lambda self: self._artwork, constant=True)
+    artworkOverview = Property(QObject, lambda self: self._artworkOverview, constant=True)

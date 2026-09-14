@@ -5,6 +5,8 @@ that segfaults (phase 0, T2), so every proxy the theme needs lives here and is
 registered under `import Universe`.
 """
 
+import os
+
 from PySide6.QtCore import (
     Property,
     QAbstractListModel,
@@ -49,7 +51,18 @@ def _file_url(path):
         return QUrl()
     if isinstance(path, str) and "://" in path:
         return QUrl(path)
-    return QUrl.fromLocalFile(str(path))
+    return file_url(str(path))
+
+
+def file_url(path):
+    """A local file as a URL the image cache keys by its modification time: a slot replaced in
+    place — a new pick over the old one — repaints instead of showing the cached bytes."""
+    url = QUrl.fromLocalFile(str(path))
+    try:
+        url.setQuery(f"v={int(os.stat(path).st_mtime_ns // 1_000_000)}")
+    except OSError:
+        pass
+    return url
 
 
 def _source_kind(value):

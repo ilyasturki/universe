@@ -138,6 +138,19 @@ Canvas {
                 ctx.roundedRect(p[0] * s, p[1] * s, 7.5 * s, 7.5 * s, 1.5 * s, 1.5 * s);
                 ctx.stroke();
             });
+        } else if (kind === "image") {
+            ctx.roundedRect(3 * s, 4 * s, 18 * s, 16 * s, 2 * s, 2 * s);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(3.5 * s, 17 * s);
+            ctx.lineTo(9 * s, 11.5 * s);
+            ctx.lineTo(13 * s, 15.5 * s);
+            ctx.lineTo(16 * s, 12.5 * s);
+            ctx.lineTo(20.5 * s, 17 * s);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(15.5 * s, 8.5 * s, 1.6 * s, 0, Math.PI * 2);
+            ctx.fill();
         } else if (kind === "user") {
             ctx.arc(12 * s, 8 * s, 4 * s, 0, Math.PI * 2);
             ctx.stroke();

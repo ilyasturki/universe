@@ -87,7 +87,7 @@ resolved (`runner_path` empty when its program was not found), the platform the 
 the game sets none.
 
 There is no change notification: the files are the truth, so a frontend watches `games/`,
-`games/<id>/{,journal,media}` and `state/` and rereads. Everything the CLI, `session-end` and the
+`games/<id>/{,journal,media}`, `state/` and the overrides directory and rereads. Everything the CLI, `session-end` and the
 hooks write shows up that way, with no other channel.
 
 ## Sessions
@@ -179,13 +179,18 @@ alone releases it. The controller watcher reads the composite device like any pa
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `media_refresh(id, force, progress)` | `media_refresh(id, force, progress)` | `universe media <name> refresh` | `(changed, total)` from SteamGridDB, RAWG, Steam screenshots and the overrides directory; `id=""` does every game |
-| `media_set_slot(id, slot, path)` | `media_set_slot(…)` | `universe media <name> set <slot> <path>` | copies into `media/<slot>.<ext>` |
-| `media_unset(id, slot)` | `media_unset(id, slot)` | `universe media <name> unset <slot>` | |
-| `media_candidates(id, slot)` | `media_candidates_json(…)` | `universe media <name> candidates <slot>` | `[{provider, url or path, score}]`, cached in `.sync.json` |
-| `media_pin(id, provider, provider_id)` | `media_pin(…)` | `universe media <name> pin <provider> <id>` | `provider ∈ sgdb, rawg, steam` → `metadata.<provider>_id` |
+| `media_refresh(id, force, progress)` | `media_refresh(id, force, progress)` | `universe media <name> refresh` | `(changed, total)`: fills the empty slots of `media/` from SteamGridDB, RAWG and Steam screenshots (`force` refetches the filled ones); an override does not stop its slot's default from being fetched; `id=""` does every game |
+| `media_status(id)` | `media_status_json(id)` | `universe media <name> status` | `[{id, title, sgdb_id, slots: [{slot, path, default, override, origin, kind}], screenshots: {count, override_count, origin, kind}}]`; `path` is what shows, `default` the fetched file under `media/`, `override` the pick under the overrides directory; `kind ∈ picked, fetched, guessed, missing` (`guessed`: a default nobody recorded — from before provenance); `origin` is `picked` or the provider that wrote the default (`sgdb`, `steam`, `pegasus`), `default_origin` that provider whatever sits over it; `id=""` does every game |
+| `media_set_slot(id, slot, path)` | `media_set_slot(…)` | `universe media <name> set <slot> <path>` | copies the file to `<overrides>/<id>/<slot>.<ext>` (a screenshot into `<overrides>/<id>/screenshots/`), replacing any file of that slot there, and returns the path; the default under `media/` stays |
+| `media_set_url(id, slot, url)` | `media_set_url(…)` | `universe media <name> set <slot> <url>` | the same from an http(s) URL, a candidate's |
+| `media_unset(id, slot)` | `media_unset(id, slot)` | `universe media <name> unset <slot>` | removes the override, so the slot shows its default again; `true` when there was one |
+| `media_candidates(id, slot, page)` | `media_candidates_json(id, slot, page=0)` | `universe media <name> candidates <slot> [--page N]` | `{items: [{provider, id, url, thumb, score, slot}], page, more}`: one page of SteamGridDB's art for the slot, best first, English and non-NSFW only; the game's SteamGridDB id is the pin, else `.sync.json`'s, else a search by title |
+| `media_search(id, query)` | `media_search_json(id, query)` | `universe media <name> search [query…]` | `[{provider, id, name, year, verified, current}]`: SteamGridDB's games for the query (the title when empty), `current` on the one the slots come from — to find the id to pin when the match is wrong |
+| `media_pin(id, provider, provider_id)` | `media_pin(…)` | `universe media <name> pin <provider> <id>` | `provider ∈ sgdb, rawg, steam` → `metadata.<provider>_id`; candidates and refresh follow it |
 
 `slot ∈ box_front, square, tile, background, logo, screenshot`. `square` is the 1:1 grid (SteamGridDB 1024×1024, then 512×512), the Switch 2 theme's tile; `tile` stays the 920×430 banner.
+
+Two layers per slot: the **default** under `games/<id>/media/`, which `refresh` fills and `.sync.json`'s `sources` attributes to its provider, and the **override** under `<paths.overrides>/<id>/`, which a pick writes and always shows first (`media_of`: overrides by id, then by the Lutris slug, then `media/`; a slot is read under its own stem or Pegasus's and Lutris's — `boxFront`, `cover`, `banner`, `hero`…). Removing the override falls back to the default, so a pick never loses what was fetched.
 
 ## Recordings
 
@@ -328,7 +333,7 @@ games_root = "~/Games"               # $XDG_GAMES_DIR: where sources install
 prefixes_root = "~/.local/share/universe/prefixes"
 recordings_root = "~/Videos/universe"            # $XDG_VIDEOS_DIR/universe
 journal_root = "~/Documents/universe/journal"    # $XDG_DOCUMENTS_DIR/universe/journal
-overrides = "~/.config/universe/overrides"       # hand-picked art: <id>/{boxFront,square,tile,background,logo}.*, <id>/screenshots/
+overrides = "~/.config/universe/overrides"       # picked art, shown over media/: <id>/{box_front,square,tile,background,logo}.*, <id>/screenshots/
 
 [launch]
 proton = "proton-ge"                 # a name under [proton], or a path

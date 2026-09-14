@@ -439,6 +439,8 @@ fn import_pegasus_media(dest: &Path, game: &Game, root: &Path) -> crate::Result<
         }
         std::fs::copy(&p, &target)?;
         copied = true;
+        let slot = crate::library::slot_of_stem(stem).unwrap_or("screenshots");
+        crate::media::note_source(dest, slot, "pegasus")?;
     }
     Ok(copied)
 }

@@ -266,17 +266,39 @@ class UniverseClientBase(QObject):
     def mediaRefresh(self, ident, force):
         return str(self._guarded("", "Media1", "Refresh", ident, bool(force), decode=False) or "")
 
-    @Slot(str, str, str)
-    def mediaSetSlot(self, ident, slot, path):
-        self._guarded(None, "Media1", "SetSlot", ident, slot, path, decode=False)
+    @Slot(str, result="QVariant")
+    def mediaStatus(self, ident):
+        return self._guarded([], "Media1", "Status", ident)
 
-    @Slot(str, str)
+    # A pick or its removal reaches the library through mediaChanged, as a refresh does.
+    @Slot(str, str, str, result=str)
+    def mediaSetSlot(self, ident, slot, path):
+        placed = str(self._guarded("", "Media1", "SetSlot", ident, slot, path, decode=False) or "")
+        if placed:
+            self.mediaChanged.emit(ident)
+        return placed
+
+    @Slot(str, str, str, result=str)
+    def mediaSetUrl(self, ident, slot, url):
+        placed = str(self._guarded("", "Media1", "SetUrl", ident, slot, url, decode=False) or "")
+        if placed:
+            self.mediaChanged.emit(ident)
+        return placed
+
+    @Slot(str, str, result=bool)
     def mediaUnset(self, ident, slot):
-        self._guarded(None, "Media1", "Unset", ident, slot, decode=False)
+        gone = bool(self._guarded(False, "Media1", "Unset", ident, slot, decode=False))
+        if gone:
+            self.mediaChanged.emit(ident)
+        return gone
+
+    @Slot(str, str, int, result="QVariant")
+    def mediaCandidates(self, ident, slot, page=0):
+        return self._guarded({}, "Media1", "Candidates", ident, slot, int(page))
 
     @Slot(str, str, result="QVariant")
-    def mediaCandidates(self, ident, slot):
-        return self._guarded([], "Media1", "Candidates", ident, slot)
+    def mediaSearch(self, ident, query):
+        return self._guarded([], "Media1", "Search", ident, query)
 
     @Slot(str, str, str)
     def mediaPin(self, ident, provider, provider_id):
@@ -421,6 +443,7 @@ class CoreClient(UniverseClientBase):
         self._core = universe_core.Core()
         self._data = Path(universe_core.data_home())
         self._state = Path(universe_core.state_home())
+        self._overrides = self._overrides_dir()
         self._job_seq = 0
         self._jobs = {}
         self._tracked = None
@@ -516,6 +539,11 @@ class CoreClient(UniverseClientBase):
 
     # -- file watches ----------------------------------------------------------------------
 
+    def _overrides_dir(self):
+        paths = (_json(self._guarded("", "Settings1", "Get", decode=False), {}) or {}).get("paths") or {}
+        return Path(os.path.expanduser(str(paths.get("overrides") or ""))) if paths.get("overrides") else None
+
+    # The picks the CLI makes land in the overrides directory: watched like games/<id>/media.
     def _rewatch(self):
         games = self._data / "games"
         for d in (games, self._state):
@@ -524,6 +552,9 @@ class CoreClient(UniverseClientBase):
         for d in games.iterdir():
             if d.is_dir():
                 wanted.update(str(p) for p in (d, d / "journal", d / "media") if p.is_dir())
+        if self._overrides and self._overrides.is_dir():
+            wanted.add(str(self._overrides))
+            wanted.update(str(p) for d in self._overrides.iterdir() if d.is_dir() for p in (d, d / "screenshots") if p.is_dir())
         have = set(self._watcher.directories())
         new = sorted(wanted - have)
         if new:
@@ -543,11 +574,17 @@ class CoreClient(UniverseClientBase):
                 state = True
             elif path == games:
                 whole = True
+            elif self._overrides and path == self._overrides:
+                # A game's first pick creates its directory, already filled before it can be watched.
+                watched = set(self._watcher.directories())
+                ids.update(d.name for d in self._overrides.iterdir() if d.is_dir() and str(d) not in watched)
             else:
-                try:
-                    ids.add(path.relative_to(games).parts[0])
-                except ValueError:
-                    pass
+                for root in (games, self._overrides):
+                    try:
+                        ids.add(path.relative_to(root).parts[0])
+                        break
+                    except (ValueError, TypeError):
+                        continue
         self._rewatch()
         if whole:
             self._guarded(None, "Library1", "Rescan", decode=False)
@@ -631,9 +668,12 @@ _CORE_CALLS = {
     ("Sources1", "Scan"): lambda s, source: s._job("scan", source, lambda p: "%d game(s)" % s._core.scan(source, p)),
     ("Sources1", "Jobs"): lambda s: json.dumps(list(s._jobs.values())),
     ("Media1", "Refresh"): lambda s, ident, force: s._job("media", ident, lambda p: "%d/%d updated" % s._core.media_refresh(ident, _bus_bool(force), p)),
+    ("Media1", "Status"): lambda s, ident: s._core.media_status_json(ident),
     ("Media1", "SetSlot"): lambda s, ident, slot, path: s._core.media_set_slot(ident, slot, path),
+    ("Media1", "SetUrl"): lambda s, ident, slot, url: s._core.media_set_url(ident, slot, url),
     ("Media1", "Unset"): lambda s, ident, slot: s._core.media_unset(ident, slot),
-    ("Media1", "Candidates"): lambda s, ident, slot: s._core.media_candidates_json(ident, slot),
+    ("Media1", "Candidates"): lambda s, ident, slot, page=0: s._core.media_candidates_json(ident, slot, int(page)),
+    ("Media1", "Search"): lambda s, ident, query: s._core.media_search_json(ident, query),
     ("Media1", "Pin"): lambda s, ident, provider, provider_id: s._core.media_pin(ident, provider, provider_id),
     ("Recording1", "List"): lambda s, ident: s._core.recordings_json(ident),
     ("Recording1", "File"): lambda s, session_id, path: s._core.file_recording(session_id, path),
@@ -711,6 +751,8 @@ class FakeClient(UniverseClientBase):
         out = json.loads(json.dumps(game))
         out.setdefault("stats", {"hours": 0, "play_count": 0, "last_played": None})
         out.setdefault("removed", False)
+        out["media"] = self._effective_media(game)
+        out.pop("overrides", None)
         # As the core does: the game keeps only what it sets, `effective` fills the rest.
         launch = out.setdefault("launch", {})
         desktop = out.setdefault("desktop", {})
@@ -1024,16 +1066,60 @@ class FakeClient(UniverseClientBase):
     def _Media1_Refresh(self, ident, force):
         return self._start_job("Refreshing media", 5, on_done=lambda: self.mediaChanged.emit(ident))
 
+    # The fixture's two layers: `media` holds the painted defaults, `overrides` the picks over them.
+    def _media_status(self, game):
+        media = game.get("media") or {}
+        overrides = game.get("overrides") or {}
+        slots = []
+        for slot in ("box_front", "square", "tile", "background", "logo"):
+            default, over = media.get(slot) or "", overrides.get(slot) or ""
+            kind = "picked" if over else "fetched" if default else "missing"
+            slots.append({"slot": slot, "path": over or default, "default": default, "override": over,
+                          "origin": "picked" if over else "sgdb" if default else "", "default_origin": "sgdb" if default else "", "kind": kind})
+        shots = media.get("screenshots") or []
+        return {"id": game["id"], "title": game.get("title", game["id"]), "sgdb_id": int((game.get("metadata") or {}).get("sgdb_id") or 0),
+                "slots": slots, "screenshots": {"count": len(shots), "override_count": 0, "origin": "steam" if shots else "", "kind": "fetched" if shots else "missing"}}
+
+    def _Media1_Status(self, ident):
+        games = [self._game(ident)] if ident else [g for g in self._data["games"] if not g.get("removed")]
+        return json.dumps([self._media_status(g) for g in games])
+
+    def _effective_media(self, game):
+        media = dict(game.get("media") or {})
+        media.update({k: v for k, v in (game.get("overrides") or {}).items() if v})
+        return media
+
     def _Media1_SetSlot(self, ident, slot, path):
-        self._game(ident).setdefault("media", {})[slot] = path
-        self.mediaChanged.emit(ident)
+        game = self._game(ident)
+        game.setdefault("overrides", {})[slot] = path
+        return path
+
+    def _Media1_SetUrl(self, ident, slot, url):
+        from .fixtures.art import paint_candidate
+
+        # A candidate is one of the painted fixtures already; a real URL gets a painted stand-in.
+        path = url if os.path.isfile(url) else paint_candidate(self._art_dir, ident, slot, url)
+        return self._Media1_SetSlot(ident, slot, path)
 
     def _Media1_Unset(self, ident, slot):
-        self._game(ident).setdefault("media", {}).pop(slot, None)
-        self.mediaChanged.emit(ident)
+        overrides = self._game(ident).setdefault("overrides", {})
+        return bool(overrides.pop(slot, None))
 
-    def _Media1_Candidates(self, ident, slot):
-        return "[]"
+    def _Media1_Candidates(self, ident, slot, page=0):
+        from .fixtures.art import paint_candidates
+
+        items = [] if int(page) > 0 else paint_candidates(self._art_dir, ident, slot, self._game(ident).get("title", ident))
+        return json.dumps({"items": items, "page": int(page), "more": False})
+
+    def _Media1_Search(self, ident, query):
+        game = self._game(ident)
+        title = game.get("title", ident)
+        current = int((game.get("metadata") or {}).get("sgdb_id") or 0) or 5000 + len(ident)
+        hits = [{"provider": "sgdb", "id": current, "name": title, "year": 2016, "verified": True, "current": True},
+                {"provider": "sgdb", "id": current + 1, "name": f"{title} Remastered", "year": 2021, "verified": False, "current": False},
+                {"provider": "sgdb", "id": current + 2, "name": f"{title} II", "year": 2019, "verified": True, "current": False}]
+        q = (query or "").casefold()
+        return json.dumps([h for h in hits if q in h["name"].casefold()])
 
     def _Media1_Pin(self, ident, provider, provider_id):
         self._game(ident).setdefault("metadata", {})[f"{provider}_id"] = provider_id

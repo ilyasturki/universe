@@ -252,14 +252,16 @@ pub enum MediaCmd {
         #[arg(long)]
         force: bool,
     },
-    /// Copy a file into a slot
+    /// Every slot: what shows, the fetched default, the override, where each came from
+    Status,
+    /// Pick a file or a URL for a slot: its override, kept over what refresh fetches
     Set {
         #[arg(value_parser = MEDIA_SLOTS)]
         slot: String,
-        /// Image file, copied into the game's media directory
-        path: std::path::PathBuf,
+        /// Image file or http(s) URL, placed under paths.overrides/<id>/
+        source: String,
     },
-    /// Clear a slot
+    /// Remove a slot's override, so it shows the fetched default again
     Unset {
         #[arg(value_parser = MEDIA_SLOTS)]
         slot: String,
@@ -268,6 +270,13 @@ pub enum MediaCmd {
     Candidates {
         #[arg(default_value = "box_front", value_parser = MEDIA_SLOTS)]
         slot: String,
+        /// The provider's page (50 per page)
+        #[arg(long, default_value_t = 0)]
+        page: u32,
+    },
+    /// Search the provider's games by name (the title when empty), to find the id to pin
+    Search {
+        query: Vec<String>,
     },
     /// Pin the game to a provider id
     Pin {
@@ -839,20 +848,56 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     let (changed, total) = core.media_refresh(&id, force, Some(&mut p)).await?;
                     report(json, true, &format!("{changed}/{total} updated"));
                 }
-                MediaCmd::Set { slot, path } => {
+                MediaCmd::Status => {
+                    let id = if name == "all" { String::new() } else { pick(&core, &name).await? };
+                    let list = parse_json(&core.media_status(&id).await?);
+                    if json {
+                        print_json(&list);
+                        return Ok(());
+                    }
+                    let mut t = table(&["Game", "Slot", "Kind", "Origin", "Shows", "Default"]);
+                    for g in list.as_array().cloned().unwrap_or_default() {
+                        for slot in g["slots"].as_array().cloned().unwrap_or_default() {
+                            t.add_row(vec![s(&g, "id"), s(&slot, "slot"), s(&slot, "kind"), s(&slot, "origin"), s(&slot, "path"), if s(&slot, "override").is_empty() { String::new() } else { s(&slot, "default") }]);
+                        }
+                        let shots = &g["screenshots"];
+                        t.add_row(vec![s(&g, "id"), "screenshots".into(), s(shots, "kind"), s(shots, "origin"), format!("{} ({} picked)", shots["count"], shots["override_count"]), String::new()]);
+                    }
+                    println!("{t}");
+                }
+                MediaCmd::Set { slot, source } => {
                     let id = pick(&core, &name).await?;
-                    let path = std::fs::canonicalize(path)?;
-                    core.media_set_slot(&id, &slot, &path.to_string_lossy()).await?;
-                    println!("{id}: {slot} set");
+                    let placed = if source.starts_with("http://") || source.starts_with("https://") {
+                        core.media_set_url(&id, &slot, &source).await?
+                    } else {
+                        let path = std::fs::canonicalize(&source)?;
+                        core.media_set_slot(&id, &slot, &path.to_string_lossy()).await?
+                    };
+                    report(json, true, &format!("{id}: {slot} → {placed}"));
                 }
                 MediaCmd::Unset { slot } => {
                     let id = pick(&core, &name).await?;
-                    core.media_unset(&id, &slot).await?;
+                    let gone = core.media_unset(&id, &slot).await?;
+                    report(json, true, &if gone { format!("{id}: {slot} override removed") } else { format!("{id}: {slot} had no override") });
                 }
-                MediaCmd::Candidates { slot } => {
+                MediaCmd::Candidates { slot, page } => {
                     let id = pick(&core, &name).await?;
-                    let list = parse_json(&core.media_candidates(&id, &slot).await?);
+                    let list = parse_json(&core.media_candidates(&id, &slot, page).await?);
                     print_json(&list);
+                }
+                MediaCmd::Search { query } => {
+                    let id = pick(&core, &name).await?;
+                    let hits = parse_json(&core.media_search(&id, &query.join(" ")).await?);
+                    if json {
+                        print_json(&hits);
+                        return Ok(());
+                    }
+                    let mut t = table(&["Id", "Name", "Year", "", ""]);
+                    for h in hits.as_array().cloned().unwrap_or_default() {
+                        let year = h["year"].as_u64().filter(|y| *y > 0).map(|y| y.to_string()).unwrap_or_default();
+                        t.add_row(vec![h["id"].to_string(), s(&h, "name"), year, if h["verified"].as_bool().unwrap_or(false) { "verified".into() } else { String::new() }, if h["current"].as_bool().unwrap_or(false) { "current".into() } else { String::new() }]);
+                    }
+                    println!("{t}");
                 }
                 MediaCmd::Pin { provider, id: pid } => {
                     let id = pick(&core, &name).await?;

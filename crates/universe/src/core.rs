@@ -1248,24 +1248,65 @@ impl Core {
         Ok((changed, total))
     }
 
-    pub async fn media_set_slot(&self, id: &str, slot: &str, path: &str) -> Result<()> {
+    /// Copies a local image over a slot as its override; returns where it landed.
+    pub async fn media_set_slot(&self, id: &str, slot: &str, path: &str) -> Result<String> {
         let r = self.get(id).await?;
-        crate::media::set_slot(&r.game, slot, Path::new(path))?;
-        self.reload_game(id).await
+        let cfg = self.config.read().await.clone();
+        let placed = crate::media::set_slot(&cfg, &r.game, slot, Path::new(path))?;
+        self.reload_game(id).await?;
+        Ok(placed.to_string_lossy().into())
     }
 
-    pub async fn media_unset(&self, id: &str, slot: &str) -> Result<()> {
+    /// Downloads a candidate's URL over a slot as its override; returns where it landed.
+    pub async fn media_set_url(&self, id: &str, slot: &str, url: &str) -> Result<String> {
         let r = self.get(id).await?;
-        crate::media::unset(&r.game, slot)?;
-        self.reload_game(id).await
+        let cfg = self.config.read().await.clone();
+        let game = r.game.clone();
+        let (slot, url) = (slot.to_string(), url.to_string());
+        let placed = tokio::task::spawn_blocking(move || crate::media::set_slot_url(&cfg, &game, &slot, &url)).await.map_err(|e| Error::Io(e.to_string()))??;
+        self.reload_game(id).await?;
+        Ok(placed.to_string_lossy().into())
     }
 
-    pub async fn media_candidates(&self, id: &str, slot: &str) -> Result<String> {
+    /// Removes a slot's override; returns whether there was one.
+    pub async fn media_unset(&self, id: &str, slot: &str) -> Result<bool> {
+        let r = self.get(id).await?;
+        let cfg = self.config.read().await.clone();
+        let gone = crate::media::unset(&cfg, &r.game, slot)?;
+        self.reload_game(id).await?;
+        Ok(gone)
+    }
+
+    /// One page of a slot's candidates: `{items: [{provider, id, url, thumb, score, slot}], page, more}`.
+    pub async fn media_candidates(&self, id: &str, slot: &str, page: u32) -> Result<String> {
         let r = self.get(id).await?;
         let cfg = self.config.read().await.clone();
         let game = r.game.clone();
         let slot = slot.to_string();
-        let list = tokio::task::spawn_blocking(move || crate::media::candidates(&cfg, &game, &slot)).await.map_err(|e| Error::Io(e.to_string()))??;
+        let list = tokio::task::spawn_blocking(move || crate::media::candidates(&cfg, &game, &slot, page)).await.map_err(|e| Error::Io(e.to_string()))??;
+        Ok(serde_json::to_string(&list)?)
+    }
+
+    /// The provider's games matching `query` (the title when empty): `[{provider, id, name, year, verified, current}]`.
+    pub async fn media_search(&self, id: &str, query: &str) -> Result<String> {
+        let r = self.get(id).await?;
+        let cfg = self.config.read().await.clone();
+        let game = r.game.clone();
+        let query = query.to_string();
+        let hits = tokio::task::spawn_blocking(move || crate::media::search(&cfg, &game, &query)).await.map_err(|e| Error::Io(e.to_string()))??;
+        Ok(serde_json::to_string(&hits)?)
+    }
+
+    /// Every slot of one game, or of every game when `id` is empty: `[{id, title, sgdb_id, slots: [{slot, path,
+    /// default, override, origin, kind}], screenshots: {count, override_count, origin, kind}}]`.
+    pub async fn media_status(&self, id: &str) -> Result<String> {
+        let cfg = self.config.read().await.clone();
+        let games: Vec<crate::game::Game> = if id.is_empty() {
+            self.games.read().await.iter().filter(|g| g.game.removed_at.is_empty()).map(|g| g.game.clone()).collect()
+        } else {
+            vec![self.get(id).await?.game]
+        };
+        let list: Vec<crate::media::MediaStatus> = games.iter().map(|g| crate::media::status(&cfg, g)).collect();
         Ok(serde_json::to_string(&list)?)
     }
 

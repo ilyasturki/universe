@@ -1,4 +1,4 @@
-from PySide6.QtCore import QDateTime
+from PySide6.QtCore import QDateTime, QUrl
 
 from universe_ui.models import (
     FavouriteGames,
@@ -50,7 +50,8 @@ def test_game_decodes_variants(app):
     assert game.extra == {"metacritic": [61]}
     assert game.tags == ["rpg", "sci-fi"]
     assert game.assets.boxFront.isLocalFile() and game.assets.square.isLocalFile()
-    assert [u.toString() for u in game.assets.screenshotList] == ["file:///tmp/a.png", "http://x/b.png"]
+    # A local file that exists carries its mtime as a query, so a replaced image repaints.
+    assert [u.toString(QUrl.FormattingOptions(QUrl.UrlFormattingOption.RemoveQuery)) for u in game.assets.screenshotList] == ["file:///tmp/a.png", "http://x/b.png"]
 
 
 def test_game_decodes_daemon_shapes(app):

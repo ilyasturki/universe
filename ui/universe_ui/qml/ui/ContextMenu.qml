@@ -16,6 +16,7 @@ FocusScope {
     signal detailRequested(var game)
     signal favouriteRequested(var game)
     signal settingsRequested(var game)
+    signal artworkRequested(var game)
     signal recordingsRequested(var game)
     signal journalRequested(var game)
     signal stopRequested()
@@ -40,6 +41,7 @@ FocusScope {
         out.push({ icon: game && game.favorite ? "heart" : "heart-outline",
                    label: game && game.favorite ? "Remove from favourites" : "Add to favourites", action: "favourite" });
         out.push({ icon: "sliders", label: "Game settings", action: "settings" });
+        out.push({ icon: "image", label: "Artwork", action: "artwork" });
         out.push({ icon: "film", label: "Recordings", action: "recordings" });
         out.push({ icon: "book", label: "Journal", action: "journal" });
         return out;
@@ -97,6 +99,8 @@ FocusScope {
             favouriteRequested(g);
         else if (action === "settings")
             settingsRequested(g);
+        else if (action === "artwork")
+            artworkRequested(g);
         else if (action === "recordings")
             recordingsRequested(g);
         else if (action === "journal")

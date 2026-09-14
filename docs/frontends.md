@@ -20,7 +20,7 @@ ui/
     models.py               Game, GameListModel and the QML proxies (import Universe)
     universe_client.py      CoreClient (the real core) and FakeClient (fixtures)
     gamepad.py              SDL2 → QKeyEvent
-    screens/                data for the added screens: settings.py, sources.py, media.py, paths.py, controller.py, runners.py
+    screens/                data for the added screens: settings.py, sources.py, media.py, paths.py, controller.py, runners.py, artwork.py
     fixtures/               library.json and generated artwork, for --fake
     themes.py               the looks the host can load and the one on screen (api.theme)
     qml/                    the ported theme plus the added screens; ui/Pad*.qml and PadGeometry.js draw the pads, assets/runners/ holds the runner logos (SOURCES.md says where each is from)
@@ -90,7 +90,7 @@ it this way, and any frontend needs the equivalent:
 |---|---|
 | `sessionStarted` | a successful `launch` |
 | `sessionEnded` | the current-session marker going empty — polled every 2 s while a session is tracked, since the game is a systemd unit, not a child. `currentSessionChanged` fires first; the theme's running view follows that property, and only the toast and the stats refresh follow the signal |
-| `libraryChanged`, `mediaChanged`, `entryWritten`, `recordingFiled` | a `QFileSystemWatcher` on `games/`, `games/<id>/{,journal,media}` and `state/`, debounced 300 ms |
+| `libraryChanged`, `mediaChanged`, `entryWritten`, `recordingFiled` | a `QFileSystemWatcher` on `games/`, `games/<id>/{,journal,media}`, `state/` and the overrides directory with its `<id>/` subdirectories (a pick made from the CLI shows up), debounced 300 ms; `mediaChanged` also follows a pick or its removal made through the client |
 | `progress`, `jobFinished` | the job's own callback — install, update, scan and media refresh run on a host thread |
 | `launched`, `launchFailed`, `error` | the call's result |
 
@@ -210,6 +210,29 @@ the runner again. The Switch 2 look has the same list as System Settings › Run
 page as `switch2/pages/RunnerPage.qml`, pushed on its stack. The game settings page's Launch group follows the runner: a Runner picker (names
 shown, ids written), then the rows the runner takes. The detail page shows the runner's logo next
 to the platform.
+
+## The artwork page and section
+
+`api.screens.artwork` is one game's artwork page (Reprise: the Artwork entry of a game's menu, or a
+tile of the overview). `load(id)` reads `Media1.Status` into `slots` — one row per slot with `url`
+(what shows), `defaultUrl` and `overrideUrl` (the two layers, see `docs/api.md`), `kind`
+(`picked`, `fetched`, `guessed`, `missing`) and `kindLabel`, `originLabel` and `defaultOriginLabel`,
+`hasOverride`, `hasDefault`, `aspect` — plus `screenshots` (URLs, to see) and `shots` (their count
+and origin). `loadCandidates(slot)` fetches `Media1.Candidates` off the UI thread into `candidates`
+(`url` is the provider's, `thumb` what the grid shows, `votes`), `more` and `candidatesBusy`;
+`moreCandidates()` takes the next page. `apply(slot, url)` runs `Media1.SetUrl` on a thread and
+emits `mediaChanged` for the game once the pick landed, `removeOverride(slot)` runs `Media1.Unset`;
+both report through `message`. The wrong-match flow is `search(query)` → `hits` (`name`, `year`,
+`verified`, `current`) → `pin(id)`, which writes `metadata.sgdb_id` through `Media1.Pin` and reloads
+the candidates. Local URLs carry the file's mtime as a query (`models.file_url`), so a pick that
+replaces a file at the same path repaints instead of showing the image cache's copy.
+
+`api.screens.artworkOverview` is the Artwork section of the Settings tab (`ArtworkOverview.qml`, a
+column of its own next to the sidebar): `slot` and `filter` (`all`, `missing`, `picked`, `fetched`)
+pick what `tiles` holds (`id`, `title`, `url`, `kind`), `counts` says how many games stand in each
+state for the slot, `refreshAll()` fetches the missing art of every game. `load()` reads
+`Media1.Status` for the whole library on a thread; a `mediaChanged` or `libraryChanged` reloads it
+after a short debounce while the section is on screen.
 
 ## The controller section
 
