@@ -13,26 +13,30 @@ QtObject {
         flick.contentY = Math.max(0, Math.min(target, Math.max(0, flick.contentHeight - height)));
     }
 
-    readonly property bool dark: api.theme.variant === "black"
+    readonly property color ground: "#ebebeb"
+    readonly property color bar: "#f4f4f4"
+    readonly property color slot: "#f2f2f2"
+    readonly property color card: "#fafafa"
+    readonly property color focusFill: "#fcfcfc"
+    readonly property color hairline: "#cdcdcd"
+    readonly property color hairlineSoft: "#dcdcdc"
+    readonly property color scrim: Qt.rgba(0.1, 0.1, 0.1, 0.5)
+    readonly property color artShade: "#d8d8d8"
+    readonly property color artInk: "#4a4a4a"
+    readonly property color disc: "#ffffff"
+    readonly property color discEdge: "#dcdcdc"
+    readonly property color thumb: "#b8b8b8"
+    readonly property color toggleOff: "#c4c4c4"
 
-    readonly property color ground: dark ? "#1b1b1b" : "#ebebeb"
-    readonly property color bar: dark ? "#2c2c2c" : "#f4f4f4"
-    readonly property color slot: dark ? "#242424" : "#f2f2f2"
-    readonly property color card: dark ? "#2a2a2a" : "#fafafa"
-    readonly property color focusFill: dark ? "#1e1e1e" : "#fcfcfc"
-    readonly property color hairline: dark ? "#3a3a3a" : "#cdcdcd"
-    readonly property color hairlineSoft: dark ? "#303030" : "#dcdcdc"
-    readonly property color scrim: dark ? Qt.rgba(0, 0, 0, 0.6) : Qt.rgba(0.1, 0.1, 0.1, 0.5)
-
-    readonly property color text: dark ? "#f2f2f2" : "#2d2d2d"
-    readonly property color textSecondary: dark ? "#b4b4b4" : "#7a7a7a"
-    readonly property color textMuted: dark ? "#8a8a8a" : "#a0a0a0"
-    readonly property color textDisabled: dark ? "#5a5a5a" : "#b8b8b8"
-    readonly property color accent: dark ? "#4bbacd" : "#2f6fd6"
-    readonly property color accentStrong: dark ? "#5bc8dc" : "#0d61c4"
+    readonly property color text: "#2d2d2d"
+    readonly property color textSecondary: "#7a7a7a"
+    readonly property color textMuted: "#a0a0a0"
+    readonly property color textDisabled: "#b8b8b8"
+    readonly property color accent: "#2f6fd6"
+    readonly property color accentStrong: "#0d61c4"
     readonly property color accentInk: "#ffffff"
-    readonly property color glyphFill: dark ? "#f2f2f2" : "#2d2d2d"
-    readonly property color glyphInk: dark ? "#1b1b1b" : "#ffffff"
+    readonly property color glyphFill: "#2d2d2d"
+    readonly property color glyphInk: "#ffffff"
     readonly property color danger: "#e60012"
     readonly property color okGreen: "#3cbc3c"
 
@@ -40,16 +44,29 @@ QtObject {
     readonly property color barOrange: "#f08a2c"
     readonly property color barGreen: "#3ab54a"
     readonly property color barBlue: "#2f6fd6"
-    readonly property color barGrey: dark ? "#c8c8c8" : "#5a5a5a"
+    readonly property color barGrey: "#5a5a5a"
 
-    readonly property color outlineCyan: "#4de3ff"
-    readonly property color outlineBlue: "#2f7cf0"
-    readonly property color outlineViolet: "#a389e8"
-    readonly property color outlinePink: "#f1c4f6"
+    readonly property color ringCyan: "#3fe0ff"
+    readonly property color ringBlue: "#2a7df5"
+    readonly property color ringBright: "#dff9ff"
+    readonly property color ringInner: "#ffffff"
+    readonly property color ringEdgeColor: Qt.rgba(1, 1, 1, 0.9)
+    readonly property color ringGlowColor: Qt.rgba(0.25, 0.6, 1, 0.16)
 
     readonly property real radiusTile: 9
     readonly property real radiusRow: 6
-    readonly property real outlineWidth: 5
+
+    // The focus ring, outward from the item: white, the band, a light edge, a halo.
+    readonly property real ringGap: 8
+    readonly property real ringLine: 6
+    readonly property real ringEdge: 2
+    readonly property real ringGlow: 8
+    // What a clipping view reserves past its items so the ring is never cut; tight: a ring with no gap
+    readonly property real ringRoom: ringGap + ringLine + ringEdge + ringGlow
+    readonly property real ringRoomTight: ringLine + ringEdge + ringGlow
+    readonly property real liftScale: 1.08
+    // How far a lifted tile of `size` px and its ring reach past the tile's resting bounds
+    function liftRoom(size) { return Math.ceil(dp(ringRoom) * liftScale + size * (liftScale - 1) / 2) }
 
     readonly property real edgeMargin: 72
     readonly property real headerHeight: 126
@@ -62,6 +79,7 @@ QtObject {
     readonly property real barY: 776
 
     readonly property int durFocus: 120
+    readonly property int durLift: 180
     readonly property int durQuick: 150
     readonly property int durPage: 200
     readonly property int durFade: 300
@@ -70,6 +88,20 @@ QtObject {
     readonly property real fontBody: 33
     readonly property real fontSmall: 26
     readonly property real fontTiny: 22
+    readonly property real fontClock: 40
+
+    // One clock for every ring, so a focus move never restarts the pulse. Only a visible ring
+    // repaints from it; a bare tick costs nothing to render.
+    property real ringPhase: 0
+    readonly property NumberAnimation ringClock: NumberAnimation {
+        target: t
+        property: "ringPhase"
+        from: 0
+        to: 1
+        duration: 1400
+        loops: Animation.Infinite
+        running: true
+    }
 
     property string clock: Format.clock()
     readonly property Timer clockTimer: Timer {

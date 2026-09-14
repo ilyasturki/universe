@@ -18,7 +18,7 @@ Item {
         y: bar.needed ? bar.height * flickable.contentY / bar.span : 0
         height: bar.needed ? Math.max(Theme.dp(40), bar.height * flickable.height / bar.span) : 0
         radius: width / 2
-        color: Theme.dark ? "#5a5a5a" : "#b8b8b8"
+        color: Theme.thumb
 
         Behavior on y {
             NumberAnimation { duration: Theme.durPage; easing.type: Easing.OutCubic }

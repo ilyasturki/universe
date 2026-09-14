@@ -14,9 +14,9 @@ Item {
         width: Theme.dp(90)
         height: width
         radius: width / 2
-        color: Theme.dark ? "#3a3a3a" : "#ffffff"
+        color: Theme.disc
         border.width: Theme.dp(3)
-        border.color: Theme.dark ? "#4a4a4a" : "#dcdcdc"
+        border.color: Theme.discEdge
 
         Image {
             anchors.fill: parent
@@ -37,6 +37,8 @@ Item {
         text: Theme.clock
         color: Theme.text
         font.family: Theme.sans
-        font.pixelSize: Theme.dp(36)
+        font.weight: Font.Bold
+        font.letterSpacing: Theme.dp(1)
+        font.pixelSize: Theme.dp(Theme.fontClock)
     }
 }

@@ -81,7 +81,7 @@ def parse_args(argv):
     parser.add_argument("--key-gap", type=int, default=120, metavar="MS")
     parser.add_argument("--key-delay", type=int, default=1200, metavar="MS", help="delay before the first key")
     parser.add_argument("--size", metavar="WxH", help="window size, implies --windowed (default 1920x1080)")
-    parser.add_argument("--theme", default="", metavar="ID", help="the look for this run: reprise, switch2-white or switch2-black")
+    parser.add_argument("--theme", default="", metavar="ID", help="the look for this run: reprise or switch2")
     args = parser.parse_args(argv)
     args.fullscreen = not (args.windowed or args.size or args.screenshot)
     args.size = args.size or "1920x1080"

@@ -30,6 +30,8 @@ FocusScope {
 
     readonly property real rowHeight: Theme.dp(96)
     readonly property real inner: Theme.dp(1400)
+    // The list clips; it reaches this far past the rows so the focus ring is never cut.
+    readonly property real room: Theme.dp(Theme.ringRoom)
 
     function show(spec, done) {
         title = spec.title || "Choose a folder";
@@ -216,69 +218,77 @@ FocusScope {
     ListView {
         id: list
 
-        x: (parent.width - sheet.inner) / 2
-        y: chips.y + chips.height + Theme.dp(36)
-        width: sheet.inner
-        height: parent.height - y - Theme.dp(Theme.hintBarHeight) - Theme.dp(20)
+        x: (parent.width - sheet.inner) / 2 - sheet.room
+        y: chips.y + chips.height + Theme.dp(36) - sheet.room
+        width: sheet.inner + sheet.room * 2
+        height: parent.height - y - Theme.dp(Theme.hintBarHeight) - Theme.dp(20) + sheet.room
         model: sheet.rowCount
         currentIndex: sheet.index
         interactive: false
         clip: true
         highlightFollowsCurrentItem: true
-        preferredHighlightBegin: 0
-        preferredHighlightEnd: height
+        preferredHighlightBegin: sheet.room
+        preferredHighlightEnd: height - sheet.room
         highlightRangeMode: ListView.ApplyRange
+        header: Item { height: sheet.room }
+        footer: Item { height: sheet.room }
 
         delegate: Item {
-            readonly property bool focused: sheet.zone === "list" && index === sheet.index
-            readonly property var entry: index === 0 ? null : sheet.entries[index - 1]
-
             width: list.width
             height: sheet.rowHeight
 
-            Rectangle {
-                id: pill
-                anchors.fill: parent
-                radius: Theme.dp(Theme.radiusRow)
-                color: Theme.focusFill
-                visible: parent.focused
-            }
+            Item {
+                readonly property bool focused: sheet.zone === "list" && index === sheet.index
+                readonly property var entry: index === 0 ? null : sheet.entries[index - 1]
 
-            FocusOutline {
-                target: pill
-                cornerRadius: pill.radius
-                gap: 0
-                shown: parent.focused && sheet.open
-            }
+                x: sheet.room
+                width: parent.width - sheet.room * 2
+                height: sheet.rowHeight
 
-            Rectangle {
-                anchors.bottom: parent.bottom
-                anchors.left: parent.left
-                anchors.right: parent.right
-                height: 1
-                visible: !parent.focused
-                color: Theme.hairlineSoft
-            }
+                Rectangle {
+                    id: pill
+                    anchors.fill: parent
+                    radius: Theme.dp(Theme.radiusRow)
+                    color: Theme.focusFill
+                    visible: parent.focused
+                }
 
-            Glyph {
-                id: rowIcon
-                x: Theme.dp(24)
-                anchors.verticalCenter: parent.verticalCenter
-                width: Theme.dp(40)
-                height: width
-                kind: index === 0 ? "chevron-left" : (parent.entry && parent.entry.dir ? "folder" : "film")
-                tint: Theme.text
-            }
+                FocusOutline {
+                    target: pill
+                    cornerRadius: pill.radius
+                    gap: 0
+                    shown: parent.focused && sheet.open
+                }
 
-            Text {
-                x: rowIcon.x + rowIcon.width + Theme.dp(20)
-                anchors.verticalCenter: parent.verticalCenter
-                width: parent.width - x - Theme.dp(24)
-                text: index === 0 ? ".." : (parent.entry ? parent.entry.name : "")
-                color: Theme.text
-                elide: Text.ElideMiddle
-                font.family: Theme.sans
-                font.pixelSize: Theme.dp(Theme.fontBody)
+                Rectangle {
+                    anchors.bottom: parent.bottom
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    height: 1
+                    visible: !parent.focused
+                    color: Theme.hairlineSoft
+                }
+
+                Glyph {
+                    id: rowIcon
+                    x: Theme.dp(24)
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Theme.dp(40)
+                    height: width
+                    kind: index === 0 ? "chevron-left" : (parent.entry && parent.entry.dir ? "folder" : "film")
+                    tint: Theme.text
+                }
+
+                Text {
+                    x: rowIcon.x + rowIcon.width + Theme.dp(20)
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: parent.width - x - Theme.dp(24)
+                    text: index === 0 ? ".." : (parent.entry ? parent.entry.name : "")
+                    color: Theme.text
+                    elide: Text.ElideMiddle
+                    font.family: Theme.sans
+                    font.pixelSize: Theme.dp(Theme.fontBody)
+                }
             }
         }
     }
@@ -287,7 +297,9 @@ FocusScope {
         anchors.right: parent.right
         anchors.rightMargin: Theme.dp(Theme.edgeMargin)
         anchors.top: list.top
+        anchors.topMargin: sheet.room
         anchors.bottom: list.bottom
+        anchors.bottomMargin: sheet.room
         flickable: list
     }
 }

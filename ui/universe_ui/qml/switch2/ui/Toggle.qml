@@ -9,7 +9,7 @@ Rectangle {
     width: Theme.dp(78)
     height: Theme.dp(42)
     radius: height / 2
-    color: on ? Theme.accentStrong : (Theme.dark ? "#4a4a4a" : "#c4c4c4")
+    color: on ? Theme.accentStrong : Theme.toggleOff
 
     Behavior on color {
         ColorAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }

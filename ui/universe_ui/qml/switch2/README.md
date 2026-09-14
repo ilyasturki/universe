@@ -7,7 +7,7 @@ in `core/Theme.qml` are measured from captures of the real HOME menu.
 ```
 switch2/
   theme.qml        HOME (TopBar, HomePage, BottomBar) and the page stack over it, the shell API
-  core/Theme.qml   palette (white/black), sizes, timings, the font
+  core/Theme.qml   palette, sizes, timings, the font, the focus ring's metrics and clock
   sound/Sound.qml  tick, ok, back, edge, type, select, open, home, launch (assets/sounds/generate.py)
   ui/              the kit
   pages/           one file per screen
@@ -59,8 +59,8 @@ writing.
 ## Running
 
 ```sh
-just ui --theme switch2-white                                   # the dev library, real art
-just ui-fake --theme switch2-black --screenshot out.png --keys "Down Return Wait Right"
+just ui --theme switch2                                         # the dev library, real art
+just ui-fake --theme switch2 --screenshot out.png --keys "Down Return Wait Right"
 ```
 
 From HOME, `Down` reaches the bar: All Software, News, Install, Album, Controllers, System

@@ -13,14 +13,14 @@ def test_theme_ids_are_unique_and_have_entries():
 def test_selector_defaults_and_persists(app, tmp_path):
     memory = Memory(str(tmp_path / "memory.json"))
     selector = ThemeSelector(memory)
-    assert selector.current == "reprise" and selector.entry == "theme.qml" and selector.variant == ""
-    assert selector.set("switch2-black") is True
-    assert selector.current == "switch2-black" and selector.variant == "black"
+    assert selector.current == "reprise" and selector.entry == "theme.qml"
+    assert selector.set("switch2") is True
+    assert selector.current == "switch2" and selector.name == "Switch 2"
     assert selector.entry == "switch2/theme.qml"
-    assert memory.get("theme") == "switch2-black"
-    assert selector.set("no-such-theme") is False and selector.current == "switch2-black"
-    assert ThemeSelector(memory).current == "switch2-black"
-    assert ThemeSelector(memory, "switch2-white").current == "switch2-white"
+    assert memory.get("theme") == "switch2"
+    assert selector.set("no-such-theme") is False and selector.current == "switch2"
+    assert ThemeSelector(memory).current == "switch2"
+    assert ThemeSelector(memory, "reprise").current == "reprise"
     memory.set("theme", "gone")
     assert ThemeSelector(memory).current == "reprise"
     assert selector.fontPath == ""
@@ -30,5 +30,14 @@ def test_selector_defaults_and_persists(app, tmp_path):
     assert memory.has("switch2Font") is False
 
 
+def test_legacy_variant_ids_still_select_switch2(app, tmp_path):
+    memory = Memory(str(tmp_path / "memory.json"))
+    memory.set("theme", "switch2-black")
+    assert ThemeSelector(memory).current == "switch2"
+    selector = ThemeSelector(memory)
+    assert selector.set("switch2-white") is True and selector.current == "switch2"
+    assert memory.get("theme") == "switch2"
+
+
 def test_theme_flag_is_parsed():
-    assert host.parse_args(["--theme", "switch2-white"]).theme == "switch2-white"
+    assert host.parse_args(["--theme", "switch2"]).theme == "switch2"

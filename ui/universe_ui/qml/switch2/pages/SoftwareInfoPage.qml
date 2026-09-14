@@ -181,7 +181,7 @@ FocusScope {
             Rectangle {
                 anchors.fill: parent
                 radius: page.software ? Theme.dp(8) : 0
-                color: Theme.dark ? "#101010" : "#1e1e1e"
+                color: "#1e1e1e"
             }
 
             Image {
@@ -231,7 +231,6 @@ FocusScope {
         FocusOutline {
             target: paneBody
             cornerRadius: Theme.dp(8)
-            gap: Theme.dp(2)
             shown: page.zone === "shots" && page.activeFocus
         }
     }
@@ -319,7 +318,7 @@ FocusScope {
                     width: parent.width
                     visible: page.description !== ""
                     text: page.description
-                    color: page.zone === "text" ? Theme.text : (Theme.dark ? "#d0d0d0" : "#4a4a4a")
+                    color: page.zone === "text" ? Theme.text : Theme.artInk
                     wrapMode: Text.WordWrap
                     lineHeight: 1.4
                     font.family: Theme.sans

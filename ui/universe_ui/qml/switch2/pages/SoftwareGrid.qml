@@ -23,9 +23,9 @@ FocusScope {
     readonly property real tile: Theme.dp(237)
     readonly property real gap: Theme.dp(18)
     readonly property real pitch: tile + gap
-    readonly property real cellHeight: groups ? pitch + Theme.dp(78) : pitch
-    // Room over the top row for the lifted tile's outline
-    readonly property real inset: Theme.dp(16)
+    // The view clips; it reaches this far past the cells so the lifted tile's ring is never cut.
+    readonly property real inset: Theme.liftRoom(tile)
+    readonly property real cellHeight: groups ? pitch + inset + Theme.dp(64) : pitch
     readonly property int lastRow: count > 0 ? Math.floor((count - 1) / columns) : 0
 
     implicitWidth: columns * pitch
@@ -119,12 +119,12 @@ FocusScope {
         id: view
 
         anchors.fill: parent
-        anchors.leftMargin: -grid.inset
-        anchors.topMargin: -grid.inset
+        anchors.margins: -grid.inset
         model: grid.games
         cellWidth: grid.pitch
         cellHeight: grid.cellHeight
         leftMargin: grid.inset
+        rightMargin: grid.inset
         topMargin: grid.inset
         bottomMargin: grid.groups ? grid.inset : Theme.dp(120)
         interactive: false
@@ -161,6 +161,8 @@ FocusScope {
 
             width: view.cellWidth
             height: view.cellHeight
+            // The lifted tile and its ring reach over the neighbours, which are later siblings.
+            z: focused ? 2 : 1
 
             Tile {
                 visible: !grid.groups
@@ -175,10 +177,10 @@ FocusScope {
                 visible: grid.groups
                 width: grid.tile
                 height: grid.tile
-                scale: cell.focused ? 1.04 : 1.0
+                scale: cell.focused ? Theme.liftScale : 1.0
 
                 Behavior on scale {
-                    NumberAnimation { duration: Theme.durFocus; easing.type: Easing.OutCubic }
+                    NumberAnimation { duration: Theme.durLift; easing.type: Easing.OutCubic }
                 }
 
                 Rectangle {
@@ -213,7 +215,6 @@ FocusScope {
                 FocusOutline {
                     target: mosaicBase
                     cornerRadius: mosaicBase.radius
-                    gap: Theme.dp(2)
                     shown: cell.focused && grid.groups
                 }
             }
@@ -221,7 +222,7 @@ FocusScope {
             Column {
                 visible: grid.groups
                 anchors.top: mosaic.bottom
-                anchors.topMargin: Theme.dp(22)
+                anchors.topMargin: grid.inset + Theme.dp(4)
                 width: grid.tile
                 spacing: Theme.dp(2)
 
@@ -257,7 +258,7 @@ FocusScope {
 
         visible: shown
         x: Math.max(-Theme.dp(80), Math.min(cellX - Theme.dp(42), grid.width - width))
-        y: cellY + grid.tile + Theme.dp(24)
+        y: cellY + grid.tile + grid.inset + Theme.dp(4)
         width: cardText.implicitWidth + Theme.dp(84)
         height: Theme.dp(82)
         z: 3
@@ -265,9 +266,9 @@ FocusScope {
         Rectangle {
             anchors.fill: parent
             radius: Theme.dp(8)
-            color: Theme.dark ? "#3a3a3a" : "#fafafa"
+            color: Theme.card
             border.width: 1
-            border.color: Theme.dark ? "#4a4a4a" : "#e0e0e0"
+            border.color: "#e0e0e0"
         }
 
         Canvas {
@@ -278,7 +279,7 @@ FocusScope {
             onPaint: {
                 var ctx = getContext("2d");
                 ctx.reset();
-                ctx.fillStyle = Theme.dark ? "#3a3a3a" : "#fafafa";
+                ctx.fillStyle = String(Theme.card);
                 ctx.beginPath();
                 ctx.moveTo(0, height);
                 ctx.lineTo(width / 2, 0);

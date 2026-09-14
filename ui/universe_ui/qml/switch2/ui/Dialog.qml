@@ -160,13 +160,16 @@ FocusScope {
                     Rectangle {
                         id: fill
                         anchors.fill: parent
+                        // Inset so the ring stays within the card
+                        anchors.margins: Theme.dp(Theme.ringRoomTight)
+                        radius: Theme.dp(Theme.radiusRow)
                         color: Theme.focusFill
                         visible: button.focused
                     }
 
                     FocusOutline {
                         target: fill
-                        cornerRadius: Theme.dp(4)
+                        cornerRadius: fill.radius
                         gap: 0
                         shown: button.focused && dialog.open
                     }

@@ -11,4 +11,4 @@ complete -c universe-ui -l keys -x -d "Key names to post once loaded, e.g. 'Righ
 complete -c universe-ui -l key-gap -x -d 'Ms between posted keys (120)'
 complete -c universe-ui -l key-delay -x -d 'Ms before the first posted key (1200)'
 complete -c universe-ui -l size -x -a '1920x1080 1280x720 2560x1440' -d 'Window size WxH, implies --windowed'
-complete -c universe-ui -l theme -x -a 'reprise switch2-white switch2-black' -d 'The look for this run'
+complete -c universe-ui -l theme -x -a 'reprise switch2' -d 'The look for this run'

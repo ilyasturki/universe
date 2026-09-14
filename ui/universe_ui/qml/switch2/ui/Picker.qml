@@ -15,6 +15,8 @@ FocusScope {
     readonly property var hints: [ { glyph: "B", label: "Back" }, { glyph: "A", label: "OK" } ]
     readonly property real rowHeight: Theme.dp(100)
     readonly property int visibleRows: 7
+    // The list clips; it reaches this far past the rows so the focus ring is never cut.
+    readonly property real room: Theme.dp(Theme.ringRoom)
 
     function show(spec, done) {
         title = spec.title || "";
@@ -75,7 +77,7 @@ FocusScope {
 
         anchors.centerIn: parent
         width: Theme.dp(1000)
-        height: heading.height + Theme.dp(20) + list.height + Theme.dp(40)
+        height: heading.height + Theme.dp(20) + list.height - picker.room * 2 + Theme.dp(40)
         radius: Theme.dp(6)
         color: Theme.card
         opacity: picker.open ? 1.0 : 0.0
@@ -104,79 +106,87 @@ FocusScope {
         ListView {
             id: list
 
-            x: Theme.dp(40)
-            y: heading.y + heading.height + Theme.dp(10)
-            width: parent.width - x * 2
-            height: picker.rowHeight * Math.min(picker.visibleRows, Math.max(1, picker.choices.length))
+            x: Theme.dp(40) - picker.room
+            y: heading.y + heading.height + Theme.dp(10) - picker.room
+            width: parent.width - Theme.dp(80) + picker.room * 2
+            height: picker.rowHeight * Math.min(picker.visibleRows, Math.max(1, picker.choices.length)) + picker.room * 2
             model: picker.choices
             currentIndex: picker.index
             interactive: false
             clip: true
             highlightFollowsCurrentItem: true
-            preferredHighlightBegin: 0
-            preferredHighlightEnd: height
+            preferredHighlightBegin: picker.room
+            preferredHighlightEnd: height - picker.room
             highlightRangeMode: ListView.ApplyRange
+            header: Item { height: picker.room }
+            footer: Item { height: picker.room }
 
             delegate: Item {
-                readonly property bool focused: index === picker.index
-                readonly property bool chosen: index === picker.current
-
                 width: list.width
                 height: picker.rowHeight
 
-                Rectangle {
-                    id: pill
-                    anchors.fill: parent
-                    radius: Theme.dp(Theme.radiusRow)
-                    color: Theme.focusFill
-                    visible: parent.focused
-                }
+                Item {
+                    readonly property bool focused: index === picker.index
+                    readonly property bool chosen: index === picker.current
 
-                FocusOutline {
-                    target: pill
-                    cornerRadius: pill.radius
-                    gap: 0
-                    shown: parent.focused && picker.open
-                }
-
-                Rectangle {
-                    anchors.bottom: parent.bottom
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    height: 1
-                    visible: !parent.focused && index < picker.choices.length - 1
-                    color: Theme.hairlineSoft
-                }
-
-                Text {
-                    x: Theme.dp(30)
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: parent.width - Theme.dp(120)
-                    text: modelData
-                    color: parent.chosen ? Theme.accent : Theme.text
-                    elide: Text.ElideRight
-                    font.family: Theme.sans
-                    font.pixelSize: Theme.dp(Theme.fontBody)
-                }
-
-                Rectangle {
-                    anchors.right: parent.right
-                    anchors.rightMargin: Theme.dp(30)
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: Theme.dp(40)
-                    height: width
-                    radius: width / 2
-                    color: parent.chosen ? Theme.accentStrong : "transparent"
-                    border.width: Theme.dp(2)
-                    border.color: parent.chosen ? Theme.accentStrong : Theme.hairline
+                    x: picker.room
+                    width: parent.width - picker.room * 2
+                    height: picker.rowHeight
 
                     Rectangle {
-                        anchors.centerIn: parent
-                        width: Theme.dp(14)
+                        id: pill
+                        anchors.fill: parent
+                        radius: Theme.dp(Theme.radiusRow)
+                        color: Theme.focusFill
+                        visible: parent.focused
+                    }
+
+                    FocusOutline {
+                        target: pill
+                        cornerRadius: pill.radius
+                        gap: 0
+                        shown: parent.focused && picker.open
+                    }
+
+                    Rectangle {
+                        anchors.bottom: parent.bottom
+                        anchors.left: parent.left
+                        anchors.right: parent.right
+                        height: 1
+                        visible: !parent.focused && index < picker.choices.length - 1
+                        color: Theme.hairlineSoft
+                    }
+
+                    Text {
+                        x: Theme.dp(30)
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: parent.width - Theme.dp(120)
+                        text: modelData
+                        color: parent.chosen ? Theme.accent : Theme.text
+                        elide: Text.ElideRight
+                        font.family: Theme.sans
+                        font.pixelSize: Theme.dp(Theme.fontBody)
+                    }
+
+                    Rectangle {
+                        anchors.right: parent.right
+                        anchors.rightMargin: Theme.dp(30)
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Theme.dp(40)
                         height: width
                         radius: width / 2
-                        color: "#ffffff"
-                        visible: parent.parent.chosen
+                        color: parent.chosen ? Theme.accentStrong : "transparent"
+                        border.width: Theme.dp(2)
+                        border.color: parent.chosen ? Theme.accentStrong : Theme.hairline
+
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: Theme.dp(14)
+                            height: width
+                            radius: width / 2
+                            color: "#ffffff"
+                            visible: parent.parent.chosen
+                        }
                     }
                 }
             }

@@ -24,11 +24,11 @@ Item {
                                   : bannerSquare ? "banner"
                                   : String(boxSource) !== "" && box.status !== Image.Error ? "box" : "none"
 
-    scale: focused && lift ? 1.04 : 1.0
+    scale: focused && lift ? Theme.liftScale : 1.0
     z: focused ? 2 : 1
 
     Behavior on scale {
-        NumberAnimation { duration: Theme.durFocus; easing.type: Easing.OutCubic }
+        NumberAnimation { duration: Theme.durLift; easing.type: Easing.OutCubic }
     }
 
     Item {
@@ -42,7 +42,7 @@ Item {
         Rectangle {
             anchors.fill: parent
             radius: tile.software ? tile.cornerRadius : 0
-            color: tile.empty ? Theme.slot : (Theme.dark ? "#101010" : "#d8d8d8")
+            color: tile.empty ? Theme.slot : Theme.artShade
         }
 
         Image {
@@ -88,7 +88,7 @@ Item {
             width: parent.width - Theme.dp(40)
             visible: !tile.empty && tile.shown === "none"
             text: tile.empty ? "" : tile.game.title
-            color: Theme.dark ? "#e0e0e0" : "#4a4a4a"
+            color: Theme.artInk
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
             maximumLineCount: 4

@@ -41,7 +41,7 @@ One context property, `api`:
 | `api.pad` | `rightX` / `rightY`: the right stick as a value, 0 without a controller |
 | `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed`, `--size` and `--screenshot` turn it off) |
-| `api.theme` | the looks: `themes` (`id`, `name`, `variant`, `entry`, `ground`), `current`, `set(id)`, `fontPath` |
+| `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `ground`, `detail`), `current`, `set(id)`, `fontPath` |
 
 A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `playTime`,
 `playCount`, `lastPlayed`, `releaseYear`, `developerList`, `publisherList`, `genreList`, `players`,
@@ -73,10 +73,9 @@ the session badge while the count is not zero.
 
 `main.qml` is a window with one `Loader` whose source is `api.theme.entry`, so a theme is a root
 QML file under `qml/` and switching one for another rebuilds the tree in place: no restart, the
-navigation comes back at the home screen. `Basic White` and `Basic Black` share `switch2/theme.qml`
-and differ by `api.theme.variant`, which the theme's palette reads — that switch is a binding. The
-choice lives in `ui-memory.json` (`theme`), `--theme ID` overrides it for one run, and both looks
-offer it in Settings › Themes. A theme calls the same `api` and the same `api.screens` objects;
+navigation comes back at the home screen. The choice lives in `ui-memory.json` (`theme`; the ids
+of the former white and black variants of `switch2` still resolve to it), `--theme ID` overrides it
+for one run, and both looks offer it in Settings › Themes. A theme calls the same `api` and the same `api.screens` objects;
 `api.screens.album` and `api.screens.news` are the recordings and journal lists across every
 game (`loadAll()`), which the Switch 2 look shows as its Album and News.
 

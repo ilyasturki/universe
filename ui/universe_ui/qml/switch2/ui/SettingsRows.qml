@@ -20,6 +20,8 @@ FocusScope {
     readonly property real headingHeight: Theme.dp(96)
     readonly property real detailLine: Theme.dp(58)
     readonly property real inset: Theme.dp(24)
+    // The view clips; it reaches this far past the rows so the focus ring is never cut.
+    readonly property real room: Theme.dp(Theme.ringRoom)
 
     function stops() {
         var out = [];
@@ -139,15 +141,16 @@ FocusScope {
         id: view
 
         anchors.fill: parent
+        anchors.margins: -rows.room
         contentWidth: width
-        contentHeight: rows.contentHeight + Theme.dp(40)
+        contentHeight: rows.contentHeight + rows.room * 2 + Theme.dp(40)
         interactive: false
         clip: true
 
         function scrollToCurrent() {
             if (height <= 0)
                 return;
-            var top = rows.yOf(rows.index), bottom = top + rows.heightOf(rows.index);
+            var top = rows.yOf(rows.index), bottom = top + rows.heightOf(rows.index) + rows.room * 2;
             if (rows.index > 0 && rows.model[rows.index - 1] && rows.model[rows.index - 1].heading)
                 top -= rows.headingHeight;
             Theme.reveal(view, top, bottom, height);
@@ -179,8 +182,9 @@ FocusScope {
                 // Dim reads as disabled but still opens: a runner whose program was not found.
                 readonly property color ink: disabled || entry.dim === true ? Theme.textDisabled : Theme.text
 
-                y: rows.yOf(index)
-                width: view.width
+                x: rows.room
+                y: rows.room + rows.yOf(index)
+                width: view.width - rows.room * 2
                 height: rows.heightOf(index)
 
                 Item {

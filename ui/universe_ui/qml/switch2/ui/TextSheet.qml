@@ -275,7 +275,7 @@ FocusScope {
         anchors.right: parent.right
         height: Theme.dp(540)
         y: sheet.open ? parent.height - height : parent.height
-        color: Theme.dark ? "#262626" : "#ebebeb"
+        color: Theme.ground
 
         Behavior on y {
             NumberAnimation { duration: Theme.durPage; easing.type: Easing.OutCubic }

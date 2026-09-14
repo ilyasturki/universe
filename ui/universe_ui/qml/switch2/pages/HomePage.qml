@@ -106,12 +106,19 @@ FocusScope {
     }
 
     Text {
-        x: page.rowX + (page.onAll ? page.allIndex : page.index) * page.pitch - row.contentX + Theme.dp(54)
-        y: Theme.dp(Theme.tileRowY) - Theme.dp(64)
-        width: page.pitch * 3
+        id: title
+
+        // Centred over the focused tile, held inside the screen's margins at either end of the row
+        readonly property real centre: page.rowX + (page.onAll ? page.allIndex : page.index) * page.pitch - row.contentX + page.tile / 2
+        readonly property real margin: Theme.dp(Theme.edgeMargin)
+
+        x: Math.max(margin, Math.min(centre - width / 2, page.width - margin - width))
+        y: Theme.dp(Theme.tileRowY) - Theme.dp(88)
+        width: Math.min(implicitWidth, page.pitch * 2.5)
         visible: page.activeFocus && (page.currentGame !== null || page.onAll)
         text: page.onAll ? "All Software" : (page.currentGame ? page.currentGame.title : "")
         color: Theme.accent
+        horizontalAlignment: Text.AlignHCenter
         elide: Text.ElideRight
         font.family: Theme.sans
         font.pixelSize: Theme.dp(Theme.fontBody)
@@ -160,6 +167,8 @@ FocusScope {
 
             width: page.tile
             height: row.height
+            // The lifted tile and its ring reach over the neighbours, which are later siblings.
+            z: focused ? 2 : 1
 
             Tile {
                 id: art
@@ -174,7 +183,7 @@ FocusScope {
             Text {
                 visible: cell.isGame && cell.game && cell.game.id === page.playingId
                 anchors.top: art.bottom
-                anchors.topMargin: Theme.dp(16)
+                anchors.topMargin: Theme.liftRoom(page.tile) + Theme.dp(4)
                 anchors.horizontalCenter: art.horizontalCenter
                 text: "Playing"
                 color: Theme.accent
@@ -198,7 +207,6 @@ FocusScope {
                 FocusOutline {
                     target: disc
                     cornerRadius: disc.radius
-                    gap: Theme.dp(2)
                     shown: cell.focused
                 }
 

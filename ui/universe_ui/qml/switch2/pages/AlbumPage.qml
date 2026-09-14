@@ -176,12 +176,14 @@ FocusScope {
 
         readonly property real pitchY: page.thumbHeight + page.gap
         readonly property int lastRow: page.shown.length > 0 ? Math.floor((page.shown.length - 1) / page.columns) : 0
+        // The view clips; it reaches this far past the cells so the focus ring is never cut.
+        readonly property real room: Theme.dp(Theme.ringRoom)
 
         function scrollToCurrent() {
             if (height <= 0)
                 return;
             var row = Math.floor(page.index / page.columns);
-            var top = row * pitchY, bottom = top + page.thumbHeight;
+            var top = row * pitchY, bottom = top + page.thumbHeight + room * 2;
             Theme.reveal(view, top, bottom, height);
         }
 
@@ -223,11 +225,9 @@ FocusScope {
             id: view
 
             anchors.fill: parent
-            // Room for the outline past the first and last row
-            anchors.topMargin: -Theme.dp(14)
-            anchors.bottomMargin: -Theme.dp(14)
+            anchors.margins: -grid.room
             contentWidth: width
-            contentHeight: (grid.lastRow + 1) * grid.pitchY + Theme.dp(28)
+            contentHeight: (grid.lastRow + 1) * grid.pitchY + grid.room * 2
             interactive: false
             clip: true
 
@@ -245,8 +245,8 @@ FocusScope {
                     readonly property var frames: page.frameMap[row.session] || null
                     readonly property bool focused: grid.activeFocus && index === page.index
 
-                    x: (index % page.columns) * (page.thumbWidth + page.gap)
-                    y: Math.floor(index / page.columns) * grid.pitchY + Theme.dp(14)
+                    x: grid.room + (index % page.columns) * (page.thumbWidth + page.gap)
+                    y: grid.room + Math.floor(index / page.columns) * grid.pitchY
                     width: page.thumbWidth
                     height: page.thumbHeight
                     z: focused ? 2 : 1
@@ -273,7 +273,6 @@ FocusScope {
                     FocusOutline {
                         target: body
                         cornerRadius: body.radius
-                        gap: Theme.dp(1)
                         shown: cell.focused
                     }
 

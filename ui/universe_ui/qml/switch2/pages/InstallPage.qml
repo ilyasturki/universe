@@ -44,8 +44,10 @@ FocusScope {
     readonly property real gridW: parent ? parent.width - gridX - Theme.dp(Theme.edgeMargin) - Theme.dp(40) : 0
     readonly property real gap: Theme.dp(24)
     readonly property real cellW: (gridW - gap * (columns - 1)) / columns
-    readonly property real cellH: cellW + Theme.dp(70)
+    readonly property real cellH: cellW + Theme.dp(Theme.ringRoom + 76)
     readonly property real headingH: Theme.dp(80)
+    // The view clips; it reaches this far past the cells so the focus ring is never cut.
+    readonly property real room: Theme.dp(Theme.ringRoom)
 
     readonly property var layout: {
         var out = [], y = 0, col = 0;
@@ -281,8 +283,9 @@ FocusScope {
             id: view
 
             anchors.fill: parent
+            anchors.margins: -page.room
             contentWidth: width
-            contentHeight: page.layout.height + Theme.dp(40)
+            contentHeight: page.layout.height + page.room * 2 + Theme.dp(40)
             interactive: false
             clip: true
 
@@ -290,7 +293,7 @@ FocusScope {
                 if (height <= 0 || page.index < 0 || page.index >= page.layout.cells.length)
                     return;
                 var c = page.layout.cells[page.index];
-                var top = c.y - Theme.dp(20), bottom = c.y + c.h + Theme.dp(20);
+                var top = c.y, bottom = c.y + c.h + page.room * 2;
                 if (page.index > 0 && page.cells[page.index - 1].heading)
                     top -= page.headingH;
                 Theme.reveal(view, top, bottom, height);
@@ -312,10 +315,11 @@ FocusScope {
                     readonly property var libraryGame: entry && entry.game_id ? api.allGames.byId(entry.game_id) : null
                     readonly property bool focused: grid.activeFocus && index === page.index
 
-                    x: spot.x
-                    y: spot.y
+                    x: page.room + spot.x
+                    y: page.room + spot.y
                     width: spot.w
                     height: spot.h
+                    z: focused ? 2 : 1
 
                     Item {
                         visible: cell.heading
@@ -392,7 +396,7 @@ FocusScope {
 
                         Text {
                             anchors.top: art.bottom
-                            anchors.topMargin: Theme.dp(14)
+                            anchors.topMargin: Theme.dp(Theme.ringRoom + 6)
                             width: art.width
                             text: cell.entry ? cell.entry.title : ""
                             color: cell.focused ? Theme.accent : Theme.text
@@ -403,7 +407,7 @@ FocusScope {
 
                         Text {
                             anchors.top: art.bottom
-                            anchors.topMargin: Theme.dp(44)
+                            anchors.topMargin: Theme.dp(Theme.ringRoom + 36)
                             width: art.width
                             text: cell.entry ? cell.entry.status : ""
                             color: cell.entry && cell.entry.pending ? Theme.accent : Theme.textSecondary

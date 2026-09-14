@@ -74,14 +74,13 @@ FocusScope {
                 id: disc
                 anchors.fill: parent
                 radius: width / 2
-                color: Theme.dark ? "#3a3a3a" : "#ffffff"
+                color: Theme.disc
                 opacity: cell.focused ? 1.0 : 0.0
             }
 
             FocusOutline {
                 target: disc
                 cornerRadius: disc.radius
-                gap: Theme.dp(1)
                 shown: cell.focused
             }
 
@@ -96,7 +95,7 @@ FocusScope {
 
             Text {
                 anchors.top: parent.bottom
-                anchors.topMargin: Theme.dp(14)
+                anchors.topMargin: Theme.dp(Theme.ringRoom + 4)
                 anchors.horizontalCenter: parent.horizontalCenter
                 visible: cell.focused
                 text: modelData.label

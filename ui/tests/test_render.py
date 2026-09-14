@@ -40,14 +40,11 @@ def test_themes_render_and_switch_live(api):
     engine, window, image = render(api)
     assert image.width() == 1280 and image.height() == 720
     assert lit_fraction(image) > 0.05
-    api.theme.set("switch2-white")
+    api.theme.set("switch2")
     pump(2500)
     image = window.grabWindow()
     assert lit_fraction(image, WHITE_GROUND) > 0.05
     assert image.pixelColor(4, 4).getRgb()[:3] == WHITE_GROUND
-    api.theme.set("switch2-black")
-    pump(400)
-    assert window.grabWindow().pixelColor(4, 4).red() < 0x40, "black ground after the palette switch"
     api.theme.set("reprise")
     pump(1500)
     assert lit_fraction(window.grabWindow()) > 0.05

@@ -7,29 +7,28 @@ Item {
 
     property Item target: parent
     property real cornerRadius: Theme.dp(Theme.radiusTile)
-    property real gap: Theme.dp(2)
-    property real lineWidth: Theme.dp(Theme.outlineWidth)
+    property real gap: Theme.dp(Theme.ringGap)
+    property real lineWidth: Theme.dp(Theme.ringLine)
     property bool shown: true
-    property real phase: 0
 
-    readonly property real pad: gap + lineWidth + Theme.dp(6)
+    readonly property real edge: Theme.dp(Theme.ringEdge)
+    readonly property real glow: Theme.dp(Theme.ringGlow)
+    readonly property real pad: gap + lineWidth + edge + glow
 
     anchors.fill: target
     anchors.margins: -pad
     visible: shown
     z: 5
 
-    NumberAnimation on phase {
-        running: ring.visible
-        loops: Animation.Infinite
-        from: 0
-        to: 1
-        duration: 2600
-    }
+    // Sticky: a grid allocates canvases as focus reaches its tiles, and a focus move never
+    // rebuilds one (a fresh canvas shows a blank frame before its first paint).
+    onShownChanged: if (shown) loader.active = true
+    Component.onCompleted: if (shown) loader.active = true
 
     Loader {
+        id: loader
         anchors.fill: parent
-        active: ring.shown
+        active: false
         sourceComponent: canvasComponent
     }
 
@@ -38,45 +37,53 @@ Item {
 
         renderStrategy: Canvas.Cooperative
 
+        onVisibleChanged: if (visible) requestPaint()
+
+        Connections {
+            target: Theme
+            enabled: canvas.visible
+            function onRingPhaseChanged() { canvas.requestPaint(); }
+        }
         Connections {
             target: ring
-            function onPhaseChanged() { canvas.requestPaint(); }
             function onWidthChanged() { canvas.requestPaint(); }
             function onHeightChanged() { canvas.requestPaint(); }
         }
 
-        function stop(g, at, color) {
-            g.addColorStop(Math.max(0, Math.min(1, at)), color);
+        function mix(a, b, k) {
+            return Qt.rgba(a.r + (b.r - a.r) * k, a.g + (b.g - a.g) * k, a.b + (b.b - a.b) * k, 1);
+        }
+
+        // A rounded frame `inset` in from the canvas edge, its corners concentric with the target's
+        function frame(ctx, inset, lw, style) {
+            ctx.beginPath();
+            var r = ring.cornerRadius + (ring.pad - inset);
+            ctx.roundedRect(inset, inset, width - inset * 2, height - inset * 2, r, r);
+            ctx.lineWidth = lw;
+            ctx.strokeStyle = style;
+            ctx.stroke();
         }
 
         onPaint: {
             var ctx = getContext("2d");
             ctx.reset();
-            var w = width, h = height, lw = ring.lineWidth;
-            var inset = Theme.dp(6) + lw / 2;
-            var r = ring.cornerRadius + ring.gap + lw / 2;
-            var p = ring.phase;
-            var g = ctx.createLinearGradient(0, 0, w, h);
-            var c = [Theme.outlineCyan, Theme.outlineBlue, Theme.outlineViolet, Theme.outlinePink, Theme.outlineCyan];
-            for (var k = -1; k <= 1; k++) {
-                for (var i = 0; i < c.length; i++) {
-                    var at = (i / (c.length - 1)) + k - p;
-                    if (at >= -0.01 && at <= 1.01)
-                        stop(g, at, c[i]);
-                }
-            }
-            stop(g, 0, c[Math.floor(((1 - p) % 1) * (c.length - 1))]);
+            ctx.clearRect(0, 0, width, height);
             ctx.lineJoin = "round";
-            ctx.beginPath();
-            ctx.roundedRect(inset, inset, w - inset * 2, h - inset * 2, r, r);
-            ctx.lineWidth = lw * 2.6;
-            ctx.strokeStyle = Theme.dark ? Qt.rgba(0.35, 0.75, 1, 0.2) : Qt.rgba(0.3, 0.6, 1, 0.2);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.roundedRect(inset, inset, w - inset * 2, h - inset * 2, r, r);
-            ctx.lineWidth = lw;
-            ctx.strokeStyle = g;
-            ctx.stroke();
+            var gap = ring.gap, lw = ring.lineWidth, edge = ring.edge, glow = ring.glow;
+            // The band brightens and dims once per clock turn: the Switch's breathing ring.
+            var k = 0.5 - 0.5 * Math.cos(Theme.ringPhase * Math.PI * 2);
+            var lift = 0.45 * k;
+            var g = ctx.createLinearGradient(0, 0, width, height);
+            g.addColorStop(0, mix(Theme.ringCyan, Theme.ringBright, lift));
+            g.addColorStop(0.55, mix(Theme.ringBlue, Theme.ringBright, lift * 0.7));
+            g.addColorStop(1, mix(Theme.ringCyan, Theme.ringBright, lift));
+            var steps = 3, w = glow / steps, c = Theme.ringGlowColor;
+            for (var i = 0; i < steps; i++)
+                frame(ctx, w * i + w / 2, w + 0.5, Qt.rgba(c.r, c.g, c.b, c.a * (i + 1) / steps));
+            frame(ctx, glow + edge / 2, edge, Theme.ringEdgeColor);
+            frame(ctx, glow + edge + lw / 2, lw, g);
+            if (gap > 0)
+                frame(ctx, glow + edge + lw + gap / 2, gap + 0.5, Theme.ringInner);
         }
     }
 }

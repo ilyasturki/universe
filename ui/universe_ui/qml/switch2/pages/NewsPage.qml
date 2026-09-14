@@ -73,10 +73,10 @@ FocusScope {
         if (tab === 0) {
             var row = Math.floor(index / columns);
             top = row * (cardHeight + gap);
-            bottom = top + cardHeight;
+            bottom = top + cardHeight + grid.room * 2;
         } else {
             top = index * channelHeight;
-            bottom = top + channelHeight;
+            bottom = top + channelHeight + grid.room * 2;
         }
         Theme.reveal(view, top, bottom, view.height);
     }
@@ -220,6 +220,8 @@ FocusScope {
         focus: page.zone === "grid"
 
         readonly property int lastRow: page.articles.length > 0 ? Math.floor((page.articles.length - 1) / page.columns) : 0
+        // The view clips; it reaches this far past the cards so the focus ring is never cut.
+        readonly property real room: Theme.dp(Theme.ringRoom)
 
         Keys.onLeftPressed: {
             if (page.tab !== 0 || page.index % page.columns === 0) {
@@ -263,12 +265,11 @@ FocusScope {
             id: view
 
             anchors.fill: parent
-            anchors.topMargin: -Theme.dp(14)
-            anchors.bottomMargin: -Theme.dp(14)
+            anchors.margins: -grid.room
             contentWidth: width
             contentHeight: page.tab === 0
-                ? (grid.lastRow + 1) * (page.cardHeight + page.gap) + Theme.dp(28)
-                : page.channels.length * page.channelHeight + Theme.dp(28)
+                ? (grid.lastRow + 1) * (page.cardHeight + page.gap) + grid.room * 2
+                : page.channels.length * page.channelHeight + grid.room * 2
             interactive: false
             clip: true
 
@@ -287,8 +288,8 @@ FocusScope {
                     readonly property string picture: row.images && row.images.length > 0 ? row.images[0] : ""
                     readonly property var game: api.allGames.byId(row.gameId)
 
-                    x: (index % page.columns) * (page.cardWidth + page.gap)
-                    y: Math.floor(index / page.columns) * (page.cardHeight + page.gap) + Theme.dp(14)
+                    x: grid.room + (index % page.columns) * (page.cardWidth + page.gap)
+                    y: grid.room + Math.floor(index / page.columns) * (page.cardHeight + page.gap)
                     width: page.cardWidth
                     height: page.cardHeight
                     z: focused ? 2 : 1
@@ -303,7 +304,6 @@ FocusScope {
                     FocusOutline {
                         target: body
                         cornerRadius: body.radius
-                        gap: Theme.dp(1)
                         shown: card.focused
                     }
 
@@ -315,7 +315,7 @@ FocusScope {
 
                         Rectangle {
                             anchors.fill: parent
-                            color: Theme.dark ? "#101010" : "#d8d8d8"
+                            color: Theme.artShade
                         }
 
                         Image {
@@ -375,7 +375,8 @@ FocusScope {
 
                     readonly property bool focused: grid.activeFocus && index === page.index
 
-                    y: index * page.channelHeight + Theme.dp(14)
+                    x: grid.room
+                    y: grid.room + index * page.channelHeight
                     width: grid.width
                     height: page.channelHeight
 

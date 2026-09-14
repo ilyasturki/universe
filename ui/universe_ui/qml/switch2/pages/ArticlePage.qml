@@ -158,11 +158,14 @@ FocusScope {
     Flickable {
         id: flick
 
-        x: page.columnX
+        // The column clips; it reaches this far left and right so the screenshot ring is never cut.
+        readonly property real room: Theme.dp(Theme.ringRoom)
+
+        x: page.columnX - room
         anchors.top: header.bottom
         anchors.bottom: parent.bottom
         anchors.bottomMargin: Theme.dp(Theme.hintBarHeight)
-        width: page.columnWidth
+        width: page.columnWidth + room * 2
         contentWidth: width
         contentHeight: article.height + Theme.dp(120)
         interactive: false
@@ -176,8 +179,9 @@ FocusScope {
         Column {
             id: article
 
+            x: flick.room
             y: Theme.dp(48)
-            width: flick.width
+            width: page.columnWidth
             spacing: Theme.dp(24)
 
             Row {
@@ -282,7 +286,7 @@ FocusScope {
                 ListView {
                     id: strip
 
-                    readonly property real inset: Theme.dp(14)
+                    readonly property real inset: flick.room
 
                     x: -inset
                     width: parent.width + inset * 2
@@ -328,7 +332,7 @@ FocusScope {
                             height: page.shotHeight
                             anchors.verticalCenter: parent.verticalCenter
                             radius: Theme.dp(4)
-                            color: Theme.dark ? "#101010" : "#d8d8d8"
+                            color: Theme.artShade
 
                             Image {
                                 anchors.fill: parent
@@ -342,7 +346,6 @@ FocusScope {
                         FocusOutline {
                             target: shotCard
                             cornerRadius: shotCard.radius
-                            gap: Theme.dp(1)
                             shown: current
                         }
                     }
