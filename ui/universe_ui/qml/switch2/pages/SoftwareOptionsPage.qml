@@ -138,7 +138,6 @@ FocusScope {
             width: Theme.dp(300)
             height: Theme.dp(300)
             game: page.game
-            lift: false
             outlineShown: false
         }
 

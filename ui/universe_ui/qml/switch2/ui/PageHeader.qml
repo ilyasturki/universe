@@ -34,7 +34,6 @@ Item {
         height: Theme.dp(84)
         cornerRadius: Theme.dp(6)
         outlineShown: false
-        lift: false
         game: header.game
     }
 

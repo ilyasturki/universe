@@ -194,7 +194,6 @@ FocusScope {
                     cornerRadius: Theme.dp(4)
                     game: page.game
                     outlineShown: false
-                    lift: false
                 }
 
                 Text {

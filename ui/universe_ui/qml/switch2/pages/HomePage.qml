@@ -108,12 +108,13 @@ FocusScope {
     Text {
         id: title
 
-        // Centred over the focused tile, held inside the screen's margins at either end of the row
-        readonly property real centre: page.rowX + (page.onAll ? page.allIndex : page.index) * page.pitch - row.contentX + page.tile / 2
+        // Centred over the focused tile, held inside the screen's margins at either end of the row.
+        // contentX starts at -leftMargin, so the row's left inset is already in it.
+        readonly property real centre: (page.onAll ? page.allIndex : page.index) * page.pitch - row.contentX + page.tile / 2
         readonly property real margin: Theme.dp(Theme.edgeMargin)
 
         x: Math.max(margin, Math.min(centre - width / 2, page.width - margin - width))
-        y: Theme.dp(Theme.tileRowY) - Theme.dp(88)
+        y: Theme.dp(Theme.tileRowY) - Theme.dp(66)
         width: Math.min(implicitWidth, page.pitch * 2.5)
         visible: page.activeFocus && (page.currentGame !== null || page.onAll)
         text: page.onAll ? "All Software" : (page.currentGame ? page.currentGame.title : "")
@@ -167,7 +168,7 @@ FocusScope {
 
             width: page.tile
             height: row.height
-            // The lifted tile and its ring reach over the neighbours, which are later siblings.
+            // The ring reaches over the neighbours, which are later siblings.
             z: focused ? 2 : 1
 
             Tile {
@@ -183,7 +184,7 @@ FocusScope {
             Text {
                 visible: cell.isGame && cell.game && cell.game.id === page.playingId
                 anchors.top: art.bottom
-                anchors.topMargin: Theme.liftRoom(page.tile) + Theme.dp(4)
+                anchors.topMargin: Theme.dp(Theme.ringRoom + 4)
                 anchors.horizontalCenter: art.horizontalCenter
                 text: "Playing"
                 color: Theme.accent

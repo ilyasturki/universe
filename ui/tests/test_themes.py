@@ -41,3 +41,9 @@ def test_legacy_variant_ids_still_select_switch2(app, tmp_path):
 
 def test_theme_flag_is_parsed():
     assert host.parse_args(["--theme", "switch2"]).theme == "switch2"
+
+
+def test_switch2_ring_shader_is_compiled():
+    shaders = host.QML_DIR / "switch2" / "assets" / "shaders"
+    assert (shaders / "ring.frag").is_file()
+    assert (shaders / "ring.frag.qsb").stat().st_size > 0

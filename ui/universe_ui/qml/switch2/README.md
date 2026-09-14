@@ -7,7 +7,9 @@ in `core/Theme.qml` are measured from captures of the real HOME menu.
 ```
 switch2/
   theme.qml        HOME (TopBar, HomePage, BottomBar) and the page stack over it, the shell API
-  core/Theme.qml   palette, sizes, timings, the font, the focus ring's metrics and clock
+  core/Theme.qml   palette, sizes, timings, the fonts, the focus ring's metrics and clock
+  assets/shaders/  ring.frag and its qsb: the focus ring (ui/FocusOutline.qml), rebuilt with
+                   `qsb --glsl "100 es,120,150" --hlsl 50 --msl 12 -o ring.frag.qsb ring.frag`
   sound/Sound.qml  tick, ok, back, edge, type, select, open, home, launch (assets/sounds/generate.py)
   ui/              the kit
   pages/           one file per screen

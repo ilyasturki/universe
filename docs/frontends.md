@@ -147,9 +147,9 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
   a different qtbase is refused. Once `QML2_IMPORT_PATH` or `QML_IMPORT_PATH` is set (the flake's
   `wrapQtAppsHook`, `nix flake check`), it leaves them alone.
 - **Software rendering has no shaders.** The `offscreen` QPA loads the software scenegraph, where
-  `OpacityMask`, `FastBlur` and `ColorOverlay` render nothing. The affected components test
-  `GraphicsInfo.api === GraphicsInfo.Software` and degrade — square corners, no blur, untinted
-  icons. On screen nothing changes.
+  `OpacityMask`, `FastBlur`, `ColorOverlay` and `ShaderEffect` render nothing. The affected components
+  test `GraphicsInfo.api === GraphicsInfo.Software` and degrade — square corners, no blur, untinted
+  icons, a still focus ring instead of the Switch 2 look's shader. On screen nothing changes.
 - **Keys posted while a game holds focus are dropped** by Qt: there is no active item, so
   `--keys` scripting cannot drive the host behind a running game, and neither can the gamepad
   (`focusWindow()` is null). That is the wanted behaviour: the running view is operable once the

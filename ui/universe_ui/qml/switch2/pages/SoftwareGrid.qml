@@ -23,8 +23,9 @@ FocusScope {
     readonly property real tile: Theme.dp(237)
     readonly property real gap: Theme.dp(18)
     readonly property real pitch: tile + gap
-    // The view clips; it reaches this far past the cells so the lifted tile's ring is never cut.
-    readonly property real inset: Theme.liftRoom(tile)
+    // The view clips; it reaches this far past the cells so the focus ring is never cut.
+    readonly property real inset: Theme.dp(Theme.ringRoom)
+    readonly property real cornerRadius: Math.round(Theme.dp(Theme.radiusTile) * tile / Theme.dp(Theme.tileSize))
     readonly property real cellHeight: groups ? pitch + inset + Theme.dp(64) : pitch
     readonly property int lastRow: count > 0 ? Math.floor((count - 1) / columns) : 0
 
@@ -161,13 +162,14 @@ FocusScope {
 
             width: view.cellWidth
             height: view.cellHeight
-            // The lifted tile and its ring reach over the neighbours, which are later siblings.
+            // The ring reaches over the neighbours, which are later siblings.
             z: focused ? 2 : 1
 
             Tile {
                 visible: !grid.groups
                 width: grid.tile
                 height: grid.tile
+                cornerRadius: grid.cornerRadius
                 game: grid.groups ? null : cell.entry
                 focused: cell.focused
             }
@@ -177,16 +179,11 @@ FocusScope {
                 visible: grid.groups
                 width: grid.tile
                 height: grid.tile
-                scale: cell.focused ? Theme.liftScale : 1.0
-
-                Behavior on scale {
-                    NumberAnimation { duration: Theme.durLift; easing.type: Easing.OutCubic }
-                }
 
                 Rectangle {
                     id: mosaicBase
                     anchors.fill: parent
-                    radius: Theme.dp(Theme.radiusTile)
+                    radius: grid.cornerRadius
                     color: Theme.slot
                 }
 
@@ -206,7 +203,6 @@ FocusScope {
                             cornerRadius: Theme.dp(5)
                             game: index < list.length ? list[index] : null
                             outlineShown: false
-                            lift: false
                             opacity: index < list.length ? 1.0 : 0.0
                         }
                     }

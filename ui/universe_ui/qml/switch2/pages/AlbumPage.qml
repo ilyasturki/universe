@@ -284,7 +284,6 @@ FocusScope {
                         cornerRadius: Theme.dp(4)
                         game: api.allGames.byId(cell.row.gameId)
                         outlineShown: false
-                        lift: false
                     }
 
                     Rectangle {

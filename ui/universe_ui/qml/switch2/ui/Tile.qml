@@ -7,8 +7,8 @@ Item {
 
     property var game: null
     property bool focused: false
-    property bool lift: true
-    property real cornerRadius: Theme.dp(Theme.radiusTile)
+    // The HOME tile's rounding, scaled down with the tile
+    property real cornerRadius: Math.round(Theme.dp(Theme.radiusTile) * Math.min(width, height) / Theme.dp(Theme.tileSize))
     property bool outlineShown: true
 
     readonly property bool empty: game === null || game === undefined
@@ -24,12 +24,7 @@ Item {
                                   : bannerSquare ? "banner"
                                   : String(boxSource) !== "" && box.status !== Image.Error ? "box" : "none"
 
-    scale: focused && lift ? Theme.liftScale : 1.0
     z: focused ? 2 : 1
-
-    Behavior on scale {
-        NumberAnimation { duration: Theme.durLift; easing.type: Easing.OutCubic }
-    }
 
     Item {
         id: body

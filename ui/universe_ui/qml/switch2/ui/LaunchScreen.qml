@@ -71,7 +71,6 @@ Item {
             height: Theme.dp(420)
             game: null
             outlineShown: false
-            lift: false
         }
 
         Text {

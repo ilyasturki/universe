@@ -364,7 +364,6 @@ FocusScope {
                             height: page.cellW
                             game: cell.libraryGame
                             focused: cell.focused
-                            lift: false
                             cornerRadius: Theme.dp(6)
                         }
 

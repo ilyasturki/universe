@@ -36,9 +36,7 @@ Item {
         y: Theme.dp(90)
         text: Theme.clock
         color: Theme.text
-        font.family: Theme.sans
-        font.weight: Font.Bold
-        font.letterSpacing: Theme.dp(1)
+        font.family: Theme.clockSans
         font.pixelSize: Theme.dp(Theme.fontClock)
     }
 }

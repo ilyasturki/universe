@@ -333,7 +333,6 @@ FocusScope {
                             game: card.game
                             cornerRadius: 0
                             outlineShown: false
-                            lift: false
                         }
                     }
 
@@ -346,7 +345,6 @@ FocusScope {
                         cornerRadius: Theme.dp(4)
                         game: card.game
                         outlineShown: false
-                        lift: false
                     }
 
                     Text {
@@ -415,7 +413,6 @@ FocusScope {
                         cornerRadius: Theme.dp(6)
                         game: api.allGames.byId(modelData.id)
                         outlineShown: false
-                        lift: false
                     }
 
                     Text {

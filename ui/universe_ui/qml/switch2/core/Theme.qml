@@ -46,27 +46,22 @@ QtObject {
     readonly property color barBlue: "#2f6fd6"
     readonly property color barGrey: "#5a5a5a"
 
-    readonly property color ringCyan: "#3fe0ff"
-    readonly property color ringBlue: "#2a7df5"
-    readonly property color ringBright: "#dff9ff"
+    // The band's colours in perimeter order, sampled from the Switch 2 at 60 fps
+    readonly property color ringBlue: "#0a6edf"
+    readonly property color ringCyan: "#52bcff"
+    readonly property color ringPink: "#f6d9ee"
+    readonly property color ringLavender: "#b9a6ea"
     readonly property color ringInner: "#ffffff"
-    readonly property color ringEdgeColor: Qt.rgba(1, 1, 1, 0.9)
-    readonly property color ringGlowColor: Qt.rgba(0.25, 0.6, 1, 0.16)
 
-    readonly property real radiusTile: 9
+    readonly property real radiusTile: 27
     readonly property real radiusRow: 6
 
-    // The focus ring, outward from the item: white, the band, a light edge, a halo.
-    readonly property real ringGap: 8
-    readonly property real ringLine: 6
-    readonly property real ringEdge: 2
-    readonly property real ringGlow: 8
+    // The focus ring, outward from the item: a white gap, then the band. Nothing lifts or grows.
+    readonly property real ringGap: 6
+    readonly property real ringLine: 7
     // What a clipping view reserves past its items so the ring is never cut; tight: a ring with no gap
-    readonly property real ringRoom: ringGap + ringLine + ringEdge + ringGlow
-    readonly property real ringRoomTight: ringLine + ringEdge + ringGlow
-    readonly property real liftScale: 1.08
-    // How far a lifted tile of `size` px and its ring reach past the tile's resting bounds
-    function liftRoom(size) { return Math.ceil(dp(ringRoom) * liftScale + size * (liftScale - 1) / 2) }
+    readonly property real ringRoom: ringGap + ringLine
+    readonly property real ringRoomTight: ringLine
 
     readonly property real edgeMargin: 72
     readonly property real headerHeight: 126
@@ -79,7 +74,6 @@ QtObject {
     readonly property real barY: 776
 
     readonly property int durFocus: 120
-    readonly property int durLift: 180
     readonly property int durQuick: 150
     readonly property int durPage: 200
     readonly property int durFade: 300
@@ -88,17 +82,16 @@ QtObject {
     readonly property real fontBody: 33
     readonly property real fontSmall: 26
     readonly property real fontTiny: 22
-    readonly property real fontClock: 40
+    readonly property real fontClock: 44
 
-    // One clock for every ring, so a focus move never restarts the pulse. Only a visible ring
-    // repaints from it; a bare tick costs nothing to render.
+    // One clock for every ring, so a focus move never restarts the sweep.
     property real ringPhase: 0
     readonly property NumberAnimation ringClock: NumberAnimation {
         target: t
         property: "ringPhase"
         from: 0
         to: 1
-        duration: 1400
+        duration: 2400
         loops: Animation.Infinite
         running: true
     }
@@ -117,4 +110,7 @@ QtObject {
     readonly property FontLoader fontBold: FontLoader { source: fontOverride !== "" ? "" : Qt.resolvedUrl("../assets/fonts/BIZUDPGothic-Bold.ttf") }
     readonly property string fontOverride: api.theme.fontPath !== "" ? "file://" + api.theme.fontPath : ""
     readonly property string sans: fontRegular.status === FontLoader.Ready ? fontRegular.name : "sans-serif"
+    // Sawarabi Gothic: narrow, light digits like the Switch's clock; the body font's are wide.
+    readonly property FontLoader fontClockFace: FontLoader { source: Qt.resolvedUrl("../assets/fonts/SawarabiGothic-Regular.ttf") }
+    readonly property string clockSans: fontClockFace.status === FontLoader.Ready ? fontClockFace.name : sans
 }
