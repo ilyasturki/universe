@@ -116,7 +116,7 @@ raises or hides itself — Mutter owns stacking and focus on Wayland — it time
 window and asks the shell extension to focus it.
 
 `launchGame` raises `ui/LaunchOverlay.qml` over the page: the poster (`ui/LaunchFrame.qml`) fades
-in over `Theme.durLaunch` as the page fades out, holds 450 ms and calls `launch()`. The poster —
+in over `Theme.durLaunch` as the page fades out and calls `launch()`. The poster —
 art, logo and title — then holds (`waiting`) until `sessionShown` says the game's window is up and
 focused: gamescope's window maps over it, black until the game draws (the compositor animates that
 black over the art), and the poster fades out under it. `sessionShown` with `ok` false (no GNOME,

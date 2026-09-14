@@ -195,11 +195,10 @@ pub fn plan(r: &Resolved, config: &Config, session_id: &str, extra_env: &BTreeMa
     })
 }
 
-/// Fullscreen on the session's screen, every client stretched to it, the size and rate flags the
-/// fields stand for; then the global and the game's own arguments, which win (gamescope takes
+/// Fullscreen on the session's screen, the size and rate flags the fields stand for; then the global and the game's own arguments, which win (gamescope takes
 /// the last of a repeated flag).
 fn gamescope_args(config: &Config, r: &Resolved, screen: Option<crate::gamescope::Mode>) -> Vec<String> {
-    let mut args: Vec<String> = vec!["-f".into(), "--force-windows-fullscreen".into()];
+    let mut args: Vec<String> = vec!["-f".into()];
     args.extend(crate::gamescope::args(&r.effective.gamescope_fields, screen));
     for extra in [&config.launch.gamescope_args, &r.effective.gamescope_args] {
         args.extend(shell_words::split(extra).unwrap_or_else(|_| vec![extra.clone()]).into_iter().filter(|a| !a.is_empty()));
@@ -527,7 +526,7 @@ mod tests {
         let p = plan(&r, &cfg, "s", &BTreeMap::new(), screen).unwrap();
         assert!(p.gamescope);
         assert_eq!(p.program, bin.to_string_lossy());
-        let mut want: Vec<String> = ["-f", "--force-windows-fullscreen", "-W", "3840", "-H", "2160", "-w", "3840", "-h", "2160", "-r", "60", "--adaptive-sync", "-r", "120", "--mangoapp", "--"].map(String::from).into();
+        let mut want: Vec<String> = ["-f", "-W", "3840", "-H", "2160", "-w", "3840", "-h", "2160", "-r", "60", "--adaptive-sync", "-r", "120", "--mangoapp", "--"].map(String::from).into();
         if let Some(setpriv) = crate::runners::on_path("setpriv") {
             want.extend([setpriv.to_string_lossy().to_string(), "--ambient-caps=-all".into(), "--inh-caps=-all".into(), "--".into()]);
         }
@@ -540,14 +539,14 @@ mod tests {
         r.effective.gamescope_args = "--expose-wayland".into();
         let p = plan(&r, &cfg, "s", &BTreeMap::new(), None).unwrap();
         assert_eq!(p.env["PROTON_ENABLE_WAYLAND"], "1");
-        assert_eq!(p.args[2], "--adaptive-sync", "no screen known: gamescope keeps its own size");
+        assert_eq!(p.args[1], "--adaptive-sync", "no screen known: gamescope keeps its own size");
 
         r.game.launch.gamescope_resolution = "1920x1080".into();
         r.game.launch.gamescope_scaler = "integer".into();
         cfg.launch.gamescope_fps_limit = Some(60);
         let r2 = crate::library::resolve(r.game.clone(), &cfg, &[]);
         let p = plan(&r2, &cfg, "s", &BTreeMap::new(), screen).unwrap();
-        assert_eq!(p.args[2..15], ["-W", "3840", "-H", "2160", "-w", "1920", "-h", "1080", "-r", "60", "-S", "integer", "--framerate-limit"], "the game's fields over the global ones, the output the screen");
+        assert_eq!(p.args[1..14], ["-W", "3840", "-H", "2160", "-w", "1920", "-h", "1080", "-r", "60", "-S", "integer", "--framerate-limit"], "the game's fields over the global ones, the output the screen");
 
         r.effective.hdr = true;
         let p = plan(&r, &cfg, "s", &BTreeMap::new(), None).unwrap();

@@ -13,7 +13,6 @@ FocusScope {
     readonly property bool sessionRunning: session !== null && session !== undefined && session.session_id !== undefined
     // A launch is in progress: from the first frame of the poster to its last.
     readonly property bool running: sequence.running || waiting || settle.running || exit.running
-    readonly property int holdMs: 450
     // Nobody could tell when the window came up (no shell extension): the poster holds this long.
     readonly property int settleMs: 1500
 
@@ -136,8 +135,6 @@ FocusScope {
 
         // The poster is on screen before the handover starts; gamescope's window then maps
         // over it, black until the game draws.
-        PauseAnimation { duration: overlay.holdMs }
-
         ScriptAction {
             script: {
                 if (overlay.game) {
