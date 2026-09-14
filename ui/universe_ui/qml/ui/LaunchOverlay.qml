@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Window
 import "../core"
 import "../sound"
 
@@ -133,13 +134,18 @@ FocusScope {
             }
         }
 
-        // The poster is on screen before the handover starts; gamescope's window then maps
-        // over it, black until the game draws.
+        // The poster is on screen before the handover starts, and goes with the launch: gamescope's
+        // keep-alive window shows this very frame until the game's own window, so the handover is
+        // poster over poster. A grab that cannot happen launches without it (a black keep-alive).
         ScriptAction {
             script: {
                 if (overlay.game) {
                     overlay.waiting = true;
-                    overlay.game.launch();
+                    var game = overlay.game;
+                    var dpr = overlay.Screen.devicePixelRatio;
+                    var size = Qt.size(Math.round(frame.width * dpr), Math.round(frame.height * dpr));
+                    if (!frame.grabToImage(function(result) { game.launchWith(result); }, size))
+                        game.launch();
                 }
             }
         }

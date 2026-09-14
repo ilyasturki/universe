@@ -98,8 +98,9 @@ fn wrap(wrapper: &str, program: String, args: Vec<String>) -> (String, Vec<Strin
 }
 
 /// `screen` is the session screen's current mode, what gamescope's size flags follow; `None` (no
-/// screen could be read) leaves gamescope's own defaults.
-pub fn plan(r: &Resolved, config: &Config, session_id: &str, extra_env: &BTreeMap<String, String>, screen: Option<crate::gamescope::Mode>) -> crate::Result<Plan> {
+/// screen could be read) leaves gamescope's own defaults. `splash` is the poster the frontend grabbed
+/// for the keep-alive window inside gamescope (`splash.rs`); `None` keeps that window black.
+pub fn plan(r: &Resolved, config: &Config, session_id: &str, extra_env: &BTreeMap<String, String>, screen: Option<crate::gamescope::Mode>, splash: Option<&Path>) -> crate::Result<Plan> {
     use crate::runners::{self, Kind};
     let g = &r.game;
     if g.launch.exe.is_empty() {
@@ -166,6 +167,12 @@ pub fn plan(r: &Resolved, config: &Config, session_id: &str, extra_env: &BTreeMa
             // gamescope hosts X11 clients through its own Xwayland; a Wayland Proton finds no xdg-shell there.
             if !wrap.iter().any(|a| a == "--expose-wayland") {
                 env.remove("PROTON_ENABLE_WAYLAND");
+            }
+            wrap.push("--".into());
+            // gamescope's primary child is the keep-alive window's process; the game is its child, still under setpriv.
+            wrap.extend([crate::paths::self_exe().to_string_lossy().to_string(), "splash".into()]);
+            if let Some(p) = splash {
+                wrap.extend(["--image".into(), p.to_string_lossy().to_string()]);
             }
             wrap.push("--".into());
             // A capability wrapper on gamescope (NixOS capSysNice) hands CAP_SYS_NICE down to the game, and bwrap refuses to start holding one.
@@ -384,7 +391,7 @@ mod tests {
         };
         let mut cfg = Config::default();
         cfg.launch.gamescope = false;
-        let p = plan(&r, &cfg, "20260911-120000", &BTreeMap::from([("FROM_HOOK".to_string(), "1".to_string())]), None).unwrap();
+        let p = plan(&r, &cfg, "20260911-120000", &BTreeMap::from([("FROM_HOOK".to_string(), "1".to_string())]), None, None).unwrap();
         assert!(!p.gamescope);
         assert_eq!(p.unit, "universe-game-sample-20260911-120000");
         assert_eq!(p.program, "umu-run");
@@ -421,7 +428,7 @@ mod tests {
         cfg.launch.env.insert("PROTON_ENABLE_WAYLAND".into(), "1".into());
         let mut r = crate::library::resolve(g, &cfg, &[]);
         r.effective.proton_path = "/p".into();
-        let p = plan(&r, &cfg, "s", &BTreeMap::new(), None).unwrap();
+        let p = plan(&r, &cfg, "s", &BTreeMap::new(), None, None).unwrap();
         assert_eq!(p.program, "gamemoderun");
         assert_eq!(p.args, vec!["taskset", "-c", "0-7", "umu-run", &exe.to_string_lossy().to_string()]);
         assert!(!p.env.contains_key("PROTON_ENABLE_WAYLAND"), "the field off beats the seed");
@@ -445,7 +452,7 @@ mod tests {
         let mut cfg = Config::default();
         cfg.launch.gamescope = false;
         let r = crate::library::resolve(g, &cfg, &[]);
-        let p = plan(&r, &cfg, "s", &BTreeMap::new(), None).unwrap();
+        let p = plan(&r, &cfg, "s", &BTreeMap::new(), None, None).unwrap();
         assert!(p.program.ends_with("wine"));
         assert_eq!(p.env["WINEARCH"], "win64");
         assert_eq!(p.env["WINEESYNC"], "0");
@@ -477,7 +484,7 @@ mod tests {
         assert_eq!(r.effective.runner_path, emu.to_string_lossy());
         assert_eq!(r.effective.platform, "Nintendo GameCube");
         assert!(r.effective.inputplumber);
-        let p = plan(&r, &cfg, "20260913-120000", &BTreeMap::new(), None).unwrap();
+        let p = plan(&r, &cfg, "20260913-120000", &BTreeMap::new(), None, None).unwrap();
         assert_eq!(p.program, emu.to_string_lossy());
         assert_eq!(p.args, vec!["--config", "Dolphin.Display.Fullscreen=True", "--batch", "-e", &rom.to_string_lossy().to_string(), "--extra"]);
         assert_eq!(p.env["MANGOHUD"], "1");
@@ -499,7 +506,7 @@ mod tests {
         cfg.launch.gamescope = false;
         let mut r = crate::library::resolve(g, &cfg, &[]);
         r.effective.proton_path = "/p".into();
-        let p = plan(&r, &cfg, "s", &BTreeMap::new(), None).unwrap();
+        let p = plan(&r, &cfg, "s", &BTreeMap::new(), None, None).unwrap();
         assert_eq!(p.program, cfg.launch.umu_run);
         assert_eq!(p.args[..2], ["/x/xenia_canary.exe", "--fullscreen"]);
         assert_eq!(p.env["PROTONPATH"], "/p");
@@ -524,10 +531,12 @@ mod tests {
         r.effective.proton_path = "/p".into();
         assert!(r.effective.gamescope);
         let screen = Some(crate::gamescope::Mode { width: 3840, height: 2160, refresh: 60 });
-        let p = plan(&r, &cfg, "s", &BTreeMap::new(), screen).unwrap();
+        let p = plan(&r, &cfg, "s", &BTreeMap::new(), screen, Some(Path::new("/run/user/1000/universe/splash-x.bgrx"))).unwrap();
         assert!(p.gamescope);
         assert_eq!(p.program, bin.to_string_lossy());
         let mut want: Vec<String> = ["-f", "--force-composition", "-W", "3840", "-H", "2160", "-w", "3840", "-h", "2160", "-r", "60", "--adaptive-sync", "-r", "120", "--mangoapp", "--"].map(String::from).into();
+        // The keep-alive window's process is gamescope's primary child; the game, under setpriv, is its.
+        want.extend([crate::paths::self_exe().to_string_lossy().to_string(), "splash".into(), "--image".into(), "/run/user/1000/universe/splash-x.bgrx".into(), "--".into()]);
         if let Some(setpriv) = crate::runners::on_path("setpriv") {
             want.extend([setpriv.to_string_lossy().to_string(), "--ambient-caps=-all".into(), "--inh-caps=-all".into(), "--".into()]);
         }
@@ -538,19 +547,21 @@ mod tests {
         assert_eq!(p.env["PROTONPATH"], "/p");
 
         r.effective.gamescope_args = "--expose-wayland".into();
-        let p = plan(&r, &cfg, "s", &BTreeMap::new(), None).unwrap();
+        let p = plan(&r, &cfg, "s", &BTreeMap::new(), None, None).unwrap();
         assert_eq!(p.env["PROTON_ENABLE_WAYLAND"], "1");
         assert_eq!(p.args[2], "--adaptive-sync", "no screen known: gamescope keeps its own size");
+        let splash = p.args.iter().position(|a| a == "splash").unwrap();
+        assert_eq!(p.args[splash + 1], "--", "no poster: the keep-alive window stays black");
 
         r.game.launch.gamescope_resolution = "1920x1080".into();
         r.game.launch.gamescope_scaler = "integer".into();
         cfg.launch.gamescope_fps_limit = Some(60);
         let r2 = crate::library::resolve(r.game.clone(), &cfg, &[]);
-        let p = plan(&r2, &cfg, "s", &BTreeMap::new(), screen).unwrap();
+        let p = plan(&r2, &cfg, "s", &BTreeMap::new(), screen, None).unwrap();
         assert_eq!(p.args[2..15], ["-W", "3840", "-H", "2160", "-w", "1920", "-h", "1080", "-r", "60", "-S", "integer", "--framerate-limit"], "the game's fields over the global ones, the output the screen");
 
         r.effective.hdr = true;
-        let p = plan(&r, &cfg, "s", &BTreeMap::new(), None).unwrap();
+        let p = plan(&r, &cfg, "s", &BTreeMap::new(), None, None).unwrap();
         assert!(p.args.contains(&"--hdr-enabled".to_string()) && p.env["PROTON_ENABLE_HDR"] == "1");
 
         r.game.launch.gamescope = Some(false);
@@ -569,7 +580,7 @@ mod tests {
         let mut cfg = Config::default();
         cfg.launch.gamescope_bin = dir.path().join("nope/gamescope").to_string_lossy().into();
         let r = crate::library::resolve(g, &cfg, &[]);
-        let p = plan(&r, &cfg, "s", &BTreeMap::new(), None).unwrap();
+        let p = plan(&r, &cfg, "s", &BTreeMap::new(), None, None).unwrap();
         assert!(!p.gamescope);
         assert_eq!(p.program, exe.to_string_lossy());
         assert_eq!(p.env["MANGOHUD"], "1");
@@ -586,7 +597,7 @@ mod tests {
         let cfg = Config::default();
         let mut r = crate::library::resolve(g, &cfg, &[]);
         r.effective.runner_path.clear();
-        let err = plan(&r, &cfg, "s", &BTreeMap::new(), None).unwrap_err();
+        let err = plan(&r, &cfg, "s", &BTreeMap::new(), None, None).unwrap_err();
         assert!(matches!(err, crate::Error::Unavailable(_)), "{err}");
     }
 }

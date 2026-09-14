@@ -15,6 +15,7 @@ pub mod recording;
 pub mod runners;
 pub mod sessions;
 pub mod slug;
+pub mod splash;
 pub mod desktop;
 pub mod core;
 pub mod cli;

@@ -199,6 +199,13 @@ class Game(QObject):
         if self._library is not None:
             self._library.launch(self)
 
+    # `grab` is an ItemGrabResult of the launch poster, gamescope's splash until the game's window.
+    @Slot(QObject)
+    def launchWith(self, grab):
+        if self._library is not None:
+            image = grab.property("image") if grab is not None else None
+            self._library.launch(self, image)
+
     id = Property(str, lambda self: self._id, notify=changed)
     title = Property(str, lambda self: self._title, notify=changed)
     sortTitle = Property(str, lambda self: self._sortTitle, notify=changed)

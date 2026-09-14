@@ -31,6 +31,31 @@ from PySide6.QtCore import (
 log = logging.getLogger("universe.client")
 
 
+def write_poster(image, ident):
+    """The poster in `universe splash`'s format — `<w> <h>\n` then RGB32 rows — under the runtime dir;
+    the helper deletes it once shown. `""` when it cannot be written: the launch goes on without it."""
+    try:
+        from PySide6.QtGui import QImage
+
+        image = image.convertToFormat(QImage.Format_RGB32)
+        width, height, stride = image.width(), image.height(), image.bytesPerLine()
+        base = Path(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()) / "universe"
+        base.mkdir(parents=True, exist_ok=True)
+        path = base / f"splash-{ident}.bgrx"
+        bits = image.constBits()
+        with open(path, "wb") as f:
+            f.write(f"{width} {height}\n".encode())
+            if stride == width * 4:
+                f.write(bits)
+            else:
+                for y in range(height):
+                    f.write(bits[y * stride:y * stride + width * 4])
+        return str(path)
+    except (OSError, AttributeError, ImportError) as e:
+        log.warning("launch poster: %s", e)
+        return ""
+
+
 class UniverseError(Exception):
     def __init__(self, kind, message):
         super().__init__(message)
@@ -187,8 +212,9 @@ class UniverseClientBase(QObject):
 
     # -- Session1 --------------------------------------------------------------------------
 
-    @Slot(str, str)
-    def launch(self, ident, screen):
+    # `poster` is the launch poster as a QImage: written for gamescope's keep-alive window (the game's
+    # splash from the first frame of gamescope to the game's own window), off the UI thread first.
+    def launch(self, ident, screen, poster=None):
         def on_reply(value):
             self.launched.emit(str(value or ""), ident)
             self._after_launch(str(value or ""))
@@ -196,7 +222,13 @@ class UniverseClientBase(QObject):
         def on_error(e):
             self.launchFailed.emit(ident, e.message)
 
-        self._call_async("Session1", "Launch", (ident, screen), on_reply, on_error)
+        def start(splash):
+            self._call_async("Session1", "Launch", (ident, screen, splash), on_reply, on_error)
+
+        if poster is None or poster.isNull():
+            start("")
+        else:
+            self.runAsync(lambda: write_poster(poster, ident), start)
 
     # Off the UI thread: a stop waits for the unit, up to a second SIGTERM some seconds later.
     @Slot(str)
@@ -715,7 +747,7 @@ _CORE_CALLS = {
     ("Library1", "Add"): lambda s, payload: (lambda ident: (s.libraryChanged.emit([ident]), ident)[1])(s._core.add_game(payload)),
     ("Runners1", "List"): lambda s: s._core.runners_json(),
     ("Runners1", "Set"): lambda s, runner, key, value: s._core.set_runner_setting(runner, key, value),
-    ("Session1", "Launch"): lambda s, ident, screen: s._launched(s._core.launch(ident, screen), ident),
+    ("Session1", "Launch"): lambda s, ident, screen, splash: s._launched(s._core.launch(ident, screen, splash), ident),
     ("Session1", "Stop"): lambda s, session_id: s._core.stop(session_id),
     ("Session1", "AdoptScope"): lambda s: s._core.adopt_scope(),
     ("Session1", "Window"): lambda s: s._core.session_window_json(),
@@ -990,7 +1022,8 @@ class FakeClient(UniverseClientBase):
 
     # -- Session1 ----------------------------------------------------------------------------
 
-    def _Session1_Launch(self, ident, screen):
+    def _Session1_Launch(self, ident, screen, splash=""):
+        self.lastSplash = splash
         if self._current:
             raise UniverseError("Busy", f"{self._current['title']} is running")
         game = self._game(ident)

@@ -116,10 +116,14 @@ raises or hides itself — Mutter owns stacking and focus on Wayland — it time
 window and asks the shell extension to focus it.
 
 `launchGame` raises `ui/LaunchOverlay.qml` over the page: the poster (`ui/LaunchFrame.qml`) fades
-in over `Theme.durLaunch` as the page fades out and calls `launch()`. The poster —
-art, logo and title — then holds (`waiting`) until `sessionShown` says the game's window is up and
-focused: gamescope's window maps over it, black until the game draws (the compositor animates that
-black over the art), and the poster fades out under it. `sessionShown` with `ok` false (no GNOME,
+in over `Theme.durLaunch` as the page fades out, then grabs itself at the screen's pixel size
+(`grabToImage`, `Game.launchWith(result)`: the QImage is written off the UI thread in `universe
+splash`'s format under `$XDG_RUNTIME_DIR/universe/` and its path goes with `launch`; a grab that
+fails launches without one). The poster — art, logo and title — then holds (`waiting`) until
+`sessionShown` says the game's window is up and focused: gamescope's window maps over it within
+about a second, showing that same grab from its keep-alive window (`docs/api.md` § Gamescope) until
+the game's own window, so the handover is poster over poster; the launcher's poster fades out under
+it. `sessionShown` with `ok` false (no GNOME,
 no extension) holds 1500 ms instead; a session that ends before its window, or `launchFailed`,
 ends the poster at once (a toast for the failure). Every key is swallowed while it runs.
 

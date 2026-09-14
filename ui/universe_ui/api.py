@@ -258,8 +258,8 @@ class Library(QObject):
     def setGameKey(self, ident, key, value):
         self._client.set(ident, key, value)
 
-    def launch(self, game):
-        self._client.launch(game.id, self._api.screenName() if self._api else "")
+    def launch(self, game, poster=None):
+        self._client.launch(game.id, self._api.screenName() if self._api else "", poster)
 
 
 class Api(QObject):

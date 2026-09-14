@@ -246,6 +246,14 @@ pub enum Cmd {
         #[command(subcommand)]
         verb: GogCmd,
     },
+    /// gamescope's primary child: the keep-alive window, then the game (universe splash [--image P] -- <cmd…>)
+    #[command(hide = true)]
+    Splash {
+        #[arg(long)]
+        image: Option<std::path::PathBuf>,
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true, required = true)]
+        cmd: Vec<String>,
+    },
     /// Completion candidates for the shell: games | sources | modules
     #[command(name = "__complete", hide = true)]
     Complete { what: String },
@@ -526,6 +534,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
     match &cmd {
         Cmd::Complete { what } => return complete(what),
         Cmd::Generate { dir } => return generate(dir),
+        Cmd::Splash { image, cmd } => std::process::exit(crate::splash::run(image.as_deref(), cmd)),
         _ => {}
     }
     let core = Core::open().await?;
@@ -565,7 +574,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             if !no_wait {
                 core.adopt_scope().await?;
             }
-            let sid = core.launch(&id, &screen).await?;
+            let sid = core.launch(&id, &screen, "").await?;
             if json {
                 print_json(&serde_json::json!({"session": sid, "id": id}));
             } else {
@@ -1138,7 +1147,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             core.reload_config().await?;
             println!("rescanned");
         }
-        Cmd::Complete { .. } | Cmd::Generate { .. } => unreachable!(),
+        Cmd::Complete { .. } | Cmd::Generate { .. } | Cmd::Splash { .. } => unreachable!(),
     }
     Ok(())
 }

@@ -104,6 +104,12 @@ def test_a_launch_holds_the_poster_until_the_window_is_shown(api, fake):
     assert overlay.property("running") is True and root.property("launching") is True
     pump(600 + 100)
     assert overlay.property("waiting") is True and fake.currentSession["id"] == "control"
+    # The poster went with the launch, in `universe splash`'s format, at the screen's pixel size.
+    assert fake.lastSplash.endswith("splash-control.bgrx")
+    with open(fake.lastSplash, "rb") as f:
+        header = f.readline().decode().split()
+        assert [int(v) for v in header] == [round(window.width() * window.devicePixelRatio()), round(window.height() * window.devicePixelRatio())]
+        assert len(f.read()) == int(header[0]) * int(header[1]) * 4
     pump(400 + 100)
     assert shown == [True]
     pump(500)

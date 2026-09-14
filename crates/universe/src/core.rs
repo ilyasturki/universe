@@ -522,7 +522,8 @@ impl Core {
     }
 
     /// Starts the game as a transient service and returns; systemd runs `universe session-end` when its cgroup empties.
-    pub async fn launch(&self, id: &str, screen: &str) -> Result<String> {
+    /// `splash` is a poster the frontend grabbed for gamescope's keep-alive window (`splash.rs`'s format), `""` for none.
+    pub async fn launch(&self, id: &str, screen: &str, splash: &str) -> Result<String> {
         self.reconcile().await?;
         if let Some(c) = self.current().await {
             return Err(Error::Busy(format!("{} is running ({})", c.title, c.session_id)));
@@ -568,7 +569,8 @@ impl Core {
         let _ = std::fs::remove_file(&env_file);
 
         let mode = crate::desktop::screen_mode(&screen).await;
-        let plan = launcher::plan(&r, &cfg, &session_id, &extra_env, mode)?;
+        let splash = (!splash.is_empty()).then(|| std::path::PathBuf::from(splash));
+        let plan = launcher::plan(&r, &cfg, &session_id, &extra_env, mode, splash.as_deref())?;
         launcher::run_shell(&plan.pre_command, &plan.env, &plan.cwd).await?;
 
         let inputplumber = r.effective.inputplumber && tokio::task::spawn_blocking(crate::inputplumber::engage).await.unwrap_or(false);

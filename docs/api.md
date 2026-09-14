@@ -101,7 +101,7 @@ hooks write shows up that way, with no other channel.
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `launch(id, screen)` | `launch(id, screen)` | `universe play <name> [--screen DP-1] [--no-wait]` | pre-launch hooks, marker, `systemd-run`, post-launch hooks; returns the `session_id` at once. `screen` is a DRM connector name or `""` for the profile default. `Busy` if a session is already running |
+| `launch(id, screen, splash)` | `launch(id, screen, splash="")` | `universe play <name> [--screen DP-1] [--no-wait]` | pre-launch hooks, marker, `systemd-run`, post-launch hooks; returns the `session_id` at once. `screen` is a DRM connector name or `""` for the profile default; `splash` a poster for gamescope's keep-alive window (see Gamescope) or `""`. `Busy` if a session is already running |
 | `stop(session_id)` | `stop(session_id)` | `universe stop` | `systemctl --user stop` on the unit; waits for it, a second SIGTERM after ~3 s |
 | `session_window()` | `session_window_json()` | — | the running game's window as the Universe shell extension lists it (`{id, pid, wm_class, title, focused, width, height, hidden, minimized}`): the largest visible toplevel whose pid is in the unit's cgroup — gamescope's when the game runs inside it. `None`/`""` before it maps; `Unavailable` off GNOME |
 | `wait_session_window(session_id, timeout)` | `wait_session_window(session_id, timeout_ms)` | — | blocks until that window is up, then `Activate`s it (focus and raise) and returns it; `""` when the session ended first or the timeout ran out; `Unavailable` off GNOME, at once. Polls the extension every 150 ms |
@@ -129,11 +129,23 @@ when it was killed by a signal (a `stop`).
 Every runner's command runs inside gamescope by default: `gamescope -f --force-composition
 -W <screen width> -H <screen height> -w <game width> -h <game height> -r <refresh> [-S scaler] [-F filter]
 [--sharpness N] [--framerate-limit N] [--adaptive-sync] [launch.gamescope_args] [the game's
-gamescope_args] [--mangoapp] -- <program> <args…>`. One window, black until the game draws,
-whatever the game, Proton or umu put up first, and the launcher hands over on that window.
-`--force-composition` keeps gamescope drawing its own frame instead of scanning the game's buffer
-out directly: Mutter's window screencast (what `capture` records) blits a scanned-out buffer as one
-flat colour. Left to itself gamescope's nested screen is 1280×720 whatever the window covers, so the session screen's mode is passed explicitly: the
+gamescope_args] [--mangoapp] -- universe splash [--image <poster>] -- <program> <args…>`. One
+window, from gamescope's first frame to the game's last, whatever the game, Proton or umu put up
+first, and the launcher hands over on it. `--force-composition` keeps gamescope drawing its own
+frame instead of scanning the game's buffer out directly: Mutter's window screencast (what
+`capture` records) blits a scanned-out buffer as one flat colour.
+
+gamescope unmaps its own window whenever no client inside it is focused, and a game that closes
+its first window before opening the real one (Dead Cells) would flash the desktop through, so
+`universe splash` — gamescope's primary child, the game its child — keeps a window up for the
+whole session: a disabled (`_WINE_HWND_STYLE` WS_DISABLED), skip-taskbar X window that gamescope
+ranks below any window of the game's, so the game's windows take over the moment they appear and
+this one shows only when the game has none. `--image` fills it with a poster the frontend
+grabbed — `<width> <height>\n` then width×height×4 bytes of little-endian BGRX (Qt's
+`Format_RGB32`), nearest-neighbour scaled onto gamescope's nested screen, the file deleted once
+read — so the launcher's poster is on screen from Proton's startup to the game's first frame;
+without it (`universe play`) the window is black. Left to itself gamescope's nested screen
+is 1280×720 whatever the window covers, so the session screen's mode is passed explicitly: the
 output (`-W -H`) is always the screen, and the game's resolution and refresh follow it unless set.
 The mode is the connector's `is-current` one from Mutter's DisplayConfig (`GetCurrentState`,
 physical pixels — gamescope handles the desktop's scale itself), else its preferred DRM mode

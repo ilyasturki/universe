@@ -98,8 +98,9 @@ impl Core {
     fn current_json(&self, py: Python<'_>) -> String {
         self.run_infallible(py, |c| c.current_json())
     }
-    fn launch(&self, py: Python<'_>, id: String, screen: String) -> PyResult<String> {
-        self.run(py, |c| async move { c.launch(&id, &screen).await })
+    #[pyo3(signature = (id, screen, splash = String::new()))]
+    fn launch(&self, py: Python<'_>, id: String, screen: String, splash: String) -> PyResult<String> {
+        self.run(py, |c| async move { c.launch(&id, &screen, &splash).await })
     }
     fn stop(&self, py: Python<'_>, session_id: String) -> PyResult<()> {
         self.run(py, |c| async move { c.stop(&session_id).await })
