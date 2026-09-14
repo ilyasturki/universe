@@ -4,10 +4,10 @@ import "../sound"
 import "../ui"
 import "../ui/Macros.js" as Macros
 
-// The Settings tab: a sidebar of sections and one column of cards beside it. Modules and their
-// global settings, the runners (where each was found, its options, a game added through it), a
-// source's library to install from, pending updates, the login flow, doctor's checks, and the
-// controller's macros. One set of cards, seven row sources.
+// The Settings tab: a sidebar of sections and one column of cards beside it. The runners (a list;
+// each opens its own page), modules and their global settings, a source's library to install
+// from, pending updates, the login flow, the controller's macros, the look, doctor's checks. One
+// set of cards, eight row sources.
 FocusScope {
     id: page
 
@@ -15,6 +15,7 @@ FocusScope {
 
     signal chromeRequested()
     signal settingsRequested(var game)
+    signal runnerRequested(string runner)
 
     readonly property var currentGame: null
     readonly property bool ownsBackdrop: false
@@ -28,16 +29,16 @@ FocusScope {
     readonly property bool ownsAccept: true
     property bool menuOpen: false
 
-    readonly property var sections: ["Modules", "Runners", "Install", "Updates", "Login", "Doctor", "Controller", "Themes"]
-    readonly property var sectionIcons: ["grid", "play", "download", "refresh", "user", "pulse", "gamepad", "sun"]
-    readonly property int modulesSection: 0
-    readonly property int runnersSection: 1
+    readonly property var sections: ["Runners", "Modules", "Install", "Updates", "Login", "Controller", "Themes", "Doctor"]
+    readonly property var sectionIcons: ["play", "grid", "download", "refresh", "user", "gamepad", "sun", "pulse"]
+    readonly property int runnersSection: 0
+    readonly property int modulesSection: 1
     readonly property int installSection: 2
     readonly property int updatesSection: 3
     readonly property int loginSection: 4
-    readonly property int doctorSection: 5
-    readonly property int controllerSection: 6
-    readonly property int themesSection: 7
+    readonly property int controllerSection: 5
+    readonly property int themesSection: 6
+    readonly property int doctorSection: 7
     property int section: 0
 
     readonly property var modulesForm: api.screens.modules
@@ -56,6 +57,8 @@ FocusScope {
     property var held: ({})
     property string pendingSlot: ""
     property string pendingTrigger: ""
+    // The runner whose page is open: the list reloads under it and the cursor finds it again.
+    property string openedRunner: ""
 
     readonly property var hints: editor.open ? editor.hints
         : menu.open ? menu.hints
@@ -192,7 +195,7 @@ FocusScope {
         if (section === themesSection) {
             rows.push({ section: "Themes", key: "theme", label: "Theme", type: "enum", value: api.theme.name, display: api.theme.name,
                         choices: api.theme.themes.map(function(t) { return t.name; }), detail: "" });
-            groups.push({ title: "Look", meta: "Changes at once, no restart", rows: [0] });
+            groups.push({ title: "Look", rows: [0] });
             return { rows: rows, groups: groups };
         }
         return { rows: modulesForm.doctor, groups: modulesForm.doctorGroups };
@@ -254,13 +257,10 @@ FocusScope {
                 editor.edit(index, row);
             }
         } else if (section === runnersSection) {
-            if (row.type === "bool") {
-                runners.toggle(index);
-                Sound.favourite(!row.value);
-            } else {
-                Sound.panel();
-                editor.edit(index, row.key === "add_file" ? { type: "path", key: "add_file", label: "Game file for " + row.section, value: "" } : row);
-            }
+            // The runner's page takes the focus next and hands it back here, on this row.
+            cards.forceActiveFocus();
+            openedRunner = row.runner;
+            page.runnerRequested(row.runner);
         } else if (section === installSection) {
             if (row.key === "search") {
                 Sound.panel();
@@ -342,10 +342,8 @@ FocusScope {
         if (!row)
             return;
         if (action === "learn") {
-            if (controller.learn(row.key)) {
+            if (controller.learn(row.key))
                 Sound.enter();
-                toast.show("Press the button on the controller…");
-            }
         } else if (action === "press" || action === "hold") {
             Sound.panel();
             pendingSlot = row.key;
@@ -370,6 +368,16 @@ FocusScope {
             controller.unbind(row.key, "hold");
         }
         cards.forceActiveFocus();
+    }
+
+    onActiveFocusChanged: {
+        if (!activeFocus || openedRunner === "")
+            return;
+        runners.load();
+        var i = runners.indexOf(openedRunner);
+        openedRunner = "";
+        if (i >= 0)
+            cards.index = i;
     }
 
     onControllerOpenChanged: {
@@ -481,11 +489,6 @@ FocusScope {
 
     Connections {
         target: page.sources
-        function onMessage(text) { toast.show(text); }
-    }
-
-    Connections {
-        target: page.runners
         function onMessage(text) { toast.show(text); }
     }
 
@@ -862,12 +865,7 @@ FocusScope {
                     Qt.callLater(function() { api.theme.set(theme.id); });
             } else if (page.section === page.controllerSection)
                 page.controller.setValue(index, value);
-            else if (page.section === page.runnersSection) {
-                // callLater: the sheet's closed() follows accepted() and would close a prompt opened now.
-                var add = page.runners.row(index).key === "add_file";
-                if (page.runners.setValue(index, value) && add)
-                    Qt.callLater(function() { editor.prompt("add-title", "Title of the game", page.runners.pendingTitle()); });
-            } else
+            else
                 page.modulesForm.setValue(index, value);
         }
         onPrompted: function(tag, value) {
@@ -875,12 +873,6 @@ FocusScope {
                 page.sources.search(value);
             else if (tag === "code")
                 page.login.submit(value);
-            else if (tag === "add-title") {
-                if (page.runners.addGame(value) !== "")
-                    Sound.enter();
-                else
-                    Sound.edge();
-            }
             else if ((tag === "keys" || tag === "command") && value !== "")
                 page.controller.bind(page.pendingSlot, page.pendingTrigger, tag, tag === "keys" ? value : "", tag === "command" ? value : "");
         }

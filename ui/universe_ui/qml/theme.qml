@@ -18,6 +18,7 @@ FocusScope {
     // A screen over the detail page or the tabs: settings, recordings or journal of one game.
     property bool subOpen: false
     property var subGame: null
+    property string subRunner: ""
     property string subSource: ""
     // The session the sub page opens on; recordings and journal jump to each other by it.
     property string subSession: ""
@@ -114,7 +115,23 @@ FocusScope {
             return;
         Sound.enter();
         subGame = game;
+        subRunner = "";
         subSource = source;
+        subSession = "";
+        subReturn = null;
+        subOpen = true;
+        if (subLoader.item)
+            subLoader.item.forceActiveFocus();
+    }
+
+    // A runner's page: no game under it, the settings tab's runner list waits behind.
+    function openRunner(runner) {
+        if (!runner)
+            return;
+        Sound.enter();
+        subGame = null;
+        subRunner = runner;
+        subSource = "pages/RunnerSettingsPage.qml";
         subSession = "";
         subReturn = null;
         subOpen = true;
@@ -448,6 +465,7 @@ FocusScope {
                         ignoreUnknownSignals: true
                         function onDetailRequested(game) { root.openDetail(game); }
                         function onSettingsRequested(game) { root.openSub("pages/GameSettingsPage.qml", game); }
+                        function onRunnerRequested(runner) { root.openRunner(runner); }
                         function onTabRequested(index) {
                             Sound.enter();
                             root.goToTab(index);
@@ -561,7 +579,10 @@ FocusScope {
                                Behavior on y { NumberAnimation { duration: Theme.durScene; easing.type: Easing.OutCubic } } }
 
         onLoaded: {
-            item.game = Qt.binding(function() { return root.subGame; });
+            if ("game" in item)
+                item.game = Qt.binding(function() { return root.subGame; });
+            if ("runner" in item)
+                item.runner = Qt.binding(function() { return root.subRunner; });
             if ("session" in item)
                 item.session = Qt.binding(function() { return root.subSession; });
             item.forceActiveFocus();

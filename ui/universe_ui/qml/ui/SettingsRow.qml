@@ -35,8 +35,10 @@ Item {
     // An icon naming a file (a runner's logo) is drawn whole in a square; a bare name is a menu glyph.
     readonly property bool iconIsFile: entry.icon !== undefined && entry.icon !== null && String(entry.icon).indexOf("/") >= 0
     readonly property bool hasMark: !hasImage && iconIsFile && mark.status === Image.Ready
+    // A list where most rows carry a mark keeps the label aligned on the ones without.
+    readonly property bool keepsMark: hasMark || entry.iconSlot === true
     readonly property bool hasIcon: !hasGlyph && !iconIsFile && entry.icon !== undefined && String(entry.icon) !== ""
-    readonly property real labelInset: hasImage ? thumb.width + Theme.dp(24) : hasMark ? mark.width + Theme.dp(28) : hasGlyph || hasIcon ? Theme.dp(18) + lead.width + Theme.dp(16) : Theme.dp(18)
+    readonly property real labelInset: hasImage ? thumb.width + Theme.dp(24) : keepsMark ? mark.width + Theme.dp(28) : hasGlyph || hasIcon ? Theme.dp(18) + lead.width + Theme.dp(16) : Theme.dp(18)
     readonly property color onFocus: Qt.rgba(0.063, 0.067, 0.086, 0.7)
     // A value or a detail leaves the label at least a third of the row.
     readonly property real valueMax: Math.max(Theme.dp(120), width * 0.6 - (hasImage ? thumb.width : 0))
@@ -174,10 +176,12 @@ Item {
         anchors.right: parent.right
         anchors.rightMargin: Theme.dp(16)
         anchors.verticalCenter: parent.verticalCenter
-        width: childrenRect.width
+        // The shown variant alone: childrenRect would count the hidden ones too.
+        width: toggle.visible ? toggle.width : valueRow.visible ? valueRow.width : infoRow.width
         height: parent.height
 
         SettingsToggle {
+            id: toggle
             visible: row.entry.type === "bool"
             anchors.verticalCenter: parent.verticalCenter
             on: row.entry.value === true
@@ -186,6 +190,7 @@ Item {
 
         // enum, string, path, int, action: an inherited tag, the value and a chevron
         Row {
+            id: valueRow
             visible: row.entry.type !== "bool" && !row.info
             anchors.verticalCenter: parent.verticalCenter
             spacing: Theme.dp(16)
@@ -300,12 +305,14 @@ Item {
 
         // info: the detail and a status dot
         Row {
+            id: infoRow
             visible: row.info
             anchors.verticalCenter: parent.verticalCenter
             spacing: Theme.dp(14)
 
             Text {
                 anchors.verticalCenter: parent.verticalCenter
+                visible: text !== ""
                 text: row.entry.detail || ""
                 color: row.focused ? row.onFocus : Theme.textMuted
                 font.family: Theme.sans

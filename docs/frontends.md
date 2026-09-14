@@ -182,8 +182,8 @@ Switch pad); with no pad the watcher sees, they stay Xbox letters.
 
 ## The Settings tab
 
-`pages/SettingsPage.qml` is a sidebar (`ui/SectionList.qml`: Modules, Runners, Install, Updates,
-Login, Doctor, Controller) beside one column of `ui/SettingsCards.qml` (`columns: 1`; the game
+`pages/SettingsPage.qml` is a sidebar (`ui/SectionList.qml`: Runners, Modules, Install, Updates,
+Login, Controller, Themes, Doctor) beside one column of `ui/SettingsCards.qml` (`columns: 1`; the game
 settings page keeps two). Up and Down in the sidebar switch the section as they go, Right or A
 enter the cards, Left or B come back, L2/R2 cycle the section from anywhere, and □ refreshes the
 sections that fetch (Install, Updates, Login, Doctor). A source's search is the first row of its
@@ -195,13 +195,19 @@ from `ui/Macros.js`, the macro's `label`).
 
 ## The runners section
 
-`api.screens.runners` is the Runners section of the Settings tab. `load()` reads `Runners1.List`
-and builds one card per runner: its logo (`assets/runners/<id>.svg|png`, `logo(id)` says which
-exists), its platforms and where its program was found in the header, then rows for the program
-(`exe`, a path; inherited when detected), the arguments, each option by its type, and an "Add a
-game…" action. `setValue(index, value)` writes through `Runners1.Set`; on the add row it keeps the
-picked file and `pendingTitle()` proposes a title from it, which `addGame(title)` sends to
-`Library1.Add`. The game settings page's Launch group follows the runner: a Runner picker (names
+`api.screens.runners` is the Runners section of the Settings tab: one row per runner, its logo
+(`assets/runners/<id>.svg|png`, `logo(id)` says which exists), its name and how many library
+games run through it (`effective.runner`), sorted by that count, then by those games' hours, then
+by name; the runners whose program was not found come last, in a dimmed "Not found" card.
+`indexOf(id)` finds a runner's row. A runner's row opens `pages/RunnerSettingsPage.qml` over the
+tab (`theme.qml` `openRunner`, the same loader as the game's sub pages), on `api.screens.runner`:
+`load(id)` builds its head (`info`: name, platforms and where its program was found, a warning)
+and cards for the program (`exe`, a path; inherited when detected) and arguments, each option by
+its type, and an "Add a game…" action. `setValue(index, value)` writes through `Runners1.Set`; on
+the add row it keeps the picked file and `pendingTitle()` proposes a title from it, which
+`addGame(title)` sends to `Library1.Add`. Back on the tab, the list reloads and the cursor finds
+the runner again. The Switch 2 look has the same list as System Settings › Runners and the same
+page as `switch2/pages/RunnerPage.qml`, pushed on its stack. The game settings page's Launch group follows the runner: a Runner picker (names
 shown, ids written), then the rows the runner takes. The detail page shows the runner's logo next
 to the platform.
 

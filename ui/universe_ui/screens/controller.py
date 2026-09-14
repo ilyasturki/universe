@@ -410,15 +410,11 @@ class ControllerScreen(QObject):
         rows, groups = [], []
         device = self._device()
         if device is None and self._status == "off" and self._watcher is not None:
-            rows.append(_row("Controller", "", "Controller macros stopped", "info", False, detail="Restarting the watcher"))
-            groups.append(_group("Controller", [0], meta="Macros are off until it is back"))
-        elif device is None and self._passive:
-            rows.append(_row("Controller", "", "No controller connected", "info", False, detail=PASSIVE_TEXT))
-            groups.append(_group("Controller", [0], meta="Macros wait for a pad"))
+            rows.append(_row("Controller", "", "Controller macros stopped", "info", False, detail="Restarting"))
+            groups.append(_group("Controller", [0]))
         elif device is None:
-            rows.append(_row("Controller", "", "No controller connected", "info", False,
-                             detail="Connect a pad over USB or Bluetooth"))
-            groups.append(_group("Controller", [0], meta="Macros wait for a pad"))
+            rows.append(_row("Controller", "", "No controller connected", "info", False))
+            groups.append(_group("Controller", [0]))
         else:
             family = self._families().get(device["family"])
             if family is not None:
@@ -429,13 +425,13 @@ class ControllerScreen(QObject):
                 slots = [{"id": s, "label": s.replace("_", " ").capitalize(), "codes": [], "extra": True} for s in device["slots"]]
                 name = device["name"]
             if self._passive:
-                rows.append(_row(name, "", PASSIVE_TEXT, "info", False, detail=PASSIVE_DETAIL))
+                rows.append(_row(name, "", PASSIVE_TEXT, "info", False))
             if len(self._devices) > 1:
                 names = [d["name"] for d in self._devices]
                 rows.append(_row(name, "device", "Controller", "enum", device["name"], choices=names))
             if self._status == "ready" and not self._passive:
-                row = _row(name, "test", "Test the buttons", "action", "Buttons, sticks and triggers")
-                row.update(family=device["family"], icon="gamepad", action="Start")
+                row = _row(name, "test", "Test the buttons", "action", "")
+                row.update(display="", family=device["family"], icon="gamepad", action="Start")
                 rows.append(row)
             for slot in slots:
                 binding = device["slots"].get(slot["id"]) or {}

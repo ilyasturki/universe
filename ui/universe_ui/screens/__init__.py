@@ -5,7 +5,7 @@ from PySide6.QtCore import Property, QObject
 from .controller import ControllerScreen
 from .media import JournalList, PendingJournals, RecordingsList
 from .paths import PathBrowser
-from .runners import RunnersForm
+from .runners import RunnerForm, RunnersForm
 from .settings import GameSettingsForm, ModulesForm
 from .sources import LoginFlow, SourcesBrowser
 
@@ -25,6 +25,7 @@ class Screens(QObject):
         self._paths = PathBrowser(client, self)
         self._controller = ControllerScreen(client, memory, self)
         self._runners = RunnersForm(client, self)
+        self._runner = RunnerForm(client, self)
 
     def shutdown(self):
         self._recordings.shutdown()
@@ -44,3 +45,4 @@ class Screens(QObject):
     paths = Property(QObject, lambda self: self._paths, constant=True)
     controller = Property(QObject, lambda self: self._controller, constant=True)
     runners = Property(QObject, lambda self: self._runners, constant=True)
+    runner = Property(QObject, lambda self: self._runner, constant=True)

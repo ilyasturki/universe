@@ -13,28 +13,32 @@ FocusScope {
     focus: true
 
     readonly property var modulesForm: api.screens.modules
+    readonly property var runners: api.screens.runners
     readonly property var sources: api.screens.sources
     readonly property var login: api.screens.login
 
     readonly property var sections: [
+        { id: "runners", label: "Runners", group: 0 },
         { id: "modules", label: "Modules", group: 0 },
         { id: "updates", label: "Updates", detail: sources.updates.length > 0 ? sources.updates.length + " pending" : "", group: 0 },
         { id: "signin", label: "Sign-in", group: 0 },
-        { id: "doctor", label: "Doctor", group: 1 },
         { id: "controllers", label: "Controllers", group: 1 },
-        { id: "themes", label: "Themes", group: 2 },
+        { id: "themes", label: "Themes", group: 1 },
+        { id: "doctor", label: "Doctor", group: 2 },
         { id: "about", label: "About", group: 2 }
     ]
     property int section: 0
     readonly property string sectionId: sections[section].id
     property string zone: "list"
     readonly property bool folderOpen: folder.open
+    // The runner whose page is open: the list reloads under it and the cursor finds it again.
+    property string openedRunner: ""
 
     readonly property var hints: {
         if (folderOpen)
             return folder.hints;
         var out = [];
-        if (sectionId === "updates" || sectionId === "signin" || sectionId === "doctor")
+        if (sectionId === "runners" || sectionId === "updates" || sectionId === "signin" || sectionId === "doctor")
             out.push({ glyph: "Y", label: "Refresh" });
         out.push({ glyph: "B", label: "Back" });
         var row = rows.currentRow;
@@ -60,13 +64,45 @@ FocusScope {
     }
 
     Component.onCompleted: {
+        runners.load();
         modulesForm.load();
         modulesForm.loadDoctor();
         sources.load();
     }
 
+    onActiveFocusChanged: {
+        if (!activeFocus || openedRunner === "")
+            return;
+        runners.load();
+        var i = rowOfRunner(openedRunner);
+        openedRunner = "";
+        if (i >= 0)
+            rows.index = i;
+    }
+
+    function rowOfRunner(id) {
+        var list = content;
+        for (var i = 0; i < list.length; i++)
+            if (list[i].runner === id)
+                return i;
+        return -1;
+    }
+
     readonly property var content: {
         var out = [], i, j;
+        if (sectionId === "runners") {
+            var rg = runners.groups, rr = runners.rows;
+            for (i = 0; i < rg.length; i++) {
+                if (rg[i].title)
+                    out.push({ heading: true, label: rg[i].title, display: "" });
+                for (j = 0; j < rg[i].rows.length; j++) {
+                    var run = rr[rg[i].rows[j]];
+                    out.push({ label: run.label, type: "action", action: "runner", runner: run.runner, icon: run.icon, iconSlot: true,
+                               display: run.display, detail: "", dim: rg[i].off === true });
+                }
+            }
+            return out;
+        }
         if (sectionId === "modules") {
             var groups = modulesForm.groups, all = modulesForm.rows;
             for (i = 0; i < groups.length; i++) {
@@ -92,12 +128,10 @@ FocusScope {
         if (sectionId === "updates") {
             var n = sources.updates.length;
             if (n === 0) {
-                out.push({ label: sources.busy ? "Checking…" : "Everything is up to date", type: "info", value: true, display: "",
-                           detail: "Installed games are compared with " + sourceName + "'s builds." });
+                out.push({ label: sources.busy ? "Checking…" : "Everything is up to date", type: "info", value: true, display: "", detail: "" });
                 return out;
             }
-            out.push({ label: "Update everything", type: "action", display: n + " pending", action: "update-all",
-                       detail: "Downloads each update in turn." });
+            out.push({ label: "Update everything", type: "action", display: n + " pending", action: "update-all", detail: "" });
             for (i = 0; i < n; i++) {
                 var u = sources.updates[i];
                 out.push({ label: u.title, type: "action", display: (u.version ? u.version + " · " : "") + (u.date || ""),
@@ -107,12 +141,9 @@ FocusScope {
         }
         if (sectionId === "signin") {
             out.push({ heading: true, label: sourceName, display: "" });
-            out.push({ label: "Signed in", type: "info", value: loggedIn, display: loggedIn ? "Yes" : "No",
-                       detail: loggedIn ? "Installs and updates come from your account." : "Sign in to install and update games." });
-            out.push({ label: "Get a sign-in link", type: "action", action: "link", display: login.url ? "Ready" : "",
-                       detail: "Shows a link and a QR code to open on your phone." });
-            out.push({ label: "Enter the code", type: "action", action: "code", display: "",
-                       detail: "The code the page shows once you are signed in." });
+            out.push({ label: "Signed in", type: "info", value: loggedIn, display: loggedIn ? "Yes" : "No", detail: "" });
+            out.push({ label: "Get a sign-in link", type: "action", action: "link", display: login.url ? "Ready" : "", detail: "" });
+            out.push({ label: "Enter the code", type: "action", action: "code", display: "", detail: "" });
             return out;
         }
         if (sectionId === "doctor") {
@@ -125,12 +156,11 @@ FocusScope {
                 }
             }
             if (out.length === 0)
-                out.push({ label: "No checks yet", type: "info", value: true, display: "", detail: "Doctor runs when this page opens." });
+                out.push({ label: "No checks yet", type: "info", value: true, display: "", detail: "" });
             return out;
         }
         if (sectionId === "controllers") {
-            out.push({ label: "Controllers", type: "action", action: "controllers", display: "",
-                       detail: "The pads the launcher sees, their buttons, and what each one does." });
+            out.push({ label: "Controllers", type: "action", action: "controllers", display: "", detail: "" });
             return out;
         }
         if (sectionId === "themes") {
@@ -145,8 +175,8 @@ FocusScope {
             return out;
         }
         if (sectionId === "about") {
-            out.push({ label: "Universe", type: "static", display: api.universe.version() || "development build", detail: "The core this host runs on." });
-            out.push({ label: "Look", type: "static", display: api.theme.name, detail: "Changed under Themes." });
+            out.push({ label: "Universe", type: "static", display: api.universe.version() || "development build", detail: "" });
+            out.push({ label: "Look", type: "static", display: api.theme.name, detail: "" });
             out.push({ label: "Library", type: "static", display: api.allGames.count + (api.allGames.count === 1 ? " game" : " games"), detail: "" });
             return out;
         }
@@ -154,6 +184,12 @@ FocusScope {
     }
 
     function activate(index, row) {
+        if (sectionId === "runners") {
+            Sound.ok();
+            openedRunner = row.runner;
+            shell.push("pages/RunnerPage.qml", { runner: row.runner });
+            return;
+        }
         if (sectionId === "modules") {
             if (row.type === "bool") {
                 modulesForm.toggle(row.form);
@@ -207,7 +243,10 @@ FocusScope {
     }
 
     function refreshNow() {
-        if (sectionId === "updates" || sectionId === "signin") {
+        if (sectionId === "runners") {
+            Sound.ok();
+            runners.load();
+        } else if (sectionId === "updates" || sectionId === "signin") {
             Sound.ok();
             sources.refresh();
         } else if (sectionId === "doctor") {

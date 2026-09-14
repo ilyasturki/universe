@@ -170,8 +170,14 @@ FocusScope {
                 readonly property bool info: entry.type === "info"
                 readonly property bool hasDetail: entry.detail !== undefined && entry.detail !== ""
                 readonly property bool hasGlyph: entry.slot !== undefined && String(entry.slot) !== "" && entry.family !== undefined
-                readonly property bool hasIcon: !hasGlyph && entry.icon !== undefined && String(entry.icon) !== ""
-                readonly property color ink: disabled ? Theme.textDisabled : Theme.text
+                // An icon naming a file (a runner's logo) is drawn whole; a bare name is a Glyph kind.
+                readonly property bool iconIsFile: entry.icon !== undefined && entry.icon !== null && String(entry.icon).indexOf("/") >= 0
+                readonly property bool hasMark: iconIsFile && mark.status === Image.Ready
+                readonly property bool hasIcon: !hasGlyph && !iconIsFile && entry.icon !== undefined && String(entry.icon) !== ""
+                // A list where most rows carry a mark keeps the label aligned on the ones without.
+                readonly property bool keepsMark: hasMark || entry.iconSlot === true
+                // Dim reads as disabled but still opens: a runner whose program was not found.
+                readonly property color ink: disabled || entry.dim === true ? Theme.textDisabled : Theme.text
 
                 y: rows.yOf(index)
                 width: view.width
@@ -264,8 +270,8 @@ FocusScope {
                         id: lead
                         x: rows.inset
                         height: rows.rowHeight
-                        width: row.hasGlyph ? Theme.dp(64) : row.hasIcon ? Theme.dp(52) : 0
-                        visible: row.hasGlyph || row.hasIcon
+                        width: row.hasGlyph ? Theme.dp(64) : row.hasIcon || row.keepsMark ? Theme.dp(52) : 0
+                        visible: row.hasGlyph || row.hasIcon || row.keepsMark
 
                         Loader {
                             anchors.verticalCenter: parent.verticalCenter
@@ -286,6 +292,21 @@ FocusScope {
                             height: width
                             kind: row.hasIcon ? String(row.entry.icon) : ""
                             tint: row.ink
+                        }
+
+                        Image {
+                            id: mark
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: Theme.dp(44)
+                            height: width
+                            source: row.iconIsFile ? Qt.resolvedUrl("../../" + row.entry.icon) : ""
+                            asynchronous: true
+                            fillMode: Image.PreserveAspectFit
+                            sourceSize.height: 128
+                            smooth: true
+                            mipmap: true
+                            visible: row.hasMark
+                            opacity: row.disabled || row.entry.dim === true ? 0.4 : 1.0
                         }
                     }
 
@@ -357,6 +378,7 @@ FocusScope {
 
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
+                                visible: text !== ""
                                 text: row.entry.display || ""
                                 color: Theme.textSecondary
                                 font.family: Theme.sans
