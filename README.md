@@ -56,6 +56,7 @@ universe status                # current session, last sessions
 universe info technomancer
 universe set technomancer proton=proton-em capture.cursor=true
 universe set technomancer gamescope=false   # this game on the desktop, not inside gamescope; gamescope_args="-r 120" for its flags
+universe set sekiro wayland=false hdr=true wrapper=gamemoderun   # Proton switches (esync fsync ntsync wayland hdr dlss_upgrade fsr4_upgrade xess_upgrade optiscaler), a command in front of the program
 universe add "/mnt/games/gamecube/F-Zero GX.iso" --runner dolphin   # a ROM, image or folder; --title, --platform, --media
 universe runner ls             # every runner, where its program was found
 universe runner set dolphin exe=/opt/dolphin/dolphin-emu batch=false   # a runner's program, arguments and options

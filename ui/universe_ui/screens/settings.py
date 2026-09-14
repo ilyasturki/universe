@@ -104,10 +104,10 @@ CORE_ROWS = [
     ("Artwork", "metadata.rawg_id", "RAWG id", "int"),
 ]
 LAUNCH_ROWS = {
-    "proton": [("launch.proton", "Proton", "enum"), ("launch.esync", "Esync", "bool"), ("launch.fsync", "Fsync", "bool"), ("launch.prefix", "Wine prefix", "path")],
-    "wine": [("launch.prefix", "Wine prefix", "path")],
+    "proton": [("launch.proton", "Proton", "enum"), ("launch.esync", "Esync", "bool"), ("launch.fsync", "Fsync", "bool"), ("launch.ntsync", "NTSync", "bool"), ("launch.wayland", "Wayland", "bool"), ("launch.hdr", "HDR", "bool"), ("launch.dlss_upgrade", "DLSS upgrade", "bool"), ("launch.fsr4_upgrade", "FSR 4 upgrade", "bool"), ("launch.xess_upgrade", "XeSS upgrade", "bool"), ("launch.optiscaler", "OptiScaler", "bool"), ("launch.prefix", "Wine prefix", "path")],
+    "wine": [("launch.esync", "Esync", "bool"), ("launch.fsync", "Fsync", "bool"), ("launch.prefix", "Wine prefix", "path")],
 }
-COMMON_LAUNCH_ROWS = [("launch.gamescope", "Gamescope", "bool"), ("launch.gamescope_args", "Gamescope arguments", "string"), ("launch.mangohud", "MangoHud", "bool"), ("launch.args", "Arguments", "string"), ("launch.working_dir", "Working directory", "path")]
+COMMON_LAUNCH_ROWS = [("launch.gamescope", "Gamescope", "bool"), ("launch.gamescope_args", "Gamescope arguments", "string"), ("launch.mangohud", "MangoHud", "bool"), ("launch.wrapper", "Wrapper command", "string"), ("launch.args", "Arguments", "string"), ("launch.working_dir", "Working directory", "path")]
 
 
 class GameSettingsForm(RowsForm):

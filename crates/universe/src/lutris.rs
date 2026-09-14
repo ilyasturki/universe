@@ -195,6 +195,8 @@ pub struct EnvDiff {
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct Report {
     pub runners_promoted: Vec<String>,
+    /// Existing games given what a first-class field now holds: a wrapper, an override, a switch.
+    pub options_promoted: Vec<String>,
     pub runners: Vec<RunnerHint>,
     pub imported: Vec<String>,
     pub skipped: Vec<String>,
@@ -212,8 +214,67 @@ pub struct Imported {
     pub lastplayed: i64,
 }
 
-/// Builds a game.toml from one Lutris entry; runner ≠ wine → backend "emulator", parked (plan §13).
-pub fn convert(p: &PgaGame, lutris_dir: &Path, global_env: &BTreeMap<String, String>) -> Imported {
+type Switch = fn(&mut crate::game::Launch) -> &mut Option<bool>;
+
+/// Lutris's `PROTON_*` env entries that Universe holds as switches: the field takes the value, the entry goes.
+const TOGGLE_ENV: &[(&str, bool, Switch)] = &[
+    ("PROTON_NO_ESYNC", false, |l| &mut l.esync),
+    ("PROTON_NO_FSYNC", false, |l| &mut l.fsync),
+    ("PROTON_NO_NTSYNC", false, |l| &mut l.ntsync),
+    ("PROTON_ENABLE_WAYLAND", true, |l| &mut l.wayland),
+    ("PROTON_ENABLE_HDR", true, |l| &mut l.hdr),
+    ("PROTON_DLSS_UPGRADE", true, |l| &mut l.dlss_upgrade),
+    ("PROTON_FSR4_UPGRADE", true, |l| &mut l.fsr4_upgrade),
+    ("PROTON_XESS_UPGRADE", true, |l| &mut l.xess_upgrade),
+    ("PROTON_USE_OPTISCALER", true, |l| &mut l.optiscaler),
+];
+
+fn lift_toggles(launch: &mut crate::game::Launch) {
+    for (var, when_set, field) in TOGGLE_ENV {
+        let Some(v) = launch.env.remove(*var) else { continue };
+        let on = !matches!(v.trim(), "" | "0");
+        *field(launch) = Some(if on { *when_set } else { !*when_set });
+    }
+}
+
+/// Wine takes `WINEDLLOVERRIDES=a=n,b;c=b`; keys lose a `.dll`, which Wine does not need and a dotted key cannot carry.
+fn parse_dll_overrides(s: &str) -> BTreeMap<String, String> {
+    s.split(';')
+        .filter_map(|part| {
+            let (k, v) = part.split_once('=')?;
+            let k = k.trim().trim_end_matches(".dll").trim_end_matches(".DLL");
+            (!k.is_empty()).then(|| (k.to_string(), v.trim().to_string()))
+        })
+        .collect()
+}
+
+/// Lutris's prefix command: leading `VAR=val` words become env (`WINEDLLOVERRIDES` its own table), the rest the wrapper.
+fn split_prefix_command(cmd: &str, launch: &mut crate::game::Launch) {
+    let Ok(words) = shell_words::split(cmd) else { return };
+    let mut rest = Vec::new();
+    for w in words {
+        if rest.is_empty() {
+            let assignment = w.split_once('=').filter(|(k, _)| !k.is_empty() && !k.starts_with(|c: char| c.is_ascii_digit()) && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'));
+            if let Some((k, v)) = assignment {
+                if k == "WINEDLLOVERRIDES" {
+                    launch.dll_overrides.extend(parse_dll_overrides(v));
+                } else {
+                    launch.env.insert(k.into(), v.into());
+                }
+                continue;
+            }
+        }
+        rest.push(w);
+    }
+    if !rest.is_empty() {
+        launch.wrapper = shell_words::join(&rest);
+    }
+}
+
+/// Builds a game.toml from one Lutris entry; runner ≠ wine → backend "emulator", parked (plan §13). A Lutris wine
+/// version is a Wine build when `<runners_dir>/<version>/bin/wine` exists and no `proton` script beside it, the
+/// system Wine when `system`, Proton otherwise.
+pub fn convert(p: &PgaGame, lutris_dir: &Path, runners_dir: &Path, global_env: &BTreeMap<String, String>) -> Imported {
     let mut g = Game::new(&p.name);
     g.hidden = p.hidden;
     g.release_year = p.year.max(0) as u32;
@@ -229,7 +290,7 @@ pub fn convert(p: &PgaGame, lutris_dir: &Path, global_env: &BTreeMap<String, Str
     parked.insert("playtime_h".into(), toml::Value::Float(p.playtime_h));
     if p.runner == "wine" {
         g.platform = "windows".into();
-        g.launch.backend = "proton".into();
+        g.launch.runner = "proton".into();
         g.launch.exe = yaml_str(&yml, &["game", "exe"]).unwrap_or_default();
         g.launch.prefix = yaml_str(&yml, &["game", "prefix"]).unwrap_or_default();
         g.launch.working_dir = yaml_str(&yml, &["game", "working_dir"]).unwrap_or_default();
@@ -242,10 +303,15 @@ pub fn convert(p: &PgaGame, lutris_dir: &Path, global_env: &BTreeMap<String, Str
         g.launch.post_command = yaml_str(&yml, &["system", "postexit_command"]).unwrap_or_default();
         g.launch.esync = yaml_bool(&yml, &["wine", "esync"]);
         g.launch.fsync = yaml_bool(&yml, &["wine", "fsync"]);
-        g.launch.dll_overrides = yaml_map(&yml, &["wine", "overrides"]);
+        g.launch.hdr = yaml_bool(&yml, &["wine", "proton_hdr"]);
+        g.launch.dll_overrides = yaml_map(&yml, &["wine", "overrides"]).into_iter().map(|(k, v)| (k.trim_end_matches(".dll").to_string(), v)).collect();
         if let Some(v) = yaml_str(&yml, &["wine", "version"]) {
+            let wine_bin = runners_dir.join(&v).join("bin/wine");
             if v == "system" {
-                g.launch.backend = "wine".into();
+                g.launch.runner = "wine".into();
+            } else if wine_bin.is_file() && !runners_dir.join(&v).join("proton").is_file() {
+                g.launch.runner = "wine".into();
+                g.launch.runner_exe = wine_bin.to_string_lossy().into();
             } else {
                 g.launch.proton = v;
             }
@@ -254,8 +320,10 @@ pub fn convert(p: &PgaGame, lutris_dir: &Path, global_env: &BTreeMap<String, Str
             g.launch.mangohud = Some(m);
         }
         if let Some(pc) = yaml_str(&yml, &["system", "prefix_command"]) {
+            split_prefix_command(&pc, &mut g.launch);
             parked.insert("prefix_command".into(), toml::Value::String(pc));
         }
+        lift_toggles(&mut g.launch);
         if let Some(fps) = yaml_str(&yml, &["system", "fps_limit"]) {
             parked.insert("fps_limit".into(), toml::Value::String(fps));
         }
@@ -295,13 +363,53 @@ pub fn convert(p: &PgaGame, lutris_dir: &Path, global_env: &BTreeMap<String, Str
     Imported { game: g, lutris_env, playtime_h: p.playtime_h, lastplayed: p.lastplayed }
 }
 
+/// What a fresh conversion holds in a field the existing file leaves empty, as `set` keys: the prefix command's
+/// parts and the switches. Never the rest of Lutris's env — a key removed here stays removed.
+fn promotions(existing: &Game, fresh: &Game) -> Vec<(String, String)> {
+    let mut out = Vec::new();
+    let mut from_prefix = crate::game::Launch::default();
+    if let Some(pc) = fresh.extra.get("lutris").and_then(|l| l.get("prefix_command")).and_then(|v| v.as_str()) {
+        split_prefix_command(pc, &mut from_prefix);
+    }
+    if existing.launch.wrapper.is_empty() && !from_prefix.wrapper.is_empty() {
+        out.push(("launch.wrapper".into(), from_prefix.wrapper.clone()));
+    }
+    for (k, v) in &from_prefix.dll_overrides {
+        if !existing.launch.dll_overrides.contains_key(k) {
+            out.push((format!("launch.dll_overrides.{k}"), v.clone()));
+        }
+    }
+    for (k, v) in &from_prefix.env {
+        if !v.is_empty() && !existing.launch.env.contains_key(k) {
+            out.push((format!("launch.env.{k}"), v.clone()));
+        }
+    }
+    let mut ex = existing.launch.clone();
+    lift_toggles(&mut ex);
+    let switches: [(&str, Option<bool>, Option<bool>); 7] = [
+        ("ntsync", ex.ntsync, fresh.launch.ntsync),
+        ("wayland", ex.wayland, fresh.launch.wayland),
+        ("hdr", ex.hdr, fresh.launch.hdr),
+        ("dlss_upgrade", ex.dlss_upgrade, fresh.launch.dlss_upgrade),
+        ("fsr4_upgrade", ex.fsr4_upgrade, fresh.launch.fsr4_upgrade),
+        ("xess_upgrade", ex.xess_upgrade, fresh.launch.xess_upgrade),
+        ("optiscaler", ex.optiscaler, fresh.launch.optiscaler),
+    ];
+    for (name, had, has) in switches {
+        if let (None, Some(v)) = (had, has) {
+            out.push((format!("launch.{name}"), v.to_string()));
+        }
+    }
+    out
+}
+
 fn lutris_global_env(lutris_dir: &Path) -> BTreeMap<String, String> {
     let yml: serde_yaml::Value = std::fs::read_to_string(lutris_dir.join("system.yml")).ok().and_then(|s| serde_yaml::from_str(&s).ok()).unwrap_or(serde_yaml::Value::Null);
     yaml_map(&yml, &["system", "env"])
 }
 
 fn diff(id: &str, title: &str, lutris_env: &BTreeMap<String, String>, universe_env: &BTreeMap<String, String>) -> EnvDiff {
-    let skip = ["WINEPREFIX", "PROTONPATH", "GAMEID", "STORE", "MANGOHUD"];
+    let skip = ["WINEPREFIX", "PROTONPATH", "GAMEID", "STORE", "MANGOHUD", "PROTON_NO_ESYNC", "PROTON_NO_FSYNC", "PROTON_NO_NTSYNC"];
     let uni: BTreeMap<String, String> = universe_env.iter().filter(|(k, _)| !skip.contains(&k.as_str())).map(|(k, v)| (k.clone(), v.clone())).collect();
     let mut d = EnvDiff { id: id.into(), title: title.into(), lutris_env: lutris_env.clone(), universe_env: uni.clone(), ..Default::default() };
     for (k, v) in &uni {
@@ -327,6 +435,7 @@ pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
     if !pga.exists() {
         return Err(crate::Error::NotFound(format!("{}", pga.display())));
     }
+    let runners_dir = paths::expand(&config.lutris.runners_dir);
     let global_env = lutris_global_env(&lutris_dir);
     let mut report = Report { applied: apply, ..Default::default() };
     let modules: Vec<crate::modules::Module> = vec![];
@@ -335,7 +444,7 @@ pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
         if p.name.trim().is_empty() {
             continue;
         }
-        let imp = convert(&p, &lutris_dir, &global_env);
+        let imp = convert(&p, &lutris_dir, &runners_dir, &global_env);
         let toml_path = imp.game.toml_path();
         let existed = toml_path.exists();
         let game = if existed {
@@ -345,6 +454,15 @@ pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
                         report.runners_promoted.push(g.id.clone());
                         if apply {
                             crate::game::set_key(&toml_path, "launch.runner", &imp.game.launch.runner)?;
+                        }
+                    }
+                    let promotions = promotions(&g, &imp.game);
+                    if !promotions.is_empty() {
+                        report.options_promoted.push(g.id.clone());
+                        if apply {
+                            for (k, v) in &promotions {
+                                crate::game::set_key(&toml_path, k, v)?;
+                            }
                         }
                     }
                     report.skipped.push(g.id.clone());
@@ -358,6 +476,7 @@ pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
         };
         let r = crate::library::resolve_with(game.clone(), config, &modules, &mut located);
         let mut env_for_diff = r.effective.env.clone();
+        env_for_diff.extend(crate::launcher::proton_toggles(&r.effective));
         if r.effective.mangohud {
             env_for_diff.insert("MANGOHUD".into(), "1".into());
         }
@@ -460,7 +579,7 @@ mod tests {
         std::fs::create_dir_all(lutris.join("games")).unwrap();
         std::fs::write(lutris.join("games/the-technomancer-1.yml"), format!("game:\n  exe: {}/TheTechnomancer.exe\n  prefix: /mnt/games/gog/the-technomancer\nsystem:\n  env:\n    WINE_CPU_TOPOLOGY: 4:0,1,2,3\nwine:\n  version: proton-ge\n  esync: false\n", gdir.display())).unwrap();
         let p = PgaGame { name: "The Technomancer".into(), slug: "the-technomancer".into(), runner: "wine".into(), platform: "Windows".into(), hidden: false, playtime_h: 0.8, lastplayed: 0, service: "gog".into(), service_id: "1972906591".into(), configpath: "the-technomancer-1".into(), directory: String::new(), year: 2016 };
-        let imp = convert(&p, &lutris, &BTreeMap::from([("PROTON_ENABLE_WAYLAND".to_string(), "1".to_string())]));
+        let imp = convert(&p, &lutris, &lutris.join("runners/wine"), &BTreeMap::from([("PROTON_ENABLE_WAYLAND".to_string(), "1".to_string())]));
         let g = imp.game;
         assert_eq!(g.id, "the-technomancer");
         assert_eq!(g.source.kind, "gog");
@@ -475,6 +594,54 @@ mod tests {
         let d = diff("x", "X", &imp.lutris_env, &BTreeMap::from([("WINE_CPU_TOPOLOGY".to_string(), "4:0,1,2,3".to_string()), ("NEW".to_string(), "1".to_string())]));
         assert_eq!(d.added, vec!["NEW"]);
         assert_eq!(d.removed, vec!["PROTON_ENABLE_WAYLAND"]);
+    }
+
+    #[test]
+    fn wine_versions_become_runners_and_prefix_commands_split() {
+        let dir = tempfile::tempdir().unwrap();
+        let lutris = dir.path().join("lutris");
+        let runners = dir.path().join("runners");
+        std::fs::create_dir_all(lutris.join("games")).unwrap();
+        std::fs::create_dir_all(runners.join("wine-ge-8-26-x86_64/bin")).unwrap();
+        std::fs::write(runners.join("wine-ge-8-26-x86_64/bin/wine"), b"").unwrap();
+        std::fs::create_dir_all(runners.join("proton-em")).unwrap();
+        std::fs::write(runners.join("proton-em/proton"), b"").unwrap();
+        let game = |name: &str, yml: &str| {
+            std::fs::write(lutris.join(format!("games/{name}.yml")), yml).unwrap();
+            let p = PgaGame { name: name.into(), slug: name.into(), runner: "wine".into(), configpath: name.into(), ..PgaGame { name: String::new(), slug: String::new(), runner: String::new(), platform: String::new(), hidden: false, playtime_h: 0.0, lastplayed: 0, service: String::new(), service_id: String::new(), configpath: String::new(), directory: String::new(), year: 0 } };
+            convert(&p, &lutris, &runners, &BTreeMap::new()).game
+        };
+        let re4 = game("re4", "game:\n  exe: /g/re4.exe\nsystem:\n  env:\n    LC_ALL: ''\n    PROTON_ENABLE_WAYLAND: '0'\n  prefix_command: WINEDLLOVERRIDES=\"amd_ags_x64.dll=n,b\" RADV_DEBUG=nodcc LC_ALL= gamemoderun taskset -c '0-7'\nwine:\n  version: proton-em\n  proton_hdr: true\n  overrides:\n    d3d11.dll: n,b\n");
+        assert_eq!(re4.runner_id(), "proton");
+        assert_eq!(re4.launch.proton, "proton-em");
+        assert_eq!(re4.launch.dll_overrides, BTreeMap::from([("amd_ags_x64".to_string(), "n,b".to_string()), ("d3d11".to_string(), "n,b".to_string())]));
+        assert_eq!(re4.launch.wrapper, "gamemoderun taskset -c 0-7");
+        assert_eq!(re4.launch.env, BTreeMap::from([("LC_ALL".to_string(), String::new()), ("RADV_DEBUG".to_string(), "nodcc".to_string())]));
+        assert_eq!(re4.launch.wayland, Some(false));
+        assert_eq!(re4.launch.hdr, Some(true));
+        assert_eq!(re4.extra["lutris"]["prefix_command"].as_str().unwrap(), "WINEDLLOVERRIDES=\"amd_ags_x64.dll=n,b\" RADV_DEBUG=nodcc LC_ALL= gamemoderun taskset -c '0-7'");
+        let ge = game("ge", "game:\n  exe: /g/a.exe\nwine:\n  version: wine-ge-8-26-x86_64\n");
+        assert_eq!(ge.runner_id(), "wine");
+        assert!(ge.launch.runner_exe.ends_with("wine-ge-8-26-x86_64/bin/wine"));
+        assert!(ge.launch.proton.is_empty());
+        let sys = game("sys", "game:\n  exe: /g/a.exe\nwine:\n  version: system\n");
+        assert_eq!(sys.runner_id(), "wine");
+        assert!(sys.launch.runner_exe.is_empty() && sys.launch.backend.is_empty());
+        let mut existing = Game::new("re4");
+        existing.launch.env.insert("LC_ALL".into(), "C".into());
+        existing.launch.env.insert("PROTON_ENABLE_HDR".into(), "1".into());
+        let promo = promotions(&existing, &re4);
+        assert_eq!(promo, vec![("launch.wrapper".to_string(), "gamemoderun taskset -c 0-7".to_string()), ("launch.dll_overrides.amd_ags_x64".to_string(), "n,b".to_string()), ("launch.env.RADV_DEBUG".to_string(), "nodcc".to_string()), ("launch.wayland".to_string(), "false".to_string())], "only the prefix command's parts and the switches; wine.overrides and system.env stay as imported");
+        assert!(promotions(&re4, &re4).is_empty());
+        let toml_path = dir.path().join("game.toml");
+        std::fs::write(&toml_path, toml::to_string_pretty(&existing).unwrap()).unwrap();
+        for (k, v) in &promo {
+            crate::game::set_key(&toml_path, k, v).unwrap();
+        }
+        let promoted = Game::load(&toml_path).unwrap();
+        assert_eq!(promoted.launch.dll_overrides, BTreeMap::from([("amd_ags_x64".to_string(), "n,b".to_string())]));
+        assert_eq!(promoted.launch.wrapper, re4.launch.wrapper);
+        assert_eq!((promoted.launch.wayland, promoted.launch.env["LC_ALL"].as_str(), promoted.launch.env["RADV_DEBUG"].as_str()), (Some(false), "C", "nodcc"));
     }
 
     #[test]
@@ -501,7 +668,7 @@ mod tests {
     fn convert_emulator_is_parked() {
         let dir = tempfile::tempdir().unwrap();
         let p = PgaGame { name: "F-Zero GX".into(), slug: "f-zero-gx".into(), runner: "dolphin".into(), platform: "Nintendo GameCube".into(), hidden: false, playtime_h: 4.3, lastplayed: 0, service: String::new(), service_id: String::new(), configpath: "none".into(), directory: String::new(), year: 0 };
-        let g = convert(&p, dir.path(), &BTreeMap::new()).game;
+        let g = convert(&p, dir.path(), dir.path(), &BTreeMap::new()).game;
         assert_eq!(g.launch.runner, "dolphin");
         assert!(g.launch.backend.is_empty());
         assert_eq!(g.platform, "Nintendo GameCube");

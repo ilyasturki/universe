@@ -90,7 +90,7 @@ def test_game_settings_launch_group_by_runner(api, fake):
     form = api.screens.gameSettings
     form.load("mini-metro")
     assert launch_keys(form) == ["launch.runner", "launch.exe", "launch.runner_exe", "launch.options.fullscreen", "launch.options.inputplumber",
-                                 "launch.gamescope", "launch.gamescope_args", "launch.mangohud", "launch.args", "launch.working_dir"]
+                                 "launch.gamescope", "launch.gamescope_args", "launch.mangohud", "launch.wrapper", "launch.args", "launch.working_dir"]
     rows = rows_of(form)
     assert rows["launch.runner"]["value"] == "Eden" and rows["launch.runner"]["icon"] == "assets/runners/eden.svg"
     assert rows["launch.runner"]["choices"][:4] == ["Proton", "Wine", "Linux", "Dolphin"]
@@ -107,10 +107,13 @@ def test_game_settings_launch_group_by_runner(api, fake):
     assert rows["platform"]["choices"] == ["Nintendo GameCube", "Nintendo Wii"]
 
     form.load("the-technomancer")
-    assert launch_keys(form) == ["launch.runner", "launch.exe", "launch.proton", "launch.esync", "launch.fsync", "launch.prefix",
-                                 "launch.gamescope", "launch.gamescope_args", "launch.mangohud", "launch.args", "launch.working_dir"]
+    assert launch_keys(form) == ["launch.runner", "launch.exe", "launch.proton", "launch.esync", "launch.fsync", "launch.ntsync", "launch.wayland", "launch.hdr",
+                                 "launch.dlss_upgrade", "launch.fsr4_upgrade", "launch.xess_upgrade", "launch.optiscaler", "launch.prefix",
+                                 "launch.gamescope", "launch.gamescope_args", "launch.mangohud", "launch.wrapper", "launch.args", "launch.working_dir"]
     rows = rows_of(form)
     assert rows["launch.runner"]["value"] == "Proton" and rows["launch.exe"]["label"] == "Program"
+    assert rows["launch.wayland"]["value"] is True and rows["launch.wayland"]["inherited"] is True
+    assert rows["launch.hdr"]["value"] is False and rows["launch.hdr"]["inherited"] is True
 
     index = next(i for i, r in enumerate(form.rows) if r["key"] == "launch.runner")
     assert form.setValue(index, "Dolphin") is True

@@ -825,7 +825,7 @@ class FakeClient(UniverseClientBase):
         out["effective"] = {
             key: (launch if key != "hide_cursor" else desktop).get(key, default)
             for key, default in defaults.items()
-            if key in ("proton", "esync", "fsync", "mangohud", "hide_cursor")
+            if key in ("proton", "esync", "fsync", "ntsync", "wayland", "hdr", "dlss_upgrade", "fsr4_upgrade", "xess_upgrade", "optiscaler", "mangohud", "hide_cursor")
         }
         runner = self._runner_of(launch)
         spec = self._runner(runner) or {"id": runner, "name": runner, "kind": "", "platforms": [], "path": "", "options": []}

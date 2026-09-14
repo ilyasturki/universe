@@ -35,6 +35,25 @@ fn prefix_of(g: &crate::game::Game, config: &Config) -> PathBuf {
     if g.launch.prefix.is_empty() { config.prefixes_root().join(&g.id) } else { crate::paths::expand(&g.launch.prefix) }
 }
 
+fn dll_overrides_env(g: &crate::game::Game, env: &mut BTreeMap<String, String>) {
+    if !g.launch.dll_overrides.is_empty() {
+        let s: Vec<String> = g.launch.dll_overrides.iter().map(|(k, v)| format!("{k}={v}")).collect();
+        env.insert("WINEDLLOVERRIDES".into(), s.join(";"));
+    }
+}
+
+/// Proton's switches as the env it reads: a sync mode off is `PROTON_NO_*=1`, a feature on is `PROTON_*=1`;
+/// the same map the Lutris env diff counts as Universe's.
+pub fn proton_toggles(e: &crate::library::Effective) -> BTreeMap<String, String> {
+    let mut env = BTreeMap::new();
+    for (on, key) in [(!e.esync, "PROTON_NO_ESYNC"), (!e.fsync, "PROTON_NO_FSYNC"), (!e.ntsync, "PROTON_NO_NTSYNC"), (e.wayland, "PROTON_ENABLE_WAYLAND"), (e.hdr, "PROTON_ENABLE_HDR"), (e.dlss_upgrade, "PROTON_DLSS_UPGRADE"), (e.fsr4_upgrade, "PROTON_FSR4_UPGRADE"), (e.xess_upgrade, "PROTON_XESS_UPGRADE"), (e.optiscaler, "PROTON_USE_OPTISCALER")] {
+        if on {
+            env.insert(key.into(), "1".into());
+        }
+    }
+    env
+}
+
 fn proton_env(g: &crate::game::Game, r: &Resolved, config: &Config, env: &mut BTreeMap<String, String>) -> crate::Result<()> {
     let prefix = prefix_of(g, config);
     std::fs::create_dir_all(&prefix)?;
@@ -48,17 +67,34 @@ fn proton_env(g: &crate::game::Game, r: &Resolved, config: &Config, env: &mut BT
     if !g.launch.store.is_empty() {
         env.insert("STORE".into(), g.launch.store.clone());
     }
-    if !r.effective.esync {
-        env.insert("PROTON_NO_ESYNC".into(), "1".into());
+    // A switch off removes what [launch.env] seeded, so the field decides.
+    for key in ["PROTON_ENABLE_WAYLAND", "PROTON_ENABLE_HDR"] {
+        env.remove(key);
     }
-    if !r.effective.fsync {
-        env.insert("PROTON_NO_FSYNC".into(), "1".into());
-    }
-    if !g.launch.dll_overrides.is_empty() {
-        let s: Vec<String> = g.launch.dll_overrides.iter().map(|(k, v)| format!("{k}={v}")).collect();
-        env.insert("WINEDLLOVERRIDES".into(), s.join(";"));
-    }
+    env.extend(proton_toggles(&r.effective));
+    dll_overrides_env(g, env);
     Ok(())
+}
+
+/// Plain Wine reads its own names: `WINEESYNC`/`WINEFSYNC` both ways, `WINEARCH` for the prefix.
+fn wine_env(g: &crate::game::Game, r: &Resolved, config: &Config, env: &mut BTreeMap<String, String>) {
+    env.insert("WINEPREFIX".into(), prefix_of(g, config).to_string_lossy().into());
+    if !g.launch.arch.is_empty() {
+        env.insert("WINEARCH".into(), g.launch.arch.clone());
+    }
+    env.insert("WINEESYNC".into(), if r.effective.esync { "1" } else { "0" }.into());
+    env.insert("WINEFSYNC".into(), if r.effective.fsync { "1" } else { "0" }.into());
+    dll_overrides_env(g, env);
+}
+
+/// `launch.wrapper` in front of the program: the innermost layer, inside gamescope and setpriv.
+fn wrap(wrapper: &str, program: String, args: Vec<String>) -> (String, Vec<String>) {
+    let mut words = shell_words::split(wrapper).unwrap_or_else(|_| vec![wrapper.to_string()]);
+    words.retain(|w| !w.is_empty());
+    match words.split_first() {
+        Some((first, rest)) => (first.clone(), rest.iter().cloned().chain(std::iter::once(program)).chain(args).collect()),
+        None => (program, args),
+    }
 }
 
 pub fn plan(r: &Resolved, config: &Config, session_id: &str, extra_env: &BTreeMap<String, String>) -> crate::Result<Plan> {
@@ -86,7 +122,7 @@ pub fn plan(r: &Resolved, config: &Config, session_id: &str, extra_env: &BTreeMa
             (if g.launch.runner_exe.is_empty() { config.launch.umu_run.clone() } else { r.effective.runner_path.clone() }, vec![file])
         }
         Kind::Wine => {
-            env.insert("WINEPREFIX".into(), prefix_of(g, config).to_string_lossy().into());
+            wine_env(g, r, config, &mut env);
             let program = if r.effective.runner_path.is_empty() { "wine".to_string() } else { r.effective.runner_path.clone() };
             (program, vec![file])
         }
@@ -111,6 +147,7 @@ pub fn plan(r: &Resolved, config: &Config, session_id: &str, extra_env: &BTreeMa
     for (k, v) in &g.launch.env {
         env.insert(k.clone(), v.clone());
     }
+    let (program, args) = wrap(&g.launch.wrapper, program, args);
     let gamescope = r.effective.gamescope.then(|| runners::on_path(&config.launch.gamescope_bin)).flatten();
     if r.effective.gamescope && gamescope.is_none() {
         tracing::warn!("{}: {} not found, launching on the desktop", g.id, config.launch.gamescope_bin);
@@ -120,6 +157,9 @@ pub fn plan(r: &Resolved, config: &Config, session_id: &str, extra_env: &BTreeMa
             let mut wrap = gamescope_args(config, r);
             if r.effective.mangohud {
                 wrap.push("--mangoapp".into());
+            }
+            if r.effective.hdr && !wrap.iter().any(|a| a == "--hdr-enabled") {
+                wrap.push("--hdr-enabled".into());
             }
             // gamescope hosts X11 clients through its own Xwayland; a Wayland Proton finds no xdg-shell there.
             if !wrap.iter().any(|a| a == "--expose-wayland") {
@@ -334,7 +374,7 @@ mod tests {
         g.launch.dll_overrides.insert("d3d11".into(), "n,b".into());
         let r = Resolved {
             game: g,
-            effective: Effective { runner: "proton".into(), proton: "proton-ge".into(), proton_path: "/nix/store/proton".into(), esync: true, fsync: false, mangohud: true, hide_cursor: true, ..Default::default() },
+            effective: Effective { runner: "proton".into(), proton: "proton-ge".into(), proton_path: "/nix/store/proton".into(), esync: true, fsync: false, ntsync: true, wayland: true, mangohud: true, hide_cursor: true, ..Default::default() },
             ..Default::default()
         };
         let mut cfg = Config::default();
@@ -353,8 +393,60 @@ mod tests {
         assert_eq!(p.env["WINE_CPU_TOPOLOGY"], "4:0,1,2,3");
         assert_eq!(p.env["FROM_HOOK"], "1");
         assert_eq!(p.env["PROTON_ENABLE_WAYLAND"], "1");
+        assert!(!p.env.contains_key("PROTON_NO_NTSYNC") && !p.env.contains_key("PROTON_ENABLE_HDR"));
         assert_eq!(p.cwd, dir.path());
         assert!(dir.path().join("pfx").is_dir());
+    }
+
+    #[test]
+    fn plan_switches_proton_features_and_wraps_the_program() {
+        let dir = tempfile::tempdir().unwrap();
+        let exe = dir.path().join("Game.exe");
+        std::fs::write(&exe, b"").unwrap();
+        let mut g = Game::new("Sample");
+        g.launch.exe = exe.to_string_lossy().into();
+        g.launch.prefix = dir.path().join("pfx").to_string_lossy().into();
+        g.launch.wayland = Some(false);
+        g.launch.ntsync = Some(false);
+        g.launch.hdr = Some(true);
+        g.launch.dlss_upgrade = Some(true);
+        g.launch.wrapper = "gamemoderun taskset -c '0-7'".into();
+        let mut cfg = Config::default();
+        cfg.launch.gamescope = false;
+        cfg.launch.env.insert("PROTON_ENABLE_WAYLAND".into(), "1".into());
+        let mut r = crate::library::resolve(g, &cfg, &[]);
+        r.effective.proton_path = "/p".into();
+        let p = plan(&r, &cfg, "s", &BTreeMap::new()).unwrap();
+        assert_eq!(p.program, "gamemoderun");
+        assert_eq!(p.args, vec!["taskset", "-c", "0-7", "umu-run", &exe.to_string_lossy().to_string()]);
+        assert!(!p.env.contains_key("PROTON_ENABLE_WAYLAND"), "the field off beats the seed");
+        assert_eq!(p.env["PROTON_NO_NTSYNC"], "1");
+        assert_eq!(p.env["PROTON_ENABLE_HDR"], "1");
+        assert_eq!(p.env["PROTON_DLSS_UPGRADE"], "1");
+        assert!(!p.env.contains_key("PROTON_FSR4_UPGRADE"));
+    }
+
+    #[test]
+    fn plan_for_plain_wine_sets_wine_env() {
+        let dir = tempfile::tempdir().unwrap();
+        let exe = dir.path().join("Game.exe");
+        std::fs::write(&exe, b"").unwrap();
+        let mut g = Game::new("Sample");
+        g.launch.runner = "wine".into();
+        g.launch.exe = exe.to_string_lossy().into();
+        g.launch.prefix = dir.path().join("pfx").to_string_lossy().into();
+        g.launch.esync = Some(false);
+        g.launch.dll_overrides.insert("amd_ags_x64".into(), "n,b".into());
+        let mut cfg = Config::default();
+        cfg.launch.gamescope = false;
+        let r = crate::library::resolve(g, &cfg, &[]);
+        let p = plan(&r, &cfg, "s", &BTreeMap::new()).unwrap();
+        assert!(p.program.ends_with("wine"));
+        assert_eq!(p.env["WINEARCH"], "win64");
+        assert_eq!(p.env["WINEESYNC"], "0");
+        assert_eq!(p.env["WINEFSYNC"], "1");
+        assert_eq!(p.env["WINEDLLOVERRIDES"], "amd_ags_x64=n,b");
+        assert!(!p.env.contains_key("PROTONPATH") && !p.env.contains_key("PROTON_ENABLE_WAYLAND"));
     }
 
     #[test]
@@ -442,6 +534,10 @@ mod tests {
         r.effective.gamescope_args = "--expose-wayland".into();
         let p = plan(&r, &cfg, "s", &BTreeMap::new()).unwrap();
         assert_eq!(p.env["PROTON_ENABLE_WAYLAND"], "1");
+
+        r.effective.hdr = true;
+        let p = plan(&r, &cfg, "s", &BTreeMap::new()).unwrap();
+        assert!(p.args.contains(&"--hdr-enabled".to_string()) && p.env["PROTON_ENABLE_HDR"] == "1");
 
         r.game.launch.gamescope = Some(false);
         let r = crate::library::resolve(r.game, &cfg, &[]);

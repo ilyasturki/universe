@@ -57,11 +57,14 @@ a dash means the surface doesn't expose it.
 | `uninstall(id)` | `uninstall(id)` | `universe uninstall <name>` | trashes `source.dir` and clears `source.dir`, `source.build_id` and `launch.exe`; the game stays in the library, not installed. Refuses a root, a home or the games root |
 | `reload_all()` | `reload()` | `universe rescan` | rereads config and `games/*/game.toml`, rebuilds the index, runs each source's `scan` |
 | `reload_game(id)` | `reload_game(id)` | — | rereads one game |
-| `import_lutris(apply)` | `import_lutris(apply)` | `universe migrate [--apply]` | JSON report: imported games, per-game env diff (`{id, lutris_env, universe_env, added, removed, changed}`), imported hours, games whose art was copied from `[lutris] pegasus_library` (`<platform>/media/<slug>/`, once, never over an existing `media/`), `runners_promoted` (emulator games from before runners that now name theirs) and `runners` (what Lutris's runner configs say: a wrapper script is seen through, the program is written to `[runners.<id>] exe` when it is not on PATH, its extra arguments to `args`). Without `apply` it only reports |
+| `import_lutris(apply)` | `import_lutris(apply)` | `universe migrate [--apply]` | JSON report: imported games, per-game env diff (`{id, lutris_env, universe_env, added, removed, changed}`), imported hours, games whose art was copied from `[lutris] pegasus_library` (`<platform>/media/<slug>/`, once, never over an existing `media/`), `runners_promoted` (emulator games from before runners that now name theirs), `options_promoted` (games already imported that take what a field now holds — a `wrapper`, a DLL override, a Proton switch — only where the file had nothing) and `runners` (what Lutris's runner configs say: a wrapper script is seen through, the program is written to `[runners.<id>] exe` when it is not on PATH, its extra arguments to `args`). Without `apply` it only reports |
 | `add_game(json)` | `add_game(json)` | `universe add <file> --runner <id> [--title T] [--platform P] [--media]` | `{"runner", "exe", "title"?, "platform"?}` → the new id. The title defaults to the file's name cleaned of release tags; the platform to the runner's first. Refuses an id already in the library |
 
 `set` takes dotted keys: `launch.runner`, `launch.exe`, `launch.proton`, `launch.gamescope`,
-`launch.gamescope_args`, `launch.env.FOO`,
+`launch.gamescope_args`, `launch.esync`, `launch.fsync`, `launch.ntsync`, `launch.wayland`,
+`launch.hdr`, `launch.dlss_upgrade`, `launch.fsr4_upgrade`, `launch.xess_upgrade`,
+`launch.optiscaler` (a switch left empty takes `[launch]`'s), `launch.wrapper`,
+`launch.dll_overrides.d3d11`, `launch.env.FOO`,
 `launch.options.<key>` (validated against the runner's options), `desktop.hide_cursor`, `hidden`,
 `favorite`, `tags`, `sort_title`, `platform`, `metadata.sgdb_id`, and `capture.cursor` as a
 validated shorthand for `modules.capture.cursor`. Values are strings: `true`/`false` for booleans,
@@ -78,8 +81,9 @@ comma-separated for lists, `""` deletes the key. A runner is written under its s
  "effective": {"runner": "dolphin", "runner_name": "Dolphin", "runner_kind": "emulator",
                "runner_path": "/…/bin/dolphin-emu", "platform": "Nintendo GameCube",
                "options": {"batch": true, "user_directory": "", "inputplumber": true}, "inputplumber": true,
-               "proton": "proton-ge", "proton_path": "…", "esync": true, "fsync": true, "mangohud": true,
-               "gamescope": true, "gamescope_args": "", "hide_cursor": true, "env": {}},
+               "proton": "proton-ge", "proton_path": "…", "esync": true, "fsync": true, "ntsync": true,
+               "wayland": true, "hdr": false, "dlss_upgrade": false, "fsr4_upgrade": false, "xess_upgrade": false,
+               "optiscaler": false, "mangohud": true, "gamescope": true, "gamescope_args": "", "hide_cursor": true, "env": {}},
  "removed": false}
 ```
 
@@ -131,9 +135,33 @@ the binary (`gamescope` on PATH, `/run/wrappers/bin` included). The game itself 
 gamescope (NixOS `capSysNice`) hands CAP_SYS_NICE down to the game, and bwrap — umu's runtime —
 refuses to start holding one. With gamescope off — or not found: a warning, and the game runs on
 the desktop as before — the plain command runs. Inside gamescope
-MangoHud is `--mangoapp` rather than `MANGOHUD=1`, and `PROTON_ENABLE_WAYLAND` is dropped (Proton
-goes X11 through gamescope's Xwayland) unless the arguments carry `--expose-wayland`. `doctor`
-checks the binary, and `mangoapp` when MangoHud is on.
+MangoHud is `--mangoapp` rather than `MANGOHUD=1`, `launch.hdr` adds `--hdr-enabled`, and
+`PROTON_ENABLE_WAYLAND` is dropped (Proton goes X11 through gamescope's Xwayland) unless the
+arguments carry `--expose-wayland`. `doctor` checks the binary, and `mangoapp` when MangoHud is on.
+
+### Proton and Wine
+
+`proton` runs `umu-run <exe>` with `WINEPREFIX` (`launch.prefix`, else `<prefixes_root>/<id>`),
+`PROTONPATH`, `GAMEID` (`launch.umu_id`, else `umu-default`), `STORE`, then the switches as the env
+Proton reads: `esync`/`fsync`/`ntsync` off are `PROTON_NO_ESYNC`/`_FSYNC`/`_NTSYNC=1`; `wayland`,
+`hdr`, `dlss_upgrade`, `fsr4_upgrade`, `xess_upgrade` and `optiscaler` on are
+`PROTON_ENABLE_WAYLAND`, `PROTON_ENABLE_HDR`, `PROTON_DLSS_UPGRADE`, `PROTON_FSR4_UPGRADE`,
+`PROTON_XESS_UPGRADE`, `PROTON_USE_OPTISCALER=1`. A switch off removes the same name from
+`[launch.env]`; `launch.env` on the game still wins. `launch.dll_overrides` (`d3d11 = "n,b"`, keys
+without `.dll`) is `WINEDLLOVERRIDES`. `wine` runs `<launch.runner_exe or wine> <exe>` with
+`WINEPREFIX`, `WINEARCH` (`launch.arch`), `WINEESYNC`/`WINEFSYNC` as `1`/`0` and
+`WINEDLLOVERRIDES`; the Proton switches do not apply. Both, like every runner, take
+`launch.wrapper` — `gamemoderun`, `taskset -c 0-7` — split like a shell line and put in front of
+the program, inside gamescope and setpriv.
+
+`migrate` maps Lutris's wine runner onto these: `wine.version` is `wine` with `launch.runner_exe`
+when `<runners_dir>/<version>/bin/wine` exists with no `proton` script beside it, `wine` for
+`system`, `proton` otherwise; `wine.proton_hdr` is `hdr`;
+`system.prefix_command`'s leading `VAR=val` words become `launch.env` (`WINEDLLOVERRIDES` its
+`dll_overrides`) and the rest `launch.wrapper`; a `PROTON_*` entry in `system.env` that has a switch
+becomes the switch. Lutris's `fps_limit` stays parked under `[lutris]`; its `fsr`, `battleye`, `eac`,
+DXVK/VKD3D versions and registry options have no counterpart (Proton bundles its own DXVK, and reads
+none of those variables).
 
 ## Sources
 
@@ -375,6 +403,13 @@ overrides = "~/.config/universe/overrides"       # picked art, shown over media/
 proton = "proton-ge"                 # a name under [proton], or a path
 esync = true
 fsync = true
+ntsync = true                        # a sync mode off is PROTON_NO_*=1 (WINEESYNC/WINEFSYNC=0 for wine)
+wayland = true                       # PROTON_ENABLE_WAYLAND=1; dropped inside gamescope unless --expose-wayland
+hdr = false                          # PROTON_ENABLE_HDR=1, and --hdr-enabled on gamescope
+dlss_upgrade = false                 # PROTON_DLSS_UPGRADE, PROTON_FSR4_UPGRADE, PROTON_XESS_UPGRADE, PROTON_USE_OPTISCALER
+fsr4_upgrade = false
+xess_upgrade = false
+optiscaler = false
 mangohud = true                      # --mangoapp inside gamescope, MANGOHUD=1 without
 gamescope = true                     # every game inside gamescope: one window, black until the game draws
 gamescope_args = ""                  # after -f --force-windows-fullscreen; --expose-wayland keeps PROTON_ENABLE_WAYLAND

@@ -860,6 +860,13 @@
       "proton": "proton-ge",
       "esync": true,
       "fsync": true,
+      "ntsync": true,
+      "wayland": true,
+      "hdr": false,
+      "dlss_upgrade": false,
+      "fsr4_upgrade": false,
+      "xess_upgrade": false,
+      "optiscaler": false,
       "mangohud": true
     },
     "desktop": {
