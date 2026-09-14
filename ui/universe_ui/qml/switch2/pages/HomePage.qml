@@ -9,10 +9,8 @@ FocusScope {
 
     property var shell: null
 
-    readonly property int minSlots: 12
     readonly property int gameCount: recent.count
-    readonly property int slotCount: Math.max(minSlots, gameCount)
-    readonly property int allIndex: slotCount
+    readonly property int allIndex: gameCount
     property int index: 0
     readonly property bool onAll: index === allIndex
     readonly property var currentGame: !onAll && index >= 0 && index < gameCount ? recent.get(index) : null
@@ -32,17 +30,20 @@ FocusScope {
     signal escapedDown()
 
     RecentGames {
-        id: recent
+        id: played
         sourceModel: api.allGames
         playingId: page.playingId
     }
 
+    // The HOME row holds the last twelve, as the console's does; All Software has the rest.
+    LimitedGames {
+        id: recent
+        sourceModel: played
+        limit: 12
+    }
+
     function step(d) {
-        var next;
-        if (d > 0)
-            next = index < gameCount - 1 ? index + 1 : (onAll ? index : allIndex);
-        else
-            next = onAll ? Math.max(0, gameCount - 1) : Math.max(0, index - 1);
+        var next = Math.max(0, Math.min(allIndex, index + d));
         if (next === index) {
             Sound.edge();
             return;
@@ -69,8 +70,8 @@ FocusScope {
     }
 
     onGameCountChanged: {
-        if (index > gameCount && !onAll)
-            index = Math.max(0, gameCount - 1);
+        index = Math.min(index, allIndex);
+        Qt.callLater(row.slideToCurrent);
     }
     onIndexChanged: row.slideToCurrent()
 
@@ -110,14 +111,14 @@ FocusScope {
     Text {
         id: title
 
-        // Centred over the focused tile, held inside the screen's margins at either end of the row.
-        // contentX starts at -leftMargin, so the row's left inset is already in it.
-        readonly property real centre: (page.onAll ? page.allIndex : page.index) * page.pitch - row.contentX + page.tile / 2
+        // Centred over the focused tile; what would run past the screen's margin is elided, not shifted.
+        readonly property real centre: page.index * page.pitch - row.contentX + page.tile / 2
         readonly property real margin: Theme.dp(Theme.edgeMargin)
+        readonly property real room: 2 * Math.min(centre - margin, page.width - margin - centre)
 
-        x: Math.max(margin, Math.min(centre - width / 2, page.width - margin - width))
+        x: centre - width / 2
         y: Theme.dp(Theme.tileRowY) - Theme.dp(66)
-        width: Math.min(implicitWidth, page.pitch * 2.5)
+        width: Math.max(0, Math.min(implicitWidth, page.pitch * 2.5, room))
         visible: page.activeFocus && (page.currentGame !== null || page.onAll)
         text: page.onAll ? "All Software" : (page.currentGame ? page.currentGame.title : "")
         color: Theme.accent
@@ -134,7 +135,7 @@ FocusScope {
         width: parent.width
         height: page.tile + Theme.dp(60)
         orientation: ListView.Horizontal
-        model: page.slotCount + 1
+        model: page.gameCount + 1
         spacing: page.gap
         leftMargin: page.rowX
         rightMargin: page.rowX
@@ -144,15 +145,16 @@ FocusScope {
         cacheBuffer: page.pitch * 4
         clip: false
 
+        // The cursor walks the tiles in view; the row slides only when the focused one would leave
+        // the margins, and then just far enough to keep it inside them, ring and title included.
         function slideToCurrent() {
-            var i = page.onAll ? page.allIndex : page.index;
-            var left = i * page.pitch - leftMargin;
+            var left = page.index * page.pitch;
             var right = left + page.tile;
             var target = contentX;
-            if (right > contentX + width - page.rowX)
-                target = right - width + page.rowX;
-            if (left < contentX + leftMargin - page.rowX)
-                target = left - leftMargin + page.rowX;
+            if (right > contentX + width - rightMargin)
+                target = right - width + rightMargin;
+            if (left < contentX + leftMargin)
+                target = left - leftMargin;
             contentX = Math.max(-leftMargin, Math.min(target, Math.max(-leftMargin, contentWidth - width + rightMargin)));
         }
 

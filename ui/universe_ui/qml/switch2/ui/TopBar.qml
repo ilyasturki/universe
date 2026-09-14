@@ -37,6 +37,8 @@ Item {
         text: Theme.clock
         color: Theme.text
         font.family: Theme.clockSans
+        // Sawarabi ships one weight; Qt emboldens it (DemiBold would render as Regular).
+        font.weight: Font.Bold
         font.pixelSize: Theme.dp(Theme.fontClock)
     }
 }

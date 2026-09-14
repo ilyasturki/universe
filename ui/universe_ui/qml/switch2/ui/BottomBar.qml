@@ -17,6 +17,7 @@ FocusScope {
     // 123: the Switch's icon pitch; fewer icons shorten the pill, never widen the gap.
     readonly property real pitch: Theme.dp(123)
     readonly property real endPad: Theme.dp(50)
+    readonly property real labelGap: Theme.dp(14)
 
     width: endPad * 2 + Math.max(0, items.length - 1) * pitch + iconSize
     height: Theme.dp(Theme.barHeight)
@@ -94,8 +95,9 @@ FocusScope {
             }
 
             Text {
+                // Under the pill, not the disc: the disc's bottom sits well inside it.
                 anchors.top: parent.bottom
-                anchors.topMargin: Theme.dp(Theme.ringRoom + 4)
+                anchors.topMargin: (bar.height - parent.height) / 2 + bar.labelGap
                 anchors.horizontalCenter: parent.horizontalCenter
                 visible: cell.focused
                 text: modelData.label
