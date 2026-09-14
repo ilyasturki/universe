@@ -166,6 +166,13 @@ Canvas {
             ctx.lineTo(16 * s, 12 * s);
             ctx.lineTo(21.5 * s, 12 * s);
             ctx.stroke();
+        } else if (kind === "power") {
+            ctx.arc(12 * s, 13 * s, 8 * s, -Math.PI * 0.32, Math.PI * 1.32);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(12 * s, 3 * s);
+            ctx.lineTo(12 * s, 12 * s);
+            ctx.stroke();
         } else if (kind === "gamepad") {
             ctx.moveTo(7 * s, 6 * s);
             ctx.lineTo(17 * s, 6 * s);

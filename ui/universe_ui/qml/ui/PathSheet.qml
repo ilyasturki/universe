@@ -24,9 +24,8 @@ FocusScope {
     readonly property int rowCount: entries.length + 1
 
     readonly property var hints: zone === "chips"
-        ? [ { glyph: "A", label: "Go" }, { glyph: "dpad", label: "Navigate" } ].concat(commonHints)
-        : [ { glyph: "A", label: index === 0 ? "Up" : (entries[index - 1] && !entries[index - 1].dir ? "Choose" : "Open") },
-            { glyph: "dpad", label: "Navigate" } ].concat(commonHints)
+        ? [ { glyph: "A", label: "Go" } ].concat(commonHints)
+        : [ { glyph: "A", label: index === 0 ? "Up" : (entries[index - 1] && !entries[index - 1].dir ? "Choose" : "Open") } ].concat(commonHints)
     readonly property var commonHints: (files ? [] : [ { glyph: "X", label: "Use this folder" } ]).concat(
         [ { glyph: "Y", label: "Type a path" }, { glyph: "B", label: "Cancel" } ])
 

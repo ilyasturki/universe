@@ -1,7 +1,9 @@
 import QtQuick
+import QtQuick.Shapes
 import "../core"
 import "PadNames.js" as Names
 import "PadDraw.js" as Draw
+import "Prompts.js" as Prompts
 
 // One button of one family drawn small, the way the pad prints it: the rows' and the hint bar's glyph.
 Item {
@@ -11,16 +13,25 @@ Item {
     property string slot: "south"
     property real unit: Theme.dp(30)
     property color ink: Theme.text
-    property real outline: 0.55
+    // Prompts.js: "o" the outline, "f" the disc with the mark cut out.
+    property string variant: "o"
 
     readonly property var spec: Names.glyph(family, slot)
-    readonly property real boxWidth: spec.shape === "bumper" ? unit * 1.3
+    readonly property var art: Prompts.paths(Names.style(family), slot)
+    // The sheet's 48-unit face button is `unit` on screen.
+    readonly property real sheetScale: unit / 48
+    readonly property real artWidth: art ? (art.b[2] - art.b[0]) * sheetScale : 0
+    readonly property real artHeight: art ? (art.b[3] - art.b[1]) * sheetScale : 0
+
+    readonly property real boxWidth: art ? artWidth
+        : spec.shape === "bumper" ? unit * 1.3
         : spec.shape === "trigger" ? unit * 0.9
         : spec.shape === "tab" ? unit * 1.1
         : spec.shape === "paddle" ? unit * 0.78
         : spec.shape === "small" ? unit * 0.84
         : unit
-    readonly property real boxHeight: spec.shape === "bumper" ? unit * 0.6
+    readonly property real boxHeight: art ? artHeight
+        : spec.shape === "bumper" ? unit * 0.6
         : spec.shape === "tab" ? unit * 0.6
         : spec.shape === "small" ? unit * 0.84
         : unit
@@ -29,9 +40,35 @@ Item {
     implicitWidth: boxWidth
     implicitHeight: unit
 
+    Shape {
+        id: shape
+
+        visible: root.art !== null
+        width: 64
+        height: 64
+        x: root.art ? (root.width - root.artWidth) / 2 - root.art.b[0] * root.sheetScale : 0
+        y: root.art ? (root.height - root.artHeight) / 2 - root.art.b[1] * root.sheetScale : 0
+        transformOrigin: Item.TopLeft
+        scale: root.sheetScale
+        preferredRendererType: Shape.CurveRenderer
+        // The software scenegraph (offscreen tests) paints a Shape past its parents' clip; a layer
+        // turns it into a plain texture that is clipped like anything else.
+        layer.enabled: GraphicsInfo.api === GraphicsInfo.Software
+        layer.smooth: true
+
+        ShapePath {
+            fillColor: root.ink
+            strokeColor: "transparent"
+            fillRule: ShapePath.OddEvenFill
+
+            PathSvg { path: root.art ? (root.variant === "f" ? root.art.f : root.art.o) : "" }
+        }
+    }
+
     Canvas {
         id: canvas
 
+        visible: root.art === null
         anchors.centerIn: parent
         width: root.boxWidth
         height: root.boxHeight
@@ -39,13 +76,15 @@ Item {
         onPaint: {
             var ctx = getContext("2d");
             ctx.reset();
+            if (root.art)
+                return;
             var w = width, h = height, line = Math.max(1, Theme.dp(2));
             var inset = line / 2 + 0.5;
             ctx.lineWidth = line;
             ctx.lineCap = "round";
             ctx.lineJoin = "round";
-            ctx.strokeStyle = Qt.rgba(root.ink.r, root.ink.g, root.ink.b, root.outline);
-            ctx.fillStyle = Qt.rgba(root.ink.r, root.ink.g, root.ink.b, root.outline);
+            ctx.strokeStyle = root.ink;
+            ctx.fillStyle = root.ink;
             var shape = root.spec.shape;
             if (shape === "circle" || shape === "stick") {
                 Draw.circle(ctx, w / 2, h / 2, w / 2 - inset);
@@ -55,7 +94,6 @@ Item {
                 ctx.stroke();
                 if (root.spec.dir !== "") {
                     Draw.arm(ctx, w / 2, h / 2, w / 2 - inset, w * 0.3 - line, root.spec.dir);
-                    ctx.fillStyle = root.ink;
                     ctx.fill();
                 }
             } else if (shape === "trigger") {
@@ -69,8 +107,6 @@ Item {
                 ctx.stroke();
             }
             if (root.spec.symbol !== "") {
-                ctx.strokeStyle = root.ink;
-                ctx.fillStyle = root.ink;
                 ctx.lineWidth = Math.max(1, Theme.dp(1.8));
                 Draw.symbol(ctx, root.spec.symbol, w / 2, h / 2, Math.min(w, h) / 2 - inset);
             }
@@ -80,13 +116,12 @@ Item {
             target: root
             function onSpecChanged() { canvas.requestPaint(); }
             function onInkChanged() { canvas.requestPaint(); }
-            function onOutlineChanged() { canvas.requestPaint(); }
         }
     }
 
     Text {
         anchors.centerIn: canvas
-        visible: root.spec.symbol === "" && root.spec.text !== ""
+        visible: root.art === null && root.spec.symbol === "" && root.spec.text !== ""
         text: root.spec.text
         color: root.ink
         font.family: Theme.sans

@@ -198,6 +198,7 @@ Two layers per slot: the **default** under `games/<id>/media/`, which `refresh` 
 |---|---|---|---|
 | `file_recording(session_id, path)` | `file_recording(session_id, path)` | `universe recording-file <session> <path>` | files the mkv as `<recordings_root>/<id>/<session>.mkv` (rename within a filesystem, copy across), writes `recording` into the session line, prints the final path |
 | `recordings_json(id)` | `recordings_json(id)` | `universe recordings <name>` | `[{session, path, size, duration_s, created_at}]` |
+| `remove_recording(id, session_id)` | `remove_recording(id, session_id)` | `universe recordings <name> --remove <session> [-y]` | trashes the mkv (`trash`), clears `recording` on the session line; the hours stay |
 
 `recording-file` is called by the capture module's `session-end` hook, so it lands before any
 `post-process` hook runs.
@@ -221,6 +222,7 @@ on it (exact for a fullscreen game).
 | `journal_json(id)` | `journal_json(id)` | `universe journal <name>` | `[Entry]`, last first, read from disk on every call; the state files below are entries too |
 | `pending_journals_json()` | `pending_journals_json()` | `universe status` (a `journal: writing <title>…` line; `pending_journals` in `--json`) | `[{game, title, session, started_at}]` for every `pending` entry across the library; `title` is the game's |
 | `render_journal(id)` | `render_journal(id)` | `universe journal <name> --render` | renders `<journal_root>/<id>/<Title>.md` from the `written` entries, returns the path |
+| `remove_journal_entry(id, session_id)` | `remove_journal_entry(id, session_id)` | `universe journal <name> --remove <session> [-y]` | trashes `journal/<session>.json` and the images it lists (their mirrors beside the note too); a `pending` entry has its `universe-journal-post-process-<session>` unit stopped and its state file removed; the note is rendered again when its folder exists |
 
 `Entry` = `{"session", "game", "written_at", "started_at", "ended_at", "duration_s", "lang",
 "title", "provider", "paragraphs": [], "next_up": "", "images": ["relative path"],

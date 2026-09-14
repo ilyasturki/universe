@@ -73,7 +73,7 @@ FocusScope {
 
     function openBar(item) {
         if (item.id === "power")
-            dialog.show({ message: "Quit Universe?", detail: "The running game, if any, keeps running.", buttons: ["Cancel", "Quit"] },
+            dialog.show({ message: "Quit Universe?", detail: api.universe.currentSession ? "The running game is closed with it." : "", buttons: ["Cancel", "Quit"] },
                         function(i) { if (i === 1) Qt.quit(); else focusTop(); });
         else
             push(item.source, {});

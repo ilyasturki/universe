@@ -29,7 +29,7 @@ FocusScope {
         : chipBar.activeFocus
         ? [ { glyph: "A", label: "Change" },
             { glyph: "B", label: "Back to grid" },
-            { glyph: "dpad", label: "Navigate" },
+            { glyph: "LT RT", label: "Collection" },
             { glyph: "LB RB", label: "Tabs" } ]
         : [ { glyph: "A", label: "Launch" },
             { glyph: "X", label: "Details" },

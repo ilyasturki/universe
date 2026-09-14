@@ -314,9 +314,29 @@ class UniverseClientBase(QObject):
     def fileRecording(self, session_id, path):
         return str(self._guarded("", "Recording1", "File", session_id, path, decode=False) or "")
 
+    @Slot(str, str, result=bool)
+    def removeRecording(self, ident, session_id):
+        try:
+            self._call("Recording1", "Remove", ident, session_id)
+        except UniverseError as e:
+            self.error.emit(e.kind, e.message)
+            return False
+        self.recordingFiled.emit("", ident, "")
+        return True
+
     @Slot(str, result="QVariant")
     def journal(self, ident):
         return self._guarded([], "Journal1", "List", ident)
+
+    @Slot(str, str, result=bool)
+    def removeJournalEntry(self, ident, session_id):
+        try:
+            self._call("Journal1", "Remove", ident, session_id)
+        except UniverseError as e:
+            self.error.emit(e.kind, e.message)
+            return False
+        self.entryWritten.emit("", ident)
+        return True
 
     @Slot(str, result=str)
     def renderJournal(self, ident):
@@ -677,8 +697,10 @@ _CORE_CALLS = {
     ("Media1", "Pin"): lambda s, ident, provider, provider_id: s._core.media_pin(ident, provider, provider_id),
     ("Recording1", "List"): lambda s, ident: s._core.recordings_json(ident),
     ("Recording1", "File"): lambda s, session_id, path: s._core.file_recording(session_id, path),
+    ("Recording1", "Remove"): lambda s, ident, session_id: s._core.remove_recording(ident, session_id),
     ("Journal1", "List"): lambda s, ident: s._core.journal_json(ident),
     ("Journal1", "Render"): lambda s, ident: s._core.render_journal(ident),
+    ("Journal1", "Remove"): lambda s, ident, session_id: s._core.remove_journal_entry(ident, session_id),
     ("Journal1", "AddEntry"): lambda s, session_id, payload: s._core.add_entry(session_id, payload),
     ("Journal1", "Pending"): lambda s: s._core.pending_journals_json(),
     ("Modules1", "List"): lambda s: s._core.modules_json(),
@@ -1136,6 +1158,13 @@ class FakeClient(UniverseClientBase):
     def _Recording1_File(self, session_id, path):
         return path
 
+    def _Recording1_Remove(self, ident, session_id):
+        recordings = self._data.get("recordings", {}).get(ident, [])
+        kept = [r for r in recordings if r.get("session") != session_id]
+        if len(kept) == len(recordings):
+            raise UniverseError("NotFound", f"session {session_id} has no recording")
+        self._data["recordings"][ident] = kept
+
     # A real clip when ffmpeg is around, so the preview has something to play; a name otherwise.
     def _fake_clip(self, ident, session):
         out = os.path.join(self._art_dir, f"{ident}-{session}.mkv")
@@ -1186,6 +1215,13 @@ class FakeClient(UniverseClientBase):
             self.entryWritten.emit(session_id, ident)
 
         QTimer.singleShot(8000, write)
+
+    def _Journal1_Remove(self, ident, session_id):
+        entries = self._data.get("journal", {}).get(ident, [])
+        kept = [e for e in entries if e.get("session") != session_id]
+        if len(kept) == len(entries):
+            raise UniverseError("NotFound", f"journal entry {session_id}")
+        self._data["journal"][ident] = kept
 
     def _Journal1_Render(self, ident):
         return os.path.join(self._art_dir, f"{ident}.md")

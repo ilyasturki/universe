@@ -18,7 +18,7 @@ Item {
         parent: root
         width: root.width
         height: root.height
-        layer.enabled: !root.software
+        layer.enabled: !root.software && root.radius > 0
         layer.smooth: true
         layer.effect: root.software ? null : root.maskEffect
     }

@@ -73,7 +73,9 @@ Item {
         anchors.leftMargin: Theme.dp(10)
         anchors.verticalCenter: parent.verticalCenter
         height: parent.height - Theme.dp(12)
-        width: Math.round(height * 2 / 3)
+        readonly property bool square: art.status === Image.Ready && art.implicitHeight > 0
+                                       && Math.abs(art.implicitWidth / art.implicitHeight - 1) < 0.08
+        width: Math.round(height * (square ? 1 : 2 / 3))
         visible: row.hasImage
         layer.enabled: visible && !row.software
         layer.smooth: true
@@ -91,6 +93,7 @@ Item {
         }
 
         Image {
+            id: art
             anchors.fill: parent
             source: row.hasImage ? row.entry.image : ""
             asynchronous: true

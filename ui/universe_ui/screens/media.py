@@ -178,6 +178,24 @@ class RecordingsList(QObject):
     def unload(self):
         self._all = False
 
+    @Slot(str, str, result=bool)
+    def remove(self, game_id, session):
+        frames = self._frames.get(session)
+        if not self._client.removeRecording(game_id, session):
+            return False
+        self._queue = [j for j in self._queue if j[0] != session]
+        for job, proc in list(self._running.items()):
+            if job[0] == session:
+                proc.finished.disconnect()
+                proc.kill()
+                proc.waitForFinished(1000)
+                self._finish(job, proc)
+        if frames is not None and self._frames.get(session) is frames:
+            del self._frames[session]
+            shutil.rmtree(frames.dir, ignore_errors=True)
+            self.framesChanged.emit()
+        return True
+
     # The picked row gets all its frames, ahead of the other rows' thumbnails. In thumbnail order,
     # so the one shown in the list is settled before the rest of the mosaic arrives.
     @Slot(str)
@@ -381,6 +399,10 @@ class JournalList(QObject):
     @Slot()
     def unload(self):
         self._all = False
+
+    @Slot(str, str, result=bool)
+    def remove(self, game_id, session):
+        return bool(self._client.removeJournalEntry(game_id, session))
 
     @Slot(result=str)
     def render(self):

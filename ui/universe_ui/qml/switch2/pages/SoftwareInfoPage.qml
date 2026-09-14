@@ -20,7 +20,7 @@ FocusScope {
     readonly property var hints: zone === "shots" && screenshots.length > 1
         ? [ { glyph: "dpad", label: "Screenshots" }, { glyph: "B", label: "Back" } ]
         : zone === "text"
-        ? [ { glyph: "dpad", label: "Scroll" }, { glyph: "B", label: "Back" } ]
+        ? [ { glyph: "B", label: "Back" } ]
         : [ { glyph: "B", label: "Back" }, { glyph: "A", label: "Confirm" } ]
 
     readonly property var facts: {

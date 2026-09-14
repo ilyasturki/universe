@@ -2,6 +2,7 @@ import QtQuick
 import "../core"
 import "../sound"
 import "../ui"
+import "../ui/Removal.js" as Removal
 
 FocusScope {
     id: page
@@ -22,7 +23,7 @@ FocusScope {
         ? [ { glyph: "dpad", label: "Previous / next" }, { glyph: "B", label: "Close" } ]
         : mode === "shots"
         ? [ { glyph: "Y", label: "Recording", dim: !(row && row.hasRecording) }, { glyph: "B", label: "Back" }, { glyph: "A", label: "View" } ]
-        : [ { glyph: "Y", label: "Recording", dim: !(row && row.hasRecording) }, { glyph: "dpad", label: "Scroll" }, { glyph: "B", label: "Back" } ]
+        : [ { glyph: "Start", label: "Options" }, { glyph: "Y", label: "Recording", dim: !(row && row.hasRecording) }, { glyph: "B", label: "Back" } ]
 
     signal closeRequested()
 
@@ -88,6 +89,18 @@ FocusScope {
             } else {
                 Sound.edge();
             }
+        } else if (api.keys.isMenu(event)) {
+            event.accepted = true;
+            if (!row) {
+                Sound.edge();
+                return;
+            }
+            Sound.ok();
+            var entry = row;
+            shell.pick({ title: entry.gameTitle + " · " + entry.dateText, choices: ["Remove entry…"] }, function(i) {
+                if (i === 0)
+                    Removal.entry(shell, api.screens, entry, function() { page.closeRequested(); });
+            });
         } else if (api.keys.isAccept(event)) {
             event.accepted = true;
             if (mode === "shots") {

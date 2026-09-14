@@ -17,7 +17,6 @@ FocusScope {
 
     readonly property var hints: editor.open ? editor.hints
         : [ { glyph: "A", label: cards.currentRow && cards.currentRow.type === "bool" ? "Toggle" : "Change" },
-            { glyph: "dpad", label: "Navigate" },
             { glyph: "B", label: "Back" } ]
 
     readonly property real sideMargin: Theme.dp(90)

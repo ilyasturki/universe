@@ -24,8 +24,7 @@ FocusScope {
 
     readonly property var hints: [
         { glyph: "A", label: "Select" },
-        { glyph: "B", label: "Close" },
-        { glyph: "dpad", label: "Navigate" }
+        { glyph: "B", label: "Close" }
     ]
 
     readonly property var session: api.universe.currentSession

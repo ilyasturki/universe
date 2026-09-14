@@ -28,11 +28,9 @@ FocusScope {
     readonly property var hints: typing
         ? [ { glyph: "A", label: "Type" },
             { glyph: "X", label: "Backspace" },
-            { glyph: "dpad", label: "Keys" },
             { glyph: "B", label: "Close" } ]
         : [ { glyph: "A", label: "Launch" },
             { glyph: "X", label: "Details" },
-            { glyph: "dpad", label: "Navigate" },
             { glyph: "B", label: "Close" } ]
 
     readonly property real sheetInner: Math.min(Theme.dp(880), width - Theme.dp(280))

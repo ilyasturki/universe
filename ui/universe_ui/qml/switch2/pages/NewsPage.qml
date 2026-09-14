@@ -3,6 +3,7 @@ import "../core"
 import "../sound"
 import "../ui"
 import "Feed.js" as Feed
+import "../ui/Removal.js" as Removal
 
 FocusScope {
     id: page
@@ -27,7 +28,7 @@ FocusScope {
 
     readonly property var hints: zone === "rail"
         ? [ { glyph: "B", label: "Back" }, { glyph: "A", label: "OK" } ]
-        : [ { glyph: "B", label: "Back" }, { glyph: "A", label: tab === 0 ? "Read" : "Open", dim: current === null } ]
+        : [ { glyph: "Start", label: "Options", dim: current === null || tab !== 0 }, { glyph: "B", label: "Back" }, { glyph: "A", label: tab === 0 ? "Read" : "Open", dim: current === null } ]
 
     signal closeRequested()
 
@@ -88,6 +89,30 @@ FocusScope {
         }
         Sound.tick();
         index = next;
+    }
+
+    function options() {
+        if (!current || tab !== 0) {
+            Sound.edge();
+            return;
+        }
+        Sound.ok();
+        var row = current;
+        var pending = row.state === "pending";
+        var items = pending ? [] : [{ label: "Read", act: "read" }];
+        if (row.hasRecording)
+            items.push({ label: "Watch the recording", act: "recording" });
+        items.push({ label: pending ? "Cancel the writing…" : "Remove entry…", act: "remove" });
+        shell.pick({ title: row.gameTitle + " · " + row.dateText, choices: items.map(function(i) { return i.label; }) }, function(i) {
+            if (i < 0)
+                return;
+            if (items[i].act === "read")
+                shell.push("pages/ArticlePage.qml", { session: row.session, gameId: row.gameId });
+            else if (items[i].act === "recording")
+                shell.push("pages/PlayerPage.qml", { session: row.session, gameId: row.gameId });
+            else
+                Removal.entry(shell, api.screens, row, function() {});
+        });
     }
 
     function activate() {
@@ -228,6 +253,9 @@ FocusScope {
             if (api.keys.isAccept(event)) {
                 event.accepted = true;
                 page.activate();
+            } else if (api.keys.isMenu(event)) {
+                event.accepted = true;
+                page.options();
             }
         }
 

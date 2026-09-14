@@ -30,8 +30,8 @@ FocusScope {
     readonly property bool ownsAccept: true
     property bool menuOpen: false
 
-    readonly property var sections: ["Runners", "Modules", "Install", "Updates", "Login", "Controller", "Themes", "Doctor", "Artwork"]
-    readonly property var sectionIcons: ["play", "grid", "download", "refresh", "user", "gamepad", "sun", "pulse", "image"]
+    readonly property var sections: ["Runners", "Modules", "Install", "Updates", "Login", "Controller", "Themes", "Doctor", "Artwork", "Quit"]
+    readonly property var sectionIcons: ["play", "grid", "download", "refresh", "user", "gamepad", "sun", "pulse", "image", "power"]
     readonly property int runnersSection: 0
     readonly property int modulesSection: 1
     readonly property int installSection: 2
@@ -42,6 +42,7 @@ FocusScope {
     readonly property int doctorSection: 7
     // Its own column, not cards: ArtworkOverview.qml.
     readonly property int artworkSection: 8
+    readonly property int quitSection: 9
     property int section: 0
 
     readonly property var modulesForm: api.screens.modules
@@ -69,10 +70,10 @@ FocusScope {
         : testing ? [ { glyph: "B", label: "Hold to finish" }, { glyph: "Start+Select", label: "Finish" } ]
         : learning ? [ { glyph: "B", label: "Stop learning" } ]
         : side.activeFocus
-        ? [ { glyph: "A", label: "Open" }, { glyph: "B", label: "Back" }, { glyph: "dpad", label: "Section" }, { glyph: "LB RB", label: "Tabs" } ]
-        : (acceptLabel !== "" ? [ { glyph: "A", label: acceptLabel } ] : []).concat(
-            refreshable ? [ { glyph: "X", label: "Refresh" } ] : [],
-            [ { glyph: "B", label: "Sections" }, { glyph: "dpad", label: "Navigate" }, { glyph: "LT RT", label: "Section" }, { glyph: "LB RB", label: "Tabs" } ])
+        ? [ { glyph: "A", label: "Open" }, { glyph: "B", label: "Back" }, { glyph: "LT RT", label: "Section" }, { glyph: "LB RB", label: "Tabs" } ]
+        : [ { glyph: "A", label: acceptLabel !== "" ? acceptLabel : "Select", dim: acceptLabel === "" },
+            { glyph: "X", label: "Refresh", dim: !refreshable },
+            { glyph: "B", label: "Sections" }, { glyph: "LT RT", label: "Section" }, { glyph: "LB RB", label: "Tabs" } ]
 
     readonly property string acceptLabel: {
         var row = cards.currentRow;
@@ -113,13 +114,14 @@ FocusScope {
 
     function games(n) { return n + (n === 1 ? " game" : " games"); }
 
-    // The library's own cover when the game is in it, else the store's picture.
+    // The library's own art when the game is in it, else the store's picture.
     function artOf(g) {
         var game = g.game_id ? api.allGames.byId(g.game_id) : null;
         if (game) {
-            var art = String(game.assets.boxFront) !== "" ? game.assets.boxFront : game.assets.tile;
-            if (String(art) !== "")
-                return art;
+            var slots = [game.assets.square, game.assets.tile, game.assets.boxFront];
+            for (var i = 0; i < slots.length; i++)
+                if (String(slots[i]) !== "")
+                    return slots[i];
         }
         return g.image || "";
     }
@@ -202,6 +204,11 @@ FocusScope {
             rows.push({ section: "Themes", key: "theme", label: "Theme", type: "enum", value: api.theme.name, display: api.theme.name,
                         choices: api.theme.themes.map(function(t) { return t.name; }), detail: "" });
             groups.push({ title: "Look", rows: [0] });
+            return { rows: rows, groups: groups };
+        }
+        if (section === quitSection) {
+            rows.push({ section: "Quit", key: "quit", label: "Quit Universe", type: "action", display: "", detail: "", icon: "power", action: "Quit" });
+            groups.push({ title: "Universe", meta: api.universe.currentSession ? "The running game is closed with it" : "", rows: [0] });
             return { rows: rows, groups: groups };
         }
         return { rows: modulesForm.doctor, groups: modulesForm.doctorGroups };
@@ -296,6 +303,12 @@ FocusScope {
         } else if (section === themesSection) {
             Sound.panel();
             editor.edit(index, row);
+        } else if (section === quitSection) {
+            Sound.panel();
+            menu.row = row;
+            menu.show([ { icon: "", label: "Stay", action: "" },
+                        { icon: "power", label: api.universe.currentSession ? "Quit and close the game" : "Quit Universe", action: "quit!", danger: true } ],
+                      cards, cards.focusRect, "Quit Universe?");
         } else if (section === controllerSection) {
             if (row.key === "test") {
                 if (controller.setTesting(true))
@@ -925,6 +938,8 @@ FocusScope {
         onChosen: function(action) {
             if (page.section === page.controllerSection)
                 page.slotAction(action);
+            else if (page.section === page.quitSection)
+                action === "quit!" ? Qt.quit() : cards.forceActiveFocus();
             else
                 page.gameAction(action);
         }

@@ -17,8 +17,7 @@ FocusScope {
 
     readonly property var hints: [
         { glyph: "A", label: "Select" },
-        { glyph: "B", label: "Close" },
-        { glyph: "dpad", label: "Navigate" }
+        { glyph: "B", label: "Close" }
     ]
 
     // The row's rect in the menu's coordinates, taken once at show().

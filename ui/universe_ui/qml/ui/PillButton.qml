@@ -5,7 +5,7 @@ Rectangle {
     id: root
 
     property string label: "Play"
-    // "play" | "info" | "library" | "stop" | ""
+    // "play" | "info" | "library" | "stop" | a MenuGlyph kind | ""
     property string icon: "play"
     property bool ghost: false
     property bool focused: false
@@ -135,6 +135,14 @@ Rectangle {
                     ctx.fill();
                 }
             }
+        }
+
+        MenuGlyph {
+            visible: root.icon !== "" && ["play", "info", "library", "stop"].indexOf(root.icon) < 0
+            width: Theme.dp(26); height: Theme.dp(26)
+            anchors.verticalCenter: parent.verticalCenter
+            kind: visible ? root.icon : ""
+            tint: root.ink
         }
 
         Text {

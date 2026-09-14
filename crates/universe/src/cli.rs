@@ -156,11 +156,23 @@ pub enum Cmd {
         /// Render, then open the note with xdg-open
         #[arg(long)]
         open: bool,
+        /// Trash the entry of this session (a pending one is cancelled)
+        #[arg(long, value_name = "SESSION")]
+        remove: Option<String>,
+        /// Do not ask for confirmation
+        #[arg(long, short)]
+        yes: bool,
     },
     /// Recordings of a game
     Recordings {
         /// Game: exact id, then whole word, substring or path
         name: String,
+        /// Trash the recording of this session; the hours stay
+        #[arg(long, value_name = "SESSION")]
+        remove: Option<String>,
+        /// Do not ask for confirmation
+        #[arg(long, short)]
+        yes: bool,
     },
     /// Artwork of a game (`all` refreshes every game)
     Media {
@@ -794,8 +806,15 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
             println!("{t}");
         }
-        Cmd::Journal { name, render, open } => {
+        Cmd::Journal { name, render, open, remove, yes } => {
             let id = pick(&core, &name).await?;
+            if let Some(session) = remove {
+                if yes || confirm(&format!("trash the journal entry {session} of {id}?")) {
+                    core.remove_journal_entry(&id, &session).await?;
+                    println!("removed {session}");
+                }
+                return Ok(());
+            }
             if render || open {
                 let path = core.render_journal(&id).await?;
                 println!("{path}");
@@ -827,8 +846,15 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 println!();
             }
         }
-        Cmd::Recordings { name } => {
+        Cmd::Recordings { name, remove, yes } => {
             let id = pick(&core, &name).await?;
+            if let Some(session) = remove {
+                if yes || confirm(&format!("trash the recording {session} of {id}?")) {
+                    core.remove_recording(&id, &session).await?;
+                    println!("removed {session}");
+                }
+                return Ok(());
+            }
             let list = parse_json(&core.recordings_json(&id).await?);
             if json {
                 print_json(&list);

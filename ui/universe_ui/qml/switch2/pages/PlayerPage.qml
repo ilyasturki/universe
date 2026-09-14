@@ -4,6 +4,7 @@ import "../core"
 import "../../core/Format.js" as Format
 import "../sound"
 import "../ui"
+import "../ui/Removal.js" as Removal
 
 FocusScope {
     id: page
@@ -104,12 +105,16 @@ FocusScope {
         Sound.ok();
         var items = row && row.hasJournal ? [{ label: "Open journal entry", act: "journal" }] : [];
         items.push({ label: "Show file name", act: "name" });
+        items.push({ label: "Remove recording…", act: "remove" });
         shell.pick({ title: row ? row.gameTitle + " · " + row.dateText : "", choices: items.map(function(i) { return i.label; }) }, function(i) {
             if (i < 0)
                 return;
             if (items[i].act === "journal") {
                 player.pause();
                 shell.push("pages/ArticlePage.qml", { session: row.session, gameId: row.gameId });
+            } else if (items[i].act === "remove") {
+                player.pause();
+                Removal.recording(shell, api.screens, row, function() { leave(); });
             } else {
                 shell.showToast(row ? row.path : "");
             }

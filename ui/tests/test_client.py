@@ -47,6 +47,26 @@ def test_core_client_reads_writes_and_watches(app):
     assert "sample" in written
     assert [e["title"] for e in client.journal("sample")] == ["First"]
 
+    # a pending entry is cancelled by dropping its state file; a recording line is cleared even
+    # when the file is already gone. Neither needs the trash.
+    (games / "sample" / "journal" / "20260912-120000.pending.json").write_text(
+        '{"session": "20260912-120000", "game": "sample", "started_at": "2026-09-12T12:00:00+02:00", "provider": "stub"}'
+    )
+    assert [e["state"] for e in client.journal("sample")] == ["pending", "written"]
+    written.clear()
+    assert client.removeJournalEntry("sample", "20260912-120000") is True
+    assert [e["state"] for e in client.journal("sample")] == ["written"] and written == ["sample"]
+    assert client.removeJournalEntry("sample", "20260912-120000") is False and seen[-1] == "NotFound"
+    (games / "sample" / "sessions.jsonl").write_text(
+        '{"session": "20260913-120000", "game": "sample", "started_at": "2026-09-13T12:00:00+02:00",'
+        ' "ended_at": "2026-09-13T13:00:00+02:00", "duration_s": 3600, "source": "universe", "exit": 0,'
+        ' "recording": "' + str(games.parent / "gone.mkv") + '"}\n'
+    )
+    client._core.reload_game("sample")
+    assert [r["session"] for r in client.recordings("sample")] == ["20260913-120000"]
+    assert client.removeRecording("sample", "20260913-120000") is True
+    assert client.recordings("sample") == [] and client.game("sample")["stats"]["hours"] == 1.0
+
     runners = {r["id"]: r for r in client.runners()}
     assert runners["linux"]["kind"] == "linux" and "Nintendo Wii" in runners["dolphin"]["platforms"]
     assert client.setRunnerSetting("dolphin", "batch", "false") and runners != {r["id"]: r for r in client.runners()}

@@ -3,6 +3,7 @@ import "../core"
 import "../sound"
 import "../ui"
 import "Feed.js" as Feed
+import "../ui/Removal.js" as Removal
 
 FocusScope {
     id: page
@@ -35,7 +36,7 @@ FocusScope {
 
     readonly property var hints: zone === "rail"
         ? [ { glyph: "B", label: "Back" }, { glyph: "A", label: "OK" } ]
-        : [ { glyph: "B", label: "Back" }, { glyph: "A", label: shown.length > 0 ? "Play" : "OK", dim: shown.length === 0 } ]
+        : [ { glyph: "Start", label: "Options", dim: shown.length === 0 }, { glyph: "B", label: "Back" }, { glyph: "A", label: shown.length > 0 ? "Play" : "OK", dim: shown.length === 0 } ]
 
     signal closeRequested()
 
@@ -84,6 +85,29 @@ FocusScope {
         }
         Sound.ok();
         shell.push("pages/PlayerPage.qml", { session: current.session, gameId: current.gameId });
+    }
+
+    function options() {
+        if (!current) {
+            Sound.edge();
+            return;
+        }
+        Sound.ok();
+        var row = current;
+        var items = [{ label: "Play", act: "play" }];
+        if (row.hasJournal)
+            items.push({ label: "Open journal entry", act: "journal" });
+        items.push({ label: "Remove recording…", act: "remove" });
+        shell.pick({ title: row.gameTitle + " · " + row.dateText, choices: items.map(function(i) { return i.label; }) }, function(i) {
+            if (i < 0)
+                return;
+            if (items[i].act === "play")
+                play();
+            else if (items[i].act === "journal")
+                shell.push("pages/ArticlePage.qml", { session: row.session, gameId: row.gameId });
+            else
+                Removal.recording(shell, api.screens, row, function() {});
+        });
     }
 
     function railAction(id) {
@@ -189,6 +213,9 @@ FocusScope {
             if (api.keys.isAccept(event)) {
                 event.accepted = true;
                 page.play();
+            } else if (api.keys.isMenu(event)) {
+                event.accepted = true;
+                page.options();
             }
         }
 

@@ -69,6 +69,7 @@ universe media technomancer status    # each slot: what shows, the fetched defau
 universe media technomancer set logo https://…   # or a file: a pick, kept over what refresh fetches
 universe media technomancer search    # SteamGridDB's entries for the name, to `pin sgdb <id>` a wrong match
 universe journal technomancer --render
+universe recordings technomancer --remove 20260909-213045   # trashes the mkv, keeps the hours; journal --remove for an entry
 universe module ls · enable capture · settings journal
 universe doctor                # prerequisites of the core and every enabled module
 universe controller ls         # connected pads, every button and what it does

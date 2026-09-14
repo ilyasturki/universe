@@ -23,7 +23,7 @@ FocusScope {
     readonly property var hints: [
         { glyph: "A", label: onSearch ? "Search" : "Open" },
         { glyph: "B", label: "Back" },
-        { glyph: "dpad", label: "Navigate" }
+        { glyph: "LB RB", label: "Tabs" }
     ]
 
     implicitHeight: Theme.dp(Theme.tabBarHeight)

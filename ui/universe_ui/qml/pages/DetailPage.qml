@@ -13,6 +13,17 @@ FocusScope {
     signal launchRequested(var game)
     signal closeRequested()
     signal menuRequested(var game, Item anchor)
+    signal recordingsRequested(var game)
+    signal journalRequested(var game)
+
+    readonly property int recordingCount: game && filed >= 0 ? (api.universe.recordings(game.id) || []).length : 0
+    readonly property int entryCount: game && filed >= 0 ? (api.universe.journal(game.id) || []).length : 0
+    property int filed: 0
+    readonly property var pills: [ "play", "favourite" ].concat(recordingCount > 0 ? [ "recordings" ] : [], entryCount > 0 ? [ "journal" ] : [])
+    readonly property string action: pills[Math.max(0, Math.min(actionIndex, pills.length - 1))] || "play"
+    readonly property string acceptLabel: action === "favourite" ? favouriteLabel
+        : action === "recordings" ? "Recordings" : action === "journal" ? "Journal"
+        : game && game.playTime > 0 ? "Continue" : "Play"
 
     // The shell's hero reads this to pull its art up and dim it as the page scrolls.
     readonly property real scrollY: flick.contentY
@@ -58,15 +69,20 @@ FocusScope {
 
     readonly property var hints: lightbox
         ? [ { glyph: "dpad", label: "Previous / next" }, { glyph: "B", label: "Close" } ]
-        : section === 2
-        ? [ { glyph: "A", label: "View" }, { glyph: "Y", label: favouriteLabel }, { glyph: "dpad", label: "Navigate" }, { glyph: "B", label: "Back" } ]
-        : section === 1
-        ? [ { glyph: "A", label: "Play" }, { glyph: "dpad", label: "Scroll" }, { glyph: "Y", label: favouriteLabel }, { glyph: "B", label: "Back" } ]
-        : [ { glyph: "A", label: actionIndex === 0 ? "Play" : favouriteLabel }, { glyph: "Y", label: favouriteLabel }, { glyph: "≡", label: "More" }, { glyph: "dpad", label: "Navigate" }, { glyph: "B", label: "Back" } ]
+        : [ { glyph: "A", label: section === 2 ? "View" : section === 1 ? "Play" : acceptLabel },
+            { glyph: "Y", label: favouriteLabel },
+            { glyph: "Start", label: "More" },
+            { glyph: "B", label: "Back" } ]
 
     readonly property string favouriteLabel: game && game.favorite ? "Remove from favourites" : "Add to favourites"
 
     onGameChanged: reset()
+
+    Connections {
+        target: api.universe
+        function onRecordingFiled(session, id, path) { page.filed++; }
+        function onEntryWritten(session, id) { page.filed++; }
+    }
 
     function reset() {
         section = 0;
@@ -270,14 +286,14 @@ FocusScope {
 
                     PillButton {
                         label: page.game && page.game.playTime > 0 ? "Continue" : "Play"
-                        focused: actions.active && page.actionIndex === 0
-                        dimmed: actions.active && page.actionIndex !== 0
+                        focused: actions.active && page.action === "play"
+                        dimmed: actions.active && page.action !== "play"
                     }
 
                     Rectangle {
                         id: heart
 
-                        readonly property bool focused: actions.active && page.actionIndex === 1
+                        readonly property bool focused: actions.active && page.action === "favourite"
 
                         width: Theme.dp(78)
                         height: Theme.dp(78)
@@ -333,6 +349,24 @@ FocusScope {
                                     ctx.stroke();
                             }
                         }
+                    }
+
+                    PillButton {
+                        visible: page.recordingCount > 0
+                        label: "Recordings"
+                        icon: "film"
+                        ghost: true
+                        focused: actions.active && page.action === "recordings"
+                        dimmed: actions.active && page.action !== "recordings"
+                    }
+
+                    PillButton {
+                        visible: page.entryCount > 0
+                        label: "Journal"
+                        icon: "book"
+                        ghost: true
+                        focused: actions.active && page.action === "journal"
+                        dimmed: actions.active && page.action !== "journal"
                     }
                 }
             }
@@ -570,8 +604,12 @@ FocusScope {
             if (page.section === 2) {
                 Sound.enter();
                 page.lightbox = true;
-            } else if (page.section === 0 && page.actionIndex === 1) {
+            } else if (page.section === 0 && page.action === "favourite") {
                 page.toggleFavourite();
+            } else if (page.section === 0 && page.action === "recordings") {
+                page.recordingsRequested(page.game);
+            } else if (page.section === 0 && page.action === "journal") {
+                page.journalRequested(page.game);
             } else {
                 page.launchRequested(page.game);
             }
@@ -602,7 +640,7 @@ FocusScope {
             event.accepted = true;
             var step = event.key === Qt.Key_Left ? -1 : 1;
             if (page.section === 0) {
-                var next = Math.max(0, Math.min(1, page.actionIndex + step));
+                var next = Math.max(0, Math.min(page.pills.length - 1, page.actionIndex + step));
                 next === page.actionIndex ? Sound.edge() : Sound.tick();
                 page.actionIndex = next;
             } else if (page.section === 2) {

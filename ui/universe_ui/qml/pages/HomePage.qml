@@ -45,16 +45,16 @@ FocusScope {
         var out = [];
         if (tileSelected) {
             out.push({ glyph: "A", label: "Open library" });
+            out.push({ glyph: "X", label: "Details", dim: true });
+            out.push({ glyph: "Y", label: favouriteLabel, dim: true });
         } else {
             out.push({ glyph: "A", label: heroActions.activeFocus && heroActions.index === 1 ? "Details" : playLabel });
-            if (!heroActions.activeFocus)
-                out.push({ glyph: "X", label: "Details" });
+            out.push({ glyph: "X", label: "Details" });
             out.push({ glyph: "Y", label: favouriteLabel });
         }
         if (heroActions.activeFocus)
             out.push({ glyph: "B", label: "Back to games" });
         out.push({ glyph: "LB RB", label: "Tabs" });
-        out.push({ glyph: "dpad", label: "Navigate" });
         return out;
     }
 
@@ -475,7 +475,8 @@ FocusScope {
                        + (tile.delta === 0 ? 0 : (tile.delta < 0 ? -page.spread : page.spread))
 
                     game: model
-                    artSource: String(model.assets.tile) !== "" ? model.assets.tile : model.assets.boxFront
+                    artSource: String(model.assets.square) !== "" ? model.assets.square
+                             : String(model.assets.tile) !== "" ? model.assets.tile : model.assets.boxFront
                     selected: tile.selected
                     selectedScale: 1.0
                     idleScale: page.idleScale

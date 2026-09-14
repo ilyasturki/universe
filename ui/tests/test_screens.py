@@ -173,6 +173,26 @@ def test_journal_and_recordings(api):
     assert row["hasJournal"] is True and entry["hasRecording"] is True
 
 
+def test_removing_a_recording_or_an_entry_reloads_both_lists(api, fake):
+    journal, recordings = api.screens.journal, api.screens.recordings
+    journal.load("the-technomancer")
+    recordings.load("the-technomancer")
+    session = recordings.rows[0]["session"]
+    assert recordings.rows[0]["hasJournal"] is True
+
+    assert recordings.remove("the-technomancer", session) is True
+    assert recordings.count == 1 and session not in recordings.frameMap
+    journal.load("the-technomancer")
+    assert [r["hasRecording"] for r in journal.rows if r["session"] == session] == [False]
+
+    errors = []
+    fake.error.connect(lambda kind, message: errors.append(kind))
+    assert recordings.remove("the-technomancer", session) is False and errors == ["NotFound"]
+
+    assert journal.remove("the-technomancer", session) is True
+    assert journal.count == 1 and all(r["session"] != session for r in journal.rows)
+
+
 def test_journal_rows_carry_state_and_duration(api, fake):
     entries = fake._data["journal"]["the-technomancer"]
     entries.insert(0, {"session": "20260912-200000", "game": "the-technomancer", "state": "pending",

@@ -45,7 +45,16 @@ The shell:
 | `shell.prompt({ title, value, max, numeric, path }, done(value))` | the keyboard; cancel answers `null` |
 | `shell.showToast(text)` | a line at the top left |
 
-`hints` glyphs are the Xbox names (`A B X Y LB RB LT RT Start Select dpad`).
+`hints` glyphs are the Xbox names (`A B X Y LB RB LT RT Start Select dpad`); `dim: true` keeps a
+hint in place at low opacity when the page has nothing for it, and the d-pad is not written for
+plain navigation. `ui/HintGlyph.qml` draws them the HOME way from the same prompts as Reprise's
+`PadGlyph` (the outline in ink under the filled disc, the mark showing through).
+
+Album, News and their Player and Article pages take **+ Options** (Start) on a recording or an
+entry: play or read it, jump to the linked one, or remove it. `ui/Removal.js` holds the two
+confirmations (`shell.dialogAsk`: Cancel, trash this one, trash both) and calls
+`api.screens.album.remove` / `api.screens.news.remove`; a pending entry's removal cancels the
+writing.
 
 ## Running
 

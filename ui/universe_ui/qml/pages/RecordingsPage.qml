@@ -23,6 +23,7 @@ FocusScope {
     readonly property var frames: current && store.frameMap[current.session] ? store.frameMap[current.session] : null
 
     property bool videoFocused: false
+    property bool fullscreen: false
     readonly property bool playing: player.playbackState === MediaPlayer.PlayingState
     readonly property bool stopped: player.playbackState === MediaPlayer.StoppedState
     // ms: the player's once loaded, else the probed file's, else the session's.
@@ -43,6 +44,8 @@ FocusScope {
     signal jumpRequested(string source, string session)
 
     readonly property var hints: {
+        if (menu.open)
+            return menu.hints;
         var out = [];
         if (videoFocused) {
             out.push({ glyph: "A", label: playing ? "Pause" : "Play" });
@@ -50,11 +53,11 @@ FocusScope {
             out.push({ glyph: "RS", label: "Scrub" });
         } else {
             out.push({ glyph: "A", label: "Play" });
-            out.push({ glyph: "dpad", label: "Navigate" });
         }
-        if (current && current.hasJournal)
-            out.push({ glyph: "Y", label: "Journal entry" });
-        out.push({ glyph: "B", label: videoFocused ? "Back to list" : "Back" });
+        out.push({ glyph: "X", label: fullscreen ? "Exit fullscreen" : "Fullscreen", dim: current === null });
+        out.push({ glyph: "Y", label: "Journal entry", dim: !(current && current.hasJournal) });
+        out.push({ glyph: "Start", label: "More", dim: current === null });
+        out.push({ glyph: "B", label: videoFocused && !fullscreen ? "Back to list" : "Back" });
         return out;
     }
 
@@ -65,13 +68,18 @@ FocusScope {
         player.stop();
         index = 0;
         videoFocused = false;
+        fullscreen = false;
         if (game)
             store.load(game.id);
         landOnSession();
     }
 
     onSessionChanged: landOnSession()
-    onRowsChanged: landOnSession()
+    onRowsChanged: {
+        if (index >= rows.length)
+            index = Math.max(0, rows.length - 1);
+        landOnSession();
+    }
 
     function landOnSession() {
         if (session === "")
@@ -108,6 +116,70 @@ FocusScope {
         if (play && !playing)
             player.play();
         wake();
+    }
+
+    function toggleFullscreen() {
+        if (!current || !current.url) {
+            Sound.edge();
+            return;
+        }
+        if (fullscreen) {
+            Sound.cancel();
+            fullscreen = false;
+        } else {
+            Sound.enter();
+            fullscreen = true;
+            if (!videoFocused)
+                focusVideo(true);
+        }
+        wake();
+    }
+
+    function openJournal() {
+        if (current && current.hasJournal)
+            page.jumpRequested("pages/JournalPage.qml", current.session);
+        else
+            Sound.edge();
+    }
+
+    function openMenu() {
+        if (!current || !list.currentItem) {
+            Sound.edge();
+            return;
+        }
+        Sound.panel();
+        var items = [ { icon: "play", label: "Play", action: "play" } ];
+        if (current.hasJournal)
+            items.push({ icon: "book", label: "Journal entry", action: "journal" });
+        items.push({ icon: "trash", label: "Remove recording…", action: "remove", danger: true });
+        menu.show(items, list, Qt.rect(list.currentItem.x, list.currentItem.y - list.contentY, list.currentItem.width, list.currentItem.height), current.dateText);
+    }
+
+    function menuAction(action) {
+        if (action === "play") {
+            focusVideo(true);
+        } else if (action === "journal") {
+            openJournal();
+        } else if (action === "remove") {
+            Sound.panel();
+            var items = [ { icon: "", label: "Keep it", action: "" },
+                          { icon: "trash", label: "Trash the recording", action: "remove!", danger: true } ];
+            if (current.hasJournal)
+                items.push({ icon: "trash", label: "Trash it and its journal entry", action: "remove-both!", danger: true });
+            menu.show(items, list, Qt.rect(list.currentItem.x, list.currentItem.y - list.contentY, list.currentItem.width, list.currentItem.height),
+                      "Remove this recording?");
+        } else if (action === "remove!" || action === "remove-both!") {
+            Sound.enter();
+            player.stop();
+            fullscreen = false;
+            videoFocused = false;
+            var gameId = current.gameId, session = current.session;
+            if (action === "remove-both!")
+                api.screens.journal.remove(gameId, session);
+            store.remove(gameId, session);
+        }
+        if (action !== "remove")
+            page.forceActiveFocus();
     }
 
     function togglePlay() {
@@ -196,19 +268,25 @@ FocusScope {
             page.videoFocused ? togglePlay() : focusVideo(true);
         } else if (api.keys.isCancel(event)) {
             event.accepted = true;
-            if (page.videoFocused) {
+            if (page.fullscreen) {
+                Sound.cancel();
+                page.fullscreen = false;
+            } else if (page.videoFocused) {
                 Sound.cancel();
                 page.videoFocused = false;
             } else {
                 player.stop();
                 page.closeRequested();
             }
+        } else if (api.keys.isDetails(event)) {
+            event.accepted = true;
+            toggleFullscreen();
+        } else if (api.keys.isMenu(event)) {
+            event.accepted = true;
+            openMenu();
         } else if (api.keys.isFilters(event)) {
             event.accepted = true;
-            if (current && current.hasJournal)
-                page.jumpRequested("pages/JournalPage.qml", current.session);
-            else
-                Sound.edge();
+            openJournal();
         } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
             event.accepted = true;
             page.videoFocused ? Sound.edge() : step(event.key === Qt.Key_Up ? -1 : 1);
@@ -379,14 +457,15 @@ FocusScope {
     RoundedMask {
         id: pane
 
-        anchors.top: list.top
-        anchors.left: list.right
-        anchors.leftMargin: Theme.dp(40)
+        anchors.top: page.fullscreen ? parent.top : list.top
+        anchors.left: page.fullscreen ? parent.left : list.right
+        anchors.leftMargin: page.fullscreen ? 0 : Theme.dp(40)
         anchors.right: parent.right
-        anchors.rightMargin: page.sideMargin
-        height: width * 9 / 16
-        radius: Theme.dp(16)
+        anchors.rightMargin: page.fullscreen ? 0 : page.sideMargin
+        height: page.fullscreen ? parent.height : width * 9 / 16
+        radius: page.fullscreen ? 0 : Theme.dp(16)
         visible: page.rows.length > 0
+        z: page.fullscreen ? 3 : 0
 
         Rectangle {
             anchors.fill: parent
@@ -507,7 +586,7 @@ FocusScope {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
-                height: Theme.dp(170)
+                height: Theme.dp(170) + (page.fullscreen ? hintBar.height : 0)
                 gradient: Gradient {
                     GradientStop { position: 0.0; color: Qt.rgba(0.02, 0.02, 0.03, 0.0) }
                     GradientStop { position: 1.0; color: Qt.rgba(0.02, 0.02, 0.03, 0.85) }
@@ -520,9 +599,9 @@ FocusScope {
                 anchors.left: parent.left
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
-                anchors.leftMargin: controls.inset
-                anchors.rightMargin: controls.inset
-                anchors.bottomMargin: Theme.dp(64)
+                anchors.leftMargin: page.fullscreen ? page.sideMargin : controls.inset
+                anchors.rightMargin: page.fullscreen ? page.sideMargin : controls.inset
+                anchors.bottomMargin: page.fullscreen ? hintBar.height + Theme.dp(64) : Theme.dp(64)
                 height: page.scrubbing ? Theme.dp(10) : Theme.dp(6)
 
                 Behavior on height {
@@ -716,5 +795,21 @@ FocusScope {
         sideMargin: page.sideMargin
         showClock: true
         hints: page.hints
+        z: 4
+        opacity: page.fullscreen && !controls.shown ? 0.0 : 1.0
+
+        Behavior on opacity {
+            NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
+        }
+    }
+
+    ActionMenu {
+        id: menu
+
+        anchors.fill: parent
+        z: 5
+
+        onChosen: function(action) { page.menuAction(action); }
+        onDismissed: page.forceActiveFocus()
     }
 }

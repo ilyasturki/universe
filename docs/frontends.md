@@ -177,21 +177,58 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
 releases still land, so nothing stays held across it. The hint bar names buttons the Xbox way
 (`ButtonGlyph`: `A`, `LB RB`, `Start+Select`, `dpad` — a space lists buttons that each do the
 thing, a `+` joins a chord and is drawn between them) and draws them the way the connected pad
-prints them (`PadGlyph`, from `PadNames.js`: × ○ △ □ and L1/R1 on a DualSense, B/A and L/R on a
-Switch pad); with no pad the watcher sees, they stay Xbox letters.
+prints them (`PadGlyph`, named by `PadNames.js`: × ○ △ □ and L1/R1 on a DualSense, B/A and L/R on
+a Switch pad); with no pad the watcher sees, they stay Xbox letters. The glyphs are vector paths
+(`ui/Prompts.js`, Kenney's Input Prompts and the PlayStation mark from Simple Icons, both CC0)
+drawn by a `Shape` on a 64-unit sheet — `o` the outline, `f` the filled disc with the mark cut
+out, which the Switch 2 look lays over the outline for its discs — so one component serves a
+14 px hint and a 48 px caption; a button no set draws (a paddle, a star) keeps its canvas
+outline and letters.
+
+## The hint bar
+
+Every page and overlay exposes `hints`, `[{ glyph, label, dim }]`, and the bar on screen shows
+the one with the focus (`theme.qml` picks the menu's, the tab bar's or the page's). `ui/Hints.js`
+lays them out the same way everywhere: the page's hints on the left in one fixed order of
+buttons (A, X, Y, sticks, d-pad, Start, B), the near-global ones — `LT RT` (the section or
+collection cycled by the triggers) and `LB RB` (the tabs) — on the right before the clock, so
+they never move as the labels around them change. A hint whose action the page has nothing for
+right now (no journal entry for this recording, no refresh in this section) is kept in place and
+dimmed (`dim: true`), never dropped; hints for what the pad makes obvious — moving with the d-pad
+— are not written, only a d-pad with a specific meaning is (`Seek 10 s`, `Previous / next`).
 
 ## The Settings tab
 
 `pages/SettingsPage.qml` is a sidebar (`ui/SectionList.qml`: Runners, Modules, Install, Updates,
-Login, Controller, Themes, Doctor) beside one column of `ui/SettingsCards.qml` (`columns: 1`; the game
-settings page keeps two). Up and Down in the sidebar switch the section as they go, Right or A
+Login, Controller, Themes, Doctor, Artwork, Quit) beside one column of `ui/SettingsCards.qml`
+(`columns: 1`; the game settings page keeps two). Quit is one row, confirmed in place (`Stay` /
+`Quit Universe`, which says when the running game closes with it), then `Qt.quit()` — the host
+stops the session and shuts the core down after the loop. Up and Down in the sidebar switch the section as they go, Right or A
 enter the cards, Left or B come back, L2/R2 cycle the section from anywhere, and □ refreshes the
 sections that fetch (Install, Updates, Login, Doctor). A source's search is the first row of its
 first card, reached by going up: the cursor lands on the first game (`SettingsCards.reset` skips
 `type: "search"` rows). The tab bar's search glass shows only on the tabs that list games
 (`TabBar.showSearch`), so Settings has none. A row's `icon` names a `MenuGlyph` kind; a pad
 button's row prints its `press` and `hold` macros as chips (`PRESS`/`HOLD`, the action's glyph
-from `ui/Macros.js`, the macro's `label`).
+from `ui/Macros.js`, the macro's `label`). A source's game row shows the library's art when the
+game is in it — the `square` slot, else the banner, else the cover — and the thumbnail takes the
+art's shape, square or 2:3; the home rail's tiles pick their art the same way.
+
+## Detail, recordings and journal
+
+The detail page's hero holds Play, the heart and, when the game has any, a Recordings and a
+Journal pill (`recordingsRequested` / `journalRequested`, the shell's `openSub`); the counts
+follow `recordingFiled` and `entryWritten`. Start is the game's menu, with the same two entries.
+
+`pages/RecordingsPage.qml` plays in a pane beside the list; □ (X) toggles it fullscreen — the
+pane fills the page, the hint bar rides the controls' auto-hide, ○ leaves fullscreen first, then
+the video, then the page. Start on a row is an `ActionMenu` (Play, Journal entry, Remove
+recording…); Remove asks in place — Keep it, Trash the recording, or trash it and its journal
+entry when it has one — and calls `api.screens.recordings.remove(gameId, session)`, which goes
+through `remove_recording`, drops the row's cached frames and reloads the list on the signal.
+`pages/JournalPage.qml` has the same menu (Read, Recording, Remove entry… — Cancel the writing…
+on a pending row) through `api.screens.journal.remove`, which cancels a pending entry's writer
+before trashing; the offer to take the recording along works the other way round.
 
 ## The runners section
 

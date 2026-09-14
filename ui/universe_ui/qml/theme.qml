@@ -548,6 +548,8 @@ FocusScope {
             function onLaunchRequested(game) { root.launchGame(game); }
             function onCloseRequested() { root.closeDetail(); }
             function onMenuRequested(game, anchor) { root.openMenu(game, anchor); }
+            function onRecordingsRequested(game) { root.openSub("pages/RecordingsPage.qml", game); }
+            function onJournalRequested(game) { root.openSub("pages/JournalPage.qml", game); }
         }
 
         Behavior on opacity {

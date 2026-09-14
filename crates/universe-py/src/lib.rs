@@ -196,6 +196,12 @@ impl Core {
     fn file_recording(&self, py: Python<'_>, session_id: String, path: String) -> PyResult<String> {
         self.run(py, |c| async move { c.file_recording(&session_id, &path).await })
     }
+    fn remove_recording(&self, py: Python<'_>, id: String, session_id: String) -> PyResult<()> {
+        self.run(py, |c| async move { c.remove_recording(&id, &session_id).await })
+    }
+    fn remove_journal_entry(&self, py: Python<'_>, id: String, session_id: String) -> PyResult<()> {
+        self.run(py, |c| async move { c.remove_journal_entry(&id, &session_id).await })
+    }
     fn journal_json(&self, py: Python<'_>, id: String) -> PyResult<String> {
         self.run(py, |c| async move { c.journal_json(&id).await })
     }

@@ -41,19 +41,17 @@ FocusScope {
     readonly property var hints: {
         if (lightbox)
             return [ { glyph: "dpad", label: "Previous / next" }, { glyph: "B", label: "Close" } ];
+        if (menu.open)
+            return menu.hints;
         var out = [];
-        if (mode === 2) {
+        if (mode === 2)
             out.push({ glyph: "A", label: "View" });
-            out.push({ glyph: "dpad", label: "Navigate" });
-        } else if (mode === 1) {
-            out.push({ glyph: "dpad", label: "Scroll" });
-        } else {
-            if (!currentPending)
-                out.push({ glyph: "A", label: "Read" });
-            out.push({ glyph: "dpad", label: "Navigate" });
-        }
-        if (current && current.hasRecording)
-            out.push({ glyph: "Y", label: "Recording" });
+        else if (mode === 1)
+            out.push({ glyph: "A", label: "Screenshots", dim: images.length === 0 });
+        else
+            out.push({ glyph: "A", label: currentPending ? "Being written" : "Read", dim: currentPending });
+        out.push({ glyph: "Y", label: "Recording", dim: !(current && current.hasRecording) });
+        out.push({ glyph: "Start", label: "More", dim: current === null });
         out.push({ glyph: "B", label: reading ? "Back to entries" : "Back" });
         return out;
     }
@@ -71,7 +69,11 @@ FocusScope {
     }
 
     onSessionChanged: landOnSession()
-    onRowsChanged: landOnSession()
+    onRowsChanged: {
+        if (index >= rows.length)
+            index = Math.max(0, rows.length - 1);
+        landOnSession();
+    }
 
     function landOnSession() {
         if (session === "")
@@ -158,6 +160,57 @@ FocusScope {
         mode = 0;
     }
 
+    function openRecording() {
+        if (current && current.hasRecording)
+            page.jumpRequested("pages/RecordingsPage.qml", current.session);
+        else
+            Sound.edge();
+    }
+
+    function rowRect() {
+        var item = list.currentItem;
+        return Qt.rect(item.x, item.y - list.contentY, item.width, item.height);
+    }
+
+    function openMenu() {
+        if (!current || !list.currentItem) {
+            Sound.edge();
+            return;
+        }
+        Sound.panel();
+        var items = [];
+        if (!currentPending)
+            items.push({ icon: "book", label: "Read", action: "read" });
+        if (current.hasRecording)
+            items.push({ icon: "film", label: "Recording", action: "recording" });
+        items.push({ icon: "trash", label: currentPending ? "Cancel the writing…" : "Remove entry…", action: "remove", danger: true });
+        menu.show(items, list, rowRect(), current.title !== "" ? current.title : whenText(current));
+    }
+
+    function menuAction(action) {
+        if (action === "read") {
+            read();
+        } else if (action === "recording") {
+            openRecording();
+        } else if (action === "remove") {
+            Sound.panel();
+            var items = [ { icon: "", label: "Keep it", action: "" },
+                          { icon: "trash", label: currentPending ? "Stop the writing" : "Trash the entry", action: "remove!", danger: true } ];
+            if (current.hasRecording)
+                items.push({ icon: "trash", label: currentPending ? "Stop it and trash the recording" : "Trash it and its recording", action: "remove-both!", danger: true });
+            menu.show(items, list, rowRect(), currentPending ? "Cancel this entry?" : "Remove this entry?");
+        } else if (action === "remove!" || action === "remove-both!") {
+            Sound.enter();
+            var gameId = current.gameId, session = current.session;
+            if (action === "remove-both!")
+                api.screens.recordings.remove(gameId, session);
+            store.remove(gameId, session);
+            mode = 0;
+        }
+        if (action !== "remove")
+            page.forceActiveFocus();
+    }
+
     Keys.onPressed: function(event) {
         var arrow = event.key === Qt.Key_Left || event.key === Qt.Key_Right;
         if (event.isAutoRepeat && !(lightbox && arrow) && !(mode === 2 && arrow))
@@ -195,10 +248,10 @@ FocusScope {
             reading ? leave() : page.closeRequested();
         } else if (api.keys.isFilters(event)) {
             event.accepted = true;
-            if (current && current.hasRecording)
-                page.jumpRequested("pages/RecordingsPage.qml", current.session);
-            else
-                Sound.edge();
+            openRecording();
+        } else if (api.keys.isMenu(event)) {
+            event.accepted = true;
+            openMenu();
         } else if (event.key === Qt.Key_Up) {
             event.accepted = true;
             if (mode === 2) {
@@ -585,5 +638,15 @@ FocusScope {
         images: page.images
         index: page.shotIndex
         open: page.lightbox
+    }
+
+    ActionMenu {
+        id: menu
+
+        anchors.fill: parent
+        z: 5
+
+        onChosen: function(action) { page.menuAction(action); }
+        onDismissed: page.forceActiveFocus()
     }
 }

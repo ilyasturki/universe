@@ -41,6 +41,14 @@ pub struct Marker {
     pub hook_env: Vec<(String, String)>,
 }
 
+fn trash(path: &Path) -> Result<()> {
+    let st = std::process::Command::new("trash").arg(path).status();
+    if !st.map(|s| s.success()).unwrap_or(false) {
+        return Err(Error::Io(format!("trash {} failed", path.display())));
+    }
+    Ok(())
+}
+
 pub fn read_marker() -> Option<Marker> {
     let s = std::fs::read_to_string(paths::current_session_file()).ok()?;
     serde_json::from_str(&s).ok()
@@ -355,10 +363,7 @@ impl Core {
         if dir.parent().is_none() || dir == home || dir == config.games_root() || home.starts_with(&dir) || shared {
             return Err(Error::Invalid(format!("refusing to trash {}", dir.display())));
         }
-        let st = std::process::Command::new("trash").arg(&dir).status();
-        if !st.map(|s| s.success()).unwrap_or(false) {
-            return Err(Error::Io(format!("trash {} failed", dir.display())));
-        }
+        trash(&dir)?;
         // Cleared so the next install sets them afresh, wherever it lands.
         let toml = r.game.toml_path();
         for key in ["source.dir", "source.build_id", "launch.exe"] {
@@ -385,11 +390,8 @@ impl Core {
         }
         if purge && !r.game.launch.prefix.is_empty() {
             let prefix = paths::expand(&r.game.launch.prefix);
-            if prefix.is_dir() {
-                let st = std::process::Command::new("trash").arg(&prefix).status();
-                if !st.map(|s| s.success()).unwrap_or(false) {
-                    tracing::warn!("trash {} failed; left in place", prefix.display());
-                }
+            if prefix.is_dir() && trash(&prefix).is_err() {
+                tracing::warn!("trash {} failed; left in place", prefix.display());
             }
         }
         crate::game::set_key(&r.game.toml_path(), "hidden", "true")?;
@@ -791,6 +793,20 @@ impl Core {
         Ok(serde_json::to_string(&crate::recording::list(&r.game)?)?)
     }
 
+    pub async fn remove_recording(&self, id: &str, session_id: &str) -> Result<()> {
+        let r = self.get(id).await?;
+        let s = r.sessions.iter().find(|s| s.session == session_id).ok_or_else(|| Error::NotFound(format!("session {session_id}")))?;
+        let Some(path) = s.recording.as_deref().filter(|p| !p.is_empty()) else {
+            return Err(Error::NotFound(format!("session {session_id} has no recording")));
+        };
+        let path = Path::new(path);
+        if path.is_file() {
+            trash(path)?;
+        }
+        crate::sessions::update(&r.game.sessions_path(), session_id, |s| s.recording = None)?;
+        self.reload_game(id).await
+    }
+
     pub async fn add_entry(&self, session_id: &str, json: &str) -> Result<()> {
         let mut entry: crate::journal::Entry = serde_json::from_str(json)?;
         if entry.session.is_empty() {
@@ -812,6 +828,46 @@ impl Core {
     pub async fn journal_json(&self, id: &str) -> Result<String> {
         let r = self.get(id).await?;
         Ok(serde_json::to_string(&crate::journal::load(&r.game.journal_dir(), &r.sessions))?)
+    }
+
+    pub async fn remove_journal_entry(&self, id: &str, session_id: &str) -> Result<()> {
+        let r = self.get(id).await?;
+        let journal_dir = r.game.journal_dir();
+        let entries = crate::journal::read_all(&journal_dir)?;
+        let entry = entries.iter().find(|e| e.session == session_id).ok_or_else(|| Error::NotFound(format!("journal entry {session_id}")))?;
+        let cfg = self.config.read().await.clone();
+        let note_dir = cfg.journal_root().join(id);
+        if entry.state == "pending" {
+            // The hook's `finally` does not run under SIGTERM: the pending file is ours to drop.
+            let unit = format!("universe-journal-post-process-{session_id}");
+            let _ = std::process::Command::new("systemctl").args(["--user", "stop", &unit]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
+        }
+        for state in ["pending", "failed"] {
+            let p = journal_dir.join(format!("{session_id}.{state}.json"));
+            if p.is_file() {
+                std::fs::remove_file(&p)?;
+            }
+        }
+        let written = journal_dir.join(format!("{session_id}.json"));
+        if written.is_file() {
+            trash(&written)?;
+        }
+        for rel in &entry.images {
+            if rel.starts_with('/') || rel.split('/').any(|seg| seg == "..") {
+                continue;
+            }
+            for dir in [&journal_dir, &note_dir] {
+                let p = dir.join(rel);
+                if p.is_file() {
+                    trash(&p)?;
+                }
+            }
+        }
+        self.reload_game(id).await?;
+        if note_dir.is_dir() {
+            self.render_journal(id).await?;
+        }
+        Ok(())
     }
 
     pub async fn pending_journals_json(&self) -> String {

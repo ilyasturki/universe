@@ -25,17 +25,9 @@ Item {
 
     component Bumper: HintGlyph {
         anchors.verticalCenter: parent.verticalCenter
-        unit: Theme.dp(34)
+        unit: Theme.dp(38)
         fill: "transparent"
         ink: Theme.textMuted
-
-        Rectangle {
-            anchors.fill: parent
-            radius: Theme.dp(6)
-            color: "transparent"
-            border.width: Theme.dp(2)
-            border.color: Theme.textMuted
-        }
     }
 
     Row {
