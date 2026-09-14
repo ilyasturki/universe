@@ -58,7 +58,10 @@ FocusScope {
         return out;
     }
 
-    readonly property string playLabel: currentGame && currentGame.playTime > 0 ? "Continue" : "Play"
+    readonly property var session: api.universe.currentSession
+    readonly property string playingId: session && session.id !== undefined ? session.id : ""
+    readonly property string playLabel: currentGame && currentGame.id === playingId ? "Resume"
+                                      : currentGame && currentGame.playTime > 0 ? "Continue" : "Play"
     readonly property string favouriteLabel: currentGame && currentGame.favorite ? "Remove from favourites" : "Add to favourites"
 
     readonly property real bandHeight: Theme.dp(Theme.heroBand)
@@ -113,6 +116,7 @@ FocusScope {
     RecentGames {
         id: recent
         sourceModel: api.allGames
+        playingId: page.playingId
     }
 
     // The library exposes no date added; releaseYear is the closest "what is new".
@@ -476,6 +480,7 @@ FocusScope {
 
                     game: model
                     artSource: String(model.assets.square) !== "" ? model.assets.square : model.assets.boxFront
+                    playing: model.id === page.playingId
                     selected: tile.selected
                     selectedScale: 1.0
                     idleScale: page.idleScale

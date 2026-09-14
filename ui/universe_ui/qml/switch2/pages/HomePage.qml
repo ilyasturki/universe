@@ -19,8 +19,10 @@ FocusScope {
     readonly property var session: api.universe.currentSession
     readonly property string playingId: session && session.id !== undefined ? session.id : ""
 
+    readonly property bool onPlaying: currentGame !== null && currentGame.id === playingId
     readonly property var hints: onAll ? [ { glyph: "A", label: "OK" } ]
-        : [ { glyph: "Start", label: "Options" }, { glyph: "A", label: currentGame && currentGame.id === playingId ? "Close" : "Start" } ]
+        : onPlaying ? [ { glyph: "Start", label: "Options" }, { glyph: "X", label: "Close" }, { glyph: "A", label: "Resume" } ]
+        : [ { glyph: "Start", label: "Options" }, { glyph: "A", label: "Start" } ]
 
     readonly property real tile: Theme.dp(Theme.tileSize)
     readonly property real gap: Theme.dp(Theme.tileGap)
@@ -32,6 +34,7 @@ FocusScope {
     RecentGames {
         id: recent
         sourceModel: api.allGames
+        playingId: page.playingId
     }
 
     function step(d) {
@@ -59,8 +62,7 @@ FocusScope {
             return;
         }
         if (currentGame.id === playingId) {
-            Sound.ok();
-            shell.closeSoftware(currentGame);
+            shell.resume();
             return;
         }
         shell.launch(currentGame);

@@ -3,10 +3,8 @@ import Qt5Compat.GraphicalEffects
 import "../core"
 
 // The launch poster. The theme rises into it and fades its art down to ground
-// before launch(); the splash, in its own process, starts on ground and fades
-// the same art back up. Only the composition is shared — neither side has to
-// match a frame of the other, so nothing the compositor animates in between
-// can show.
+// before launch(); gamescope's window then maps black over the ground and the
+// game draws into it, so nothing the compositor animates in between can show.
 Item {
     id: frame
 
@@ -17,7 +15,7 @@ Item {
 
     property alias artOpacity: art.opacity
     property alias artScale: art.scale
-    // Ground over the art, under the logo: the running view's dim.
+    // Ground over the art, under the logo.
     property real dim: 0.0
     readonly property int heroStatus: hero.status
 

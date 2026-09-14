@@ -86,6 +86,12 @@ def test_recent_games(api):
     assert recent.count == 6
     assert titles(recent)[:3] == ["The Technomancer", "Mini Metro", "Dead Cells"]
     assert "Mirror's Edge" not in titles(recent)
+    recent.playingId = api.allGames.byId("mirrors-edge").id
+    assert titles(recent)[:2] == ["Mirror's Edge", "The Technomancer"] and recent.count == 7
+    recent.playingId = "dead-cells"
+    assert titles(recent)[:2] == ["Dead Cells", "The Technomancer"] and recent.count == 6
+    recent.playingId = ""
+    assert titles(recent)[:3] == ["The Technomancer", "Mini Metro", "Dead Cells"]
 
 
 def test_sorted_and_limited(api):

@@ -60,8 +60,7 @@ FocusScope {
         if (row.key === "start") {
             shell.launch(game);
         } else if (row.key === "resume") {
-            Sound.ok();
-            shell.showToast(game.title + " is running on the desktop");
+            shell.resume();
         } else if (row.key === "close") {
             Sound.ok();
             shell.closeSoftware(game);

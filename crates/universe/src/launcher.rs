@@ -15,6 +15,8 @@ pub struct Plan {
     pub env: BTreeMap<String, String>,
     pub pre_command: String,
     pub post_command: String,
+    /// The game runs inside gamescope: one window, black until the game draws.
+    pub gamescope: bool,
 }
 
 impl Plan {
@@ -106,12 +108,35 @@ pub fn plan(r: &Resolved, config: &Config, session_id: &str, extra_env: &BTreeMa
         }
     };
     args.extend(g.launch.args.iter().cloned());
-    if r.effective.mangohud {
-        env.insert("MANGOHUD".into(), "1".into());
-    }
     for (k, v) in &g.launch.env {
         env.insert(k.clone(), v.clone());
     }
+    let gamescope = r.effective.gamescope.then(|| runners::on_path(&config.launch.gamescope_bin)).flatten();
+    if r.effective.gamescope && gamescope.is_none() {
+        tracing::warn!("{}: {} not found, launching on the desktop", g.id, config.launch.gamescope_bin);
+    }
+    let (program, args) = match &gamescope {
+        Some(bin) => {
+            let mut wrap = gamescope_args(config, r);
+            if r.effective.mangohud {
+                wrap.push("--mangoapp".into());
+            }
+            // gamescope hosts X11 clients through its own Xwayland; a Wayland Proton finds no xdg-shell there.
+            if !wrap.iter().any(|a| a == "--expose-wayland") {
+                env.remove("PROTON_ENABLE_WAYLAND");
+            }
+            wrap.push("--".into());
+            wrap.push(program);
+            wrap.extend(args);
+            (bin.to_string_lossy().to_string(), wrap)
+        }
+        None => {
+            if r.effective.mangohud {
+                env.insert("MANGOHUD".into(), "1".into());
+            }
+            (program, args)
+        }
+    };
     Ok(Plan {
         unit: unit_name(&g.id, session_id),
         program,
@@ -120,7 +145,17 @@ pub fn plan(r: &Resolved, config: &Config, session_id: &str, extra_env: &BTreeMa
         env,
         pre_command: g.launch.pre_command.clone(),
         post_command: g.launch.post_command.clone(),
+        gamescope: gamescope.is_some(),
     })
+}
+
+/// Fullscreen on the session's screen, every client stretched to it; then the global and the game's own arguments.
+fn gamescope_args(config: &Config, r: &Resolved) -> Vec<String> {
+    let mut args: Vec<String> = vec!["-f".into(), "--force-windows-fullscreen".into()];
+    for extra in [&config.launch.gamescope_args, &r.effective.gamescope_args] {
+        args.extend(shell_words::split(extra).unwrap_or_else(|_| vec![extra.clone()]).into_iter().filter(|a| !a.is_empty()));
+    }
+    args
 }
 
 /// The `systemd-run` invocation: `ExitType=cgroup` ends the unit with the last game process; `bind_to` (the
@@ -265,7 +300,7 @@ mod tests {
 
     #[test]
     fn systemd_run_binds_to_the_launcher_scope_only_when_asked() {
-        let plan = Plan { unit: "universe-game-x-20260911-120000".into(), program: "umu-run".into(), args: vec!["/g/x.exe".into(), "-w".into()], cwd: "/nonexistent".into(), env: BTreeMap::from([("WINEPREFIX".to_string(), "/p".to_string())]), pre_command: String::new(), post_command: String::new() };
+        let plan = Plan { unit: "universe-game-x-20260911-120000".into(), program: "umu-run".into(), args: vec!["/g/x.exe".into(), "-w".into()], cwd: "/nonexistent".into(), env: BTreeMap::from([("WINEPREFIX".to_string(), "/p".to_string())]), pre_command: String::new(), post_command: String::new(), gamescope: false };
         let stop_post = vec!["/usr/bin/universe".to_string(), "session-end".into(), "x".into(), "20260911-120000".into()];
         let passthrough = BTreeMap::from([("PATH".to_string(), "/bin".to_string())]);
         let plain = systemd_run_args(&plan, &stop_post, &passthrough, 80, None);
@@ -298,8 +333,10 @@ mod tests {
             effective: Effective { runner: "proton".into(), proton: "proton-ge".into(), proton_path: "/nix/store/proton".into(), esync: true, fsync: false, mangohud: true, hide_cursor: true, ..Default::default() },
             ..Default::default()
         };
-        let cfg = Config::default();
+        let mut cfg = Config::default();
+        cfg.launch.gamescope = false;
         let p = plan(&r, &cfg, "20260911-120000", &BTreeMap::from([("FROM_HOOK".to_string(), "1".to_string())])).unwrap();
+        assert!(!p.gamescope);
         assert_eq!(p.unit, "universe-game-sample-20260911-120000");
         assert_eq!(p.program, "umu-run");
         assert_eq!(p.args[0], exe.to_string_lossy());
@@ -331,8 +368,10 @@ mod tests {
         let mut t = toml::Table::new();
         t.insert("exe".into(), toml::Value::String(emu.to_string_lossy().into()));
         t.insert("args".into(), toml::Value::String("--config Dolphin.Display.Fullscreen=True".into()));
+        t.insert("gamescope".into(), toml::Value::Boolean(false));
         cfg.runners.insert("dolphin".into(), t);
         let r = crate::library::resolve(g, &cfg, &[]);
+        assert!(!r.effective.gamescope, "a runner's own gamescope switch wins over the default");
         assert_eq!(r.effective.runner, "dolphin");
         assert_eq!(r.effective.runner_path, emu.to_string_lossy());
         assert_eq!(r.effective.platform, "Nintendo GameCube");
@@ -355,13 +394,66 @@ mod tests {
         g.launch.exe = iso.to_string_lossy().into();
         g.launch.runner_exe = "/x/xenia_canary.exe".into();
         g.launch.prefix = dir.path().join("pfx").to_string_lossy().into();
-        let cfg = Config::default();
+        let mut cfg = Config::default();
+        cfg.launch.gamescope = false;
         let mut r = crate::library::resolve(g, &cfg, &[]);
         r.effective.proton_path = "/p".into();
         let p = plan(&r, &cfg, "s", &BTreeMap::new()).unwrap();
         assert_eq!(p.program, cfg.launch.umu_run);
         assert_eq!(p.args[..2], ["/x/xenia_canary.exe", "--fullscreen"]);
         assert_eq!(p.env["PROTONPATH"], "/p");
+    }
+
+    #[test]
+    fn plan_wraps_the_game_in_gamescope() {
+        let dir = tempfile::tempdir().unwrap();
+        let exe = dir.path().join("Game.exe");
+        std::fs::write(&exe, b"").unwrap();
+        let mut g = Game::new("Sample");
+        g.launch.exe = exe.to_string_lossy().into();
+        g.launch.prefix = dir.path().join("pfx").to_string_lossy().into();
+        g.launch.args = vec!["-skipintro".into()];
+        g.launch.gamescope_args = "-r 120".into();
+        let bin = dir.path().join("gamescope");
+        std::fs::write(&bin, b"#!/bin/sh\n").unwrap();
+        let mut cfg = Config::default();
+        cfg.launch.gamescope_args = "--adaptive-sync".into();
+        cfg.launch.gamescope_bin = bin.to_string_lossy().into();
+        let mut r = crate::library::resolve(g, &cfg, &[]);
+        r.effective.proton_path = "/p".into();
+        assert!(r.effective.gamescope);
+        let p = plan(&r, &cfg, "s", &BTreeMap::new()).unwrap();
+        assert!(p.gamescope);
+        assert_eq!(p.program, bin.to_string_lossy());
+        assert_eq!(p.args, vec!["-f", "--force-windows-fullscreen", "--adaptive-sync", "-r", "120", "--mangoapp", "--", "umu-run", &exe.to_string_lossy().to_string(), "-skipintro"]);
+        assert!(!p.env.contains_key("MANGOHUD"), "mangoapp draws the HUD inside gamescope");
+        assert!(!p.env.contains_key("PROTON_ENABLE_WAYLAND"), "an X11 Proton under gamescope's Xwayland");
+        assert_eq!(p.env["PROTONPATH"], "/p");
+
+        r.effective.gamescope_args = "--expose-wayland".into();
+        let p = plan(&r, &cfg, "s", &BTreeMap::new()).unwrap();
+        assert_eq!(p.env["PROTON_ENABLE_WAYLAND"], "1");
+
+        r.game.launch.gamescope = Some(false);
+        let r = crate::library::resolve(r.game, &cfg, &[]);
+        assert!(!r.effective.gamescope, "the game's own switch wins");
+    }
+
+    #[test]
+    fn plan_without_a_gamescope_binary_runs_the_game_plain() {
+        let dir = tempfile::tempdir().unwrap();
+        let exe = dir.path().join("game");
+        std::fs::write(&exe, b"").unwrap();
+        let mut g = Game::new("Native");
+        g.launch.runner = "linux".into();
+        g.launch.exe = exe.to_string_lossy().into();
+        let mut cfg = Config::default();
+        cfg.launch.gamescope_bin = dir.path().join("nope/gamescope").to_string_lossy().into();
+        let r = crate::library::resolve(g, &cfg, &[]);
+        let p = plan(&r, &cfg, "s", &BTreeMap::new()).unwrap();
+        assert!(!p.gamescope);
+        assert_eq!(p.program, exe.to_string_lossy());
+        assert_eq!(p.env["MANGOHUD"], "1");
     }
 
     #[test]

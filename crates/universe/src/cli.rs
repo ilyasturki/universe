@@ -667,6 +667,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 println!("  proton     {} ({})", s(&g["effective"], "proton"), s(&g["effective"], "proton_path"));
             }
             println!("  esync/fsync/mangohud  {}/{}/{}", g["effective"]["esync"], g["effective"]["fsync"], g["effective"]["mangohud"]);
+            println!("  gamescope  {} {}", g["effective"]["gamescope"], s(&g["effective"], "gamescope_args"));
             println!("  env        {}", g["effective"]["env"]);
             println!("  hours      {}  plays {}  last {}", hours(&g), g["stats"]["play_count"], when(&s(&g["stats"], "last_played"), &loc));
             println!("  media      {}", g["media"]);
@@ -784,7 +785,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             for p in pairs {
                 let (k, v) = p.split_once('=').ok_or_else(|| anyhow::anyhow!("expected key=value, got {p}"))?;
                 let k = match k {
-                    "runner" | "runner_exe" | "proton" | "exe" | "prefix" | "args" | "working_dir" | "esync" | "fsync" | "mangohud" | "umu_id" | "store" | "pre_command" | "post_command" | "arch" => format!("launch.{k}"),
+                    "runner" | "runner_exe" | "proton" | "exe" | "prefix" | "args" | "working_dir" | "esync" | "fsync" | "mangohud" | "gamescope" | "gamescope_args" | "umu_id" | "store" | "pre_command" | "post_command" | "arch" => format!("launch.{k}"),
                     "hide_cursor" => "desktop.hide_cursor".into(),
                     _ if k.starts_with("options.") => format!("launch.{k}"),
                     _ => k.to_string(),
@@ -1309,8 +1310,8 @@ fn complete(what: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-const GAME_KEYS: [&str; 25] = [
-    "runner=", "runner_exe=", "exe=", "proton=", "prefix=", "args=", "working_dir=", "esync=", "fsync=", "mangohud=", "umu_id=", "store=", "pre_command=", "post_command=", "arch=", "hide_cursor=",
+const GAME_KEYS: [&str; 27] = [
+    "runner=", "runner_exe=", "exe=", "proton=", "prefix=", "args=", "working_dir=", "esync=", "fsync=", "mangohud=", "gamescope=", "gamescope_args=", "umu_id=", "store=", "pre_command=", "post_command=", "arch=", "hide_cursor=",
     "hidden=", "favorite=", "tags=", "sort_title=", "platform=", "metadata.sgdb_id=", "capture.cursor=", "launch.env.", "options.",
 ];
 
@@ -1358,8 +1359,8 @@ const POSITIONALS: &[(&str, usize, &str)] = &[
     ("controller forget", 2, "buttons"),
 ];
 
-const CONFIG_KEYS: [&str; 21] = [
-    "paths.games_root", "paths.prefixes_root", "paths.recordings_root", "paths.journal_root", "paths.overrides", "launch.proton", "launch.esync", "launch.fsync", "launch.mangohud", "runners.",
+const CONFIG_KEYS: [&str; 24] = [
+    "paths.games_root", "paths.prefixes_root", "paths.recordings_root", "paths.journal_root", "paths.overrides", "launch.proton", "launch.esync", "launch.fsync", "launch.mangohud", "launch.gamescope", "launch.gamescope_args", "launch.gamescope_bin", "runners.",
     "desktop.profile", "desktop.hide_cursor", "desktop.cursor_extension", "keys.sgdb", "keys.sgdb_file", "keys.rawg", "keys.rawg_file",
     "controller.enabled", "controller.hold_ms", "controller.volume_step", "controller.mangohud_toggle",
 ];

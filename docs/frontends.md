@@ -88,7 +88,8 @@ it this way, and any frontend needs the equivalent:
 | Signal | Derived from |
 |---|---|
 | `sessionStarted` | a successful `launch` |
-| `sessionEnded` | the current-session marker going empty — polled every 2 s while a session is tracked, since the game is a systemd unit, not a child. `currentSessionChanged` fires first; the theme's running view follows that property, and only the toast and the stats refresh follow the signal |
+| `sessionShown` | `(session_id, ok)`: the game's window is on screen and has the focus — `wait_session_window` on a host thread, up to 60 s. `ok` false when nobody can tell: no GNOME, no shell extension, or the session ended first |
+| `sessionEnded` | the current-session marker going empty — the `state/` watch sees `session-end` remove it (debounced 300 ms), a 2 s poll stands behind it, since the game is a systemd unit, not a child. `currentSessionChanged` fires first; the pinned tile and the badge follow that property, and only the toast, the stats refresh and a pending launch follow the signal |
 | `libraryChanged`, `mediaChanged`, `entryWritten`, `recordingFiled` | a `QFileSystemWatcher` on `games/`, `games/<id>/{,journal,media}`, `state/` and the overrides directory with its `<id>/` subdirectories (a pick made from the CLI shows up), debounced 300 ms; `mediaChanged` also follows a pick or its removal made through the client |
 | `progress`, `jobFinished` | the job's own callback — install, update, scan and media refresh run on a host thread |
 | `launched`, `launchFailed`, `error` | the call's result |
@@ -109,26 +110,30 @@ process**: closing the frontend mid-install interrupts it, by design.
 
 ## Launch and the running view
 
+The game runs inside gamescope (`launch.gamescope`, see `docs/api.md`): one window, black until
+the game draws, whatever Proton, umu or the emulator put up first. The launcher never lowers,
+raises or hides itself — Mutter owns stacking and focus on Wayland — it times the handover on that
+window and asks the shell extension to focus it.
+
 `launchGame` raises `ui/LaunchOverlay.qml` over the page: the poster (`ui/LaunchFrame.qml`) fades
 in over `Theme.durLaunch` as the page fades out, holds 450 ms, dips its art to plain ground over
-300 ms — whatever the compositor animates between this window and the splash is then black on
-black — and calls `launch()`. From there the overlay follows `api.universe.currentSession`, not a
-timer: while it is set the poster stays as the running view — the art back up under a dim, the
-logo, "PLAYING · elapsed" above it, one focused pill "Quit <title>" and a hint bar with the
-clock. The overlay holds the focus. Accept held for one second fills the pill and calls
-`stop(session_id)` ("Stopping…" until the session goes); a release, or the window losing focus,
-cancels the hold, and every other key does nothing. When the pad in hand has a `stop` hold macro
-bound (`api.screens.controller.state.macros`), the hint bar names its button too. A session
-already running when the host starts (`CoreClient` tracks the marker at construction) shows the
-running view at once, resolved through `api.allGames.byId`.
+300 ms and calls `launch()`. The ground then holds (`waiting`) until `sessionShown` says the
+game's window is up and focused — the compositor's animation between the two is black on black —
+and the poster fades out under the game. `sessionShown` with `ok` false (no GNOME, no extension)
+holds 1500 ms instead; a session that ends before its window, or `launchFailed`, ends the poster
+at once (a toast for the failure). Every key is swallowed while it runs.
 
-When `currentSession` empties — up to 2 s after the game exits, the poll interval — the overlay
-signals `ended(game)`: the theme drops `launching` and opens the game's `DetailPage` under the
-fading poster, so its stats and its journal are one press away; the journal entry the module is
-writing shows up there as a pending row. `launchFailed` still aborts the poster to a toast
-(`finished` then `failed`). A session the CLI started is tracked the same way (the `state/`
-watch), so the overlay covers the page for it too; the game menu's "Stop <title>" item is no
-longer reachable.
+From there the launcher is home again, with the game pinned first on the rail (`RecentGames.
+playingId`, played before or not) under a PLAYING mark, its hero pill reading "Resume", and the
+tab bar's badge "<title> · m:ss" on every tab; the badge is a chrome slot past the glass: A
+resumes, Start opens the game menu. A resumes on the pinned game wherever it is (`focusSession()`:
+the extension's `Activate` on the game's window), the game menu offers "Resume" and "Quit
+<title>" for it. Play on another game asks "Quit X and start Y?" (`ui/ConfirmDialog.qml`); yes
+stops the session, and `sessionEnded` starts the pending launch. Nothing on the pad brings the
+launcher back over a running game: Alt-Tab, or the game's own exit, does — its window closes,
+Mutter focuses what was under it. A session already running when the host starts (`CoreClient`
+tracks the marker at construction), or one the CLI started (the `state/` watch), is the same
+state: home, pinned, badge.
 
 ## Qt and QML notes
 
@@ -152,8 +157,8 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
   icons, a still focus ring instead of the Switch 2 look's shader. On screen nothing changes.
 - **Keys posted while a game holds focus are dropped** by Qt: there is no active item, so
   `--keys` scripting cannot drive the host behind a running game, and neither can the gamepad
-  (`focusWindow()` is null). That is the wanted behaviour: the running view is operable once the
-  game has handed the focus back (Alt-Tab, or its own exit).
+  (`focusWindow()` is null). That is the wanted behaviour: home is operable once the game has
+  handed the focus back (Alt-Tab, or its own exit, after which `focusLauncher()` asks for it).
 - **Collections are platforms.** The theme labels a collection by its `shortName` and looks for
   `assets/platforms/<shortName>.svg`; the core gives a platform string, which `api.py` maps
   (`windows`, `switch`, `wii`, `gamecube`, `nds`, `ps3`, …) and falls back to the source id.

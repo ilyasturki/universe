@@ -221,6 +221,6 @@ def run(argv=None):
         gamepad.stop()
     # The scope is ours now: the game goes with the launcher, and stopping it first lets session-end run.
     if client.currentSession:
-        client.stop("")
+        client.stopNow("")
     api.shutdown()
     return rc or exit_code["value"]

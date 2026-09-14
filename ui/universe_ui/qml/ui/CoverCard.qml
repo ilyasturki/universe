@@ -12,6 +12,8 @@ Item {
     property real selectedScale: 1.05
     property real idleScale: 1.0
     property bool showHeart: true
+    // The session's game: a PLAYING mark over the art.
+    property bool playing: false
     property int focusOrigin: Item.Center
     property int focusDuration: Theme.durBase
     property real ringOpacity: 1.0
@@ -118,6 +120,48 @@ Item {
             color: "white"
             antialiasing: true
             visible: false
+        }
+
+        Loader {
+            active: root.playing
+            anchors.left: parent.left
+            anchors.bottom: parent.bottom
+            anchors.margins: Theme.dp(12)
+
+            sourceComponent: Rectangle {
+                width: mark.width + Theme.dp(26)
+                height: Theme.dp(30)
+                radius: height / 2
+                color: Qt.rgba(0.02, 0.02, 0.03, 0.72)
+
+                Row {
+                    id: mark
+                    anchors.centerIn: parent
+                    spacing: Theme.dp(8)
+
+                    Rectangle {
+                        anchors.verticalCenter: parent.verticalCenter
+                        width: Theme.dp(8)
+                        height: width
+                        radius: width / 2
+                        color: "#5fd48a"
+
+                        SequentialAnimation on opacity {
+                            running: root.playing
+                            loops: Animation.Infinite
+                            NumberAnimation { to: 0.3; duration: 900; easing.type: Easing.InOutQuad }
+                            NumberAnimation { to: 1.0; duration: 900; easing.type: Easing.InOutQuad }
+                        }
+                    }
+
+                    CapsLabel {
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: "PLAYING"
+                        color: Theme.text
+                        size: Theme.dp(13)
+                    }
+                }
+            }
         }
 
         Loader {

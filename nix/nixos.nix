@@ -9,6 +9,7 @@ in {
     capture.enable = lib.mkOption { type = lib.types.bool; default = true; description = "Enable gpu-screen-recorder with its setcap KMS helper for the capture module, at the version this flake's nixpkgs ships (the helper and the recorder must match)."; };
     controller.enable = lib.mkOption { type = lib.types.bool; default = true; description = "What the controller macros need from the system: /dev/uinput (key macros type through it; add your user to the uinput group) and the game-devices udev rules that make pads readable by the logged-in user."; };
     inputplumber.enable = lib.mkOption { type = lib.types.bool; default = true; description = "The InputPlumber daemon and CLI, which the emulators' `inputplumber` option uses to hand the pads to the emulator as one composite device for the session."; };
+    gamescope.enable = lib.mkOption { type = lib.types.bool; default = true; description = "gamescope with its CAP_SYS_NICE wrapper: every game runs inside it (launch.gamescope), one window that is black until the game draws."; };
   };
   config = lib.mkIf cfg.enable {
     environment.systemPackages = [ cfg.package cfg.ui ];
@@ -16,5 +17,6 @@ in {
     hardware.uinput.enable = lib.mkIf cfg.controller.enable true;
     services.inputplumber.enable = lib.mkIf cfg.inputplumber.enable true;
     services.udev.packages = lib.mkIf cfg.controller.enable [ pkgs.game-devices-udev-rules ];
+    programs.gamescope = lib.mkIf cfg.gamescope.enable { enable = true; capSysNice = lib.mkDefault true; };
   };
 }

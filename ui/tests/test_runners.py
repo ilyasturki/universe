@@ -29,9 +29,10 @@ def test_runner_form_cards(api, fake):
     assert form.info["name"] == "Dolphin" and form.info["warning"] == "" and form.info["icon"] == "assets/runners/dolphin.svg"
     assert form.info["meta"] == "Nintendo GameCube, Nintendo Wii · /run/current-system/sw/bin/dolphin-emu"
     assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups] == \
-        [("", ["exe", "args"]), ("Options", ["batch", "user_directory", "inputplumber"]), ("", ["add_file"])]
+        [("", ["exe", "args"]), ("", ["gamescope"]), ("Options", ["batch", "user_directory", "inputplumber"]), ("", ["add_file"])]
     rows = rows_of(form)
     assert rows["exe"]["type"] == "path" and rows["exe"]["inherited"] is True and rows["exe"]["detail"].endswith("dolphin-emu")
+    assert rows["gamescope"]["type"] == "bool" and rows["gamescope"]["inherited"] is True
     assert rows["batch"]["type"] == "bool" and rows["batch"]["value"] is True
     assert rows["add_file"]["type"] == "action" and rows["add_file"]["runner"] == "dolphin"
     form.load("rpcs3")
@@ -39,7 +40,7 @@ def test_runner_form_cards(api, fake):
     form.load("melonds")
     assert "(config)" in form.info["meta"] and rows_of(form)["exe"]["inherited"] is False
     form.load("linux")
-    assert [form.rows[i]["key"] for g in form.groups for i in g["rows"]] == ["add_file"], "the program is the game itself"
+    assert [form.rows[i]["key"] for g in form.groups for i in g["rows"]] == ["gamescope", "add_file"], "the program is the game itself"
     form.load("nope")
     assert form.rows == [] and form.info == {}
 
@@ -89,7 +90,7 @@ def test_game_settings_launch_group_by_runner(api, fake):
     form = api.screens.gameSettings
     form.load("mini-metro")
     assert launch_keys(form) == ["launch.runner", "launch.exe", "launch.runner_exe", "launch.options.fullscreen", "launch.options.inputplumber",
-                                 "launch.mangohud", "launch.args", "launch.working_dir"]
+                                 "launch.gamescope", "launch.gamescope_args", "launch.mangohud", "launch.args", "launch.working_dir"]
     rows = rows_of(form)
     assert rows["launch.runner"]["value"] == "Eden" and rows["launch.runner"]["icon"] == "assets/runners/eden.svg"
     assert rows["launch.runner"]["choices"][:4] == ["Proton", "Wine", "Linux", "Dolphin"]
@@ -107,7 +108,7 @@ def test_game_settings_launch_group_by_runner(api, fake):
 
     form.load("the-technomancer")
     assert launch_keys(form) == ["launch.runner", "launch.exe", "launch.proton", "launch.esync", "launch.fsync", "launch.prefix",
-                                 "launch.mangohud", "launch.args", "launch.working_dir"]
+                                 "launch.gamescope", "launch.gamescope_args", "launch.mangohud", "launch.args", "launch.working_dir"]
     rows = rows_of(form)
     assert rows["launch.runner"]["value"] == "Proton" and rows["launch.exe"]["label"] == "Program"
 

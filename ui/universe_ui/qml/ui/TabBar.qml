@@ -12,19 +12,24 @@ FocusScope {
     property bool showSearch: true
 
     readonly property int searchIndex: tabs.length
-    readonly property bool onSearch: index === searchIndex
-    readonly property int slots: showSearch ? searchIndex + 1 : searchIndex
+    readonly property bool onSearch: showSearch && index === searchIndex
+    // Past the glass: the running game's badge, while there is one.
+    readonly property int badgeIndex: showSearch ? searchIndex + 1 : searchIndex
+    readonly property bool onBadge: badge.active && index === badgeIndex
+    readonly property int slots: badgeIndex + (badge.active ? 1 : 0)
+    readonly property var currentGame: onBadge ? api.allGames.byId(badge.session.id) : null
+    readonly property Item menuAnchor: onBadge ? badge : null
 
     signal tabRequested(int index)
     signal searchRequested()
+    signal resumeRequested()
+    signal menuRequested(var game, Item anchor)
     signal entered()
     signal dismissed()
 
-    readonly property var hints: [
-        { glyph: "A", label: onSearch ? "Search" : "Open" },
-        { glyph: "B", label: "Back" },
-        { glyph: "LB RB", label: "Tabs" }
-    ]
+    readonly property var hints: onBadge
+        ? [ { glyph: "A", label: "Resume" }, { glyph: "≡", label: "Options" }, { glyph: "B", label: "Back" }, { glyph: "LB RB", label: "Tabs" } ]
+        : [ { glyph: "A", label: onSearch ? "Search" : "Open" }, { glyph: "B", label: "Back" }, { glyph: "LB RB", label: "Tabs" } ]
 
     implicitHeight: Theme.dp(Theme.tabBarHeight)
 
@@ -58,6 +63,11 @@ FocusScope {
         if (!showSearch && index >= searchIndex)
             index = currentIndex;
     }
+    onSlotsChanged: {
+        if (index >= slots)
+            index = currentIndex;
+        frame.retarget();
+    }
 
     Keys.onLeftPressed: root.step(-1)
     Keys.onRightPressed: root.step(1)
@@ -72,12 +82,20 @@ FocusScope {
             return;
         if (api.keys.isAccept(event)) {
             event.accepted = true;
-            if (root.onSearch)
+            if (root.onBadge)
+                root.resumeRequested();
+            else if (root.onSearch)
                 root.searchRequested();
             else {
                 Sound.panel();
                 root.entered();
             }
+            return;
+        }
+        if (api.keys.isMenu(event) && root.onBadge) {
+            event.accepted = true;
+            if (root.currentGame)
+                root.menuRequested(root.currentGame, badge);
             return;
         }
         if (api.keys.isCancel(event)) {
@@ -101,12 +119,12 @@ FocusScope {
         // geometry stays bound, or the frame keeps whatever the first layout gave it.
         property Item target: null
         readonly property Item pane: root.index < root.searchIndex ? labels : rightSide
-        // A circle on the glass, a pill on a label.
-        readonly property real padX: root.onSearch ? padY : Theme.dp(20)
-        readonly property real padY: Theme.dp(10)
+        // A circle on the glass, a pill on a label; the badge is a pill of its own.
+        readonly property real padX: root.onBadge ? 0 : root.onSearch ? padY : Theme.dp(20)
+        readonly property real padY: root.onBadge ? 0 : Theme.dp(10)
 
         function retarget() {
-            target = root.index < root.searchIndex ? tabRepeater.itemAt(root.index) : glass;
+            target = root.index < root.searchIndex ? tabRepeater.itemAt(root.index) : root.onBadge ? badge : glass;
         }
 
         x: target ? pane.x + target.x - padX : 0
@@ -127,6 +145,7 @@ FocusScope {
             anchors.fill: parent
             radius: height / 2
             color: Theme.surface
+            visible: !root.onBadge
         }
 
         FocusRing {
@@ -216,10 +235,6 @@ FocusScope {
         anchors.verticalCenter: parent.verticalCenter
         spacing: Theme.dp(34)
 
-        SessionBadge {
-            anchors.verticalCenter: parent.verticalCenter
-        }
-
         MenuGlyph {
             id: journalMark
 
@@ -270,6 +285,14 @@ FocusScope {
                 ctx.lineTo(21 * s, 21 * s);
                 ctx.stroke();
             }
+        }
+
+        SessionBadge {
+            id: badge
+            anchors.verticalCenter: parent.verticalCenter
+            focused: root.activeFocus && root.onBadge
+            onActiveChanged: frame.retarget()
+            onWidthChanged: frame.retarget()
         }
 
         Text {

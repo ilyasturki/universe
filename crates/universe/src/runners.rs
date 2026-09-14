@@ -410,6 +410,7 @@ pub fn to_json(spec: &RunnerSpec, config: &Config) -> serde_json::Value {
         "binaries": spec.binaries, "platforms": spec.platforms, "extensions": spec.extensions,
         "exe": configured.and_then(|t| t.get("exe")).and_then(|v| v.as_str()).unwrap_or(""),
         "args": shell_words::join(global_args(spec, config)),
+        "gamescope": configured.and_then(|t| t.get("gamescope")).and_then(|v| v.as_bool()),
         "path": located.program, "source": located.source, "available": available,
         "options": spec.options_json(config),
     })

@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use serde::{Deserialize, Serialize};
+
 use crate::config::Config;
 
 /// The Universe GNOME Shell extension: window capture and the like; the home-manager module installs it.
@@ -140,6 +142,70 @@ async fn call_bool(proxy: &zbus::Proxy<'_>, method: &str, extension: &str) -> bo
     }
 }
 
+/// One toplevel as the Universe extension lists it; `id` is what its `Activate` and Mutter's `RecordWindow` take.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct Toplevel {
+    pub id: u64,
+    #[serde(default)]
+    pub pid: i64,
+    #[serde(default)]
+    pub wm_class: Option<String>,
+    #[serde(default)]
+    pub title: Option<String>,
+    #[serde(default)]
+    pub focused: bool,
+    #[serde(default)]
+    pub width: i64,
+    #[serde(default)]
+    pub height: i64,
+    #[serde(default)]
+    pub hidden: bool,
+    #[serde(default)]
+    pub minimized: bool,
+}
+
+async fn windows_proxy() -> Result<zbus::Proxy<'static>, String> {
+    let conn = zbus::Connection::session().await.map_err(|e| e.to_string())?;
+    zbus::Proxy::new(&conn, "org.universe.Windows", "/org/universe/Windows", "org.universe.Windows").await.map_err(|e| e.to_string())
+}
+
+/// The shell's toplevels through the Universe extension; an error off GNOME or before the shell has loaded it.
+pub async fn list_windows() -> Result<Vec<Toplevel>, String> {
+    let proxy = windows_proxy().await?;
+    let json: String = tokio::time::timeout(std::time::Duration::from_secs(5), proxy.call("List", &())).await.map_err(|_| "gnome-shell did not answer".to_string())?.map_err(|e| e.to_string())?;
+    serde_json::from_str(&json).map_err(|e| e.to_string())
+}
+
+pub async fn activate_window(id: u64) -> Result<bool, String> {
+    let proxy = windows_proxy().await?;
+    tokio::time::timeout(std::time::Duration::from_secs(5), proxy.call("Activate", &(id,))).await.map_err(|_| "gnome-shell did not answer".to_string())?.map_err(|e| e.to_string())
+}
+
+/// The cgroup path systemd reports for a unit, `None` while it is not loaded.
+pub async fn unit_cgroup(unit: &str) -> Option<String> {
+    let out = tokio::process::Command::new("systemctl").args(["--user", "show", "-p", "ControlGroup", "--value", unit]).output().await.ok()?;
+    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    (!s.is_empty()).then_some(s)
+}
+
+pub fn pid_in_cgroup(pid: i64, cgroup: &str) -> bool {
+    let Ok(text) = std::fs::read_to_string(format!("/proc/{pid}/cgroup")) else { return false };
+    cgroup_matches(&text, cgroup)
+}
+
+pub fn cgroup_matches(proc_cgroup: &str, cgroup: &str) -> bool {
+    let base = cgroup.trim_end_matches('/');
+    proc_cgroup.lines().any(|l| {
+        let path = l.rsplit(':').next().unwrap_or("");
+        path == base || path.starts_with(&format!("{base}/"))
+    })
+}
+
+/// The largest visible toplevel a unit's processes own: gamescope's when the game runs inside it.
+pub fn pick_window(windows: &[Toplevel], cgroup: &str) -> Option<Toplevel> {
+    windows.iter().filter(|w| !w.hidden && !w.minimized && w.width > 0 && w.height > 0 && w.pid > 0 && pid_in_cgroup(w.pid, cgroup)).max_by_key(|w| w.width * w.height).cloned()
+}
+
 pub fn extension_installed(extension: &str) -> bool {
     let home = crate::paths::home().join(".local/share/gnome-shell/extensions").join(extension);
     if home.exists() {
@@ -178,5 +244,23 @@ mod tests {
     #[test]
     fn normalize_keeps_unknown() {
         assert_eq!(normalize_connector("DP-9"), "DP-9");
+    }
+
+    #[test]
+    fn a_process_is_in_its_unit_or_under_it() {
+        let cg = "/user.slice/user-1000.slice/user@1000.service/app.slice/universe-game-x-s.service";
+        assert!(cgroup_matches(&format!("0::{cg}\n"), cg));
+        assert!(cgroup_matches(&format!("0::{cg}/child\n"), &format!("{cg}/")));
+        assert!(!cgroup_matches("0::/user.slice/user-1000.slice/user@1000.service/app.slice/other.service\n", cg));
+    }
+
+    #[test]
+    fn the_session_window_is_the_largest_visible_one_of_the_unit() {
+        let me = std::process::id() as i64;
+        let cg = std::fs::read_to_string("/proc/self/cgroup").unwrap_or_default().lines().last().and_then(|l| l.rsplit(':').next().map(String::from)).unwrap_or_default();
+        let w = |id, pid, width, hidden| Toplevel { id, pid, width, height: 100, hidden, ..Default::default() };
+        let windows = vec![w(1, me, 300, true), w(2, me, 200, false), w(3, me, 100, false), w(4, 1, 900, false)];
+        assert_eq!(pick_window(&windows, &cg).map(|w| w.id), Some(2));
+        assert!(pick_window(&windows, "/nowhere").is_none());
     }
 }

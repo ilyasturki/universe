@@ -38,6 +38,11 @@ FocusScope {
                                                : detailOpen ? detailGame
                                                : (activePage ? activePage.currentGame : null)
     readonly property bool menuOpen: contextMenu.open
+    readonly property var session: api.universe.currentSession
+    readonly property bool sessionRunning: session !== null && session !== undefined && session.session_id !== undefined
+    readonly property string playingId: sessionRunning ? session.id : ""
+    // The game to start once the running one has been quit for it.
+    property var pendingLaunch: null
 
     Binding {
         target: Theme
@@ -103,13 +108,37 @@ FocusScope {
         restoreFocus();
     }
 
+    // Play on the running game is a return to it; on another one, a question first.
     function launchGame(game) {
-        if (!game || launchOverlay.running)
+        if (!game || launchOverlay.running || confirm.open)
             return;
+        if (sessionRunning) {
+            if (game.id === playingId) {
+                resumeSession();
+                return;
+            }
+            var running = session.title;
+            confirm.ask({ message: "Quit " + running + " and start " + game.title + "?",
+                          detail: "Unsaved progress in " + running + " will be lost.", yes: "Quit and start", no: "Keep playing" },
+                        function(yes) {
+                            if (!yes)
+                                return;
+                            root.pendingLaunch = game;
+                            root.stopSession();
+                        });
+            return;
+        }
         launching = true;
         Sound.enter();
         Sound.launch();
         launchOverlay.begin(game);
+    }
+
+    function resumeSession() {
+        if (!sessionRunning)
+            return;
+        Sound.enter();
+        api.universe.focusSession();
     }
 
     function openSub(source, game, slot) {
@@ -184,27 +213,13 @@ FocusScope {
             restoreFocus();
     }
 
+    // The unit gets a SIGTERM, a second one after ~3 s: the toast covers the wait.
     function stopSession() {
-        var session = api.universe.currentSession;
-        if (!session)
+        if (!sessionRunning)
             return;
         Sound.cancel();
+        toast.show("Quitting " + session.title + "…");
         api.universe.stop(session.session_id);
-    }
-
-    // Back from a session: the game's page, where its stats and journal are one press away.
-    function returnFromSession(game) {
-        launching = false;
-        if (activePage && activePage.leave)
-            activePage.leave();
-        if (game) {
-            detailGame = game;
-            detailOpen = true;
-            if (detailLoader.item)
-                detailLoader.item.forceActiveFocus();
-        } else {
-            restoreFocus();
-        }
     }
 
     function openMenu(game, anchor) {
@@ -410,6 +425,8 @@ FocusScope {
 
             onTabRequested: function(index) { root.goToTab(index); }
             onSearchRequested: root.openSearch()
+            onResumeRequested: root.resumeSession()
+            onMenuRequested: function(game, anchor) { root.openMenu(game, anchor); }
             onEntered: root.focusPage()
             onDismissed: root.focusPage()
         }
@@ -485,7 +502,8 @@ FocusScope {
             anchors.bottom: parent.bottom
             anchors.left: parent.left
             anchors.right: parent.right
-            hints: root.menuOpen ? contextMenu.hints
+            hints: confirm.open ? confirm.hints
+                 : root.menuOpen ? contextMenu.hints
                  : root.focusOwner === "chrome" ? tabBar.hints
                  : (root.focusTarget ? root.focusTarget.hints : [])
         }
@@ -620,10 +638,22 @@ FocusScope {
         onRecordingsRequested: root.openSub("pages/RecordingsPage.qml", game)
         onJournalRequested: root.openSub("pages/JournalPage.qml", game)
         onStopRequested: root.stopSession()
+        onResumeRequested: root.resumeSession()
         onClosed: {
             if (root.subOpen && subLoader.item)
                 subLoader.item.forceActiveFocus();
             else if (root.detailOpen && detailLoader.item)
+                detailLoader.item.forceActiveFocus();
+            else
+                root.restoreFocus();
+        }
+    }
+
+    ConfirmDialog {
+        id: confirm
+        anchors.fill: parent
+        onClosed: {
+            if (root.detailOpen && detailLoader.item)
                 detailLoader.item.forceActiveFocus();
             else
                 root.restoreFocus();
@@ -639,8 +669,8 @@ FocusScope {
             // The overlay's snapshot has let go of the page by now, so a prune is safe.
             if (root.activePage && root.activePage.leave)
                 root.activePage.leave();
+            root.restoreFocus();
         }
-        onEnded: function(game) { root.returnFromSession(game); }
         onFailed: function(game, message) { toast.show("Could not launch" + (game ? " " + game.title : "") + (message ? ": " + message : "")); }
     }
 
@@ -650,11 +680,18 @@ FocusScope {
 
     Connections {
         target: api.universe
-        function onError(kind, message) { toast.show(message); }
+        function onError(kind, message) {
+            toast.show(message);
+            root.pendingLaunch = null;
+        }
         function onSessionEnded(sessionId, id, duration) {
             var game = api.allGames.byId(id);
             if (game)
                 toast.show(game.title + " · " + Math.max(1, Math.round(duration / 60)) + " min");
+            var next = root.pendingLaunch;
+            root.pendingLaunch = null;
+            if (next)
+                root.launchGame(next);
         }
     }
 
@@ -665,7 +702,7 @@ FocusScope {
     }
 
     Keys.onPressed: function(event) {
-        if (root.launching || root.subOpen || launchOverlay.running) {
+        if (root.launching || root.subOpen || launchOverlay.running || confirm.open) {
             event.accepted = true;
             return;
         }
@@ -723,7 +760,7 @@ FocusScope {
         event.accepted = true;
         root.acceptHeld = false;
         holdTimer.stop();
-        if (root.launching || launchOverlay.running || root.detailOpen || root.menuOpen || !root.focusTarget)
+        if (root.launching || launchOverlay.running || confirm.open || root.detailOpen || root.menuOpen || !root.focusTarget)
             return;
         launchGame(root.focusTarget.currentGame);
     }

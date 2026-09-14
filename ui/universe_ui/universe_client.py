@@ -68,6 +68,9 @@ class UniverseClientBase(QObject):
     currentSessionChanged = Signal()
     launched = Signal(str, str)
     launchFailed = Signal(str, str)
+    # The game's window is on screen and has the focus (`ok`), or nobody can tell: no shell
+    # extension, or no window within the wait.
+    sessionShown = Signal(str, bool)
     error = Signal(str, str)
 
     def __init__(self, parent=None):
@@ -188,15 +191,34 @@ class UniverseClientBase(QObject):
     def launch(self, ident, screen):
         def on_reply(value):
             self.launched.emit(str(value or ""), ident)
+            self._after_launch(str(value or ""))
 
         def on_error(e):
             self.launchFailed.emit(ident, e.message)
 
         self._call_async("Session1", "Launch", (ident, screen), on_reply, on_error)
 
+    # Off the UI thread: a stop waits for the unit, up to a second SIGTERM some seconds later.
     @Slot(str)
     def stop(self, session_id):
+        self._call_async("Session1", "Stop", (session_id,), lambda value: None, lambda e: self.error.emit(e.kind, e.message))
+
+    # After `launched` has gone out, on this thread: what a transport does once a session is up.
+    def _after_launch(self, session_id):
+        return None
+
+    # On this thread, for a host on its way out: the unit is down when it returns.
+    def stopNow(self, session_id):
         self._guarded(None, "Session1", "Stop", session_id, decode=False)
+
+    @Slot()
+    def focusSession(self):
+        self._call_async("Session1", "FocusSession", (), lambda value: None, lambda e: self.error.emit(e.kind, e.message))
+
+    # Quiet: off GNOME the compositor decides, and it usually gets it right.
+    @Slot()
+    def focusLauncher(self):
+        self._call_async("Session1", "FocusPid", (os.getpid(),), lambda value: None, lambda e: log.info("focus launcher: %s", e.message))
 
     # Quiet on purpose: an older core has neither call, and a toast for that would be noise.
     def adoptScope(self):
@@ -529,6 +551,18 @@ class CoreClient(UniverseClientBase):
         self._deliver.emit(lambda: self._track(session_id, ident))
         return session_id
 
+    # Blocks in the core until the game's window maps and gets the focus, or the session ends first.
+    def _after_launch(self, session_id):
+        def run():
+            try:
+                shown = bool(self._core.wait_session_window(session_id, 60000))
+            except self._mod.UniverseError as e:
+                log.info("session window: %s", e.args[1] if len(e.args) > 1 else e)
+                shown = False
+            self._deliver.emit(lambda: self.sessionShown.emit(session_id, shown))
+
+        threading.Thread(target=run, daemon=True, name="session-window").start()
+
     def _track(self, session_id, ident):
         self._tracked = (session_id, ident)
         self.refreshCurrent()
@@ -545,6 +579,8 @@ class CoreClient(UniverseClientBase):
         session_id, ident = self._tracked
         self._tracked = None
         self._poll.stop()
+        # The game's window is gone: home takes the screen, whatever Mutter's stack says.
+        self.focusLauncher()
         try:
             self._core.reload_game(ident)
         except self._mod.UniverseError:
@@ -621,6 +657,9 @@ class CoreClient(UniverseClientBase):
             self.refreshCurrent()
             if self._current and not self._tracked:
                 self._track(self._current["session_id"], self._current["id"])
+            elif self._tracked:
+                # The marker went: session-end has filed the session, no need to wait for the poll.
+                self._poll_session()
 
     # -- jobs: the work runs in this process, on a thread; closing the UI aborts it -----------
 
@@ -673,6 +712,9 @@ _CORE_CALLS = {
     ("Session1", "Launch"): lambda s, ident, screen: s._launched(s._core.launch(ident, screen), ident),
     ("Session1", "Stop"): lambda s, session_id: s._core.stop(session_id),
     ("Session1", "AdoptScope"): lambda s: s._core.adopt_scope(),
+    ("Session1", "Window"): lambda s: s._core.session_window_json(),
+    ("Session1", "FocusSession"): lambda s: s._core.focus_session(),
+    ("Session1", "FocusPid"): lambda s, pid: s._core.focus_pid(int(pid)),
     ("Session1", "Screenshot"): lambda s: s._core.screenshot(),
     ("Session1", "Sessions"): lambda s, ident: s._core.sessions_json(ident),
     ("Sources1", "List"): lambda s: s._core.sources_json(),
@@ -951,6 +993,7 @@ class FakeClient(UniverseClientBase):
         self._session_started = time.monotonic()
         self.currentSessionChanged.emit()
         QTimer.singleShot(0, lambda: self.sessionStarted.emit(session_id, ident))
+        QTimer.singleShot(400, lambda: self._current and self._current["session_id"] == session_id and self.sessionShown.emit(session_id, True))
         if self._fake_launch and shutil.which("sleep"):
             self._process = QProcess(self)
             self._process.finished.connect(lambda code, status: self._end_session(code))
@@ -999,6 +1042,16 @@ class FakeClient(UniverseClientBase):
 
     def _Session1_AdoptScope(self):
         return ""
+
+    def _Session1_Window(self):
+        return json.dumps({"id": 1, "pid": os.getpid(), "focused": True}) if self._current else ""
+
+    def _Session1_FocusSession(self):
+        if not self._current:
+            raise UniverseError("NotFound", "no session running")
+
+    def _Session1_FocusPid(self, pid):
+        return None
 
     def _Session1_Screenshot(self):
         return os.path.join(self._art_dir, "screenshot.png")

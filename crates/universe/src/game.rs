@@ -62,6 +62,8 @@ pub struct Launch {
     pub umu_id: String,
     pub store: String,
     pub mangohud: Option<bool>,
+    pub gamescope: Option<bool>,
+    pub gamescope_args: String,
     pub options: BTreeMap<String, toml::Value>,
 }
 
@@ -136,6 +138,8 @@ impl Default for Launch {
             umu_id: String::new(),
             store: String::new(),
             mangohud: None,
+            gamescope: None,
+            gamescope_args: String::new(),
             options: BTreeMap::new(),
         }
     }

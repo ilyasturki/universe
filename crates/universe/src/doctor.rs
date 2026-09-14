@@ -24,6 +24,13 @@ pub async fn run(config: &Config, modules: &[Module], shell: Option<&zbus::Conne
     for bin in ["umu-run", "systemd-run", "systemctl"] {
         push(bin, which(bin).is_some(), which(bin).unwrap_or_else(|| "missing".into()), "core");
     }
+    if config.launch.gamescope {
+        let bin = &config.launch.gamescope_bin;
+        push("gamescope", which(bin).is_some(), which(bin).unwrap_or_else(|| format!("{bin} not found: games launch on the desktop (launch.gamescope = false to stop asking)")), "core");
+        if config.launch.mangohud {
+            push("mangoapp", which("mangoapp").is_some(), which("mangoapp").unwrap_or_else(|| "missing: no HUD inside gamescope (the mangohud package ships it)".into()), "core");
+        }
+    }
     let proton = config.proton_path(&config.launch.proton);
     push("proton", proton.is_some(), proton.map(|p| p.to_string_lossy().into()).unwrap_or_else(|| format!("{} not found", config.launch.proton)), "core");
     let ext_ok = crate::desktop::extension_installed(&config.desktop.cursor_extension);

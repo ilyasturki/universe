@@ -24,6 +24,10 @@ FocusScope {
     property string homeFocus: "home"
     property bool launching: false
     readonly property bool modal: dialog.open || sheet.open || picker.open || launching
+    readonly property var session: api.universe.currentSession
+    readonly property bool sessionRunning: session !== null && session !== undefined && session.session_id !== undefined
+    // The game to start once the running one has been closed for it.
+    property var pendingLaunch: null
 
     readonly property var barItems: [
         { id: "software", icon: "grid", color: Theme.barRed, label: "All Software", source: "pages/AllSoftwarePage.qml" },
@@ -91,12 +95,25 @@ FocusScope {
     function prompt(spec, done) { sheet.show(spec, after(done)); }
     function pick(spec, done) { picker.show(spec, after(done)); }
 
+    // Start on the running game is a return to it; on another one, a question first.
     function launch(game) {
         if (!game || launchScreen.running)
             return;
-        if (api.universe.currentSession) {
-            Sound.edge();
-            toast.show(api.universe.currentSession.title + " is still running");
+        if (sessionRunning) {
+            if (game.id === session.id) {
+                resume();
+                return;
+            }
+            var running = session.title;
+            dialogAsk({ message: "Close " + running + " and start " + game.title + "?",
+                        detail: "Unsaved progress in " + running + " will be lost.",
+                        buttons: ["Cancel", "Close and start"], danger: 1 },
+                      function(i) {
+                          if (i !== 1)
+                              return;
+                          root.pendingLaunch = game;
+                          root.stopSession();
+                      });
             return;
         }
         Sound.launch();
@@ -104,15 +121,31 @@ FocusScope {
         launchScreen.begin(game);
     }
 
+    function resume() {
+        if (!sessionRunning) {
+            Sound.edge();
+            return;
+        }
+        Sound.ok();
+        api.universe.focusSession();
+    }
+
     function closeSoftware(game) {
-        var session = api.universe.currentSession;
-        if (!session) {
+        if (!sessionRunning) {
             Sound.edge();
             return;
         }
         dialogAsk({ message: "Close the software?", detail: "Unsaved progress in " + session.title + " will be lost.",
                     buttons: ["Cancel", "Close"], danger: 1 },
-                  function(i) { if (i === 1) api.universe.stop(session.session_id); });
+                  function(i) { if (i === 1) root.stopSession(); });
+    }
+
+    // The unit gets a SIGTERM, a second one after ~3 s: the toast covers the wait.
+    function stopSession() {
+        if (!sessionRunning)
+            return;
+        toast.show("Closing " + session.title + "…");
+        api.universe.stop(session.session_id);
     }
 
     function showToast(text) { toast.show(text); }
@@ -205,6 +238,65 @@ FocusScope {
         }
     }
 
+    // Off HOME the tile is out of sight: the running game and its time, in the hint bar of every
+    // page, beside the pad. Start goes HOME, where the tile and its options resume or close it.
+    Rectangle {
+        id: chip
+
+        readonly property bool shown: root.sessionRunning && hintBar.visible && !root.onHome
+        property int elapsed: 0
+
+        x: Theme.dp(160)
+        y: parent.height - (Theme.dp(Theme.hintBarHeight) + height) / 2
+        z: 11.6
+        width: chipRow.width + Theme.dp(36)
+        height: Theme.dp(50)
+        radius: height / 2
+        color: Theme.card
+        border.width: 1
+        border.color: Theme.hairline
+        opacity: shown ? 1.0 : 0.0
+        visible: opacity > 0.01
+
+        Behavior on opacity {
+            NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
+        }
+
+        onShownChanged: {
+            var started = root.session && root.session.started_at ? Date.parse(root.session.started_at) : NaN;
+            elapsed = isNaN(started) ? 0 : Math.max(0, Math.round((Date.now() - started) / 1000));
+        }
+
+        Timer {
+            interval: 1000
+            running: chip.shown
+            repeat: true
+            onTriggered: chip.elapsed += 1
+        }
+
+        Row {
+            id: chipRow
+            anchors.centerIn: parent
+            spacing: Theme.dp(12)
+
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                width: Theme.dp(12)
+                height: width
+                radius: width / 2
+                color: Theme.okGreen
+            }
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: (root.session && root.session.title ? root.session.title : "") + " · " + Math.max(1, Math.floor(chip.elapsed / 60)) + " min"
+                color: Theme.text
+                font.family: Theme.sans
+                font.pixelSize: Theme.dp(Theme.fontTiny)
+            }
+        }
+    }
+
     HintBar {
         id: hintBar
         anchors.bottom: parent.bottom
@@ -253,11 +345,18 @@ FocusScope {
 
     Connections {
         target: api.universe
-        function onError(kind, message) { toast.show(message); }
+        function onError(kind, message) {
+            toast.show(message);
+            root.pendingLaunch = null;
+        }
         function onSessionEnded(sessionId, id, duration) {
             var game = api.allGames.byId(id);
             if (game)
                 toast.show(game.title + " · " + Math.max(1, Math.round(duration / 60)) + " min");
+            var next = root.pendingLaunch;
+            root.pendingLaunch = null;
+            if (next)
+                root.launch(next);
         }
     }
 

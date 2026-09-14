@@ -441,15 +441,31 @@ class SortedGames(GameProxy):
 
 @QmlElement
 class RecentGames(GameProxy):
-    """Played games, last played first (HomePage's rail)."""
+    """Played games, last played first (HomePage's rail); the game of `playingId` first of all, played before or not."""
+
+    playingIdChanged = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self._sort_name = "lastPlayed"
         self._descending = True
+        self._playing = ""
+
+    def _set_playing(self, ident):
+        ident = str(ident or "")
+        if ident == self._playing:
+            return
+        self._playing = ident
+        self.playingIdChanged.emit()
+        self.invalidate()
 
     def acceptsGame(self, game, source_row):
-        return game.playCount > 0
+        return game.playCount > 0 or (self._playing != "" and game.id == self._playing)
+
+    def sortKey(self, game):
+        return (2 if self._playing != "" and game.id == self._playing else 0,) + super().sortKey(game)
+
+    playingId = Property(str, lambda self: self._playing, _set_playing, notify=playingIdChanged)
 
 
 @QmlElement

@@ -37,6 +37,8 @@ pub struct Effective {
     pub esync: bool,
     pub fsync: bool,
     pub mangohud: bool,
+    pub gamescope: bool,
+    pub gamescope_args: String,
     pub hide_cursor: bool,
     pub env: BTreeMap<String, String>,
 }
@@ -172,6 +174,7 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
         spec.map(|s| located.entry(s.id.into()).or_insert_with(|| crate::runners::locate(s, config).program).clone()).unwrap_or_default()
     };
     let options = spec.map(|s| s.merged_options(config, Some(&game))).unwrap_or_default();
+    let gamescope = game.launch.gamescope.or_else(|| config.runners.get(&runner).and_then(|t| t.get("gamescope")).and_then(|v| v.as_bool())).unwrap_or(config.launch.gamescope);
     let effective = Effective {
         runner_name: spec.map(|s| s.name.to_string()).unwrap_or_else(|| runner.clone()),
         runner_kind: spec.map(|s| s.kind.as_str().to_string()).unwrap_or_default(),
@@ -185,6 +188,8 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
         esync: game.launch.esync.unwrap_or(config.launch.esync),
         fsync: game.launch.fsync.unwrap_or(config.launch.fsync),
         mangohud: game.launch.mangohud.unwrap_or(config.launch.mangohud),
+        gamescope,
+        gamescope_args: game.launch.gamescope_args.clone(),
         hide_cursor: game.desktop.hide_cursor.unwrap_or(config.desktop.hide_cursor),
         env,
     };

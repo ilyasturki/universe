@@ -6,17 +6,21 @@ Item {
     id: screen
 
     property var game: null
-    readonly property bool running: sequence.running || settle.running || fallback.running
-    readonly property int takeoverSlackMs: 1500
-    readonly property int launchTimeoutMs: 25000
+    // launch() was called; the screen holds until the game's window is up and focused.
+    property bool waiting: false
+    property string launchedSession: ""
+    readonly property bool running: sequence.running || waiting || settle.running
+    // Nobody could tell when the window came up (no shell extension): the screen holds this long.
+    readonly property int settleMs: 1500
 
     signal finished()
     signal failed(var game, string message)
 
     function begin(target) {
-        if (sequence.running)
+        if (running)
             return;
         game = target;
+        launchedSession = "";
         art.game = target;
         caption.text = target.title;
         art.scale = 0.92;
@@ -25,7 +29,8 @@ Item {
 
     function reset() {
         settle.stop();
-        fallback.stop();
+        waiting = false;
+        launchedSession = "";
         frame.opacity = 0.0;
         art.game = null;
         game = null;
@@ -45,13 +50,26 @@ Item {
 
     Connections {
         target: api.universe
-        function onSessionStarted(sessionId, id) {
-            if (screen.game && screen.game.id === id)
+        function onLaunched(sessionId, id) {
+            if (screen.waiting && screen.game && screen.game.id === id)
+                screen.launchedSession = sessionId;
+        }
+        function onSessionShown(sessionId, ok) {
+            if (!screen.waiting || sessionId !== screen.launchedSession)
+                return;
+            if (ok)
+                screen.done();
+            else
                 settle.restart();
         }
         function onLaunchFailed(id, message) {
             if (screen.game && screen.game.id === id)
                 screen.abort(message);
+        }
+        // Over before its window came up: nothing to wait for.
+        function onSessionEnded(sessionId, id, duration) {
+            if (screen.waiting && sessionId === screen.launchedSession)
+                screen.done();
         }
     }
 
@@ -99,22 +117,17 @@ Item {
         PauseAnimation { duration: 500 }
         ScriptAction {
             script: {
-                fallback.restart();
-                if (screen.game)
+                if (screen.game) {
+                    screen.waiting = true;
                     screen.game.launch();
+                }
             }
         }
     }
 
     Timer {
         id: settle
-        interval: screen.takeoverSlackMs
-        onTriggered: screen.done()
-    }
-
-    Timer {
-        id: fallback
-        interval: screen.launchTimeoutMs
+        interval: screen.settleMs
         onTriggered: screen.done()
     }
 }

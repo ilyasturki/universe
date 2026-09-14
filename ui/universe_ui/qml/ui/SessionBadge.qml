@@ -1,21 +1,26 @@
 import QtQuick
 import "../core"
 
-// What is running right now, from Session1's Current property.
+// What is running right now, from Session1's Current property; a chrome slot the tab bar can land on.
 Rectangle {
     id: badge
 
     readonly property var session: api.universe.currentSession
     readonly property bool active: session !== null && session !== undefined && session.title !== undefined
+    property bool focused: false
     property int elapsed: 0
 
     visible: active
     height: Theme.dp(40)
     width: row.width + Theme.dp(32)
     radius: height / 2
-    color: Qt.rgba(1, 1, 1, 0.10)
+    color: focused ? Theme.text : Qt.rgba(1, 1, 1, 0.10)
     border.width: 1
     border.color: Theme.surfaceBorder
+
+    Behavior on color {
+        ColorAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
+    }
 
     onSessionChanged: {
         var started = session && session.started_at ? Date.parse(session.started_at) : NaN;
@@ -53,7 +58,7 @@ Rectangle {
             anchors.verticalCenter: parent.verticalCenter
             text: (badge.session && badge.session.title ? badge.session.title : "")
                   + " · " + Math.floor(badge.elapsed / 60) + ":" + ("0" + (badge.elapsed % 60)).slice(-2)
-            color: Theme.text
+            color: badge.focused ? Theme.onLight : Theme.text
             font.family: Theme.sans
             font.weight: Font.Medium
             font.pixelSize: Theme.dp(20)

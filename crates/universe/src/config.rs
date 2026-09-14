@@ -37,6 +37,9 @@ pub struct LaunchDefaults {
     pub esync: bool,
     pub fsync: bool,
     pub mangohud: bool,
+    pub gamescope: bool,
+    pub gamescope_args: String,
+    pub gamescope_bin: String,
     pub env: BTreeMap<String, String>,
     pub umu_run: String,
 }
@@ -115,6 +118,9 @@ impl Default for LaunchDefaults {
             esync: true,
             fsync: true,
             mangohud: true,
+            gamescope: true,
+            gamescope_args: String::new(),
+            gamescope_bin: "gamescope".into(),
             env: BTreeMap::from([("PROTON_ENABLE_WAYLAND".into(), "1".into())]),
             umu_run: "umu-run".into(),
         }

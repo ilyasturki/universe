@@ -107,6 +107,18 @@ impl Core {
     fn adopt_scope(&self, py: Python<'_>) -> PyResult<String> {
         self.run(py, |c| c.adopt_scope())
     }
+    fn session_window_json(&self, py: Python<'_>) -> PyResult<String> {
+        self.run(py, |c| c.session_window_json())
+    }
+    fn wait_session_window(&self, py: Python<'_>, session_id: String, timeout_ms: u64) -> PyResult<String> {
+        self.run(py, |c| async move { c.wait_session_window(&session_id, std::time::Duration::from_millis(timeout_ms)).await })
+    }
+    fn focus_session(&self, py: Python<'_>) -> PyResult<()> {
+        self.run(py, |c| c.focus_session())
+    }
+    fn focus_pid(&self, py: Python<'_>, pid: u32) -> PyResult<()> {
+        self.run(py, |c| async move { c.focus_pid(pid).await })
+    }
     fn screenshot(&self, py: Python<'_>) -> PyResult<String> {
         self.run(py, |c| c.screenshot())
     }

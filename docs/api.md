@@ -60,7 +60,8 @@ a dash means the surface doesn't expose it.
 | `import_lutris(apply)` | `import_lutris(apply)` | `universe migrate [--apply]` | JSON report: imported games, per-game env diff (`{id, lutris_env, universe_env, added, removed, changed}`), imported hours, games whose art was copied from `[lutris] pegasus_library` (`<platform>/media/<slug>/`, once, never over an existing `media/`), `runners_promoted` (emulator games from before runners that now name theirs) and `runners` (what Lutris's runner configs say: a wrapper script is seen through, the program is written to `[runners.<id>] exe` when it is not on PATH, its extra arguments to `args`). Without `apply` it only reports |
 | `add_game(json)` | `add_game(json)` | `universe add <file> --runner <id> [--title T] [--platform P] [--media]` | `{"runner", "exe", "title"?, "platform"?}` → the new id. The title defaults to the file's name cleaned of release tags; the platform to the runner's first. Refuses an id already in the library |
 
-`set` takes dotted keys: `launch.runner`, `launch.exe`, `launch.proton`, `launch.env.FOO`,
+`set` takes dotted keys: `launch.runner`, `launch.exe`, `launch.proton`, `launch.gamescope`,
+`launch.gamescope_args`, `launch.env.FOO`,
 `launch.options.<key>` (validated against the runner's options), `desktop.hide_cursor`, `hidden`,
 `favorite`, `tags`, `sort_title`, `platform`, `metadata.sgdb_id`, and `capture.cursor` as a
 validated shorthand for `modules.capture.cursor`. Values are strings: `true`/`false` for booleans,
@@ -78,7 +79,7 @@ comma-separated for lists, `""` deletes the key. A runner is written under its s
                "runner_path": "/…/bin/dolphin-emu", "platform": "Nintendo GameCube",
                "options": {"batch": true, "user_directory": "", "inputplumber": true}, "inputplumber": true,
                "proton": "proton-ge", "proton_path": "…", "esync": true, "fsync": true, "mangohud": true,
-               "hide_cursor": true, "env": {}},
+               "gamescope": true, "gamescope_args": "", "hide_cursor": true, "env": {}},
  "removed": false}
 ```
 
@@ -95,7 +96,10 @@ hooks write shows up that way, with no other channel.
 | Rust | Python | CLI | Role |
 |---|---|---|---|
 | `launch(id, screen)` | `launch(id, screen)` | `universe play <name> [--screen DP-1] [--no-wait]` | pre-launch hooks, marker, `systemd-run`, post-launch hooks; returns the `session_id` at once. `screen` is a DRM connector name or `""` for the profile default. `Busy` if a session is already running |
-| `stop(session_id)` | `stop(session_id)` | `universe stop` | `systemctl --user stop` on the unit |
+| `stop(session_id)` | `stop(session_id)` | `universe stop` | `systemctl --user stop` on the unit; waits for it, a second SIGTERM after ~3 s |
+| `session_window()` | `session_window_json()` | — | the running game's window as the Universe shell extension lists it (`{id, pid, wm_class, title, focused, width, height, hidden, minimized}`): the largest visible toplevel whose pid is in the unit's cgroup — gamescope's when the game runs inside it. `None`/`""` before it maps; `Unavailable` off GNOME |
+| `wait_session_window(session_id, timeout)` | `wait_session_window(session_id, timeout_ms)` | — | blocks until that window is up, then `Activate`s it (focus and raise) and returns it; `""` when the session ended first or the timeout ran out; `Unavailable` off GNOME, at once. Polls the extension every 150 ms |
+| `focus_session()` / `focus_pid(pid)` | `focus_session()` / `focus_pid(pid)` | — | `Activate` on the game's window / on the largest window of a process (a frontend's own, once the game is gone) |
 | `adopt_scope()` | `adopt_scope()` | — (`universe play` does it unless `--no-wait`) | moves the calling process into the transient scope `universe-launcher-<pid>.scope` (`StartTransientUnit` on the user manager) and returns its name; every later `launch` binds the game to it. Idempotent. `Unavailable` without a user systemd |
 | `screenshot()` | `screenshot()` | `universe screenshot` | runs the `screenshot` hook of whichever module declares one; returns the PNG path |
 | `current()` / `current_json()` | `current_json()` | `universe status` | `{session_id, id, title, unit, screen, started_at}`, or `""`. The CLI wraps it: `status --json` prints `{"current": … or null, "recent": [the last 10 sessions], "pending_journals": [see Journal]}` |
@@ -113,6 +117,20 @@ One `sessions.jsonl` line:
 
 `source ∈ universe, import-recording, import-lutris`. `exit` is the main process's exit code, `-1`
 when it was killed by a signal (a `stop`).
+
+### Gamescope
+
+Every runner's command runs inside gamescope by default: `gamescope -f --force-windows-fullscreen
+[launch.gamescope_args] [the game's gamescope_args] [--mangoapp] -- <program> <args…>`. One
+window, black until the game draws, whatever the game, Proton or umu put up first; every client
+inside is stretched to the screen, and the launcher hands over on that window. `launch.gamescope`
+(global), `[runners.<id>] gamescope` (per runner: an emulator that misbehaves under it) and the
+game's `launch.gamescope` switch it off, the game's own key winning; `launch.gamescope_bin` names
+the binary (`gamescope` on PATH, `/run/wrappers/bin` included). With it off — or not found: a
+warning, and the game runs on the desktop as before — the plain command runs. Inside gamescope
+MangoHud is `--mangoapp` rather than `MANGOHUD=1`, and `PROTON_ENABLE_WAYLAND` is dropped (Proton
+goes X11 through gamescope's Xwayland) unless the arguments carry `--expose-wayland`. `doctor`
+checks the binary, and `mangoapp` when MangoHud is on.
 
 ## Sources
 
@@ -144,12 +162,12 @@ quit with the game, and typed options — with a program the core detects or the
 | Rust | Python | CLI | Role |
 |---|---|---|---|
 | `runners_json()` | `runners_json()` | `universe runner ls` · `runner options <id>` | `[Runner]`, see below |
-| `set_runner_setting(id, key, value)` | `set_runner_setting(…)` | `universe runner set <id> k=v …` | writes `config.toml [runners.<id>] <key>`: `exe`, `args`, or an option, validated by type; `""` resets it |
+| `set_runner_setting(id, key, value)` | `set_runner_setting(…)` | `universe runner set <id> k=v …` | writes `config.toml [runners.<id>] <key>`: `exe`, `args`, `gamescope`, or an option, validated by type; `""` resets it |
 
 `Runner` = `{"id": "dolphin", "name": "Dolphin", "kind": "proton|wine|linux|emulator", "aliases": ["…"],
 "lutris": "dolphin", "binaries": ["dolphin-emu"], "platforms": ["Nintendo GameCube", "Nintendo Wii"],
 "extensions": ["iso", …], "exe": "the configured program or empty", "args": "extra arguments, shell-quoted",
-"path": "the program that will run, empty when none was found", "source": "config|path|lutris|",
+"gamescope": true | false | null (the global default), "path": "the program that will run, empty when none was found", "source": "config|path|lutris|",
 "available": true, "options": [{"key", "type": "bool|path", "default", "label", "choices": [],
 "value": the global value}]}`.
 
@@ -341,7 +359,10 @@ overrides = "~/.config/universe/overrides"       # picked art, shown over media/
 proton = "proton-ge"                 # a name under [proton], or a path
 esync = true
 fsync = true
-mangohud = true
+mangohud = true                      # --mangoapp inside gamescope, MANGOHUD=1 without
+gamescope = true                     # every game inside gamescope: one window, black until the game draws
+gamescope_args = ""                  # after -f --force-windows-fullscreen; --expose-wayland keeps PROTON_ENABLE_WAYLAND
+gamescope_bin = "gamescope"          # a name on PATH (/run/wrappers/bin included) or a path
 
 [desktop]
 profile = "auto"                     # auto | gnome | none
@@ -351,9 +372,10 @@ cursor_extension = "hide-cursor@elcste.com"   # enabled for the session, restore
 [proton]                             # name → path
 proton-ge = "~/.local/share/lutris/runners/wine/proton-ge"
 
-# [runners.dolphin]                  # per runner: the program, extra arguments, its options
+# [runners.dolphin]                  # per runner: the program, extra arguments, gamescope, its options
 # exe = "/opt/dolphin/dolphin-emu"   # empty or absent: detected (PATH, then Lutris's runners dir)
 # args = "--config Dolphin.Display.Fullscreen=True"
+# gamescope = false                  # this runner on the desktop; a game's launch.gamescope wins over it
 # batch = true
 
 [modules]

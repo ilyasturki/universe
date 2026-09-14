@@ -20,6 +20,7 @@ FocusScope {
     signal recordingsRequested(var game)
     signal journalRequested(var game)
     signal stopRequested()
+    signal resumeRequested()
     signal closed()
 
     readonly property var hints: [
@@ -30,12 +31,16 @@ FocusScope {
     readonly property var session: api.universe.currentSession
     readonly property bool sessionRunning: session !== null && session !== undefined && session.session_id !== undefined
 
+    readonly property bool playing: sessionRunning && game !== null && game !== undefined && game.id === session.id
+
     readonly property var items: {
         var out = [];
-        if (sessionRunning)
-            out.push({ icon: "stop", label: "Stop " + session.title, action: "stop" });
-        else
+        if (playing) {
+            out.push({ icon: "play", label: "Resume", action: "resume" });
+            out.push({ icon: "stop", label: "Quit " + session.title, action: "stop" });
+        } else {
             out.push({ icon: "play", label: game && game.playTime > 0 ? "Continue" : "Play", action: "play" });
+        }
         out.push({ icon: "info", label: "Details", action: "details" });
         out.push({ icon: game && game.favorite ? "heart" : "heart-outline",
                    label: game && game.favorite ? "Remove from favourites" : "Add to favourites", action: "favourite" });
@@ -92,6 +97,8 @@ FocusScope {
             playRequested(g, art);
         else if (action === "stop")
             stopRequested();
+        else if (action === "resume")
+            resumeRequested();
         else if (action === "details")
             detailRequested(g);
         else if (action === "favourite")

@@ -107,7 +107,7 @@ LAUNCH_ROWS = {
     "proton": [("launch.proton", "Proton", "enum"), ("launch.esync", "Esync", "bool"), ("launch.fsync", "Fsync", "bool"), ("launch.prefix", "Wine prefix", "path")],
     "wine": [("launch.prefix", "Wine prefix", "path")],
 }
-COMMON_LAUNCH_ROWS = [("launch.mangohud", "MangoHud", "bool"), ("launch.args", "Arguments", "string"), ("launch.working_dir", "Working directory", "path")]
+COMMON_LAUNCH_ROWS = [("launch.gamescope", "Gamescope", "bool"), ("launch.gamescope_args", "Gamescope arguments", "string"), ("launch.mangohud", "MangoHud", "bool"), ("launch.args", "Arguments", "string"), ("launch.working_dir", "Working directory", "path")]
 
 
 class GameSettingsForm(RowsForm):

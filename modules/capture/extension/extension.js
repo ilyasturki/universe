@@ -16,6 +16,10 @@ const IFACE = `
       <arg type="s" name="label" direction="in"/>
       <arg type="d" name="level" direction="in"/>
     </method>
+    <method name="Activate">
+      <arg type="t" name="id" direction="in"/>
+      <arg type="b" name="ok" direction="out"/>
+    </method>
   </interface>
 </node>`;
 
@@ -63,6 +67,18 @@ export default class UniverseExtension extends Extension {
             });
         }
         return JSON.stringify(windows);
+    }
+
+    // Focus and raise one of List's windows: the launcher hands the screen to the game and takes it back.
+    Activate(id) {
+        for (const actor of global.get_window_actors()) {
+            const w = actor.get_meta_window();
+            if (!w || w.get_id() !== Number(id))
+                continue;
+            w.activate(global.get_current_time());
+            return true;
+        }
+        return false;
     }
 
     // The shell's own media-key OSD, on every monitor; org.gnome.Shell.ShowOSD refuses callers other

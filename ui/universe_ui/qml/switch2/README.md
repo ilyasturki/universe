@@ -40,8 +40,9 @@ The shell:
 |---|---|
 | `shell.push(source, args)` | a page over this one; `source` relative to `switch2/` (`"pages/AlbumPage.qml"`) |
 | `shell.pop()` | back one page |
-| `shell.launch(game)` | the launch screen, then `game.launch()` |
-| `shell.closeSoftware(game)` | the "Close the software?" dialog, then `stop` |
+| `shell.launch(game)` | the launch screen, then `game.launch()`; the running game resumes instead, another one asks "Close X and start Y?" first |
+| `shell.resume()` | the running game's window back on top |
+| `shell.closeSoftware(game)` | the "Close the software?" dialog, then `shell.stopSession()`: a toast and `stop` |
 | `shell.dialogAsk({ message, detail, buttons, index, danger }, done(i))` | the dialog; B answers 0 |
 | `shell.pick({ title, choices, index }, done(i))` | the small list; B answers -1 |
 | `shell.prompt({ title, value, max, numeric, path }, done(value))` | the keyboard; cancel answers `null` |

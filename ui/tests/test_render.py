@@ -52,10 +52,10 @@ def test_themes_render_and_switch_live(api):
     pump(50)
 
 
-def test_a_session_running_at_startup_is_the_running_view(api, fake):
+def test_a_session_running_at_startup_is_home_with_the_game_pinned(api, fake):
     from PySide6.QtCore import QObject
 
-    fake.launch("the-technomancer", "")
+    fake.launch("mirrors-edge", "")
     assert fake.currentSession
     engine = QQmlApplicationEngine()
     for p in host.qml_import_paths() if host.qt_paths_unset() else []:
@@ -69,11 +69,46 @@ def test_a_session_running_at_startup_is_the_running_view(api, fake):
     pump(800)
     overlay = window.findChild(QObject, "launchOverlay")
     assert overlay is not None
-    assert overlay.property("playing") is True and overlay.property("running") is True
-    assert overlay.property("activeFocus") is True
+    # No poster: the game is on the desktop, the launcher is home with it first on the rail.
+    assert overlay.property("running") is False
+    root = window.property("contentItem").childItems()[0].property("item")
+    assert root.property("playingId") == "mirrors-edge"
+    home = root.property("activePage")
+    assert home is not None and home.property("currentGame").property("id") == "mirrors-edge"
+    assert home.property("playLabel") == "Resume"
     pump(2500)
     assert fake.currentSession is None
-    assert overlay.property("running") is False and overlay.property("activeFocus") is False
+    assert root.property("playingId") == ""
+    window.close()
+    pump(50)
+
+
+def test_a_launch_holds_the_poster_until_the_window_is_shown(api, fake):
+    from PySide6.QtCore import Q_ARG, QMetaObject, QObject
+
+    engine = QQmlApplicationEngine()
+    for p in host.qml_import_paths() if host.qt_paths_unset() else []:
+        engine.addImportPath(p)
+    engine.rootContext().setContextProperty("api", api)
+    engine.load(QUrl.fromLocalFile(str(host.QML_DIR / "main.qml")))
+    assert engine.rootObjects(), "main.qml failed to load"
+    window = engine.rootObjects()[0]
+    api.attachWindow(window)
+    window.requestActivate()
+    pump(800)
+    root = window.property("contentItem").childItems()[0].property("item")
+    overlay = window.findChild(QObject, "launchOverlay")
+    shown = []
+    fake.sessionShown.connect(lambda sid, ok: shown.append(ok))
+    QMetaObject.invokeMethod(root, "launchGame", Q_ARG("QVariant", api.allGames.byId("control")))
+    assert overlay.property("running") is True and root.property("launching") is True
+    pump(600 + 450 + 300 + 120 + 100)
+    assert overlay.property("waiting") is True and fake.currentSession["id"] == "control"
+    pump(400 + 100)
+    assert shown == [True]
+    pump(500)
+    assert overlay.property("running") is False and root.property("launching") is False
+    assert root.property("playingId") == "control"
     window.close()
     pump(50)
 

@@ -341,7 +341,10 @@ impl Core {
 
     pub async fn set_runner_setting(&self, runner: &str, key: &str, value: &str) -> Result<()> {
         let spec = crate::runners::spec(runner).ok_or_else(|| Error::NotFound(format!("runner {runner}")))?;
-        if !matches!(key, "exe" | "args") && !value.is_empty() {
+        if key == "gamescope" && !matches!(value, "" | "true" | "false") {
+            return Err(Error::Invalid("gamescope must be true or false".into()));
+        }
+        if !matches!(key, "exe" | "args" | "gamescope") && !value.is_empty() {
             spec.validate_option(key, value)?;
         }
         Config::set_key(&paths::config_file(), &format!("runners.{}.{key}", spec.id), value)?;
@@ -727,6 +730,59 @@ impl Core {
             return Err(Error::NotFound(session_id.into()));
         }
         launcher::stop_unit(&c.unit).await
+    }
+
+    /// The running game's window, as the shell sees it: `None` before it maps; `Unavailable` off GNOME.
+    pub async fn session_window(&self) -> Result<Option<crate::desktop::Toplevel>> {
+        let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
+        let Some(cg) = crate::desktop::unit_cgroup(&c.unit).await else { return Ok(None) };
+        let windows = crate::desktop::list_windows().await.map_err(Error::Unavailable)?;
+        Ok(crate::desktop::pick_window(&windows, &cg))
+    }
+
+    pub async fn session_window_json(&self) -> Result<String> {
+        Ok(self.session_window().await?.map(|w| serde_json::to_string(&w).unwrap_or_default()).unwrap_or_default())
+    }
+
+    /// Blocks until the session's window is on screen, then gives it the focus; the window as JSON, or
+    /// `""` when the session ended first or `timeout` ran out. `Unavailable` off GNOME, at once.
+    pub async fn wait_session_window(&self, session_id: &str, timeout: std::time::Duration) -> Result<String> {
+        crate::desktop::list_windows().await.map_err(Error::Unavailable)?;
+        let deadline = std::time::Instant::now() + timeout;
+        loop {
+            let Some(c) = self.current().await else { return Ok(String::new()) };
+            if c.session_id != session_id {
+                return Ok(String::new());
+            }
+            if let Some(w) = self.session_window().await? {
+                if let Err(e) = crate::desktop::activate_window(w.id).await {
+                    tracing::warn!("activate {}: {e}", w.id);
+                }
+                return Ok(serde_json::to_string(&w)?);
+            }
+            if std::time::Instant::now() > deadline {
+                return Ok(String::new());
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        }
+    }
+
+    /// Focus and raise the running game's window.
+    pub async fn focus_session(&self) -> Result<()> {
+        let w = self.session_window().await?.ok_or_else(|| Error::NotFound("the game has no window yet".into()))?;
+        match crate::desktop::activate_window(w.id).await {
+            Ok(true) => Ok(()),
+            Ok(false) => Err(Error::NotFound("the game's window is gone".into())),
+            Err(e) => Err(Error::Unavailable(e)),
+        }
+    }
+
+    /// Focus and raise the largest window of a process: the frontend's own, back from a game.
+    pub async fn focus_pid(&self, pid: u32) -> Result<()> {
+        let windows = crate::desktop::list_windows().await.map_err(Error::Unavailable)?;
+        let w = windows.iter().filter(|w| w.pid == pid as i64 && !w.hidden).max_by_key(|w| w.width * w.height).ok_or_else(|| Error::NotFound(format!("no window of pid {pid}")))?;
+        crate::desktop::activate_window(w.id).await.map_err(Error::Unavailable)?;
+        Ok(())
     }
 
     pub async fn screenshot(&self) -> Result<String> {

@@ -14,8 +14,8 @@ Renders the Reprise interface (Qt 6, PySide6) over the Universe core linked
 in-process. Fullscreen by default. Games launch as transient systemd units
 bound to the UI's own scope: quitting the UI (SIGINT and SIGTERM included)
 stops the running game first, and *universe session-end* closes the session
-when its cgroup empties. While a game runs the launch poster stays as the
-running view; holding A for a second quits the game.
+when its cgroup empties. While a game runs the launcher stays home with the
+game pinned first: A resumes it, its menu quits it.
 
 # OPTIONS
 

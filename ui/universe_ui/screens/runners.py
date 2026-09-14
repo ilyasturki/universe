@@ -101,6 +101,10 @@ class RunnerForm(RowsForm):
                              detail=found if not runner.get("exe") else "", inherited=not runner.get("exe") and bool(found)))
             rows.append(_row(name, "args", "Arguments", "string", runner.get("args") or "", module=ident))
             groups.append(_group("", list(range(len(rows)))))
+        own = runner.get("gamescope")
+        default = bool(((self._client.config() or {}).get("launch") or {}).get("gamescope", True))
+        rows.append(_row(name, "gamescope", "Gamescope", "bool", default if own is None else bool(own), module=ident, inherited=own is None))
+        groups.append(_group("", [len(rows) - 1]))
         options = runner.get("options") or []
         if options:
             first = len(rows)
