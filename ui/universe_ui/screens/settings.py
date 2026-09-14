@@ -98,7 +98,6 @@ CORE_ROWS = [
     ("Desktop and library", "desktop.hide_cursor", "Hide the cursor while playing", "bool"),
     ("Desktop and library", "favorite", "Favourite", "bool"),
     ("Desktop and library", "hidden", "Hidden", "bool"),
-    ("Desktop and library", "sort_title", "Sort title", "string"),
     ("Desktop and library", "tags", "Tags", "string"),
     ("Artwork", "metadata.sgdb_id", "SteamGridDB id", "int"),
     ("Artwork", "metadata.rawg_id", "RAWG id", "int"),

@@ -8,6 +8,7 @@ from universe_ui.models import (
     RecentGames,
     SearchGames,
     SortedGames,
+    sort_title,
 )
 
 
@@ -30,6 +31,16 @@ def test_game_defaults_when_keys_missing(app):
     assert game.hidden is False
     assert game.assets.boxFront.isEmpty()
     assert game.assets.screenshotList == []
+
+
+def test_sort_title_drops_leading_article(app):
+    assert sort_title("The Witcher 3") == "Witcher 3"
+    assert sort_title("A Hat in Time") == "Hat in Time"
+    assert sort_title("An Untitled Story") == "Untitled Story"
+    assert sort_title("Theatrhythm") == "Theatrhythm"
+    assert sort_title("The") == "The"
+    assert Game({"title": "The Witcher 3"}, None).sortTitle == "Witcher 3"
+    assert Game({"title": "The Witcher 3", "sort_title": "Witcher"}, None).sortTitle == "Witcher"
 
 
 def test_game_decodes_variants(app):
@@ -138,7 +149,8 @@ def test_library_sort_modes(api):
         titles(library)[-2:] == ["Batman: Arkham Origins", "Mirror's Edge"]
     assert library.get(0).title == "The Technomancer"
     library.sortMode = 1
-    assert titles(library) == sorted(titles(library), key=str.casefold)
+    assert titles(library) == sorted(titles(library), key=lambda t: sort_title(t).casefold())
+    assert titles(library)[-2:] == ["The Technomancer", "Cyberpunk 2077"] or titles(library)[-1] == "The Technomancer"
     library.sortMode = 2
     assert library.get(0).title == "The Technomancer"
 

@@ -46,6 +46,12 @@ def _as_list(value):
     return [str(v) for v in value]
 
 
+def sort_title(title):
+    """The title with a leading English article dropped, so "The Witcher" files under W."""
+    first, _, rest = title.partition(" ")
+    return rest if rest and first.lower() in ("the", "a", "an") else title
+
+
 def _file_url(path):
     if not path:
         return QUrl()
@@ -144,7 +150,7 @@ class Game(QObject):
         stats = raw.get("stats") or {}
         self._id = str(raw.get("id") or "")
         self._title = str(raw.get("title") or self._id)
-        self._sortTitle = str(raw.get("sort_title") or self._title)
+        self._sortTitle = str(raw.get("sort_title") or sort_title(self._title))
         self._favorite = bool(raw.get("favorite", False))
         self._hidden = bool(raw.get("hidden", False))
         self._playTime = int(round(float(stats.get("hours") or 0) * 3600))
@@ -543,7 +549,7 @@ class SearchGames(GameProxy):
     query = Property(str, lambda self: self._query, _set_query, notify=queryChanged)
 
 
-LIBRARY_SORTS = [("lastPlayed", True), ("title", False), ("playTime", True), ("releaseYear", True)]
+LIBRARY_SORTS = [("lastPlayed", True), ("sortTitle", False), ("playTime", True), ("releaseYear", True)]
 
 
 @QmlElement
