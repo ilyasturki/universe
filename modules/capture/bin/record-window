@@ -11,6 +11,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import (  # noqa: E402
     WINDOWS_BUS_NAME, SETTINGS_DEFAULTS, log, load_settings, resolve_screen, resolve_fps, gsr_args,
     output_path, cursor_mode, gst_window_args, unit_cgroup, pid_in_unit, segment_path,
+    set_companion_mode, show_osd,
 )
 
 POLL_S = 0.5
@@ -32,7 +33,10 @@ def exec_screen_fallback(settings, reason):
         log(f"could not resolve a screen to capture: {e}")
         sys.exit(1)
     pending_dir = os.path.join(os.environ["MODULE_DATA_DIR"], "pending")
-    args = gsr_args(settings, screen, output_path(pending_dir, os.environ["SESSION_ID"], settings))
+    session_id = os.environ["SESSION_ID"]
+    set_companion_mode(pending_dir, session_id, "screen", reason)
+    show_osd("Recording the screen")
+    args = gsr_args(settings, screen, output_path(pending_dir, session_id, settings))
     os.execvp(args[0], args)
 
 

@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 """post-launch hook (async): starts the window recorder (bin/record-window) or gpu-screen-recorder under a transient unit."""
-import json
 import os
 import subprocess
 import sys
@@ -9,7 +8,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import (  # noqa: E402
     EXTENSION_UUID, WINDOWS_BUS_NAME, log, load_settings, resolve_screen, gsr_args, output_path,
-    is_gnome, extension_installed, enable_extension, bus_name_has_owner,
+    is_gnome, extension_installed, enable_extension, bus_name_has_owner, write_companion, show_osd,
 )
 
 
@@ -27,16 +26,6 @@ def run_systemd(cmd):
         log(f"systemd-run failed ({result.returncode}): {result.stderr.strip()}")
         return False
     return True
-
-
-def write_companion(pending_dir, session_id, unit, path, mode):
-    with open(os.path.join(pending_dir, f"{session_id}.json"), "w") as f:
-        json.dump({
-            "unit": f"{unit}.service",
-            "output": path,
-            "mode": mode,
-            "started_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
-        }, f)
 
 
 def start_window(unit, pending_dir, session_id):
@@ -117,6 +106,8 @@ def main():
     if not start_screen(unit, screen, settings, path):
         return 1
     write_companion(pending_dir, session_id, unit, path, "screen")
+    if source == "window":
+        show_osd("Recording the screen")
     return 0
 
 

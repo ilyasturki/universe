@@ -6,6 +6,7 @@ import re
 import shlex
 import subprocess
 import sys
+import time
 
 # quality preset -> (AV1 quality factor 0-255, H.26x quality factor 0-51, target kbps, ceiling kbps).
 # QVBR on both backends: constant quality up to the ceiling; very_high is the measured
@@ -389,6 +390,46 @@ def enable_extension(uuid=EXTENSION_UUID):
          "/org/gnome/Shell/Extensions", "org.gnome.Shell.Extensions", "EnableExtension", "s", uuid],
         capture_output=True, text=True,
     )
+
+
+def show_osd(label, icon="video-display-symbolic"):
+    """The shell's OSD through the universe extension; nothing when it is not loaded."""
+    try:
+        subprocess.run(
+            ["busctl", "--user", "call", WINDOWS_BUS_NAME, "/org/universe/Windows", WINDOWS_BUS_NAME,
+             "ShowOSD", "ssd", "--", icon, label, "-1"],
+            capture_output=True, text=True, timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        pass
+
+
+def companion_path(pending_dir, session_id):
+    return os.path.join(pending_dir, f"{session_id}.json")
+
+
+def write_companion(pending_dir, session_id, unit, path, mode):
+    with open(companion_path(pending_dir, session_id), "w") as f:
+        json.dump({
+            "unit": f"{unit}.service",
+            "output": path,
+            "mode": mode,
+            "started_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+        }, f)
+
+
+def set_companion_mode(pending_dir, session_id, mode, reason):
+    """Corrects the mode start wrote when record-window ends up recording the screen."""
+    path = companion_path(pending_dir, session_id)
+    try:
+        with open(path) as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return
+    data["mode"] = mode
+    data["fallback"] = reason
+    with open(path, "w") as f:
+        json.dump(data, f)
 
 
 def bus_name_has_owner(name):

@@ -175,6 +175,10 @@ impl Module {
                 }
             }
         }
+        // An earlier set wrote enabled as ["false"]; a hook would read that list as true.
+        if let Some(b) = out.get("enabled").and_then(|v| v.as_array()).filter(|a| a.len() == 1).and_then(|a| a[0].as_str()).and_then(|s| s.parse::<bool>().ok()) {
+            out.insert("enabled".into(), serde_json::Value::Bool(b));
+        }
         out
     }
 
@@ -480,6 +484,8 @@ scope = "config"
         assert_eq!(merged["enabled"], true);
         assert_eq!(merged["cursor"], true);
         assert_eq!(merged["codec"], "hevc");
+        g.modules.insert("capture".into(), toml::from_str("enabled = [\"false\"]").unwrap());
+        assert_eq!(module.merged_settings(&cfg, Some(&g))["enabled"], false);
         assert!(module.validate_setting("codec", "vp9", false).is_err());
         assert!(module.validate_setting("codec", "hevc", true).is_err());
         assert!(module.validate_setting("cursor", "true", true).is_ok());

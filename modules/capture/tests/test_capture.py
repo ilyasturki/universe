@@ -367,6 +367,36 @@ def test_start_window_falls_back_to_gsr_when_extension_not_loaded(tmp_path, fake
     assert str(BIN_DIR / "record-window") not in args
     companion = json.loads((tmp_path / "data" / "pending" / f"{SESSION_ID}.json").read_text())
     assert companion["mode"] == "screen"
+    # The fallback is said on screen, not only in the log.
+    assert "ShowOSD" in (fakebin["logs"] / "busctl.args").read_text()
+
+
+def test_start_screen_source_shows_no_osd(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {"source": "screen"})
+    result = run("start", env)
+    assert result.returncode == 0, result.stderr
+    assert not (fakebin["logs"] / "busctl.args").exists()
+
+
+def test_set_companion_mode_rewrites_start_companion(tmp_path):
+    _common.write_companion(str(tmp_path), SESSION_ID, "u", "/o.mkv", "window")
+    _common.set_companion_mode(str(tmp_path), SESSION_ID, "screen", "no window in 60 s")
+    companion = json.loads((tmp_path / f"{SESSION_ID}.json").read_text())
+    assert companion["mode"] == "screen"
+    assert companion["fallback"] == "no window in 60 s"
+    assert companion["output"] == "/o.mkv"
+    _common.set_companion_mode(str(tmp_path), "missing", "screen", "x")  # no companion: nothing to correct
+
+
+def test_show_osd_passes_a_negative_level_past_busctl(tmp_path, fakebin):
+    env = dict(os.environ, PATH=f"{fakebin['bin']}:{os.environ['PATH']}")
+    result = subprocess.run(
+        [sys.executable, "-c", "import _common; _common.show_osd('Recording the screen')"],
+        cwd=BIN_DIR, env=env, capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    args = (fakebin["logs"] / "busctl.args").read_text().splitlines()
+    assert args[args.index("ssd") + 1] == "--"
+    assert args[-1] == "-1"
 
 
 def test_start_window_falls_back_to_gsr_when_extension_missing(tmp_path, fakebin):
