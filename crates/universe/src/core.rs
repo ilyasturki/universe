@@ -97,7 +97,7 @@ pub fn title_of(path: &Path) -> String {
 /// Environment the game unit needs beyond the game's own: our binary and dirs for the hooks and `ExecStopPost`, the desktop for the game.
 fn passthrough_env() -> BTreeMap<String, String> {
     let mut env = BTreeMap::new();
-    for k in ["PATH", "HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS", "WAYLAND_DISPLAY", "DISPLAY", "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE", "GST_PLUGIN_SYSTEM_PATH_1_0", "GI_TYPELIB_PATH", "UNIVERSE_DATA_HOME", "UNIVERSE_CONFIG_HOME", "UNIVERSE_STATE_HOME", "UNIVERSE_CACHE_HOME", "UNIVERSE_MODULES_PATH", "RUST_LOG"] {
+    for k in ["PATH", "HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS", "WAYLAND_DISPLAY", "DISPLAY", "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE", "GI_TYPELIB_PATH", "UNIVERSE_DATA_HOME", "UNIVERSE_CONFIG_HOME", "UNIVERSE_STATE_HOME", "UNIVERSE_CACHE_HOME", "UNIVERSE_MODULES_PATH", "RUST_LOG"] {
         if let Ok(v) = std::env::var(k) {
             env.insert(k.to_string(), v);
         }

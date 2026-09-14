@@ -11,19 +11,6 @@ pub struct Check {
     pub module: String,
 }
 
-/// Whether the interpreter a hook's shebang names can import `module`; `#!/usr/bin/env python3` resolves on PATH like the hook does.
-fn hook_imports(hook: &std::path::Path, module: &str) -> (bool, String) {
-    let shebang = std::fs::read_to_string(hook).ok().and_then(|s| s.lines().next().and_then(|l| l.strip_prefix("#!").map(str::to_string)));
-    let mut words = shebang.as_deref().unwrap_or("").split_whitespace().map(str::to_string).collect::<Vec<_>>();
-    if words.first().is_some_and(|w| w.ends_with("/env")) {
-        words.remove(0);
-    }
-    let Some(interpreter) = words.first().cloned() else { return (false, format!("{} has no shebang", hook.display())) };
-    words.extend(["-c".into(), format!("import {module}")]);
-    let ok = std::process::Command::new(&words[0]).args(&words[1..]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status().map(|s| s.success()).unwrap_or(false);
-    (ok, if ok { format!("{module} importable by {interpreter}") } else { format!("{module} missing for {interpreter}: window capture falls back to the screen") })
-}
-
 fn which(bin: &str) -> Option<String> {
     crate::runners::on_path(bin).map(|p| p.to_string_lossy().into())
 }
@@ -112,8 +99,6 @@ pub async fn run(config: &Config, modules: &[Module], shell: Option<&zbus::Conne
         }
         if m.id() == "capture" {
             push("gsr-kms-server", which("gsr-kms-server").is_some(), which("gsr-kms-server").unwrap_or_else(|| "missing (programs.gpu-screen-recorder.enable)".into()), "capture");
-            let (ok, detail) = hook_imports(&m.dir.join("bin/record-window"), "jeepney");
-            push("jeepney", ok, detail, "capture");
         }
         if m.is_source() && m.id() == "gog" {
             let auth = crate::paths::expand(m.merged_settings(config, None).get("auth_path").and_then(|v| v.as_str()).unwrap_or("~/.config/gogdl/auth.json"));

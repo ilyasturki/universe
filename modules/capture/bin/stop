@@ -8,7 +8,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import log, load_settings, universe_bin, output_path, segment_paths, concat_list_lines  # noqa: E402
+from _common import log, load_settings, universe_bin, output_path  # noqa: E402
 
 STABLE_WINDOW_S = 15
 
@@ -21,30 +21,6 @@ def recording_path(pending_dir, session_id, settings):
     except (OSError, ValueError):
         path = None
     return path or output_path(pending_dir, session_id, settings)
-
-
-def consolidate_segments(pending_dir, session_id, path):
-    """window mode writes <sid>-N.<ext>; join them into <sid>.<ext>. No-op for the gsr path."""
-    segments = segment_paths(pending_dir, session_id)
-    if not segments:
-        return
-    if len(segments) == 1:
-        os.replace(segments[0], path)
-        return
-    list_file = os.path.join(pending_dir, f"{session_id}.concat")
-    with open(list_file, "w") as f:
-        f.write("\n".join(concat_list_lines(segments)) + "\n")
-    result = subprocess.run(
-        ["ffmpeg", "-y", "-f", "concat", "-safe", "0", "-i", list_file, "-c", "copy", path],
-        capture_output=True, text=True,
-    )
-    os.remove(list_file)
-    if result.returncode != 0:
-        log(f"ffmpeg concat failed ({result.returncode}): {result.stderr.strip()} — segments left in pending/")
-        return
-    for segment in segments:
-        if os.path.exists(segment):
-            os.remove(segment)
 
 
 def stop_unit(unit):
@@ -101,7 +77,6 @@ def main():
     path = recording_path(pending_dir, session_id, settings)
 
     stop_unit(f"universe-capture-{session_id}.service")
-    consolidate_segments(pending_dir, session_id, path)
 
     if not os.path.exists(path):
         log(f"no recording file for session {session_id}, nothing to do")

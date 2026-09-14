@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""post-launch hook (async): starts the window recorder (bin/record-window) or gpu-screen-recorder under a transient unit."""
+"""post-launch hook (async): starts gpu-screen-recorder under a transient unit — the screen, or the game's
+window through the GNOME picker once the window is up (the pick is remembered per game)."""
 import os
 import subprocess
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import (  # noqa: E402
-    EXTENSION_UUID, WINDOWS_BUS_NAME, log, load_settings, resolve_screen, gsr_args, output_path,
-    is_gnome, extension_installed, enable_extension, bus_name_has_owner, write_companion, show_osd,
+    log, load_settings, resolve_screen, gsr_args, output_path, extension_ready, unit_cgroup,
+    wait_for_window, window_wait_s, write_companion, show_osd,
 )
 
 
@@ -28,39 +28,17 @@ def run_systemd(cmd):
     return True
 
 
-def start_window(unit, pending_dir, session_id):
-    record_window = os.path.join(os.path.dirname(os.path.abspath(__file__)), "record-window")
-    passthrough = ["SESSION_ID", "SESSION_UNIT", "SESSION_SCREEN", "MODULE_SETTINGS_JSON",
-                   "MODULE_DATA_DIR", "PATH", "GST_PLUGIN_SYSTEM_PATH_1_0"]
-    env_args = []
-    for key in passthrough:
-        val = os.environ.get(key)
-        if val is not None:
-            env_args += ["-E", f"{key}={val}"]
-    cmd = [
-        "systemd-run", "--user", f"--unit={unit}", "--collect",
-        "-p", "CPUWeight=100", "-p", "MemoryHigh=4G",
-        *bind_args(),
-        "-p", "TimeoutStopSec=10",
-        # gst-launch -e finalises on SIGINT, and only one may reach it: record-window forwards it (KillMode=mixed).
-        "-p", "KillMode=mixed", "-p", "KillSignal=SIGINT",
-        *env_args,
-        record_window,
-    ]
-    return run_systemd(cmd)
-
-
-def start_screen(unit, screen, settings, path):
-    cmd = [
-        "systemd-run", "--user", f"--unit={unit}", "--collect",
-        "-p", "CPUWeight=100", "-p", "MemoryHigh=4G",
-        *bind_args(),
-        # bounds `systemctl stop`'s wait below bin/stop's own 15s stability budget;
-        # default TimeoutStopSec (90s) would blow session-end's timeout_s=20 if gsr hangs.
-        "-p", "TimeoutStopSec=10",
-        *gsr_args(settings, screen, path),
-    ]
-    return run_systemd(cmd)
+def window_token(settings, data_dir):
+    """The portal token file for the game's window, once it is up; None when the screen is recorded instead."""
+    if not extension_ready():
+        return None
+    wait_s = window_wait_s(settings)
+    if not wait_for_window(unit_cgroup(os.environ.get("SESSION_UNIT")), wait_s):
+        log(f"no game window within {wait_s}s")
+        return None
+    tokens = os.path.join(data_dir, "portal")
+    os.makedirs(tokens, exist_ok=True)
+    return os.path.join(tokens, os.environ["GAME_ID"])
 
 
 def main():
@@ -80,34 +58,25 @@ def main():
         log(f"could not resolve a screen to capture: {e}")
         return 1
 
+    token = window_token(settings, data_dir) if settings.get("source") == "window" else None
+    if settings.get("source") == "window" and not token:
+        log("recording the screen")
+        show_osd("Recording the screen")
+
     unit = f"universe-capture-{session_id}"
     path = output_path(pending_dir, session_id, settings)
-    source = settings.get("source", "window")
-
-    if source == "window" and is_gnome():
-        if extension_installed():
-            enable_extension()
-            # EnableExtension runs the extension's enable() asynchronously in the shell,
-            # so the well-known name can lag the call by a moment on the first launch.
-            deadline = time.monotonic() + 3
-            owned = bus_name_has_owner(WINDOWS_BUS_NAME)
-            while not owned and time.monotonic() < deadline:
-                time.sleep(0.25)
-                owned = bus_name_has_owner(WINDOWS_BUS_NAME)
-            if owned:
-                if not start_window(unit, pending_dir, session_id):
-                    return 1
-                write_companion(pending_dir, session_id, unit, path, "window")
-                return 0
-            log(f"{EXTENSION_UUID} installed but not loaded (log out once to load it); recording the screen")
-        else:
-            log(f"{EXTENSION_UUID} not installed; recording the screen")
-
-    if not start_screen(unit, screen, settings, path):
+    cmd = [
+        "systemd-run", "--user", f"--unit={unit}", "--collect",
+        "-p", "CPUWeight=100", "-p", "MemoryHigh=4G",
+        *bind_args(),
+        # bounds `systemctl stop`'s wait below bin/stop's own 15s stability budget;
+        # default TimeoutStopSec (90s) would blow session-end's timeout_s=20 if gsr hangs.
+        "-p", "TimeoutStopSec=10",
+        *gsr_args(settings, screen, path, token),
+    ]
+    if not run_systemd(cmd):
         return 1
-    write_companion(pending_dir, session_id, unit, path, "screen")
-    if source == "window":
-        show_osd("Recording the screen")
+    write_companion(pending_dir, session_id, unit, path, "window" if token else "screen")
     return 0
 
 

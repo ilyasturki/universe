@@ -9,35 +9,9 @@ import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import (  # noqa: E402
-    EXTENSION_UUID,
-    WINDOWS_BUS_NAME,
-    bus_name_has_owner,
-    enable_extension,
-    extension_installed,
-    is_gnome,
-    load_settings,
-    log,
-    resolve_screen,
-)
+from _common import WINDOWS_BUS_NAME, extension_ready, load_settings, log, resolve_screen  # noqa: E402
 
 TAKE_TIMEOUT_S = 15
-
-
-def extension_ready():
-    """One bus round-trip on the usual press; the enable and its wait only when the name is not up."""
-    if not is_gnome() or not extension_installed():
-        return False
-    if bus_name_has_owner(WINDOWS_BUS_NAME):
-        return True
-    enable_extension()
-    deadline = time.monotonic() + 3
-    while not bus_name_has_owner(WINDOWS_BUS_NAME):
-        if time.monotonic() > deadline:
-            log(f"{EXTENSION_UUID} installed but not loaded (log out once to load it)")
-            return False
-        time.sleep(0.25)
-    return True
 
 
 def take_in_shell(path, window, cursor):

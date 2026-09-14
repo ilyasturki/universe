@@ -132,8 +132,8 @@ Every runner's command runs inside gamescope by default: `gamescope -f --force-c
 gamescope_args] [--mangoapp] -- universe splash [--image <poster>] -- <program> <args…>`. One
 window, from gamescope's first frame to the game's last, whatever the game, Proton or umu put up
 first, and the launcher hands over on it. `--force-composition` keeps gamescope drawing its own
-frame instead of scanning the game's buffer out directly: Mutter's window screencast (what
-`capture` records) blits a scanned-out buffer as one flat colour.
+frame instead of scanning the game's buffer out directly: Mutter's window screencast (`capture`'s
+window source) blits a scanned-out buffer as one flat colour.
 
 gamescope unmaps its own window whenever no client inside it is focused, and a game that closes
 its first window before opening the real one (Dead Cells) would flash the desktop through, so
@@ -306,29 +306,27 @@ Two layers per slot: the **default** under `games/<id>/media/`, which `refresh` 
 `recording-file` is called by the capture module's `session-end` hook, so it lands before any
 `post-process` hook runs.
 
-The capture module records either the game's **window** (`source = "window"`, the default) or the
-whole **screen** (`source = "screen"`). Window capture needs GNOME and the `universe@ilyasturki.github.io`
-shell extension (shipped by the home-manager module, loaded after one logout): the module enables it,
-lists the game's toplevels through it, and records the largest one through Mutter's private
-`org.gnome.Mutter.ScreenCast` into `<session>-N.mkv` segments (a new segment when the window is
-replaced), which `session-end` concatenates into `<session>.mkv`. It follows the window across
-workspaces and occlusion, and starts a fresh segment on a new window. Off GNOME, with the extension
-absent or not yet loaded, or when no game window appears within 60 s, it falls back to the
-gpu-screen-recorder screen path. Window capture is the monitor's resolution with the window composited
-on it (exact for a fullscreen game).
+The capture module records the whole **screen** (`source = "screen"`, the default: gpu-screen-recorder's
+KMS capture of the session's output) or the game's **window** (`source = "window"`, per game). The
+window source needs GNOME and the `universe@ilyasturki.github.io` shell extension (shipped by the
+home-manager module, loaded after one logout): the module enables it, waits through it for the game's
+toplevel to be up (`window_wait_s`, gamescope's window stays hidden until the game draws), then runs
+gpu-screen-recorder on GNOME's screencast portal. The first launch of a game shows GNOME's picker —
+pick the game's window, which is on screen by then — and the portal's restore token is kept in
+`<data>/modules/capture/portal/<game id>`; GNOME restores the pick by the window's app id and title,
+so later launches record without a dialog. A cancelled picker records nothing. Off GNOME, with the
+extension absent or not yet loaded, or when no game window appears in time, the screen is recorded
+and the shell's OSD says so.
 
-Both paths read the same settings. `quality` is a preset (`medium`, `high`, `very_high`, `ultra`)
-mapped to QVBR on both encoders — constant quality up to a bitrate ceiling (`very_high`: 16 Mbps
-target, 32 Mbps ceiling, ~7-8 GB/h at 4K on AMD). `size` fits the video inside `WxH` at its own
-aspect, never upscaled (`native`: no scaling). `container` is `mkv` (survives a crash mid-session)
-or `mp4`; `audio_codec` is `opus`, `aac` or `flac`, `audio_bitrate` in kbps or `auto` for the
-encoder's default (`flac` is opus on the screen path, where gpu-screen-recorder has it disabled). `window_wait_s` bounds the wait for the game's window before the screen is
-recorded instead. Three config-scope keys, for `config.toml` or `universe module set capture
+`quality` is a preset (`medium`, `high`, `very_high`, `ultra`) mapped to QVBR — constant quality up
+to a bitrate ceiling (`very_high`: 16 Mbps target, 32 Mbps ceiling, ~7-8 GB/h at 4K on AMD).
+`size` fits the video inside `WxH` at its own aspect, never upscaled (`native`: no scaling).
+`container` is `mkv` (survives a crash mid-session) or `mp4`; `audio_codec` is `opus`, `aac` or
+`flac` (opus: gpu-screen-recorder has flac disabled), `audio_bitrate` in kbps or `auto` for the
+encoder's default. Two config-scope keys, for `config.toml` or `universe module set capture
 <key>=<value>` and never a settings row, replace what the presets choose: `ffmpeg_video_opts`
-(gpu-screen-recorder's `-ffmpeg-video-opts`, screen path), `va_encoder_opts` (`key=value …`
-properties of the VA encoder, window path) and `gsr_extra_args` (appended to the
-gpu-screen-recorder command, screen path). `-bm cbr` stays pinned on the screen path: it is the
-base the QVBR override needs.
+(gpu-screen-recorder's `-ffmpeg-video-opts`) and `gsr_extra_args` (appended to the command). `-bm
+cbr` stays pinned: it is the base the QVBR override needs.
 
 The module's `screenshot` hook grabs the frame in the shell through the extension
 (`org.universe.Windows.Screenshot(path, window, cursor)`): the focused window's client area with
@@ -377,7 +375,7 @@ that is not `*.json` are ignored, and `render_journal` only renders `written` en
 | `module_settings_json(module, game_id)` | `module_settings_json(…)` | `universe module settings <id> [game]` | global settings merged with the game's; `game_id=""` is global only |
 | `set_module_setting(module, game_id, key, value)` | `set_module_setting(…)` | `universe module set <id> k=v [--game g]` | validated against `[[settings]]`. `game_id=""` writes `config.toml [modules.<id>]`, otherwise `game.toml [modules.<id>]` |
 | `module_setting_choices(module, key)` | `module_setting_choices_json(…)` | — | the global setting's choices; a setting with `choices_exec` gets them from the module, live (see below) |
-| `doctor_json()` | `doctor_json()` | `universe doctor` | `[{check, ok, detail, module}]`: required binaries, `gsr-kms-server`, `jeepney` (importable by the interpreter `record-window` runs under, else window capture falls back to the screen), Proton, cursor extension, tokens, one `runner-<id>` check per runner a library game uses (its program resolved), `inputplumber` when an emulator wants it |
+| `doctor_json()` | `doctor_json()` | `universe doctor` | `[{check, ok, detail, module}]`: required binaries, `gsr-kms-server`, Proton, cursor extension, tokens, one `runner-<id>` check per runner a library game uses (its program resolved), `inputplumber` when an emulator wants it |
 
 A module entry is `{id, name, kind: [], version, dir, enabled, available, missing: [bin],
 hooks: {}, verbs: [], settings: [Setting], frontend_qml: "path or null"}`, and
@@ -506,16 +504,15 @@ proton-ge = "~/.local/share/lutris/runners/wine/proton-ge"
 enabled = ["gog", "capture", "journal"]
 
 [modules.capture]
-source = "window"                    # window (GNOME + the Universe shell extension) | screen (gpu-screen-recorder)
+source = "screen"                    # screen | window (GNOME's picker once per game, then remembered)
 codec = "av1_10bit"
 quality = "very_high"                # medium | high | very_high | ultra: QVBR on both paths
 size = "native"                      # or a WxH the video must fit in, e.g. 1920x1080
 container = "mkv"                    # mkv | mp4
 audio_codec = "opus"                 # opus | aac | flac
 audio_bitrate = "auto"               # kbps, or auto for the encoder's default
-window_wait_s = 60                   # then the screen is recorded instead
-# ffmpeg_video_opts = "rc_mode=CQP;qp=20"   # config-only: replaces the preset on the screen path
-# va_encoder_opts = "rate-control=cqp qp=30" # config-only: replaces the preset on the window path
+window_wait_s = 60                   # window source: wait for the game's window, then the screen is recorded instead
+# ffmpeg_video_opts = "rc_mode=CQP;qp=20"   # config-only: replaces the quality preset
 # gsr_extra_args = "-cr full -keyint 2"      # config-only: appended to gpu-screen-recorder
 
 [lutris]                             # what `universe migrate` reads

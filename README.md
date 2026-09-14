@@ -38,7 +38,7 @@ programs.universe = {
 };
 ```
 
-The home-manager module also installs Universe's GNOME Shell extension (window recording and in-shell screenshots for `capture`, the volume OSD for the controller macros); **log out once** to let GNOME load it (until then `capture` records the screen, screenshots come from gpu-screen-recorder without a flash, and the volume macros show nothing).
+The home-manager module also installs Universe's GNOME Shell extension (window recording and in-shell screenshots for `capture`, the volume OSD for the controller macros); **log out once** to let GNOME load it (until then `capture`'s window source records the screen, screenshots come from gpu-screen-recorder without a flash, and the volume macros show nothing).
 
 `settings = null` installs the packages and leaves `~/.config/universe/config.toml` to you: the core edits that file in place (`universe config set`, `universe module enable`, the UI's settings), which a symlink into the store refuses.
 
@@ -106,7 +106,7 @@ The spare buttons of a pad — the Edge's paddles and Fn buttons, the Elite's pa
 | Module | Kind | Needs | Notes |
 |---|---|---|---|
 | `gog` | source | `gogdl` | login via `universe gog login`; a dedicated `GOGDL_CONFIG_PATH` under the module's data dir |
-| `capture` | hooks | `gpu-screen-recorder` + its setcap `gsr-kms-server` (screen source); `gst-launch-1.0` + the `universe@ilyasturki.github.io` shell extension (window source, GNOME) | `source = "window"` (default) records just the game's window through Mutter's ScreenCast, dialog-free, following it across workspaces and occlusion; `source = "screen"` (or off GNOME / extension not loaded / no `jeepney` / no window in 60 s) falls back to KMS screen capture and says so on the shell's OSD. `cursor` per game; `fps = "auto"` follows the output's refresh rate (read from Mutter, 60 elsewhere) |
+| `capture` | hooks | `gpu-screen-recorder` + its setcap `gsr-kms-server`; the `universe@ilyasturki.github.io` shell extension for the window source (GNOME) | `source = "screen"` (default) records the session's output through KMS. `source = "window"` (per game) records just the game's window through GNOME's screencast portal: the first launch shows GNOME's picker once the game's window is up — pick it — and the pick is remembered per game, so later launches record it without a dialog and follow it across workspaces. Off GNOME, extension not loaded, or no window in 60 s: the screen, said on the shell's OSD. `cursor` per game; `fps = "auto"` follows the output's refresh rate (read from Mutter, 60 elsewhere) |
 | `journal` | hooks | `ffmpeg`, `codex` (or `provider = "claude"` / `"stub"`) | one Markdown entry per session from frames and screenshots |
 | metadata | core | SteamGridDB and RAWG keys in `[keys]` | artwork slots `box_front`, `square`, `banner`, `background`, `logo`, screenshots |
 | runners | core | the emulator on `PATH` (or `[runners.<id>] exe`); `inputplumber` for the pad option | `universe runner ls`; one doctor check per runner in use |

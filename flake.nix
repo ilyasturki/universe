@@ -52,7 +52,7 @@
       moduleNames = builtins.filter (n: builtins.pathExists (./modules + "/${n}/module.toml"))
         (builtins.attrNames (builtins.readDir ./modules));
 
-      modulePython = pkgs.python3.withPackages (ps: [ ps.jeepney ]);
+      modulePython = pkgs.python3;
 
       mkModule = name: pkgs.stdenvNoCC.mkDerivation {
         pname = "universe-module-${name}";
@@ -75,18 +75,6 @@
         paths = builtins.attrValues modulePkgs;
       };
 
-      # gst_all_1.gstreamer's default output is "bin"; its plugins live in "out".
-      gstPluginPath = lib.makeSearchPath "lib/gstreamer-1.0" (with pkgs; [
-        gst_all_1.gstreamer.out gst_all_1.gst-plugins-base gst_all_1.gst-plugins-good gst_all_1.gst-plugins-bad pipewire
-      ]);
-
-      # gst-launch with the window-capture plugins baked in, so the packaged capture
-      # module never depends on GST_PLUGIN_SYSTEM_PATH_1_0 being in the hook environment.
-      gstLaunch = pkgs.runCommand "universe-gst-launch" { nativeBuildInputs = [ pkgs.makeWrapper ]; } ''
-        makeWrapper ${lib.getBin pkgs.gst_all_1.gstreamer}/bin/gst-launch-1.0 $out/bin/gst-launch-1.0 \
-          --set GST_PLUGIN_SYSTEM_PATH_1_0 "${gstPluginPath}"
-      '';
-
       universe-shell-extension = pkgs.stdenvNoCC.mkDerivation {
         pname = "universe-shell-extension";
         inherit version;
@@ -103,7 +91,7 @@
       };
 
       # No gpu-screen-recorder here: it must match the host's setcap gsr-kms-server (nixos.nix pins that package).
-      moduleRuntime = with pkgs; [ gogdl ffmpeg trash-cli util-linux gstLaunch ];
+      moduleRuntime = with pkgs; [ gogdl ffmpeg trash-cli util-linux ];
 
       uiDesktopItem = pkgs.makeDesktopItem {
         name = "universe-ui";
@@ -178,7 +166,7 @@
       pytestModules = pkgs.stdenvNoCC.mkDerivation {
         name = "universe-pytest-modules";
         src = ./modules;
-        nativeBuildInputs = [ (pkgs.python3.withPackages (ps: [ ps.pytest ps.jeepney ])) ] ++ moduleRuntime;
+        nativeBuildInputs = [ (pkgs.python3.withPackages (ps: [ ps.pytest ])) ] ++ moduleRuntime;
         postPatch = "patchShebangs .";
         buildPhase = ''
           export HOME=$TMPDIR LC_ALL=C.UTF-8 TZ=Europe/Paris TZDIR=${pkgs.tzdata}/share/zoneinfo
@@ -203,13 +191,12 @@
       overlays.default = final: prev: { universe = universe; universe-ui = ui; universe-core = core; universe-modules = modulesPkg; };
 
       devShells.${system}.default = pkgs.mkShell {
-        packages = with pkgs; [ cargo rustc clippy rustfmt rust-analyzer pkg-config libpulseaudio ruff maturin (python3.withPackages (ps: [ ps.pyside6 ps.pysdl2 ps.qrcode ps.pytest ps.setuptools ps.jeepney ])) qt6.qtdeclarative qt6.qt5compat qt6.qtmultimedia qt6.qtsvg SDL2 ] ++ moduleRuntime;
+        packages = with pkgs; [ cargo rustc clippy rustfmt rust-analyzer pkg-config libpulseaudio ruff maturin (python3.withPackages (ps: [ ps.pyside6 ps.pysdl2 ps.qrcode ps.pytest ps.setuptools ])) qt6.qtdeclarative qt6.qt5compat qt6.qtmultimedia qt6.qtsvg SDL2 ] ++ moduleRuntime;
         shellHook = ''
           export UNIVERSE_MODULES_PATH="$PWD/modules"
           export QML2_IMPORT_PATH="${pkgs.qt6.qtdeclarative}/lib/qt-6/qml:${pkgs.qt6.qt5compat}/lib/qt-6/qml:${pkgs.qt6.qtmultimedia}/lib/qt-6/qml"
           export QT_PLUGIN_PATH="${pkgs.qt6.qtsvg}/lib/qt-6/plugins:${pkgs.qt6.qtmultimedia}/lib/qt-6/plugins"
           export LD_LIBRARY_PATH="${lib.makeLibraryPath [ pkgs.pipewire ]}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
-          export GST_PLUGIN_SYSTEM_PATH_1_0="${gstPluginPath}"
           export QT_FORCE_STDERR_LOGGING=1
         '';
       };

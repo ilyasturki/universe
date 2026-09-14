@@ -1,5 +1,4 @@
 """Shared helpers for capture module hooks. Not a hook itself."""
-import glob
 import json
 import os
 import re
@@ -22,24 +21,12 @@ DEFAULT_QUALITY = "very_high"
 EXTENSION_UUID = "universe@ilyasturki.github.io"
 WINDOWS_BUS_NAME = "org.universe.Windows"
 
-# org.gnome.Mutter.ScreenCast RecordWindow cursor-mode (meta-screen-cast.h)
-CURSOR_HIDDEN = 0
-CURSOR_EMBEDDED = 1
-
-# codec setting -> (VA GStreamer encoder, raw format vapostproc must output)
-VA_ENCODERS = {
-    "av1_10bit": ("vaav1enc", "P010_10LE"),
-    "av1": ("vaav1enc", "NV12"),
-    "hevc": ("vah265enc", "NV12"),
-    "h264": ("vah264enc", "NV12"),
-}
-VA_PARSERS = {"vaav1enc": "av1parse", "vah265enc": "h265parse", "vah264enc": "h264parse"}
-GST_MUXERS = {"mkv": "matroskamux", "mp4": "mp4mux"}
-GST_AUDIO_ENCODERS = {"opus": "opusenc", "aac": "fdkaacenc", "flac": "flacenc"}
+CONTAINERS = ("mkv", "mp4")
+AUDIO_CODECS = ("opus", "aac", "flac")
 
 SETTINGS_DEFAULTS = {
     "enabled": True,
-    "source": "window",
+    "source": "screen",
     "cursor": False,
     "codec": "av1_10bit",
     "quality": DEFAULT_QUALITY,
@@ -52,7 +39,6 @@ SETTINGS_DEFAULTS = {
     "min_duration_s": 240,
     "window_wait_s": 60,
     "ffmpeg_video_opts": "",
-    "va_encoder_opts": "",
     "gsr_extra_args": "",
 }
 
@@ -163,7 +149,7 @@ def ffmpeg_video_opts(settings):
 
 def container_ext(settings):
     ext = settings.get("container") or "mkv"
-    if ext not in GST_MUXERS:
+    if ext not in CONTAINERS:
         log(f"unknown container {ext!r}, using mkv")
         return "mkv"
     return ext
@@ -182,7 +168,7 @@ def size_limit(settings):
 
 def audio_codec(settings):
     codec = settings.get("audio_codec") or "opus"
-    if codec not in GST_AUDIO_ENCODERS:
+    if codec not in AUDIO_CODECS:
         log(f"unknown audio codec {codec!r}, using opus")
         return "opus"
     return codec
@@ -209,8 +195,9 @@ def gsr_extra_args(settings):
         return []
 
 
-def gsr_args(settings, screen, output_path):
-    """The gpu-screen-recorder argv (no systemd-run wrapper) — the screen-capture path."""
+def gsr_args(settings, screen, output_path, token_path=None):
+    """The gpu-screen-recorder argv (no systemd-run wrapper): the screen, or the game's window through the
+    GNOME picker with `token_path` remembering the pick for the game's next launches."""
     cursor = "yes" if settings.get("cursor") else "no"
     fps = str(resolve_fps(settings.get("fps", 60), screen))
     codec = settings.get("codec", "av1_10bit")
@@ -219,11 +206,15 @@ def gsr_args(settings, screen, output_path):
     ac = audio_codec(settings)
     if ac == "flac":
         # gpu-screen-recorder's man page: "FLAC temporarily disabled".
-        log("flac is disabled in gpu-screen-recorder, using opus for the screen path")
+        log("flac is disabled in gpu-screen-recorder, using opus")
         ac = "opus"
+    if token_path:
+        target = ["-w", "portal", "-restore-portal-session", "yes", "-portal-session-token-filepath", token_path]
+    else:
+        target = ["-w", screen]
     return [
         "gpu-screen-recorder",
-        "-w", screen,
+        *target,
         "-cursor", cursor,
         "-f", fps,
         "-fm", "vfr",
@@ -241,79 +232,6 @@ def gsr_args(settings, screen, output_path):
         *gsr_extra_args(settings),
         "-o", output_path,
     ]
-
-
-def cursor_mode(settings):
-    return CURSOR_EMBEDDED if settings.get("cursor") else CURSOR_HIDDEN
-
-
-def va_encoder_props(settings):
-    """The VA encoder's rate-control properties: the raw override, else the preset's QVBR."""
-    raw = settings.get("va_encoder_opts") or ""
-    if raw:
-        return raw.split()
-    q, target, ceiling = _quality_factor(settings)
-    return ["rate-control=qvbr", f"qp={q}", f"bitrate={ceiling}", f"target-percentage={target * 100 // ceiling}"]
-
-
-def gst_audio_encoder(settings):
-    codec = audio_codec(settings)
-    bitrate = audio_bitrate_kbps(settings)
-    encoder = [GST_AUDIO_ENCODERS[codec]]
-    if bitrate is not None and codec != "flac":
-        encoder.append(f"bitrate={bitrate * 1000}")
-    return encoder
-
-
-def audio_gst_branches(settings):
-    setting = settings.get("audio")
-    if setting == "none":
-        return []
-    if setting == "output":
-        devices = ["@DEFAULT_MONITOR@"]
-    else:
-        if setting != "output+input":
-            log(f"unknown audio setting {setting!r}, using output+input")
-        devices = ["@DEFAULT_MONITOR@", "@DEFAULT_SOURCE@"]
-    branch = []
-    for device in devices:
-        branch += [
-            "pulsesrc", f"device={device}", "do-timestamp=true", "!",
-            "audioconvert", "!", "audioresample", "!", "audio/x-raw,channels=2", "!",
-            *gst_audio_encoder(settings), "!", "queue", "!", "mux.",
-        ]
-    return branch
-
-
-def gst_window_args(node_id, settings, fps, output_path):
-    """gst-launch argv that encodes a PipeWire window node to the container. fps None keeps the source rate."""
-    codec = settings.get("codec", "av1_10bit")
-    if codec not in VA_ENCODERS:
-        log(f"unknown codec {codec!r}, using av1_10bit")
-        codec = "av1_10bit"
-    encoder, fmt = VA_ENCODERS[codec]
-    parser = VA_PARSERS[encoder]
-    args = [
-        "gst-launch-1.0", "-e",
-        "pipewiresrc", f"path={node_id}", "do-timestamp=true", "!",
-        "video/x-raw(ANY)", "!", "queue", "!",
-    ]
-    if fps is not None:
-        args += ["videorate", "drop-only=true", f"max-rate={fps}", "!"]
-    caps = f"video/x-raw(memory:VAMemory),format={fmt}"
-    size = size_limit(settings)
-    if size:
-        # A range fits the frame inside WxH at its own aspect, never upscaled — gsr's -s.
-        caps += f",width=[1,{size[0]}],height=[1,{size[1]}],pixel-aspect-ratio=1/1"
-    args += [
-        "vapostproc", "!", caps, "!",
-        encoder, *va_encoder_props(settings), "!",
-        parser, "!", "queue", "!",
-        GST_MUXERS[container_ext(settings)], "name=mux", "!",
-        "filesink", f"location={output_path}",
-    ]
-    args += audio_gst_branches(settings)
-    return args
 
 
 def unit_cgroup(unit):
@@ -351,24 +269,40 @@ def output_path(pending_dir, session_id, settings):
     return os.path.join(pending_dir, f"{session_id}.{container_ext(settings)}")
 
 
-def segment_path(pending_dir, session_id, index, settings):
-    return os.path.join(pending_dir, f"{session_id}-{index}.{container_ext(settings)}")
+def list_windows():
+    """The shell's toplevels through the universe extension (org.universe.Windows.List); [] when it does not answer."""
+    try:
+        out = subprocess.run(
+            ["busctl", "--user", "--json=short", "call", WINDOWS_BUS_NAME, "/org/universe/Windows", WINDOWS_BUS_NAME, "List"],
+            capture_output=True, text=True, check=True, timeout=5,
+        ).stdout
+        return json.loads(json.loads(out)["data"][0])
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, IndexError, TypeError):
+        return []
 
 
-def _segment_index(session_id, path):
-    m = re.search(rf"{re.escape(session_id)}-(\d+)\.(mkv|mp4)$", os.path.basename(path))
-    return int(m.group(1)) if m else -1
+def pick_window(windows, unit_cg):
+    """The largest visible toplevel of the game's cgroup, else None."""
+    mine = [w for w in windows
+            if not w.get("hidden") and not w.get("minimized") and w.get("pid") and pid_in_unit(w["pid"], unit_cg)]
+    return max(mine, key=lambda w: w.get("width", 0) * w.get("height", 0), default=None)
 
 
-def segment_paths(pending_dir, session_id):
-    found = glob.glob(os.path.join(pending_dir, f"{session_id}-*.m*"))
-    numbered = [p for p in found if _segment_index(session_id, p) >= 0]
-    return sorted(numbered, key=lambda p: _segment_index(session_id, p))
+def wait_for_window(unit_cg, wait_s, poll_s=0.5):
+    deadline = time.monotonic() + wait_s
+    while True:
+        w = pick_window(list_windows(), unit_cg)
+        if w or time.monotonic() >= deadline:
+            return w
+        time.sleep(poll_s)
 
 
-def concat_list_lines(paths):
-    # ffmpeg concat demuxer: one `file '<abs path>'` per line, single quotes escaped.
-    return [f"file '{os.path.abspath(p).replace(chr(39), chr(39) + chr(92) + chr(39) + chr(39))}'" for p in paths]
+def window_wait_s(settings):
+    try:
+        return max(0, int(settings.get("window_wait_s", SETTINGS_DEFAULTS["window_wait_s"])))
+    except (TypeError, ValueError):
+        log(f"window_wait_s {settings.get('window_wait_s')!r} is not a number, using {SETTINGS_DEFAULTS['window_wait_s']}")
+        return SETTINGS_DEFAULTS["window_wait_s"]
 
 
 def extension_installed(uuid=EXTENSION_UUID):
@@ -390,6 +324,26 @@ def enable_extension(uuid=EXTENSION_UUID):
          "/org/gnome/Shell/Extensions", "org.gnome.Shell.Extensions", "EnableExtension", "s", uuid],
         capture_output=True, text=True,
     )
+
+
+def extension_ready():
+    """Whether org.universe.Windows answers: one bus round-trip when it is up; the enable and its wait otherwise
+    (EnableExtension runs enable() asynchronously in the shell, so the name can lag the call)."""
+    if not is_gnome():
+        return False
+    if not extension_installed():
+        log(f"{EXTENSION_UUID} not installed")
+        return False
+    if bus_name_has_owner(WINDOWS_BUS_NAME):
+        return True
+    enable_extension()
+    deadline = time.monotonic() + 3
+    while not bus_name_has_owner(WINDOWS_BUS_NAME):
+        if time.monotonic() > deadline:
+            log(f"{EXTENSION_UUID} installed but not loaded (log out once to load it)")
+            return False
+        time.sleep(0.25)
+    return True
 
 
 def show_osd(label, icon="video-display-symbolic"):
@@ -416,20 +370,6 @@ def write_companion(pending_dir, session_id, unit, path, mode):
             "mode": mode,
             "started_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         }, f)
-
-
-def set_companion_mode(pending_dir, session_id, mode, reason):
-    """Corrects the mode start wrote when record-window ends up recording the screen."""
-    path = companion_path(pending_dir, session_id)
-    try:
-        with open(path) as f:
-            data = json.load(f)
-    except (OSError, ValueError):
-        return
-    data["mode"] = mode
-    data["fallback"] = reason
-    with open(path, "w") as f:
-        json.dump(data, f)
 
 
 def bus_name_has_owner(name):

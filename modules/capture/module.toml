@@ -6,7 +6,7 @@ version = "0.0.1"
 
 [requires]
 core = "=0.0.1"
-bins = ["gpu-screen-recorder", "gst-launch-1.0"]
+bins = ["gpu-screen-recorder"]
 
 [hooks]
 post-launch = "bin/start"
@@ -28,10 +28,10 @@ scope = "game"
 [[settings]]
 key = "source"
 type = "enum"
-default = "window"
-label = "Capture"
+default = "screen"
+label = "Capture (window: picked once in GNOME's dialog)"
 scope = "game"
-choices = ["window", "screen"]
+choices = ["screen", "window"]
 
 [[settings]]
 key = "cursor"
@@ -115,7 +115,7 @@ scope = "global"
 key = "window_wait_s"
 type = "int"
 default = 60
-label = "Wait for the game's window (s), then record the screen"
+label = "Wait for the game's window (s) before the pick, then record the screen"
 scope = "global"
 
 # config scope: config.toml / `universe module set` only, no settings row — raw knobs for the tweaker.
@@ -123,19 +123,12 @@ scope = "global"
 key = "ffmpeg_video_opts"
 type = "string"
 default = ""
-label = "gpu-screen-recorder -ffmpeg-video-opts, replacing the quality preset (screen capture)"
-scope = "config"
-
-[[settings]]
-key = "va_encoder_opts"
-type = "string"
-default = ""
-label = "VA encoder properties (key=value …), replacing the quality preset (window capture)"
+label = "gpu-screen-recorder -ffmpeg-video-opts, replacing the quality preset"
 scope = "config"
 
 [[settings]]
 key = "gsr_extra_args"
 type = "string"
 default = ""
-label = "Extra gpu-screen-recorder arguments (screen capture)"
+label = "Extra gpu-screen-recorder arguments"
 scope = "config"
