@@ -126,13 +126,14 @@ when it was killed by a signal (a `stop`).
 
 ### Gamescope
 
-Every runner's command runs inside gamescope by default: `gamescope -f -W <screen width>
--H <screen height> -w <game width> -h <game height> -r <refresh> [-S scaler] [-F filter]
+Every runner's command runs inside gamescope by default: `gamescope -f --force-composition
+-W <screen width> -H <screen height> -w <game width> -h <game height> -r <refresh> [-S scaler] [-F filter]
 [--sharpness N] [--framerate-limit N] [--adaptive-sync] [launch.gamescope_args] [the game's
 gamescope_args] [--mangoapp] -- <program> <args…>`. One window, black until the game draws,
-whatever the game, Proton or umu put up first, and the launcher hands over on that window. Left
-to itself gamescope's nested screen
-is 1280×720 whatever the window covers, so the session screen's mode is passed explicitly: the
+whatever the game, Proton or umu put up first, and the launcher hands over on that window.
+`--force-composition` keeps gamescope drawing its own frame instead of scanning the game's buffer
+out directly: Mutter's window screencast (what `capture` records) blits a scanned-out buffer as one
+flat colour. Left to itself gamescope's nested screen is 1280×720 whatever the window covers, so the session screen's mode is passed explicitly: the
 output (`-W -H`) is always the screen, and the game's resolution and refresh follow it unless set.
 The mode is the connector's `is-current` one from Mutter's DisplayConfig (`GetCurrentState`,
 physical pixels — gamescope handles the desktop's scale itself), else its preferred DRM mode
