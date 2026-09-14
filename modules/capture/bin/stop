@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """session-end hook (blocking, short): stops the recorder, files or trashes the mkv."""
+import json
 import os
 import shutil
 import subprocess
@@ -7,13 +8,23 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import log, load_settings, universe_bin, segment_paths, concat_list_lines  # noqa: E402
+from _common import log, load_settings, universe_bin, output_path, segment_paths, concat_list_lines  # noqa: E402
 
 STABLE_WINDOW_S = 15
 
 
+def recording_path(pending_dir, session_id, settings):
+    """The path start wrote in the companion; the settings' own if there is none."""
+    try:
+        with open(os.path.join(pending_dir, f"{session_id}.json")) as f:
+            path = json.load(f).get("output")
+    except (OSError, ValueError):
+        path = None
+    return path or output_path(pending_dir, session_id, settings)
+
+
 def consolidate_segments(pending_dir, session_id, path):
-    """window mode writes <sid>-N.mkv; join them into <sid>.mkv. No-op for the gsr path."""
+    """window mode writes <sid>-N.<ext>; join them into <sid>.<ext>. No-op for the gsr path."""
     segments = segment_paths(pending_dir, session_id)
     if not segments:
         return
@@ -87,7 +98,7 @@ def main():
 
     data_dir = os.environ["MODULE_DATA_DIR"]
     pending_dir = os.path.join(data_dir, "pending")
-    path = os.path.join(pending_dir, f"{session_id}.mkv")
+    path = recording_path(pending_dir, session_id, settings)
 
     stop_unit(f"universe-capture-{session_id}.service")
     consolidate_segments(pending_dir, session_id, path)

@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 use crate::game::Game;
 use crate::sessions::{self, Session};
 
-/// `NNN-YYYYMMDD-HHMMSS-<dur>.mkv` (process-game-recording.mjs) or `<session>.mkv`.
+/// `NNN-YYYYMMDD-HHMMSS-<dur>.mkv` (process-game-recording.mjs) or `<session>.mkv` / `.mp4`.
 pub fn parse_name(name: &str) -> Option<(String, u64)> {
-    let stem = name.strip_suffix(".mkv")?;
+    let stem = name.strip_suffix(".mkv").or_else(|| name.strip_suffix(".mp4"))?;
     let parts: Vec<&str> = stem.split('-').collect();
     match parts.len() {
         2 if parts[0].len() == 8 && parts[1].len() == 6 => Some((stem.to_string(), 0)),
@@ -51,13 +51,13 @@ fn session_times(session: &str, duration_s: u64) -> (String, String) {
     }
 }
 
-/// One `import-recording` session per mkv not yet referenced (plan §7); returns how many were added.
+/// One `import-recording` session per mkv or mp4 not yet referenced (plan §7); returns how many were added.
 pub fn import_existing(game: &Game, recordings_root: &Path) -> crate::Result<usize> {
     let dir = recordings_root.join(&game.id);
     let Ok(rd) = std::fs::read_dir(&dir) else { return Ok(0) };
     let existing = sessions::read(&game.sessions_path())?;
     let mut added = 0;
-    let mut files: Vec<PathBuf> = rd.flatten().map(|e| e.path()).filter(|p| p.extension().and_then(|s| s.to_str()) == Some("mkv")).collect();
+    let mut files: Vec<PathBuf> = rd.flatten().map(|e| e.path()).filter(|p| matches!(p.extension().and_then(|s| s.to_str()), Some("mkv" | "mp4"))).collect();
     files.sort();
     for p in files {
         let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
@@ -123,6 +123,7 @@ mod tests {
     fn names_and_durations() {
         assert_eq!(parse_name("004-20241216-015858-1h5m.mkv"), Some(("20241216-015858".into(), 3900)));
         assert_eq!(parse_name("20260911-120000.mkv"), Some(("20260911-120000".into(), 0)));
+        assert_eq!(parse_name("20260911-120000.mp4"), Some(("20260911-120000".into(), 0)));
         assert_eq!(parse_name("clip.mkv"), None);
         assert_eq!(parse_duration("12m30s"), 750);
     }

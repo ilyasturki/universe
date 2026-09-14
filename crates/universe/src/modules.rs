@@ -466,9 +466,14 @@ key = "model"
 type = "string"
 default = "m"
 choices_exec = "bin/choices"
+[[settings]]
+key = "gsr_extra_args"
+type = "string"
+default = ""
+scope = "config"
 "#).unwrap();
         let module = Module { available: false, missing: vec!["x".into()], enabled: true, dir: PathBuf::from("/m"), manifest: m };
-        let cfg: Config = toml::from_str("[modules.capture]\ncodec = \"hevc\"").unwrap();
+        let cfg: Config = toml::from_str("[modules.capture]\ncodec = \"hevc\"\ngsr_extra_args = \"-cr full\"").unwrap();
         let mut g = crate::game::Game::new("X");
         g.modules.insert("capture".into(), toml::from_str("cursor = true").unwrap());
         let merged = module.merged_settings(&cfg, Some(&g));
@@ -482,6 +487,10 @@ choices_exec = "bin/choices"
         assert!(module.validate_setting("fps", "144", false).is_ok());
         assert!(module.validate_setting("fps", "auto", false).is_ok());
         assert!(module.validate_setting("fps", "fast", false).is_err());
+        // config scope: settable globally, never per game, and reaches the hooks like any other.
+        assert_eq!(merged["gsr_extra_args"], "-cr full");
+        assert!(module.validate_setting("gsr_extra_args", "-keyint 2", false).is_ok());
+        assert!(module.validate_setting("gsr_extra_args", "-keyint 2", true).is_err());
         assert_eq!(module.timeout(), Duration::from_secs(5));
         assert_eq!(module.hook("post-launch"), Some(PathBuf::from("/m/bin/start")));
         let j = module.to_json();

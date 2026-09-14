@@ -49,12 +49,36 @@ scope = "global"
 choices = ["av1_10bit", "av1", "hevc", "h264"]
 
 [[settings]]
+key = "quality"
+type = "enum"
+default = "very_high"
+label = "Quality (constant, up to a size ceiling)"
+scope = "global"
+choices = ["medium", "high", "very_high", "ultra"]
+
+[[settings]]
 key = "fps"
 type = "int"
 default = 60
 label = "Frame rate (auto: the screen's)"
 scope = "global"
 choices = ["auto", "120", "90", "60", "30"]
+
+[[settings]]
+key = "size"
+type = "string"
+default = "native"
+label = "Fit the video in (native: no scaling)"
+scope = "global"
+choices = ["native", "3840x2160", "2560x1440", "1920x1080"]
+
+[[settings]]
+key = "container"
+type = "enum"
+default = "mkv"
+label = "Container (mkv survives a crash, mp4 plays anywhere)"
+scope = "global"
+choices = ["mkv", "mp4"]
 
 [[settings]]
 key = "audio"
@@ -65,6 +89,22 @@ scope = "global"
 choices = ["output", "output+input", "none"]
 
 [[settings]]
+key = "audio_codec"
+type = "enum"
+default = "opus"
+label = "Audio codec"
+scope = "global"
+choices = ["opus", "aac", "flac"]
+
+[[settings]]
+key = "audio_bitrate"
+type = "int"
+default = "auto"
+label = "Audio bitrate (kbps)"
+scope = "global"
+choices = ["auto", "96", "128", "160", "192", "256", "320"]
+
+[[settings]]
 key = "min_duration_s"
 type = "int"
 default = 240
@@ -72,9 +112,30 @@ label = "Minimum duration kept (s)"
 scope = "global"
 
 [[settings]]
-key = "quality"
-type = "string"
-default = "qvbr"
-label = "Quality (qvbr, or raw ffmpeg video options)"
+key = "window_wait_s"
+type = "int"
+default = 60
+label = "Wait for the game's window (s), then record the screen"
 scope = "global"
-choices = ["qvbr"]
+
+# config scope: config.toml / `universe module set` only, no settings row — raw knobs for the tweaker.
+[[settings]]
+key = "ffmpeg_video_opts"
+type = "string"
+default = ""
+label = "gpu-screen-recorder -ffmpeg-video-opts, replacing the quality preset (screen capture)"
+scope = "config"
+
+[[settings]]
+key = "va_encoder_opts"
+type = "string"
+default = ""
+label = "VA encoder properties (key=value …), replacing the quality preset (window capture)"
+scope = "config"
+
+[[settings]]
+key = "gsr_extra_args"
+type = "string"
+default = ""
+label = "Extra gpu-screen-recorder arguments (screen capture)"
+scope = "config"

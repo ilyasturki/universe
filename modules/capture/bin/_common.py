@@ -3,12 +3,20 @@ import glob
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 
-# Overridden by GSR's -ffmpeg-video-opts last, right before avcodec_open2, so
-# these keys win over GSR's own choices even though -bm cbr is also set.
-QVBR_OPTS = "rc_mode=QVBR;global_quality=95;b=16000000;maxrate=32000000;bufsize=64000000"
+# quality preset -> (AV1 quality factor 0-255, H.26x quality factor 0-51, target kbps, ceiling kbps).
+# QVBR on both backends: constant quality up to the ceiling; very_high is the measured
+# ~7-8 GB/h AMD configuration (uncapped vbr peaked at 420 Mbps, 18-21 GB/h).
+QUALITY_PRESETS = {
+    "medium": (150, 32, 6000, 12000),
+    "high": (120, 27, 10000, 20000),
+    "very_high": (95, 22, 16000, 32000),
+    "ultra": (70, 17, 24000, 48000),
+}
+DEFAULT_QUALITY = "very_high"
 
 EXTENSION_UUID = "universe@ilyasturki.github.io"
 WINDOWS_BUS_NAME = "org.universe.Windows"
@@ -25,16 +33,26 @@ VA_ENCODERS = {
     "h264": ("vah264enc", "NV12"),
 }
 VA_PARSERS = {"vaav1enc": "av1parse", "vah265enc": "h265parse", "vah264enc": "h264parse"}
+GST_MUXERS = {"mkv": "matroskamux", "mp4": "mp4mux"}
+GST_AUDIO_ENCODERS = {"opus": "opusenc", "aac": "fdkaacenc", "flac": "flacenc"}
 
 SETTINGS_DEFAULTS = {
     "enabled": True,
     "source": "window",
     "cursor": False,
     "codec": "av1_10bit",
+    "quality": DEFAULT_QUALITY,
     "fps": 60,
+    "size": "native",
+    "container": "mkv",
     "audio": "output+input",
+    "audio_codec": "opus",
+    "audio_bitrate": "auto",
     "min_duration_s": 240,
-    "quality": "qvbr",
+    "window_wait_s": 60,
+    "ffmpeg_video_opts": "",
+    "va_encoder_opts": "",
+    "gsr_extra_args": "",
 }
 
 
@@ -114,10 +132,80 @@ def audio_args(setting):
     return ["-a", "default_output", "-a", "default_input"]
 
 
-def quality_opts(setting):
-    if not setting or setting == "qvbr":
-        return QVBR_OPTS
-    return setting
+def quality_preset(setting):
+    """The preset a `quality` value names; "qvbr" (the old default) and an unknown name are the default."""
+    if setting in QUALITY_PRESETS:
+        return setting
+    if setting and setting != "qvbr":
+        log(f"unknown quality {setting!r}, using {DEFAULT_QUALITY}")
+    return DEFAULT_QUALITY
+
+
+def _quality_factor(settings):
+    q_av1, q_h26x, target, ceiling = QUALITY_PRESETS[quality_preset(settings.get("quality"))]
+    q = q_av1 if str(settings.get("codec", "av1_10bit")).startswith("av1") else q_h26x
+    return q, target, ceiling
+
+
+def ffmpeg_video_opts(settings):
+    """The -ffmpeg-video-opts string: the raw override, a raw legacy `quality`, else the preset's QVBR."""
+    raw = settings.get("ffmpeg_video_opts") or ""
+    quality = str(settings.get("quality") or "")
+    if not raw and "=" in quality:
+        raw = quality
+    if raw:
+        return raw
+    q, target, ceiling = _quality_factor(settings)
+    # Merged last, right before avcodec_open2, so rc_mode wins over -bm cbr and b over -q.
+    return f"rc_mode=QVBR;global_quality={q};b={target * 1000};maxrate={ceiling * 1000};bufsize={ceiling * 2000}"
+
+
+def container_ext(settings):
+    ext = settings.get("container") or "mkv"
+    if ext not in GST_MUXERS:
+        log(f"unknown container {ext!r}, using mkv")
+        return "mkv"
+    return ext
+
+
+def size_limit(settings):
+    """(W, H) the output must fit in, None for the source's own size."""
+    raw = str(settings.get("size") or "native").strip().lower()
+    m = re.fullmatch(r"(\d+)x(\d+)", raw)
+    if not m or "0" in m.groups():
+        if raw not in ("native", "0x0"):
+            log(f"size {raw!r} is not WxH, recording at the source's size")
+        return None
+    return int(m.group(1)), int(m.group(2))
+
+
+def audio_codec(settings):
+    codec = settings.get("audio_codec") or "opus"
+    if codec not in GST_AUDIO_ENCODERS:
+        log(f"unknown audio codec {codec!r}, using opus")
+        return "opus"
+    return codec
+
+
+def audio_bitrate_kbps(settings):
+    """The audio bitrate in kbps, None for the encoder's own default."""
+    raw = settings.get("audio_bitrate", "auto")
+    if raw in ("auto", "", None, 0, "0"):
+        return None
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        log(f"audio bitrate {raw!r} is not a number, using the encoder's default")
+        return None
+
+
+def gsr_extra_args(settings):
+    raw = settings.get("gsr_extra_args") or ""
+    try:
+        return shlex.split(raw)
+    except ValueError as e:
+        log(f"gsr_extra_args unparsable ({e}), ignored")
+        return []
 
 
 def gsr_args(settings, screen, output_path):
@@ -125,20 +213,31 @@ def gsr_args(settings, screen, output_path):
     cursor = "yes" if settings.get("cursor") else "no"
     fps = str(resolve_fps(settings.get("fps", 60), screen))
     codec = settings.get("codec", "av1_10bit")
+    size = size_limit(settings)
+    bitrate = audio_bitrate_kbps(settings)
+    ac = audio_codec(settings)
+    if ac == "flac":
+        # gpu-screen-recorder's man page: "FLAC temporarily disabled".
+        log("flac is disabled in gpu-screen-recorder, using opus for the screen path")
+        ac = "opus"
     return [
         "gpu-screen-recorder",
         "-w", screen,
         "-cursor", cursor,
         "-f", fps,
         "-fm", "vfr",
-        "-c", "mkv",
+        "-c", container_ext(settings),
+        *(["-s", f"{size[0]}x{size[1]}"] if size else []),
         "-k", codec,
-        "-ac", "opus",
+        "-ac", ac,
+        *(["-ab", str(bitrate)] if bitrate is not None else []),
         "-tune", "quality",
+        # cbr is the base the QVBR override needs: gsr's vbr branch pins qmin = qmax.
         "-bm", "cbr",
         "-q", "20000",
         *audio_args(settings.get("audio")),
-        "-ffmpeg-video-opts", quality_opts(settings.get("quality")),
+        "-ffmpeg-video-opts", ffmpeg_video_opts(settings),
+        *gsr_extra_args(settings),
         "-o", output_path,
     ]
 
@@ -147,14 +246,26 @@ def cursor_mode(settings):
     return CURSOR_EMBEDDED if settings.get("cursor") else CURSOR_HIDDEN
 
 
-def va_rate_control_args(quality):
-    # VA encoders take no ffmpeg -ffmpeg-video-opts string; a raw value is dropped.
-    if quality and quality != "qvbr":
-        log(f"quality {quality!r} is a raw ffmpeg string, ignored for window capture; using qvbr")
-    return ["rate-control=vbr", "bitrate=16000", "target-percentage=50"]
+def va_encoder_props(settings):
+    """The VA encoder's rate-control properties: the raw override, else the preset's QVBR."""
+    raw = settings.get("va_encoder_opts") or ""
+    if raw:
+        return raw.split()
+    q, target, ceiling = _quality_factor(settings)
+    return ["rate-control=qvbr", f"qp={q}", f"bitrate={ceiling}", f"target-percentage={target * 100 // ceiling}"]
 
 
-def audio_gst_branches(setting):
+def gst_audio_encoder(settings):
+    codec = audio_codec(settings)
+    bitrate = audio_bitrate_kbps(settings)
+    encoder = [GST_AUDIO_ENCODERS[codec]]
+    if bitrate is not None and codec != "flac":
+        encoder.append(f"bitrate={bitrate * 1000}")
+    return encoder
+
+
+def audio_gst_branches(settings):
+    setting = settings.get("audio")
     if setting == "none":
         return []
     if setting == "output":
@@ -168,13 +279,13 @@ def audio_gst_branches(setting):
         branch += [
             "pulsesrc", f"device={device}", "do-timestamp=true", "!",
             "audioconvert", "!", "audioresample", "!", "audio/x-raw,channels=2", "!",
-            "opusenc", "!", "queue", "!", "mux.",
+            *gst_audio_encoder(settings), "!", "queue", "!", "mux.",
         ]
     return branch
 
 
 def gst_window_args(node_id, settings, fps, output_path):
-    """gst-launch argv that encodes a PipeWire window node to mkv. fps None keeps the source rate."""
+    """gst-launch argv that encodes a PipeWire window node to the container. fps None keeps the source rate."""
     codec = settings.get("codec", "av1_10bit")
     if codec not in VA_ENCODERS:
         log(f"unknown codec {codec!r}, using av1_10bit")
@@ -188,14 +299,19 @@ def gst_window_args(node_id, settings, fps, output_path):
     ]
     if fps is not None:
         args += ["videorate", "drop-only=true", f"max-rate={fps}", "!"]
+    caps = f"video/x-raw(memory:VAMemory),format={fmt}"
+    size = size_limit(settings)
+    if size:
+        # A range fits the frame inside WxH at its own aspect, never upscaled — gsr's -s.
+        caps += f",width=[1,{size[0]}],height=[1,{size[1]}],pixel-aspect-ratio=1/1"
     args += [
-        "vapostproc", "!", f"video/x-raw(memory:VAMemory),format={fmt}", "!",
-        encoder, *va_rate_control_args(settings.get("quality")), "!",
+        "vapostproc", "!", caps, "!",
+        encoder, *va_encoder_props(settings), "!",
         parser, "!", "queue", "!",
-        "matroskamux", "name=mux", "!",
+        GST_MUXERS[container_ext(settings)], "name=mux", "!",
         "filesink", f"location={output_path}",
     ]
-    args += audio_gst_branches(settings.get("audio"))
+    args += audio_gst_branches(settings)
     return args
 
 
@@ -230,17 +346,21 @@ def pid_in_unit(pid, unit_cg):
     return cgroup_matches(text, unit_cg)
 
 
-def segment_path(pending_dir, session_id, index):
-    return os.path.join(pending_dir, f"{session_id}-{index}.mkv")
+def output_path(pending_dir, session_id, settings):
+    return os.path.join(pending_dir, f"{session_id}.{container_ext(settings)}")
+
+
+def segment_path(pending_dir, session_id, index, settings):
+    return os.path.join(pending_dir, f"{session_id}-{index}.{container_ext(settings)}")
 
 
 def _segment_index(session_id, path):
-    m = re.search(rf"{re.escape(session_id)}-(\d+)\.mkv$", os.path.basename(path))
+    m = re.search(rf"{re.escape(session_id)}-(\d+)\.(mkv|mp4)$", os.path.basename(path))
     return int(m.group(1)) if m else -1
 
 
 def segment_paths(pending_dir, session_id):
-    found = glob.glob(os.path.join(pending_dir, f"{session_id}-*.mkv"))
+    found = glob.glob(os.path.join(pending_dir, f"{session_id}-*.m*"))
     numbered = [p for p in found if _segment_index(session_id, p) >= 0]
     return sorted(numbered, key=lambda p: _segment_index(session_id, p))
 

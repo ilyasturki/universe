@@ -235,6 +235,19 @@ absent or not yet loaded, or when no game window appears within 60 s, it falls b
 gpu-screen-recorder screen path. Window capture is the monitor's resolution with the window composited
 on it (exact for a fullscreen game).
 
+Both paths read the same settings. `quality` is a preset (`medium`, `high`, `very_high`, `ultra`)
+mapped to QVBR on both encoders — constant quality up to a bitrate ceiling (`very_high`: 16 Mbps
+target, 32 Mbps ceiling, ~7-8 GB/h at 4K on AMD). `size` fits the video inside `WxH` at its own
+aspect, never upscaled (`native`: no scaling). `container` is `mkv` (survives a crash mid-session)
+or `mp4`; `audio_codec` is `opus`, `aac` or `flac`, `audio_bitrate` in kbps or `auto` for the
+encoder's default (`flac` is opus on the screen path, where gpu-screen-recorder has it disabled). `window_wait_s` bounds the wait for the game's window before the screen is
+recorded instead. Three config-scope keys, for `config.toml` or `universe module set capture
+<key>=<value>` and never a settings row, replace what the presets choose: `ffmpeg_video_opts`
+(gpu-screen-recorder's `-ffmpeg-video-opts`, screen path), `va_encoder_opts` (`key=value …`
+properties of the VA encoder, window path) and `gsr_extra_args` (appended to the
+gpu-screen-recorder command, screen path). `-bm cbr` stays pinned on the screen path: it is the
+base the QVBR override needs.
+
 ## Journal
 
 | Rust | Python | CLI | Role |
@@ -387,6 +400,15 @@ enabled = ["gog", "capture", "journal"]
 [modules.capture]
 source = "window"                    # window (GNOME + the Universe shell extension) | screen (gpu-screen-recorder)
 codec = "av1_10bit"
+quality = "very_high"                # medium | high | very_high | ultra: QVBR on both paths
+size = "native"                      # or a WxH the video must fit in, e.g. 1920x1080
+container = "mkv"                    # mkv | mp4
+audio_codec = "opus"                 # opus | aac | flac
+audio_bitrate = "auto"               # kbps, or auto for the encoder's default
+window_wait_s = 60                   # then the screen is recorded instead
+# ffmpeg_video_opts = "rc_mode=CQP;qp=20"   # config-only: replaces the preset on the screen path
+# va_encoder_opts = "rate-control=cqp qp=30" # config-only: replaces the preset on the window path
+# gsr_extra_args = "-cr full -keyint 2"      # config-only: appended to gpu-screen-recorder
 
 [lutris]                             # what `universe migrate` reads
 config_dir = "~/.config/lutris"
@@ -453,7 +475,8 @@ key = "enabled"                   # reserved: always present, game scope
 type = "bool"
 default = true
 label = "Record the session"
-scope = "game"                    # global → config.toml [modules.<id>]; game → game.toml [modules.<id>]
+scope = "game"                    # global → config.toml [modules.<id>]; game → game.toml [modules.<id>];
+                                  # config → config.toml / `universe module set` only, no settings row
 
 [[settings]]
 key = "fps"

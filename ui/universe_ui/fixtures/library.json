@@ -410,28 +410,56 @@
           "type": "bool",
           "default": true,
           "label": "Record the session",
-          "scope": "game"
+          "scope": "game",
+          "dynamic": false
+        },
+        {
+          "key": "source",
+          "type": "enum",
+          "default": "window",
+          "label": "Capture",
+          "scope": "game",
+          "choices": [
+            "window",
+            "screen"
+          ],
+          "dynamic": false
         },
         {
           "key": "cursor",
           "type": "bool",
           "default": false,
-          "label": "Capture the cursor",
-          "scope": "game"
+          "label": "Show the cursor in the recording",
+          "scope": "game",
+          "dynamic": false
         },
         {
           "key": "codec",
           "type": "enum",
           "default": "av1_10bit",
-          "label": "Codec",
+          "label": "Video codec",
           "scope": "global",
           "choices": [
             "av1_10bit",
             "av1",
-            "hevc_10bit",
             "hevc",
             "h264"
-          ]
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "quality",
+          "type": "enum",
+          "default": "very_high",
+          "label": "Quality (constant, up to a size ceiling)",
+          "scope": "global",
+          "choices": [
+            "medium",
+            "high",
+            "very_high",
+            "ultra"
+          ],
+          "dynamic": false
         },
         {
           "key": "fps",
@@ -445,14 +473,117 @@
             "90",
             "60",
             "30"
-          ]
+          ],
+          "dynamic": false
         },
         {
-          "key": "microphone",
-          "type": "bool",
-          "default": true,
-          "label": "Record the microphone",
-          "scope": "global"
+          "key": "size",
+          "type": "string",
+          "default": "native",
+          "label": "Fit the video in (native: no scaling)",
+          "scope": "global",
+          "choices": [
+            "native",
+            "3840x2160",
+            "2560x1440",
+            "1920x1080"
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "container",
+          "type": "enum",
+          "default": "mkv",
+          "label": "Container (mkv survives a crash, mp4 plays anywhere)",
+          "scope": "global",
+          "choices": [
+            "mkv",
+            "mp4"
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "audio",
+          "type": "enum",
+          "default": "output+input",
+          "label": "Audio tracks captured",
+          "scope": "global",
+          "choices": [
+            "output",
+            "output+input",
+            "none"
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "audio_codec",
+          "type": "enum",
+          "default": "opus",
+          "label": "Audio codec",
+          "scope": "global",
+          "choices": [
+            "opus",
+            "aac",
+            "flac"
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "audio_bitrate",
+          "type": "int",
+          "default": "auto",
+          "label": "Audio bitrate (kbps)",
+          "scope": "global",
+          "choices": [
+            "auto",
+            "96",
+            "128",
+            "160",
+            "192",
+            "256",
+            "320"
+          ],
+          "dynamic": false
+        },
+        {
+          "key": "min_duration_s",
+          "type": "int",
+          "default": 240,
+          "label": "Minimum duration kept (s)",
+          "scope": "global",
+          "dynamic": false
+        },
+        {
+          "key": "window_wait_s",
+          "type": "int",
+          "default": 60,
+          "label": "Wait for the game's window (s), then record the screen",
+          "scope": "global",
+          "dynamic": false
+        },
+        {
+          "key": "ffmpeg_video_opts",
+          "type": "string",
+          "default": "",
+          "label": "gpu-screen-recorder -ffmpeg-video-opts, replacing the quality preset (screen capture)",
+          "scope": "config",
+          "dynamic": false
+        },
+        {
+          "key": "va_encoder_opts",
+          "type": "string",
+          "default": "",
+          "label": "VA encoder properties (key=value …), replacing the quality preset (window capture)",
+          "scope": "config",
+          "dynamic": false
+        },
+        {
+          "key": "gsr_extra_args",
+          "type": "string",
+          "default": "",
+          "label": "Extra gpu-screen-recorder arguments (screen capture)",
+          "scope": "config",
+          "dynamic": false
         }
       ],
       "frontend_qml": null
@@ -757,7 +888,11 @@
     "volume_step": "precise",
     "mangohud_toggle": "Super_L+F12",
     "devices": [
-      { "id": "event30", "family": "dualsense-edge", "bus": "bluetooth" }
+      {
+        "id": "event30",
+        "family": "dualsense-edge",
+        "bus": "bluetooth"
+      }
     ],
     "families": [
       {

@@ -9,11 +9,10 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import (  # noqa: E402
-    WINDOWS_BUS_NAME, log, load_settings, resolve_screen, resolve_fps, gsr_args,
-    cursor_mode, gst_window_args, unit_cgroup, pid_in_unit, segment_path,
+    WINDOWS_BUS_NAME, SETTINGS_DEFAULTS, log, load_settings, resolve_screen, resolve_fps, gsr_args,
+    output_path, cursor_mode, gst_window_args, unit_cgroup, pid_in_unit, segment_path,
 )
 
-WINDOW_WAIT_S = 60
 POLL_S = 0.5
 WATCH_S = 2.0
 
@@ -32,8 +31,8 @@ def exec_screen_fallback(settings, reason):
     except Exception as e:
         log(f"could not resolve a screen to capture: {e}")
         sys.exit(1)
-    args = gsr_args(settings, screen, os.path.join(
-        os.environ["MODULE_DATA_DIR"], "pending", f"{os.environ['SESSION_ID']}.mkv"))
+    pending_dir = os.path.join(os.environ["MODULE_DATA_DIR"], "pending")
+    args = gsr_args(settings, screen, output_path(pending_dir, os.environ["SESSION_ID"], settings))
     os.execvp(args[0], args)
 
 
@@ -74,8 +73,16 @@ def pick_window(windows, unit_cg):
     return max(mine, key=lambda w: (w.get("width", 0) * w.get("height", 0)))
 
 
-def wait_for_window(windows, unit_cg):
-    deadline = time.monotonic() + WINDOW_WAIT_S
+def window_wait_s(settings):
+    try:
+        return max(0, int(settings.get("window_wait_s", SETTINGS_DEFAULTS["window_wait_s"])))
+    except (TypeError, ValueError):
+        log(f"window_wait_s {settings.get('window_wait_s')!r} is not a number, using {SETTINGS_DEFAULTS['window_wait_s']}")
+        return SETTINGS_DEFAULTS["window_wait_s"]
+
+
+def wait_for_window(windows, unit_cg, wait_s):
+    deadline = time.monotonic() + wait_s
     while time.monotonic() < deadline and not _interrupted:
         w = pick_window(windows.list(), unit_cg)
         if w:
@@ -142,12 +149,24 @@ def record_segment(conn, window_id, settings, fps, out_path, windows, unit_cg):
 
     _finalise(gst)
     conn.send_and_get_reply(new_method_call(sess, "Stop", "", ()))
+    if gst_exited:
+        check_wrote_something(gst.returncode, out_path)
     # The window vanished with the stream; pick up a new game window if one is up.
     if gst_exited and replacement is None and not _interrupted:
         replacement = pick_window(windows.list(), unit_cg)
     if replacement and replacement.get("id") != window_id:
         return replacement["id"]
     return None
+
+
+def check_wrote_something(returncode, out_path):
+    """A pipeline that failed before its first byte (a bad encoder property, a missing element) is an error, not a window that ended."""
+    try:
+        size = os.path.getsize(out_path)
+    except OSError:
+        size = 0
+    if returncode != 0 and size == 0:
+        raise RuntimeError(f"gst-launch exited {returncode} before writing anything")
 
 
 def _finalise(gst):
@@ -184,17 +203,18 @@ def main():
     conn = open_dbus_connection(bus="SESSION")
     windows = Windows(conn)
 
-    window = wait_for_window(windows, unit_cg)
+    wait_s = window_wait_s(settings)
+    window = wait_for_window(windows, unit_cg, wait_s)
     if _interrupted:
         return 0
     if window is None:
         conn.close()
-        exec_screen_fallback(settings, "no window in 60 s, recording the screen")
+        exec_screen_fallback(settings, f"no window in {wait_s} s, recording the screen")
 
     window_id = window["id"]
     index = 0
     while window_id is not None and not _interrupted:
-        out_path = segment_path(pending_dir, session_id, index)
+        out_path = segment_path(pending_dir, session_id, index, settings)
         try:
             window_id = record_segment(conn, window_id, settings, fps, out_path, windows, unit_cg)
         except Exception as e:

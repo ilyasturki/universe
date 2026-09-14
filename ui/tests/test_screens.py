@@ -46,7 +46,7 @@ def test_modules_form(api, fake):
     assert rows[enabled]["value"] is False
     capture = next(g for g in form.groups if g["title"] == "Video capture")
     assert capture["meta"] == "v0.1.0 · hooks" and capture["warning"] == "" and capture["off"] is False
-    assert [rows[i]["key"] for i in capture["rows"]] == ["codec", "fps", "microphone"]
+    assert [rows[i]["key"] for i in capture["rows"]] == ["codec", "quality", "fps", "size", "container", "audio", "audio_codec", "audio_bitrate", "min_duration_s", "window_wait_s"]
     codec = next(i for i, r in enumerate(rows) if r["module"] == "capture" and r["key"] == "codec")
     assert form.setValue(codec, "av1") is True
     assert fake.getSettings("capture", "")["codec"] == "av1"

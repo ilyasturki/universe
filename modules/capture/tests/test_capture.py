@@ -1,11 +1,13 @@
 """Runs bin/start, bin/stop, bin/shot as subprocesses against fake systemd-run /
 systemctl / universe / ffprobe / gpu-screen-recorder / trash shims on PATH."""
+import importlib.machinery
 import importlib.util
 import json
 import os
 import shutil
 import stat
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -127,7 +129,7 @@ def test_start_composes_gsr_command(tmp_path, fakebin):
     assert flag_values(args, "-f") == ["30"]
     assert flag_values(args, "-k") == ["hevc"]
     assert flag_values(args, "-a") == ["default_output"]
-    assert flag_values(args, "-ffmpeg-video-opts") == [QVBR_OPTS]
+    assert flag_values(args, "-ffmpeg-video-opts") == [QVBR_OPTS.replace("global_quality=95", "global_quality=22")]
     assert flag_values(args, "-o") == [pending_path(tmp_path)]
 
 
@@ -396,6 +398,70 @@ def test_stop_multiple_segments_are_concatenated(tmp_path, fakebin):
         assert not s.exists()
 
 
+def test_start_and_stop_follow_the_container(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {"container": "mp4", "min_duration_s": 240}, extra={"FAKE_DURATION": "999"})
+    assert run("start", env).returncode == 0
+    args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
+    final = tmp_path / "data" / "pending" / f"{SESSION_ID}.mp4"
+    assert flag_values(args, "-o") == [str(final)]
+    companion = json.loads((tmp_path / "data" / "pending" / f"{SESSION_ID}.json").read_text())
+    assert companion["output"] == str(final)
+
+    final.write_bytes(b"x")
+    result = run("stop", env)
+    assert result.returncode == 0, result.stderr
+    assert (fakebin["logs"] / "universe.args").read_text().splitlines() == ["recording-file", SESSION_ID, str(final)]
+
+
+def test_stop_mp4_segments_are_consolidated(tmp_path, fakebin):
+    pending = tmp_path / "data" / "pending"
+    pending.mkdir(parents=True)
+    for i in (0, 1):
+        (pending / f"{SESSION_ID}-{i}.mp4").write_bytes(b"s")
+    (pending / f"{SESSION_ID}.json").write_text(json.dumps({"output": str(pending / f"{SESSION_ID}.mp4")}))
+    env = env_for(tmp_path, fakebin, {"container": "mp4"}, extra={"FAKE_DURATION": "999"})
+    result = run("stop", env)
+    assert result.returncode == 0, result.stderr
+    ff = (fakebin["logs"] / "ffmpeg.args").read_text().splitlines()
+    assert ff[-1] == str(pending / f"{SESSION_ID}.mp4")
+    assert not (pending / f"{SESSION_ID}-0.mp4").exists()
+
+
+def test_record_window_wait_setting():
+    loader = importlib.machinery.SourceFileLoader("capture_record_window", str(BIN_DIR / "record-window"))
+    rw = importlib.util.module_from_spec(importlib.util.spec_from_loader(loader.name, loader))
+    # The script imports `_common` by its bare name; another module's may already own that slot.
+    previous = sys.modules.get("_common")
+    sys.modules["_common"] = _common
+    try:
+        loader.exec_module(rw)
+    finally:
+        if previous is None:
+            del sys.modules["_common"]
+        else:
+            sys.modules["_common"] = previous
+    assert rw.window_wait_s({}) == 60
+    assert rw.window_wait_s({"window_wait_s": "120"}) == 120
+    assert rw.window_wait_s({"window_wait_s": -5}) == 0
+    assert rw.window_wait_s({"window_wait_s": "soon"}) == 60
+    return rw
+
+
+def test_record_window_gst_failure_before_first_byte_raises(tmp_path):
+    rw = test_record_window_wait_setting()
+    out = tmp_path / "seg.mkv"
+    with pytest.raises(RuntimeError):
+        rw.check_wrote_something(1, str(out))
+    rw.check_wrote_something(0, str(out))  # a clean EOS with no bytes: the stream simply ended
+    out.write_bytes(b"frames")
+    rw.check_wrote_something(1, str(out))  # a crash after frames: the segment stands
+
+
+def test_gsr_args_flac_falls_back_to_opus():
+    args = _common.gsr_args({"audio": "output", "audio_codec": "flac"}, "DP-1", "/o.mkv")
+    assert flag_values(args, "-ac") == ["opus"]
+
+
 # --- pure helpers ----------------------------------------------------------
 
 def test_gsr_args_matches_the_screen_path():
@@ -441,10 +507,77 @@ def test_gst_window_args_audio_branches():
     assert "device=@DEFAULT_SOURCE@" in two
 
 
-def test_gst_window_args_raw_quality_is_ignored():
-    args = _common.gst_window_args(1, {"quality": "rc_mode=CQP;qp=20", "audio": "none"}, 60, "/o.mkv")
-    assert "rate-control=vbr" in args
-    assert "bitrate=16000" in args
+def test_gst_window_args_quality_preset_is_qvbr_per_codec():
+    av1 = _common.gst_window_args(1, {"codec": "av1_10bit", "quality": "very_high", "audio": "none"}, 60, "/o.mkv")
+    assert av1[av1.index("vaav1enc") + 1:av1.index("av1parse") - 1] == \
+        ["rate-control=qvbr", "qp=95", "bitrate=32000", "target-percentage=50"]
+    hevc = _common.gst_window_args(1, {"codec": "hevc", "quality": "ultra", "audio": "none"}, 60, "/o.mkv")
+    assert "qp=17" in hevc and "bitrate=48000" in hevc
+    # The old default name and a raw legacy string both mean the default preset here.
+    for legacy in ("qvbr", "rc_mode=CQP;qp=20"):
+        args = _common.gst_window_args(1, {"quality": legacy, "audio": "none"}, 60, "/o.mkv")
+        assert "rate-control=qvbr" in args and "qp=95" in args
+
+
+def test_gst_window_args_va_encoder_opts_replace_the_preset():
+    args = _common.gst_window_args(1, {"quality": "ultra", "va_encoder_opts": "rate-control=cqp qp=30", "audio": "none"}, 60, "/o.mkv")
+    assert args[args.index("vaav1enc") + 1:args.index("av1parse") - 1] == ["rate-control=cqp", "qp=30"]
+
+
+def test_gst_window_args_size_fits_within_and_keeps_aspect():
+    args = _common.gst_window_args(1, {"size": "1920x1080", "audio": "none"}, 60, "/o.mkv")
+    assert "video/x-raw(memory:VAMemory),format=P010_10LE,width=[1,1920],height=[1,1080],pixel-aspect-ratio=1/1" in args
+    native = _common.gst_window_args(1, {"size": "native", "audio": "none"}, 60, "/o.mkv")
+    assert "video/x-raw(memory:VAMemory),format=P010_10LE" in native
+
+
+def test_gst_window_args_container_and_audio_codec():
+    mp4 = _common.gst_window_args(1, {"container": "mp4", "audio": "output", "audio_codec": "aac", "audio_bitrate": "192"}, 60, "/o.mp4")
+    assert "mp4mux" in mp4 and "matroskamux" not in mp4
+    assert mp4[mp4.index("fdkaacenc") + 1] == "bitrate=192000"
+    flac = _common.gst_window_args(1, {"audio": "output", "audio_codec": "flac", "audio_bitrate": "192"}, 60, "/o.mkv")
+    assert "flacenc" in flac and not any(a.startswith("bitrate=192") for a in flac)
+    opus = _common.gst_window_args(1, {"audio": "output", "audio_codec": "opus", "audio_bitrate": "auto"}, 60, "/o.mkv")
+    assert opus[opus.index("opusenc") + 1] == "!"
+
+
+def test_gsr_args_quality_presets_and_overrides():
+    hevc = _common.gsr_args({"codec": "hevc", "quality": "high", "audio": "none"}, "DP-1", "/o.mkv")
+    assert hevc[hevc.index("-ffmpeg-video-opts") + 1] == "rc_mode=QVBR;global_quality=27;b=10000000;maxrate=20000000;bufsize=40000000"
+    raw = _common.gsr_args({"quality": "ultra", "ffmpeg_video_opts": "rc_mode=CQP;qp=20", "audio": "none"}, "DP-1", "/o.mkv")
+    assert raw[raw.index("-ffmpeg-video-opts") + 1] == "rc_mode=CQP;qp=20"
+    assert _common.gsr_args({"quality": "qvbr", "audio": "none"}, "DP-1", "/o.mkv").count(QVBR_OPTS) == 1
+
+
+def test_gsr_args_container_size_audio_and_extra_args():
+    args = _common.gsr_args({"container": "mp4", "size": "2560x1440", "audio": "output", "audio_codec": "aac",
+                             "audio_bitrate": 160, "gsr_extra_args": "-cr full -keyint 2"}, "DP-1", "/o.mp4")
+    assert flag_values(args, "-c") == ["mp4"]
+    assert flag_values(args, "-s") == ["2560x1440"]
+    assert flag_values(args, "-ac") == ["aac"]
+    assert flag_values(args, "-ab") == ["160"]
+    assert args[args.index("-cr"):] == ["-cr", "full", "-keyint", "2", "-o", "/o.mp4"]
+    plain = _common.gsr_args({"audio": "none"}, "DP-1", "/o.mkv")
+    assert "-s" not in plain and "-ab" not in plain and flag_values(plain, "-c") == ["mkv"]
+
+
+def test_size_limit_and_audio_bitrate_parse():
+    assert _common.size_limit({"size": "1920x1080"}) == (1920, 1080)
+    for raw in ("native", "", "0x0", "wide", None):
+        assert _common.size_limit({"size": raw}) is None
+    assert _common.audio_bitrate_kbps({"audio_bitrate": "128"}) == 128
+    for raw in ("auto", "", 0, "0", "loud"):
+        assert _common.audio_bitrate_kbps({"audio_bitrate": raw}) is None
+    assert _common.gsr_extra_args({"gsr_extra_args": "-x 'a b'"}) == ["-x", "a b"]
+    assert _common.gsr_extra_args({"gsr_extra_args": "-x 'unterminated"}) == []
+
+
+def test_output_paths_follow_the_container(tmp_path):
+    assert _common.output_path("/p", "s", {"container": "mp4"}) == "/p/s.mp4"
+    assert _common.segment_path("/p", "s", 3, {}) == "/p/s-3.mkv"
+    for name in ("s-0.mp4", "s-1.mp4", "s.mp4", "s-x.mp4"):
+        (tmp_path / name).write_text("x")
+    assert [os.path.basename(p) for p in _common.segment_paths(str(tmp_path), "s")] == ["s-0.mp4", "s-1.mp4"]
 
 
 def test_cursor_mode():

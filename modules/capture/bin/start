@@ -8,7 +8,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import (  # noqa: E402
-    EXTENSION_UUID, WINDOWS_BUS_NAME, log, load_settings, resolve_screen, gsr_args,
+    EXTENSION_UUID, WINDOWS_BUS_NAME, log, load_settings, resolve_screen, gsr_args, output_path,
     is_gnome, extension_installed, enable_extension, bus_name_has_owner,
 )
 
@@ -29,11 +29,11 @@ def run_systemd(cmd):
     return True
 
 
-def write_companion(pending_dir, session_id, unit, output_path, mode):
+def write_companion(pending_dir, session_id, unit, path, mode):
     with open(os.path.join(pending_dir, f"{session_id}.json"), "w") as f:
         json.dump({
             "unit": f"{unit}.service",
-            "output": output_path,
+            "output": path,
             "mode": mode,
             "started_at": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
         }, f)
@@ -61,7 +61,7 @@ def start_window(unit, pending_dir, session_id):
     return run_systemd(cmd)
 
 
-def start_screen(unit, screen, settings, output_path):
+def start_screen(unit, screen, settings, path):
     cmd = [
         "systemd-run", "--user", f"--unit={unit}", "--collect",
         "-p", "CPUWeight=100", "-p", "MemoryHigh=4G",
@@ -69,7 +69,7 @@ def start_screen(unit, screen, settings, output_path):
         # bounds `systemctl stop`'s wait below bin/stop's own 15s stability budget;
         # default TimeoutStopSec (90s) would blow session-end's timeout_s=20 if gsr hangs.
         "-p", "TimeoutStopSec=10",
-        *gsr_args(settings, screen, output_path),
+        *gsr_args(settings, screen, path),
     ]
     return run_systemd(cmd)
 
@@ -92,7 +92,7 @@ def main():
         return 1
 
     unit = f"universe-capture-{session_id}"
-    output_path = os.path.join(pending_dir, f"{session_id}.mkv")
+    path = output_path(pending_dir, session_id, settings)
     source = settings.get("source", "window")
 
     if source == "window" and is_gnome():
@@ -108,15 +108,15 @@ def main():
             if owned:
                 if not start_window(unit, pending_dir, session_id):
                     return 1
-                write_companion(pending_dir, session_id, unit, output_path, "window")
+                write_companion(pending_dir, session_id, unit, path, "window")
                 return 0
             log(f"{EXTENSION_UUID} installed but not loaded (log out once to load it); recording the screen")
         else:
             log(f"{EXTENSION_UUID} not installed; recording the screen")
 
-    if not start_screen(unit, screen, settings, output_path):
+    if not start_screen(unit, screen, settings, path):
         return 1
-    write_companion(pending_dir, session_id, unit, output_path, "screen")
+    write_companion(pending_dir, session_id, unit, path, "screen")
     return 0
 
 
