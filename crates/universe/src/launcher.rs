@@ -126,6 +126,10 @@ pub fn plan(r: &Resolved, config: &Config, session_id: &str, extra_env: &BTreeMa
                 env.remove("PROTON_ENABLE_WAYLAND");
             }
             wrap.push("--".into());
+            // A capability wrapper on gamescope (NixOS capSysNice) hands CAP_SYS_NICE down to the game, and bwrap refuses to start holding one.
+            if let Some(setpriv) = runners::on_path("setpriv") {
+                wrap.extend([setpriv.to_string_lossy().to_string(), "--ambient-caps=-all".into(), "--inh-caps=-all".into(), "--".into()]);
+            }
             wrap.push(program);
             wrap.extend(args);
             (bin.to_string_lossy().to_string(), wrap)
@@ -425,7 +429,12 @@ mod tests {
         let p = plan(&r, &cfg, "s", &BTreeMap::new()).unwrap();
         assert!(p.gamescope);
         assert_eq!(p.program, bin.to_string_lossy());
-        assert_eq!(p.args, vec!["-f", "--force-windows-fullscreen", "--adaptive-sync", "-r", "120", "--mangoapp", "--", "umu-run", &exe.to_string_lossy().to_string(), "-skipintro"]);
+        let mut want: Vec<String> = ["-f", "--force-windows-fullscreen", "--adaptive-sync", "-r", "120", "--mangoapp", "--"].map(String::from).into();
+        if let Some(setpriv) = crate::runners::on_path("setpriv") {
+            want.extend([setpriv.to_string_lossy().to_string(), "--ambient-caps=-all".into(), "--inh-caps=-all".into(), "--".into()]);
+        }
+        want.extend(["umu-run".to_string(), exe.to_string_lossy().to_string(), "-skipintro".into()]);
+        assert_eq!(p.args, want);
         assert!(!p.env.contains_key("MANGOHUD"), "mangoapp draws the HUD inside gamescope");
         assert!(!p.env.contains_key("PROTON_ENABLE_WAYLAND"), "an X11 Proton under gamescope's Xwayland");
         assert_eq!(p.env["PROTONPATH"], "/p");

@@ -126,8 +126,11 @@ window, black until the game draws, whatever the game, Proton or umu put up firs
 inside is stretched to the screen, and the launcher hands over on that window. `launch.gamescope`
 (global), `[runners.<id>] gamescope` (per runner: an emulator that misbehaves under it) and the
 game's `launch.gamescope` switch it off, the game's own key winning; `launch.gamescope_bin` names
-the binary (`gamescope` on PATH, `/run/wrappers/bin` included). With it off — or not found: a
-warning, and the game runs on the desktop as before — the plain command runs. Inside gamescope
+the binary (`gamescope` on PATH, `/run/wrappers/bin` included). The game itself runs under
+`setpriv --ambient-caps=-all --inh-caps=-all` when util-linux is on PATH: a capability wrapper on
+gamescope (NixOS `capSysNice`) hands CAP_SYS_NICE down to the game, and bwrap — umu's runtime —
+refuses to start holding one. With gamescope off — or not found: a warning, and the game runs on
+the desktop as before — the plain command runs. Inside gamescope
 MangoHud is `--mangoapp` rather than `MANGOHUD=1`, and `PROTON_ENABLE_WAYLAND` is dropped (Proton
 goes X11 through gamescope's Xwayland) unless the arguments carry `--expose-wayland`. `doctor`
 checks the binary, and `mangoapp` when MangoHud is on.

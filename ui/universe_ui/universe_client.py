@@ -525,7 +525,8 @@ class CoreClient(UniverseClientBase):
             try:
                 value = self._call(iface, method, *args)
             except UniverseError as e:
-                self._deliver.emit(lambda: on_error(e))
+                err = e
+                self._deliver.emit(lambda: on_error(err))
                 return
             self._deliver.emit(lambda: on_reply(value))
 

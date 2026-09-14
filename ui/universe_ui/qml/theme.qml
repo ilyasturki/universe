@@ -632,11 +632,11 @@ FocusScope {
         anchors.fill: parent
         onPlayRequested: function(game) { root.launchGame(game); }
         onDetailRequested: function(game) { root.openDetail(game); }
-        onFavouriteRequested: root.toggleFavourite(game)
-        onSettingsRequested: root.openSub("pages/GameSettingsPage.qml", game)
-        onArtworkRequested: root.openSub("pages/ArtworkPage.qml", game)
-        onRecordingsRequested: root.openSub("pages/RecordingsPage.qml", game)
-        onJournalRequested: root.openSub("pages/JournalPage.qml", game)
+        onFavouriteRequested: function(game) { root.toggleFavourite(game); }
+        onSettingsRequested: function(game) { root.openSub("pages/GameSettingsPage.qml", game); }
+        onArtworkRequested: function(game) { root.openSub("pages/ArtworkPage.qml", game); }
+        onRecordingsRequested: function(game) { root.openSub("pages/RecordingsPage.qml", game); }
+        onJournalRequested: function(game) { root.openSub("pages/JournalPage.qml", game); }
         onStopRequested: root.stopSession()
         onResumeRequested: root.resumeSession()
         onClosed: {
