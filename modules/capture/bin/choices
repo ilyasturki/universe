@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 import json
 import os
-import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import resolve_screen, screen_refresh_hz  # noqa: E402
+from _common import screen_refresh_hz  # noqa: E402
 
 RATES = ["120", "90", "60", "30"]
 
@@ -13,10 +12,7 @@ RATES = ["120", "90", "60", "30"]
 def main(argv):
     if argv[:1] != ["fps"]:
         return 2
-    try:
-        hz = screen_refresh_hz(resolve_screen())
-    except (OSError, subprocess.SubprocessError, RuntimeError):
-        hz = None
+    hz = screen_refresh_hz(os.environ.get("SESSION_SCREEN", ""))
     # Recording above the screen's rate captures nothing more; 30 always stays offered.
     print(json.dumps(["auto"] + [r for r in RATES if hz is None or int(r) <= max(hz, 30)]))
     return 0

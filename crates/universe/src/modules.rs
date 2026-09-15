@@ -355,7 +355,7 @@ pub async fn setting_choices(module: &Module, settings: &serde_json::Map<String,
         return Ok(s.choices.clone());
     }
     let exe = module.dir.join(&s.choices_exec);
-    let child = module_cmd(module, &exe)?.arg(key).env("MODULE_SETTINGS_JSON", serde_json::Value::Object(settings.clone()).to_string()).spawn().map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
+    let child = module_cmd(module, &exe)?.arg(key).env("MODULE_SETTINGS_JSON", serde_json::Value::Object(settings.clone()).to_string()).env("UNIVERSE_BIN", paths::self_exe()).spawn().map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
     let out = tokio::time::timeout(Duration::from_secs(20), child.wait_with_output())
         .await
         .map_err(|_| crate::Error::Io(format!("{} {key}: choices timed out", module.id())))??;

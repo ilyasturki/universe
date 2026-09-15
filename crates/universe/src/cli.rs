@@ -240,6 +240,20 @@ pub enum Cmd {
     /// Add a journal entry to the session (journal module's post-process hook)
     #[command(name = "journal-add", hide = true)]
     JournalAdd { session: String, entry: String },
+    /// The running game's window as the shell extension lists it (capture module's post-launch hook)
+    #[command(name = "session-window", hide = true)]
+    SessionWindow {
+        /// Block up to this many seconds for the window to map, then focus it
+        #[arg(long)]
+        wait: Option<u64>,
+    },
+    /// The connector's current mode: width, height, refresh (capture module's fps choices)
+    #[command(name = "screen-mode", hide = true)]
+    ScreenMode {
+        /// DRM connector, e.g. DP-1 (default: the desktop profile decides)
+        #[arg(default_value = "")]
+        screen: String,
+    },
     /// gamescope's primary child: the keep-alive window, then the game (universe splash [--image P] -- <cmd…>)
     #[command(hide = true)]
     Splash {
@@ -533,6 +547,29 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         }
         Cmd::RecordingFile { session, path } => println!("{}", core.file_recording(&session, &path).await?),
         Cmd::JournalAdd { session, entry } => core.add_entry(&session, serde_json::from_str(&entry).map_err(crate::Error::from)?).await?,
+        Cmd::SessionWindow { wait } => {
+            let window = match wait {
+                Some(secs) => {
+                    let c = core.current().await.ok_or_else(|| crate::Error::NotFound("no session running".into()))?;
+                    core.wait_session_window(&c.session_id, std::time::Duration::from_secs(secs)).await?
+                }
+                None => core.session_window().await?,
+            };
+            if json {
+                return print_json(&window);
+            }
+            match window {
+                Some(w) => println!("{}", w.title.unwrap_or_default()),
+                None => println!("{}", "no window".dimmed()),
+            }
+        }
+        Cmd::ScreenMode { screen } => {
+            let mode = core.screen_mode(&screen).await;
+            if json {
+                return print_json(&mode);
+            }
+            println!("{} {}×{} @ {} Hz", s(&mode, "screen"), mode["width"], mode["height"], mode["refresh"]);
+        }
         Cmd::Ls { all } => {
             let list = core.list().await;
             if json {

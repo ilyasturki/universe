@@ -7,7 +7,7 @@ import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import WINDOWS_BUS_NAME, extension_ready, load_settings, log, resolve_screen  # noqa: E402
+from _common import WINDOWS_BUS_NAME, extension_ready, load_settings, log  # noqa: E402
 
 TAKE_TIMEOUT_S = 15
 
@@ -60,7 +60,7 @@ def main():
             return 0
         log(f"shell screenshot {path} failed: {stderr.strip()}")
 
-    ok, stderr = take(resolve_screen(), path)
+    ok, stderr = take(os.environ["SESSION_SCREEN"], path)
     if not ok:
         log(f"gpu-screen-recorder -o {path} failed: {stderr.strip()}")
         return 1

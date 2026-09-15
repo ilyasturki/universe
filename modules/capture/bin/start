@@ -4,16 +4,14 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import (  # noqa: E402
-    log, load_settings, resolve_screen, gsr_args, output_path, extension_ready, unit_cgroup, wait_for_window, show_osd,
-)
+from _common import log, load_settings, gsr_args, output_path, extension_ready, wait_for_window, show_osd  # noqa: E402
 
 
 def window_token(settings, data_dir):
     if not extension_ready():
         return None
     wait_s = max(0, int(settings.get("window_wait_s", 60)))
-    if not wait_for_window(unit_cgroup(os.environ.get("SESSION_UNIT")), wait_s):
+    if not wait_for_window(wait_s):
         log(f"no game window within {wait_s}s")
         return None
     tokens = os.path.join(data_dir, "portal")
@@ -31,7 +29,7 @@ def main():
     data_dir = os.environ["MODULE_DATA_DIR"]
     pending_dir = os.path.join(data_dir, "pending")
     os.makedirs(pending_dir, exist_ok=True)
-    screen = resolve_screen()
+    screen = os.environ["SESSION_SCREEN"]
 
     token = window_token(settings, data_dir) if settings.get("source") == "window" else None
     if settings.get("source") == "window" and not token:

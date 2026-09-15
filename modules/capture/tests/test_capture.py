@@ -35,26 +35,28 @@ def fakebin(tmp_path):
     logs.mkdir()
 
     _write_shim(bindir / "systemd-run", f'printf "%s\\n" "$@" > "{logs}/systemd-run.args"\nexit 0\n')
-    _write_shim(bindir / "systemctl", 'if [ "$2" = "show" ]; then echo "${FAKE_CGROUP:-}"; fi\nexit 0')
-    _write_shim(bindir / "universe", f'''printf "%s\\n" "$@" > "{logs}/universe.args"
-if [ "${{FAKE_UNIVERSE_EXIT:-0}}" != "0" ]; then echo "universe: not found: session" >&2; exit "${{FAKE_UNIVERSE_EXIT}}"; fi
+    _write_shim(bindir / "systemctl", 'exit 0')
+    # The CLI: screen-mode answers DP-1 at 120 Hz, HDMI-A-1 at 60 Hz (FAKE_REFRESH overrides, 0 for an unreadable
+    # mode); session-window answers FAKE_WINDOW_JSON, null without it; FAKE_UNIVERSE_EXIT fails every command.
+    _write_shim(bindir / "universe", f'''printf "%s\\n" "$@" >> "{logs}/universe.args"
+if [ "${{FAKE_UNIVERSE_EXIT:-0}}" != "0" ]; then echo "universe: unavailable: no shell" >&2; exit "${{FAKE_UNIVERSE_EXIT}}"; fi
+case "$1" in
+  screen-mode) hz="${{FAKE_REFRESH:-}}"; [ -n "$hz" ] || {{ [ "$2" = HDMI-A-1 ] && hz=60 || hz=120; }}
+    echo "{{\\"screen\\":\\"$2\\",\\"width\\":3840,\\"height\\":2160,\\"refresh\\":$hz}}"; exit 0;;
+  session-window) echo "${{FAKE_WINDOW_JSON:-null}}"; exit 0;;
+esac
 echo "/mnt/recordings/games/fake/session.mkv"
 exit 0''')
     _write_shim(bindir / "ffprobe", 'echo "${FAKE_DURATION:-300}"\nexit 0\n')
-    # Mutter GetCurrentState: DP-1 at 120 Hz, HDMI-A-1 at 60 Hz; extension List: one 4K window of the caller's pid.
     _write_shim(bindir / "busctl", f'''printf "%s\\n" "$@" >> "{logs}/busctl.args"
 case "$*" in
   *NameHasOwner*) echo "b ${{FAKE_NAME_OWNED:-false}}"; exit 0;;
   *EnableExtension*) echo "b ${{FAKE_NAME_OWNED:-false}}"; exit 0;;
-  *" List") printf '{{"type":"s","data":["[{{\\\\"id\\\\":7,\\\\"pid\\\\":%s,\\\\"width\\\\":3840,\\\\"height\\\\":2160,\\\\"hidden\\\\":%s}}]"]}}\\n' "$PPID" "${{FAKE_WINDOW_HIDDEN:-false}}"; exit 0;;
   *" Screenshot "*) [ "${{FAKE_SHOT_OK:-true}}" = true ] && echo fake > "$8"; echo "b ${{FAKE_SHOT_OK:-true}}"; exit 0;;
 esac
-if [ "${{FAKE_BUSCTL_EXIT:-0}}" != "0" ]; then exit "${{FAKE_BUSCTL_EXIT}}"; fi
-echo '{{"type":"ua((ssss)a(siiddada{{sv}})a{{sv}})a(iiduba(ssss)a{{sv}})a{{sv}}","data":[1,[[["DP-1","GSM","LG","0x1"],[["3840x2160@59.997",3840,2160,59.997,1.5,[1.0],{{}}],["3840x2160@119.88",3840,2160,119.88,1.5,[1.0],{{"is-current":{{"type":"b","data":true}}}}]],{{}}],[["HDMI-A-1","DEL","Dell","0x2"],[["2560x1440@59.951",2560,1440,59.951,1.0,[1.0],{{"is-current":{{"type":"b","data":true}}}}]],{{}}]],[],{{}}]}}'
 exit 0''')
     _write_shim(bindir / "trash", f'printf "%s\\n" "$@" > "{logs}/trash.args"\nrm -f "$1"\nexit 0\n')
     _write_shim(bindir / "gpu-screen-recorder", f'''printf "%s\\n" "$@" >> "{logs}/gsr.args"
-if [ "$1" = "--list-monitors" ]; then echo "${{FAKE_MONITOR:-DP-1|3840x2160}}"; exit 0; fi
 for ((i=1; i<=$#; i++)); do
   if [ "${{!i}}" = "-o" ]; then j=$((i+1)); echo fake > "${{!j}}"; fi
 done
@@ -134,7 +136,7 @@ def test_start_fps_auto_takes_the_screens_refresh_rate(tmp_path, fakebin):
     assert result.returncode == 0, result.stderr
     args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
     assert flag_values(args, "-f") == ["120"]
-    assert "GetCurrentState" in (fakebin["logs"] / "busctl.args").read_text()
+    assert (fakebin["logs"] / "universe.args").read_text() == "screen-mode\nDP-1\n--json\n"
 
     env = env_for(tmp_path, fakebin, {"fps": "auto"}, extra={"SESSION_SCREEN": "HDMI-A-1"})
     assert run("start", env).returncode == 0
@@ -142,32 +144,35 @@ def test_start_fps_auto_takes_the_screens_refresh_rate(tmp_path, fakebin):
     assert flag_values(args, "-f") == ["60"]
 
 
-def test_start_fps_auto_falls_back_to_60_without_mutter(tmp_path, fakebin):
-    env = env_for(tmp_path, fakebin, {"fps": "auto"}, extra={"FAKE_BUSCTL_EXIT": "1"})
+def test_start_fps_auto_falls_back_to_60_when_the_mode_is_unreadable(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {"fps": "auto"}, extra={"FAKE_REFRESH": "0"})
     result = run("start", env)
     assert result.returncode == 0, result.stderr
     assert "fps auto" in result.stderr
     args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
     assert flag_values(args, "-f") == ["60"]
 
+    env = env_for(tmp_path, fakebin, {"fps": "auto"}, extra={"FAKE_UNIVERSE_EXIT": "1"})
+    result = run("start", env)
+    assert result.returncode == 0, result.stderr
+    assert "no shell" in result.stderr
+    assert flag_values((fakebin["logs"] / "systemd-run.args").read_text().splitlines(), "-f") == ["60"]
+
 
 def test_fps_choices_stop_at_the_screens_refresh_rate(tmp_path, fakebin):
     def choices(**extra):
-        result = subprocess.run([str(BIN_DIR / "choices"), "fps"], env=env_for(tmp_path, fakebin, {}, extra=extra), capture_output=True, text=True, timeout=30)
+        env = env_for(tmp_path, fakebin, {}, extra=extra)
+        if "SESSION_SCREEN" not in extra:
+            del env["SESSION_SCREEN"]
+        result = subprocess.run([str(BIN_DIR / "choices"), "fps"], env=env, capture_output=True, text=True, timeout=30)
         assert result.returncode == 0, result.stderr
         return json.loads(result.stdout)
 
     assert choices(SESSION_SCREEN="HDMI-A-1") == ["auto", "60", "30"]
     assert choices(SESSION_SCREEN="DP-1") == ["auto", "120", "90", "60", "30"]
-    assert choices(FAKE_BUSCTL_EXIT="1") == ["auto", "120", "90", "60", "30"], "no mutter: every rate stays"
-
-
-def test_start_resolves_screen_when_unset(tmp_path, fakebin):
-    env = env_for(tmp_path, fakebin, {}, extra={"SESSION_SCREEN": ""})
-    result = run("start", env)
-    assert result.returncode == 0, result.stderr
-    args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
-    assert flag_values(args, "-w") == ["DP-1"]
+    assert choices(FAKE_REFRESH="0") == ["auto", "120", "90", "60", "30"], "no mode: every rate stays"
+    # The settings form runs choices without a session: the profile's default screen.
+    assert (fakebin["logs"] / "universe.args").read_text().endswith("screen-mode\n--json\n")
 
 
 def test_start_enabled_false_exits_early(tmp_path, fakebin):
@@ -262,17 +267,17 @@ def test_shot_falls_back_to_gsr_when_the_shell_refuses(tmp_path, fakebin):
     assert flag_values((fakebin["logs"] / "gsr.args").read_text().splitlines(), "-o") == [result.stdout.strip()]
 
 
-def own_cgroup():
-    return Path("/proc/self/cgroup").read_text().strip().split("::", 1)[1]
+WINDOW_JSON = '{"id":7,"pid":4242,"wm_class":"gamescope","title":"Dead Cells","focused":true,"width":3840,"height":2160,"hidden":false,"minimized":false}'
 
 
 def test_start_window_records_through_the_portal_once_the_window_is_up(tmp_path, fakebin):
-    env = env_for(tmp_path, fakebin, {"source": "window"},
-                  extra={"FAKE_NAME_OWNED": "true", "FAKE_CGROUP": own_cgroup(), "GAME_ID": "dead-cells"})
+    env = env_for(tmp_path, fakebin, {"source": "window", "window_wait_s": 45},
+                  extra={"FAKE_NAME_OWNED": "true", "FAKE_WINDOW_JSON": WINDOW_JSON, "GAME_ID": "dead-cells"})
     install_fake_extension(env)
     result = run("start", env)
     assert result.returncode == 0, result.stderr
 
+    assert (fakebin["logs"] / "universe.args").read_text() == "session-window\n--wait\n45\n--json\n"
     args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
     assert f"--unit=universe-capture-{SESSION_ID}" in args
     assert f"BindsTo={GAME_UNIT}" in flag_values(args, "-p")
@@ -285,7 +290,7 @@ def test_start_window_records_through_the_portal_once_the_window_is_up(tmp_path,
 
 def test_start_window_records_the_screen_when_no_window_shows_up(tmp_path, fakebin):
     env = env_for(tmp_path, fakebin, {"source": "window", "window_wait_s": 0},
-                  extra={"FAKE_NAME_OWNED": "true", "FAKE_CGROUP": own_cgroup(), "FAKE_WINDOW_HIDDEN": "true", "GAME_ID": "dead-cells"})
+                  extra={"FAKE_NAME_OWNED": "true", "GAME_ID": "dead-cells"})
     install_fake_extension(env)
     result = run("start", env)
     assert result.returncode == 0, result.stderr
@@ -295,15 +300,14 @@ def test_start_window_records_the_screen_when_no_window_shows_up(tmp_path, fakeb
     assert "ShowOSD" in (fakebin["logs"] / "busctl.args").read_text()
 
 
-def test_pick_window_wants_a_visible_toplevel_of_the_unit():
-    mine = {"id": 1, "pid": os.getpid(), "width": 100, "height": 100}
-    bigger = dict(mine, id=2, width=200)
-    assert _common.pick_window([mine, bigger], own_cgroup())["id"] == 2
-    assert _common.pick_window([dict(mine, hidden=True)], own_cgroup()) is None
-    assert _common.pick_window([dict(mine, minimized=True)], own_cgroup()) is None
-    # Not pid 1: in a build sandbox every process shares the root cgroup.
-    assert _common.pick_window([dict(mine, pid=2**62)], own_cgroup()) is None
-    assert _common.pick_window([mine], None) is None
+def test_start_window_records_the_screen_when_the_cli_has_no_shell(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {"source": "window", "window_wait_s": 0},
+                  extra={"FAKE_NAME_OWNED": "true", "FAKE_UNIVERSE_EXIT": "1", "GAME_ID": "dead-cells"})
+    install_fake_extension(env)
+    result = run("start", env)
+    assert result.returncode == 0, result.stderr
+    assert "no shell" in result.stderr and "no game window" in result.stderr
+    assert flag_values((fakebin["logs"] / "systemd-run.args").read_text().splitlines(), "-w") == ["DP-1"]
 
 
 def test_start_window_falls_back_to_gsr_when_extension_not_loaded(tmp_path, fakebin):
@@ -397,14 +401,3 @@ def test_size_limit_and_audio_bitrate_parse():
 def test_output_path_follows_the_container():
     assert _common.output_path("/p", "s", {"container": "mp4"}) == "/p/s.mp4"
     assert _common.output_path("/p", "s", {}) == "/p/s.mkv"
-
-
-def test_cgroup_matches():
-    unit_cg = "/user.slice/user-1000.slice/user@1000.service/app.slice/universe-game-x.service"
-    exact = f"0::{unit_cg}\n"
-    child = f"0::{unit_cg}/sub\n"
-    other = "0::/user.slice/user-1000.slice/user@1000.service/app.slice/other.service\n"
-    assert _common.cgroup_matches(exact, unit_cg)
-    assert _common.cgroup_matches(child, unit_cg)
-    assert not _common.cgroup_matches(other, unit_cg)
-    assert not _common.cgroup_matches(exact, None)

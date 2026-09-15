@@ -107,8 +107,8 @@ hooks write shows up that way, with no other channel.
 |---|---|---|---|
 | `launch(id, screen, splash)` | `launch(id, screen, splash="")` | `universe play <name> [--screen DP-1] [--no-wait]` | pre-launch hooks, marker, `systemd-run`, post-launch hooks; returns the `session_id` at once. `screen` is a DRM connector name or `""` for the profile default; `splash` a poster for gamescope's keep-alive window (see Gamescope) or `""`. `Busy` if a session is already running |
 | `stop(session_id)` | `stop(session_id)` | `universe stop` | `systemctl --user stop` on the unit; waits for it, a second SIGTERM after ~3 s |
-| `session_window()` | `session_window()` | — | the running game's window as the Universe shell extension lists it (`{id, pid, wm_class, title, focused, width, height, hidden, minimized}`): the largest visible toplevel whose pid is in the unit's cgroup — gamescope's when the game runs inside it. `None` before it maps; `Unavailable` off GNOME |
-| `wait_session_window(session_id, timeout)` | `wait_session_window(session_id, timeout_ms)` | — | blocks until that window is up, then `Activate`s it (focus and raise) and returns it; `None` when the session ended first or the timeout ran out; `Unavailable` off GNOME, at once. Polls the extension every 150 ms |
+| `session_window()` | `session_window()` | `universe session-window [--json]` | the running game's window as the Universe shell extension lists it (`{id, pid, wm_class, title, focused, width, height, hidden, minimized}`): the largest visible toplevel whose pid is in the unit's cgroup — gamescope's when the game runs inside it. `None` before it maps; `Unavailable` off GNOME |
+| `wait_session_window(session_id, timeout)` | `wait_session_window(session_id, timeout_ms)` | `universe session-window --wait <secs> [--json]` | blocks until that window is up, then `Activate`s it (focus and raise) and returns it; `None` when the session ended first or the timeout ran out (the CLI prints `null`, exit 0); `Unavailable` off GNOME, at once. Polls the extension every 150 ms |
 | `focus_session()` / `focus_pid(pid)` | `focus_session()` / `focus_pid(pid)` | — | `Activate` on the game's window / on the largest window of a process (a frontend's own, once the game is gone) |
 | `adopt_scope()` | `adopt_scope()` | — (`universe play` does it unless `--no-wait`) | moves the calling process into the transient scope `universe-launcher-<pid>.scope` (`StartTransientUnit` on the user manager) and returns its name; every later `launch` binds the game to it. Idempotent. `Unavailable` without a user systemd |
 | `screenshot()` | `screenshot()` | `universe screenshot` | runs the `screenshot` hook of whichever module declares one; returns the PNG path |
@@ -309,8 +309,9 @@ Two layers per slot: the **default** under `games/<id>/media/`, which `refresh` 
 The capture module records the whole **screen** (`source = "screen"`, the default: gpu-screen-recorder's
 KMS capture of the session's output) or the game's **window** (`source = "window"`, per game). The
 window source needs GNOME and the `universe@ilyasturki.github.io` shell extension (shipped by the
-home-manager module, loaded after one logout): the module enables it, waits through it for the game's
-toplevel to be up (`window_wait_s`, gamescope's window stays hidden until the game draws), then runs
+home-manager module, loaded after one logout): the module enables it, waits for the game's toplevel
+through `universe session-window --wait` (`window_wait_s`, gamescope's window stays hidden until the
+game draws; the core focuses it once it maps), then runs
 gpu-screen-recorder on GNOME's screencast portal. The first launch of a game shows GNOME's picker —
 pick the game's window, which is on screen by then — and the portal's restore token is kept in
 `<data>/modules/capture/portal/<game id>`; GNOME restores the pick by the window's app id and title,
@@ -380,8 +381,8 @@ hooks: {}, settings: [Setting]}`, and
 or a `string` it lists suggestions, any value stays accepted — except that an `int` also
 takes a listed non-numeric name (`"auto"`), which the module resolves itself. `dynamic` is
 set when the manifest names a `choices_exec`: `<module dir>/<choices_exec> <key>`, run with
-`MODULE_SETTINGS_JSON`, `MODULE_DIR` and `MODULE_DATA_DIR`, prints the choices as a JSON
-array of strings (20 s at most).
+`MODULE_SETTINGS_JSON`, `MODULE_DIR`, `MODULE_DATA_DIR` and `UNIVERSE_BIN` (the capture module asks it
+`screen-mode` for the fps choices), prints the choices as a JSON array of strings (20 s at most).
 
 ## Settings
 
@@ -390,7 +391,7 @@ array of strings (20 s at most).
 | `settings()` | `settings()` | `universe config get` | resolved `config.toml`: absolute paths, defaults applied |
 | `set_setting(key, value)` | `set_setting(key, value)` | `universe config set <key> <value>` | dotted `config.toml` key (`launch.proton`, `paths.recordings_root`, `desktop.profile`); a `launch.*` key is validated against the catalogue, an unknown or game-only one refused |
 | `launch_keys(scope, screen)` | `launch_keys(scope, screen)` | `universe launch-keys [--json]` | the launch keys of `scope` (`game`, `global`, `both`) that have a settings row: `[{key, type, default, choices, label, section, scope, runners, description}]`, `type` one of bool, int, string, path, list, enum, resolution, refresh, fps, proton; `screen` (a `screen_mode`, or none) sizes the resolution, refresh and fps choices; `runners` empty means every runner. The maps (`env`, `dll_overrides`, `options`) and the rowless keys (`runner`, `exe`, `umu_run`…) are settable but not listed; the CLI's table prints all of them |
-| `screen_mode(screen)` | `screen_mode(screen)` | — | `{screen, width, height, refresh}`: the connector's current mode as gamescope is told it (see Gamescope), `screen=""` for the profile default; zeros when none can be read |
+| `screen_mode(screen)` | `screen_mode(screen)` | `universe screen-mode [<screen>] [--json]` | `{screen, width, height, refresh}`: the connector's current mode as gamescope is told it (see Gamescope), `screen=""` for the profile default; zeros when none can be read |
 | — | `version()`, `data_home()`, `state_home()` | `universe --version` | |
 
 ## Controller
@@ -586,7 +587,7 @@ label = "Model"
 | `MODULE_SETTINGS_JSON` | global settings merged with the game's | all |
 | `UNIVERSE_ENV_FILE` | write `KEY=VALUE` lines here to add them to the game's environment, ahead of `launch.env` | `pre-launch` |
 | `MODULE_DIR`, `MODULE_DATA_DIR` | the module's directory, `$XDG_DATA_HOME/universe/modules/<id>` | all |
-| `UNIVERSE_BIN`, `UNIVERSE_{DATA,CONFIG,STATE,CACHE}_HOME`, `UNIVERSE_MODULES_PATH`, `PATH` | the CLI to call back (`recording-file`, `journal-add`) and the environment that makes it open the same core | all |
+| `UNIVERSE_BIN`, `UNIVERSE_{DATA,CONFIG,STATE,CACHE}_HOME`, `UNIVERSE_MODULES_PATH`, `PATH` | the CLI to call back (`recording-file`, `journal-add`, `session-window`, `screen-mode`) and the environment that makes it open the same core | all |
 | `UNIVERSE_GAME_JSON`, `UNIVERSE_JOURNAL_ROOT` | the resolved `Game`, serialized; `paths.journal_root` | all |
 
 Exit codes: 0 is success; anything else is logged and the session continues — except a `pre-launch`

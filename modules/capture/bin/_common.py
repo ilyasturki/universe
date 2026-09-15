@@ -30,40 +30,27 @@ def load_settings():
     return json.loads(os.environ.get("MODULE_SETTINGS_JSON") or "{}")
 
 
-def resolve_screen():
-    screen = (os.environ.get("SESSION_SCREEN") or "").strip()
-    if screen:
-        return screen
-    out = subprocess.run(
-        ["gpu-screen-recorder", "--list-monitors"],
-        capture_output=True, text=True, check=True,
-    ).stdout
-    for line in out.splitlines():
-        line = line.strip()
-        if line:
-            return line.split("|", 1)[0]
-    raise RuntimeError("gpu-screen-recorder --list-monitors returned no monitor")
+def cli_json(args, timeout=20):
+    """`universe <args> --json` parsed; None when the CLI refused (logged) or did not answer."""
+    cmd = [os.environ.get("UNIVERSE_BIN") or "universe", *args, "--json"]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+    except (OSError, subprocess.SubprocessError) as e:
+        log(f"universe {' '.join(args)}: {e}")
+        return None
+    if r.returncode != 0:
+        log(f"universe {' '.join(args)}: {r.stderr.strip()}")
+        return None
+    try:
+        return json.loads(r.stdout)
+    except ValueError:
+        return None
 
 
 def screen_refresh_hz(screen):
-    """The current mode's refresh rate of a DRM connector, from Mutter's DisplayConfig; None off GNOME."""
-    try:
-        out = subprocess.run(
-            ["busctl", "--user", "--json=short", "call", "org.gnome.Mutter.DisplayConfig",
-             "/org/gnome/Mutter/DisplayConfig", "org.gnome.Mutter.DisplayConfig", "GetCurrentState"],
-            capture_output=True, text=True, check=True, timeout=5,
-        ).stdout
-        monitors = json.loads(out)["data"][1]
-    except (OSError, subprocess.SubprocessError, ValueError, KeyError, IndexError, TypeError):
-        return None
-    for monitor in monitors:
-        if monitor[0][0] != screen:
-            continue
-        for mode in monitor[1]:
-            props = mode[6] if len(mode) > 6 and isinstance(mode[6], dict) else {}
-            if (props.get("is-current") or {}).get("data") is True:
-                return round(float(mode[3]))
-    return None
+    """The connector's current refresh rate as the core reads it ("" for the profile default); None when it cannot."""
+    mode = cli_json(["screen-mode", *([screen] if screen else [])]) or {}
+    return int(mode.get("refresh") or 0) or None
 
 
 def resolve_fps(setting, screen):
@@ -144,67 +131,14 @@ def gsr_args(settings, screen, output_path, token_path=None):
     ]
 
 
-def unit_cgroup(unit):
-    if not unit:
-        return None
-    out = subprocess.run(
-        ["systemctl", "--user", "show", "-p", "ControlGroup", "--value", unit],
-        capture_output=True, text=True,
-    ).stdout.strip()
-    return out or None
-
-
-def cgroup_matches(proc_cgroup_text, unit_cg):
-    """Whether a /proc/<pid>/cgroup dump belongs to (or under) the unit's cgroup path."""
-    if not unit_cg:
-        return False
-    base = unit_cg.rstrip("/")
-    for line in proc_cgroup_text.splitlines():
-        path = line.split("::", 1)[1] if "::" in line else line.rsplit(":", 1)[-1]
-        if path == base or path.startswith(base + "/"):
-            return True
-    return False
-
-
-def pid_in_unit(pid, unit_cg):
-    try:
-        with open(f"/proc/{pid}/cgroup") as f:
-            text = f.read()
-    except OSError:
-        return False
-    return cgroup_matches(text, unit_cg)
-
-
 def output_path(pending_dir, session_id, settings):
     return os.path.join(pending_dir, f"{session_id}.{settings.get('container') or 'mkv'}")
 
 
-def list_windows():
-    """The shell's toplevels through the universe extension (org.universe.Windows.List); [] when it does not answer."""
-    try:
-        out = subprocess.run(
-            ["busctl", "--user", "--json=short", "call", WINDOWS_BUS_NAME, "/org/universe/Windows", WINDOWS_BUS_NAME, "List"],
-            capture_output=True, text=True, check=True, timeout=5,
-        ).stdout
-        return json.loads(json.loads(out)["data"][0])
-    except (OSError, subprocess.SubprocessError, ValueError, KeyError, IndexError, TypeError):
-        return []
-
-
-def pick_window(windows, unit_cg):
-    """The largest visible toplevel of the game's cgroup, else None."""
-    mine = [w for w in windows
-            if not w.get("hidden") and not w.get("minimized") and w.get("pid") and pid_in_unit(w["pid"], unit_cg)]
-    return max(mine, key=lambda w: w.get("width", 0) * w.get("height", 0), default=None)
-
-
-def wait_for_window(unit_cg, wait_s, poll_s=0.5):
-    deadline = time.monotonic() + wait_s
-    while True:
-        w = pick_window(list_windows(), unit_cg)
-        if w or time.monotonic() >= deadline:
-            return w
-        time.sleep(poll_s)
+def wait_for_window(wait_s):
+    """The session's window once it maps (the core focuses it), None when none shows within `wait_s` or off GNOME."""
+    # The CLI opens the core and asks the shell before its own wait starts.
+    return cli_json(["session-window", "--wait", str(wait_s)], timeout=wait_s + 30)
 
 
 def extension_ready():

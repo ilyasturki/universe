@@ -367,7 +367,7 @@ impl Core {
         let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
         let Some(cg) = self.host.units.cgroup(&c.unit).await else { return Ok(None) };
         let windows = crate::desktop::list_windows().await.map_err(Error::Unavailable)?;
-        Ok(crate::desktop::pick_window(&windows, &cg))
+        Ok(crate::desktop::pick_window(&windows, |pid| crate::desktop::pid_in_cgroup(pid, &cg)))
     }
 
     /// Blocks until the session's window is on screen, then gives it the focus; the window, or
