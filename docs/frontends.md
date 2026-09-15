@@ -228,17 +228,19 @@ before trashing; the offer to take the recording along works the other way round
 ## The launch and modules sections
 
 `api.screens.launch` is Settings › Launch, what every game starts with, each row a `config.toml`
-key written through `set_setting`: a Gamescope card — the switch, then the fields of
-`docs/api.md` § Gamescope as rows (`gamescope_resolution` and `gamescope_refresh` are
-`string`/`int` rows whose choices come from the screen the window is on, `screen_mode` —
-`auto`, the screen's mode, the standard heights below it at its aspect ratio; the rates below its
-own — and take a typed value; scaler, filter and sharpness list a `default` choice that clears
-the key, through `choiceValues`), then the raw arguments; the card's meta is the screen
-(`screen`: `DP-1 3840×2160 @ 60 Hz`). Then MangoHud, the frame rate limit (`launch.fps_limit`:
-`auto`, `none`, the screen's rate and the ones below it, or a typed number; `auto` displays as
-`auto · 60`, the rate it stands for) and the cursor, then the Proton defaults. The game settings
-page has the same Gamescope group per game and the limit after its MangoHud row, each inherited
-from the global one until set. `load()` reads the config again.
+key written through `set_setting`. The rows are the core's launch-key catalogue
+(`launch_keys(scope, screen)`, `client.launchKeys`): each entry's `section` is the card —
+Gamescope (the switch, the fields, the raw arguments), Overlay and cursor (MangoHud, the frame
+rate limit, then `desktop.hide_cursor` added by the screen), Proton — its `label` and `description`
+(the row's `detail`) come with it, and its `choices` are sized by the screen the window is on
+(`screen_mode`: `auto`, the screen's mode, the standard heights below it at its aspect ratio; the
+rates below its own). `screens/settings.py`'s `launch_row` is the presentation over an entry: an
+`enum` or `int` with choices lists a `default` choice that clears the key (through
+`choiceValues`), a `proton` entry lists the config's `[proton]` names, `fps_limit`'s `auto`
+displays as `auto · 60`, the rate it stands for; the card's meta is the screen (`screen`:
+`DP-1 3840×2160 @ 60 Hz`). The game settings page reads the same catalogue with scope `game`,
+filtered by the runner's kind (`runners`), its Gamescope entries in their own group and the rest in
+Launch, a `both` key inherited from the global value until set. `load()` reads the config again.
 
 `api.screens.modules` is Settings › Modules: one `action` row per module (`module`, its name,
 `value` whether it runs, `display` On / Off / Unavailable, `meta` version and kind, `warning`

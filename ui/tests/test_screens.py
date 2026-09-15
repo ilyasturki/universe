@@ -97,15 +97,17 @@ def test_launch_form(api, fake):
     form = api.screens.launch
     form.load()
     assert form.screen == "DP-1 2560×1440 @ 144 Hz"
-    assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups] == [
-        ("Gamescope", ["launch.gamescope", "launch.gamescope_resolution", "launch.gamescope_refresh", "launch.gamescope_scaler", "launch.gamescope_filter",
-                       "launch.gamescope_sharpness", "launch.gamescope_adaptive_sync", "launch.gamescope_args"]),
-        ("Overlay and cursor", ["launch.mangohud", "launch.fps_limit", "desktop.hide_cursor"]),
-        ("Proton", ["launch.proton", "launch.esync", "launch.fsync", "launch.ntsync", "launch.wayland", "launch.hdr", "launch.dlss_upgrade",
-                    "launch.fsr4_upgrade", "launch.xess_upgrade", "launch.optiscaler"]),
-    ]
+    # The rows are the catalogue's global keys, card by card, the cursor switch after the limiter.
+    keys = fake.launchKeys("global", fake.screenMode("DP-1"))
+    assert {k["scope"] for k in keys} == {"both"} and "prefix" not in [k["key"] for k in keys]
+    expected = [(section, ["launch." + k["key"] for k in keys if k["section"] == section]) for section in ("Gamescope", "Overlay and cursor", "Proton")]
+    expected[1][1].append("desktop.hide_cursor")
+    assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups] == expected
+    assert expected[0][1][:2] == ["launch.gamescope", "launch.gamescope_resolution"] and expected[1][1] == ["launch.mangohud", "launch.fps_limit", "desktop.hide_cursor"]
+    assert expected[2][1][:2] == ["launch.proton", "launch.esync"] and len(expected[2][1]) == 10
     assert form.groups[0]["meta"] == form.screen
     rows = rows_by_key(form)
+    assert rows["launch.gamescope"]["detail"] == next(k["description"] for k in keys if k["key"] == "gamescope")
     assert rows["launch.gamescope"]["value"] is True
     assert rows["launch.gamescope_resolution"]["type"] == "string" and rows["launch.gamescope_resolution"]["value"] == "auto"
     assert rows["launch.gamescope_resolution"]["choices"] == ["auto", "2560x1440", "1920x1080", "1280x720"], "the screen, then the standard heights at its aspect"
@@ -147,14 +149,17 @@ def test_game_settings_gamescope_group(api, fake):
     form = api.screens.gameSettings
     form.load("the-technomancer")
     group = next(g for g in form.groups if g["title"] == "Gamescope")
-    assert [form.rows[i]["key"] for i in group["rows"]] == [
-        "launch.gamescope", "launch.gamescope_resolution", "launch.gamescope_refresh", "launch.gamescope_scaler", "launch.gamescope_filter",
-        "launch.gamescope_sharpness", "launch.gamescope_adaptive_sync", "launch.gamescope_args"]
+    catalogue = fake.launchKeys("game", fake.screenMode("DP-1"))
+    assert [form.rows[i]["key"] for i in group["rows"]] == ["launch." + k["key"] for k in catalogue if k["section"] == "Gamescope"]
+    assert [form.rows[i]["key"] for i in group["rows"]][:2] == ["launch.gamescope", "launch.gamescope_resolution"]
     rows = rows_by_key(form, "")
     assert rows["launch.fps_limit"]["value"] == "auto" and rows["launch.fps_limit"]["inherited"] is True and rows["launch.fps_limit"]["display"] == "auto · 144"
     launch = next(g for g in form.groups if g["title"] == "Launch")
     keys = [form.rows[i]["key"] for i in launch["rows"]]
     assert keys.index("launch.fps_limit") == keys.index("launch.mangohud") + 1
+    # A Proton game shows every key of its runner and none of another's; the rows carry the catalogue's sentence.
+    assert keys[2:] == ["launch." + k["key"] for k in catalogue if k["section"] != "Gamescope" and (not k["runners"] or "proton" in k["runners"])]
+    assert "launch.prefix" in keys and rows["launch.esync"]["detail"].startswith("Wine's eventfd")
     assert rows["launch.gamescope_resolution"]["value"] == "auto" and rows["launch.gamescope_resolution"]["inherited"] is True
     assert rows["launch.gamescope_resolution"]["choices"][:2] == ["auto", "2560x1440"]
     assert rows["launch.gamescope_scaler"]["value"] == "default" and rows["launch.gamescope_scaler"]["inherited"] is True
@@ -163,6 +168,9 @@ def test_game_settings_gamescope_group(api, fake):
     assert fake.game("the-technomancer")["launch"]["gamescope_resolution"] == "1920x1080"
     rows = rows_by_key(form, "")
     assert rows["launch.gamescope_resolution"]["value"] == "1920x1080" and rows["launch.gamescope_resolution"]["inherited"] is False
+    form.load("mini-metro")
+    emulator = [r["key"] for r in form.rows if r["section"] == "Launch"]
+    assert "launch.esync" not in emulator and "launch.proton" not in emulator and "launch.wrapper" in emulator
 
 
 def test_sources_browser_statuses(api):

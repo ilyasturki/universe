@@ -15,6 +15,9 @@ from pathlib import Path
 from .errors import UniverseError
 
 FIXTURE = Path(__file__).parent / "fixtures" / "library.json"
+LAUNCH_KEYS = Path(__file__).parent / "fixtures" / "launch_keys.json"
+REFRESH_RATES = [240, 165, 144, 120, 100, 90, 75, 60, 50, 48, 40, 30]
+RESOLUTION_HEIGHTS = [2160, 1800, 1440, 1080, 720]
 STEP_S = 0.15
 SESSION_S = 2.0
 WINDOW_S = 0.4
@@ -55,6 +58,10 @@ class FakeCore:
         with open(fixture) as f:
             self._data = json.load(f)
         self._config = dict(self._data.get("config") or {})
+        with open(LAUNCH_KEYS) as f:
+            self._launch_keys = json.load(f)
+        # As the core's `settings()`: the resolved config, every global launch key at its default until set.
+        self._config["launch"] = {**{k["key"]: k["default"] for k in self._launch_keys if k["scope"] != "game"}, **(self._config.get("launch") or {})}
         self._tmp = tempfile.TemporaryDirectory(prefix="universe-fake-") if root is None else None
         self._root = Path(root if root is not None else self._tmp.name)
         self._cache = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "universe", "fake-art")
@@ -161,10 +168,12 @@ class FakeCore:
             for key, default in defaults.items()
             if key in ("proton", "esync", "fsync", "ntsync", "wayland", "hdr", "dlss_upgrade", "fsr4_upgrade", "xess_upgrade", "optiscaler", "mangohud", "hide_cursor")
         }
-        # The gamescope fields: the game's own when set, else the global one (`auto` for the sizes).
+        # The gamescope fields and the limiter: the game's own when set, else the global one, else the catalogue's default.
         for key in ("gamescope", "gamescope_resolution", "gamescope_refresh", "gamescope_scaler", "gamescope_filter", "gamescope_sharpness", "gamescope_adaptive_sync", "fps_limit"):
             own = launch.get(key)
-            fallback = defaults.get(key, "auto" if key in ("gamescope_resolution", "gamescope_refresh", "fps_limit") else True if key == "gamescope" else False if key == "gamescope_adaptive_sync" else "" if key in ("gamescope_scaler", "gamescope_filter") else None)
+            fallback = defaults.get(key)
+            if fallback is None:
+                fallback = next(k["default"] for k in self._launch_keys if k["key"] == key)
             out["effective"][key] = fallback if own in (None, "") else own
         out["effective"]["gamescope_args"] = launch.get("gamescope_args") or ""
         runner = self._runner_of(launch)
@@ -751,6 +760,30 @@ class FakeCore:
 
     def screen_mode(self, screen):
         return dict(self._data.get("screen") or {"screen": screen or "DP-1", "width": 2560, "height": 1440, "refresh": 144})
+
+    def launch_keys(self, scope, screen):
+        """The fixture's rows of `scope`; the resolution, refresh and limit choices follow `screen` as the core's do."""
+        if scope not in ("game", "global", "both"):
+            raise UniverseError("Invalid", f"scope must be game, global or both, not '{scope}'")
+        mode = dict(screen or {})
+        w, h, hz = int(mode.get("width") or 0), int(mode.get("height") or 0), int(mode.get("refresh") or 0)
+        rates = [str(r) for r in (sorted({hz, *[r for r in REFRESH_RATES if r < hz]}, reverse=True) if hz else REFRESH_RATES)]
+        resolutions = ["auto", "1920x1080", "1280x720"]
+        if w and h:
+            resolutions = ["auto"]
+            for height in [h, *RESOLUTION_HEIGHTS]:
+                wh = f"{round(w * height / h / 2) * 2}x{height}"
+                if height <= h and wh not in resolutions:
+                    resolutions.append(wh)
+        choices = {"resolution": resolutions, "refresh": ["auto", *rates], "fps": ["auto", "none", *rates]}
+        out = []
+        for spec in self._launch_keys:
+            if scope != "both" and spec["scope"] not in ("both", scope):
+                continue
+            row = json.loads(json.dumps(spec))
+            row["choices"] = choices.get(spec["type"], row["choices"])
+            out.append(row)
+        return out
 
     # -- controller --------------------------------------------------------------------------
 

@@ -40,7 +40,7 @@ FocusScope {
         var out = g.rows.map(function(i) {
             var src = form.rows[i], r = Details.withDetail(src, src.module);
             r.form = i;
-            if (src.inherited === true && !src.detail)
+            if (src.inherited === true)
                 r.detail += (r.detail ? " " : "") + "Inherited from the global setting.";
             return r;
         });

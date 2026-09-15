@@ -194,7 +194,7 @@ impl Core {
             value = crate::runners::spec(&value).ok_or_else(|| Error::Invalid(format!("unknown runner {value}")))?.id.into();
         }
         if let Some(field) = real_key.strip_prefix("launch.") {
-            crate::gamescope::validate(field, &value)?;
+            crate::launch_keys::validate(crate::launch_keys::Scope::Game, field, &value)?;
         }
         if let Some(okey) = real_key.strip_prefix("launch.options.") {
             let spec = crate::runners::spec(&r.game.runner_id()).ok_or_else(|| Error::Invalid(format!("{id} has no known runner")))?;
@@ -645,12 +645,17 @@ impl Core {
         serde_json::json!({ "screen": screen, "width": mode.width, "height": mode.height, "refresh": mode.refresh })
     }
 
+    /// The launch keys of `scope` (`game`, `global`, `both`) as settings rows, the screen's mode sizing the choices.
+    pub fn launch_keys(&self, scope: &str, screen: Option<crate::gamescope::Mode>) -> Result<Vec<crate::launch_keys::Row>> {
+        Ok(crate::launch_keys::rows(crate::launch_keys::Scope::parse(scope)?, screen))
+    }
+
     pub async fn set_setting(&self, key: &str, value: &str) -> Result<()> {
         if key == "controller.volume_step" {
             crate::controller::volume_step_value(value)?;
         }
         if let Some(field) = key.strip_prefix("launch.") {
-            crate::gamescope::validate(field, value)?;
+            crate::launch_keys::validate(crate::launch_keys::Scope::Global, field, value)?;
         }
         Config::set_key(&paths::config_file(), key, value)?;
         if key.starts_with("controller.") {

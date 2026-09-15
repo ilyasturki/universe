@@ -287,6 +287,11 @@ impl Core {
     fn screen_mode(&self, py: Python<'_>, screen: String) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| async move { c.screen_mode(&screen).await })
     }
+    /// `screen`: a `screen_mode()` dict, or `None` for the screenless choices.
+    fn launch_keys(&self, py: Python<'_>, scope: String, screen: Option<&Bound<'_, PyAny>>) -> PyResult<Py<PyAny>> {
+        let screen: Option<universe::gamescope::Mode> = screen.map(typed).transpose()?;
+        py_of(py, &self.core.launch_keys(&scope, screen).map_err(err)?)
+    }
     fn doctor(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| c.doctor())
     }

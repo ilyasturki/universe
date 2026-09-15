@@ -4,6 +4,7 @@ pub mod game;
 pub mod gamescope;
 pub mod inputplumber;
 pub mod journal;
+pub mod launch_keys;
 pub mod launcher;
 pub mod library;
 pub mod lutris;

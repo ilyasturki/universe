@@ -70,11 +70,8 @@ def _to_bus(row, value):
     return payload
 
 
-GAMESCOPE_SCALERS = ["auto", "integer", "fit", "fill", "stretch"]
-GAMESCOPE_FILTERS = ["linear", "nearest", "fsr", "nis", "pixel"]
-GAMESCOPE_SHARPNESS = ["0", "2", "5", "10", "15", "20"]
-REFRESH_RATES = [240, 165, 144, 120, 100, 90, 75, 60, 50, 48, 40, 30]
-RESOLUTION_HEIGHTS = [2160, 1800, 1440, 1080, 720]
+# The catalogue's kinds as the rows' types; a `list` shows and edits as its comma-joined string.
+ROW_TYPES = {"resolution": "string", "refresh": "int", "fps": "string", "proton": "enum", "list": "string"}
 
 
 def screen_label(mode):
@@ -85,68 +82,42 @@ def screen_label(mode):
     return f"{w}×{h}" + (f" @ {hz} Hz" if hz else "")
 
 
-def resolution_choices(mode):
-    """`auto`, the screen, then the standard heights below it at the screen's aspect ratio."""
-    w, h = int(mode.get("width") or 0), int(mode.get("height") or 0)
-    if not w or not h:
-        return ["auto", "1920x1080", "1280x720"]
-    out = ["auto"]
-    for hh in [h] + RESOLUTION_HEIGHTS:
-        if hh > h:
-            continue
-        ww = round(w * hh / h / 2) * 2
-        if f"{ww}x{hh}" not in out:
-            out.append(f"{ww}x{hh}")
-    return out
-
-
-def refresh_choices(mode):
-    """`auto`, the screen's rate, then the common rates below it: a game sees no more than the screen shows."""
-    hz = int(mode.get("refresh") or 0)
-    if not hz:
-        return ["auto"] + [str(r) for r in REFRESH_RATES]
-    return ["auto"] + [str(r) for r in sorted({hz, *[r for r in REFRESH_RATES if r < hz]}, reverse=True)]
-
-
-def gamescope_rows(mode):
-    """(key, label, kind, choices, choiceValues) of the gamescope fields; a `choiceValues` list
-    maps the choices to what is written, its first entry standing for the key left empty."""
-    return [
-        ("launch.gamescope_resolution", "Resolution", "string", resolution_choices(mode), None),
-        ("launch.gamescope_refresh", "Refresh rate", "int", refresh_choices(mode), None),
-        ("launch.gamescope_scaler", "Scaler", "enum", ["default"] + GAMESCOPE_SCALERS, [""] + GAMESCOPE_SCALERS),
-        ("launch.gamescope_filter", "Filter", "enum", ["default"] + GAMESCOPE_FILTERS, [""] + GAMESCOPE_FILTERS),
-        ("launch.gamescope_sharpness", "Sharpness", "int", ["default"] + GAMESCOPE_SHARPNESS, [""] + GAMESCOPE_SHARPNESS),
-        ("launch.gamescope_adaptive_sync", "Adaptive sync", "bool", None, None),
-    ]
-
-
-def fps_limit_choices(mode):
-    """`auto` (the refresh the game sees), `none`, then the rates the screen can show."""
-    return ["auto", "none"] + refresh_choices(mode)[1:]
-
-
-def fps_limit_row(section, value, mode, inherited=False, gamescope=True, gamescope_refresh="auto"):
-    """The MangoHud limiter's row; `auto` shows the rate it stands for: the gamescope one when set, else the screen's."""
-    row = choice_row(section, "launch.fps_limit", "Frame rate limit", "string", value or "auto", fps_limit_choices(mode), None, inherited=inherited)
-    hz = int(mode.get("refresh") or 0)
+def auto_rate(mode, gamescope, gamescope_refresh):
+    """The rate `fps_limit = auto` stands for: the gamescope one when set, else the screen's."""
     if gamescope and str(gamescope_refresh or "").isdigit():
-        hz = int(gamescope_refresh)
-    if row["value"] == "auto" and hz:
-        row["display"] = f"auto · {hz}"
-    return row
+        return int(gamescope_refresh)
+    return int(mode.get("refresh") or 0)
 
 
-def choice_row(section, key, label, kind, value, choices, values, inherited=False):
-    """A row whose listed choices may stand for other written values (`values`, see gamescope_rows)."""
-    if values:
-        empty = value in (None, "")
-        value = choices[0] if empty else choices[values.index(str(value))] if str(value) in values else str(value)
-    elif kind != "bool" and value is not None:
+def proton_choices(config):
+    """The config's `[proton]` names, the default first when it is not one of them (a path)."""
+    choices = sorted((config.get("proton") or {}).keys())
+    default = str(_dig(config, "launch.proton", "") or "")
+    if default and default not in choices:
+        choices.insert(0, default)
+    return choices
+
+
+def launch_row(section, spec, value, inherited=False, protons=(), auto_hz=0):
+    """A row over a `launchKeys` entry and the value shown; an enum or int with choices lists a `default`
+    choice standing for the key left empty (`choiceValues` maps the choices to what is written)."""
+    kind = ROW_TYPES.get(spec["type"], spec["type"])
+    choices, values = [str(c) for c in spec["choices"]], None
+    if spec["type"] in ("enum", "int") and choices:
+        choices, values = ["default"] + choices, [""] + choices
+    elif spec["type"] == "proton":
+        choices = list(protons)
+    if kind == "bool":
+        value = bool(value)
+    elif values:
+        value = choices[0] if value in (None, "") else choices[values.index(str(value))] if str(value) in values else str(value)
+    elif choices and value is not None:
         value = str(value)
-    row = _row(section, key, label, kind, value, choices, inherited=inherited)
+    row = _row(section, "launch." + spec["key"], spec["label"], kind, value, choices, detail=spec["description"], inherited=inherited)
     if values:
-        row["choiceValues"] = list(values)
+        row["choiceValues"] = values
+    if spec["type"] == "fps" and value == "auto" and auto_hz:
+        row["display"] = f"auto · {auto_hz}"
     return row
 
 
@@ -229,11 +200,6 @@ CORE_ROWS = [
     ("Artwork", "metadata.sgdb_id", "SteamGridDB id", "int"),
     ("Artwork", "metadata.rawg_id", "RAWG id", "int"),
 ]
-LAUNCH_ROWS = {
-    "proton": [("launch.proton", "Proton", "enum"), ("launch.esync", "Esync", "bool"), ("launch.fsync", "Fsync", "bool"), ("launch.ntsync", "NTSync", "bool"), ("launch.wayland", "Wayland", "bool"), ("launch.hdr", "HDR", "bool"), ("launch.dlss_upgrade", "DLSS upgrade", "bool"), ("launch.fsr4_upgrade", "FSR 4 upgrade", "bool"), ("launch.xess_upgrade", "XeSS upgrade", "bool"), ("launch.optiscaler", "OptiScaler", "bool"), ("launch.prefix", "Wine prefix", "path")],
-    "wine": [("launch.esync", "Esync", "bool"), ("launch.fsync", "Fsync", "bool"), ("launch.prefix", "Wine prefix", "path")],
-}
-COMMON_LAUNCH_ROWS = [("launch.mangohud", "MangoHud", "bool"), ("launch.fps_limit", "Frame rate limit", "string"), ("launch.wrapper", "Wrapper command", "string"), ("launch.args", "Arguments", "string"), ("launch.working_dir", "Working directory", "path")]
 
 
 class GameSettingsForm(RowsForm):
@@ -257,44 +223,27 @@ class GameSettingsForm(RowsForm):
         effective = game.get("effective") or {}
         rows, runner_kind = self._launch_rows(game, effective)
         groups = [_group("Launch", range(len(rows)), caps=True)]
-        launch = [("Launch", key, label, kind) for key, label, kind in LAUNCH_ROWS.get(runner_kind, []) + COMMON_LAUNCH_ROWS]
         mode = self._screen_mode() or {}
-        gamescope = [("Gamescope", "launch.gamescope", "Gamescope", "bool")]
-        gamescope += [("Gamescope", key, label, kind) for key, label, kind, _, _ in gamescope_rows(mode)]
-        gamescope.append(("Gamescope", "launch.gamescope_args", "Arguments", "string"))
-        listed = {key: (kind, choices, values) for key, _, kind, choices, values in gamescope_rows(mode)}
-        for section, key, label, kind in launch + gamescope + CORE_ROWS:
+        protons = proton_choices(config)
+        hz = auto_rate(mode, effective.get("gamescope", True), effective.get("gamescope_refresh"))
+        for spec in self._client.launchKeys("game", mode):
+            if spec["runners"] and runner_kind not in spec["runners"]:
+                continue
+            # A key the game leaves empty takes the global value, `effective` says which.
+            own = _dig(game, "launch." + spec["key"])
+            value, inherited = own, False
+            if own in (None, "") and spec["scope"] == "both":
+                value, inherited = effective.get(spec["key"]), True
+            section = "Gamescope" if spec["section"] == "Gamescope" else "Launch"
+            _add(rows, groups, section, launch_row(section, spec, value, inherited, protons, hz), caps=True)
+        for section, key, label, kind in CORE_ROWS:
             value = _dig(game, key)
-            if key == "launch.fps_limit":
-                _add(rows, groups, section, fps_limit_row(section, value or effective.get("fps_limit"), mode, inherited=value in (None, ""),
-                                                          gamescope=bool(effective.get("gamescope", True)), gamescope_refresh=effective.get("gamescope_refresh")), caps=True)
-                continue
-            if key in listed:
-                # A field left empty takes the global one, `effective` says which; the choices carry the screen.
-                own = value
-                if own in (None, ""):
-                    value = effective.get(key.split(".", 1)[1])
-                _, choices, values = listed[key]
-                _add(rows, groups, section, choice_row(section, key, label, kind, value, choices, values, inherited=own in (None, "")), caps=True)
-                continue
-            # A launch or desktop key the game leaves empty takes the global value.
             inherited = False
-            if value in (None, "") and key.startswith(("launch.", "desktop.")):
-                value = effective.get(key.split(".", 1)[1])
-                inherited = value not in (None, "")
-            choices = []
-            if key == "launch.proton":
-                choices = sorted((config.get("proton") or {}).keys())
-                default = _dig(config, "launch.proton", "")
-                if default and default not in choices:
-                    choices.insert(0, default)
-                if not value and default:
-                    value, inherited = default, True
+            if key == "desktop.hide_cursor" and value is None:
+                value, inherited = effective.get("hide_cursor"), True
             if kind == "bool":
-                if value is None and key.startswith(("launch.", "desktop.")):
-                    value, inherited = bool(_dig(config, key, False)), True
                 value = bool(value)
-            _add(rows, groups, section, _row(section, key, label, kind, value, choices, inherited=inherited), caps=True)
+            _add(rows, groups, section, _row(section, key, label, kind, value, inherited=inherited), caps=True)
         modules = {m["id"]: m for m in self._client.modules() or []}
         for module_id, values in (self._client.settings(game_id) or {}).items():
             module = modules.get(module_id) or {}

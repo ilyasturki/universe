@@ -7,9 +7,12 @@ use crate::Error;
 pub const SCALERS: [&str; 5] = ["auto", "integer", "fit", "fill", "stretch"];
 pub const FILTERS: [&str; 5] = ["linear", "nearest", "fsr", "nis", "pixel"];
 pub const SHARPNESS_MAX: u32 = 20;
+const REFRESH_RATES: [u32; 12] = [240, 165, 144, 120, 100, 90, 75, 60, 50, 48, 40, 30];
+const RESOLUTION_HEIGHTS: [u32; 5] = [2160, 1800, 1440, 1080, 720];
 
 /// A screen's current mode; refresh in Hz, rounded.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Mode {
     pub width: u32,
     pub height: u32,
@@ -59,24 +62,33 @@ pub fn parse_refresh(s: &str) -> crate::Result<Option<u32>> {
     }
 }
 
-/// A `gamescope_*` launch key's value; empty always passes (it clears the key).
-pub fn validate(key: &str, value: &str) -> crate::Result<()> {
-    if value.is_empty() {
-        return Ok(());
+/// `auto`, the screen's `WxH`, then the standard heights below it at its aspect ratio; two common sizes when no screen is known.
+pub fn resolution_choices(screen: Option<Mode>) -> Vec<String> {
+    let Some(s) = screen.filter(|s| s.width > 0 && s.height > 0) else { return ["auto", "1920x1080", "1280x720"].map(String::from).to_vec() };
+    let mut out = vec!["auto".to_string()];
+    for h in std::iter::once(s.height).chain(RESOLUTION_HEIGHTS).filter(|h| *h <= s.height) {
+        let w = (s.width as f64 * h as f64 / s.height as f64 / 2.0).round() as u32 * 2;
+        let wh = format!("{w}x{h}");
+        if !out.contains(&wh) {
+            out.push(wh);
+        }
     }
-    match key {
-        "gamescope_resolution" => parse_resolution(value).map(|_| ()),
-        "gamescope_refresh" => parse_refresh(value).map(|_| ()),
-        "gamescope_scaler" if !SCALERS.contains(&value) => Err(Error::Invalid(format!("gamescope_scaler must be one of {}", SCALERS.join(", ")))),
-        "gamescope_filter" if !FILTERS.contains(&value) => Err(Error::Invalid(format!("gamescope_filter must be one of {}", FILTERS.join(", ")))),
-        "gamescope_sharpness" => match value.parse::<u32>() {
-            Ok(n) if n <= SHARPNESS_MAX => Ok(()),
-            _ => Err(Error::Invalid(format!("gamescope_sharpness must be 0 (sharpest) to {SHARPNESS_MAX}"))),
-        },
-        "fps_limit" => crate::launcher::parse_fps_limit(value).map(|_| ()),
-        "gamescope_adaptive_sync" | "gamescope" if !matches!(value, "true" | "false") => Err(Error::Invalid(format!("{key} must be true or false"))),
-        _ => Ok(()),
-    }
+    out
+}
+
+/// `auto`, the screen's rate, then the common rates below it: a game sees no more than the screen shows.
+pub fn refresh_choices(screen: Option<Mode>) -> Vec<String> {
+    let mut rates: Vec<u32> = match screen.map(|s| s.refresh).filter(|hz| *hz > 0) {
+        Some(hz) => std::iter::once(hz).chain(REFRESH_RATES.into_iter().filter(|r| *r < hz)).collect(),
+        None => REFRESH_RATES.to_vec(),
+    };
+    rates.sort_unstable_by(|a, b| b.cmp(a));
+    std::iter::once("auto".to_string()).chain(rates.iter().map(u32::to_string)).collect()
+}
+
+/// `auto` (the refresh the game sees), `none`, then the rates the screen can show.
+pub fn fps_limit_choices(screen: Option<Mode>) -> Vec<String> {
+    ["auto".to_string(), "none".to_string()].into_iter().chain(refresh_choices(screen).into_iter().skip(1)).collect()
 }
 
 /// No screen known: no size flags, so gamescope keeps its own default rather than a wrong one.
@@ -127,17 +139,15 @@ mod tests {
     }
 
     #[test]
-    fn keys_validate() {
-        assert!(validate("gamescope_scaler", "integer").is_ok());
-        assert!(validate("gamescope_scaler", "bilinear").is_err());
-        assert!(validate("gamescope_filter", "fsr").is_ok());
-        assert!(validate("gamescope_filter", "").is_ok());
-        assert!(validate("gamescope_sharpness", "20").is_ok());
-        assert!(validate("gamescope_sharpness", "21").is_err());
-        assert!(validate("fps_limit", "60").is_ok() && validate("fps_limit", "auto").is_ok() && validate("fps_limit", "none").is_ok());
-        assert!(validate("fps_limit", "sixty").is_err() && validate("fps_limit", "0").is_err());
-        assert!(validate("gamescope_adaptive_sync", "yes").is_err());
-        assert!(validate("gamescope_args", "anything -r 120").is_ok());
+    fn choices_follow_the_screen() {
+        let screen = Some(Mode { width: 3840, height: 2160, refresh: 60 });
+        assert_eq!(resolution_choices(screen), ["auto", "3840x2160", "3200x1800", "2560x1440", "1920x1080", "1280x720"]);
+        assert_eq!(resolution_choices(Some(Mode { width: 3440, height: 1440, refresh: 100 })), ["auto", "3440x1440", "2580x1080", "1720x720"]);
+        assert_eq!(resolution_choices(None), ["auto", "1920x1080", "1280x720"]);
+        assert_eq!(refresh_choices(screen), ["auto", "60", "50", "48", "40", "30"]);
+        assert_eq!(refresh_choices(Some(Mode { width: 1, height: 1, refresh: 72 })), ["auto", "72", "60", "50", "48", "40", "30"]);
+        assert_eq!(refresh_choices(None).len(), 13);
+        assert_eq!(fps_limit_choices(screen), ["auto", "none", "60", "50", "48", "40", "30"]);
     }
 
     #[test]

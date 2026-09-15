@@ -507,6 +507,11 @@ class CoreClient(QObject):
         """`{screen, width, height, refresh}`: the mode gamescope is told, of `screen` or the default."""
         return self._guarded({}, self._core.screen_mode, screen or "") or {}
 
+    @Slot(str, "QVariant", result="QVariant")
+    def launchKeys(self, scope, screen):
+        """The launch keys of `scope` (game, global, both) as rows; `screen` (a `screenMode`) sizes the choices."""
+        return list(self._guarded([], self._core.launch_keys, scope, dict(screen) if screen else None) or [])
+
     @Slot(result=str)
     def version(self):
         try:

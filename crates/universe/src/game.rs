@@ -299,7 +299,7 @@ pub fn set_dotted(doc: &mut toml_edit::DocumentMut, key: &str, value: &str) -> c
     // [runners.<id>] args is a shell-quoted string, not a list; [modules.<id>] enabled is a bool, only modules.enabled lists.
     let is_list = list_keys.contains(&last) && !key.starts_with("runners.") && (last != "enabled" || key == "modules.enabled");
     // A rate is a string that may be a number: `auto` or `60`.
-    let is_rate = matches!(last, "gamescope_refresh" | "fps_limit") && key.starts_with("launch.");
+    let is_rate = key.starts_with("launch.") && crate::launch_keys::find(last).is_some_and(|k| matches!(k.kind, crate::launch_keys::Kind::Refresh | crate::launch_keys::Kind::Fps));
     let v = if is_list && !value.starts_with('[') {
         parse_value(&format!("[{value}]"))
     } else if is_rate {

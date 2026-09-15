@@ -135,9 +135,12 @@ pub enum Cmd {
     Set {
         /// Game: exact id, then whole word, substring or path
         name: String,
-        /// key=value; launch keys (runner, exe, proton, prefix, args…) need no `launch.` prefix, a runner option is options.<key>
+        /// key=value; launch keys (`universe launch-keys`) need no `launch.` prefix, a runner option is options.<key>
         pairs: Vec<String>,
     },
+    /// The launch keys: what `set` and `config set launch.*` take, with each one's type, default and scope
+    #[command(name = "launch-keys")]
+    LaunchKeys,
     /// Sessions of a game
     Sessions {
         /// Game: exact id, then whole word, substring or path
@@ -515,6 +518,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
     match &cmd {
         Cmd::Complete { what } => return complete(what),
         Cmd::Generate { dir } => return generate(dir),
+        Cmd::LaunchKeys => return launch_keys(json),
         Cmd::Splash { image, cmd } => std::process::exit(crate::splash::run(image.as_deref(), cmd)),
         _ => {}
     }
@@ -755,9 +759,8 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             for p in pairs {
                 let (k, v) = p.split_once('=').ok_or_else(|| anyhow::anyhow!("expected key=value, got {p}"))?;
                 let k = match k {
-                    "runner" | "runner_exe" | "proton" | "exe" | "prefix" | "args" | "working_dir" | "esync" | "fsync" | "ntsync" | "wayland" | "hdr" | "dlss_upgrade" | "fsr4_upgrade" | "xess_upgrade" | "optiscaler" | "mangohud" | "gamescope" | "gamescope_args" | "gamescope_resolution" | "gamescope_refresh" | "gamescope_scaler" | "gamescope_filter" | "gamescope_sharpness" | "gamescope_adaptive_sync" | "fps_limit" | "umu_id" | "store" | "wrapper" | "pre_command" | "post_command" | "arch" => format!("launch.{k}"),
                     "hide_cursor" => "desktop.hide_cursor".into(),
-                    _ if k.starts_with("options.") => format!("launch.{k}"),
+                    _ if crate::launch_keys::find(k.split('.').next().unwrap_or(k)).is_some() => format!("launch.{k}"),
                     _ => k.to_string(),
                 };
                 core.set(&id, &k, v).await?;
@@ -1059,7 +1062,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             core.reload_config().await?;
             println!("rescanned");
         }
-        Cmd::Complete { .. } | Cmd::Generate { .. } | Cmd::Splash { .. } => unreachable!(),
+        Cmd::Complete { .. } | Cmd::Generate { .. } | Cmd::Splash { .. } | Cmd::LaunchKeys => unreachable!(),
     }
     Ok(())
 }
@@ -1233,10 +1236,60 @@ fn complete(what: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-const GAME_KEYS: [&str; 42] = [
-    "runner=", "runner_exe=", "exe=", "proton=", "prefix=", "args=", "working_dir=", "esync=", "fsync=", "ntsync=", "wayland=", "hdr=", "dlss_upgrade=", "fsr4_upgrade=", "xess_upgrade=", "optiscaler=", "mangohud=", "gamescope=", "gamescope_args=", "gamescope_resolution=", "gamescope_refresh=", "gamescope_scaler=", "gamescope_filter=", "gamescope_sharpness=", "gamescope_adaptive_sync=", "fps_limit=", "umu_id=", "store=", "wrapper=", "pre_command=", "post_command=", "arch=", "hide_cursor=",
-    "hidden=", "favorite=", "tags=", "sort_title=", "platform=", "metadata.sgdb_id=", "capture.cursor=", "launch.env.", "options.",
-];
+/// `--json` is `rows(Both, None)`, what `ui/universe_ui/fixtures/launch_keys.json` copies; the table lists the maps too.
+fn launch_keys(json: bool) -> anyhow::Result<()> {
+    use crate::launch_keys::{Kind, Scope, LAUNCH_KEYS};
+    if json {
+        return print_json(&crate::launch_keys::rows(Scope::Both, None));
+    }
+    let mut t = table(&["Key", "Type", "Default", "Scope", "Label"]);
+    for k in LAUNCH_KEYS {
+        let kind = match k.kind {
+            Kind::Bool => "bool".to_string(),
+            Kind::Int { max: Some(m) } => format!("0..{m}"),
+            Kind::Int { max: None } => "int".into(),
+            Kind::Str => "string".into(),
+            Kind::Path => "path".into(),
+            Kind::List => "list".into(),
+            Kind::Enum(choices) => choices.join(" | "),
+            Kind::Resolution => "auto | WxH".into(),
+            Kind::Refresh => "auto | Hz".into(),
+            Kind::Fps => "auto | none | fps".into(),
+            Kind::Proton => "[proton] name".into(),
+            Kind::Map => format!("{}.<name>", k.key),
+        };
+        let scope = match k.scope {
+            Scope::Game => "game",
+            Scope::Global => "global",
+            Scope::Both => "game, global",
+        };
+        t.add_row(vec![Cell::new(format!("launch.{}", k.key)), Cell::new(kind), Cell::new(k.default), Cell::new(scope), Cell::new(k.label)]);
+    }
+    println!("{t}");
+    Ok(())
+}
+
+/// `set`'s candidates: the launch keys unprefixed (a map as `env.`), then the other game keys.
+fn game_keys() -> Vec<String> {
+    use crate::launch_keys::{Kind, Scope, LAUNCH_KEYS};
+    let mut keys: Vec<String> = LAUNCH_KEYS.iter().filter(|k| k.scope != Scope::Global).map(|k| if k.kind == Kind::Map { format!("{}.", k.key) } else { format!("{}=", k.key) }).collect();
+    keys.extend(["hide_cursor=", "hidden=", "favorite=", "tags=", "sort_title=", "platform=", "metadata.sgdb_id=", "capture.cursor="].map(String::from));
+    keys
+}
+
+fn config_keys() -> Vec<String> {
+    use crate::launch_keys::{Kind, Scope, LAUNCH_KEYS};
+    let mut keys: Vec<String> = ["paths.games_root", "paths.prefixes_root", "paths.recordings_root", "paths.journal_root", "paths.overrides"].map(String::from).to_vec();
+    keys.extend(LAUNCH_KEYS.iter().filter(|k| k.scope != Scope::Game).map(|k| if k.kind == Kind::Map { format!("launch.{}.", k.key) } else { format!("launch.{}", k.key) }));
+    keys.extend(
+        [
+            "runners.", "desktop.profile", "desktop.hide_cursor", "desktop.cursor_extension", "keys.sgdb", "keys.sgdb_file", "keys.rawg", "keys.rawg_file",
+            "controller.enabled", "controller.hold_ms", "controller.volume_step", "controller.mangohud_toggle",
+        ]
+        .map(String::from),
+    );
+    keys
+}
 
 /// `(subcommand path, position of the positional counted from that subcommand, candidates)`.
 const POSITIONALS: &[(&str, usize, &str)] = &[
@@ -1279,12 +1332,6 @@ const POSITIONALS: &[(&str, usize, &str)] = &[
     ("controller learn", 2, "buttons"),
     ("controller forget", 1, "families"),
     ("controller forget", 2, "buttons"),
-];
-
-const CONFIG_KEYS: [&str; 38] = [
-    "paths.games_root", "paths.prefixes_root", "paths.recordings_root", "paths.journal_root", "paths.overrides", "launch.proton", "launch.esync", "launch.fsync", "launch.ntsync", "launch.wayland", "launch.hdr", "launch.dlss_upgrade", "launch.fsr4_upgrade", "launch.xess_upgrade", "launch.optiscaler", "launch.mangohud", "launch.gamescope", "launch.gamescope_args", "launch.gamescope_bin", "launch.gamescope_resolution", "launch.gamescope_refresh", "launch.gamescope_scaler", "launch.gamescope_filter", "launch.gamescope_sharpness", "launch.gamescope_adaptive_sync", "launch.fps_limit", "runners.",
-    "desktop.profile", "desktop.hide_cursor", "desktop.cursor_extension", "keys.sgdb", "keys.sgdb_file", "keys.rawg", "keys.rawg_file",
-    "controller.enabled", "controller.hold_ms", "controller.volume_step", "controller.mangohud_toggle",
 ];
 
 fn generate(dir: &std::path::Path) -> anyhow::Result<()> {
@@ -1347,13 +1394,13 @@ fn generate(dir: &std::path::Path) -> anyhow::Result<()> {
         let cond = format!("__universe_at '{path}' {n}");
         match *what {
             "FILES" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -F\n")),
-            "CONFIG_KEYS" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"{}\"\n", CONFIG_KEYS.join(" "))),
+            "CONFIG_KEYS" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"{}\"\n", config_keys().join(" "))),
             "games" | "sources" | "modules" | "families" | "buttons" | "runners" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"(universe __complete {what})\"\n")),
             "games all" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"(universe __complete games) all\"\n")),
             literal => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"{literal}\"\n")),
         }
     }
-    fish.push_str(&format!("complete -c universe -n \"__universe_at set 2+\" -f -a \"{}\"\n", GAME_KEYS.join(" ")));
+    fish.push_str(&format!("complete -c universe -n \"__universe_at set 2+\" -f -a \"{}\"\n", game_keys().join(" ")));
     fish.push_str("complete -c universe -n \"__fish_seen_subcommand_from search install\" -l source -x -a \"(universe __complete sources)\"\n");
     fish.push_str("complete -c universe -n \"__fish_seen_subcommand_from add\" -s r -l runner -x -a \"(universe __complete runners)\"\n");
     fish.push_str("complete -c universe -n \"__fish_seen_subcommand_from module\" -l game -x -a \"(universe __complete games)\"\n");

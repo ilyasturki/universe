@@ -496,28 +496,6 @@
   "config": {
     "schema": 1,
     "paths": {"games_root": "/mnt/games/PC", "prefixes_root": "/mnt/games/prefixes"},
-    "launch": {
-      "proton": "proton-ge",
-      "esync": true,
-      "fsync": true,
-      "ntsync": true,
-      "wayland": true,
-      "hdr": false,
-      "dlss_upgrade": false,
-      "fsr4_upgrade": false,
-      "xess_upgrade": false,
-      "optiscaler": false,
-      "mangohud": true,
-      "gamescope": true,
-      "gamescope_args": "",
-      "gamescope_resolution": "auto",
-      "gamescope_refresh": "auto",
-      "gamescope_scaler": "",
-      "gamescope_filter": "",
-      "gamescope_sharpness": null,
-      "gamescope_adaptive_sync": false,
-      "fps_limit": "auto"
-    },
     "desktop": {"hide_cursor": true},
     "proton": {
       "proton-ge": "~/.local/share/lutris/runners/wine/proton-ge",

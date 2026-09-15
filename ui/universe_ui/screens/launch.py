@@ -1,12 +1,8 @@
 from PySide6.QtCore import Property, Signal, Slot
 
-from .settings import RowsForm, _add, _dig, _row, choice_row, fps_limit_row, gamescope_rows, screen_label
+from .settings import RowsForm, _add, _dig, _row, auto_rate, launch_row, proton_choices, screen_label
 
-PROTON_ROWS = [
-    ("launch.esync", "Esync", "bool"), ("launch.fsync", "Fsync", "bool"), ("launch.ntsync", "NTSync", "bool"),
-    ("launch.wayland", "Wayland", "bool"), ("launch.hdr", "HDR", "bool"), ("launch.dlss_upgrade", "DLSS upgrade", "bool"),
-    ("launch.fsr4_upgrade", "FSR 4 upgrade", "bool"), ("launch.xess_upgrade", "XeSS upgrade", "bool"), ("launch.optiscaler", "OptiScaler", "bool"),
-]
+SECTIONS = ["Gamescope", "Overlay and cursor", "Proton"]
 
 
 class LaunchForm(RowsForm):
@@ -24,25 +20,21 @@ class LaunchForm(RowsForm):
         mode = self._screen_mode() or {}
         self._screen = " ".join(p for p in (str(mode.get("screen") or ""), screen_label(mode)) if p)
         self.screenChanged.emit()
+        keys = self._client.launchKeys("global", mode)
+        protons = proton_choices(config)
+        hz = auto_rate(mode, launch.get("gamescope", True), launch.get("gamescope_refresh"))
         rows, groups = [], []
-        _add(rows, groups, "Gamescope", _row("Launch", "launch.gamescope", "Gamescope", "bool", bool(launch.get("gamescope", True))), caps=True)
-        for key, label, kind, choices, values in gamescope_rows(mode):
-            value = launch.get(key.split(".", 1)[1])
-            if kind == "bool":
-                value = bool(value)
-            _add(rows, groups, "Gamescope", choice_row("Launch", key, label, kind, value, choices, values), caps=True)
-        _add(rows, groups, "Gamescope", _row("Launch", "launch.gamescope_args", "Arguments", "string", launch.get("gamescope_args") or ""), caps=True)
+        for section in SECTIONS:
+            for spec in keys:
+                if spec["section"] != section:
+                    continue
+                value = launch.get(spec["key"])
+                if value in (None, ""):
+                    value = spec["default"]
+                _add(rows, groups, section, launch_row("Launch", spec, value, protons=protons, auto_hz=hz), caps=True)
+            if section == "Overlay and cursor":
+                _add(rows, groups, section, _row("Launch", "desktop.hide_cursor", "Hide the cursor while playing", "bool", bool(_dig(config, "desktop.hide_cursor", True))), caps=True)
         groups[0]["meta"] = self._screen
-        _add(rows, groups, "Overlay and cursor", _row("Launch", "launch.mangohud", "MangoHud", "bool", bool(launch.get("mangohud", True))), caps=True)
-        _add(rows, groups, "Overlay and cursor", fps_limit_row("Launch", launch.get("fps_limit"), mode, gamescope=bool(launch.get("gamescope", True)), gamescope_refresh=launch.get("gamescope_refresh")), caps=True)
-        _add(rows, groups, "Overlay and cursor", _row("Launch", "desktop.hide_cursor", "Hide the cursor while playing", "bool", bool(_dig(config, "desktop.hide_cursor", True))), caps=True)
-        choices = sorted((config.get("proton") or {}).keys())
-        default = str(launch.get("proton") or "")
-        if default and default not in choices:
-            choices.insert(0, default)
-        _add(rows, groups, "Proton", _row("Launch", "launch.proton", "Proton", "enum", default, choices), caps=True)
-        for key, label, kind in PROTON_ROWS:
-            _add(rows, groups, "Proton", _row("Launch", key, label, kind, bool(launch.get(key.split(".", 1)[1], False))), caps=True)
         self._set_rows(rows, groups)
 
     def _write(self, row, payload):

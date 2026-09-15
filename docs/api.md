@@ -67,14 +67,11 @@ operation; a dash means the surface doesn't expose it.
 | `import_lutris(apply)` | `import_lutris(apply)` | `universe migrate [--apply]` | a report: imported games, per-game env diff (`{id, lutris_env, universe_env, added, removed, changed}`), imported hours, games whose art was copied from `[lutris] pegasus_library` (`<platform>/media/<slug>/`, once, never over an existing `media/`), `runners_promoted` (emulator games from before runners that now name theirs), `options_promoted` (games already imported that take what a field now holds — a `wrapper`, a DLL override, a Proton switch — only where the file had nothing) and `runners` (what Lutris's runner configs say: a wrapper script is seen through, the program is written to `[runners.<id>] exe` when it is not on PATH, its extra arguments to `args`). Without `apply` it only reports |
 | `add_game(spec)` | `add_game(spec)` | `universe add <file> --runner <id> [--title T] [--platform P] [--media]` | `{"runner", "exe", "title"?, "platform"?}` → the new id. The title defaults to the file's name cleaned of release tags; the platform to the runner's first. Refuses an id already in the library |
 
-`set` takes dotted keys: `launch.runner`, `launch.exe`, `launch.proton`, `launch.gamescope`,
-`launch.gamescope_args`, `launch.gamescope_resolution`, `launch.gamescope_refresh`,
-`launch.gamescope_scaler`, `launch.gamescope_filter`, `launch.gamescope_sharpness`,
-`launch.gamescope_adaptive_sync`, `launch.fps_limit` (validated as `[launch]`'s), `launch.esync`, `launch.fsync`, `launch.ntsync`, `launch.wayland`,
-`launch.hdr`, `launch.dlss_upgrade`, `launch.fsr4_upgrade`, `launch.xess_upgrade`,
-`launch.optiscaler` (a switch left empty takes `[launch]`'s), `launch.wrapper`,
-`launch.dll_overrides.d3d11`, `launch.env.FOO`,
-`launch.options.<key>` (validated against the runner's options), `desktop.hide_cursor`, `hidden`,
+`set` takes dotted keys: the `launch.*` keys of `universe launch-keys` — the one catalogue
+(`launch_keys.rs`) every `[launch]` key is declared in, with its type, default, scope and choices;
+a game key left empty takes `[launch]`'s, a value is validated as the key's type says, an unknown
+or global-only key is refused — with the maps `launch.dll_overrides.d3d11`, `launch.env.FOO` and
+`launch.options.<key>` (validated against the runner's options); then `desktop.hide_cursor`, `hidden`,
 `favorite`, `tags`, `sort_title`, `platform`, `metadata.sgdb_id`, and `capture.cursor` as a
 validated shorthand for `modules.capture.cursor`. Values are strings: `true`/`false` for booleans,
 comma-separated for lists, `""` deletes the key. A runner is written under its shipped id (`yuzu` →
@@ -157,17 +154,13 @@ output (`-W -H`) is always the screen, and the game's resolution and refresh fol
 The mode is the connector's `is-current` one from Mutter's DisplayConfig (`GetCurrentState`,
 physical pixels — gamescope handles the desktop's scale itself), else its preferred DRM mode
 (`/sys/class/drm/*/modes`) at 60 Hz; no screen at all leaves gamescope's own defaults.
-`universe doctor` prints the mode it read. The fields, global in `[launch]` and per game in
-`game.toml`'s `[launch]` (a field left empty takes the global one), each a flag:
-
-| Field | Values | Flag |
-|---|---|---|
-| `gamescope_resolution` | `auto` (the screen) or `WxH`: what the game renders at, upscaled to the screen when smaller | `-w -h` |
-| `gamescope_refresh` | `auto` (the screen's rate) or Hz | `-r` |
-| `gamescope_scaler` | empty (gamescope's `auto`), `auto`, `integer`, `fit`, `fill`, `stretch` | `-S` |
-| `gamescope_filter` | empty (gamescope's `linear`), `linear`, `nearest`, `fsr`, `nis`, `pixel` | `-F` |
-| `gamescope_sharpness` | unset, or 0 (sharpest) to 20; for `fsr` and `nis` | `--sharpness` |
-| `gamescope_adaptive_sync` | `false` / `true`: variable refresh when the screen has it | `--adaptive-sync` |
+`universe doctor` prints the mode it read. The `gamescope_*` fields, global in `[launch]` and per
+game in `game.toml`'s `[launch]` (a field left empty takes the global one), are launch keys:
+`universe launch-keys` prints each one's values and default. Each is a flag: `gamescope_resolution`
+(what the game renders at, upscaled to the screen when smaller) `-w -h`, `gamescope_refresh` `-r`,
+`gamescope_scaler` `-S`, `gamescope_filter` `-F`, `gamescope_sharpness` (for `fsr` and `nis`)
+`--sharpness`, `gamescope_adaptive_sync` `--adaptive-sync`; a scaler or filter left empty leaves
+gamescope its own default.
 
 `gamescope_args` (global, then the game's) comes after these and wins: gamescope takes the last
 of a repeated flag, so `-w 1280 -h 720` there overrides the field. `launch.gamescope` (global),
@@ -395,7 +388,8 @@ array of strings (20 s at most).
 | Rust | Python | CLI | Role |
 |---|---|---|---|
 | `settings()` | `settings()` | `universe config get` | resolved `config.toml`: absolute paths, defaults applied |
-| `set_setting(key, value)` | `set_setting(key, value)` | `universe config set <key> <value>` | dotted `config.toml` key (`launch.proton`, `paths.recordings_root`, `desktop.profile`); the `launch.gamescope_*` fields are validated |
+| `set_setting(key, value)` | `set_setting(key, value)` | `universe config set <key> <value>` | dotted `config.toml` key (`launch.proton`, `paths.recordings_root`, `desktop.profile`); a `launch.*` key is validated against the catalogue, an unknown or game-only one refused |
+| `launch_keys(scope, screen)` | `launch_keys(scope, screen)` | `universe launch-keys [--json]` | the launch keys of `scope` (`game`, `global`, `both`) that have a settings row: `[{key, type, default, choices, label, section, scope, runners, description}]`, `type` one of bool, int, string, path, list, enum, resolution, refresh, fps, proton; `screen` (a `screen_mode`, or none) sizes the resolution, refresh and fps choices; `runners` empty means every runner. The maps (`env`, `dll_overrides`, `options`) and the rowless keys (`runner`, `exe`, `umu_run`…) are settable but not listed; the CLI's table prints all of them |
 | `screen_mode(screen)` | `screen_mode(screen)` | — | `{screen, width, height, refresh}`: the connector's current mode as gamescope is told it (see Gamescope), `screen=""` for the profile default; zeros when none can be read |
 | — | `version()`, `data_home()`, `state_home()` | `universe --version` | |
 

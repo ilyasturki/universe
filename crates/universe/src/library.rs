@@ -162,9 +162,10 @@ fn gamescope_fields_of(game: &Game, config: &Config) -> crate::gamescope::Fields
     let l = &game.launch;
     let d = &config.launch;
     let pick = |own: &str, global: &str| if own.is_empty() { global.to_string() } else { own.to_string() };
+    let or_default = |global: &str, key: &str| if global.is_empty() { crate::launch_keys::default_of(key).to_string() } else { global.to_string() };
     crate::gamescope::Fields {
-        resolution: pick(&l.gamescope_resolution, if d.gamescope_resolution.is_empty() { "auto" } else { &d.gamescope_resolution }),
-        refresh: pick(&l.gamescope_refresh, if d.gamescope_refresh.is_empty() { "auto" } else { &d.gamescope_refresh }),
+        resolution: pick(&l.gamescope_resolution, &or_default(&d.gamescope_resolution, "gamescope_resolution")),
+        refresh: pick(&l.gamescope_refresh, &or_default(&d.gamescope_refresh, "gamescope_refresh")),
         scaler: pick(&l.gamescope_scaler, &d.gamescope_scaler),
         filter: pick(&l.gamescope_filter, &d.gamescope_filter),
         sharpness: l.gamescope_sharpness.or(d.gamescope_sharpness),
@@ -221,7 +222,7 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
         gamescope,
         gamescope_args: game.launch.gamescope_args.clone(),
         gamescope_fields: gamescope_fields_of(&game, config),
-        fps_limit: [&game.launch.fps_limit, &config.launch.fps_limit].into_iter().find(|s| !s.is_empty()).cloned().unwrap_or_else(|| "auto".into()),
+        fps_limit: [&game.launch.fps_limit, &config.launch.fps_limit].into_iter().find(|s| !s.is_empty()).cloned().unwrap_or_else(|| crate::launch_keys::default_of("fps_limit").into()),
         hide_cursor: game.desktop.hide_cursor.unwrap_or(config.desktop.hide_cursor),
         env,
     };

@@ -178,3 +178,15 @@ def test_the_real_core_reads_writes_and_watches(app):
     assert client.controllerSetButton("dualsense-edge", "south", "[]") and client.controllerSetButton("dualsense-edge", "south", "null")
     assert client.controllerBind('{"family": "*", "button": "south", "trigger": "press", "action": "nope"}') is False and seen[-1][0] == "Invalid"
     client.shutdown()
+
+
+def test_the_launch_keys_fixture_is_the_cores_table(app):
+    universe_core = pytest.importorskip("universe_core")
+    from universe_ui.fake_core import LAUNCH_KEYS, FakeCore
+
+    core = universe_core.Core()
+    table = core.launch_keys("both", None)
+    assert json.loads(LAUNCH_KEYS.read_text()) == table, "regenerate with `universe launch-keys --json > ui/universe_ui/fixtures/launch_keys.json`"
+    screen = {"screen": "DP-1", "width": 2560, "height": 1440, "refresh": 144}
+    assert FakeCore().launch_keys("game", screen) == core.launch_keys("game", screen), "the fake sizes the choices as the core does"
+    assert FakeCore().launch_keys("global", {}) == core.launch_keys("global", {})
