@@ -290,6 +290,7 @@ impl Core {
             screen: screen.clone(),
             exit,
             recording: None,
+            recording_duration_s: 0,
         };
         sessions::append(&r.game.sessions_path(), &session)?;
         if let Some(m) = &marker {

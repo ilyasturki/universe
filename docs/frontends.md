@@ -21,7 +21,7 @@ One context property, `api`:
 | `api.allGames` | the library model |
 | `api.collections` | collections, one per platform |
 | `api.memory` | `get`/`set`/`has`/`unset`, persisted to `$XDG_STATE_HOME/universe/ui-memory.json` |
-| `api.universe` | the client: every core call, plus the signals below. `adoptScope()` and `pendingJournals()` wrap `adopt_scope` and `pending_journals`; their failures get a log line, not a toast |
+| `api.universe` | the client: every core call, plus the signals below. `adoptScope()` and `pendingJournals()` wrap `adopt_scope` and `pending_journals`; their failures get a log line, not a toast. `recordings(id)` is the client's own: `sessions(id)` kept to the rows with a `recording` |
 | `api.pad` | `rightX`: the right stick as a value, 0 without a controller |
 | `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed` and `--size` turn it off) |
@@ -33,15 +33,19 @@ A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `p
 `collections`, and `assets` (`boxFront`, `square`, `banner`, `background`, `logo`, `screenshotList`; `tile` is `square` under Pegasus's name), plus
 `launch()`.
 
-`api.screens.recordings` samples 16 frames per recording with ffmpeg into
-`$XDG_CACHE_HOME/universe/frames/<sha1 of the path>/NN.jpg` (`stats.json` keeps the probed duration and
-each frame's 8×8 gray stddev, so the list thumbnail is the first frame that is not black or a fade).
-Two extractions run at a time; the picked row's frames go first, the others' thumbnails after.
-`frameMap[session]` carries `thumbnail`, `frames` (`""` until extracted), `complete` and `duration`.
+`api.screens.recordings` maps the session rows that carry a `recording` (`sessions(id)`, see
+`api.md`) to rows — `session`, `path`, `url`, `size`, `sizeText`, `duration_s`, `durationText`,
+`dateText`, `created_at`, `hasJournal`, `gameId`, `gameTitle` — and samples 16 frames per recording
+with ffmpeg into `$XDG_CACHE_HOME/universe/frames/<sha1 of the path>/NN.jpg`; the seeks are spread
+over the row's `recording.duration_s` (the media's length the core probed when the file was filed),
+or the session's span for a line filed before the core kept lengths. Two extractions run at a time;
+the picked row's frames go first, the others' thumbnails after. `frameMap[session]` carries
+`thumbnail`, `frames` (`""` until extracted), `complete` and `duration`.
 
 `api.screens.journal` maps a game's entries to rows — `session`, `title`, `state`, `reason`,
 `started_at`, `dateText`, `duration_s`, `durationText`, `paragraphs`, `blocks`, `next_up`,
-`images`, `hasRecording` — sorted by session id, last first. `state` is `written`, `pending` (the
+`images` (`file://` URLs of the paths the core hands out), `hasRecording` (from the session rows),
+`gameId`, `gameTitle` — sorted by session id, last first. `state` is `written`, `pending` (the
 module is still writing: no title, no paragraphs; the row pulses with the time since `started_at`
 and cannot be opened) or `failed` (`reason` is the module's message, its one paragraph).
 `durationText` is the session's length — `42 min`, `1 h 05` — next to the date in the row and in
@@ -61,7 +65,7 @@ navigation comes back at the home screen. The choice lives in `ui-memory.json` (
 of the former white and black variants of `switch2` still resolve to it), `--theme ID` overrides it
 for one run, and both looks offer it in Settings › Themes. A theme calls the same `api` and the same `api.screens` objects;
 `api.screens.album` and `api.screens.news` are the recordings and journal lists across every
-game (`loadAll()`), which the Switch 2 look shows as its Album and News.
+visible game (`loadAll()`, over `sessions("")`), which the Switch 2 look shows as its Album and News.
 
 ## Changes
 

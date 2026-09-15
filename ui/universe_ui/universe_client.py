@@ -278,6 +278,7 @@ class CoreClient(QObject):
     def screenshot(self):
         return str(self._guarded("", self._core.screenshot) or "")
 
+    # Newest first; "" spans every visible game.
     @Slot(str, result="QVariant")
     def sessions(self, ident):
         return self._guarded([], self._core.sessions, ident) or []
@@ -318,7 +319,7 @@ class CoreClient(QObject):
         self.sessionEnded.emit(session_id, ident, int(line.get("duration_s") or 0))
         self.libraryChanged.emit([ident])
         if line.get("recording"):
-            self.recordingFiled.emit(session_id, ident, line["recording"])
+            self.recordingFiled.emit(session_id, ident, str(line["recording"].get("path") or ""))
 
     # -- sources ---------------------------------------------------------------------------
 
@@ -414,7 +415,7 @@ class CoreClient(QObject):
 
     @Slot(str, result="QVariant")
     def recordings(self, ident):
-        return self._guarded([], self._core.recordings, ident) or []
+        return [row for row in self.sessions(ident) if row.get("recording")]
 
     @Slot(str, str, result=str)
     def fileRecording(self, session_id, path):

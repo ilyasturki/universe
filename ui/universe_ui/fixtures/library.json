@@ -191,10 +191,7 @@
     ]
   },
   "recordings": {
-    "the-technomancer": [
-      {"session": "20260909-213045", "path": "", "size": 2147483648, "duration_s": 4215, "created_at": "2026-09-09T22:41:05+02:00"},
-      {"session": "20260907-224100", "path": "", "size": 2415919104, "duration_s": 4640, "created_at": "2026-09-07T23:58:25+02:00"}
-    ]
+    "the-technomancer": {"20260909-213045": 2147483648, "20260907-224100": 2415919104}
   },
   "journal": {
     "the-technomancer": [

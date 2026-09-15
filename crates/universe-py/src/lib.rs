@@ -236,9 +236,6 @@ impl Core {
     }
 
     // -- recordings & journal --
-    fn recordings(&self, py: Python<'_>, id: String) -> PyResult<Py<PyAny>> {
-        self.value(py, |c| async move { c.recordings(&id).await })
-    }
     fn file_recording(&self, py: Python<'_>, session_id: String, path: String) -> PyResult<String> {
         self.run(py, |c| async move { c.file_recording(&session_id, &path).await })
     }

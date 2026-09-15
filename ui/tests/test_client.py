@@ -164,6 +164,8 @@ def test_the_real_core_reads_writes_and_watches(app):
     )
     core.reload_game("sample")
     assert [r["session"] for r in client.recordings("sample")] == ["20260913-120000"]
+    row = client.sessions("")[0]
+    assert (row["title"], row["journal"], row["recording"]["exists"], row["recording"]["duration_s"]) == ("Sample", None, False, 0)
     assert client.removeRecording("sample", "20260913-120000") is True
     assert client.recordings("sample") == [] and client.game("sample")["stats"]["hours"] == 1.0
 

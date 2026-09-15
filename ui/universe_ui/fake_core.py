@@ -22,6 +22,7 @@ STEP_S = 0.15
 SESSION_S = 2.0
 WINDOW_S = 0.4
 JOURNAL_S = 8.0
+CLIP_S = 20
 
 SLOTS = ("box_front", "square", "banner", "background", "logo")
 
@@ -418,8 +419,26 @@ class FakeCore:
         return os.path.join(self._cache, "screenshot.png")
 
     def sessions(self, ident):
-        self._game(ident)
-        return json.loads(json.dumps(self._data.get("sessions", {}).get(ident, [])))
+        idents = [self._game(ident)["id"]] if ident else [g["id"] for g in self._data["games"] if not (g.get("removed") or g.get("hidden"))]
+        rows = [self._session_row(i, line) for i in idents for line in self._data.get("sessions", {}).get(i, [])]
+        rows.sort(key=lambda r: r["ended_at"], reverse=True)
+        return rows
+
+    def _session_row(self, ident, line):
+        row = json.loads(json.dumps(line))
+        row.pop("recording_duration_s", None)
+        row["title"] = self._game(ident)["title"]
+        row["recording"] = None
+        if line.get("recording"):
+            # The fixture's paths stand for files that are not there: a painted clip plays in their place.
+            path = line["recording"] if os.path.isfile(line["recording"]) else self._fake_clip(ident, line["session"])
+            exists = os.path.isfile(path)
+            size = self._data.get("recordings", {}).get(ident, {}).get(line["session"]) or (os.path.getsize(path) if exists else 0)
+            duration = CLIP_S if path.startswith(self._cache) and exists else line.get("recording_duration_s") or 0
+            row["recording"] = {"path": path, "size": size, "exists": exists, "duration_s": duration}
+        entry = next((e for e in self._data.get("journal", {}).get(ident, []) if e.get("session") == line.get("session")), None)
+        row["journal"] = None if entry is None else {"state": entry.get("state") or "written", "title": entry.get("title") or "", "written_at": entry.get("written_at") or ""}
+        return row
 
     # -- sources: a job blocks its caller and ticks `progress`, as the module's do -------------
 
@@ -571,13 +590,6 @@ class FakeCore:
 
     # -- recordings and journal --------------------------------------------------------------
 
-    def recordings(self, ident):
-        recordings = self._data.get("recordings", {}).get(ident, [])
-        for rec in recordings:
-            if not rec.get("path"):
-                rec["path"] = self._fake_clip(ident, rec["session"])
-        return json.loads(json.dumps(recordings))
-
     def _game_of_session(self, session_id):
         current = self.current()
         if current and current["session_id"] == session_id:
@@ -592,25 +604,20 @@ class FakeCore:
         dest = str(self._root / "recordings" / ident / f"{session_id}{os.path.splitext(path)[1] or '.mkv'}")
         if os.path.isfile(path):
             _place(path, dest)
-        size = os.path.getsize(dest) if os.path.exists(dest) else 0
         line = next((s for s in self._data.get("sessions", {}).get(ident, []) if s.get("session") == session_id), None)
         if line is not None:
             line["recording"] = dest
-        recordings = self._data.setdefault("recordings", {}).setdefault(ident, [])
-        recordings[:] = [r for r in recordings if r.get("session") != session_id]
-        recordings.insert(0, {"session": session_id, "path": dest, "size": size, "duration_s": (line or {}).get("duration_s") or 0, "created_at": _now()})
+            line["recording_duration_s"] = line.get("duration_s") or 0
+            self._data.get("recordings", {}).get(ident, {}).pop(session_id, None)
         self._write_sessions(ident)
         return dest
 
     def remove_recording(self, ident, session_id):
-        recordings = self._data.get("recordings", {}).get(ident, [])
-        kept = [r for r in recordings if r.get("session") != session_id]
-        if len(kept) == len(recordings):
+        line = next((s for s in self._data.get("sessions", {}).get(ident, []) if s.get("session") == session_id and s.get("recording")), None)
+        if line is None:
             raise UniverseError("NotFound", f"session {session_id} has no recording")
-        self._data["recordings"][ident] = kept
-        for line in self._data.get("sessions", {}).get(ident, []):
-            if line.get("session") == session_id:
-                line["recording"] = None
+        line["recording"] = None
+        self._data.get("recordings", {}).get(ident, {}).pop(session_id, None)
         self._write_sessions(ident)
 
     # A real clip when ffmpeg is around, so the preview has something to play; a name otherwise.
@@ -621,8 +628,8 @@ class FakeCore:
         ffmpeg = shutil.which("ffmpeg")
         if ffmpeg:
             subprocess.run(
-                [ffmpeg, "-loglevel", "error", "-y", "-f", "lavfi", "-i", "testsrc=size=640x360:rate=30:duration=20",
-                 "-f", "lavfi", "-i", "sine=frequency=440:duration=20", "-c:v", "libx264", "-preset", "ultrafast",
+                [ffmpeg, "-loglevel", "error", "-y", "-f", "lavfi", "-i", f"testsrc=size=640x360:rate=30:duration={CLIP_S}",
+                 "-f", "lavfi", "-i", f"sine=frequency=440:duration={CLIP_S}", "-c:v", "libx264", "-preset", "ultrafast",
                  "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", out],
                 capture_output=True, timeout=30,
             )

@@ -440,10 +440,21 @@ impl Core {
         Err(Error::Unavailable("no module provides a screenshot hook".into()))
     }
 
-    /// Last first.
-    pub async fn sessions(&self, id: &str) -> Result<Vec<crate::sessions::Session>> {
-        let r = self.get(id).await?;
-        Ok(r.sessions.iter().rev().cloned().collect())
+    /// Newest first; an empty `id` lists every visible game. The entry state is read from disk on every call, as `journal` is.
+    pub async fn sessions(&self, id: &str) -> Result<Vec<crate::sessions::SessionRow>> {
+        let games = self.games.read().await;
+        let picked: Vec<&Resolved> = if id.is_empty() {
+            games.iter().filter(|g| g.game.removed_at.is_empty() && !g.game.hidden).collect()
+        } else {
+            vec![games.iter().find(|g| g.game.id == id).ok_or_else(|| Error::NotFound(id.into()))?]
+        };
+        let mut rows = Vec::new();
+        for r in picked {
+            let entries = crate::journal::read_all(&r.game.journal_dir()).unwrap_or_default();
+            rows.extend(r.sessions.iter().rev().map(|s| crate::sessions::SessionRow::new(s, &r.game.title, entries.iter().find(|e| e.session == s.session))));
+        }
+        rows.sort_by(|a, b| b.session.ended_at.cmp(&a.session.ended_at));
+        Ok(rows)
     }
 
     async fn game_of_session(&self, session_id: &str) -> Option<String> {
@@ -461,11 +472,6 @@ impl Core {
         let dest = crate::recording::file(&r.game, session_id, Path::new(path), &cfg.recordings_root())?;
         self.reload_game(&id).await?;
         Ok(dest.to_string_lossy().to_string())
-    }
-
-    pub async fn recordings(&self, id: &str) -> Result<Vec<serde_json::Value>> {
-        let r = self.get(id).await?;
-        crate::recording::list(&r.game)
     }
 
     pub async fn remove_recording(&self, id: &str, session_id: &str) -> Result<()> {
@@ -499,9 +505,15 @@ impl Core {
     }
 
     /// Read from disk on every call: a pending entry's timeout is judged now, not at the last reload.
+    /// The images come back absolute; the entry on disk keeps them relative to the journal dir.
     pub async fn journal(&self, id: &str) -> Result<Vec<crate::journal::Entry>> {
         let r = self.get(id).await?;
-        Ok(crate::journal::load(&r.game.journal_dir(), &r.sessions))
+        let journal_dir = r.game.journal_dir();
+        let mut entries = crate::journal::load(&journal_dir, &r.sessions);
+        for img in entries.iter_mut().flat_map(|e| e.images.iter_mut()) {
+            *img = journal_dir.join(&*img).to_string_lossy().into_owned();
+        }
+        Ok(entries)
     }
 
     pub async fn remove_journal_entry(&self, id: &str, session_id: &str) -> Result<()> {

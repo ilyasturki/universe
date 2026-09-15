@@ -112,8 +112,8 @@ hooks write shows up that way, with no other channel.
 | `focus_session()` / `focus_pid(pid)` | `focus_session()` / `focus_pid(pid)` | — | `Activate` on the game's window / on the largest window of a process (a frontend's own, once the game is gone) |
 | `adopt_scope()` | `adopt_scope()` | — (`universe play` does it unless `--no-wait`) | moves the calling process into the transient scope `universe-launcher-<pid>.scope` (`StartTransientUnit` on the user manager) and returns its name; every later `launch` binds the game to it. Idempotent. `Unavailable` without a user systemd |
 | `screenshot()` | `screenshot()` | `universe screenshot` | runs the `screenshot` hook of whichever module declares one; returns the PNG path |
-| `current()` | `current()` | `universe status` | `{session_id, id, title, unit, screen, started_at}`, or `None`. The CLI wraps it: `status --json` prints `{"current": … or null, "recent": [the last 10 sessions], "pending_journals": [see Journal]}` |
-| `sessions(id)` | `sessions(id)` | `universe sessions <name>` | `[Session]` from `sessions.jsonl`, last first |
+| `current()` | `current()` | `universe status` | `{session_id, id, title, unit, screen, started_at}`, or `None`. The CLI wraps it: `status --json` prints `{"current": … or null, "recent": [the 10 newest session rows across the library], "pending_journals": [see Journal]}` |
+| `sessions(id)` | `sessions(id)` | `universe sessions <name>` | `[SessionRow]`, newest first (by `ended_at`); `id = ""` spans every visible game (not removed, not hidden) |
 | `session_end(id, session_id, exit, ended)` | — | `universe session-end <id> <session>` | closes the session, idempotent. Run by systemd's `ExecStopPost`, or by reconciliation |
 
 One `sessions.jsonl` line:
@@ -122,8 +122,21 @@ One `sessions.jsonl` line:
 {"session":"20260910-213045","game":"the-technomancer","started_at":"RFC3339",
  "ended_at":"RFC3339","duration_s":1234,"source":"universe",
  "unit":"universe-game-the-technomancer-20260910-213045.service","screen":"DP-1",
- "exit":0,"recording":"path or null"}
+ "exit":0,"recording":"path or null","recording_duration_s":1230}
 ```
+
+`recording_duration_s` is the media's length as `ffprobe` reported it when the file was filed or
+imported, `0` when unknown (older lines lack the key). A `SessionRow` is the line with what every
+listing joins onto it, in the line's place:
+
+```json
+{"session":…, "game":…, "title":"The Technomancer", …,
+ "recording":{"path":"…/20260910-213045.mkv","size":2147483648,"exists":true,"duration_s":1230} or null,
+ "journal":{"state":"written","title":"Into the Dome","written_at":"RFC3339"} or null}
+```
+
+`recording` stands for the file (`duration_s` is `recording_duration_s`); `journal` is the entry's
+state, `title` and `written_at` (see Journal), `null` when the session has none.
 
 `source ∈ universe, import-recording, import-lutris`. `exit` is the main process's exit code, `-1`
 when it was killed by a signal (a `stop`).
@@ -299,8 +312,8 @@ Two layers per slot: the **default** under `games/<id>/media/`, which `refresh` 
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `file_recording(session_id, path)` | `file_recording(session_id, path)` | `universe recording-file <session> <path>` | files the mkv as `<recordings_root>/<id>/<session>.mkv` (rename within a filesystem, copy across), writes `recording` into the session line, prints the final path |
-| `recordings(id)` | `recordings(id)` | `universe recordings <name>` | `[{session, path, size, duration_s, created_at}]` |
+| `file_recording(session_id, path)` | `file_recording(session_id, path)` | `universe recording-file <session> <path>` | files the mkv as `<recordings_root>/<id>/<session>.mkv` (rename within a filesystem, copy across), writes `recording` and the probed `recording_duration_s` into the session line, prints the final path |
+| — | `recordings(id)` (a filter on the client) | `universe recordings <name>` | the `SessionRow`s of `sessions(id)` that have a `recording` |
 | `remove_recording(id, session_id)` | `remove_recording(id, session_id)` | `universe recordings <name> --remove <session> [-y]` | trashes the mkv (`trash`), clears `recording` on the session line; the hours stay |
 
 `recording-file` is called by the capture module's `session-end` hook, so it lands before any
@@ -338,14 +351,15 @@ gpu-screen-recorder `-o` capture of the session's screen, with no cue.
 | Rust | Python | CLI | Role |
 |---|---|---|---|
 | `add_entry(session_id, entry)` | `add_entry(session_id, entry)` | `universe journal-add <session> <entry>` | validates the schema, fills `started_at`/`ended_at`/`duration_s` from the session line when the entry lacks them, writes `journal/<session>.json` |
-| `journal(id)` | `journal(id)` | `universe journal <name>` | `[Entry]`, last first, read from disk on every call; the state files below are entries too |
+| `journal(id)` | `journal(id)` | `universe journal <name>` | `[Entry]`, last first, read from disk on every call, `images` made absolute; the state files below are entries too |
 | `pending_journals()` | `pending_journals()` | `universe status` (a `journal: writing <title>…` line; `pending_journals` in `--json`) | `[{game, title, session, started_at}]` for every `pending` entry across the library; `title` is the game's |
 | `render_journal(id)` | `render_journal(id)` | `universe journal <name> --render` | renders `<journal_root>/<id>/<Title>.md` from the `written` entries, returns the path |
 | `remove_journal_entry(id, session_id)` | `remove_journal_entry(id, session_id)` | `universe journal <name> --remove <session> [-y]` | trashes `journal/<session>.json` and the images it lists (their mirrors beside the note too); a `pending` entry has its `universe-journal-post-process-<session>` unit stopped and its state file removed; the note is rendered again when its folder exists |
 
 `Entry` = `{"session", "game", "written_at", "started_at", "ended_at", "duration_s", "lang",
 "title", "provider", "paragraphs": [], "next_up": "", "images": ["relative path"],
-"state": "written"}`. `started_at`, `ended_at` and `duration_s` are the session's span; an entry
+"state": "written"}`. On disk and in `add_entry` the images are relative to `games/<id>/journal/`;
+`journal(id)` hands them out absolute. `started_at`, `ended_at` and `duration_s` are the session's span; an entry
 written before the core stamped them gets them at read time from `sessions.jsonl` (or the module's
 migration sidecar), so every listing has one shape. `journal-add` is called by the journal module's
 `post-process` hook, which also passes `started_at`, `ended_at` and `duration_s` so an entry it

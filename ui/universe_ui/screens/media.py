@@ -1,5 +1,4 @@
 import hashlib
-import json
 import os
 import re
 import shutil
@@ -45,24 +44,14 @@ WORKERS = 2
 
 
 class Frames:
-    def __init__(self, path):
+    def __init__(self, path, duration):
         self.path = path
         self.dir = os.path.join(_cache_dir(), hashlib.sha1(path.encode()).hexdigest())
-        self.duration = 0.0
-        try:
-            with open(os.path.join(self.dir, "stats.json")) as f:
-                self.duration = float(json.load(f).get("duration") or 0)
-        except (OSError, ValueError, TypeError):
-            pass
+        self.duration = float(duration or 0)
         self.extracted = {i for i in range(FRAME_COUNT) if os.path.exists(self.file(i))}
 
     def file(self, index):
         return os.path.join(self.dir, f"{index:02d}.jpg")
-
-    def save(self):
-        os.makedirs(self.dir, exist_ok=True)
-        with open(os.path.join(self.dir, "stats.json"), "w") as f:
-            json.dump({"duration": self.duration}, f)
 
     def seconds(self, index):
         return (index + 0.5) / FRAME_COUNT * self.duration
@@ -98,25 +87,25 @@ class RecordingsList(QObject):
         self._all = False
         self._show(self._rows_of(game_id))
 
-    def _rows_of(self, game_id, title=""):
-        recordings = self._client.recordings(game_id) or []
-        if not recordings:
-            return []
-        journal = {str(e.get("session") or "") for e in self._client.journal(game_id) or []}
+    def _rows_of(self, game_id):
         rows = []
-        for rec in recordings:
+        for line in self._client.sessions(game_id) or []:
+            rec = line.get("recording")
+            if not rec:
+                continue
             path = str(rec.get("path") or "")
-            session = str(rec.get("session") or "")
+            session = str(line.get("session") or "")
             rows.append({
                 "session": session, "path": path,
                 "url": QUrl.fromLocalFile(path).toString() if path else "",
                 "size": rec.get("size") or 0, "sizeText": _size(rec.get("size")),
-                "duration_s": rec.get("duration_s") or 0, "durationText": _duration(rec.get("duration_s")),
-                "dateText": _when(rec.get("created_at")), "hasJournal": session in journal,
-                "created_at": str(rec.get("created_at") or ""), "gameId": game_id, "gameTitle": title,
+                "duration_s": line.get("duration_s") or 0, "durationText": _duration(line.get("duration_s")),
+                "dateText": _when(line.get("ended_at")), "hasJournal": line.get("journal") is not None,
+                "created_at": str(line.get("ended_at") or ""), "gameId": str(line.get("game") or ""), "gameTitle": str(line.get("title") or ""),
             })
             if path and session and session not in self._frames:
-                self._frames[session] = Frames(path)
+                # A line filed before the core probed lengths says 0: the session's span stands in.
+                self._frames[session] = Frames(path, rec.get("duration_s") or line.get("duration_s"))
         return rows
 
     def _show(self, rows):
@@ -133,9 +122,7 @@ class RecordingsList(QObject):
         self.gameIdChanged.emit()
         self._queue.clear()
         self._all = True
-        rows = [r for g in _visible_games(self._client) for r in self._rows_of(str(g.get("id") or ""), str(g.get("title") or g.get("id") or ""))]
-        rows.sort(key=lambda r: r["created_at"], reverse=True)
-        self._show(rows)
+        self._show(self._rows_of(""))
 
     @Slot()
     def unload(self):
@@ -169,22 +156,12 @@ class RecordingsList(QObject):
             self._queue.append(job)
 
     def _pump(self):
-        # Frames of a file still being probed wait for its duration, in place.
-        waiting = []
         while self._queue and len(self._running) < WORKERS:
             job = self._queue.pop(0)
-            if job in self._running:
-                continue
             frames = self._frames.get(job[0])
-            if frames is None or not os.path.exists(frames.path):
+            if job in self._running or frames is None or frames.duration <= 0 or not os.path.exists(frames.path):
                 continue
-            if frames.duration > 0:
-                self._extract(job, frames)
-            elif any(j[0] == job[0] for j in self._running):
-                waiting.append(job)
-            else:
-                self._probe(job, frames)
-        self._queue = waiting + self._queue
+            self._extract(job, frames)
 
     def _start(self, job, program, args, done):
         exe = shutil.which(program)
@@ -194,23 +171,6 @@ class RecordingsList(QObject):
         self._running[job] = proc
         proc.finished.connect(lambda code, status: done(job, proc, code))
         proc.start(exe, args)
-
-    def _probe(self, job, frames):
-        self._start(job, "ffprobe", ["-v", "error", "-show_entries", "format=duration",
-                                     "-of", "default=noprint_wrappers=1:nokey=1", frames.path], self._probed)
-
-    def _probed(self, job, proc, code):
-        self._finish(job, proc)
-        frames = self._frames.get(job[0])
-        if frames is not None and code == 0:
-            try:
-                frames.duration = float(bytes(proc.readAllStandardOutput()).decode().strip())
-            except ValueError:
-                frames.duration = 0.0
-            if frames.duration > 0:
-                frames.save()
-                self._queue.insert(0, job)
-        self._pump()
 
     def _extract(self, job, frames):
         index = job[1]
@@ -277,12 +237,8 @@ def markdown_blocks(paragraphs):
     return blocks
 
 
-def _journal_dir(game_id):
-    return os.path.join(universe_home("DATA", ".local/share"), "games", game_id, "journal")
-
-
-def _visible_games(client):
-    return [g for g in client.list() or [] if not (g.get("removed") or g.get("hidden"))]
+def _recorded(lines):
+    return {(str(line.get("game") or ""), str(line.get("session") or "")) for line in lines if line.get("recording")}
 
 
 class JournalList(QObject):
@@ -302,28 +258,20 @@ class JournalList(QObject):
         self._game_id = game_id
         self.gameIdChanged.emit()
         self._all = False
-        self._rows = self._rows_of(game_id)
+        lines = self._client.sessions(game_id) or []
+        title = str((self._client.game(game_id) or {}).get("title") or game_id)
+        self._rows = self._rows_of(game_id, title, _recorded(lines))
         self.rowsChanged.emit()
 
-    def _rows_of(self, game_id, game=None):
-        entries = self._client.journal(game_id) or []
-        if not entries:
-            return []
-        game = game if game is not None else (self._client.game(game_id) or {})
-        game_dir = game.get("dir") or ""
-        base = os.path.join(game_dir, "journal") if game_dir else _journal_dir(game_id)
-        recorded = {str(r.get("session") or "") for r in self._client.recordings(game_id) or []}
+    def _rows_of(self, game_id, title, recorded):
         rows = []
-        for entry in entries:
-            images = []
-            for rel in entry.get("images") or []:
-                path = rel if os.path.isabs(str(rel)) else os.path.join(base, str(rel))
-                images.append(QUrl.fromLocalFile(path).toString())
+        for entry in self._client.journal(game_id) or []:
+            session = str(entry.get("session") or "")
             state = str(entry.get("state") or "written")
             paragraphs = [str(p) for p in entry.get("paragraphs") or []]
             duration = int(entry.get("duration_s") or 0)
             rows.append({
-                "session": str(entry.get("session") or ""),
+                "session": session,
                 "title": str(entry.get("title") or ("" if state == "pending" else "Journal failed" if state == "failed" else "Untitled")),
                 "state": state, "reason": paragraphs[0] if state == "failed" and paragraphs else "",
                 "started_at": str(entry.get("started_at") or ""),
@@ -331,10 +279,11 @@ class JournalList(QObject):
                 "duration_s": duration, "durationText": _duration(duration) if duration else "",
                 "provider": str(entry.get("provider") or ""),
                 "paragraphs": paragraphs, "blocks": markdown_blocks(paragraphs),
-                "next_up": str(entry.get("next_up") or ""), "images": images,
-                "hasRecording": str(entry.get("session") or "") in recorded,
+                "next_up": str(entry.get("next_up") or ""),
+                "images": [QUrl.fromLocalFile(str(p)).toString() for p in entry.get("images") or []],
+                "hasRecording": (game_id, session) in recorded,
                 "written_at": str(entry.get("written_at") or ""),
-                "gameId": game_id, "gameTitle": str(game.get("title") or game_id),
+                "gameId": game_id, "gameTitle": title,
             })
         # Session ids are timestamps: a pending entry sorts among the written ones by when it was played.
         rows.sort(key=lambda r: r["session"], reverse=True)
@@ -345,7 +294,12 @@ class JournalList(QObject):
         self._game_id = ""
         self.gameIdChanged.emit()
         self._all = True
-        rows = [r for g in _visible_games(self._client) for r in self._rows_of(str(g.get("id") or ""), g)]
+        lines = self._client.sessions("") or []
+        titles = {}
+        for line in lines:
+            titles.setdefault(str(line.get("game") or ""), str(line.get("title") or ""))
+        recorded = _recorded(lines)
+        rows = [r for game_id, title in titles.items() for r in self._rows_of(game_id, title, recorded)]
         rows.sort(key=lambda r: r["session"], reverse=True)
         self._rows = rows
         self.rowsChanged.emit()

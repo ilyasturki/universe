@@ -648,14 +648,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Cmd::Status => {
             let cur = core.current().await;
             let pending = core.pending_journals().await;
-            let mut recent: Vec<Value> = Vec::new();
-            for g in core.list().await {
-                for mut sess in rows(&core.sessions(&s(&g, "id")).await?) {
-                    sess["title"] = g["title"].clone();
-                    recent.push(sess);
-                }
-            }
-            recent.sort_by_key(|r| std::cmp::Reverse(s(r, "ended_at")));
+            let mut recent = rows(&core.sessions("").await?);
             recent.truncate(10);
             if json {
                 return print_json(&serde_json::json!({"current": cur, "recent": recent, "pending_journals": pending}));
@@ -810,9 +803,9 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             if json {
                 return print_json(&list);
             }
-            let mut t = table(&["Session", "Started", "Duration", "Source", "Recording"]);
+            let mut t = table(&["Session", "Started", "Duration", "Source", "Journal", "Recording"]);
             for r in rows(&list) {
-                t.add_row(vec![s(&r, "session"), when(&s(&r, "started_at"), &loc), fmt_duration(r["duration_s"].as_u64().unwrap_or(0)), s(&r, "source"), s(&r, "recording")]);
+                t.add_row(vec![s(&r, "session"), when(&s(&r, "started_at"), &loc), fmt_duration(r["duration_s"].as_u64().unwrap_or(0)), s(&r, "source"), s(&r["journal"], "state"), s(&r["recording"], "path")]);
             }
             println!("{t}");
         }
@@ -864,13 +857,15 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 }
                 return Ok(());
             }
-            let list = core.recordings(&id).await?;
+            let list: Vec<_> = core.sessions(&id).await?.into_iter().filter(|r| r.recording.is_some()).collect();
             if json {
                 return print_json(&list);
             }
             let mut t = table(&["Session", "Duration", "Size", "Path"]);
-            for r in list {
-                t.add_row(vec![s(&r, "session"), fmt_duration(r["duration_s"].as_u64().unwrap_or(0)), format!("{:.1} G", r["size"].as_u64().unwrap_or(0) as f64 / 1e9), s(&r, "path")]);
+            for r in rows(&list) {
+                let rec = &r["recording"];
+                let duration = rec["duration_s"].as_u64().filter(|d| *d > 0).or(r["duration_s"].as_u64()).unwrap_or(0);
+                t.add_row(vec![s(&r, "session"), fmt_duration(duration), format!("{:.1} G", rec["size"].as_u64().unwrap_or(0) as f64 / 1e9), s(rec, "path")]);
             }
             println!("{t}");
         }

@@ -272,6 +272,8 @@ def test_removing_a_recording_or_an_entry_reloads_both_lists(api, fake):
     entry, row = journal.rows[0], recordings.rows[0]
     assert entry["paragraphs"] and entry["dateText"] and entry["hasRecording"] is True
     assert row["url"].startswith("file://") and row["sizeText"] == "2.0 GB" and row["hasJournal"] is True
+    assert row["durationText"] == "1 h 10" and row["gameTitle"] == "The Technomancer"
+    assert entry["images"] and all(i.startswith("file://") for i in entry["images"]), "the core hands the images out absolute"
     session = row["session"]
 
     assert recordings.remove("the-technomancer", session) is True
@@ -370,7 +372,7 @@ def test_recording_frames_are_sampled_from_the_file(api):
         assert wait_for(recordings.framesChanged, 10000) is not None
     frames = recordings.frameMap[session]
     assert frames["complete"] and all(f.startswith("file://") for f in frames["frames"])
-    # The fixture claims 1 h 10; the clip is 20 s, and the seeks follow the file.
+    # The session lasted 1 h 10; the row carries the clip's 20 s, and the seeks follow the file.
     assert 19.5 < frames["duration"] < 20.5
     assert frames["thumbnail"] == frames["frames"][media.THUMB]
 
