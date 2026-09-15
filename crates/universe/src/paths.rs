@@ -11,31 +11,23 @@ pub fn xdg(var: &str, fallback: &str) -> PathBuf {
 pub(crate) static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
 
 pub fn home() -> PathBuf {
-    dirs::home_dir().unwrap_or_else(|| PathBuf::from("/"))
+    std::env::home_dir().unwrap_or_else(|| PathBuf::from("/"))
+}
+
+fn universe_home(var: &str, xdg_var: &str, fallback: &str) -> PathBuf {
+    std::env::var_os(var).map(PathBuf::from).unwrap_or_else(|| xdg(xdg_var, fallback).join("universe"))
 }
 
 pub fn data_home() -> PathBuf {
-    std::env::var_os("UNIVERSE_DATA_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| xdg("XDG_DATA_HOME", ".local/share").join("universe"))
+    universe_home("UNIVERSE_DATA_HOME", "XDG_DATA_HOME", ".local/share")
 }
 
 pub fn config_home() -> PathBuf {
-    std::env::var_os("UNIVERSE_CONFIG_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| xdg("XDG_CONFIG_HOME", ".config").join("universe"))
+    universe_home("UNIVERSE_CONFIG_HOME", "XDG_CONFIG_HOME", ".config")
 }
 
 pub fn state_home() -> PathBuf {
-    std::env::var_os("UNIVERSE_STATE_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| xdg("XDG_STATE_HOME", ".local/state").join("universe"))
-}
-
-pub fn cache_home() -> PathBuf {
-    std::env::var_os("UNIVERSE_CACHE_HOME")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| xdg("XDG_CACHE_HOME", ".cache").join("universe"))
+    universe_home("UNIVERSE_STATE_HOME", "XDG_STATE_HOME", ".local/state")
 }
 
 /// xdg-user-dirs: `$XDG_<NAME>_DIR`, else the entry in `~/.config/user-dirs.dirs`, else `~/<fallback>`.
@@ -88,7 +80,6 @@ pub fn self_exe() -> PathBuf {
     resolved.filter(|p| p.is_file()).or_else(|| std::env::current_exe().ok()).unwrap_or(argv0)
 }
 
-/// System module dirs: $UNIVERSE_MODULES_PATH (colon-separated) then XDG_DATA_DIRS/universe/modules.
 pub fn system_module_dirs() -> Vec<PathBuf> {
     let mut out = Vec::new();
     if let Some(p) = std::env::var_os("UNIVERSE_MODULES_PATH") {

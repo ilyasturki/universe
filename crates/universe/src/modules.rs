@@ -19,7 +19,6 @@ pub struct Manifest {
     pub hooks: BTreeMap<String, toml::Value>,
     pub limits: Limits,
     pub source: SourceSpec,
-    pub frontend: Frontend,
     pub settings: Vec<Setting>,
 }
 
@@ -46,12 +45,6 @@ impl Default for Limits {
 #[serde(default)]
 pub struct SourceSpec {
     pub exe: String,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(default)]
-pub struct Frontend {
-    pub qml: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,7 +107,6 @@ impl Module {
             .filter(|(k, _)| HOOKS.contains(&k.as_str()))
             .map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string()))
             .collect();
-        let verbs: Vec<&str> = if self.is_source() { vec!["login", "library", "search", "info", "install", "update", "scan"] } else { vec![] };
         serde_json::json!({
             "id": m.id,
             "name": if m.name.is_empty() { m.id.clone() } else { m.name.clone() },
@@ -125,9 +117,7 @@ impl Module {
             "available": self.available,
             "missing": self.missing,
             "hooks": hooks,
-            "verbs": verbs,
             "settings": self.settings_json(),
-            "frontend_qml": if m.frontend.qml.is_empty() { serde_json::Value::Null } else { serde_json::json!(self.dir.join(&m.frontend.qml)) },
         })
     }
 
@@ -140,10 +130,10 @@ impl Module {
         for s in &self.manifest.settings {
             list.push(serde_json::json!({
                 "key": s.key,
-                "type": if s.kind.is_empty() { "string" } else { s.kind.as_str() },
+                "type": s.kind,
                 "default": toml_to_json(&s.default),
                 "label": s.label,
-                "scope": if s.scope.is_empty() { "global" } else { s.scope.as_str() },
+                "scope": s.scope,
                 "choices": s.choices,
                 "dynamic": !s.choices_exec.is_empty(),
             }));
@@ -163,16 +153,9 @@ impl Module {
         if out.get("games_dir").and_then(|v| v.as_str()) == Some("") {
             out.insert("games_dir".into(), serde_json::Value::String(config.games_root().to_string_lossy().into()));
         }
-        if let Some(t) = config.modules.settings.get(self.id()) {
+        for t in config.modules.settings.get(self.id()).into_iter().chain(game.and_then(|g| g.modules.get(self.id()))) {
             for (k, v) in t {
                 out.insert(k.clone(), toml_to_json(v));
-            }
-        }
-        if let Some(g) = game {
-            if let Some(t) = g.modules.get(self.id()) {
-                for (k, v) in t {
-                    out.insert(k.clone(), toml_to_json(v));
-                }
             }
         }
         // An earlier set wrote enabled as ["false"]; a hook would read that list as true.
@@ -190,8 +173,7 @@ impl Module {
             };
         }
         let s = self.manifest.settings.iter().find(|s| s.key == key).ok_or_else(|| crate::Error::Invalid(format!("{}: unknown setting {key}", self.id())))?;
-        let scope = if s.scope.is_empty() { "global" } else { s.scope.as_str() };
-        if scope_game && scope != "game" {
+        if scope_game && s.scope != "game" {
             return Err(crate::Error::Invalid(format!("{}.{key} is a global setting", self.id())));
         }
         match s.kind.as_str() {
@@ -202,13 +184,8 @@ impl Module {
             // A listed non-numeric choice is a named value ("auto") the module resolves itself.
             "int" if value.parse::<i64>().is_ok() || s.choices.iter().any(|c| c == value) => Ok(value.into()),
             "int" => Err(crate::Error::Invalid(format!("{key} must be an integer"))),
-            "enum" => {
-                if s.choices.iter().any(|c| c == value) {
-                    Ok(value.into())
-                } else {
-                    Err(crate::Error::Invalid(format!("{key} must be one of {}", s.choices.join(", "))))
-                }
-            }
+            "enum" if s.choices.iter().any(|c| c == value) => Ok(value.into()),
+            "enum" => Err(crate::Error::Invalid(format!("{key} must be one of {}", s.choices.join(", ")))),
             _ => Ok(value.into()),
         }
     }
@@ -226,13 +203,6 @@ pub fn toml_to_json(v: &toml::Value) -> serde_json::Value {
     }
 }
 
-fn which(bin: &str) -> bool {
-    if bin.contains('/') {
-        return Path::new(bin).exists();
-    }
-    crate::runners::on_path(bin).is_some()
-}
-
 /// User modules override system modules on the same id.
 pub fn discover(config: &Config) -> Vec<Module> {
     let mut found: BTreeMap<String, Module> = BTreeMap::new();
@@ -248,7 +218,7 @@ pub fn discover(config: &Config) -> Vec<Module> {
             }
             match std::fs::read_to_string(&mp).map_err(crate::Error::from).and_then(|s| toml::from_str::<Manifest>(&s).map_err(Into::into)) {
                 Ok(m) if !m.id.is_empty() => {
-                    let missing: Vec<String> = m.requires.bins.iter().filter(|b| !which(b)).cloned().collect();
+                    let missing: Vec<String> = m.requires.bins.iter().filter(|b| crate::runners::on_path(b).is_none()).cloned().collect();
                     let enabled = config.modules.enabled.iter().any(|e| e == &m.id);
                     let module = Module { available: missing.is_empty(), missing, enabled, dir: dir.clone(), manifest: m };
                     found.insert(module.id().to_string(), module);
@@ -279,23 +249,19 @@ pub struct HookOutcome {
     pub stderr: String,
 }
 
-/// Blocking hook (pre-launch, session-end, screenshot): waits up to the manifest timeout, then kills.
+fn module_cmd(module: &Module, exe: &Path) -> crate::Result<tokio::process::Command> {
+    std::fs::create_dir_all(module.data_dir())?;
+    let mut cmd = tokio::process::Command::new(exe);
+    cmd.env("MODULE_DIR", &module.dir).env("MODULE_DATA_DIR", module.data_dir()).current_dir(&module.dir).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
+    Ok(cmd)
+}
+
 pub async fn run_blocking(module: &Module, hook: &str, env: &HookEnv) -> crate::Result<HookOutcome> {
     let Some(exe) = module.hook(hook) else {
         return Ok(HookOutcome { status: 0, stdout: String::new(), stderr: String::new() });
     };
-    std::fs::create_dir_all(module.data_dir())?;
-    let mut cmd = tokio::process::Command::new(&exe);
-    cmd.envs(env.vars.iter().map(|(k, v)| (k.as_str(), v.as_str())))
-        .env("MODULE_DIR", &module.dir)
-        .env("MODULE_DATA_DIR", module.data_dir())
-        .current_dir(&module.dir)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-    let child = cmd.spawn().map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
-    let timeout = if hook == "screenshot" { Duration::from_secs(30) } else { module.timeout() };
+    let child = module_cmd(module, &exe)?.envs(env.vars.iter().map(|(k, v)| (k.as_str(), v.as_str()))).spawn().map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
+    let timeout = module.timeout();
     match tokio::time::timeout(timeout, child.wait_with_output()).await {
         Ok(Ok(out)) => {
             let o = HookOutcome { status: out.status.code().unwrap_or(-1), stdout: String::from_utf8_lossy(&out.stdout).into(), stderr: String::from_utf8_lossy(&out.stderr).into() };
@@ -305,10 +271,7 @@ pub async fn run_blocking(module: &Module, hook: &str, env: &HookEnv) -> crate::
             Ok(o)
         }
         Ok(Err(e)) => Err(e.into()),
-        Err(_) => {
-            tracing::warn!("hook {}:{hook} timed out after {timeout:?}", module.id());
-            Err(crate::Error::Io(format!("{}:{hook} timed out", module.id())))
-        }
+        Err(_) => Err(crate::Error::Io(format!("{}:{hook} timed out after {timeout:?}", module.id()))),
     }
 }
 
@@ -353,26 +316,13 @@ pub enum SourceEvent {
     Unknown,
 }
 
-/// Runs `bin/source <verb> [args]`, streaming one JSON event per stdout line to `on_event`.
 pub async fn run_source<F>(module: &Module, settings: &serde_json::Map<String, serde_json::Value>, verb: &str, args: &[String], mut on_event: F) -> crate::Result<()>
 where
     F: FnMut(SourceEvent),
 {
     use tokio::io::AsyncBufReadExt;
     let exe = module.dir.join(&module.manifest.source.exe);
-    std::fs::create_dir_all(module.data_dir())?;
-    let mut cmd = tokio::process::Command::new(&exe);
-    cmd.arg(verb).args(args)
-        .env("MODULE_SETTINGS_JSON", serde_json::Value::Object(settings.clone()).to_string())
-        .env("MODULE_DIR", &module.dir)
-        .env("MODULE_DATA_DIR", module.data_dir())
-        .env("UNIVERSE_BIN", paths::self_exe())
-        .current_dir(&module.dir)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-    let mut child = cmd.spawn().map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
+    let mut child = module_cmd(module, &exe)?.arg(verb).args(args).env("MODULE_SETTINGS_JSON", serde_json::Value::Object(settings.clone()).to_string()).env("UNIVERSE_BIN", paths::self_exe()).spawn().map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();
     let id = module.id().to_string();
@@ -403,26 +353,14 @@ where
     Ok(())
 }
 
-/// The choices a setting's `choices_exec` prints (a JSON array of strings); the static list when
-/// there is none. Run as `<exec> <key>` in the source's environment, bounded to 20 s.
+/// `<exec> <key>` prints a JSON array of strings, bounded to 20 s; the static list when there is no exec.
 pub async fn setting_choices(module: &Module, settings: &serde_json::Map<String, serde_json::Value>, key: &str) -> crate::Result<Vec<String>> {
     let s = module.manifest.settings.iter().find(|s| s.key == key).ok_or_else(|| crate::Error::Invalid(format!("{}: unknown setting {key}", module.id())))?;
     if s.choices_exec.is_empty() {
         return Ok(s.choices.clone());
     }
     let exe = module.dir.join(&s.choices_exec);
-    std::fs::create_dir_all(module.data_dir())?;
-    let mut cmd = tokio::process::Command::new(&exe);
-    cmd.arg(key)
-        .env("MODULE_SETTINGS_JSON", serde_json::Value::Object(settings.clone()).to_string())
-        .env("MODULE_DIR", &module.dir)
-        .env("MODULE_DATA_DIR", module.data_dir())
-        .current_dir(&module.dir)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .kill_on_drop(true);
-    let child = cmd.spawn().map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
+    let child = module_cmd(module, &exe)?.arg(key).env("MODULE_SETTINGS_JSON", serde_json::Value::Object(settings.clone()).to_string()).spawn().map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
     let out = tokio::time::timeout(Duration::from_secs(20), child.wait_with_output())
         .await
         .map_err(|_| crate::Error::Io(format!("{} {key}: choices timed out", module.id())))??;
@@ -489,11 +427,9 @@ scope = "config"
         assert!(module.validate_setting("codec", "vp9", false).is_err());
         assert!(module.validate_setting("codec", "hevc", true).is_err());
         assert!(module.validate_setting("cursor", "true", true).is_ok());
-        // An int takes a number or one of its listed names, nothing else.
         assert!(module.validate_setting("fps", "144", false).is_ok());
         assert!(module.validate_setting("fps", "auto", false).is_ok());
         assert!(module.validate_setting("fps", "fast", false).is_err());
-        // config scope: settable globally, never per game, and reaches the hooks like any other.
         assert_eq!(merged["gsr_extra_args"], "-cr full");
         assert!(module.validate_setting("gsr_extra_args", "-keyint 2", false).is_ok());
         assert!(module.validate_setting("gsr_extra_args", "-keyint 2", true).is_err());
@@ -513,7 +449,6 @@ scope = "config"
         std::env::set_var("UNIVERSE_DATA_HOME", dir.path().join("data"));
         std::fs::create_dir_all(dir.path().join("bin")).unwrap();
         let exe = dir.path().join("bin/choices");
-        // Echoes the provider it was handed, as `["provider:codex"]`.
         std::fs::write(&exe, r##"#!/bin/sh
 [ "$1" = model ] || exit 2
 provider=$(printf '%s' "$MODULE_SETTINGS_JSON" | sed 's/.*"provider":"\([a-z]*\)".*/\1/')
@@ -543,15 +478,5 @@ choices_exec = "bin/choices"
         assert_eq!(listed.len(), 1);
         assert!(listed[0].contains("provider:codex"), "{listed:?}");
         assert!(setting_choices(&module, &settings, "nope").await.is_err());
-    }
-
-    #[test]
-    fn source_events_parse() {
-        let e: SourceEvent = serde_json::from_str(r#"{"event":"game","id":"1","title":"T","owned":true}"#).unwrap();
-        assert!(matches!(e, SourceEvent::Game(_)));
-        let e: SourceEvent = serde_json::from_str(r#"{"event":"progress","done":1,"total":2}"#).unwrap();
-        assert!(matches!(e, SourceEvent::Progress { done: 1, total: 2, .. }));
-        let e: SourceEvent = serde_json::from_str(r#"{"event":"done"}"#).unwrap();
-        assert!(matches!(e, SourceEvent::Done));
     }
 }

@@ -44,14 +44,12 @@ pub fn probe_duration(path: &Path) -> Option<u64> {
 }
 
 fn session_times(session: &str, duration_s: u64) -> (String, String) {
-    let start = chrono::NaiveDateTime::parse_from_str(session, "%Y%m%d-%H%M%S").ok();
-    match start.and_then(|s| s.and_local_timezone(chrono::Local).single()) {
+    match sessions::parse_session_id(session) {
         Some(s) => (s.to_rfc3339(), (s + chrono::Duration::seconds(duration_s as i64)).to_rfc3339()),
         None => (String::new(), String::new()),
     }
 }
 
-/// One `import-recording` session per mkv or mp4 not yet referenced (plan §7); returns how many were added.
 pub fn import_existing(game: &Game, recordings_root: &Path) -> crate::Result<usize> {
     let dir = recordings_root.join(&game.id);
     let Ok(rd) = std::fs::read_dir(&dir) else { return Ok(0) };
@@ -74,7 +72,6 @@ pub fn import_existing(game: &Game, recordings_root: &Path) -> crate::Result<usi
     Ok(added)
 }
 
-/// Moves a filed recording to `<recordings_root>/<id>/<session>.mkv` and attaches it to the session line.
 pub fn file(game: &Game, session_id: &str, src: &Path, recordings_root: &Path) -> crate::Result<PathBuf> {
     if !src.is_file() {
         return Err(crate::Error::NotFound(src.display().to_string()));

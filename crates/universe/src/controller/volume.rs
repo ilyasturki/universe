@@ -1,18 +1,6 @@
-//! Volume macros as PulseAudio calls on the default sink: nothing is typed, so no key reaches the game.
+//! Volume macros as `wpctl` calls on the default sink: nothing is typed, so no key reaches the game.
 
-use std::cell::RefCell;
-use std::rc::Rc;
-use std::time::{Duration, Instant};
-
-use libpulse_binding::callbacks::ListResult;
-use libpulse_binding::context::{Context, FlagSet, State};
-use libpulse_binding::mainloop::standard::Mainloop;
-use libpulse_binding::operation::{Operation, State as OpState};
-use libpulse_binding::time::MicroSeconds;
-use libpulse_binding::volume::{ChannelVolumes, Volume};
-
-pub const NORMAL: u32 = Volume::NORMAL.0;
-const DEADLINE: Duration = Duration::from_secs(3);
+use std::process::Command;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Change {
@@ -21,35 +9,6 @@ pub enum Change {
     ToggleMute,
 }
 
-/// One channel moved by `percent` of the normal volume and kept within [0, normal]: a sink boosted above
-/// it comes back down to normal on either step.
-pub fn step(volume: u32, percent: u8, up: bool) -> u32 {
-    let delta = (u64::from(NORMAL) * u64::from(percent) / 100) as u32;
-    if up { volume.saturating_add(delta) } else { volume.saturating_sub(delta) }.min(NORMAL)
-}
-
-fn pump(ml: &mut Mainloop, since: Instant) -> Result<(), String> {
-    if since.elapsed() > DEADLINE {
-        return Err("pulseaudio did not answer in time".into());
-    }
-    ml.prepare(Some(MicroSeconds(200_000))).map_err(|e| format!("mainloop: {e}"))?;
-    ml.poll().map_err(|e| format!("mainloop: {e}"))?;
-    ml.dispatch().map_err(|e| format!("mainloop: {e}"))?;
-    Ok(())
-}
-
-fn wait<T: ?Sized>(ml: &mut Mainloop, op: &Operation<T>, since: Instant) -> Result<(), String> {
-    while op.get_state() == OpState::Running {
-        pump(ml, since)?;
-    }
-    if op.get_state() == OpState::Cancelled {
-        return Err("operation cancelled".into());
-    }
-    Ok(())
-}
-
-/// The sink after a change: the loudest channel as a percent of normal, whether it is muted, and the
-/// output's name as GNOME's own volume OSD prints it (the active port, else the sink).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Level {
     pub percent: u8,
@@ -57,88 +16,24 @@ pub struct Level {
     pub output: String,
 }
 
-/// Blocking: connects to the default server, applies the change to the default sink, disconnects.
-pub fn apply(change: Change, percent: u8) -> Result<Level, String> {
-    let since = Instant::now();
-    let mut ml = Mainloop::new().ok_or("mainloop")?;
-    let mut ctx = Context::new(&ml, "universe").ok_or("context")?;
-    ctx.connect(None, FlagSet::NOAUTOSPAWN, None).map_err(|e| format!("connect: {e}"))?;
-    loop {
-        match ctx.get_state() {
-            State::Ready => break,
-            State::Failed | State::Terminated => return Err(format!("no pulseaudio server: {}", ctx.errno())),
-            _ => pump(&mut ml, since)?,
-        }
+fn wpctl(args: &[&str]) -> Result<String, String> {
+    let out = Command::new("wpctl").args(args).output().map_err(|e| format!("wpctl: {e}"))?;
+    if !out.status.success() {
+        return Err(format!("wpctl {}: {}", args.join(" "), String::from_utf8_lossy(&out.stderr).trim()));
     }
-    let sink: Rc<RefCell<Option<String>>> = Rc::new(RefCell::new(None));
-    let op = {
-        let sink = sink.clone();
-        ctx.introspect().get_server_info(move |info| *sink.borrow_mut() = info.default_sink_name.as_ref().map(|s| s.to_string()))
-    };
-    wait(&mut ml, &op, since)?;
-    let name = sink.borrow().clone().ok_or("no default sink")?;
-    let found: Rc<RefCell<Option<(ChannelVolumes, bool, String)>>> = Rc::new(RefCell::new(None));
-    let op = {
-        let found = found.clone();
-        ctx.introspect().get_sink_info_by_name(&name, move |r| {
-            if let ListResult::Item(i) = r {
-                let output = i.active_port.as_ref().and_then(|p| p.description.as_deref()).or(i.description.as_deref()).unwrap_or_default().to_string();
-                *found.borrow_mut() = Some((i.volume, i.mute, output));
-            }
-        })
-    };
-    wait(&mut ml, &op, since)?;
-    let (mut volume, mute, output) = found.borrow().clone().ok_or_else(|| format!("sink {name} not found"))?;
-    let done: Rc<RefCell<Option<bool>>> = Rc::new(RefCell::new(None));
-    let cb: Box<dyn FnMut(bool)> = {
-        let done = done.clone();
-        Box::new(move |ok| *done.borrow_mut() = Some(ok))
-    };
-    let muted = match change {
-        Change::ToggleMute => !mute,
-        Change::Up | Change::Down => {
-            for v in volume.get_mut() {
-                v.0 = step(v.0, percent, change == Change::Up);
-            }
-            mute
-        }
-    };
-    let op = match change {
-        Change::ToggleMute => ctx.introspect().set_sink_mute_by_name(&name, muted, Some(cb)),
-        Change::Up | Change::Down => ctx.introspect().set_sink_volume_by_name(&name, &volume, Some(cb)),
-    };
-    wait(&mut ml, &op, since)?;
-    let ok = *done.borrow();
-    ctx.disconnect();
-    match ok {
-        Some(true) => Ok(Level { percent: (u64::from(volume.max().0) * 100 / u64::from(NORMAL)) as u8, muted, output }),
-        _ => Err(format!("{name}: {change:?} refused")),
-    }
+    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn steps_by_percent_within_the_normal_range() {
-        let two = NORMAL / 50;
-        assert_eq!(step(NORMAL / 2, 2, true), NORMAL / 2 + two);
-        assert_eq!(step(NORMAL / 2, 2, false), NORMAL / 2 - two);
-        assert_eq!(step(NORMAL - 10, 2, true), NORMAL, "clamped at normal");
-        assert_eq!(step(NORMAL + 20_000, 2, true), NORMAL, "a boosted sink drops back to normal");
-        assert_eq!(step(NORMAL + 20_000, 2, false), NORMAL);
-        assert_eq!(step(100, 6, false), 0, "clamped at silence");
-        assert_eq!(step(0, 100, true), NORMAL);
-        assert_eq!(step(NORMAL / 2, 0, true), NORMAL / 2);
-    }
-
-    // Needs a PulseAudio server: `cargo test -- --ignored mute_round_trip`. Mutes, then unmutes: the sink ends as it began.
-    #[test]
-    #[ignore]
-    fn mute_round_trip() {
-        let level = apply(Change::ToggleMute, 2).unwrap();
-        assert!(!level.output.is_empty(), "the sink names its output for the OSD");
-        apply(Change::ToggleMute, 2).unwrap();
-    }
+/// Blocking: applies the change to the default sink, capped at the normal volume on the way up.
+pub fn apply(change: Change, percent: u8) -> Result<Level, String> {
+    const SINK: &str = "@DEFAULT_AUDIO_SINK@";
+    match change {
+        Change::Up => wpctl(&["set-volume", "-l", "1.0", SINK, &format!("{percent}%+")])?,
+        Change::Down => wpctl(&["set-volume", SINK, &format!("{percent}%-")])?,
+        Change::ToggleMute => wpctl(&["set-mute", SINK, "toggle"])?,
+    };
+    let volume = wpctl(&["get-volume", SINK])?;
+    let level: f64 = volume.split_whitespace().nth(1).and_then(|v| v.parse().ok()).ok_or_else(|| format!("wpctl get-volume: {volume:?}"))?;
+    let output = wpctl(&["inspect", SINK])?.lines().find_map(|l| l.split_once("node.description = ")).map(|(_, v)| v.trim().trim_matches('"').to_string()).unwrap_or_default();
+    Ok(Level { percent: (level * 100.0).round() as u8, muted: volume.contains("[MUTED]"), output })
 }

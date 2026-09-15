@@ -1,6 +1,4 @@
-//! Controller macros: a pad's spare buttons (paddles, Fn, Create…) bound to actions, read from evdev
-//! without a grab so the game keeps the pad whole. `watch` is the engine; the rest is config,
-//! layouts and the pure state machine behind it.
+//! Pads are read from evdev without a grab so the game keeps the pad whole.
 
 pub mod engine;
 pub mod keys;
@@ -52,17 +50,13 @@ impl Macro {
         if self.action == "command" && self.command.trim().is_empty() {
             return Err(bad("command is empty".into()));
         }
-        if self.family != "*" && family_by_id(&self.family).is_none() {
-            return Err(bad(format!("unknown family '{}'", self.family)));
+        match (self.family.as_str(), family_by_id(&self.family)) {
+            ("*", _) if !STANDARD.iter().any(|s| s.id == self.button) => Err(bad(format!("'{}' is not a standard button; bind it on its family", self.button))),
+            ("*", _) => Ok(()),
+            (_, Some(f)) if !f.slots().any(|s| s.id == self.button) => Err(bad(format!("{} has no button '{}'", f.name, self.button))),
+            (_, Some(_)) => Ok(()),
+            _ => Err(bad(format!("unknown family '{}'", self.family))),
         }
-        if let Some(f) = family_by_id(&self.family) {
-            if !f.slots.iter().any(|s| s.id == self.button) {
-                return Err(bad(format!("{} has no button '{}'", f.name, self.button)));
-            }
-        } else if !STANDARD.iter().any(|s| s.id == self.button) {
-            return Err(bad(format!("'{}' is not a standard button; bind it on its family", self.button)));
-        }
-        Ok(())
     }
 
     pub fn matches(&self, family: &str, button: &str, trigger: &str) -> bool {
@@ -75,8 +69,6 @@ impl Macro {
 pub struct ControllerConfig {
     pub enabled: bool,
     pub hold_ms: u64,
-    /// percent of the normal volume per volume macro
-    #[serde(deserialize_with = "de_volume_step")]
     pub volume_step: u8,
     pub mangohud_toggle: String,
     /// family → slot → learned codes, first present on the pad wins
@@ -91,29 +83,9 @@ impl Default for ControllerConfig {
     }
 }
 
-// "precise" and "normal" are the uinput-era spellings (Shift + key, bare key), kept readable.
-const LEGACY_VOLUME_STEPS: [(&str, u8); 2] = [("precise", 2), ("normal", 6)];
-
-fn de_volume_step<'de, D: serde::Deserializer<'de>>(d: D) -> Result<u8, D::Error> {
-    #[derive(Deserialize)]
-    #[serde(untagged)]
-    enum Raw {
-        Percent(u8),
-        Legacy(String),
-    }
-    match Raw::deserialize(d)? {
-        Raw::Percent(p) => Ok(p),
-        Raw::Legacy(s) => volume_step_value(&s).map(|v| v.parse().unwrap()).map_err(serde::de::Error::custom),
-    }
-}
-
-/// The config.toml value for `controller.volume_step`: a percent from 1 to 100, or a legacy name mapped to its percent.
-pub fn volume_step_value(value: &str) -> crate::Result<String> {
-    if let Some((_, p)) = LEGACY_VOLUME_STEPS.iter().find(|(name, _)| *name == value) {
-        return Ok(p.to_string());
-    }
+pub fn volume_step_value(value: &str) -> crate::Result<u8> {
     match value.parse::<u8>() {
-        Ok(p) if (1..=100).contains(&p) => Ok(p.to_string()),
+        Ok(p) if (1..=100).contains(&p) => Ok(p),
         _ => Err(crate::Error::Invalid(format!("controller.volume_step: a percent from 1 to 100, not '{value}'"))),
     }
 }
@@ -138,13 +110,12 @@ impl ControllerConfig {
         out
     }
 
-    /// The learned list when the slot has one (it replaces the seeds, so a seed taken away stays
-    /// away), the shipped seeds otherwise.
+    /// A learned list replaces the seeds, so a seed taken away stays away.
     pub fn codes_for(&self, family: &Family, slot: &str) -> Vec<String> {
         if let Some(learned) = self.buttons.get(family.id).and_then(|b| b.get(slot)) {
             return learned.clone();
         }
-        family.slots.iter().find(|s| s.id == slot).map(|s| s.codes.iter().map(|c| (*c).to_string()).collect()).unwrap_or_default()
+        family.slots().find(|s| s.id == slot).map(|s| s.codes.iter().map(|c| (*c).to_string()).collect()).unwrap_or_default()
     }
 }
 
@@ -186,7 +157,6 @@ pub fn preset(id: &str) -> Option<&'static Preset> {
     PRESETS.iter().find(|p| p.id == id)
 }
 
-/// One physical button of a family: its id, what the pad calls it, the evdev codes it may arrive as.
 #[derive(Debug, Clone, Copy)]
 pub struct Slot {
     pub id: &'static str,
@@ -236,25 +206,21 @@ const EIGHTBITDO: [Slot; 17] = standard!("B", "A", "X", "Y", "L1", "R1", "L2", "
 pub struct Family {
     pub id: &'static str,
     pub name: &'static str,
-    pub standard: &'static [Slot; 17],
-    pub extras: &'static [Slot],
-    /// (vendor, product); product 0 matches the vendor alone
-    pub ids: &'static [(u16, u16)],
-    pub name_hints: &'static [&'static str],
-    pub slots: Vec<Slot>,
-}
-
-struct FamilySpec {
-    id: &'static str,
-    name: &'static str,
     standard: &'static [Slot; 17],
     extras: &'static [Slot],
+    /// (vendor, product); product 0 matches the vendor alone
     ids: &'static [(u16, u16)],
     name_hints: &'static [&'static str],
 }
 
-const FAMILY_SPECS: [FamilySpec; 8] = [
-    FamilySpec {
+impl Family {
+    pub fn slots(&self) -> impl Iterator<Item = &Slot> {
+        self.standard.iter().chain(self.extras)
+    }
+}
+
+const FAMILIES: [Family; 8] = [
+    Family {
         id: "dualsense-edge",
         name: "DualSense Edge",
         standard: &SONY,
@@ -267,9 +233,9 @@ const FAMILY_SPECS: [FamilySpec; 8] = [
         ids: &[(0x054c, 0x0df2)],
         name_hints: &["dualsense edge"],
     },
-    FamilySpec { id: "dualsense", name: "DualSense", standard: &SONY, extras: &[], ids: &[(0x054c, 0x0ce6)], name_hints: &["dualsense"] },
-    FamilySpec { id: "dualshock4", name: "DualShock 4", standard: &SONY_DS4, extras: &[], ids: &[(0x054c, 0x05c4), (0x054c, 0x09cc), (0x054c, 0x0ba0)], name_hints: &["dualshock", "wireless controller"] },
-    FamilySpec {
+    Family { id: "dualsense", name: "DualSense", standard: &SONY, extras: &[], ids: &[(0x054c, 0x0ce6)], name_hints: &["dualsense"] },
+    Family { id: "dualshock4", name: "DualShock 4", standard: &SONY_DS4, extras: &[], ids: &[(0x054c, 0x05c4), (0x054c, 0x09cc), (0x054c, 0x0ba0)], name_hints: &["dualshock", "wireless controller"] },
+    Family {
         id: "xbox-elite",
         name: "Xbox Elite Series 2",
         standard: &XBOX,
@@ -282,9 +248,9 @@ const FAMILY_SPECS: [FamilySpec; 8] = [
         ids: &[(0x045e, 0x0b00), (0x045e, 0x0b05), (0x045e, 0x0b22)],
         name_hints: &["elite"],
     },
-    FamilySpec { id: "xbox", name: "Xbox", standard: &XBOX, extras: &[extra("share", "Share", &["BTN_TRIGGER_HAPPY1", "KEY_RECORD"])], ids: &[(0x045e, 0)], name_hints: &["xbox", "microsoft", "x-box"] },
-    FamilySpec { id: "switch-pro", name: "Switch Pro", standard: &SWITCH, extras: &[extra("capture", "Capture", &["BTN_Z"])], ids: &[(0x057e, 0x2009), (0x057e, 0x2017)], name_hints: &["pro controller", "nintendo"] },
-    FamilySpec {
+    Family { id: "xbox", name: "Xbox", standard: &XBOX, extras: &[extra("share", "Share", &["BTN_TRIGGER_HAPPY1", "KEY_RECORD"])], ids: &[(0x045e, 0)], name_hints: &["xbox", "microsoft", "x-box"] },
+    Family { id: "switch-pro", name: "Switch Pro", standard: &SWITCH, extras: &[extra("capture", "Capture", &["BTN_Z"])], ids: &[(0x057e, 0x2009), (0x057e, 0x2017)], name_hints: &["pro controller", "nintendo"] },
+    Family {
         id: "8bitdo-pro-3",
         name: "8BitDo Pro 3",
         standard: &EIGHTBITDO,
@@ -298,47 +264,39 @@ const FAMILY_SPECS: [FamilySpec; 8] = [
         ids: &[(0x2dc8, 0x6009)],
         name_hints: &["8bitdo pro 3"],
     },
-    FamilySpec { id: "generic", name: "Controller", standard: &STANDARD, extras: &[], ids: &[], name_hints: &[] },
+    Family { id: "generic", name: "Controller", standard: &STANDARD, extras: &[], ids: &[], name_hints: &[] },
 ];
 
-fn family_of_spec(spec: &FamilySpec) -> Family {
-    let mut slots: Vec<Slot> = spec.standard.to_vec();
-    slots.extend_from_slice(spec.extras);
-    Family { id: spec.id, name: spec.name, standard: spec.standard, extras: spec.extras, ids: spec.ids, name_hints: spec.name_hints, slots }
+pub fn families() -> &'static [Family] {
+    &FAMILIES
 }
 
-pub fn families() -> Vec<Family> {
-    FAMILY_SPECS.iter().map(family_of_spec).collect()
+pub fn family_by_id(id: &str) -> Option<&'static Family> {
+    FAMILIES.iter().find(|s| s.id == id)
 }
 
-pub fn family_by_id(id: &str) -> Option<Family> {
-    FAMILY_SPECS.iter().find(|s| s.id == id).map(family_of_spec)
-}
-
-/// The family of a pad: an exact vendor/product first, a vendor-wide id next, then the name;
-/// `generic` otherwise. xpadneo presents an Elite as a plain "Xbox Wireless Controller" 045e:028e,
-/// so an Xbox pad advertising grip or paddle codes is an Elite whatever it says.
-pub fn detect_family(vendor: u16, product: u16, name: &str, keys: &[u16]) -> Family {
+/// xpadneo presents an Elite as a plain "Xbox Wireless Controller" 045e:028e, so an Xbox pad
+/// advertising grip or paddle codes is an Elite whatever it says.
+pub fn detect_family(vendor: u16, product: u16, name: &str, keys: &[u16]) -> &'static Family {
     let lname = name.to_lowercase();
-    let spec = FAMILY_SPECS
+    let family = FAMILIES
         .iter()
         .find(|s| s.ids.iter().any(|(v, p)| *v == vendor && *p == product && *p != 0))
-        .or_else(|| FAMILY_SPECS.iter().find(|s| s.name_hints.iter().any(|h| lname.contains(h)) && s.ids.iter().any(|(v, _)| *v == vendor)))
-        .or_else(|| FAMILY_SPECS.iter().find(|s| s.ids.iter().any(|(v, p)| *v == vendor && *p == 0)))
-        .or_else(|| FAMILY_SPECS.iter().find(|s| s.name_hints.iter().any(|h| lname.contains(h))));
-    let mut family = spec.map(family_of_spec).unwrap_or_else(|| family_by_id("generic").unwrap());
+        .or_else(|| FAMILIES.iter().find(|s| s.name_hints.iter().any(|h| lname.contains(h)) && s.ids.iter().any(|(v, _)| *v == vendor)))
+        .or_else(|| FAMILIES.iter().find(|s| s.ids.iter().any(|(v, p)| *v == vendor && *p == 0)))
+        .or_else(|| FAMILIES.iter().find(|s| s.name_hints.iter().any(|h| lname.contains(h))))
+        .unwrap_or_else(|| family_by_id("generic").unwrap());
     if family.id == "xbox" && keys.iter().any(|k| (0x224..=0x227).contains(k) || (708..=711).contains(k)) {
-        family = family_by_id("xbox-elite").unwrap();
+        return family_by_id("xbox-elite").unwrap();
     }
     family
 }
 
-/// Which slot each source of the pad drives: the first code of a slot the pad advertises wins. A
-/// slot none of whose codes are present stays unbound on this connection.
+/// The first code of a slot the pad advertises wins; a slot with none present stays unbound.
 pub fn resolve_slots(config: &ControllerConfig, family: &Family, keys: &[u16], axes: &[u16]) -> BTreeMap<String, Option<keys::Source>> {
     let mut out = BTreeMap::new();
     let mut taken: Vec<keys::Source> = Vec::new();
-    for s in &family.slots {
+    for s in family.slots() {
         let found = config.codes_for(family, s.id).iter().filter_map(|c| keys::parse_source(c)).find(|src| src.present(keys, axes) && !taken.contains(src));
         if let Some(src) = found {
             taken.push(src);
@@ -354,7 +312,7 @@ pub fn state_json(config: &ControllerConfig) -> serde_json::Value {
         .map(|f| {
             serde_json::json!({
                 "id": f.id, "name": f.name,
-                "slots": f.slots.iter().map(|s| serde_json::json!({"id": s.id, "label": s.label, "codes": config.codes_for(f, s.id), "extra": s.extra})).collect::<Vec<_>>(),
+                "slots": f.slots().map(|s| serde_json::json!({"id": s.id, "label": s.label, "codes": config.codes_for(f, s.id), "extra": s.extra})).collect::<Vec<_>>(),
             })
         })
         .collect();
@@ -413,53 +371,21 @@ pub fn write_macros(list: &[Macro]) -> crate::Result<()> {
 
 /// `None` forgets what was learned (the seeds apply again); an empty list leaves the slot unbound.
 pub fn write_button(family: &str, slot: &str, codes: Option<&[String]>) -> crate::Result<()> {
-    let path = paths::config_file();
-    let text = std::fs::read_to_string(&path).unwrap_or_default();
-    let mut doc: toml_edit::DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| crate::Error::Invalid(e.to_string()))?;
-    let ctl = controller_table(&mut doc);
-    let buttons = ctl.entry("buttons").or_insert(toml_edit::table());
-    if !buttons.is_table() {
-        *buttons = toml_edit::table();
-    }
-    let buttons = buttons.as_table_mut().unwrap();
-    buttons.set_implicit(true);
-    let fam = buttons.entry(family).or_insert(toml_edit::table());
-    if !fam.is_table() {
-        *fam = toml_edit::table();
-    }
-    let fam = fam.as_table_mut().unwrap();
-    match codes {
-        None => {
-            fam.remove(slot);
-        }
-        Some(codes) => {
-            let mut arr = toml_edit::Array::new();
-            for c in codes {
-                arr.push(c.as_str());
-            }
-            fam[slot] = toml_edit::value(arr);
-        }
-    }
-    if let Some(parent) = path.parent() {
-        paths::ensure_dir(parent)?;
-    }
-    std::fs::write(&path, doc.to_string())?;
-    Ok(())
+    let value = codes.map(|c| format!("[{}]", c.join(","))).unwrap_or_default();
+    crate::config::Config::set_key(&paths::config_file(), &format!("controller.buttons.{family}.{slot}"), &value)
 }
 
-/// Replaces the macro with the same (family, button, trigger), or appends.
 pub fn upsert_macro(list: &mut Vec<Macro>, m: Macro) {
     list.retain(|x| !x.matches(&m.family, &m.button, &m.trigger));
     list.push(m);
 }
 
-/// Moves a code to `slot`, taking it from whichever slot of the family held it; returns that slot.
 pub fn learn_code(config: &ControllerConfig, family: &Family, slot: &str, code: &str) -> crate::Result<Option<String>> {
-    if !family.slots.iter().any(|s| s.id == slot) {
+    if !family.slots().any(|s| s.id == slot) {
         return Err(crate::Error::Invalid(format!("{} has no button '{slot}'", family.name)));
     }
     let mut previous = None;
-    for s in &family.slots {
+    for s in family.slots() {
         if s.id == slot {
             continue;
         }
@@ -490,7 +416,7 @@ mod tests {
         assert_eq!(detect_family(0x045e, 0x028e, "Xbox Wireless Controller", &[0x130, 708]).id, "xbox-elite", "xpad over USB");
         assert_eq!(detect_family(0x2dc8, 0x6009, "8BitDo Pro 3", &[]).id, "8bitdo-pro-3");
         assert_eq!(detect_family(0x1234, 0x0001, "Some Pad", &[]).id, "generic");
-        assert_eq!(detect_family(0x054c, 0x0df2, "DualSense Edge Wireless Controller", &[]).slots.iter().filter(|s| s.extra).count(), 4);
+        assert_eq!(detect_family(0x054c, 0x0df2, "DualSense Edge Wireless Controller", &[]).slots().filter(|s| s.extra).count(), 4);
     }
 
     #[test]
@@ -499,21 +425,21 @@ mod tests {
         let edge = family_by_id("dualsense-edge").unwrap();
         let keys: Vec<u16> = [0x130, 0x131, 0x133, 0x134, 0x136, 0x137, 0x138, 0x139, 0x13a, 0x13b, 0x13c, 0x13d, 0x13e, 704, 705, 706, 707].to_vec();
         let axes = vec![0, 1, 2, 3, 4, 5, 16, 17];
-        let slots = resolve_slots(&cfg, &edge, &keys, &axes);
+        let slots = resolve_slots(&cfg, edge, &keys, &axes);
         assert_eq!(slots["paddle_left"].unwrap().to_string(), "BTN_TRIGGER_HAPPY3");
         assert_eq!(slots["lt"].unwrap().to_string(), "BTN_TL2");
         assert_eq!(slots["dpad_left"].unwrap().to_string(), "ABS_HAT0X-");
         let older: Vec<u16> = keys.iter().copied().filter(|k| *k < 700).collect();
-        assert!(resolve_slots(&cfg, &edge, &older, &axes)["paddle_left"].is_none(), "no paddles before kernel 7.2");
+        assert!(resolve_slots(&cfg, edge, &older, &axes)["paddle_left"].is_none(), "no paddles before kernel 7.2");
 
         let elite = family_by_id("xbox-elite").unwrap();
         let bt: Vec<u16> = [0x130, 0x131, 0x133, 0x134, 0x136, 0x137, 0x13a, 0x13b, 0x13c, 0x13d, 0x13e, 548, 549, 550, 551].to_vec();
-        let s = resolve_slots(&cfg, &elite, &bt, &[0, 1, 3, 4, 16, 17, 9, 10]);
+        let s = resolve_slots(&cfg, elite, &bt, &[0, 1, 3, 4, 16, 17, 9, 10]);
         assert_eq!(s["paddle_p1"].unwrap().to_string(), "BTN_GRIPR");
         assert_eq!(s["paddle_p3"].unwrap().to_string(), "BTN_GRIPL");
         assert_eq!(s["lt"].unwrap().to_string(), "ABS_BRAKE+");
         let usb: Vec<u16> = [0x130, 0x131, 0x133, 0x134, 0x136, 0x137, 0x13a, 0x13b, 0x13c, 0x13d, 0x13e, 708, 709, 710, 711].to_vec();
-        let s = resolve_slots(&cfg, &elite, &usb, &[0, 1, 2, 3, 4, 5, 16, 17]);
+        let s = resolve_slots(&cfg, elite, &usb, &[0, 1, 2, 3, 4, 5, 16, 17]);
         assert_eq!(s["paddle_p1"].unwrap().to_string(), "BTN_TRIGGER_HAPPY5");
         assert_eq!(s["paddle_p4"].unwrap().to_string(), "BTN_TRIGGER_HAPPY8");
         assert_eq!(s["lt"].unwrap().to_string(), "ABS_Z+");
@@ -525,12 +451,12 @@ mod tests {
         cfg.buttons.entry("xbox-elite".into()).or_default().insert("paddle_p1".into(), vec!["BTN_TRIGGER_HAPPY8".into()]);
         let elite = family_by_id("xbox-elite").unwrap();
         let usb: Vec<u16> = [0x130, 708, 709, 710, 711].to_vec();
-        let s = resolve_slots(&cfg, &elite, &usb, &[]);
+        let s = resolve_slots(&cfg, elite, &usb, &[]);
         assert_eq!(s["paddle_p1"].unwrap().to_string(), "BTN_TRIGGER_HAPPY8");
         assert!(s["paddle_p4"].is_none(), "its seed now drives P1");
-        assert_eq!(cfg.codes_for(&elite, "paddle_p1"), vec!["BTN_TRIGGER_HAPPY8"], "a learned list replaces the seeds");
+        assert_eq!(cfg.codes_for(elite, "paddle_p1"), vec!["BTN_TRIGGER_HAPPY8"], "a learned list replaces the seeds");
         cfg.buttons.get_mut("xbox-elite").unwrap().insert("paddle_p2".into(), vec![]);
-        assert!(resolve_slots(&cfg, &elite, &usb, &[])["paddle_p2"].is_none(), "an empty learned list keeps the slot unbound");
+        assert!(resolve_slots(&cfg, elite, &usb, &[])["paddle_p2"].is_none(), "an empty learned list keeps the slot unbound");
     }
 
     #[test]
@@ -545,16 +471,13 @@ mod tests {
     }
 
     #[test]
-    fn volume_step_reads_percents_and_the_legacy_names() {
+    fn volume_step_is_a_percent() {
         let cfg: ControllerConfig = toml::from_str("").unwrap();
         assert_eq!(cfg.volume_step, 2);
         assert_eq!(toml::from_str::<ControllerConfig>("volume_step = 5").unwrap().volume_step, 5);
-        assert_eq!(toml::from_str::<ControllerConfig>("volume_step = \"precise\"").unwrap().volume_step, 2);
-        assert_eq!(toml::from_str::<ControllerConfig>("volume_step = \"normal\"").unwrap().volume_step, 6);
         assert!(toml::from_str::<ControllerConfig>("volume_step = \"loud\"").is_err());
-        assert_eq!(volume_step_value("normal").unwrap(), "6");
-        assert_eq!(volume_step_value("10").unwrap(), "10");
-        assert!(volume_step_value("0").is_err() && volume_step_value("101").is_err() && volume_step_value("precise!").is_err());
+        assert_eq!(volume_step_value("10").unwrap(), 10);
+        assert!(volume_step_value("0").is_err() && volume_step_value("101").is_err() && volume_step_value("precise").is_err());
         assert_eq!(state_json(&cfg)["volume_step"], 2);
     }
 

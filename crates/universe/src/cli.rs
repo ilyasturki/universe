@@ -22,7 +22,7 @@ Files:
   $XDG_RUNTIME_DIR/universe/controller.lock — held by the one controller watcher (the launcher's, or a session's)
 
 Environment:
-  UNIVERSE_CONFIG_HOME, UNIVERSE_DATA_HOME, UNIVERSE_STATE_HOME, UNIVERSE_CACHE_HOME — replace the XDG directories
+  UNIVERSE_CONFIG_HOME, UNIVERSE_DATA_HOME, UNIVERSE_STATE_HOME — replace the XDG directories
   UNIVERSE_MODULES_PATH — extra module roots, colon-separated
   RUST_LOG — tracing filter, warn by default
 
@@ -89,9 +89,6 @@ pub enum Cmd {
         /// Do not ask before updating
         #[arg(long, short)]
         yes: bool,
-        /// Source module
-        #[arg(long, default_value = "gog")]
-        source: String,
     },
     /// Remove a game: parks recordings and journal; --purge trashes the prefix
     Rm {
@@ -205,7 +202,6 @@ pub enum Cmd {
         refresh: bool,
     },
     /// Scan installed games of the sources (all by default)
-    #[command(alias = "gog-scan")]
     Scan {
         /// Source module; every source when omitted
         source: Option<String>,
@@ -241,11 +237,6 @@ pub enum Cmd {
     /// Add a journal entry to the session (journal module's post-process hook)
     #[command(name = "journal-add", hide = true)]
     JournalAdd { session: String, entry: String },
-    /// GOG shortcuts
-    Gog {
-        #[command(subcommand)]
-        verb: GogCmd,
-    },
     /// gamescope's primary child: the keep-alive window, then the game (universe splash [--image P] -- <cmd…>)
     #[command(hide = true)]
     Splash {
@@ -426,28 +417,6 @@ pub enum ControllerCmd {
     Forget { family: String, slot: String },
 }
 
-#[derive(Subcommand, Debug)]
-pub enum GogCmd {
-    /// Cross installed folders with the owned library
-    Scan,
-    /// Owned titles
-    Library {
-        /// Fetch again instead of reading the cache
-        #[arg(long)]
-        refresh: bool,
-    },
-    /// Search the catalogue
-    Search {
-        /// Search terms
-        query: Vec<String>,
-    },
-    /// Log in (prints the URL, then takes the code)
-    Login {
-        /// The code= value from the address bar after logging in
-        code: Option<String>,
-    },
-}
-
 fn table(headers: &[&str]) -> Table {
     let mut t = Table::new();
     t.load_preset(UTF8_FULL_CONDENSED);
@@ -466,11 +435,7 @@ fn s(v: &Value, k: &str) -> String {
 
 fn hours(v: &Value) -> String {
     let h = v["stats"]["hours"].as_f64().unwrap_or(0.0);
-    if h == 0.0 {
-        String::new()
-    } else {
-        format!("{h:.1}")
-    }
+    if h == 0.0 { String::new() } else { format!("{h:.1}") }
 }
 
 fn local(ts: &str) -> Option<chrono::DateTime<chrono::Local>> {
@@ -494,17 +459,22 @@ fn parse_json(s: &str) -> Value {
     serde_json::from_str(s).unwrap_or(Value::Null)
 }
 
-fn print_json(v: &Value) {
-    println!("{}", serde_json::to_string_pretty(v).unwrap_or_default());
+fn print_json(v: &Value) -> anyhow::Result<()> {
+    println!("{}", serde_json::to_string_pretty(v)?);
+    Ok(())
 }
 
-fn confirm(prompt: &str) -> bool {
+fn ask(prompt: &str) -> String {
     use std::io::Write;
-    print!("{prompt} [y/N] ");
+    print!("{prompt} ");
     let _ = std::io::stdout().flush();
     let mut s = String::new();
     let _ = std::io::stdin().read_line(&mut s);
-    s.trim().to_lowercase().starts_with('y')
+    s.trim().to_string()
+}
+
+fn confirm(prompt: &str) -> bool {
+    ask(&format!("{prompt} [y/N]")).to_lowercase().starts_with('y')
 }
 
 fn progress_printer(json: bool) -> impl FnMut(u64, u64, &str) {
@@ -516,9 +486,19 @@ fn progress_printer(json: bool) -> impl FnMut(u64, u64, &str) {
     }
 }
 
+fn finish(json: bool, r: crate::Result<String>) {
+    match r {
+        Ok(m) => report(json, true, &m),
+        Err(e) => {
+            report(json, false, &e.to_string());
+            std::process::exit(1);
+        }
+    }
+}
+
 fn report(json: bool, ok: bool, message: &str) {
     if json {
-        print_json(&serde_json::json!({"ok": ok, "message": message}));
+        let _ = print_json(&serde_json::json!({"ok": ok, "message": message}));
     } else if ok {
         println!("{} {message}", "done".green());
     } else {
@@ -551,8 +531,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Cmd::Ls { all } => {
             let list = parse_json(&core.list_json().await);
             if json {
-                print_json(&list);
-                return Ok(());
+                return print_json(&list);
             }
             let mut t = table(&["Title", "Runner", "Source", "Hours", "Last played"]);
             for i in 1..=4 {
@@ -576,7 +555,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
             let sid = core.launch(&id, &screen, "").await?;
             if json {
-                print_json(&serde_json::json!({"session": sid, "id": id}));
+                print_json(&serde_json::json!({"session": sid, "id": id}))?;
             } else {
                 println!("{} {id} · session {sid}", "launched".green());
             }
@@ -639,8 +618,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             recent.sort_by_key(|r| std::cmp::Reverse(s(r, "ended_at")));
             recent.truncate(10);
             if json {
-                print_json(&serde_json::json!({"current": if cur.is_empty() { Value::Null } else { parse_json(&cur) }, "recent": recent, "pending_journals": pending}));
-                return Ok(());
+                return print_json(&serde_json::json!({"current": if cur.is_empty() { Value::Null } else { parse_json(&cur) }, "recent": recent, "pending_journals": pending}));
             }
             if cur.is_empty() {
                 println!("{}", "no session running".dimmed());
@@ -661,8 +639,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             let id = pick(&core, &name).await?;
             let g = core.get(&id).await?.to_json();
             if json {
-                print_json(&g);
-                return Ok(());
+                return print_json(&g);
             }
             println!("{}  {}", s(&g, "title").bold(), s(&g, "id").dimmed());
             println!("  source     {} {}  build {}", s(&g["source"], "kind"), s(&g["source"], "gog_id"), s(&g["source"], "build_id"));
@@ -689,8 +666,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Cmd::Search { query, source } => {
             let list = parse_json(&core.source_search(&source, &query).await?);
             if json {
-                print_json(&list);
-                return Ok(());
+                return print_json(&list);
             }
             let mut t = table(&["Id", "Title", "Owned", "Installed"]);
             for g in list.as_array().cloned().unwrap_or_default() {
@@ -703,15 +679,9 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 println!("installing {id} from {source}");
             }
             let mut p = progress_printer(json);
-            match core.source_install(&source, &id, Some(&mut p)).await {
-                Ok(gid) => report(json, true, &gid),
-                Err(e) => {
-                    report(json, false, &e.to_string());
-                    std::process::exit(1);
-                }
-            }
+            finish(json, core.source_install(&source, &id, Some(&mut p)).await);
         }
-        Cmd::Update { name, yes, source } => {
+        Cmd::Update { name, yes } => {
             match name {
                 Some(n) => {
                     let id = pick(&core, &n).await?;
@@ -721,19 +691,12 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                         anyhow::bail!("{id} has no source id");
                     }
                     let mut p = progress_printer(json);
-                    match core.source_update(&s(&g["source"], "kind"), &gid, Some(&mut p)).await {
-                        Ok(n) => report(json, true, &format!("{n} updated")),
-                        Err(e) => {
-                            report(json, false, &e.to_string());
-                            std::process::exit(1);
-                        }
-                    }
+                    finish(json, core.source_update(&s(&g["source"], "kind"), &gid, Some(&mut p)).await.map(|n| format!("{n} updated")));
                 }
                 None => {
                     let pending = parse_json(&core.source_updates().await?);
                     if json {
-                        print_json(&pending);
-                        return Ok(());
+                        return print_json(&pending);
                     }
                     let list = pending.as_array().cloned().unwrap_or_default();
                     if list.is_empty() {
@@ -748,8 +711,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     if yes || confirm("download?") {
                         let mut p = progress_printer(json);
                         for u in &list {
-                            let src = if s(u, "source").is_empty() { source.clone() } else { s(u, "source") };
-                            match core.source_update(&src, &s(u, "id"), Some(&mut p)).await {
+                            match core.source_update(&s(u, "source"), &s(u, "id"), Some(&mut p)).await {
                                 Ok(_) => report(json, true, &s(u, "title")),
                                 Err(e) => report(json, false, &format!("{}: {e}", s(u, "title"))),
                             }
@@ -783,7 +745,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 }
             }
             if json {
-                print_json(&core.get(&id).await?.to_json());
+                print_json(&core.get(&id).await?.to_json())?;
             } else {
                 println!("{} {} · {} · {}", "added".green(), id, g.effective.runner_name, g.effective.platform);
                 if g.effective.runner_path.is_empty() && g.effective.runner_kind != "linux" {
@@ -810,8 +772,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             let id = pick(&core, &name).await?;
             let list = parse_json(&core.sessions_json(&id).await?);
             if json {
-                print_json(&list);
-                return Ok(());
+                return print_json(&list);
             }
             let mut t = table(&["Session", "Started", "Duration", "Source", "Recording"]);
             for r in list.as_array().cloned().unwrap_or_default() {
@@ -838,8 +799,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
             let list = parse_json(&core.journal_json(&id).await?);
             if json {
-                print_json(&list);
-                return Ok(());
+                return print_json(&list);
             }
             for e in list.as_array().cloned().unwrap_or_default() {
                 let state = s(&e, "state");
@@ -870,8 +830,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
             let list = parse_json(&core.recordings_json(&id).await?);
             if json {
-                print_json(&list);
-                return Ok(());
+                return print_json(&list);
             }
             let mut t = table(&["Session", "Duration", "Size", "Path"]);
             for r in list.as_array().cloned().unwrap_or_default() {
@@ -880,19 +839,17 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             println!("{t}");
         }
         Cmd::Media { name, action } => {
+            let id = if name == "all" && matches!(action, MediaCmd::Refresh { .. } | MediaCmd::Status) { String::new() } else { pick(&core, &name).await? };
             match action {
                 MediaCmd::Refresh { force } => {
-                    let id = if name == "all" { String::new() } else { pick(&core, &name).await? };
                     let mut p = progress_printer(json);
                     let (changed, total) = core.media_refresh(&id, force, Some(&mut p)).await?;
                     report(json, true, &format!("{changed}/{total} updated"));
                 }
                 MediaCmd::Status => {
-                    let id = if name == "all" { String::new() } else { pick(&core, &name).await? };
                     let list = parse_json(&core.media_status(&id).await?);
                     if json {
-                        print_json(&list);
-                        return Ok(());
+                        return print_json(&list);
                     }
                     let mut t = table(&["Game", "Entry", "Slot", "Kind", "Origin", "Shows", "Default"]);
                     for g in list.as_array().cloned().unwrap_or_default() {
@@ -908,7 +865,6 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     println!("{t}");
                 }
                 MediaCmd::Set { slot, source } => {
-                    let id = pick(&core, &name).await?;
                     let placed = if source.starts_with("http://") || source.starts_with("https://") {
                         core.media_set_url(&id, &slot, &source).await?
                     } else {
@@ -918,21 +874,16 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     report(json, true, &format!("{id}: {slot} → {placed}"));
                 }
                 MediaCmd::Unset { slot } => {
-                    let id = pick(&core, &name).await?;
                     let gone = core.media_unset(&id, &slot).await?;
                     report(json, true, &if gone { format!("{id}: {slot} override removed") } else { format!("{id}: {slot} had no override") });
                 }
                 MediaCmd::Candidates { slot, page } => {
-                    let id = pick(&core, &name).await?;
-                    let list = parse_json(&core.media_candidates(&id, &slot, page).await?);
-                    print_json(&list);
+                    print_json(&parse_json(&core.media_candidates(&id, &slot, page).await?))?;
                 }
                 MediaCmd::Search { query } => {
-                    let id = pick(&core, &name).await?;
                     let hits = parse_json(&core.media_search(&id, &query.join(" ")).await?);
                     if json {
-                        print_json(&hits);
-                        return Ok(());
+                        return print_json(&hits);
                     }
                     let mut t = table(&["Id", "Name", "Year", "", ""]);
                     for h in hits.as_array().cloned().unwrap_or_default() {
@@ -942,7 +893,6 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     println!("{t}");
                 }
                 MediaCmd::Pin { provider, id: pid } => {
-                    let id = pick(&core, &name).await?;
                     core.media_pin(&id, &provider, &pid).await?;
                     println!("pinned");
                 }
@@ -953,8 +903,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 ModuleCmd::Ls => {
                     let list = parse_json(&core.modules_json().await);
                     if json {
-                        print_json(&list);
-                        return Ok(());
+                        return print_json(&list);
                     }
                     let mut t = table(&["Id", "Name", "Kind", "Enabled", "Available", "Missing", "Hooks"]);
                     for m in list.as_array().cloned().unwrap_or_default() {
@@ -973,7 +922,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 }
                 ModuleCmd::Settings { id, game } => {
                     let gid = match game { Some(g) => pick(&core, &g).await?, None => String::new() };
-                    print_json(&parse_json(&core.module_settings_json(&id, &gid).await?));
+                    print_json(&parse_json(&core.module_settings_json(&id, &gid).await?))?;
                 }
                 ModuleCmd::Set { id, pairs, game } => {
                     let gid = match game { Some(g) => pick(&core, &g).await?, None => String::new() };
@@ -988,7 +937,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Cmd::Sources => {
             let list = parse_json(&core.sources_json().await);
             if json {
-                print_json(&list);
+                print_json(&list)?;
             } else {
                 let mut t = table(&["Id", "Name", "Enabled", "Available", "Library (cached)", "Games dir"]);
                 for m in list.as_array().cloned().unwrap_or_default() {
@@ -1003,12 +952,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 None => {
                     let url = core.source_login_url(&source).await?;
                     println!("Open this URL, log in, then paste the code= value from the address bar:\n\n  {url}\n");
-                    use std::io::Write;
-                    print!("code: ");
-                    let _ = std::io::stdout().flush();
-                    let mut s = String::new();
-                    std::io::stdin().read_line(&mut s)?;
-                    s.trim().to_string()
+                    ask("code:")
                 }
             };
             let user = core.source_login(&source, &code).await?;
@@ -1018,8 +962,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             let raw = core.source_library(&source, refresh).await?;
             let list = parse_json(&raw);
             if json {
-                print_json(&list);
-                return Ok(());
+                return print_json(&list);
             }
             let mut t = table(&["Id", "Title", "Installed", "Dir"]);
             for g in list.as_array().cloned().unwrap_or_default() {
@@ -1042,35 +985,10 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 println!("{t}");
             }
         }
-        Cmd::Gog { verb } => {
-            match verb {
-                GogCmd::Scan => {
-                    let mut p = progress_printer(json);
-                    let n = core.source_scan("gog", Some(&mut p)).await?;
-                    report(json, true, &format!("{n} game(s)"));
-                    let list = parse_json(&core.list_json().await);
-                    if json {
-                        print_json(&list);
-                        return Ok(());
-                    }
-                    let mut t = table(&["Title", "GOG id", "Id", "Build", "Hours"]);
-                    for g in list.as_array().cloned().unwrap_or_default() {
-                        if s(&g["source"], "kind") == "gog" {
-                            t.add_row(vec![s(&g, "title"), s(&g["source"], "gog_id"), s(&g, "id"), s(&g["source"], "build_id"), hours(&g)]);
-                        }
-                    }
-                    println!("{t}");
-                }
-                GogCmd::Library { refresh } => return Box::pin(run(Cli { json, cmd: Some(Cmd::Library { source: "gog".into(), refresh }) })).await,
-                GogCmd::Search { query } => return Box::pin(run(Cli { json, cmd: Some(Cmd::Search { query: query.join(" "), source: "gog".into() }) })).await,
-                GogCmd::Login { code } => return Box::pin(run(Cli { json, cmd: Some(Cmd::Login { source: "gog".into(), code }) })).await,
-            }
-        }
         Cmd::Migrate { apply } => {
             let report = parse_json(&core.import_lutris(apply).await?);
             if json {
-                print_json(&report);
-                return Ok(());
+                return print_json(&report);
             }
             let n = |k: &str| report[k].as_array().map(|a| a.len()).unwrap_or(0);
             println!("{} imported {}, skipped (already present) {}, updated {}, media from pegasus-library {}", if apply { "applied:" } else { "dry run:" }, n("imported"), n("skipped"), n("updated"), n("media_imported"));
@@ -1105,8 +1023,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Cmd::Doctor => {
             let list = parse_json(&core.doctor_json().await);
             if json {
-                print_json(&list);
-                return Ok(());
+                return print_json(&list);
             }
             let mut bad = 0;
             for c in list.as_array().cloned().unwrap_or_default() {
@@ -1133,7 +1050,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     }
                     match v {
                         Value::String(s) => println!("{s}"),
-                        other => print_json(&other),
+                        other => print_json(&other)?,
                     }
                 }
                 ConfigCmd::Set { key, value } => {
@@ -1164,8 +1081,7 @@ async fn controller(core: Core, action: ControllerCmd, json: bool) -> anyhow::Re
             let mut state = controller::state_json(&cfg);
             state["devices"] = Value::Array(controller::watch::enumerate_json(&cfg));
             if json {
-                print_json(&state);
-                return Ok(());
+                return print_json(&state);
             }
             let devices = state["devices"].as_array().cloned().unwrap_or_default();
             if devices.is_empty() {
@@ -1176,10 +1092,10 @@ async fn controller(core: Core, action: ControllerCmd, json: bool) -> anyhow::Re
                 let family = s(d, "family");
                 let mut t = table(&["Button", "Code", "Press", "Hold"]);
                 let fam = controller::family_by_id(&family);
-                let order: Vec<String> = fam.as_ref().map(|f| f.slots.iter().map(|s| s.id.to_string()).collect()).unwrap_or_default();
+                let order: Vec<String> = fam.map(|f| f.slots().map(|s| s.id.to_string()).collect()).unwrap_or_default();
                 for slot in order {
                     let entry = &d["slots"][&slot];
-                    let label = fam.as_ref().and_then(|f| f.slots.iter().find(|s| s.id == slot)).map(|s| s.label).unwrap_or(&slot);
+                    let label = fam.and_then(|f| f.slots().find(|s| s.id == slot)).map(|s| s.label).unwrap_or(&slot);
                     let macros = cfg.macros_for(&family, &slot);
                     let of = |t: &str| macros.iter().find(|m| m.trigger == t).map(|m| if m.keys.is_empty() && m.command.is_empty() { m.action.clone() } else { format!("{} {}{}", m.action, m.keys, m.command) }).unwrap_or_default();
                     let code = if entry["bound"] == true { s(entry, "code") } else { "unbound".to_string() };
@@ -1205,17 +1121,17 @@ async fn controller(core: Core, action: ControllerCmd, json: bool) -> anyhow::Re
         }
         ControllerCmd::Learn { family, slot } => {
             let fam = controller::family_by_id(&family).ok_or_else(|| anyhow::anyhow!("unknown family {family}"))?;
-            if !fam.slots.iter().any(|s| s.id == slot) {
+            if !fam.slots().any(|s| s.id == slot) {
                 anyhow::bail!("{} has no button {slot}", fam.name);
             }
             if !json {
                 eprintln!("press the button for {} on the {}…", slot, fam.name);
             }
             let cfg = core.config.read().await.controller.clone();
-            let (code, from) = controller::watch::learn_once(&cfg, &fam, &slot).await?;
-            core.reload_config().await?;
+            let (code, from) = controller::watch::learn_once(&cfg, fam, &slot).await?;
+            core.reload_settings().await?;
             if json {
-                print_json(&serde_json::json!({"family": family, "slot": slot, "code": code, "from": from}));
+                print_json(&serde_json::json!({"family": family, "slot": slot, "code": code, "from": from}))?;
             } else {
                 println!("{slot} = {code}{}", from.map(|f| format!(" (taken from {f})")).unwrap_or_default());
             }
@@ -1233,8 +1149,7 @@ async fn runner(core: Core, action: RunnerCmd, json: bool) -> anyhow::Result<()>
         RunnerCmd::Ls => {
             let list = parse_json(&core.runners_json().await);
             if json {
-                print_json(&list);
-                return Ok(());
+                return print_json(&list);
             }
             let mut t = table(&["Id", "Name", "Platforms", "Program", "Found"]);
             for r in list.as_array().cloned().unwrap_or_default() {
@@ -1249,8 +1164,7 @@ async fn runner(core: Core, action: RunnerCmd, json: bool) -> anyhow::Result<()>
             let list = parse_json(&core.runners_json().await);
             let Some(r) = list.as_array().and_then(|a| a.iter().find(|r| s(r, "id") == crate::runners::canonical(&id))).cloned() else { anyhow::bail!("unknown runner {id}") };
             if json {
-                print_json(&r);
-                return Ok(());
+                return print_json(&r);
             }
             println!("{}  {}", s(&r, "name").bold(), s(&r, "id").dimmed());
             println!("  exe   {}", if s(&r, "exe").is_empty() { format!("{} (detected)", s(&r, "path")).dimmed().to_string() } else { s(&r, "exe") });
@@ -1305,7 +1219,7 @@ fn complete(what: &str) -> anyhow::Result<()> {
         "buttons" => {
             let mut seen = std::collections::BTreeSet::new();
             for f in crate::controller::families() {
-                for s in f.slots {
+                for s in f.slots() {
                     if seen.insert(s.id) {
                         println!("{}\t{}", s.id, s.label);
                     }
@@ -1331,8 +1245,7 @@ const GAME_KEYS: [&str; 42] = [
     "hidden=", "favorite=", "tags=", "sort_title=", "platform=", "metadata.sgdb_id=", "capture.cursor=", "launch.env.", "options.",
 ];
 
-/// Positional completions clap's static Fish output cannot express: `(subcommand path, position of the
-/// positional counted from that subcommand, candidates)`. `games`/`sources`/`modules` call the binary.
+/// `(subcommand path, position of the positional counted from that subcommand, candidates)`.
 const POSITIONALS: &[(&str, usize, &str)] = &[
     ("play", 1, "games"),
     ("add", 1, "FILES"),
@@ -1448,7 +1361,7 @@ fn generate(dir: &std::path::Path) -> anyhow::Result<()> {
         }
     }
     fish.push_str(&format!("complete -c universe -n \"__universe_at set 2+\" -f -a \"{}\"\n", GAME_KEYS.join(" ")));
-    fish.push_str("complete -c universe -n \"__fish_seen_subcommand_from search install update\" -l source -x -a \"(universe __complete sources)\"\n");
+    fish.push_str("complete -c universe -n \"__fish_seen_subcommand_from search install\" -l source -x -a \"(universe __complete sources)\"\n");
     fish.push_str("complete -c universe -n \"__fish_seen_subcommand_from add\" -s r -l runner -x -a \"(universe __complete runners)\"\n");
     fish.push_str("complete -c universe -n \"__fish_seen_subcommand_from module\" -l game -x -a \"(universe __complete games)\"\n");
     std::fs::create_dir_all(dir)?;
@@ -1479,7 +1392,6 @@ pub fn fmt_duration(secs: u64) -> String {
     }
 }
 
-/// Resolves a name to one id, listing the candidates when ambiguous.
 async fn pick(core: &Core, name: &str) -> anyhow::Result<String> {
     let ids = core.resolve(name).await;
     match ids.len() {
@@ -1492,12 +1404,7 @@ async fn pick(core: &Core, name: &str) -> anyhow::Result<String> {
             for (i, id) in ids.iter().enumerate() {
                 println!("  {} {id}", i + 1);
             }
-            use std::io::Write;
-            print!("which one? [1-{}] ", ids.len());
-            let _ = std::io::stdout().flush();
-            let mut s = String::new();
-            std::io::stdin().read_line(&mut s)?;
-            let n: usize = s.trim().parse().unwrap_or(0);
+            let n: usize = ask(&format!("which one? [1-{}]", ids.len())).parse().unwrap_or(0);
             ids.get(n.wrapping_sub(1)).cloned().ok_or_else(|| anyhow::anyhow!("no choice"))
         }
     }

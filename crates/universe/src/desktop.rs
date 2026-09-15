@@ -10,7 +10,6 @@ pub const UNIVERSE_EXTENSION: &str = "universe@ilyasturki.github.io";
 // ExtensionState.ACTIVE (js/misc/extensionUtils.js)
 const EXTENSION_ACTIVE: f64 = 1.0;
 
-/// The four desktop-dependent operations (plan §6). GNOME is the only profile in the MVP.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Profile {
     Gnome,
@@ -32,25 +31,18 @@ pub fn detect(config: &Config) -> Profile {
     }
 }
 
-/// Connected DRM connectors, e.g. ["DP-1"]; the first one is the fallback screen.
 pub fn connected_outputs() -> Vec<String> {
-    let mut out = Vec::new();
-    let Ok(rd) = std::fs::read_dir("/sys/class/drm") else { return out };
+    let Ok(rd) = std::fs::read_dir("/sys/class/drm") else { return vec![] };
     let mut names: Vec<String> = rd
         .flatten()
         .filter_map(|e| {
             let name = e.file_name().to_string_lossy().to_string();
             let status = std::fs::read_to_string(e.path().join("status")).ok()?;
-            if status.trim() != "connected" {
-                return None;
-            }
-            let (_, conn) = name.split_once('-')?;
-            Some(conn.to_string())
+            (status.trim() == "connected").then(|| name.split_once('-').map(|(_, c)| c.to_string())).flatten()
         })
         .collect();
     names.sort();
-    out.extend(names);
-    out
+    names
 }
 
 /// Qt/Mutter names HDMI outputs "HDMI-1"; DRM says "HDMI-A-1". gsr wants the DRM name.
@@ -132,7 +124,7 @@ fn drm_preferred_mode(screen: &str) -> Option<crate::gamescope::Mode> {
     None
 }
 
-/// Enables the cursor-hiding GNOME Shell extension for the session (plan §6); returns whether it was already active.
+/// Returns whether the extension was already active.
 pub async fn cursor_extension_enable(conn: &zbus::Connection, profile: Profile, extension: &str) -> bool {
     let Some(proxy) = extensions_proxy(conn, profile, extension).await else { return false };
     let was_active = extension_is_active(extension_state(&proxy, extension).await.flatten());
@@ -142,27 +134,15 @@ pub async fn cursor_extension_enable(conn: &zbus::Connection, profile: Profile, 
     was_active
 }
 
-/// What the shell knows of an extension: `None` when it cannot be asked, `Some(None)` when it has not
-/// loaded it (`GetExtensionInfo` answers an empty dict), else the ExtensionState.
+/// `None` when the shell cannot be asked, `Some(None)` when it has not loaded the extension, else the ExtensionState.
 pub async fn extension_state(proxy: &zbus::Proxy<'_>, extension: &str) -> Option<Option<f64>> {
-    match tokio::time::timeout(std::time::Duration::from_secs(5), proxy.call::<_, _, HashMap<String, zbus::zvariant::OwnedValue>>("GetExtensionInfo", &(extension,))).await {
-        Ok(Ok(info)) => Some(info.get("state").and_then(|v| f64::try_from(v).ok())),
-        Ok(Err(e)) => {
-            tracing::warn!("GetExtensionInfo({extension}): {e}");
-            None
-        }
-        Err(_) => {
-            tracing::warn!("GetExtensionInfo({extension}): timeout");
-            None
-        }
-    }
+    shell_call::<HashMap<String, zbus::zvariant::OwnedValue>>(proxy, "GetExtensionInfo", extension).await.map(|info| info.get("state").and_then(|v| f64::try_from(v).ok()))
 }
 
 pub fn extension_is_active(state: Option<f64>) -> bool {
     state == Some(EXTENSION_ACTIVE)
 }
 
-/// Disables the extension again unless it was active before the session.
 pub async fn cursor_extension_restore(conn: &zbus::Connection, profile: Profile, extension: &str, was_active: bool) {
     if was_active {
         return;
@@ -185,39 +165,36 @@ pub async fn extensions_proxy(conn: &zbus::Connection, profile: Profile, extensi
     }
 }
 
-async fn call_bool(proxy: &zbus::Proxy<'_>, method: &str, extension: &str) -> bool {
-    match tokio::time::timeout(std::time::Duration::from_secs(5), proxy.call::<_, _, bool>(method, &(extension,))).await {
-        Ok(Ok(ok)) => ok,
+async fn shell_call<T: serde::de::DeserializeOwned + zbus::zvariant::Type>(proxy: &zbus::Proxy<'_>, method: &str, extension: &str) -> Option<T> {
+    match tokio::time::timeout(std::time::Duration::from_secs(5), proxy.call::<_, _, T>(method, &(extension,))).await {
+        Ok(Ok(v)) => Some(v),
         Ok(Err(e)) => {
             tracing::warn!("{method}({extension}): {e}");
-            false
+            None
         }
         Err(_) => {
             tracing::warn!("{method}({extension}): timeout");
-            false
+            None
         }
     }
 }
 
-/// One toplevel as the Universe extension lists it; `id` is what its `Activate` and Mutter's `RecordWindow` take.
+async fn call_bool(proxy: &zbus::Proxy<'_>, method: &str, extension: &str) -> bool {
+    shell_call(proxy, method, extension).await.unwrap_or(false)
+}
+
+/// `id` is what the extension's `Activate` and Mutter's `RecordWindow` take.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Toplevel {
     pub id: u64,
-    #[serde(default)]
     pub pid: i64,
-    #[serde(default)]
     pub wm_class: Option<String>,
-    #[serde(default)]
     pub title: Option<String>,
-    #[serde(default)]
     pub focused: bool,
-    #[serde(default)]
     pub width: i64,
-    #[serde(default)]
     pub height: i64,
-    #[serde(default)]
     pub hidden: bool,
-    #[serde(default)]
     pub minimized: bool,
 }
 
@@ -272,36 +249,25 @@ pub fn extension_installed(extension: &str) -> bool {
     dirs.split(':').any(|d| std::path::Path::new(d).join("gnome-shell/extensions").join(extension).exists())
 }
 
-/// GNOME Shell's media-key OSD through the Universe extension (org.gnome.Shell.ShowOSD refuses callers other
-/// than gsd), drawn over a fullscreen game: `level` in [0, 1] shows the bar. An extension the shell has
-/// loaded but not enabled (capture never ran) is enabled on the first call; one it has not loaded (no
-/// logout since the install) or no GNOME at all is an error, and the caller decides how loudly.
+/// Through the Universe extension: org.gnome.Shell.ShowOSD refuses callers other than gsd. An extension
+/// the shell has loaded but not enabled is enabled on the first call; `level` in [0, 1] shows the bar.
 pub async fn show_osd(icon: &str, label: Option<&str>, level: Option<f64>) -> Result<(), String> {
     let args = (icon, label.unwrap_or(""), level.unwrap_or(-1.0));
     let call = async {
-        let conn = zbus::Connection::session().await.map_err(|e| e.to_string())?;
-        let proxy = zbus::Proxy::new(&conn, "org.universe.Windows", "/org/universe/Windows", "org.universe.Windows").await.map_err(|e| e.to_string())?;
+        let proxy = windows_proxy().await?;
         let Err(first) = proxy.call_method("ShowOSD", &args).await else { return Ok(()) };
-        let Some(ext) = extensions_proxy(&conn, Profile::Gnome, UNIVERSE_EXTENSION).await else { return Err(first.to_string()) };
+        let Some(ext) = extensions_proxy(proxy.connection(), Profile::Gnome, UNIVERSE_EXTENSION).await else { return Err(first.to_string()) };
         if !call_bool(&ext, "EnableExtension", UNIVERSE_EXTENSION).await {
             return Err(format!("{first}; the shell has not loaded {UNIVERSE_EXTENSION}"));
         }
         proxy.call_method("ShowOSD", &args).await.map(|_| ()).map_err(|e| e.to_string())
     };
-    match tokio::time::timeout(std::time::Duration::from_secs(5), call).await {
-        Ok(r) => r,
-        Err(_) => Err("gnome-shell did not answer".into()),
-    }
+    tokio::time::timeout(std::time::Duration::from_secs(5), call).await.unwrap_or_else(|_| Err("gnome-shell did not answer".into()))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn normalize_keeps_unknown() {
-        assert_eq!(normalize_connector("DP-9"), "DP-9");
-    }
 
     #[test]
     fn a_process_is_in_its_unit_or_under_it() {

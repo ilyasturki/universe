@@ -15,7 +15,6 @@ pub struct Plan {
     pub env: BTreeMap<String, String>,
     pub pre_command: String,
     pub post_command: String,
-    /// The game runs inside gamescope: one window, black until the game draws.
     pub gamescope: bool,
     /// The MangoHud config the game reads, written before the launch: the user's own plus the limit.
     pub mangohud_conf: Option<(PathBuf, String)>,
@@ -23,9 +22,7 @@ pub struct Plan {
 
 impl Plan {
     pub fn command_line(&self) -> String {
-        let mut parts = vec![self.program.clone()];
-        parts.extend(self.args.iter().cloned());
-        shell_words::join(parts)
+        shell_words::join(std::iter::once(&self.program).chain(&self.args))
     }
 }
 
@@ -40,7 +37,6 @@ pub enum FpsLimit {
     Hz(u32),
 }
 
-/// `auto`, `none`, or a positive number of frames per second.
 pub fn parse_fps_limit(s: &str) -> crate::Result<FpsLimit> {
     match s.trim() {
         "" | "auto" => Ok(FpsLimit::Auto),
@@ -52,8 +48,7 @@ pub fn parse_fps_limit(s: &str) -> crate::Result<FpsLimit> {
     }
 }
 
-/// The rate MangoHud's limiter holds the game to: `auto` is the refresh the game sees, its
-/// gamescope rate when set, else the screen's; nothing when neither is known.
+/// `auto` is the refresh the game sees: its gamescope rate when set, else the screen's.
 pub fn fps_limit_hz(e: &crate::library::Effective, screen: Option<crate::gamescope::Mode>) -> Option<u32> {
     match parse_fps_limit(&e.fps_limit).unwrap_or(FpsLimit::Auto) {
         FpsLimit::Hz(hz) => Some(hz),
@@ -65,8 +60,7 @@ pub fn fps_limit_hz(e: &crate::library::Effective, screen: Option<crate::gamesco
     }
 }
 
-/// The game's MangoHud config: the user's MangoHud.conf — its layout, `fps_limit_method`… —
-/// with `fps_limit` swapped for ours and `no_display` when the HUD is drawn elsewhere or off.
+/// The user's MangoHud.conf with `fps_limit` swapped for ours and `no_display` when the HUD is drawn elsewhere or off.
 pub fn mangohud_conf_text(hz: u32, hidden: bool) -> String {
     let own = std::fs::read_to_string(crate::paths::xdg("XDG_CONFIG_HOME", ".config").join("MangoHud/MangoHud.conf")).unwrap_or_default();
     let key = |l: &str| l.split('=').next().unwrap_or("").trim().to_string();
@@ -89,8 +83,7 @@ fn dll_overrides_env(g: &crate::game::Game, env: &mut BTreeMap<String, String>) 
     }
 }
 
-/// Proton's switches as the env it reads: a sync mode off is `PROTON_NO_*=1`, a feature on is `PROTON_*=1`;
-/// the same map the Lutris env diff counts as Universe's.
+/// A sync mode off is `PROTON_NO_*=1`, a feature on is `PROTON_*=1`.
 pub fn proton_toggles(e: &crate::library::Effective) -> BTreeMap<String, String> {
     let mut env = BTreeMap::new();
     for (on, key) in [(!e.esync, "PROTON_NO_ESYNC"), (!e.fsync, "PROTON_NO_FSYNC"), (!e.ntsync, "PROTON_NO_NTSYNC"), (e.wayland, "PROTON_ENABLE_WAYLAND"), (e.hdr, "PROTON_ENABLE_HDR"), (e.dlss_upgrade, "PROTON_DLSS_UPGRADE"), (e.fsr4_upgrade, "PROTON_FSR4_UPGRADE"), (e.xess_upgrade, "PROTON_XESS_UPGRADE"), (e.optiscaler, "PROTON_USE_OPTISCALER")] {
@@ -123,7 +116,6 @@ fn proton_env(g: &crate::game::Game, r: &Resolved, config: &Config, env: &mut BT
     Ok(())
 }
 
-/// Plain Wine reads its own names: `WINEESYNC`/`WINEFSYNC` both ways, `WINEARCH` for the prefix.
 fn wine_env(g: &crate::game::Game, r: &Resolved, config: &Config, env: &mut BTreeMap<String, String>) {
     env.insert("WINEPREFIX".into(), prefix_of(g, config).to_string_lossy().into());
     if !g.launch.arch.is_empty() {
@@ -144,9 +136,7 @@ fn wrap(wrapper: &str, program: String, args: Vec<String>) -> (String, Vec<Strin
     }
 }
 
-/// `screen` is the session screen's current mode, what gamescope's size flags follow; `None` (no
-/// screen could be read) leaves gamescope's own defaults. `splash` is the poster the frontend grabbed
-/// for the keep-alive window inside gamescope (`splash.rs`); `None` keeps that window black.
+/// `screen` `None` leaves gamescope's own size; `splash` `None` keeps the keep-alive window black.
 pub fn plan(r: &Resolved, config: &Config, session_id: &str, extra_env: &BTreeMap<String, String>, screen: Option<crate::gamescope::Mode>, splash: Option<&Path>) -> crate::Result<Plan> {
     use crate::runners::{self, Kind};
     let g = &r.game;
@@ -158,13 +148,8 @@ pub fn plan(r: &Resolved, config: &Config, session_id: &str, extra_env: &BTreeMa
     if spec.file_required && !exe.exists() {
         return Err(crate::Error::NotFound(format!("{}: {} missing", g.id, exe.display())));
     }
-    let mut env: BTreeMap<String, String> = BTreeMap::new();
-    for (k, v) in extra_env {
-        env.insert(k.clone(), v.clone());
-    }
-    for (k, v) in &config.launch.env {
-        env.insert(k.clone(), v.clone());
-    }
+    let mut env = extra_env.clone();
+    env.extend(config.launch.env.clone());
     let file = exe.to_string_lossy().to_string();
     let (program, mut args) = match spec.kind {
         Kind::Proton => {
@@ -194,9 +179,7 @@ pub fn plan(r: &Resolved, config: &Config, session_id: &str, extra_env: &BTreeMa
         }
     };
     args.extend(g.launch.args.iter().cloned());
-    for (k, v) in &g.launch.env {
-        env.insert(k.clone(), v.clone());
-    }
+    env.extend(g.launch.env.clone());
     let (program, args) = wrap(&g.launch.wrapper, program, args);
     let gamescope = r.effective.gamescope.then(|| runners::on_path(&config.launch.gamescope_bin)).flatten();
     if r.effective.gamescope && gamescope.is_none() {
@@ -213,8 +196,7 @@ pub fn plan(r: &Resolved, config: &Config, session_id: &str, extra_env: &BTreeMa
         (Some(bin), Kind::Linux | Kind::Emulator) if !spec.via_proton => (bin.to_string_lossy().to_string(), std::iter::once(program).chain(args).collect()),
         _ => (program, args),
     };
-    // The game's own MangoHud variables go in front of the program: on the unit they would reach
-    // gamescope (a Vulkan client too) and mangoapp. The HUD is the game's own on the desktop alone.
+    // MangoHud variables go in front of the program, not on the unit, where gamescope (a Vulkan client too) would read them.
     let mut mangohud_conf = None;
     let (program, args) = match (limit, &mangohud) {
         (Some(hz), Some(_)) => {
@@ -274,8 +256,7 @@ pub fn plan(r: &Resolved, config: &Config, session_id: &str, extra_env: &BTreeMa
     })
 }
 
-/// Fullscreen on the session's screen, the size and rate flags the fields stand for; then the global and the game's own arguments, which win (gamescope takes
-/// the last of a repeated flag). `--force-composition`: a game buffer gamescope scans out straight through blits as one flat colour in Mutter's
+/// `--force-composition`: a game buffer gamescope scans out straight through blits as one flat colour in Mutter's
 /// window screencast (DMA-BUF), so the capture module would record nothing; a composited frame records fine.
 fn gamescope_args(config: &Config, r: &Resolved, screen: Option<crate::gamescope::Mode>) -> Vec<String> {
     let mut args: Vec<String> = vec!["-f".into(), "--force-composition".into()];
@@ -446,28 +427,33 @@ mod tests {
         assert_eq!(bound.len(), plain.len() + 2);
     }
 
+    fn game(dir: &Path, file: &str, runner: &str) -> Game {
+        let exe = dir.join(file);
+        std::fs::write(&exe, b"").unwrap();
+        let mut g = Game::new("Sample");
+        g.launch.runner = runner.into();
+        g.launch.exe = exe.to_string_lossy().into();
+        g.launch.prefix = dir.join("pfx").to_string_lossy().into();
+        g
+    }
+
     #[test]
     fn plan_sets_umu_env() {
         let dir = tempfile::tempdir().unwrap();
-        let exe = dir.path().join("Game.exe");
-        std::fs::write(&exe, b"").unwrap();
-        let mut g = Game::new("Sample");
-        g.launch.exe = exe.to_string_lossy().into();
-        g.launch.prefix = dir.path().join("pfx").to_string_lossy().into();
+        let mut g = game(dir.path(), "Game.exe", "");
+        let exe = g.launch.exe.clone();
+        g.launch.fsync = Some(false);
         g.launch.env.insert("WINE_CPU_TOPOLOGY".into(), "4:0,1,2,3".into());
         g.launch.dll_overrides.insert("d3d11".into(), "n,b".into());
-        let r = Resolved {
-            game: g,
-            effective: Effective { runner: "proton".into(), proton: "proton-ge".into(), proton_path: "/nix/store/proton".into(), esync: true, fsync: false, ntsync: true, wayland: true, mangohud: true, hide_cursor: true, ..Default::default() },
-            ..Default::default()
-        };
         let mut cfg = Config::default();
         cfg.launch.gamescope = false;
+        let mut r = crate::library::resolve(g, &cfg, &[]);
+        r.effective.proton_path = "/nix/store/proton".into();
         let p = plan(&r, &cfg, "20260911-120000", &BTreeMap::from([("FROM_HOOK".to_string(), "1".to_string())]), None, None).unwrap();
         assert!(!p.gamescope);
         assert_eq!(p.unit, "universe-game-sample-20260911-120000");
         assert_eq!(p.program, "umu-run");
-        assert_eq!(p.args[0], exe.to_string_lossy());
+        assert_eq!(p.args[0], exe);
         assert_eq!(p.env["GAMEID"], "umu-default");
         assert_eq!(p.env["PROTONPATH"], "/nix/store/proton");
         assert_eq!(p.env["PROTON_NO_FSYNC"], "1");
@@ -485,11 +471,8 @@ mod tests {
     #[test]
     fn plan_switches_proton_features_and_wraps_the_program() {
         let dir = tempfile::tempdir().unwrap();
-        let exe = dir.path().join("Game.exe");
-        std::fs::write(&exe, b"").unwrap();
-        let mut g = Game::new("Sample");
-        g.launch.exe = exe.to_string_lossy().into();
-        g.launch.prefix = dir.path().join("pfx").to_string_lossy().into();
+        let mut g = game(dir.path(), "Game.exe", "");
+        let exe = g.launch.exe.clone();
         g.launch.wayland = Some(false);
         g.launch.ntsync = Some(false);
         g.launch.hdr = Some(true);
@@ -502,7 +485,7 @@ mod tests {
         r.effective.proton_path = "/p".into();
         let p = plan(&r, &cfg, "s", &BTreeMap::new(), None, None).unwrap();
         assert_eq!(p.program, "gamemoderun");
-        assert_eq!(p.args, vec!["taskset", "-c", "0-7", "umu-run", &exe.to_string_lossy().to_string()]);
+        assert_eq!(p.args, vec!["taskset", "-c", "0-7", "umu-run", &exe]);
         assert!(!p.env.contains_key("PROTON_ENABLE_WAYLAND"), "the field off beats the seed");
         assert_eq!(p.env["PROTON_NO_NTSYNC"], "1");
         assert_eq!(p.env["PROTON_ENABLE_HDR"], "1");
@@ -513,12 +496,7 @@ mod tests {
     #[test]
     fn plan_for_plain_wine_sets_wine_env() {
         let dir = tempfile::tempdir().unwrap();
-        let exe = dir.path().join("Game.exe");
-        std::fs::write(&exe, b"").unwrap();
-        let mut g = Game::new("Sample");
-        g.launch.runner = "wine".into();
-        g.launch.exe = exe.to_string_lossy().into();
-        g.launch.prefix = dir.path().join("pfx").to_string_lossy().into();
+        let mut g = game(dir.path(), "Game.exe", "wine");
         g.launch.esync = Some(false);
         g.launch.dll_overrides.insert("amd_ags_x64".into(), "n,b".into());
         let mut cfg = Config::default();
@@ -536,13 +514,10 @@ mod tests {
     #[test]
     fn plan_for_an_emulator() {
         let dir = tempfile::tempdir().unwrap();
-        let rom = dir.path().join("F-Zero GX.iso");
-        std::fs::write(&rom, b"").unwrap();
         let emu = dir.path().join("dolphin-emu");
         std::fs::write(&emu, b"#!/bin/sh\n").unwrap();
-        let mut g = Game::new("F-Zero GX");
-        g.launch.runner = "dolphin".into();
-        g.launch.exe = rom.to_string_lossy().into();
+        let mut g = game(dir.path(), "F-Zero GX.iso", "dolphin");
+        let rom = g.launch.exe.clone();
         g.launch.args = vec!["--extra".into()];
         let mut cfg = Config::default();
         let mut t = toml::Table::new();
@@ -558,7 +533,7 @@ mod tests {
         assert!(r.effective.inputplumber);
         let p = plan(&r, &cfg, "20260913-120000", &BTreeMap::new(), None, None).unwrap();
         assert_eq!(p.program, emu.to_string_lossy());
-        assert_eq!(p.args, vec!["--config", "Dolphin.Display.Fullscreen=True", "--batch", "-e", &rom.to_string_lossy().to_string(), "--extra"]);
+        assert_eq!(p.args, vec!["--config", "Dolphin.Display.Fullscreen=True", "--batch", "-e", &rom, "--extra"]);
         assert_eq!(p.env["MANGOHUD"], "1");
         assert!(!p.env.contains_key("WINEPREFIX"));
         assert_eq!(p.cwd, dir.path());
@@ -567,13 +542,8 @@ mod tests {
     #[test]
     fn plan_runs_xenia_through_umu() {
         let dir = tempfile::tempdir().unwrap();
-        let iso = dir.path().join("a.iso");
-        std::fs::write(&iso, b"").unwrap();
-        let mut g = Game::new("A");
-        g.launch.runner = "xenia".into();
-        g.launch.exe = iso.to_string_lossy().into();
+        let mut g = game(dir.path(), "a.iso", "xenia");
         g.launch.runner_exe = "/x/xenia_canary.exe".into();
-        g.launch.prefix = dir.path().join("pfx").to_string_lossy().into();
         let mut cfg = Config::default();
         cfg.launch.gamescope = false;
         let mut r = crate::library::resolve(g, &cfg, &[]);
@@ -587,11 +557,8 @@ mod tests {
     #[test]
     fn plan_wraps_the_game_in_gamescope() {
         let dir = tempfile::tempdir().unwrap();
-        let exe = dir.path().join("Game.exe");
-        std::fs::write(&exe, b"").unwrap();
-        let mut g = Game::new("Sample");
-        g.launch.exe = exe.to_string_lossy().into();
-        g.launch.prefix = dir.path().join("pfx").to_string_lossy().into();
+        let mut g = game(dir.path(), "Game.exe", "");
+        let exe = g.launch.exe.clone();
         g.launch.args = vec!["-skipintro".into()];
         g.launch.gamescope_args = "-r 120".into();
         let bin = dir.path().join("gamescope");
@@ -608,12 +575,11 @@ mod tests {
         assert!(p.gamescope);
         assert_eq!(p.program, bin.to_string_lossy());
         let mut want: Vec<String> = ["-f", "--force-composition", "-W", "3840", "-H", "2160", "-w", "3840", "-h", "2160", "-r", "60", "--adaptive-sync", "-r", "120", "--mangoapp", "--"].map(String::from).into();
-        // The keep-alive window's process is gamescope's primary child; the game, under setpriv, is its.
         want.extend([crate::paths::self_exe().to_string_lossy().to_string(), "splash".into(), "--image".into(), "/run/user/1000/universe/splash-x.bgrx".into(), "--".into()]);
         if let Some(setpriv) = crate::runners::on_path("setpriv") {
             want.extend([setpriv.to_string_lossy().to_string(), "--ambient-caps=-all".into(), "--inh-caps=-all".into(), "--".into()]);
         }
-        want.extend(["umu-run".to_string(), exe.to_string_lossy().to_string(), "-skipintro".into()]);
+        want.extend(["umu-run".to_string(), exe, "-skipintro".into()]);
         assert_eq!(p.args, want);
         assert!(!p.env.contains_key("MANGOHUD"), "mangoapp draws the HUD inside gamescope");
         assert!(!p.env.contains_key("PROTON_ENABLE_WAYLAND"), "an X11 Proton under gamescope's Xwayland");
@@ -667,11 +633,7 @@ mod tests {
     fn plan_limits_the_frame_rate_through_mangohud() {
         let Some(mangohud) = crate::runners::on_path("mangohud") else { return };
         let dir = tempfile::tempdir().unwrap();
-        let exe = dir.path().join("Game.exe");
-        std::fs::write(&exe, b"").unwrap();
-        let mut g = Game::new("Sample");
-        g.launch.exe = exe.to_string_lossy().into();
-        g.launch.prefix = dir.path().join("pfx").to_string_lossy().into();
+        let g = game(dir.path(), "Game.exe", "");
         let bin = dir.path().join("gamescope");
         std::fs::write(&bin, b"#!/bin/sh\n").unwrap();
         let mut cfg = Config::default();
@@ -700,7 +662,6 @@ mod tests {
         let p = plan(&r2, &cfg, "s", &BTreeMap::new(), screen, None).unwrap();
         assert!(!p.args.iter().any(|a| a.starts_with("MANGOHUD")) && p.mangohud_conf.is_none());
 
-        // On the desktop the HUD is the game's own: the user's layout kept, nothing hidden.
         r.game.launch.fps_limit.clear();
         r.game.launch.gamescope = Some(false);
         let mut r2 = crate::library::resolve(r.game.clone(), &cfg, &[]);
@@ -712,19 +673,15 @@ mod tests {
         assert_eq!(p.args[..3], ["MANGOHUD=1".to_string(), format!("MANGOHUD_CONFIGFILE={}", path.display()), "umu-run".to_string()]);
         assert_eq!(p.env["MANGOHUD"], "1");
 
-        // A native program runs through the wrapper, so an OpenGL game is limited too.
-        let native = dir.path().join("game");
-        std::fs::write(&native, b"").unwrap();
-        let mut n = Game::new("Native");
-        n.launch.runner = "linux".into();
-        n.launch.exe = native.to_string_lossy().into();
+        let mut n = game(dir.path(), "game", "linux");
+        let native = n.launch.exe.clone();
         n.launch.mangohud = Some(false);
         n.launch.gamescope = Some(false);
         let r = crate::library::resolve(n, &cfg, &[]);
         let p = plan(&r, &cfg, "s", &BTreeMap::new(), screen, None).unwrap();
         assert!(p.program.ends_with("env"));
         let (path, text) = p.mangohud_conf.as_ref().unwrap();
-        assert_eq!(p.args, ["MANGOHUD=1".to_string(), format!("MANGOHUD_CONFIGFILE={}", path.display()), mangohud.to_string_lossy().to_string(), native.to_string_lossy().to_string()]);
+        assert_eq!(p.args, ["MANGOHUD=1".to_string(), format!("MANGOHUD_CONFIGFILE={}", path.display()), mangohud.to_string_lossy().to_string(), native]);
         assert!(!p.env.contains_key("MANGOHUD") && text.contains("no_display\n"), "the HUD is off: the layer limits, draws nothing");
     }
 
@@ -734,14 +691,9 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         std::fs::create_dir_all(dir.path().join("MangoHud")).unwrap();
         std::fs::write(dir.path().join("MangoHud/MangoHud.conf"), "fps_limit=30\nfps_limit_method=early\nno_display\ntoggle_hud=F12\n").unwrap();
-        let before = std::env::var_os("XDG_CONFIG_HOME");
         std::env::set_var("XDG_CONFIG_HOME", dir.path());
         let shown = mangohud_conf_text(60, false);
         let hidden = mangohud_conf_text(45, true);
-        match before {
-            Some(v) => std::env::set_var("XDG_CONFIG_HOME", v),
-            None => std::env::remove_var("XDG_CONFIG_HOME"),
-        }
         assert_eq!(shown, "fps_limit_method=early\ntoggle_hud=F12\nfps_limit=60\n", "the method survives, the old limit and no_display go");
         assert_eq!(hidden, "fps_limit_method=early\ntoggle_hud=F12\nno_display\nfps_limit=45\n");
     }
@@ -749,28 +701,21 @@ mod tests {
     #[test]
     fn plan_without_a_gamescope_binary_runs_the_game_plain() {
         let dir = tempfile::tempdir().unwrap();
-        let exe = dir.path().join("game");
-        std::fs::write(&exe, b"").unwrap();
-        let mut g = Game::new("Native");
-        g.launch.runner = "linux".into();
-        g.launch.exe = exe.to_string_lossy().into();
+        let g = game(dir.path(), "game", "linux");
+        let exe = g.launch.exe.clone();
         let mut cfg = Config::default();
         cfg.launch.gamescope_bin = dir.path().join("nope/gamescope").to_string_lossy().into();
         let r = crate::library::resolve(g, &cfg, &[]);
         let p = plan(&r, &cfg, "s", &BTreeMap::new(), None, None).unwrap();
         assert!(!p.gamescope);
-        assert_eq!(p.program, exe.to_string_lossy());
+        assert_eq!(p.program, exe);
         assert_eq!(p.env["MANGOHUD"], "1");
     }
 
     #[test]
     fn plan_refuses_a_missing_runner() {
         let dir = tempfile::tempdir().unwrap();
-        let rom = dir.path().join("a.nsp");
-        std::fs::write(&rom, b"").unwrap();
-        let mut g = Game::new("A");
-        g.launch.runner = "eden".into();
-        g.launch.exe = rom.to_string_lossy().into();
+        let g = game(dir.path(), "a.nsp", "eden");
         let cfg = Config::default();
         let mut r = crate::library::resolve(g, &cfg, &[]);
         r.effective.runner_path.clear();

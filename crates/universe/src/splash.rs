@@ -1,12 +1,10 @@
-//! The keep-alive window inside gamescope. gamescope unmaps its own toplevel whenever no client
-//! window is focused, so a game that closes its first window before opening the real one flashes
-//! the desktop through; this window sits under everything for the whole session — gamescope ranks
-//! a disabled, skip-taskbar window below any game window — and shows the launcher's poster, or
-//! black, until the game has one.
+//! gamescope unmaps its own toplevel whenever no client window is focused; it ranks a disabled,
+//! skip-taskbar window below any game window, so this one sits under everything for the session.
 
 use std::io::Read;
+use std::os::unix::process::ExitStatusExt;
 use std::path::Path;
-use std::process::{Command, ExitStatus};
+use std::process::Command;
 
 use x11rb::connection::{Connection, RequestConnection};
 use x11rb::protocol::xproto::{AtomEnum, ConnectionExt, CreateGCAux, CreateWindowAux, EventMask, ImageFormat, PropMode, WindowClass};
@@ -66,7 +64,6 @@ struct Shown {
     hwnd_style: u32,
 }
 
-/// The window, mapped and painted before the game starts, on `$DISPLAY` (gamescope's Xwayland).
 fn show(poster: Option<&Poster>) -> Result<Shown, Box<dyn std::error::Error>> {
     let (conn, screen_num) = x11rb::connect(None)?;
     let screen = &conn.setup().roots[screen_num];
@@ -107,7 +104,6 @@ fn show(poster: Option<&Poster>) -> Result<Shown, Box<dyn std::error::Error>> {
     conn.map_window(win)?;
     conn.flush()?;
     if let Some(pix) = pixmap {
-        // The window keeps the background; the pixmap itself is no longer needed.
         conn.free_pixmap(pix)?;
     }
     Ok(Shown { conn, win, wm_state, hwnd_style })
@@ -128,44 +124,25 @@ fn serve(s: Shown) {
     }
 }
 
-/// `universe splash [--image <poster>] -- <program> <args…>`: the window first, the game second, the game's exit status.
 pub fn run(image: Option<&Path>, cmd: &[String]) -> i32 {
     let Some((program, args)) = cmd.split_first() else {
         eprintln!("splash: no command");
         return 2;
     };
-    let poster = image.and_then(|p| match read_poster(p) {
-        Ok(poster) => Some(poster),
-        Err(e) => {
-            eprintln!("splash: {}: {e}", p.display());
-            None
-        }
-    });
+    let poster = image.and_then(|p| read_poster(p).inspect_err(|e| eprintln!("splash: {}: {e}", p.display())).ok());
     if let Some(p) = image {
         let _ = std::fs::remove_file(p);
     }
-    let shown = match show(poster.as_ref()) {
-        Ok(v) => Some(v),
-        Err(e) => {
-            eprintln!("splash: no window: {e}");
-            None
-        }
-    };
-    if let Some(s) = shown {
+    if let Ok(s) = show(poster.as_ref()).inspect_err(|e| eprintln!("splash: no window: {e}")) {
         std::thread::spawn(move || serve(s));
     }
     match Command::new(program).args(args).status() {
-        Ok(status) => exit_code(status),
+        Ok(status) => status.code().unwrap_or_else(|| 128 + status.signal().unwrap_or(0)),
         Err(e) => {
             eprintln!("splash: {program}: {e}");
             127
         }
     }
-}
-
-fn exit_code(status: ExitStatus) -> i32 {
-    use std::os::unix::process::ExitStatusExt;
-    status.code().unwrap_or_else(|| 128 + status.signal().unwrap_or(0))
 }
 
 #[cfg(test)]

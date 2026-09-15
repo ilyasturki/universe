@@ -2,7 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::io::{BufRead, Write};
 use std::path::Path;
 
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(default)]
 pub struct Session {
     pub session: String,
@@ -15,23 +15,6 @@ pub struct Session {
     pub screen: String,
     pub exit: i32,
     pub recording: Option<String>,
-}
-
-impl Default for Session {
-    fn default() -> Self {
-        Session {
-            session: String::new(),
-            game: String::new(),
-            started_at: String::new(),
-            ended_at: String::new(),
-            duration_s: 0,
-            source: "daemon".into(),
-            unit: String::new(),
-            screen: String::new(),
-            exit: 0,
-            recording: None,
-        }
-    }
 }
 
 pub fn session_id(t: chrono::DateTime<chrono::Local>) -> String {
@@ -75,7 +58,6 @@ pub fn append(path: &Path, s: &Session) -> crate::Result<()> {
     Ok(())
 }
 
-/// Rewrites one session line (used to attach a recording); other lines are untouched.
 pub fn update<F: FnMut(&mut Session)>(path: &Path, session_id: &str, mut f: F) -> crate::Result<bool> {
     let mut all = read(path)?;
     let mut found = false;

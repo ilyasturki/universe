@@ -5,11 +5,11 @@ use serde::Serialize;
 
 use crate::config::Config;
 use crate::game::Game;
-use crate::journal::Entry;
 use crate::sessions::{Session, Stats};
 use crate::{paths, sessions};
 
 pub const MEDIA_SLOTS: [&str; 5] = ["box_front", "square", "banner", "background", "logo"];
+pub const IMAGE_EXTS: [&str; 4] = ["png", "jpg", "jpeg", "webp"];
 
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Resolved {
@@ -18,7 +18,7 @@ pub struct Resolved {
     pub sessions: Vec<Session>,
     pub media: Vec<(String, String)>,
     pub screenshots: Vec<String>,
-    pub journal: Vec<Entry>,
+    pub journal_count: usize,
     pub modules: BTreeMap<String, serde_json::Map<String, serde_json::Value>>,
     pub effective: Effective,
 }
@@ -70,14 +70,13 @@ impl Resolved {
         v["installed"] = serde_json::Value::Bool(self.game.is_installed());
         v["platform"] = serde_json::Value::String(self.effective.platform.clone());
         v["removed"] = serde_json::Value::Bool(!self.game.removed_at.is_empty());
-        v["journal_count"] = serde_json::json!(self.journal.iter().filter(|e| e.state == "written").count());
+        v["journal_count"] = serde_json::json!(self.journal_count);
         v["recording_count"] = serde_json::json!(self.sessions.iter().filter(|s| s.recording.is_some()).count());
         v["dir"] = serde_json::json!(self.game.dir());
         v
     }
 }
 
-/// The file stems a slot is read from: the core's name first, then Pegasus's and Lutris's.
 /// Pegasus's `tile` is the 1:1 grid and its `steam` the 920×430 banner.
 pub fn stems_of(slot: &str) -> &'static [&'static str] {
     match slot {
@@ -94,8 +93,7 @@ pub fn slot_of_stem(stem: &str) -> Option<&'static str> {
     MEDIA_SLOTS.into_iter().find(|s| stems_of(s).contains(&stem))
 }
 
-/// Where a game's art is read from, first match wins: the overrides by id, then by the Lutris
-/// slug, then the game's own media directory.
+/// First match wins: the overrides by id, then by the Lutris slug, then the game's own media directory.
 pub fn media_dirs(game: &Game, overrides: &Path) -> Vec<PathBuf> {
     let mut dirs = vec![overrides.join(&game.id)];
     if !game.source.lutris_slug.is_empty() && game.source.lutris_slug != game.id {
@@ -105,7 +103,6 @@ pub fn media_dirs(game: &Game, overrides: &Path) -> Vec<PathBuf> {
     dirs
 }
 
-/// One directory's art: slot → file, and its `screenshots/` sorted.
 pub fn scan_media_dir(dir: &Path) -> (Vec<(String, String)>, Vec<String>) {
     let mut media: Vec<(String, String, usize)> = Vec::new();
     let mut shots = Vec::new();
@@ -157,7 +154,7 @@ pub fn media_of(game: &Game, overrides: &Path) -> (Vec<(String, String)>, Vec<St
 }
 
 pub fn is_image(p: &Path) -> bool {
-    matches!(p.extension().and_then(|s| s.to_str()).map(|s| s.to_ascii_lowercase()).as_deref(), Some("png" | "jpg" | "jpeg" | "webp"))
+    p.extension().and_then(|s| s.to_str()).is_some_and(|e| IMAGE_EXTS.contains(&e.to_ascii_lowercase().as_str()))
 }
 
 /// The game's gamescope fields over the global ones, a field left empty taking `[launch]`'s.
@@ -179,12 +176,12 @@ pub fn resolve(game: Game, config: &Config, modules: &[crate::modules::Module]) 
     resolve_with(game, config, modules, &mut HashMap::new())
 }
 
-/// `located` memoises each runner's program across the games of one load.
+/// `located` memoises each runner's program and each Proton's path across the games of one load.
 pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Module], located: &mut HashMap<String, String>) -> Resolved {
     let sessions = sessions::read(&game.sessions_path()).unwrap_or_default();
     let stats = sessions::stats(&sessions);
     let (media, screenshots) = media_of(&game, &config.overrides_dir());
-    let journal = crate::journal::load(&game.journal_dir(), &sessions);
+    let journal_count = crate::journal::count_written(&game.journal_dir());
     let mut mods = BTreeMap::new();
     for m in modules.iter().filter(|m| m.active() && m.is_hooks()) {
         mods.insert(m.id().to_string(), m.merged_settings(config, Some(&game)));
@@ -209,7 +206,7 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
         inputplumber: options.get("inputplumber").and_then(|v| v.as_bool()).unwrap_or(false),
         options,
         runner,
-        proton_path: config.proton_path(&proton).map(|p| p.to_string_lossy().into()).unwrap_or_default(),
+        proton_path: located.entry(format!("proton:{proton}")).or_insert_with(|| config.proton_path(&proton).map(|p| p.to_string_lossy().into()).unwrap_or_default()).clone(),
         proton,
         esync: game.launch.esync.unwrap_or(config.launch.esync),
         fsync: game.launch.fsync.unwrap_or(config.launch.fsync),
@@ -228,7 +225,7 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
         hide_cursor: game.desktop.hide_cursor.unwrap_or(config.desktop.hide_cursor),
         env,
     };
-    Resolved { game, stats, sessions, media, screenshots, journal, modules: mods, effective }
+    Resolved { game, stats, sessions, media, screenshots, journal_count, modules: mods, effective }
 }
 
 pub fn load_all(config: &Config, modules: &[crate::modules::Module]) -> Vec<Resolved> {
@@ -260,7 +257,7 @@ pub fn sort_default(list: &mut [Resolved]) {
     });
 }
 
-/// exact › whole word › substring › path, on id, title and exe (the game script's four passes).
+/// exact › whole word › substring › path on id, title and exe, then every query word a prefix of a title word or genre.
 pub fn resolve_query<'a>(games: &'a [Resolved], query: &str) -> Vec<&'a Resolved> {
     let q = query.trim();
     if q.is_empty() {
@@ -284,7 +281,12 @@ pub fn resolve_query<'a>(games: &'a [Resolved], query: &str) -> Vec<&'a Resolved
         return sub;
     }
     let qp = PathBuf::from(q);
-    games.iter().filter(|g| !g.game.launch.exe.is_empty() && (g.game.exe_path() == qp || g.game.exe_path().starts_with(&qp) || g.game.game_root() == qp)).collect()
+    let by_path: Vec<&Resolved> = games.iter().filter(|g| !g.game.launch.exe.is_empty() && (g.game.exe_path() == qp || g.game.exe_path().starts_with(&qp) || g.game.game_root() == qp)).collect();
+    if !by_path.is_empty() {
+        return by_path;
+    }
+    let words: Vec<&str> = ql.split_whitespace().collect();
+    games.iter().filter(|g| words.iter().all(|w| g.game.title.to_lowercase().split(|c: char| !c.is_alphanumeric()).any(|t| t.starts_with(w)) || g.game.metadata.genres.iter().any(|x| x.to_lowercase().starts_with(w)))).collect()
 }
 
 #[cfg(test)]
@@ -305,6 +307,7 @@ mod tests {
         assert_eq!(resolve_query(&games, "mini").len(), 2);
         assert_eq!(resolve_query(&games, "otorw")[0].game.id, "mini-motorways");
         assert_eq!(resolve_query(&games, "/g/Dead Cells")[0].game.id, "dead-cells");
+        assert_eq!(resolve_query(&games, "mot mini")[0].game.id, "mini-motorways");
         assert!(resolve_query(&games, "zzz").is_empty());
     }
 }

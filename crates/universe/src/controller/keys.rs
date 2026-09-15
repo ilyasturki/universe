@@ -1,6 +1,3 @@
-//! Names for what a pad sends (evdev key codes, hat and trigger axes) and for what a macro types
-//! (a key combo in MangoHud's `Super_L+F12` spelling or `KEY_*` names).
-
 use std::str::FromStr;
 
 use evdev::KeyCode;
@@ -73,12 +70,6 @@ pub fn parse_source(text: &str) -> Option<Source> {
     parse_key(t).map(Source::Key)
 }
 
-/// A typed combo: modifiers first, the key last, every one an evdev code.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct Combo {
-    pub codes: Vec<u16>,
-}
-
 /// X keysym names as MangoHud.conf spells them, plus the plain names people type.
 const ALIASES: [(&str, &str); 26] = [
     ("shift", "KEY_LEFTSHIFT"), ("shift_l", "KEY_LEFTSHIFT"), ("shift_r", "KEY_RIGHTSHIFT"),
@@ -97,10 +88,7 @@ fn key_of_name(name: &str) -> Option<u16> {
     if let Some((_, k)) = ALIASES.iter().find(|(a, _)| *a == lower) {
         return parse_key(k);
     }
-    if let Some(k) = parse_key(name) {
-        return Some(k);
-    }
-    parse_key(&format!("KEY_{}", lower.to_uppercase())).or_else(|| lower.strip_prefix("xf86audio").and_then(|rest| parse_key(&format!("KEY_{}", audio_key(rest)?))))
+    parse_key(name).or_else(|| parse_key(&format!("KEY_{}", lower.to_uppercase()))).or_else(|| lower.strip_prefix("xf86audio").and_then(|rest| parse_key(&format!("KEY_{}", audio_key(rest)?))))
 }
 
 fn audio_key(rest: &str) -> Option<&'static str> {
@@ -115,7 +103,7 @@ fn audio_key(rest: &str) -> Option<&'static str> {
     })
 }
 
-pub fn parse_combo(text: &str) -> Result<Combo, String> {
+pub fn parse_combo(text: &str) -> Result<Vec<u16>, String> {
     let mut codes = Vec::new();
     for part in text.split('+').map(str::trim).filter(|p| !p.is_empty()) {
         codes.push(key_of_name(part).ok_or_else(|| format!("unknown key '{part}' in '{text}'"))?);
@@ -123,10 +111,9 @@ pub fn parse_combo(text: &str) -> Result<Combo, String> {
     if codes.is_empty() {
         return Err("empty key combo".into());
     }
-    Ok(Combo { codes })
+    Ok(codes)
 }
 
-/// MangoHud's own toggle, from config or `~/.config/MangoHud/MangoHud.conf`; its default otherwise.
 pub fn mangohud_toggle(config: &ControllerConfig) -> String {
     if !config.mangohud_toggle.trim().is_empty() {
         return config.mangohud_toggle.trim().to_string();
@@ -162,12 +149,12 @@ mod tests {
 
     #[test]
     fn combos_in_mangohud_and_plain_spellings() {
-        assert_eq!(parse_combo("Super_L+F12").unwrap().codes, vec![125, 88]);
-        assert_eq!(parse_combo("Shift_R+F12").unwrap().codes, vec![54, 88]);
-        assert_eq!(parse_combo("ctrl+shift+f2").unwrap().codes, vec![29, 42, 60]);
-        assert_eq!(parse_combo("KEY_LEFTSHIFT+KEY_VOLUMEUP").unwrap().codes, vec![42, 115]);
-        assert_eq!(parse_combo("XF86AudioRaiseVolume").unwrap().codes, vec![115]);
-        assert_eq!(parse_combo("a").unwrap().codes, vec![30]);
+        assert_eq!(parse_combo("Super_L+F12").unwrap(), vec![125, 88]);
+        assert_eq!(parse_combo("Shift_R+F12").unwrap(), vec![54, 88]);
+        assert_eq!(parse_combo("ctrl+shift+f2").unwrap(), vec![29, 42, 60]);
+        assert_eq!(parse_combo("KEY_LEFTSHIFT+KEY_VOLUMEUP").unwrap(), vec![42, 115]);
+        assert_eq!(parse_combo("XF86AudioRaiseVolume").unwrap(), vec![115]);
+        assert_eq!(parse_combo("a").unwrap(), vec![30]);
         assert!(parse_combo("Ctrl+Nope").is_err());
         assert!(parse_combo("").is_err());
     }

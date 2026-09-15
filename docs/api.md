@@ -51,11 +51,11 @@ a dash means the surface doesn't expose it.
 |---|---|---|---|
 | `list_json()` | `list_json()` | `universe ls [--all]` | JSON `[Game]`; unhidden first, last played first. `--json` always prints every game — `--all` only stops the table from hiding the hidden ones |
 | `get(id)` | `get_json(id)` | `universe info <name> --json` | resolved `Game`: global defaults merged in, session stats, media, active modules |
-| `resolve(query)` | `resolve(query)` | — | candidate ids: exact › whole word › substring › path. Empty means unknown, more than one means ambiguous |
+| `resolve(query)` | `resolve(query)` | — | candidate ids: exact › whole word › substring › path › every word a prefix of a title word or genre. Empty means unknown, more than one means ambiguous |
 | `set(id, key, value)` | `set(id, key, value)` | `universe set <name> k=v …` | writes one `game.toml` key |
 | `remove(id, purge)` | `remove(id, purge)` | `universe rm <name> [--purge]` | parks recordings and journal under `.archive/`, marks `removed_at`; `purge` also trashes the prefix |
 | `uninstall(id)` | `uninstall(id)` | `universe uninstall <name>` | trashes `source.dir` and clears `source.dir`, `source.build_id` and `launch.exe`; the game stays in the library, not installed. Refuses a root, a home or the games root |
-| `reload_all()` | `reload()` | `universe rescan` | rereads config and `games/*/game.toml`, rebuilds the index, runs each source's `scan` |
+| `reload_all()` | `reload()` | `universe rescan` | rereads config and `games/*/game.toml`, runs each source's `scan` |
 | `reload_game(id)` | `reload_game(id)` | — | rereads one game |
 | `import_lutris(apply)` | `import_lutris(apply)` | `universe migrate [--apply]` | JSON report: imported games, per-game env diff (`{id, lutris_env, universe_env, added, removed, changed}`), imported hours, games whose art was copied from `[lutris] pegasus_library` (`<platform>/media/<slug>/`, once, never over an existing `media/`), `runners_promoted` (emulator games from before runners that now name theirs), `options_promoted` (games already imported that take what a field now holds — a `wrapper`, a DLL override, a Proton switch — only where the file had nothing) and `runners` (what Lutris's runner configs say: a wrapper script is seen through, the program is written to `[runners.<id>] exe` when it is not on PATH, its extra arguments to `args`). Without `apply` it only reports |
 | `add_game(json)` | `add_game(json)` | `universe add <file> --runner <id> [--title T] [--platform P] [--media]` | `{"runner", "exe", "title"?, "platform"?}` → the new id. The title defaults to the file's name cleaned of release tags; the platform to the runner's first. Refuses an id already in the library |
@@ -378,7 +378,7 @@ that is not `*.json` are ignored, and `render_journal` only renders `written` en
 | `doctor_json()` | `doctor_json()` | `universe doctor` | `[{check, ok, detail, module}]`: required binaries, `gsr-kms-server`, Proton, cursor extension, tokens, one `runner-<id>` check per runner a library game uses (its program resolved), `inputplumber` when an emulator wants it |
 
 A module entry is `{id, name, kind: [], version, dir, enabled, available, missing: [bin],
-hooks: {}, verbs: [], settings: [Setting], frontend_qml: "path or null"}`, and
+hooks: {}, settings: [Setting]}`, and
 `Setting` = `{"key", "type": "bool|string|int|enum|path", "default", "label",
 "scope": "global|game", "choices": [], "dynamic": bool}`. `choices` binds an `enum`; on an `int`
 or a `string` it lists suggestions, any value stays accepted — except that an `int` also

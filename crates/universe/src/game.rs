@@ -73,7 +73,6 @@ pub struct Launch {
     pub mangohud: Option<bool>,
     pub gamescope: Option<bool>,
     pub gamescope_args: String,
-    /// The gamescope fields of `[launch]`, each empty one taking the global value.
     pub gamescope_resolution: String,
     pub gamescope_refresh: String,
     pub gamescope_scaler: String,
@@ -218,28 +217,10 @@ impl Game {
     pub fn load(path: &Path) -> crate::Result<Game> {
         let s = std::fs::read_to_string(path)?;
         let mut g: Game = toml::from_str(&s)?;
-        for (module, value) in listed_enabled(&g) {
-            // merged_settings reads the list as the bool either way; the rewrite is for the file.
-            match set_key(path, &format!("modules.{module}.enabled"), &value.to_string()) {
-                Ok(repaired) => {
-                    tracing::info!("{}: modules.{module}.enabled = [\"{value}\"] rewritten as {value}", path.display());
-                    g = repaired;
-                }
-                Err(err) => tracing::warn!("{}: modules.{module}.enabled = [\"{value}\"] left as is: {err}", path.display()),
-            }
-        }
         if g.id.is_empty() {
             g.id = path.parent().and_then(|p| p.file_name()).map(|s| s.to_string_lossy().into()).unwrap_or_default();
         }
         Ok(g)
-    }
-
-    pub fn load_id(id: &str) -> crate::Result<Game> {
-        let p = paths::game_dir(id).join("game.toml");
-        if !p.exists() {
-            return Err(crate::Error::NotFound(id.into()));
-        }
-        Self::load(&p)
     }
 
     pub fn save(&self) -> crate::Result<()> {
@@ -280,10 +261,8 @@ fn parse_value(value: &str) -> toml_edit::Value {
         }
         return toml_edit::Value::Array(arr);
     }
-    match value {
-        "true" => return true.into(),
-        "false" => return false.into(),
-        _ => {}
+    if let Ok(b) = value.parse::<bool>() {
+        return b.into();
     }
     if let Ok(i) = value.parse::<i64>() {
         return i.into();
@@ -296,18 +275,7 @@ fn parse_value(value: &str) -> toml_edit::Value {
     value.into()
 }
 
-/// Writes `a.b.c = value` into a TOML document; "" removes the key; lists as "a,b" for known list keys or "[a,b]".
-/// The [modules.<id>] enabled values an earlier set wrote as `["true"]` / `["false"]` instead of a bool.
-fn listed_enabled(g: &Game) -> Vec<(String, bool)> {
-    g.modules
-        .iter()
-        .filter_map(|(id, t)| match t.get("enabled").and_then(|v| v.as_array()) {
-            Some(a) if a.len() == 1 => a[0].as_str().and_then(|s| s.parse::<bool>().ok()).map(|b| (id.clone(), b)),
-            _ => None,
-        })
-        .collect()
-}
-
+/// "" removes the key; lists as "a,b" for known list keys or "[a,b]".
 pub fn set_dotted(doc: &mut toml_edit::DocumentMut, key: &str, value: &str) -> crate::Result<()> {
     let parts: Vec<&str> = key.split('.').collect();
     if parts.is_empty() || parts.iter().any(|p| p.is_empty()) {
@@ -343,7 +311,6 @@ pub fn set_dotted(doc: &mut toml_edit::DocumentMut, key: &str, value: &str) -> c
     Ok(())
 }
 
-/// Validates a Set key: core keys are typed against `Game`; unknown top-level keys are refused.
 pub fn set_key(game_toml: &Path, key: &str, value: &str) -> crate::Result<Game> {
     let text = std::fs::read_to_string(game_toml)?;
     let mut doc: toml_edit::DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| crate::Error::Invalid(e.to_string()))?;
@@ -351,9 +318,6 @@ pub fn set_key(game_toml: &Path, key: &str, value: &str) -> crate::Result<Game> 
     let allowed = ["title", "sort_title", "platform", "release_year", "hidden", "favorite", "tags", "source", "launch", "desktop", "metadata", "modules"];
     if !allowed.contains(&top) {
         return Err(crate::Error::Invalid(format!("unknown key {key}")));
-    }
-    if top == "id" || top == "schema" {
-        return Err(crate::Error::Invalid("immutable key".into()));
     }
     set_dotted(&mut doc, key, value)?;
     if key == "launch.runner" && !value.is_empty() {
@@ -369,7 +333,6 @@ pub fn set_key(game_toml: &Path, key: &str, value: &str) -> crate::Result<Game> 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::os::unix::fs::PermissionsExt;
 
     const SAMPLE: &str = r#"
 schema = 1
@@ -459,7 +422,7 @@ configpath = "the-technomancer-1780794348"
     fn setting_runner_retires_backend() {
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join("game.toml");
-        std::fs::write(&p, "id = \"x\"\ntitle = \"X\"\n[launch]\nbackend = \"emulator\"\nexe = \"/r/a.iso\"\n").unwrap();
+        std::fs::write(&p, "title = \"X\"\n[launch]\nbackend = \"emulator\"\nexe = \"/r/a.iso\"\n").unwrap();
         let g = set_key(&p, "launch.runner", "dolphin").unwrap();
         assert_eq!(g.launch.runner, "dolphin");
         assert!(g.launch.backend.is_empty());
@@ -469,29 +432,6 @@ configpath = "the-technomancer-1780794348"
         set_key(&p, "launch.options.batch", "false").unwrap();
         let g = Game::load(&p).unwrap();
         assert_eq!(g.launch.options["batch"].as_bool(), Some(false));
-    }
-
-    #[test]
-    fn load_repairs_listed_enabled() {
-        let dir = tempfile::tempdir().unwrap();
-        let p = dir.path().join("game.toml");
-        std::fs::write(&p, "title = \"X\"\n[modules.capture]\nenabled = [\"false\"]\ncursor = true\n[modules.journal]\nenabled = [\"true\"]\n").unwrap();
-        let g = Game::load(&p).unwrap();
-        assert_eq!(g.modules["capture"]["enabled"].as_bool(), Some(false));
-        assert_eq!(g.modules["capture"]["cursor"].as_bool(), Some(true));
-        assert_eq!(g.modules["journal"]["enabled"].as_bool(), Some(true));
         assert_eq!(g.id, dir.path().file_name().unwrap().to_string_lossy());
-        let text = std::fs::read_to_string(&p).unwrap();
-        assert!(text.contains("enabled = false"));
-        assert!(!text.contains("[\"false\"]"));
-        // A file that cannot be rewritten still loads, list and all.
-        let ro = dir.path().join("ro");
-        std::fs::create_dir(&ro).unwrap();
-        let p = ro.join("game.toml");
-        std::fs::write(&p, "title = \"Y\"\n[modules.capture]\nenabled = [\"false\"]\n").unwrap();
-        std::fs::set_permissions(&ro, std::fs::Permissions::from_mode(0o555)).unwrap();
-        let g = Game::load(&p).unwrap();
-        std::fs::set_permissions(&ro, std::fs::Permissions::from_mode(0o755)).unwrap();
-        assert_eq!(g.modules["capture"]["enabled"].as_array().map(|a| a.len()), Some(1));
     }
 }

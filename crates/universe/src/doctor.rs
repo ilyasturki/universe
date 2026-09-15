@@ -49,14 +49,12 @@ pub async fn run(config: &Config, modules: &[Module], shell: Option<&zbus::Conne
         let (ok, detail) = if !crate::desktop::extension_installed(uuid) {
             (false, "window capture falls back to the screen: the home-manager module installs the universe shell extension; log out to load it".to_string())
         } else {
-            let proxy = match shell {
-                Some(conn) => crate::desktop::extensions_proxy(conn, crate::desktop::Profile::Gnome, uuid).await,
-                None => None,
-            };
-            let state = match &proxy {
-                Some(p) => crate::desktop::extension_state(p, uuid).await,
-                None => None,
-            };
+            let mut state = None;
+            if let Some(conn) = shell {
+                if let Some(p) = crate::desktop::extensions_proxy(conn, crate::desktop::Profile::Gnome, uuid).await {
+                    state = crate::desktop::extension_state(&p, uuid).await;
+                }
+            }
             match state {
                 Some(s) if crate::desktop::extension_is_active(s) => (true, format!("{uuid} active")),
                 Some(Some(_)) => (false, format!("installed but not enabled: gnome-extensions enable {uuid}")),

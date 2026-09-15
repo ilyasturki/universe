@@ -1,6 +1,3 @@
-//! `universe controller watch`: the engine process. Reads every pad on evdev without grabbing it,
-//! runs the macros, and speaks JSON lines to the launcher (events out, commands in).
-
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 use std::os::fd::AsRawFd;
@@ -52,7 +49,6 @@ pub fn lock_path() -> PathBuf {
     std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from).filter(|p| p.is_absolute()).unwrap_or_else(paths::state_home).join("universe").join("controller.lock")
 }
 
-/// Exclusive lock on the watcher; `None` when another watcher holds it and `wait` is off.
 async fn take_lock(wait: bool, out: &Out) -> crate::Result<Option<std::fs::File>> {
     let path = lock_path();
     if let Some(p) = path.parent() {
@@ -90,13 +86,14 @@ struct Pad {
     id: String,
     path: PathBuf,
     name: String,
-    family: Family,
+    family: &'static Family,
     bus: String,
     keys: Vec<u16>,
     axes: Vec<u16>,
     ranges: BTreeMap<u16, (i32, i32)>,
     slots: BTreeMap<String, Option<Source>>,
     by_source: BTreeMap<Source, String>,
+    bindings: BTreeMap<String, Binding>,
     axis_down: BTreeSet<(u16, bool)>,
     axis_last: BTreeMap<&'static str, i32>,
     cmd: mpsc::Sender<PadCmd>,
@@ -127,11 +124,11 @@ fn axis_value(name: &str, value: i32, (min, max): (i32, i32)) -> f64 {
 
 impl Pad {
     fn resolve(&mut self, cfg: &ControllerConfig) {
-        self.slots = resolve_slots(cfg, &self.family, &self.keys, &self.axes);
+        self.slots = resolve_slots(cfg, self.family, &self.keys, &self.axes);
         self.by_source = self.slots.iter().filter_map(|(s, src)| src.map(|src| (src, s.clone()))).collect();
+        self.bindings = self.slots.keys().map(|s| (s.clone(), Binding::of(&cfg.macros_for(self.family.id, s)))).collect();
     }
 
-    /// The live sample the page shows while it streams axes, once it moved a hundredth.
     fn axis_sample(&mut self, code: u16, value: i32) -> Option<serde_json::Value> {
         let name = axis_name(code)?;
         let range = self.ranges.get(&code).copied().unwrap_or((-1, 1));
@@ -146,7 +143,6 @@ impl Pad {
         })
     }
 
-    /// Axis transitions as (source, pressed): a hat direction, or a trigger past half its range.
     fn axis(&mut self, code: u16, value: i32) -> Vec<(Source, bool)> {
         let (min, max) = self.ranges.get(&code).copied().unwrap_or((-1, 1));
         let positive = if min < 0 { value > 0 } else { value > (min + max) / 2 };
@@ -169,8 +165,7 @@ impl Pad {
 
 const BTN_JOYSTICK: u16 = 0x120;
 
-/// A gamepad by its key map, or a joystick-mapped device from a known pad maker (a D-input 8BitDo);
-/// dongles that only claim ID_INPUT_JOYSTICK stay out.
+/// A joystick-mapped device counts only from a known pad maker (a D-input 8BitDo): dongles claiming ID_INPUT_JOYSTICK stay out.
 fn is_pad(dev: &Device) -> bool {
     let Some(keys) = dev.supported_keys() else { return false };
     if keys.contains(KeyCode::new(BTN_GAMEPAD)) {
@@ -189,7 +184,7 @@ fn bus_name(dev: &Device) -> String {
 
 struct Caps {
     name: String,
-    family: Family,
+    family: &'static Family,
     keys: Vec<u16>,
     axes: Vec<u16>,
     ranges: BTreeMap<u16, (i32, i32)>,
@@ -210,7 +205,6 @@ fn readable(path: &Path) -> bool {
     unsafe { libc::access(c.as_ptr(), libc::R_OK) == 0 }
 }
 
-/// One-shot: every pad readable now, with its slots resolved.
 pub fn enumerate_json(cfg: &ControllerConfig) -> Vec<serde_json::Value> {
     let mut out = vec![];
     for (path, dev) in evdev::enumerate() {
@@ -218,7 +212,7 @@ pub fn enumerate_json(cfg: &ControllerConfig) -> Vec<serde_json::Value> {
             continue;
         }
         let c = describe(&dev);
-        let slots = resolve_slots(cfg, &c.family, &c.keys, &c.axes);
+        let slots = resolve_slots(cfg, c.family, &c.keys, &c.axes);
         out.push(serde_json::json!({
             "id": path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default(), "path": path, "name": c.name, "family": c.family.id, "family_name": c.family.name, "bus": bus_name(&dev),
             "slots": slots.iter().map(|(s, src)| (s.clone(), serde_json::json!({"code": src.map(|x| x.to_string()), "bound": src.is_some()}))).collect::<serde_json::Map<_, _>>(),
@@ -296,7 +290,6 @@ impl Typist {
     }
 }
 
-/// The OSD's failure is reported once per run: it repeats on every held volume press otherwise.
 async fn osd(icon: &str, label: Option<&str>, level: Option<f64>) {
     static REPORTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
     if let Err(e) = crate::desktop::show_osd(icon, label, level).await {
@@ -359,7 +352,7 @@ impl Watcher {
             let c = describe(&dev);
             let bus = bus_name(&dev);
             let (ctx, crx) = mpsc::channel(4);
-            let mut pad = Pad { id: id.clone(), path, name: c.name, family: c.family, bus, keys: c.keys, axes: c.axes, ranges: c.ranges, slots: BTreeMap::new(), by_source: BTreeMap::new(), axis_down: BTreeSet::new(), axis_last: BTreeMap::new(), cmd: ctx };
+            let mut pad = Pad { id: id.clone(), path, name: c.name, family: c.family, bus, keys: c.keys, axes: c.axes, ranges: c.ranges, slots: BTreeMap::new(), by_source: BTreeMap::new(), bindings: BTreeMap::new(), axis_down: BTreeSet::new(), axis_last: BTreeMap::new(), cmd: ctx };
             pad.resolve(&self.cfg);
             pad_task(id.clone(), dev, self.tx.clone(), crx);
             self.out.emit(pad.json());
@@ -392,8 +385,6 @@ impl Watcher {
 
     async fn input(&mut self, id: String, ev: InputEvent) -> bool {
         let Some(pad) = self.pads.get_mut(&id) else { return true };
-        // Sticks and unowned trigger axes reach the page only as samples while it asked for them;
-        // as presses, only hats and axes a slot resolved to.
         let (transitions, sample): (Vec<(Source, bool)>, Option<serde_json::Value>) = match ev.destructure() {
             EventSummary::Key(_, key, value) => {
                 if value == 2 {
@@ -415,15 +406,12 @@ impl Watcher {
             }
         }
         for (source, down) in transitions {
-            if let Some((lid, slot, since)) = self.learning.clone() {
-                if since.elapsed() > LEARN_TIMEOUT {
-                    self.learning = None;
-                    self.out.emit(serde_json::json!({"event": "learn_timeout"}));
-                } else if lid == id && down && matches!(source, Source::Key(_) | Source::Axis { code: 16..=17, .. }) {
+            if let Some((lid, slot, _)) = self.learning.clone() {
+                if lid == id && down && matches!(source, Source::Key(_) | Source::Axis { code: 16..=17, .. }) {
                     self.learning = None;
                     let pad = self.pads.get(&id).unwrap();
                     let family = pad.family.id.to_string();
-                    let from = super::learn_code(&self.cfg, &pad.family, &slot, &source.to_string());
+                    let from = super::learn_code(&self.cfg, pad.family, &slot, &source.to_string());
                     match from {
                         Ok(from) => {
                             if !self.out.emit(serde_json::json!({"event": "learned", "family": family, "slot": slot, "code": source.to_string(), "from": from})) {
@@ -452,7 +440,7 @@ impl Watcher {
             if self.suspended && down {
                 continue;
             }
-            let binding = Binding::of(&self.cfg.macros_for(pad.family.id, &slot));
+            let binding = pad.bindings.get(&slot).cloned().unwrap_or_default();
             let now = self.now();
             let fires = if down { self.engine.press(&id, &slot, binding, now) } else { self.engine.release(&id, &slot, now) };
             for f in fires {
@@ -465,56 +453,48 @@ impl Watcher {
     fn fire(&mut self, f: Fire) {
         let (id, slot, m) = (f.device, f.slot, f.action);
         self.out.emit(serde_json::json!({"event": "macro", "id": id, "slot": slot, "trigger": f.trigger, "action": m.action, "keys": m.keys, "command": m.command}));
-        let change = match m.action.as_str() {
-            "volume_up" => Some(super::volume::Change::Up),
-            "volume_down" => Some(super::volume::Change::Down),
-            "mute" => Some(super::volume::Change::ToggleMute),
-            _ => None,
-        };
-        if let Some(change) = change {
-            let percent = self.cfg.volume_step;
-            tokio::spawn(async move {
-                match tokio::task::spawn_blocking(move || super::volume::apply(change, percent)).await {
-                    Ok(Ok(level)) => {
-                        let icon = match level.percent {
-                            _ if level.muted => "audio-volume-muted-symbolic",
-                            0 => "audio-volume-muted-symbolic",
-                            1..=33 => "audio-volume-low-symbolic",
-                            34..=66 => "audio-volume-medium-symbolic",
-                            _ => "audio-volume-high-symbolic",
-                        };
-                        osd(icon, Some(&level.output), Some(f64::from(level.percent) / 100.0)).await;
-                    }
-                    Ok(Err(e)) => tracing::warn!("{change:?}: {e}"),
-                    Err(e) => tracing::warn!("{change:?}: {e}"),
-                }
-            });
-            return;
-        }
-        let combo = match m.action.as_str() {
-            "mangohud" => keys::parse_combo(&keys::mangohud_toggle(&self.cfg)).ok().map(|c| (c.codes, MANGOHUD_HOLD)),
-            "keys" => keys::parse_combo(&m.keys).ok().map(|c| (c.codes, COMBO_HOLD)),
-            _ => None,
-        };
-        if let Some((codes, hold)) = combo {
-            let typist = self.typist.clone();
-            tokio::spawn(async move {
-                let mut t = typist.lock().await;
-                t.set(&codes, true);
-                tokio::time::sleep(hold).await;
-                let up: Vec<u16> = codes.iter().rev().copied().collect();
-                t.set(&up, false);
-            });
-            return;
-        }
         let core = self.core.clone();
         match m.action.as_str() {
+            "volume_up" | "volume_down" | "mute" => {
+                let change = match m.action.as_str() {
+                    "volume_up" => super::volume::Change::Up,
+                    "volume_down" => super::volume::Change::Down,
+                    _ => super::volume::Change::ToggleMute,
+                };
+                let percent = self.cfg.volume_step;
+                tokio::spawn(async move {
+                    match tokio::task::spawn_blocking(move || super::volume::apply(change, percent)).await {
+                        Ok(Ok(level)) => {
+                            let icon = match level.percent {
+                                p if level.muted || p == 0 => "audio-volume-muted-symbolic",
+                                1..=33 => "audio-volume-low-symbolic",
+                                34..=66 => "audio-volume-medium-symbolic",
+                                _ => "audio-volume-high-symbolic",
+                            };
+                            osd(icon, Some(&level.output), Some(f64::from(level.percent) / 100.0)).await;
+                        }
+                        Ok(Err(e)) => tracing::warn!("{change:?}: {e}"),
+                        Err(e) => tracing::warn!("{change:?}: {e}"),
+                    }
+                });
+            }
+            "mangohud" | "keys" => {
+                let (text, hold) = if m.action == "keys" { (m.keys.clone(), COMBO_HOLD) } else { (keys::mangohud_toggle(&self.cfg), MANGOHUD_HOLD) };
+                let Ok(codes) = keys::parse_combo(&text) else { return };
+                let typist = self.typist.clone();
+                tokio::spawn(async move {
+                    let mut t = typist.lock().await;
+                    t.set(&codes, true);
+                    tokio::time::sleep(hold).await;
+                    let up: Vec<u16> = codes.iter().rev().copied().collect();
+                    t.set(&up, false);
+                });
+            }
             // The cue (a flash, the shutter) is the capture's own, at grab time; an OSD after it would only lag.
             "screenshot" => {
                 tokio::spawn(async move {
-                    match core.screenshot().await {
-                        Ok(p) => tracing::info!("screenshot {p}"),
-                        Err(e) => tracing::warn!("screenshot: {e}"),
+                    if let Err(e) = core.screenshot().await {
+                        tracing::warn!("screenshot: {e}");
                     }
                 });
             }
@@ -567,12 +547,10 @@ impl Watcher {
             "learn" => {
                 let id = v["id"].as_str().unwrap_or("").to_string();
                 let slot = v["slot"].as_str().unwrap_or("").to_string();
-                let ok = self.pads.get(&id).map(|p| p.family.slots.iter().any(|s| s.id == slot)).unwrap_or(false);
-                if ok {
-                    self.learning = Some((id, slot, Instant::now()));
-                } else {
+                if !self.pads.get(&id).is_some_and(|p| p.family.slots().any(|s| s.id == slot)) {
                     return self.out.emit(serde_json::json!({"event": "error", "message": format!("cannot learn {slot} on {id}")}));
                 }
+                self.learning = Some((id, slot, Instant::now()));
             }
             "cancel" => self.learning = None,
             "rumble" => {
@@ -636,7 +614,6 @@ pub async fn watch(core: Arc<Core>, opts: WatchOptions) -> crate::Result<()> {
                 // A bind from the launcher or a terminal reaches a watcher it has no pipe to.
                 if config_mtime() != w.config_mtime {
                     w.reload().await;
-                    tracing::info!("config.toml changed: reloaded");
                 }
                 if w.learning.as_ref().map(|(_, _, since)| since.elapsed() > LEARN_TIMEOUT).unwrap_or(false) {
                     w.learning = None;
@@ -662,7 +639,6 @@ pub async fn watch(core: Arc<Core>, opts: WatchOptions) -> crate::Result<()> {
     Ok(())
 }
 
-/// `universe controller learn`: the next key pressed on a pad of the family becomes `slot`.
 pub async fn learn_once(cfg: &ControllerConfig, family: &Family, slot: &str) -> crate::Result<(String, Option<String>)> {
     let (tx, mut rx) = mpsc::channel::<DevEvent>(64);
     let mut senders = vec![];

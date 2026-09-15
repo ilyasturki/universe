@@ -46,12 +46,12 @@ pub fn read_pga(pga: &Path) -> crate::Result<Vec<PgaGame>> {
     Ok(rows.filter_map(|r| r.ok()).collect())
 }
 
-fn yaml_str(v: &serde_yaml::Value, path: &[&str]) -> Option<String> {
-    let mut cur = v;
-    for p in path {
-        cur = cur.get(*p)?;
-    }
-    match cur {
+fn yaml_at<'a>(v: &'a serde_yaml::Value, path: &[&str]) -> Option<&'a serde_yaml::Value> {
+    path.iter().try_fold(v, |cur, p| cur.get(*p))
+}
+
+fn yaml_scalar(v: &serde_yaml::Value) -> Option<String> {
+    match v {
         serde_yaml::Value::String(s) => Some(s.clone()),
         serde_yaml::Value::Number(n) => Some(n.to_string()),
         serde_yaml::Value::Bool(b) => Some(b.to_string()),
@@ -59,39 +59,17 @@ fn yaml_str(v: &serde_yaml::Value, path: &[&str]) -> Option<String> {
     }
 }
 
+fn yaml_str(v: &serde_yaml::Value, path: &[&str]) -> Option<String> {
+    yaml_scalar(yaml_at(v, path)?)
+}
+
 fn yaml_bool(v: &serde_yaml::Value, path: &[&str]) -> Option<bool> {
-    let mut cur = v;
-    for p in path {
-        cur = cur.get(*p)?;
-    }
-    cur.as_bool()
+    yaml_at(v, path)?.as_bool()
 }
 
 fn yaml_map(v: &serde_yaml::Value, path: &[&str]) -> BTreeMap<String, String> {
-    let mut cur = v;
-    for p in path {
-        match cur.get(*p) {
-            Some(c) => cur = c,
-            None => return BTreeMap::new(),
-        }
-    }
-    cur.as_mapping()
-        .map(|m| {
-            m.iter()
-                .filter_map(|(k, v)| {
-                    let key = k.as_str()?.to_string();
-                    let val = match v {
-                        serde_yaml::Value::String(s) => s.clone(),
-                        serde_yaml::Value::Number(n) => n.to_string(),
-                        serde_yaml::Value::Bool(b) => b.to_string(),
-                        serde_yaml::Value::Null => String::new(),
-                        _ => return None,
-                    };
-                    Some((key, val))
-                })
-                .collect()
-        })
-        .unwrap_or_default()
+    let Some(m) = yaml_at(v, path).and_then(|c| c.as_mapping()) else { return BTreeMap::new() };
+    m.iter().filter_map(|(k, v)| Some((k.as_str()?.to_string(), if v.is_null() { String::new() } else { yaml_scalar(v)? }))).collect()
 }
 
 #[derive(Debug, Clone, Serialize, Default, PartialEq)]
@@ -153,11 +131,8 @@ pub struct GogManifest {
     pub primary_exe: String,
 }
 
-/// Reads the base game's goggame-<id>.info in `dir` (gameId == rootGameId).
 pub fn read_gog_manifest(dir: &Path) -> Option<GogManifest> {
-    let rd = std::fs::read_dir(dir).ok()?;
-    let mut best: Option<GogManifest> = None;
-    for e in rd.flatten() {
+    for e in std::fs::read_dir(dir).ok()?.flatten() {
         let name = e.file_name().to_string_lossy().to_string();
         if !(name.starts_with("goggame-") && name.ends_with(".info")) {
             continue;
@@ -175,10 +150,9 @@ pub fn read_gog_manifest(dir: &Path) -> Option<GogManifest> {
             .and_then(|t| t["path"].as_str())
             .unwrap_or("")
             .to_string();
-        best = Some(GogManifest { game_id: gid, root_game_id: root, build_id: v["buildId"].as_str().unwrap_or("").to_string(), name: v["name"].as_str().unwrap_or("").to_string(), primary_exe: exe });
-        break;
+        return Some(GogManifest { game_id: gid, root_game_id: root, build_id: v["buildId"].as_str().unwrap_or("").to_string(), name: v["name"].as_str().unwrap_or("").to_string(), primary_exe: exe });
     }
-    best
+    None
 }
 
 #[derive(Debug, Clone, Serialize, Default)]
@@ -271,9 +245,8 @@ fn split_prefix_command(cmd: &str, launch: &mut crate::game::Launch) {
     }
 }
 
-/// Builds a game.toml from one Lutris entry; runner ≠ wine → backend "emulator", parked (plan §13). A Lutris wine
-/// version is a Wine build when `<runners_dir>/<version>/bin/wine` exists and no `proton` script beside it, the
-/// system Wine when `system`, Proton otherwise.
+/// A Lutris wine version is a Wine build when `<runners_dir>/<version>/bin/wine` exists and no `proton` script
+/// beside it, the system Wine when `system`, Proton otherwise.
 pub fn convert(p: &PgaGame, lutris_dir: &Path, runners_dir: &Path, global_env: &BTreeMap<String, String>) -> Imported {
     let mut g = Game::new(&p.name);
     g.hidden = p.hidden;
@@ -328,21 +301,17 @@ pub fn convert(p: &PgaGame, lutris_dir: &Path, runners_dir: &Path, global_env: &
             g.launch.fps_limit = fps;
         }
         let exe_dir = g.exe_path().parent().map(|p| p.to_path_buf()).unwrap_or_default();
+        g.source.kind = "lutris".into();
+        g.source.dir = exe_dir.to_string_lossy().into();
         if let Some(m) = read_gog_manifest(&exe_dir) {
-            let confirmed = p.service == "gog" && (p.service_id.is_empty() || p.service_id == m.game_id);
-            if confirmed {
+            if p.service == "gog" && (p.service_id.is_empty() || p.service_id == m.game_id) {
                 g.source.kind = "gog".into();
                 g.source.gog_id = m.game_id.clone();
                 g.source.build_id = m.build_id.clone();
             } else {
-                g.source.kind = "lutris".into();
                 parked.insert("gog_manifest".into(), toml::Value::String(m.game_id.clone()));
                 parked.insert("gog_build".into(), toml::Value::String(m.build_id.clone()));
             }
-            g.source.dir = exe_dir.to_string_lossy().into();
-        } else {
-            g.source.kind = "lutris".into();
-            g.source.dir = exe_dir.to_string_lossy().into();
         }
     } else {
         g.platform = if p.platform.is_empty() { p.runner.clone() } else { p.platform.clone() };
@@ -363,8 +332,7 @@ pub fn convert(p: &PgaGame, lutris_dir: &Path, runners_dir: &Path, global_env: &
     Imported { game: g, lutris_env, playtime_h: p.playtime_h, lastplayed: p.lastplayed }
 }
 
-/// What a fresh conversion holds in a field the existing file leaves empty, as `set` keys: the prefix command's
-/// parts and the switches. Never the rest of Lutris's env — a key removed here stays removed.
+/// Never the rest of Lutris's env: a key removed here stays removed.
 fn promotions(existing: &Game, fresh: &Game) -> Vec<(String, String)> {
     let mut out = Vec::new();
     let mut from_prefix = crate::game::Launch::default();
@@ -427,8 +395,7 @@ fn diff(id: &str, title: &str, lutris_env: &BTreeMap<String, String>, universe_e
     d
 }
 
-/// Imports installed Lutris games into games/<id>/game.toml without overwriting existing files; hours become one
-/// `import-lutris` session covering what recordings do not (never negative). `apply=false` only reports.
+/// Hours become one `import-lutris` session covering what recordings do not.
 pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
     let lutris_dir = paths::expand(&config.lutris.config_dir);
     let pga = paths::expand(&config.lutris.pga_db);
@@ -438,7 +405,6 @@ pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
     let runners_dir = paths::expand(&config.lutris.runners_dir);
     let global_env = lutris_global_env(&lutris_dir);
     let mut report = Report { applied: apply, ..Default::default() };
-    let modules: Vec<crate::modules::Module> = vec![];
     let mut located = std::collections::HashMap::new();
     for p in read_pga(&pga)? {
         if p.name.trim().is_empty() {
@@ -474,7 +440,7 @@ pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
             report.imported.push(imp.game.id.clone());
             imp.game.clone()
         };
-        let r = crate::library::resolve_with(game.clone(), config, &modules, &mut located);
+        let r = crate::library::resolve_with(game.clone(), config, &[], &mut located);
         let mut env_for_diff = r.effective.env.clone();
         env_for_diff.extend(crate::launcher::proton_toggles(&r.effective));
         if r.effective.mangohud {
@@ -496,11 +462,7 @@ pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
             let covered: u64 = sessions.iter().filter(|s| s.source == "import-recording").map(|s| s.duration_s).sum();
             let total = (imp.playtime_h * 3600.0).round() as u64;
             let remainder = total.saturating_sub(covered);
-            let ended_at = if imp.lastplayed > 0 {
-                chrono::DateTime::from_timestamp(imp.lastplayed, 0).map(|d| d.with_timezone(&chrono::Local).to_rfc3339()).unwrap_or_default()
-            } else {
-                String::new()
-            };
+            let ended_at = chrono::DateTime::from_timestamp(imp.lastplayed, 0).filter(|_| imp.lastplayed > 0).map(|d| d.with_timezone(&chrono::Local).to_rfc3339()).unwrap_or_default();
             sessions::append(&game.sessions_path(), &Session { session: "lutris".into(), game: game.id.clone(), started_at: String::new(), ended_at, duration_s: remainder, source: "import-lutris".into(), ..Default::default() })?;
             report.hours_imported.insert(game.id.clone(), (remainder as f64 / 36.0).round() / 100.0);
             if existed {
@@ -527,8 +489,7 @@ pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
     Ok(report)
 }
 
-/// Copies the art pegasus-sync fetched (`<root>/<platform>/media/<slug>/`) into `games/<id>/media/`, once: an
-/// existing media dir is left alone. Only the slots the core reads; flat `screenshotNN.*` land in `screenshots/`.
+/// `<root>/<platform>/media/<slug>/` into `games/<id>/media/`, once: an existing media dir is left alone.
 fn import_pegasus_media(dest: &Path, game: &Game, root: &Path) -> crate::Result<bool> {
     if dest.exists() {
         return Ok(false);
@@ -544,10 +505,7 @@ fn import_pegasus_media(dest: &Path, game: &Game, root: &Path) -> crate::Result<
     let mut copied = false;
     for e in std::fs::read_dir(&src)?.flatten() {
         let p = e.path();
-        let (Some(stem), Some(ext)) = (p.file_stem().and_then(|s| s.to_str()), p.extension().and_then(|s| s.to_str())) else { continue };
-        if !matches!(ext.to_ascii_lowercase().as_str(), "png" | "jpg" | "jpeg" | "webp") {
-            continue;
-        }
+        let Some(stem) = p.file_stem().and_then(|s| s.to_str()).filter(|_| crate::library::is_image(&p)) else { continue };
         let target = match stem {
             "boxFront" | "square" | "tile" | "steam" | "banner" | "background" | "logo" => dest.join(e.file_name()),
             s if s.starts_with("screenshot") => dest.join("screenshots").join(e.file_name()),
@@ -563,7 +521,6 @@ fn import_pegasus_media(dest: &Path, game: &Game, root: &Path) -> crate::Result<
     }
     Ok(copied)
 }
-
 
 #[cfg(test)]
 mod tests {

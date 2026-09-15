@@ -3,7 +3,6 @@ pub mod controller;
 pub mod game;
 pub mod gamescope;
 pub mod inputplumber;
-pub mod index;
 pub mod journal;
 pub mod launcher;
 pub mod library;
@@ -44,11 +43,6 @@ impl From<std::io::Error> for Error {
         Error::Io(e.to_string())
     }
 }
-impl From<anyhow::Error> for Error {
-    fn from(e: anyhow::Error) -> Self {
-        Error::Io(format!("{e:#}"))
-    }
-}
 impl From<toml::de::Error> for Error {
     fn from(e: toml::de::Error) -> Self {
         Error::Invalid(e.to_string())
@@ -64,7 +58,6 @@ impl From<rusqlite::Error> for Error {
         Error::Io(e.to_string())
     }
 }
-
 
 pub type Result<T> = std::result::Result<T, Error>;
 

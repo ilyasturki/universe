@@ -2,7 +2,7 @@
 
 A gamepad-first game launcher for Linux. A Rust core (a library, the `universe` CLI and a Python module for the host) owns the library, launches games through their runner — Proton via [umu-run](https://github.com/Open-Wine-Components/umu-launcher), Wine, the program itself, or an emulator — as transient systemd units, and records sessions and playtime. There is no daemon: systemd runs `universe session-end` when the game's cgroup empties, whatever happened to the process that launched it. A launcher that adopts a scope (the UI, `universe play` without `--no-wait`) binds the game to itself, so closing it takes the game down cleanly; `universe play --no-wait` and hooks leave the game to systemd. A Qt 6 / PySide6 host (`universe-ui`) renders the interface on top of the core, in-process, in one of two looks: [Reprise](https://github.com/ilyasturki/pegasus-theme-reprise), dark and cinematic, or the Switch 2 HOME menu, switched live from Settings › Themes. Everything else — GOG installs, dialog-free recording, an AI play journal — is a module.
 
-Plain files are the truth: one `game.toml`, one `sessions.jsonl` and a `journal/` per game under `$XDG_DATA_HOME/universe/games/<id>/`. SQLite is only a rebuildable index.
+Plain files are the truth: one `game.toml`, one `sessions.jsonl` and a `journal/` per game under `$XDG_DATA_HOME/universe/games/<id>/`.
 
 ## Install (Nix flake)
 
@@ -63,8 +63,8 @@ universe add "/mnt/games/gamecube/F-Zero GX.iso" --runner dolphin   # a ROM, ima
 universe runner ls             # every runner, where its program was found
 universe runner set dolphin exe=/opt/dolphin/dolphin-emu batch=false   # a runner's program, arguments and options
 universe set f-zero-gx options.batch=true platform="Nintendo Wii"      # per game
-universe gog login             # prints the URL, takes the code
-universe gog scan              # cross installed folders with the owned library
+universe login gog             # prints the URL, takes the code
+universe scan gog              # cross installed folders with the owned library
 universe install 1434554947    # GOG id
 universe update                # pending GOG updates (build id vs GOG builds endpoint)
 universe uninstall technomancer   # trashes the install folder, keeps the hours and the journal
@@ -97,7 +97,7 @@ Pads and emulators: every emulator has an `inputplumber` option, on by default, 
 
 ## Controller macros
 
-The spare buttons of a pad — the Edge's paddles and Fn buttons, the Elite's paddles, the Pro 3's back buttons — carry macros: volume, mute, a screenshot, the MangoHud toggle, stopping the game on a long hold, any key combo, any command. The Settings tab has a Controller section that lists each button with its macros, learns a button by pressing it, and draws the pad live — every press, stick and trigger pull — in its test view. Nothing is grabbed: the engine reads the pad over evdev next to the game, so the game keeps rumble, the lightbar and every button it already saw. It runs only while the launcher is open or a session is running (`universe controller watch`, one instance at a time through a lock), never on the bare desktop. Pads can come and go while it runs, several pads each fire their family's macros, and a bind made anywhere reaches the running instance within its next scan. Paddle codes are not trusted: they differ between USB and Bluetooth and between drivers, so a slot is checked against what the pad advertises on every connect, and a button the seeds got wrong is fixed by pressing it (`universe controller learn xbox-elite paddle_p1`). The DualSense Edge's paddles reach evdev from kernel 7.2. An Elite Series 2 only reports its paddles on profile slot 0 (LED off) over Bluetooth (xpadneo) and on the in-tree xpad driver over USB; xone has no such gating. Volume and mute go straight to PulseAudio (PipeWire's server included) through libpulse, by `controller.volume_step` percent per press, so no synthetic key leaks into the game, and volume and mute show GNOME's own OSD (output name and level) through the Universe shell extension; a screenshot flashes the captured area and plays the shutter, at the press; key macros and the MangoHud toggle type through uinput (the launcher toasts the MangoHud fire, since that key never reaches it): enable `hardware.uinput` and put your user in the `uinput` group (the NixOS module does the first).
+The spare buttons of a pad — the Edge's paddles and Fn buttons, the Elite's paddles, the Pro 3's back buttons — carry macros: volume, mute, a screenshot, the MangoHud toggle, stopping the game on a long hold, any key combo, any command. The Settings tab has a Controller section that lists each button with its macros, learns a button by pressing it, and draws the pad live — every press, stick and trigger pull — in its test view. Nothing is grabbed: the engine reads the pad over evdev next to the game, so the game keeps rumble, the lightbar and every button it already saw. It runs only while the launcher is open or a session is running (`universe controller watch`, one instance at a time through a lock), never on the bare desktop. Pads can come and go while it runs, several pads each fire their family's macros, and a bind made anywhere reaches the running instance within its next scan. Paddle codes are not trusted: they differ between USB and Bluetooth and between drivers, so a slot is checked against what the pad advertises on every connect, and a button the seeds got wrong is fixed by pressing it (`universe controller learn xbox-elite paddle_p1`). The DualSense Edge's paddles reach evdev from kernel 7.2. An Elite Series 2 only reports its paddles on profile slot 0 (LED off) over Bluetooth (xpadneo) and on the in-tree xpad driver over USB; xone has no such gating. Volume and mute go straight to the default sink through `wpctl`, by `controller.volume_step` percent per press, so no synthetic key leaks into the game, and volume and mute show GNOME's own OSD (output name and level) through the Universe shell extension; a screenshot flashes the captured area and plays the shutter, at the press; key macros and the MangoHud toggle type through uinput (the launcher toasts the MangoHud fire, since that key never reaches it): enable `hardware.uinput` and put your user in the `uinput` group (the NixOS module does the first).
 
 ## Modules and their prerequisites
 
@@ -105,7 +105,7 @@ The spare buttons of a pad — the Edge's paddles and Fn buttons, the Elite's pa
 
 | Module | Kind | Needs | Notes |
 |---|---|---|---|
-| `gog` | source | `gogdl` | login via `universe gog login`; a dedicated `GOGDL_CONFIG_PATH` under the module's data dir |
+| `gog` | source | `gogdl` | login via `universe login gog`; a dedicated `GOGDL_CONFIG_PATH` under the module's data dir |
 | `capture` | hooks | `gpu-screen-recorder` + its setcap `gsr-kms-server`; the `universe@ilyasturki.github.io` shell extension for the window source (GNOME) | `source = "screen"` (default) records the session's output through KMS. `source = "window"` (per game) records just the game's window through GNOME's screencast portal: the first launch shows GNOME's picker once the game's window is up — pick it — and the pick is remembered per game, so later launches record it without a dialog and follow it across workspaces. Off GNOME, extension not loaded, or no window in 60 s: the screen, said on the shell's OSD. `cursor` per game; `fps = "auto"` follows the output's refresh rate (read from Mutter, 60 elsewhere) |
 | `journal` | hooks | `ffmpeg`, `codex` (or `provider = "claude"` / `"stub"`) | one Markdown entry per session from frames and screenshots |
 | metadata | core | SteamGridDB and RAWG keys in `[keys]` | artwork slots `box_front`, `square`, `banner`, `background`, `logo`, screenshots |
@@ -125,7 +125,7 @@ A `justfile` wraps everything in `nix develop` and points the core at an isolate
 
 ```sh
 just setup                 # build, create .dev/config/config.toml, run doctor
-just cli migrate --apply   # any CLI command against .dev/ (gog login, gog scan, media <id> refresh, launch <id>…)
+just cli migrate --apply   # any CLI command against .dev/ (login gog, scan gog, media <id> refresh, launch <id>…)
 just cli play <game>       # a game is a transient systemd unit; `just logs` follows them
 just ui                    # PySide6 host on the in-process core (add --windowed)
 just ui-fake               # host on a fixture library, no core

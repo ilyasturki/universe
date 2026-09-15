@@ -87,7 +87,7 @@ Pegasus's default bindings; the gamepad posts the same keys.
 *UNIVERSE_MODULES_PATH*
 	Extra module roots, colon-separated.
 
-*UNIVERSE_CONFIG_HOME*, *UNIVERSE_DATA_HOME*, *UNIVERSE_STATE_HOME*, *UNIVERSE_CACHE_HOME*
+*UNIVERSE_CONFIG_HOME*, *UNIVERSE_DATA_HOME*, *UNIVERSE_STATE_HOME*
 	Replace the XDG directories, as for *universe*(1).
 
 # SEE ALSO

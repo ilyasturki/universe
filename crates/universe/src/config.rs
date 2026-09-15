@@ -284,7 +284,6 @@ impl Config {
         v
     }
 
-    /// Dotted-key write into config.toml, preserving the rest of the file.
     pub fn set_key(path: &Path, key: &str, value: &str) -> crate::Result<()> {
         let text = std::fs::read_to_string(path).unwrap_or_default();
         let mut doc: toml_edit::DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| crate::Error::Invalid(e.to_string()))?;

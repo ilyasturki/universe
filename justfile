@@ -7,7 +7,6 @@ dev := justfile_directory() / env("UNIVERSE_DEV", ".dev")
 export UNIVERSE_DATA_HOME := dev / "data"
 export UNIVERSE_CONFIG_HOME := dev / "config"
 export UNIVERSE_STATE_HOME := dev / "state"
-export UNIVERSE_CACHE_HOME := dev / "cache"
 export UNIVERSE_MODULES_PATH := justfile_directory() / "modules"
 export UNIVERSE_BIN := justfile_directory() / "target/debug/universe"
 export RUST_LOG := env("RUST_LOG", "info")
@@ -37,7 +36,7 @@ develop:
     env -u RUST_LOG maturin develop --quiet -m crates/universe-py/Cargo.toml
     "$VIRTUAL_ENV/bin/pip" install --quiet --no-index --no-build-isolation --no-deps -e ui
 
-# The CLI against .dev/: just cli migrate --apply, just cli gog scan, just cli play <game>…
+# The CLI against .dev/: just cli migrate --apply, just cli scan gog, just cli play <game>…
 cli *args: build env
     @{{ nix }} target/debug/universe {{ args }}
 

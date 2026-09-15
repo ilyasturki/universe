@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
 use crate::game::Game;
-use crate::library::{is_image, media_dirs, scan_media_dir, stems_of, MEDIA_SLOTS};
+use crate::library::{is_image, media_dirs, scan_media_dir, stems_of, IMAGE_EXTS, MEDIA_SLOTS};
 
 const SGDB: &str = "https://www.steamgriddb.com/api/v2";
 const RAWG: &str = "https://api.rawg.io/api";
@@ -18,7 +18,6 @@ const SGDB_PLAN: [(&str, &str, Option<&str>); 5] = [
     ("background", "heroes", None),
     ("logo", "logos", None),
 ];
-const IMAGE_EXTS: [&str; 4] = ["png", "jpg", "jpeg", "webp"];
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Candidate {
@@ -30,8 +29,7 @@ pub struct Candidate {
     pub slot: String,
 }
 
-/// One page of a slot's candidates; `more` says whether the provider has another page,
-/// `entry` which of the provider's games they belong to.
+/// `more`: the provider has another page; `entry`: the provider's game the items belong to.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct CandidatePage {
     pub items: Vec<Candidate>,
@@ -40,7 +38,6 @@ pub struct CandidatePage {
     pub entry: Option<Hit>,
 }
 
-/// A provider's game, from a search by name: what a pin points at.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct Hit {
     pub provider: String,
@@ -51,7 +48,7 @@ pub struct Hit {
     pub current: bool,
 }
 
-/// Where a slot stands: the file the UI shows, the fetched default under it, the override over it.
+/// The file the UI shows, the fetched default under it, the override over it.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SlotStatus {
     pub slot: String,
@@ -67,7 +64,6 @@ pub struct SlotStatus {
     pub kind: String,
 }
 
-/// A game's art and the SteamGridDB entry it is read from (`sgdb_name` empty until known).
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct MediaStatus {
     pub id: String,
@@ -93,21 +89,17 @@ struct SyncCache {
     sources: BTreeMap<String, String>,
 }
 
-fn client() -> reqwest::blocking::Client {
-    reqwest::blocking::Client::builder().timeout(Duration::from_secs(20)).user_agent("universe/0.1").build().expect("client")
+fn client() -> &'static reqwest::blocking::Client {
+    static CLIENT: std::sync::OnceLock<reqwest::blocking::Client> = std::sync::OnceLock::new();
+    CLIENT.get_or_init(|| reqwest::blocking::Client::builder().timeout(Duration::from_secs(20)).user_agent("universe/0.1").build().expect("client"))
 }
 
 fn get_json(url: &str, bearer: Option<&str>) -> crate::Result<serde_json::Value> {
-    let c = client();
-    let mut req = c.get(url);
+    let mut req = client().get(url);
     if let Some(b) = bearer {
         req = req.bearer_auth(b);
     }
-    let resp = req.send().map_err(|e| crate::Error::Io(format!("{url}: {e}")))?;
-    let status = resp.status();
-    if !status.is_success() {
-        return Err(crate::Error::Io(format!("{url}: HTTP {status}")));
-    }
+    let resp = req.send().and_then(|r| r.error_for_status()).map_err(|e| crate::Error::Io(format!("{url}: {e}")))?;
     resp.json().map_err(|e| crate::Error::Io(format!("{url}: {e}")))
 }
 
@@ -124,8 +116,7 @@ fn download(url: &str, dest: &Path) -> crate::Result<()> {
 }
 
 fn name_key(name: &str) -> String {
-    let s: String = crate::slug::slug(name).replace('-', " ");
-    s
+    crate::slug::slug(name).replace('-', " ")
 }
 
 fn released_year(date: &str) -> Option<u32> {
@@ -136,30 +127,16 @@ fn epoch_year(epoch: i64) -> u32 {
     chrono::DateTime::from_timestamp(epoch, 0).map(|d| d.format("%Y").to_string()).and_then(|y| y.parse::<u32>().ok()).unwrap_or(0)
 }
 
-/// SteamGridDB's autocomplete for a title: the hits as they come, with their release year.
-pub fn sgdb_hits(key: &str, title: &str) -> crate::Result<Vec<Hit>> {
-    let url = format!("{SGDB}/search/autocomplete/{}", urlencoding::encode(title));
-    let v = get_json(&url, Some(key))?;
-    Ok(v["data"]
-        .as_array()
-        .cloned()
-        .unwrap_or_default()
-        .iter()
-        .filter_map(|r| {
-            Some(Hit {
-                provider: "sgdb".into(),
-                id: r["id"].as_u64()?,
-                name: r["name"].as_str().unwrap_or("").to_string(),
-                year: r["release_date"].as_i64().map(epoch_year).unwrap_or(0),
-                verified: r["verified"].as_bool().unwrap_or(false),
-                current: false,
-            })
-        })
-        .collect())
+fn hit(r: &serde_json::Value, current: bool) -> Option<Hit> {
+    Some(Hit { provider: "sgdb".into(), id: r["id"].as_u64()?, name: r["name"].as_str().unwrap_or("").to_string(), year: r["release_date"].as_i64().map(epoch_year).unwrap_or(0), verified: r["verified"].as_bool().unwrap_or(false), current })
 }
 
-/// SteamGridDB search: the hit named like the title wins over autocomplete's first ("Donkey Kong
-/// Country Returns HD" over "…Returns"); exact-name twins are told apart by release year.
+pub fn sgdb_hits(key: &str, title: &str) -> crate::Result<Vec<Hit>> {
+    let url = format!("{SGDB}/search/autocomplete/{}", urlencoding::encode(title));
+    Ok(get_json(&url, Some(key))?["data"].as_array().into_iter().flatten().filter_map(|r| hit(r, false)).collect())
+}
+
+/// The hit named like the title wins over autocomplete's first; exact-name twins are told apart by year.
 pub fn sgdb_match(key: &str, title: &str, year: u32) -> crate::Result<Option<Hit>> {
     let hits = sgdb_hits(key, title)?;
     let want = name_key(title);
@@ -176,22 +153,8 @@ pub fn sgdb_match(key: &str, title: &str, year: u32) -> crate::Result<Option<Hit
     Ok(Some((*head).clone()))
 }
 
-pub fn sgdb_search(key: &str, title: &str, year: u32) -> crate::Result<Option<u64>> {
-    Ok(sgdb_match(key, title, year)?.map(|h| h.id))
-}
-
-/// One SteamGridDB game by id, for the name of a pinned entry.
 fn sgdb_game(key: &str, id: u64) -> Option<Hit> {
-    let v = get_json(&format!("{SGDB}/games/id/{id}"), Some(key)).ok()?;
-    let d = &v["data"];
-    Some(Hit {
-        provider: "sgdb".into(),
-        id: d["id"].as_u64()?,
-        name: d["name"].as_str().unwrap_or("").to_string(),
-        year: d["release_date"].as_i64().map(epoch_year).unwrap_or(0),
-        verified: d["verified"].as_bool().unwrap_or(false),
-        current: true,
-    })
+    get_json(&format!("{SGDB}/games/id/{id}"), Some(key)).ok().and_then(|v| hit(&v["data"], true))
 }
 
 fn sgdb_assets(key: &str, endpoint: &str, game_id: u64, dims: Option<&str>, page: u32) -> crate::Result<(Vec<Candidate>, bool)> {
@@ -201,14 +164,13 @@ fn sgdb_assets(key: &str, endpoint: &str, game_id: u64, dims: Option<&str>, page
     }
     let v = match get_json(&url, Some(key)) {
         Ok(v) => v,
-        Err(e) if e.to_string().contains("HTTP 404") => return Ok((vec![], false)),
+        Err(e) if e.to_string().contains("404 Not Found") => return Ok((vec![], false)),
         Err(e) => return Err(e),
     };
     let mut rows: Vec<Candidate> = v["data"]
         .as_array()
-        .cloned()
-        .unwrap_or_default()
-        .iter()
+        .into_iter()
+        .flatten()
         .filter(|r| r["language"].as_str().unwrap_or("en") == "en" && !r["nsfw"].as_bool().unwrap_or(false))
         .map(|r| Candidate {
             provider: "sgdb".into(),
@@ -237,7 +199,7 @@ pub fn rawg_search(key: &str, title: &str, year: u32) -> crate::Result<Option<u6
     let v = get_json(&url, None)?;
     let want = name_key(title);
     let mut loose = None;
-    for hit in v["results"].as_array().cloned().unwrap_or_default() {
+    for hit in v["results"].as_array().into_iter().flatten() {
         let got = name_key(hit["name"].as_str().unwrap_or(""));
         let hy = hit["released"].as_str().and_then(released_year);
         let same_year = year == 0 || hy.map(|y| (y as i64 - year as i64).abs() <= 1).unwrap_or(true);
@@ -251,14 +213,6 @@ pub fn rawg_search(key: &str, title: &str, year: u32) -> crate::Result<Option<u6
     Ok(loose)
 }
 
-fn strip_html(s: &str) -> String {
-    let re = regex::Regex::new(r"(?i)</p>|<br\s*/?>").unwrap();
-    let t = re.replace_all(s, "\n");
-    let re2 = regex::Regex::new(r"<[^>]+>").unwrap();
-    let t = re2.replace_all(&t, "");
-    t.replace("&amp;", "&").replace("&quot;", "\"").replace("&#39;", "'").replace("&lt;", "<").replace("&gt;", ">").trim().to_string()
-}
-
 pub fn rawg_details(key: &str, id: u64) -> crate::Result<serde_json::Value> {
     get_json(&format!("{RAWG}/games/{id}?key={key}"), None)
 }
@@ -266,7 +220,7 @@ pub fn rawg_details(key: &str, id: u64) -> crate::Result<serde_json::Value> {
 pub fn steam_screenshots(appid: u64) -> crate::Result<Vec<String>> {
     let v = get_json(&format!("{STEAM_APPDETAILS}?appids={appid}&l=english"), None)?;
     let data = &v[appid.to_string()]["data"];
-    Ok(data["screenshots"].as_array().cloned().unwrap_or_default().iter().filter_map(|s| s["path_full"].as_str().map(|s| s.to_string())).collect())
+    Ok(data["screenshots"].as_array().into_iter().flatten().filter_map(|s| s["path_full"].as_str().map(|s| s.to_string())).collect())
 }
 
 fn read_cache_in(media_dir: &Path) -> SyncCache {
@@ -279,15 +233,6 @@ fn write_cache_in(media_dir: &Path, c: &SyncCache) -> crate::Result<()> {
     Ok(())
 }
 
-fn read_cache(game: &Game) -> SyncCache {
-    read_cache_in(&game.media_dir())
-}
-
-fn write_cache(game: &Game, c: &SyncCache) -> crate::Result<()> {
-    write_cache_in(&game.media_dir(), c)
-}
-
-/// Records who wrote `<media_dir>/<slot>` (the migration's Pegasus import).
 pub fn note_source(media_dir: &Path, slot: &str, provider: &str) -> crate::Result<()> {
     let mut cache = read_cache_in(media_dir);
     cache.sources.insert(slot.into(), provider.into());
@@ -305,7 +250,6 @@ fn ext_of(url: &str) -> &'static str {
     }
 }
 
-/// Removes every file a slot could be read from in `dir`, under any of its stems and extensions.
 fn clear_slot(dir: &Path, slot: &str) -> bool {
     let mut gone = false;
     for stem in stems_of(slot) {
@@ -318,19 +262,13 @@ fn clear_slot(dir: &Path, slot: &str) -> bool {
     gone
 }
 
-fn override_dir(config: &Config, game: &Game) -> PathBuf {
-    config.overrides_dir().join(&game.id)
-}
-
-/// The override directories a game reads: its own and, for a migrated game, its Lutris slug's.
 fn override_dirs(config: &Config, game: &Game) -> Vec<PathBuf> {
     let mut dirs = media_dirs(game, &config.overrides_dir());
     dirs.pop();
     dirs
 }
 
-/// The SteamGridDB entry a game is pinned to: `metadata.sgdb_id`, else pegasus-sync's
-/// `<overrides>/<id>/sgdb_id` file. Zero when unpinned.
+/// `metadata.sgdb_id`, else pegasus-sync's `<overrides>/<id>/sgdb_id` file; zero when unpinned.
 fn pinned_sgdb_id(config: &Config, game: &Game) -> u64 {
     if game.metadata.sgdb_id > 0 {
         return game.metadata.sgdb_id;
@@ -338,8 +276,7 @@ fn pinned_sgdb_id(config: &Config, game: &Game) -> u64 {
     override_dirs(config, game).iter().find_map(|d| std::fs::read_to_string(d.join("sgdb_id")).ok()?.trim().parse().ok()).unwrap_or(0)
 }
 
-/// The entry candidates come from: the pin, else the cached or searched match; remembers the
-/// match and its name. Zero when SteamGridDB has nothing under the title.
+/// The pin, else the cached or searched match; zero when SteamGridDB has nothing under the title.
 fn resolve_sgdb(config: &Config, game: &Game, cache: &mut SyncCache, key: &str) -> crate::Result<u64> {
     let pinned = pinned_sgdb_id(config, game);
     let mut found = None;
@@ -350,17 +287,9 @@ fn resolve_sgdb(config: &Config, game: &Game, cache: &mut SyncCache, key: &str) 
     } else if cache.sgdb_miss {
         0
     } else {
-        match sgdb_match(key, &game.title, game.release_year)? {
-            Some(h) => {
-                let id = h.id;
-                found = Some(h);
-                id
-            }
-            None => {
-                cache.sgdb_miss = true;
-                0
-            }
-        }
+        found = sgdb_match(key, &game.title, game.release_year)?;
+        cache.sgdb_miss = found.is_none();
+        found.as_ref().map_or(0, |h| h.id)
     };
     if id == 0 {
         return Ok(0);
@@ -378,17 +307,13 @@ fn resolve_sgdb(config: &Config, game: &Game, cache: &mut SyncCache, key: &str) 
     Ok(id)
 }
 
-/// Fills missing slots and metadata from SteamGridDB, RAWG and Steam into media/; an override
-/// over a slot does not stop its default from being fetched. Pins in game.toml win. Returns true
-/// if anything changed.
+/// An override over a slot does not stop its default from being fetched; pins in game.toml win.
 pub fn refresh(config: &Config, game: &Game, force: bool) -> crate::Result<bool> {
     let mut changed = false;
-    let mut cache = read_cache(game);
+    let mut cache = read_cache_in(&game.media_dir());
     let mut g = Game::load(&game.toml_path())?;
-    let sgdb_key = config.api_key("sgdb");
-    let rawg_key = config.api_key("rawg");
 
-    if let Some(key) = &sgdb_key {
+    if let Some(key) = &config.api_key("sgdb") {
         let sgdb_id = resolve_sgdb(config, &g, &mut cache, key)?;
         if sgdb_id > 0 {
             let (have, _) = scan_media_dir(&g.media_dir());
@@ -411,7 +336,7 @@ pub fn refresh(config: &Config, game: &Game, force: bool) -> crate::Result<bool>
         }
     }
 
-    if let Some(key) = &rawg_key {
+    if let Some(key) = &config.api_key("rawg") {
         let mut rawg_id = g.metadata.rawg_id;
         if rawg_id == 0 && !cache.rawg_miss {
             rawg_id = if cache.rawg_id > 0 { cache.rawg_id } else { rawg_search(key, &g.title, g.release_year)?.unwrap_or(0) };
@@ -422,9 +347,9 @@ pub fn refresh(config: &Config, game: &Game, force: bool) -> crate::Result<bool>
         if rawg_id > 0 && (force || g.metadata.description.is_empty() || g.metadata.genres.is_empty()) {
             cache.rawg_id = rawg_id;
             let d = rawg_details(key, rawg_id)?;
-            let desc = d["description_raw"].as_str().map(|s| s.to_string()).filter(|s| !s.is_empty()).unwrap_or_else(|| strip_html(d["description"].as_str().unwrap_or("")));
-            let names = |k: &str| -> Vec<String> { d[k].as_array().cloned().unwrap_or_default().iter().filter_map(|x| x["name"].as_str().map(|s| s.to_string())).collect() };
-            g.metadata.description = desc.clone();
+            let desc = d["description_raw"].as_str().unwrap_or("");
+            let names = |k: &str| -> Vec<String> { d[k].as_array().into_iter().flatten().filter_map(|x| x["name"].as_str().map(|s| s.to_string())).collect() };
+            g.metadata.description = desc.into();
             if g.metadata.summary.is_empty() {
                 g.metadata.summary = desc.split("\n\n").next().unwrap_or("").chars().take(400).collect();
             }
@@ -456,7 +381,7 @@ pub fn refresh(config: &Config, game: &Game, force: bool) -> crate::Result<bool>
     }
 
     cache.fetched_at = chrono::Local::now().to_rfc3339();
-    write_cache(&g, &cache)?;
+    write_cache_in(&g.media_dir(), &cache)?;
     if changed {
         g.save()?;
     }
@@ -467,17 +392,16 @@ fn sgdb_key(config: &Config) -> crate::Result<String> {
     config.api_key("sgdb").ok_or_else(|| crate::Error::Unavailable("no SteamGridDB key".into()))
 }
 
-/// One page of SteamGridDB's art for a slot, best first, with the entry it belongs to.
 pub fn candidates(config: &Config, game: &Game, slot: &str, page: u32) -> crate::Result<CandidatePage> {
     let key = sgdb_key(config)?;
     let Some(&(_, endpoint, dims)) = SGDB_PLAN.iter().find(|(s, _, _)| *s == slot) else {
         return Err(crate::Error::Invalid(format!("unknown slot {slot}")));
     };
-    let mut cache = read_cache(game);
+    let mut cache = read_cache_in(&game.media_dir());
     let before = (cache.sgdb_id, cache.sgdb_name.clone(), cache.sgdb_miss);
     let id = resolve_sgdb(config, game, &mut cache, &key)?;
     if before != (cache.sgdb_id, cache.sgdb_name.clone(), cache.sgdb_miss) {
-        let _ = write_cache(game, &cache);
+        let _ = write_cache_in(&game.media_dir(), &cache);
     }
     if id == 0 {
         return Ok(CandidatePage { items: vec![], page, more: false, entry: None });
@@ -490,12 +414,11 @@ pub fn candidates(config: &Config, game: &Game, slot: &str, page: u32) -> crate:
     Ok(CandidatePage { items, page, more, entry })
 }
 
-/// SteamGridDB's games for a query (the title when empty), the pinned or resolved one marked.
 pub fn search(config: &Config, game: &Game, query: &str) -> crate::Result<Vec<Hit>> {
     let key = sgdb_key(config)?;
     let query = if query.trim().is_empty() { game.title.as_str() } else { query.trim() };
     let pinned = pinned_sgdb_id(config, game);
-    let current = if pinned > 0 { pinned } else { read_cache(game).sgdb_id };
+    let current = if pinned > 0 { pinned } else { read_cache_in(&game.media_dir()).sgdb_id };
     let mut hits = sgdb_hits(&key, query)?;
     for h in hits.iter_mut() {
         h.current = h.id == current;
@@ -510,10 +433,9 @@ fn check_slot(slot: &str) -> crate::Result<()> {
     Ok(())
 }
 
-/// Places `src` (a file the caller owns) as the override of a slot: `<overrides>/<id>/<slot>.<ext>`,
-/// any other file of the slot there gone; a screenshot joins `<overrides>/<id>/screenshots/`.
+/// `<overrides>/<id>/<slot>.<ext>`, any other file of the slot there gone; a screenshot joins `screenshots/`.
 fn place_override(config: &Config, game: &Game, slot: &str, src: &Path, name: &str) -> crate::Result<PathBuf> {
-    let dir = override_dir(config, game);
+    let dir = config.overrides_dir().join(&game.id);
     if slot == "screenshot" {
         let dir = dir.join("screenshots");
         std::fs::create_dir_all(&dir)?;
@@ -532,7 +454,6 @@ fn place_override(config: &Config, game: &Game, slot: &str, src: &Path, name: &s
     Ok(dest)
 }
 
-/// Copies a local image over a slot, as its override. Returns where it landed.
 pub fn set_slot(config: &Config, game: &Game, slot: &str, src: &Path) -> crate::Result<PathBuf> {
     check_slot(slot)?;
     if !src.is_file() || !is_image(src) {
@@ -542,7 +463,6 @@ pub fn set_slot(config: &Config, game: &Game, slot: &str, src: &Path) -> crate::
     place_override(config, game, slot, src, &name)
 }
 
-/// Downloads an image (a candidate's URL) over a slot, as its override. Returns where it landed.
 pub fn set_slot_url(config: &Config, game: &Game, slot: &str, url: &str) -> crate::Result<PathBuf> {
     check_slot(slot)?;
     if !url.starts_with("http://") && !url.starts_with("https://") {
@@ -557,7 +477,6 @@ pub fn set_slot_url(config: &Config, game: &Game, slot: &str, url: &str) -> crat
     placed
 }
 
-/// Removes a slot's override, so the slot shows its fetched default again. Returns whether one was there.
 pub fn unset(config: &Config, game: &Game, slot: &str) -> crate::Result<bool> {
     check_slot(slot)?;
     let mut gone = false;
@@ -575,10 +494,8 @@ pub fn unset(config: &Config, game: &Game, slot: &str) -> crate::Result<bool> {
     Ok(gone)
 }
 
-/// Every slot of a game: what shows, what was fetched, what was picked, and where each came from.
-/// Offline: the entry's name is what a refresh or the candidates cached.
 pub fn status(config: &Config, game: &Game) -> MediaStatus {
-    let cache = read_cache(game);
+    let cache = read_cache_in(&game.media_dir());
     let (default, _) = scan_media_dir(&game.media_dir());
     let mut picked: Vec<(String, String)> = Vec::new();
     for dir in override_dirs(config, game) {
@@ -621,17 +538,15 @@ pub fn status(config: &Config, game: &Game) -> MediaStatus {
 mod tests {
     use super::*;
 
-    fn game_in(dir: &Path, id: &str) -> Game {
-        std::env::set_var("UNIVERSE_DATA_HOME", dir.join("data"));
+    fn setup(id: &str) -> (std::sync::MutexGuard<'static, ()>, tempfile::TempDir, Config, Game) {
+        let env = crate::paths::ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("UNIVERSE_DATA_HOME", dir.path().join("data"));
+        let mut c = Config::default();
+        c.paths.overrides = dir.path().join("overrides").to_string_lossy().into();
         let mut g = Game::new(id);
         g.source.lutris_slug = format!("{id}-lutris");
-        g
-    }
-
-    fn config_in(dir: &Path) -> Config {
-        let mut c = Config::default();
-        c.paths.overrides = dir.join("overrides").to_string_lossy().into();
-        c
+        (env, dir, c, g)
     }
 
     fn touch(p: &Path) {
@@ -642,17 +557,13 @@ mod tests {
     #[test]
     fn helpers() {
         assert_eq!(name_key("Assassin's Creed: Odyssey"), "assassins creed odyssey");
-        assert_eq!(strip_html("<p>Hello &amp; <b>bye</b></p>"), "Hello & bye");
         assert_eq!(ext_of("https://x/y.webp?z"), "webp");
         assert_eq!(released_year("2016-06-28"), Some(2016));
     }
 
     #[test]
     fn overrides_sit_over_defaults_and_come_off() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
-        let dir = tempfile::tempdir().unwrap();
-        let config = config_in(dir.path());
-        let game = game_in(dir.path(), "g");
+        let (_env, dir, config, game) = setup("g");
         touch(&game.media_dir().join("boxFront.png"));
         note_source(&game.media_dir(), "box_front", "pegasus").unwrap();
         touch(&game.media_dir().join("logo.png"));
@@ -675,7 +586,6 @@ mod tests {
         assert_eq!(bf.path, placed.to_string_lossy());
         assert!(bf.default.ends_with("boxFront.png"));
 
-        // A second pick replaces the first whatever its extension; the old Lutris-slug dir is cleared too.
         touch(&dir.path().join("overrides/g-lutris/cover.png"));
         let src2 = dir.path().join("pick2.png");
         touch(&src2);
@@ -693,13 +603,9 @@ mod tests {
         assert!(game.media_dir().join("boxFront.png").exists());
     }
 
-    // Pegasus's square is `tile`, its 920×430 banner `steam`; a pin file names the SteamGridDB entry.
     #[test]
     fn pegasus_stems_and_pin_file_are_read() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
-        let dir = tempfile::tempdir().unwrap();
-        let config = config_in(dir.path());
-        let game = game_in(dir.path(), "p");
+        let (_env, dir, config, game) = setup("p");
         touch(&game.media_dir().join("tile.jpg"));
         touch(&dir.path().join("overrides/p-lutris/steam.png"));
         touch(&dir.path().join("overrides/p-lutris/tile.png"));
@@ -714,7 +620,6 @@ mod tests {
         assert_eq!(st.sgdb_id, 5332120);
         assert_eq!(st.sgdb_name, "");
 
-        // A new pick under the core's stem replaces the Pegasus one; own stems win over aliases.
         let src = dir.path().join("wide.png");
         touch(&src);
         set_slot(&config, &game, "banner", &src).unwrap();
@@ -728,10 +633,7 @@ mod tests {
 
     #[test]
     fn screenshots_join_the_override_dir() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
-        let dir = tempfile::tempdir().unwrap();
-        let config = config_in(dir.path());
-        let game = game_in(dir.path(), "s");
+        let (_env, dir, config, game) = setup("s");
         let src = dir.path().join("mine.png");
         touch(&src);
         set_slot(&config, &game, "screenshot", &src).unwrap();

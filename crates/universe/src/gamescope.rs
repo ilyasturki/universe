@@ -1,6 +1,4 @@
-//! gamescope's flags from the launch settings. Left alone, gamescope's nested screen is 1280×720
-//! whatever the window covers, so the screen's mode is passed explicitly: the output (`-W -H`) is
-//! always the screen, the game's resolution (`-w -h`) and refresh (`-r`) follow it unless set.
+//! Left alone, gamescope's nested screen is 1280×720 whatever the window covers, so the screen's mode is passed explicitly.
 
 use serde::{Deserialize, Serialize};
 
@@ -18,8 +16,7 @@ pub struct Mode {
     pub refresh: u32,
 }
 
-/// The resolved gamescope fields of a game, every level folded in; serialized under the
-/// `launch` key names so a frontend reads them as it reads the other effective switches.
+/// Serialized under the `launch` key names so a frontend reads them as it reads the other effective switches.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Fields {
     /// `auto` or `WxH`.
@@ -38,7 +35,6 @@ pub struct Fields {
     pub adaptive_sync: bool,
 }
 
-/// `WxH` as a pair; `auto` and empty as None.
 pub fn parse_resolution(s: &str) -> crate::Result<Option<(u32, u32)>> {
     let s = s.trim();
     if s.is_empty() || s == "auto" {
@@ -52,7 +48,6 @@ pub fn parse_resolution(s: &str) -> crate::Result<Option<(u32, u32)>> {
     }
 }
 
-/// `auto` and empty as None, else Hz.
 pub fn parse_refresh(s: &str) -> crate::Result<Option<u32>> {
     let s = s.trim();
     if s.is_empty() || s == "auto" {
@@ -84,8 +79,7 @@ pub fn validate(key: &str, value: &str) -> crate::Result<()> {
     }
 }
 
-/// The flags the fields stand for, the screen's mode filling `auto`; nothing for the size when no
-/// screen is known, so gamescope keeps its own default rather than a wrong one.
+/// No screen known: no size flags, so gamescope keeps its own default rather than a wrong one.
 pub fn args(f: &Fields, screen: Option<Mode>) -> Vec<String> {
     let mut out: Vec<String> = Vec::new();
     if let Some(s) = screen.filter(|s| s.width > 0 && s.height > 0) {

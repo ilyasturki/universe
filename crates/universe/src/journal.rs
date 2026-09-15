@@ -58,8 +58,7 @@ fn field(v: &serde_json::Value, key: &str) -> String {
     v[key].as_str().unwrap_or("").to_string()
 }
 
-/// `<sid>.pending.json` (`{session, game, started_at, provider}`) while a module writes the entry; one older than
-/// `PENDING_TIMEOUT` (by mtime) is listed as failed.
+/// A pending file older than `PENDING_TIMEOUT` (by mtime) is listed as failed.
 fn pending_entry(p: &Path, sid: &str) -> crate::Result<Entry> {
     let v = read_json(p)?;
     let age = std::fs::metadata(p).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).unwrap_or_default();
@@ -82,8 +81,7 @@ fn failed_entry(p: &Path, sid: &str) -> crate::Result<Entry> {
     Ok(Entry { session: sid.into(), game: field(&v, "game"), written_at: field(&v, "written_at"), paragraphs: if reason.is_empty() { vec![] } else { vec![reason] }, state: "failed".into(), ..Entry::default() })
 }
 
-/// Every entry of the directory, the state files included, last session first; a session with a written
-/// entry hides its failed one, a failed one its pending one.
+/// A session with a written entry hides its failed one, a failed one its pending one.
 pub fn read_all(journal_dir: &Path) -> crate::Result<Vec<Entry>> {
     let (mut written, mut failed, mut pending) = (Vec::new(), Vec::new(), Vec::new());
     let rd = match std::fs::read_dir(journal_dir) {
@@ -124,7 +122,26 @@ pub fn read_all(journal_dir: &Path) -> crate::Result<Vec<Entry>> {
     Ok(out)
 }
 
-/// Entries written before the core stamped them get their span from the session they belong to.
+/// The pending entries alone, under `read_all`'s hiding rule, without parsing the written ones.
+pub fn pending(journal_dir: &Path) -> Vec<Entry> {
+    let Ok(rd) = std::fs::read_dir(journal_dir) else { return vec![] };
+    rd.flatten()
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().to_string();
+            let sid = name.strip_suffix(".pending.json").filter(|s| !s.starts_with('.'))?.to_string();
+            if journal_dir.join(format!("{sid}.json")).exists() || journal_dir.join(format!("{sid}.failed.json")).exists() {
+                return None;
+            }
+            pending_entry(&e.path(), &sid).ok().filter(|en| en.state == "pending")
+        })
+        .collect()
+}
+
+pub fn count_written(journal_dir: &Path) -> usize {
+    let Ok(rd) = std::fs::read_dir(journal_dir) else { return 0 };
+    rd.flatten().filter(|e| matches!(e.file_name().to_str(), Some(n) if !n.starts_with('.') && n.ends_with(".json") && !n.ends_with(".pending.json") && !n.ends_with(".failed.json"))).count()
+}
+
 pub fn fill_timing(entries: &mut [Entry], sessions: &HashMap<String, Session>) {
     for en in entries {
         let Some(s) = sessions.get(&en.session) else { continue };
@@ -140,7 +157,6 @@ pub fn fill_timing(entries: &mut [Entry], sessions: &HashMap<String, Session>) {
     }
 }
 
-/// `read_all` with the timing filled from `sessions` and the migration sidecar: the shape every listing serves.
 pub fn load(journal_dir: &Path, sessions: &[Session]) -> Vec<Entry> {
     let mut entries = read_all(journal_dir).unwrap_or_default();
     fill_timing(&mut entries, &sessions_for_note(sessions, journal_dir));
@@ -155,10 +171,9 @@ pub fn write(journal_dir: &Path, entry: &Entry) -> crate::Result<std::path::Path
     Ok(p)
 }
 
-// Sessions the journal module imported from legacy notes before the core had them.
+/// The core's sessions win; the module's migration sidecar (legacy notes) fills the spans it lacks.
 const MIGRATED_SESSIONS: &str = ".migrated-sessions.jsonl";
 
-/// The core's sessions win; the module's migration sidecar fills the spans it lacks.
 pub fn sessions_for_note(sessions: &[Session], journal_dir: &Path) -> HashMap<String, Session> {
     let mut map: HashMap<String, Session> = sessions.iter().map(|s| (s.session.clone(), s.clone())).collect();
     if let Ok(text) = std::fs::read_to_string(journal_dir.join(MIGRATED_SESSIONS)) {
@@ -172,8 +187,6 @@ pub fn sessions_for_note(sessions: &[Session], journal_dir: &Path) -> HashMap<St
     }
     map
 }
-
-// ----- the note: same output as modules/journal/bin/note.py -----
 
 struct Labels {
     journal: &'static str,
@@ -199,7 +212,6 @@ fn labels(lang: &str) -> &'static Labels {
     LABELS.iter().find(|(c, _)| *c == code).or_else(|| LABELS.iter().find(|(c, _)| *c == "en")).map(|(_, l)| l).unwrap()
 }
 
-/// LC_TIME for the meta line: the environment's, or POSIX so tests do not depend on the shell.
 pub struct Locale(libc::locale_t);
 
 impl Locale {
@@ -212,7 +224,6 @@ impl Locale {
     }
 
     fn new(name: &std::ffi::CStr) -> Self {
-        // A locale the system lacks makes newlocale fail; POSIX is then the honest fallback.
         let loc = unsafe { libc::newlocale(libc::LC_TIME_MASK, name.as_ptr(), std::ptr::null_mut()) };
         let loc = if loc.is_null() { unsafe { libc::newlocale(libc::LC_TIME_MASK, c"C".as_ptr(), std::ptr::null_mut()) } } else { loc };
         Locale(loc)
@@ -223,7 +234,6 @@ impl Locale {
         self.fmt(c"%x", "%Y-%m-%d", t)
     }
 
-    /// `%c` of the locale: date and time.
     pub fn datetime(&self, t: &DateTime<Local>) -> String {
         self.fmt(c"%c", "%Y-%m-%d %H:%M:%S", t)
     }
@@ -410,8 +420,7 @@ fn frontmatter(title: &str, body: &str) -> String {
     format!("---\n{}\n---\n\n", lines.join("\n"))
 }
 
-/// The Obsidian note, newest session first; byte for byte what the journal module renders. Pending and failed
-/// entries stay out of it.
+/// Byte for byte what the journal module renders; pending and failed entries stay out of it.
 pub fn render_note(title: &str, entries: &[Entry], sessions: &HashMap<String, Session>, loc: &Locale) -> String {
     let mut entries: Vec<Entry> = entries.iter().filter(|e| e.state == "written").cloned().collect();
     entries.sort_by(|a, b| b.session.cmp(&a.session));
@@ -478,7 +487,6 @@ fn mirror_images(entries: &[Entry], journal_dir: &Path, note_dir: &Path) -> crat
     Ok(())
 }
 
-/// Renders the note into `note_dir` and returns its path; an unchanged note is not rewritten.
 pub fn write_note(title: &str, entries: &[Entry], sessions: &HashMap<String, Session>, journal_dir: &Path, note_dir: &Path, loc: &Locale) -> crate::Result<PathBuf> {
     std::fs::create_dir_all(note_dir)?;
     let path = resolve_note_path(note_dir, title);
@@ -660,7 +668,6 @@ You reached the title screen.
         write(&journal_dir, &e).unwrap();
         let all = read_all(&journal_dir).unwrap();
         assert_eq!(all, vec![e.clone()]);
-        // the migration sidecar carries only the fields the module knows
         std::fs::write(journal_dir.join(MIGRATED_SESSIONS), "{\"session\": \"20260910-213045\", \"game\": \"x\", \"started_at\": \"2026-09-10T21:30:45+02:00\", \"ended_at\": \"2026-09-10T22:00:00+02:00\", \"duration_s\": 1755, \"source\": \"import-journal\", \"recording\": null}\n").unwrap();
         let sessions = sessions_for_note(&[], &journal_dir);
         let note_dir = dir.path().join("vault").join("x");

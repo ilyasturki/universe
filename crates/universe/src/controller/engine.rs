@@ -1,5 +1,3 @@
-//! The press / hold / repeat state machine, in milliseconds from any clock so it tests without one.
-
 use std::collections::BTreeMap;
 
 use super::{preset, Macro};
@@ -61,12 +59,10 @@ impl Engine {
         }
         let mut out = vec![];
         let mut repeat_at = None;
-        if binding.hold.is_none() {
-            if let Some(m) = &binding.press {
-                out.push(fire(&key, "press", m));
-                if preset(&m.action).map(|p| p.repeats).unwrap_or(false) {
-                    repeat_at = Some(now + REPEAT_DELAY_MS);
-                }
+        if let (None, Some(m)) = (&binding.hold, &binding.press) {
+            out.push(fire(&key, "press", m));
+            if preset(&m.action).map(|p| p.repeats).unwrap_or(false) {
+                repeat_at = Some(now + REPEAT_DELAY_MS);
             }
         }
         self.held.insert(key, Held { since: now, hold_fired: false, repeat_at, binding });
@@ -77,10 +73,8 @@ impl Engine {
         let key = (device.to_string(), slot.to_string());
         let Some(h) = self.held.remove(&key) else { return vec![] };
         let mut out = vec![];
-        if h.binding.hold.is_some() && !h.hold_fired && now.saturating_sub(h.since) < self.hold_ms {
-            if let Some(m) = &h.binding.press {
-                out.push(fire(&key, "press", m));
-            }
+        if let (Some(m), true) = (&h.binding.press, h.binding.hold.is_some() && !h.hold_fired && now.saturating_sub(h.since) < self.hold_ms) {
+            out.push(fire(&key, "press", m));
         }
         out
     }
@@ -104,7 +98,6 @@ impl Engine {
         out
     }
 
-    /// When the next tick is due, if anything is held.
     pub fn deadline(&self) -> Option<u64> {
         self.held
             .values()
