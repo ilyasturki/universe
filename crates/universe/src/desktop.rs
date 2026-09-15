@@ -316,7 +316,8 @@ mod tests {
         let me = std::process::id() as i64;
         let cg = std::fs::read_to_string("/proc/self/cgroup").unwrap_or_default().lines().last().and_then(|l| l.rsplit(':').next().map(String::from)).unwrap_or_default();
         let w = |id, pid, width, hidden| Toplevel { id, pid, width, height: 100, hidden, ..Default::default() };
-        let windows = vec![w(1, me, 300, true), w(2, me, 200, false), w(3, me, 100, false), w(4, 1, 900, false)];
+        // Not pid 1: in a build sandbox every process shares the root cgroup.
+        let windows = vec![w(1, me, 300, true), w(2, me, 200, false), w(3, me, 100, false), w(4, i64::MAX, 900, false)];
         assert_eq!(pick_window(&windows, &cg).map(|w| w.id), Some(2));
         assert!(pick_window(&windows, "/nowhere").is_none());
     }

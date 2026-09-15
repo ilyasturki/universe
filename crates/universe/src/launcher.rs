@@ -628,7 +628,8 @@ mod tests {
 
         r.game.launch.gamescope_resolution = "1920x1080".into();
         r.game.launch.gamescope_scaler = "integer".into();
-        let r2 = crate::library::resolve(r.game.clone(), &cfg, &[]);
+        let mut r2 = crate::library::resolve(r.game.clone(), &cfg, &[]);
+        r2.effective.proton_path = "/p".into();
         let p = plan(&r2, &cfg, "s", &BTreeMap::new(), screen, None).unwrap();
         assert_eq!(p.args[2..14], ["-W", "3840", "-H", "2160", "-w", "1920", "-h", "1080", "-r", "60", "-S", "integer"], "the game's fields over the global ones, the output the screen");
 
@@ -688,19 +689,22 @@ mod tests {
         assert!(p.args.contains(&"--mangoapp".to_string()));
 
         r.game.launch.gamescope_refresh = "30".into();
-        let r2 = crate::library::resolve(r.game.clone(), &cfg, &[]);
+        let mut r2 = crate::library::resolve(r.game.clone(), &cfg, &[]);
+        r2.effective.proton_path = "/p".into();
         let p = plan(&r2, &cfg, "s", &BTreeMap::new(), screen, None).unwrap();
         assert!(p.mangohud_conf.as_ref().unwrap().1.ends_with("fps_limit=30\n"), "auto follows the game's gamescope rate");
 
         r.game.launch.fps_limit = "none".into();
-        let r2 = crate::library::resolve(r.game.clone(), &cfg, &[]);
+        let mut r2 = crate::library::resolve(r.game.clone(), &cfg, &[]);
+        r2.effective.proton_path = "/p".into();
         let p = plan(&r2, &cfg, "s", &BTreeMap::new(), screen, None).unwrap();
         assert!(!p.args.iter().any(|a| a.starts_with("MANGOHUD")) && p.mangohud_conf.is_none());
 
         // On the desktop the HUD is the game's own: the user's layout kept, nothing hidden.
         r.game.launch.fps_limit.clear();
         r.game.launch.gamescope = Some(false);
-        let r2 = crate::library::resolve(r.game.clone(), &cfg, &[]);
+        let mut r2 = crate::library::resolve(r.game.clone(), &cfg, &[]);
+        r2.effective.proton_path = "/p".into();
         let p = plan(&r2, &cfg, "s", &BTreeMap::new(), screen, None).unwrap();
         let (path, text) = p.mangohud_conf.as_ref().expect("a config to write");
         assert!(text.ends_with("fps_limit=60\n") && !text.contains("no_display"));
