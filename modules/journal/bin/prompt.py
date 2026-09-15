@@ -1,11 +1,10 @@
-"""Brief, output schema and acceptance, ported from ~/NixOs/bin/game-session-summary.mjs.
-The brief addresses the model; the entry comes back in the game's language."""
 import re
 
-from _common import JOURNAL_LANGUAGES, LABELS, LANG_ENGLISH, fmt_duration, journal_lang
+from _common import COLONS, JOURNAL_LANGUAGES, LANG_ENGLISH, fmt_duration, journal_lang, label_alt
 
 CODEX_EFFORT = "high"
 CODEX_VERBOSITY = "medium"
+IMAGE_INTRO = "Images of THIS session, ATTACHED TO THIS MESSAGE in this exact chronological order:"
 
 SYSTEM_PROMPT = "\n".join([
     "You keep the user's play journal.",
@@ -114,11 +113,6 @@ def image_label(im):
     return "image auto-extracted from the recording"
 
 
-# The brief gets ISO dates whatever the locale; the note's meta line is the one that follows LC_TIME.
-def iso_date(d):
-    return d.strftime("%Y-%m-%d")
-
-
 def clock(d):
     return d.strftime("%H:%M")
 
@@ -128,15 +122,9 @@ def ordinal(n):
     return f"{n}{suffix}"
 
 
-# Binds by position: same order as the -i flags.
-def image_lines(images, with_paths=False):
-    lines = []
-    for i, im in enumerate(images, 1):
-        line = f"- image {i}: {image_label(im)}, around {clock(im.t)}"
-        if with_paths:
-            line += f", file {im.file}"
-        lines.append(line)
-    return lines
+# Numbered by position: the same order as the -i flags.
+def image_lines(images):
+    return [f"- image {i}: {image_label(im)}, around {clock(im.t)}" for i, im in enumerate(images, 1)]
 
 
 def memory_context(memory):
@@ -160,7 +148,7 @@ def memory_context(memory):
     return "\n".join(p for p in parts if p)
 
 
-def build_user_prompt(title, start, end, duration_s, session_number, total_sec, images, prev, memory, image_intro, lines):
+def build_user_prompt(title, start, end, duration_s, session_number, total_sec, images, prev, memory):
     mem_ctx = memory_context(memory)
     no_memory_note = (
         "This is your first entry for this game: briefly search the web for the game to establish the premise and the spelling of the main names."
@@ -170,15 +158,15 @@ def build_user_prompt(title, start, end, duration_s, session_number, total_sec, 
     profile = (memory or {}).get("profile")
     return "\n".join([
         f"Game: {title}",
-        f"Session: {iso_date(start)}, {clock(start)} to {clock(end)} ({fmt_duration(duration_s)})",
+        f"Session: {start.strftime('%Y-%m-%d')}, {clock(start)} to {clock(end)} ({fmt_duration(duration_s)})",
         f"History: {ordinal(session_number)} session on this game, about {fmt_duration(total_sec)} of play time in total.",
         "",
         mem_ctx or no_memory_note,
         "",
         f'Previous journal entry (for continuity, do not repeat it):\n"""\n{prev}\n"""' if prev else "",
         "",
-        image_intro,
-        *lines,
+        IMAGE_INTRO,
+        *image_lines(images),
         "",
         f"Profile already established for this game: {profile} (default {PROFILE_SHAPES.get(profile, PROFILE_SHAPES['arcade'])}). Keep it in the memory, and tip to the other shape only if the content of THIS session justifies it."
         if profile else
@@ -188,16 +176,7 @@ def build_user_prompt(title, start, end, duration_s, session_number, total_sec, 
     ])
 
 
-# --- acceptance of the model's fields --------------------------------------------
-
-COLONS = r"[ \u00a0\u202f]?[:\uff1a]"
-
-
-def _any_label(key):
-    return "|".join(re.escape(v) for v in dict.fromkeys(l[key] for l in LABELS.values()))
-
-
-NEXT_UP_RE = re.compile(rf"^\*\*(?:{_any_label('next')}){COLONS}\*\*\s*(.+?)\s*$", re.M)
+NEXT_UP_RE = re.compile(rf"^\*\*(?:{label_alt('next')}){COLONS}\*\*\s*(.+?)\s*$", re.M)
 STALL_OPENER = re.compile(
     r"^\s*(?:je\s+(?:vais|commence|dois|vérifie|verifie)|i(?:'|’)?(?:ll|m going to|m about to| will| am going to| need to)|i\s+will|let me|first,? let me)\b",
     re.I,
@@ -284,8 +263,6 @@ def paragraphs_from_body(body):
     flush()
     return [p for p in paras if p]
 
-
-# --- per-game memory -------------------------------------------------------------
 
 # The prompt forbids shortening the synopsis; this catches the rewrites that do anyway.
 SYNOPSIS_SHRINK_FLOOR = 0.8

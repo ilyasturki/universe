@@ -318,15 +318,11 @@ so later launches record without a dialog. A cancelled picker records nothing. O
 extension absent or not yet loaded, or when no game window appears in time, the screen is recorded
 and the shell's OSD says so.
 
-`quality` is a preset (`medium`, `high`, `very_high`, `ultra`) mapped to QVBR — constant quality up
-to a bitrate ceiling (`very_high`: 16 Mbps target, 32 Mbps ceiling, ~7-8 GB/h at 4K on AMD).
-`size` fits the video inside `WxH` at its own aspect, never upscaled (`native`: no scaling).
-`container` is `mkv` (survives a crash mid-session) or `mp4`; `audio_codec` is `opus`, `aac` or
-`flac` (opus: gpu-screen-recorder has flac disabled), `audio_bitrate` in kbps or `auto` for the
-encoder's default. Two config-scope keys, for `config.toml` or `universe module set capture
-<key>=<value>` and never a settings row, replace what the presets choose: `ffmpeg_video_opts`
-(gpu-screen-recorder's `-ffmpeg-video-opts`) and `gsr_extra_args` (appended to the command). `-bm
-cbr` stays pinned: it is the base the QVBR override needs.
+`quality` is a QVBR preset — constant quality up to a bitrate ceiling (`very_high`: 16 Mbps target,
+32 Mbps ceiling, ~7-8 GB/h at 4K on AMD). Two config-scope keys, for `config.toml` or `universe
+module set capture <key>=<value>` and never a settings row, replace what the presets choose:
+`ffmpeg_video_opts` (gpu-screen-recorder's `-ffmpeg-video-opts`) and `gsr_extra_args` (appended
+to the command). `-bm cbr` stays pinned: it is the base the QVBR override needs.
 
 The module's `screenshot` hook grabs the frame in the shell through the extension
 (`org.universe.Windows.Screenshot(path, window, cursor)`): the focused window's client area with
@@ -494,24 +490,12 @@ cursor_extension = "hide-cursor@elcste.com"   # enabled for the session, restore
 [proton]                             # name → path
 proton-ge = "~/.local/share/lutris/runners/wine/proton-ge"
 
-# [runners.dolphin]                  # per runner: the program, extra arguments, gamescope, its options
-# exe = "/opt/dolphin/dolphin-emu"   # empty or absent: detected (PATH, then Lutris's runners dir)
-# args = "--config Dolphin.Display.Fullscreen=True"
-# gamescope = false                  # this runner on the desktop; a game's launch.gamescope wins over it
-# batch = true
+# [runners.<id>]                     # per runner (`universe runner set`): exe (absent: detected), args, gamescope, its options
 
 [modules]
 enabled = ["gog", "capture", "journal"]
 
-[modules.capture]
-source = "screen"                    # screen | window (GNOME's picker once per game, then remembered)
-codec = "av1_10bit"
-quality = "very_high"                # medium | high | very_high | ultra: QVBR on both paths
-size = "native"                      # or a WxH the video must fit in, e.g. 1920x1080
-container = "mkv"                    # mkv | mp4
-audio_codec = "opus"                 # opus | aac | flac
-audio_bitrate = "auto"               # kbps, or auto for the encoder's default
-window_wait_s = 60                   # window source: wait for the game's window, then the screen is recorded instead
+[modules.capture]                    # the settings rows: `universe module settings capture`
 # ffmpeg_video_opts = "rc_mode=CQP;qp=20"   # config-only: replaces the quality preset
 # gsr_extra_args = "-cr full -keyint 2"      # config-only: appended to gpu-screen-recorder
 
@@ -532,11 +516,7 @@ volume_step = 2                      # percent of the normal volume per press, 1
 mangohud_toggle = ""                 # empty: toggle_hud from ~/.config/MangoHud/MangoHud.conf, else Shift_R+F12
 # [controller.buttons.xbox-elite]    # learned codes: a slot's list replaces its seeds, [] leaves it unbound
 # paddle_p1 = ["BTN_GRIPR", "BTN_TRIGGER_HAPPY5"]
-# [[controller.macros]]              # absent: the seeded workflow (Edge: Fn = screenshot / MangoHud,
-# family = "dualsense-edge"          # paddles = volume; Elite P1…P4 = MangoHud, volume up, screenshot,
-# button = "paddle_left"             # volume down; Pro 3 R4 / PR / PL); `macros = []` is none at all
-# trigger = "press"
-# action = "volume_down"
+# [[controller.macros]]              # {family, button, trigger, action} (`universe controller bind`); absent: the seeded workflow, `macros = []` none at all
 ```
 
 ## Module protocol
@@ -554,7 +534,6 @@ kind = ["hooks"]                  # hooks | source; a module may be both
 version = "0.0.1"
 
 [requires]
-core = "=0.0.1"
 bins = ["gpu-screen-recorder"]    # a missing binary makes the module "unavailable" and it is never run
 
 [hooks]                           # paths relative to the module directory
@@ -571,9 +550,6 @@ memory_high  = "4G"               # default 2G
 
 [source]                          # kind = source
 exe = "bin/source"                # run as: bin/source <verb> [args]
-
-[frontend]
-qml = "ui/Page.qml"               # optional: a screen added to the frontend
 
 [[settings]]
 key = "enabled"                   # reserved: always present, game scope
@@ -610,7 +586,7 @@ label = "Model"
 | `UNIVERSE_ENV_FILE` | write `KEY=VALUE` lines here to add them to the game's environment, ahead of `launch.env` | `pre-launch` |
 | `MODULE_DIR`, `MODULE_DATA_DIR` | the module's directory, `$XDG_DATA_HOME/universe/modules/<id>` | all |
 | `UNIVERSE_BIN`, `UNIVERSE_{DATA,CONFIG,STATE,CACHE}_HOME`, `UNIVERSE_MODULES_PATH`, `PATH` | the CLI to call back (`recording-file`, `journal-add`) and the environment that makes it open the same core | all |
-| `UNIVERSE_GAME_JSON` | the resolved `Game`, serialized | all |
+| `UNIVERSE_GAME_JSON`, `UNIVERSE_JOURNAL_ROOT` | the resolved `Game`, serialized; `paths.journal_root` | all |
 
 Exit codes: 0 is success; anything else is logged and the session continues — except a `pre-launch`
 hook, where a non-zero exit cancels the launch.

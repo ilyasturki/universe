@@ -1,49 +1,17 @@
 #!/usr/bin/env python3
-"""session-end hook (blocking, short): stops the recorder, files or trashes the mkv."""
-import json
+import glob
 import os
-import shutil
 import subprocess
 import sys
-import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import log, load_settings, universe_bin, output_path  # noqa: E402
-
-STABLE_WINDOW_S = 15
-
-
-def recording_path(pending_dir, session_id, settings):
-    """The path start wrote in the companion; the settings' own if there is none."""
-    try:
-        with open(os.path.join(pending_dir, f"{session_id}.json")) as f:
-            path = json.load(f).get("output")
-    except (OSError, ValueError):
-        path = None
-    return path or output_path(pending_dir, session_id, settings)
+from _common import log, load_settings  # noqa: E402
 
 
 def stop_unit(unit):
     result = subprocess.run(["systemctl", "--user", "stop", unit], capture_output=True, text=True)
     if result.returncode != 0 and "not loaded" not in result.stderr.lower():
         log(f"systemctl stop {unit} failed: {result.stderr.strip()}")
-
-
-def wait_stable(path, budget_s):
-    deadline = time.monotonic() + budget_s
-    prev_size = None
-    stable_reads = 0
-    while time.monotonic() < deadline:
-        if not os.path.exists(path):
-            time.sleep(1)
-            continue
-        size = os.path.getsize(path)
-        stable_reads = stable_reads + 1 if size == prev_size else 0
-        prev_size = size
-        if stable_reads >= 2:
-            return True
-        time.sleep(1)
-    return os.path.exists(path)
 
 
 def probe_duration(path):
@@ -54,58 +22,33 @@ def probe_duration(path):
     return float(result.stdout.strip())
 
 
-def discard(path):
-    if shutil.which("trash"):
-        subprocess.run(["trash", path], check=False)
-    else:
-        subprocess.run(["rm", "-f", path], check=False)
-
-
-def cleanup_companion(pending_dir, session_id):
-    companion = os.path.join(pending_dir, f"{session_id}.json")
-    if os.path.exists(companion):
-        os.remove(companion)
-
-
 def main():
     session_id = os.environ["SESSION_ID"]
-    settings = load_settings()
-    min_duration_s = settings.get("min_duration_s", 240)
-
-    data_dir = os.environ["MODULE_DATA_DIR"]
-    pending_dir = os.path.join(data_dir, "pending")
-    path = recording_path(pending_dir, session_id, settings)
+    min_duration_s = load_settings().get("min_duration_s", 240)
+    pending_dir = os.path.join(os.environ["MODULE_DATA_DIR"], "pending")
 
     stop_unit(f"universe-capture-{session_id}.service")
 
-    if not os.path.exists(path):
+    path = next(iter(glob.glob(os.path.join(pending_dir, f"{session_id}.mkv")) + glob.glob(os.path.join(pending_dir, f"{session_id}.mp4"))), None)
+    if not path:
         log(f"no recording file for session {session_id}, nothing to do")
-        cleanup_companion(pending_dir, session_id)
         return 0
 
-    wait_stable(path, STABLE_WINDOW_S)
-
-    try:
-        duration = probe_duration(path)
-    except (ValueError, OSError) as e:
-        log(f"ffprobe could not read a duration from {path}: {e}")
-        return 1
+    duration = probe_duration(path)
     log(f"recording duration: {duration:.1f}s (min {min_duration_s}s)")
 
     if duration < min_duration_s:
         log(f"recording shorter than {min_duration_s}s, discarding")
-        discard(path)
-        cleanup_companion(pending_dir, session_id)
+        subprocess.run(["trash", path], check=False)
         return 0
 
-    cmd = [universe_bin(), "recording-file", session_id, path]
+    cmd = [os.environ.get("UNIVERSE_BIN") or "universe", "recording-file", session_id, path]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         log(f"universe recording-file failed ({result.returncode}): {result.stderr.strip()} — left in pending/: {path}")
         return 1
 
     log(f"filed: {result.stdout.strip()}")
-    cleanup_companion(pending_dir, session_id)
     return 0
 
 

@@ -1,39 +1,16 @@
-"""The Obsidian note, rendered from Entry JSON and parsed back (format of game-session-summary.mjs buildEntry).
-The meta line follows the LC_TIME of the environment; the parser also reads the legacy French form."""
 import json
 import os
 import re
 import shutil
-from datetime import timedelta
-from urllib.parse import quote, unquote
+from urllib.parse import quote
 
-from _common import (LABELS, fmt_date, fmt_duration, fmt_time, game_note_name, journal_lang, labels, parse_duration,
-                     parse_session_id, rfc3339_local, sanitize_game_name, session_span)
+from _common import COLONS, LABELS, fmt_date, fmt_duration, fmt_time, game_note_name, journal_lang, label_alt, session_span
 
+# Format frozen to game-session-summary.mjs buildEntry; the core's journal.rs mirrors it.
 SHOT_IMAGE_RE = re.compile(r"(?:^|/)\d{8}-\d{6}\.(?:png|jpe?g)$", re.I)
 MARKER_RE = re.compile(r"<!-- session: (\d{8}-\d{6}) -->")
-META_RE = re.compile(r"^(?P<date>.+?) · (?P<sh>\d{2})[:h](?P<sm>\d{2})(?:–| à )(?P<eh>\d{2})[:h](?P<em>\d{2}) · (?P<duration>.+)$")
-HEADER_RE = re.compile(r"^## (?:#(\d+) · )?(.*)$")
-IMAGE_LINE_RE = re.compile(r"^!\[[^\]]*\]\((.+?)\)\s*$")
-COLONS = r"[ \u00a0\u202f]?[:\uff1a]"
 RECORDING_NUM_RE = re.compile(r"^(\d{1,4})-\d{8}-\d{6}")
-
-
-def _by_label(key):
-    out = {}
-    for code, l in LABELS.items():
-        out.setdefault(l[key], code)
-    return out
-
-
-def _alt(key):
-    return "|".join(re.escape(v) for v in _by_label(key))
-
-
-NEXT_LINE_RE = re.compile(rf"^\*\*({_alt('next')}){COLONS}\*\*\s*(.*?)\s*$")
-RECORDING_LINE_RE = re.compile(rf"^\*\*({_alt('recording')}){COLONS}\*\* \[([^\]]*)\]\(([^)]*)\)\s*$")
-FRAMES_CAPTION_RE = re.compile(rf"^\*({_alt('frames')})\*$")
-DOC_TITLE_RE = re.compile(rf"^#\s*(?:{_alt('journal')})\s*{COLONS}\s*(.+?)\s*$", re.M)
+DOC_TITLE_RE = re.compile(rf"^#\s*(?:{label_alt('journal')})\s*{COLONS}\s*(.+?)\s*$", re.M)
 
 
 def file_uri(path):
@@ -51,20 +28,6 @@ def yaml_str(s):
         return s
 
 
-def yaml_unstr(s):
-    s = s.strip()
-    if s.startswith('"'):
-        try:
-            return json.loads(s)
-        except ValueError:
-            return s.strip('"')
-    if s.startswith("'") and s.endswith("'") and len(s) >= 2:
-        return s[1:-1].replace("''", "'")
-    return s
-
-
-# --- rendering -------------------------------------------------------------------
-
 def body_from_paragraphs(paragraphs, italic=False):
     blocks, bullets = [], []
     for p in paragraphs:
@@ -81,7 +44,6 @@ def body_from_paragraphs(paragraphs, italic=False):
 
 
 def entry_number(entry, sessions, entries):
-    """NNN from the recording name, else the rank among recorded sessions; none without footage."""
     sid = entry["session"]
     rec = (sessions.get(sid) or {}).get("recording")
     if not rec:
@@ -94,7 +56,7 @@ def entry_number(entry, sessions, entries):
 
 def render_block(entry, sessions, entries):
     sid = entry["session"]
-    lab = labels(entry.get("lang"))
+    lab = LABELS[journal_lang(entry.get("lang"))]
     start, end, duration = session_span(sessions.get(sid), sid)
     meta = f"{fmt_date(start)} · {fmt_time(start)}–{fmt_time(end)} · {fmt_duration(duration)}"
     n = entry_number(entry, sessions, entries)
@@ -204,144 +166,3 @@ def write_note(entries, sessions, title, journal_dir, note_dir):
         f.write(text)
     os.replace(tmp, path)
     return path, True
-
-
-# --- parsing (migration) ---------------------------------------------------------
-
-def parse_frontmatter(text):
-    m = re.match(r"^---\n(.*?)\n---\n+", text, re.S)
-    if not m:
-        return {}, text
-    data = {}
-    for line in m.group(1).splitlines():
-        k, sep, v = line.partition(":")
-        if sep:
-            data[k.strip()] = yaml_unstr(v)
-    return data, text[m.end():]
-
-
-def _lang_of(block_lines):
-    for regex, key in ((RECORDING_LINE_RE, "recording"), (FRAMES_CAPTION_RE, "frames"), (NEXT_LINE_RE, "next")):
-        table = _by_label(key)
-        for line in block_lines:
-            m = regex.match(line.strip())
-            if m:
-                return table[m.group(1)]
-    return None
-
-
-def parse_note(text, game=None):
-    """-> (title, [Entry], [Session]); written_at is the session's end, the only clock the note has."""
-    fm, body = parse_frontmatter(text)
-    m = DOC_TITLE_RE.search(body)
-    title = fm.get("game") or (m.group(1) if m else None) or "Journal"
-    doc_lang = None
-    if m:
-        first = body[m.start():].split("\n", 1)[0]
-        doc_lang = _by_label("journal").get(re.match(r"^#\s*(\S+)", first).group(1))
-    starts = [h.start() for h in re.finditer(r"^## .*$", body, re.M)]
-    entries, sessions = [], []
-    for i, s in enumerate(starts):
-        block = body[s:starts[i + 1] if i + 1 < len(starts) else len(body)]
-        e, sess = parse_block(block, title, game, doc_lang)
-        if e:
-            entries.append(e)
-            sessions.append(sess)
-    return title, entries, sessions
-
-
-def parse_block(block, title, game, doc_lang):
-    lines = block.rstrip("\n").split("\n")
-    hm = HEADER_RE.match(lines[0])
-    sm = MARKER_RE.search(block)
-    if not hm or not sm:
-        return None, None
-    sid = sm.group(1)
-    header_rest = hm.group(2).strip()
-    meta = header_rest if META_RE.match(header_rest) else ""
-    entry_title = "" if meta else header_rest
-    body_lines, images, next_up, recording = [], [], "", None
-    for raw in lines[1:]:
-        line = raw.strip()
-        if not line or MARKER_RE.search(line):
-            if not line:
-                body_lines.append("")
-            continue
-        if not meta and META_RE.match(line.strip("*")) and line.startswith("*") and line.endswith("*"):
-            meta = line.strip("*")
-            continue
-        im = IMAGE_LINE_RE.match(line)
-        if im:
-            images.append(im.group(1))
-            continue
-        if FRAMES_CAPTION_RE.match(line):
-            continue
-        nm = NEXT_LINE_RE.match(line)
-        if nm:
-            next_up = nm.group(2)
-            continue
-        rm = RECORDING_LINE_RE.match(line)
-        if rm:
-            uri = rm.group(3)
-            recording = unquote(uri[7:]) if uri.startswith("file://") else uri
-            continue
-        body_lines.append(line)
-    paragraphs = _paragraphs(body_lines)
-    provider = "import"
-    if len(paragraphs) == 1 and not next_up and re.fullmatch(r"\*[^*].*\*", paragraphs[0]):
-        provider = "none"
-        paragraphs = [paragraphs[0][1:-1]]
-    lang = _lang_of(lines) or doc_lang or "en"
-
-    start = parse_session_id(sid)
-    mm = META_RE.match(meta) if meta else None
-    if mm:
-        end = start.replace(hour=int(mm["eh"]), minute=int(mm["em"]), second=0)
-        if end < start.replace(second=0):
-            end += timedelta(days=1)
-        duration = parse_duration(mm["duration"])
-    else:
-        end, duration = start, 0
-    entry = {
-        "session": sid,
-        "game": game or sanitize_game_name(title),
-        "written_at": rfc3339_local(end),
-        "lang": lang,
-        "title": entry_title,
-        "provider": provider,
-        "paragraphs": paragraphs,
-        "next_up": next_up,
-        "images": images,
-    }
-    session = {
-        "session": sid,
-        "game": entry["game"],
-        "started_at": rfc3339_local(start),
-        "ended_at": rfc3339_local(end),
-        "duration_s": duration,
-        "source": "import-journal",
-        "recording": recording,
-    }
-    return entry, session
-
-
-def _paragraphs(lines):
-    paras, cur = [], []
-
-    def flush():
-        if cur:
-            paras.append(" ".join(cur))
-            cur.clear()
-
-    for line in lines:
-        if not line:
-            flush()
-            continue
-        m = re.match(r"^(?:[-*•]|\d+[.)])\s+(.*)$", line)
-        if m:
-            flush()
-            paras.append("- " + m.group(1).strip())
-        else:
-            cur.append(line)
-    flush()
-    return paras

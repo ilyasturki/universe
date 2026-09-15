@@ -101,13 +101,9 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("PATH", f"{shim_dir}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.setenv("SHIM_LOG", str(log))
     monkeypatch.setenv("MODULE_DATA_DIR", str(tmp_path / "data"))
-    monkeypatch.setenv("MODULE_DIR", str(MODULE_DIR))
     monkeypatch.setenv("MODULE_SETTINGS_JSON", json.dumps({
         "games_dir": str(games), "scan_dirs": f"{scan},{tmp_path / 'missing'}",
-        "auth_path": str(tmp_path / "auth" / "auth.json"), "install_timeout_s": 30}))
-    monkeypatch.delenv("SHIM_MODE", raising=False)
-    monkeypatch.delenv("SHIM_BUILD", raising=False)
-    monkeypatch.delenv("SHIM_EXIT", raising=False)
+        "auth_path": str(tmp_path / "auth" / "auth.json"), "install_timeout_s": 30, "platform": "windows", "with_dlcs": True}))
     return {"tmp": tmp_path, "log": log, "games": games, "scan": scan, "data": tmp_path / "data"}
 
 
@@ -394,17 +390,6 @@ def test_scan_crosses_cache(src, env, capsys):
     by_id = {e["id"]: e for e in events[:-1]}
     assert by_id["1434554947"]["owned"] is True and by_id["1434554947"]["release_year"] == 2015
     assert by_id["3"]["owned"] is False
-
-
-def test_settings_defaults_from_toml(src, monkeypatch):
-    monkeypatch.delenv("MODULE_SETTINGS_JSON", raising=False)
-    monkeypatch.setenv("MODULE_DIR", str(MODULE_DIR))
-    settings = src.load_settings()
-    assert settings["games_dir"] == os.path.expanduser("~/Games")
-    assert settings["scan_dirs"] == [settings["games_dir"]]
-    assert settings["platform"] == "windows" and settings["with_dlcs"] is True
-    assert settings["auth_path"] == os.path.expanduser("~/.config/gogdl/auth.json")
-    assert settings["install_timeout_s"] == 7200
 
 
 def test_usage(src, capsys):

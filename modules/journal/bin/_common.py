@@ -4,19 +4,7 @@ import os
 import re
 import subprocess
 import sys
-import unicodedata
 from datetime import datetime, timedelta
-
-
-SETTINGS_DEFAULTS = {
-    "enabled": True,
-    "language": "auto",
-    "provider": "codex",
-    "model": "gpt-5.6-sol",
-    "markdown_export": True,
-    "journal_root": "~/Documents/universe/journal",
-    "max_images": 40,
-}
 
 SESSION_ID_RE = re.compile(r"^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})$")
 
@@ -26,29 +14,36 @@ def log(msg):
 
 
 def load_settings():
-    raw = os.environ.get("MODULE_SETTINGS_JSON", "") or "{}"
+    return json.loads(os.environ.get("MODULE_SETTINGS_JSON") or "{}")
+
+
+def journal_root():
+    return os.path.expanduser(os.environ["UNIVERSE_JOURNAL_ROOT"])
+
+
+def read_json(path):
     try:
-        parsed = json.loads(raw)
-    except json.JSONDecodeError as e:
-        log(f"MODULE_SETTINGS_JSON invalid ({e}), using defaults")
-        parsed = {}
-    settings = dict(SETTINGS_DEFAULTS)
-    settings.update({k: v for k, v in parsed.items() if v is not None})
+        with open(path, encoding="utf-8") as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def write_json(path, data):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    tmp = path + ".tmp"
+    with open(tmp, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+        f.write("\n")
+    os.replace(tmp, path)
+
+
+def remove(path):
     try:
-        settings["max_images"] = max(1, int(settings["max_images"]))
-    except (TypeError, ValueError):
-        settings["max_images"] = SETTINGS_DEFAULTS["max_images"]
-    if "journal_root" not in parsed and os.environ.get("UNIVERSE_JOURNAL_ROOT"):
-        settings["journal_root"] = os.environ["UNIVERSE_JOURNAL_ROOT"]
-    settings["journal_root"] = os.path.expanduser(str(settings["journal_root"]))
-    return settings
+        os.remove(path)
+    except OSError:
+        pass
 
-
-def universe_bin():
-    return os.environ.get("UNIVERSE_BIN") or "universe"
-
-
-# --- session ids and dates ---------------------------------------------------
 
 def parse_session_id(s):
     m = SESSION_ID_RE.match(str(s or ""))
@@ -57,24 +52,15 @@ def parse_session_id(s):
     return datetime(*(int(x) for x in m.groups()))
 
 
-def session_id(d):
-    return d.strftime("%Y%m%d-%H%M%S")
-
-
-def to_local_naive(d):
-    if d.tzinfo is not None:
-        d = d.astimezone().replace(tzinfo=None)
-    return d
-
-
 def parse_rfc3339(s):
     s = (s or "").strip()
     if not s:
         return None
     try:
-        return to_local_naive(datetime.fromisoformat(s.replace("Z", "+00:00")))
+        d = datetime.fromisoformat(s.replace("Z", "+00:00"))
     except ValueError:
         return None
+    return d.astimezone().replace(tzinfo=None) if d.tzinfo else d
 
 
 def rfc3339_local(d):
@@ -84,7 +70,6 @@ def rfc3339_local(d):
 
 
 def use_system_locale():
-    """Dates render in the LC_TIME of the environment; an unknown locale falls back to C."""
     try:
         locale.setlocale(locale.LC_TIME, "")
     except locale.Error:
@@ -109,34 +94,11 @@ def fmt_duration(total_sec):
     return f"{m} min"
 
 
-# The space before the unit tells "1 h 23 min" apart from the legacy "14h30" time range.
-def parse_duration(s):
-    h = re.search(r"(\d+)\s+h\b", str(s or ""))
-    m = re.search(r"(\d+)\s+min\b", str(s or ""))
-    return (int(h.group(1)) if h else 0) * 3600 + (int(m.group(1)) if m else 0) * 60
-
-
-# --- names -------------------------------------------------------------------
-
-# Mirror of sanitizeGameName (~/NixOs/bin/lib/game-session.mjs), which named the recording and journal folders.
-def sanitize_game_name(name):
-    if not name:
-        return "unknown"
-    s = unicodedata.normalize("NFKD", str(name).lower())
-    s = re.sub(r"[\u0300-\u036f]", "", s)
-    s = re.sub(r"['’]", "", s)
-    s = re.sub(r"[^a-z0-9-]", "-", s)
-    s = re.sub(r"-+", "-", s)
-    return s.strip("-")
-
-
 def game_note_name(title):
     safe = re.sub(r"[\\/:#^\[\]|]", " ", str(title or ""))
     safe = re.sub(r"\s+", " ", safe).strip()
     return safe or "Journal"
 
-
-# --- languages and labels -------------------------------------------------------
 
 LABELS = {
     "fr": {"journal": "Journal", "recording": "Enregistrement", "next": "Reprise", "frames": "Images extraites de l'enregistrement", "colon": " :"},
@@ -148,6 +110,7 @@ LABELS = {
     "ja": {"journal": "日誌", "recording": "録画", "next": "次回", "frames": "録画から抽出した画像", "colon": "："},
 }
 JOURNAL_LANGUAGES = list(LABELS)
+COLONS = r"[   ]?[:：]"
 
 LANG_NAMES = {
     "en": ["anglais", "english", "inglés", "ingles", "englisch", "inglese", "inglês", "英語"],
@@ -160,7 +123,6 @@ LANG_NAMES = {
 }
 LANG_BY_NAME = {n: code for code, names in LANG_NAMES.items() for n in names}
 
-# What the brief calls each language when the user forces one.
 LANG_ENGLISH = {"en": "English", "fr": "French", "es": "Spanish", "de": "German", "it": "Italian", "pt": "Portuguese", "ja": "Japanese"}
 
 
@@ -171,16 +133,14 @@ def journal_lang(lang):
     return LANG_BY_NAME.get(raw, "en")
 
 
-def labels(lang):
-    return LABELS[journal_lang(lang)]
+def label_alt(key):
+    return "|".join(re.escape(v) for v in dict.fromkeys(l[key] for l in LABELS.values()))
 
-
-# --- sessions.jsonl --------------------------------------------------------------
 
 MIGRATED_SESSIONS = ".migrated-sessions.jsonl"
 
 
-def _read_jsonl(path):
+def read_jsonl(path):
     out = []
     try:
         with open(path, encoding="utf-8") as f:
@@ -197,13 +157,11 @@ def _read_jsonl(path):
     return out
 
 
-def read_sessions(journal_dir, explicit=None):
-    """The core's sessions.jsonl beside journal/ wins; the migration sidecar fills what it lacks."""
+def read_sessions(journal_dir):
     sessions = {}
-    paths = [explicit] if explicit else [os.path.join(os.path.dirname(os.path.abspath(journal_dir)), "sessions.jsonl")]
-    paths.append(os.path.join(journal_dir, MIGRATED_SESSIONS))
+    paths = [os.path.join(os.path.dirname(os.path.abspath(journal_dir)), "sessions.jsonl"), os.path.join(journal_dir, MIGRATED_SESSIONS)]
     for path in paths:
-        for s in _read_jsonl(path):
+        for s in read_jsonl(path):
             sid = s.get("session")
             if sid and sid not in sessions:
                 sessions[sid] = s
@@ -222,8 +180,6 @@ def session_span(session, sid):
         end = start + timedelta(seconds=int(duration or 0))
     return start, end, int(duration or 0)
 
-
-# --- entries ---------------------------------------------------------------------
 
 ENTRY_KEYS = ("session", "game", "written_at", "lang", "title", "provider", "paragraphs", "next_up", "images")
 OPTIONAL_ENTRY_KEYS = ("started_at", "ended_at", "duration_s")
@@ -271,19 +227,14 @@ def read_entries(journal_dir):
 
 
 def write_entry_file(journal_dir, entry):
-    os.makedirs(journal_dir, exist_ok=True)
     path = os.path.join(journal_dir, f"{entry['session']}.json")
-    tmp = path + ".tmp"
-    with open(tmp, "w", encoding="utf-8") as f:
-        json.dump(entry, f, ensure_ascii=False, indent=2)
-        f.write("\n")
-    os.replace(tmp, path)
+    write_json(path, entry)
     return path
 
 
 def add_entry_via_core(sid, entry_json):
     """-> 'ok' | 'invalid' (the core rejected the entry) | 'unavailable'."""
-    cmd = [universe_bin(), "journal-add", sid, entry_json]
+    cmd = [os.environ.get("UNIVERSE_BIN") or "universe", "journal-add", sid, entry_json]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
     except FileNotFoundError:

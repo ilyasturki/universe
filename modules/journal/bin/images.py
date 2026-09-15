@@ -7,7 +7,7 @@ from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
-from _common import log
+from _common import log, remove
 
 SHOT_RE = re.compile(r"(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})\.(?:png|jpe?g)$", re.I)
 # Shots taken just before the recorder started or after it stopped still belong to the sitting.
@@ -100,7 +100,6 @@ def hamming(a, b):
 
 
 def grab_frame(recording, off, png_path):
-    """One seek writes the model-sized PNG and the 9x8 gray for the hash -> (hash, stddev) | None."""
     raw_path = png_path + ".raw"
     cmd = [
         "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{off:.3f}", "-i", recording,
@@ -116,10 +115,7 @@ def grab_frame(recording, off, png_path):
     except (OSError, subprocess.TimeoutExpired):
         return None
     finally:
-        try:
-            os.remove(raw_path)
-        except OSError:
-            pass
+        remove(raw_path)
     if len(raw) < 72:
         return None
     return dhash(raw[:72]), statistics.pstdev(raw[:72])
@@ -141,7 +137,6 @@ def greedy_farthest(chosen, rest, k):
 
 
 def stratified_pick(cands, k, a, b):
-    """Coverage first (one frame per equal-time bucket), distinctness second."""
     if k <= 0 or not cands:
         return []
     if len(cands) <= k:
@@ -174,7 +169,6 @@ def dedupe(images):
 
 
 def extract_frames(recording, shots, start, need, frames_dir, duration_s):
-    """Frames spread over the gaps between screenshots; the last seconds are reserved so the ending is always shown."""
     if need <= 0 or not duration_s or duration_s <= 3 or not os.path.exists(recording):
         return []
     os.makedirs(frames_dir, exist_ok=True)
@@ -236,16 +230,12 @@ def extract_frames(recording, shots, start, need, frames_dir, duration_s):
     out = dedupe(sorted(out, key=lambda c: c.off))
     for c in cands:
         if c not in out:
-            try:
-                os.remove(c.file)
-            except OSError:
-                pass
+            remove(c.file)
     log(f"extracted {len(out)} frame(s) from {len(specs)} candidate(s) to fill {need} slot(s)")
     return out
 
 
 def normalize_review(review, count):
-    """{gallery, unusable} over 1-based numbers -> (ranked order, unusable set); unmentioned images rank last."""
     def in_range(n):
         return isinstance(n, int) and not isinstance(n, bool) and 1 <= n <= count
     review = review if isinstance(review, dict) else {}
@@ -261,7 +251,6 @@ def normalize_review(review, count):
 
 
 def pick_gallery(fed, order, unusable, shots, frames, frames_target=GALLERY_FRAME_TARGET):
-    """Kept shots (never all rejected) and the best frames, one slot held for the tail."""
     rejected = {fed[n - 1].file for n in unusable}
     kept_shots = [s for s in shots if s.file not in rejected]
     if shots and not kept_shots:

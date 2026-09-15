@@ -423,7 +423,6 @@ impl Core {
             env.set(&k, v);
         }
         env.set("UNIVERSE_GAME_JSON", r.to_json().to_string());
-        env.set("UNIVERSE_RECORDINGS_ROOT", cfg.recordings_root().to_string_lossy().to_string());
         env.set("UNIVERSE_JOURNAL_ROOT", cfg.journal_root().to_string_lossy().to_string());
         env
     }

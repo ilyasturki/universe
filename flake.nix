@@ -35,7 +35,6 @@
         meta.mainProgram = "universe";
       };
 
-      # The core as a Python module (`import universe_core`): what the host links.
       corePy = pkgs.python3Packages.buildPythonPackage {
         pname = "universe-core";
         inherit version;
@@ -47,45 +46,29 @@
         pythonImportsCheck = [ "universe_core" ];
       };
 
-      moduleNames = builtins.filter (n: builtins.pathExists (./modules + "/${n}/module.toml"))
-        (builtins.attrNames (builtins.readDir ./modules));
-
-      modulePython = pkgs.python3;
-
-      mkModule = name: pkgs.stdenvNoCC.mkDerivation {
-        pname = "universe-module-${name}";
+      modulesPkg = pkgs.stdenvNoCC.mkDerivation {
+        pname = "universe-modules";
         inherit version;
-        src = ./modules + "/${name}";
-        nativeBuildInputs = [ modulePython ];
-        buildInputs = [ modulePython ];
+        src = ./modules;
+        nativeBuildInputs = [ pkgs.python3 ];
         installPhase = ''
-          mkdir -p $out/share/universe/modules/${name}
-          cp -r . $out/share/universe/modules/${name}/
-          rm -rf $out/share/universe/modules/${name}/tests $out/share/universe/modules/${name}/__pycache__ $out/share/universe/modules/${name}/extension
-          patchShebangs $out/share/universe/modules/${name}
+          mkdir -p $out/share/universe
+          cp -r . $out/share/universe/modules
+          rm -rf $out/share/universe/modules/*/tests $out/share/universe/modules/capture/extension
+          patchShebangs $out/share/universe/modules
         '';
-      };
-
-      modulePkgs = lib.genAttrs moduleNames mkModule;
-
-      modulesPkg = pkgs.symlinkJoin {
-        name = "universe-modules-${version}";
-        paths = builtins.attrValues modulePkgs;
       };
 
       universe-shell-extension = pkgs.stdenvNoCC.mkDerivation {
         pname = "universe-shell-extension";
         inherit version;
         src = ./modules/capture/extension;
-        dontConfigure = true;
-        dontBuild = true;
         installPhase = ''
           runHook preInstall
           install -Dm644 metadata.json extension.js -t \
             "$out/share/gnome-shell/extensions/universe@ilyasturki.github.io"
           runHook postInstall
         '';
-        passthru.extensionUuid = "universe@ilyasturki.github.io";
       };
 
       # No gpu-screen-recorder here: it must match the host's setcap gsr-kms-server (nixos.nix pins that package).
@@ -118,7 +101,6 @@
           install -Dm644 icons/hicolor/symbolic/apps/universe-ui-symbolic.svg $out/share/icons/hicolor/symbolic/apps/universe-ui-symbolic.svg
         '';
         buildInputs = with pkgs.qt6; [ qtbase qtdeclarative qt5compat qtmultimedia qtwayland qtsvg ];
-        dontWrapQtApps = false;
         desktopItems = [ uiDesktopItem ];
         # The hooks and systemd's ExecStopPost need the CLI; a Python process has no argv[0] to find it by.
         preFixup = ''
@@ -132,9 +114,9 @@
           for f in $out/bin/*; do wrapQtApp "$f"; done
         '';
         doCheck = false;
+        meta.mainProgram = "universe-ui";
       };
 
-      # The core wrapped with the shipped modules and their runtime on PATH: `nix build .#universe`.
       universe = pkgs.symlinkJoin {
         name = "universe-${version}";
         paths = [ core modulesPkg ];
@@ -178,11 +160,6 @@
         modules = modulesPkg;
         universe-ui = ui;
         default = universe;
-      } // lib.mapAttrs' (n: v: lib.nameValuePair "modules-${n}" v) modulePkgs;
-
-      apps.${system} = {
-        default = { type = "app"; program = "${universe}/bin/universe"; meta.description = "Universe launcher CLI"; };
-        universe-ui = { type = "app"; program = "${ui}/bin/universe-ui"; meta.description = "Universe Qt UI"; };
       };
 
       overlays.default = final: prev: { universe = universe; universe-ui = ui; universe-core = core; universe-modules = modulesPkg; };

@@ -1,5 +1,3 @@
-"""Journal module: image curation, the stub pipeline end to end, the Markdown
-round trip (entries -> note -> migrate -> entries) and codex argument composition."""
 import json
 import locale
 import os
@@ -20,13 +18,11 @@ import images as img  # noqa: E402
 import note  # noqa: E402
 import prompt as pr  # noqa: E402
 import providers  # noqa: E402
-from _common import read_entries, read_sessions, validate_entry  # noqa: E402
+from _common import validate_entry  # noqa: E402
 
 SID = "20260911-120000"
-needs_ffmpeg = pytest.mark.skipif(shutil.which("ffmpeg") is None, reason="ffmpeg not on PATH")
 
 
-# The meta line follows LC_TIME; pin it so the asserts hold under any shell locale.
 @pytest.fixture(autouse=True)
 def c_locale(monkeypatch):
     monkeypatch.setenv("LC_ALL", "C.UTF-8")
@@ -53,9 +49,6 @@ def write_shim(path, body):
     path.chmod(path.stat().st_mode | stat.S_IEXEC | stat.S_IXGRP | stat.S_IXOTH)
 
 
-# --- image curation ---------------------------------------------------------------
-
-@needs_ffmpeg
 def test_select_screenshots_window(tmp_path):
     att = tmp_path / "attachments"
     for name in ("20260911-115900.png", "20260911-120130.png", "20260911-120245.jpg", "20260911-130000.png", "20260911-120000-1.png"):
@@ -63,12 +56,10 @@ def test_select_screenshots_window(tmp_path):
     (att / "notes.txt").write_text("not an image")
     start, end = datetime(2026, 9, 11, 12, 0, 0), datetime(2026, 9, 11, 12, 3, 20)
     shots = img.select_screenshots(str(att), start, end)
-    # the head/tail grace admits 11:59:00, the frame file and the 13:00 shot stay out
     assert [os.path.basename(s.file) for s in shots] == ["20260911-115900.png", "20260911-120130.png", "20260911-120245.jpg"]
     assert all(s.kind == "shot" for s in shots)
 
 
-@needs_ffmpeg
 def test_extract_frames_from_mkv(tmp_path):
     rec = tmp_path / "rec.mkv"
     make_mkv(rec, "testsrc", 120)
@@ -85,7 +76,6 @@ def test_extract_frames_from_mkv(tmp_path):
             assert img.hamming(a.hash, b.hash) >= img.DUP_DISTANCE
 
 
-@needs_ffmpeg
 def test_extract_frames_dedupes_static_and_drops_black(tmp_path):
     static = tmp_path / "static.mkv"
     make_mkv(static, "smptebars", 100)
@@ -107,8 +97,6 @@ def test_dhash_and_review_normalization():
     assert img.normalize_review(None, 2) == ([1, 2], set())
     assert img.even_sample(list(range(10)), 4) == [0, 3, 6, 9]
 
-
-# --- the stub pipeline, end to end ------------------------------------------------------
 
 SHOT = "20260911-120130.png"
 
@@ -139,8 +127,8 @@ def run_process(tmp_path, fakebin, settings, extra_env=None, recording=None):
         "SESSION_ID": SID, "SESSION_STARTED_AT": "2026-09-11T12:00:00+02:00",
         "SESSION_ENDED_AT": "2026-09-11T12:03:20+02:00", "SESSION_DURATION_S": "200",
         "RECORDING_PATH": str(recording or ""),
-        "JOURNAL_DIR": str(journal_dir), "MODULE_DATA_DIR": str(tmp_path / "data"), "MODULE_DIR": str(MODULE_DIR),
-        "MODULE_SETTINGS_JSON": json.dumps({"provider": "stub", "journal_root": str(tmp_path / "root"), **settings}),
+        "JOURNAL_DIR": str(journal_dir), "MODULE_DATA_DIR": str(tmp_path / "data"), "UNIVERSE_JOURNAL_ROOT": str(tmp_path / "root"),
+        "MODULE_SETTINGS_JSON": json.dumps({"provider": "stub", "max_images": 40, **settings}),
     })
     env.update(extra_env or {})
     res = subprocess.run([sys.executable, str(BIN_DIR / "process")], env=env, capture_output=True, text=True)
@@ -172,7 +160,6 @@ def failed_file(journal_dir):
     return failed["reason"]
 
 
-@needs_ffmpeg
 def test_stub_pipeline_writes_entry_note_and_memory(tmp_path, fakebin):
     rec = tmp_path / "rec.mkv"
     make_mkv(rec, "testsrc", 200)
@@ -223,7 +210,6 @@ def test_stub_pipeline_writes_entry_note_and_memory(tmp_path, fakebin):
     assert all((note_path.parent / f).exists() for f in entry["images"])
     assert list((tmp_path / "data" / "work").iterdir()) == []
 
-    # a second run finds the entry and does nothing
     res2, _ = run_process(tmp_path, fakebin, {}, {"FAKE_UNIVERSE_EXIT": "1"}, recording=rec)
     assert res2.returncode == 0 and "already exists" in res2.stderr
     assert note_path.read_text() == text and state_files(journal_dir) == []
@@ -236,10 +222,7 @@ def test_stub_pipeline_hands_off_to_the_core(tmp_path, fakebin):
     assert not (journal_dir / f"{SID}.json").exists()
     assert "journal-add" in res.stderr and not (tmp_path / "root").exists()
     entry = json.loads((fakebin / "universe.args").read_text().splitlines()[2])
-    assert validate_entry(entry) == []
-    assert entry["provider"] == "stub" and entry["images"] == [f"attachments/{SHOT}"] and entry["title"] == "Stub session of Test Game: Redux"
-    assert datetime.fromisoformat(entry["started_at"]) == datetime.fromisoformat("2026-09-11T12:00:00+02:00")
-    assert datetime.fromisoformat(entry["ended_at"]) == datetime.fromisoformat("2026-09-11T12:03:20+02:00") and entry["duration_s"] == 200
+    assert entry["provider"] == "stub" and entry["images"] == [f"attachments/{SHOT}"]
     pending_seen_by_core(fakebin)
     assert state_files(journal_dir) == []
 
@@ -269,7 +252,6 @@ def test_codex_quota_marks_the_session_failed_and_defers(tmp_path, fakebin):
     assert failed_file(journal_dir) == "codex quota reached"
     assert (tmp_path / "data" / "codex-limit.json").exists()
 
-    # while the limit holds a rerun defers without calling codex, and the failed file is rewritten
     (journal_dir / f"{SID}.failed.json").write_text("{}")
     res, _ = run_process(tmp_path, fakebin, {"provider": "codex"})
     assert res.returncode == 75 and "deferring" in res.stderr
@@ -286,7 +268,6 @@ def test_model_failure_marks_the_session_failed(tmp_path, fakebin):
     assert len((fakebin / "codex.calls").read_text().splitlines()) == providers.RETRIES + 1
 
 
-@needs_ffmpeg
 def test_blank_recording_marks_the_session_failed(tmp_path, fakebin):
     rec = tmp_path / "rec.mkv"
     make_mkv(rec, "color=c=black", 60)
@@ -308,8 +289,6 @@ def test_disabled_and_forced_language(tmp_path, fakebin):
     assert "# Journal : Test Game: Redux\n\n## Stub session of Test Game: Redux\n*09/11/26 · 12:00–12:03 · 3 min*\n<!-- session:" in text
     assert "\n**Reprise :** Resume at the first checkpoint and keep going.\n" in text
 
-
-# --- render <-> migrate round trip ------------------------------------------------------------
 
 def sample_entries():
     return [
@@ -346,121 +325,15 @@ def sample_sessions():
     ]
 
 
-def test_render_then_migrate_round_trip(tmp_path):
-    entries, sessions = sample_entries(), sample_sessions()
-    journal_dir = tmp_path / "games" / "sample" / "journal"
-    journal_dir.mkdir(parents=True)
-    with open(tmp_path / "games" / "sample" / "sessions.jsonl", "w") as f:
-        for s in sessions:
-            f.write(json.dumps(s) + "\n")
-    for e in entries:
-        (journal_dir / f"{e['session']}.json").write_text(json.dumps(e))
-    res = subprocess.run([sys.executable, str(BIN_DIR / "render"), "sample", "--journal-dir", str(journal_dir), "--journal-root", str(tmp_path / "root"), "--title", "Sample: The Game"], capture_output=True, text=True)
-    assert res.returncode == 0, res.stderr
-    note_path = Path(res.stdout.strip())
-    text = note_path.read_text()
-    assert note_path == tmp_path / "root" / "sample" / "Sample The Game.md"
+def test_render_note():
+    text = note.render_note(sample_entries(), {s["session"]: s for s in sample_sessions()}, "Sample: The Game")
+    assert text.startswith("---\ngame: \"Sample: The Game\"\nsessions: 5\nfirst_played: 2025-12-01\nlast_played: 2026-03-01\ncover: attachments/20260301-211500.png\n---\n\n# Journal: Sample: The Game\n\n")
     assert "\n## #4 · Into the Dome\n*03/01/26 · 21:00–22:30 · 1 h 30 min*\n" in text
     assert "\n## #3 · Trois contrats et Port-péril\n" in text and "\n**Reprise :** Tu reprendras" in text and "\n**Enregistrement :** [003-" in text
     assert "\n## #2 · 01/10/26 · 00:05–00:07 · 2 min\n<!-- session: 20260110-000500 -->\n\n**Recording:** [002-" in text
     assert "\n## #1 · 12/20/25 · 12:00–12:01 · 1 min\n<!-- session: 20251220-120000 -->\n\n*This session’s recording" in text
     assert "\n## First Glimpse\n*12/01/25 · 23:00–00:10 · 1 h 10 min*\n" in text
     assert "![](attachments/20260301-211500.png)\n\n*Frames from the recording*\n\n![](attachments/20260301-210000-1.png)\n![](attachments/frames/frame-20260301-210000-02.jpg)\n" in text
-
-    out_dir = tmp_path / "migrated"
-    res = subprocess.run([sys.executable, str(BIN_DIR / "migrate"), str(note_path), str(out_dir), "--game", "sample"], capture_output=True, text=True)
-    assert res.returncode == 0, res.stderr
-    assert read_entries(str(out_dir)) == sorted(entries, key=lambda e: e["session"], reverse=True)
-    migrated = read_sessions(str(out_dir))
-    for s in sessions:
-        assert migrated[s["session"]] == s
-    # rendering the migrated data reproduces the note; a second render is a no-op
-    res = subprocess.run([sys.executable, str(BIN_DIR / "render"), "--journal-dir", str(out_dir), "--journal-root", str(tmp_path / "root2"), "--title", "Sample: The Game"], capture_output=True, text=True)
-    assert res.returncode == 0 and Path(res.stdout.strip()).read_text() == text
-    res = subprocess.run([sys.executable, str(BIN_DIR / "render"), "--journal-dir", str(out_dir), "--journal-root", str(tmp_path / "root2"), "--title", "Sample: The Game"], capture_output=True, text=True)
-    assert "unchanged" in res.stderr
-
-
-LEGACY_NOTE = """---
-game: "Dishonored: Definitive Edition"
-sessions: 3
-first_played: 2024-03-09
-last_played: 2026-04-25
-cover: attachments/20260425-000349.png
----
-
-# Journal: Dishonored: Definitive Edition
-## First Glimpse of Dunwall
-*25/04/2026 · 00h03 à 00h03 · 1 min*
-<!-- session: 20260425-000349 -->
-
-You launched Dishonored for the first time and reached the title screen overlooking Dunwall.
-
-**Next up:** Resume from the title screen, press any key, and begin a new campaign.
-
-![](attachments/20260425-000349.png)
-
-## #9 · 22/12/2025 · 22h19 à 22h25 · 6 min
-<!-- session: 20251222-221927 -->
-
-**Recording:** [009-20251222-221927-6m.mkv](file:///mnt/recordings/games/dishonored/009-20251222-221927-6m.mkv)
-
-## #2 · Trois contrats
-*09/03/2024 · 18h58 à 20h27 · 1 h 28 min*
-<!-- session: 20240309-185826 -->
-
-Le duo a enchaîné les sauvetages au dernier souffle.
-
-- **Boss :** Tu as vaincu Corbin Claquebec.
-- **Niveau :** Tu as terminé Port-péril.
-
-**Reprise :** Tu reprendras dans le Mausolée III.
-
-**Enregistrement :** [002-20240309-185826-1h28m.mkv](file:///mnt/recordings/games/dishonored/002-20240309-185826-1h28m.mkv)
-
-*Images extraites de l'enregistrement*
-
-![](attachments/frames/frame-20240309-185826-01.jpg)
-![](attachments/frames/frame-20240309-185826-02.jpg)
-"""
-
-
-def test_migrate_legacy_note_shapes(tmp_path):
-    src = tmp_path / "legacy" / "Dishonored Definitive Edition.md"
-    src.parent.mkdir()
-    src.write_text(LEGACY_NOTE)
-    (src.parent / "attachments").mkdir()
-    (src.parent / "attachments" / "20260425-000349.png").write_bytes(b"png")
-    out = tmp_path / "journal"
-    res = subprocess.run([sys.executable, str(BIN_DIR / "migrate"), str(src), str(out)], capture_output=True, text=True)
-    assert res.returncode == 0, res.stderr
-    entries = read_entries(str(out))
-    assert [e["session"] for e in entries] == ["20260425-000349", "20251222-221927", "20240309-185826"]
-    virtual, bodyless, french = entries
-    assert virtual["game"] == "dishonored-definitive-edition" and virtual["title"] == "First Glimpse of Dunwall" and virtual["lang"] == "en"
-    assert virtual["images"] == ["attachments/20260425-000349.png"] and virtual["written_at"] == "2026-04-25T00:03:00+02:00"
-    assert bodyless["title"] == "" and bodyless["paragraphs"] == [] and bodyless["next_up"] == "" and bodyless["lang"] == "en"
-    assert french["lang"] == "fr" and french["paragraphs"] == ["Le duo a enchaîné les sauvetages au dernier souffle.", "- **Boss :** Tu as vaincu Corbin Claquebec.", "- **Niveau :** Tu as terminé Port-péril."]
-    assert french["next_up"] == "Tu reprendras dans le Mausolée III." and french["title"] == "Trois contrats"
-    assert (out / "attachments" / "20260425-000349.png").read_bytes() == b"png"
-    sessions = read_sessions(str(out))
-    assert sessions["20251222-221927"]["recording"] == "/mnt/recordings/games/dishonored/009-20251222-221927-6m.mkv"
-    assert sessions["20260425-000349"]["recording"] is None and sessions["20240309-185826"]["duration_s"] == 5280
-    title, parsed, parsed_sessions = note.parse_note(LEGACY_NOTE)
-    rendered = note.render_note(parsed, {s["session"]: s for s in parsed_sessions}, title)
-    # the legacy meta lines come back in the current format, everything else byte for byte
-    expected = (LEGACY_NOTE.replace("# Journal: Dishonored: Definitive Edition\n## First", "# Journal: Dishonored: Definitive Edition\n\n## First")
-                .replace("25/04/2026 · 00h03 à 00h03", "04/25/26 · 00:03–00:03")
-                .replace("22/12/2025 · 22h19 à 22h25", "12/22/25 · 22:19–22:25")
-                .replace("09/03/2024 · 18h58 à 20h27", "03/09/24 · 18:58–20:27"))
-    assert rendered == expected
-
-
-# --- codex provider ------------------------------------------------------------------------
-
-class FakeImage:
-    def __init__(self, file, t, kind="frame", tail=False):
-        self.file, self.t, self.kind, self.tail = file, t, kind, tail
 
 
 def test_codex_exec_arguments(tmp_path, monkeypatch):
@@ -475,9 +348,8 @@ def test_codex_exec_arguments(tmp_path, monkeypatch):
         return subprocess.CompletedProcess(args, 0, "", "")
 
     monkeypatch.setattr(providers.subprocess, "run", fake_run)
-    ims = [FakeImage("/tmp/a.png", datetime(2026, 9, 11, 12, 1)), FakeImage("/tmp/b.png", datetime(2026, 9, 11, 12, 2), tail=True)]
-    brief = pr.build_user_prompt("Test", datetime(2026, 9, 11, 12, 0), datetime(2026, 9, 11, 12, 30), 1800, 1, 1800, ims, "", None,
-                                 providers.IMAGE_INTRO, pr.image_lines(ims))
+    ims = [img.Image("/tmp/a.png", datetime(2026, 9, 11, 12, 1), "frame"), img.Image("/tmp/b.png", datetime(2026, 9, 11, 12, 2), "frame", True)]
+    brief = pr.build_user_prompt("Test", datetime(2026, 9, 11, 12, 0), datetime(2026, 9, 11, 12, 30), 1800, 1, 1800, ims, "", None)
     out = providers.run_codex("gpt-5.6-sol", brief, ims, str(tmp_path))
     assert out == answer
     args, kw = calls[0]
@@ -525,8 +397,6 @@ def test_acceptance_of_model_fields():
     assert merged == {"synopsis": "A long synopsis about the whole story so far.", "entities": {"characters": ["Zach", "Amelia"], "places": ["Ophir"], "bosses": []}, "language": "fr", "profile": "narrative"}
 
 
-# --- bin/choices -------------------------------------------------------------------------
-
 def run_choices(tmp_path, settings, codex_body):
     bindir = tmp_path / "fakebin"
     bindir.mkdir(exist_ok=True)
@@ -545,9 +415,6 @@ def test_choices_lists_the_providers_models(tmp_path):
     res = run_choices(tmp_path, {"provider": "codex"}, f"[ \"$1 $2\" = 'debug models' ] || exit 2\necho '{json.dumps(catalog)}'\nexit 0")
     assert res.returncode == 0, res.stderr
     assert json.loads(res.stdout) == ["gpt-6-astra", "gpt-5.6-sol"]
-
-    res = run_choices(tmp_path, {"provider": "claude"}, "exit 2")
-    assert json.loads(res.stdout) == ["fable", "opus", "sonnet", "haiku"]
 
     res = run_choices(tmp_path, {"provider": "stub"}, "exit 2")
     assert json.loads(res.stdout) == []

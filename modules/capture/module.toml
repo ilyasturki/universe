@@ -5,8 +5,7 @@ kind = ["hooks"]
 version = "0.0.1"
 
 [requires]
-core = "=0.0.1"
-bins = ["gpu-screen-recorder"]
+bins = ["gpu-screen-recorder", "ffprobe", "trash"]
 
 [hooks]
 post-launch = "bin/start"
@@ -119,7 +118,6 @@ default = 60
 label = "Wait for the game's window (s) before the pick, then record the screen"
 scope = "global"
 
-# config scope: config.toml / `universe module set` only, no settings row — raw knobs for the tweaker.
 [[settings]]
 key = "ffmpeg_video_opts"
 type = "string"

@@ -11,22 +11,6 @@ The shipped frontend, `universe-ui`, lives in `ui/`: a PySide6 host around two Q
 contract and the parts of it that were expensive to get right; a GTK or Windows frontend owes none
 of it except the "Changes" section, which is a property of the core.
 
-```
-ui/
-  pyproject.toml            the universe_ui package, the universe-ui script
-  universe_ui/
-    host.py                 QGuiApplication + QQmlApplicationEngine, options, screen capture, key scripting
-    api.py                  the `api` object QML sees
-    models.py               Game, GameListModel and the QML proxies (import Universe)
-    universe_client.py      CoreClient (the real core) and FakeClient (fixtures)
-    gamepad.py              SDL2 → QKeyEvent
-    screens/                data for the added screens: settings.py, sources.py, media.py, paths.py, controller.py, runners.py, artwork.py
-    fixtures/               library.json and generated artwork, for --fake
-    themes.py               the looks the host can load and the one on screen (api.theme)
-    qml/                    the ported theme plus the added screens; ui/Pad*.qml and PadGeometry.js draw the pads, assets/runners/ holds the runner logos (SOURCES.md says where each is from)
-  tests/                    pytest, offscreen
-```
-
 ## What QML sees
 
 One context property, `api`:
@@ -110,9 +94,8 @@ process**: closing the frontend mid-install interrupts it, by design.
 
 ## Launch and the running view
 
-The game runs inside gamescope (`launch.gamescope`, see `docs/api.md`): one window, black until
-the game draws, whatever Proton, umu or the emulator put up first. The launcher never lowers,
-raises or hides itself — Mutter owns stacking and focus on Wayland — it times the handover on that
+The game runs inside gamescope (`docs/api.md` § Gamescope). The launcher never lowers, raises or
+hides itself — Mutter owns stacking and focus on Wayland — it times the handover on gamescope's
 window and asks the shell extension to focus it.
 
 `launchGame` raises `ui/LaunchOverlay.qml` over the page: the poster (`ui/LaunchFrame.qml`) fades
@@ -362,19 +345,4 @@ named by `UNIVERSE_FAKE_PAD` (a family id, or `none` for the empty state), with 
 
 ## Running and testing the shipped host
 
-```sh
-nix run .#universe-ui                  # fullscreen; add --windowed
-just ui                                # against .dev/
-just ui-fake                           # against fixtures, no core
-just seed [id…]                        # real games in .dev/: journal and media copied, recordings read in place
-```
-
-Options: `--windowed`, `--size WxH` (1920x1080, implies `--windowed`), `--no-gamepad`, `--fake`,
-`--fake-launch`, `--quit-after MS`, and `--keys "Right Right Return
-Wait I"` with `--key-gap MS` / `--key-delay MS`. Key names are `A B X Y LB RB LT RT Start Up Down
-Left Right Return Esc`; `Wait` pauses, `Wait:N` pauses N times, `Hold:A` / `Release:A` split a
-press, `Stick:rightX=0.6` tilts a stick, `Shot:path.png` grabs the window; with `--fake`,
-`Press:slot` / `Unpress:slot` and `Axis:lx=0.6` play the fake pad through the watcher.
-
-`just test` runs the suite. `conftest.py` forces `QT_QPA_PLATFORM=offscreen` and redirects
-`XDG_{STATE,CACHE,DATA}_HOME` to a temporary directory, so tests never touch real user state.
+`man universe-ui` lists the options, `KeyScript` in `universe_ui/gamepad.py` the `--keys` names, `just --list` the dev recipes.

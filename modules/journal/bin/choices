@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""choices_exec for `model`: the current provider's models as a JSON array on stdout."""
 import json
 import os
 import subprocess
@@ -7,9 +6,6 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import load_settings, log  # noqa: E402
-
-# `claude` has no catalog; these are the aliases its --model documents.
-CLAUDE_MODELS = ["fable", "opus", "sonnet", "haiku"]
 
 
 def codex_models():
@@ -28,14 +24,7 @@ def main(argv):
     if argv[:1] != ["model"]:
         log(f"usage: choices model (got {argv})")
         return 2
-    provider = load_settings().get("provider")
-    if provider == "codex":
-        models = codex_models()
-    elif provider == "claude":
-        models = CLAUDE_MODELS
-    else:
-        models = []
-    print(json.dumps(models))
+    print(json.dumps(codex_models() if load_settings().get("provider") == "codex" else []))
     return 0
 
 

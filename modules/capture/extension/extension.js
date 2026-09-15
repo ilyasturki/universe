@@ -42,14 +42,9 @@ export default class UniverseExtension extends Extension {
     }
 
     disable() {
-        if (this._nameId) {
-            Gio.bus_unown_name(this._nameId);
-            this._nameId = 0;
-        }
-        if (this._dbus) {
-            this._dbus.unexport();
-            this._dbus = null;
-        }
+        Gio.bus_unown_name(this._nameId);
+        this._dbus.unexport();
+        this._dbus = null;
     }
 
     // The ids are what org.gnome.Mutter.ScreenCast.Session.RecordWindow takes as window-id.
@@ -78,7 +73,6 @@ export default class UniverseExtension extends Extension {
         return JSON.stringify(windows);
     }
 
-    // Focus and raise one of List's windows: the launcher hands the screen to the game and takes it back.
     Activate(id) {
         for (const actor of global.get_window_actors()) {
             const w = actor.get_meta_window();
@@ -90,11 +84,8 @@ export default class UniverseExtension extends Extension {
         return false;
     }
 
-    // A screenshot in-process, written to `path` as a PNG: the focused window's client area, or every
-    // monitor. org.gnome.Shell.Screenshot refuses background callers, and a KMS grab out of process
-    // takes long enough that its cue lags the press. Mutter reads the framebuffer synchronously in
-    // screenshot*(): the pixels are taken once it returns, so the cue fires and the caller is answered
-    // right away, before the async PNG encode; a write that fails later is only a notification.
+    // org.gnome.Shell.Screenshot refuses background callers. Mutter grabs the pixels synchronously
+    // in screenshot*(), so the cue and the reply go out before the async PNG encode.
     ScreenshotAsync([path, window, cursor], invocation) {
         const reply = ok => invocation.return_value(new GLib.Variant('(b)', [ok]));
         let stream;
@@ -111,7 +102,7 @@ export default class UniverseExtension extends Extension {
         }
         const area = window ? this._focusedWindowRect() : this._primaryMonitorRect();
         if (!area) {
-            try { stream.close(null); } catch { /* unusable */ }
+            try { stream.close(null); } catch {}
             reply(false);
             return;
         }
@@ -127,7 +118,7 @@ export default class UniverseExtension extends Extension {
                     logError(e, 'Universe: screenshot failed');
                     Main.notifyError('Universe', 'Screenshot failed to save');
                 }
-                try { stream.close(null); } catch { /* unusable */ }
+                try { stream.close(null); } catch {}
             };
             if (window)
                 shooter.screenshot_window(false, cursor, stream, finish);
@@ -135,7 +126,7 @@ export default class UniverseExtension extends Extension {
                 shooter.screenshot(cursor, stream, finish);
         } catch (e) {
             logError(e, 'Universe: screenshot failed');
-            try { stream.close(null); } catch { /* unusable */ }
+            try { stream.close(null); } catch {}
             reply(false);
             return;
         }
@@ -156,7 +147,6 @@ export default class UniverseExtension extends Extension {
         return m ? {x: m.x, y: m.y, width: m.width, height: m.height} : null;
     }
 
-    // GNOME's own screenshot cue, which the in-process grab skips: a flash over the area, the shutter.
     _screenshotCue(area) {
         try {
             new Flashspot(area).fire();

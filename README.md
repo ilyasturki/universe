@@ -44,7 +44,7 @@ The home-manager module also installs Universe's GNOME Shell extension (window r
 
 Without home-manager: `nix profile install github:ilyasturki/universe`, then write `~/.config/universe/config.toml` (defaults in `docs/api.md`).
 
-Packages: `universe` (default: core wrapped with the shipped modules and their runtime on `PATH`), `universe-ui`, `core`, `universe-core-py` (the `universe_core` Python module), `modules`, `modules-<id>`. `nix run .#universe-ui` starts the host. `universe` ships Fish completions (game names, modules and sources come from the library); both ship man pages: `man universe`, `man universe-play`, `man universe-ui`.
+Packages: `universe` (default: core wrapped with the shipped modules and their runtime on `PATH`), `universe-ui`, `core`, `universe-core-py` (the `universe_core` Python module), `modules`. `nix run .#universe-ui` starts the host. `universe` ships Fish completions (game names, modules and sources come from the library); both ship man pages: `man universe`, `man universe-play`, `man universe-ui`.
 
 ## Use
 
@@ -74,7 +74,6 @@ universe media technomancer set logo https://…   # or a file: a pick, kept ove
 universe media technomancer search    # SteamGridDB's entries for the name, to `pin sgdb <id>` a wrong match
 universe journal technomancer --render
 universe recordings technomancer --remove 20260909-213045   # trashes the mkv, keeps the hours; journal --remove for an entry
-universe module ls · enable capture · settings journal
 universe doctor                # prerequisites of the core and every enabled module
 universe controller ls         # connected pads, every button and what it does
 universe controller bind xbox-elite paddle_p1 hold stop    # a macro; `learn` when a paddle is not recognised
@@ -106,14 +105,12 @@ The spare buttons of a pad — the Edge's paddles and Fn buttons, the Elite's pa
 | Module | Kind | Needs | Notes |
 |---|---|---|---|
 | `gog` | source | `gogdl` | login via `universe login gog`; a dedicated `GOGDL_CONFIG_PATH` under the module's data dir |
-| `capture` | hooks | `gpu-screen-recorder` + its setcap `gsr-kms-server`; the `universe@ilyasturki.github.io` shell extension for the window source (GNOME) | `source = "screen"` (default) records the session's output through KMS. `source = "window"` (per game) records just the game's window through GNOME's screencast portal: the first launch shows GNOME's picker once the game's window is up — pick it — and the pick is remembered per game, so later launches record it without a dialog and follow it across workspaces. Off GNOME, extension not loaded, or no window in 60 s: the screen, said on the shell's OSD. `cursor` per game; `fps = "auto"` follows the output's refresh rate (read from Mutter, 60 elsewhere) |
-| `journal` | hooks | `ffmpeg`, `codex` (or `provider = "claude"` / `"stub"`) | one Markdown entry per session from frames and screenshots |
+| `capture` | hooks | `gpu-screen-recorder` + its setcap `gsr-kms-server`, `ffprobe`, `trash`; the `universe@ilyasturki.github.io` shell extension for the window source (GNOME) | the screen by default, or the game's window through GNOME's picker: `docs/api.md` § Recordings |
+| `journal` | hooks | `ffmpeg`, `codex` (or `provider = "stub"`) | one Markdown entry per session from frames and screenshots |
 | metadata | core | SteamGridDB and RAWG keys in `[keys]` | artwork slots `box_front`, `square`, `banner`, `background`, `logo`, screenshots |
 | runners | core | the emulator on `PATH` (or `[runners.<id>] exe`); `inputplumber` for the pad option | `universe runner ls`; one doctor check per runner in use |
 
 Cursor hiding on GNOME toggles the `hide-cursor@elcste.com` shell extension around the session.
-Window capture, screenshots and the macro OSD use the `universe@ilyasturki.github.io` shell extension, installed by the
-home-manager module; GNOME loads it after the next logout, until then capture records the screen.
 
 Settings › Modules lists the modules, on or off, and opens each one's page with its settings; the same on the CLI: `universe module ls · enable capture · settings journal`.
 
@@ -123,18 +120,6 @@ Third-party modules: drop a directory with a `module.toml` under `~/.local/share
 
 A `justfile` wraps everything in `nix develop` and points the core at an isolated `.dev/` (its own config, data, recordings, journal), so nothing touches `~/.config/universe`. The host runs from `.venv/`, a venv on the dev shell's Python where `maturin develop` installs `universe_core` and `universe_ui` is installed editable (`just develop`, run by `ui` and `test`):
 
-```sh
-just setup                 # build, create .dev/config/config.toml, run doctor
-just cli migrate --apply   # any CLI command against .dev/ (login gog, scan gog, media <id> refresh, launch <id>…)
-just cli play <game>       # a game is a transient systemd unit; `just logs` follows them
-just ui                    # PySide6 host on the in-process core (add --windowed)
-just ui-fake               # host on a fixture library, no core
-just seed [id…]            # copy real games (journal, media, recording refs) into .dev/ to test the player and the journal
-just fixture-game          # add SuperTux as a `linux` game, to launch something where no library exists
-just test / just check     # cargo + pytest / flake packages + sandboxed checks
-just clean                 # trash .dev/ and .venv/
-UNIVERSE_DEV=.dev-empty just ui   # any recipe on another profile; a new one starts as an empty library
-just bump patch|minor|major|X.Y.Z   # release: rewrite every version copy from Cargo.toml, commit, tag vX.Y.Z (no push)
-```
+`just setup` first; `just --list` names the rest. `UNIVERSE_DEV=.dev-empty just ui` runs any recipe on another profile; a new one starts as an empty library.
 
 `docs/api.md` is the core API, the process model and the module contract; `docs/frontends.md` is what a frontend binds to.

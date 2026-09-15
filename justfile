@@ -1,7 +1,4 @@
-# Every recipe runs inside `nix develop` against an isolated data dir (.dev/), so nothing
-# here touches ~/.config/universe or ~/.local/share/universe. Nothing runs in the background:
-# a game is a transient systemd unit that closes its own session (`universe session-end`).
-# UNIVERSE_DEV names another profile: `UNIVERSE_DEV=.dev-empty just ui` starts on an empty library.
+# Every recipe runs inside `nix develop` against .dev/; UNIVERSE_DEV names another profile (`UNIVERSE_DEV=.dev-empty just ui`).
 
 dev := justfile_directory() / env("UNIVERSE_DEV", ".dev")
 export UNIVERSE_DATA_HOME := dev / "data"
@@ -52,10 +49,6 @@ ui-fake *args: develop
 logs:
     journalctl --user -f -u 'universe-*'
 
-# Open the dev shell (cargo, PySide6, Qt paths, module runtime on PATH)
-shell:
-    nix develop
-
 test: build develop env
     @{{ nix }} cargo test
     @{{ nix }} {{ python }} -m pytest -q ui
@@ -66,8 +59,6 @@ check:
     nix build .#universe .#universe-ui --no-link
     nix flake check
 
-# game.toml, sessions.jsonl, media/ and journal/ are copied from ~/.local/share/universe; the
-# recordings stay where they are (sessions.jsonl points at them by absolute path, nothing in dev writes there).
 # Copy real games into .dev/ to test the recording player and the journal: just seed [id…]
 seed *ids: env
     #!/usr/bin/env bash
@@ -120,9 +111,7 @@ env:
     EOF
     echo "wrote $cfg"
 
-# Release: run the sandboxed checks, rewrite every copy of the version, commit `chore(release): vX.Y.Z`, tag vX.Y.Z (no push).
-# Cargo.toml [workspace.package] is the source: flake.nix and universe-py read it; ui/pyproject.toml,
-# modules/*/module.toml and the docs example are copies nix can't reach from Cargo.toml, so they are rewritten.
+# Release: rewrite every copy of the version, commit `chore(release): vX.Y.Z`, tag vX.Y.Z (no push).
 bump level: check
     #!/usr/bin/env -S nix develop --quiet --command bash
     set -euo pipefail
@@ -141,7 +130,7 @@ bump level: check
     ! git rev-parse -q --verify "refs/tags/v$new" >/dev/null || { echo "bump: tag v$new exists" >&2; exit 1; }
     copies=(ui/pyproject.toml modules/*/module.toml docs/api.md)
     sed -i "/^\[workspace.package\]/,/^\[/s/^version = \"$cur\"$/version = \"$new\"/" Cargo.toml
-    sed -i "s/^version = \"$cur\"$/version = \"$new\"/; s/^core = \"=$cur\"$/core = \"=$new\"/" "${copies[@]}"
+    sed -i "s/^version = \"$cur\"$/version = \"$new\"/" "${copies[@]}"
     cargo update --workspace --offline --quiet
     git add Cargo.toml Cargo.lock "${copies[@]}"
     git commit --quiet -m "chore(release): v$new"

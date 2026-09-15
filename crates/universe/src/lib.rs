@@ -71,13 +71,9 @@ mod version_tests {
         let mut files = vec![root.join("ui/pyproject.toml"), root.join("docs/api.md")];
         files.extend(modules.flatten().map(|d| d.path().join("module.toml")).filter(|p| p.exists()));
         let version = format!("version = \"{}\"", super::VERSION);
-        let core = format!("core = \"={}\"", super::VERSION);
         for f in files {
             let s = std::fs::read_to_string(&f).unwrap();
             assert!(s.lines().any(|l| l == version), "{}: no `{version}`", f.display());
-            if f.ends_with("module.toml") || f.ends_with("api.md") {
-                assert!(s.lines().any(|l| l == core), "{}: no `{core}`", f.display());
-            }
         }
     }
 }

@@ -8,8 +8,6 @@ import subprocess
 import sys
 import threading
 import time
-import tomllib
-import urllib.error
 import urllib.parse
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -45,44 +43,18 @@ def log(message):
     print(f"gog: {message}", file=sys.stderr, flush=True)
 
 
-# ---------------------------------------------------------------- settings
-
-def module_dir():
-    return Path(os.environ.get("MODULE_DIR") or Path(__file__).resolve().parents[1])
-
-
 def data_dir():
-    raw = os.environ.get("MODULE_DATA_DIR")
-    if not raw:
-        xdg = os.environ.get("XDG_DATA_HOME") or os.path.expanduser("~/.local/share")
-        raw = os.path.join(xdg, "universe", "modules", "gog")
-    path = Path(raw)
+    path = Path(os.environ["MODULE_DATA_DIR"])
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
-def to_bool(value):
-    if isinstance(value, str):
-        return value.strip().lower() in ("1", "true", "yes", "on")
-    return bool(value)
-
-
 def load_settings():
-    with open(module_dir() / "module.toml", "rb") as f:
-        spec = tomllib.load(f)
-    settings = {s["key"]: s["default"] for s in spec.get("settings", [])}
-    raw = os.environ.get("MODULE_SETTINGS_JSON")
-    if raw:
-        settings.update(json.loads(raw))
-    if not settings["games_dir"]:
-        settings["games_dir"] = "~/Games"
+    settings = json.loads(os.environ["MODULE_SETTINGS_JSON"])
     for key in ("games_dir", "auth_path"):
         settings[key] = os.path.expanduser(str(settings[key]))
-    dirs = settings["scan_dirs"]
-    if isinstance(dirs, str):
-        dirs = [d.strip() for d in dirs.split(",") if d.strip()]
+    dirs = [d.strip() for d in settings["scan_dirs"].split(",") if d.strip()]
     settings["scan_dirs"] = [os.path.expanduser(d) for d in dirs] or [settings["games_dir"]]
-    settings["with_dlcs"] = to_bool(settings["with_dlcs"])
     settings["install_timeout_s"] = int(settings["install_timeout_s"])
     return settings
 
@@ -90,8 +62,6 @@ def load_settings():
 def platform_args(settings):
     return ["--platform", settings["platform"], "--with-dlcs" if settings["with_dlcs"] else "--skip-dlcs"]
 
-
-# -------------------------------------------------------------------- HTTP
 
 def fetch(url, token=None):
     headers = {"User-Agent": USER_AGENT, "Accept": "application/json"}
@@ -104,8 +74,6 @@ def fetch(url, token=None):
     except (OSError, ValueError) as exc:
         raise SourceError(f"GET {url.split('?')[0]}: {exc}") from exc
 
-
-# ------------------------------------------------------------------- gogdl
 
 def ensure_auth_file(path):
     # gogdl json.loads() the file whenever the path exists, so it must hold at least "{}".
@@ -210,8 +178,6 @@ def gogdl_stream(settings, *args, timeout):
         raise SourceError(f"gogdl {args[0]} failed (exit {code})")
 
 
-# ------------------------------------------------------------------ library
-
 def library_cache_path():
     return data_dir() / "library.json"
 
@@ -231,8 +197,9 @@ def save_library_cache(products):
     tmp.replace(library_cache_path())
 
 
-def library_index(products):
-    return {str(p.get("id")): p for p in products or []}
+def library_index():
+    products = load_library_cache()
+    return None if products is None else {str(p.get("id")): p for p in products}
 
 
 def access_token(settings):
@@ -269,8 +236,6 @@ def product_image(product):
     return (product or {}).get("coverVertical") or image or None
 
 
-# ------------------------------------------------------------------- builds
-
 def fetch_build(settings, game_id):
     data = fetch(BUILDS_URL.format(id=game_id, platform=settings["platform"]))
     items = [b for b in data.get("items") or [] if b.get("branch") is None]
@@ -292,8 +257,6 @@ def fetch_builds(settings, game_ids):
     with ThreadPoolExecutor(max_workers=8) as pool:
         return dict(pool.map(one, game_ids))
 
-
-# --------------------------------------------------------------------- scan
 
 def find_info_files(root):
     stack = [(Path(root), 1)]
@@ -372,8 +335,6 @@ def owned_status(game_id, index):
     return (game_id in index) if index is not None else None
 
 
-# -------------------------------------------------------------------- verbs
-
 def require_id(args, verb):
     if not args or not args[0].strip():
         raise SourceError(f"usage: {verb} <id>")
@@ -430,8 +391,7 @@ def cmd_search(settings, args):
     query = urllib.parse.urlencode({"query": f"like:{text}", "productType": "in:game", "limit": "20"},
                                    quote_via=urllib.parse.quote)
     data = fetch(f"{CATALOG_URL}?{query}")
-    library = load_library_cache()
-    index = library_index(library) if library is not None else None
+    index = library_index()
     installs = {i["id"]: i for i in scan_installs(settings)}
     for product in data.get("products") or []:
         game_id = str(product.get("id"))
@@ -450,8 +410,7 @@ def cmd_install(settings, args):
     game_id = require_id(args, "install")
     games_dir = settings["games_dir"]
     os.makedirs(games_dir, exist_ok=True)
-    library = load_library_cache()
-    index = library_index(library) if library is not None else None
+    index = library_index()
     if index is not None and game_id not in index:
         log(f"{game_id} is not in the cached library; gogdl may refuse it")
     gogdl_stream(settings, "download", game_id, *platform_args(settings), "--path", games_dir,
@@ -465,8 +424,7 @@ def cmd_install(settings, args):
 
 def cmd_update(settings, args):
     installs = scan_installs(settings)
-    library = load_library_cache()
-    index = library_index(library) if library is not None else None
+    index = library_index()
     if not args:
         remotes = fetch_builds(settings, [i["id"] for i in installs])
         for install in installs:
@@ -507,8 +465,7 @@ def cmd_update(settings, args):
 
 
 def cmd_scan(settings, args):
-    library = load_library_cache()
-    index = library_index(library) if library is not None else None
+    index = library_index()
     for install in scan_installs(settings):
         game_event(install["id"], install["title"], owned_status(install["id"], index), install,
                    (index or {}).get(install["id"]))
