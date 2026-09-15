@@ -1,8 +1,9 @@
 # Every recipe runs inside `nix develop` against an isolated data dir (.dev/), so nothing
 # here touches ~/.config/universe or ~/.local/share/universe. Nothing runs in the background:
 # a game is a transient systemd unit that closes its own session (`universe session-end`).
+# UNIVERSE_DEV names another profile: `UNIVERSE_DEV=.dev-empty just ui` starts on an empty library.
 
-dev := justfile_directory() / ".dev"
+dev := justfile_directory() / env("UNIVERSE_DEV", ".dev")
 export UNIVERSE_DATA_HOME := dev / "data"
 export UNIVERSE_CONFIG_HOME := dev / "config"
 export UNIVERSE_STATE_HOME := dev / "state"
@@ -61,7 +62,7 @@ test: build develop env
     @{{ nix }} {{ python }} -m pytest -q ui
     @{{ nix }} python3 -m pytest -q modules
 
-# Build the flake packages and run the sandboxed checks
+# Build the flake packages and run the sandboxed checks: what nixos-rebuild and CI run
 check:
     nix build .#universe .#universe-ui --no-link
     nix flake check
@@ -90,7 +91,14 @@ seed *ids: env
         echo "seeded $id ($(grep -c '"recording":"/' "$dest/sessions.jsonl" 2>/dev/null || echo 0) recordings, $(ls "$dest/journal"/*.json 2>/dev/null | wc -l) entries)"
     done
 
-# Trash .dev/ (config, data, recordings, journal) and .venv
+# A free native game (SuperTux) in the profile, to exercise the launch path where no library exists
+fixture-game: build env
+    #!/usr/bin/env bash
+    set -euo pipefail
+    nix build --out-link "{{ dev }}/supertux" nixpkgs#supertux
+    {{ nix }} target/debug/universe add "{{ dev }}/supertux/bin/supertux2" --runner linux --title SuperTux
+
+# Trash the profile (config, data, recordings, journal) and .venv
 clean:
     trash "{{ dev }}" "{{ VIRTUAL_ENV }}"
 
@@ -113,10 +121,10 @@ env:
     EOF
     echo "wrote $cfg"
 
-# Release: rewrite every copy of the version, commit `chore(release): vX.Y.Z`, tag vX.Y.Z (no push).
+# Release: run the sandboxed checks, rewrite every copy of the version, commit `chore(release): vX.Y.Z`, tag vX.Y.Z (no push).
 # Cargo.toml [workspace.package] is the source: flake.nix and universe-py read it; ui/pyproject.toml,
 # modules/*/module.toml and the docs example are copies nix can't reach from Cargo.toml, so they are rewritten.
-bump level:
+bump level: check
     #!/usr/bin/env -S nix develop --quiet --command bash
     set -euo pipefail
     cd "{{ justfile_directory() }}"

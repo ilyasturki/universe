@@ -378,7 +378,8 @@ def test_pick_window_wants_a_visible_toplevel_of_the_unit():
     assert _common.pick_window([mine, bigger], own_cgroup())["id"] == 2
     assert _common.pick_window([dict(mine, hidden=True)], own_cgroup()) is None
     assert _common.pick_window([dict(mine, minimized=True)], own_cgroup()) is None
-    assert _common.pick_window([dict(mine, pid=1)], own_cgroup()) is None
+    # Not pid 1: in a build sandbox every process shares the root cgroup.
+    assert _common.pick_window([dict(mine, pid=2**62)], own_cgroup()) is None
     assert _common.pick_window([mine], None) is None
 
 
