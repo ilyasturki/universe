@@ -4,16 +4,8 @@ A second look on the same host; how looks load and switch is `docs/frontends.md`
 Everything is authored at 1080p and scaled by the window height through `Theme.dp()`; the sizes
 in `core/Theme.qml` are measured from captures of the real HOME menu.
 
-```
-switch2/
-  theme.qml        HOME (TopBar, HomePage, BottomBar) and the page stack over it, the shell API
-  core/Theme.qml   palette, sizes, timings, the fonts, the focus ring's metrics and clock
-  assets/shaders/  ring.frag and its qsb: the focus ring (ui/FocusOutline.qml), rebuilt with
-                   `qsb --glsl "100 es,120,150" --hlsl 50 --msl 12 -o ring.frag.qsb ring.frag`
-  sound/Sound.qml  tick, ok, back, edge, type, select, open, home, launch (assets/sounds/generate.py)
-  ui/              the kit
-  pages/           one file per screen
-```
+The focus ring's shader ships as `assets/shaders/ring.frag.qsb`, rebuilt from `ring.frag` with
+`qsb --glsl "100 es,120,150" --hlsl 50 --msl 12 -o ring.frag.qsb ring.frag`.
 
 ## A page
 
@@ -34,38 +26,19 @@ page, **Start/Guide** (one key, F1) goes HOME. A page with an inner level (a gri
 player, a feed that opens an article) accepts B itself while inside, and accepts Start when it
 means "+ Options".
 
-The shell:
-
-| Call | What it does |
-|---|---|
-| `shell.push(source, args)` | a page over this one; `source` relative to `switch2/` (`"pages/AlbumPage.qml"`) |
-| `shell.pop()` | back one page |
-| `shell.launch(game)` | the launch screen, then `game.launch()`; the running game resumes instead, another one asks "Close X and start Y?" first |
-| `shell.resume()` | the running game's window back on top |
-| `shell.closeSoftware(game)` | the "Close the software?" dialog, then `shell.stopSession()`: a toast and `stop` |
-| `shell.dialogAsk({ message, detail, buttons, index, danger }, done(i))` | the dialog; B answers 0 |
-| `shell.pick({ title, choices, index }, done(i))` | the small list; B answers -1 |
-| `shell.prompt({ title, value, max, numeric, path }, done(value))` | the keyboard; cancel answers `null` |
-| `shell.showToast(text)` | a line at the top left |
+The shell is theme.qml's functions; B answers `dialogAsk` with 0, `pick` with −1, `prompt` and
+`browse` with `null`.
 
 `hints` glyphs are the Xbox names (`A B X Y LB RB LT RT Start Select dpad`); `dim: true` keeps a
 hint in place at low opacity when the page has nothing for it, and the d-pad is not written for
 plain navigation. `ui/HintGlyph.qml` draws them the HOME way from the same prompts as Reprise's
 `PadGlyph` (the outline in ink under the filled disc, the mark showing through).
 
-Album, News and their Player and Article pages take **+ Options** (Start) on a recording or an
-entry: play or read it, jump to the linked one, or remove it. `ui/Removal.js` holds the two
-confirmations (`shell.dialogAsk`: Cancel, trash this one, trash both) and calls
-`api.screens.album.remove` / `api.screens.news.remove`; a pending entry's removal cancels the
-writing.
-
 ## Running
 
 ```sh
-just ui --theme switch2                                         # the dev library, real art
 just ui-fake --theme switch2 --windowed --keys "Down Return Wait Right Shot:out.png" --quit-after 3000
 ```
 
-From HOME, `Down` reaches the bar: All Software, News, Install, Album, Controllers, System
-Settings, Quit. A bare `universe-ui` writes the pad it sees, and any pick in Settings › Themes,
-into the real `ui-memory.json`.
+A bare `universe-ui` writes the pad it sees, and any pick in Settings › Themes, into the real
+`ui-memory.json`.

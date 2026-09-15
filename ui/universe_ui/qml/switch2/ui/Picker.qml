@@ -2,20 +2,16 @@ import QtQuick
 import "../core"
 import "../sound"
 
-FocusScope {
+Modal {
     id: picker
 
-    property bool open: false
     property string title: ""
     property var choices: []
     property int index: 0
     property int current: -1
-    property var callback: null
 
     readonly property var hints: [ { glyph: "B", label: "Back" }, { glyph: "A", label: "OK" } ]
     readonly property real rowHeight: Theme.dp(100)
-    readonly property int visibleRows: 7
-    // The list clips; it reaches this far past the rows so the focus ring is never cut.
     readonly property real room: Theme.dp(Theme.ringRoom)
 
     function show(spec, done) {
@@ -23,170 +19,108 @@ FocusScope {
         choices = spec.choices || [];
         current = spec.index !== undefined ? spec.index : -1;
         index = Math.max(0, current);
-        callback = done || null;
-        Sound.open();
-        open = true;
-        forceActiveFocus();
+        present(done);
         list.positionViewAtIndex(index, ListView.Contain);
     }
 
-    function finish(i) {
-        var cb = callback;
-        callback = null;
-        open = false;
-        if (cb)
-            cb(i);
-    }
-
-    anchors.fill: parent
-    visible: scrim.opacity > 0.01
-    focus: open
+    card.width: Theme.dp(1000)
+    card.height: heading.height + Theme.dp(20) + list.height - picker.room * 2 + Theme.dp(40)
 
     Keys.onPressed: function(event) {
         event.accepted = true;
         if (event.isAutoRepeat)
             return;
         if (api.keys.isAccept(event)) {
-            Sound.select();
+            Sound.play("select");
             finish(index);
         } else if (api.keys.isCancel(event)) {
-            Sound.back();
+            Sound.play("back");
             finish(-1);
         } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
-            var next = Math.max(0, Math.min(choices.length - 1, index + (event.key === Qt.Key_Up ? -1 : 1)));
-            next === index ? Sound.edge() : Sound.tick();
-            index = next;
+            index = Sound.stepped(index, event.key === Qt.Key_Up ? -1 : 1, choices.length);
         } else if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
-            Sound.edge();
+            Sound.play("edge");
         }
     }
 
-    Rectangle {
-        id: scrim
-        anchors.fill: parent
-        color: Theme.scrim
-        opacity: picker.open ? 1.0 : 0.0
-
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-        }
+    Label {
+        id: heading
+        x: Theme.dp(60)
+        y: Theme.dp(20)
+        height: picker.title !== "" ? Theme.dp(80) : 0
+        verticalAlignment: Text.AlignVCenter
+        visible: picker.title !== ""
+        text: picker.title
+        color: Theme.textSecondary
+        font.pixelSize: Theme.dp(Theme.fontSmall)
     }
 
-    Rectangle {
-        id: card
+    ListView {
+        id: list
 
-        anchors.centerIn: parent
-        width: Theme.dp(1000)
-        height: heading.height + Theme.dp(20) + list.height - picker.room * 2 + Theme.dp(40)
-        radius: Theme.dp(6)
-        color: Theme.card
-        opacity: picker.open ? 1.0 : 0.0
-        scale: picker.open ? 1.0 : 0.98
+        x: Theme.dp(40) - picker.room
+        y: heading.y + heading.height + Theme.dp(10) - picker.room
+        width: parent.width - Theme.dp(80) + picker.room * 2
+        height: picker.rowHeight * Math.min(7, Math.max(1, picker.choices.length)) + picker.room * 2
+        model: picker.choices
+        currentIndex: picker.index
+        interactive: false
+        clip: true
+        highlightFollowsCurrentItem: true
+        preferredHighlightBegin: picker.room
+        preferredHighlightEnd: height - picker.room
+        highlightRangeMode: ListView.ApplyRange
+        header: Item { height: picker.room }
+        footer: Item { height: picker.room }
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-        }
-        Behavior on scale {
-            NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-        }
+        delegate: Item {
+            width: list.width
+            height: picker.rowHeight
 
-        Text {
-            id: heading
-            x: Theme.dp(60)
-            y: Theme.dp(20)
-            height: picker.title !== "" ? Theme.dp(80) : 0
-            verticalAlignment: Text.AlignVCenter
-            visible: picker.title !== ""
-            text: picker.title
-            color: Theme.textSecondary
-            font.family: Theme.sans
-            font.pixelSize: Theme.dp(Theme.fontSmall)
-        }
+            Item {
+                readonly property bool focused: index === picker.index
+                readonly property bool chosen: index === picker.current
 
-        ListView {
-            id: list
-
-            x: Theme.dp(40) - picker.room
-            y: heading.y + heading.height + Theme.dp(10) - picker.room
-            width: parent.width - Theme.dp(80) + picker.room * 2
-            height: picker.rowHeight * Math.min(picker.visibleRows, Math.max(1, picker.choices.length)) + picker.room * 2
-            model: picker.choices
-            currentIndex: picker.index
-            interactive: false
-            clip: true
-            highlightFollowsCurrentItem: true
-            preferredHighlightBegin: picker.room
-            preferredHighlightEnd: height - picker.room
-            highlightRangeMode: ListView.ApplyRange
-            header: Item { height: picker.room }
-            footer: Item { height: picker.room }
-
-            delegate: Item {
-                width: list.width
+                x: picker.room
+                width: parent.width - picker.room * 2
                 height: picker.rowHeight
 
-                Item {
-                    readonly property bool focused: index === picker.index
-                    readonly property bool chosen: index === picker.current
+                FocusPill {
+                    anchors.fill: parent
+                    focused: parent.focused
+                }
 
-                    x: picker.room
-                    width: parent.width - picker.room * 2
-                    height: picker.rowHeight
+                Hairline {
+                    visible: !parent.focused && index < picker.choices.length - 1
+                }
 
-                    Rectangle {
-                        id: pill
-                        anchors.fill: parent
-                        radius: Theme.dp(Theme.radiusRow)
-                        color: Theme.focusFill
-                        visible: parent.focused
-                    }
+                Label {
+                    x: Theme.dp(30)
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: parent.width - Theme.dp(120)
+                    text: modelData
+                    color: parent.chosen ? Theme.accent : Theme.text
+                    elide: Text.ElideRight
+                }
 
-                    FocusOutline {
-                        target: pill
-                        cornerRadius: pill.radius
-                        gap: 0
-                        shown: parent.focused && picker.open
-                    }
-
-                    Rectangle {
-                        anchors.bottom: parent.bottom
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        height: 1
-                        visible: !parent.focused && index < picker.choices.length - 1
-                        color: Theme.hairlineSoft
-                    }
-
-                    Text {
-                        x: Theme.dp(30)
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: parent.width - Theme.dp(120)
-                        text: modelData
-                        color: parent.chosen ? Theme.accent : Theme.text
-                        elide: Text.ElideRight
-                        font.family: Theme.sans
-                        font.pixelSize: Theme.dp(Theme.fontBody)
-                    }
+                Rectangle {
+                    anchors.right: parent.right
+                    anchors.rightMargin: Theme.dp(30)
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Theme.dp(40)
+                    height: width
+                    radius: width / 2
+                    color: parent.chosen ? Theme.accentStrong : "transparent"
+                    border.width: Theme.dp(2)
+                    border.color: parent.chosen ? Theme.accentStrong : Theme.hairline
 
                     Rectangle {
-                        anchors.right: parent.right
-                        anchors.rightMargin: Theme.dp(30)
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: Theme.dp(40)
+                        anchors.centerIn: parent
+                        width: Theme.dp(14)
                         height: width
                         radius: width / 2
-                        color: parent.chosen ? Theme.accentStrong : "transparent"
-                        border.width: Theme.dp(2)
-                        border.color: parent.chosen ? Theme.accentStrong : Theme.hairline
-
-                        Rectangle {
-                            anchors.centerIn: parent
-                            width: Theme.dp(14)
-                            height: width
-                            radius: width / 2
-                            color: "#ffffff"
-                            visible: parent.parent.chosen
-                        }
+                        color: "#ffffff"
+                        visible: parent.parent.chosen
                     }
                 }
             }

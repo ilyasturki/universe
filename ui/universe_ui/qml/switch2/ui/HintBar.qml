@@ -5,6 +5,7 @@ Item {
     id: bar
 
     property var hints: []
+    property string key: ""
     property bool hairline: false
     property color ink: Theme.text
     property color muted: Theme.textDisabled
@@ -13,13 +14,19 @@ Item {
 
     implicitHeight: Theme.dp(Theme.hintBarHeight)
 
-    Rectangle {
+    onHintsChanged: {
+        var k = JSON.stringify(hints);
+        if (k !== key) {
+            key = k;
+            rep.model = hints;
+        }
+    }
+
+    Hairline {
+        anchors.bottom: undefined
         anchors.top: parent.top
-        anchors.left: parent.left
-        anchors.right: parent.right
         anchors.leftMargin: Theme.dp(Theme.edgeMargin)
         anchors.rightMargin: Theme.dp(Theme.edgeMargin)
-        height: 1
         visible: bar.hairline
         color: Theme.hairline
     }
@@ -66,7 +73,7 @@ Item {
         spacing: Theme.dp(42)
 
         Repeater {
-            model: bar.hints
+            id: rep
 
             Row {
                 spacing: Theme.dp(14)
@@ -85,12 +92,10 @@ Item {
                     }
                 }
 
-                Text {
+                Label {
                     anchors.verticalCenter: parent.verticalCenter
                     text: modelData.label
                     color: modelData.dim === true ? bar.muted : bar.ink
-                    font.family: Theme.sans
-                    font.pixelSize: Theme.dp(Theme.fontBody)
                 }
             }
         }

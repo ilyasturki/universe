@@ -42,31 +42,19 @@ FocusScope {
         limit: 12
     }
 
-    function step(d) {
-        var next = Math.max(0, Math.min(allIndex, index + d));
-        if (next === index) {
-            Sound.edge();
-            return;
-        }
-        Sound.tick();
-        index = next;
-    }
+    function step(d) { index = Sound.stepped(index, d, allIndex + 1); }
 
     function activate() {
         if (onAll) {
-            Sound.ok();
+            Sound.play("ok");
             shell.push("pages/AllSoftwarePage.qml", {});
             return;
         }
         if (!currentGame) {
-            Sound.edge();
+            Sound.play("edge");
             return;
         }
-        if (currentGame.id === playingId) {
-            shell.resume();
-            return;
-        }
-        shell.launch(currentGame);
+        onPlaying ? shell.resume() : shell.launch(currentGame);
     }
 
     onGameCountChanged: {
@@ -78,10 +66,10 @@ FocusScope {
     Keys.onLeftPressed: step(-1)
     Keys.onRightPressed: step(1)
     Keys.onDownPressed: {
-        Sound.tick();
+        Sound.play("tick");
         page.escapedDown();
     }
-    Keys.onUpPressed: Sound.edge()
+    Keys.onUpPressed: Sound.play("edge")
 
     Keys.onPressed: function(event) {
         if (event.isAutoRepeat)
@@ -92,26 +80,25 @@ FocusScope {
         } else if (api.keys.isMenu(event)) {
             event.accepted = true;
             if (currentGame) {
-                Sound.ok();
+                Sound.play("ok");
                 shell.push("pages/SoftwareOptionsPage.qml", { gameId: currentGame.id });
             } else {
-                Sound.edge();
+                Sound.play("edge");
             }
         } else if (api.keys.isDetails(event)) {
             event.accepted = true;
-            if (currentGame && currentGame.id === playingId) {
-                Sound.ok();
+            if (onPlaying) {
+                Sound.play("ok");
                 shell.closeSoftware(currentGame);
             } else {
-                Sound.edge();
+                Sound.play("edge");
             }
         }
     }
 
-    Text {
+    Label {
         id: title
 
-        // Centred over the focused tile; what would run past the screen's margin is elided, not shifted.
         readonly property real centre: page.index * page.pitch - row.contentX + page.tile / 2
         readonly property real margin: Theme.dp(Theme.edgeMargin)
         readonly property real room: 2 * Math.min(centre - margin, page.width - margin - centre)
@@ -124,8 +111,6 @@ FocusScope {
         color: Theme.accent
         horizontalAlignment: Text.AlignHCenter
         elide: Text.ElideRight
-        font.family: Theme.sans
-        font.pixelSize: Theme.dp(Theme.fontBody)
     }
 
     ListView {
@@ -135,7 +120,7 @@ FocusScope {
         width: parent.width
         height: page.tile + Theme.dp(60)
         orientation: ListView.Horizontal
-        model: page.gameCount + 1
+        model: recent
         spacing: page.gap
         leftMargin: page.rowX
         rightMargin: page.rowX
@@ -145,8 +130,6 @@ FocusScope {
         cacheBuffer: page.pitch * 4
         clip: false
 
-        // The cursor walks the tiles in view; the row slides only when the focused one would leave
-        // the margins, and then just far enough to keep it inside them, ring and title included.
         function slideToCurrent() {
             var left = page.index * page.pitch;
             var right = left + page.tile;
@@ -158,17 +141,12 @@ FocusScope {
             contentX = Math.max(-leftMargin, Math.min(target, Math.max(-leftMargin, contentWidth - width + rightMargin)));
         }
 
-        Behavior on contentX {
-            NumberAnimation { duration: Theme.durFocus; easing.type: Easing.OutCubic }
-        }
+        Behavior on contentX { Ease { duration: Theme.durFocus } }
 
         delegate: Item {
             id: cell
 
-            readonly property bool isAll: index === page.allIndex
-            readonly property bool isGame: index < page.gameCount
-            readonly property bool focused: page.activeFocus && (page.onAll ? isAll : index === page.index)
-            readonly property var game: isGame ? recent.get(index) : null
+            readonly property bool focused: page.activeFocus && index === page.index
 
             width: page.tile
             height: row.height
@@ -177,28 +155,34 @@ FocusScope {
 
             Tile {
                 id: art
-                visible: !cell.isAll
                 y: Theme.dp(30)
                 width: page.tile
                 height: page.tile
-                game: cell.game
+                game: modelData
                 focused: cell.focused
             }
 
-            Text {
-                visible: cell.isGame && cell.game && cell.game.id === page.playingId
+            Label {
+                visible: modelData.id === page.playingId
                 anchors.top: art.bottom
                 anchors.topMargin: Theme.dp(Theme.ringRoom + 4)
                 anchors.horizontalCenter: art.horizontalCenter
                 text: "Playing"
                 color: Theme.accent
-                font.family: Theme.sans
                 font.pixelSize: Theme.dp(Theme.fontSmall)
             }
+        }
+
+        footer: Item {
+            readonly property bool focused: page.activeFocus && page.onAll
+
+            width: page.tile + page.gap
+            height: row.height
+            z: focused ? 2 : 1
 
             Item {
-                visible: cell.isAll
-                anchors.centerIn: art
+                x: page.gap + (page.tile - width) / 2
+                y: Theme.dp(30) + (page.tile - height) / 2
                 width: Theme.dp(236)
                 height: width
 
@@ -212,7 +196,7 @@ FocusScope {
                 FocusOutline {
                     target: disc
                     cornerRadius: disc.radius
-                    shown: cell.focused
+                    shown: parent.parent.focused
                 }
 
                 Glyph {

@@ -1,6 +1,5 @@
 import QtQuick
 import "../core"
-import "../sound"
 import "../ui"
 import "Groups.js" as Groups
 
@@ -21,8 +20,6 @@ FocusScope {
     readonly property var hints: zone === "rail" ? [ { glyph: "B", label: "Back" }, { glyph: "A", label: "OK" } ]
                                : [ { glyph: "Start", label: "Options" }, { glyph: "B", label: "Back" }, { glyph: "A", label: "Start" } ]
 
-    property var list: []
-
     function key(g) {
         return sortMode === 1 ? g.sortTitle.toLowerCase()
              : sortMode === 2 ? -g.playTime
@@ -30,18 +27,11 @@ FocusScope {
              : -(g.lastPlayed instanceof Date && !isNaN(g.lastPlayed.getTime()) ? g.lastPlayed.getTime() : 0);
     }
 
-    function rebuild() {
+    readonly property var list: {
         var keyed = Groups.gamesOf(api.allGames, api.collections, groupKey).map(function(g) { return { k: page.key(g), g: g }; });
         keyed.sort(function(a, b) { return a.k < b.k ? -1 : a.k > b.k ? 1 : 0; });
-        list = keyed.map(function(e) { return e.g; });
+        return keyed.map(function(e) { return e.g; });
     }
-
-    Connections {
-        target: api.allGames
-        function onCountChanged() { page.rebuild(); }
-    }
-    onArgsChanged: rebuild()
-    onSortModeChanged: rebuild()
 
     focus: true
 
@@ -57,7 +47,7 @@ FocusScope {
         anchors.right: parent.right
         icon: "grid"
         title: page.name
-        trailing: Groups.count(page.list.length)
+        trailing: page.list.length + (page.list.length === 1 ? " game" : " games")
     }
 
     Rail {
@@ -81,13 +71,12 @@ FocusScope {
         }
     }
 
-    Text {
+    Label {
         anchors.right: parent.right
         anchors.rightMargin: Theme.dp(160)
         y: Theme.dp(140)
         text: page.sortNames[page.sortMode]
         color: Theme.textSecondary
-        font.family: Theme.sans
         font.pixelSize: Theme.dp(Theme.fontSmall)
     }
 
@@ -103,8 +92,7 @@ FocusScope {
             page.zone = "rail";
             rail.forceActiveFocus();
         }
-        onEscapedUp: Sound.edge()
-        onActivated: function(i) { page.shell.launch(games[i]); }
-        onOptionsRequested: function(i) { page.shell.push("pages/SoftwareOptionsPage.qml", { gameId: games[i].id }); }
+        onActivated: page.shell.launch(current)
+        onOptionsRequested: page.shell.push("pages/SoftwareOptionsPage.qml", { gameId: current.id })
     }
 }

@@ -23,8 +23,6 @@ Rectangle {
         x: root.on ? parent.width - width - Theme.dp(4) : Theme.dp(4)
         color: "#ffffff"
 
-        Behavior on x {
-            NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-        }
+        Behavior on x { Ease { duration: Theme.durQuick } }
     }
 }

@@ -19,9 +19,7 @@ Item {
     height: Theme.dp(84)
     visible: y > -height + 1
 
-    Behavior on y {
-        NumberAnimation { duration: Theme.durPage; easing.type: Easing.OutCubic }
-    }
+    Behavior on y { Ease {} }
 
     Timer {
         id: hideTimer
@@ -37,15 +35,13 @@ Item {
         border.color: Theme.hairline
     }
 
-    Text {
+    Label {
         id: label
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.margins: Theme.dp(32)
         anchors.verticalCenter: parent.verticalCenter
         text: toast.text
-        color: Theme.text
-        font.family: Theme.sans
         font.pixelSize: Theme.dp(Theme.fontSmall)
         elide: Text.ElideRight
     }

@@ -2,22 +2,21 @@ import QtQuick
 import "../core"
 import "../sound"
 
-FocusScope {
+Modal {
     id: sheet
 
-    property bool open: false
     property string title: ""
     property string text: ""
     property int max: 64
     property bool numeric: false
     property bool symbols: false
     property bool shift: false
-    property var callback: null
+    property bool built: false
 
     property string zone: "keys"
     property int rowIndex: 1
     property int colIndex: 0
-    property int sideIndex: 2
+    property int sideIndex: 1
 
     readonly property var hints: [
         { glyph: "Y", label: "Space" },
@@ -27,6 +26,11 @@ FocusScope {
         { glyph: "A", label: "Select" }
     ]
 
+    carded: false
+    scrimColor: Theme.ground
+    scrimOpacity: 0.96
+    onOpenChanged: if (open) built = true
+
     function show(spec, done) {
         title = spec.title || "";
         text = spec.value === undefined || spec.value === null ? "" : String(spec.value);
@@ -34,42 +38,30 @@ FocusScope {
         numeric = spec.numeric === true;
         symbols = spec.path === true;
         shift = false;
-        callback = done || null;
         zone = "keys";
         rowIndex = numeric ? 0 : 1;
         colIndex = 0;
-        sideIndex = 2;
-        Sound.open();
-        open = true;
-        forceActiveFocus();
-    }
-
-    function finish(value) {
-        var cb = callback;
-        callback = null;
-        open = false;
-        if (cb)
-            cb(value);
+        sideIndex = 1;
+        present(done);
     }
 
     function cancel() {
-        Sound.back();
+        Sound.play("back");
         finish(null);
     }
 
     function put(ch) {
         if (text.length >= max) {
-            Sound.edge();
+            Sound.play("edge");
             return;
         }
-        Sound.type();
+        Sound.play("type");
         text += shift ? ch.toUpperCase() : ch;
-        if (shift)
-            shift = false;
+        shift = false;
     }
 
     function backspace() {
-        Sound.type();
+        Sound.play("type");
         text = text.slice(0, -1);
     }
 
@@ -78,8 +70,8 @@ FocusScope {
     readonly property var rows: numeric
         ? [ chars("123"), chars("456"), chars("789"), chars("-0.") ]
         : [ chars("1234567890-"), chars("qwertyuiop/"), chars("asdfghjkl:'"), chars("zxcvbnm,.?!") ]
-    readonly property var bottomRow: numeric ? [] : [ { label: "⇧", action: "shift" }, { label: "ABC", action: "abc" }, { label: "#+=", action: "symbols" }, { label: "Space", action: "space" } ]
-    readonly property var side: [ { label: "⌫", action: "backspace" }, { label: "Return", action: "return", disabled: true }, { label: "OK", action: "ok" } ]
+    readonly property var bottomRow: numeric ? [] : [ { label: "⇧", action: "shift" }, { label: "ABC", action: "abc" }, { label: "#+=", action: "symbols" }, { label: "Space", action: "space", value: " " } ]
+    readonly property var side: [ { label: "⌫", action: "backspace" }, { label: "OK", action: "ok" } ]
     readonly property var symbolRows: [ chars("~`!@#$%^&*("), chars(")_+={}[]|\\;"), chars("\"<>/?,.-:'"), chars("¿¡€£¥•…—–") ]
     readonly property var shownRows: symbols && !numeric ? symbolRows : rows
 
@@ -94,33 +86,28 @@ FocusScope {
 
     function press() {
         if (zone === "side") {
-            var s = side[sideIndex];
-            if (s.action === "backspace")
+            if (side[sideIndex].action === "backspace") {
                 backspace();
-            else if (s.action === "ok") {
-                Sound.ok();
+            } else {
+                Sound.play("ok");
                 finish(text);
-            } else
-                Sound.edge();
+            }
             return;
         }
         var key = keyAt(rowIndex, colIndex);
         if (!key)
             return;
-        if (key.action === "shift") {
-            Sound.type();
-            shift = !shift;
-        } else if (key.action === "abc") {
-            Sound.type();
-            symbols = false;
-        } else if (key.action === "symbols") {
-            Sound.type();
-            symbols = !symbols;
-        } else if (key.action === "space") {
-            put(" ");
-        } else {
+        if (key.value !== undefined) {
             put(key.value);
+            return;
         }
+        Sound.play("type");
+        if (key.action === "shift")
+            shift = !shift;
+        else if (key.action === "abc")
+            symbols = false;
+        else
+            symbols = !symbols;
     }
 
     function move(dr, dc) {
@@ -128,43 +115,38 @@ FocusScope {
             if (dc < 0) {
                 zone = "keys";
                 colIndex = rowLength(rowIndex) - 1;
-                Sound.tick();
+                Sound.play("tick");
                 return;
             }
-            var ns = Math.max(0, Math.min(side.length - 1, sideIndex + dr));
-            ns === sideIndex ? Sound.edge() : Sound.tick();
-            sideIndex = ns;
+            sideIndex = Sound.stepped(sideIndex, dr, side.length);
             return;
         }
         if (dr !== 0) {
             var nr = rowIndex + dr;
             if (nr < 0 || nr >= rowCount) {
-                Sound.edge();
+                Sound.play("edge");
                 return;
             }
             var ratio = colIndex / Math.max(1, rowLength(rowIndex) - 1);
             rowIndex = nr;
             colIndex = Math.round(ratio * (rowLength(nr) - 1));
-            Sound.tick();
+            Sound.play("tick");
             return;
         }
         var nc = colIndex + dc;
         if (nc >= rowLength(rowIndex)) {
             zone = "side";
             sideIndex = Math.min(side.length - 1, Math.round(rowIndex / Math.max(1, rowCount - 1) * (side.length - 1)));
-            Sound.tick();
+            Sound.play("tick");
             return;
         }
         if (nc < 0) {
-            Sound.edge();
+            Sound.play("edge");
             return;
         }
         colIndex = nc;
-        Sound.tick();
+        Sound.play("tick");
     }
-
-    visible: scrim.opacity > 0.01
-    focus: open
 
     Keys.onLeftPressed: move(0, -1)
     Keys.onRightPressed: move(0, 1)
@@ -184,19 +166,8 @@ FocusScope {
         else if (api.keys.isFilters(event))
             put(" ");
         else if (api.keys.isMenu(event)) {
-            Sound.ok();
+            Sound.play("ok");
             finish(text);
-        }
-    }
-
-    Rectangle {
-        id: scrim
-        anchors.fill: parent
-        color: Theme.ground
-        opacity: sheet.open ? 0.96 : 0.0
-
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
         }
     }
 
@@ -207,29 +178,19 @@ FocusScope {
         y: Theme.dp(60)
         width: parent.width - x * 2
         height: Theme.dp(280)
-        opacity: sheet.open ? 1.0 : 0.0
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-        }
-
-        Text {
+        Label {
             y: Theme.dp(20)
             text: sheet.title
-            color: Theme.text
-            font.family: Theme.sans
-            font.pixelSize: Theme.dp(Theme.fontBody)
         }
 
-        Text {
+        Label {
             id: valueText
             x: Theme.dp(8)
             y: Theme.dp(190)
             width: parent.width - Theme.dp(140)
             text: sheet.text
-            color: Theme.text
             elide: Text.ElideLeft
-            font.family: Theme.sans
             font.pixelSize: Theme.dp(42)
         }
 
@@ -249,12 +210,11 @@ FocusScope {
             color: Theme.text
         }
 
-        Text {
+        Label {
             anchors.right: parent.right
             y: valueText.y + Theme.dp(74)
             text: sheet.text.length + "/" + sheet.max
             color: Theme.textSecondary
-            font.family: Theme.sans
             font.pixelSize: Theme.dp(Theme.fontSmall)
         }
     }
@@ -277,9 +237,7 @@ FocusScope {
         y: sheet.open ? parent.height - height : parent.height
         color: Theme.ground
 
-        Behavior on y {
-            NumberAnimation { duration: Theme.durPage; easing.type: Easing.OutCubic }
-        }
+        Behavior on y { Ease {} }
 
         readonly property real keyW: Theme.dp(128)
         readonly property real keyH: Theme.dp(72)
@@ -295,7 +253,7 @@ FocusScope {
             spacing: panel.keyGap
 
             Repeater {
-                model: sheet.rowCount
+                model: sheet.built ? sheet.rowCount : 0
 
                 Row {
                     readonly property int r: index
@@ -315,25 +273,18 @@ FocusScope {
                             width: wide ? panel.keyW * 5 + panel.keyGap * 4 : panel.keyW
                             height: panel.keyH
 
-                            Rectangle {
-                                id: keyFill
+                            FocusPill {
                                 anchors.fill: parent
                                 radius: Theme.dp(4)
                                 color: key.focused ? Theme.focusFill : Theme.card
+                                visible: true
+                                focused: key.focused
                             }
 
-                            FocusOutline {
-                                target: keyFill
-                                cornerRadius: keyFill.radius
-                                gap: 0
-                                shown: key.focused && sheet.open
-                            }
-
-                            Text {
+                            Label {
                                 anchors.centerIn: parent
                                 text: key.spec.label !== undefined ? key.spec.label : (sheet.shift && key.spec.value.length === 1 ? key.spec.value.toUpperCase() : key.spec.value)
                                 color: key.latched ? Theme.accent : Theme.text
-                                font.family: Theme.sans
                                 font.pixelSize: Theme.dp(key.spec.label !== undefined && key.spec.label.length > 1 ? 28 : 34)
                             }
 
@@ -358,7 +309,7 @@ FocusScope {
             spacing: panel.keyGap
 
             Repeater {
-                model: sheet.side
+                model: sheet.built ? sheet.side : []
 
                 Item {
                     id: sideKey
@@ -367,28 +318,20 @@ FocusScope {
                     readonly property bool ok: modelData.action === "ok"
 
                     width: panel.sideW
-                    height: index === 2 ? panel.keyH * 2 + panel.keyGap : index === 1 ? panel.keyH * 1.5 + panel.keyGap : panel.keyH
+                    height: ok ? panel.keyH * 2 + panel.keyGap : panel.keyH
 
-                    Rectangle {
-                        id: sideFill
+                    FocusPill {
                         anchors.fill: parent
                         radius: Theme.dp(4)
                         color: sideKey.ok ? Theme.barBlue : sideKey.focused ? Theme.focusFill : Theme.card
-                        opacity: modelData.disabled ? 0.45 : 1.0
+                        visible: true
+                        focused: sideKey.focused
                     }
 
-                    FocusOutline {
-                        target: sideFill
-                        cornerRadius: sideFill.radius
-                        gap: 0
-                        shown: sideKey.focused && sheet.open
-                    }
-
-                    Text {
+                    Label {
                         anchors.centerIn: parent
                         text: modelData.label
-                        color: sideKey.ok ? Theme.accentInk : modelData.disabled ? Theme.textDisabled : Theme.text
-                        font.family: Theme.sans
+                        color: sideKey.ok ? Theme.accentInk : Theme.text
                         font.pixelSize: Theme.dp(modelData.label.length > 1 ? 30 : 38)
                     }
                 }

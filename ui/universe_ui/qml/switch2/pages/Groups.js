@@ -45,10 +45,10 @@ function groups(all, collections) {
 }
 
 function gamesOf(all, collections, key) {
-    var hit = groups(all, collections).filter(function(g) { return g.key === key; })[0];
-    return hit ? hit.games : [];
-}
-
-function count(n) {
-    return n + (n === 1 ? " game" : " games");
+    if (key.indexOf("platform:") === 0) {
+        var c = listOf(collections).find(function(c) { return "platform:" + c.id === key; });
+        return c ? listOf(c.games) : [];
+    }
+    var games = listOf(all);
+    return key === "favourites" ? games.filter(function(g) { return g.favorite; }) : tagged(games, key.slice(4));
 }

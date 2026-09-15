@@ -22,36 +22,24 @@ FocusScope {
     readonly property var entries: {
         if (!game)
             return [];
-        var out = [];
-        if (playing) {
-            out.push({ key: "resume", label: "Resume", type: "action", display: "Playing" });
-            out.push({ key: "close", label: "Close Software", type: "action", display: "" });
-        } else {
-            out.push({ key: "start", label: game.playTime > 0 ? "Continue" : "Start", type: "action", display: "" });
-        }
-        out.push({ key: "info", label: "Software Information", type: "action", display: "" });
-        out.push({ key: "favourite", label: game.favorite ? "Remove from Favourites" : "Add to Favourites", type: "action", display: "" });
-        out.push({ key: "settings", label: "Game Settings", type: "action", display: "" });
-        out.push({ key: "recordings", label: "Recordings", type: "action", display: "" });
-        out.push({ key: "journal", label: "Journal", type: "action", display: "" });
-        out.push({ key: "artwork", label: "Refresh Artwork", type: "action", display: "" });
-        out.push({ key: "remove", label: "Remove from Library…", type: "action", display: "" });
-        return out;
+        var start = playing ? [{ key: "resume", label: "Resume", type: "action", display: "Playing" }, { key: "close", label: "Close Software", type: "action" }]
+                            : [{ key: "start", label: game.playTime > 0 ? "Continue" : "Start", type: "action" }];
+        return start.concat([
+            { key: "info", label: "Software Information", type: "action", page: "pages/SoftwareInfoPage.qml" },
+            { key: "favourite", label: game.favorite ? "Remove from Favourites" : "Add to Favourites", type: "action" },
+            { key: "settings", label: "Game Settings", type: "action", page: "pages/GameSettingsPage.qml" },
+            { key: "recordings", label: "Recordings", type: "action", page: "pages/AlbumPage.qml" },
+            { key: "journal", label: "Journal", type: "action", page: "pages/NewsPage.qml" },
+            { key: "artwork", label: "Refresh Artwork", type: "action" },
+            { key: "remove", label: "Remove from Library…", type: "action" }
+        ]);
     }
 
     readonly property var stats: {
         if (!game)
             return [];
-        var out = [];
-        var last = Format.lastPlayed(game.lastPlayed);
-        out.push(last === "Never played" ? last : "Last played " + last.toLowerCase());
-        var time = Format.playTime(game.playTime);
-        if (time !== "")
-            out.push("Played for " + time);
-        var count = Format.sessions(game.playCount);
-        if (count !== "")
-            out.push(count);
-        return out;
+        var last = Format.lastPlayed(game.lastPlayed), time = Format.playTime(game.playTime);
+        return [last === "Never played" ? last : "Last played " + last.toLowerCase(), time && "Played for " + time, Format.sessions(game.playCount)].filter(Boolean);
     }
 
     function activate(index, row) {
@@ -62,29 +50,20 @@ FocusScope {
         } else if (row.key === "resume") {
             shell.resume();
         } else if (row.key === "close") {
-            Sound.ok();
+            Sound.play("ok");
             shell.closeSoftware(game);
-        } else if (row.key === "info") {
-            Sound.ok();
-            shell.push("pages/SoftwareInfoPage.qml", { gameId: game.id });
+        } else if (row.page) {
+            Sound.play("ok");
+            shell.push(row.page, { gameId: game.id });
         } else if (row.key === "favourite") {
             game.favorite = !game.favorite;
-            Sound.select();
-        } else if (row.key === "settings") {
-            Sound.ok();
-            shell.push("pages/GameSettingsPage.qml", { gameId: game.id });
-        } else if (row.key === "recordings") {
-            Sound.ok();
-            shell.push("pages/AlbumPage.qml", { gameId: game.id });
-        } else if (row.key === "journal") {
-            Sound.ok();
-            shell.push("pages/NewsPage.qml", { gameId: game.id });
+            Sound.play("select");
         } else if (row.key === "artwork") {
-            Sound.ok();
+            Sound.play("ok");
             api.universe.mediaRefresh(game.id, false);
             shell.showToast("Refreshing the artwork of " + game.title);
         } else if (row.key === "remove") {
-            Sound.ok();
+            Sound.play("ok");
             var id = game.id, title = game.title;
             shell.dialogAsk({ message: "Remove " + title + " from the library?",
                               detail: "The install folder, the hours and the journal stay on disk.",
@@ -96,11 +75,6 @@ FocusScope {
                                 }
                             });
         }
-    }
-
-    Rectangle {
-        anchors.fill: parent
-        color: Theme.ground
     }
 
     PageHeader {
@@ -118,13 +92,11 @@ FocusScope {
         width: Theme.dp(560)
         spacing: Theme.dp(10)
 
-        Text {
+        Label {
             anchors.horizontalCenter: parent.horizontalCenter
             visible: page.playing
             text: "Playing"
             color: Theme.accent
-            font.family: Theme.sans
-            font.pixelSize: Theme.dp(Theme.fontBody)
         }
 
         Item {
@@ -145,16 +117,13 @@ FocusScope {
             height: Theme.dp(26)
         }
 
-        Text {
+        Label {
             width: parent.width
             horizontalAlignment: Text.AlignHCenter
             text: page.game ? page.game.title : ""
-            color: Theme.text
             wrapMode: Text.WordWrap
             maximumLineCount: 2
             elide: Text.ElideRight
-            font.family: Theme.sans
-            font.pixelSize: Theme.dp(Theme.fontBody)
         }
 
         Item {
@@ -165,12 +134,11 @@ FocusScope {
         Repeater {
             model: page.stats
 
-            Text {
+            Label {
                 width: parent.width
                 horizontalAlignment: Text.AlignHCenter
                 text: modelData
                 color: Theme.textSecondary
-                font.family: Theme.sans
                 font.pixelSize: Theme.dp(Theme.fontSmall)
             }
         }
@@ -187,7 +155,6 @@ FocusScope {
         model: page.entries
 
         onActivated: function(index, row) { page.activate(index, row); }
-        onEscapedLeft: Sound.edge()
-        onEscapedUp: Sound.edge()
+        onEscapedLeft: Sound.play("edge")
     }
 }

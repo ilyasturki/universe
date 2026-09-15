@@ -30,14 +30,8 @@ FocusScope {
     }
     readonly property var current: index >= 0 && index < cells.length && !cells[index].heading ? cells[index] : null
 
-    readonly property var hints: {
-        var out = [ { glyph: "Y", label: "Refresh" }, { glyph: "B", label: "Back" } ];
-        if (zone === "rail")
-            out.push({ glyph: "A", label: "OK" });
-        else if (current)
-            out.push({ glyph: "A", label: current.game.installed ? "Options" : "Install" });
-        return out;
-    }
+    readonly property var hints: [ { glyph: "Y", label: "Refresh" }, { glyph: "B", label: "Back" } ].concat(
+        zone === "rail" ? [{ glyph: "A", label: "OK" }] : current ? [{ glyph: "A", label: current.game.installed ? "Options" : "Install" }] : [])
 
     readonly property int columns: 5
     readonly property real gridX: Theme.dp(300)
@@ -46,7 +40,6 @@ FocusScope {
     readonly property real cellW: (gridW - gap * (columns - 1)) / columns
     readonly property real cellH: cellW + Theme.dp(Theme.ringRoom + 76)
     readonly property real headingH: Theme.dp(80)
-    // The view clips; it reaches this far past the cells so the focus ring is never cut.
     readonly property real room: Theme.dp(Theme.ringRoom)
 
     readonly property var layout: {
@@ -85,48 +78,43 @@ FocusScope {
 
     function move(dx, dy) {
         if (!current) {
-            var f = firstGame();
-            if (f >= 0)
-                index = f;
+            index = Math.max(0, firstGame());
             return;
         }
         var here = layout.cells[index];
         var best = -1, bestD = 1e9;
-        for (var i = 0; i < cells.length; i++) {
-            if (cells[i].heading || i === index)
-                continue;
-            var c = layout.cells[i];
-            if (dx !== 0) {
-                if (i !== index + dx)
+        if (dx !== 0) {
+            var n = index + dx;
+            best = n >= 0 && n < cells.length && !cells[n].heading ? n : -1;
+        } else {
+            for (var i = 0; i < cells.length; i++) {
+                var c = layout.cells[i];
+                if (cells[i].heading || i === index || dy > 0 && c.y <= here.y || dy < 0 && c.y >= here.y)
                     continue;
-                best = i;
-                break;
-            }
-            if (dy > 0 && c.y <= here.y || dy < 0 && c.y >= here.y)
-                continue;
-            var d = Math.abs(c.y - here.y) * 10 + Math.abs(c.x - here.x) / cellW;
-            if (d < bestD) {
-                bestD = d;
-                best = i;
+                var d = Math.abs(c.y - here.y) * 10 + Math.abs(c.x - here.x) / cellW;
+                if (d < bestD) {
+                    bestD = d;
+                    best = i;
+                }
             }
         }
         if (best < 0) {
             if (dx < 0) {
                 zone = "rail";
                 rail.forceActiveFocus();
-                Sound.tick();
+                Sound.play("tick");
             } else {
-                Sound.edge();
+                Sound.play("edge");
             }
             return;
         }
-        Sound.tick();
+        Sound.play("tick");
         index = best;
     }
 
     function activate() {
         if (!current) {
-            Sound.edge();
+            Sound.play("edge");
             return;
         }
         var g = current.game, items = [];
@@ -141,19 +129,16 @@ FocusScope {
                 items.push({ label: "Uninstall…", act: "uninstall" }, { label: "Remove from library…", act: "remove" });
         }
         if (items.length === 0) {
-            Sound.edge();
+            Sound.play("edge");
             return;
         }
         var row = current.row, title = g.title, gameId = g.game_id;
-        shell.pick({ title: title, choices: items.map(function(i) { return i.label; }), index: 0 }, function(i) {
-            if (i < 0)
-                return;
-            var a = items[i].act;
+        shell.menu(title, items, function(a) {
             if (a === "install" || a === "update") {
-                Sound.ok();
+                Sound.play("ok");
                 sources.install(row);
             } else if (a === "settings") {
-                Sound.ok();
+                Sound.play("ok");
                 shell.push("pages/GameSettingsPage.qml", { gameId: gameId });
             } else if (a === "uninstall") {
                 shell.dialogAsk({ message: "Uninstall " + title + "?", detail: "The install folder goes to the trash; the hours and the journal stay.",
@@ -174,8 +159,6 @@ FocusScope {
                 zone = "grid";
                 grid.forceActiveFocus();
             });
-        } else if (id === "refresh") {
-            sources.refresh();
         } else if (id === "signin") {
             shell.push("pages/SettingsPage.qml", { section: "signin" });
         } else if (id === "clear") {
@@ -193,18 +176,13 @@ FocusScope {
             return;
         if (api.keys.isFilters(event)) {
             event.accepted = true;
-            Sound.ok();
+            Sound.play("ok");
             sources.refresh();
         } else if (api.keys.isCancel(event) && sources.query !== "") {
             event.accepted = true;
-            Sound.back();
+            Sound.play("back");
             sources.search("");
         }
-    }
-
-    Rectangle {
-        anchors.fill: parent
-        color: Theme.ground
     }
 
     PageHeader {
@@ -226,7 +204,7 @@ FocusScope {
         height: parent.height - y - Theme.dp(Theme.hintBarHeight)
         focus: page.zone === "rail"
         items: {
-            var out = [ { id: "search", icon: "search", label: "Search" }, { id: "refresh", icon: "refresh", label: "Refresh" } ];
+            var out = [ { id: "search", icon: "search", label: "Search" } ];
             if (page.sources.query !== "")
                 out.push({ id: "clear", icon: "filter", label: "Clear the search" });
             out.push({ id: "signin", icon: "key", label: page.loggedIn ? "Signed in" : "Sign in" });
@@ -270,13 +248,11 @@ FocusScope {
             }
         }
 
-        Text {
+        Label {
             anchors.centerIn: parent
             visible: page.cells.length === 0
             text: page.sources.busy ? "Loading…" : page.loggedIn ? "Nothing here yet." : "Sign in to see your games."
             color: Theme.textMuted
-            font.family: Theme.sans
-            font.pixelSize: Theme.dp(Theme.fontBody)
         }
 
         Flickable {
@@ -299,19 +275,18 @@ FocusScope {
                 Theme.reveal(view, top, bottom, height);
             }
 
-            Behavior on contentY {
-                NumberAnimation { duration: Theme.durPage; easing.type: Easing.OutCubic }
-            }
+            Behavior on contentY { Ease {} }
 
             Repeater {
                 model: page.cells
 
-                Item {
+                Loader {
                     id: cell
 
+                    readonly property var row: modelData
                     readonly property var spot: page.layout.cells[index] || ({ x: 0, y: 0, w: 0, h: 0 })
-                    readonly property bool heading: modelData.heading === true
-                    readonly property var entry: heading ? null : modelData.game
+                    readonly property bool heading: row.heading === true
+                    readonly property var entry: heading ? null : row.game
                     readonly property var libraryGame: entry && entry.game_id ? api.allGames.byId(entry.game_id) : null
                     readonly property bool focused: grid.activeFocus && index === page.index
 
@@ -320,100 +295,97 @@ FocusScope {
                     width: spot.w
                     height: spot.h
                     z: focused ? 2 : 1
+                    active: spot.y + spot.h > view.contentY - page.cellH && spot.y < view.contentY + view.height + page.cellH
+                    sourceComponent: heading ? headingCell : gameCell
+                }
+            }
 
-                    Item {
-                        visible: cell.heading
-                        anchors.fill: parent
+            Component {
+                id: headingCell
 
-                        Text {
-                            anchors.verticalCenter: parent.verticalCenter
-                            anchors.verticalCenterOffset: Theme.dp(4)
-                            text: cell.heading ? modelData.label : ""
-                            color: Theme.text
-                            font.family: Theme.sans
-                            font.pixelSize: Theme.dp(Theme.fontBody)
-                        }
+                Item {
+                    readonly property Item cell: parent
 
-                        Text {
-                            anchors.right: parent.right
-                            anchors.verticalCenter: parent.verticalCenter
-                            anchors.verticalCenterOffset: Theme.dp(4)
-                            text: cell.heading ? modelData.count + (modelData.count === 1 ? " game" : " games") : ""
-                            color: Theme.textSecondary
-                            font.family: Theme.sans
-                            font.pixelSize: Theme.dp(Theme.fontSmall)
-                        }
-
-                        Rectangle {
-                            anchors.bottom: parent.bottom
-                            anchors.bottomMargin: Theme.dp(12)
-                            anchors.left: parent.left
-                            anchors.right: parent.right
-                            height: 1
-                            color: Theme.hairline
-                        }
+                    Label {
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.verticalCenterOffset: Theme.dp(4)
+                        text: cell.row.label
                     }
 
-                    Item {
-                        visible: !cell.heading
-                        anchors.fill: parent
+                    Label {
+                        anchors.right: parent.right
+                        anchors.verticalCenter: parent.verticalCenter
+                        anchors.verticalCenterOffset: Theme.dp(4)
+                        text: cell.row.count + (cell.row.count === 1 ? " game" : " games")
+                        color: Theme.textSecondary
+                        font.pixelSize: Theme.dp(Theme.fontSmall)
+                    }
 
-                        Tile {
-                            id: art
-                            width: page.cellW
-                            height: page.cellW
-                            game: cell.libraryGame
-                            focused: cell.focused
-                            cornerRadius: Theme.dp(6)
-                        }
+                    Hairline {
+                        anchors.bottomMargin: Theme.dp(12)
+                        color: Theme.hairline
+                    }
+                }
+            }
 
-                        Image {
-                            id: storeImage
-                            anchors.fill: art
-                            z: 3
-                            visible: cell.libraryGame === null && status === Image.Ready
-                            source: cell.entry ? cell.entry.image : ""
-                            fillMode: Image.PreserveAspectCrop
-                            asynchronous: true
-                            sourceSize.width: 400
-                        }
+            Component {
+                id: gameCell
 
-                        Text {
-                            anchors.centerIn: art
-                            z: 3
-                            width: art.width - Theme.dp(30)
-                            visible: cell.libraryGame === null && !(cell.entry && cell.entry.image && storeImage.status === Image.Ready)
-                            text: cell.entry ? cell.entry.title : ""
-                            color: Theme.textSecondary
-                            horizontalAlignment: Text.AlignHCenter
-                            wrapMode: Text.WordWrap
-                            maximumLineCount: 3
-                            elide: Text.ElideRight
-                            font.family: Theme.sans
-                            font.pixelSize: Theme.dp(Theme.fontSmall)
-                        }
+                Item {
+                    readonly property Item cell: parent
 
-                        Text {
-                            anchors.top: art.bottom
-                            anchors.topMargin: Theme.dp(Theme.ringRoom + 6)
-                            width: art.width
-                            text: cell.entry ? cell.entry.title : ""
-                            color: cell.focused ? Theme.accent : Theme.text
-                            elide: Text.ElideRight
-                            font.family: Theme.sans
-                            font.pixelSize: Theme.dp(Theme.fontSmall)
-                        }
+                    Tile {
+                        id: art
+                        width: page.cellW
+                        height: page.cellW
+                        game: cell.libraryGame
+                        focused: cell.focused
+                        cornerRadius: Theme.dp(6)
+                    }
 
-                        Text {
-                            anchors.top: art.bottom
-                            anchors.topMargin: Theme.dp(Theme.ringRoom + 36)
-                            width: art.width
-                            text: cell.entry ? cell.entry.status : ""
-                            color: cell.entry && cell.entry.pending ? Theme.accent : Theme.textSecondary
-                            elide: Text.ElideRight
-                            font.family: Theme.sans
-                            font.pixelSize: Theme.dp(Theme.fontTiny)
-                        }
+                    Image {
+                        id: storeImage
+                        anchors.fill: art
+                        z: 3
+                        visible: cell.libraryGame === null && status === Image.Ready
+                        source: cell.libraryGame === null && cell.entry ? cell.entry.image : ""
+                        fillMode: Image.PreserveAspectCrop
+                        asynchronous: true
+                        sourceSize.width: 400
+                    }
+
+                    Label {
+                        anchors.centerIn: art
+                        z: 3
+                        width: art.width - Theme.dp(30)
+                        visible: cell.libraryGame === null && !(cell.entry && cell.entry.image && storeImage.status === Image.Ready)
+                        text: cell.entry ? cell.entry.title : ""
+                        color: Theme.textSecondary
+                        horizontalAlignment: Text.AlignHCenter
+                        wrapMode: Text.WordWrap
+                        maximumLineCount: 3
+                        elide: Text.ElideRight
+                        font.pixelSize: Theme.dp(Theme.fontSmall)
+                    }
+
+                    Label {
+                        anchors.top: art.bottom
+                        anchors.topMargin: Theme.dp(Theme.ringRoom + 6)
+                        width: art.width
+                        text: cell.entry ? cell.entry.title : ""
+                        color: cell.focused ? Theme.accent : Theme.text
+                        elide: Text.ElideRight
+                        font.pixelSize: Theme.dp(Theme.fontSmall)
+                    }
+
+                    Label {
+                        anchors.top: art.bottom
+                        anchors.topMargin: Theme.dp(Theme.ringRoom + 36)
+                        width: art.width
+                        text: cell.entry ? cell.entry.status : ""
+                        color: cell.entry && cell.entry.pending ? Theme.accent : Theme.textSecondary
+                        elide: Text.ElideRight
+                        font.pixelSize: Theme.dp(Theme.fontTiny)
                     }
                 }
             }

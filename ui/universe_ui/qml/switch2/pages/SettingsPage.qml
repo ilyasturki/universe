@@ -3,6 +3,7 @@ import "../core"
 import "../sound"
 import "../ui"
 import "Details.js" as Details
+import "Forms.js" as Forms
 
 FocusScope {
     id: page
@@ -32,16 +33,26 @@ FocusScope {
     property int section: 0
     readonly property string sectionId: sections[section].id
     property string zone: "list"
-    readonly property bool folderOpen: folder.open
     // The runner or module whose page is open: the list reloads under it and the cursor finds it again.
-    property string openedRunner: ""
-    property string openedModule: ""
+    property var reopen: null
+
+    readonly property var loaders: ({
+        runners: function() { runners.load(); },
+        launch: function() { launch.load(); },
+        modules: function() { modulesForm.load(); },
+        doctor: function() { modulesForm.loadDoctor(); }
+    })
+    readonly property var refreshers: ({
+        runners: function() { runners.load(); },
+        updates: function() { sources.refresh(); },
+        signin: function() { sources.refresh(); },
+        doctor: function() { modulesForm.loadDoctor(); }
+    })
+    readonly property var loaded: ({})
 
     readonly property var hints: {
-        if (folderOpen)
-            return folder.hints;
         var out = [];
-        if (sectionId === "runners" || sectionId === "updates" || sectionId === "signin" || sectionId === "doctor")
+        if (refreshers[sectionId])
             out.push({ glyph: "Y", label: "Refresh" });
         var row = rows.currentRow;
         if (sectionId === "modules" && zone === "rows" && row && !row.heading)
@@ -60,181 +71,113 @@ FocusScope {
         return Math.max(0, sections.map(function(s) { return s.id; }).indexOf(id));
     }
 
+    // Read from `section`: the derived `sectionId` is still stale inside onSectionChanged.
+    function loadSection() {
+        var id = sections[section].id;
+        if (loaded[id] || !loaders[id])
+            return;
+        loaded[id] = true;
+        loaders[id]();
+    }
+
     onArgsChanged: {
         if (args && args.section) {
             section = sectionIndex(args.section);
             list.index = section;
-            list.current = section;
         }
     }
 
     Component.onCompleted: {
-        runners.load();
-        launch.load();
-        modulesForm.load();
-        modulesForm.loadDoctor();
         sources.load();
+        loadSection();
     }
 
     onActiveFocusChanged: {
-        if (!activeFocus)
+        if (!activeFocus || !reopen)
             return;
-        if (openedRunner !== "") {
-            runners.load();
-            var i = rowOf("runner", openedRunner);
-            openedRunner = "";
-            if (i >= 0)
-                rows.index = i;
-        } else if (openedModule !== "") {
-            modulesForm.load();
-            var j = rowOf("module", openedModule);
-            openedModule = "";
-            if (j >= 0)
-                rows.index = j;
-        }
-    }
-
-    function rowOf(field, id) {
-        var list = content;
-        for (var i = 0; i < list.length; i++)
-            if (list[i][field] === id)
-                return i;
-        return -1;
+        reopen.form.load();
+        var i = content.findIndex(function(r) { return r[reopen.field] === reopen.id; });
+        reopen = null;
+        if (i >= 0)
+            rows.index = i;
     }
 
     readonly property var content: {
-        var out = [], i, j;
-        if (sectionId === "runners") {
-            var rg = runners.groups, rr = runners.rows;
-            for (i = 0; i < rg.length; i++) {
-                if (rg[i].title)
-                    out.push({ heading: true, label: rg[i].title, display: "" });
-                for (j = 0; j < rg[i].rows.length; j++) {
-                    var run = rr[rg[i].rows[j]];
-                    out.push({ label: run.label, type: "action", action: "runner", runner: run.runner, icon: run.icon, iconSlot: true,
-                               display: run.display, detail: "", dim: rg[i].off === true });
-                }
-            }
-            return out;
-        }
-        if (sectionId === "launch") {
-            var lg = launch.groups, lr = launch.rows;
-            for (i = 0; i < lg.length; i++) {
-                out.push({ heading: true, label: lg[i].title, display: lg[i].meta || "" });
-                for (j = 0; j < lg[i].rows.length; j++) {
-                    var l = Details.withDetail(lr[lg[i].rows[j]], "");
-                    l.form = lg[i].rows[j];
-                    out.push(l);
-                }
-            }
-            return out;
-        }
-        if (sectionId === "modules") {
-            var mg = modulesForm.groups, mr = modulesForm.rows;
-            for (i = 0; i < mg.length; i++) {
-                if (mg[i].title)
-                    out.push({ heading: true, label: mg[i].title, display: "" });
-                for (j = 0; j < mg[i].rows.length; j++) {
-                    var m = mr[mg[i].rows[j]];
-                    // A module that cannot run is opened all the same: its page says what is missing.
-                    out.push({ label: m.label, type: "action", action: "module", module: m.module, value: m.value, display: m.display,
-                               detail: m.warning && !m.value ? m.detail : Details.enabledSentence(m.label, m.kind.join(" · ")),
-                               form: mg[i].rows[j], dim: m.warning !== "" && m.value !== true });
-                }
-            }
-            return out;
-        }
+        if (sectionId === "runners")
+            return Forms.grouped(runners.groups, runners.rows, function(run, i, g) {
+                return { label: run.label, type: "action", action: "runner", runner: run.runner, icon: run.icon, iconSlot: true,
+                         display: run.display, detail: "", dim: g.off === true };
+            });
+        if (sectionId === "launch")
+            return Forms.grouped(launch.groups, launch.rows, function(r, i) { return Object.assign(Details.withDetail(r, ""), { form: i }); });
+        if (sectionId === "modules")
+            return Forms.grouped(modulesForm.groups, modulesForm.rows, function(m, i) {
+                return { label: m.label, type: "action", action: "module", module: m.module, value: m.value, display: m.display,
+                         detail: m.warning && !m.value ? m.detail : Details.enabledSentence(m.label, m.kind.join(" · ")),
+                         form: i, dim: m.warning !== "" && m.value !== true };
+            });
         if (sectionId === "updates") {
             var n = sources.updates.length;
-            if (n === 0) {
-                out.push({ label: sources.busy ? "Checking…" : "Everything is up to date", type: "info", value: true, display: "", detail: "" });
-                return out;
-            }
-            out.push({ label: "Update everything", type: "action", display: n + " pending", action: "update-all", detail: "" });
-            for (i = 0; i < n; i++) {
-                var u = sources.updates[i];
-                out.push({ label: u.title, type: "action", display: (u.version ? u.version + " · " : "") + (u.date || ""),
-                           action: "update", row: i, detail: "" });
-            }
-            return out;
+            if (n === 0)
+                return [{ label: sources.busy ? "Checking…" : "Everything is up to date", type: "info", value: true, display: "", detail: "" }];
+            return [{ label: "Update everything", type: "action", display: n + " pending", action: "update-all", detail: "" }].concat(
+                sources.updates.map(function(u, i) {
+                    return { label: u.title, type: "action", display: (u.version ? u.version + " · " : "") + (u.date || ""), action: "update", row: i, detail: "" };
+                }));
         }
-        if (sectionId === "signin") {
-            out.push({ heading: true, label: sourceName, display: "" });
-            out.push({ label: "Signed in", type: "info", value: loggedIn, display: loggedIn ? "Yes" : "No", detail: "" });
-            out.push({ label: "Get a sign-in link", type: "action", action: "link", display: login.url ? "Ready" : "", detail: "" });
-            out.push({ label: "Enter the code", type: "action", action: "code", display: "", detail: "" });
-            return out;
-        }
+        if (sectionId === "signin")
+            return [{ heading: true, label: sourceName, display: "" },
+                    { label: "Signed in", type: "info", value: loggedIn, display: loggedIn ? "Yes" : "No", detail: "" },
+                    { label: "Get a sign-in link", type: "action", action: "link", display: login.url ? "Ready" : "", detail: "" },
+                    { label: "Enter the code", type: "action", action: "code", display: "", detail: "" }];
         if (sectionId === "doctor") {
-            var dg = modulesForm.doctorGroups, dr = modulesForm.doctor;
-            for (i = 0; i < dg.length; i++) {
-                out.push({ heading: true, label: dg[i].title, display: dg[i].meta || "" });
-                for (j = 0; j < dg[i].rows.length; j++) {
-                    var c = dr[dg[i].rows[j]];
-                    out.push({ label: c.label, type: "info", value: c.value === true, display: c.detail || "", detail: "" });
-                }
-            }
-            if (out.length === 0)
-                out.push({ label: "No checks yet", type: "info", value: true, display: "", detail: "" });
-            return out;
+            var checks = Forms.grouped(modulesForm.doctorGroups, modulesForm.doctor, function(c) {
+                return { label: c.label, type: "info", value: c.value === true, display: c.detail || "", detail: "" };
+            });
+            return checks.length > 0 ? checks : [{ label: "No checks yet", type: "info", value: true, display: "", detail: "" }];
         }
-        if (sectionId === "controllers") {
-            out.push({ label: "Controllers", type: "action", action: "controllers", display: "", detail: "" });
-            return out;
-        }
-        if (sectionId === "themes") {
-            var themes = api.theme.themes;
-            for (i = 0; i < themes.length; i++)
-                out.push({ label: themes[i].name, type: "radio", value: themes[i].id === api.theme.current, swatch: themes[i].ground,
-                           action: "theme", theme: themes[i].id, detail: themes[i].detail || "" });
-            out.push({ heading: true, label: "Font", display: "" });
-            out.push({ label: "Font file", type: "path", action: "font", value: api.theme.fontPath,
-                       display: api.theme.fontPath ? api.theme.fontPath.split("/").pop() : "Bundled (BIZ UDPGothic)",
-                       detail: "A .ttf you own, such as the Switch's own; applies at once." });
-            return out;
-        }
-        if (sectionId === "about") {
-            out.push({ label: "Universe", type: "static", display: api.universe.version() || "development build", detail: "" });
-            out.push({ label: "Look", type: "static", display: api.theme.name, detail: "" });
-            out.push({ label: "Library", type: "static", display: api.allGames.count + (api.allGames.count === 1 ? " game" : " games"), detail: "" });
-            return out;
-        }
-        return out;
+        if (sectionId === "controllers")
+            return [{ label: "Controllers", type: "action", action: "controllers", display: "", detail: "" }];
+        if (sectionId === "themes")
+            return api.theme.themes.map(function(t) {
+                return { label: t.name, type: "radio", value: t.id === api.theme.current, swatch: t.ground, action: "theme", theme: t.id, detail: t.detail || "" };
+            }).concat([
+                { heading: true, label: "Font", display: "" },
+                { label: "Font file", key: "font_file", type: "path", action: "font", value: api.theme.fontPath,
+                  display: api.theme.fontPath ? api.theme.fontPath.split("/").pop() : "Bundled (BIZ UDPGothic)",
+                  detail: "A .ttf you own, such as the Switch's own; applies at once." }]);
+        if (sectionId === "about")
+            return [{ label: "Universe", type: "static", display: api.universe.version() || "development build", detail: "" },
+                    { label: "Look", type: "static", display: api.theme.name, detail: "" },
+                    { label: "Library", type: "static", display: api.allGames.count + (api.allGames.count === 1 ? " game" : " games"), detail: "" }];
+        return [];
     }
 
     function activate(index, row) {
         if (sectionId === "runners") {
-            Sound.ok();
-            openedRunner = row.runner;
-            shell.push("pages/RunnerPage.qml", { runner: row.runner });
-            return;
-        }
-        if (sectionId === "launch") {
+            Sound.play("ok");
+            reopen = { form: runners, field: "runner", id: row.runner };
+            shell.push("pages/FormPage.qml", { runner: row.runner });
+        } else if (sectionId === "launch") {
             if (row.type === "bool") {
                 launch.toggle(row.form);
-                Sound.select();
+                Sound.play("select");
             } else {
                 rows.edit(row, function(value) { launch.setValue(row.form, value); });
             }
-            return;
-        }
-        if (sectionId === "modules") {
-            Sound.ok();
-            openedModule = row.module;
-            shell.push("pages/ModulePage.qml", { module: row.module });
-            return;
-        }
-        if (sectionId === "updates") {
-            Sound.ok();
+        } else if (sectionId === "modules") {
+            Sound.play("ok");
+            reopen = { form: modulesForm, field: "module", id: row.module };
+            shell.push("pages/FormPage.qml", { module: row.module });
+        } else if (sectionId === "updates") {
+            Sound.play("ok");
             if (row.action === "update-all")
                 sources.updateAll();
             else
                 sources.update(row.row);
-            return;
-        }
-        if (sectionId === "signin") {
+        } else if (sectionId === "signin") {
             if (row.action === "link") {
-                Sound.ok();
+                Sound.play("ok");
                 login.begin(sources.source);
             } else if (row.action === "code") {
                 shell.prompt({ title: "Code from " + sourceName, value: "" }, function(value) {
@@ -242,58 +185,43 @@ FocusScope {
                         login.submit(value);
                 });
             }
-            return;
-        }
-        if (sectionId === "controllers") {
-            Sound.ok();
+        } else if (sectionId === "controllers") {
+            Sound.play("ok");
             shell.push("pages/ControllersPage.qml", {});
-            return;
+        } else if (row.action === "theme") {
+            Sound.play("select");
+            var id = row.theme;
+            // Reprise replaces this tree: let the press finish first.
+            Qt.callLater(function() { api.theme.set(id); });
+        } else if (row.action === "font") {
+            rows.edit(row, function(path) { api.theme.fontPath = path; });
         }
-        if (sectionId === "themes") {
-            if (row.action === "theme") {
-                Sound.select();
-                var id = row.theme;
-                // Reprise replaces this tree: let the press finish first.
-                Qt.callLater(function() { api.theme.set(id); });
-            } else if (row.action === "font") {
-                folder.show({ title: "Font file", path: api.theme.fontPath, files: true }, function(path) {
-                    if (path !== null)
-                        api.theme.fontPath = path;
-                    rows.forceActiveFocus();
-                });
-            }
-            return;
-        }
-        Sound.edge();
     }
 
-    // X on a module's row switches it in place; A opens its page.
     function toggleModule() {
         var row = rows.currentRow;
         if (sectionId !== "modules" || zone !== "rows" || !row || row.heading || row.dim === true) {
-            Sound.edge();
+            Sound.play("edge");
             return;
         }
-        Sound.select();
+        Sound.play("select");
         modulesForm.toggle(row.form);
     }
 
     function refreshNow() {
-        if (sectionId === "runners") {
-            Sound.ok();
-            runners.load();
-        } else if (sectionId === "updates" || sectionId === "signin") {
-            Sound.ok();
-            sources.refresh();
-        } else if (sectionId === "doctor") {
-            Sound.ok();
-            modulesForm.loadDoctor();
-        } else {
-            Sound.edge();
+        var f = refreshers[sectionId];
+        if (!f) {
+            Sound.play("edge");
+            return;
         }
+        Sound.play("ok");
+        f();
     }
 
-    onSectionChanged: Qt.callLater(rows.reset)
+    onSectionChanged: {
+        loadSection();
+        Qt.callLater(rows.reset);
+    }
 
     Connections {
         target: page.sources
@@ -309,11 +237,11 @@ FocusScope {
     }
 
     Keys.onPressed: function(event) {
-        if (event.isAutoRepeat || page.folderOpen)
+        if (event.isAutoRepeat)
             return;
         if (api.keys.isCancel(event) && page.zone === "rows") {
             event.accepted = true;
-            Sound.back();
+            Sound.play("back");
             page.zone = "list";
             list.forceActiveFocus();
         } else if (api.keys.isFilters(event)) {
@@ -323,11 +251,6 @@ FocusScope {
             event.accepted = true;
             page.toggleModule();
         }
-    }
-
-    Rectangle {
-        anchors.fill: parent
-        color: Theme.ground
     }
 
     PageHeader {
@@ -347,7 +270,6 @@ FocusScope {
         width: Theme.dp(470)
         height: parent.height - y - Theme.dp(Theme.hintBarHeight)
         sections: page.sections
-        current: page.section
         focus: page.zone === "list"
 
         onActivated: function(i) { page.section = i; }
@@ -377,7 +299,6 @@ FocusScope {
         id: rows
 
         shell: page.shell
-        folder: folder
         x: Theme.dp(705)
         y: header.height + Theme.dp(64) + jobLine.height
         width: Theme.dp(1023)
@@ -390,7 +311,6 @@ FocusScope {
             page.zone = "list";
             list.forceActiveFocus();
         }
-        onEscapedUp: Sound.edge()
     }
 
     Item {
@@ -417,54 +337,39 @@ FocusScope {
             y: Theme.dp(24)
             width: Theme.dp(282)
             height: width
-            visible: page.login.url !== ""
+            active: page.login.url !== ""
             source: "../../ui/QrCode.qml"
             onLoaded: item.matrix = Qt.binding(function() { return page.login.matrix; })
         }
 
         Column {
-            x: qr.visible ? qr.x + qr.width + Theme.dp(30) : Theme.dp(30)
+            x: qr.active ? qr.x + qr.width + Theme.dp(30) : Theme.dp(30)
             y: Theme.dp(30)
             width: parent.width - x - Theme.dp(30)
             spacing: Theme.dp(14)
 
-            Text {
+            Label {
                 width: parent.width
                 text: "Scan to sign in on your phone"
-                color: Theme.text
-                font.family: Theme.sans
-                font.pixelSize: Theme.dp(Theme.fontBody)
             }
 
-            Text {
+            Label {
                 width: parent.width
                 text: page.login.url
                 color: Theme.accent
                 wrapMode: Text.WrapAnywhere
                 maximumLineCount: 4
                 elide: Text.ElideRight
-                font.family: Theme.sans
                 font.pixelSize: Theme.dp(Theme.fontTiny)
             }
 
-            Text {
+            Label {
                 width: parent.width
                 text: page.login.status
                 color: Theme.textSecondary
                 wrapMode: Text.WordWrap
-                font.family: Theme.sans
                 font.pixelSize: Theme.dp(Theme.fontSmall)
             }
-        }
-    }
-
-    FolderPage {
-        id: folder
-        z: 5
-        onTypeRequested: function(path) {
-            page.shell.prompt({ title: "Path", value: path, path: true }, function(v) {
-                folder.finish(v);
-            });
         }
     }
 }

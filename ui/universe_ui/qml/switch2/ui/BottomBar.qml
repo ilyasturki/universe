@@ -17,28 +17,19 @@ FocusScope {
     // 123: the Switch's icon pitch; fewer icons shorten the pill, never widen the gap.
     readonly property real pitch: Theme.dp(123)
     readonly property real endPad: Theme.dp(50)
-    readonly property real labelGap: Theme.dp(14)
 
     width: endPad * 2 + Math.max(0, items.length - 1) * pitch + iconSize
     height: Theme.dp(Theme.barHeight)
 
-    function step(d) {
-        var next = index + d;
-        if (next < 0 || next >= items.length) {
-            Sound.edge();
-            return;
-        }
-        Sound.tick();
-        index = next;
-    }
+    function step(d) { index = Sound.stepped(index, d, items.length); }
 
     Keys.onLeftPressed: step(-1)
     Keys.onRightPressed: step(1)
     Keys.onUpPressed: {
-        Sound.tick();
+        Sound.play("tick");
         bar.escapedUp();
     }
-    Keys.onDownPressed: Sound.edge()
+    Keys.onDownPressed: Sound.play("edge")
 
     Keys.onPressed: function(event) {
         if (event.isAutoRepeat)
@@ -46,7 +37,7 @@ FocusScope {
         if (api.keys.isAccept(event)) {
             event.accepted = true;
             if (items.length > 0) {
-                Sound.ok();
+                Sound.play("ok");
                 bar.activated(items[index]);
             }
         }
@@ -94,16 +85,13 @@ FocusScope {
                 stroke: 1.7
             }
 
-            Text {
-                // Under the pill, not the disc: the disc's bottom sits well inside it.
+            Label {
                 anchors.top: parent.bottom
-                anchors.topMargin: (bar.height - parent.height) / 2 + bar.labelGap
+                anchors.topMargin: (bar.height - parent.height) / 2 + Theme.dp(14)
                 anchors.horizontalCenter: parent.horizontalCenter
                 visible: cell.focused
                 text: modelData.label
                 color: Theme.accent
-                font.family: Theme.sans
-                font.pixelSize: Theme.dp(Theme.fontBody)
             }
         }
     }

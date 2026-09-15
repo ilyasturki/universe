@@ -1,7 +1,6 @@
 import QtQuick
 import Universe
 import "../core"
-import "../sound"
 import "../ui"
 import "Groups.js" as Groups
 
@@ -12,14 +11,12 @@ FocusScope {
 
     signal closeRequested()
 
-    readonly property var tabNames: ["Software", "Groups"]
     property int tab: 0
     property string zone: "grid"
     property int sortMode: 0
     property string query: ""
 
     readonly property var sortNames: ["By Recently Played", "By Title", "By Play Time", "By Release"]
-    readonly property var railItems: [ { id: "search", icon: "search" }, { id: "sort", icon: "sort" } ]
 
     readonly property var hints: tab === 1 || zone === "rail" ? [ { glyph: "B", label: "Back" }, { glyph: "A", label: "OK" } ]
                                : [ { glyph: "Start", label: "Options" }, { glyph: "B", label: "Back" }, { glyph: "A", label: "Start" } ]
@@ -41,28 +38,7 @@ FocusScope {
         sortMode: page.sortMode
     }
 
-    property var softwareList: []
-    property var groupList: []
-
-    function rebuildSoftware() { softwareList = Groups.listOf(sorted); }
-    function rebuildGroups() { groupList = Groups.groups(api.allGames, api.collections); }
-
-    Connections {
-        target: sorted
-        function onCountChanged() { page.rebuildSoftware(); }
-    }
-    Connections {
-        target: api.allGames
-        function onCountChanged() { page.rebuildGroups(); }
-    }
-    Connections {
-        target: api.collections
-        function onCountChanged() { page.rebuildGroups(); }
-    }
-    Component.onCompleted: {
-        rebuildSoftware();
-        rebuildGroups();
-    }
+    readonly property var groupList: Groups.groups(api.allGames, api.collections)
 
     function focusZone() {
         if (tab === 1)
@@ -110,7 +86,7 @@ FocusScope {
         anchors.top: parent.top
         anchors.left: parent.left
         anchors.right: parent.right
-        names: page.tabNames
+        names: ["Software", "Groups"]
         onChanged: function(i) {
             page.tab = i;
             page.focusZone();
@@ -126,7 +102,7 @@ FocusScope {
             x: Theme.dp(102)
             y: Theme.dp(170)
             height: parent.height - y - Theme.dp(Theme.hintBarHeight)
-            items: page.railItems
+            items: [ { id: "search", icon: "search" }, { id: "sort", icon: "sort" } ]
             focus: page.zone === "rail"
             onActivated: function(id) { page.railAction(id); }
             onEscapedRight: {
@@ -135,13 +111,12 @@ FocusScope {
             }
         }
 
-        Text {
+        Label {
             anchors.right: parent.right
             anchors.rightMargin: Theme.dp(160)
             y: Theme.dp(140)
             text: page.sortNames[page.sortMode] + (page.query !== "" ? "  ·  “" + page.query + "”" : "")
             color: Theme.textSecondary
-            font.family: Theme.sans
             font.pixelSize: Theme.dp(Theme.fontSmall)
         }
 
@@ -151,15 +126,14 @@ FocusScope {
             y: page.gridY
             width: implicitWidth
             height: parent.height - y - Theme.dp(Theme.hintBarHeight)
-            games: page.softwareList
+            games: sorted
             focus: page.zone === "grid"
             onEscapedLeft: {
                 page.zone = "rail";
                 rail.forceActiveFocus();
             }
-            onEscapedUp: Sound.edge()
-            onActivated: function(i) { page.shell.launch(games[i]); }
-            onOptionsRequested: function(i) { page.shell.push("pages/SoftwareOptionsPage.qml", { gameId: games[i].id }); }
+            onActivated: page.shell.launch(current)
+            onOptionsRequested: page.shell.push("pages/SoftwareOptionsPage.qml", { gameId: current.id })
         }
     }
 
@@ -174,9 +148,6 @@ FocusScope {
         groups: true
         escapesLeft: false
         focus: page.tab === 1
-        onEscapedUp: Sound.edge()
-        onActivated: function(i) {
-            page.shell.push("pages/GroupPage.qml", { group: games[i].key, name: games[i].name });
-        }
+        onActivated: page.shell.push("pages/GroupPage.qml", { group: current.key, name: current.name })
     }
 }

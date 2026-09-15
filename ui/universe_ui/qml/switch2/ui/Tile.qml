@@ -1,18 +1,16 @@
 import QtQuick
-import Qt5Compat.GraphicalEffects
 import "../core"
+import "../../ui" as Base
 
 Item {
     id: tile
 
     property var game: null
     property bool focused: false
-    // The HOME tile's rounding, scaled down with the tile
     property real cornerRadius: Math.round(Theme.dp(Theme.radiusTile) * Math.min(width, height) / Theme.dp(Theme.tileSize))
     property bool outlineShown: true
 
     readonly property bool empty: game === null || game === undefined
-    readonly property bool software: GraphicsInfo.api === GraphicsInfo.Software
 
     readonly property url squareSource: empty ? "" : game.assets.square
     readonly property url bannerSource: empty ? "" : game.assets.tile
@@ -26,17 +24,15 @@ Item {
 
     z: focused ? 2 : 1
 
-    Item {
+    Base.RoundedMask {
         id: body
 
         anchors.fill: parent
-        layer.enabled: !tile.software
-        layer.smooth: true
-        layer.effect: tile.software ? null : maskEffect
+        radius: tile.cornerRadius
 
         Rectangle {
             anchors.fill: parent
-            radius: tile.software ? tile.cornerRadius : 0
+            radius: Theme.software ? tile.cornerRadius : 0
             color: tile.empty ? Theme.slot : Theme.artShade
         }
 
@@ -78,7 +74,7 @@ Item {
             visible: tile.shown === "box"
         }
 
-        Text {
+        Label {
             anchors.centerIn: parent
             width: parent.width - Theme.dp(40)
             visible: !tile.empty && tile.shown === "none"
@@ -88,24 +84,9 @@ Item {
             wrapMode: Text.WordWrap
             maximumLineCount: 4
             elide: Text.ElideRight
-            font.family: Theme.sans
             font.weight: Font.Bold
             font.pixelSize: Theme.dp(34)
         }
-    }
-
-    Component {
-        id: maskEffect
-        OpacityMask { maskSource: mask }
-    }
-
-    Rectangle {
-        id: mask
-        anchors.fill: parent
-        radius: tile.cornerRadius
-        color: "white"
-        antialiasing: true
-        visible: false
     }
 
     FocusOutline {

@@ -1,14 +1,12 @@
 import QtQuick
 import "../core"
 import "../sound"
-import "../ui"
 
-FocusScope {
+Modal {
     id: sheet
 
-    property bool open: false
+    property var shell: null
     property string title: ""
-    property var callback: null
     property string zone: "list"
     property int chipIndex: 0
     property int index: 0
@@ -30,45 +28,36 @@ FocusScope {
 
     readonly property real rowHeight: Theme.dp(96)
     readonly property real inner: Theme.dp(1400)
-    // The list clips; it reaches this far past the rows so the focus ring is never cut.
     readonly property real room: Theme.dp(Theme.ringRoom)
+
+    carded: false
+    scrimColor: Theme.ground
 
     function show(spec, done) {
         title = spec.title || "Choose a folder";
         browser.open(spec.path || "", spec.files === true);
-        callback = done || null;
         zone = "list";
         index = 0;
         chipIndex = 0;
-        Sound.open();
-        open = true;
-        forceActiveFocus();
-    }
-
-    function finish(path) {
-        var cb = callback;
-        callback = null;
-        open = false;
-        if (cb)
-            cb(path);
+        present(done);
     }
 
     function activate() {
         if (zone === "chips") {
-            Sound.ok();
+            Sound.play("ok");
             browser.go(browser.shortcuts[chipIndex].path);
             zone = "list";
             index = 0;
             return;
         }
         if (index === 0) {
-            browser.up() ? Sound.ok() : Sound.edge();
+            browser.up() ? Sound.play("ok") : Sound.play("edge");
             return;
         }
         var entry = entries[index - 1];
         if (!entry)
             return;
-        Sound.ok();
+        Sound.play("ok");
         if (entry.dir) {
             browser.enter(index - 1);
             index = 0;
@@ -77,43 +66,43 @@ FocusScope {
         }
     }
 
-    anchors.fill: parent
-    visible: scrim.opacity > 0.01
-    focus: open
+    function typePath() {
+        Sound.play("ok");
+        var done = callback;
+        callback = null;
+        open = false;
+        shell.prompt({ title: "Path", value: browser.path, path: true }, done);
+    }
 
     Keys.onUpPressed: {
-        if (zone === "chips") {
-            Sound.edge();
-        } else if (index === 0) {
-            if (browser.shortcuts.length > 0) {
-                zone = "chips";
-                Sound.tick();
-            } else {
-                Sound.edge();
-            }
-        } else {
+        if (zone === "list" && index > 0)
             index--;
-            Sound.tick();
+        else if (zone === "list" && browser.shortcuts.length > 0)
+            zone = "chips";
+        else {
+            Sound.play("edge");
+            return;
         }
+        Sound.play("tick");
     }
     Keys.onDownPressed: {
-        if (zone === "chips") {
+        if (zone === "chips")
             zone = "list";
-            Sound.tick();
-        } else if (index < rowCount - 1) {
+        else if (index < rowCount - 1)
             index++;
-            Sound.tick();
-        } else {
-            Sound.edge();
+        else {
+            Sound.play("edge");
+            return;
         }
+        Sound.play("tick");
     }
     function stepChip(d) {
         var next = chipIndex + d;
         if (zone === "chips" && next >= 0 && next < browser.shortcuts.length) {
             chipIndex = next;
-            Sound.tick();
+            Sound.play("tick");
         } else {
-            Sound.edge();
+            Sound.play("edge");
         }
     }
     Keys.onLeftPressed: stepChip(-1)
@@ -126,37 +115,20 @@ FocusScope {
         if (api.keys.isAccept(event)) {
             activate();
         } else if (api.keys.isCancel(event)) {
-            Sound.back();
+            Sound.play("back");
             if (browser.up())
                 index = 0;
             else
                 finish(null);
         } else if (api.keys.isDetails(event)) {
-            if (files) {
-                Sound.edge();
-            } else {
-                Sound.ok();
+            if (files)
+                Sound.play("edge");
+            else {
+                Sound.play("ok");
                 finish(browser.path);
             }
         } else if (api.keys.isFilters(event)) {
-            Sound.ok();
-            var current = browser.path;
-            open = false;
-            sheet.typeRequested(current);
-        }
-    }
-
-    // The page that owns the sheet answers with the keyboard and then calls finish().
-    signal typeRequested(string path)
-
-    Rectangle {
-        id: scrim
-        anchors.fill: parent
-        color: Theme.ground
-        opacity: sheet.open ? 1.0 : 0.0
-
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
+            typePath();
         }
     }
 
@@ -187,28 +159,21 @@ FocusScope {
                 width: chipLabel.implicitWidth + Theme.dp(56)
                 height: Theme.dp(72)
 
-                Rectangle {
-                    id: chipFill
+                FocusPill {
                     anchors.fill: parent
                     radius: height / 2
                     color: parent.focused ? Theme.focusFill : Theme.card
                     border.width: 1
                     border.color: Theme.hairline
+                    visible: true
+                    focused: parent.focused
                 }
 
-                FocusOutline {
-                    target: chipFill
-                    cornerRadius: chipFill.radius
-                    gap: 0
-                    shown: parent.focused && sheet.open
-                }
-
-                Text {
+                Label {
                     id: chipLabel
                     anchors.centerIn: parent
                     text: modelData.label
                     color: parent.here ? Theme.accent : Theme.text
-                    font.family: Theme.sans
                     font.pixelSize: Theme.dp(Theme.fontSmall)
                 }
             }
@@ -245,28 +210,13 @@ FocusScope {
                 width: parent.width - sheet.room * 2
                 height: sheet.rowHeight
 
-                Rectangle {
-                    id: pill
+                FocusPill {
                     anchors.fill: parent
-                    radius: Theme.dp(Theme.radiusRow)
-                    color: Theme.focusFill
-                    visible: parent.focused
+                    focused: parent.focused
                 }
 
-                FocusOutline {
-                    target: pill
-                    cornerRadius: pill.radius
-                    gap: 0
-                    shown: parent.focused && sheet.open
-                }
-
-                Rectangle {
-                    anchors.bottom: parent.bottom
-                    anchors.left: parent.left
-                    anchors.right: parent.right
-                    height: 1
+                Hairline {
                     visible: !parent.focused
-                    color: Theme.hairlineSoft
                 }
 
                 Glyph {
@@ -279,15 +229,12 @@ FocusScope {
                     tint: Theme.text
                 }
 
-                Text {
+                Label {
                     x: rowIcon.x + rowIcon.width + Theme.dp(20)
                     anchors.verticalCenter: parent.verticalCenter
                     width: parent.width - x - Theme.dp(24)
                     text: index === 0 ? ".." : (parent.entry ? parent.entry.name : "")
-                    color: Theme.text
                     elide: Text.ElideMiddle
-                    font.family: Theme.sans
-                    font.pixelSize: Theme.dp(Theme.fontBody)
                 }
             }
         }

@@ -13,17 +13,13 @@ FocusScope {
 
     width: Theme.dp(110)
 
-    function step(d) {
-        var next = Math.max(0, Math.min(items.length - 1, index + d));
-        next === index ? Sound.edge() : Sound.tick();
-        index = next;
-    }
+    function step(d) { index = Sound.stepped(index, d, items.length); }
 
     Keys.onUpPressed: step(-1)
     Keys.onDownPressed: step(1)
-    Keys.onLeftPressed: Sound.edge()
+    Keys.onLeftPressed: Sound.play("edge")
     Keys.onRightPressed: {
-        Sound.tick();
+        Sound.play("tick");
         rail.escapedRight();
     }
 
@@ -33,7 +29,7 @@ FocusScope {
         if (api.keys.isAccept(event)) {
             event.accepted = true;
             if (items.length > 0) {
-                Sound.ok();
+                Sound.play("ok");
                 rail.activated(items[index].id);
             }
         }
@@ -51,19 +47,10 @@ FocusScope {
                 width: Theme.dp(80)
                 height: Theme.dp(80)
 
-                Rectangle {
-                    id: disc
+                FocusPill {
                     anchors.fill: parent
                     radius: width / 2
-                    color: Theme.focusFill
-                    visible: parent.focused
-                }
-
-                FocusOutline {
-                    target: disc
-                    cornerRadius: disc.radius
-                    gap: 0
-                    shown: parent.focused
+                    focused: parent.focused
                 }
 
                 Glyph {
@@ -74,15 +61,13 @@ FocusScope {
                     tint: Theme.text
                 }
 
-                Text {
+                Label {
                     anchors.left: parent.right
                     anchors.leftMargin: Theme.dp(20)
                     anchors.verticalCenter: parent.verticalCenter
                     visible: parent.focused && modelData.label !== undefined
                     text: modelData.label || ""
                     color: Theme.accent
-                    font.family: Theme.sans
-                    font.pixelSize: Theme.dp(Theme.fontBody)
                 }
             }
         }

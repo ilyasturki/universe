@@ -1,11 +1,13 @@
 pragma Singleton
 import QtQuick
+import "../../core" as Base
 import "../../core/Format.js" as Format
 
 QtObject {
     id: t
 
     property real vscale: 1.0
+    readonly property bool software: Base.Theme.software
     function dp(v) { return Math.round(v * t.vscale) }
 
     function reveal(flick, top, bottom, height) {
@@ -56,7 +58,7 @@ QtObject {
     readonly property real radiusTile: 27
     readonly property real radiusRow: 6
 
-    // The focus ring, outward from the item: a white gap, then the band. Nothing lifts or grows.
+    // The focus ring, outward from the item: a white gap, then the band.
     readonly property real ringGap: 6
     readonly property real ringLine: 7
     // What a clipping view reserves past its items so the ring is never cut; tight: a ring with no gap
@@ -93,7 +95,7 @@ QtObject {
         to: 1
         duration: 2400
         loops: Animation.Infinite
-        running: true
+        running: Qt.application.state === Qt.ApplicationActive
     }
 
     property string clock: Format.clock()
@@ -105,7 +107,6 @@ QtObject {
         onTriggered: t.clock = Format.clock()
     }
 
-    // BIZ UDPGothic: the free relative of the Switch's UD Shin Go.
     readonly property FontLoader fontRegular: FontLoader { source: fontOverride !== "" ? fontOverride : Qt.resolvedUrl("../assets/fonts/BIZUDPGothic-Regular.ttf") }
     readonly property FontLoader fontBold: FontLoader { source: fontOverride !== "" ? "" : Qt.resolvedUrl("../assets/fonts/BIZUDPGothic-Bold.ttf") }
     readonly property string fontOverride: api.theme.fontPath !== "" ? "file://" + api.theme.fontPath : ""

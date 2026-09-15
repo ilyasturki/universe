@@ -1,8 +1,8 @@
 import QtQuick
-import Qt5Compat.GraphicalEffects
 import "../core"
 import "../sound"
 import "../ui"
+import "../../ui" as Base
 
 FocusScope {
     id: page
@@ -15,7 +15,6 @@ FocusScope {
     readonly property string description: game ? (game.description || game.summary || "") : ""
     property string zone: "button"
     property int shotIndex: 0
-    readonly property bool software: GraphicsInfo.api === GraphicsInfo.Software
 
     readonly property var hints: zone === "shots" && screenshots.length > 1
         ? [ { glyph: "dpad", label: "Screenshots" }, { glyph: "B", label: "Back" } ]
@@ -50,16 +49,17 @@ FocusScope {
 
     focus: true
 
-    function stepShot(d) {
-        var next = Math.max(0, Math.min(screenshots.length - 1, shotIndex + d));
-        next === shotIndex ? Sound.edge() : Sound.tick();
-        shotIndex = next;
+    function stepShot(d) { shotIndex = Sound.stepped(shotIndex, d, screenshots.length); }
+
+    function go(z) {
+        Sound.play("tick");
+        zone = z;
     }
 
     function scroll(d) {
         var max = Math.max(0, flick.contentHeight - flick.height);
         var next = Math.max(0, Math.min(max, flick.contentY + d * Theme.dp(220)));
-        next === flick.contentY ? Sound.edge() : Sound.tick();
+        next === flick.contentY ? Sound.play("edge") : Sound.play("tick");
         flick.contentY = next;
     }
 
@@ -74,73 +74,37 @@ FocusScope {
             else if (zone === "shots")
                 stepShot(1);
             else
-                Sound.edge();
+                Sound.play("edge");
         } else if (event.key === Qt.Key_Up) {
             event.accepted = true;
-            if (zone === "button") {
-                Sound.tick();
-                zone = "shots";
-            } else if (zone === "text") {
-                scroll(-1);
-            } else {
-                Sound.edge();
-            }
+            if (zone === "button") go("shots"); else if (zone === "text") scroll(-1); else Sound.play("edge");
         } else if (event.key === Qt.Key_Down) {
             event.accepted = true;
-            if (zone === "shots") {
-                Sound.tick();
-                zone = "button";
-            } else if (zone === "text") {
-                scroll(1);
-            } else {
-                Sound.edge();
-            }
+            if (zone === "shots") go("button"); else if (zone === "text") scroll(1); else Sound.play("edge");
         } else if (event.key === Qt.Key_Right) {
             event.accepted = true;
-            if (zone === "shots" && shotIndex < screenshots.length - 1)
-                stepShot(1);
-            else if (zone !== "text") {
-                Sound.tick();
-                zone = "text";
-            } else {
-                Sound.edge();
-            }
+            if (zone === "shots" && shotIndex < screenshots.length - 1) stepShot(1); else if (zone !== "text") go("text"); else Sound.play("edge");
         } else if (event.key === Qt.Key_Left) {
             event.accepted = true;
-            if (zone === "shots")
-                stepShot(-1);
-            else if (zone === "text") {
-                Sound.tick();
-                zone = "button";
-            } else {
-                Sound.edge();
-            }
+            if (zone === "shots") stepShot(-1); else if (zone === "text") go("button"); else Sound.play("edge");
         }
     }
 
-    Rectangle {
-        anchors.fill: parent
-        color: Theme.ground
-    }
-
-    Text {
+    Label {
         x: Theme.dp(108)
         y: Theme.dp(78)
         text: page.game && page.game.publisherList.length > 0 ? page.game.publisherList.join(", ")
             : page.game && page.game.developerList.length > 0 ? page.game.developerList.join(", ") : ""
         color: Theme.textSecondary
-        font.family: Theme.sans
         font.pixelSize: Theme.dp(Theme.fontSmall)
     }
 
-    Text {
+    Label {
         x: Theme.dp(108)
         y: Theme.dp(116)
         width: Theme.dp(1500)
         text: page.game ? page.game.title : ""
-        color: Theme.text
         elide: Text.ElideRight
-        font.family: Theme.sans
         font.pixelSize: Theme.dp(Theme.fontTitle)
     }
 
@@ -170,16 +134,14 @@ FocusScope {
         width: Theme.dp(720)
         height: Math.round(width * 9 / 16)
 
-        Item {
+        Base.RoundedMask {
             id: paneBody
             anchors.fill: parent
-            layer.enabled: !page.software
-            layer.smooth: true
-            layer.effect: page.software ? null : paneMask
+            radius: Theme.dp(8)
 
             Rectangle {
                 anchors.fill: parent
-                radius: page.software ? Theme.dp(8) : 0
+                radius: Theme.software ? Theme.dp(8) : 0
                 color: "#1e1e1e"
             }
 
@@ -203,28 +165,12 @@ FocusScope {
                 visible: page.screenshots.length === 0 && status === Image.Ready
             }
 
-            Text {
+            Label {
                 anchors.centerIn: parent
                 visible: page.screenshots.length === 0 && (!page.game || String(page.game.assets.boxFront) === "")
                 text: "No screenshots"
                 color: "#8a8a8a"
-                font.family: Theme.sans
-                font.pixelSize: Theme.dp(Theme.fontBody)
             }
-        }
-
-        Component {
-            id: paneMask
-            OpacityMask { maskSource: paneMaskRect }
-        }
-
-        Rectangle {
-            id: paneMaskRect
-            anchors.fill: parent
-            radius: Theme.dp(8)
-            color: "white"
-            antialiasing: true
-            visible: false
         }
 
         FocusOutline {
@@ -261,28 +207,18 @@ FocusScope {
         width: pane.width
         height: Theme.dp(96)
 
-        Rectangle {
-            id: startFill
+        FocusPill {
             anchors.fill: parent
-            radius: Theme.dp(6)
             color: page.zone === "button" ? Theme.focusFill : "transparent"
             border.width: Theme.dp(2)
             border.color: page.zone === "button" ? "transparent" : Theme.hairline
+            visible: true
+            focused: page.zone === "button" && page.activeFocus
         }
 
-        FocusOutline {
-            target: startFill
-            cornerRadius: startFill.radius
-            gap: 0
-            shown: page.zone === "button" && page.activeFocus
-        }
-
-        Text {
+        Label {
             anchors.centerIn: parent
             text: page.game && page.game.playTime > 0 ? "Continue Software" : "Start Software"
-            color: Theme.text
-            font.family: Theme.sans
-            font.pixelSize: Theme.dp(Theme.fontBody)
         }
     }
 
@@ -303,9 +239,7 @@ FocusScope {
             interactive: false
             clip: true
 
-            Behavior on contentY {
-                NumberAnimation { duration: Theme.durPage; easing.type: Easing.OutCubic }
-            }
+            Behavior on contentY { Ease {} }
 
             Column {
                 id: article
@@ -313,25 +247,21 @@ FocusScope {
                 width: flick.width - Theme.dp(20)
                 spacing: Theme.dp(30)
 
-                Text {
+                Label {
                     width: parent.width
                     visible: page.description !== ""
                     text: page.description
                     color: page.zone === "text" ? Theme.text : Theme.artInk
                     wrapMode: Text.WordWrap
                     lineHeight: 1.4
-                    font.family: Theme.sans
-                    font.pixelSize: Theme.dp(Theme.fontBody)
                 }
 
-                Text {
+                Label {
                     width: parent.width
                     visible: page.description === "" && page.facts.length === 0
                     text: "No information about this software yet."
                     color: Theme.textSecondary
                     wrapMode: Text.WordWrap
-                    font.family: Theme.sans
-                    font.pixelSize: Theme.dp(Theme.fontBody)
                 }
 
                 Column {
@@ -345,21 +275,18 @@ FocusScope {
                             width: parent.width
                             spacing: Theme.dp(20)
 
-                            Text {
+                            Label {
                                 width: Theme.dp(260)
                                 text: modelData.label
                                 color: Theme.textSecondary
                                 elide: Text.ElideRight
-                                font.family: Theme.sans
                                 font.pixelSize: Theme.dp(Theme.fontSmall)
                             }
 
-                            Text {
+                            Label {
                                 width: parent.width - Theme.dp(280)
                                 text: modelData.value
-                                color: Theme.text
                                 wrapMode: Text.WordWrap
-                                font.family: Theme.sans
                                 font.pixelSize: Theme.dp(Theme.fontSmall)
                             }
                         }

@@ -20,8 +20,6 @@ Item {
         radius: width / 2
         color: Theme.thumb
 
-        Behavior on y {
-            NumberAnimation { duration: Theme.durPage; easing.type: Easing.OutCubic }
-        }
+        Behavior on y { Ease {} }
     }
 }

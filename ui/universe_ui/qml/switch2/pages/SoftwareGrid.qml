@@ -6,16 +6,17 @@ import "../ui"
 FocusScope {
     id: grid
 
+    // A JS array of games or groups, or a game proxy model.
     property var games: []
     property bool groups: false
     property int index: 0
     property bool escapesLeft: true
-    readonly property int count: games.length
-    readonly property var current: index >= 0 && index < count ? games[index] : null
+    readonly property bool listed: Array.isArray(games)
+    readonly property int count: listed ? games.length : games ? games.count : 0
+    readonly property var current: index < 0 ? null : listed ? (index < games.length ? games[index] : null) : (games && index < games.count ? games.get(index) : null)
     readonly property bool cursorShown: activeFocus
 
     signal escapedLeft()
-    signal escapedUp()
     signal activated(int index)
     signal optionsRequested(int index)
 
@@ -23,7 +24,6 @@ FocusScope {
     readonly property real tile: Theme.dp(237)
     readonly property real gap: Theme.dp(18)
     readonly property real pitch: tile + gap
-    // The view clips; it reaches this far past the cells so the focus ring is never cut.
     readonly property real inset: Theme.dp(Theme.ringRoom)
     readonly property real cornerRadius: Math.round(Theme.dp(Theme.radiusTile) * tile / Theme.dp(Theme.tileSize))
     readonly property real cellHeight: groups ? pitch + inset + Theme.dp(64) : pitch
@@ -31,45 +31,21 @@ FocusScope {
 
     implicitWidth: columns * pitch
 
-    function go(next) {
-        if (next < 0 || next >= count || next === index) {
-            Sound.edge();
-            return;
-        }
-        Sound.tick();
-        index = next;
-    }
+    function go(next) { index = Sound.stepped(index, next - index, count); }
 
-    Keys.onRightPressed: {
-        if (index % columns === columns - 1 || index === count - 1)
-            Sound.edge();
-        else
-            go(index + 1);
-    }
+    Keys.onRightPressed: index % columns === columns - 1 || index === count - 1 ? Sound.play("edge") : go(index + 1)
     Keys.onLeftPressed: {
-        if (index % columns === 0) {
-            if (escapesLeft) {
-                Sound.tick();
-                grid.escapedLeft();
-            } else {
-                Sound.edge();
-            }
-        } else {
+        if (index % columns !== 0) {
             go(index - 1);
+        } else if (escapesLeft) {
+            Sound.play("tick");
+            grid.escapedLeft();
+        } else {
+            Sound.play("edge");
         }
     }
-    Keys.onDownPressed: {
-        if (Math.floor(index / columns) < lastRow)
-            go(Math.min(index + columns, count - 1));
-        else
-            Sound.edge();
-    }
-    Keys.onUpPressed: {
-        if (index >= columns)
-            go(index - columns);
-        else
-            grid.escapedUp();
-    }
+    Keys.onDownPressed: Math.floor(index / columns) < lastRow ? go(Math.min(index + columns, count - 1)) : Sound.play("edge")
+    Keys.onUpPressed: index >= columns ? go(index - columns) : Sound.play("edge")
 
     Keys.onPressed: function(event) {
         if (event.isAutoRepeat)
@@ -77,18 +53,18 @@ FocusScope {
         if (api.keys.isAccept(event)) {
             event.accepted = true;
             if (current) {
-                Sound.ok();
+                Sound.play("ok");
                 grid.activated(index);
             } else {
-                Sound.edge();
+                Sound.play("edge");
             }
         } else if (api.keys.isMenu(event) && !groups) {
             event.accepted = true;
             if (current) {
-                Sound.ok();
+                Sound.play("ok");
                 grid.optionsRequested(index);
             } else {
-                Sound.edge();
+                Sound.play("edge");
             }
         }
     }
@@ -101,7 +77,7 @@ FocusScope {
     onIndexChanged: view.scrollToCurrent()
     onHeightChanged: view.scrollToCurrent()
 
-    Text {
+    Label {
         anchors.centerIn: parent
         anchors.verticalCenterOffset: -Theme.dp(60)
         width: parent.width - Theme.dp(200)
@@ -110,9 +86,6 @@ FocusScope {
         wrapMode: Text.WordWrap
         text: grid.groups ? "Groups gather your games: your favourites, each platform, each tag you give a game."
                           : "No software matches."
-        color: Theme.text
-        font.family: Theme.sans
-        font.pixelSize: Theme.dp(Theme.fontBody)
         lineHeight: 1.3
     }
 
@@ -150,9 +123,7 @@ FocusScope {
             contentY = Math.max(-topMargin, Math.min(target, contentHeight - height + bottomMargin));
         }
 
-        Behavior on contentY {
-            NumberAnimation { duration: Theme.durPage; easing.type: Easing.OutCubic }
-        }
+        Behavior on contentY { Ease {} }
 
         delegate: Item {
             id: cell
@@ -165,13 +136,15 @@ FocusScope {
             // The ring reaches over the neighbours, which are later siblings.
             z: focused ? 2 : 1
 
-            Tile {
-                visible: !grid.groups
+            Loader {
+                active: !grid.groups
                 width: grid.tile
                 height: grid.tile
-                cornerRadius: grid.cornerRadius
-                game: grid.groups ? null : cell.entry
-                focused: cell.focused
+                sourceComponent: Tile {
+                    cornerRadius: grid.cornerRadius
+                    game: cell.entry
+                    focused: cell.focused
+                }
             }
 
             Item {
@@ -222,22 +195,20 @@ FocusScope {
                 width: grid.tile
                 spacing: Theme.dp(2)
 
-                Text {
+                Label {
                     width: parent.width
                     horizontalAlignment: Text.AlignHCenter
                     text: grid.groups && cell.entry ? cell.entry.name : ""
                     color: cell.focused ? Theme.accent : Theme.text
                     elide: Text.ElideRight
-                    font.family: Theme.sans
                     font.pixelSize: Theme.dp(Theme.fontSmall)
                 }
 
-                Text {
+                Label {
                     width: parent.width
                     horizontalAlignment: Text.AlignHCenter
                     text: grid.groups && cell.entry ? cell.entry.games.length + (cell.entry.games.length === 1 ? " game" : " games") : ""
                     color: Theme.textSecondary
-                    font.family: Theme.sans
                     font.pixelSize: Theme.dp(Theme.fontTiny)
                 }
             }
@@ -285,15 +256,13 @@ FocusScope {
             }
         }
 
-        Text {
+        Label {
             id: cardText
             anchors.centerIn: parent
             width: Math.min(implicitWidth, Theme.dp(760))
             text: grid.current && !grid.groups ? grid.current.title : ""
             color: Theme.accent
             elide: Text.ElideRight
-            font.family: Theme.sans
-            font.pixelSize: Theme.dp(Theme.fontBody)
         }
     }
 

@@ -8,27 +8,20 @@ FocusScope {
     property var model: []
     property int index: 0
     property var shell: null
-    property var folder: null
     readonly property bool cursorShown: activeFocus
     readonly property var currentRow: index >= 0 && index < model.length ? model[index] : null
 
     signal activated(int index, var row)
     signal escapedLeft()
-    signal escapedUp()
 
     readonly property real rowHeight: Theme.dp(113)
     readonly property real headingHeight: Theme.dp(96)
     readonly property real detailLine: Theme.dp(58)
     readonly property real inset: Theme.dp(24)
-    // The view clips; it reaches this far past the rows so the focus ring is never cut.
     readonly property real room: Theme.dp(Theme.ringRoom)
 
     function stops() {
-        var out = [];
-        for (var i = 0; i < model.length; i++)
-            if (!model[i].heading)
-                out.push(i);
-        return out;
+        return model.map(function(r, i) { return i; }).filter(function(i) { return !model[i].heading; });
     }
 
     function heightOf(i) {
@@ -37,10 +30,7 @@ FocusScope {
     }
 
     function yOf(i) {
-        var y = 0;
-        for (var k = 0; k < i && k < model.length; k++)
-            y += heightOf(k);
-        return y;
+        return model.slice(0, i).reduce(function(y, r, k) { return y + heightOf(k); }, 0);
     }
 
     readonly property real contentHeight: yOf(model.length)
@@ -56,7 +46,7 @@ FocusScope {
                 if (i < 0)
                     return;
                 if (i < choices.length) {
-                    Sound.select();
+                    Sound.play("select");
                     apply(choices[i]);
                 } else {
                     shell.prompt({ title: row.label, value: row.value, numeric: row.type === "int" }, function(v) { if (v !== null) apply(v); });
@@ -65,10 +55,9 @@ FocusScope {
             return;
         }
         if (row.type === "path") {
-            folder.show({ title: row.label, path: row.value, files: /(_path|_file|file)$/.test(String(row.key || "")) }, function(path) {
+            shell.browse({ title: row.label, path: row.value, files: /(_path|_file|file|exe)$/.test(String(row.key || "")) }, function(path) {
                 if (path !== null)
                     apply(path);
-                rows.forceActiveFocus();
             });
             return;
         }
@@ -88,15 +77,11 @@ FocusScope {
             return;
         }
         var next = pos + d;
-        if (next < 0) {
-            rows.escapedUp();
+        if (next < 0 || next >= s.length) {
+            Sound.play("edge");
             return;
         }
-        if (next >= s.length) {
-            Sound.edge();
-            return;
-        }
-        Sound.tick();
+        Sound.play("tick");
         index = s[next];
     }
 
@@ -111,10 +96,10 @@ FocusScope {
     Keys.onUpPressed: step(-1)
     Keys.onDownPressed: step(1)
     Keys.onLeftPressed: {
-        Sound.tick();
+        Sound.play("tick");
         rows.escapedLeft();
     }
-    Keys.onRightPressed: Sound.edge()
+    Keys.onRightPressed: Sound.play("edge")
 
     Keys.onPressed: function(event) {
         if (event.isAutoRepeat)
@@ -124,17 +109,15 @@ FocusScope {
             if (currentRow && !currentRow.heading && currentRow.type !== "info" && currentRow.type !== "static" && !currentRow.disabled)
                 rows.activated(index, currentRow);
             else
-                Sound.edge();
+                Sound.play("edge");
         }
     }
 
-    Text {
+    Label {
         anchors.centerIn: parent
         visible: rows.model.length === 0
         text: "Nothing here yet."
         color: Theme.textMuted
-        font.family: Theme.sans
-        font.pixelSize: Theme.dp(Theme.fontBody)
     }
 
     Flickable {
@@ -156,9 +139,7 @@ FocusScope {
             Theme.reveal(view, top, bottom, height);
         }
 
-        Behavior on contentY {
-            NumberAnimation { duration: Theme.durPage; easing.type: Easing.OutCubic }
-        }
+        Behavior on contentY { Ease {} }
 
         Repeater {
             model: rows.model
@@ -177,7 +158,6 @@ FocusScope {
                 readonly property bool iconIsFile: entry.icon !== undefined && entry.icon !== null && String(entry.icon).indexOf("/") >= 0
                 readonly property bool hasMark: iconIsFile && mark.status === Image.Ready
                 readonly property bool hasIcon: !hasGlyph && !iconIsFile && entry.icon !== undefined && String(entry.icon) !== ""
-                // A list where most rows carry a mark keeps the label aligned on the ones without.
                 readonly property bool keepsMark: hasMark || entry.iconSlot === true
                 // Dim reads as disabled but still opens: a runner whose program was not found.
                 readonly property color ink: disabled || entry.dim === true ? Theme.textDisabled : Theme.text
@@ -199,32 +179,24 @@ FocusScope {
                         color: Theme.text
                     }
 
-                    Text {
+                    Label {
                         x: Theme.dp(20)
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.verticalCenterOffset: Theme.dp(8)
                         text: row.entry.label || ""
-                        color: Theme.text
-                        font.family: Theme.sans
-                        font.pixelSize: Theme.dp(Theme.fontBody)
                     }
 
-                    Text {
+                    Label {
                         anchors.right: parent.right
                         anchors.rightMargin: rows.inset
                         anchors.verticalCenter: parent.verticalCenter
                         anchors.verticalCenterOffset: Theme.dp(8)
                         text: row.entry.display || ""
                         color: Theme.textSecondary
-                        font.family: Theme.sans
                         font.pixelSize: Theme.dp(Theme.fontSmall)
                     }
 
-                    Rectangle {
-                        anchors.bottom: parent.bottom
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        height: 1
+                    Hairline {
                         color: Theme.hairline
                     }
                 }
@@ -233,29 +205,14 @@ FocusScope {
                     visible: !row.heading
                     anchors.fill: parent
 
-                    Rectangle {
-                        id: pill
+                    FocusPill {
                         width: parent.width
                         height: rows.rowHeight
-                        radius: Theme.dp(Theme.radiusRow)
-                        color: Theme.focusFill
-                        visible: row.focused
+                        focused: row.focused
                     }
 
-                    FocusOutline {
-                        target: pill
-                        cornerRadius: pill.radius
-                        gap: 0
-                        shown: row.focused
-                    }
-
-                    Rectangle {
-                        anchors.bottom: parent.bottom
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        height: 1
+                    Hairline {
                         visible: !row.focused
-                        color: Theme.hairlineSoft
                     }
 
                     Rectangle {
@@ -314,7 +271,7 @@ FocusScope {
                         }
                     }
 
-                    Text {
+                    Label {
                         id: label
                         x: rows.inset + (lead.visible ? lead.width + Theme.dp(8) : 0) + (swatch.visible ? swatch.width + Theme.dp(30) : 0)
                         height: rows.rowHeight
@@ -323,8 +280,6 @@ FocusScope {
                         text: row.entry.label || ""
                         color: row.ink
                         elide: Text.ElideRight
-                        font.family: Theme.sans
-                        font.pixelSize: Theme.dp(Theme.fontBody)
                     }
 
                     Item {
@@ -362,7 +317,7 @@ FocusScope {
                             }
                         }
 
-                        Text {
+                        Label {
                             id: valueText
                             visible: row.entry.type !== "bool" && row.entry.type !== "radio" && !row.info
                             anchors.verticalCenter: parent.verticalCenter
@@ -370,8 +325,6 @@ FocusScope {
                             color: row.disabled ? Theme.textDisabled : row.entry.inherited === true || row.entry.type === "static" ? Theme.textSecondary : Theme.accent
                             elide: Text.ElideMiddle
                             width: Math.min(implicitWidth, row.width * 0.5)
-                            font.family: Theme.sans
-                            font.pixelSize: Theme.dp(Theme.fontBody)
                         }
 
                         Row {
@@ -380,12 +333,11 @@ FocusScope {
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: Theme.dp(18)
 
-                            Text {
+                            Label {
                                 anchors.verticalCenter: parent.verticalCenter
                                 visible: text !== ""
                                 text: row.entry.display || ""
                                 color: Theme.textSecondary
-                                font.family: Theme.sans
                                 font.pixelSize: Theme.dp(Theme.fontSmall)
                             }
 
@@ -407,7 +359,7 @@ FocusScope {
                         }
                     }
 
-                    Text {
+                    Label {
                         visible: row.hasDetail
                         x: rows.inset
                         y: rows.rowHeight + Theme.dp(16)
@@ -417,8 +369,6 @@ FocusScope {
                         text: row.entry.detail || ""
                         color: Theme.textSecondary
                         elide: Text.ElideRight
-                        font.family: Theme.sans
-                        font.pixelSize: Theme.dp(Theme.fontSmall)
                     }
                 }
             }

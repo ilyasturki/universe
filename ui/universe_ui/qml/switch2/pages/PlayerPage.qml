@@ -4,6 +4,7 @@ import "../core"
 import "../../core/Format.js" as Format
 import "../sound"
 import "../ui"
+import "../../ui" as Base
 import "../ui/Removal.js" as Removal
 
 FocusScope {
@@ -26,12 +27,8 @@ FocusScope {
                                    : frames && frames.duration > 0 ? frames.duration * 1000
                                    : row ? row.duration_s * 1000 : 0
 
-    property bool scrubbing: false
-    property real scrubPos: 0
-    readonly property real shownPos: scrubbing ? scrubPos : player.position
-    readonly property real stickX: api.pad.rightX
-    readonly property real scrubSpeed: Math.max(60000, duration / 12)
-    readonly property real seekStep: 10000
+    readonly property bool scrubbing: scrub.scrubbing
+    readonly property real shownPos: scrub.shownPos
 
     readonly property var hints: [
         { glyph: "Start", label: footerShown ? "Hide Footer" : "Show Footer" },
@@ -58,10 +55,10 @@ FocusScope {
 
     function togglePlay() {
         if (!row || !row.url) {
-            Sound.edge();
+            Sound.play("edge");
             return;
         }
-        Sound.ok();
+        Sound.play("ok");
         if (playing)
             player.pause();
         else
@@ -69,26 +66,14 @@ FocusScope {
         wake();
     }
 
-    function seekBy(ms) {
-        if (duration <= 0)
+    function openJournal() {
+        if (!(row && row.hasJournal)) {
+            Sound.play("edge");
             return;
-        if (!scrubbing) {
-            scrubPos = player.position;
-            scrubbing = true;
         }
-        scrubPos = Math.max(0, Math.min(duration, scrubPos + ms));
-        wake();
-    }
-
-    function commitSeek() {
-        if (!scrubbing)
-            return;
-        scrubbing = false;
-        if (stopped) {
-            player.play();
-            player.pause();
-        }
-        player.position = scrubPos;
+        Sound.play("ok");
+        player.pause();
+        shell.push("pages/ArticlePage.qml", { session: row.session, gameId: row.gameId });
     }
 
     function wake() {
@@ -102,17 +87,15 @@ FocusScope {
     }
 
     function menu() {
-        Sound.ok();
+        Sound.play("ok");
         var items = row && row.hasJournal ? [{ label: "Open journal entry", act: "journal" }] : [];
         items.push({ label: "Show file name", act: "name" });
         items.push({ label: "Remove recording…", act: "remove" });
-        shell.pick({ title: row ? row.gameTitle + " · " + row.dateText : "", choices: items.map(function(i) { return i.label; }) }, function(i) {
-            if (i < 0)
-                return;
-            if (items[i].act === "journal") {
+        shell.menu(row ? row.gameTitle + " · " + row.dateText : "", items, function(act) {
+            if (act === "journal") {
                 player.pause();
                 shell.push("pages/ArticlePage.qml", { session: row.session, gameId: row.gameId });
-            } else if (items[i].act === "remove") {
+            } else if (act === "remove") {
                 player.pause();
                 Removal.recording(shell, api.screens, row, function() { leave(); });
             } else {
@@ -127,34 +110,12 @@ FocusScope {
         onTriggered: footer.awake = false
     }
 
-    Timer {
-        id: commitTimer
-        interval: 220
-        onTriggered: page.commitSeek()
-    }
-
-    Timer {
-        id: stickTimer
-        interval: 16
-        repeat: true
-        running: page.activeFocus && page.stickX !== 0 && page.duration > 0
-        onRunningChanged: {
-            if (running) {
-                commitTimer.stop();
-                if (!page.scrubbing) {
-                    page.scrubPos = player.position;
-                    page.scrubbing = true;
-                }
-                page.wake();
-            } else if (page.scrubbing) {
-                commitTimer.restart();
-            }
-        }
-        onTriggered: {
-            var x = page.stickX;
-            var speed = (0.12 + 0.88 * x * x) * page.scrubSpeed;
-            page.scrubPos = Math.max(0, Math.min(page.duration, page.scrubPos + (x < 0 ? -1 : 1) * speed * interval / 1000));
-        }
+    Base.Scrubber {
+        id: scrub
+        player: player
+        duration: page.duration
+        active: page.activeFocus
+        onWoke: page.wake()
     }
 
     Keys.onPressed: function(event) {
@@ -163,12 +124,12 @@ FocusScope {
             return;
         if (api.keys.isMenu(event)) {
             event.accepted = true;
-            Sound.select();
+            Sound.play("select");
             footerShown = !footerShown;
             wake();
         } else if (api.keys.isCancel(event)) {
             event.accepted = true;
-            Sound.back();
+            Sound.play("back");
             leave();
         } else if (api.keys.isAccept(event)) {
             event.accepted = true;
@@ -178,19 +139,12 @@ FocusScope {
             togglePlay();
         } else if (api.keys.isDetails(event)) {
             event.accepted = true;
-            if (row && row.hasJournal) {
-                Sound.ok();
-                player.pause();
-                shell.push("pages/ArticlePage.qml", { session: row.session, gameId: row.gameId });
-            } else {
-                Sound.edge();
-            }
+            openJournal();
         } else if (arrow) {
             event.accepted = true;
             if (!event.isAutoRepeat)
-                Sound.tick();
-            commitTimer.stop();
-            seekBy(event.key === Qt.Key_Left ? -seekStep : seekStep);
+                Sound.play("tick");
+            scrub.seekBy(event.key === Qt.Key_Left ? -scrub.step : scrub.step);
         } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
             event.accepted = true;
             wake();
@@ -198,10 +152,8 @@ FocusScope {
     }
 
     Keys.onReleased: function(event) {
-        if (event.isAutoRepeat || !page.scrubbing || stickTimer.running)
-            return;
-        if (event.key === Qt.Key_Left || event.key === Qt.Key_Right)
-            commitTimer.restart();
+        if (!event.isAutoRepeat && (event.key === Qt.Key_Left || event.key === Qt.Key_Right))
+            scrub.release();
     }
 
     Rectangle {
@@ -229,9 +181,7 @@ FocusScope {
                     asynchronous: true
                     opacity: status === Image.Ready ? 1.0 : 0.0
 
-                    Behavior on opacity {
-                        NumberAnimation { duration: Theme.durFade; easing.type: Easing.OutCubic }
-                    }
+                    Behavior on opacity { Ease { duration: Theme.durFade } }
                 }
             }
         }
@@ -255,22 +205,19 @@ FocusScope {
         spacing: Theme.dp(12)
         visible: page.failed
 
-        Text {
+        Label {
             anchors.horizontalCenter: parent.horizontalCenter
             text: "This recording cannot be played."
             color: "#ffffff"
-            font.family: Theme.sans
-            font.pixelSize: Theme.dp(Theme.fontBody)
         }
 
-        Text {
+        Label {
             anchors.horizontalCenter: parent.horizontalCenter
             width: page.width - Theme.dp(400)
             horizontalAlignment: Text.AlignHCenter
             text: page.row ? page.row.path : ""
             color: "#b0b0b0"
             elide: Text.ElideMiddle
-            font.family: Theme.sans
             font.pixelSize: Theme.dp(Theme.fontSmall)
         }
     }
@@ -282,7 +229,6 @@ FocusScope {
         radius: width / 2
         color: Qt.rgba(0, 0, 0, 0.55)
         visible: !page.playing && !page.failed && !page.stopped
-        opacity: visible ? 1.0 : 0.0
 
         Glyph {
             anchors.centerIn: parent
@@ -307,9 +253,7 @@ FocusScope {
         height: Theme.dp(220)
         opacity: shown ? 1.0 : 0.0
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease { duration: Theme.durQuick } }
 
         Rectangle {
             anchors.fill: parent
@@ -352,9 +296,7 @@ FocusScope {
                 color: "#ffffff"
                 scale: page.scrubbing ? 1.3 : 1.0
 
-                Behavior on scale {
-                    NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-                }
+                Behavior on scale { Ease { duration: Theme.durQuick } }
             }
 
             Rectangle {
@@ -375,9 +317,7 @@ FocusScope {
                 opacity: page.scrubbing ? 1.0 : 0.0
                 visible: opacity > 0.01
 
-                Behavior on opacity {
-                    NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-                }
+                Behavior on opacity { Ease { duration: Theme.durQuick } }
 
                 Image {
                     anchors.fill: parent
@@ -396,24 +336,22 @@ FocusScope {
                     radius: Theme.dp(3)
                     color: Qt.rgba(0, 0, 0, 0.7)
 
-                    Text {
+                    Label {
                         id: peekTime
                         anchors.centerIn: parent
                         text: Format.clockTime(page.shownPos / 1000)
                         color: "#ffffff"
-                        font.family: Theme.sans
                         font.pixelSize: Theme.dp(Theme.fontTiny)
                     }
                 }
             }
         }
 
-        Text {
+        Label {
             anchors.right: bar.right
             y: bar.y + Theme.dp(20)
             text: Format.clockTime(page.shownPos / 1000) + "  /  " + Format.clockTime(page.duration / 1000)
             color: "#ffffff"
-            font.family: Theme.sans
             font.pixelSize: Theme.dp(Theme.fontTiny)
         }
 

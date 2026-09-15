@@ -1,4 +1,5 @@
 import QtQuick
+import "../core" as Base
 import "core"
 import "sound"
 import "ui"
@@ -17,16 +18,21 @@ FocusScope {
         value: root.height / 1080
     }
 
+    Binding {
+        target: Base.Theme
+        property: "software"
+        value: root.GraphicsInfo.api === GraphicsInfo.Software
+    }
+
     // args travel as JSON: a library reload can delete a Game under a page, so pages carry ids.
     readonly property ListModel stack: ListModel {}
     readonly property int depth: stack.count
     readonly property bool onHome: depth === 0
     property string homeFocus: "home"
     property bool launching: false
-    readonly property bool modal: dialog.open || sheet.open || picker.open || launching
+    readonly property bool modal: dialog.open || sheet.open || picker.open || folder.open || launching
     readonly property var session: api.universe.currentSession
     readonly property bool sessionRunning: session !== null && session !== undefined && session.session_id !== undefined
-    // The game to start once the running one has been closed for it.
     property var pendingLaunch: null
 
     readonly property var barItems: [
@@ -43,6 +49,7 @@ FocusScope {
     readonly property var hints: dialog.open ? dialog.hints
                                : sheet.open ? sheet.hints
                                : picker.open ? picker.hints
+                               : folder.open ? folder.hints
                                : launching ? []
                                : !onHome && topPage ? topPage.hints
                                : homeFocus === "bar" ? bottomBar.hints
@@ -63,7 +70,7 @@ FocusScope {
     function goHome() {
         if (depth === 0)
             return;
-        Sound.home();
+        Sound.play("home");
         stack.clear();
         homeFocus = "home";
         Qt.callLater(focusTop);
@@ -84,18 +91,18 @@ FocusScope {
     }
 
     function after(done) {
-        return function(v) {
-            if (done)
-                done(v);
-            focusTop();
-        };
+        return function(v) { if (done) done(v); focusTop(); };
     }
 
     function dialogAsk(spec, done) { dialog.show(spec, after(done)); }
     function prompt(spec, done) { sheet.show(spec, after(done)); }
     function pick(spec, done) { picker.show(spec, after(done)); }
+    function browse(spec, done) { folder.show(spec, after(done)); }
 
-    // Start on the running game is a return to it; on another one, a question first.
+    function menu(title, items, done) {
+        pick({ title: title, choices: items.map(function(i) { return i.label; }) }, function(i) { if (i >= 0) done(items[i].act); });
+    }
+
     function launch(game) {
         if (!game || launchScreen.running)
             return;
@@ -116,23 +123,23 @@ FocusScope {
                       });
             return;
         }
-        Sound.launch();
+        Sound.play("launch");
         launching = true;
         launchScreen.begin(game);
     }
 
     function resume() {
         if (!sessionRunning) {
-            Sound.edge();
+            Sound.play("edge");
             return;
         }
-        Sound.ok();
+        Sound.play("ok");
         api.universe.focusSession();
     }
 
     function closeSoftware(game) {
         if (!sessionRunning) {
-            Sound.edge();
+            Sound.play("edge");
             return;
         }
         dialogAsk({ message: "Close the software?", detail: "Unsaved progress in " + session.title + " will be lost.",
@@ -162,9 +169,7 @@ FocusScope {
         opacity: root.onHome && !root.launching ? 1.0 : 0.0
         visible: opacity > 0.01
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durPage; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease {} }
 
         TopBar {
             anchors.top: parent.top
@@ -212,8 +217,12 @@ FocusScope {
             visible: opacity > 0.01
             focus: isTop
 
-            Behavior on opacity {
-                NumberAnimation { duration: Theme.durPage; easing.type: Easing.OutCubic }
+            Behavior on opacity { Ease {} }
+
+            Rectangle {
+                anchors.fill: parent
+                z: -1
+                color: Theme.ground
             }
 
             // Bound after creation, so a page fades in instead of appearing at full opacity.
@@ -231,15 +240,13 @@ FocusScope {
                 target: pageLoader.item
                 ignoreUnknownSignals: true
                 function onCloseRequested() {
-                    Sound.back();
+                    Sound.play("back");
                     root.pop();
                 }
             }
         }
     }
 
-    // Off HOME the tile is out of sight: the running game and its time, in the hint bar of every
-    // page, beside the pad. Start goes HOME, where the tile and its options resume or close it.
     Rectangle {
         id: chip
 
@@ -258,20 +265,17 @@ FocusScope {
         opacity: shown ? 1.0 : 0.0
         visible: opacity > 0.01
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-        }
-
-        onShownChanged: {
-            var started = root.session && root.session.started_at ? Date.parse(root.session.started_at) : NaN;
-            elapsed = isNaN(started) ? 0 : Math.max(0, Math.round((Date.now() - started) / 1000));
-        }
+        Behavior on opacity { Ease { duration: Theme.durQuick } }
 
         Timer {
-            interval: 1000
+            interval: 60000
             running: chip.shown
             repeat: true
-            onTriggered: chip.elapsed += 1
+            triggeredOnStart: true
+            onTriggered: {
+                var started = root.session && root.session.started_at ? Date.parse(root.session.started_at) : NaN;
+                chip.elapsed = isNaN(started) ? 0 : Math.max(0, Math.round((Date.now() - started) / 1000));
+            }
         }
 
         Row {
@@ -287,11 +291,9 @@ FocusScope {
                 color: Theme.okGreen
             }
 
-            Text {
+            Label {
                 anchors.verticalCenter: parent.verticalCenter
                 text: (root.session && root.session.title ? root.session.title : "") + " · " + Math.max(1, Math.floor(chip.elapsed / 60)) + " min"
-                color: Theme.text
-                font.family: Theme.sans
                 font.pixelSize: Theme.dp(Theme.fontTiny)
             }
         }
@@ -317,6 +319,12 @@ FocusScope {
 
     Picker {
         id: picker
+        z: 11
+    }
+
+    FolderSheet {
+        id: folder
+        shell: root
         z: 11
     }
 
@@ -353,10 +361,9 @@ FocusScope {
             var game = api.allGames.byId(id);
             if (game)
                 toast.show(game.title + " · " + Math.max(1, Math.round(duration / 60)) + " min");
-            var next = root.pendingLaunch;
+            if (root.pendingLaunch)
+                root.launch(root.pendingLaunch);
             root.pendingLaunch = null;
-            if (next)
-                root.launch(next);
         }
     }
 
@@ -375,14 +382,14 @@ FocusScope {
         if (api.keys.isCancel(event)) {
             event.accepted = true;
             if (!root.onHome) {
-                Sound.back();
+                Sound.play("back");
                 root.pop();
             } else if (root.homeFocus === "bar") {
-                Sound.back();
+                Sound.play("back");
                 root.homeFocus = "home";
                 home.forceActiveFocus();
             } else {
-                Sound.edge();
+                Sound.play("edge");
             }
             return;
         }

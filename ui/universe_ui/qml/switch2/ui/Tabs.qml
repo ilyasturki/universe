@@ -15,10 +15,10 @@ Item {
     function step(d) {
         var next = index + d;
         if (next < 0 || next >= names.length) {
-            Sound.edge();
+            Sound.play("edge");
             return;
         }
-        Sound.select();
+        Sound.play("select");
         index = next;
         tabs.changed(index);
     }
@@ -46,12 +46,10 @@ Item {
                 width: Theme.dp(330)
                 height: Theme.dp(60)
 
-                Text {
+                Label {
                     anchors.centerIn: parent
                     text: modelData
                     color: parent.open ? Theme.accent : Theme.text
-                    font.family: Theme.sans
-                    font.pixelSize: Theme.dp(Theme.fontBody)
                 }
 
                 Rectangle {
@@ -68,13 +66,9 @@ Item {
         Bumper { glyph: "RB" }
     }
 
-    Rectangle {
-        anchors.bottom: parent.bottom
-        anchors.left: parent.left
-        anchors.right: parent.right
+    Hairline {
         anchors.leftMargin: Theme.dp(Theme.edgeMargin)
         anchors.rightMargin: Theme.dp(Theme.edgeMargin)
-        height: 1
         color: Theme.hairline
     }
 }

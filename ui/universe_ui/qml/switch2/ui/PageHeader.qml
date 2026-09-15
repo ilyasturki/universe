@@ -42,39 +42,30 @@ Item {
         anchors.verticalCenter: glyph.verticalCenter
         spacing: Theme.dp(2)
 
-        Text {
+        Label {
             visible: header.subtitle !== ""
             text: header.subtitle
             color: Theme.textSecondary
-            font.family: Theme.sans
             font.pixelSize: Theme.dp(Theme.fontSmall)
         }
 
-        Text {
+        Label {
             text: header.title
-            color: Theme.text
-            font.family: Theme.sans
             font.pixelSize: Theme.dp(Theme.fontTitle)
         }
     }
 
-    Text {
+    Label {
         anchors.right: parent.right
         anchors.rightMargin: Theme.dp(120)
         anchors.verticalCenter: glyph.verticalCenter
         text: header.trailing
         color: Theme.textSecondary
-        font.family: Theme.sans
-        font.pixelSize: Theme.dp(Theme.fontBody)
     }
 
-    Rectangle {
-        anchors.bottom: parent.bottom
-        anchors.left: parent.left
-        anchors.right: parent.right
+    Hairline {
         anchors.leftMargin: Theme.dp(Theme.edgeMargin)
         anchors.rightMargin: Theme.dp(Theme.edgeMargin)
-        height: 1
         visible: header.hairline
         color: Theme.hairline
     }

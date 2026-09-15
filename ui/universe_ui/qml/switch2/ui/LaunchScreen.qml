@@ -1,6 +1,5 @@
 import QtQuick
 import "../core"
-import "../sound"
 
 Item {
     id: screen
@@ -10,8 +9,6 @@ Item {
     property bool waiting: false
     property string launchedSession: ""
     readonly property bool running: sequence.running || waiting || settle.running
-    // Nobody could tell when the window came up (no shell extension): the screen holds this long.
-    readonly property int settleMs: 1500
 
     signal finished()
     signal failed(var game, string message)
@@ -21,8 +18,6 @@ Item {
             return;
         game = target;
         launchedSession = "";
-        art.game = target;
-        caption.text = target.title;
         art.scale = 0.92;
         sequence.start();
     }
@@ -32,7 +27,6 @@ Item {
         waiting = false;
         launchedSession = "";
         frame.opacity = 0.0;
-        art.game = null;
         game = null;
     }
 
@@ -87,22 +81,20 @@ Item {
             anchors.verticalCenterOffset: -Theme.dp(50)
             width: Theme.dp(420)
             height: Theme.dp(420)
-            game: null
+            game: screen.game
             outlineShown: false
         }
 
-        Text {
-            id: caption
+        Label {
             anchors.top: art.bottom
             anchors.topMargin: Theme.dp(40)
             anchors.horizontalCenter: parent.horizontalCenter
             width: parent.width - Theme.dp(300)
-            color: Theme.text
+            text: screen.game ? screen.game.title : ""
             horizontalAlignment: Text.AlignHCenter
             wrapMode: Text.WordWrap
             maximumLineCount: 2
             elide: Text.ElideRight
-            font.family: Theme.sans
             font.pixelSize: Theme.dp(Theme.fontTitle)
         }
     }
@@ -125,9 +117,10 @@ Item {
         }
     }
 
+    // Nobody could tell when the window came up (no shell extension): the screen holds this long.
     Timer {
         id: settle
-        interval: screen.settleMs
+        interval: 1500
         onTriggered: screen.done()
     }
 }

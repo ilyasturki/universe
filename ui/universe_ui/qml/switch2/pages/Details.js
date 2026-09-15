@@ -51,9 +51,7 @@ function sentence(module, key) {
 }
 
 function withDetail(row, module) {
-    var out = {};
-    for (var k in row)
-        out[k] = row[k];
+    var out = Object.assign({}, row);
     if (!out.detail)
         out.detail = sentence(module, row.key);
     return out;

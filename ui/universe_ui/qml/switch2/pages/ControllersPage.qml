@@ -55,10 +55,8 @@ FocusScope {
     }
 
     function toggled(set, key, on) {
-        var next = {};
-        for (var k in set)
-            if (k !== key)
-                next[k] = true;
+        var next = Object.assign({}, set);
+        delete next[key];
         if (on)
             next[key] = true;
         return next;
@@ -71,9 +69,7 @@ FocusScope {
     }
 
     function axis(name, value) {
-        var next = {};
-        for (var k in axes)
-            next[k] = axes[k];
+        var next = Object.assign({}, axes);
         next[name] = value;
         axes = next;
     }
@@ -89,21 +85,21 @@ FocusScope {
     function activate(index, row) {
         if (row.key === "test") {
             if (controller.setTesting(true))
-                Sound.ok();
+                Sound.play("ok");
             else
-                Sound.edge();
+                Sound.play("edge");
         } else if (row.key === "device") {
-            Sound.ok();
+            Sound.play("ok");
             var choices = row.choices || [];
             shell.pick({ title: "Controller", choices: choices, index: choices.indexOf(String(row.value)) }, function(i) {
                 if (i >= 0)
                     controller.setValue(index, choices[i]);
             });
         } else if (row.slot !== undefined) {
-            Sound.ok();
+            Sound.play("ok");
             slotMenu(row);
         } else {
-            Sound.edge();
+            Sound.play("edge");
         }
     }
 
@@ -116,26 +112,20 @@ FocusScope {
             items.push({ label: "Clear hold", act: "clear-hold" });
         if (row.bound)
             items.push({ label: "Learn the button again", act: "learn" });
-        shell.pick({ title: row.label, choices: items.map(function(i) { return i.label; }), index: 0 }, function(i) {
-            if (i >= 0)
-                slotAction(row, items[i].act);
-        });
+        shell.menu(row.label, items, function(act) { slotAction(row, act); });
     }
 
     function slotAction(row, action) {
         if (action === "learn") {
             if (controller.learn(row.slot)) {
-                Sound.ok();
+                Sound.play("ok");
                 shell.showToast("Press the button on the controller…");
             }
         } else if (action === "press" || action === "hold") {
             presetMenu(row, action);
-        } else if (action === "clear-press") {
-            Sound.select();
-            controller.unbind(row.slot, "press");
-        } else if (action === "clear-hold") {
-            Sound.select();
-            controller.unbind(row.slot, "hold");
+        } else if (action === "clear-press" || action === "clear-hold") {
+            Sound.play("select");
+            controller.unbind(row.slot, action.substring(6));
         }
     }
 
@@ -151,13 +141,13 @@ FocusScope {
                 return;
             var id = ids[i];
             if (id.indexOf("preset:") === 0) {
-                Sound.select();
+                Sound.play("select");
                 controller.bind(row.slot, trigger, id.substring(7), "", "");
             } else {
                 var value = current && current.action === id ? current[id] : "";
                 shell.prompt({ title: (id === "keys" ? "Key combo for " : "Command for ") + row.label, value: value, max: 200 }, function(text) {
                     if (text !== null && text !== undefined && text !== "") {
-                        Sound.select();
+                        Sound.play("select");
                         controller.bind(row.slot, trigger, id, id === "keys" ? text : "", id === "command" ? text : "");
                     }
                 });
@@ -187,7 +177,7 @@ FocusScope {
         id: holdOut
         interval: 1000
         onTriggered: {
-            Sound.back();
+            Sound.play("back");
             page.controller.setTesting(false);
         }
     }
@@ -200,16 +190,11 @@ FocusScope {
             page.press(slot, isDown);
             if (!page.testing)
                 return;
-            var next = page.toggled(page.held, slot, isDown);
-            page.held = next;
-            if (slot === "east") {
-                if (isDown)
-                    holdOut.restart();
-                else
-                    holdOut.stop();
-            }
-            if (isDown && next.start && next.select) {
-                Sound.back();
+            page.held = page.toggled(page.held, slot, isDown);
+            if (slot === "east")
+                holdOut.running = isDown;
+            if (isDown && page.held.start && page.held.select) {
+                Sound.play("back");
                 page.controller.setTesting(false);
             }
         }
@@ -235,11 +220,6 @@ FocusScope {
         NumberAnimation { to: 0.15; duration: 500; easing.type: Easing.InOutSine }
     }
 
-    Rectangle {
-        anchors.fill: parent
-        color: Theme.ground
-    }
-
     PageHeader {
         id: header
         anchors.top: parent.top
@@ -259,9 +239,9 @@ FocusScope {
         radius: Theme.dp(12)
         color: "#2d2d2d"
 
-        Behavior on x { NumberAnimation { duration: Theme.durPage; easing.type: Easing.OutCubic } }
-        Behavior on width { NumberAnimation { duration: Theme.durPage; easing.type: Easing.OutCubic } }
-        Behavior on height { NumberAnimation { duration: Theme.durPage; easing.type: Easing.OutCubic } }
+        Behavior on x { Ease {} }
+        Behavior on width { Ease {} }
+        Behavior on height { Ease {} }
 
         Loader {
             id: art
@@ -272,9 +252,7 @@ FocusScope {
             source: "../../ui/PadArt.qml"
             opacity: page.controller.connected ? 1.0 : 0.38
 
-            Behavior on opacity {
-                NumberAnimation { duration: Theme.durFade; easing.type: Easing.OutCubic }
-            }
+            Behavior on opacity { Ease { duration: Theme.durFade } }
 
             onLoaded: {
                 item.family = Qt.binding(function() { return page.controller.family; });
@@ -305,12 +283,10 @@ FocusScope {
                 }
             }
 
-            Text {
+            Label {
                 anchors.verticalCenter: parent.verticalCenter
                 text: page.labelOf(page.lastSlot)
                 color: "#f2f2f2"
-                font.family: Theme.sans
-                font.pixelSize: Theme.dp(Theme.fontBody)
             }
         }
     }
@@ -322,11 +298,10 @@ FocusScope {
         spacing: Theme.dp(8)
         visible: !page.testing
 
-        Text {
+        Label {
             anchors.horizontalCenter: parent.horizontalCenter
             text: page.controller.connected ? "Controllers" : "Connect a controller"
             color: Theme.textSecondary
-            font.family: Theme.sans
             font.pixelSize: Theme.dp(Theme.fontSmall)
         }
 
@@ -345,31 +320,26 @@ FocusScope {
                     color: modelData.id === page.controller.current ? Theme.okGreen : Theme.textDisabled
                 }
 
-                Text {
+                Label {
                     anchors.verticalCenter: parent.verticalCenter
                     text: modelData.name + (modelData.bus ? " · " + (modelData.bus === "bluetooth" ? "Bluetooth" : modelData.bus === "usb" ? "USB" : modelData.bus) : "")
-                    color: Theme.text
-                    font.family: Theme.sans
-                    font.pixelSize: Theme.dp(Theme.fontBody)
                 }
             }
         }
 
-        Text {
+        Label {
             anchors.horizontalCenter: parent.horizontalCenter
             visible: page.controller.connected && page.learning
             text: "Press the button on the controller"
             color: Theme.accent
-            font.family: Theme.sans
             font.pixelSize: Theme.dp(Theme.fontSmall)
         }
 
-        Text {
+        Label {
             anchors.horizontalCenter: parent.horizontalCenter
             visible: page.controller.connected && !page.learning && page.controller.unboundSlots.length > 0
             text: "Dashed buttons have no code on this connection: learn them"
             color: Theme.textMuted
-            font.family: Theme.sans
             font.pixelSize: Theme.dp(Theme.fontSmall)
         }
     }
@@ -395,20 +365,17 @@ FocusScope {
         opacity: page.testing ? 0.0 : 1.0
         visible: opacity > 0.01
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durPage; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease {} }
 
         onActivated: function(index, row) { page.activate(index, row); }
-        onEscapedLeft: Sound.edge()
-        onEscapedUp: Sound.edge()
+        onEscapedLeft: Sound.play("edge")
 
         Keys.onPressed: function(event) {
             if (event.isAutoRepeat)
                 return;
             if (api.keys.isCancel(event) && page.learning) {
                 event.accepted = true;
-                Sound.back();
+                Sound.play("back");
                 page.controller.cancelLearn();
             }
         }
@@ -425,7 +392,7 @@ FocusScope {
             if (event.isAutoRepeat)
                 return;
             if (api.keys.isCancel(event)) {
-                Sound.back();
+                Sound.play("back");
                 page.controller.setTesting(false);
             }
         }

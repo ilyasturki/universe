@@ -14,21 +14,14 @@ FocusScope {
 
     readonly property var form: api.screens.gameSettings
     readonly property var game: args && args.gameId ? api.allGames.byId(args.gameId) : null
-    readonly property bool folderOpen: folder.open
 
-    readonly property var sections: {
-        var out = [];
-        var groups = form.groups;
-        for (var i = 0; i < groups.length; i++)
-            out.push({ label: groups[i].title, detail: groups[i].meta || "", group: groups[i].caps === true ? 0 : 1 });
-        return out;
-    }
+    readonly property var sections: form.groups.map(function(g) {
+        return { label: g.title, detail: g.meta || "", group: g.caps === true ? 0 : 1 };
+    })
     property int section: 0
     property string zone: "list"
 
     readonly property var hints: {
-        if (folderOpen)
-            return folder.hints;
         var row = rows.currentRow;
         var label = zone !== "rows" ? "OK" : !row || row.heading || row.disabled ? "OK"
                   : row.type === "bool" ? "Toggle" : row.type === "action" ? "Select" : "Change";
@@ -41,18 +34,16 @@ FocusScope {
     }
 
     readonly property var content: {
-        var out = [];
-        var groups = form.groups, all = form.rows;
-        if (section < 0 || section >= groups.length)
-            return out;
-        var g = groups[section];
-        for (var j = 0; j < g.rows.length; j++) {
-            var src = all[g.rows[j]], r = Details.withDetail(src, src.module);
-            r.form = g.rows[j];
+        var g = form.groups[section];
+        if (!g)
+            return [];
+        var out = g.rows.map(function(i) {
+            var src = form.rows[i], r = Details.withDetail(src, src.module);
+            r.form = i;
             if (src.inherited === true && !src.detail)
                 r.detail += (r.detail ? " " : "") + "Inherited from the global setting.";
-            out.push(r);
-        }
+            return r;
+        });
         if (g.title === "Artwork")
             out.push({ label: "Refresh artwork", type: "action", action: "refresh", display: "",
                        detail: "Fetch the box, the tile, the background and the logo from SteamGridDB, the description from RAWG." });
@@ -61,35 +52,28 @@ FocusScope {
 
     function activate(index, row) {
         if (row.action === "refresh") {
-            Sound.ok();
+            Sound.play("ok");
             api.universe.mediaRefresh(args.gameId, false);
             shell.showToast("Fetching artwork for " + (game ? game.title : args.gameId) + "…");
-            return;
-        }
-        if (row.type === "bool") {
+        } else if (row.type === "bool") {
             form.toggle(row.form);
-            Sound.select();
-            return;
+            Sound.play("select");
+        } else {
+            rows.edit(row, function(value) { form.setValue(row.form, value); });
         }
-        rows.edit(row, function(value) { form.setValue(row.form, value); });
     }
 
     onSectionChanged: Qt.callLater(rows.reset)
 
     Keys.onPressed: function(event) {
-        if (event.isAutoRepeat || page.folderOpen)
+        if (event.isAutoRepeat)
             return;
         if (api.keys.isCancel(event) && page.zone === "rows") {
             event.accepted = true;
-            Sound.back();
+            Sound.play("back");
             page.zone = "list";
             list.forceActiveFocus();
         }
-    }
-
-    Rectangle {
-        anchors.fill: parent
-        color: Theme.ground
     }
 
     PageHeader {
@@ -110,7 +94,6 @@ FocusScope {
         width: Theme.dp(470)
         height: parent.height - y - Theme.dp(Theme.hintBarHeight)
         sections: page.sections
-        current: page.section
         focus: page.zone === "list"
 
         onActivated: function(i) { page.section = i; }
@@ -132,7 +115,6 @@ FocusScope {
         id: rows
 
         shell: page.shell
-        folder: folder
         x: Theme.dp(705)
         y: header.height + Theme.dp(64)
         width: Theme.dp(1023)
@@ -144,15 +126,6 @@ FocusScope {
         onEscapedLeft: {
             page.zone = "list";
             list.forceActiveFocus();
-        }
-        onEscapedUp: Sound.edge()
-    }
-
-    FolderPage {
-        id: folder
-        z: 5
-        onTypeRequested: function(path) {
-            page.shell.prompt({ title: "Path", value: path, path: true }, function(v) { folder.finish(v); });
         }
     }
 }

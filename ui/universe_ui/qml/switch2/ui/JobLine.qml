@@ -12,12 +12,10 @@ Item {
     height: shown ? Theme.dp(90) : 0
     visible: shown
 
-    Text {
+    Label {
         width: parent.width
         text: line.job ? line.job.message + (line.job.ok === true ? " ✓" : line.job.ok === false ? " ✗" : "") : ""
-        color: Theme.text
         elide: Text.ElideRight
-        font.family: Theme.sans
         font.pixelSize: Theme.dp(Theme.fontSmall)
     }
 
@@ -36,9 +34,7 @@ Item {
             radius: height / 2
             color: Theme.accentStrong
 
-            Behavior on width {
-                NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-            }
+            Behavior on width { Ease { duration: Theme.durQuick } }
         }
     }
 }

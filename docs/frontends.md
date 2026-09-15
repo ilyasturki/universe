@@ -241,7 +241,7 @@ from the global one until set. `load()` reads the config again.
 what is missing), the ones running first, the others in an "Off" card. A opens the module's page;
 △ (Y in Reprise, X in the Switch 2 look) toggles it in the list (`toggle(index)`, refused with a
 warning while it is off). `indexOf(id)` finds a module's row for the cursor to land on again.
-`pages/FormPage.qml` with `{ module }` (`theme.qml` `openSub`; `switch2/pages/ModulePage.qml` on the
+`pages/FormPage.qml` with `{ module }` (`theme.qml` `openSub`; `switch2/pages/FormPage.qml` on the
 stack) is on `api.screens.module`: `load(id)` builds its head (`info`: name, meta, warning,
 `enabled`) and cards for the switch (`enabled`, `disabled` while the module's programs are
 missing) and, once on, its global settings, a `dynamic` setting's choices fetched off the UI
@@ -262,7 +262,7 @@ its type, and an "Add a game…" action. `setValue(index, value)` writes through
 the add row it keeps the picked file and `pendingTitle()` proposes a title from it, which
 `addGame(title)` sends to `Library1.Add`. Back on the tab, the list reloads and the cursor finds
 the runner again. The Switch 2 look has the same list as System Settings › Runners and the same
-page as `switch2/pages/RunnerPage.qml`, pushed on its stack. The game settings page's Launch group follows the runner: a Runner picker (names
+page as `switch2/pages/FormPage.qml`, pushed on its stack. The game settings page's Launch group follows the runner: a Runner picker (names
 shown, ids written), then the rows the runner takes. The detail page shows the runner's logo next
 to the platform.
 

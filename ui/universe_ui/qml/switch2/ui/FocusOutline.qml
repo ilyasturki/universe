@@ -1,8 +1,7 @@
 import QtQuick
 import "../core"
 
-// The focus ring: a thin band whose colours travel around the perimeter, a white gap inside it.
-// A shader on screen; under GraphicsInfo.Software (the offscreen tests) a still ring of plain rectangles.
+// A shader on screen; under the software scenegraph (the offscreen tests) a still ring of plain rectangles.
 Item {
     id: ring
 
@@ -13,7 +12,6 @@ Item {
     property bool shown: true
 
     readonly property real pad: gap + lineWidth
-    readonly property bool software: GraphicsInfo.api === GraphicsInfo.Software
 
     anchors.fill: target
     anchors.margins: -pad
@@ -22,15 +20,13 @@ Item {
 
     ShaderEffect {
         anchors.fill: parent
-        visible: !ring.software
+        visible: !Theme.software
 
         readonly property vector2d size: Qt.vector2d(width, height)
         readonly property real radius: ring.cornerRadius + ring.pad
         readonly property real line: ring.lineWidth
         readonly property real gap: ring.gap
         readonly property real phase: ring.visible ? Theme.ringPhase : 0
-        readonly property real cycles: 1
-        readonly property real sharp: 0
         readonly property color c0: Theme.ringBlue
         readonly property color c1: Theme.ringCyan
         readonly property color c2: Theme.ringPink
@@ -42,7 +38,7 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        visible: ring.software
+        visible: Theme.software
         radius: ring.cornerRadius + ring.pad
         color: "transparent"
         border.width: ring.lineWidth

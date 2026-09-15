@@ -30,12 +30,11 @@ Item {
         }
     }
 
-    Text {
+    Label {
         anchors.right: parent.right
         anchors.rightMargin: Theme.dp(72)
         y: Theme.dp(90)
         text: Theme.clock
-        color: Theme.text
         font.family: Theme.clockSans
         // Sawarabi ships one weight; Qt emboldens it (DemiBold would render as Regular).
         font.weight: Font.Bold

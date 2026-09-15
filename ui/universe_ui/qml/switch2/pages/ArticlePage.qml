@@ -47,23 +47,19 @@ FocusScope {
         var next = Math.max(0, Math.min(maxScroll(), flick.contentY + d * Theme.dp(260)));
         if (next === flick.contentY) {
             if (d > 0 && images.length > 0) {
-                Sound.tick();
+                Sound.play("tick");
                 mode = "shots";
                 flick.contentY = maxScroll();
             } else {
-                Sound.edge();
+                Sound.play("edge");
             }
             return;
         }
-        Sound.tick();
+        Sound.play("tick");
         flick.contentY = next;
     }
 
-    function stepShot(d) {
-        var next = Math.max(0, Math.min(images.length - 1, shotIndex + d));
-        next === shotIndex ? Sound.edge() : Sound.tick();
-        shotIndex = next;
-    }
+    function stepShot(d) { shotIndex = Sound.stepped(shotIndex, d, images.length); }
 
     Keys.onPressed: function(event) {
         var arrow = event.key === Qt.Key_Left || event.key === Qt.Key_Right;
@@ -73,7 +69,7 @@ FocusScope {
         if (lightbox) {
             event.accepted = true;
             if (api.keys.isCancel(event) || api.keys.isAccept(event)) {
-                Sound.back();
+                Sound.play("back");
                 lightbox = false;
             } else if (arrow) {
                 stepShot(event.key === Qt.Key_Left ? -1 : 1);
@@ -84,55 +80,51 @@ FocusScope {
         if (api.keys.isFilters(event)) {
             event.accepted = true;
             if (row && row.hasRecording) {
-                Sound.ok();
+                Sound.play("ok");
                 shell.push("pages/PlayerPage.qml", { session: row.session, gameId: row.gameId });
             } else {
-                Sound.edge();
+                Sound.play("edge");
             }
         } else if (api.keys.isMenu(event)) {
             event.accepted = true;
             if (!row) {
-                Sound.edge();
+                Sound.play("edge");
                 return;
             }
-            Sound.ok();
-            var entry = row;
-            shell.pick({ title: entry.gameTitle + " · " + entry.dateText, choices: ["Remove entry…"] }, function(i) {
-                if (i === 0)
-                    Removal.entry(shell, api.screens, entry, function() { page.closeRequested(); });
-            });
+            Sound.play("ok");
+            Removal.entry(shell, api.screens, row, function() { page.closeRequested(); });
         } else if (api.keys.isAccept(event)) {
             event.accepted = true;
             if (mode === "shots") {
-                Sound.ok();
+                Sound.play("ok");
                 lightbox = true;
             } else if (images.length > 0) {
-                Sound.tick();
+                Sound.play("tick");
                 mode = "shots";
                 flick.contentY = maxScroll();
             } else {
-                Sound.edge();
+                Sound.play("edge");
             }
         } else if (api.keys.isCancel(event)) {
             if (mode === "shots") {
                 event.accepted = true;
-                Sound.back();
+                Sound.play("back");
                 mode = "text";
             }
         } else if (event.key === Qt.Key_Up) {
             event.accepted = true;
             if (mode === "shots") {
-                Sound.tick();
+                Sound.play("tick");
                 mode = "text";
             } else {
                 scroll(-1);
             }
         } else if (event.key === Qt.Key_Down) {
             event.accepted = true;
-            mode === "shots" ? Sound.edge() : scroll(1);
+            mode === "shots" ? Sound.play("edge") : scroll(1);
         } else if (arrow) {
             event.accepted = true;
-            mode === "shots" ? stepShot(event.key === Qt.Key_Left ? -1 : 1) : Sound.edge();
+            mode === "shots" ? stepShot(event.key === Qt.Key_Left ? -1 : 1) : Sound.play("edge");
         }
     }
 
@@ -146,19 +138,16 @@ FocusScope {
         trailing: page.row ? page.row.gameTitle : ""
     }
 
-    Text {
+    Label {
         anchors.centerIn: parent
         visible: page.row === null
         text: "This entry is gone."
         color: Theme.textMuted
-        font.family: Theme.sans
-        font.pixelSize: Theme.dp(Theme.fontBody)
     }
 
     Flickable {
         id: flick
 
-        // The column clips; it reaches this far left and right so the screenshot ring is never cut.
         readonly property real room: Theme.dp(Theme.ringRoom)
 
         x: page.columnX - room
@@ -172,9 +161,7 @@ FocusScope {
         clip: true
         visible: page.row !== null
 
-        Behavior on contentY {
-            NumberAnimation { duration: Theme.durPage; easing.type: Easing.OutCubic }
-        }
+        Behavior on contentY { Ease {} }
 
         Column {
             id: article
@@ -196,28 +183,24 @@ FocusScope {
                     outlineShown: false
                 }
 
-                Text {
+                Label {
                     anchors.verticalCenter: parent.verticalCenter
                     text: page.row ? page.row.gameTitle : ""
                     color: Theme.accent
-                    font.family: Theme.sans
                     font.pixelSize: Theme.dp(Theme.fontSmall)
                 }
             }
 
-            Text {
+            Label {
                 width: parent.width
                 text: page.row ? page.row.title : ""
-                color: Theme.text
                 wrapMode: Text.WordWrap
-                font.family: Theme.sans
                 font.pixelSize: Theme.dp(Theme.fontTitle)
             }
 
-            Text {
+            Label {
                 text: page.row ? page.row.dateText : ""
                 color: Theme.textSecondary
-                font.family: Theme.sans
                 font.pixelSize: Theme.dp(Theme.fontSmall)
             }
 
@@ -230,15 +213,12 @@ FocusScope {
             Repeater {
                 model: page.row ? page.row.blocks : []
 
-                Text {
+                Label {
                     width: article.width
                     text: modelData
                     textFormat: Text.MarkdownText
-                    color: Theme.text
                     wrapMode: Text.WordWrap
                     lineHeight: 1.5
-                    font.family: Theme.sans
-                    font.pixelSize: Theme.dp(Theme.fontBody)
                 }
             }
 
@@ -247,22 +227,18 @@ FocusScope {
                 spacing: Theme.dp(10)
                 visible: page.row && page.row.next_up !== ""
 
-                Text {
+                Label {
                     text: "Next up"
                     color: Theme.accent
-                    font.family: Theme.sans
                     font.pixelSize: Theme.dp(Theme.fontSmall)
                 }
 
-                Text {
+                Label {
                     width: parent.width
                     text: page.row ? page.row.next_up : ""
                     textFormat: Text.MarkdownText
-                    color: Theme.text
                     wrapMode: Text.WordWrap
                     lineHeight: 1.4
-                    font.family: Theme.sans
-                    font.pixelSize: Theme.dp(Theme.fontBody)
                 }
             }
 
@@ -275,10 +251,9 @@ FocusScope {
 
                 readonly property bool focused: page.mode === "shots" && !page.lightbox
 
-                Text {
+                Label {
                     text: "Screenshots"
                     color: shots.focused ? Theme.accent : Theme.textSecondary
-                    font.family: Theme.sans
                     font.pixelSize: Theme.dp(Theme.fontSmall)
                 }
 
@@ -315,9 +290,7 @@ FocusScope {
                         contentX = Math.max(-leftMargin, Math.min(target, Math.max(-leftMargin, contentWidth - width + rightMargin)));
                     }
 
-                    Behavior on contentX {
-                        NumberAnimation { duration: Theme.durPage; easing.type: Easing.OutCubic }
-                    }
+                    Behavior on contentX { Ease {} }
 
                     delegate: Item {
                         width: page.shotWidth
@@ -368,24 +341,22 @@ FocusScope {
         visible: opacity > 0.01
         z: 5
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease { duration: Theme.durQuick } }
 
         Image {
             anchors.fill: parent
             source: page.lightbox && page.shotIndex < page.images.length ? page.images[page.shotIndex] : ""
             fillMode: Image.PreserveAspectFit
             asynchronous: true
+            sourceSize.width: page.width
         }
 
-        Text {
+        Label {
             anchors.right: parent.right
             anchors.bottom: parent.bottom
             anchors.margins: Theme.dp(40)
             text: (page.shotIndex + 1) + " / " + page.images.length
             color: "#ffffff"
-            font.family: Theme.sans
             font.pixelSize: Theme.dp(Theme.fontSmall)
         }
     }
