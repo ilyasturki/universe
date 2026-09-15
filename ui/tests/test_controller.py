@@ -1,13 +1,18 @@
-import json
 from pathlib import Path
 
-from conftest import pump
+import pytest
+
+from conftest import pump, rows_by_key, wait_for
 from universe_ui.screens.controller import FakeWatcher, Watcher
-from universe_ui.universe_client import UniverseError
 
 
-def rows_by_key(screen):
-    return {r["key"]: r for r in screen.rows}
+@pytest.fixture
+def started(api):
+    screen = api.screens.controller
+    screen.restart_ms = 0
+    watcher = FakeWatcher("dualsense-edge")
+    screen.start(watcher)
+    return screen, watcher
 
 
 def test_rows_follow_the_watcher_and_the_macros(api, fake):
@@ -50,10 +55,8 @@ def test_rows_follow_the_watcher_and_the_macros(api, fake):
     assert axes == [("event30", "lx", -0.5)], "only the six named axes reach the page"
 
 
-def test_bind_unbind_and_learn(api, fake):
-    screen = api.screens.controller
-    watcher = FakeWatcher("dualsense-edge")
-    screen.start(watcher)
+def test_bind_unbind_and_learn(started, fake):
+    screen, watcher = started
 
     assert screen.bind("paddle_left", "hold", "stop", "", "") is True
     assert rows_by_key(screen)["paddle_left"]["display"] == "Press · Volume down / Hold · Stop the game"
@@ -108,10 +111,8 @@ def test_bind_unbind_and_learn(api, fake):
     assert watcher.commands[-2:] == [{"cmd": "cancel"}, {"cmd": "resume"}], "leaving the section drops a pending learn"
 
 
-def test_two_pads_and_hotplug(api, fake):
-    screen = api.screens.controller
-    watcher = FakeWatcher("dualsense-edge")
-    screen.start(watcher)
+def test_two_pads_and_hotplug(started, fake):
+    screen, watcher = started
     watcher.emit(watcher.device("event40", "xbox-elite", "usb"))
     rows = rows_by_key(screen)
     assert screen.current == "event30" and screen.family == "dualsense-edge"
@@ -136,10 +137,8 @@ def test_two_pads_and_hotplug(api, fake):
     assert screen.bind("south", "press", "screenshot", "", "") is False
 
 
-def test_learn_timeout_and_error_clear_learning(api, fake):
-    screen = api.screens.controller
-    watcher = FakeWatcher("dualsense-edge")
-    screen.start(watcher)
+def test_learn_timeout_and_error_clear_learning(started, fake):
+    screen, watcher = started
     messages = []
     screen.message.connect(messages.append)
     assert screen.learn("paddle_left") is True and screen.learning == "paddle_left"
@@ -152,10 +151,8 @@ def test_learn_timeout_and_error_clear_learning(api, fake):
     assert len(messages) == 2, "a timeout with nothing to stop says nothing"
 
 
-def test_the_mangohud_macro_gets_a_toast_the_others_do_not(api, fake):
-    screen = api.screens.controller
-    watcher = FakeWatcher("dualsense-edge")
-    screen.start(watcher)
+def test_the_mangohud_macro_gets_a_toast_the_others_do_not(started, fake):
+    screen, watcher = started
     notices = []
     screen.macroNotice.connect(notices.append)
     fire = lambda action: watcher.emit({"event": "macro", "id": "event30", "slot": "fn_right", "trigger": "press", "action": action})
@@ -202,11 +199,8 @@ def test_waiting_lists_the_cores_pads_passively(api, fake):
     assert screen.learn("paddle_left") is True
 
 
-def test_watcher_restarts_after_it_dies(api, fake):
-    screen = api.screens.controller
-    screen.restart_ms = 0
-    watcher = FakeWatcher("dualsense-edge")
-    screen.start(watcher)
+def test_watcher_restarts_after_it_dies(started, fake):
+    screen, watcher = started
     assert screen.learn("paddle_left") is True
     watcher.exit(3)
     assert screen.status == "off" and not screen.connected and screen.learning == ""
@@ -224,10 +218,8 @@ def test_watcher_restarts_after_it_dies(api, fake):
     assert not watcher.started, "no restart after shutdown"
 
 
-def test_reconnect_returns_to_the_shown_pad(api, fake):
-    screen = api.screens.controller
-    watcher = FakeWatcher("dualsense-edge")
-    screen.start(watcher)
+def test_reconnect_returns_to_the_shown_pad(started, fake):
+    screen, watcher = started
     watcher.emit(watcher.device("event40", "xbox-elite", "usb"))
     assert screen.current == "event30"
     watcher.emit({"event": "gone", "id": "event30"})
@@ -278,11 +270,8 @@ def test_testing_streams_axes_and_ends_with_the_pad(api, fake):
     assert not screen.testing and not api.pad.muted and screen.status == "off"
 
 
-def test_a_watcher_restart_ends_testing(api, fake):
-    screen = api.screens.controller
-    screen.restart_ms = 0
-    watcher = FakeWatcher("dualsense-edge")
-    screen.start(watcher)
+def test_a_watcher_restart_ends_testing(started, fake):
+    screen, watcher = started
     assert screen.setTesting(True) is True
     watcher.exit(3)
     assert not screen.testing
@@ -292,33 +281,6 @@ def test_a_watcher_restart_ends_testing(api, fake):
     assert {"cmd": "axes", "on": True} not in watcher.commands[sent:], "a fresh watcher streams nothing until asked"
 
 
-def test_fake_client_controller_calls(fake):
-    state = fake.controllerState()
-    assert [f["id"] for f in state["families"]][:2] == ["dualsense-edge", "dualsense"]
-    assert {p["id"] for p in state["presets"] if p["hold_only"]} == {"stop"}
-    assert fake.controllerBind(json.dumps({"family": "xbox-elite", "button": "paddle_p1", "trigger": "hold", "action": "stop"}))
-    macros = [m for m in fake.controllerState()["macros"] if m["button"] == "paddle_p1"]
-    assert [m["trigger"] for m in macros] == ["press", "hold"]
-    assert fake.controllerBind(json.dumps({"family": "xbox-elite", "button": "paddle_p1", "trigger": "hold", "action": "mute"}))
-    assert [m["action"] for m in fake.controllerState()["macros"] if m["button"] == "paddle_p1"] == ["mangohud", "mute"], "same trigger replaces"
-    errors = []
-    fake.error.connect(lambda kind, message: errors.append(kind))
-    assert fake.controllerBind(json.dumps({"family": "xbox-elite", "button": "paddle_p9", "trigger": "press", "action": "mute"})) is False
-    assert fake.controllerBind(json.dumps({"family": "xbox-elite", "button": "paddle_p1", "trigger": "press", "action": "stop"})) is False
-    assert errors == ["NotFound", "Invalid"]
-    assert fake.controllerUnbind("xbox-elite", "paddle_p1", "")
-    assert not [m for m in fake.controllerState()["macros"] if m["button"] == "paddle_p1"]
-    assert fake.controllerSetButton("xbox-elite", "paddle_p2", json.dumps(["BTN_TRIGGER_HAPPY6"]))
-    family = next(f for f in fake.controllerState()["families"] if f["id"] == "xbox-elite")
-    assert next(s for s in family["slots"] if s["id"] == "paddle_p2")["codes"] == ["BTN_TRIGGER_HAPPY6"]
-    try:
-        fake._call("Controller1", "SetButton", "nope", "south", "[]")
-    except UniverseError as e:
-        assert e.kind == "NotFound"
-    else:
-        raise AssertionError("an unknown family is NotFound")
-
-
 def test_watcher_process_round_trip(api, monkeypatch):
     monkeypatch.setenv("UNIVERSE_BIN", str(Path(__file__).parent / "fake-universe"))
     screen = api.screens.controller
@@ -326,18 +288,13 @@ def test_watcher_process_round_trip(api, monkeypatch):
     echoed = []
     watcher.event.connect(lambda line: echoed.append(line) if line.get("event") == "echo" else None)
     assert screen.start(watcher) is True
-    for _ in range(50):
-        pump(100)
-        if screen.connected:
-            break
+    wait_for(screen.devicesChanged, 5000)
     assert screen.connected and screen.family == "xbox" and screen.status == "ready"
     assert rows_by_key(screen)["share"]["display"] == "Unbound"
     screen.suspend()
     screen.learn("share")
-    for _ in range(50):
-        pump(100)
-        if len(echoed) >= 2:
-            break
+    wait_for(watcher.event, 5000)
+    wait_for(watcher.event, 5000)
     assert [e["command"] for e in echoed] == [{"cmd": "suspend"}, {"cmd": "learn", "id": "event9", "slot": "share"}]
     screen.shutdown()
     assert watcher._process is None

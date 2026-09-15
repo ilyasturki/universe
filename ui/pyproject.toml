@@ -11,7 +11,7 @@ license = { text = "MIT" }
 dependencies = ["PySide6>=6.11", "pysdl2", "qrcode"]
 
 [project.scripts]
-universe-ui = "universe_ui.__main__:main"
+universe-ui = "universe_ui.host:main"
 
 [tool.setuptools.packages.find]
 include = ["universe_ui*"]

@@ -1,6 +1,3 @@
-"""The pads draw offscreen: every family's art builds a button per slot the core lists, and every
-slot has a glyph, with no QML errors. The live view and the settings cards keep their layout rules."""
-
 import pytest
 from PySide6.QtCore import QUrl
 from PySide6.QtQml import QQmlComponent, QQmlEngine, QQmlExpression
@@ -15,8 +12,6 @@ FAMILIES = ["dualsense-edge", "dualsense", "dualshock4", "xbox-elite", "xbox", "
 @pytest.fixture
 def engine(api):
     engine = QQmlEngine()
-    for p in host.qml_import_paths() if host.qt_paths_unset() else []:
-        engine.addImportPath(p)
     engine.rootContext().setContextProperty("api", api)
     engine.made = []
     yield engine
@@ -38,7 +33,6 @@ def create(engine, name, **props):
 
 
 def call(engine, item, expression):
-    """Runs a QML expression with `item` as its scope: the way to call a function with arguments."""
     result = QQmlExpression(engine.rootContext(), item, expression).evaluate()
     return result[0] if isinstance(result, tuple) else result
 

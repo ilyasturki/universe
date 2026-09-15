@@ -1,10 +1,3 @@
-"""SDL2 game controllers → the keyboard events the theme already handles.
-
-`Mapper` is pure state (testable without hardware); `GamepadThread` feeds it SDL events and
-hands the transitions to the main thread, which posts QKeyEvents to the focused window.
-Nothing is posted while a game holds the screen, since there is no focus window then.
-"""
-
 import logging
 import time
 
@@ -17,7 +10,7 @@ log = logging.getLogger("universe.gamepad")
 BTN_A, BTN_B, BTN_X, BTN_Y, BTN_BACK, BTN_GUIDE, BTN_START = 0, 1, 2, 3, 4, 5, 6
 BTN_LEFTSTICK, BTN_RIGHTSTICK, BTN_LEFTSHOULDER, BTN_RIGHTSHOULDER = 7, 8, 9, 10
 BTN_DPAD_UP, BTN_DPAD_DOWN, BTN_DPAD_LEFT, BTN_DPAD_RIGHT = 11, 12, 13, 14
-AXIS_LEFTX, AXIS_LEFTY, AXIS_RIGHTX, AXIS_RIGHTY, AXIS_TRIGGERLEFT, AXIS_TRIGGERRIGHT = 0, 1, 2, 3, 4, 5
+AXIS_LEFTX, AXIS_LEFTY, AXIS_RIGHTX, AXIS_TRIGGERLEFT, AXIS_TRIGGERRIGHT = 0, 1, 2, 4, 5
 
 BUTTON_KEYS = {
     BTN_A: Qt.Key.Key_Return,
@@ -43,7 +36,7 @@ AXIS_KEYS = {
 }
 
 # The right stick reaches the theme as a value, not a key: it scrubs the recording player.
-STICKS = {AXIS_RIGHTX: "rightX", AXIS_RIGHTY: "rightY"}
+STICKS = {AXIS_RIGHTX: "rightX"}
 STICK_DEADZONE = 0.18
 
 REPEATING = {Qt.Key.Key_Up, Qt.Key.Key_Down, Qt.Key.Key_Left, Qt.Key.Key_Right}
@@ -62,9 +55,7 @@ class Mapper:
 
     def button(self, button, pressed):
         key = BUTTON_KEYS.get(button)
-        if key is None:
-            return []
-        return self._transition(key, pressed)
+        return [] if key is None else self._transition(key, pressed)
 
     def axis(self, axis, value):
         keys = AXIS_KEYS.get(axis)
@@ -157,11 +148,8 @@ class GamepadThread(QThread):
         self.wait(2000)
 
     def run(self):
-        try:
-            import sdl2
-        except ImportError as e:
-            log.warning("no gamepad support: %s", e)
-            return
+        import sdl2
+
         sdl2.SDL_SetHint(sdl2.SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, b"1")
         if sdl2.SDL_Init(sdl2.SDL_INIT_GAMECONTROLLER | sdl2.SDL_INIT_JOYSTICK) != 0:
             log.warning("no gamepad support: %s", sdl2.SDL_GetError())
@@ -175,7 +163,7 @@ class GamepadThread(QThread):
                     self._handle(sdl2, event, controllers)
                 for key, pressed, repeat in self.mapper.tick():
                     self.key.emit(key, pressed, repeat)
-                sdl2.SDL_WaitEventTimeout(None, 20)
+                sdl2.SDL_WaitEventTimeout(None, 20 if self.mapper._held else 500)
         finally:
             for c in controllers.values():
                 sdl2.SDL_GameControllerClose(c)
@@ -216,9 +204,8 @@ KEY_NAMES = {
 
 
 class KeyScript(QObject):
-    """Posts a scripted key sequence, one name per gap: `Wait` idles, `Wait:N` idles N gaps,
-    `Hold:A`/`Release:A` split a press, `Stick:rightX=0.6` tilts a stick, `Shot:path.png` grabs the
-    window; with a fake watcher, `Press:slot`/`Unpress:slot` and `Axis:lx=0.6` play the pad."""
+    """One name per gap: `Wait`, `Wait:N`, `Hold:A`/`Release:A`, `Stick:rightX=0.6`, `Shot:path.png`;
+    with a fake watcher, `Press:slot`/`Unpress:slot` and `Axis:lx=0.6` play the pad."""
 
     def __init__(self, script, gap_ms, window, pad=None, watcher=None, parent=None):
         super().__init__(parent)

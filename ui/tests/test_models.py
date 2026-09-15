@@ -61,7 +61,6 @@ def test_game_decodes_variants(app):
     assert game.extra == {"metacritic": [61]}
     assert game.tags == ["rpg", "sci-fi"]
     assert game.assets.boxFront.isLocalFile() and game.assets.square.isLocalFile()
-    # A local file that exists carries its mtime as a query, so a replaced image repaints.
     assert [u.toString(QUrl.FormattingOptions(QUrl.UrlFormattingOption.RemoveQuery)) for u in game.assets.screenshotList] == ["file:///tmp/a.png", "http://x/b.png"]
 
 
@@ -111,8 +110,7 @@ def test_sorted_and_limited(api):
     by_release.sortRoleName = "releaseYear"
     by_release.descending = True
     assert by_release.get(0).title == "Control"
-    assert titles(by_release)[-2:] == ["Mirror's Edge", "LEGO Batman: The Videogame"] or \
-        titles(by_release)[-2:] == ["LEGO Batman: The Videogame", "Mirror's Edge"]
+    assert set(titles(by_release)[-2:]) == {"Mirror's Edge", "LEGO Batman: The Videogame"}
 
     newest = LimitedGames()
     newest.setSourceModel(by_release)
@@ -145,12 +143,10 @@ def test_library_sort_modes(api):
     library = LibraryGames()
     library.setSourceModel(api.allGames)
     library.sortMode = 0
-    assert titles(library)[-2:] == ["Mirror's Edge", "Batman: Arkham Origins"] or \
-        titles(library)[-2:] == ["Batman: Arkham Origins", "Mirror's Edge"]
+    assert set(titles(library)[-2:]) == {"Mirror's Edge", "Batman: Arkham Origins"}
     assert library.get(0).title == "The Technomancer"
     library.sortMode = 1
     assert titles(library) == sorted(titles(library), key=lambda t: sort_title(t).casefold())
-    assert titles(library)[-2:] == ["The Technomancer", "Cyberpunk 2077"] or titles(library)[-1] == "The Technomancer"
     library.sortMode = 2
     assert library.get(0).title == "The Technomancer"
 

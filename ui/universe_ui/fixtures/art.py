@@ -1,5 +1,3 @@
-"""Placeholder artwork for the fixture library, painted once per run with QPainter."""
-
 import hashlib
 import os
 
@@ -69,7 +67,6 @@ CANDIDATES = 6
 
 
 def paint_candidates(art_dir, ident, slot, title):
-    """Six painted takes on a slot, as SteamGridDB would offer: `{provider, id, url, thumb, score, slot}`."""
     size = SLOTS.get(slot) or SLOTS["box_front"]
     items = []
     for n in range(CANDIDATES):
@@ -87,7 +84,6 @@ def paint_candidate(art_dir, ident, slot, url):
 
 
 def paint_library(games, art_dir):
-    """Fill each game's `media` with painted files; `hidden` games get none, like an unscraped title."""
     os.makedirs(art_dir, exist_ok=True)
     for game in games:
         ident, title = game["id"], game.get("title", game["id"])

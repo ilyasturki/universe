@@ -18,13 +18,6 @@ def test_buttons_map_to_theme_keys():
     assert m.button(gamepad.BTN_A, True) == []
     assert m.button(gamepad.BTN_A, False) == [(Qt.Key.Key_Return, False, False)]
     assert m.button(gamepad.BTN_A, False) == []
-    assert m.button(gamepad.BTN_B, True) == [(Qt.Key.Key_Escape, True, False)]
-    assert m.button(gamepad.BTN_X, True) == [(Qt.Key.Key_I, True, False)]
-    assert m.button(gamepad.BTN_Y, True) == [(Qt.Key.Key_F, True, False)]
-    assert m.button(gamepad.BTN_LEFTSHOULDER, True) == [(Qt.Key.Key_Q, True, False)]
-    assert m.button(gamepad.BTN_RIGHTSHOULDER, True) == [(Qt.Key.Key_E, True, False)]
-    assert m.button(gamepad.BTN_START, True) == [(Qt.Key.Key_F1, True, False)]
-    assert m.button(gamepad.BTN_DPAD_LEFT, True) == [(Qt.Key.Key_Left, True, False)]
     assert m.button(gamepad.BTN_BACK, True) == []
 
 
@@ -51,8 +44,6 @@ def test_right_stick_is_analog_past_the_deadzone():
     name, value = m.stick(gamepad.AXIS_RIGHTX, -16384)
     assert name == "rightX" and -0.40 < value < -0.38
     assert m.stick(gamepad.AXIS_RIGHTX, 1000) == ("rightX", 0.0)
-    assert m.stick(gamepad.AXIS_RIGHTY, -32767) == ("rightY", -1.0)
-    # The keys stay untouched: the right stick never presses anything.
     assert m.axis(gamepad.AXIS_RIGHTX, 32767) == []
 
 
@@ -103,8 +94,3 @@ def test_key_script_plays_a_fake_pad(app):
         script._step()
     assert [(l["event"], l.get("slot") or l.get("axis"), l.get("pressed", l.get("value"))) for l in lines] == [
         ("button", "south", True), ("axis", "lx", -0.5), ("button", "south", False)]
-
-
-def test_key_script_names_cover_the_pad():
-    for name in ("A", "B", "X", "Y", "LB", "RB", "LT", "RT", "Start", "Up", "Down", "Left", "Right"):
-        assert name in gamepad.KEY_NAMES

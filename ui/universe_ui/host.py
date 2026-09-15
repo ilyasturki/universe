@@ -1,79 +1,19 @@
-"""QGuiApplication + QQmlApplicationEngine around the theme, with the flags the tests and the
-nix check drive it by."""
-
 import argparse
-import glob
 import logging
 import os
 import signal
 import socket
-import subprocess
 import sys
 from pathlib import Path
 
-log = logging.getLogger("universe.host")
-
 QML_DIR = Path(__file__).parent / "qml"
-STORE_QT_MODULES = ("QtQml", "QtQuick", "QtMultimedia", "QtGui", "QtCore")
-
-
-def _store_dirs_linked_by(so_path):
-    try:
-        out = subprocess.run(["ldd", so_path], capture_output=True, text=True).stdout
-    except OSError:
-        return set()
-    dirs = set()
-    for line in out.splitlines():
-        if "=>" not in line:
-            continue
-        target = line.split("=>")[1].strip().split(" ")[0]
-        if target.startswith("/nix/store/") and "/lib/" in target:
-            dirs.add(target.split("/lib/")[0])
-    return dirs
-
-
-def qt_store_dirs():
-    """Nix store derivations PySide6 links against, plus the qt5compat and qtsvg builds that
-    share its qtbase (several coexist in the store; a plugin against another qtbase is refused)."""
-    import PySide6
-
-    pydir = os.path.dirname(PySide6.__file__)
-    dirs = set()
-    for mod in STORE_QT_MODULES:
-        so = os.path.join(pydir, f"{mod}.abi3.so")
-        if os.path.exists(so):
-            dirs |= _store_dirs_linked_by(so)
-    bases = {d for d in dirs if "-qtbase-" in d}
-    for name, lib in (("qt5compat", "libQt6Core5Compat.so.6"), ("qtsvg", "libQt6Svg.so.6")):
-        for d in glob.glob(f"/nix/store/*-{name}-6.*"):
-            base = os.path.basename(d)
-            if base.endswith(("-dev", "-debug", ".drv")) or "src" in base:
-                continue
-            so = os.path.join(d, "lib", lib)
-            if os.path.exists(so) and _store_dirs_linked_by(so) & bases:
-                dirs.add(d)
-    return sorted(dirs)
-
-
-def qt_paths_unset():
-    return not os.environ.get("QML2_IMPORT_PATH") and not os.environ.get("QML_IMPORT_PATH")
-
-
-def qml_import_paths():
-    return [p for p in (os.path.join(d, "lib", "qt-6", "qml") for d in qt_store_dirs()) if os.path.isdir(p)]
-
-
-def qt_plugin_paths():
-    return [p for p in (os.path.join(d, "lib", "qt-6", "plugins") for d in qt_store_dirs()) if os.path.isdir(p)]
 
 
 def parse_args(argv):
     parser = argparse.ArgumentParser(prog="universe-ui", description="Universe game launcher UI")
     parser.add_argument("--fake", action="store_true", help="fixture library, no core")
     parser.add_argument("--fake-launch", action="store_true", help="fake session runs `sleep 2` (implies --fake)")
-    parser.add_argument("--windowed", action="store_true", help="a window instead of fullscreen (--size and --screenshot imply it)")
-    parser.add_argument("--screenshot", metavar="PATH", help="grab the window to PATH, then quit")
-    parser.add_argument("--after", type=int, default=3000, metavar="MS", help="delay before --screenshot")
+    parser.add_argument("--windowed", action="store_true", help="a window instead of fullscreen (--size implies it)")
     parser.add_argument("--quit-after", type=int, default=0, metavar="MS", help="quit after MS (0 = never)")
     parser.add_argument("--no-gamepad", action="store_true")
     parser.add_argument("--keys", default="", metavar="LIST",
@@ -83,7 +23,7 @@ def parse_args(argv):
     parser.add_argument("--size", metavar="WxH", help="window size, implies --windowed (default 1920x1080)")
     parser.add_argument("--theme", default="", metavar="ID", help="the look for this run: reprise or switch2")
     args = parser.parse_args(argv)
-    args.fullscreen = not (args.windowed or args.size or args.screenshot)
+    args.fullscreen = not (args.windowed or args.size)
     args.size = args.size or "1920x1080"
     return args
 
@@ -99,7 +39,6 @@ def build_client(args):
 
 
 def quit_on_signals(app, on_signal=None):
-    """SIGINT and SIGTERM end the Qt loop instead of stranding a KeyboardInterrupt in a slot."""
     from PySide6.QtCore import QSocketNotifier
 
     on_signal = on_signal or app.quit
@@ -133,18 +72,10 @@ def run(argv=None):
     os.environ.setdefault("QT_FFMPEG_ENCODING_HW_DEVICE_TYPES", "vaapi")
     logging.basicConfig(level=logging.INFO, format="%(name)s: %(message)s")
 
-    from PySide6.QtCore import QCoreApplication, Qt, QTimer, QUrl
+    from PySide6.QtCore import Qt, QTimer, QUrl
     from PySide6.QtGui import QGuiApplication
     from PySide6.QtQml import QQmlApplicationEngine
     from PySide6.QtQuick import QQuickWindow  # noqa: F401  (down-casts rootObjects() so grabWindow exists)
-
-    # The nix shell sets no Qt paths at all; the flake's wrapQtAppsHook will, so only fill the gap.
-    if qt_paths_unset():
-        for p in qt_plugin_paths():
-            QCoreApplication.addLibraryPath(p)
-        import_paths = qml_import_paths()
-    else:
-        import_paths = []
 
     app = QGuiApplication(sys.argv[:1])
     app.setApplicationName("universe-ui")
@@ -155,14 +86,12 @@ def run(argv=None):
     from .api import Api
 
     client = build_client(args)
-    if not (args.fake or args.fake_launch or args.screenshot):
+    if not (args.fake or args.fake_launch):
         client.adoptScope()
     api = Api(client, fullscreen=args.fullscreen, theme=args.theme, parent=app)
     quit_on_signals(app)
 
     engine = QQmlApplicationEngine()
-    for p in import_paths:
-        engine.addImportPath(p)
     engine.rootContext().setContextProperty("api", api)
     engine.load(QUrl.fromLocalFile(str(QML_DIR / "main.qml")))
     if not engine.rootObjects():
@@ -170,7 +99,6 @@ def run(argv=None):
         return 1
     window = engine.rootObjects()[0]
     api.attachWindow(window)
-    window.activeChanged.connect(lambda: log.info("window active=%s", window.isActive()))
     if not args.fullscreen:
         try:
             w, h = (int(v) for v in args.size.lower().split("x"))
@@ -194,8 +122,6 @@ def run(argv=None):
             watcher = Watcher(app)
         api.screens.controller.start(watcher)
 
-    exit_code = {"value": 0}
-
     if args.keys:
         from .gamepad import KeyScript
 
@@ -204,15 +130,6 @@ def run(argv=None):
         fake_pad = watcher if gamepad is not None and (args.fake or args.fake_launch) else None
         KeyScript(args.keys, args.key_gap, window, pad=api.pad, watcher=fake_pad, parent=app).start(args.key_delay)
 
-    def grab():
-        image = window.grabWindow()
-        ok = image.save(args.screenshot)
-        print(f"universe-ui: screenshot {'saved' if ok else 'FAILED'} {image.width()}x{image.height()} {args.screenshot}")
-        exit_code["value"] = 0 if ok else 2
-        app.quit()
-
-    if args.screenshot:
-        QTimer.singleShot(args.after, grab)
     if args.quit_after > 0:
         QTimer.singleShot(args.quit_after, app.quit)
 
@@ -223,4 +140,8 @@ def run(argv=None):
     if client.currentSession:
         client.stopNow("")
     api.shutdown()
-    return rc or exit_code["value"]
+    return rc
+
+
+def main():
+    sys.exit(run())

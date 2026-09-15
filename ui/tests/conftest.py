@@ -1,5 +1,3 @@
-"""Offscreen Qt, fixtures for the fake client, and XDG dirs pointed away from the user's state."""
-
 import os
 
 import pytest
@@ -21,14 +19,8 @@ def xdg(tmp_path_factory):
 
 @pytest.fixture(scope="session")
 def app(xdg):
-    from PySide6.QtCore import QCoreApplication
     from PySide6.QtGui import QGuiApplication
 
-    from universe_ui import host
-
-    if host.qt_paths_unset():
-        for p in host.qt_plugin_paths():
-            QCoreApplication.addLibraryPath(p)
     application = QGuiApplication.instance() or QGuiApplication([])
     from universe_ui import models  # noqa: F401  (registers the Universe QML module)
 
@@ -36,10 +28,10 @@ def app(xdg):
 
 
 @pytest.fixture
-def fake(app, tmp_path):
+def fake(app, xdg):
     from universe_ui.universe_client import FakeClient
 
-    client = FakeClient(art_dir=str(tmp_path / "art"))
+    client = FakeClient(art_dir=str(xdg / "art"))
     yield client
     client.shutdown()
 
@@ -54,7 +46,6 @@ def api(fake, tmp_path):
 
 
 def wait_for(signal, timeout_ms=5000):
-    """Runs the event loop until `signal` fires; returns its arguments, or None on timeout."""
     from PySide6.QtCore import QEventLoop, QTimer
 
     loop = QEventLoop()
@@ -77,3 +68,11 @@ def pump(ms):
     loop = QEventLoop()
     QTimer.singleShot(ms, loop.quit)
     loop.exec()
+
+
+def index_of(form, key):
+    return next(i for i, r in enumerate(form.rows) if r["key"] == key)
+
+
+def rows_by_key(form, module=None):
+    return {r["key"]: r for r in form.rows if module is None or r["module"] == module}

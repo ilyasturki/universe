@@ -1,21 +1,17 @@
-"""Rows for the per-game settings page and the Modules page, rendered generically by QML.
-
-A row is {section, key, label, type, value, display, choices, module, detail, inherited};
-`type` is one of bool, enum, string, path, int, info, action. Groups arrange the rows into
-cards: {title, meta, warning, caps, control, off, rows}, `rows` and `control` indexing the
-flat row list. QML picks the control by type and calls setValue(index, value) with the result.
-"""
+# A row's `type` is bool, enum, string, path, int, info or action; a group's `rows` and `control` index the flat row list.
 
 import json
 import os
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
+from ..universe_client import UniverseError
+
 ASSETS = os.path.join(os.path.dirname(os.path.dirname(__file__)), "qml", "assets", "runners")
 LOGOS = {os.path.splitext(f)[0]: f"assets/runners/{f}" for f in sorted(os.listdir(ASSETS))}
 
 
-def _display(kind, value, choices=None):
+def _display(kind, value):
     if kind == "bool":
         return "On" if value else "Off"
     if value is None or value == "" or value == [] or (kind in ("int", "string") and value == 0):
@@ -25,11 +21,11 @@ def _display(kind, value, choices=None):
     return str(value)
 
 
-def _row(section, key, label, kind, value, choices=None, module="", detail="", inherited=False, dynamic=False):
+def _row(section, key, label, kind, value, choices=None, module="", detail="", inherited=False):
     return {
         "section": section, "key": key, "label": label, "type": kind, "value": value,
-        "display": _display(kind, value, choices), "choices": list(choices or []), "module": module,
-        "detail": detail, "inherited": inherited, "dynamic": dynamic,
+        "display": _display(kind, value), "choices": list(choices or []), "module": module,
+        "detail": detail, "inherited": inherited,
     }
 
 
@@ -38,12 +34,16 @@ def _group(title, rows, meta="", warning="", caps=False, control=-1, off=False):
             "off": off, "rows": list(rows)}
 
 
+def _add(rows, groups, section, row, **group):
+    if not groups or groups[-1]["title"] != section:
+        groups.append(_group(section, [], **group))
+    groups[-1]["rows"].append(len(rows))
+    rows.append(row)
+
+
 def _module_meta(module):
-    parts = []
-    if module.get("version"):
-        parts.append(f"v{module['version']}")
-    parts.append(" · ".join(module.get("kind") or []))
-    return " · ".join(p for p in parts if p)
+    version = module.get("version")
+    return " · ".join(p for p in (f"v{version}" if version else "", *(module.get("kind") or [])) if p)
 
 
 def _dig(data, dotted, default=None):
@@ -59,12 +59,15 @@ def runner_logo(runner_id):
     return LOGOS.get(runner_id, "")
 
 
-def _to_bus(kind, value):
-    if kind == "bool":
+def _to_bus(row, value):
+    if row["type"] == "bool":
         return "true" if value else "false"
     if isinstance(value, list):
         return ",".join(str(v) for v in value)
-    return "" if value is None else str(value)
+    payload = "" if value is None else str(value)
+    if row.get("choiceValues") and payload in row["choices"]:
+        payload = row["choiceValues"][row["choices"].index(payload)]
+    return payload
 
 
 GAMESCOPE_SCALERS = ["auto", "integer", "fit", "fill", "stretch"]
@@ -147,16 +150,42 @@ def choice_row(section, key, label, kind, value, choices, values, inherited=Fals
     return row
 
 
+class AsyncScreen(QObject):
+    busyChanged = Signal()
+
+    def __init__(self, client, parent=None):
+        super().__init__(parent)
+        self._client = client
+        self._busy = 0
+
+    def _run(self, work, done):
+        self._busy += 1
+        self.busyChanged.emit()
+
+        def guarded():
+            try:
+                return work(), ""
+            except UniverseError as e:
+                return None, e.message or e.kind
+
+        def finish(result):
+            self._busy -= 1
+            done(*result)
+            self.busyChanged.emit()
+
+        self._client.runAsync(guarded, finish)
+
+    busy = Property(bool, lambda self: self._busy > 0, notify=busyChanged)
+
+
 class RowsForm(QObject):
     rowsChanged = Signal()
-    busyChanged = Signal()
 
     def __init__(self, client, parent=None):
         super().__init__(parent)
         self._client = client
         self._rows = []
         self._groups = []
-        self._busy = False
 
     def _set_rows(self, rows, groups):
         self._rows = rows
@@ -167,13 +196,31 @@ class RowsForm(QObject):
     def row(self, index):
         return self._rows[index] if 0 <= index < len(self._rows) else {}
 
+    @Slot(str, result=int)
+    def indexOf(self, ident):
+        return next((i for i, r in enumerate(self._rows) if r.get("module") == ident), -1)
+
+    @Slot(int, "QVariant", result=bool)
+    def setValue(self, index, value):
+        row = self.row(index)
+        if not row:
+            return False
+        ok = self._write(row, _to_bus(row, value))
+        if ok:
+            self._reload(row)
+        return bool(ok)
+
+    @Slot(int)
+    def toggle(self, index):
+        row = self.row(index)
+        if row.get("type") == "bool":
+            self.setValue(index, not row.get("value"))
+
     rows = Property("QVariantList", lambda self: list(self._rows), notify=rowsChanged)
     groups = Property("QVariantList", lambda self: list(self._groups), notify=rowsChanged)
     count = Property(int, lambda self: len(self._rows), notify=rowsChanged)
-    busy = Property(bool, lambda self: self._busy, notify=busyChanged)
 
 
-# Core keys Library1.Set accepts, grouped as the page shows them. Proton choices come from config.
 CORE_ROWS = [
     ("Desktop and library", "desktop.hide_cursor", "Hide the cursor while playing", "bool"),
     ("Desktop and library", "favorite", "Favourite", "bool"),
@@ -193,9 +240,9 @@ class GameSettingsForm(RowsForm):
     gameIdChanged = Signal()
     titleChanged = Signal()
 
-    def __init__(self, client, screen_name=lambda: "", parent=None):
+    def __init__(self, client, screen_mode=lambda: {}, parent=None):
         super().__init__(client, parent)
-        self._screen_name = screen_name
+        self._screen_mode = screen_mode
         self._game_id = ""
         self._title = ""
 
@@ -211,7 +258,7 @@ class GameSettingsForm(RowsForm):
         rows, runner_kind = self._launch_rows(game, effective)
         groups = [_group("Launch", range(len(rows)), caps=True)]
         launch = [("Launch", key, label, kind) for key, label, kind in LAUNCH_ROWS.get(runner_kind, []) + COMMON_LAUNCH_ROWS]
-        mode = self._client.screenMode(self._screen_name()) or {}
+        mode = self._screen_mode() or {}
         gamescope = [("Gamescope", "launch.gamescope", "Gamescope", "bool")]
         gamescope += [("Gamescope", key, label, kind) for key, label, kind, _, _ in gamescope_rows(mode)]
         gamescope.append(("Gamescope", "launch.gamescope_args", "Arguments", "string"))
@@ -219,11 +266,8 @@ class GameSettingsForm(RowsForm):
         for section, key, label, kind in launch + gamescope + CORE_ROWS:
             value = _dig(game, key)
             if key == "launch.fps_limit":
-                if not groups or groups[-1]["title"] != section:
-                    groups.append(_group(section, [], caps=True))
-                groups[-1]["rows"].append(len(rows))
-                rows.append(fps_limit_row(section, value or effective.get("fps_limit"), mode, inherited=value in (None, ""),
-                                          gamescope=bool(effective.get("gamescope", True)), gamescope_refresh=effective.get("gamescope_refresh")))
+                _add(rows, groups, section, fps_limit_row(section, value or effective.get("fps_limit"), mode, inherited=value in (None, ""),
+                                                          gamescope=bool(effective.get("gamescope", True)), gamescope_refresh=effective.get("gamescope_refresh")), caps=True)
                 continue
             if key in listed:
                 # A field left empty takes the global one, `effective` says which; the choices carry the screen.
@@ -231,10 +275,7 @@ class GameSettingsForm(RowsForm):
                 if own in (None, ""):
                     value = effective.get(key.split(".", 1)[1])
                 _, choices, values = listed[key]
-                if not groups or groups[-1]["title"] != section:
-                    groups.append(_group(section, [], caps=True))
-                groups[-1]["rows"].append(len(rows))
-                rows.append(choice_row(section, key, label, kind, value, choices, values, inherited=own in (None, "")))
+                _add(rows, groups, section, choice_row(section, key, label, kind, value, choices, values, inherited=own in (None, "")), caps=True)
                 continue
             # A launch or desktop key the game leaves empty takes the global value.
             inherited = False
@@ -253,10 +294,7 @@ class GameSettingsForm(RowsForm):
                 if value is None and key.startswith(("launch.", "desktop.")):
                     value, inherited = bool(_dig(config, key, False)), True
                 value = bool(value)
-            if not groups or groups[-1]["title"] != section:
-                groups.append(_group(section, [], caps=True))
-            groups[-1]["rows"].append(len(rows))
-            rows.append(_row(section, key, label, kind, value, choices, inherited=inherited))
+            _add(rows, groups, section, _row(section, key, label, kind, value, choices, inherited=inherited), caps=True)
         modules = {m["id"]: m for m in self._client.modules() or []}
         for module_id, values in (self._client.settings(game_id) or {}).items():
             module = modules.get(module_id) or {}
@@ -303,27 +341,13 @@ class GameSettingsForm(RowsForm):
                                  value, option.get("choices"), inherited=key not in own))
         return rows, kind
 
-    @Slot(int, "QVariant", result=bool)
-    def setValue(self, index, value):
-        if not (0 <= index < len(self._rows)):
-            return False
-        row = self._rows[index]
-        payload = _to_bus(row["type"], value)
-        if row.get("choiceValues") and payload in row["choices"]:
-            payload = row["choiceValues"][row["choices"].index(payload)]
+    def _write(self, row, payload):
         if row["module"]:
-            ok = self._client.setSetting(row["module"], self._game_id, row["key"], payload)
-        else:
-            ok = self._client.set(self._game_id, row["key"], payload)
-        if ok:
-            self.load(self._game_id)
-        return bool(ok)
+            return self._client.setSetting(row["module"], self._game_id, row["key"], payload)
+        return self._client.set(self._game_id, row["key"], payload)
 
-    @Slot(int)
-    def toggle(self, index):
-        row = self.row(index)
-        if row.get("type") == "bool":
-            self.setValue(index, not row.get("value"))
+    def _reload(self, row):
+        self.load(self._game_id)
 
     gameId = Property(str, lambda self: self._game_id, notify=gameIdChanged)
     title = Property(str, lambda self: self._title, notify=titleChanged)
@@ -337,10 +361,6 @@ def _module_state(module):
 
 
 class ModulesForm(RowsForm):
-    """Settings › Modules: one row per module, its name and whether it runs; the row opens the
-    module's page (ModuleForm), and the list toggles it in place. Then Doctor's checks, one card
-    per module."""
-
     doctorChanged = Signal()
 
     def __init__(self, client, parent=None):
@@ -368,10 +388,6 @@ class ModulesForm(RowsForm):
             groups.append(_group("Off", off, caps=True, off=True))
         self._set_rows(rows, groups)
 
-    @Slot(str, result=int)
-    def indexOf(self, ident):
-        return next((i for i, r in enumerate(self._rows) if r["module"] == ident), -1)
-
     @Slot(int)
     def toggle(self, index):
         row = self.row(index)
@@ -383,8 +399,7 @@ class ModulesForm(RowsForm):
     @Slot()
     def loadDoctor(self):
         names = {m["id"]: m.get("name", m["id"]) for m in self._client.modules() or []}
-        rows = []
-        groups = []
+        rows, groups = [], []
         for check in self._client.doctor() or []:
             ident = check.get("module") or ""
             name = names.get(ident, ident) or "Core"
@@ -408,15 +423,11 @@ class ModulesForm(RowsForm):
 
 
 class ModuleForm(RowsForm):
-    """One module's page: its enable switch, then its global settings. A setting the module
-    lists live (`dynamic`) gets its choices off the UI thread, once per state of the module's
-    settings."""
-
+    # A `dynamic` setting's choices come from the module, fetched once per state of its settings.
     moduleChanged = Signal()
 
-    def __init__(self, client, screen_hz=lambda: 0, parent=None):
+    def __init__(self, client, parent=None):
         super().__init__(client, parent)
-        self._screen_hz = screen_hz
         self._module = {}
         self._ident = ""
         self._dynamic = {}
@@ -428,11 +439,6 @@ class ModuleForm(RowsForm):
         choices = [str(c) for c in setting.get("choices") or []]
         if setting.get("dynamic"):
             choices = self._dynamic.get(self._dynamic_key(ident, key, values), choices)
-        # Recording above the screen's rate captures nothing more; the rates it can't reach go.
-        if ident == "capture" and key == "fps":
-            hz = self._screen_hz() or 0
-            if hz > 0:
-                choices = [c for c in choices if not c.isdigit() or int(c) <= max(hz, 30)]
         return choices
 
     @staticmethod
@@ -453,7 +459,6 @@ class ModuleForm(RowsForm):
 
         self._client.runAsync(lambda: self._client.settingChoices(ident, key), done)
 
-    @Slot()
     def reload(self):
         if self._ident:
             self.load(self._ident)
@@ -490,35 +495,22 @@ class ModuleForm(RowsForm):
             if setting.get("scope") != "global":
                 continue
             key = setting["key"]
-            dynamic = bool(setting.get("dynamic"))
-            if dynamic:
+            if setting.get("dynamic"):
                 self._fetch_dynamic(ident, key, values)
             settings["rows"].append(len(rows))
             rows.append(_row(name, key, setting.get("label", key), setting.get("type", "string"),
-                             values.get(key, setting.get("default")), self._choices(ident, key, setting, values),
-                             ident, dynamic=dynamic))
+                             values.get(key, setting.get("default")), self._choices(ident, key, setting, values), ident))
         if settings["rows"]:
             groups.append(settings)
         return rows, groups
 
     info = Property("QVariant", lambda self: dict(self._module), notify=moduleChanged)
 
-    @Slot(int, "QVariant", result=bool)
-    def setValue(self, index, value):
-        if not (0 <= index < len(self._rows)):
-            return False
-        row = self._rows[index]
+    def _write(self, row, payload):
         if row["key"] == "enabled":
-            self._client.enableModule(row["module"], bool(value))
-            ok = True
-        else:
-            ok = self._client.setSetting(row["module"], "", row["key"], _to_bus(row["type"], value))
-        if ok:
-            self.load(row["module"])
-        return bool(ok)
+            self._client.enableModule(row["module"], payload == "true")
+            return True
+        return self._client.setSetting(row["module"], "", row["key"], payload)
 
-    @Slot(int)
-    def toggle(self, index):
-        row = self.row(index)
-        if row.get("type") == "bool":
-            self.setValue(index, not row.get("value"))
+    def _reload(self, row):
+        self.load(row["module"])

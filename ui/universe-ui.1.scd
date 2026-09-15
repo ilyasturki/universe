@@ -10,17 +10,17 @@ universe-ui - gamepad-first game library on the Universe core
 
 # DESCRIPTION
 
-Renders the Reprise interface (Qt 6, PySide6) over the Universe core linked
-in-process. Fullscreen by default. Games launch as transient systemd units
-bound to the UI's own scope: quitting the UI (SIGINT and SIGTERM included)
-stops the running game first, and *universe session-end* closes the session
-when its cgroup empties. While a game runs the launcher stays home with the
-game pinned first: A resumes it, its menu quits it.
+Renders the launcher (Qt 6, PySide6) in the Reprise or Switch 2 look over the
+Universe core linked in-process. Fullscreen by default. Games launch as
+transient systemd units bound to the UI's own scope: quitting the UI (SIGINT
+and SIGTERM included) stops the running game first, and *universe session-end*
+closes the session when its cgroup empties. While a game runs the launcher
+stays home with the game pinned first: A resumes it, its menu quits it.
 
 # OPTIONS
 
 *--windowed*
-	A window instead of fullscreen. *--size* and *--screenshot* imply it.
+	A window instead of fullscreen. *--size* implies it.
 
 *--size* _WxH_
 	Window size (default 1920x1080).
@@ -38,24 +38,8 @@ game pinned first: A resumes it, its menu quits it.
 *--fake-launch*
 	Fake sessions run *sleep 2*. Implies *--fake*.
 
-*--screenshot* _PATH_
-	Grab the window to _PATH_, then quit.
-
-*--after* _MS_
-	Delay before *--screenshot* (default 3000).
-
-*--quit-after* _MS_
-	Quit after _MS_ milliseconds; 0 never (default).
-
-*--keys* _LIST_
-	Key names posted once loaded, e.g. 'Right Right Return'. *Wait* idles one gap;
-	with *--fake*, *Press:slot*, *Unpress:slot* and *Axis:lx=0.6* play the fake pad.
-
-*--key-gap* _MS_
-	Gap between posted keys (default 120).
-
-*--key-delay* _MS_
-	Delay before the first posted key (default 1200).
+*--quit-after*, *--keys*, *--key-gap*, *--key-delay*
+	The test harness: see *--help*.
 
 *-h*, *--help*
 	Print help.

@@ -1,8 +1,5 @@
+from conftest import index_of, rows_by_key
 from universe_ui.screens.runners import suggested_title
-
-
-def rows_of(form):
-    return {r["key"]: r for r in form.rows}
 
 
 def launch_keys(form):
@@ -30,7 +27,7 @@ def test_runner_form_cards(api, fake):
     assert form.info["meta"] == "Nintendo GameCube, Nintendo Wii · /run/current-system/sw/bin/dolphin-emu"
     assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups] == \
         [("", ["exe", "args"]), ("", ["gamescope"]), ("Options", ["batch", "user_directory", "inputplumber"]), ("", ["add_file"])]
-    rows = rows_of(form)
+    rows = rows_by_key(form)
     assert rows["exe"]["type"] == "path" and rows["exe"]["inherited"] is True
     assert rows["exe"]["value"].endswith("dolphin-emu") and rows["exe"]["display"] == rows["exe"]["value"], "the found program is the value shown"
     assert rows["exe"]["detail"] == "Found on PATH"
@@ -40,7 +37,7 @@ def test_runner_form_cards(api, fake):
     form.load("rpcs3")
     assert form.info["warning"] == "not found"
     form.load("melonds")
-    assert "(config)" in form.info["meta"] and rows_of(form)["exe"]["inherited"] is False
+    assert "(config)" in form.info["meta"] and rows_by_key(form)["exe"]["inherited"] is False
     form.load("linux")
     assert [form.rows[i]["key"] for g in form.groups for i in g["rows"]] == ["gamescope", "add_file"], "the program is the game itself"
     form.load("nope")
@@ -50,12 +47,12 @@ def test_runner_form_cards(api, fake):
 def test_runner_form_writes_through(api, fake):
     form = api.screens.runner
     form.load("dolphin")
-    batch = next(i for i, r in enumerate(form.rows) if r["key"] == "batch")
+    batch = index_of(form, "batch")
     form.toggle(batch)
     assert form.rows[batch]["value"] is False
     assert fake.runners()[3]["options"][0]["value"] is False
     form.load("rpcs3")
-    exe = next(i for i, r in enumerate(form.rows) if r["key"] == "exe")
+    exe = index_of(form, "exe")
     assert form.setValue(exe, "/opt/rpcs3/rpcs3") is True
     assert form.info["warning"] == "" and "/opt/rpcs3/rpcs3 (config)" in form.info["meta"]
 
@@ -65,7 +62,7 @@ def test_add_game_flow(api, fake):
     form.load("dolphin")
     messages = []
     form.message.connect(messages.append)
-    add = next(i for i, r in enumerate(form.rows) if r["key"] == "add_file")
+    add = index_of(form, "add_file")
     assert form.setValue(add, "") is False
     assert form.setValue(add, "/mnt/games/gamecube/Mario Kart - Double Dash!! (USA) [v1.1].iso") is True
     assert form.pendingTitle() == "Mario Kart - Double Dash!!"
@@ -93,7 +90,7 @@ def test_game_settings_launch_group_by_runner(api, fake):
     form.load("mini-metro")
     assert launch_keys(form) == ["launch.runner", "launch.exe", "launch.runner_exe", "launch.options.fullscreen", "launch.options.inputplumber",
                                  "launch.mangohud", "launch.fps_limit", "launch.wrapper", "launch.args", "launch.working_dir"]
-    rows = rows_of(form)
+    rows = rows_by_key(form)
     assert rows["launch.runner"]["value"] == "Eden" and rows["launch.runner"]["icon"] == "assets/runners/eden.svg"
     assert rows["launch.runner"]["choices"][:4] == ["Proton", "Wine", "Linux", "Dolphin"]
     assert rows["launch.runner"]["choiceValues"][:4] == ["proton", "wine", "linux", "dolphin"]
@@ -104,7 +101,7 @@ def test_game_settings_launch_group_by_runner(api, fake):
     assert "launch.proton" not in rows and "platform" not in rows, "one platform: no Platform row"
 
     form.load("lego-batman")
-    rows = rows_of(form)
+    rows = rows_by_key(form)
     assert rows["platform"]["type"] == "enum" and rows["platform"]["value"] == "Nintendo Wii"
     assert rows["platform"]["choices"] == ["Nintendo GameCube", "Nintendo Wii"]
 
@@ -112,12 +109,12 @@ def test_game_settings_launch_group_by_runner(api, fake):
     assert launch_keys(form) == ["launch.runner", "launch.exe", "launch.proton", "launch.esync", "launch.fsync", "launch.ntsync", "launch.wayland", "launch.hdr",
                                  "launch.dlss_upgrade", "launch.fsr4_upgrade", "launch.xess_upgrade", "launch.optiscaler", "launch.prefix",
                                  "launch.mangohud", "launch.fps_limit", "launch.wrapper", "launch.args", "launch.working_dir"]
-    rows = rows_of(form)
+    rows = rows_by_key(form)
     assert rows["launch.runner"]["value"] == "Proton" and rows["launch.exe"]["label"] == "Program"
     assert rows["launch.wayland"]["value"] is True and rows["launch.wayland"]["inherited"] is True
     assert rows["launch.hdr"]["value"] is False and rows["launch.hdr"]["inherited"] is True
 
-    index = next(i for i, r in enumerate(form.rows) if r["key"] == "launch.runner")
+    index = index_of(form, "launch.runner")
     assert form.setValue(index, "Dolphin") is True
     assert fake.game("the-technomancer")["launch"]["runner"] == "dolphin"
     assert "platform" in launch_keys(form)

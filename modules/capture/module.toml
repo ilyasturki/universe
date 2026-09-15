@@ -63,6 +63,7 @@ default = 60
 label = "Frame rate (auto: the screen's)"
 scope = "global"
 choices = ["auto", "120", "90", "60", "30"]
+choices_exec = "bin/choices"
 
 [[settings]]
 key = "size"

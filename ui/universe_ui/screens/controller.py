@@ -1,12 +1,5 @@
-"""The Controller section: the pads the watcher sees and their live presses, the core's macro
-state, and the rows the cards show for the current pad.
-
-The watcher is `universe controller watch --json --wait`, a child of the host for its lifetime:
-events in on stdout, commands out on stdin. `FakeWatcher` scripts the same stream for --fake and
-the tests. A row is the settings row shape plus `slot`, `family`, `bound`, `code`, `extra`,
-`press`, `hold` (each macro with its `label`); the test row (`key` "test") opens the live view of
-the pad.
-"""
+# The watcher is a child process speaking JSON lines both ways: events in on stdout, commands out on stdin.
+# A row is the settings row plus `slot`, `family`, `bound`, `code`, `extra`, `press`, `hold` (each macro with its `label`).
 
 import json
 import logging
@@ -29,8 +22,6 @@ RESTART_MAX_MS = 30000
 
 
 class Watcher(QObject):
-    """`universe controller watch --json --wait` as a child process."""
-
     event = Signal(object)
 
     def __init__(self, parent=None):
@@ -87,10 +78,7 @@ class Watcher(QObject):
 
 
 class FakeWatcher(QObject):
-    """The watcher's stream from the fixture: one pad of `family` (none for "none"), every slot
-    bound but the `unbound` ones, no presses until a test scripts them with emit(). Commands
-    sent to it pile up in `commands`."""
-
+    # One pad of `family` ("none" for no pad), every slot bound but the `unbound` ones.
     event = Signal(object)
 
     def __init__(self, family="dualsense-edge", unbound=(), parent=None):
@@ -151,11 +139,10 @@ class ControllerScreen(QObject):
     axisMoved = Signal(str, str, float)
     unknownPressed = Signal(str, str)
     learned = Signal(str, str, str)
-    macroFired = Signal(str, str, str)
     macroNotice = Signal(str)
     message = Signal(str)
 
-    def __init__(self, client, memory=None, parent=None):
+    def __init__(self, client, memory, parent=None):
         super().__init__(parent)
         self._client = client
         self._memory = memory
@@ -173,8 +160,7 @@ class ControllerScreen(QObject):
         self._wanted = ""
         self.restart_ms = RESTART_MS
         self._restart_delay = RESTART_MS
-        remembered = memory.get("controllerFamily") if memory is not None else None
-        self._last_family = str(remembered) if remembered else "dualsense"
+        self._last_family = str(memory.get("controllerFamily") or "dualsense")
         self._rebuild()
 
     def start(self, watcher):
@@ -203,8 +189,6 @@ class ControllerScreen(QObject):
         if self._watcher is not None:
             self._watcher.stop()
             self._watcher = None
-
-    # -- state -------------------------------------------------------------------------------
 
     @Slot()
     def load(self):
@@ -236,7 +220,6 @@ class ControllerScreen(QObject):
     def _presets(self):
         return {p["id"]: p for p in self._state.get("presets") or [] if p.get("id")}
 
-    # The row's macro carries what the chip prints for it.
     def _macro(self, family, slot, trigger):
         for m in self._state.get("macros") or []:
             if m.get("button") == slot and m.get("trigger") == trigger and m.get("family") in (family, "*"):
@@ -251,10 +234,7 @@ class ControllerScreen(QObject):
         if not family:
             return
         self._last_family = family
-        if self._memory is not None:
-            self._memory.set("controllerFamily", family)
-
-    # -- the watcher's stream ----------------------------------------------------------------
+        self._memory.set("controllerFamily", family)
 
     def _on_event(self, line):
         kind = line.get("event")
@@ -272,9 +252,7 @@ class ControllerScreen(QObject):
         elif kind == "unknown":
             self.unknownPressed.emit(ident, str(line.get("code") or ""))
         elif kind == "macro":
-            action = str(line.get("action") or "")
-            self.macroFired.emit(str(line.get("slot") or ""), str(line.get("trigger") or ""), action)
-            notice = self._notice(action)
+            notice = self._notice(str(line.get("action") or ""))
             if notice:
                 self.macroNotice.emit(notice)
         elif kind == "learned":
@@ -285,35 +263,29 @@ class ControllerScreen(QObject):
         elif kind == "error":
             self._stop_learning()
             self.message.emit(str(line.get("message") or "Controller error"))
-        elif kind == "waiting":
+        elif kind in ("waiting", "ready", "off"):
             self._status = kind
-            self._passive = True
-            self._stop_testing()
-            self._enumerate()
-            self._rebuild()
-            self.statusChanged.emit()
-        elif kind == "ready":
-            self._status = kind
-            self._restart_delay = self.restart_ms
-            if self._passive:
+            if kind == "waiting":
+                self._passive = True
+                self._stop_testing()
+                self._enumerate()
+            elif kind == "ready":
+                self._restart_delay = self.restart_ms
+                if self._passive:
+                    self._passive = False
+                    self._clear_devices()
+            else:
                 self._passive = False
+                self._stop_learning()
+                self._stop_testing()
                 self._clear_devices()
             self._rebuild()
             self.statusChanged.emit()
-        elif kind == "off":
-            self._status = kind
-            self._passive = False
-            self._stop_learning()
-            self._stop_testing()
-            self._clear_devices()
-            self._rebuild()
-            self.statusChanged.emit()
-            if self._watcher is not None:
+            if kind == "off" and self._watcher is not None:
                 QTimer.singleShot(self._restart_delay, self._restart)
                 self._restart_delay = min(max(self._restart_delay, 1) * 2, RESTART_MAX_MS)
 
-    # A macro whose effect is drawn by the game, not the launcher, gets a toast here: the MangoHud
-    # toggle types a key the launcher never sees, so a press with the launcher up looks like nothing.
+    # The MangoHud toggle types a key the launcher never sees: with the launcher up the press would look like nothing.
     def _notice(self, action):
         if action != "mangohud":
             return ""
@@ -333,7 +305,6 @@ class ControllerScreen(QObject):
         self.statusChanged.emit()
         return True
 
-    # The live view ends with whatever it was showing: the pad gone, the watcher gone or waiting.
     def _stop_testing(self):
         if not self._testing:
             return False
@@ -381,14 +352,11 @@ class ControllerScreen(QObject):
             else:
                 self._stop_testing()
             self.currentChanged.emit()
-        if self._learning and not self._devices:
-            self._learning = ""
-            self.statusChanged.emit()
+        if not self._devices:
+            self._stop_learning()
         self._rebuild()
         self.devicesChanged.emit()
 
-    # The watcher re-announces the device after a learn; the slots are patched here too, so a
-    # stream that does not is still right on screen.
     def _learned(self, line):
         family, slot, code = str(line.get("family") or ""), str(line.get("slot") or ""), str(line.get("code") or "")
         previous = line.get("from")
@@ -398,14 +366,11 @@ class ControllerScreen(QObject):
             device["slots"][slot] = {"code": code, "bound": True}
             if previous and previous != slot:
                 device["slots"][previous] = {"code": None, "bound": False}
-        self._learning = ""
-        self.statusChanged.emit()
+        self._stop_learning()
         # The watcher wrote config.toml from its own process; this one's core rereads it first.
         self._client.rescan()
         self.load()
         self.learned.emit(family, slot, code)
-
-    # -- rows --------------------------------------------------------------------------------
 
     def _label(self, macro):
         action = str(macro.get("action") or "")
@@ -486,8 +451,6 @@ class ControllerScreen(QObject):
         self.setCurrent(device["id"])
         return True
 
-    # -- what the page does --------------------------------------------------------------------
-
     @Slot(str, str, str, str, str, result=bool)
     def bind(self, slot, trigger, action, keys, command):
         device = self._device()
@@ -533,15 +496,9 @@ class ControllerScreen(QObject):
 
     @Slot()
     def cancelLearn(self):
-        if not self._learning:
-            return
-        self._learning = ""
-        self.statusChanged.emit()
-        if self._watcher is not None:
+        if self._stop_learning() and self._watcher is not None:
             self._watcher.send({"cmd": "cancel"})
 
-    # The live view: the watcher streams the sticks and triggers while it is on; the host mutes the
-    # pad's keys for as long as it is (see Api).
     @Slot(bool, result=bool)
     def setTesting(self, on):
         if not on:
@@ -570,12 +527,10 @@ class ControllerScreen(QObject):
         if self._watcher is not None:
             self._watcher.send({"cmd": "resume"})
 
-    @Slot()
     def reload(self):
         if self._watcher is not None:
             self._watcher.send({"cmd": "reload"})
 
-    @Slot(str)
     def setCurrent(self, ident):
         device = self._device(ident)
         if device is None or ident == self._current:

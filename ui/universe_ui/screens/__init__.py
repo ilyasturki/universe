@@ -1,5 +1,3 @@
-"""`api.screens`: one support object per new screen, all data through the client."""
-
 from PySide6.QtCore import Property, QObject
 
 from .artwork import ArtworkForm, ArtworkOverview
@@ -13,19 +11,17 @@ from .sources import LoginFlow, SourcesBrowser
 
 
 class Screens(QObject):
-    def __init__(self, client, screen_hz=lambda: 0, parent=None, memory=None, screen_name=lambda: ""):
+    def __init__(self, client, memory, screen_mode, parent=None):
         super().__init__(parent)
-        self._gameSettings = GameSettingsForm(client, screen_name, self)
+        self._gameSettings = GameSettingsForm(client, screen_mode, self)
         self._modules = ModulesForm(client, self)
-        self._module = ModuleForm(client, screen_hz, self)
-        self._launch = LaunchForm(client, screen_name, self)
+        self._module = ModuleForm(client, self)
+        self._launch = LaunchForm(client, screen_mode, self)
         self._sources = SourcesBrowser(client, self)
         self._login = LoginFlow(client, self)
         self._recordings = RecordingsList(client, self)
         self._journal = JournalList(client, self)
         self._pendingJournals = PendingJournals(client, self)
-        self._album = RecordingsList(client, self)
-        self._news = JournalList(client, self)
         self._paths = PathBrowser(client, self)
         self._controller = ControllerScreen(client, memory, self)
         self._runners = RunnersForm(client, self)
@@ -36,7 +32,6 @@ class Screens(QObject):
     def shutdown(self):
         self._recordings.shutdown()
         self._pendingJournals.shutdown()
-        self._album.shutdown()
         self._controller.shutdown()
 
     gameSettings = Property(QObject, lambda self: self._gameSettings, constant=True)
@@ -48,8 +43,8 @@ class Screens(QObject):
     recordings = Property(QObject, lambda self: self._recordings, constant=True)
     journal = Property(QObject, lambda self: self._journal, constant=True)
     pendingJournals = Property(QObject, lambda self: self._pendingJournals, constant=True)
-    album = Property(QObject, lambda self: self._album, constant=True)
-    news = Property(QObject, lambda self: self._news, constant=True)
+    album = Property(QObject, lambda self: self._recordings, constant=True)
+    news = Property(QObject, lambda self: self._journal, constant=True)
     paths = Property(QObject, lambda self: self._paths, constant=True)
     controller = Property(QObject, lambda self: self._controller, constant=True)
     runners = Property(QObject, lambda self: self._runners, constant=True)

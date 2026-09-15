@@ -1,14 +1,9 @@
-"""Artwork: one game's slots, each with its default under the pick over it and SteamGridDB's
-candidates for it; and the library-wide gallery of one slot across every game."""
-
-import json
-
-from PySide6.QtCore import Property, QObject, QTimer, Signal, Slot
+from PySide6.QtCore import Property, QTimer, Signal, Slot
 
 from ..models import file_url
-from ..universe_client import UniverseError
+from ..universe_client import UniverseError, _json
+from .settings import AsyncScreen
 
-# slot, label, width / height as the theme draws it, where the themes show it
 SLOTS = [
     ("box_front", "Box front", 600 / 900, "Details, launch, settings"),
     ("square", "Square", 1.0, "Home rail, Switch 2 tiles"),
@@ -26,15 +21,6 @@ FILTER_LABELS = {"all": "All", "missing": "Missing", "picked": "Picked", "defaul
 RELOAD_MS = 300
 
 
-def _url(value):
-    value = str(value or "")
-    if not value:
-        return ""
-    if "://" in value:
-        return value
-    return file_url(value).toString()
-
-
 def _slot_row(raw):
     slot = str(raw.get("slot") or "")
     kind = str(raw.get("kind") or "missing")
@@ -42,7 +28,7 @@ def _slot_row(raw):
     default_origin = str(raw.get("default_origin") or "")
     return {
         "slot": slot, "label": SLOT_LABELS.get(slot, slot), "aspect": SLOT_ASPECTS.get(slot, 1.0), "use": SLOT_USES.get(slot, ""),
-        "url": _url(raw.get("path")), "defaultUrl": _url(raw.get("default")), "overrideUrl": _url(raw.get("override")),
+        "url": file_url(raw.get("path")).toString(), "defaultUrl": file_url(raw.get("default")).toString(), "overrideUrl": file_url(raw.get("override")).toString(),
         "origin": origin, "originLabel": ORIGIN_LABELS.get(origin, origin),
         "defaultOriginLabel": ORIGIN_LABELS.get(default_origin, default_origin) or "Default",
         "kind": kind, "kindLabel": KIND_LABELS.get(kind, kind), "hasOverride": bool(raw.get("override")),
@@ -54,8 +40,8 @@ def _candidate_row(raw, index):
     score = int(raw.get("score") or 0)
     # `url` stays the provider's, for the core to download; `thumb` is what the grid shows.
     return {
-        "index": index, "id": int(raw.get("id") or 0), "url": str(raw.get("url") or ""), "thumb": _url(raw.get("thumb") or raw.get("url")),
-        "score": score, "votes": score // 1000, "slot": str(raw.get("slot") or ""),
+        "index": index, "id": int(raw.get("id") or 0), "url": str(raw.get("url") or ""), "thumb": file_url(raw.get("thumb") or raw.get("url")).toString(),
+        "votes": score // 1000, "slot": str(raw.get("slot") or ""),
     }
 
 
@@ -66,22 +52,17 @@ def _hit_row(raw):
     }
 
 
-class ArtworkForm(QObject):
-    """`api.screens.artwork`: the slots of one game and the candidates of the one in focus."""
-
+class ArtworkForm(AsyncScreen):
     slotsChanged = Signal()
     candidatesChanged = Signal()
     hitsChanged = Signal()
-    busyChanged = Signal()
     gameIdChanged = Signal()
     message = Signal(str)
     applied = Signal(str)
-    # The last search's failure, empty when it went through.
     searchErrorChanged = Signal()
 
     def __init__(self, client, parent=None):
-        super().__init__(parent)
-        self._client = client
+        super().__init__(client, parent)
         self._game_id = ""
         self._title = ""
         self._sgdb_id = 0
@@ -96,13 +77,10 @@ class ArtworkForm(QObject):
         self._hits = []
         self._search_busy = False
         self._search_error = ""
-        self._busy = 0
         # One in-flight candidates fetch at a time; a slot change while it runs drops its result.
         self._fetch_seq = 0
         client.mediaChanged.connect(self._on_media_changed)
         client.libraryChanged.connect(self._on_library_changed)
-
-    # -- loading ---------------------------------------------------------------------------
 
     @Slot(str)
     def load(self, game_id):
@@ -121,7 +99,6 @@ class ArtworkForm(QObject):
         self._game_id = ""
         self.gameIdChanged.emit()
 
-    @Slot()
     def reload(self):
         if not self._game_id:
             return
@@ -146,34 +123,11 @@ class ArtworkForm(QObject):
         if self._game_id and (not ids or self._game_id in ids):
             self.reload()
 
-    @Slot(str, result="QVariant")
     def slot(self, name):
         return next((dict(s) for s in self._slots if s["slot"] == name), {})
 
-    # -- work off the UI thread -------------------------------------------------------------
-
-    def _run(self, work, done):
-        self._busy += 1
-        self.busyChanged.emit()
-
-        def guarded():
-            try:
-                return work(), ""
-            except UniverseError as e:
-                return None, e.message or e.kind
-
-        def finish(result):
-            self._busy -= 1
-            done(*result)
-            self.busyChanged.emit()
-
-        self._client.runAsync(guarded, finish)
-
-    # -- candidates --------------------------------------------------------------------------
-
     @Slot(str)
     def loadCandidates(self, slot):
-        """The first page of a slot's candidates; the same slot again is a no-op while it holds."""
         if slot == self._candidates_slot and (self._candidates or self._candidates_busy):
             return
         self._candidates = []
@@ -206,7 +160,7 @@ class ArtworkForm(QObject):
                 self.message.emit(error)
                 self.candidatesChanged.emit()
                 return
-            data = _decode(result, {})
+            data = _json(result, {})
             items = [_candidate_row(c, len(self._candidates) + i) for i, c in enumerate(data.get("items") or [])]
             self._candidates = self._candidates + items
             self._page = int(data.get("page") or page)
@@ -221,11 +175,8 @@ class ArtworkForm(QObject):
 
         self._run(work, done)
 
-    # -- picking -----------------------------------------------------------------------------
-
     @Slot(str, str)
     def apply(self, slot, url):
-        """Downloads the candidate over the slot as its override."""
         game_id = self._game_id
         label = SLOT_LABELS.get(slot, slot)
 
@@ -256,8 +207,6 @@ class ArtworkForm(QObject):
             self.message.emit(f"{label}: back to the default" + (f" from {row['originLabel']}" if row.get("originLabel") else "") if row.get("hasDefault") else f"{label}: pick removed, nothing under it")
         return gone
 
-    # -- the wrong game ----------------------------------------------------------------------
-
     @Slot(str)
     def search(self, query):
         game_id = self._game_id
@@ -270,7 +219,7 @@ class ArtworkForm(QObject):
         def done(result, error):
             self._search_busy = False
             self._search_error = error or ""
-            self._hits = [] if error else [_hit_row(h) for h in _decode(result, [])]
+            self._hits = [] if error else [_hit_row(h) for h in _json(result, [])]
             self.searchErrorChanged.emit()
             self.hitsChanged.emit()
 
@@ -278,7 +227,6 @@ class ArtworkForm(QObject):
 
     @Slot(int)
     def pin(self, sgdb_id):
-        """Pins the game to a SteamGridDB id: the candidates and the next refresh follow it."""
         try:
             self._client._call("Media1", "Pin", self._game_id, "sgdb", str(int(sgdb_id)))
         except UniverseError as e:
@@ -307,7 +255,6 @@ class ArtworkForm(QObject):
     gameId = Property(str, lambda self: self._game_id, notify=gameIdChanged)
     title = Property(str, lambda self: self._title, notify=slotsChanged)
     sgdbId = Property(int, lambda self: self._sgdb_id, notify=slotsChanged)
-    # The SteamGridDB entry the candidates come from, "Name (year)"; empty until a fetch named it.
     entry = Property(str, lambda self: (self._sgdb_name + (f" ({self._sgdb_year})" if self._sgdb_year else "")) if self._sgdb_name else (f"entry {self._sgdb_id}" if self._sgdb_id else ""), notify=slotsChanged)
     slots = Property("QVariantList", lambda self: [dict(s) for s in self._slots], notify=slotsChanged)
     candidates = Property("QVariantList", lambda self: [dict(c) for c in self._candidates], notify=candidatesChanged)
@@ -317,35 +264,20 @@ class ArtworkForm(QObject):
     hits = Property("QVariantList", lambda self: [dict(h) for h in self._hits], notify=hitsChanged)
     searchBusy = Property(bool, lambda self: self._search_busy, notify=hitsChanged)
     searchError = Property(str, lambda self: self._search_error, notify=searchErrorChanged)
-    busy = Property(bool, lambda self: self._busy > 0, notify=busyChanged)
 
 
-def _decode(value, default):
-    if isinstance(value, (dict, list)):
-        return value
-    try:
-        return json.loads(value) if value else default
-    except (TypeError, ValueError):
-        return default
-
-
-class ArtworkOverview(QObject):
-    """`api.screens.artworkOverview`: one slot across the library, filtered by how each game stands."""
-
+class ArtworkOverview(AsyncScreen):
     rowsChanged = Signal()
     slotChanged = Signal()
     filterChanged = Signal()
-    busyChanged = Signal()
     jobChanged = Signal()
     message = Signal(str)
 
     def __init__(self, client, parent=None):
-        super().__init__(parent)
-        self._client = client
+        super().__init__(client, parent)
         self._rows = []
         self._slot = "box_front"
         self._filter = "all"
-        self._busy = False
         self._loaded = False
         self._job = None
         self._reload = QTimer(self)
@@ -366,50 +298,40 @@ class ArtworkOverview(QObject):
         if self._busy:
             self._reload.start()
             return
-        self._busy = True
-        self.busyChanged.emit()
 
         def work():
-            try:
-                return self._client._call("Media1", "Status", ""), ""
-            except UniverseError as e:
-                return None, e.message or e.kind
+            status = _json(self._client._call("Media1", "Status", ""), [])
+            hidden = {str(g.get("id") or "") for g in self._client.list() or [] if g.get("hidden") or g.get("removed")}
+            rows = []
+            for g in status:
+                ident = str(g.get("id") or "")
+                if ident in hidden:
+                    continue
+                slots = {str(s.get("slot") or ""): _slot_row(s) for s in g.get("slots") or []}
+                rows.append({"id": ident, "title": str(g.get("title") or ident), "slots": slots})
+            return sorted(rows, key=lambda r: r["title"].casefold())
 
-        def done(result):
-            raw, error = result
-            self._busy = False
+        def done(rows, error):
             self._loaded = True
             if error:
                 self.message.emit(error)
             else:
-                hidden = {str(g.get("id") or "") for g in self._client.list() or [] if g.get("hidden") or g.get("removed")}
-                rows = []
-                for g in _decode(raw, []):
-                    ident = str(g.get("id") or "")
-                    if ident in hidden:
-                        continue
-                    slots = {str(s.get("slot") or ""): _slot_row(s) for s in g.get("slots") or []}
-                    rows.append({"id": ident, "title": str(g.get("title") or ident), "slots": slots})
-                rows.sort(key=lambda r: r["title"].casefold())
                 self._rows = rows
             self.rowsChanged.emit()
-            self.busyChanged.emit()
 
-        self._client.runAsync(work, done)
+        self._run(work, done)
 
     @Slot()
     def unload(self):
         self._loaded = False
         self._reload.stop()
 
-    @Slot(str)
     def setSlot(self, slot):
         if slot in SLOT_LABELS and slot != self._slot:
             self._slot = slot
             self.slotChanged.emit()
             self.rowsChanged.emit()
 
-    @Slot(str)
     def setFilter(self, name):
         if name in FILTERS and name != self._filter:
             self._filter = name
@@ -437,7 +359,6 @@ class ArtworkOverview(QObject):
 
     @Slot()
     def refreshAll(self):
-        """Fetches the missing art of every game; `job` follows it until it ends."""
         if self._job and self._job.get("ok") is None:
             self.message.emit("Already fetching")
             return
@@ -469,6 +390,5 @@ class ArtworkOverview(QObject):
     slotUse = Property(str, lambda self: SLOT_USES.get(self._slot, ""), notify=slotChanged)
     slotNames = Property("QVariantList", lambda self: [{"slot": s, "label": l, "use": u} for s, l, _, u in SLOTS], constant=True)
     filterNames = Property("QVariantList", lambda self: [{"filter": f, "label": FILTER_LABELS[f]} for f in FILTERS], constant=True)
-    busy = Property(bool, lambda self: self._busy, notify=busyChanged)
     # {id, message, done, total, ok (None while running)} or None
     job = Property("QVariant", lambda self: dict(self._job) if self._job else None, notify=jobChanged)

@@ -1,9 +1,4 @@
-"""Game objects, the library model and the proxies the theme sorts and filters with.
-
-QtQml.Models' SortFilterProxyModel has no get(), no ExpressionFilter and a FunctionFilter
-that segfaults (phase 0, T2), so every proxy the theme needs lives here and is
-registered under `import Universe`.
-"""
+# QtQml.Models' SortFilterProxyModel has no get(), no ExpressionFilter and a FunctionFilter that segfaults.
 
 import os
 
@@ -47,22 +42,19 @@ def _as_list(value):
 
 
 def sort_title(title):
-    """The title with a leading English article dropped, so "The Witcher" files under W."""
     first, _, rest = title.partition(" ")
     return rest if rest and first.lower() in ("the", "a", "an") else title
 
 
-def _file_url(path):
-    if not path:
-        return QUrl()
-    if isinstance(path, str) and "://" in path:
-        return QUrl(path)
-    return file_url(str(path))
+ASSET_SLOTS = ("box_front", "square", "banner", "background", "logo")
 
 
 def file_url(path):
-    """A local file as a URL the image cache keys by its modification time: a slot replaced in
-    place — a new pick over the old one — repaints instead of showing the cached bytes."""
+    if not path:
+        return QUrl()
+    if "://" in str(path):
+        return QUrl(path)
+    # The mtime query keys the image cache: a slot replaced in place repaints instead of showing the cached bytes.
     url = QUrl.fromLocalFile(str(path))
     try:
         url.setQuery(f"v={int(os.stat(path).st_mtime_ns // 1_000_000)}")
@@ -102,36 +94,26 @@ class GameAssets(QObject):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._box = QUrl()
-        self._square = QUrl()
-        self._banner = QUrl()
-        self._background = QUrl()
-        self._logo = QUrl()
+        self._urls = dict.fromkeys(ASSET_SLOTS, QUrl())
         self._shots = []
 
     def update(self, media):
         media = media or {}
-        self._box = _file_url(media.get("box_front"))
-        self._square = _file_url(media.get("square"))
-        self._banner = _file_url(media.get("banner"))
-        self._background = _file_url(media.get("background"))
-        self._logo = _file_url(media.get("logo"))
-        self._shots = [_file_url(p) for p in (media.get("screenshots") or [])]
+        self._urls = {k: file_url(media.get(k)) for k in ASSET_SLOTS}
+        self._shots = [file_url(p) for p in (media.get("screenshots") or [])]
         self.changed.emit()
 
-    boxFront = Property(QUrl, lambda self: self._box, notify=changed)
-    square = Property(QUrl, lambda self: self._square, notify=changed)
-    banner = Property(QUrl, lambda self: self._banner, notify=changed)
+    boxFront = Property(QUrl, lambda self: self._urls["box_front"], notify=changed)
+    square = Property(QUrl, lambda self: self._urls["square"], notify=changed)
+    banner = Property(QUrl, lambda self: self._urls["banner"], notify=changed)
     # `tile` was the square under Pegasus's name; themes written against it keep working.
-    tile = Property(QUrl, lambda self: self._square, notify=changed)
-    background = Property(QUrl, lambda self: self._background, notify=changed)
-    logo = Property(QUrl, lambda self: self._logo, notify=changed)
+    tile = Property(QUrl, lambda self: self._urls["square"], notify=changed)
+    background = Property(QUrl, lambda self: self._urls["background"], notify=changed)
+    logo = Property(QUrl, lambda self: self._urls["logo"], notify=changed)
     screenshotList = Property("QVariantList", lambda self: list(self._shots), notify=changed)
 
 
 class Game(QObject):
-    """One library entry, decoded from Library1's Game JSON. Missing keys fall back to defaults."""
-
     changed = Signal()
     favoriteChanged = Signal()
 
@@ -140,12 +122,10 @@ class Game(QObject):
         self._library = library
         self._assets = GameAssets(self)
         self._collections = None
-        self._raw = {}
         self.update(data)
 
     def update(self, data):
-        self._raw = data or {}
-        raw = self._raw
+        raw = data or {}
         meta = raw.get("metadata") or {}
         stats = raw.get("stats") or {}
         self._id = str(raw.get("id") or "")
@@ -174,15 +154,9 @@ class Game(QObject):
         self.changed.emit()
         self.favoriteChanged.emit()
 
-    def rawData(self):
-        return self._raw
-
     def setCollections(self, model):
         self._collections = model
         self.changed.emit()
-
-    def _get_favorite(self):
-        return self._favorite
 
     def _set_favorite(self, value):
         value = bool(value)
@@ -209,7 +183,7 @@ class Game(QObject):
     id = Property(str, lambda self: self._id, notify=changed)
     title = Property(str, lambda self: self._title, notify=changed)
     sortTitle = Property(str, lambda self: self._sortTitle, notify=changed)
-    favorite = Property(bool, _get_favorite, _set_favorite, notify=favoriteChanged)
+    favorite = Property(bool, lambda self: self._favorite, _set_favorite, notify=favoriteChanged)
     hidden = Property(bool, lambda self: self._hidden, notify=changed)
     playTime = Property(int, lambda self: self._playTime, notify=changed)
     playCount = Property(int, lambda self: self._playCount, notify=changed)
@@ -229,17 +203,15 @@ class Game(QObject):
     assets = Property(QObject, lambda self: self._assets, constant=True)
     collections = Property(QObject, lambda self: self._collections, notify=changed)
     extra = Property("QVariantMap", lambda self: dict(self._extra), notify=changed)
-    raw = Property("QVariantMap", lambda self: dict(self._raw), notify=changed)
 
 
 class ObjectListModel(QAbstractListModel):
-    """A list of QObjects with `count` and `get(i)`, the shape Pegasus gave `api.collections`."""
-
     countChanged = Signal()
 
-    def __init__(self, objects=None, parent=None):
+    def __init__(self, objects=None, parent=None, roles=("name",)):
         super().__init__(parent)
         self._objects = list(objects or [])
+        self._roles = {MODEL_DATA_ROLE: b"modelData", **{MODEL_DATA_ROLE + 1 + i: r.encode() for i, r in enumerate(roles)}}
         for signal in (self.rowsInserted, self.rowsRemoved, self.modelReset):
             signal.connect(self.countChanged)
 
@@ -247,9 +219,6 @@ class ObjectListModel(QAbstractListModel):
         self.beginResetModel()
         self._objects = list(objects)
         self.endResetModel()
-
-    def objects(self):
-        return list(self._objects)
 
     def rowCount(self, parent=QModelIndex()):
         return 0 if parent.isValid() else len(self._objects)
@@ -260,11 +229,11 @@ class ObjectListModel(QAbstractListModel):
         obj = self._objects[index.row()]
         if role == MODEL_DATA_ROLE:
             return obj
-        name = self.roleNames().get(role)
-        return obj.property(bytes(name).decode()) if name else None
+        name = self._roles.get(role)
+        return obj.property(name.decode()) if name else None
 
     def roleNames(self):
-        return {MODEL_DATA_ROLE: b"modelData", MODEL_DATA_ROLE + 1: b"name"}
+        return dict(self._roles)
 
     @Slot(int, result=QObject)
     def get(self, row):
@@ -286,75 +255,32 @@ class Collection(QObject):
     games = Property(QObject, lambda self: self._games, constant=True)
 
 
-class GameListModel(QAbstractListModel):
-    """`api.allGames`: every visible game, one role per Game property plus `modelData`."""
-
-    countChanged = Signal()
-
+class GameListModel(ObjectListModel):
     def __init__(self, parent=None):
-        super().__init__(parent)
-        self._games = []
-        self._roles = {MODEL_DATA_ROLE: b"modelData"}
-        for i, name in enumerate(GAME_ROLES):
-            self._roles[MODEL_DATA_ROLE + 1 + i] = name.encode()
-        for signal in (self.rowsInserted, self.rowsRemoved, self.modelReset):
-            signal.connect(self.countChanged)
+        super().__init__(parent=parent, roles=GAME_ROLES)
 
     def setGames(self, games):
-        self.beginResetModel()
-        for game in self._games:
+        for game in self._objects:
             try:
                 game.changed.disconnect(self._on_game_changed)
             except (RuntimeError, TypeError):
                 pass
-        self._games = list(games)
-        for game in self._games:
+        self.setObjects(games)
+        for game in self._objects:
             game.changed.connect(self._on_game_changed)
-        self.endResetModel()
-
-    def games(self):
-        return list(self._games)
 
     def _on_game_changed(self):
-        game = self.sender()
-        row = self.rowOf(game)
+        row = self.rowOf(self.sender())
         if row >= 0:
             index = self.index(row, 0)
             self.dataChanged.emit(index, index)
 
     def rowOf(self, game):
-        for i, g in enumerate(self._games):
-            if g is game:
-                return i
-        return -1
-
-    def rowCount(self, parent=QModelIndex()):
-        return 0 if parent.isValid() else len(self._games)
-
-    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
-        if not index.isValid() or not (0 <= index.row() < len(self._games)):
-            return None
-        game = self._games[index.row()]
-        if role == MODEL_DATA_ROLE:
-            return game
-        name = self._roles.get(role)
-        return game.property(name.decode()) if name else None
-
-    def roleNames(self):
-        return dict(self._roles)
-
-    @Slot(int, result=QObject)
-    def get(self, row):
-        return self._games[row] if 0 <= row < len(self._games) else None
+        return next((i for i, g in enumerate(self._objects) if g is game), -1)
 
     @Slot(str, result=QObject)
     def byId(self, ident):
-        for game in self._games:
-            if game.id == ident:
-                return game
-        return None
-
-    count = Property(int, lambda self: len(self._games), notify=countChanged)
+        return next((g for g in self._objects if g.id == ident), None)
 
 
 def _game_at(model, row):
@@ -362,8 +288,6 @@ def _game_at(model, row):
 
 
 class GameProxy(QSortFilterProxyModel):
-    """Base for the theme's proxies: `count`, `get(i)`, `mapToSource(i)`, sort by a Game property."""
-
     countChanged = Signal()
     sortRoleNameChanged = Signal()
     descendingChanged = Signal()
@@ -385,18 +309,12 @@ class GameProxy(QSortFilterProxyModel):
             self.sort(-1)
         self.invalidate()
 
-    def _get_sort_name(self):
-        return self._sort_name
-
     def _set_sort_name(self, name):
         if name == self._sort_name:
             return
         self._sort_name = name
         self.sortRoleNameChanged.emit()
         self._resort()
-
-    def _get_descending(self):
-        return self._descending
 
     def _set_descending(self, value):
         value = bool(value)
@@ -443,19 +361,17 @@ class GameProxy(QSortFilterProxyModel):
         return index.row() if index.isValid() else -1
 
     count = Property(int, lambda self: self.rowCount(), notify=countChanged)
-    sortRoleName = Property(str, _get_sort_name, _set_sort_name, notify=sortRoleNameChanged)
-    descending = Property(bool, _get_descending, _set_descending, notify=descendingChanged)
+    sortRoleName = Property(str, lambda self: self._sort_name, _set_sort_name, notify=sortRoleNameChanged)
+    descending = Property(bool, lambda self: self._descending, _set_descending, notify=descendingChanged)
 
 
 @QmlElement
 class SortedGames(GameProxy):
-    """Sort only: `sortRoleName` + `descending`, the RoleSorter/StringSorter case."""
+    pass
 
 
 @QmlElement
 class RecentGames(GameProxy):
-    """Played games, last played first (HomePage's rail); the game of `playingId` first of all, played before or not."""
-
     playingIdChanged = Signal()
 
     def __init__(self, parent=None):
@@ -483,8 +399,6 @@ class RecentGames(GameProxy):
 
 @QmlElement
 class LimitedGames(GameProxy):
-    """The first `limit` source rows; chained after a sorted proxy, like IndexFilter was."""
-
     limitChanged = Signal()
 
     def __init__(self, parent=None):
@@ -506,8 +420,7 @@ class LimitedGames(GameProxy):
 
 @QmlElement
 class FavouriteGames(GameProxy):
-    """favorite || pinned: `pinned` holds source rows kept in place after Y removed them."""
-
+    # `pinned` holds source rows kept in place after Y removed them.
     pinnedChanged = Signal()
 
     def __init__(self, parent=None):
@@ -532,8 +445,6 @@ class FavouriteGames(GameProxy):
 
 @QmlElement
 class SearchGames(GameProxy):
-    """Titles containing `query`, case-insensitive, last played first."""
-
     queryChanged = Signal()
 
     def __init__(self, parent=None):
@@ -561,8 +472,6 @@ LIBRARY_SORTS = [("lastPlayed", True), ("sortTitle", False), ("playTime", True),
 
 @QmlElement
 class LibraryGames(GameProxy):
-    """LibraryPage's grid: `sortMode` 0..3 = last played, title, playtime, released."""
-
     sortModeChanged = Signal()
 
     def __init__(self, parent=None):
@@ -587,8 +496,6 @@ def collection_key(game):
 
 
 class CollectionGames(GameProxy):
-    """One collection's games: those sharing a platform (or a source, when none is known)."""
-
     def __init__(self, key, parent=None):
         super().__init__(parent)
         self._key = key

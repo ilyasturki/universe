@@ -38,9 +38,9 @@ One context property, `api`:
 | `api.collections` | collections, one per platform |
 | `api.memory` | `get`/`set`/`has`/`unset`, persisted to `$XDG_STATE_HOME/universe/ui-memory.json` |
 | `api.universe` | the client: every core call, plus the signals below. `adoptScope()` and `pendingJournals()` wrap `adopt_scope` and `pending_journals_json`; a core without them gets a log line, not a toast |
-| `api.pad` | `rightX` / `rightY`: the right stick as a value, 0 without a controller |
+| `api.pad` | `rightX`: the right stick as a value, 0 without a controller |
 | `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written) |
-| `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed`, `--size` and `--screenshot` turn it off) |
+| `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed` and `--size` turn it off) |
 | `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `ground`, `detail`), `current`, `set(id)`, `fontPath` |
 
 A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `playTime`,
@@ -97,7 +97,7 @@ it this way, and any frontend needs the equivalent:
 A frontend decides who owns the game's lifetime. `adopt_scope()`, called once at startup, moves the
 frontend into `universe-launcher-<pid>.scope`; every game it launches from then on is bound to that
 scope and goes down with the frontend, `session-end` included. `host.py` calls `adoptScope()` once
-the client exists — not with `--fake`, nor for `--screenshot` — so closing `universe-ui` closes the
+the client exists — not with `--fake` — so closing `universe-ui` closes the
 game; a frontend that never calls it leaves the game to systemd, as `universe play --no-wait` and
 the hooks do. The host also quits cleanly on SIGINT and SIGTERM (a wakeup-fd `QSocketNotifier`
 lets the Python handlers run under the Qt loop) and, with a session running, calls `stop("")`
@@ -179,7 +179,7 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
 | LT / RT | PageUp / PageDown | collection, section, keyboard page |
 | Start, Guide | F1 | context menu of the game on screen, whichever part of the page has focus |
 | d-pad, left stick | arrows | navigation |
-| right stick | `api.pad.rightX` / `rightY` | analog, past a 0.18 deadzone: scrubs the recording player |
+| right stick | `api.pad.rightX` | analog, past a 0.18 deadzone: scrubs the recording player |
 
 `api.pad.muted` (set by `Api` while the controller section's live view is on) drops the presses;
 releases still land, so nothing stays held across it. The hint bar names buttons the Xbox way
@@ -370,7 +370,7 @@ just seed [id…]                        # real games in .dev/: journal and medi
 ```
 
 Options: `--windowed`, `--size WxH` (1920x1080, implies `--windowed`), `--no-gamepad`, `--fake`,
-`--fake-launch`, `--screenshot PATH --after MS`, `--quit-after MS`, and `--keys "Right Right Return
+`--fake-launch`, `--quit-after MS`, and `--keys "Right Right Return
 Wait I"` with `--key-gap MS` / `--key-delay MS`. Key names are `A B X Y LB RB LT RT Start Up Down
 Left Right Return Esc`; `Wait` pauses, `Wait:N` pauses N times, `Hold:A` / `Release:A` split a
 press, `Stick:rightX=0.6` tilts a stick, `Shot:path.png` grabs the window; with `--fake`,

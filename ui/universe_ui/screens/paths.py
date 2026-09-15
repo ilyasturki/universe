@@ -1,5 +1,3 @@
-"""A folder listing for the path picker: the folder shown, its entries, and a row of shortcuts."""
-
 import os
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
@@ -59,7 +57,6 @@ class PathBrowser(QObject):
 
     @Slot(str, bool)
     def open(self, path, files):
-        """Starts at `path` (its folder when it is a file, ~ when it is empty or gone), listing files too when asked."""
         self._files = bool(files)
         self._load_shortcuts()
         full = _expand(path)
@@ -107,7 +104,6 @@ class PathBrowser(QObject):
 
     @Slot(str, result=str)
     def display(self, path):
-        """`path` with the home folder as ~, for the rows and the header."""
         home = _expand("~")
         full = str(path or "")
         if full == home:

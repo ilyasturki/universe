@@ -1,5 +1,3 @@
-"""The `api` object the theme reads: keys, allGames, collections, memory, universe, screens."""
-
 import json
 import os
 from pathlib import Path
@@ -47,67 +45,34 @@ def _collection_names(key):
     return short, name
 
 
-def _key_of(event):
-    key = event.property("key") if isinstance(event, QObject) else event
-    try:
-        return int(key)
-    except (TypeError, ValueError):
-        return -1
+def _is(name):
+    def test(self, event):
+        return event.property("key") in [int(k) for k in KEYS[name]]
+
+    test.__name__ = f"is{name}"
+    return Slot(QObject, result=bool)(test)
 
 
 class Keys(QObject):
-    """`api.keys.isX(event)`: which action a key event stands for. The gamepad posts the same keys."""
-
-    def _is(self, event, name):
-        return _key_of(event) in [int(k) for k in KEYS[name]]
-
-    @Slot(QObject, result=bool)
-    def isAccept(self, event):
-        return self._is(event, "Accept")
-
-    @Slot(QObject, result=bool)
-    def isCancel(self, event):
-        return self._is(event, "Cancel")
-
-    @Slot(QObject, result=bool)
-    def isDetails(self, event):
-        return self._is(event, "Details")
-
-    @Slot(QObject, result=bool)
-    def isFilters(self, event):
-        return self._is(event, "Filters")
-
-    @Slot(QObject, result=bool)
-    def isPageUp(self, event):
-        return self._is(event, "PageUp")
-
-    @Slot(QObject, result=bool)
-    def isPageDown(self, event):
-        return self._is(event, "PageDown")
-
-    @Slot(QObject, result=bool)
-    def isPrevPage(self, event):
-        return self._is(event, "PrevPage")
-
-    @Slot(QObject, result=bool)
-    def isNextPage(self, event):
-        return self._is(event, "NextPage")
-
-    @Slot(QObject, result=bool)
-    def isMenu(self, event):
-        return self._is(event, "Menu")
+    isAccept = _is("Accept")
+    isCancel = _is("Cancel")
+    isDetails = _is("Details")
+    isFilters = _is("Filters")
+    isPageUp = _is("PageUp")
+    isPageDown = _is("PageDown")
+    isPrevPage = _is("PrevPage")
+    isNextPage = _is("NextPage")
+    isMenu = _is("Menu")
 
 
 class Pad(QObject):
-    """`api.pad`: the sticks the theme reads as values; 0 with no controller. `muted` keeps the pad's
-    presses from becoming keys while the controller section shows them live."""
-
+    # `muted` keeps the pad's presses from becoming keys while the controller section shows them live.
     changed = Signal()
     mutedChanged = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._axes = {"rightX": 0.0, "rightY": 0.0}
+        self._axes = {"rightX": 0.0}
         self._muted = False
 
     @Slot(str, float)
@@ -116,26 +81,21 @@ class Pad(QObject):
             self._axes[name] = value
             self.changed.emit()
 
-    @Slot(bool)
     def setMuted(self, muted):
         if self._muted != bool(muted):
             self._muted = bool(muted)
             self.mutedChanged.emit()
 
     rightX = Property(float, lambda self: self._axes["rightX"], notify=changed)
-    rightY = Property(float, lambda self: self._axes["rightY"], notify=changed)
     muted = Property(bool, lambda self: self._muted, setMuted, notify=mutedChanged)
 
 
 class Memory(QObject):
-    """`api.memory`: small persisted key/value store, $UNIVERSE_STATE_HOME/ui-memory.json."""
-
     def __init__(self, path=None, parent=None):
         super().__init__(parent)
         if path is None:
             path = os.path.join(universe_home("STATE", ".local/state"), "ui-memory.json")
         self._path = Path(path)
-        self._data = {}
         try:
             with open(self._path) as f:
                 self._data = json.load(f)
@@ -165,21 +125,15 @@ class Memory(QObject):
     def has(self, key):
         return key in self._data
 
-    @Slot(str)
     def unset(self, key):
         if self._data.pop(key, None) is not None:
             self._flush()
 
 
 class Library(QObject):
-    """Owns the Game objects; keeps them current from Library1 and the daemon's signals."""
-
-    loaded = Signal()
-
     def __init__(self, client, parent=None):
         super().__init__(parent)
         self._client = client
-        self._api = parent
         self._games = {}
         self.allGames = GameListModel(self)
         self.collections = ObjectListModel(parent=self)
@@ -205,10 +159,7 @@ class Library(QObject):
             if ident not in seen:
                 self._games.pop(ident).deleteLater()
         self._rebuild()
-        self.loaded.emit()
 
-    # Hidden games stay out of every model: the theme has no notion of them. Collections are
-    # platforms (the theme labels them by shortname), sorted by name.
     def _rebuild(self):
         visible = [g for g in self._games.values() if not g.hidden]
         keys = sorted({collection_key(g) for g in visible if collection_key(g)}, key=lambda k: _collection_names(k)[1])
@@ -245,11 +196,9 @@ class Library(QObject):
             self._rebuild()
 
     def _on_library_changed(self, ids):
-        ids = list(ids or [])
         if not ids:
             self.reload()
-            return
-        for ident in ids:
+        for ident in ids or []:
             self.refresh(ident)
 
     def get(self, ident):
@@ -259,12 +208,10 @@ class Library(QObject):
         self._client.set(ident, key, value)
 
     def launch(self, game, poster=None):
-        self._client.launch(game.id, self._api.screenName() if self._api else "", poster)
+        self._client.launch(game.id, self.parent().screenName(), poster)
 
 
 class Api(QObject):
-    fullscreenChanged = Signal()
-
     def __init__(self, client, memory_path=None, fullscreen=False, theme="", parent=None):
         super().__init__(parent)
         self._client = client
@@ -273,7 +220,8 @@ class Api(QObject):
         self._memory = Memory(memory_path, self)
         self._theme = ThemeSelector(self._memory, theme, self)
         self._library = Library(client, self)
-        self._screens = Screens(client, self.screenHz, self, memory=self._memory, screen_name=self.screenName)
+        self._modes = {}
+        self._screens = Screens(client, self._memory, self.screenMode, self)
         controller = self._screens.controller
         controller.testingChanged.connect(lambda: self._pad.setMuted(controller.testing))
         self._window = None
@@ -281,6 +229,7 @@ class Api(QObject):
 
     def attachWindow(self, window):
         self._window = window
+        window.screenChanged.connect(lambda screen: self._modes.clear())
 
     def shutdown(self):
         self._screens.shutdown()
@@ -288,15 +237,14 @@ class Api(QObject):
             self._client.shutdown()
 
     def screenName(self):
-        window = self._window
-        screen = window.screen() if window is not None else None
+        screen = self._window.screen() if self._window is not None else None
         return screen.name() if screen is not None else ""
 
-    def screenHz(self):
-        """The refresh rate of the screen the window is on, 0 when there is none yet."""
-        window = self._window
-        screen = window.screen() if window is not None else None
-        return int(round(screen.refreshRate())) if screen is not None else 0
+    def screenMode(self):
+        name = self.screenName()
+        if name not in self._modes:
+            self._modes[name] = self._client.screenMode(name) or {}
+        return self._modes[name]
 
     @property
     def library(self):
@@ -310,4 +258,4 @@ class Api(QObject):
     universe = Property(QObject, lambda self: self._client, constant=True)
     screens = Property(QObject, lambda self: self._screens, constant=True)
     theme = Property(QObject, lambda self: self._theme, constant=True)
-    fullscreen = Property(bool, lambda self: self._fullscreen, notify=fullscreenChanged)
+    fullscreen = Property(bool, lambda self: self._fullscreen, constant=True)

@@ -23,12 +23,6 @@ def _games(n):
 
 
 class RunnersForm(RowsForm):
-    """The list: one row per runner, the ones with games first, the ones not found last."""
-
-    def __init__(self, client, parent=None):
-        super().__init__(client, parent)
-        self._usage = {}
-
     @Slot()
     def load(self):
         usage = {}
@@ -38,7 +32,6 @@ class RunnersForm(RowsForm):
                 continue
             count, hours = usage.get(ident, (0, 0.0))
             usage[ident] = (count + 1, hours + float((game.get("stats") or {}).get("hours") or 0))
-        self._usage = usage
         runners = sorted(self._client.runners() or [],
                          key=lambda r: (not _found(r), -usage.get(r["id"], (0, 0.0))[0], -usage.get(r["id"], (0, 0.0))[1],
                                         r.get("name", r["id"]).lower()))
@@ -55,18 +48,12 @@ class RunnersForm(RowsForm):
             groups.append(_group("Not found", missing, caps=True, off=True))
         self._set_rows(rows, groups)
 
-    @Slot(str, result=int)
-    def indexOf(self, ident):
-        return next((i for i, r in enumerate(self._rows) if r["runner"] == ident), -1)
-
     @Slot(str, result=str)
     def logo(self, ident):
         return runner_logo(ident)
 
 
 class RunnerForm(RowsForm):
-    """One runner's page: its program, arguments, options, and a game added through it."""
-
     message = Signal(str)
     runnerChanged = Signal()
 
@@ -123,22 +110,16 @@ class RunnerForm(RowsForm):
 
     @Slot(int, "QVariant", result=bool)
     def setValue(self, index, value):
-        if not (0 <= index < len(self._rows)):
+        row = self.row(index)
+        if not row:
             return False
-        row = self._rows[index]
         if row["key"] == "add_file":
             self._pending = {"runner": row["module"], "name": row["section"], "file": str(value or "")}
             return bool(self._pending["file"])
-        ok = self._client.setRunnerSetting(row["module"], row["key"], _to_bus(row["type"], value))
+        ok = self._client.setRunnerSetting(row["module"], row["key"], _to_bus(row, value))
         if ok:
             self.load(row["module"])
         return bool(ok)
-
-    @Slot(int)
-    def toggle(self, index):
-        row = self.row(index)
-        if row.get("type") == "bool":
-            self.setValue(index, not row.get("value"))
 
     @Slot(result=str)
     def pendingTitle(self):

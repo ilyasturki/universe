@@ -1,8 +1,3 @@
-"""The artwork screens against the fake: slots with their layers, candidates, picks, the pin flow, the overview."""
-
-from conftest import wait_for
-
-
 def test_slots_carry_both_layers_and_a_pick_sits_over_the_default(api, fake):
     form = api.screens.artwork
     form.load("dead-cells")
@@ -27,7 +22,6 @@ def test_slots_carry_both_layers_and_a_pick_sits_over_the_default(api, fake):
     row = form.slot("box_front")
     assert row["kind"] == "picked" and row["hasOverride"] and row["hasDefault"]
     assert row["url"] == row["overrideUrl"] != row["defaultUrl"]
-    # The library shows the pick.
     assert api.library.get("dead-cells").assets.boxFront.toString() == row["overrideUrl"]
 
     assert form.removeOverride("box_front")
@@ -65,7 +59,6 @@ def test_overview_filters_one_slot_across_the_library(api, fake):
     assert counts["all"] == len(view.tiles) and counts["missing"] == 0 and counts["default"] == counts["all"]
 
     fake.mediaSetSlot("dead-cells", "banner", fake.game("dead-cells")["media"]["logo"])
-    # A pick reloads the overview after a short debounce; the test does it by hand.
     view.load()
     view.slot = "banner"
     view.filter = "picked"

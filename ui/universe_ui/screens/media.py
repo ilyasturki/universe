@@ -1,5 +1,3 @@
-"""Recordings (with frames sampled by ffmpeg) and journal entries for one game."""
-
 import hashlib
 import json
 import os
@@ -8,7 +6,7 @@ import shutil
 from datetime import datetime
 
 import shiboken6
-from PySide6.QtCore import Property, QObject, QProcess, Qt, QTimer, QUrl, Signal, Slot
+from PySide6.QtCore import Property, QLocale, QObject, QProcess, QTimer, QUrl, Signal, Slot
 
 from .paths import universe_home
 
@@ -30,12 +28,7 @@ def _duration(seconds):
 
 
 def _size(n):
-    n = float(n or 0)
-    for unit in ("B", "KB", "MB", "GB"):
-        if n < 1024 or unit == "GB":
-            return f"{n:.0f} {unit}" if unit == "B" else f"{n:.1f} {unit}"
-        n /= 1024
-    return ""
+    return QLocale.c().formattedDataSize(int(n or 0), 1, QLocale.DataSizeFormat.DataSizeTraditionalFormat)
 
 
 def _cache_dir():
@@ -46,41 +39,22 @@ def _cache_dir():
 
 FRAME_COUNT = 16
 FRAME_WIDTH = 640
-# Which frame stands for the recording: the first of these that is not black or a flat fade.
-THUMB_ORDER = (3, 7, 11, 15, 1, 5, 9, 13, 0, 2, 4, 6, 8, 10, 12, 14)
-# 8x8 area-averaged gray: below this the frame is black or a flat fade (images.py's threshold).
-FLAT_STDDEV = 4.0
+# The frame standing for the recording: about a fifth in, past the launch and the menus.
+THUMB = 3
 WORKERS = 2
 
 
-def frame_stddev(path):
-    from PySide6.QtGui import QImage
-
-    image = QImage(path)
-    if image.isNull():
-        return 0.0
-    small = image.scaled(8, 8, Qt.AspectRatioMode.IgnoreAspectRatio, Qt.TransformationMode.SmoothTransformation)
-    grays = [small.pixelColor(x, y).value() for y in range(8) for x in range(8)]
-    mean = sum(grays) / len(grays)
-    return (sum((g - mean) ** 2 for g in grays) / len(grays)) ** 0.5
-
-
 class Frames:
-    """The cached frames of one recording: `<cache>/frames/<sha1 of path>/NN.jpg` plus stats.json."""
-
     def __init__(self, path):
         self.path = path
         self.dir = os.path.join(_cache_dir(), hashlib.sha1(path.encode()).hexdigest())
         self.duration = 0.0
-        self.stddev = {}
         try:
             with open(os.path.join(self.dir, "stats.json")) as f:
-                data = json.load(f)
-            self.duration = float(data.get("duration") or 0)
-            self.stddev = {int(k): float(v) for k, v in (data.get("stddev") or {}).items()}
+                self.duration = float(json.load(f).get("duration") or 0)
         except (OSError, ValueError, TypeError):
             pass
-        self.stddev = {i: v for i, v in self.stddev.items() if os.path.exists(self.file(i))}
+        self.extracted = {i for i in range(FRAME_COUNT) if os.path.exists(self.file(i))}
 
     def file(self, index):
         return os.path.join(self.dir, f"{index:02d}.jpg")
@@ -88,27 +62,16 @@ class Frames:
     def save(self):
         os.makedirs(self.dir, exist_ok=True)
         with open(os.path.join(self.dir, "stats.json"), "w") as f:
-            json.dump({"duration": self.duration, "stddev": {str(k): v for k, v in self.stddev.items()}}, f)
+            json.dump({"duration": self.duration}, f)
 
     def seconds(self, index):
         return (index + 0.5) / FRAME_COUNT * self.duration
 
     def thumbnail(self):
-        for i in THUMB_ORDER:
-            if self.stddev.get(i, 0.0) >= FLAT_STDDEV:
-                return i
-        if len(self.stddev) == FRAME_COUNT:
-            return max(self.stddev, key=self.stddev.get)
-        return None
-
-    def next_candidate(self):
-        for i in THUMB_ORDER:
-            if i not in self.stddev:
-                return i
-        return None
+        return THUMB if THUMB in self.extracted else None
 
     def complete(self):
-        return len(self.stddev) == FRAME_COUNT
+        return len(self.extracted) == FRAME_COUNT
 
 
 class RecordingsList(QObject):
@@ -180,40 +143,30 @@ class RecordingsList(QObject):
 
     @Slot(str, str, result=bool)
     def remove(self, game_id, session):
-        frames = self._frames.get(session)
         if not self._client.removeRecording(game_id, session):
             return False
         self._queue = [j for j in self._queue if j[0] != session]
-        for job, proc in list(self._running.items()):
-            if job[0] == session:
-                proc.finished.disconnect()
-                proc.kill()
-                proc.waitForFinished(1000)
-                self._finish(job, proc)
-        if frames is not None and self._frames.get(session) is frames:
-            del self._frames[session]
+        self._kill(session)
+        frames = self._frames.pop(session, None)
+        if frames is not None:
             shutil.rmtree(frames.dir, ignore_errors=True)
             self.framesChanged.emit()
         return True
 
-    # The picked row gets all its frames, ahead of the other rows' thumbnails. In thumbnail order,
-    # so the one shown in the list is settled before the rest of the mosaic arrives.
     @Slot(str)
     def select(self, session):
         frames = self._frames.get(session)
         if frames is None:
             return
-        jobs = [(session, i) for i in THUMB_ORDER if i not in frames.stddev and (session, i) not in self._running]
+        jobs = [(session, i) for i in range(FRAME_COUNT) if i not in frames.extracted and (session, i) not in self._running]
         self._queue = jobs + [j for j in self._queue if j[0] != session]
         self._pump()
 
     def _want_thumbnail(self, session):
         frames = self._frames.get(session)
-        if frames is None or frames.thumbnail() is not None:
-            return
-        index = frames.next_candidate()
-        if index is not None and (session, index) not in self._queue and (session, index) not in self._running:
-            self._queue.append((session, index))
+        job = (session, THUMB)
+        if frames is not None and frames.thumbnail() is None and job not in self._queue and job not in self._running:
+            self._queue.append(job)
 
     def _pump(self):
         # Frames of a file still being probed wait for its duration, in place.
@@ -271,9 +224,7 @@ class RecordingsList(QObject):
         session, index = job
         frames = self._frames.get(session)
         if frames is not None and code == 0 and os.path.exists(frames.file(index)):
-            frames.stddev[index] = frame_stddev(frames.file(index))
-            frames.save()
-            self._want_thumbnail(session)
+            frames.extracted.add(index)
             self.framesChanged.emit()
         self._pump()
 
@@ -282,13 +233,17 @@ class RecordingsList(QObject):
         if shiboken6.isValid(proc):
             proc.deleteLater()
 
+    def _kill(self, session=None):
+        for job, proc in list(self._running.items()):
+            if session is None or job[0] == session:
+                proc.finished.disconnect()
+                proc.kill()
+                proc.waitForFinished(1000)
+                self._finish(job, proc)
+
     def shutdown(self):
         self._queue.clear()
-        for proc in self._running.values():
-            proc.finished.disconnect()
-            proc.kill()
-            proc.waitForFinished(1000)
-        self._running.clear()
+        self._kill()
 
     def _frame_map(self):
         out = {}
@@ -296,7 +251,7 @@ class RecordingsList(QObject):
             thumb = frames.thumbnail()
             out[session] = {
                 "thumbnail": QUrl.fromLocalFile(frames.file(thumb)).toString() if thumb is not None else "",
-                "frames": [QUrl.fromLocalFile(frames.file(i)).toString() if i in frames.stddev else "" for i in range(FRAME_COUNT)],
+                "frames": [QUrl.fromLocalFile(frames.file(i)).toString() if i in frames.extracted else "" for i in range(FRAME_COUNT)],
                 "complete": frames.complete(),
                 "duration": frames.duration,
             }
@@ -313,7 +268,6 @@ LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")
 
 
 def markdown_blocks(paragraphs):
-    """Paragraphs as Markdown blocks: list items that follow each other become one list."""
     blocks = []
     for p in paragraphs:
         if blocks and LIST_ITEM.match(p) and LIST_ITEM.match(blocks[-1].rsplit("\n", 1)[-1]):
@@ -375,7 +329,7 @@ class JournalList(QObject):
                 "started_at": str(entry.get("started_at") or ""),
                 "dateText": _when(entry.get("written_at") or entry.get("started_at")),
                 "duration_s": duration, "durationText": _duration(duration) if duration else "",
-                "lang": str(entry.get("lang") or ""), "provider": str(entry.get("provider") or ""),
+                "provider": str(entry.get("provider") or ""),
                 "paragraphs": paragraphs, "blocks": markdown_blocks(paragraphs),
                 "next_up": str(entry.get("next_up") or ""), "images": images,
                 "hasRecording": str(entry.get("session") or "") in recorded,
@@ -404,10 +358,6 @@ class JournalList(QObject):
     def remove(self, game_id, session):
         return bool(self._client.removeJournalEntry(game_id, session))
 
-    @Slot(result=str)
-    def render(self):
-        return self._client.renderJournal(self._game_id) if self._game_id else ""
-
     rows = Property("QVariantList", lambda self: [dict(r) for r in self._rows], notify=rowsChanged)
     count = Property(int, lambda self: len(self._rows), notify=rowsChanged)
     gameId = Property(str, lambda self: self._game_id, notify=gameIdChanged)
@@ -417,10 +367,7 @@ POLL_MS = 10000
 
 
 class PendingJournals(QObject):
-    """`api.screens.pendingJournals`: the entries being written, across all games. Refreshed by the
-    journal watcher, a session's end, and a 10 s poll while any is pending (elapsed time, the
-    module's timeout). `appeared` and `resolved` fire once per session."""
-
+    # Polled while any entry is pending: the elapsed time and the module's timeout move on their own.
     changed = Signal()
     appeared = Signal(str, str)
     resolved = Signal(str, str, str, str)

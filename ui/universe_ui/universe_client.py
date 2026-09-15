@@ -820,7 +820,7 @@ class FakeClient(UniverseClientBase):
         with open(fixture) as f:
             self._data = json.load(f)
         self._fake_launch = fake_launch
-        self._art_dir = art_dir or tempfile.mkdtemp(prefix="universe-ui-fake-")
+        self._art_dir = art_dir or os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "universe", "fake-art")
         self._jobs = {}
         self._job_hooks = {}
         self._job_seq = 0

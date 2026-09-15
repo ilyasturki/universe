@@ -1,8 +1,9 @@
-"""Install/update browsing over Sources1, and the login flow with its QR code."""
-
 import time
 
+import qrcode
 from PySide6.QtCore import Property, QObject, Signal, Slot
+
+from .settings import AsyncScreen
 
 
 def _source_row(game, updates):
@@ -16,31 +17,26 @@ def _source_row(game, updates):
     return {
         "id": str(game.get("id") or ""), "title": str(game.get("title") or ""),
         "game_id": str(game.get("game_id") or ""), "image": str(game.get("image") or ""),
-        "owned": bool(game.get("owned")), "installed": bool(game.get("installed")),
-        "dir": game.get("dir") or "", "build": game.get("build") or "", "remote_build": game.get("remote_build") or "",
-        "pending": pending, "status": status,
+        "installed": bool(game.get("installed")), "pending": pending, "status": status,
         "action": "Update" if pending else ("Play from library" if game.get("installed") else "Install"),
     }
 
 
-# A source's library and its pending updates reach the network: fetched off the UI thread,
-# kept, and fetched again only after a job, on request, or once this old.
+# The fetched library and updates stay until a job, a request, or this age.
 STALE_S = 15 * 60
 
 
-class SourcesBrowser(QObject):
+class SourcesBrowser(AsyncScreen):
     sourcesChanged = Signal()
     sourceChanged = Signal()
     rowsChanged = Signal()
     updatesChanged = Signal()
     jobChanged = Signal()
     queryChanged = Signal()
-    busyChanged = Signal()
     message = Signal(str)
 
     def __init__(self, client, parent=None):
-        super().__init__(parent)
-        self._client = client
+        super().__init__(client, parent)
         self._sources = []
         self._source = ""
         self._games = []
@@ -48,25 +44,12 @@ class SourcesBrowser(QObject):
         self._updates = []
         self._query = ""
         self._job = None
-        self._busy = 0
         self._loaded_at = 0.0
         client.progress.connect(self._on_progress)
         client.jobFinished.connect(self._on_job_finished)
 
-    def _run(self, work, done):
-        self._busy += 1
-        self.busyChanged.emit()
-
-        def finish(result):
-            self._busy -= 1
-            done(result)
-            self.busyChanged.emit()
-
-        self._client.runAsync(work, finish)
-
     @Slot()
     def load(self):
-        """The first call fetches everything; later ones only once the data has gone stale."""
         if self._busy or (self._loaded_at and time.monotonic() - self._loaded_at < STALE_S):
             return
         self.refresh()
@@ -83,7 +66,10 @@ class SourcesBrowser(QObject):
             games = list(self._client.sourceLibrary(source) or []) if source else []
             return sources, source, updates, games
 
-        def done(result):
+        def done(result, error):
+            if error:
+                self.message.emit(error)
+                return
             sources, source, updates, games = result
             self._sources = sources
             self.sourcesChanged.emit()
@@ -105,31 +91,6 @@ class SourcesBrowser(QObject):
         self.rowsChanged.emit()
 
     @Slot(str)
-    def selectSource(self, source):
-        if source != self._source:
-            self._source = source
-            self.sourceChanged.emit()
-        self._query = ""
-        self.queryChanged.emit()
-        self._loaded_at = 0.0
-        self.refresh()
-
-    @Slot()
-    def loadLibrary(self):
-        source = self._source
-        if not source:
-            self._games = []
-            self._rebuild()
-            return
-
-        def done(games):
-            self._games = list(games or [])
-            if not self._query:
-                self._rebuild()
-
-        self._run(lambda: self._client.sourceLibrary(source), done)
-
-    @Slot(str)
     def search(self, query):
         self._query = query
         self.queryChanged.emit()
@@ -138,24 +99,16 @@ class SourcesBrowser(QObject):
             return
         source = self._source
 
-        def done(found):
-            if self._query != query:
+        def done(found, error):
+            if error:
+                self.message.emit(error)
+            if self._query != query or error:
                 return
             pending = {u.get("id") for u in self._updates}
             self._rows = [_source_row(g, pending) for g in found or []]
             self.rowsChanged.emit()
 
         self._run(lambda: self._client.search(source, query), done)
-
-    @Slot()
-    def loadUpdates(self):
-        def done(updates):
-            self._updates = list(updates or [])
-            self.updatesChanged.emit()
-            if not self._query:
-                self._rebuild()
-
-        self._run(lambda: self._client.updates(), done)
 
     @Slot(int, result=str)
     def install(self, index):
@@ -179,12 +132,7 @@ class SourcesBrowser(QObject):
     def updateAll(self):
         return self._begin(self._client.update(self._source, ""), "Updating everything")
 
-    @Slot(result=str)
-    def scan(self):
-        return self._begin(self._client.scan(""), "Scanning")
-
-    # Both act on a library game by its id (a confirmation outlives a refresh that reorders
-    # the rows): the folder goes to the trash, the entry to .archive.
+    # By library id: a confirmation outlives a refresh that reorders the rows.
     def _title(self, game_id):
         return next((r["title"] for r in self._rows if r["game_id"] == game_id), game_id)
 
@@ -194,9 +142,9 @@ class SourcesBrowser(QObject):
             return
         title = self._title(game_id)
 
-        def done(ok):
-            self.message.emit(f"Uninstalled {title}" if ok else f"Could not uninstall {title}")
-            self.loadLibrary()
+        def done(ok, error):
+            self.message.emit(error or (f"Uninstalled {title}" if ok else f"Could not uninstall {title}"))
+            self.refresh()
 
         self._run(lambda: self._client.uninstall(game_id), done)
 
@@ -206,9 +154,9 @@ class SourcesBrowser(QObject):
             return
         title = self._title(game_id)
 
-        def done(ok):
-            self.message.emit(f"Removed {title} from the library" if ok else f"Could not remove {title}")
-            self.loadLibrary()
+        def done(ok, error):
+            self.message.emit(error or (f"Removed {title} from the library" if ok else f"Could not remove {title}"))
+            self.refresh()
 
         self._run(lambda: self._client.remove(game_id, False), done)
 
@@ -229,16 +177,9 @@ class SourcesBrowser(QObject):
             self._job.update({"ok": bool(ok), "message": text or self._job["message"]})
             self.jobChanged.emit()
             self.message.emit(text)
-            self.loadUpdates()
+            self.refresh()
             if self._query:
                 self.search(self._query)
-            else:
-                self.loadLibrary()
-
-    @Slot()
-    def dismissJob(self):
-        self._job = None
-        self.jobChanged.emit()
 
     sources = Property("QVariantList", lambda self: list(self._sources), notify=sourcesChanged)
     source = Property(str, lambda self: self._source, notify=sourceChanged)
@@ -247,15 +188,9 @@ class SourcesBrowser(QObject):
     updates = Property("QVariantList", lambda self: list(self._updates), notify=updatesChanged)
     query = Property(str, lambda self: self._query, notify=queryChanged)
     job = Property("QVariant", lambda self: dict(self._job) if self._job else None, notify=jobChanged)
-    busy = Property(bool, lambda self: self._busy > 0, notify=busyChanged)
 
 
 def qr_matrix(text):
-    """Rows of booleans for `text`, or [] when the qrcode package is missing."""
-    try:
-        import qrcode
-    except ImportError:
-        return []
     qr = qrcode.QRCode(border=0, error_correction=qrcode.constants.ERROR_CORRECT_L)
     qr.add_data(text)
     qr.make(fit=True)
@@ -300,13 +235,6 @@ class LoginFlow(QObject):
         self._status = text or ("Logged in." if ok else "Login failed.")
         self.changed.emit()
         self.finished.emit(bool(ok), self._status)
-
-    @Slot(result=bool)
-    def loggedIn(self):
-        for s in self._client.sources() or []:
-            if s.get("id") == self._source:
-                return bool(s.get("logged_in"))
-        return False
 
     source = Property(str, lambda self: self._source, notify=changed)
     url = Property(str, lambda self: self._url, notify=changed)

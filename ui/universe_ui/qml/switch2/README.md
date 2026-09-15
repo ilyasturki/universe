@@ -63,7 +63,7 @@ writing.
 
 ```sh
 just ui --theme switch2                                         # the dev library, real art
-just ui-fake --theme switch2 --screenshot out.png --keys "Down Return Wait Right"
+just ui-fake --theme switch2 --windowed --keys "Down Return Wait Right Shot:out.png" --quit-after 3000
 ```
 
 From HOME, `Down` reaches the bar: All Software, News, Install, Album, Controllers, System

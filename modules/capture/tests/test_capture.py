@@ -195,6 +195,17 @@ def test_start_fps_auto_falls_back_to_60_without_mutter(tmp_path, fakebin):
     assert flag_values(args, "-f") == ["60"]
 
 
+def test_fps_choices_stop_at_the_screens_refresh_rate(tmp_path, fakebin):
+    def choices(**extra):
+        result = subprocess.run([str(BIN_DIR / "choices"), "fps"], env=env_for(tmp_path, fakebin, {}, extra=extra), capture_output=True, text=True, timeout=30)
+        assert result.returncode == 0, result.stderr
+        return json.loads(result.stdout)
+
+    assert choices(SESSION_SCREEN="HDMI-A-1") == ["auto", "60", "30"]
+    assert choices(SESSION_SCREEN="DP-1") == ["auto", "120", "90", "60", "30"]
+    assert choices(FAKE_BUSCTL_EXIT="1") == ["auto", "120", "90", "60", "30"], "no mutter: every rate stays"
+
+
 def test_start_resolves_screen_when_unset(tmp_path, fakebin):
     env = env_for(tmp_path, fakebin, {}, extra={"SESSION_SCREEN": ""})
     result = run("start", env)

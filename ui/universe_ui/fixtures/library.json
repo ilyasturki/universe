@@ -6,67 +6,23 @@
       "source": "gog",
       "favorite": true,
       "hidden": false,
-      "tags": [
-        "rpg",
-        "mars"
-      ],
-      "launch": {
-        "exe": "/mnt/games/PC/The Technomancer/TheTechnomancer.exe",
-        "prefix": "/mnt/games/gog/the-technomancer",
-        "proton": "proton-ge",
-        "env": {
-          "WINE_CPU_TOPOLOGY": "4:0,1,2,3"
-        }
-      },
-      "gog": {
-        "id": "1972906591",
-        "build": "52654527801265271"
-      },
+      "tags": ["rpg", "mars"],
+      "launch": {"exe": "/mnt/games/PC/The Technomancer/TheTechnomancer.exe", "prefix": "/mnt/games/gog/the-technomancer", "proton": "proton-ge"},
       "metadata": {
-        "developers": [
-          "Spiders"
-        ],
-        "publishers": [
-          "Focus Home Interactive"
-        ],
-        "genres": [
-          "Action RPG",
-          "Science fiction"
-        ],
+        "developers": ["Spiders"],
+        "publishers": ["Focus Home Interactive"],
+        "genres": ["Action RPG", "Science fiction"],
         "release_year": 2016,
         "players": 1,
         "description": "Two hundred years after the first colonists arrived, Mars is ruled by corporations and short of water. Zachariah, a Technomancer of the Abundance army, flees the secret police across the red planet with a band of companions, from the domes of Ophir to the Noctis slums, trading, fighting and deciding who to trust.",
         "summary": "A science-fiction RPG set on a hostile Mars.",
-        "extra": {
-          "metacritic": [
-            62
-          ],
-          "hltb-main": [
-            26.5
-          ],
-          "hltb-extra": [
-            39
-          ],
-          "hltb-completionist": [
-            50
-          ]
-        },
+        "extra": {"metacritic": [62], "hltb-main": [26.5], "hltb-extra": [39], "hltb-completionist": [50]},
         "sgdb_id": "4287"
       },
-      "stats": {
-        "hours": 41.5,
-        "play_count": 23,
-        "last_played": "2026-09-09T22:41:00+02:00"
-      },
+      "stats": {"hours": 41.5, "play_count": 23, "last_played": "2026-09-09T22:41:00+02:00"},
       "modules": {
-        "capture": {
-          "enabled": true,
-          "cursor": false
-        },
-        "journal": {
-          "enabled": true,
-          "language": "fr"
-        }
+        "capture": {"enabled": true, "cursor": false},
+        "journal": {"enabled": true, "language": "fr"}
       },
       "platform": "windows"
     },
@@ -78,34 +34,17 @@
       "launch": {
         "runner": "yuzu",
         "exe": "/mnt/games/switch/Mini Metro.nsp",
-        "options": {
-          "fullscreen": false
-        }
-      },
-      "gog": {
-        "id": "1434554947",
-        "build": "59049085453457155"
+        "options": {"fullscreen": false}
       },
       "metadata": {
-        "developers": [
-          "Dinosaur Polo Club"
-        ],
-        "publishers": [
-          "Dinosaur Polo Club"
-        ],
-        "genres": [
-          "Strategy",
-          "Puzzle"
-        ],
+        "developers": ["Dinosaur Polo Club"],
+        "publishers": ["Dinosaur Polo Club"],
+        "genres": ["Strategy", "Puzzle"],
         "release_year": 2015,
         "players": 1,
         "description": "Draw the subway map of a growing city. Stations appear, passengers wait, and every week you pick one upgrade to keep the lines from clogging."
       },
-      "stats": {
-        "hours": 6.2,
-        "play_count": 11,
-        "last_played": "2026-09-07T20:10:00+02:00"
-      },
+      "stats": {"hours": 6.2, "play_count": 11, "last_played": "2026-09-07T20:10:00+02:00"},
       "platform": "Nintendo Switch"
     },
     {
@@ -114,26 +53,14 @@
       "source": "gog",
       "favorite": true,
       "metadata": {
-        "developers": [
-          "Motion Twin"
-        ],
-        "publishers": [
-          "Motion Twin"
-        ],
-        "genres": [
-          "Roguelite",
-          "Metroidvania",
-          "Action"
-        ],
+        "developers": ["Motion Twin"],
+        "publishers": ["Motion Twin"],
+        "genres": ["Roguelite", "Metroidvania", "Action"],
         "release_year": 2018,
         "players": 1,
         "description": "A dead body possessed by a ball of cells fights its way through a shifting island, one run at a time. Nothing between runs survives but the blueprints you unlocked."
       },
-      "stats": {
-        "hours": 18.75,
-        "play_count": 40,
-        "last_played": "2026-09-02T23:05:00+02:00"
-      },
+      "stats": {"hours": 18.75, "play_count": 40, "last_played": "2026-09-02T23:05:00+02:00"},
       "platform": "windows"
     },
     {
@@ -141,25 +68,14 @@
       "title": "Control",
       "source": "gog",
       "metadata": {
-        "developers": [
-          "Remedy Entertainment"
-        ],
-        "publishers": [
-          "505 Games"
-        ],
-        "genres": [
-          "Action",
-          "Adventure"
-        ],
+        "developers": ["Remedy Entertainment"],
+        "publishers": ["505 Games"],
+        "genres": ["Action", "Adventure"],
         "release_year": 2019,
         "players": 1,
         "description": "Jesse Faden walks into the Federal Bureau of Control looking for her brother and leaves the lobby as its new Director. The Oldest House shifts around her while the Hiss speaks through its staff."
       },
-      "stats": {
-        "hours": 12.0,
-        "play_count": 8,
-        "last_played": "2026-08-20T21:30:00+02:00"
-      },
+      "stats": {"hours": 12.0, "play_count": 8, "last_played": "2026-08-20T21:30:00+02:00"},
       "platform": "windows"
     },
     {
@@ -168,25 +84,14 @@
       "source": "lutris",
       "sort_title": "Dishonored",
       "metadata": {
-        "developers": [
-          "Arkane Studios"
-        ],
-        "publishers": [
-          "Bethesda Softworks"
-        ],
-        "genres": [
-          "Stealth",
-          "Action"
-        ],
+        "developers": ["Arkane Studios"],
+        "publishers": ["Bethesda Softworks"],
+        "genres": ["Stealth", "Action"],
         "release_year": 2012,
         "players": 1,
         "description": "Corvo Attano, bodyguard framed for the Empress's murder, takes to the rooftops of Dunwall with a blade, a mask and the Outsider's mark."
       },
-      "stats": {
-        "hours": 3.4,
-        "play_count": 3,
-        "last_played": "2026-07-14T19:00:00+02:00"
-      },
+      "stats": {"hours": 3.4, "play_count": 3, "last_played": "2026-07-14T19:00:00+02:00"},
       "platform": "windows"
     },
     {
@@ -194,25 +99,14 @@
       "title": "Mirror's Edge",
       "source": "lutris",
       "metadata": {
-        "developers": [
-          "DICE"
-        ],
-        "publishers": [
-          "Electronic Arts"
-        ],
-        "genres": [
-          "Platformer",
-          "Action"
-        ],
+        "developers": ["DICE"],
+        "publishers": ["Electronic Arts"],
+        "genres": ["Platformer", "Action"],
         "release_year": 2008,
         "players": 1,
         "description": "Faith runs messages across the rooftops of a city too clean to be honest, and the red paint on the pipes tells her where to go next."
       },
-      "stats": {
-        "hours": 0,
-        "play_count": 0,
-        "last_played": null
-      },
+      "stats": {"hours": 0, "play_count": 0, "last_played": null},
       "platform": "windows"
     },
     {
@@ -220,55 +114,30 @@
       "title": "LEGO Batman: The Videogame",
       "source": "gog",
       "metadata": {
-        "developers": [
-          "Traveller's Tales"
-        ],
-        "publishers": [
-          "Warner Bros. Interactive"
-        ],
-        "genres": [
-          "Action",
-          "Adventure"
-        ],
+        "developers": ["Traveller's Tales"],
+        "publishers": ["Warner Bros. Interactive"],
+        "genres": ["Action", "Adventure"],
         "release_year": 2008,
         "players": 2,
         "description": "Gotham's villains break out of Arkham in three gangs, and Batman and Robin chase them down brick by brick, in the one game where the villains get their own campaign."
       },
-      "stats": {
-        "hours": 1.1,
-        "play_count": 2,
-        "last_played": "2026-05-03T16:20:00+02:00"
-      },
+      "stats": {"hours": 1.1, "play_count": 2, "last_played": "2026-05-03T16:20:00+02:00"},
       "platform": "Nintendo Wii",
-      "launch": {
-        "runner": "dolphin",
-        "exe": "/mnt/games/wii/LEGO Batman.rvz"
-      }
+      "launch": {"runner": "dolphin", "exe": "/mnt/games/wii/LEGO Batman.rvz"}
     },
     {
       "id": "batman-arkham-origins",
       "title": "Batman: Arkham Origins",
       "source": "gog",
       "metadata": {
-        "developers": [
-          "WB Games Montréal"
-        ],
-        "publishers": [
-          "Warner Bros. Interactive"
-        ],
-        "genres": [
-          "Action",
-          "Adventure"
-        ],
+        "developers": ["WB Games Montréal"],
+        "publishers": ["Warner Bros. Interactive"],
+        "genres": ["Action", "Adventure"],
         "release_year": 2013,
         "players": 1,
         "description": "Christmas Eve, a younger Batman, and eight assassins hired by Black Mask to end him before morning."
       },
-      "stats": {
-        "hours": 0,
-        "play_count": 0,
-        "last_played": null
-      },
+      "stats": {"hours": 0, "play_count": 0, "last_played": null},
       "platform": "windows"
     },
     {
@@ -276,20 +145,8 @@
       "title": "Cyberpunk 2077",
       "source": "gog",
       "hidden": true,
-      "metadata": {
-        "developers": [
-          "CD PROJEKT RED"
-        ],
-        "genres": [
-          "RPG"
-        ],
-        "release_year": 2020
-      },
-      "stats": {
-        "hours": 0,
-        "play_count": 0,
-        "last_played": null
-      },
+      "metadata": {"developers": ["CD PROJEKT RED"], "genres": ["RPG"], "release_year": 2020},
+      "stats": {"hours": 0, "play_count": 0, "last_played": null},
       "platform": "windows"
     }
   ],
@@ -335,20 +192,8 @@
   },
   "recordings": {
     "the-technomancer": [
-      {
-        "session": "20260909-213045",
-        "path": "",
-        "size": 2147483648,
-        "duration_s": 4215,
-        "created_at": "2026-09-09T22:41:05+02:00"
-      },
-      {
-        "session": "20260907-224100",
-        "path": "",
-        "size": 2415919104,
-        "duration_s": 4640,
-        "created_at": "2026-09-07T23:58:25+02:00"
-      }
+      {"session": "20260909-213045", "path": "", "size": 2147483648, "duration_s": 4215, "created_at": "2026-09-09T22:41:05+02:00"},
+      {"session": "20260907-224100", "path": "", "size": 2415919104, "duration_s": 4640, "created_at": "2026-09-07T23:58:25+02:00"}
     ]
   },
   "journal": {
@@ -390,61 +235,22 @@
     {
       "id": "capture",
       "name": "Video capture",
-      "kind": [
-        "hooks"
-      ],
+      "kind": ["hooks"],
       "version": "0.1.0",
-      "dir": "/nix/store/xxx-universe/share/universe/modules/capture",
       "enabled": true,
       "available": true,
       "missing": [],
-      "hooks": {
-        "post-launch": "bin/start",
-        "session-end": "bin/stop",
-        "screenshot": "bin/shot"
-      },
-      "verbs": [],
       "settings": [
-        {
-          "key": "enabled",
-          "type": "bool",
-          "default": true,
-          "label": "Record the session",
-          "scope": "game",
-          "dynamic": false
-        },
-        {
-          "key": "source",
-          "type": "enum",
-          "default": "window",
-          "label": "Capture",
-          "scope": "game",
-          "choices": [
-            "window",
-            "screen"
-          ],
-          "dynamic": false
-        },
-        {
-          "key": "cursor",
-          "type": "bool",
-          "default": false,
-          "label": "Show the cursor in the recording",
-          "scope": "game",
-          "dynamic": false
-        },
+        {"key": "enabled", "type": "bool", "default": true, "label": "Record the session", "scope": "game", "dynamic": false},
+        {"key": "source", "type": "enum", "default": "window", "label": "Capture", "scope": "game", "choices": ["window", "screen"], "dynamic": false},
+        {"key": "cursor", "type": "bool", "default": false, "label": "Show the cursor in the recording", "scope": "game", "dynamic": false},
         {
           "key": "codec",
           "type": "enum",
           "default": "av1_10bit",
           "label": "Video codec",
           "scope": "global",
-          "choices": [
-            "av1_10bit",
-            "av1",
-            "hevc",
-            "h264"
-          ],
+          "choices": ["av1_10bit", "av1", "hevc", "h264"],
           "dynamic": false
         },
         {
@@ -453,12 +259,7 @@
           "default": "very_high",
           "label": "Quality (constant, up to a size ceiling)",
           "scope": "global",
-          "choices": [
-            "medium",
-            "high",
-            "very_high",
-            "ultra"
-          ],
+          "choices": ["medium", "high", "very_high", "ultra"],
           "dynamic": false
         },
         {
@@ -467,14 +268,8 @@
           "default": 60,
           "label": "Frame rate (auto: the screen's)",
           "scope": "global",
-          "choices": [
-            "auto",
-            "120",
-            "90",
-            "60",
-            "30"
-          ],
-          "dynamic": false
+          "choices": ["auto", "120", "90", "60", "30"],
+          "dynamic": true
         },
         {
           "key": "size",
@@ -482,12 +277,7 @@
           "default": "native",
           "label": "Fit the video in (native: no scaling)",
           "scope": "global",
-          "choices": [
-            "native",
-            "3840x2160",
-            "2560x1440",
-            "1920x1080"
-          ],
+          "choices": ["native", "3840x2160", "2560x1440", "1920x1080"],
           "dynamic": false
         },
         {
@@ -496,10 +286,7 @@
           "default": "mkv",
           "label": "Container (mkv survives a crash, mp4 plays anywhere)",
           "scope": "global",
-          "choices": [
-            "mkv",
-            "mp4"
-          ],
+          "choices": ["mkv", "mp4"],
           "dynamic": false
         },
         {
@@ -508,11 +295,7 @@
           "default": "output+input",
           "label": "Audio tracks captured",
           "scope": "global",
-          "choices": [
-            "output",
-            "output+input",
-            "none"
-          ],
+          "choices": ["output", "output+input", "none"],
           "dynamic": false
         },
         {
@@ -521,11 +304,7 @@
           "default": "opus",
           "label": "Audio codec",
           "scope": "global",
-          "choices": [
-            "opus",
-            "aac",
-            "flac"
-          ],
+          "choices": ["opus", "aac", "flac"],
           "dynamic": false
         },
         {
@@ -534,25 +313,10 @@
           "default": "auto",
           "label": "Audio bitrate (kbps)",
           "scope": "global",
-          "choices": [
-            "auto",
-            "96",
-            "128",
-            "160",
-            "192",
-            "256",
-            "320"
-          ],
+          "choices": ["auto", "96", "128", "160", "192", "256", "320"],
           "dynamic": false
         },
-        {
-          "key": "min_duration_s",
-          "type": "int",
-          "default": 240,
-          "label": "Minimum duration kept (s)",
-          "scope": "global",
-          "dynamic": false
-        },
+        {"key": "min_duration_s", "type": "int", "default": 240, "label": "Minimum duration kept (s)", "scope": "global", "dynamic": false},
         {
           "key": "window_wait_s",
           "type": "int",
@@ -585,55 +349,20 @@
           "scope": "config",
           "dynamic": false
         }
-      ],
-      "frontend_qml": null
+      ]
     },
     {
       "id": "journal",
       "name": "Play journal",
-      "kind": [
-        "hooks"
-      ],
+      "kind": ["hooks"],
       "version": "0.1.0",
-      "dir": "/nix/store/xxx-universe/share/universe/modules/journal",
       "enabled": true,
       "available": true,
       "missing": [],
-      "hooks": {
-        "post-process": "bin/process"
-      },
-      "verbs": [],
       "settings": [
-        {
-          "key": "enabled",
-          "type": "bool",
-          "default": true,
-          "label": "Write a journal entry",
-          "scope": "game"
-        },
-        {
-          "key": "language",
-          "type": "enum",
-          "default": "fr",
-          "label": "Language",
-          "scope": "game",
-          "choices": [
-            "fr",
-            "en"
-          ]
-        },
-        {
-          "key": "provider",
-          "type": "enum",
-          "default": "codex",
-          "label": "Provider",
-          "scope": "global",
-          "choices": [
-            "codex",
-            "anthropic",
-            "ollama"
-          ]
-        },
+        {"key": "enabled", "type": "bool", "default": true, "label": "Write a journal entry", "scope": "game"},
+        {"key": "language", "type": "enum", "default": "fr", "label": "Language", "scope": "game", "choices": ["fr", "en"]},
+        {"key": "provider", "type": "enum", "default": "codex", "label": "Provider", "scope": "global", "choices": ["codex", "anthropic", "ollama"]},
         {
           "key": "model",
           "type": "string",
@@ -642,70 +371,27 @@
           "scope": "global",
           "choices": [],
           "dynamic": true,
-          "dynamic_choices": [
-            "gpt-6-astra",
-            "gpt-5.6-sol",
-            "gpt-5.5"
-          ]
+          "dynamic_choices": ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.5"]
         },
-        {
-          "key": "markdown_export",
-          "type": "bool",
-          "default": true,
-          "label": "Render Markdown notes",
-          "scope": "global"
-        },
-        {
-          "key": "journal_root",
-          "type": "path",
-          "default": "~/Documents/notes/games/journal",
-          "label": "Notes folder",
-          "scope": "global"
-        }
-      ],
-      "frontend_qml": null
+        {"key": "markdown_export", "type": "bool", "default": true, "label": "Render Markdown notes", "scope": "global"},
+        {"key": "journal_root", "type": "path", "default": "~/Documents/notes/games/journal", "label": "Notes folder", "scope": "global"}
+      ]
     },
     {
       "id": "gog",
       "name": "GOG",
-      "kind": [
-        "source"
-      ],
+      "kind": ["source"],
       "version": "0.1.0",
-      "dir": "/nix/store/xxx-universe/share/universe/modules/gog",
       "enabled": true,
       "available": true,
       "missing": [],
-      "hooks": {},
-      "verbs": [
-        "login",
-        "library",
-        "search",
-        "info",
-        "install",
-        "update",
-        "scan"
-      ],
       "settings": [
-        {
-          "key": "games_dir",
-          "type": "path",
-          "default": "/mnt/games/PC",
-          "label": "Install folder",
-          "scope": "global"
-        }
-      ],
-      "frontend_qml": null
+        {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder", "scope": "global"}
+      ]
     }
   ],
   "sources": [
-    {
-      "id": "gog",
-      "name": "GOG",
-      "available": true,
-      "logged_in": true,
-      "games_dir": "/mnt/games/PC"
-    }
+    {"id": "gog", "name": "GOG", "available": true, "logged_in": true, "games_dir": "/mnt/games/PC"}
   ],
   "login_url": "https://auth.gog.com/auth?client_id=46755278331571209&redirect_uri=https%3A%2F%2Fembed.gog.com%2Fon_login_success%3Forigin%3Dclient&response_type=code&layout=client2",
   "source_library": {
@@ -787,24 +473,8 @@
     ]
   },
   "catalog": [
-    {
-      "id": "1207658924",
-      "title": "The Witcher: Enhanced Edition",
-      "owned": false,
-      "installed": false,
-      "dir": null,
-      "build": null,
-      "remote_build": null
-    },
-    {
-      "id": "1207658930",
-      "title": "The Witcher 3: Wild Hunt",
-      "owned": true,
-      "installed": false,
-      "dir": null,
-      "build": null,
-      "remote_build": "9"
-    }
+    {"id": "1207658924", "title": "The Witcher: Enhanced Edition", "owned": false, "installed": false, "dir": null, "build": null, "remote_build": null},
+    {"id": "1207658930", "title": "The Witcher 3: Wild Hunt", "owned": true, "installed": false, "dir": null, "build": null, "remote_build": "9"}
   ],
   "updates": [
     {
@@ -817,45 +487,15 @@
     }
   ],
   "doctor": [
-    {
-      "check": "gogdl on PATH",
-      "ok": true,
-      "detail": "/run/current-system/sw/bin/gogdl",
-      "module": "gog"
-    },
-    {
-      "check": "gpu-screen-recorder",
-      "ok": true,
-      "detail": "1.9",
-      "module": "capture"
-    },
-    {
-      "check": "gsr-kms-server",
-      "ok": true,
-      "detail": "/run/wrappers/bin/gsr-kms-server",
-      "module": "capture"
-    },
-    {
-      "check": "Proton proton-ge",
-      "ok": true,
-      "detail": "GE-Proton11-5",
-      "module": ""
-    },
-    {
-      "check": "hide-cursor extension",
-      "ok": false,
-      "detail": "hide-cursor@elcste.com not enabled",
-      "module": ""
-    }
+    {"check": "gogdl on PATH", "ok": true, "detail": "/run/current-system/sw/bin/gogdl", "module": "gog"},
+    {"check": "gpu-screen-recorder", "ok": true, "detail": "1.9", "module": "capture"},
+    {"check": "gsr-kms-server", "ok": true, "detail": "/run/wrappers/bin/gsr-kms-server", "module": "capture"},
+    {"check": "Proton proton-ge", "ok": true, "detail": "GE-Proton11-5", "module": ""},
+    {"check": "hide-cursor extension", "ok": false, "detail": "hide-cursor@elcste.com not enabled", "module": ""}
   ],
   "config": {
     "schema": 1,
-    "paths": {
-      "games_root": "/mnt/games/PC",
-      "prefixes_root": "/mnt/games/prefixes",
-      "recordings_root": "/mnt/recordings/games",
-      "journal_root": "/home/yasso/Documents/notes/games/journal"
-    },
+    "paths": {"games_root": "/mnt/games/PC", "prefixes_root": "/mnt/games/prefixes"},
     "launch": {
       "proton": "proton-ge",
       "esync": true,
@@ -870,7 +510,6 @@
       "mangohud": true,
       "gamescope": true,
       "gamescope_args": "",
-      "gamescope_bin": "gamescope",
       "gamescope_resolution": "auto",
       "gamescope_refresh": "auto",
       "gamescope_scaler": "",
@@ -879,1415 +518,242 @@
       "gamescope_adaptive_sync": false,
       "fps_limit": "auto"
     },
-    "desktop": {
-      "profile": "auto",
-      "hide_cursor": true
-    },
+    "desktop": {"hide_cursor": true},
     "proton": {
       "proton-ge": "~/.local/share/lutris/runners/wine/proton-ge",
       "proton-em": "~/.local/share/lutris/runners/wine/proton-em",
       "proton-cachyos": "~/.local/share/lutris/runners/wine/proton-cachyos"
     },
     "modules": {
-      "enabled": [
-        "gog",
-        "capture",
-        "journal"
-      ],
-      "capture": {
-        "codec": "av1_10bit"
-      }
+      "enabled": ["gog", "capture", "journal"],
+      "capture": {"codec": "av1_10bit"}
     }
   },
   "controller": {
-    "enabled": true,
-    "hold_ms": 600,
-    "volume_step": "precise",
-    "mangohud_toggle": "Super_L+F12",
     "devices": [
-      {
-        "id": "event30",
-        "family": "dualsense-edge",
-        "bus": "bluetooth"
-      }
+      {"id": "event30", "family": "dualsense-edge", "bus": "bluetooth"}
     ],
     "families": [
       {
         "id": "dualsense-edge",
         "name": "DualSense Edge",
         "slots": [
-          {
-            "id": "south",
-            "label": "Cross",
-            "codes": [
-              "BTN_SOUTH"
-            ],
-            "extra": false
-          },
-          {
-            "id": "east",
-            "label": "Circle",
-            "codes": [
-              "BTN_EAST"
-            ],
-            "extra": false
-          },
-          {
-            "id": "north",
-            "label": "Triangle",
-            "codes": [
-              "BTN_NORTH"
-            ],
-            "extra": false
-          },
-          {
-            "id": "west",
-            "label": "Square",
-            "codes": [
-              "BTN_WEST"
-            ],
-            "extra": false
-          },
-          {
-            "id": "lb",
-            "label": "L1",
-            "codes": [
-              "BTN_TL"
-            ],
-            "extra": false
-          },
-          {
-            "id": "rb",
-            "label": "R1",
-            "codes": [
-              "BTN_TR"
-            ],
-            "extra": false
-          },
-          {
-            "id": "lt",
-            "label": "L2",
-            "codes": [
-              "BTN_TL2"
-            ],
-            "extra": false
-          },
-          {
-            "id": "rt",
-            "label": "R2",
-            "codes": [
-              "BTN_TR2"
-            ],
-            "extra": false
-          },
-          {
-            "id": "select",
-            "label": "Create",
-            "codes": [
-              "BTN_SELECT"
-            ],
-            "extra": false
-          },
-          {
-            "id": "start",
-            "label": "Options",
-            "codes": [
-              "BTN_START"
-            ],
-            "extra": false
-          },
-          {
-            "id": "guide",
-            "label": "PS",
-            "codes": [
-              "BTN_MODE"
-            ],
-            "extra": false
-          },
-          {
-            "id": "ls",
-            "label": "L3",
-            "codes": [
-              "BTN_THUMBL"
-            ],
-            "extra": false
-          },
-          {
-            "id": "rs",
-            "label": "R3",
-            "codes": [
-              "BTN_THUMBR"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_up",
-            "label": "D-pad up",
-            "codes": [
-              "BTN_DPAD_UP"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_down",
-            "label": "D-pad down",
-            "codes": [
-              "BTN_DPAD_DOWN"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_left",
-            "label": "D-pad left",
-            "codes": [
-              "BTN_DPAD_LEFT"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_right",
-            "label": "D-pad right",
-            "codes": [
-              "BTN_DPAD_RIGHT"
-            ],
-            "extra": false
-          },
-          {
-            "id": "fn_left",
-            "label": "Left Fn",
-            "codes": [
-              "BTN_TRIGGER_HAPPY1"
-            ],
-            "extra": true
-          },
-          {
-            "id": "fn_right",
-            "label": "Right Fn",
-            "codes": [
-              "BTN_TRIGGER_HAPPY2"
-            ],
-            "extra": true
-          },
-          {
-            "id": "paddle_left",
-            "label": "Left back button (LB)",
-            "codes": [
-              "BTN_TRIGGER_HAPPY3"
-            ],
-            "extra": true
-          },
-          {
-            "id": "paddle_right",
-            "label": "Right back button (RB)",
-            "codes": [
-              "BTN_TRIGGER_HAPPY4"
-            ],
-            "extra": true
-          }
+          {"id": "south", "label": "Cross", "codes": ["BTN_SOUTH"], "extra": false},
+          {"id": "east", "label": "Circle", "codes": ["BTN_EAST"], "extra": false},
+          {"id": "north", "label": "Triangle", "codes": ["BTN_NORTH"], "extra": false},
+          {"id": "west", "label": "Square", "codes": ["BTN_WEST"], "extra": false},
+          {"id": "lb", "label": "L1", "codes": ["BTN_TL"], "extra": false},
+          {"id": "rb", "label": "R1", "codes": ["BTN_TR"], "extra": false},
+          {"id": "lt", "label": "L2", "codes": ["BTN_TL2"], "extra": false},
+          {"id": "rt", "label": "R2", "codes": ["BTN_TR2"], "extra": false},
+          {"id": "select", "label": "Create", "codes": ["BTN_SELECT"], "extra": false},
+          {"id": "start", "label": "Options", "codes": ["BTN_START"], "extra": false},
+          {"id": "guide", "label": "PS", "codes": ["BTN_MODE"], "extra": false},
+          {"id": "ls", "label": "L3", "codes": ["BTN_THUMBL"], "extra": false},
+          {"id": "rs", "label": "R3", "codes": ["BTN_THUMBR"], "extra": false},
+          {"id": "dpad_up", "label": "D-pad up", "codes": ["BTN_DPAD_UP"], "extra": false},
+          {"id": "dpad_down", "label": "D-pad down", "codes": ["BTN_DPAD_DOWN"], "extra": false},
+          {"id": "dpad_left", "label": "D-pad left", "codes": ["BTN_DPAD_LEFT"], "extra": false},
+          {"id": "dpad_right", "label": "D-pad right", "codes": ["BTN_DPAD_RIGHT"], "extra": false},
+          {"id": "fn_left", "label": "Left Fn", "codes": ["BTN_TRIGGER_HAPPY1"], "extra": true},
+          {"id": "fn_right", "label": "Right Fn", "codes": ["BTN_TRIGGER_HAPPY2"], "extra": true},
+          {"id": "paddle_left", "label": "Left back button (LB)", "codes": ["BTN_TRIGGER_HAPPY3"], "extra": true},
+          {"id": "paddle_right", "label": "Right back button (RB)", "codes": ["BTN_TRIGGER_HAPPY4"], "extra": true}
         ]
       },
       {
         "id": "dualsense",
         "name": "DualSense",
         "slots": [
-          {
-            "id": "south",
-            "label": "Cross",
-            "codes": [
-              "BTN_SOUTH"
-            ],
-            "extra": false
-          },
-          {
-            "id": "east",
-            "label": "Circle",
-            "codes": [
-              "BTN_EAST"
-            ],
-            "extra": false
-          },
-          {
-            "id": "north",
-            "label": "Triangle",
-            "codes": [
-              "BTN_NORTH"
-            ],
-            "extra": false
-          },
-          {
-            "id": "west",
-            "label": "Square",
-            "codes": [
-              "BTN_WEST"
-            ],
-            "extra": false
-          },
-          {
-            "id": "lb",
-            "label": "L1",
-            "codes": [
-              "BTN_TL"
-            ],
-            "extra": false
-          },
-          {
-            "id": "rb",
-            "label": "R1",
-            "codes": [
-              "BTN_TR"
-            ],
-            "extra": false
-          },
-          {
-            "id": "lt",
-            "label": "L2",
-            "codes": [
-              "BTN_TL2"
-            ],
-            "extra": false
-          },
-          {
-            "id": "rt",
-            "label": "R2",
-            "codes": [
-              "BTN_TR2"
-            ],
-            "extra": false
-          },
-          {
-            "id": "select",
-            "label": "Create",
-            "codes": [
-              "BTN_SELECT"
-            ],
-            "extra": false
-          },
-          {
-            "id": "start",
-            "label": "Options",
-            "codes": [
-              "BTN_START"
-            ],
-            "extra": false
-          },
-          {
-            "id": "guide",
-            "label": "PS",
-            "codes": [
-              "BTN_MODE"
-            ],
-            "extra": false
-          },
-          {
-            "id": "ls",
-            "label": "L3",
-            "codes": [
-              "BTN_THUMBL"
-            ],
-            "extra": false
-          },
-          {
-            "id": "rs",
-            "label": "R3",
-            "codes": [
-              "BTN_THUMBR"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_up",
-            "label": "D-pad up",
-            "codes": [
-              "BTN_DPAD_UP"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_down",
-            "label": "D-pad down",
-            "codes": [
-              "BTN_DPAD_DOWN"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_left",
-            "label": "D-pad left",
-            "codes": [
-              "BTN_DPAD_LEFT"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_right",
-            "label": "D-pad right",
-            "codes": [
-              "BTN_DPAD_RIGHT"
-            ],
-            "extra": false
-          },
-          {
-            "id": "mute",
-            "label": "Mute",
-            "codes": [
-              "KEY_MICMUTE"
-            ],
-            "extra": true
-          }
+          {"id": "south", "label": "Cross", "codes": ["BTN_SOUTH"], "extra": false},
+          {"id": "east", "label": "Circle", "codes": ["BTN_EAST"], "extra": false},
+          {"id": "north", "label": "Triangle", "codes": ["BTN_NORTH"], "extra": false},
+          {"id": "west", "label": "Square", "codes": ["BTN_WEST"], "extra": false},
+          {"id": "lb", "label": "L1", "codes": ["BTN_TL"], "extra": false},
+          {"id": "rb", "label": "R1", "codes": ["BTN_TR"], "extra": false},
+          {"id": "lt", "label": "L2", "codes": ["BTN_TL2"], "extra": false},
+          {"id": "rt", "label": "R2", "codes": ["BTN_TR2"], "extra": false},
+          {"id": "select", "label": "Create", "codes": ["BTN_SELECT"], "extra": false},
+          {"id": "start", "label": "Options", "codes": ["BTN_START"], "extra": false},
+          {"id": "guide", "label": "PS", "codes": ["BTN_MODE"], "extra": false},
+          {"id": "ls", "label": "L3", "codes": ["BTN_THUMBL"], "extra": false},
+          {"id": "rs", "label": "R3", "codes": ["BTN_THUMBR"], "extra": false},
+          {"id": "dpad_up", "label": "D-pad up", "codes": ["BTN_DPAD_UP"], "extra": false},
+          {"id": "dpad_down", "label": "D-pad down", "codes": ["BTN_DPAD_DOWN"], "extra": false},
+          {"id": "dpad_left", "label": "D-pad left", "codes": ["BTN_DPAD_LEFT"], "extra": false},
+          {"id": "dpad_right", "label": "D-pad right", "codes": ["BTN_DPAD_RIGHT"], "extra": false},
+          {"id": "mute", "label": "Mute", "codes": ["KEY_MICMUTE"], "extra": true}
         ]
       },
       {
         "id": "dualshock4",
         "name": "DualShock 4",
         "slots": [
-          {
-            "id": "south",
-            "label": "Cross",
-            "codes": [
-              "BTN_SOUTH"
-            ],
-            "extra": false
-          },
-          {
-            "id": "east",
-            "label": "Circle",
-            "codes": [
-              "BTN_EAST"
-            ],
-            "extra": false
-          },
-          {
-            "id": "north",
-            "label": "Triangle",
-            "codes": [
-              "BTN_NORTH"
-            ],
-            "extra": false
-          },
-          {
-            "id": "west",
-            "label": "Square",
-            "codes": [
-              "BTN_WEST"
-            ],
-            "extra": false
-          },
-          {
-            "id": "lb",
-            "label": "L1",
-            "codes": [
-              "BTN_TL"
-            ],
-            "extra": false
-          },
-          {
-            "id": "rb",
-            "label": "R1",
-            "codes": [
-              "BTN_TR"
-            ],
-            "extra": false
-          },
-          {
-            "id": "lt",
-            "label": "L2",
-            "codes": [
-              "BTN_TL2"
-            ],
-            "extra": false
-          },
-          {
-            "id": "rt",
-            "label": "R2",
-            "codes": [
-              "BTN_TR2"
-            ],
-            "extra": false
-          },
-          {
-            "id": "select",
-            "label": "Share",
-            "codes": [
-              "BTN_SELECT"
-            ],
-            "extra": false
-          },
-          {
-            "id": "start",
-            "label": "Options",
-            "codes": [
-              "BTN_START"
-            ],
-            "extra": false
-          },
-          {
-            "id": "guide",
-            "label": "PS",
-            "codes": [
-              "BTN_MODE"
-            ],
-            "extra": false
-          },
-          {
-            "id": "ls",
-            "label": "L3",
-            "codes": [
-              "BTN_THUMBL"
-            ],
-            "extra": false
-          },
-          {
-            "id": "rs",
-            "label": "R3",
-            "codes": [
-              "BTN_THUMBR"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_up",
-            "label": "D-pad up",
-            "codes": [
-              "BTN_DPAD_UP"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_down",
-            "label": "D-pad down",
-            "codes": [
-              "BTN_DPAD_DOWN"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_left",
-            "label": "D-pad left",
-            "codes": [
-              "BTN_DPAD_LEFT"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_right",
-            "label": "D-pad right",
-            "codes": [
-              "BTN_DPAD_RIGHT"
-            ],
-            "extra": false
-          }
+          {"id": "south", "label": "Cross", "codes": ["BTN_SOUTH"], "extra": false},
+          {"id": "east", "label": "Circle", "codes": ["BTN_EAST"], "extra": false},
+          {"id": "north", "label": "Triangle", "codes": ["BTN_NORTH"], "extra": false},
+          {"id": "west", "label": "Square", "codes": ["BTN_WEST"], "extra": false},
+          {"id": "lb", "label": "L1", "codes": ["BTN_TL"], "extra": false},
+          {"id": "rb", "label": "R1", "codes": ["BTN_TR"], "extra": false},
+          {"id": "lt", "label": "L2", "codes": ["BTN_TL2"], "extra": false},
+          {"id": "rt", "label": "R2", "codes": ["BTN_TR2"], "extra": false},
+          {"id": "select", "label": "Share", "codes": ["BTN_SELECT"], "extra": false},
+          {"id": "start", "label": "Options", "codes": ["BTN_START"], "extra": false},
+          {"id": "guide", "label": "PS", "codes": ["BTN_MODE"], "extra": false},
+          {"id": "ls", "label": "L3", "codes": ["BTN_THUMBL"], "extra": false},
+          {"id": "rs", "label": "R3", "codes": ["BTN_THUMBR"], "extra": false},
+          {"id": "dpad_up", "label": "D-pad up", "codes": ["BTN_DPAD_UP"], "extra": false},
+          {"id": "dpad_down", "label": "D-pad down", "codes": ["BTN_DPAD_DOWN"], "extra": false},
+          {"id": "dpad_left", "label": "D-pad left", "codes": ["BTN_DPAD_LEFT"], "extra": false},
+          {"id": "dpad_right", "label": "D-pad right", "codes": ["BTN_DPAD_RIGHT"], "extra": false}
         ]
       },
       {
         "id": "xbox-elite",
         "name": "Xbox Elite Series 2",
         "slots": [
-          {
-            "id": "south",
-            "label": "A",
-            "codes": [
-              "BTN_SOUTH"
-            ],
-            "extra": false
-          },
-          {
-            "id": "east",
-            "label": "B",
-            "codes": [
-              "BTN_EAST"
-            ],
-            "extra": false
-          },
-          {
-            "id": "north",
-            "label": "Y",
-            "codes": [
-              "BTN_NORTH"
-            ],
-            "extra": false
-          },
-          {
-            "id": "west",
-            "label": "X",
-            "codes": [
-              "BTN_WEST"
-            ],
-            "extra": false
-          },
-          {
-            "id": "lb",
-            "label": "LB",
-            "codes": [
-              "BTN_TL"
-            ],
-            "extra": false
-          },
-          {
-            "id": "rb",
-            "label": "RB",
-            "codes": [
-              "BTN_TR"
-            ],
-            "extra": false
-          },
-          {
-            "id": "lt",
-            "label": "LT",
-            "codes": [
-              "BTN_TL2"
-            ],
-            "extra": false
-          },
-          {
-            "id": "rt",
-            "label": "RT",
-            "codes": [
-              "BTN_TR2"
-            ],
-            "extra": false
-          },
-          {
-            "id": "select",
-            "label": "View",
-            "codes": [
-              "BTN_SELECT"
-            ],
-            "extra": false
-          },
-          {
-            "id": "start",
-            "label": "Menu",
-            "codes": [
-              "BTN_START"
-            ],
-            "extra": false
-          },
-          {
-            "id": "guide",
-            "label": "Xbox",
-            "codes": [
-              "BTN_MODE"
-            ],
-            "extra": false
-          },
-          {
-            "id": "ls",
-            "label": "LS",
-            "codes": [
-              "BTN_THUMBL"
-            ],
-            "extra": false
-          },
-          {
-            "id": "rs",
-            "label": "RS",
-            "codes": [
-              "BTN_THUMBR"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_up",
-            "label": "D-pad up",
-            "codes": [
-              "BTN_DPAD_UP"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_down",
-            "label": "D-pad down",
-            "codes": [
-              "BTN_DPAD_DOWN"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_left",
-            "label": "D-pad left",
-            "codes": [
-              "BTN_DPAD_LEFT"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_right",
-            "label": "D-pad right",
-            "codes": [
-              "BTN_DPAD_RIGHT"
-            ],
-            "extra": false
-          },
-          {
-            "id": "paddle_p1",
-            "label": "P1 (right upper)",
-            "codes": [
-              "BTN_GRIPR",
-              "BTN_TRIGGER_HAPPY5"
-            ],
-            "extra": true
-          },
-          {
-            "id": "paddle_p2",
-            "label": "P2 (right lower)",
-            "codes": [
-              "BTN_GRIPR2",
-              "BTN_TRIGGER_HAPPY6"
-            ],
-            "extra": true
-          },
-          {
-            "id": "paddle_p3",
-            "label": "P3 (left upper)",
-            "codes": [
-              "BTN_GRIPL",
-              "BTN_TRIGGER_HAPPY7"
-            ],
-            "extra": true
-          },
-          {
-            "id": "paddle_p4",
-            "label": "P4 (left lower)",
-            "codes": [
-              "BTN_GRIPL2",
-              "BTN_TRIGGER_HAPPY8"
-            ],
-            "extra": true
-          }
+          {"id": "south", "label": "A", "codes": ["BTN_SOUTH"], "extra": false},
+          {"id": "east", "label": "B", "codes": ["BTN_EAST"], "extra": false},
+          {"id": "north", "label": "Y", "codes": ["BTN_NORTH"], "extra": false},
+          {"id": "west", "label": "X", "codes": ["BTN_WEST"], "extra": false},
+          {"id": "lb", "label": "LB", "codes": ["BTN_TL"], "extra": false},
+          {"id": "rb", "label": "RB", "codes": ["BTN_TR"], "extra": false},
+          {"id": "lt", "label": "LT", "codes": ["BTN_TL2"], "extra": false},
+          {"id": "rt", "label": "RT", "codes": ["BTN_TR2"], "extra": false},
+          {"id": "select", "label": "View", "codes": ["BTN_SELECT"], "extra": false},
+          {"id": "start", "label": "Menu", "codes": ["BTN_START"], "extra": false},
+          {"id": "guide", "label": "Xbox", "codes": ["BTN_MODE"], "extra": false},
+          {"id": "ls", "label": "LS", "codes": ["BTN_THUMBL"], "extra": false},
+          {"id": "rs", "label": "RS", "codes": ["BTN_THUMBR"], "extra": false},
+          {"id": "dpad_up", "label": "D-pad up", "codes": ["BTN_DPAD_UP"], "extra": false},
+          {"id": "dpad_down", "label": "D-pad down", "codes": ["BTN_DPAD_DOWN"], "extra": false},
+          {"id": "dpad_left", "label": "D-pad left", "codes": ["BTN_DPAD_LEFT"], "extra": false},
+          {"id": "dpad_right", "label": "D-pad right", "codes": ["BTN_DPAD_RIGHT"], "extra": false},
+          {"id": "paddle_p1", "label": "P1 (right upper)", "codes": ["BTN_GRIPR", "BTN_TRIGGER_HAPPY5"], "extra": true},
+          {"id": "paddle_p2", "label": "P2 (right lower)", "codes": ["BTN_GRIPR2", "BTN_TRIGGER_HAPPY6"], "extra": true},
+          {"id": "paddle_p3", "label": "P3 (left upper)", "codes": ["BTN_GRIPL", "BTN_TRIGGER_HAPPY7"], "extra": true},
+          {"id": "paddle_p4", "label": "P4 (left lower)", "codes": ["BTN_GRIPL2", "BTN_TRIGGER_HAPPY8"], "extra": true}
         ]
       },
       {
         "id": "xbox",
         "name": "Xbox controller",
         "slots": [
-          {
-            "id": "south",
-            "label": "A",
-            "codes": [
-              "BTN_SOUTH"
-            ],
-            "extra": false
-          },
-          {
-            "id": "east",
-            "label": "B",
-            "codes": [
-              "BTN_EAST"
-            ],
-            "extra": false
-          },
-          {
-            "id": "north",
-            "label": "Y",
-            "codes": [
-              "BTN_NORTH"
-            ],
-            "extra": false
-          },
-          {
-            "id": "west",
-            "label": "X",
-            "codes": [
-              "BTN_WEST"
-            ],
-            "extra": false
-          },
-          {
-            "id": "lb",
-            "label": "LB",
-            "codes": [
-              "BTN_TL"
-            ],
-            "extra": false
-          },
-          {
-            "id": "rb",
-            "label": "RB",
-            "codes": [
-              "BTN_TR"
-            ],
-            "extra": false
-          },
-          {
-            "id": "lt",
-            "label": "LT",
-            "codes": [
-              "BTN_TL2"
-            ],
-            "extra": false
-          },
-          {
-            "id": "rt",
-            "label": "RT",
-            "codes": [
-              "BTN_TR2"
-            ],
-            "extra": false
-          },
-          {
-            "id": "select",
-            "label": "View",
-            "codes": [
-              "BTN_SELECT"
-            ],
-            "extra": false
-          },
-          {
-            "id": "start",
-            "label": "Menu",
-            "codes": [
-              "BTN_START"
-            ],
-            "extra": false
-          },
-          {
-            "id": "guide",
-            "label": "Xbox",
-            "codes": [
-              "BTN_MODE"
-            ],
-            "extra": false
-          },
-          {
-            "id": "ls",
-            "label": "LS",
-            "codes": [
-              "BTN_THUMBL"
-            ],
-            "extra": false
-          },
-          {
-            "id": "rs",
-            "label": "RS",
-            "codes": [
-              "BTN_THUMBR"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_up",
-            "label": "D-pad up",
-            "codes": [
-              "BTN_DPAD_UP"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_down",
-            "label": "D-pad down",
-            "codes": [
-              "BTN_DPAD_DOWN"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_left",
-            "label": "D-pad left",
-            "codes": [
-              "BTN_DPAD_LEFT"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_right",
-            "label": "D-pad right",
-            "codes": [
-              "BTN_DPAD_RIGHT"
-            ],
-            "extra": false
-          },
-          {
-            "id": "share",
-            "label": "Share",
-            "codes": [
-              "KEY_RECORD"
-            ],
-            "extra": true
-          }
+          {"id": "south", "label": "A", "codes": ["BTN_SOUTH"], "extra": false},
+          {"id": "east", "label": "B", "codes": ["BTN_EAST"], "extra": false},
+          {"id": "north", "label": "Y", "codes": ["BTN_NORTH"], "extra": false},
+          {"id": "west", "label": "X", "codes": ["BTN_WEST"], "extra": false},
+          {"id": "lb", "label": "LB", "codes": ["BTN_TL"], "extra": false},
+          {"id": "rb", "label": "RB", "codes": ["BTN_TR"], "extra": false},
+          {"id": "lt", "label": "LT", "codes": ["BTN_TL2"], "extra": false},
+          {"id": "rt", "label": "RT", "codes": ["BTN_TR2"], "extra": false},
+          {"id": "select", "label": "View", "codes": ["BTN_SELECT"], "extra": false},
+          {"id": "start", "label": "Menu", "codes": ["BTN_START"], "extra": false},
+          {"id": "guide", "label": "Xbox", "codes": ["BTN_MODE"], "extra": false},
+          {"id": "ls", "label": "LS", "codes": ["BTN_THUMBL"], "extra": false},
+          {"id": "rs", "label": "RS", "codes": ["BTN_THUMBR"], "extra": false},
+          {"id": "dpad_up", "label": "D-pad up", "codes": ["BTN_DPAD_UP"], "extra": false},
+          {"id": "dpad_down", "label": "D-pad down", "codes": ["BTN_DPAD_DOWN"], "extra": false},
+          {"id": "dpad_left", "label": "D-pad left", "codes": ["BTN_DPAD_LEFT"], "extra": false},
+          {"id": "dpad_right", "label": "D-pad right", "codes": ["BTN_DPAD_RIGHT"], "extra": false},
+          {"id": "share", "label": "Share", "codes": ["KEY_RECORD"], "extra": true}
         ]
       },
       {
         "id": "switch-pro",
         "name": "Switch Pro Controller",
         "slots": [
-          {
-            "id": "south",
-            "label": "B",
-            "codes": [
-              "BTN_SOUTH"
-            ],
-            "extra": false
-          },
-          {
-            "id": "east",
-            "label": "A",
-            "codes": [
-              "BTN_EAST"
-            ],
-            "extra": false
-          },
-          {
-            "id": "north",
-            "label": "X",
-            "codes": [
-              "BTN_NORTH"
-            ],
-            "extra": false
-          },
-          {
-            "id": "west",
-            "label": "Y",
-            "codes": [
-              "BTN_WEST"
-            ],
-            "extra": false
-          },
-          {
-            "id": "lb",
-            "label": "L",
-            "codes": [
-              "BTN_TL"
-            ],
-            "extra": false
-          },
-          {
-            "id": "rb",
-            "label": "R",
-            "codes": [
-              "BTN_TR"
-            ],
-            "extra": false
-          },
-          {
-            "id": "lt",
-            "label": "ZL",
-            "codes": [
-              "BTN_TL2"
-            ],
-            "extra": false
-          },
-          {
-            "id": "rt",
-            "label": "ZR",
-            "codes": [
-              "BTN_TR2"
-            ],
-            "extra": false
-          },
-          {
-            "id": "select",
-            "label": "Minus",
-            "codes": [
-              "BTN_SELECT"
-            ],
-            "extra": false
-          },
-          {
-            "id": "start",
-            "label": "Plus",
-            "codes": [
-              "BTN_START"
-            ],
-            "extra": false
-          },
-          {
-            "id": "guide",
-            "label": "Home",
-            "codes": [
-              "BTN_MODE"
-            ],
-            "extra": false
-          },
-          {
-            "id": "ls",
-            "label": "LS",
-            "codes": [
-              "BTN_THUMBL"
-            ],
-            "extra": false
-          },
-          {
-            "id": "rs",
-            "label": "RS",
-            "codes": [
-              "BTN_THUMBR"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_up",
-            "label": "D-pad up",
-            "codes": [
-              "BTN_DPAD_UP"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_down",
-            "label": "D-pad down",
-            "codes": [
-              "BTN_DPAD_DOWN"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_left",
-            "label": "D-pad left",
-            "codes": [
-              "BTN_DPAD_LEFT"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_right",
-            "label": "D-pad right",
-            "codes": [
-              "BTN_DPAD_RIGHT"
-            ],
-            "extra": false
-          },
-          {
-            "id": "capture",
-            "label": "Capture",
-            "codes": [
-              "BTN_Z"
-            ],
-            "extra": true
-          }
+          {"id": "south", "label": "B", "codes": ["BTN_SOUTH"], "extra": false},
+          {"id": "east", "label": "A", "codes": ["BTN_EAST"], "extra": false},
+          {"id": "north", "label": "X", "codes": ["BTN_NORTH"], "extra": false},
+          {"id": "west", "label": "Y", "codes": ["BTN_WEST"], "extra": false},
+          {"id": "lb", "label": "L", "codes": ["BTN_TL"], "extra": false},
+          {"id": "rb", "label": "R", "codes": ["BTN_TR"], "extra": false},
+          {"id": "lt", "label": "ZL", "codes": ["BTN_TL2"], "extra": false},
+          {"id": "rt", "label": "ZR", "codes": ["BTN_TR2"], "extra": false},
+          {"id": "select", "label": "Minus", "codes": ["BTN_SELECT"], "extra": false},
+          {"id": "start", "label": "Plus", "codes": ["BTN_START"], "extra": false},
+          {"id": "guide", "label": "Home", "codes": ["BTN_MODE"], "extra": false},
+          {"id": "ls", "label": "LS", "codes": ["BTN_THUMBL"], "extra": false},
+          {"id": "rs", "label": "RS", "codes": ["BTN_THUMBR"], "extra": false},
+          {"id": "dpad_up", "label": "D-pad up", "codes": ["BTN_DPAD_UP"], "extra": false},
+          {"id": "dpad_down", "label": "D-pad down", "codes": ["BTN_DPAD_DOWN"], "extra": false},
+          {"id": "dpad_left", "label": "D-pad left", "codes": ["BTN_DPAD_LEFT"], "extra": false},
+          {"id": "dpad_right", "label": "D-pad right", "codes": ["BTN_DPAD_RIGHT"], "extra": false},
+          {"id": "capture", "label": "Capture", "codes": ["BTN_Z"], "extra": true}
         ]
       },
       {
         "id": "8bitdo-pro-3",
         "name": "8BitDo Pro 3",
         "slots": [
-          {
-            "id": "south",
-            "label": "B",
-            "codes": [
-              "BTN_SOUTH"
-            ],
-            "extra": false
-          },
-          {
-            "id": "east",
-            "label": "A",
-            "codes": [
-              "BTN_EAST"
-            ],
-            "extra": false
-          },
-          {
-            "id": "north",
-            "label": "X",
-            "codes": [
-              "BTN_NORTH"
-            ],
-            "extra": false
-          },
-          {
-            "id": "west",
-            "label": "Y",
-            "codes": [
-              "BTN_WEST"
-            ],
-            "extra": false
-          },
-          {
-            "id": "lb",
-            "label": "L1",
-            "codes": [
-              "BTN_TL"
-            ],
-            "extra": false
-          },
-          {
-            "id": "rb",
-            "label": "R1",
-            "codes": [
-              "BTN_TR"
-            ],
-            "extra": false
-          },
-          {
-            "id": "lt",
-            "label": "L2",
-            "codes": [
-              "BTN_TL2"
-            ],
-            "extra": false
-          },
-          {
-            "id": "rt",
-            "label": "R2",
-            "codes": [
-              "BTN_TR2"
-            ],
-            "extra": false
-          },
-          {
-            "id": "select",
-            "label": "Select",
-            "codes": [
-              "BTN_SELECT"
-            ],
-            "extra": false
-          },
-          {
-            "id": "start",
-            "label": "Start",
-            "codes": [
-              "BTN_START"
-            ],
-            "extra": false
-          },
-          {
-            "id": "guide",
-            "label": "Home",
-            "codes": [
-              "BTN_MODE"
-            ],
-            "extra": false
-          },
-          {
-            "id": "ls",
-            "label": "L3",
-            "codes": [
-              "BTN_THUMBL"
-            ],
-            "extra": false
-          },
-          {
-            "id": "rs",
-            "label": "R3",
-            "codes": [
-              "BTN_THUMBR"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_up",
-            "label": "D-pad up",
-            "codes": [
-              "BTN_DPAD_UP"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_down",
-            "label": "D-pad down",
-            "codes": [
-              "BTN_DPAD_DOWN"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_left",
-            "label": "D-pad left",
-            "codes": [
-              "BTN_DPAD_LEFT"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_right",
-            "label": "D-pad right",
-            "codes": [
-              "BTN_DPAD_RIGHT"
-            ],
-            "extra": false
-          },
-          {
-            "id": "paddle_l4",
-            "label": "L4",
-            "codes": [
-              "BTN_TRIGGER_HAPPY1"
-            ],
-            "extra": true
-          },
-          {
-            "id": "paddle_r4",
-            "label": "R4",
-            "codes": [
-              "BTN_TRIGGER_HAPPY2"
-            ],
-            "extra": true
-          },
-          {
-            "id": "paddle_pl",
-            "label": "PL",
-            "codes": [
-              "BTN_TRIGGER_HAPPY3"
-            ],
-            "extra": true
-          },
-          {
-            "id": "paddle_pr",
-            "label": "PR",
-            "codes": [
-              "BTN_TRIGGER_HAPPY4"
-            ],
-            "extra": true
-          },
-          {
-            "id": "star",
-            "label": "Star",
-            "codes": [
-              "BTN_TRIGGER_HAPPY5"
-            ],
-            "extra": true
-          }
+          {"id": "south", "label": "B", "codes": ["BTN_SOUTH"], "extra": false},
+          {"id": "east", "label": "A", "codes": ["BTN_EAST"], "extra": false},
+          {"id": "north", "label": "X", "codes": ["BTN_NORTH"], "extra": false},
+          {"id": "west", "label": "Y", "codes": ["BTN_WEST"], "extra": false},
+          {"id": "lb", "label": "L1", "codes": ["BTN_TL"], "extra": false},
+          {"id": "rb", "label": "R1", "codes": ["BTN_TR"], "extra": false},
+          {"id": "lt", "label": "L2", "codes": ["BTN_TL2"], "extra": false},
+          {"id": "rt", "label": "R2", "codes": ["BTN_TR2"], "extra": false},
+          {"id": "select", "label": "Select", "codes": ["BTN_SELECT"], "extra": false},
+          {"id": "start", "label": "Start", "codes": ["BTN_START"], "extra": false},
+          {"id": "guide", "label": "Home", "codes": ["BTN_MODE"], "extra": false},
+          {"id": "ls", "label": "L3", "codes": ["BTN_THUMBL"], "extra": false},
+          {"id": "rs", "label": "R3", "codes": ["BTN_THUMBR"], "extra": false},
+          {"id": "dpad_up", "label": "D-pad up", "codes": ["BTN_DPAD_UP"], "extra": false},
+          {"id": "dpad_down", "label": "D-pad down", "codes": ["BTN_DPAD_DOWN"], "extra": false},
+          {"id": "dpad_left", "label": "D-pad left", "codes": ["BTN_DPAD_LEFT"], "extra": false},
+          {"id": "dpad_right", "label": "D-pad right", "codes": ["BTN_DPAD_RIGHT"], "extra": false},
+          {"id": "paddle_l4", "label": "L4", "codes": ["BTN_TRIGGER_HAPPY1"], "extra": true},
+          {"id": "paddle_r4", "label": "R4", "codes": ["BTN_TRIGGER_HAPPY2"], "extra": true},
+          {"id": "paddle_pl", "label": "PL", "codes": ["BTN_TRIGGER_HAPPY3"], "extra": true},
+          {"id": "paddle_pr", "label": "PR", "codes": ["BTN_TRIGGER_HAPPY4"], "extra": true},
+          {"id": "star", "label": "Star", "codes": ["BTN_TRIGGER_HAPPY5"], "extra": true}
         ]
       },
       {
         "id": "generic",
         "name": "Controller",
         "slots": [
-          {
-            "id": "south",
-            "label": "A",
-            "codes": [
-              "BTN_SOUTH"
-            ],
-            "extra": false
-          },
-          {
-            "id": "east",
-            "label": "B",
-            "codes": [
-              "BTN_EAST"
-            ],
-            "extra": false
-          },
-          {
-            "id": "north",
-            "label": "Y",
-            "codes": [
-              "BTN_NORTH"
-            ],
-            "extra": false
-          },
-          {
-            "id": "west",
-            "label": "X",
-            "codes": [
-              "BTN_WEST"
-            ],
-            "extra": false
-          },
-          {
-            "id": "lb",
-            "label": "LB",
-            "codes": [
-              "BTN_TL"
-            ],
-            "extra": false
-          },
-          {
-            "id": "rb",
-            "label": "RB",
-            "codes": [
-              "BTN_TR"
-            ],
-            "extra": false
-          },
-          {
-            "id": "lt",
-            "label": "LT",
-            "codes": [
-              "BTN_TL2"
-            ],
-            "extra": false
-          },
-          {
-            "id": "rt",
-            "label": "RT",
-            "codes": [
-              "BTN_TR2"
-            ],
-            "extra": false
-          },
-          {
-            "id": "select",
-            "label": "Select",
-            "codes": [
-              "BTN_SELECT"
-            ],
-            "extra": false
-          },
-          {
-            "id": "start",
-            "label": "Start",
-            "codes": [
-              "BTN_START"
-            ],
-            "extra": false
-          },
-          {
-            "id": "guide",
-            "label": "Guide",
-            "codes": [
-              "BTN_MODE"
-            ],
-            "extra": false
-          },
-          {
-            "id": "ls",
-            "label": "LS",
-            "codes": [
-              "BTN_THUMBL"
-            ],
-            "extra": false
-          },
-          {
-            "id": "rs",
-            "label": "RS",
-            "codes": [
-              "BTN_THUMBR"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_up",
-            "label": "D-pad up",
-            "codes": [
-              "BTN_DPAD_UP"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_down",
-            "label": "D-pad down",
-            "codes": [
-              "BTN_DPAD_DOWN"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_left",
-            "label": "D-pad left",
-            "codes": [
-              "BTN_DPAD_LEFT"
-            ],
-            "extra": false
-          },
-          {
-            "id": "dpad_right",
-            "label": "D-pad right",
-            "codes": [
-              "BTN_DPAD_RIGHT"
-            ],
-            "extra": false
-          }
+          {"id": "south", "label": "A", "codes": ["BTN_SOUTH"], "extra": false},
+          {"id": "east", "label": "B", "codes": ["BTN_EAST"], "extra": false},
+          {"id": "north", "label": "Y", "codes": ["BTN_NORTH"], "extra": false},
+          {"id": "west", "label": "X", "codes": ["BTN_WEST"], "extra": false},
+          {"id": "lb", "label": "LB", "codes": ["BTN_TL"], "extra": false},
+          {"id": "rb", "label": "RB", "codes": ["BTN_TR"], "extra": false},
+          {"id": "lt", "label": "LT", "codes": ["BTN_TL2"], "extra": false},
+          {"id": "rt", "label": "RT", "codes": ["BTN_TR2"], "extra": false},
+          {"id": "select", "label": "Select", "codes": ["BTN_SELECT"], "extra": false},
+          {"id": "start", "label": "Start", "codes": ["BTN_START"], "extra": false},
+          {"id": "guide", "label": "Guide", "codes": ["BTN_MODE"], "extra": false},
+          {"id": "ls", "label": "LS", "codes": ["BTN_THUMBL"], "extra": false},
+          {"id": "rs", "label": "RS", "codes": ["BTN_THUMBR"], "extra": false},
+          {"id": "dpad_up", "label": "D-pad up", "codes": ["BTN_DPAD_UP"], "extra": false},
+          {"id": "dpad_down", "label": "D-pad down", "codes": ["BTN_DPAD_DOWN"], "extra": false},
+          {"id": "dpad_left", "label": "D-pad left", "codes": ["BTN_DPAD_LEFT"], "extra": false},
+          {"id": "dpad_right", "label": "D-pad right", "codes": ["BTN_DPAD_RIGHT"], "extra": false}
         ]
       }
     ],
     "macros": [
-      {
-        "family": "dualsense-edge",
-        "button": "fn_left",
-        "trigger": "press",
-        "action": "screenshot",
-        "keys": "",
-        "command": ""
-      },
-      {
-        "family": "dualsense-edge",
-        "button": "fn_right",
-        "trigger": "press",
-        "action": "mangohud",
-        "keys": "",
-        "command": ""
-      },
-      {
-        "family": "dualsense-edge",
-        "button": "paddle_right",
-        "trigger": "press",
-        "action": "volume_up",
-        "keys": "",
-        "command": ""
-      },
-      {
-        "family": "dualsense-edge",
-        "button": "paddle_left",
-        "trigger": "press",
-        "action": "volume_down",
-        "keys": "",
-        "command": ""
-      },
-      {
-        "family": "xbox-elite",
-        "button": "paddle_p1",
-        "trigger": "press",
-        "action": "mangohud",
-        "keys": "",
-        "command": ""
-      },
-      {
-        "family": "xbox-elite",
-        "button": "paddle_p2",
-        "trigger": "press",
-        "action": "volume_up",
-        "keys": "",
-        "command": ""
-      },
-      {
-        "family": "xbox-elite",
-        "button": "paddle_p3",
-        "trigger": "press",
-        "action": "screenshot",
-        "keys": "",
-        "command": ""
-      },
-      {
-        "family": "xbox-elite",
-        "button": "paddle_p4",
-        "trigger": "press",
-        "action": "volume_down",
-        "keys": "",
-        "command": ""
-      }
+      {"family": "dualsense-edge", "button": "fn_left", "trigger": "press", "action": "screenshot", "keys": "", "command": ""},
+      {"family": "dualsense-edge", "button": "fn_right", "trigger": "press", "action": "mangohud", "keys": "", "command": ""},
+      {"family": "dualsense-edge", "button": "paddle_right", "trigger": "press", "action": "volume_up", "keys": "", "command": ""},
+      {"family": "dualsense-edge", "button": "paddle_left", "trigger": "press", "action": "volume_down", "keys": "", "command": ""},
+      {"family": "xbox-elite", "button": "paddle_p1", "trigger": "press", "action": "mangohud", "keys": "", "command": ""},
+      {"family": "xbox-elite", "button": "paddle_p2", "trigger": "press", "action": "volume_up", "keys": "", "command": ""},
+      {"family": "xbox-elite", "button": "paddle_p3", "trigger": "press", "action": "screenshot", "keys": "", "command": ""},
+      {"family": "xbox-elite", "button": "paddle_p4", "trigger": "press", "action": "volume_down", "keys": "", "command": ""}
     ],
     "presets": [
-      {
-        "id": "volume_up",
-        "label": "Volume up",
-        "hold_only": false
-      },
-      {
-        "id": "volume_down",
-        "label": "Volume down",
-        "hold_only": false
-      },
-      {
-        "id": "mute",
-        "label": "Mute",
-        "hold_only": false
-      },
-      {
-        "id": "screenshot",
-        "label": "Screenshot",
-        "hold_only": false
-      },
-      {
-        "id": "mangohud",
-        "label": "Toggle MangoHud",
-        "hold_only": false
-      },
-      {
-        "id": "stop",
-        "label": "Stop the game",
-        "hold_only": true
-      },
-      {
-        "id": "keys",
-        "label": "Key combo…",
-        "hold_only": false
-      },
-      {
-        "id": "command",
-        "label": "Command…",
-        "hold_only": false
-      }
+      {"id": "volume_up", "label": "Volume up", "hold_only": false},
+      {"id": "volume_down", "label": "Volume down", "hold_only": false},
+      {"id": "mute", "label": "Mute", "hold_only": false},
+      {"id": "screenshot", "label": "Screenshot", "hold_only": false},
+      {"id": "mangohud", "label": "Toggle MangoHud", "hold_only": false},
+      {"id": "stop", "label": "Stop the game", "hold_only": true},
+      {"id": "keys", "label": "Key combo…", "hold_only": false},
+      {"id": "command", "label": "Command…", "hold_only": false}
     ]
   },
   "runners": [
@@ -2295,12 +761,8 @@
       "id": "proton",
       "name": "Proton",
       "kind": "proton",
-      "aliases": [
-        "umu"
-      ],
-      "platforms": [
-        "windows"
-      ],
+      "aliases": ["umu"],
+      "platforms": ["windows"],
       "exe": "",
       "args": "",
       "path": "/run/current-system/sw/bin/umu-run",
@@ -2313,9 +775,7 @@
       "id": "wine",
       "name": "Wine",
       "kind": "wine",
-      "platforms": [
-        "windows"
-      ],
+      "platforms": ["windows"],
       "exe": "",
       "args": "",
       "path": "/run/current-system/sw/bin/wine",
@@ -2328,12 +788,8 @@
       "id": "linux",
       "name": "Linux",
       "kind": "linux",
-      "aliases": [
-        "native"
-      ],
-      "platforms": [
-        "linux"
-      ],
+      "aliases": ["native"],
+      "platforms": ["linux"],
       "exe": "",
       "args": "",
       "path": "",
@@ -2346,10 +802,7 @@
       "id": "dolphin",
       "name": "Dolphin",
       "kind": "emulator",
-      "platforms": [
-        "Nintendo GameCube",
-        "Nintendo Wii"
-      ],
+      "platforms": ["Nintendo GameCube", "Nintendo Wii"],
       "exe": "",
       "args": "",
       "path": "/run/current-system/sw/bin/dolphin-emu",
@@ -2357,42 +810,17 @@
       "source": "path",
       "available": true,
       "options": [
-        {
-          "key": "batch",
-          "type": "bool",
-          "default": true,
-          "label": "Batch mode (quit with the game)",
-          "value": true
-        },
-        {
-          "key": "user_directory",
-          "type": "path",
-          "default": "",
-          "label": "User directory",
-          "value": ""
-        },
-        {
-          "key": "inputplumber",
-          "type": "bool",
-          "default": true,
-          "label": "Manage pads with InputPlumber",
-          "value": true
-        }
+        {"key": "batch", "type": "bool", "default": true, "label": "Batch mode (quit with the game)", "value": true},
+        {"key": "user_directory", "type": "path", "default": "", "label": "User directory", "value": ""},
+        {"key": "inputplumber", "type": "bool", "default": true, "label": "Manage pads with InputPlumber", "value": true}
       ]
     },
     {
       "id": "eden",
       "name": "Eden",
       "kind": "emulator",
-      "aliases": [
-        "yuzu",
-        "citron",
-        "sudachi",
-        "suyu"
-      ],
-      "platforms": [
-        "Nintendo Switch"
-      ],
+      "aliases": ["yuzu", "citron", "sudachi", "suyu"],
+      "platforms": ["Nintendo Switch"],
       "exe": "",
       "args": "",
       "path": "/run/current-system/sw/bin/eden",
@@ -2400,29 +828,15 @@
       "source": "path",
       "available": true,
       "options": [
-        {
-          "key": "fullscreen",
-          "type": "bool",
-          "default": true,
-          "label": "Fullscreen",
-          "value": true
-        },
-        {
-          "key": "inputplumber",
-          "type": "bool",
-          "default": true,
-          "label": "Manage pads with InputPlumber",
-          "value": true
-        }
+        {"key": "fullscreen", "type": "bool", "default": true, "label": "Fullscreen", "value": true},
+        {"key": "inputplumber", "type": "bool", "default": true, "label": "Manage pads with InputPlumber", "value": true}
       ]
     },
     {
       "id": "rpcs3",
       "name": "RPCS3",
       "kind": "emulator",
-      "platforms": [
-        "Sony PlayStation 3"
-      ],
+      "platforms": ["Sony PlayStation 3"],
       "exe": "",
       "args": "",
       "path": "",
@@ -2430,29 +844,15 @@
       "source": "",
       "available": false,
       "options": [
-        {
-          "key": "nogui",
-          "type": "bool",
-          "default": true,
-          "label": "No GUI (quit with the game)",
-          "value": true
-        },
-        {
-          "key": "inputplumber",
-          "type": "bool",
-          "default": true,
-          "label": "Manage pads with InputPlumber",
-          "value": true
-        }
+        {"key": "nogui", "type": "bool", "default": true, "label": "No GUI (quit with the game)", "value": true},
+        {"key": "inputplumber", "type": "bool", "default": true, "label": "Manage pads with InputPlumber", "value": true}
       ]
     },
     {
       "id": "melonds",
       "name": "melonDS",
       "kind": "emulator",
-      "platforms": [
-        "Nintendo DS"
-      ],
+      "platforms": ["Nintendo DS"],
       "exe": "/home/yasso/.local/share/lutris/runners/melonds/melonDS-x86_64.AppImage",
       "args": "--fullscreen",
       "path": "/home/yasso/.local/share/lutris/runners/melonds/melonDS-x86_64.AppImage",
@@ -2460,27 +860,10 @@
       "source": "config",
       "available": true,
       "options": [
-        {
-          "key": "fullscreen",
-          "type": "bool",
-          "default": true,
-          "label": "Fullscreen",
-          "value": false
-        },
-        {
-          "key": "inputplumber",
-          "type": "bool",
-          "default": true,
-          "label": "Manage pads with InputPlumber",
-          "value": true
-        }
+        {"key": "fullscreen", "type": "bool", "default": true, "label": "Fullscreen", "value": false},
+        {"key": "inputplumber", "type": "bool", "default": true, "label": "Manage pads with InputPlumber", "value": true}
       ]
     }
   ],
-  "screen": {
-    "screen": "DP-1",
-    "width": 2560,
-    "height": 1440,
-    "refresh": 144
-  }
+  "screen": {"screen": "DP-1", "width": 2560, "height": 1440, "refresh": 144}
 }
