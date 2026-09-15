@@ -145,9 +145,9 @@ impl Core {
         Ok(())
     }
 
-    pub async fn list_json(&self) -> String {
+    pub async fn list(&self) -> Vec<serde_json::Value> {
         let games = self.games.read().await;
-        serde_json::Value::Array(games.iter().filter(|g| g.game.removed_at.is_empty()).map(|g| g.to_json()).collect()).to_string()
+        games.iter().filter(|g| g.game.removed_at.is_empty()).map(|g| g.to_json()).collect()
     }
 
     pub async fn get(&self, id: &str) -> Result<Resolved> {
@@ -206,8 +206,7 @@ impl Core {
         self.reload_game(id).await
     }
 
-    pub async fn add_game(&self, json: &str) -> Result<String> {
-        let v: serde_json::Value = serde_json::from_str(json)?;
+    pub async fn add_game(&self, v: &serde_json::Value) -> Result<String> {
         let field = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").trim().to_string();
         let spec = crate::runners::spec(&field("runner")).ok_or_else(|| Error::Invalid(format!("unknown runner '{}'", field("runner"))))?;
         let exe = field("exe");
@@ -246,9 +245,9 @@ impl Core {
         Ok(g.id)
     }
 
-    pub async fn runners_json(&self) -> String {
+    pub async fn runners(&self) -> Vec<serde_json::Value> {
         let cfg = self.config.read().await.clone();
-        serde_json::Value::Array(crate::runners::RUNNERS.iter().map(|s| crate::runners::to_json(s, &cfg)).collect()).to_string()
+        crate::runners::RUNNERS.iter().map(|s| crate::runners::to_json(s, &cfg)).collect()
     }
 
     pub async fn set_runner_setting(&self, runner: &str, key: &str, value: &str) -> Result<()> {
@@ -315,13 +314,13 @@ impl Core {
         self.reload_game(id).await
     }
 
-    pub async fn import_lutris(&self, apply: bool) -> Result<String> {
+    pub async fn import_lutris(&self, apply: bool) -> Result<crate::lutris::Report> {
         let config = self.config.read().await.clone();
         let report = crate::lutris::import(&config, apply)?;
         if apply {
             self.reload_all().await?;
         }
-        Ok(serde_json::to_string(&report)?)
+        Ok(report)
     }
 
     pub(crate) fn hook_env_base(&self, r: &Resolved, cfg: &Config) -> HookEnv {
@@ -371,28 +370,24 @@ impl Core {
         Ok(crate::desktop::pick_window(&windows, &cg))
     }
 
-    pub async fn session_window_json(&self) -> Result<String> {
-        Ok(self.session_window().await?.map(|w| serde_json::to_string(&w).unwrap_or_default()).unwrap_or_default())
-    }
-
-    /// Blocks until the session's window is on screen, then gives it the focus; the window as JSON, or
-    /// `""` when the session ended first or `timeout` ran out. `Unavailable` off GNOME, at once.
-    pub async fn wait_session_window(&self, session_id: &str, timeout: std::time::Duration) -> Result<String> {
+    /// Blocks until the session's window is on screen, then gives it the focus; the window, or
+    /// `None` when the session ended first or `timeout` ran out. `Unavailable` off GNOME, at once.
+    pub async fn wait_session_window(&self, session_id: &str, timeout: std::time::Duration) -> Result<Option<crate::desktop::Toplevel>> {
         crate::desktop::list_windows().await.map_err(Error::Unavailable)?;
         let deadline = std::time::Instant::now() + timeout;
         loop {
-            let Some(c) = self.current().await else { return Ok(String::new()) };
+            let Some(c) = self.current().await else { return Ok(None) };
             if c.session_id != session_id {
-                return Ok(String::new());
+                return Ok(None);
             }
             if let Some(w) = self.session_window().await? {
                 if let Err(e) = crate::desktop::activate_window(w.id).await {
                     tracing::warn!("activate {}: {e}", w.id);
                 }
-                return Ok(serde_json::to_string(&w)?);
+                return Ok(Some(w));
             }
             if std::time::Instant::now() > deadline {
-                return Ok(String::new());
+                return Ok(None);
             }
             tokio::time::sleep(std::time::Duration::from_millis(150)).await;
         }
@@ -445,9 +440,10 @@ impl Core {
         Err(Error::Unavailable("no module provides a screenshot hook".into()))
     }
 
-    pub async fn sessions_json(&self, id: &str) -> Result<String> {
+    /// Last first.
+    pub async fn sessions(&self, id: &str) -> Result<Vec<crate::sessions::Session>> {
         let r = self.get(id).await?;
-        Ok(serde_json::to_string(&r.sessions.iter().rev().collect::<Vec<_>>())?)
+        Ok(r.sessions.iter().rev().cloned().collect())
     }
 
     async fn game_of_session(&self, session_id: &str) -> Option<String> {
@@ -467,9 +463,9 @@ impl Core {
         Ok(dest.to_string_lossy().to_string())
     }
 
-    pub async fn recordings_json(&self, id: &str) -> Result<String> {
+    pub async fn recordings(&self, id: &str) -> Result<Vec<serde_json::Value>> {
         let r = self.get(id).await?;
-        Ok(serde_json::to_string(&crate::recording::list(&r.game)?)?)
+        crate::recording::list(&r.game)
     }
 
     pub async fn remove_recording(&self, id: &str, session_id: &str) -> Result<()> {
@@ -486,8 +482,7 @@ impl Core {
         self.reload_game(id).await
     }
 
-    pub async fn add_entry(&self, session_id: &str, json: &str) -> Result<()> {
-        let mut entry: crate::journal::Entry = serde_json::from_str(json)?;
+    pub async fn add_entry(&self, session_id: &str, mut entry: crate::journal::Entry) -> Result<()> {
         if entry.session.is_empty() {
             entry.session = session_id.into();
         }
@@ -504,9 +499,9 @@ impl Core {
     }
 
     /// Read from disk on every call: a pending entry's timeout is judged now, not at the last reload.
-    pub async fn journal_json(&self, id: &str) -> Result<String> {
+    pub async fn journal(&self, id: &str) -> Result<Vec<crate::journal::Entry>> {
         let r = self.get(id).await?;
-        Ok(serde_json::to_string(&crate::journal::load(&r.game.journal_dir(), &r.sessions))?)
+        Ok(crate::journal::load(&r.game.journal_dir(), &r.sessions))
     }
 
     pub async fn remove_journal_entry(&self, id: &str, session_id: &str) -> Result<()> {
@@ -549,7 +544,7 @@ impl Core {
         Ok(())
     }
 
-    pub async fn pending_journals_json(&self) -> String {
+    pub async fn pending_journals(&self) -> Vec<serde_json::Value> {
         let games = self.games.read().await;
         let mut out = Vec::new();
         for r in games.iter() {
@@ -557,7 +552,7 @@ impl Core {
                 out.push(serde_json::json!({"game": r.game.id, "title": r.game.title, "session": e.session, "started_at": e.started_at}));
             }
         }
-        serde_json::Value::Array(out).to_string()
+        out
     }
 
     pub async fn render_journal(&self, id: &str) -> Result<String> {
@@ -571,8 +566,8 @@ impl Core {
         Ok(path.to_string_lossy().into())
     }
 
-    pub async fn modules_json(&self) -> String {
-        serde_json::Value::Array(self.modules.read().await.iter().map(|m| m.to_json()).collect()).to_string()
+    pub async fn modules(&self) -> Vec<serde_json::Value> {
+        self.modules.read().await.iter().map(|m| m.to_json()).collect()
     }
 
     pub async fn reload_modules(&self) {
@@ -606,20 +601,19 @@ impl Core {
         Ok(())
     }
 
-    pub async fn module_settings_json(&self, module: &str, game_id: &str) -> Result<String> {
+    pub async fn module_settings(&self, module: &str, game_id: &str) -> Result<serde_json::Value> {
         let cfg = self.config.read().await.clone();
         let modules = self.modules.read().await;
         let m = modules.iter().find(|m| m.id() == module).ok_or_else(|| Error::NotFound(format!("module {module}")))?;
         let game = if game_id.is_empty() { None } else { Some(self.get(game_id).await?.game) };
-        Ok(serde_json::Value::Object(m.merged_settings(&cfg, game.as_ref())).to_string())
+        Ok(serde_json::Value::Object(m.merged_settings(&cfg, game.as_ref())))
     }
 
-    pub async fn module_setting_choices(&self, module: &str, key: &str) -> Result<String> {
+    pub async fn module_setting_choices(&self, module: &str, key: &str) -> Result<Vec<String>> {
         let cfg = self.config.read().await.clone();
         let m = self.modules.read().await.iter().find(|m| m.id() == module).cloned().ok_or_else(|| Error::NotFound(format!("module {module}")))?;
         let settings = m.merged_settings(&cfg, None);
-        let list = modules::setting_choices(&m, &settings, key).await?;
-        Ok(serde_json::to_string(&list)?)
+        modules::setting_choices(&m, &settings, key).await
     }
 
     pub async fn set_module_setting(&self, module: &str, game_id: &str, key: &str, value: &str) -> Result<()> {
@@ -640,15 +634,15 @@ impl Core {
         }
     }
 
-    pub async fn settings_json(&self) -> String {
-        self.config.read().await.to_json().to_string()
+    pub async fn settings(&self) -> serde_json::Value {
+        self.config.read().await.to_json()
     }
 
     /// `{screen, width, height, refresh}`, zeros when no screen can be read.
-    pub async fn screen_mode_json(&self, screen: &str) -> String {
+    pub async fn screen_mode(&self, screen: &str) -> serde_json::Value {
         let screen = crate::desktop::pick_screen(screen);
         let mode = crate::desktop::screen_mode(&screen).await.unwrap_or_default();
-        serde_json::json!({ "screen": screen, "width": mode.width, "height": mode.height, "refresh": mode.refresh }).to_string()
+        serde_json::json!({ "screen": screen, "width": mode.width, "height": mode.height, "refresh": mode.refresh })
     }
 
     pub async fn set_setting(&self, key: &str, value: &str) -> Result<()> {
@@ -665,18 +659,17 @@ impl Core {
         self.reload_config().await
     }
 
-    pub async fn controller_state_json(&self) -> String {
-        crate::controller::state_json(&self.config.read().await.controller).to_string()
+    pub async fn controller_state(&self) -> serde_json::Value {
+        crate::controller::state_json(&self.config.read().await.controller)
     }
 
     /// The pads readable right now, as `watch` would announce them; for a frontend whose watcher waits on the lock.
-    pub async fn controller_pads_json(&self) -> String {
+    pub async fn controller_pads(&self) -> Vec<serde_json::Value> {
         let cfg = self.config.read().await.controller.clone();
-        serde_json::Value::Array(crate::controller::watch::enumerate_json(&cfg)).to_string()
+        crate::controller::watch::enumerate_json(&cfg)
     }
 
-    pub async fn set_controller_macro(&self, json: &str) -> Result<()> {
-        let m: crate::controller::Macro = serde_json::from_str(json)?;
+    pub async fn set_controller_macro(&self, m: crate::controller::Macro) -> Result<()> {
         m.validate()?;
         let cfg = self.config.read().await.clone();
         let mut list = cfg.controller.macros();
@@ -698,13 +691,12 @@ impl Core {
         self.reload_settings().await
     }
 
-    /// `[]` leaves the slot unbound, `null` restores the seeds.
-    pub async fn set_controller_button(&self, family: &str, slot: &str, codes_json: &str) -> Result<()> {
+    /// `Some([])` leaves the slot unbound, `None` restores the seeds.
+    pub async fn set_controller_button(&self, family: &str, slot: &str, codes: Option<Vec<String>>) -> Result<()> {
         let f = crate::controller::family_by_id(family).ok_or_else(|| Error::NotFound(format!("family {family}")))?;
         if !f.slots().any(|s| s.id == slot) {
             return Err(Error::NotFound(format!("{} has no button {slot}", f.name)));
         }
-        let codes: Option<Vec<String>> = serde_json::from_str(codes_json)?;
         if let Some(list) = &codes {
             for c in list {
                 crate::controller::keys::parse_source(c).ok_or_else(|| Error::Invalid(format!("unknown code {c}")))?;
@@ -714,12 +706,12 @@ impl Core {
         self.reload_settings().await
     }
 
-    pub async fn doctor_json(&self) -> String {
+    pub async fn doctor(&self) -> Vec<crate::doctor::Check> {
         let cfg = self.config.read().await.clone();
         let modules = self.modules.read().await.clone();
         let conn = if crate::desktop::detect(&cfg) == crate::desktop::Profile::Gnome { self.shell_conn().await } else { None };
         let runners: Vec<String> = self.games.read().await.iter().filter(|g| g.game.removed_at.is_empty()).map(|g| g.effective.runner.clone()).collect();
-        serde_json::to_string(&crate::doctor::run(&cfg, &modules, conn.as_ref(), &runners).await).unwrap_or_default()
+        crate::doctor::run(&cfg, &modules, conn.as_ref(), &runners).await
     }
 
     pub async fn source(&self, id: &str) -> Result<Module> {
@@ -734,7 +726,7 @@ impl Core {
         Ok(m)
     }
 
-    pub async fn sources_json(&self) -> String {
+    pub async fn sources(&self) -> Vec<serde_json::Value> {
         self.ensure_logins().await;
         let cfg = self.config.read().await.clone();
         let modules = self.modules.read().await;
@@ -753,7 +745,7 @@ impl Core {
                 })
             })
             .collect();
-        serde_json::Value::Array(list).to_string()
+        list
     }
 
     async fn run_verb(&self, m: &Module, verb: &str, args: &[String], mut progress: Option<Progress<'_, '_>>) -> Result<Vec<SourceEvent>> {
@@ -788,7 +780,7 @@ impl Core {
         events.iter().filter_map(|e| if let SourceEvent::Game(g) = e { Some(g.clone()) } else { None }).collect()
     }
 
-    pub async fn source_library(&self, source: &str, refresh: bool) -> Result<String> {
+    pub async fn source_library(&self, source: &str, refresh: bool) -> Result<Vec<serde_json::Value>> {
         let m = self.source(source).await?;
         if refresh || !self.source_libraries.lock().await.contains_key(source) {
             let events = self.run_verb(&m, "library", &[], None).await?;
@@ -812,20 +804,19 @@ impl Core {
                 serde_json::Value::Object(g)
             })
             .collect();
-        Ok(serde_json::Value::Array(list).to_string())
+        Ok(list)
     }
 
-    pub async fn source_search(&self, source: &str, query: &str) -> Result<String> {
+    pub async fn source_search(&self, source: &str, query: &str) -> Result<Vec<serde_json::Value>> {
         let m = self.source(source).await?;
         let events = self.run_verb(&m, "search", &[query.to_string()], None).await?;
-        Ok(serde_json::to_string(&Self::game_events(&events))?)
+        Ok(Self::game_events(&events).into_iter().map(serde_json::Value::Object).collect())
     }
 
-    pub async fn source_info(&self, source: &str, game_id: &str) -> Result<String> {
+    pub async fn source_info(&self, source: &str, game_id: &str) -> Result<serde_json::Value> {
         let m = self.source(source).await?;
         let events = self.run_verb(&m, "info", &[game_id.to_string()], None).await?;
-        let data = events.iter().find_map(|e| if let SourceEvent::Info { data } = e { Some(data.clone()) } else { None }).unwrap_or(serde_json::Value::Null);
-        Ok(data.to_string())
+        Ok(events.iter().find_map(|e| if let SourceEvent::Info { data } = e { Some(data.clone()) } else { None }).unwrap_or(serde_json::Value::Null))
     }
 
     /// Creates the game when owned and installed, updates its source fields otherwise.
@@ -919,7 +910,7 @@ impl Core {
         Ok(id)
     }
 
-    pub async fn source_updates(&self) -> Result<String> {
+    pub async fn source_updates(&self) -> Result<Vec<serde_json::Value>> {
         let mut out = Vec::new();
         let sources: Vec<Module> = self.modules.read().await.iter().filter(|m| m.is_source() && m.active()).cloned().collect();
         for m in sources {
@@ -931,7 +922,7 @@ impl Core {
                 }
             }
         }
-        Ok(serde_json::Value::Array(out).to_string())
+        Ok(out)
     }
 
     /// Every pending title when `game_id` is empty.
@@ -1005,33 +996,30 @@ impl Core {
         Ok(gone)
     }
 
-    pub async fn media_candidates(&self, id: &str, slot: &str, page: u32) -> Result<String> {
+    pub async fn media_candidates(&self, id: &str, slot: &str, page: u32) -> Result<crate::media::CandidatePage> {
         let r = self.get(id).await?;
         let cfg = self.config.read().await.clone();
         let game = r.game.clone();
         let slot = slot.to_string();
-        let list = tokio::task::spawn_blocking(move || crate::media::candidates(&cfg, &game, &slot, page)).await.map_err(|e| Error::Io(e.to_string()))??;
-        Ok(serde_json::to_string(&list)?)
+        tokio::task::spawn_blocking(move || crate::media::candidates(&cfg, &game, &slot, page)).await.map_err(|e| Error::Io(e.to_string()))?
     }
 
-    pub async fn media_search(&self, id: &str, query: &str) -> Result<String> {
+    pub async fn media_search(&self, id: &str, query: &str) -> Result<Vec<crate::media::Hit>> {
         let r = self.get(id).await?;
         let cfg = self.config.read().await.clone();
         let game = r.game.clone();
         let query = query.to_string();
-        let hits = tokio::task::spawn_blocking(move || crate::media::search(&cfg, &game, &query)).await.map_err(|e| Error::Io(e.to_string()))??;
-        Ok(serde_json::to_string(&hits)?)
+        tokio::task::spawn_blocking(move || crate::media::search(&cfg, &game, &query)).await.map_err(|e| Error::Io(e.to_string()))?
     }
 
-    pub async fn media_status(&self, id: &str) -> Result<String> {
+    pub async fn media_status(&self, id: &str) -> Result<Vec<crate::media::MediaStatus>> {
         let cfg = self.config.read().await.clone();
         let games: Vec<crate::game::Game> = if id.is_empty() {
             self.games.read().await.iter().filter(|g| g.game.removed_at.is_empty()).map(|g| g.game.clone()).collect()
         } else {
             vec![self.get(id).await?.game]
         };
-        let list: Vec<crate::media::MediaStatus> = games.iter().map(|g| crate::media::status(&cfg, g)).collect();
-        Ok(serde_json::to_string(&list)?)
+        Ok(games.iter().map(|g| crate::media::status(&cfg, g)).collect())
     }
 
     pub async fn media_pin(&self, id: &str, provider: &str, provider_id: &str) -> Result<()> {

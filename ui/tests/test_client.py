@@ -1,99 +1,22 @@
-import pytest
+"""CoreClient over a FakeCore in a tmp root: what the client derives from the core's files and marker."""
 
+import json
 from pathlib import Path
 
+import pytest
+
 from conftest import pump, wait_for
-from universe_ui.universe_client import _json
 
 
-def test_json_tolerance():
-    assert _json("", []) == []
-    assert _json(None, {}) == {}
-    assert _json("not json", {"d": 1}) == {"d": 1}
-    assert _json('{"a": [1]}', None) == {"a": [1]}
-    assert _json(42, None) == 42
-
-
-def test_core_client_reads_writes_and_watches(app):
-    universe_core = pytest.importorskip("universe_core")
-    from universe_ui.universe_client import CoreClient
-
-    games = Path(universe_core.data_home()) / "games"
-    (games / "sample").mkdir(parents=True, exist_ok=True)
-    (games / "sample" / "game.toml").write_text('schema = 1\nid = "sample"\ntitle = "Sample"\n')
-    client = CoreClient()
-    assert [g["id"] for g in client.list()] == ["sample"]
-    assert client.currentSession is None
-
+def _collect(signal):
     seen = []
-    client.error.connect(lambda kind, message: seen.append(kind))
-    assert client.game("nope") == {} and seen == ["NotFound"]
-    assert client.set("sample", "favorite", "true") and client.game("sample")["favorite"] is True
-
-    # another process writes a journal entry: the watch reloads the game and tells the screens
-    written = []
-    client.entryWritten.connect(lambda session_id, ident: written.append(ident))
-    (games / "sample" / "journal").mkdir()
-    pump(700)  # the new directory is itself a change; the watch on it starts here
-    written.clear()
-    (games / "sample" / "journal" / "20260911-120000.json").write_text(
-        '{"session": "20260911-120000", "game": "sample", "written_at": "2026-09-11T12:10:00+02:00", "lang": "en",'
-        ' "title": "First", "provider": "stub", "paragraphs": ["p"], "next_up": "", "images": []}'
-    )
-    for _ in range(30):
-        pump(100)
-        if "sample" in written:
-            break
-    assert "sample" in written
-    assert [e["title"] for e in client.journal("sample")] == ["First"]
-
-    # a pending entry is cancelled by dropping its state file; a recording line is cleared even
-    # when the file is already gone. Neither needs the trash.
-    (games / "sample" / "journal" / "20260912-120000.pending.json").write_text(
-        '{"session": "20260912-120000", "game": "sample", "started_at": "2026-09-12T12:00:00+02:00", "provider": "stub"}'
-    )
-    assert [e["state"] for e in client.journal("sample")] == ["pending", "written"]
-    written.clear()
-    assert client.removeJournalEntry("sample", "20260912-120000") is True
-    assert [e["state"] for e in client.journal("sample")] == ["written"] and written == ["sample"]
-    assert client.removeJournalEntry("sample", "20260912-120000") is False and seen[-1] == "NotFound"
-    (games / "sample" / "sessions.jsonl").write_text(
-        '{"session": "20260913-120000", "game": "sample", "started_at": "2026-09-13T12:00:00+02:00",'
-        ' "ended_at": "2026-09-13T13:00:00+02:00", "duration_s": 3600, "source": "universe", "exit": 0,'
-        ' "recording": "' + str(games.parent / "gone.mkv") + '"}\n'
-    )
-    client._core.reload_game("sample")
-    assert [r["session"] for r in client.recordings("sample")] == ["20260913-120000"]
-    assert client.removeRecording("sample", "20260913-120000") is True
-    assert client.recordings("sample") == [] and client.game("sample")["stats"]["hours"] == 1.0
-
-    runners = {r["id"]: r for r in client.runners()}
-    assert runners["linux"]["kind"] == "linux" and "Nintendo Wii" in runners["dolphin"]["platforms"]
-    assert client.setRunnerSetting("dolphin", "batch", "false") and runners != {r["id"]: r for r in client.runners()}
-    assert client.setRunnerSetting("dolphin", "nope", "1") is False and seen[-1] == "Invalid"
-    rom = games.parent / "F-Zero GX.iso"
-    rom.write_bytes(b"")
-    ident = client.addGame("yuzu", str(rom), "")
-    assert ident == "f-zero-gx"
-    game = client.game(ident)
-    assert game["effective"]["runner"] == "eden" and game["platform"] == "Nintendo Switch"
-    assert game["effective"]["options"]["fullscreen"] is True
-    assert client.addGame("dolphin", str(rom), "F-Zero GX") == "" and seen[-1] == "Invalid"
-
-
-def test_list_resolves_defaults(fake):
-    rows = fake.list()
-    assert [r["id"] for r in rows][:2] == ["the-technomancer", "mini-metro"]
-    control = fake.game("control")
-    assert "proton" not in control["launch"] and control["effective"]["proton"] == "proton-ge"
-    assert control["modules"]["capture"]["enabled"] is True
-    assert control["stats"]["play_count"] == 8
-    assert fake.game("mirrors-edge")["stats"]["last_played"] is None
+    signal.connect(lambda *args: seen.append(args))
+    return seen
 
 
 def test_errors_are_signalled_not_raised(fake):
-    seen = []
-    fake.error.connect(lambda kind, message: seen.append((kind, message)))
+    seen = _collect(fake.error)
+    assert fake.version() == "0.0.0-fake"
     assert fake.game("nope") == {}
     assert seen and seen[0][0] == "NotFound"
     assert fake.setSetting("capture", "", "codec", "mpeg2") is False
@@ -102,6 +25,7 @@ def test_errors_are_signalled_not_raised(fake):
     assert fake.getSettings("capture", "")["codec"] == "hevc"
     assert fake.setRunnerSetting("dolphin", "nope", "1") is False and seen[-1][0] == "Invalid"
     assert fake.setRunnerSetting("nope", "exe", "/x") is False and seen[-1][0] == "NotFound"
+    assert fake.removeJournalEntry("control", "nope") is False and seen[-1] == ("NotFound", "journal entry nope")
 
 
 def test_settings_merges_game_scope(fake):
@@ -113,34 +37,144 @@ def test_settings_merges_game_scope(fake):
     assert fake.game("control")["tags"] == ["a", "b"]
 
 
-def test_launch_runs_a_session(fake):
-    started, launched = [], []
-    fake.sessionStarted.connect(lambda sid, ident: started.append(ident))
-    fake.launched.connect(lambda sid, ident: launched.append(ident))
+def test_launch_writes_the_marker_and_the_end_comes_from_the_state_watch(fake):
+    core = fake.core
+    started, launched, ended = _collect(fake.sessionStarted), _collect(fake.launched), _collect(fake.sessionEnded)
+    current = _collect(fake.currentSessionChanged)
     assert fake.currentSession is None
     fake.launch("control", "DP-1")
-    assert launched == ["control"]
-    assert fake.currentSession["id"] == "control"
-    assert fake.currentSession["screen"] == "DP-1"
+    assert wait_for(fake.launched, 3000) is not None
+    marker = json.loads((core._root / "state" / "current-session.json").read_text())
+    assert marker["id"] == "control" and marker["screen"] == "DP-1" and marker["session_id"] == launched[0][0]
+    assert fake.currentSession["id"] == "control" and fake.currentSession["screen"] == "DP-1"
+    assert started == [(launched[0][0], "control")] and len(current) == 1
 
-    busy = []
-    fake.launchFailed.connect(lambda ident, message: busy.append(message))
+    busy = _collect(fake.launchFailed)
     fake.launch("mini-metro", "DP-1")
-    assert busy and "running" in busy[0]
+    assert wait_for(fake.launchFailed, 3000) is not None
+    assert busy[0][0] == "mini-metro" and "running" in busy[0][1]
+    assert wait_for(fake.sessionShown, 3000) == (launched[0][0], True)
 
-    args = wait_for(fake.sessionEnded, 6000)
-    assert args is not None and args[1] == "control" and args[2] >= 1
-    assert started == ["control"]
-    assert fake.currentSession is None
+    # The fake ends the session after 2 s: the session line lands, then the marker goes.
+    assert wait_for(fake.sessionEnded, 6000) is not None
+    assert ended == [(launched[0][0], "control", ended[0][2])] and ended[0][2] >= 1
+    assert fake.currentSession is None and len(current) == 2
+    assert not (core._root / "state" / "current-session.json").exists()
+    line = json.loads((core._root / "data" / "games" / "control" / "sessions.jsonl").read_text().splitlines()[-1])
+    assert line["session"] == launched[0][0] and line["duration_s"] == ended[0][2]
     assert fake.game("control")["stats"]["play_count"] == 9
+    assert [e["state"] for e in fake.journal("control")][:1] == ["pending"]
+
+
+def test_a_stop_ends_the_session_now(fake):
+    fake.launch("control", "")
+    assert wait_for(fake.launched, 3000) is not None
+    fake.stop("")
+    args = wait_for(fake.sessionEnded, 3000)
+    assert args is not None and args[1] == "control"
+    assert fake.currentSession is None
+
+
+def test_files_written_by_others_reach_the_screens(fake):
+    core = fake.core
+    changed, media, written, filed = _collect(fake.libraryChanged), _collect(fake.mediaChanged), _collect(fake.entryWritten), _collect(fake.recordingFiled)
+    games = core._root / "data" / "games"
+    (games / "control" / "media" / "extra.png").write_bytes(b"")
+    for _ in range(30):
+        pump(100)
+        if changed:
+            break
+    assert changed == [(["control"],)] and written == [("", "control")] and filed == [("", "control", "")]
+    assert media == [], "a file under media/ is a library change; mediaChanged follows the client's own picks"
+
+    changed.clear()
+    (games / "control" / "journal" / "20260914-120000.json").write_text('{"session": "20260914-120000", "game": "control"}')
+    for _ in range(30):
+        pump(100)
+        if changed:
+            break
+    assert changed == [(["control"],)]
+
+    # A pick through the client: mediaChanged at once, and the overrides watch sees the file too.
+    assert fake.mediaSetSlot("control", "banner", fake.game("control")["media"]["logo"])
+    assert media == [("control",)]
+    assert fake.game("control")["media"]["banner"].startswith(str(core._root / "overrides" / "control"))
+    assert fake.mediaUnset("control", "banner") is True and fake.mediaUnset("control", "banner") is False
+    assert media == [("control",), ("control",)]
 
 
 def test_install_job_reports_progress(fake):
-    steps = []
-    fake.progress.connect(lambda job, done, total, message: steps.append((done, total)))
+    steps = _collect(fake.progress)
     job = fake.install("gog", "1207658930")
     assert job.startswith("job-")
+    assert fake.jobs()[0]["id"] == job and fake.jobs()[0]["finished"] is False
     args = wait_for(fake.jobFinished, 10000)
     assert args is not None and args[0] == job and args[1] is True
-    assert steps and steps[-1] == (20, 20)
+    assert steps and steps[-1][1:3] == (20, 20)
     assert next(g for g in fake.sourceLibrary("gog") if g["id"] == "1207658930")["installed"] is True
+
+
+def test_a_failing_job_reports_its_end(fake):
+    def broken(source, game_id, progress=None):
+        raise RuntimeError("offline")
+
+    fake.core.install = broken
+    job = fake.install("gog", "1")
+    args = wait_for(fake.jobFinished, 3000)
+    assert args == (job, False, "offline")
+
+
+def test_the_real_core_reads_writes_and_watches(app):
+    universe_core = pytest.importorskip("universe_core")
+    from universe_ui.universe_client import CoreClient
+
+    core = universe_core.Core()
+    games = Path(core.data_home()) / "games"
+    (games / "sample").mkdir(parents=True, exist_ok=True)
+    (games / "sample" / "game.toml").write_text('schema = 1\nid = "sample"\ntitle = "Sample"\n')
+    core.reload_game("sample")
+    client = CoreClient(core)
+    assert [g["id"] for g in client.list()] == ["sample"]
+    assert client.currentSession is None and client.version() == core.version()
+
+    seen = _collect(client.error)
+    assert client.game("nope") == {} and seen == [("NotFound", "nope")]
+    assert client.set("sample", "favorite", "true") and client.game("sample")["favorite"] is True
+
+    # another process writes a journal entry: the watch reloads the game and tells the screens
+    written = _collect(client.entryWritten)
+    (games / "sample" / "journal").mkdir()
+    pump(700)  # the new directory is itself a change; the watch on it starts here
+    written.clear()
+    (games / "sample" / "journal" / "20260911-120000.json").write_text(
+        '{"session": "20260911-120000", "game": "sample", "written_at": "2026-09-11T12:10:00+02:00", "lang": "en",'
+        ' "title": "First", "provider": "stub", "paragraphs": ["p"], "next_up": "", "images": []}'
+    )
+    for _ in range(30):
+        pump(100)
+        if written:
+            break
+    assert written == [("", "sample")]
+    assert [e["title"] for e in client.journal("sample")] == ["First"]
+    assert client.removeJournalEntry("sample", "20260912-120000") is False and seen[-1][0] == "NotFound"
+    (games / "sample" / "sessions.jsonl").write_text(
+        '{"session": "20260913-120000", "game": "sample", "started_at": "2026-09-13T12:00:00+02:00",'
+        ' "ended_at": "2026-09-13T13:00:00+02:00", "duration_s": 3600, "source": "universe", "exit": 0,'
+        ' "recording": "' + str(games.parent / "gone.mkv") + '"}\n'
+    )
+    core.reload_game("sample")
+    assert [r["session"] for r in client.recordings("sample")] == ["20260913-120000"]
+    assert client.removeRecording("sample", "20260913-120000") is True
+    assert client.recordings("sample") == [] and client.game("sample")["stats"]["hours"] == 1.0
+
+    runners = {r["id"]: r for r in client.runners()}
+    assert runners["linux"]["kind"] == "linux" and "Nintendo Wii" in runners["dolphin"]["platforms"]
+    assert client.setRunnerSetting("dolphin", "batch", "false") and runners != {r["id"]: r for r in client.runners()}
+    rom = games.parent / "F-Zero GX.iso"
+    rom.write_bytes(b"")
+    ident = client.addGame("yuzu", str(rom), "")
+    assert ident == "f-zero-gx" and client.game(ident)["effective"]["runner"] == "eden"
+    assert client.addGame("dolphin", str(rom), "F-Zero GX") == "" and seen[-1][0] == "Invalid"
+    assert client.controllerSetButton("dualsense-edge", "south", "[]") and client.controllerSetButton("dualsense-edge", "south", "null")
+    assert client.controllerBind('{"family": "*", "button": "south", "trigger": "press", "action": "nope"}') is False and seen[-1][0] == "Invalid"
+    client.shutdown()

@@ -29,13 +29,15 @@ def parse_args(argv):
 
 
 def build_client(args):
-    if args.fake or args.fake_launch:
-        from .universe_client import FakeClient
-
-        return FakeClient(fake_launch=args.fake_launch)
     from .universe_client import CoreClient
 
-    return CoreClient()
+    if args.fake or args.fake_launch:
+        from .fake_core import FakeCore
+
+        return CoreClient(FakeCore(fake_launch=args.fake_launch))
+    import universe_core
+
+    return CoreClient(universe_core.Core())
 
 
 def quit_on_signals(app, on_signal=None):

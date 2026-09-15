@@ -455,11 +455,12 @@ fn when(ts: &str, loc: &Locale) -> String {
     local(ts).map(|t| loc.datetime(&t)).unwrap_or_else(|| ts.to_string())
 }
 
-fn parse_json(s: &str) -> Value {
-    serde_json::from_str(s).unwrap_or(Value::Null)
+/// A list as the text arms read it: `Value` rows, whatever the core's type.
+fn rows(v: &impl serde::Serialize) -> Vec<Value> {
+    serde_json::to_value(v).ok().and_then(|v| v.as_array().cloned()).unwrap_or_default()
 }
 
-fn print_json(v: &Value) -> anyhow::Result<()> {
+fn print_json(v: &impl serde::Serialize) -> anyhow::Result<()> {
     println!("{}", serde_json::to_string_pretty(v)?);
     Ok(())
 }
@@ -527,9 +528,9 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             core.session_end(&id, &session, exit, None).await?;
         }
         Cmd::RecordingFile { session, path } => println!("{}", core.file_recording(&session, &path).await?),
-        Cmd::JournalAdd { session, entry } => core.add_entry(&session, &entry).await?,
+        Cmd::JournalAdd { session, entry } => core.add_entry(&session, serde_json::from_str(&entry).map_err(crate::Error::from)?).await?,
         Cmd::Ls { all } => {
-            let list = parse_json(&core.list_json().await);
+            let list = core.list().await;
             if json {
                 return print_json(&list);
             }
@@ -537,7 +538,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             for i in 1..=4 {
                 t.column_mut(i).unwrap().set_constraint(ColumnConstraint::ContentWidth);
             }
-            for g in list.as_array().cloned().unwrap_or_default() {
+            for g in list {
                 if !all && g["hidden"].as_bool() == Some(true) {
                     continue;
                 }
@@ -604,13 +605,11 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             println!("stopped");
         }
         Cmd::Status => {
-            let cur = core.current_json().await;
-            let pending = parse_json(&core.pending_journals_json().await);
-            let list = parse_json(&core.list_json().await);
+            let cur = core.current().await;
+            let pending = core.pending_journals().await;
             let mut recent: Vec<Value> = Vec::new();
-            for g in list.as_array().cloned().unwrap_or_default() {
-                for sess in parse_json(&core.sessions_json(&s(&g, "id")).await?).as_array().cloned().unwrap_or_default() {
-                    let mut sess = sess;
+            for g in core.list().await {
+                for mut sess in rows(&core.sessions(&s(&g, "id")).await?) {
                     sess["title"] = g["title"].clone();
                     recent.push(sess);
                 }
@@ -618,15 +617,13 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             recent.sort_by_key(|r| std::cmp::Reverse(s(r, "ended_at")));
             recent.truncate(10);
             if json {
-                return print_json(&serde_json::json!({"current": if cur.is_empty() { Value::Null } else { parse_json(&cur) }, "recent": recent, "pending_journals": pending}));
+                return print_json(&serde_json::json!({"current": cur, "recent": recent, "pending_journals": pending}));
             }
-            if cur.is_empty() {
-                println!("{}", "no session running".dimmed());
-            } else {
-                let c = parse_json(&cur);
-                println!("{} {} · session {} · {} · since {}", "running".green(), s(&c, "title"), s(&c, "session_id"), s(&c, "unit"), when(&s(&c, "started_at"), &loc));
+            match cur {
+                None => println!("{}", "no session running".dimmed()),
+                Some(c) => println!("{} {} · session {} · {} · since {}", "running".green(), c.title, c.session_id, c.unit, when(&c.started_at, &loc)),
             }
-            for p in pending.as_array().cloned().unwrap_or_default() {
+            for p in pending {
                 println!("{} writing {}… (session {})", "journal:".yellow(), s(&p, "title"), s(&p, "session"));
             }
             let mut t = table(&["Session", "Game", "Duration", "Source", "Recording"]);
@@ -664,12 +661,12 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             println!("  journal    {} entries · recordings {}", g["journal_count"], g["recording_count"]);
         }
         Cmd::Search { query, source } => {
-            let list = parse_json(&core.source_search(&source, &query).await?);
+            let list = core.source_search(&source, &query).await?;
             if json {
                 return print_json(&list);
             }
             let mut t = table(&["Id", "Title", "Owned", "Installed"]);
-            for g in list.as_array().cloned().unwrap_or_default() {
+            for g in list {
                 t.add_row(vec![s(&g, "id"), s(&g, "title"), flag(&g["owned"]), flag(&g["installed"])]);
             }
             println!("{t}");
@@ -694,11 +691,10 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     finish(json, core.source_update(&s(&g["source"], "kind"), &gid, Some(&mut p)).await.map(|n| format!("{n} updated")));
                 }
                 None => {
-                    let pending = parse_json(&core.source_updates().await?);
+                    let list = core.source_updates().await?;
                     if json {
-                        return print_json(&pending);
+                        return print_json(&list);
                     }
-                    let list = pending.as_array().cloned().unwrap_or_default();
                     if list.is_empty() {
                         println!("everything is current");
                         return Ok(());
@@ -736,7 +732,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         }
         Cmd::Add { file, runner, title, platform, media } => {
             let payload = serde_json::json!({"title": title, "runner": runner, "exe": file.to_string_lossy(), "platform": platform});
-            let id = core.add_game(&payload.to_string()).await?;
+            let id = core.add_game(&payload).await?;
             let g = core.get(&id).await?;
             if media {
                 let mut p = progress_printer(json);
@@ -770,12 +766,12 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         }
         Cmd::Sessions { name } => {
             let id = pick(&core, &name).await?;
-            let list = parse_json(&core.sessions_json(&id).await?);
+            let list = core.sessions(&id).await?;
             if json {
                 return print_json(&list);
             }
             let mut t = table(&["Session", "Started", "Duration", "Source", "Recording"]);
-            for r in list.as_array().cloned().unwrap_or_default() {
+            for r in rows(&list) {
                 t.add_row(vec![s(&r, "session"), when(&s(&r, "started_at"), &loc), fmt_duration(r["duration_s"].as_u64().unwrap_or(0)), s(&r, "source"), s(&r, "recording")]);
             }
             println!("{t}");
@@ -797,11 +793,11 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 }
                 return Ok(());
             }
-            let list = parse_json(&core.journal_json(&id).await?);
+            let list = core.journal(&id).await?;
             if json {
                 return print_json(&list);
             }
-            for e in list.as_array().cloned().unwrap_or_default() {
+            for e in rows(&list) {
                 let state = s(&e, "state");
                 let tag = match state.as_str() {
                     "pending" => "writing…".yellow().to_string(),
@@ -828,12 +824,12 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 }
                 return Ok(());
             }
-            let list = parse_json(&core.recordings_json(&id).await?);
+            let list = core.recordings(&id).await?;
             if json {
                 return print_json(&list);
             }
             let mut t = table(&["Session", "Duration", "Size", "Path"]);
-            for r in list.as_array().cloned().unwrap_or_default() {
+            for r in list {
                 t.add_row(vec![s(&r, "session"), fmt_duration(r["duration_s"].as_u64().unwrap_or(0)), format!("{:.1} G", r["size"].as_u64().unwrap_or(0) as f64 / 1e9), s(&r, "path")]);
             }
             println!("{t}");
@@ -847,12 +843,12 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     report(json, true, &format!("{changed}/{total} updated"));
                 }
                 MediaCmd::Status => {
-                    let list = parse_json(&core.media_status(&id).await?);
+                    let list = core.media_status(&id).await?;
                     if json {
                         return print_json(&list);
                     }
                     let mut t = table(&["Game", "Entry", "Slot", "Kind", "Origin", "Shows", "Default"]);
-                    for g in list.as_array().cloned().unwrap_or_default() {
+                    for g in rows(&list) {
                         let entry = match (s(&g, "sgdb_name"), g["sgdb_id"].as_u64().unwrap_or(0)) {
                             (name, id) if !name.is_empty() => format!("{name} ({id})"),
                             (_, 0) => String::new(),
@@ -878,15 +874,15 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     report(json, true, &if gone { format!("{id}: {slot} override removed") } else { format!("{id}: {slot} had no override") });
                 }
                 MediaCmd::Candidates { slot, page } => {
-                    print_json(&parse_json(&core.media_candidates(&id, &slot, page).await?))?;
+                    print_json(&core.media_candidates(&id, &slot, page).await?)?;
                 }
                 MediaCmd::Search { query } => {
-                    let hits = parse_json(&core.media_search(&id, &query.join(" ")).await?);
+                    let hits = core.media_search(&id, &query.join(" ")).await?;
                     if json {
                         return print_json(&hits);
                     }
                     let mut t = table(&["Id", "Name", "Year", "", ""]);
-                    for h in hits.as_array().cloned().unwrap_or_default() {
+                    for h in rows(&hits) {
                         let year = h["year"].as_u64().filter(|y| *y > 0).map(|y| y.to_string()).unwrap_or_default();
                         t.add_row(vec![h["id"].to_string(), s(&h, "name"), year, if h["verified"].as_bool().unwrap_or(false) { "verified".into() } else { String::new() }, if h["current"].as_bool().unwrap_or(false) { "current".into() } else { String::new() }]);
                     }
@@ -901,12 +897,12 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Cmd::Module { action } => {
             match action {
                 ModuleCmd::Ls => {
-                    let list = parse_json(&core.modules_json().await);
+                    let list = core.modules().await;
                     if json {
                         return print_json(&list);
                     }
                     let mut t = table(&["Id", "Name", "Kind", "Enabled", "Available", "Missing", "Hooks"]);
-                    for m in list.as_array().cloned().unwrap_or_default() {
+                    for m in list {
                         let hooks: Vec<String> = m["hooks"].as_object().map(|o| o.keys().cloned().collect()).unwrap_or_default();
                         t.add_row(vec![s(&m, "id"), s(&m, "name"), m["kind"].as_array().map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(",")).unwrap_or_default(), flag(&m["enabled"]), flag(&m["available"]), m["missing"].as_array().map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(",")).unwrap_or_default(), hooks.join(",")]);
                     }
@@ -922,7 +918,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 }
                 ModuleCmd::Settings { id, game } => {
                     let gid = match game { Some(g) => pick(&core, &g).await?, None => String::new() };
-                    print_json(&parse_json(&core.module_settings_json(&id, &gid).await?))?;
+                    print_json(&core.module_settings(&id, &gid).await?)?;
                 }
                 ModuleCmd::Set { id, pairs, game } => {
                     let gid = match game { Some(g) => pick(&core, &g).await?, None => String::new() };
@@ -935,12 +931,12 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
         }
         Cmd::Sources => {
-            let list = parse_json(&core.sources_json().await);
+            let list = core.sources().await;
             if json {
                 print_json(&list)?;
             } else {
                 let mut t = table(&["Id", "Name", "Enabled", "Available", "Library (cached)", "Games dir"]);
-                for m in list.as_array().cloned().unwrap_or_default() {
+                for m in list {
                     t.add_row(vec![s(&m, "id"), s(&m, "name"), flag(&m["enabled"]), flag(&m["available"]), m["library_cached"].to_string(), s(&m, "games_dir")]);
                 }
                 println!("{t}");
@@ -959,13 +955,12 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             report(json, true, &user);
         }
         Cmd::Library { source, refresh } => {
-            let raw = core.source_library(&source, refresh).await?;
-            let list = parse_json(&raw);
+            let list = core.source_library(&source, refresh).await?;
             if json {
                 return print_json(&list);
             }
             let mut t = table(&["Id", "Title", "Installed", "Dir"]);
-            for g in list.as_array().cloned().unwrap_or_default() {
+            for g in list {
                 t.add_row(vec![s(&g, "id"), s(&g, "title"), flag(&g["installed"]), s(&g, "dir")]);
             }
             println!("{t}");
@@ -975,9 +970,8 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             let n = core.source_scan(source.as_deref().unwrap_or(""), Some(&mut p)).await?;
             report(json, true, &format!("{n} game(s)"));
             if !json {
-                let list = parse_json(&core.list_json().await);
                 let mut t = table(&["Title", "Source", "Id", "Build"]);
-                for g in list.as_array().cloned().unwrap_or_default() {
+                for g in core.list().await {
                     if s(&g["source"], "kind") == source.clone().unwrap_or_else(|| "gog".into()) {
                         t.add_row(vec![s(&g, "title"), s(&g["source"], "gog_id"), s(&g, "id"), s(&g["source"], "build_id")]);
                     }
@@ -986,7 +980,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
         }
         Cmd::Migrate { apply } => {
-            let report = parse_json(&core.import_lutris(apply).await?);
+            let report = serde_json::to_value(core.import_lutris(apply).await?)?;
             if json {
                 return print_json(&report);
             }
@@ -1021,12 +1015,12 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
         }
         Cmd::Doctor => {
-            let list = parse_json(&core.doctor_json().await);
+            let list = core.doctor().await;
             if json {
                 return print_json(&list);
             }
             let mut bad = 0;
-            for c in list.as_array().cloned().unwrap_or_default() {
+            for c in rows(&list) {
                 let ok = c["ok"].as_bool().unwrap_or(false);
                 if !ok {
                     bad += 1;
@@ -1042,7 +1036,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Cmd::Config { action } => {
             match action {
                 ConfigCmd::Get { key } => {
-                    let mut v = parse_json(&core.settings_json().await);
+                    let mut v = core.settings().await;
                     if let Some(key) = key {
                         for part in key.split('.') {
                             v = v.get(part).cloned().unwrap_or(Value::Null);
@@ -1112,7 +1106,7 @@ async fn controller(core: Core, action: ControllerCmd, json: bool) -> anyhow::Re
         }
         ControllerCmd::Bind { family, button, trigger, action, keys, command } => {
             let m = controller::Macro { family, button, trigger, action, keys, command };
-            core.set_controller_macro(&serde_json::to_string(&m)?).await?;
+            core.set_controller_macro(m).await?;
             report(json, true, "bound");
         }
         ControllerCmd::Unbind { family, button, trigger } => {
@@ -1137,7 +1131,7 @@ async fn controller(core: Core, action: ControllerCmd, json: bool) -> anyhow::Re
             }
         }
         ControllerCmd::Forget { family, slot } => {
-            core.set_controller_button(&family, &slot, "null").await?;
+            core.set_controller_button(&family, &slot, None).await?;
             report(json, true, "forgotten");
         }
     }
@@ -1147,12 +1141,12 @@ async fn controller(core: Core, action: ControllerCmd, json: bool) -> anyhow::Re
 async fn runner(core: Core, action: RunnerCmd, json: bool) -> anyhow::Result<()> {
     match action {
         RunnerCmd::Ls => {
-            let list = parse_json(&core.runners_json().await);
+            let list = core.runners().await;
             if json {
                 return print_json(&list);
             }
             let mut t = table(&["Id", "Name", "Platforms", "Program", "Found"]);
-            for r in list.as_array().cloned().unwrap_or_default() {
+            for r in list {
                 let platforms = r["platforms"].as_array().map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(", ")).unwrap_or_default();
                 let program = if s(&r, "path").is_empty() { if s(&r, "kind") == "linux" { "the game itself".to_string() } else { "not found".to_string() } } else { s(&r, "path") };
                 let program = if r["available"].as_bool() == Some(true) { Cell::new(program) } else { Cell::new(program).add_attribute(Attribute::Dim) };
@@ -1161,8 +1155,7 @@ async fn runner(core: Core, action: RunnerCmd, json: bool) -> anyhow::Result<()>
             println!("{t}");
         }
         RunnerCmd::Options { id } => {
-            let list = parse_json(&core.runners_json().await);
-            let Some(r) = list.as_array().and_then(|a| a.iter().find(|r| s(r, "id") == crate::runners::canonical(&id))).cloned() else { anyhow::bail!("unknown runner {id}") };
+            let Some(r) = core.runners().await.into_iter().find(|r| s(r, "id") == crate::runners::canonical(&id)) else { anyhow::bail!("unknown runner {id}") };
             if json {
                 return print_json(&r);
             }

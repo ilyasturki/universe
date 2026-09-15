@@ -28,10 +28,12 @@ def app(xdg):
 
 
 @pytest.fixture
-def fake(app, xdg):
-    from universe_ui.universe_client import FakeClient
+def fake(app, xdg, tmp_path):
+    """`CoreClient` over a `FakeCore` laid out under a fresh root; the core is `fake.core`."""
+    from universe_ui.fake_core import FIXTURE, FakeCore
+    from universe_ui.universe_client import CoreClient
 
-    client = FakeClient(art_dir=str(xdg / "art"))
+    client = CoreClient(FakeCore(FIXTURE, tmp_path / "core"))
     yield client
     client.shutdown()
 
@@ -68,6 +70,16 @@ def pump(ms):
     loop = QEventLoop()
     QTimer.singleShot(ms, loop.quit)
     loop.exec()
+
+
+def settle(screen, timeout_ms=5000):
+    """Pumps until `screen.busy` clears: the client runs every screen's work on a thread."""
+    from PySide6.QtCore import QDeadlineTimer
+
+    deadline = QDeadlineTimer(timeout_ms)
+    while screen.busy and not deadline.hasExpired():
+        pump(10)
+    assert not screen.busy, "still busy"
 
 
 def index_of(form, key):

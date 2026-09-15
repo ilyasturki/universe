@@ -21,7 +21,7 @@ One context property, `api`:
 | `api.allGames` | the library model |
 | `api.collections` | collections, one per platform |
 | `api.memory` | `get`/`set`/`has`/`unset`, persisted to `$XDG_STATE_HOME/universe/ui-memory.json` |
-| `api.universe` | the client: every core call, plus the signals below. `adoptScope()` and `pendingJournals()` wrap `adopt_scope` and `pending_journals_json`; a core without them gets a log line, not a toast |
+| `api.universe` | the client: every core call, plus the signals below. `adoptScope()` and `pendingJournals()` wrap `adopt_scope` and `pending_journals`; their failures get a log line, not a toast |
 | `api.pad` | `rightX`: the right stick as a value, 0 without a controller |
 | `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed` and `--size` turn it off) |
@@ -46,7 +46,7 @@ module is still writing: no title, no paragraphs; the row pulses with the time s
 and cannot be opened) or `failed` (`reason` is the module's message, its one paragraph).
 `durationText` is the session's length — `42 min`, `1 h 05` — next to the date in the row and in
 the article header; the date is `written_at`, or `started_at` while there is none.
-`api.screens.pendingJournals` is `pending_journals_json()` as `rows` and `count`, refreshed on
+`api.screens.pendingJournals` is `pending_journals()` as `rows` and `count`, refreshed on
 `entryWritten`, on `sessionEnded` and every 10 s while any is pending (so the elapsed time and
 the module's 30-min timeout show up); `appeared(session, title)` and
 `resolved(session, game, state, text)` fire once per session and become the "Journal: writing …",
@@ -66,8 +66,12 @@ game (`loadAll()`), which the Switch 2 look shows as its Album and News.
 ## Changes
 
 The core pushes nothing — the files are the truth, and anything may write them: the CLI, systemd's
-`session-end`, a hook. A frontend therefore derives its own change notifications. `CoreClient` does
-it this way, and any frontend needs the equivalent:
+`session-end`, a hook. A frontend therefore derives its own change notifications. `CoreClient`
+(`ui/universe_ui/universe_client.py`) is one client over one core object — `universe_core.Core`
+in production, `FakeCore` (`fake_core.py`, the same methods over `fixtures/library.json`, laying
+out `games/`, `state/` and the overrides directory under a temporary root and writing them the way
+the core does) under `--fake` and in the tests — and its slots call the core's methods directly.
+What it derives is derived this way, and any frontend needs the equivalent:
 
 | Signal | Derived from |
 |---|---|
@@ -224,9 +228,9 @@ before trashing; the offer to take the recording along works the other way round
 ## The launch and modules sections
 
 `api.screens.launch` is Settings › Launch, what every game starts with, each row a `config.toml`
-key written through `Settings1.Set`: a Gamescope card — the switch, then the fields of
+key written through `set_setting`: a Gamescope card — the switch, then the fields of
 `docs/api.md` § Gamescope as rows (`gamescope_resolution` and `gamescope_refresh` are
-`string`/`int` rows whose choices come from the screen the window is on, `Settings1.Screen` —
+`string`/`int` rows whose choices come from the screen the window is on, `screen_mode` —
 `auto`, the screen's mode, the standard heights below it at its aspect ratio; the rates below its
 own — and take a typed value; scaler, filter and sharpness list a `default` choice that clears
 the key, through `choiceValues`), then the raw arguments; the card's meta is the screen
@@ -258,9 +262,9 @@ tab (`theme.qml` `openSub`, the same loader as the game's sub pages), on `api.sc
 `load(id)` builds its head (`info`: name, platforms and where its program was found, a warning)
 and cards for the program (`exe`, a path; the detected one shown as the value, inherited, its
 origin as the detail) and arguments, each option by
-its type, and an "Add a game…" action. `setValue(index, value)` writes through `Runners1.Set`; on
+its type, and an "Add a game…" action. `setValue(index, value)` writes through `set_runner_setting`; on
 the add row it keeps the picked file and `pendingTitle()` proposes a title from it, which
-`addGame(title)` sends to `Library1.Add`. Back on the tab, the list reloads and the cursor finds
+`addGame(title)` sends to `add_game`. Back on the tab, the list reloads and the cursor finds
 the runner again. The Switch 2 look has the same list as System Settings › Runners and the same
 page as `switch2/pages/FormPage.qml`, pushed on its stack. The game settings page's Launch group follows the runner: a Runner picker (names
 shown, ids written), then the rows the runner takes. The detail page shows the runner's logo next
@@ -269,17 +273,17 @@ to the platform.
 ## The artwork page and section
 
 `api.screens.artwork` is one game's artwork page (Reprise: the Artwork entry of a game's menu, or a
-tile of the overview). `load(id)` reads `Media1.Status` into `slots` — one row per slot with `url`
+tile of the overview). `load(id)` reads `media_status` into `slots` — one row per slot with `url`
 (what shows), `defaultUrl` and `overrideUrl` (the two layers, see `docs/api.md`), `kind`
 (`picked`, `default`, `missing`) and `kindLabel`, `originLabel` and `defaultOriginLabel`,
 `hasOverride`, `hasDefault`, `aspect`, `use` (where the themes show the slot) — and `entry`, the
 SteamGridDB entry the candidates come from ("Name (year)"), which heads the candidates so a wrong
-match is seen. `loadCandidates(slot)` fetches `Media1.Candidates` off the UI thread into `candidates`
+match is seen. `loadCandidates(slot)` fetches `media_candidates` off the UI thread into `candidates`
 (`url` is the provider's, `thumb` what the grid shows, `votes`), `more` and `candidatesBusy`;
-`moreCandidates()` takes the next page. `apply(slot, url)` runs `Media1.SetUrl` on a thread and
-emits `mediaChanged` for the game once the pick landed, `removeOverride(slot)` runs `Media1.Unset`;
+`moreCandidates()` takes the next page. `apply(slot, url)` runs `media_set_url` on a thread and
+emits `mediaChanged` for the game once the pick landed, `removeOverride(slot)` runs `media_unset`;
 both report through `message`. The wrong-match flow is `search(query)` → `hits` (`name`, `year`,
-`verified`, `current`) → `pin(id)`, which writes `metadata.sgdb_id` through `Media1.Pin` and reloads
+`verified`, `current`) → `pin(id)`, which writes `metadata.sgdb_id` through `media_pin` and reloads
 the candidates. Local URLs carry the file's mtime as a query (`models.file_url`), so a pick that
 replaces a file at the same path repaints instead of showing the image cache's copy.
 
@@ -288,7 +292,7 @@ column of its own next to the sidebar): `slot` and `filter` (`all`, `missing`, `
 pick what `tiles` holds (`id`, `title`, `url`, `kind`), `counts` says how many games stand in each
 state for the slot, `slotUse` where the slot shows, `refreshAll()` fetches the missing art of every
 game (the section's X, a button top right). `load()` reads
-`Media1.Status` for the whole library on a thread; a `mediaChanged` or `libraryChanged` reloads it
+`media_status` for the whole library on a thread; a `mediaChanged` or `libraryChanged` reloads it
 after a short debounce while the section is on screen.
 
 ## The controller section
@@ -305,11 +309,11 @@ a "Test the buttons" row while the watcher is `ready`, then a row per button of 
 with its `slot` and `family`, so the row draws the button's glyph, and its `press` and `hold`
 macros, each carrying its `label` — the extras (back buttons, Fn) first, then the standard
 buttons) and `bind`, `unbind`, `learn`, `cancelLearn`, `setTesting`,
-`suspend`, `resume`. Macros and families come from the core's `Controller1.State`; a write goes
-through `Controller1.Bind`/`Unbind` and is followed by a `reload` to the watcher.
+`suspend`, `resume`. Macros and families come from the core's `controller_state`; a write goes
+through `set_controller_macro`/`remove_controller_macro` and is followed by a `reload` to the watcher.
 
 While another watcher holds the pads (a game launched from the CLI is running) the child reports
-`waiting`: the screen turns passive, lists the pads from `Controller1.Pads` under an info row
+`waiting`: the screen turns passive, lists the pads from `controller_pads` under an info row
 saying macros run in the game session, binds as usual (the holder reloads on the config's mtime)
 and refuses `learn` until `ready`. A watcher that exits reports `off`: the card says so and the
 screen restarts it after `restart_ms`, doubling up to 30 s until it stays up. A shown pad that

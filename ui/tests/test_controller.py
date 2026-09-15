@@ -163,6 +163,7 @@ def test_the_mangohud_macro_gets_a_toast_the_others_do_not(started, fake):
     assert len(notices) == 1, "volume and the screenshot draw their own cue"
 
     fake.launch("control", "DP-1")
+    wait_for(fake.launched, 3000)
     fire("mangohud")
     assert notices[-1] == "MangoHud toggled · Control"
     fake.set("control", "launch.mangohud", "false")

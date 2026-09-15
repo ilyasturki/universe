@@ -1,7 +1,6 @@
 from PySide6.QtCore import Property, QTimer, Signal, Slot
 
 from ..models import file_url
-from ..universe_client import UniverseError, _json
 from .settings import AsyncScreen
 
 SLOTS = [
@@ -149,18 +148,13 @@ class ArtworkForm(AsyncScreen):
         self._candidates_busy = True
         self.candidatesChanged.emit()
 
-        def work():
-            return self._client._call("Media1", "Candidates", game_id, slot, page)
-
-        def done(result, error):
+        def done(data, error):
             if seq != self._fetch_seq:
                 return
             self._candidates_busy = False
-            if error:
-                self.message.emit(error)
+            if not data:
                 self.candidatesChanged.emit()
                 return
-            data = _json(result, {})
             items = [_candidate_row(c, len(self._candidates) + i) for i, c in enumerate(data.get("items") or [])]
             self._candidates = self._candidates + items
             self._page = int(data.get("page") or page)
@@ -173,64 +167,54 @@ class ArtworkForm(AsyncScreen):
                 self.slotsChanged.emit()
             self.candidatesChanged.emit()
 
-        self._run(work, done)
+        self._run(lambda: self._client.mediaCandidates(game_id, slot, page), done)
 
+    # The core's refusals reach the toast through the client's `error`; the slots answer empty then.
     @Slot(str, str)
     def apply(self, slot, url):
         game_id = self._game_id
         label = SLOT_LABELS.get(slot, slot)
 
-        def work():
-            return self._client._call("Media1", "SetUrl", game_id, slot, url)
-
-        def done(result, error):
-            if error:
-                self.message.emit(f"{label}: {error}")
+        def done(placed, error):
+            if not placed:
                 return
-            self._client.mediaChanged.emit(game_id)
             self.applied.emit(slot)
             self.message.emit(f"{label} picked for {self._title}")
 
-        self._run(work, done)
+        self._run(lambda: self._client.mediaSetUrl(game_id, slot, url), done)
 
     @Slot(str, result=bool)
     def removeOverride(self, slot):
         label = SLOT_LABELS.get(slot, slot)
-        try:
-            gone = bool(self._client._call("Media1", "Unset", self._game_id, slot))
-        except UniverseError as e:
-            self.message.emit(f"{label}: {e.message or e.kind}")
-            return False
+        gone = self._client.mediaUnset(self._game_id, slot)
         if gone:
-            self._client.mediaChanged.emit(self._game_id)
             row = self.slot(slot)
             self.message.emit(f"{label}: back to the default" + (f" from {row['originLabel']}" if row.get("originLabel") else "") if row.get("hasDefault") else f"{label}: pick removed, nothing under it")
         return gone
 
+    # A failed search shows its reason on the page: the client's `error` lands before the reply does.
     @Slot(str)
     def search(self, query):
         game_id = self._game_id
         self._search_busy = True
         self.hitsChanged.emit()
+        failures = []
+        failed = lambda kind, message: failures.append(message)  # noqa: E731
+        self._client.error.connect(failed)
 
-        def work():
-            return self._client._call("Media1", "Search", game_id, query)
-
-        def done(result, error):
+        def done(hits, error):
+            self._client.error.disconnect(failed)
             self._search_busy = False
-            self._search_error = error or ""
-            self._hits = [] if error else [_hit_row(h) for h in _json(result, [])]
+            self._search_error = failures[0] if failures else ""
+            self._hits = [] if failures else [_hit_row(h) for h in hits or []]
             self.searchErrorChanged.emit()
             self.hitsChanged.emit()
 
-        self._run(work, done)
+        self._run(lambda: self._client.mediaSearch(game_id, query), done)
 
     @Slot(int)
     def pin(self, sgdb_id):
-        try:
-            self._client._call("Media1", "Pin", self._game_id, "sgdb", str(int(sgdb_id)))
-        except UniverseError as e:
-            self.message.emit(e.message or e.kind)
+        if not self._client.mediaPin(self._game_id, "sgdb", str(int(sgdb_id))):
             return
         self._sgdb_id = int(sgdb_id)
         self._hits = [dict(h, current=h["id"] == self._sgdb_id) for h in self._hits]
@@ -300,7 +284,7 @@ class ArtworkOverview(AsyncScreen):
             return
 
         def work():
-            status = _json(self._client._call("Media1", "Status", ""), [])
+            status = self._client.mediaStatus("")
             hidden = {str(g.get("id") or "") for g in self._client.list() or [] if g.get("hidden") or g.get("removed")}
             rows = []
             for g in status:

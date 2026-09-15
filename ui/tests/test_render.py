@@ -60,6 +60,7 @@ def test_a_session_running_at_startup_is_home_with_the_game_pinned(api, fake):
     from PySide6.QtCore import QObject
 
     fake.launch("mirrors-edge", "")
+    wait_for(fake.launched, 3000)
     assert fake.currentSession
     engine, window = render(api, activate=True)
     overlay = window.findChild(QObject, "launchOverlay")
@@ -88,8 +89,8 @@ def test_a_launch_holds_the_poster_until_the_window_is_shown(api, fake):
     assert overlay.property("running") is True and root.property("launching") is True
     wait_for(fake.sessionStarted, 3000)
     assert overlay.property("waiting") is True and fake.currentSession["id"] == "control"
-    assert fake.lastSplash.endswith("splash-control.bgrx")
-    with open(fake.lastSplash, "rb") as f:
+    assert fake.core.last_splash.endswith("splash-control.bgrx")
+    with open(fake.core.last_splash, "rb") as f:
         header = f.readline().decode().split()
         assert [int(v) for v in header] == [round(window.width() * window.devicePixelRatio()), round(window.height() * window.devicePixelRatio())]
         assert len(f.read()) == int(header[0]) * int(header[1]) * 4

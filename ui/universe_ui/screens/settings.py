@@ -5,7 +5,7 @@ import os
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
-from ..universe_client import UniverseError
+from ..errors import UniverseError
 
 ASSETS = os.path.join(os.path.dirname(os.path.dirname(__file__)), "qml", "assets", "runners")
 LOGOS = {os.path.splitext(f)[0]: f"assets/runners/{f}" for f in sorted(os.listdir(ASSETS))}
@@ -432,7 +432,6 @@ class ModuleForm(RowsForm):
         self._ident = ""
         self._dynamic = {}
         self._pending = set()
-        self._loading = False
         client.modulesChanged.connect(self.reload)
 
     def _choices(self, ident, key, setting, values):
@@ -454,8 +453,7 @@ class ModuleForm(RowsForm):
         def done(choices):
             self._pending.discard(cache_key)
             self._dynamic[cache_key] = [str(c) for c in choices or []]
-            if not self._loading:
-                self.reload()
+            self.reload()
 
         self._client.runAsync(lambda: self._client.settingChoices(ident, key), done)
 
@@ -466,11 +464,7 @@ class ModuleForm(RowsForm):
     @Slot(str)
     def load(self, ident):
         self._ident = ident
-        self._loading = True
-        try:
-            self._set_rows(*self._build(ident))
-        finally:
-            self._loading = False
+        self._set_rows(*self._build(ident))
         self.moduleChanged.emit()
 
     def _build(self, ident):

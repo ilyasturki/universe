@@ -1,6 +1,6 @@
 import pytest
 
-from conftest import index_of, rows_by_key, wait_for
+from conftest import index_of, rows_by_key, settle, wait_for
 
 PENDING = {"session": "20260912-200000", "game": "the-technomancer", "state": "pending",
            "started_at": "2026-09-12T20:00:00+02:00", "written_at": "", "title": "", "paragraphs": [], "images": []}
@@ -33,7 +33,7 @@ def test_game_settings_form(api, fake):
 
 
 def test_modules_list(api, fake):
-    journal_module = next(m for m in fake._data["modules"] if m["id"] == "journal")
+    journal_module = next(m for m in fake.core._data["modules"] if m["id"] == "journal")
     journal_module.update(enabled=False, available=False, missing=["ffmpeg"])
     form = api.screens.modules
     form.load()
@@ -55,7 +55,7 @@ def test_modules_list(api, fake):
 
 
 def test_module_form(api, fake):
-    journal_module = next(m for m in fake._data["modules"] if m["id"] == "journal")
+    journal_module = next(m for m in fake.core._data["modules"] if m["id"] == "journal")
     journal_module.update(enabled=False, available=False, missing=["ffmpeg"])
     form = api.screens.module
     form.load("journal")
@@ -83,6 +83,7 @@ def test_module_form_choices(api, fake):
     rows = rows_by_key(form, "capture")
     assert rows["fps"]["type"] == "int" and rows["fps"]["choices"] == ["auto", "120", "90", "60", "30"]
     form.load("journal")
+    wait_for(form.rowsChanged, 3000)  # the dynamic choices come back from a thread
     journal = rows_by_key(form, "journal")
     assert journal["model"]["choices"] == ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.5"]
     form.load("capture")
@@ -167,8 +168,8 @@ def test_game_settings_gamescope_group(api, fake):
 def test_sources_browser_statuses(api):
     browser = api.screens.sources
     browser.load()
+    settle(browser)
     assert browser.source == "gog"
-    assert not browser.busy
     status = {r["title"]: r["status"] for r in browser.rows}
     assert status["The Technomancer"] == "Installed"
     assert status["Mini Metro"] == "Update available"
@@ -178,6 +179,7 @@ def test_sources_browser_statuses(api):
     assert rows["Dead Cells"]["game_id"] == "dead-cells" and rows["Stardew Valley"]["game_id"] == ""
     assert rows["Stardew Valley"]["image"].startswith("https://")
     browser.search("disco")
+    settle(browser)
     assert [r["title"] for r in browser.rows] == ["Disco Elysium"]
 
 
@@ -187,29 +189,38 @@ def test_sources_browser_keeps_its_fetch(api, fake):
     fake.updates = lambda: calls.append(1) or original()
     browser = api.screens.sources
     browser.load()
+    settle(browser)
     browser.load()
+    settle(browser)
     assert len(calls) == 1
     browser.refresh()
+    settle(browser)
     assert len(calls) == 2
 
 
 def test_sources_browser_uninstall_and_remove(api, fake):
     browser = api.screens.sources
     browser.load()
+    settle(browser)
     messages = []
     browser.message.connect(messages.append)
     browser.uninstall("dead-cells")
+    settle(browser)
     assert messages == ["Uninstalled Dead Cells"]
     rows = {r["title"]: r for r in browser.rows}
     assert rows["Dead Cells"]["status"] == "Owned" and rows["Dead Cells"]["game_id"] == "dead-cells"
     browser.uninstall("")
+    settle(browser)
     assert len(messages) == 1, "a game outside the library has nothing to uninstall"
     browser.uninstall("dead-cells")
+    settle(browser)
     assert messages[-1] == "Could not uninstall Dead Cells", "the core's refusal reaches the toast"
     browser.remove("the-technomancer")
+    settle(browser)
     assert messages[-1] == "Removed The Technomancer from the library"
     assert fake.game("the-technomancer")["removed"] is True
     browser.remove("no-such-game")
+    settle(browser)
     assert messages[-1] == "Could not remove no-such-game"
 
 
@@ -269,7 +280,7 @@ def test_removing_a_recording_or_an_entry_reloads_both_lists(api, fake):
 
 
 def test_journal_rows_carry_state_and_duration(api, fake):
-    entries = fake._data["journal"]["the-technomancer"]
+    entries = fake.core._data["journal"]["the-technomancer"]
     entries.insert(0, dict(PENDING))
     entries.append({"session": "20260905-190000", "game": "the-technomancer", "state": "failed", "duration_s": 2520,
                     "started_at": "2026-09-05T19:00:00+02:00", "written_at": "2026-09-05T19:50:00+02:00", "title": "",
@@ -292,7 +303,7 @@ def test_pending_journals_announce_each_session_once(api, fake):
     seen = []
     pending.appeared.connect(lambda session, title: seen.append(("appeared", session, title)))
     pending.resolved.connect(lambda session, game, state, text: seen.append(("resolved", session, game, state, text)))
-    entries = fake._data["journal"]["the-technomancer"]
+    entries = fake.core._data["journal"]["the-technomancer"]
     entries.insert(0, dict(PENDING))
     fake.entryWritten.emit("20260912-200000", "the-technomancer")
     assert pending.count == 1 and pending.rows[0]["title"] == "The Technomancer"

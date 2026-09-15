@@ -5,13 +5,16 @@ process runs in the background.** There are three ways into it, all in-process:
 
 - **the crate** — `Core::open().await`, every method `async`;
 - **`universe_core`** — the Python module built from `crates/universe-py` (PyO3). `Core()` opens the
-  core; every method releases the GIL for the duration of the call. This is what the PySide6 host
+  core; every method releases the GIL for the duration of the call and hands back plain dicts,
+  lists and strings (`None` for "nothing"), taking dicts and lists where the crate takes a struct.
+  `data_home()`, `state_home()` and `version()` are methods on it. This is what the PySide6 host
   binds;
 - **the `universe` CLI** — the same library, one process per command, `--json` on every command.
   This is what hooks and systemd call.
 
-Heavy payloads are JSON strings. Each table below gives all three spellings of the same operation;
-a dash means the surface doesn't expose it.
+The crate hands back its structs or `serde_json::Value`s, Python the same as dicts and lists, and
+the CLI prints them as JSON under `--json`. Each table below gives all three spellings of the same
+operation; a dash means the surface doesn't expose it.
 
 ## Process model
 
@@ -53,16 +56,16 @@ a dash means the surface doesn't expose it.
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `list_json()` | `list_json()` | `universe ls [--all]` | JSON `[Game]`; unhidden first, last played first. `--json` always prints every game — `--all` only stops the table from hiding the hidden ones |
-| `get(id)` | `get_json(id)` | `universe info <name> --json` | resolved `Game`: global defaults merged in, session stats, media, active modules |
+| `list()` | `list()` | `universe ls [--all]` | `[Game]`; unhidden first, last played first. `--json` always prints every game — `--all` only stops the table from hiding the hidden ones |
+| `get(id)` | `get(id)` | `universe info <name> --json` | resolved `Game`: global defaults merged in, session stats, media, active modules |
 | `resolve(query)` | `resolve(query)` | — | candidate ids: exact › whole word › substring › path › every word a prefix of a title word or genre. Empty means unknown, more than one means ambiguous |
 | `set(id, key, value)` | `set(id, key, value)` | `universe set <name> k=v …` | writes one `game.toml` key |
 | `remove(id, purge)` | `remove(id, purge)` | `universe rm <name> [--purge]` | parks recordings and journal under `.archive/`, marks `removed_at`; `purge` also trashes the prefix |
 | `uninstall(id)` | `uninstall(id)` | `universe uninstall <name>` | trashes `source.dir` and clears `source.dir`, `source.build_id` and `launch.exe`; the game stays in the library, not installed. Refuses a root, a home or the games root |
 | `reload_all()` | `reload()` | `universe rescan` | rereads config and `games/*/game.toml`, runs each source's `scan` |
 | `reload_game(id)` | `reload_game(id)` | — | rereads one game |
-| `import_lutris(apply)` | `import_lutris(apply)` | `universe migrate [--apply]` | JSON report: imported games, per-game env diff (`{id, lutris_env, universe_env, added, removed, changed}`), imported hours, games whose art was copied from `[lutris] pegasus_library` (`<platform>/media/<slug>/`, once, never over an existing `media/`), `runners_promoted` (emulator games from before runners that now name theirs), `options_promoted` (games already imported that take what a field now holds — a `wrapper`, a DLL override, a Proton switch — only where the file had nothing) and `runners` (what Lutris's runner configs say: a wrapper script is seen through, the program is written to `[runners.<id>] exe` when it is not on PATH, its extra arguments to `args`). Without `apply` it only reports |
-| `add_game(json)` | `add_game(json)` | `universe add <file> --runner <id> [--title T] [--platform P] [--media]` | `{"runner", "exe", "title"?, "platform"?}` → the new id. The title defaults to the file's name cleaned of release tags; the platform to the runner's first. Refuses an id already in the library |
+| `import_lutris(apply)` | `import_lutris(apply)` | `universe migrate [--apply]` | a report: imported games, per-game env diff (`{id, lutris_env, universe_env, added, removed, changed}`), imported hours, games whose art was copied from `[lutris] pegasus_library` (`<platform>/media/<slug>/`, once, never over an existing `media/`), `runners_promoted` (emulator games from before runners that now name theirs), `options_promoted` (games already imported that take what a field now holds — a `wrapper`, a DLL override, a Proton switch — only where the file had nothing) and `runners` (what Lutris's runner configs say: a wrapper script is seen through, the program is written to `[runners.<id>] exe` when it is not on PATH, its extra arguments to `args`). Without `apply` it only reports |
+| `add_game(spec)` | `add_game(spec)` | `universe add <file> --runner <id> [--title T] [--platform P] [--media]` | `{"runner", "exe", "title"?, "platform"?}` → the new id. The title defaults to the file's name cleaned of release tags; the platform to the runner's first. Refuses an id already in the library |
 
 `set` takes dotted keys: `launch.runner`, `launch.exe`, `launch.proton`, `launch.gamescope`,
 `launch.gamescope_args`, `launch.gamescope_resolution`, `launch.gamescope_refresh`,
@@ -107,13 +110,13 @@ hooks write shows up that way, with no other channel.
 |---|---|---|---|
 | `launch(id, screen, splash)` | `launch(id, screen, splash="")` | `universe play <name> [--screen DP-1] [--no-wait]` | pre-launch hooks, marker, `systemd-run`, post-launch hooks; returns the `session_id` at once. `screen` is a DRM connector name or `""` for the profile default; `splash` a poster for gamescope's keep-alive window (see Gamescope) or `""`. `Busy` if a session is already running |
 | `stop(session_id)` | `stop(session_id)` | `universe stop` | `systemctl --user stop` on the unit; waits for it, a second SIGTERM after ~3 s |
-| `session_window()` | `session_window_json()` | — | the running game's window as the Universe shell extension lists it (`{id, pid, wm_class, title, focused, width, height, hidden, minimized}`): the largest visible toplevel whose pid is in the unit's cgroup — gamescope's when the game runs inside it. `None`/`""` before it maps; `Unavailable` off GNOME |
-| `wait_session_window(session_id, timeout)` | `wait_session_window(session_id, timeout_ms)` | — | blocks until that window is up, then `Activate`s it (focus and raise) and returns it; `""` when the session ended first or the timeout ran out; `Unavailable` off GNOME, at once. Polls the extension every 150 ms |
+| `session_window()` | `session_window()` | — | the running game's window as the Universe shell extension lists it (`{id, pid, wm_class, title, focused, width, height, hidden, minimized}`): the largest visible toplevel whose pid is in the unit's cgroup — gamescope's when the game runs inside it. `None` before it maps; `Unavailable` off GNOME |
+| `wait_session_window(session_id, timeout)` | `wait_session_window(session_id, timeout_ms)` | — | blocks until that window is up, then `Activate`s it (focus and raise) and returns it; `None` when the session ended first or the timeout ran out; `Unavailable` off GNOME, at once. Polls the extension every 150 ms |
 | `focus_session()` / `focus_pid(pid)` | `focus_session()` / `focus_pid(pid)` | — | `Activate` on the game's window / on the largest window of a process (a frontend's own, once the game is gone) |
 | `adopt_scope()` | `adopt_scope()` | — (`universe play` does it unless `--no-wait`) | moves the calling process into the transient scope `universe-launcher-<pid>.scope` (`StartTransientUnit` on the user manager) and returns its name; every later `launch` binds the game to it. Idempotent. `Unavailable` without a user systemd |
 | `screenshot()` | `screenshot()` | `universe screenshot` | runs the `screenshot` hook of whichever module declares one; returns the PNG path |
-| `current()` / `current_json()` | `current_json()` | `universe status` | `{session_id, id, title, unit, screen, started_at}`, or `""`. The CLI wraps it: `status --json` prints `{"current": … or null, "recent": [the last 10 sessions], "pending_journals": [see Journal]}` |
-| `sessions_json(id)` | `sessions_json(id)` | `universe sessions <name>` | JSON `[Session]` from `sessions.jsonl`, last first |
+| `current()` | `current()` | `universe status` | `{session_id, id, title, unit, screen, started_at}`, or `None`. The CLI wraps it: `status --json` prints `{"current": … or null, "recent": [the last 10 sessions], "pending_journals": [see Journal]}` |
+| `sessions(id)` | `sessions(id)` | `universe sessions <name>` | `[Session]` from `sessions.jsonl`, last first |
 | `session_end(id, session_id, exit, ended)` | — | `universe session-end <id> <session>` | closes the session, idempotent. Run by systemd's `ExecStopPost`, or by reconciliation |
 
 One `sessions.jsonl` line:
@@ -225,15 +228,15 @@ none of those variables).
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `sources_json()` | `sources_json()` | `universe sources` | `[{id, name, available, enabled, missing, logged_in, user, games_dir, library_cached}]` |
+| `sources()` | `sources()` | `universe sources` | `[{id, name, available, enabled, missing, logged_in, user, games_dir, library_cached}]` |
 | `source_login_url(source)` | `login_url(source)` | `universe login <source>` | URL to open |
 | `source_login(source, code)` | `login(source, code)` | `universe login <source> <code>` | returns the user name |
-| `source_library(source, refresh)` | `library_json(source, refresh)` | `universe library [source] [--refresh]` | `[SourceGame]`, served from cache unless `refresh` |
-| `source_search(source, query)` | `search_json(source, query)` | `universe search <query> [--source]` | `[SourceGame]` |
-| `source_info(source, game_id)` | `info_json(source, game_id)` | — | the source's raw `info` payload |
+| `source_library(source, refresh)` | `library(source, refresh)` | `universe library [source] [--refresh]` | `[SourceGame]`, served from cache unless `refresh` |
+| `source_search(source, query)` | `search(source, query)` | `universe search <query> [--source]` | `[SourceGame]` |
+| `source_info(source, game_id)` | `info(source, game_id)` | — | the source's raw `info` payload |
 | `source_install(source, game_id, progress)` | `install(source, game_id, progress)` | `universe install <id> [--source]` | id of the installed game |
 | `source_update(source, game_id, progress)` | `update(source, game_id, progress)` | `universe update [name] [-y]` | how many were updated; `game_id=""` updates everything pending |
-| `source_updates()` | `updates_json()` | `universe update` | `[{id, title, local_build, remote_build, version, date}]` |
+| `source_updates()` | `updates()` | `universe update` | `[{id, title, local_build, remote_build, version, date}]` |
 | `source_scan(source, progress)` | `scan(source, progress)` | `universe scan [source]` | how many games entered the library; `source=""` scans all |
 
 `progress` is called `(done, total, message)` as the job runs.
@@ -250,7 +253,7 @@ quit with the game, and typed options — with a program the core detects or the
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `runners_json()` | `runners_json()` | `universe runner ls` · `runner options <id>` | `[Runner]`, see below |
+| `runners()` | `runners()` | `universe runner ls` · `runner options <id>` | `[Runner]`, see below |
 | `set_runner_setting(id, key, value)` | `set_runner_setting(…)` | `universe runner set <id> k=v …` | writes `config.toml [runners.<id>] <key>`: `exe`, `args`, `gamescope`, or an option, validated by type; `""` resets it |
 
 `Runner` = `{"id": "dolphin", "name": "Dolphin", "kind": "proton|wine|linux|emulator", "aliases": ["…"],
@@ -287,12 +290,12 @@ alone releases it. The controller watcher reads the composite device like any pa
 | Rust | Python | CLI | Role |
 |---|---|---|---|
 | `media_refresh(id, force, progress)` | `media_refresh(id, force, progress)` | `universe media <name> refresh` | `(changed, total)`: fills the empty slots of `media/` from SteamGridDB, RAWG and Steam screenshots (`force` refetches the filled ones); an override does not stop its slot's default from being fetched; `id=""` does every game |
-| `media_status(id)` | `media_status_json(id)` | `universe media <name> status` | `[{id, title, sgdb_id, sgdb_name, sgdb_year, slots: [{slot, path, default, override, origin, default_origin, kind}]}]`; `path` is what shows, `default` the fetched file under `media/`, `override` the pick under the overrides directory; `kind ∈ picked, default, missing`; `origin` is `picked` or the provider that wrote the default (`sgdb`, `steam`, `pegasus`; empty when nobody recorded it), `default_origin` that provider whatever sits over it; `sgdb_name` is the SteamGridDB entry the art comes from, as the last refresh or candidates call cached it (offline: empty until then); `id=""` does every game |
+| `media_status(id)` | `media_status(id)` | `universe media <name> status` | `[{id, title, sgdb_id, sgdb_name, sgdb_year, slots: [{slot, path, default, override, origin, default_origin, kind}]}]`; `path` is what shows, `default` the fetched file under `media/`, `override` the pick under the overrides directory; `kind ∈ picked, default, missing`; `origin` is `picked` or the provider that wrote the default (`sgdb`, `steam`, `pegasus`; empty when nobody recorded it), `default_origin` that provider whatever sits over it; `sgdb_name` is the SteamGridDB entry the art comes from, as the last refresh or candidates call cached it (offline: empty until then); `id=""` does every game |
 | `media_set_slot(id, slot, path)` | `media_set_slot(…)` | `universe media <name> set <slot> <path>` | copies the file to `<overrides>/<id>/<slot>.<ext>` (a screenshot into `<overrides>/<id>/screenshots/`), replacing any file of that slot there, and returns the path; the default under `media/` stays |
 | `media_set_url(id, slot, url)` | `media_set_url(…)` | `universe media <name> set <slot> <url>` | the same from an http(s) URL, a candidate's |
 | `media_unset(id, slot)` | `media_unset(id, slot)` | `universe media <name> unset <slot>` | removes the override, so the slot shows its default again; `true` when there was one |
-| `media_candidates(id, slot, page)` | `media_candidates_json(id, slot, page=0)` | `universe media <name> candidates <slot> [--page N]` | `{items: [{provider, id, url, thumb, score, slot}], page, more, entry: {id, name, year}}`: one page of SteamGridDB's art for the slot, best first, English and non-NSFW only, and the entry it belongs to; the entry is the pin (`metadata.sgdb_id`, else pegasus-sync's `<overrides>/<id>/sgdb_id` file), else `.sync.json`'s, else a search by title — the hit named like the title, else autocomplete's first |
-| `media_search(id, query)` | `media_search_json(id, query)` | `universe media <name> search [query…]` | `[{provider, id, name, year, verified, current}]`: SteamGridDB's games for the query (the title when empty), `current` on the one the slots come from — to find the id to pin when the match is wrong |
+| `media_candidates(id, slot, page)` | `media_candidates(id, slot, page=0)` | `universe media <name> candidates <slot> [--page N]` | `{items: [{provider, id, url, thumb, score, slot}], page, more, entry: {id, name, year}}`: one page of SteamGridDB's art for the slot, best first, English and non-NSFW only, and the entry it belongs to; the entry is the pin (`metadata.sgdb_id`, else pegasus-sync's `<overrides>/<id>/sgdb_id` file), else `.sync.json`'s, else a search by title — the hit named like the title, else autocomplete's first |
+| `media_search(id, query)` | `media_search(id, query)` | `universe media <name> search [query…]` | `[{provider, id, name, year, verified, current}]`: SteamGridDB's games for the query (the title when empty), `current` on the one the slots come from — to find the id to pin when the match is wrong |
 | `media_pin(id, provider, provider_id)` | `media_pin(…)` | `universe media <name> pin <provider> <id>` | `provider ∈ sgdb, rawg, steam` → `metadata.<provider>_id`; candidates and refresh follow it |
 
 `slot ∈ box_front, square, banner, background, logo, screenshot`. `square` is the 1:1 grid (SteamGridDB 1024×1024, then 512×512): Reprise's home rail and the Switch 2 tiles; `banner` the 920×430 grid, shown nowhere yet. On disk a slot is read under its own stem or Pegasus's and Lutris's, own stem first: `boxFront`, `cover`; `tile`, `icon` (Pegasus's square); `steam`, `grid` (Pegasus's banner); `hero`, `fanart`.
@@ -304,7 +307,7 @@ Two layers per slot: the **default** under `games/<id>/media/`, which `refresh` 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
 | `file_recording(session_id, path)` | `file_recording(session_id, path)` | `universe recording-file <session> <path>` | files the mkv as `<recordings_root>/<id>/<session>.mkv` (rename within a filesystem, copy across), writes `recording` into the session line, prints the final path |
-| `recordings_json(id)` | `recordings_json(id)` | `universe recordings <name>` | `[{session, path, size, duration_s, created_at}]` |
+| `recordings(id)` | `recordings(id)` | `universe recordings <name>` | `[{session, path, size, duration_s, created_at}]` |
 | `remove_recording(id, session_id)` | `remove_recording(id, session_id)` | `universe recordings <name> --remove <session> [-y]` | trashes the mkv (`trash`), clears `recording` on the session line; the hours stay |
 
 `recording-file` is called by the capture module's `session-end` hook, so it lands before any
@@ -340,9 +343,9 @@ gpu-screen-recorder `-o` capture of the session's screen, with no cue.
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `add_entry(session_id, json)` | `add_entry(session_id, json)` | `universe journal-add <session> <entry>` | validates the schema, fills `started_at`/`ended_at`/`duration_s` from the session line when the entry lacks them, writes `journal/<session>.json` |
-| `journal_json(id)` | `journal_json(id)` | `universe journal <name>` | `[Entry]`, last first, read from disk on every call; the state files below are entries too |
-| `pending_journals_json()` | `pending_journals_json()` | `universe status` (a `journal: writing <title>…` line; `pending_journals` in `--json`) | `[{game, title, session, started_at}]` for every `pending` entry across the library; `title` is the game's |
+| `add_entry(session_id, entry)` | `add_entry(session_id, entry)` | `universe journal-add <session> <entry>` | validates the schema, fills `started_at`/`ended_at`/`duration_s` from the session line when the entry lacks them, writes `journal/<session>.json` |
+| `journal(id)` | `journal(id)` | `universe journal <name>` | `[Entry]`, last first, read from disk on every call; the state files below are entries too |
+| `pending_journals()` | `pending_journals()` | `universe status` (a `journal: writing <title>…` line; `pending_journals` in `--json`) | `[{game, title, session, started_at}]` for every `pending` entry across the library; `title` is the game's |
 | `render_journal(id)` | `render_journal(id)` | `universe journal <name> --render` | renders `<journal_root>/<id>/<Title>.md` from the `written` entries, returns the path |
 | `remove_journal_entry(id, session_id)` | `remove_journal_entry(id, session_id)` | `universe journal <name> --remove <session> [-y]` | trashes `journal/<session>.json` and the images it lists (their mirrors beside the note too); a `pending` entry has its `universe-journal-post-process-<session>` unit stopped and its state file removed; the note is rendered again when its folder exists |
 
@@ -370,12 +373,12 @@ that is not `*.json` are ignored, and `render_journal` only renders `written` en
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `modules_json()` | `modules_json()` | `universe module ls` | see below |
+| `modules()` | `modules()` | `universe module ls` | see below |
 | `enable_module(id, enabled)` | `enable_module(id, enabled)` | `universe module enable\|disable <id>` | writes `[modules] enabled` in `config.toml` |
-| `module_settings_json(module, game_id)` | `module_settings_json(…)` | `universe module settings <id> [game]` | global settings merged with the game's; `game_id=""` is global only |
+| `module_settings(module, game_id)` | `module_settings(…)` | `universe module settings <id> [game]` | global settings merged with the game's; `game_id=""` is global only |
 | `set_module_setting(module, game_id, key, value)` | `set_module_setting(…)` | `universe module set <id> k=v [--game g]` | validated against `[[settings]]`. `game_id=""` writes `config.toml [modules.<id>]`, otherwise `game.toml [modules.<id>]` |
-| `module_setting_choices(module, key)` | `module_setting_choices_json(…)` | — | the global setting's choices; a setting with `choices_exec` gets them from the module, live (see below) |
-| `doctor_json()` | `doctor_json()` | `universe doctor` | `[{check, ok, detail, module}]`: required binaries, `gsr-kms-server`, Proton, cursor extension, tokens, one `runner-<id>` check per runner a library game uses (its program resolved), `inputplumber` when an emulator wants it |
+| `module_setting_choices(module, key)` | `module_setting_choices(…)` | — | the global setting's choices; a setting with `choices_exec` gets them from the module, live (see below) |
+| `doctor()` | `doctor()` | `universe doctor` | `[{check, ok, detail, module}]`: required binaries, `gsr-kms-server`, Proton, cursor extension, tokens, one `runner-<id>` check per runner a library game uses (its program resolved), `inputplumber` when an emulator wants it |
 
 A module entry is `{id, name, kind: [], version, dir, enabled, available, missing: [bin],
 hooks: {}, settings: [Setting]}`, and
@@ -391,20 +394,20 @@ array of strings (20 s at most).
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `settings_json()` | `settings_json()` | `universe config get` | resolved `config.toml`: absolute paths, defaults applied |
+| `settings()` | `settings()` | `universe config get` | resolved `config.toml`: absolute paths, defaults applied |
 | `set_setting(key, value)` | `set_setting(key, value)` | `universe config set <key> <value>` | dotted `config.toml` key (`launch.proton`, `paths.recordings_root`, `desktop.profile`); the `launch.gamescope_*` fields are validated |
-| `screen_mode_json(screen)` | `screen_mode_json(screen)` | — | `{screen, width, height, refresh}`: the connector's current mode as gamescope is told it (see Gamescope), `screen=""` for the profile default; zeros when none can be read |
+| `screen_mode(screen)` | `screen_mode(screen)` | — | `{screen, width, height, refresh}`: the connector's current mode as gamescope is told it (see Gamescope), `screen=""` for the profile default; zeros when none can be read |
 | — | `version()`, `data_home()`, `state_home()` | `universe --version` | |
 
 ## Controller
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `controller_state_json()` | `controller_state_json()` | `universe controller ls` | `{enabled, hold_ms, volume_step (a percent, number), mangohud_toggle, families: [{id, name, slots: [{id, label, codes, extra}]}], macros: [Macro], presets: [{id, label, hold_only}]}`; the CLI adds `devices`, the pads readable now with every slot's code or `bound: false` |
-| `controller_pads_json()` | `controller_pads_json()` | — | the `devices` list alone, in the shape `watch` announces; for a frontend whose watcher waits on the lock |
-| `set_controller_macro(json)` | same | `universe controller bind <family> <button> <press\|hold> <action> [--keys K] [--command C]` | validates, replaces the macro with the same family, button and trigger |
+| `controller_state()` | `controller_state()` | `universe controller ls` | `{enabled, hold_ms, volume_step (a percent, number), mangohud_toggle, families: [{id, name, slots: [{id, label, codes, extra}]}], macros: [Macro], presets: [{id, label, hold_only}]}`; the CLI adds `devices`, the pads readable now with every slot's code or `bound: false` |
+| `controller_pads()` | `controller_pads()` | — | the `devices` list alone, in the shape `watch` announces; for a frontend whose watcher waits on the lock |
+| `set_controller_macro(macro)` | same | `universe controller bind <family> <button> <press\|hold> <action> [--keys K] [--command C]` | validates, replaces the macro with the same family, button and trigger |
 | `remove_controller_macro(family, button, trigger)` | same | `universe controller unbind <family> <button> [trigger]` | an empty trigger removes both |
-| `set_controller_button(family, slot, codes_json)` | same | `universe controller learn <family> <slot>` · `forget` | the codes a slot answers to: a JSON list (empty leaves it unbound), `null` restores the seeds. `learn` reads the pad instead: the next button pressed becomes the slot's, taken from whichever slot had it |
+| `set_controller_button(family, slot, codes)` | same | `universe controller learn <family> <slot>` · `forget` | the codes a slot answers to: a list (empty leaves it unbound), `None` restores the seeds. `learn` reads the pad instead: the next button pressed becomes the slot's, taken from whichever slot had it |
 | — | — | `universe controller watch [--json] [--wait]` | the engine |
 
 `Macro` = `{"family": "dualsense-edge" | "*", "button": "paddle_left", "trigger": "press" | "hold",

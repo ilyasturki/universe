@@ -74,10 +74,6 @@ impl Core {
         self.host.units.is_active(&m.current.unit).await.then_some(m.current)
     }
 
-    pub async fn current_json(&self) -> String {
-        self.current().await.map(|c| serde_json::to_string(&c).unwrap_or_default()).unwrap_or_default()
-    }
-
     /// A marker without an active unit is a session whose `session-end` never ran (crash, reboot): close it now.
     /// One that cannot be read goes too, or every later launch would be `Busy`.
     pub async fn reconcile(&self) -> Result<()> {
