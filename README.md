@@ -130,8 +130,10 @@ just cli play <game>       # a game is a transient systemd unit; `just logs` fol
 just ui                    # PySide6 host on the in-process core (add --windowed)
 just ui-fake               # host on a fixture library, no core
 just seed [id…]            # copy real games (journal, media, recording refs) into .dev/ to test the player and the journal
+just fixture-game          # add SuperTux as a `linux` game, to launch something where no library exists
 just test / just check     # cargo + pytest / flake packages + sandboxed checks
 just clean                 # trash .dev/ and .venv/
+UNIVERSE_DEV=.dev-empty just ui   # any recipe on another profile; a new one starts as an empty library
 just bump patch|minor|major|X.Y.Z   # release: rewrite every version copy from Cargo.toml, commit, tag vX.Y.Z (no push)
 ```
 
