@@ -58,7 +58,6 @@ fn field(v: &serde_json::Value, key: &str) -> String {
     v[key].as_str().unwrap_or("").to_string()
 }
 
-/// A pending file older than `PENDING_TIMEOUT` (by mtime) is listed as failed.
 fn pending_entry(p: &Path, sid: &str) -> crate::Result<Entry> {
     let v = read_json(p)?;
     let age = std::fs::metadata(p).and_then(|m| m.modified()).ok().and_then(|t| t.elapsed().ok()).unwrap_or_default();
@@ -219,6 +218,7 @@ impl Locale {
         Self::new(c"")
     }
 
+    #[cfg(test)]
     pub fn posix() -> Self {
         Self::new(c"C")
     }

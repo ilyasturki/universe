@@ -52,7 +52,7 @@ pub fn lock_path() -> PathBuf {
 async fn take_lock(wait: bool, out: &Out) -> crate::Result<Option<std::fs::File>> {
     let path = lock_path();
     if let Some(p) = path.parent() {
-        paths::ensure_dir(p)?;
+        std::fs::create_dir_all(p)?;
     }
     let file = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(&path)?;
     let fd = file.as_raw_fd();
@@ -112,7 +112,6 @@ fn axis_name(code: u16) -> Option<&'static str> {
     }
 }
 
-/// A stick axis as -1..1 about the centre of its range, a trigger as 0..1 across it.
 fn axis_value(name: &str, value: i32, (min, max): (i32, i32)) -> f64 {
     let span = f64::from(max) - f64::from(min);
     if span <= 0.0 {
@@ -137,10 +136,7 @@ impl Pad {
     }
 
     fn json(&self) -> serde_json::Value {
-        serde_json::json!({
-            "event": "device", "id": self.id, "name": self.name, "family": self.family.id, "family_name": self.family.name, "bus": self.bus,
-            "slots": self.slots.iter().map(|(s, src)| (s.clone(), serde_json::json!({"code": src.map(|x| x.to_string()), "bound": src.is_some()}))).collect::<serde_json::Map<_, _>>(),
-        })
+        serde_json::json!({"event": "device", "id": self.id, "name": self.name, "family": self.family.id, "family_name": self.family.name, "bus": self.bus, "slots": slots_json(&self.slots)})
     }
 
     fn axis(&mut self, code: u16, value: i32) -> Vec<(Source, bool)> {
@@ -200,6 +196,10 @@ fn describe(dev: &Device) -> Caps {
     Caps { name, family, keys, axes, ranges }
 }
 
+fn slots_json(slots: &BTreeMap<String, Option<Source>>) -> serde_json::Map<String, serde_json::Value> {
+    slots.iter().map(|(s, src)| (s.clone(), serde_json::json!({"code": src.map(|x| x.to_string()), "bound": src.is_some()}))).collect()
+}
+
 fn readable(path: &Path) -> bool {
     let Ok(c) = std::ffi::CString::new(path.to_string_lossy().as_bytes()) else { return false };
     unsafe { libc::access(c.as_ptr(), libc::R_OK) == 0 }
@@ -215,7 +215,7 @@ pub fn enumerate_json(cfg: &ControllerConfig) -> Vec<serde_json::Value> {
         let slots = resolve_slots(cfg, c.family, &c.keys, &c.axes);
         out.push(serde_json::json!({
             "id": path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default(), "path": path, "name": c.name, "family": c.family.id, "family_name": c.family.name, "bus": bus_name(&dev),
-            "slots": slots.iter().map(|(s, src)| (s.clone(), serde_json::json!({"code": src.map(|x| x.to_string()), "bound": src.is_some()}))).collect::<serde_json::Map<_, _>>(),
+            "slots": slots_json(&slots),
         }));
     }
     out.sort_by(|a, b| a["id"].as_str().cmp(&b["id"].as_str()));
@@ -375,9 +375,7 @@ impl Watcher {
         self.cfg = self.core.config.read().await.controller.clone();
         self.config_mtime = config_mtime();
         self.engine.hold_ms = self.cfg.hold_ms;
-        let ids: Vec<String> = self.pads.keys().cloned().collect();
-        for id in ids {
-            let pad = self.pads.get_mut(&id).unwrap();
+        for pad in self.pads.values_mut() {
             pad.resolve(&self.cfg);
             self.out.emit(pad.json());
         }
@@ -406,25 +404,22 @@ impl Watcher {
             }
         }
         for (source, down) in transitions {
-            if let Some((lid, slot, _)) = self.learning.clone() {
-                if lid == id && down && matches!(source, Source::Key(_) | Source::Axis { code: 16..=17, .. }) {
-                    self.learning = None;
-                    let pad = self.pads.get(&id).unwrap();
-                    let family = pad.family.id.to_string();
-                    let from = super::learn_code(&self.cfg, pad.family, &slot, &source.to_string());
-                    match from {
-                        Ok(from) => {
-                            if !self.out.emit(serde_json::json!({"event": "learned", "family": family, "slot": slot, "code": source.to_string(), "from": from})) {
-                                return false;
-                            }
-                            self.reload().await;
+            let learnable = down && matches!(source, Source::Key(_) | Source::Axis { code: 16..=17, .. });
+            if let Some((_, slot, _)) = self.learning.clone().filter(|(lid, _, _)| *lid == id && learnable) {
+                self.learning = None;
+                let family = self.pads[&id].family;
+                match super::learn_code(&self.cfg, family, &slot, &source.to_string()) {
+                    Ok(from) => {
+                        if !self.out.emit(serde_json::json!({"event": "learned", "family": family.id, "slot": slot, "code": source.to_string(), "from": from})) {
+                            return false;
                         }
-                        Err(e) => {
-                            self.out.emit(serde_json::json!({"event": "error", "message": e.to_string()}));
-                        }
+                        self.reload().await;
                     }
-                    return true;
+                    Err(e) => {
+                        self.out.emit(serde_json::json!({"event": "error", "message": e.to_string()}));
+                    }
                 }
+                return true;
             }
             let pad = self.pads.get(&id).unwrap();
             let Some(slot) = pad.by_source.get(&source).cloned() else {

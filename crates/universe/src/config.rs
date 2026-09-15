@@ -47,15 +47,12 @@ pub struct LaunchDefaults {
     pub gamescope: bool,
     pub gamescope_args: String,
     pub gamescope_bin: String,
-    /// `auto` (the screen's mode) or `WxH`: what the game renders at; the output is always the screen.
     pub gamescope_resolution: String,
-    /// `auto` (the screen's rate) or Hz.
     pub gamescope_refresh: String,
     pub gamescope_scaler: String,
     pub gamescope_filter: String,
     pub gamescope_sharpness: Option<u32>,
     pub gamescope_adaptive_sync: bool,
-    /// `auto` (the refresh the game sees), `none`, or frames per second: MangoHud's limiter in the game.
     pub fps_limit: String,
     pub env: BTreeMap<String, String>,
     pub umu_run: String,
@@ -230,29 +227,16 @@ impl Config {
 
     /// Resolves a Proton name (or path) to a directory; proton/<name> under data_home wins, then [proton], then a path.
     pub fn proton_path(&self, name: &str) -> Option<PathBuf> {
-        let linked = paths::data_home().join("proton").join(name);
-        if linked.exists() {
-            return Some(std::fs::canonicalize(&linked).unwrap_or(linked));
-        }
-        if let Some(p) = self.proton.get(name) {
-            let p = paths::expand(p);
-            if p.exists() {
-                return Some(std::fs::canonicalize(&p).unwrap_or(p));
-            }
-        }
-        let p = paths::expand(name);
-        if p.is_absolute() && p.exists() {
-            return Some(p);
-        }
-        let lutris = paths::expand(&self.lutris.runners_dir).join(name);
-        if lutris.exists() {
-            return Some(std::fs::canonicalize(&lutris).unwrap_or(lutris));
-        }
-        let steam = paths::home().join(".local/share/Steam/compatibilitytools.d").join(name);
-        if steam.exists() {
-            return Some(steam);
-        }
-        None
+        let own = paths::expand(name);
+        let candidates = [
+            Some(paths::data_home().join("proton").join(name)),
+            self.proton.get(name).map(|p| paths::expand(p)),
+            own.is_absolute().then_some(own),
+            Some(paths::expand(&self.lutris.runners_dir).join(name)),
+            Some(paths::home().join(".local/share/Steam/compatibilitytools.d").join(name)),
+        ];
+        let p = candidates.into_iter().flatten().find(|p| p.exists())?;
+        Some(std::fs::canonicalize(&p).unwrap_or(p))
     }
 
     pub fn api_key(&self, which: &str) -> Option<String> {
@@ -289,7 +273,7 @@ impl Config {
         let mut doc: toml_edit::DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| crate::Error::Invalid(e.to_string()))?;
         crate::game::set_dotted(&mut doc, key, value)?;
         if let Some(parent) = path.parent() {
-            paths::ensure_dir(parent)?;
+            std::fs::create_dir_all(parent)?;
         }
         std::fs::write(path, doc.to_string())?;
         Ok(())

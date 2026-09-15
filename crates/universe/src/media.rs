@@ -191,7 +191,8 @@ fn sgdb_assets(key: &str, endpoint: &str, game_id: u64, dims: Option<&str>, page
 
 fn sgdb_steam_appid(key: &str, game_id: u64) -> Option<u64> {
     let v = get_json(&format!("{SGDB}/games/id/{game_id}?platformdata=steam"), Some(key)).ok()?;
-    v["data"]["external_platform_data"]["steam"].as_array()?.first()?["id"].as_str().and_then(|s| s.parse().ok()).or_else(|| v["data"]["external_platform_data"]["steam"][0]["id"].as_u64())
+    let id = &v["data"]["external_platform_data"]["steam"][0]["id"];
+    id.as_u64().or_else(|| id.as_str()?.parse().ok())
 }
 
 pub fn rawg_search(key: &str, title: &str, year: u32) -> crate::Result<Option<u64>> {

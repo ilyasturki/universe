@@ -22,7 +22,7 @@ fn trash(path: &Path) -> Result<()> {
     Ok(())
 }
 
-pub fn title_of(path: &Path) -> String {
+fn title_of(path: &Path) -> String {
     let stem = if path.is_dir() { path.file_name() } else { path.file_stem() }.map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
     let mut s = stem.replace('_', " ");
     for (open, close) in [('[', ']'), ('(', ')')] {
@@ -50,6 +50,11 @@ pub(crate) fn passthrough_env() -> BTreeMap<String, String> {
     env
 }
 
+/// The media providers block on the network; a worker thread keeps the runtime free.
+async fn blocking<T: Send + 'static>(f: impl FnOnce() -> Result<T> + Send + 'static) -> Result<T> {
+    tokio::task::spawn_blocking(f).await.map_err(|e| Error::Io(e.to_string()))?
+}
+
 fn load_source_caches(modules: &[Module]) -> BTreeMap<String, Vec<serde_json::Map<String, serde_json::Value>>> {
     let mut caches = BTreeMap::new();
     for m in modules.iter().filter(|m| m.is_source()) {
@@ -64,10 +69,10 @@ pub struct Core {
     pub config: RwLock<Config>,
     pub modules: RwLock<Vec<Module>>,
     pub games: RwLock<Vec<Resolved>>,
-    pub source_libraries: Mutex<BTreeMap<String, Vec<serde_json::Map<String, serde_json::Value>>>>,
-    pub source_logins: Mutex<BTreeMap<String, String>>,
-    logins_probed: Mutex<bool>,
-    pub(crate) scope: std::sync::Mutex<Option<String>>,
+    source_libraries: Mutex<BTreeMap<String, Vec<serde_json::Map<String, serde_json::Value>>>>,
+    source_logins: Mutex<BTreeMap<String, String>>,
+    logins_probed: tokio::sync::OnceCell<()>,
+    pub(crate) scope: std::sync::OnceLock<String>,
     pub(crate) host: Host,
 }
 
@@ -82,8 +87,8 @@ impl Core {
             games: RwLock::new(games),
             source_libraries: Mutex::new(caches),
             source_logins: Mutex::new(BTreeMap::new()),
-            logins_probed: Mutex::new(false),
-            scope: std::sync::Mutex::new(None),
+            logins_probed: tokio::sync::OnceCell::new(),
+            scope: std::sync::OnceLock::new(),
             host,
         }
     }
@@ -94,7 +99,6 @@ impl Core {
         Core::open_with(config, host).await
     }
 
-    /// The core over a given host: what the tests open on the in-memory one.
     pub async fn open_with(config: Config, host: Host) -> Result<Core> {
         std::fs::create_dir_all(paths::games_dir())?;
         let core = Core::new(config, host);
@@ -113,23 +117,20 @@ impl Core {
 
     /// Login probes reach the network: once per process, on the first call that reports them.
     async fn ensure_logins(&self) {
-        let mut probed = self.logins_probed.lock().await;
-        if *probed {
-            return;
-        }
-        let sources: Vec<Module> = self.modules.read().await.iter().filter(|m| m.is_source() && m.active()).cloned().collect();
-        for m in sources {
-            self.refresh_login(&m).await;
-        }
-        *probed = true;
+        self.logins_probed
+            .get_or_init(|| async {
+                let sources: Vec<Module> = self.modules.read().await.iter().filter(|m| m.is_source() && m.active()).cloned().collect();
+                for m in sources {
+                    self.refresh_login(&m).await;
+                }
+            })
+            .await;
     }
 
-    pub async fn reload_all(&self) -> Result<()> {
+    pub async fn reload_all(&self) {
         let config = self.config.read().await.clone();
         let modules = self.modules.read().await.clone();
-        let games = library::load_all(&config, &modules);
-        *self.games.write().await = games;
-        Ok(())
+        *self.games.write().await = library::load_all(&config, &modules);
     }
 
     pub async fn reload_game(&self, id: &str) -> Result<()> {
@@ -175,16 +176,10 @@ impl Core {
         let r = self.get(id).await?;
         let modules = self.modules.read().await.clone();
         let top = key.split('.').next().unwrap_or("");
-        let (real_key, module_id) = if top == "modules" {
-            (key.to_string(), key.split('.').nth(1).map(|s| s.to_string()))
-        } else if modules.iter().any(|m| m.id() == top) {
-            (format!("modules.{key}"), Some(top.to_string()))
-        } else {
-            (key.to_string(), None)
-        };
-        if let Some(mid) = module_id {
+        let real_key = if modules.iter().any(|m| m.id() == top) { format!("modules.{key}") } else { key.to_string() };
+        if let Some(rest) = real_key.strip_prefix("modules.") {
+            let (mid, skey) = rest.split_once('.').ok_or_else(|| Error::Invalid(format!("bad key {key}")))?;
             let m = modules.iter().find(|m| m.id() == mid).ok_or_else(|| Error::NotFound(format!("module {mid}")))?;
-            let skey = real_key.splitn(3, '.').nth(2).ok_or_else(|| Error::Invalid(format!("bad key {key}")))?;
             if !value.is_empty() {
                 m.validate_setting(skey, value, true)?;
             }
@@ -269,7 +264,6 @@ impl Core {
         if r.game.source.dir.is_empty() || !dir.is_dir() {
             return Err(Error::Invalid(format!("{id} has no install folder")));
         }
-        // Never a root, a home, a games root or a folder another game lives in: only its own.
         let config = self.config.read().await.clone();
         let home = paths::home();
         let shared = self.games.read().await.iter().any(|x| x.game.id != id && !x.game.source.dir.is_empty() && paths::expand(&x.game.source.dir).starts_with(&dir));
@@ -277,7 +271,6 @@ impl Core {
             return Err(Error::Invalid(format!("refusing to trash {}", dir.display())));
         }
         trash(&dir)?;
-        // Cleared so the next install sets them afresh, wherever it lands.
         let toml = r.game.toml_path();
         for key in ["source.dir", "source.build_id", "launch.exe"] {
             crate::game::set_key(&toml, key, "")?;
@@ -318,7 +311,7 @@ impl Core {
         let config = self.config.read().await.clone();
         let report = crate::lutris::import(&config, apply)?;
         if apply {
-            self.reload_all().await?;
+            self.reload_all().await;
         }
         Ok(report)
     }
@@ -358,10 +351,6 @@ impl Core {
             .collect()
     }
 
-    async fn shell_conn(&self) -> Option<zbus::Connection> {
-        zbus::Connection::session().await.inspect_err(|e| tracing::warn!("session bus: {e}")).ok()
-    }
-
     /// The running game's window, as the shell sees it: `None` before it maps; `Unavailable` off GNOME.
     pub async fn session_window(&self) -> Result<Option<crate::desktop::Toplevel>> {
         let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
@@ -370,8 +359,7 @@ impl Core {
         Ok(crate::desktop::pick_window(&windows, |pid| crate::desktop::pid_in_cgroup(pid, &cg)))
     }
 
-    /// Blocks until the session's window is on screen, then gives it the focus; the window, or
-    /// `None` when the session ended first or `timeout` ran out. `Unavailable` off GNOME, at once.
+    /// Waits for the session's window, then focuses it; `None` once the session ended or `timeout` ran out.
     pub async fn wait_session_window(&self, session_id: &str, timeout: std::time::Duration) -> Result<Option<crate::desktop::Toplevel>> {
         crate::desktop::list_windows().await.map_err(Error::Unavailable)?;
         let deadline = std::time::Instant::now() + timeout;
@@ -504,8 +492,7 @@ impl Core {
         self.reload_game(&id).await
     }
 
-    /// Read from disk on every call: a pending entry's timeout is judged now, not at the last reload.
-    /// The images come back absolute; the entry on disk keeps them relative to the journal dir.
+    /// Read from disk on every call, a pending entry's timeout judged now; the images come back absolute.
     pub async fn journal(&self, id: &str) -> Result<Vec<crate::journal::Entry>> {
         let r = self.get(id).await?;
         let journal_dir = r.game.journal_dir();
@@ -602,7 +589,8 @@ impl Core {
 
     pub async fn reload_config(&self) -> Result<()> {
         self.reload_settings().await?;
-        self.reload_all().await
+        self.reload_all().await;
+        Ok(())
     }
 
     /// config.toml and the module list only, not the library: what the controller watcher needs, without a rescan stalling it.
@@ -657,7 +645,6 @@ impl Core {
         serde_json::json!({ "screen": screen, "width": mode.width, "height": mode.height, "refresh": mode.refresh })
     }
 
-    /// The launch keys of `scope` (`game`, `global`, `both`) as settings rows, the screen's mode sizing the choices.
     pub fn launch_keys(&self, scope: &str, screen: Option<crate::gamescope::Mode>) -> Result<Vec<crate::launch_keys::Row>> {
         Ok(crate::launch_keys::rows(crate::launch_keys::Scope::parse(scope)?, screen))
     }
@@ -726,7 +713,7 @@ impl Core {
     pub async fn doctor(&self) -> Vec<crate::doctor::Check> {
         let cfg = self.config.read().await.clone();
         let modules = self.modules.read().await.clone();
-        let conn = if crate::desktop::detect(&cfg) == crate::desktop::Profile::Gnome { self.shell_conn().await } else { None };
+        let conn = if crate::desktop::detect(&cfg) == crate::desktop::Profile::Gnome { crate::host::session_bus().await } else { None };
         let runners: Vec<String> = self.games.read().await.iter().filter(|g| g.game.removed_at.is_empty()).map(|g| g.effective.runner.clone()).collect();
         crate::doctor::run(&cfg, &modules, conn.as_ref(), &runners).await
     }
@@ -749,7 +736,7 @@ impl Core {
         let modules = self.modules.read().await;
         let caches = self.source_libraries.lock().await;
         let logins = self.source_logins.lock().await;
-        let list: Vec<serde_json::Value> = modules
+        modules
             .iter()
             .filter(|m| m.is_source())
             .map(|m| {
@@ -761,8 +748,7 @@ impl Core {
                     "logged_in": logins.contains_key(m.id()), "user": logins.get(m.id()).cloned().unwrap_or_default(),
                 })
             })
-            .collect();
-        list
+            .collect()
     }
 
     async fn run_verb(&self, m: &Module, verb: &str, args: &[String], mut progress: Option<Progress<'_, '_>>) -> Result<Vec<SourceEvent>> {
@@ -975,7 +961,7 @@ impl Core {
             }
             let cfg = cfg.clone();
             let game = r.game.clone();
-            match tokio::task::spawn_blocking(move || crate::media::refresh(&cfg, &game, force)).await.map_err(|e| Error::Io(e.to_string())).and_then(|r| r) {
+            match blocking(move || crate::media::refresh(&cfg, &game, force)).await {
                 Ok(true) => {
                     changed += 1;
                     let _ = self.reload_game(gid).await;
@@ -1000,7 +986,7 @@ impl Core {
         let cfg = self.config.read().await.clone();
         let game = r.game.clone();
         let (slot, url) = (slot.to_string(), url.to_string());
-        let placed = tokio::task::spawn_blocking(move || crate::media::set_slot_url(&cfg, &game, &slot, &url)).await.map_err(|e| Error::Io(e.to_string()))??;
+        let placed = blocking(move || crate::media::set_slot_url(&cfg, &game, &slot, &url)).await?;
         self.reload_game(id).await?;
         Ok(placed.to_string_lossy().into())
     }
@@ -1018,7 +1004,7 @@ impl Core {
         let cfg = self.config.read().await.clone();
         let game = r.game.clone();
         let slot = slot.to_string();
-        tokio::task::spawn_blocking(move || crate::media::candidates(&cfg, &game, &slot, page)).await.map_err(|e| Error::Io(e.to_string()))?
+        blocking(move || crate::media::candidates(&cfg, &game, &slot, page)).await
     }
 
     pub async fn media_search(&self, id: &str, query: &str) -> Result<Vec<crate::media::Hit>> {
@@ -1026,7 +1012,7 @@ impl Core {
         let cfg = self.config.read().await.clone();
         let game = r.game.clone();
         let query = query.to_string();
-        tokio::task::spawn_blocking(move || crate::media::search(&cfg, &game, &query)).await.map_err(|e| Error::Io(e.to_string()))?
+        blocking(move || crate::media::search(&cfg, &game, &query)).await
     }
 
     pub async fn media_status(&self, id: &str) -> Result<Vec<crate::media::MediaStatus>> {

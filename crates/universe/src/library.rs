@@ -48,7 +48,6 @@ pub struct Effective {
     pub gamescope_args: String,
     #[serde(flatten)]
     pub gamescope_fields: crate::gamescope::Fields,
-    /// `auto` (the refresh the game sees), `none`, or frames per second.
     pub fps_limit: String,
     pub hide_cursor: bool,
     pub env: BTreeMap<String, String>,
@@ -157,7 +156,6 @@ pub fn is_image(p: &Path) -> bool {
     p.extension().and_then(|s| s.to_str()).is_some_and(|e| IMAGE_EXTS.contains(&e.to_ascii_lowercase().as_str()))
 }
 
-/// The game's gamescope fields over the global ones, a field left empty taking `[launch]`'s.
 fn gamescope_fields_of(game: &Game, config: &Config) -> crate::gamescope::Fields {
     let l = &game.launch;
     let d = &config.launch;
@@ -247,7 +245,6 @@ pub fn load_all(config: &Config, modules: &[crate::modules::Module]) -> Vec<Reso
     out
 }
 
-/// Not hidden first, then most recently played, then title.
 pub fn sort_default(list: &mut [Resolved]) {
     list.sort_by(|a, b| {
         let ra = (!a.game.removed_at.is_empty(), a.game.hidden);

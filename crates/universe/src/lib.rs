@@ -1,7 +1,12 @@
+pub mod cli;
 pub mod config;
 pub mod controller;
+pub mod core;
+pub mod desktop;
+pub mod doctor;
 pub mod game;
 pub mod gamescope;
+pub mod host;
 pub mod inputplumber;
 pub mod journal;
 pub mod launch_keys;
@@ -13,15 +18,10 @@ pub mod modules;
 pub mod paths;
 pub mod recording;
 pub mod runners;
+pub mod session;
 pub mod sessions;
 pub mod slug;
 pub mod splash;
-pub mod desktop;
-pub mod host;
-pub mod session;
-pub mod core;
-pub mod cli;
-pub mod doctor;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 

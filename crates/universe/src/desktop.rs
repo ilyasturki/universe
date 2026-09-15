@@ -37,8 +37,9 @@ pub fn connected_outputs() -> Vec<String> {
         .flatten()
         .filter_map(|e| {
             let name = e.file_name().to_string_lossy().to_string();
+            let (_, connector) = name.split_once('-')?;
             let status = std::fs::read_to_string(e.path().join("status")).ok()?;
-            (status.trim() == "connected").then(|| name.split_once('-').map(|(_, c)| c.to_string())).flatten()
+            (status.trim() == "connected").then(|| connector.to_string())
         })
         .collect();
     names.sort();
@@ -46,7 +47,7 @@ pub fn connected_outputs() -> Vec<String> {
 }
 
 /// Qt/Mutter names HDMI outputs "HDMI-1"; DRM says "HDMI-A-1". gsr wants the DRM name.
-pub fn normalize_connector(name: &str) -> String {
+fn normalize_connector(name: &str) -> String {
     let connected = connected_outputs();
     if connected.iter().any(|c| c == name) {
         return name.to_string();
@@ -67,8 +68,7 @@ pub fn pick_screen(requested: &str) -> String {
     connected_outputs().into_iter().next().unwrap_or_default()
 }
 
-/// The connector's current mode: from Mutter's DisplayConfig on GNOME, else its preferred DRM
-/// mode at 60 Hz; None when the connector is not there at all.
+/// Mutter's DisplayConfig on GNOME, else the preferred DRM mode at 60 Hz; `None` when the connector is not there.
 pub async fn screen_mode(screen: &str) -> Option<crate::gamescope::Mode> {
     if screen.is_empty() {
         return None;
@@ -82,8 +82,7 @@ pub async fn screen_mode(screen: &str) -> Option<crate::gamescope::Mode> {
     drm_preferred_mode(screen)
 }
 
-/// GetCurrentState's `is-current` mode of the monitor whose connector is `screen` (Mutter spells
-/// HDMI outputs without the `-A`, so both spellings match).
+/// The `is-current` mode of the monitor on `screen`; Mutter spells HDMI outputs without the `-A`, so both spellings match.
 async fn mutter_current_mode(screen: &str) -> zbus::Result<Option<crate::gamescope::Mode>> {
     type Props = HashMap<String, zbus::zvariant::OwnedValue>;
     type Mode = (String, i32, i32, f64, f64, Vec<f64>, Props);
@@ -242,8 +241,7 @@ pub fn extension_installed(extension: &str) -> bool {
     dirs.split(':').any(|d| std::path::Path::new(d).join("gnome-shell/extensions").join(extension).exists())
 }
 
-/// Through the Universe extension: org.gnome.Shell.ShowOSD refuses callers other than gsd. An extension
-/// the shell has loaded but not enabled is enabled on the first call; `level` in [0, 1] shows the bar.
+/// org.gnome.Shell.ShowOSD refuses callers other than gsd, so through the extension, enabled on the first call; `level` in [0, 1] shows the bar.
 pub async fn show_osd(icon: &str, label: Option<&str>, level: Option<f64>) -> Result<(), String> {
     let args = (icon, label.unwrap_or(""), level.unwrap_or(-1.0));
     let call = async {

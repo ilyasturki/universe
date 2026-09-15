@@ -36,7 +36,7 @@ impl Macro {
     }
 
     pub fn validate(&self) -> crate::Result<()> {
-        let bad = |m: String| crate::Error::Invalid(m);
+        let bad = crate::Error::Invalid;
         if !TRIGGERS.contains(&self.trigger.as_str()) {
             return Err(bad(format!("trigger must be press or hold, not '{}'", self.trigger)));
         }
@@ -57,10 +57,6 @@ impl Macro {
             (_, Some(_)) => Ok(()),
             _ => Err(bad(format!("unknown family '{}'", self.family))),
         }
-    }
-
-    pub fn matches(&self, family: &str, button: &str, trigger: &str) -> bool {
-        self.family == family && self.button == button && self.trigger == trigger
     }
 }
 
@@ -275,8 +271,7 @@ pub fn family_by_id(id: &str) -> Option<&'static Family> {
     FAMILIES.iter().find(|s| s.id == id)
 }
 
-/// xpadneo presents an Elite as a plain "Xbox Wireless Controller" 045e:028e, so an Xbox pad
-/// advertising grip or paddle codes is an Elite whatever it says.
+/// xpadneo presents an Elite as a plain "Xbox Wireless Controller" 045e:028e: grip or paddle codes make it an Elite whatever it says.
 pub fn detect_family(vendor: u16, product: u16, name: &str, keys: &[u16]) -> &'static Family {
     let lname = name.to_lowercase();
     let family = FAMILIES
@@ -363,7 +358,7 @@ pub fn write_macros(list: &[Macro]) -> crate::Result<()> {
     let mut doc: toml_edit::DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| crate::Error::Invalid(e.to_string()))?;
     controller_table(&mut doc)["macros"] = toml_edit::Item::ArrayOfTables(macros_to_toml(list));
     if let Some(parent) = path.parent() {
-        paths::ensure_dir(parent)?;
+        std::fs::create_dir_all(parent)?;
     }
     std::fs::write(&path, doc.to_string())?;
     Ok(())
@@ -376,7 +371,7 @@ pub fn write_button(family: &str, slot: &str, codes: Option<&[String]>) -> crate
 }
 
 pub fn upsert_macro(list: &mut Vec<Macro>, m: Macro) {
-    list.retain(|x| !x.matches(&m.family, &m.button, &m.trigger));
+    list.retain(|x| (&x.family, &x.button, &x.trigger) != (&m.family, &m.button, &m.trigger));
     list.push(m);
 }
 

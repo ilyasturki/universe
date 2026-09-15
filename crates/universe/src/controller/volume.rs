@@ -24,7 +24,6 @@ fn wpctl(args: &[&str]) -> Result<String, String> {
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
 }
 
-/// Blocking: applies the change to the default sink, capped at the normal volume on the way up.
 pub fn apply(change: Change, percent: u8) -> Result<Level, String> {
     const SINK: &str = "@DEFAULT_AUDIO_SINK@";
     match change {

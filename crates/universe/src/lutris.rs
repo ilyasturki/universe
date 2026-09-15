@@ -8,7 +8,7 @@ use crate::game::Game;
 use crate::paths;
 use crate::sessions::{self, Session};
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct PgaGame {
     pub name: String,
     pub slug: String,
@@ -245,8 +245,7 @@ fn split_prefix_command(cmd: &str, launch: &mut crate::game::Launch) {
     }
 }
 
-/// A Lutris wine version is a Wine build when `<runners_dir>/<version>/bin/wine` exists and no `proton` script
-/// beside it, the system Wine when `system`, Proton otherwise.
+/// A wine version is a Wine build when `<runners_dir>/<version>/bin/wine` exists without a `proton` script beside it, `system` the system Wine, else Proton.
 pub fn convert(p: &PgaGame, lutris_dir: &Path, runners_dir: &Path, global_env: &BTreeMap<String, String>) -> Imported {
     let mut g = Game::new(&p.name);
     g.hidden = p.hidden;
@@ -535,7 +534,7 @@ mod tests {
         let lutris = dir.path().join("lutris");
         std::fs::create_dir_all(lutris.join("games")).unwrap();
         std::fs::write(lutris.join("games/the-technomancer-1.yml"), format!("game:\n  exe: {}/TheTechnomancer.exe\n  prefix: /mnt/games/gog/the-technomancer\nsystem:\n  env:\n    WINE_CPU_TOPOLOGY: 4:0,1,2,3\nwine:\n  version: proton-ge\n  esync: false\n", gdir.display())).unwrap();
-        let p = PgaGame { name: "The Technomancer".into(), slug: "the-technomancer".into(), runner: "wine".into(), platform: "Windows".into(), hidden: false, playtime_h: 0.8, lastplayed: 0, service: "gog".into(), service_id: "1972906591".into(), configpath: "the-technomancer-1".into(), directory: String::new(), year: 2016 };
+        let p = PgaGame { name: "The Technomancer".into(), slug: "the-technomancer".into(), runner: "wine".into(), platform: "Windows".into(), playtime_h: 0.8, service: "gog".into(), service_id: "1972906591".into(), configpath: "the-technomancer-1".into(), year: 2016, ..Default::default() };
         let imp = convert(&p, &lutris, &lutris.join("runners/wine"), &BTreeMap::from([("PROTON_ENABLE_WAYLAND".to_string(), "1".to_string())]));
         let g = imp.game;
         assert_eq!(g.id, "the-technomancer");
@@ -565,7 +564,7 @@ mod tests {
         std::fs::write(runners.join("proton-em/proton"), b"").unwrap();
         let game = |name: &str, yml: &str| {
             std::fs::write(lutris.join(format!("games/{name}.yml")), yml).unwrap();
-            let p = PgaGame { name: name.into(), slug: name.into(), runner: "wine".into(), configpath: name.into(), ..PgaGame { name: String::new(), slug: String::new(), runner: String::new(), platform: String::new(), hidden: false, playtime_h: 0.0, lastplayed: 0, service: String::new(), service_id: String::new(), configpath: String::new(), directory: String::new(), year: 0 } };
+            let p = PgaGame { name: name.into(), slug: name.into(), runner: "wine".into(), configpath: name.into(), ..Default::default() };
             convert(&p, &lutris, &runners, &BTreeMap::new()).game
         };
         let re4 = game("re4", "game:\n  exe: /g/re4.exe\nsystem:\n  env:\n    LC_ALL: ''\n    PROTON_ENABLE_WAYLAND: '0'\n  prefix_command: WINEDLLOVERRIDES=\"amd_ags_x64.dll=n,b\" RADV_DEBUG=nodcc LC_ALL= gamemoderun taskset -c '0-7'\nwine:\n  version: proton-em\n  proton_hdr: true\n  overrides:\n    d3d11.dll: n,b\n");
@@ -624,7 +623,7 @@ mod tests {
     #[test]
     fn convert_emulator_is_parked() {
         let dir = tempfile::tempdir().unwrap();
-        let p = PgaGame { name: "F-Zero GX".into(), slug: "f-zero-gx".into(), runner: "dolphin".into(), platform: "Nintendo GameCube".into(), hidden: false, playtime_h: 4.3, lastplayed: 0, service: String::new(), service_id: String::new(), configpath: "none".into(), directory: String::new(), year: 0 };
+        let p = PgaGame { name: "F-Zero GX".into(), slug: "f-zero-gx".into(), runner: "dolphin".into(), platform: "Nintendo GameCube".into(), playtime_h: 4.3, configpath: "none".into(), ..Default::default() };
         let g = convert(&p, dir.path(), dir.path(), &BTreeMap::new()).game;
         assert_eq!(g.launch.runner, "dolphin");
         assert!(g.launch.backend.is_empty());

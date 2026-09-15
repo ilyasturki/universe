@@ -85,7 +85,6 @@ impl Core {
         universe::paths::state_home().to_string_lossy().to_string()
     }
 
-    // -- library --
     fn list(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| c.list())
     }
@@ -119,7 +118,6 @@ impl Core {
         self.run(py, |c| async move { c.add_game(&v).await })
     }
 
-    // -- runners --
     fn runners(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| c.runners())
     }
@@ -127,7 +125,6 @@ impl Core {
         self.run(py, |c| async move { c.set_runner_setting(&runner, &key, &value).await })
     }
 
-    // -- session --
     fn current(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| c.current())
     }
@@ -160,7 +157,6 @@ impl Core {
         self.value(py, |c| async move { c.sessions(&id).await })
     }
 
-    // -- sources --
     fn sources(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| c.sources())
     }
@@ -204,7 +200,6 @@ impl Core {
         })
     }
 
-    // -- media --
     #[pyo3(signature = (id, force, progress=None))]
     fn media_refresh(&self, py: Python<'_>, id: String, force: bool, progress: Option<Py<PyAny>>) -> PyResult<(usize, usize)> {
         self.run(py, |c| async move {
@@ -235,7 +230,6 @@ impl Core {
         self.run(py, |c| async move { c.media_pin(&id, &provider, &provider_id).await })
     }
 
-    // -- recordings & journal --
     fn file_recording(&self, py: Python<'_>, session_id: String, path: String) -> PyResult<String> {
         self.run(py, |c| async move { c.file_recording(&session_id, &path).await })
     }
@@ -259,7 +253,6 @@ impl Core {
         self.run(py, |c| async move { c.add_entry(&session_id, entry).await })
     }
 
-    // -- modules & settings --
     fn modules(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| c.modules())
     }
@@ -293,7 +286,6 @@ impl Core {
         self.value_infallible(py, |c| c.doctor())
     }
 
-    // -- controller --
     fn controller_state(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| c.controller_state())
     }

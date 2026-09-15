@@ -165,28 +165,19 @@ impl Module {
         out
     }
 
-    pub fn validate_setting(&self, key: &str, value: &str, scope_game: bool) -> crate::Result<String> {
-        if key == "enabled" && self.is_hooks() && !self.manifest.settings.iter().any(|s| s.key == "enabled") {
-            return match value {
-                "true" | "false" => Ok(value.into()),
-                _ => Err(crate::Error::Invalid("enabled must be true or false".into())),
-            };
-        }
-        let s = self.manifest.settings.iter().find(|s| s.key == key).ok_or_else(|| crate::Error::Invalid(format!("{}: unknown setting {key}", self.id())))?;
-        if scope_game && s.scope != "game" {
-            return Err(crate::Error::Invalid(format!("{}.{key} is a global setting", self.id())));
-        }
-        match s.kind.as_str() {
-            "bool" => match value {
-                "true" | "false" => Ok(value.into()),
-                _ => Err(crate::Error::Invalid(format!("{key} must be true or false"))),
-            },
+    pub fn validate_setting(&self, key: &str, value: &str, scope_game: bool) -> crate::Result<()> {
+        let (kind, choices): (&str, &[String]) = match self.manifest.settings.iter().find(|s| s.key == key) {
+            Some(s) if scope_game && s.scope != "game" => return Err(crate::Error::Invalid(format!("{}.{key} is a global setting", self.id()))),
+            Some(s) => (&s.kind, &s.choices),
+            None if key == "enabled" && self.is_hooks() => ("bool", &[]),
+            None => return Err(crate::Error::Invalid(format!("{}: unknown setting {key}", self.id()))),
+        };
+        match kind {
+            "bool" if !matches!(value, "true" | "false") => Err(crate::Error::Invalid(format!("{key} must be true or false"))),
             // A listed non-numeric choice is a named value ("auto") the module resolves itself.
-            "int" if value.parse::<i64>().is_ok() || s.choices.iter().any(|c| c == value) => Ok(value.into()),
-            "int" => Err(crate::Error::Invalid(format!("{key} must be an integer"))),
-            "enum" if s.choices.iter().any(|c| c == value) => Ok(value.into()),
-            "enum" => Err(crate::Error::Invalid(format!("{key} must be one of {}", s.choices.join(", ")))),
-            _ => Ok(value.into()),
+            "int" if value.parse::<i64>().is_err() && !choices.iter().any(|c| c == value) => Err(crate::Error::Invalid(format!("{key} must be an integer"))),
+            "enum" if !choices.iter().any(|c| c == value) => Err(crate::Error::Invalid(format!("{key} must be one of {}", choices.join(", ")))),
+            _ => Ok(()),
         }
     }
 }
@@ -206,9 +197,7 @@ pub fn toml_to_json(v: &toml::Value) -> serde_json::Value {
 /// User modules override system modules on the same id.
 pub fn discover(config: &Config) -> Vec<Module> {
     let mut found: BTreeMap<String, Module> = BTreeMap::new();
-    let mut roots = paths::system_module_dirs();
-    roots.insert(0, paths::user_modules_dir());
-    for root in roots.iter().rev() {
+    for root in paths::system_module_dirs().into_iter().rev().chain([paths::user_modules_dir()]) {
         let Ok(rd) = std::fs::read_dir(root) else { continue };
         for e in rd.flatten() {
             let dir = e.path();
@@ -275,8 +264,7 @@ pub async fn run_blocking(module: &Module, hook: &str, env: &HookEnv) -> crate::
     }
 }
 
-/// Async hook (post-launch, post-process): a transient unit with the manifest limits; returns the unit name.
-/// `bind_to` (post-launch) ties the unit to the game's so it is stopped with it whatever happens to the caller.
+/// A transient unit under the manifest limits, bound to the game's unit when `bind_to` names it; returns its name.
 pub async fn run_async(units: &crate::host::Units, module: &Module, hook: &str, env: &HookEnv, session_id: &str, bind_to: Option<&str>) -> crate::Result<Option<String>> {
     let Some(exe) = module.hook(hook) else { return Ok(None) };
     std::fs::create_dir_all(module.data_dir())?;

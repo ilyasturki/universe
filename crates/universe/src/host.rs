@@ -75,8 +75,7 @@ impl Units {
         }
     }
 
-    // --no-block, then a second SIGTERM after ~3 s: Dolphin takes the first as a "quit?" prompt and
-    // only exits on the second.
+    // A second SIGTERM after ~3 s: Dolphin takes the first as a "quit?" prompt and only exits on the second.
     pub async fn stop(&self, unit: &str) -> Result<()> {
         match self {
             Units::Systemd => {
@@ -112,7 +111,6 @@ impl Units {
         }
     }
 
-    /// What the journal remembers of a unit: the start, the end and the main process's exit status.
     pub async fn log(&self, unit: &str) -> UnitLog {
         match self {
             Units::Systemd => {
@@ -150,7 +148,7 @@ impl Units {
                 let aux: Vec<(String, Vec<(String, zbus::zvariant::Value)>)> = vec![];
                 match proxy.call::<_, _, zbus::zvariant::OwnedObjectPath>("StartTransientUnit", &(name.as_str(), "fail", props, aux)).await {
                     Ok(_) => {}
-                    // The scope survives from an earlier core of this process; it only counts if we are in it.
+                    // A scope left by an earlier core of this process counts only if we are in it.
                     Err(e) if e.to_string().contains("UnitExists") && in_cgroup_of(&name) => {}
                     Err(e) => return Err(Error::Unavailable(format!("StartTransientUnit({name}): {e}"))),
                 }
@@ -177,8 +175,7 @@ fn in_cgroup_of(unit: &str) -> bool {
     std::fs::read_to_string("/proc/self/cgroup").map(|s| s.lines().any(|l| l.rsplit('/').next() == Some(unit))).unwrap_or(false)
 }
 
-/// The `systemd-run` invocation: `bind_to` (the launcher's scope, or the game's unit for a hook) takes the unit
-/// down with what it is bound to, `BindsTo=` plus `After=` so the bond holds from the start.
+/// `BindsTo=` plus `After=`: the unit goes down with `bind_to` (the launcher's scope, or a hook's game unit) from the start.
 fn systemd_run_args(spec: &UnitSpec) -> Vec<String> {
     let mut args: Vec<String> = vec!["--user".into(), "--collect".into(), "--quiet".into(), format!("--unit={}", spec.name)];
     for (k, v) in &spec.properties {
@@ -269,7 +266,7 @@ impl Shell {
     }
 }
 
-async fn session_bus() -> Option<zbus::Connection> {
+pub(crate) async fn session_bus() -> Option<zbus::Connection> {
     zbus::Connection::session().await.inspect_err(|e| tracing::warn!("session bus: {e}")).ok()
 }
 
@@ -312,11 +309,10 @@ pub struct Memory {
 }
 
 #[cfg(test)]
-#[derive(Debug, Clone)]
-pub struct UnitState {
-    pub spec: UnitSpec,
-    pub active: bool,
-    pub log: UnitLog,
+struct UnitState {
+    spec: UnitSpec,
+    active: bool,
+    log: UnitLog,
 }
 
 #[cfg(test)]
@@ -354,14 +350,6 @@ impl Memory {
 
     pub fn spec(&self, unit: &str) -> Option<UnitSpec> {
         self.units.lock().unwrap().get(unit).map(|u| u.spec.clone())
-    }
-
-    pub fn log_of(&self, unit: &str) -> UnitLog {
-        self.units.lock().unwrap().get(unit).map(|u| u.log.clone()).unwrap_or_default()
-    }
-
-    pub fn started(&self) -> Vec<String> {
-        self.calls.lock().unwrap().iter().filter_map(|c| c.strip_prefix("unit:start ").map(String::from)).collect()
     }
 
     pub fn calls(&self) -> Vec<String> {

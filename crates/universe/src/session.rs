@@ -68,14 +68,12 @@ fn remove_marker() {
 }
 
 impl Core {
-    /// A marker whose unit the manager still reports as active.
     pub async fn current(&self) -> Option<Current> {
         let m = read_marker()?;
         self.host.units.is_active(&m.current.unit).await.then_some(m.current)
     }
 
-    /// A marker without an active unit is a session whose `session-end` never ran (crash, reboot): close it now.
-    /// One that cannot be read goes too, or every later launch would be `Busy`.
+    /// A marker without an active unit (crash, reboot) is closed now; one that cannot be read goes, or every launch would be `Busy`.
     pub async fn reconcile(&self) -> Result<()> {
         let path = paths::current_session_file();
         let Ok(text) = std::fs::read_to_string(&path) else { return Ok(()) };
@@ -96,16 +94,14 @@ impl Core {
 
     /// Every game launched afterwards is bound to the scope, so it goes down with the launcher; idempotent.
     pub async fn adopt_scope(&self) -> Result<String> {
-        if let Some(name) = self.scope.lock().unwrap().clone() {
-            return Ok(name);
+        if let Some(name) = self.scope.get() {
+            return Ok(name.clone());
         }
         let name = self.host.units.adopt_scope(std::process::id()).await?;
-        *self.scope.lock().unwrap() = Some(name.clone());
-        Ok(name)
+        Ok(self.scope.get_or_init(|| name).clone())
     }
 
-    /// Starts the game as a transient service and returns; the manager runs `universe session-end` when its cgroup empties.
-    /// `splash` is a poster the frontend grabbed for gamescope's keep-alive window (`splash.rs`'s format), `""` for none.
+    /// Starts the game as a transient service; `splash` is a poster for gamescope's keep-alive window (`splash.rs`'s format), `""` for none.
     pub async fn launch(&self, id: &str, screen: &str, splash: &str) -> Result<String> {
         self.reconcile().await?;
         if let Some(c) = self.current().await {
@@ -127,7 +123,6 @@ impl Core {
         base.set("SESSION_SCREEN", screen.clone());
         base.set("SESSION_STARTED_AT", started.to_rfc3339());
 
-        let mut extra_env = BTreeMap::new();
         let env_file = paths::state_home().join(format!("env-{session_id}"));
         std::fs::create_dir_all(paths::state_home())?;
         std::fs::write(&env_file, "")?;
@@ -140,20 +135,12 @@ impl Core {
                 return Err(Error::Io(format!("pre-launch {} refused the launch: {}", m.id(), out.stderr.trim())));
             }
         }
-        if let Ok(s) = std::fs::read_to_string(&env_file) {
-            for line in s.lines() {
-                if let Some((k, v)) = line.split_once('=') {
-                    if !k.trim().is_empty() {
-                        extra_env.insert(k.trim().to_string(), v.to_string());
-                    }
-                }
-            }
-        }
+        let extra_env: BTreeMap<String, String> = std::fs::read_to_string(&env_file).unwrap_or_default().lines().filter_map(|l| l.split_once('=')).filter(|(k, _)| !k.trim().is_empty()).map(|(k, v)| (k.trim().to_string(), v.to_string())).collect();
         let _ = std::fs::remove_file(&env_file);
 
         let mode = crate::desktop::screen_mode(&screen).await;
         let splash = (!splash.is_empty()).then(|| std::path::PathBuf::from(splash));
-        let plan = launcher::plan(&r, &cfg, &session_id, &extra_env, mode, splash.as_deref())?;
+        let plan = launcher::plan(&r, &cfg, &extra_env, mode, splash.as_deref())?;
         if let Some((path, text)) = &plan.mangohud_conf {
             std::fs::write(path, text)?;
         }
@@ -199,7 +186,6 @@ impl Core {
         let budget: u64 = 60 + self.hook_modules(r, "session-end").await.iter().map(|m| m.timeout().as_secs()).sum::<u64>();
         let mut env = passthrough_env();
         env.extend(plan.env.clone());
-        let bind_to = self.scope.lock().unwrap().clone();
         let spec = UnitSpec {
             name: current.unit.clone(),
             program: plan.program.clone(),
@@ -208,7 +194,7 @@ impl Core {
             cwd: Some(plan.cwd.clone()),
             // ExitType=cgroup: the unit ends with the last game process, not with the one systemd-run started.
             properties: vec![("ExitType".into(), "cgroup".into()), ("TimeoutStopSec".into(), budget.to_string())],
-            bind_to,
+            bind_to: self.scope.get().cloned(),
             stop_post: vec![paths::self_exe().to_string_lossy().to_string(), "session-end".into(), current.id.clone(), current.session_id.clone()],
         };
         self.host.units.start(&spec).await
@@ -228,13 +214,7 @@ impl Core {
         }
     }
 
-    async fn close_marker(&self, m: &Marker) {
-        remove_marker();
-        self.rollback(&m.undo).await;
-    }
-
-    /// The macro engine for a launch the UI did not make: bound to the game's unit, it waits on the
-    /// watcher lock, so it only reads the pads once no launcher does.
+    /// The macro engine for a launch the UI did not make: bound to the game's unit, it waits on the watcher lock.
     async fn spawn_controller_watch(&self, session_id: &str, game_unit: &str) -> Result<()> {
         let spec = UnitSpec {
             name: format!("universe-controller-{session_id}"),
@@ -247,68 +227,34 @@ impl Core {
         self.host.units.start(&spec).await
     }
 
-    /// Closes a session: run by systemd's `ExecStopPost`, or by `reconcile` for one that was left open. Idempotent.
-    /// Without a marker (a reboot) the times come from the unit's log and the session id.
+    /// Run by `ExecStopPost`, or by `reconcile` for a session left open; idempotent. Without a marker (a reboot) the times come from the unit's log.
     pub async fn session_end(&self, id: &str, session_id: &str, exit: Option<i32>, ended: Option<chrono::DateTime<chrono::Local>>) -> Result<()> {
         let marker = read_marker().filter(|m| m.current.session_id == session_id);
-        let r = match self.get(id).await {
-            Ok(r) => r,
-            Err(e) => {
-                if let Some(m) = &marker {
-                    self.close_marker(m).await;
-                }
-                return Err(e);
-            }
+        let filed = match self.get(id).await {
+            Err(e) => Err(e),
+            Ok(r) if sessions::read(&r.game.sessions_path()).unwrap_or_default().iter().any(|s| s.session == session_id) => Ok(None),
+            // A row that could not be appended keeps the marker: `reconcile` files it on the next open.
+            Ok(r) => Ok(Some((self.file_session(&r, session_id, exit, ended, marker.as_ref()).await?, r))),
         };
-        if sessions::read(&r.game.sessions_path()).unwrap_or_default().iter().any(|s| s.session == session_id) {
-            if let Some(m) = &marker {
-                self.close_marker(m).await;
-            }
-            return Ok(());
-        }
-        let cfg = self.config.read().await.clone();
-        let unit = marker.as_ref().map(|m| m.current.unit.clone()).unwrap_or_else(|| format!("{}.service", launcher::unit_name(id, session_id)));
-        let log = self.host.units.log(&unit).await;
-        let started = marker
-            .as_ref()
-            .and_then(|m| chrono::DateTime::parse_from_rfc3339(&m.current.started_at).ok().map(|t| t.with_timezone(&chrono::Local)))
-            .or(log.started)
-            .or_else(|| sessions::parse_session_id(session_id))
-            .unwrap_or_else(chrono::Local::now);
-        let ended = ended.or(log.ended).unwrap_or_else(chrono::Local::now);
-        let exit = exit.or(log.exit).unwrap_or(-1);
-        let duration_s = (ended - started).num_seconds().max(0) as u64;
-        let screen = marker.as_ref().map(|m| m.current.screen.clone()).unwrap_or_default();
-        let session = Session {
-            session: session_id.into(),
-            game: id.into(),
-            started_at: started.to_rfc3339(),
-            ended_at: ended.to_rfc3339(),
-            duration_s,
-            source: "universe".into(),
-            unit: unit.clone(),
-            screen: screen.clone(),
-            exit,
-            recording: None,
-            recording_duration_s: 0,
-        };
-        sessions::append(&r.game.sessions_path(), &session)?;
         if let Some(m) = &marker {
-            self.close_marker(m).await;
+            remove_marker();
+            self.rollback(&m.undo).await;
         }
+        let Some((session, r)) = filed? else { return Ok(()) };
+        let cfg = self.config.read().await.clone();
         let mut env_end = match &marker {
             Some(m) => HookEnv { vars: m.hook_env.clone() },
             None => {
                 let mut e = self.hook_env_base(&r, &cfg);
                 e.set("SESSION_ID", session_id);
-                e.set("SESSION_UNIT", unit.clone());
-                e.set("SESSION_SCREEN", screen);
-                e.set("SESSION_STARTED_AT", started.to_rfc3339());
+                e.set("SESSION_UNIT", session.unit.clone());
+                e.set("SESSION_SCREEN", session.screen.clone());
+                e.set("SESSION_STARTED_AT", session.started_at.clone());
                 e
             }
         };
-        env_end.set("SESSION_ENDED_AT", ended.to_rfc3339());
-        env_end.set("SESSION_DURATION_S", duration_s.to_string());
+        env_end.set("SESSION_ENDED_AT", session.ended_at.clone());
+        env_end.set("SESSION_DURATION_S", session.duration_s.to_string());
         for m in self.hook_modules(&r, "session-end").await {
             let env = self.module_env(&m, &r, &cfg, &env_end);
             if let Err(e) = modules::run_blocking(&m, "session-end", &env).await {
@@ -320,7 +266,31 @@ impl Core {
         Ok(())
     }
 
-    /// post-process hooks, once the session-end hooks have filed the recording (or not).
+    async fn file_session(&self, r: &Resolved, session_id: &str, exit: Option<i32>, ended: Option<chrono::DateTime<chrono::Local>>, marker: Option<&Marker>) -> Result<Session> {
+        let unit = marker.map(|m| m.current.unit.clone()).unwrap_or_else(|| format!("{}.service", launcher::unit_name(&r.game.id, session_id)));
+        let log = self.host.units.log(&unit).await;
+        let started = marker
+            .and_then(|m| chrono::DateTime::parse_from_rfc3339(&m.current.started_at).ok().map(|t| t.with_timezone(&chrono::Local)))
+            .or(log.started)
+            .or_else(|| sessions::parse_session_id(session_id))
+            .unwrap_or_else(chrono::Local::now);
+        let ended = ended.or(log.ended).unwrap_or_else(chrono::Local::now);
+        let session = Session {
+            session: session_id.into(),
+            game: r.game.id.clone(),
+            started_at: started.to_rfc3339(),
+            ended_at: ended.to_rfc3339(),
+            duration_s: (ended - started).num_seconds().max(0) as u64,
+            source: "universe".into(),
+            unit,
+            screen: marker.map(|m| m.current.screen.clone()).unwrap_or_default(),
+            exit: exit.or(log.exit).unwrap_or(-1),
+            ..Default::default()
+        };
+        sessions::append(&r.game.sessions_path(), &session)?;
+        Ok(session)
+    }
+
     async fn post_process(&self, id: &str, session_id: &str) {
         let Ok(r) = self.get(id).await else { return };
         let cfg = self.config.read().await.clone();
@@ -432,7 +402,7 @@ mod tests {
         assert_eq!(rows.len(), 1);
         assert_eq!((rows[0].session.as_str(), rows[0].exit, rows[0].unit.as_str()), (sid.as_str(), 0, unit.as_str()));
         assert_eq!(rows[0].started_at, marker.current.started_at);
-        assert_eq!(rows[0].ended_at, memory.log_of(&unit).ended.unwrap().to_rfc3339());
+        assert_eq!(rows[0].ended_at, core.host.units.log(&unit).await.ended.unwrap().to_rfc3339());
         assert!(read_marker().is_none(), "the marker is gone");
         assert!(sb.post_ran.exists(), "post_command ran");
         let calls = memory.calls();

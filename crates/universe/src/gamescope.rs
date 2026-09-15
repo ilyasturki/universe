@@ -22,10 +22,8 @@ pub struct Mode {
 /// Serialized under the `launch` key names so a frontend reads them as it reads the other effective switches.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize)]
 pub struct Fields {
-    /// `auto` or `WxH`.
     #[serde(rename = "gamescope_resolution")]
     pub resolution: String,
-    /// `auto` or Hz.
     #[serde(rename = "gamescope_refresh")]
     pub refresh: String,
     #[serde(rename = "gamescope_scaler")]
@@ -62,7 +60,6 @@ pub fn parse_refresh(s: &str) -> crate::Result<Option<u32>> {
     }
 }
 
-/// `auto`, the screen's `WxH`, then the standard heights below it at its aspect ratio; two common sizes when no screen is known.
 pub fn resolution_choices(screen: Option<Mode>) -> Vec<String> {
     let Some(s) = screen.filter(|s| s.width > 0 && s.height > 0) else { return ["auto", "1920x1080", "1280x720"].map(String::from).to_vec() };
     let mut out = vec!["auto".to_string()];
@@ -76,7 +73,6 @@ pub fn resolution_choices(screen: Option<Mode>) -> Vec<String> {
     out
 }
 
-/// `auto`, the screen's rate, then the common rates below it: a game sees no more than the screen shows.
 pub fn refresh_choices(screen: Option<Mode>) -> Vec<String> {
     let mut rates: Vec<u32> = match screen.map(|s| s.refresh).filter(|hz| *hz > 0) {
         Some(hz) => std::iter::once(hz).chain(REFRESH_RATES.into_iter().filter(|r| *r < hz)).collect(),
@@ -86,7 +82,6 @@ pub fn refresh_choices(screen: Option<Mode>) -> Vec<String> {
     std::iter::once("auto".to_string()).chain(rates.iter().map(u32::to_string)).collect()
 }
 
-/// `auto` (the refresh the game sees), `none`, then the rates the screen can show.
 pub fn fps_limit_choices(screen: Option<Mode>) -> Vec<String> {
     ["auto".to_string(), "none".to_string()].into_iter().chain(refresh_choices(screen).into_iter().skip(1)).collect()
 }

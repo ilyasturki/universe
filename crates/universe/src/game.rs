@@ -224,7 +224,7 @@ impl Game {
     }
 
     pub fn save(&self) -> crate::Result<()> {
-        paths::ensure_dir(&self.dir())?;
+        std::fs::create_dir_all(self.dir())?;
         let text = toml::to_string_pretty(self).map_err(|e| crate::Error::Invalid(e.to_string()))?;
         atomic_write(&self.toml_path(), text.as_bytes())
     }
@@ -278,7 +278,7 @@ fn parse_value(value: &str) -> toml_edit::Value {
 /// "" removes the key; lists as "a,b" for known list keys or "[a,b]".
 pub fn set_dotted(doc: &mut toml_edit::DocumentMut, key: &str, value: &str) -> crate::Result<()> {
     let parts: Vec<&str> = key.split('.').collect();
-    if parts.is_empty() || parts.iter().any(|p| p.is_empty()) {
+    if parts.iter().any(|p| p.is_empty()) {
         return Err(crate::Error::Invalid(format!("bad key {key}")));
     }
     let list_keys = ["tags", "args", "dlcs", "enabled"];

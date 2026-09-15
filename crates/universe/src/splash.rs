@@ -1,5 +1,4 @@
-//! gamescope unmaps its own toplevel whenever no client window is focused; it ranks a disabled,
-//! skip-taskbar window below any game window, so this one sits under everything for the session.
+//! gamescope unmaps its toplevel whenever no client window is focused; a disabled, skip-taskbar window ranks below any game window.
 
 use std::io::Read;
 use std::os::unix::process::ExitStatusExt;
@@ -13,8 +12,7 @@ use x11rb::wrapper::ConnectionExt as _;
 
 const WS_DISABLED: u32 = 0x0800_0000;
 
-/// A poster the frontend grabbed: `<width> <height>\n` then width×height×4 bytes of Qt's `Format_RGB32`
-/// (X's depth-24 ZPixmap on a little-endian server).
+/// `<width> <height>\n` then width×height×4 bytes of Qt's `Format_RGB32` (X's depth-24 ZPixmap, little-endian).
 pub struct Poster {
     pub width: u32,
     pub height: u32,
@@ -109,8 +107,7 @@ fn show(poster: Option<&Poster>) -> Result<Shown, Box<dyn std::error::Error>> {
     Ok(Shown { conn, win, wm_state, hwnd_style })
 }
 
-/// gamescope reads `_WINE_HWND_STYLE` only from a PropertyNotify, and selects those on a window as it
-/// maps it, writing `WM_STATE` right after: that write is the moment the style is sure to be seen.
+/// gamescope reads `_WINE_HWND_STYLE` only from a PropertyNotify it selects as it maps the window; its `WM_STATE` write is that moment.
 fn serve(s: Shown) {
     let mut styled = false;
     while let Ok(event) = s.conn.wait_for_event() {

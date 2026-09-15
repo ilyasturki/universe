@@ -61,8 +61,7 @@ pub fn engage() -> bool {
     true
 }
 
-// No restart: killed before udev restores permissions, a pad stays mode 000 until power-cycled.
-// by-hidden empties only once udev has run, so that is the "usable again" probe.
+// No restart: killed before udev restores permissions, a pad stays mode 000 until power-cycled; by-hidden empties once udev has run.
 pub fn release() {
     if !installed() {
         return;

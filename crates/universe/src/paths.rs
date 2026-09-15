@@ -105,7 +105,3 @@ pub fn expand(p: &str) -> PathBuf {
         PathBuf::from(p)
     }
 }
-
-pub fn ensure_dir(p: &Path) -> std::io::Result<()> {
-    std::fs::create_dir_all(p)
-}

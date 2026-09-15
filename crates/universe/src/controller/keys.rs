@@ -118,7 +118,7 @@ pub fn mangohud_toggle(config: &ControllerConfig) -> String {
     if !config.mangohud_toggle.trim().is_empty() {
         return config.mangohud_toggle.trim().to_string();
     }
-    let conf = std::env::var_os("XDG_CONFIG_HOME").map(std::path::PathBuf::from).filter(|p| p.is_absolute()).unwrap_or_else(|| crate::paths::home().join(".config")).join("MangoHud/MangoHud.conf");
+    let conf = crate::paths::xdg("XDG_CONFIG_HOME", ".config").join("MangoHud/MangoHud.conf");
     std::fs::read_to_string(conf).ok().and_then(|s| toggle_hud_of(&s)).unwrap_or_else(|| "Shift_R+F12".into())
 }
 

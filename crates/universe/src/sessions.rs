@@ -34,7 +34,6 @@ pub struct JournalState {
     pub written_at: String,
 }
 
-/// The persisted line with what every listing joins onto it: the game's title, the recording file, the entry's state.
 #[derive(Debug, Clone, PartialEq)]
 pub struct SessionRow {
     pub session: Session,

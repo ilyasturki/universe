@@ -450,6 +450,11 @@ fn s(v: &Value, k: &str) -> String {
     }
 }
 
+/// A JSON list of strings, joined.
+fn joined(v: &Value, sep: &str) -> String {
+    v.as_array().map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(sep)).unwrap_or_default()
+}
+
 fn hours(v: &Value) -> String {
     let h = v["stats"]["hours"].as_f64().unwrap_or(0.0);
     if h == 0.0 { String::new() } else { format!("{h:.1}") }
@@ -939,7 +944,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     let mut t = table(&["Id", "Name", "Kind", "Enabled", "Available", "Missing", "Hooks"]);
                     for m in list {
                         let hooks: Vec<String> = m["hooks"].as_object().map(|o| o.keys().cloned().collect()).unwrap_or_default();
-                        t.add_row(vec![s(&m, "id"), s(&m, "name"), m["kind"].as_array().map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(",")).unwrap_or_default(), flag(&m["enabled"]), flag(&m["available"]), m["missing"].as_array().map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(",")).unwrap_or_default(), hooks.join(",")]);
+                        t.add_row(vec![s(&m, "id"), s(&m, "name"), joined(&m["kind"], ","), flag(&m["enabled"]), flag(&m["available"]), joined(&m["missing"], ","), hooks.join(",")]);
                     }
                     println!("{t}");
                 }
@@ -1030,16 +1035,14 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 println!("  runners: {} emulator game(s) {} their runner instead of backend = \"emulator\"", n("runners_promoted"), if apply { "now name" } else { "would name" });
             }
             if n("options_promoted") > 0 {
-                let ids = report["options_promoted"].as_array().map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(", ")).unwrap_or_default();
-                println!("  options: {} {} what Lutris's prefix command and PROTON_* env now have fields for: {ids}", n("options_promoted"), if apply { "game(s) took" } else { "game(s) would take" });
+                println!("  options: {} {} what Lutris's prefix command and PROTON_* env now have fields for: {}", n("options_promoted"), if apply { "game(s) took" } else { "game(s) would take" }, joined(&report["options_promoted"], ", "));
             }
             for h in report["runners"].as_array().cloned().unwrap_or_default() {
-                let args = h["args"].as_array().map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(" ")).unwrap_or_default();
-                println!("  [runners.{}] {} {}{}", s(&h, "runner"), s(&h, "program"), args, if s(&h, "wrapped") == "true" { " (Lutris wrapper dropped)".dimmed().to_string() } else { String::new() });
+                println!("  [runners.{}] {} {}{}", s(&h, "runner"), s(&h, "program"), joined(&h["args"], " "), if s(&h, "wrapped") == "true" { " (Lutris wrapper dropped)".dimmed().to_string() } else { String::new() });
             }
             let mut t = table(&["Game", "Added", "Removed", "Changed"]);
             for d in report["env_diffs"].as_array().cloned().unwrap_or_default() {
-                let j = |k: &str| d[k].as_array().map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(", ")).unwrap_or_default();
+                let j = |k: &str| joined(&d[k], ", ");
                 if !(j("added").is_empty() && j("removed").is_empty() && j("changed").is_empty()) {
                     t.add_row(vec![s(&d, "id"), j("added"), j("removed"), j("changed")]);
                 }
@@ -1182,10 +1185,9 @@ async fn runner(core: Core, action: RunnerCmd, json: bool) -> anyhow::Result<()>
             }
             let mut t = table(&["Id", "Name", "Platforms", "Program", "Found"]);
             for r in list {
-                let platforms = r["platforms"].as_array().map(|a| a.iter().filter_map(|v| v.as_str()).collect::<Vec<_>>().join(", ")).unwrap_or_default();
                 let program = if s(&r, "path").is_empty() { if s(&r, "kind") == "linux" { "the game itself".to_string() } else { "not found".to_string() } } else { s(&r, "path") };
                 let program = if r["available"].as_bool() == Some(true) { Cell::new(program) } else { Cell::new(program).add_attribute(Attribute::Dim) };
-                t.add_row(vec![Cell::new(s(&r, "id")), Cell::new(s(&r, "name")), Cell::new(platforms), program, Cell::new(s(&r, "source"))]);
+                t.add_row(vec![Cell::new(s(&r, "id")), Cell::new(s(&r, "name")), Cell::new(joined(&r["platforms"], ", ")), program, Cell::new(s(&r, "source"))]);
             }
             println!("{t}");
         }
@@ -1338,10 +1340,10 @@ const POSITIONALS: &[(&str, usize, &str)] = &[
     ("recordings", 1, "games"),
     ("update", 1, "games"),
     ("media", 1, "games all"),
-    ("media set", 1, "box_front square banner background logo screenshot"),
+    ("media set", 1, "SLOTS"),
     ("media set", 2, "FILES"),
-    ("media unset", 1, "box_front square banner background logo screenshot"),
-    ("media candidates", 1, "box_front square banner background logo screenshot"),
+    ("media unset", 1, "SLOTS"),
+    ("media candidates", 1, "SLOTS"),
     ("media pin", 1, "sgdb rawg steam"),
     ("module enable", 1, "modules"),
     ("module disable", 1, "modules"),
@@ -1427,6 +1429,7 @@ fn generate(dir: &std::path::Path) -> anyhow::Result<()> {
         match *what {
             "FILES" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -F\n")),
             "CONFIG_KEYS" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"{}\"\n", config_keys().join(" "))),
+            "SLOTS" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"{}\"\n", MEDIA_SLOTS.join(" "))),
             "games" | "sources" | "modules" | "families" | "buttons" | "runners" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"(universe __complete {what})\"\n")),
             "games all" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"(universe __complete games) all\"\n")),
             literal => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"{literal}\"\n")),
@@ -1453,7 +1456,7 @@ fn flag(v: &Value) -> String {
     }
 }
 
-pub fn fmt_duration(secs: u64) -> String {
+fn fmt_duration(secs: u64) -> String {
     let (h, m) = (secs / 3600, (secs % 3600) / 60);
     if h > 0 {
         format!("{h}h{m:02}")

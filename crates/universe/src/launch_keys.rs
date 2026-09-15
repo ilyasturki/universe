@@ -124,13 +124,8 @@ pub fn find(key: &str) -> Option<&'static LaunchKey> {
     LAUNCH_KEYS.iter().find(|k| k.key == key)
 }
 
-/// The global default a key falls back to; empty for a key the table does not know.
 pub fn default_of(key: &str) -> &'static str {
     find(key).map(|k| k.default).unwrap_or("")
-}
-
-fn parse_bool(key: &str, value: &str) -> crate::Result<()> {
-    if matches!(value, "true" | "false") { Ok(()) } else { Err(Error::Invalid(format!("{key} must be true or false"))) }
 }
 
 /// A `launch.*` key's value (`env.FOO` and `options.<key>` reach their map); empty always passes, it clears the key.
@@ -147,7 +142,7 @@ pub fn validate(scope: Scope, key: &str, value: &str) -> crate::Result<()> {
         return Ok(());
     }
     match k.kind {
-        Kind::Bool => parse_bool(key, value),
+        Kind::Bool if !matches!(value, "true" | "false") => Err(Error::Invalid(format!("{key} must be true or false"))),
         Kind::Int { max } => match value.parse::<u32>() {
             Ok(n) if max.is_none_or(|m| n <= m) => Ok(()),
             _ => Err(Error::Invalid(match max {
@@ -218,7 +213,6 @@ fn choices_of(k: &LaunchKey, screen: Option<Mode>) -> Vec<String> {
     }
 }
 
-/// The keys of `scope` that have a row, the screen's mode sizing the resolution and rate choices.
 pub fn rows(scope: Scope, screen: Option<Mode>) -> Vec<Row> {
     LAUNCH_KEYS
         .iter()
