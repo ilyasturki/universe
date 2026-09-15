@@ -1,8 +1,7 @@
 import QtQuick
 import "../core"
 
-// The game's art behind the top of a sub page, settling into the ground. Faded as one
-// layer: item opacity would thin the gradient too and let the art's edge through.
+// Faded as one layer, or the gradient thins too and lets the art's edge through.
 Item {
     id: root
 
@@ -16,6 +15,7 @@ Item {
         anchors.fill: parent
         game: root.game
         blurRadius: 30
+        drift: false
         zoomEnabled: false
         overscan: 1.06
     }

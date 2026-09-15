@@ -1,7 +1,6 @@
 import QtQuick
 import "../core"
 
-// Keys only: the sheet around it owns the panel, the field and the padding.
 Item {
     id: keyboard
 
@@ -12,11 +11,9 @@ Item {
 
     property real keyHeight: Theme.dp(58)
     property real keyGap: Theme.dp(10)
-    // Sheets that take a value add shift, path symbols and a done key; search keeps the bare set.
     property bool showDone: false
     property bool symbols: false
     property bool shift: false
-    // Digits and a minus only, on keys twice as wide, for an integer.
     property bool numeric: false
 
     readonly property real keyUnit: (width - keyGap * 9) / 10
@@ -66,12 +63,9 @@ Item {
 
     // With the path symbols in, the bottom row only fits with single-width shift, clear and done.
     readonly property real clearWidth: symbols ? keyUnit : keyUnit * 2 + keyGap
-    readonly property real bottomFixed: {
-        var keys = rows[rows.length - 1].keys, w = 0;
-        for (var i = 0; i < keys.length; i++)
-            w += (keys[i].action === "space" ? 0 : keyWidth(keys[i])) + (i > 0 ? keyGap : 0);
-        return w;
-    }
+    readonly property real bottomFixed: rows[rows.length - 1].keys.reduce(function(w, k, i) {
+        return w + (k.action === "space" ? 0 : keyWidth(k)) + (i > 0 ? keyGap : 0);
+    }, 0)
 
     function keyWidth(key) {
         if (key.wide)

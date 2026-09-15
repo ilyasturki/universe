@@ -9,11 +9,9 @@ GridView {
     property real gap: Theme.dp(28)
     // While the selection is inactive another group owns the d-pad; keys fall through.
     property bool selectionActive: true
-    property bool escapesLeft: false
     readonly property real coverWidth: cellWidth - gap
     readonly property Item focusedArtItem: currentItem ? currentItem.artItem : null
-    // Room inside the clip for the focused cover's ring and its 5% growth; callers
-    // widen their anchors by this so the cells stay put.
+    // Room inside the clip for the focused cover's ring and its 5% growth.
     readonly property real inset: Theme.dp(12)
 
     cellHeight: coverWidth * 1.5 + gap
@@ -49,8 +47,7 @@ GridView {
         contentY = Math.max(-topMargin, Math.min(target, maxY));
     }
 
-    // Setting currentIndex moves contentY synchronously, past any Behavior —
-    // snapshot it, restore, animate.
+    // Setting currentIndex moves contentY synchronously, past any Behavior: snapshot, restore, animate.
     function moveCurrent(index) {
         if (index < 0 || index >= count || index === currentIndex) {
             Sound.edge();
@@ -80,7 +77,6 @@ GridView {
     onHeightChanged: scrollToCurrent()
     onCountChanged: scrollToCurrent()
 
-    // A ragged last row is short, so the step down clamps to the final cell.
     Keys.onDownPressed: function(event) {
         if (!selectionActive)
             event.accepted = false;
@@ -98,7 +94,7 @@ GridView {
     }
 
     Keys.onLeftPressed: function(event) {
-        if (!selectionActive || (escapesLeft && currentIndex % columns === 0))
+        if (!selectionActive)
             event.accepted = false;
         else
             moveCurrent(currentIndex - 1);

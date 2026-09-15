@@ -1,13 +1,9 @@
 .pragma library
 
-// Each family's pad seen from the front, on a 1000 × 700 sheet: the body as an SVG path, the
-// panels drawn on it, and one entry per button with the slot it stands for. Two bodies serve them
-// all: Sony's symmetric sticks and Xbox's offset ones. A family without its own entry gets the
-// Xbox body under its own names.
+// Each family's pad seen from the front, on a 1000 × 700 sheet.
 
 var VIEW = [1000, 700];
 
-// ---- Sony -------------------------------------------------------------------------------------
 
 var SONY_BODY = "M 500 100 C 600 100 705 110 780 134 C 845 155 890 200 912 262 C 930 312 938 370 936 430 "
     + "C 934 500 940 575 912 622 C 890 660 818 668 776 634 C 745 608 728 552 690 505 C 650 458 565 470 500 474 "
@@ -68,7 +64,6 @@ function sony(kind) {
     return { view: VIEW, body: SONY_BODY, details: sonyDetails(kind), buttons: sonyButtons(kind) };
 }
 
-// ---- Xbox -------------------------------------------------------------------------------------
 
 var XBOX_BODY = "M 500 110 C 600 110 700 118 768 140 C 848 166 900 236 922 326 C 940 410 934 530 896 606 "
     + "C 866 660 792 668 752 626 C 716 588 694 540 644 502 C 594 466 546 484 500 486 "
@@ -133,7 +128,6 @@ function of(family) {
     return xbox(family === "xbox-elite" || family === "xbox" || family === "switch-pro" ? family : "generic");
 }
 
-// The box a button occupies on the sheet, in sheet units: what its item is sized from.
 function box(spec) {
     if (spec.kind === "face" || spec.kind === "stick")
         return { x: spec.x - spec.r, y: spec.y - spec.r, w: spec.r * 2, h: spec.r * 2 };

@@ -180,10 +180,10 @@ outline and letters.
 
 Every page and overlay exposes `hints`, `[{ glyph, label, dim }]`, and the bar on screen shows
 the one with the focus (`theme.qml` picks the menu's, the tab bar's or the page's). `ui/Hints.js`
-lays them out the same way everywhere: the page's hints on the left in one fixed order of
-buttons (A, X, Y, sticks, d-pad, Start, B), the near-global ones — `LT RT` (the section or
-collection cycled by the triggers) and `LB RB` (the tabs) — on the right before the clock, so
-they never move as the labels around them change. A hint whose action the page has nothing for
+splits them: the page's hints on the left in the order the page wrote them, the near-global ones
+— `LT RT` (the section or collection cycled by the triggers) and `LB RB` (the tabs, appended by
+the shell) — on the right before the clock, so they never move as the labels around them change.
+A hint whose action the page has nothing for
 right now (no journal entry for this recording, no refresh in this section) is kept in place and
 dimmed (`dim: true`), never dropped; hints for what the pad makes obvious — moving with the d-pad
 — are not written, only a d-pad with a specific meaning is (`Seek 10 s`, `Previous / next`).
@@ -241,7 +241,7 @@ from the global one until set. `load()` reads the config again.
 what is missing), the ones running first, the others in an "Off" card. A opens the module's page;
 △ (Y in Reprise, X in the Switch 2 look) toggles it in the list (`toggle(index)`, refused with a
 warning while it is off). `indexOf(id)` finds a module's row for the cursor to land on again.
-`pages/ModuleSettingsPage.qml` (`theme.qml` `openModule`; `switch2/pages/ModulePage.qml` on the
+`pages/FormPage.qml` with `{ module }` (`theme.qml` `openSub`; `switch2/pages/ModulePage.qml` on the
 stack) is on `api.screens.module`: `load(id)` builds its head (`info`: name, meta, warning,
 `enabled`) and cards for the switch (`enabled`, `disabled` while the module's programs are
 missing) and, once on, its global settings, a `dynamic` setting's choices fetched off the UI
@@ -253,8 +253,8 @@ thread. Doctor's checks stay on `api.screens.modules` (`loadDoctor`, `doctor`, `
 (`assets/runners/<id>.svg|png`, `logo(id)` says which exists), its name and how many library
 games run through it (`effective.runner`), sorted by that count, then by those games' hours, then
 by name; the runners whose program was not found come last, in a dimmed "Not found" card.
-`indexOf(id)` finds a runner's row. A runner's row opens `pages/RunnerSettingsPage.qml` over the
-tab (`theme.qml` `openRunner`, the same loader as the game's sub pages), on `api.screens.runner`:
+`indexOf(id)` finds a runner's row. A runner's row opens `pages/FormPage.qml` with `{ runner }` over the
+tab (`theme.qml` `openSub`, the same loader as the game's sub pages), on `api.screens.runner`:
 `load(id)` builds its head (`info`: name, platforms and where its program was found, a warning)
 and cards for the program (`exe`, a path; the detected one shown as the value, inherited, its
 origin as the detail) and arguments, each option by
@@ -329,7 +329,7 @@ is left, the shown pad goes, another is picked, or the watcher stops or turns pa
 
 The art is `ui/ControllerArt.qml` around `ui/PadArt.qml`: `ui/PadGeometry.js` holds each family's
 body (an SVG path) and buttons on a 1000 × 700 sheet, one canvas draws the body and a `PadButton`
-sits on every button — white on a press, a stick leaning with its axes, a trigger filling from the
+(a component of `PadArt`) sits on every button — white on a press, a stick leaning with its axes, a trigger filling from the
 bottom with its pull (a press past the half only brightens its outline, so the gauge reads all the
 way down; dashed when the slot has no code on this connection — `PadArt` also takes
 `focusedSlot` and `learningSlot`, which the live view leaves empty). While a button is being

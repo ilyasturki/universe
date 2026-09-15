@@ -3,19 +3,14 @@ import "../core"
 import "../sound"
 import "../ui"
 
-// One game's artwork: the five slots on the left, each with what shows and where it came from;
-// on the right the focused slot large, the default under a pick, and SteamGridDB's
-// candidates for it. A on a candidate downloads it over the slot as an override; X takes an
-// override off again (the default under it comes back) or fetches what is missing; Y searches
-// SteamGridDB by name and pins the game to the right entry when the match was wrong.
 FocusScope {
     id: page
 
     focus: true
 
-    property var game: null
-    // The slot to land on, set by the shell when the overview opens the page.
-    property string slot: ""
+    property var args: ({})
+    readonly property var game: args.game || null
+    readonly property string slot: args.slot || ""
     readonly property var form: api.screens.artwork
     readonly property var slots: form.slots
     property int index: 0
@@ -28,12 +23,11 @@ FocusScope {
     property int hitIndex: 0
     readonly property bool inCands: zone === "cands"
     readonly property bool inHits: zone === "hits"
-    // Columns of the candidates grid, so a cover stays a cover and a hero stays wide.
     readonly property int columns: currentSlot === "box_front" || currentSlot === "square" ? 4 : currentSlot === "background" ? 2 : 3
-    // The "more" tile stands past the last candidate.
     readonly property int candCount: candidates.length + (form.more ? 1 : 0)
 
     signal closeRequested()
+    signal message(string text)
 
     readonly property var hints: {
         if (keyboard.open)
@@ -45,12 +39,12 @@ FocusScope {
             out.push({ glyph: "A", label: candIndex < candidates.length ? "Pick" : "Load more" });
         else if (candidates.length > 0)
             out.push({ glyph: "A", label: "Candidates" });
-        out.push({ glyph: "dpad", label: "Navigate" });
         if (current && current.hasOverride)
             out.push({ glyph: "X", label: "Remove override" });
         else if (current && current.kind === "missing")
             out.push({ glyph: "X", label: "Fetch missing" });
         out.push({ glyph: "Y", label: "Change entry" });
+        out.push({ glyph: "dpad", label: "Navigate" });
         out.push({ glyph: "B", label: inCands ? "Back to slots" : "Back" });
         return out;
     }
@@ -71,16 +65,13 @@ FocusScope {
     }
 
     onSlotChanged: landOnSlot()
-    // Off screen the form stops following the library.
     Component.onDestruction: form.unload()
     onSlotsChanged: if (index >= slots.length) index = Math.max(0, slots.length - 1)
 
     function landOnSlot() {
-        for (var i = 0; i < slots.length; i++)
-            if (slots[i].slot === slot) {
-                index = i;
-                return;
-            }
+        var i = slots.findIndex(function(s) { return s.slot === slot; });
+        if (i >= 0)
+            index = i;
     }
 
     onCurrentSlotChanged: {
@@ -90,15 +81,11 @@ FocusScope {
     }
 
     function step(d) {
-        var next = Math.max(0, Math.min(slots.length - 1, index + d));
-        next === index ? Sound.edge() : Sound.tick();
-        index = next;
+        index = Sound.stepped(index, d, slots.length);
     }
 
     function stepCand(d) {
-        var next = Math.max(0, Math.min(candCount - 1, candIndex + d));
-        next === candIndex ? Sound.edge() : Sound.tick();
-        candIndex = next;
+        candIndex = Sound.stepped(candIndex, d, candCount);
     }
 
     function enterCands() {
@@ -112,13 +99,8 @@ FocusScope {
     }
 
     function pick() {
-        if (candIndex >= candidates.length) {
-            Sound.enter();
-            form.moreCandidates();
-            return;
-        }
         Sound.enter();
-        form.apply(currentSlot, candidates[candIndex].url);
+        candIndex >= candidates.length ? form.moreCandidates() : form.apply(currentSlot, candidates[candIndex].url);
     }
 
     function removeOrFetch() {
@@ -140,9 +122,14 @@ FocusScope {
         keyboard.show("Search SteamGridDB", form.title, "text");
     }
 
+    function leaveHits() {
+        hitsPanel.open = false;
+        zone = "slots";
+    }
+
     Connections {
         target: page.form
-        function onMessage(text) { toast.show(text); }
+        function onMessage(text) { page.message(text); }
         function onHitsChanged() {
             if (!page.form.searchBusy && hitsPanel.pending) {
                 hitsPanel.pending = false;
@@ -165,17 +152,13 @@ FocusScope {
                 if (hits.length > 0) {
                     Sound.enter();
                     page.form.pin(hits[page.hitIndex].id);
-                    hitsPanel.open = false;
-                    page.zone = "slots";
+                    leaveHits();
                 }
             } else if (api.keys.isCancel(event)) {
                 Sound.cancel();
-                hitsPanel.open = false;
-                page.zone = "slots";
+                leaveHits();
             } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
-                var n = Math.max(0, Math.min(hits.length - 1, page.hitIndex + (event.key === Qt.Key_Up ? -1 : 1)));
-                n === page.hitIndex ? Sound.edge() : Sound.tick();
-                page.hitIndex = n;
+                page.hitIndex = Sound.stepped(page.hitIndex, event.key === Qt.Key_Up ? -1 : 1, hits.length);
             }
             return;
         }
@@ -217,11 +200,6 @@ FocusScope {
         }
     }
 
-    Rectangle {
-        anchors.fill: parent
-        color: Theme.ground
-    }
-
     GameBackdrop {
         anchors.top: parent.top
         anchors.left: parent.left
@@ -242,8 +220,6 @@ FocusScope {
         label: "ARTWORK"
         detail: page.form.entry !== "" ? "SteamGridDB · " + page.form.entry : ""
     }
-
-    // -- the slots ---------------------------------------------------------------------------
 
     Column {
         id: slotList
@@ -301,7 +277,6 @@ FocusScope {
                         source: modelData.url
                         fillMode: modelData.slot === "logo" ? Image.PreserveAspectFit : Image.PreserveAspectCrop
                         asynchronous: true
-                        cache: false
                         sourceSize.width: 400
                     }
                 }
@@ -349,8 +324,6 @@ FocusScope {
         }
     }
 
-    // -- the dock: the slot large, then its candidates --------------------------------------
-
     Item {
         id: dock
 
@@ -364,7 +337,6 @@ FocusScope {
 
         readonly property real previewHeight: Theme.dp(300)
 
-        // What shows now, and beside it the default a pick sits over.
         Item {
             id: preview
 
@@ -454,7 +426,6 @@ FocusScope {
                 anchors.verticalCenter: parent.verticalCenter
             }
 
-            // The entry the candidates belong to: a wrong match shows here, Y changes it.
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 visible: page.form.entry !== ""
@@ -491,7 +462,6 @@ FocusScope {
             currentIndex: page.inCands ? page.candIndex : -1
             cellWidth: Math.floor(width / page.columns)
             cellHeight: Math.round(cellWidth / (page.current ? page.current.aspect : 1)) + Theme.dp(20)
-            // The focused row sits at the top: no half row peeking over it.
             preferredHighlightBegin: 0
             preferredHighlightEnd: cellHeight
             highlightRangeMode: GridView.ApplyRange
@@ -588,8 +558,6 @@ FocusScope {
             }
         }
     }
-
-    // -- the wrong game: SteamGridDB's entries for a name, one to pin ------------------------
 
     Item {
         id: hitsPanel
@@ -705,11 +673,6 @@ FocusScope {
         sideMargin: page.sideMargin
         showClock: true
         hints: page.hints
-    }
-
-    Toast {
-        id: toast
-        z: 4
     }
 
     KeyboardSheet {

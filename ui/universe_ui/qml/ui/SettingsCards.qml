@@ -2,10 +2,7 @@ import QtQuick
 import "../core"
 import "../sound"
 
-// Settings as cards in one or two columns, driven by the flat rows the host builds and the
-// groups that arrange them: { title, meta, warning, caps, control, off, rows }, `rows` and
-// `control` indexing the flat list. The cursor walks a column and crosses to the nearest row;
-// the page decides what A opens, and where Left goes past the first column.
+// groups: { title, meta, warning, caps, control, off, rows, icon }; `rows` and `control` index the flat list.
 FocusScope {
     id: cards
 
@@ -28,7 +25,6 @@ FocusScope {
     readonly property real pad: Theme.dp(compact ? 6 : 8)
     readonly property real rowHeight: Theme.dp(compact ? 60 : 66)
     readonly property real columnWidth: (width - gap * (columns - 1)) / columns
-    // The focused stop, in the cards' own coordinates, for whatever the page drops from it.
     readonly property rect focusRect: {
         var s = stopOf(index);
         if (!s)
@@ -50,9 +46,7 @@ FocusScope {
         return pad * 2 + headerHeight(g) + g.rows.length * rowHeight + 2;
     }
 
-    // Each card joins the shortest column, so the columns end close together. Every focus
-    // stop gets its y range and the y to reveal (the card's top for a card's first stop, so
-    // its header comes into view with it).
+    // Each card joins the shortest column; a stop's `top` is the card's top for its first stop, so the header comes into view with it.
     readonly property var layout: {
         var cardsOut = [], stops = [], tops = [], c, i, r;
         for (c = 0; c < columns; c++) {
@@ -90,8 +84,7 @@ FocusScope {
         return null;
     }
 
-    // Where the cursor lands on a fresh section: the first row that is not a search field,
-    // which is reached by going up from it.
+    // The first row that is not a search field; the field is reached by going up from it.
     function firstStop() {
         var fallback = null;
         for (var c = 0; c < layout.stops.length; c++)
@@ -118,20 +111,11 @@ FocusScope {
 
     function step(d) {
         var s = stopOf(index);
-        if (!s) {
-            if (d < 0)
-                cards.escapedUp();
-            else
-                Sound.edge();
-            return;
-        }
-        var list = layout.stops[s.col];
-        var pos = list.indexOf(s) + d;
-        if (pos >= 0 && pos < list.length) {
+        var list = s ? layout.stops[s.col] : [];
+        var pos = s ? list.indexOf(s) + d : -1;
+        if (pos >= 0 && pos < list.length)
             go(list[pos]);
-            return;
-        }
-        if (d < 0)
+        else if (d < 0)
             cards.escapedUp();
         else
             Sound.edge();
@@ -182,7 +166,137 @@ FocusScope {
                 cards.activated(index, currentRow);
             else
                 Sound.edge();
-            return;
+        }
+    }
+
+    component SettingsCard: Item {
+        id: card
+
+        property var group: ({})
+        readonly property bool hasIcon: group.icon != null && String(group.icon) !== "" && logo.status === Image.Ready
+        readonly property real headerHeight: cards.headerHeight(group)
+
+        readonly property bool hasControl: group.control >= 0
+        readonly property bool headerFocused: hasControl && cards.index === group.control && cards.cursorShown
+        readonly property color onFocus: Qt.rgba(0.063, 0.067, 0.086, 0.6)
+
+        height: cards.cardHeight(group)
+        // A module that is off fades, except while its switch is the focused thing.
+        opacity: group.off && !headerFocused ? 0.55 : 1.0
+
+        Behavior on opacity {
+            NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            radius: Theme.dp(24)
+            color: Qt.rgba(1, 1, 1, 0.04)
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.10)
+        }
+
+        Rectangle {
+            id: head
+
+            x: 1 + cards.pad
+            y: 1 + cards.pad
+            width: parent.width - 2 - cards.pad * 2
+            height: card.headerHeight
+            radius: Theme.dp(14)
+            visible: card.headerHeight > 0
+            color: card.headerFocused ? Theme.text : "transparent"
+
+            Behavior on color {
+                ColorAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
+            }
+
+            Image {
+                id: logo
+                anchors.left: parent.left
+                anchors.leftMargin: Theme.dp(16)
+                anchors.verticalCenter: parent.verticalCenter
+                height: parent.height - Theme.dp(24)
+                width: height
+                source: card.group.icon ? Qt.resolvedUrl("../" + card.group.icon) : ""
+                asynchronous: true
+                fillMode: Image.PreserveAspectFit
+                sourceSize.height: 128
+                smooth: true
+                mipmap: true
+                visible: card.hasIcon
+            }
+
+            Column {
+                anchors.left: parent.left
+                anchors.leftMargin: card.hasIcon ? logo.width + Theme.dp(30) : Theme.dp(18)
+                anchors.right: toggle.visible ? toggle.left : parent.right
+                anchors.rightMargin: Theme.dp(20)
+                anchors.verticalCenter: parent.verticalCenter
+                spacing: Theme.dp(2)
+
+                CapsLabel {
+                    visible: card.group.caps === true
+                    text: (card.group.title || "").toUpperCase()
+                    color: card.headerFocused ? card.onFocus : Theme.textMuted
+                }
+
+                Text {
+                    visible: card.group.caps !== true
+                    width: parent.width
+                    text: card.group.title || ""
+                    color: card.headerFocused ? Theme.onLight : Theme.text
+                    font.family: Theme.sans
+                    font.weight: Font.Bold
+                    font.pixelSize: Theme.dp(cards.compact ? 24 : 27)
+                    elide: Text.ElideRight
+                }
+
+                Text {
+                    visible: text !== ""
+                    width: parent.width
+                    text: (card.group.meta || "")
+                          + (card.group.warning
+                             ? (card.group.meta ? " · " : "") + "<font color=\"#e0655a\">" + card.group.warning + "</font>"
+                             : "")
+                    textFormat: Text.StyledText
+                    color: card.headerFocused ? card.onFocus : Theme.textMuted
+                    font.family: Theme.sans
+                    font.pixelSize: Theme.dp(cards.compact ? 18 : 19)
+                    elide: Text.ElideRight
+                }
+            }
+
+            SettingsToggle {
+                id: toggle
+                visible: card.hasControl
+                anchors.right: parent.right
+                anchors.rightMargin: Theme.dp(16)
+                anchors.verticalCenter: parent.verticalCenter
+                on: card.hasControl && cards.rows[card.group.control] ? cards.rows[card.group.control].value === true : false
+                focused: card.headerFocused
+            }
+        }
+
+        Column {
+            x: 1 + cards.pad
+            y: 1 + cards.pad + card.headerHeight
+            width: parent.width - 2 - cards.pad * 2
+
+            Repeater {
+                model: card.group.rows
+
+                SettingsRow {
+                    readonly property bool prevFocused: index > 0 && card.group.rows[index - 1] === cards.index && cards.cursorShown
+
+                    width: parent.width
+                    height: cards.rowHeight
+                    entry: cards.rows[modelData] || ({})
+                    focused: modelData === cards.index && cards.cursorShown
+                    compact: cards.compact
+                    separator: index > 0 && !focused && !prevFocused
+                }
+            }
         }
     }
 
@@ -211,14 +325,8 @@ FocusScope {
 
         function scrollToCurrent() {
             var s = cards.stopOf(cards.index);
-            if (!s || height <= 0)
-                return;
-            var target = contentY;
-            if (s.top < contentY)
-                target = s.top;
-            else if (s.y1 > contentY + height)
-                target = s.y1 - height;
-            contentY = Math.max(0, Math.min(target, Math.max(0, contentHeight - height)));
+            if (s && height > 0)
+                Theme.reveal(view, s.top, s.y1, height);
         }
 
         Behavior on contentY {
@@ -233,13 +341,6 @@ FocusScope {
                 y: modelData.y
                 width: cards.columnWidth
                 group: cards.groups[modelData.group]
-                rows: cards.rows
-                cursor: cards.index
-                active: cards.cursorShown
-                compact: cards.compact
-                pad: cards.pad
-                headerHeight: cards.headerHeight(group)
-                rowHeight: cards.rowHeight
             }
         }
     }

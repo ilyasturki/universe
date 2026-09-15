@@ -3,7 +3,7 @@ import pytest
 from pathlib import Path
 
 from conftest import pump, wait_for
-from universe_ui.universe_client import UniverseError, _json
+from universe_ui.universe_client import _json
 
 
 def test_json_tolerance():
@@ -114,7 +114,7 @@ def test_settings_merges_game_scope(fake):
 
 
 def test_launch_runs_a_session(fake):
-    started, launched, ended = [], [], []
+    started, launched = [], []
     fake.sessionStarted.connect(lambda sid, ident: started.append(ident))
     fake.launched.connect(lambda sid, ident: launched.append(ident))
     assert fake.currentSession is None

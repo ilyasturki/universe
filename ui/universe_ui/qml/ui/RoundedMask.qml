@@ -9,18 +9,15 @@ Item {
     property real radius: Theme.dp(Theme.radiusCover)
     default property alias content: inner.data
 
-    // The software scenegraph (offscreen tests) drops every ShaderEffect: corners go square there.
-    readonly property bool software: GraphicsInfo.api === GraphicsInfo.Software
-
     // Sized by binding, not anchors: these are parented after they are built.
     readonly property Item inner: Item {
         id: inner
         parent: root
         width: root.width
         height: root.height
-        layer.enabled: !root.software && root.radius > 0
+        layer.enabled: !Theme.software && root.radius > 0
         layer.smooth: true
-        layer.effect: root.software ? null : root.maskEffect
+        layer.effect: Theme.software ? null : root.maskEffect
     }
 
     readonly property Component maskEffect: Component {

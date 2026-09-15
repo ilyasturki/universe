@@ -2,8 +2,7 @@ import QtQuick
 import "../core"
 import "../sound"
 
-// A menu of actions beside a focused row: the row stays lit above the scrim as a live copy,
-// the panel slides in on the side with room. Items: [{ icon, label, action, danger }].
+// Items: [{ icon, label, action, danger }]; the row stays lit above the scrim as a live copy.
 FocusScope {
     id: menu
 
@@ -11,8 +10,8 @@ FocusScope {
     property string title: ""
     property var items: []
     property int index: 0
+    property var done: null
 
-    signal chosen(string action)
     signal dismissed()
 
     readonly property var hints: [
@@ -25,8 +24,8 @@ FocusScope {
     property real ay: 0
     property real aw: 0
     property real ah: 0
-    readonly property real copyMargin: Theme.dp(6)
-    readonly property real gap: Theme.dp(28)
+    property real copyMargin: Theme.dp(6)
+    property real gap: Theme.dp(28)
     readonly property bool onRight: ax + aw + gap + panel.width <= width - Theme.dp(40)
     property real slide: open ? 0.0 : 1.0
 
@@ -37,9 +36,10 @@ FocusScope {
         NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
     }
 
-    function show(list, anchor, rect, heading) {
+    function show(list, anchor, rect, heading, after) {
         items = list;
         title = heading || "";
+        done = after || null;
         index = 0;
         var p = anchor.mapToItem(menu, rect.x, rect.y);
         ax = p.x;
@@ -56,6 +56,7 @@ FocusScope {
     function hide() {
         open = false;
         focus = false;
+        done = null;
     }
 
     function cancel() {
@@ -68,8 +69,9 @@ FocusScope {
     property int shown: 0
 
     function activate() {
-        var was = shown;
-        chosen(items[index].action);
+        var was = shown, after = done;
+        if (after)
+            after(items[index].action);
         if (shown === was)
             hide();
     }
@@ -206,23 +208,13 @@ FocusScope {
         event.accepted = true;
         if (event.isAutoRepeat)
             return;
-        if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
-            var next = Math.max(0, Math.min(items.length - 1, index + (event.key === Qt.Key_Up ? -1 : 1)));
-            next === index ? Sound.edge() : Sound.tick();
-            index = next;
-            return;
-        }
-        if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
+        if (event.key === Qt.Key_Up || event.key === Qt.Key_Down)
+            index = Sound.stepped(index, event.key === Qt.Key_Up ? -1 : 1, items.length);
+        else if (event.key === Qt.Key_Left || event.key === Qt.Key_Right)
             Sound.edge();
-            return;
-        }
-        if (api.keys.isAccept(event)) {
+        else if (api.keys.isAccept(event))
             activate();
-            return;
-        }
-        if (api.keys.isCancel(event) || api.keys.isMenu(event)) {
+        else if (api.keys.isCancel(event) || api.keys.isMenu(event))
             cancel();
-            return;
-        }
     }
 }

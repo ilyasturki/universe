@@ -2,15 +2,11 @@ import QtQuick
 import "../core"
 import "../sound"
 
-// The Settings tab's sidebar: one entry per section. The open one is the white cursor while the
-// list has the focus and a quiet fill once the content has it, so one thing on screen is white.
-// Up and Down change the section as they go; Right or A hand the focus to the content, B and Up
-// past the top leave for the tab bar.
 FocusScope {
     id: list
 
+    // [{ name, icon }]
     property var sections: []
-    property var icons: []
     property var badges: []
     property int current: 0
 
@@ -23,7 +19,7 @@ FocusScope {
 
     implicitHeight: column.height
 
-    // Round trip: past the last section comes the first. The page owns `current`.
+    // The page owns `current`; a step only asks.
     function step(d) {
         var n = sections.length;
         list.requested((current + d + n) % n);
@@ -55,13 +51,10 @@ FocusScope {
             event.accepted = true;
             Sound.panel();
             list.entered();
-            return;
-        }
-        if (api.keys.isCancel(event)) {
+        } else if (api.keys.isCancel(event)) {
             event.accepted = true;
             Sound.cancel();
             list.escapedUp();
-            return;
         }
     }
 
@@ -100,7 +93,7 @@ FocusScope {
                     anchors.verticalCenter: parent.verticalCenter
                     width: Theme.dp(24)
                     height: width
-                    kind: index < list.icons.length ? list.icons[index] : ""
+                    kind: modelData.icon
                     tint: focused ? Theme.onLight : active ? Theme.text : Theme.textSecondary
                 }
 
@@ -110,7 +103,7 @@ FocusScope {
                     anchors.right: badgePill.visible ? badgePill.left : parent.right
                     anchors.rightMargin: Theme.dp(16)
                     anchors.verticalCenter: parent.verticalCenter
-                    text: modelData
+                    text: modelData.name
                     color: ink
                     font.family: Theme.sans
                     font.weight: active ? Font.DemiBold : Font.Medium

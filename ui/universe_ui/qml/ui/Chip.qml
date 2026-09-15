@@ -10,7 +10,6 @@ Item {
     property string badge: ""
     property bool showSortIcon: false
     property bool focused: false
-    // The chosen one of a set: filled white, the way a focused row is.
     property bool active: false
 
     implicitHeight: Theme.dp(45)

@@ -1,4 +1,3 @@
-// One SVG path per button of each family on a 64-unit sheet, drawn by PadGlyph and HintGlyph.
 // `o` is the outline (a ring with the mark), `f` the filled disc with the mark cut out, `b` the
 // outline's bounding box; a face button is the 48-unit circle from 8 to 56.
 // Paths from Kenney's Input Prompts 1.5 (CC0, kenney.nl/assets/input-prompts); Sony's guide

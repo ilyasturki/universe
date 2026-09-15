@@ -1,13 +1,10 @@
 import QtQuick
 import "../core"
+import "../core/Format.js" as Format
 import "../sound"
 import "../ui"
 import "../ui/Macros.js" as Macros
 
-// The Settings tab: a sidebar of sections and one column of cards beside it. The runners and the
-// modules (lists; each opens its own page), what every game launches with, a source's library to
-// install from, pending updates, the login flow, the controller's macros, the look, doctor's
-// checks. One set of cards, nine row sources.
 FocusScope {
     id: page
 
@@ -18,21 +15,24 @@ FocusScope {
     signal runnerRequested(string runner)
     signal moduleRequested(string module)
     signal artworkRequested(var game, string slot)
+    signal message(string text)
 
     readonly property var currentGame: null
     readonly property bool ownsBackdrop: false
     readonly property real backdropBlur: 30
-    readonly property real chromeScrim: 0
     readonly property real scrimTop: 0.9
     readonly property real scrimMid: 0.94
     readonly property real scrimBottom: 0.98
-    readonly property Item focusedArtItem: null
     readonly property Item menuAnchor: null
-    readonly property bool ownsAccept: true
-    property bool menuOpen: false
+    // The shell keeps its tab hint off the bar while these hold the keys.
+    readonly property bool modal: editor.open || menu.open || testing || learning
 
-    readonly property var sections: ["Runners", "Launch", "Modules", "Install", "Updates", "Login", "Controller", "Themes", "Doctor", "Artwork", "Quit"]
-    readonly property var sectionIcons: ["play", "sliders", "grid", "download", "refresh", "user", "gamepad", "sun", "pulse", "image", "power"]
+    readonly property var sections: [
+        { name: "Runners", icon: "play" }, { name: "Launch", icon: "sliders" }, { name: "Modules", icon: "grid" },
+        { name: "Install", icon: "download" }, { name: "Updates", icon: "refresh" }, { name: "Login", icon: "user" },
+        { name: "Controller", icon: "gamepad" }, { name: "Themes", icon: "sun" }, { name: "Doctor", icon: "pulse" },
+        { name: "Artwork", icon: "image" }, { name: "Quit", icon: "power" }
+    ]
     readonly property int runnersSection: 0
     readonly property int launchSection: 1
     readonly property int modulesSection: 2
@@ -42,7 +42,6 @@ FocusScope {
     readonly property int controllerSection: 6
     readonly property int themesSection: 7
     readonly property int doctorSection: 8
-    // Its own column, not cards: ArtworkOverview.qml.
     readonly property int artworkSection: 9
     readonly property int quitSection: 10
     property int section: 0
@@ -54,17 +53,12 @@ FocusScope {
     readonly property var login: api.screens.login
     readonly property var controller: api.screens.controller
 
-    // The watcher reports instead of firing while the section is on screen, so a paddle
-    // pressed to find its row does not take a screenshot.
+    // The watcher is suspended while the section is on screen: a paddle pressed to find its row must not fire.
     readonly property bool controllerOpen: section === controllerSection && activeFocus
     readonly property bool learning: section === controllerSection && controller.learning !== ""
-    // The live view: the pad alone in the column, its presses muted as keys (see Api), left by
-    // holding Circle/B or pressing Start and Select together, both read from the watcher.
     readonly property bool testing: section === controllerSection && controller.testing
-    property var held: ({})
     property string pendingSlot: ""
     property string pendingTrigger: ""
-    // The runner or module whose page is open: the list reloads under it and the cursor finds it again.
     property string openedRunner: ""
     property string openedModule: ""
 
@@ -74,14 +68,14 @@ FocusScope {
         : testing ? [ { glyph: "B", label: "Hold to finish" }, { glyph: "Start+Select", label: "Finish" } ]
         : learning ? [ { glyph: "B", label: "Stop learning" } ]
         : side.activeFocus
-        ? [ { glyph: "A", label: "Open" }, { glyph: "B", label: "Back" }, { glyph: "LT RT", label: "Section" }, { glyph: "LB RB", label: "Tabs" } ]
+        ? [ { glyph: "A", label: "Open" }, { glyph: "B", label: "Back" }, { glyph: "LT RT", label: "Section" } ]
         : section === modulesSection
         ? [ { glyph: "A", label: "Open" },
             { glyph: "Y", label: cards.currentRow && cards.currentRow.value === true ? "Disable" : "Enable", dim: !cards.currentRow || (cards.currentRow.warning !== "" && cards.currentRow.value !== true) },
-            { glyph: "B", label: "Sections" }, { glyph: "LT RT", label: "Section" }, { glyph: "LB RB", label: "Tabs" } ]
+            { glyph: "B", label: "Sections" }, { glyph: "LT RT", label: "Section" } ]
         : [ { glyph: "A", label: acceptLabel !== "" ? acceptLabel : "Select", dim: acceptLabel === "" },
             { glyph: "X", label: "Refresh", dim: !refreshable },
-            { glyph: "B", label: "Sections" }, { glyph: "LT RT", label: "Section" }, { glyph: "LB RB", label: "Tabs" } ]
+            { glyph: "B", label: "Sections" }, { glyph: "LT RT", label: "Section" } ]
 
     readonly property string acceptLabel: {
         var row = cards.currentRow;
@@ -96,11 +90,8 @@ FocusScope {
         return "Change";
     }
 
-    // The sections that reach the network keep what they fetched; X fetches again.
     readonly property bool refreshable: section >= installSection && section <= loginSection
 
-    // The sidebar at the left margin; the column of cards centred in what is left, capped so a
-    // row's label and its value stay within one glance.
     readonly property real sideMargin: Theme.dp(80)
     readonly property real sideWidth: Theme.dp(300)
     readonly property real mainRoom: width - sideMargin * 2 - sideWidth - Theme.dp(56)
@@ -111,30 +102,11 @@ FocusScope {
     readonly property string sourceName: currentSource ? currentSource.name : sources.source
     readonly property bool loggedIn: currentSource ? currentSource.logged_in === true : false
 
-    // The source's module row carries its version and kind; the login card borrows them.
     readonly property string sourceMeta: {
-        var rows = modulesForm.rows;
-        for (var i = 0; i < rows.length; i++)
-            if (rows[i].module === sources.source)
-                return rows[i].meta || "";
-        return "";
+        var row = modulesForm.rows.find(function(r) { return r.module === sources.source; });
+        return row ? row.meta || "" : "";
     }
 
-    function games(n) { return n + (n === 1 ? " game" : " games"); }
-
-    // The library's own art when the game is in it, else the store's picture.
-    function artOf(g) {
-        var game = g.game_id ? api.allGames.byId(g.game_id) : null;
-        if (game) {
-            var slots = [game.assets.square, game.assets.boxFront];
-            for (var i = 0; i < slots.length; i++)
-                if (String(slots[i]) !== "")
-                    return slots[i];
-        }
-        return g.image || "";
-    }
-
-    // The rows and the cards that arrange them for the open section, from the host's data.
     readonly property var content: {
         var rows = [], groups = [];
         if (section === artworkSection)
@@ -154,17 +126,17 @@ FocusScope {
                 var g = sources.rows[i];
                 rows.push({ section: sourceName, key: "game", label: g.title, type: "action",
                             display: g.status, choices: [], detail: "", row: i, installed: g.installed,
-                            pending: g.pending, gameId: g.game_id, image: page.artOf(g), action: "Options" });
+                            pending: g.pending, gameId: g.game_id, image: g.image, action: "Options" });
                 all.push(rows.length - 1);
                 (g.installed ? installed : owned).push(rows.length - 1);
             }
             var busy = sources.busy ? (all.length > 0 ? " · refreshing…" : "loading…") : "";
             if (sources.query)
-                groups.push({ title: "Results", meta: games(all.length) + " · “" + sources.query + "”" + busy, rows: [0].concat(all) });
+                groups.push({ title: "Results", meta: Format.plural(all.length, "game", "games") + " · “" + sources.query + "”" + busy, rows: [0].concat(all) });
             else {
                 var where = currentSource && currentSource.games_dir ? " · " + currentSource.games_dir : "";
-                groups.push({ title: "Installed", meta: (all.length > 0 || !busy ? games(installed.length) + where : "") + busy, rows: [0].concat(installed) });
-                groups.push({ title: "Owned, not installed", meta: games(owned.length), rows: owned });
+                groups.push({ title: "Installed", meta: (all.length > 0 || !busy ? Format.plural(installed.length, "game", "games") + where : "") + busy, rows: [0].concat(installed) });
+                groups.push({ title: "Owned, not installed", meta: Format.plural(owned.length, "game", "games"), rows: owned });
             }
             return { rows: rows, groups: groups };
         }
@@ -182,7 +154,7 @@ FocusScope {
                 rows.push({ section: "Updates", key: "update", label: u.title, type: "action",
                             display: (u.version ? u.version + " · " : "") + (u.date || ""), detail: "", row: j });
             }
-            groups.push({ title: "Pending", meta: n + (n === 1 ? " update" : " updates"),
+            groups.push({ title: "Pending", meta: Format.plural(n, "update", "updates"),
                           rows: rows.map(function(r, i) { return i; }) });
             return { rows: rows, groups: groups };
         }
@@ -196,17 +168,9 @@ FocusScope {
         if (section === controllerSection) {
             if (!learning)
                 return { rows: controller.rows, groups: controller.groups };
-            // The row being learned says so in place of its chips, for as long as it listens.
             var listening = controller.rows.map(function(r) {
-                if (r.slot !== controller.learning)
-                    return r;
-                var out = {};
-                for (var k in r)
-                    out[k] = r[k];
-                out.display = "Press the button on the pad…";
-                out.press = null;
-                out.hold = null;
-                return out;
+                return r.slot !== controller.learning ? r
+                     : Object.assign({}, r, { display: "Press the button on the pad…", press: null, hold: null });
             });
             return { rows: listening, groups: controller.groups };
         }
@@ -224,13 +188,7 @@ FocusScope {
         return { rows: modulesForm.doctor, groups: modulesForm.doctorGroups };
     }
 
-    readonly property int checksPassed: {
-        var n = 0;
-        for (var i = 0; i < modulesForm.doctor.length; i++)
-            if (modulesForm.doctor[i].value)
-                n++;
-        return n;
-    }
+    readonly property int checksPassed: modulesForm.doctor.filter(function(d) { return d.value; }).length
 
     function leave() {
         editor.hide();
@@ -238,7 +196,6 @@ FocusScope {
             menu.hide();
     }
 
-    // Modules, Launch and Doctor read the core in-process; the sources keep their last fetch (see load).
     function refresh() {
         if (section === modulesSection)
             modulesForm.load();
@@ -253,29 +210,22 @@ FocusScope {
         else if (section === artworkSection) {
             if (artwork.item)
                 artwork.item.load();
-        } else
+        } else if (section === doctorSection)
             modulesForm.loadDoctor();
     }
 
     function refreshNow() {
-        if (refreshable) {
-            Sound.enter();
-            sources.refresh();
-        } else if (section === doctorSection) {
-            Sound.enter();
-            modulesForm.loadDoctor();
-        } else if (section === controllerSection) {
-            Sound.enter();
-            controller.load();
-        } else if (section === runnersSection) {
-            Sound.enter();
-            runners.load();
-        } else {
+        if (!(refreshable || section === doctorSection || section === controllerSection || section === runnersSection)) {
             Sound.edge();
+            return;
         }
+        Sound.enter();
+        if (refreshable)
+            sources.refresh();
+        else
+            refresh();
     }
 
-    // Y on a module's row switches it in place; A opens its page.
     function toggleModule() {
         var row = cards.currentRow;
         if (section !== modulesSection || !row || (row.warning !== "" && row.value !== true)) {
@@ -284,6 +234,16 @@ FocusScope {
         }
         Sound.favourite(!row.value);
         modulesForm.toggle(cards.index);
+    }
+
+    function confirm(keep, icon, label, title, done) {
+        Sound.panel();
+        menu.show([ { icon: "", label: keep, action: "" }, { icon: icon, label: label, action: "yes", danger: true } ],
+                  cards, cards.focusRect, title, function(action) {
+                      if (action === "yes")
+                          done();
+                      cards.forceActiveFocus();
+                  });
     }
 
     function activate(index, row) {
@@ -298,22 +258,18 @@ FocusScope {
                 Sound.favourite(!row.value);
             } else {
                 Sound.panel();
-                editor.edit(index, row);
+                editor.edit(row, function(value) { launch.setValue(index, value); });
             }
         } else if (section === runnersSection) {
-            // The runner's page takes the focus next and hands it back here, on this row.
             cards.forceActiveFocus();
             openedRunner = row.runner;
             page.runnerRequested(row.runner);
         } else if (section === installSection) {
-            if (row.key === "search") {
-                Sound.panel();
-                editor.prompt("search", "Search " + sourceName, sources.query);
-            } else {
-                Sound.panel();
-                menu.row = row;
-                menu.show(page.gameActions(row), cards, cards.focusRect, row.label);
-            }
+            Sound.panel();
+            if (row.key === "search")
+                editor.prompt("Search " + sourceName, sources.query, function(query) { sources.search(query); });
+            else
+                menu.show(page.gameActions(row), cards, cards.focusRect, row.label, function(action) { page.gameAction(row, action); });
         } else if (section === updatesSection) {
             Sound.enter();
             if (row.key === "all")
@@ -326,36 +282,34 @@ FocusScope {
                 login.begin(sources.source);
             } else if (row.key === "code") {
                 Sound.panel();
-                editor.prompt("code", "Code from " + sourceName, "");
+                editor.prompt("Code from " + sourceName, "", function(code) { login.submit(code); });
             }
         } else if (section === themesSection) {
             Sound.panel();
-            editor.edit(index, row);
+            editor.edit(row, function(value) {
+                var theme = api.theme.themes.filter(function(t) { return t.name === value; })[0];
+                // The switch rebuilds this tree; let the editor finish closing first.
+                if (theme)
+                    Qt.callLater(function() { api.theme.set(theme.id); });
+            });
         } else if (section === quitSection) {
-            Sound.panel();
-            menu.row = row;
-            menu.show([ { icon: "", label: "Stay", action: "" },
-                        { icon: "power", label: api.universe.currentSession ? "Quit and close the game" : "Quit Universe", action: "quit!", danger: true } ],
-                      cards, cards.focusRect, "Quit Universe?");
+            confirm("Stay", "power", api.universe.currentSession ? "Quit and close the game" : "Quit Universe", "Quit Universe?", function() { Qt.quit(); });
         } else if (section === controllerSection) {
             if (row.key === "test") {
                 if (controller.setTesting(true))
                     Sound.enter();
             } else if (row.type === "enum") {
                 Sound.panel();
-                editor.edit(index, row);
+                editor.edit(row, function(value) { controller.setValue(index, value); });
             } else if (row.type === "action") {
                 Sound.panel();
-                menu.row = row;
-                menu.show(page.slotActions(row), cards, cards.focusRect, row.label);
+                menu.show(page.slotActions(row), cards, cards.focusRect, row.label, function(action) { page.slotAction(row, action); });
             } else {
                 Sound.edge();
             }
         }
     }
 
-    // What a button of the pad can be given: a macro on press or on hold, its button learned
-    // (first when the slot has none on this connection), a macro cleared.
     function slotActions(row) {
         var out = [];
         if (!row.bound)
@@ -387,10 +341,7 @@ FocusScope {
         return out;
     }
 
-    function slotAction(action) {
-        var row = menu.row;
-        if (!row)
-            return;
+    function slotAction(row, action) {
         if (action === "learn") {
             if (controller.learn(row.key))
                 Sound.enter();
@@ -399,7 +350,8 @@ FocusScope {
             pendingSlot = row.key;
             pendingTrigger = action;
             menu.show(page.presetActions(action), cards, cards.focusRect,
-                      row.label + " · " + (action === "press" ? "On press" : "On hold"));
+                      row.label + " · " + (action === "press" ? "On press" : "On hold"),
+                      function(next) { page.slotAction(row, next); });
             return;
         } else if (action.indexOf("preset:") === 0) {
             Sound.enter();
@@ -408,7 +360,10 @@ FocusScope {
             Sound.panel();
             var current = pendingTrigger === "hold" ? row.hold : row.press;
             var value = current && current.action === action ? current[action] : "";
-            editor.prompt(action, (action === "keys" ? "Key combo for " : "Command for ") + row.label, value);
+            editor.prompt((action === "keys" ? "Key combo for " : "Command for ") + row.label, value, function(typed) {
+                if (typed !== "")
+                    controller.bind(pendingSlot, pendingTrigger, action, action === "keys" ? typed : "", action === "command" ? typed : "");
+            });
             return;
         } else if (action === "clear-press") {
             Sound.cancel();
@@ -423,19 +378,15 @@ FocusScope {
     onActiveFocusChanged: {
         if (!activeFocus)
             return;
-        if (openedRunner !== "") {
-            runners.load();
-            var i = runners.indexOf(openedRunner);
-            openedRunner = "";
-            if (i >= 0)
-                cards.index = i;
-        } else if (openedModule !== "") {
-            modulesForm.load();
-            var j = modulesForm.indexOf(openedModule);
-            openedModule = "";
-            if (j >= 0)
-                cards.index = j;
-        }
+        var store = openedRunner !== "" ? runners : openedModule !== "" ? modulesForm : null;
+        if (!store)
+            return;
+        var name = openedRunner || openedModule;
+        openedRunner = openedModule = "";
+        store.load();
+        var i = store.indexOf(name);
+        if (i >= 0)
+            cards.index = i;
     }
 
     onControllerOpenChanged: {
@@ -446,19 +397,16 @@ FocusScope {
     }
 
     onTestingChanged: {
-        art.clear();
-        held = ({});
+        if (art.item)
+            art.item.clear();
         holdOut.stop();
         if (testing) {
             tester.forceActiveFocus();
             return;
         }
-        var rows = controller.rows;
-        for (var i = 0; i < rows.length; i++)
-            if (rows[i].key === "test") {
-                cards.index = i;
-                break;
-            }
+        var i = controller.rows.findIndex(function(r) { return r.key === "test"; });
+        if (i >= 0)
+            cards.index = i;
         cards.forceActiveFocus();
     }
 
@@ -471,8 +419,6 @@ FocusScope {
         }
     }
 
-    // What a game of the source can have done to it: installed, or, once it is, updated,
-    // configured (when the library lists it), uninstalled, removed.
     function gameActions(row) {
         var out = [];
         if (!row.installed) {
@@ -490,37 +436,26 @@ FocusScope {
         return out;
     }
 
-    function gameAction(action) {
-        var row = menu.row;
-        if (!row)
-            return;
+    function gameAction(row, action) {
         if (action === "install" || action === "update") {
             Sound.enter();
             sources.install(row.row);
         } else if (action === "settings") {
-            // The cards get the focus back first: the sub-screen takes it next, and
-            // returns it to the page, where the cursor must still be a row.
             cards.forceActiveFocus();
             page.settingsRequested(api.allGames.byId(row.gameId));
             return;
         } else if (action === "uninstall") {
-            Sound.panel();
-            menu.show([ { icon: "", label: "Keep it", action: "" },
-                        { icon: "trash", label: "Trash the install folder", action: "uninstall!", danger: true } ],
-                      cards, cards.focusRect, "Uninstall " + row.label + "?");
+            confirm("Keep it", "trash", "Trash the install folder", "Uninstall " + row.label + "?", function() {
+                Sound.enter();
+                sources.uninstall(row.gameId);
+            });
             return;
         } else if (action === "remove") {
-            Sound.panel();
-            menu.show([ { icon: "", label: "Keep it", action: "" },
-                        { icon: "eye-off", label: "Remove from the library", action: "remove!", danger: true } ],
-                      cards, cards.focusRect, "Remove " + row.label + "?");
+            confirm("Keep it", "eye-off", "Remove from the library", "Remove " + row.label + "?", function() {
+                Sound.enter();
+                sources.remove(row.gameId);
+            });
             return;
-        } else if (action === "uninstall!") {
-            Sound.enter();
-            sources.uninstall(row.gameId);
-        } else if (action === "remove!") {
-            Sound.enter();
-            sources.remove(row.gameId);
         }
         cards.forceActiveFocus();
     }
@@ -528,7 +463,6 @@ FocusScope {
     Component.onCompleted: {
         modulesForm.load();
         runners.load();
-        modulesForm.loadDoctor();
         sources.load();
     }
 
@@ -538,7 +472,6 @@ FocusScope {
         Qt.callLater(cards.reset);
     }
 
-    // Triggers cycle the section from anywhere, as they cycle the collection in the library.
     function stepSection(d) {
         var n = sections.length;
         section = (section + d + n) % n;
@@ -547,60 +480,44 @@ FocusScope {
 
     Connections {
         target: page.sources
-        function onMessage(text) { toast.show(text); }
+        function onMessage(text) { page.message(text); }
     }
 
     Connections {
         target: page.login
         function onFinished(ok, text) {
-            toast.show(text);
+            page.message(text);
             page.sources.load();
         }
     }
 
-    // In the live view a press lights its button on the art and counts towards the way out.
     Connections {
         target: page.controller
         function onButtonPressed(id, slot, pressed) {
-            if (!page.testing || id !== page.controller.current)
+            if (!page.testing || id !== page.controller.current || !art.item)
                 return;
-            art.press(slot, pressed);
-            var next = {};
-            for (var k in page.held)
-                if (k !== slot)
-                    next[k] = true;
-            if (pressed)
-                next[slot] = true;
-            page.held = next;
-            if (slot === "east") {
-                if (pressed)
-                    holdOut.restart();
-                else
-                    holdOut.stop();
-            }
-            if (pressed && next.start && next.select) {
+            art.item.press(slot, pressed);
+            if (slot === "east")
+                pressed ? holdOut.restart() : holdOut.stop();
+            var held = art.item.pressed;
+            if (pressed && held.start && held.select) {
                 Sound.cancel();
                 page.controller.setTesting(false);
             }
         }
         function onAxisMoved(id, axis, value) {
-            if (page.testing && id === page.controller.current)
-                art.axis(axis, value);
+            if (page.testing && id === page.controller.current && art.item)
+                art.item.axis(axis, value);
         }
         function onUnknownPressed(id, code) {
             if (page.section === page.controllerSection && !page.learning && id === page.controller.current)
-                toast.show(code + " is not one of the pad's buttons yet: learn it from a row");
+                page.message(code + " is not one of the pad's buttons yet: learn it from a row");
         }
         function onLearned(family, slot, code) {
-            var rows = page.controller.rows;
-            for (var i = 0; i < rows.length; i++)
-                if (rows[i].slot === slot) {
-                    toast.show(rows[i].label + " is now " + code);
-                    return;
-                }
-            toast.show(slot + " is now " + code);
+            var r = page.controller.rows.find(function(r) { return r.slot === slot; });
+            page.message((r ? r.label : slot) + " is now " + code);
         }
-        function onMessage(text) { toast.show(text); }
+        function onMessage(text) { page.message(text); }
     }
 
     Text {
@@ -623,8 +540,7 @@ FocusScope {
         width: page.sideWidth
         focus: true
         sections: page.sections
-        icons: page.sectionIcons
-        badges: page.sections.map(function(name, i) {
+        badges: page.sections.map(function(s, i) {
             return i === page.updatesSection && page.sources.updates.length > 0 ? page.sources.updates.length.toString() : "";
         })
         current: page.section
@@ -661,11 +577,10 @@ FocusScope {
                 side.forceActiveFocus();
             }
             function onEscapedUp() { page.chromeRequested(); }
-            function onMessage(text) { toast.show(text); }
+            function onMessage(text) { page.message(text); }
         }
     }
 
-    // Above the cards: a running job's message and bar, and on Doctor the tally of checks.
     Column {
         id: above
 
@@ -681,7 +596,7 @@ FocusScope {
             height: Theme.dp(64)
             radius: Theme.dp(14)
             color: Theme.surface
-            visible: page.sources.job !== null && page.sources.job !== undefined
+            visible: page.sources.job != null
 
             readonly property var job: page.sources.job
             readonly property real fraction: job && job.total > 0 ? job.done / job.total : 0
@@ -714,7 +629,7 @@ FocusScope {
                     anchors.left: parent.left
                     anchors.top: parent.top
                     anchors.bottom: parent.bottom
-                    width: parent.width * (jobBar.job && jobBar.job.ok !== null && jobBar.job.ok !== undefined ? 1 : jobBar.fraction)
+                    width: parent.width * (jobBar.job && jobBar.job.ok != null ? 1 : jobBar.fraction)
                     radius: height / 2
                     color: Theme.text
 
@@ -736,8 +651,8 @@ FocusScope {
                 model: {
                     var passed = page.checksPassed, failed = page.modulesForm.doctor.length - passed;
                     return [
-                        { count: passed, text: passed + (passed === 1 ? " check passes" : " checks pass"), color: "#5fd48a" },
-                        { count: failed, text: failed + (failed === 1 ? " needs attention" : " need attention"), color: "#e0655a" }
+                        { count: passed, text: Format.plural(passed, "check passes", "checks pass"), color: "#5fd48a" },
+                        { count: failed, text: Format.plural(failed, "needs attention", "need attention"), color: "#e0655a" }
                     ];
                 }
 
@@ -795,14 +710,10 @@ FocusScope {
         Keys.onPressed: function(event) {
             if (event.isAutoRepeat)
                 return;
-            if (api.keys.isCancel(event) && page.learning) {
+            if (api.keys.isCancel(event)) {
                 event.accepted = true;
                 Sound.cancel();
-                page.controller.cancelLearn();
-            } else if (api.keys.isCancel(event)) {
-                event.accepted = true;
-                Sound.cancel();
-                side.forceActiveFocus();
+                page.learning ? page.controller.cancelLearn() : side.forceActiveFocus();
             } else if (api.keys.isDetails(event)) {
                 event.accepted = true;
                 page.refreshNow();
@@ -813,7 +724,6 @@ FocusScope {
         }
     }
 
-    // The sign-in link as a card under the login rows: the code to scan, the link, the state.
     Item {
         id: loginCard
 
@@ -901,25 +811,27 @@ FocusScope {
         }
     }
 
-    // The live view: the pad takes the column, every press and pull shown on it.
-    ControllerArt {
+    Loader {
         id: art
 
         x: page.mainX
         y: cards.y
         width: page.mainWidth
         height: cards.height
+        active: page.testing || opacity > 0.01
         visible: opacity > 0.01
         opacity: page.testing ? 1.0 : 0.0
-        family: page.controller.family
-        connected: page.controller.connected
-        rows: page.controller.rows
-        unbound: page.controller.unboundSlots
 
         Behavior on opacity { NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic } }
+
+        sourceComponent: ControllerArt {
+            family: page.controller.family
+            connected: page.controller.connected
+            rows: page.controller.rows
+            unbound: page.controller.unboundSlots
+        }
     }
 
-    // Holds the keyboard while the pad is on show: Escape leaves, everything else stays put.
     FocusScope {
         id: tester
 
@@ -944,50 +856,16 @@ FocusScope {
         cards: cards
         z: 3
 
-        onAccepted: function(index, value) {
-            if (page.section === page.themesSection) {
-                var theme = api.theme.themes.filter(function(t) { return t.name === value; })[0];
-                // The switch rebuilds this tree; let the editor finish closing first.
-                if (theme)
-                    Qt.callLater(function() { api.theme.set(theme.id); });
-            } else if (page.section === page.controllerSection)
-                page.controller.setValue(index, value);
-            else if (page.section === page.launchSection)
-                page.launch.setValue(index, value);
-        }
-        onPrompted: function(tag, value) {
-            if (tag === "search")
-                page.sources.search(value);
-            else if (tag === "code")
-                page.login.submit(value);
-            else if ((tag === "keys" || tag === "command") && value !== "")
-                page.controller.bind(page.pendingSlot, page.pendingTrigger, tag, tag === "keys" ? value : "", tag === "command" ? value : "");
-        }
         onClosed: cards.forceActiveFocus()
     }
 
     ActionMenu {
         id: menu
 
-        property var row: null
-
         anchors.fill: parent
         z: 4
 
-        onChosen: function(action) {
-            if (page.section === page.controllerSection)
-                page.slotAction(action);
-            else if (page.section === page.quitSection)
-                action === "quit!" ? Qt.quit() : cards.forceActiveFocus();
-            else
-                page.gameAction(action);
-        }
         onDismissed: cards.forceActiveFocus()
-    }
-
-    Toast {
-        id: toast
-        z: 6
     }
 
     Keys.onPressed: function(event) {
@@ -998,12 +876,10 @@ FocusScope {
     Keys.onReleased: function(event) {
         if (event.isAutoRepeat || editor.open || menu.open)
             return;
-        if (api.keys.isPageUp(event)) {
-            event.accepted = true;
-            page.stepSection(-1);
-        } else if (api.keys.isPageDown(event)) {
-            event.accepted = true;
-            page.stepSection(1);
-        }
+        var d = api.keys.isPageUp(event) ? -1 : api.keys.isPageDown(event) ? 1 : 0;
+        if (!d)
+            return;
+        event.accepted = true;
+        page.stepSection(d);
     }
 }

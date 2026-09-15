@@ -3,7 +3,6 @@ import Qt5Compat.GraphicalEffects
 import "../core"
 import "../sound"
 
-// The list a chip drops down: options under the chip, the focused one filled white.
 FocusScope {
     id: picker
 
@@ -76,13 +75,7 @@ FocusScope {
     }
 
     function step(d) {
-        var next = index + d;
-        if (next < 0 || next >= options.length) {
-            Sound.edge();
-            return;
-        }
-        index = next;
-        Sound.tick();
+        index = Sound.stepped(index, d, options.length);
     }
 
     Keys.onUpPressed: picker.step(-1)
@@ -96,20 +89,15 @@ FocusScope {
         if (api.keys.isAccept(event)) {
             event.accepted = true;
             picker.chosen(picker.index);
-            return;
-        }
-        if (api.keys.isCancel(event)) {
+        } else if (api.keys.isCancel(event)) {
             event.accepted = true;
             Sound.cancel();
             picker.dismissed();
-            return;
-        }
-        // The chip bar and the grid below own these; an open list must eat them.
-        if (api.keys.isDetails(event) || api.keys.isFilters(event)
-                || api.keys.isPageUp(event) || api.keys.isPageDown(event)) {
+        } else if (api.keys.isDetails(event) || api.keys.isFilters(event)
+                   || api.keys.isPageUp(event) || api.keys.isPageDown(event)) {
+            // The chip bar and the grid below own these; an open list must eat them.
             event.accepted = true;
             Sound.edge();
-            return;
         }
     }
 
@@ -152,26 +140,11 @@ FocusScope {
             model: picker.options
             currentIndex: picker.index
             interactive: false
-            highlightFollowsCurrentItem: false
             clip: true
-
-            function scrollToCurrent() {
-                if (height <= 0 || contentHeight <= height)
-                    return;
-                var top = currentIndex * picker.rowHeight;
-                var target = contentY;
-                if (top < contentY)
-                    target = top;
-                else if (top + picker.rowHeight > contentY + height)
-                    target = top + picker.rowHeight - height;
-                contentY = Math.max(0, Math.min(target, contentHeight - height));
-            }
-
-            onCurrentIndexChanged: scrollToCurrent()
-
-            Behavior on contentY {
-                NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutQuint }
-            }
+            highlightRangeMode: ListView.ApplyRange
+            preferredHighlightBegin: 0
+            preferredHighlightEnd: height
+            highlightMoveDuration: Theme.durQuick
 
             delegate: Item {
                 id: row

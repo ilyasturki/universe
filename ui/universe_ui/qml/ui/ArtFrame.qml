@@ -1,7 +1,6 @@
 import QtQuick
 import "../core"
 
-// One image of the artwork page, framed, with its badge on the art and a caption under it.
 Item {
     id: root
 
@@ -34,7 +33,6 @@ Item {
             source: root.source
             fillMode: root.logo ? Image.PreserveAspectFit : Image.PreserveAspectCrop
             asynchronous: true
-            cache: false
             sourceSize.width: 1200
         }
 

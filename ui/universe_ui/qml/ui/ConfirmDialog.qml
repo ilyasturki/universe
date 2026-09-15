@@ -2,7 +2,6 @@ import QtQuick
 import "../core"
 import "../sound"
 
-// A question over a scrim with two pills: B answers no, A the focused one.
 FocusScope {
     id: dialog
 
@@ -16,8 +15,8 @@ FocusScope {
 
     readonly property var hints: [
         { glyph: "A", label: "Select" },
-        { glyph: "B", label: "Cancel" },
-        { glyph: "dpad", label: "Navigate" }
+        { glyph: "dpad", label: "Navigate" },
+        { glyph: "B", label: "Cancel" }
     ]
 
     signal closed()
@@ -136,17 +135,11 @@ FocusScope {
         if (event.isAutoRepeat)
             return;
         if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
-            var next = event.key === Qt.Key_Left ? 0 : 1;
-            next === index ? Sound.edge() : Sound.tick();
-            index = next;
-            return;
-        }
-        if (api.keys.isAccept(event)) {
+            index = Sound.stepped(index, event.key === Qt.Key_Left ? -1 : 1, 2);
+        } else if (api.keys.isAccept(event)) {
             index === 1 ? Sound.enter() : Sound.cancel();
             choose(index === 1);
-            return;
-        }
-        if (api.keys.isCancel(event)) {
+        } else if (api.keys.isCancel(event)) {
             Sound.cancel();
             choose(false);
         }

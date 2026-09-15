@@ -1,18 +1,17 @@
 import QtQuick
 import "../core"
+import "../core/Format.js" as Format
 import "../sound"
 import "../ui"
 
-// A game's journal: entries on the left, the picked one read on the right. Right or A hands
-// the d-pad to the article; Down past its end lands on the screenshots.
 FocusScope {
     id: page
 
     focus: true
 
-    property var game: null
-    // Set by the shell when the recordings jump here.
-    property string session: ""
+    property var args: ({})
+    readonly property var game: args.game || null
+    readonly property string session: args.session || ""
     readonly property var store: api.screens.journal
     readonly property var rows: store.rows
     property int index: 0
@@ -20,12 +19,7 @@ FocusScope {
     readonly property string currentSession: current ? current.session : ""
     readonly property var images: current ? current.images : []
     readonly property bool currentPending: current !== null && current.state === "pending"
-    readonly property bool anyPending: {
-        for (var i = 0; i < rows.length; i++)
-            if (rows[i].state === "pending")
-                return true;
-        return false;
-    }
+    readonly property bool anyPending: rows.some(function(r) { return r.state === "pending"; })
     // Ticks while an entry is being written, so its elapsed time moves.
     property double now: Date.now()
 
@@ -76,14 +70,9 @@ FocusScope {
     }
 
     function landOnSession() {
-        if (session === "")
-            return;
-        for (var i = 0; i < rows.length; i++) {
-            if (rows[i].session === session) {
-                index = i;
-                return;
-            }
-        }
+        var i = rows.findIndex(function(r) { return r.session === session; });
+        if (i >= 0)
+            index = i;
     }
 
     onCurrentChanged: {
@@ -92,9 +81,7 @@ FocusScope {
     }
 
     function step(d) {
-        var next = Math.max(0, Math.min(rows.length - 1, index + d));
-        next === index ? Sound.edge() : Sound.tick();
-        index = next;
+        index = Sound.stepped(index, d, rows.length);
     }
 
     function maxScroll() {
@@ -118,9 +105,7 @@ FocusScope {
     }
 
     function stepShot(d) {
-        var next = Math.max(0, Math.min(images.length - 1, shotIndex + d));
-        next === shotIndex ? Sound.edge() : Sound.tick();
-        shotIndex = next;
+        shotIndex = Sound.stepped(shotIndex, d, images.length);
     }
 
     function read() {
@@ -184,7 +169,7 @@ FocusScope {
         if (current.hasRecording)
             items.push({ icon: "film", label: "Recording", action: "recording" });
         items.push({ icon: "trash", label: currentPending ? "Cancel the writing…" : "Remove entry…", action: "remove", danger: true });
-        menu.show(items, list, rowRect(), current.title !== "" ? current.title : whenText(current));
+        menu.show(items, list, rowRect(), current.title !== "" ? current.title : whenText(current), menuAction);
     }
 
     function menuAction(action) {
@@ -198,7 +183,7 @@ FocusScope {
                           { icon: "trash", label: currentPending ? "Stop the writing" : "Trash the entry", action: "remove!", danger: true } ];
             if (current.hasRecording)
                 items.push({ icon: "trash", label: currentPending ? "Stop it and trash the recording" : "Trash it and its recording", action: "remove-both!", danger: true });
-            menu.show(items, list, rowRect(), currentPending ? "Cancel this entry?" : "Remove this entry?");
+            menu.show(items, list, rowRect(), currentPending ? "Cancel this entry?" : "Remove this entry?", menuAction);
         } else if (action === "remove!" || action === "remove-both!") {
             Sound.enter();
             var gameId = current.gameId, session = current.session;
@@ -216,19 +201,15 @@ FocusScope {
         if (event.isAutoRepeat && !(lightbox && arrow) && !(mode === 2 && arrow))
             return;
 
+        event.accepted = true;
         if (lightbox) {
-            event.accepted = true;
             if (api.keys.isCancel(event) || api.keys.isAccept(event)) {
                 Sound.cancel();
                 lightbox = false;
             } else if (arrow) {
                 stepShot(event.key === Qt.Key_Left ? -1 : 1);
             }
-            return;
-        }
-
-        if (api.keys.isAccept(event)) {
-            event.accepted = true;
+        } else if (api.keys.isAccept(event)) {
             if (mode === 2) {
                 Sound.enter();
                 lightbox = true;
@@ -244,16 +225,12 @@ FocusScope {
                 read();
             }
         } else if (api.keys.isCancel(event)) {
-            event.accepted = true;
             reading ? leave() : page.closeRequested();
         } else if (api.keys.isFilters(event)) {
-            event.accepted = true;
             openRecording();
         } else if (api.keys.isMenu(event)) {
-            event.accepted = true;
             openMenu();
         } else if (event.key === Qt.Key_Up) {
-            event.accepted = true;
             if (mode === 2) {
                 Sound.panel();
                 mode = 1;
@@ -263,7 +240,6 @@ FocusScope {
                 step(-1);
             }
         } else if (event.key === Qt.Key_Down) {
-            event.accepted = true;
             if (mode === 2)
                 Sound.edge();
             else if (mode === 1)
@@ -271,17 +247,12 @@ FocusScope {
             else
                 step(1);
         } else if (event.key === Qt.Key_Right) {
-            event.accepted = true;
             mode === 2 ? stepShot(1) : mode === 1 ? Sound.edge() : read();
         } else if (event.key === Qt.Key_Left) {
-            event.accepted = true;
             mode === 2 ? stepShot(-1) : mode === 1 ? leave() : Sound.edge();
+        } else {
+            event.accepted = false;
         }
-    }
-
-    Rectangle {
-        anchors.fill: parent
-        color: Theme.ground
     }
 
     GameBackdrop {
@@ -302,7 +273,7 @@ FocusScope {
         anchors.rightMargin: page.sideMargin
         game: page.game
         label: "JOURNAL"
-        detail: page.rows.length > 0 ? page.rows.length + (page.rows.length === 1 ? " entry" : " entries") : ""
+        detail: page.rows.length > 0 ? Format.plural(page.rows.length, "entry", "entries") : ""
     }
 
     Text {
@@ -338,80 +309,30 @@ FocusScope {
             NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
         }
 
-        delegate: Rectangle {
-            readonly property bool focused: index === page.index
-            readonly property bool lit: focused && !page.reading
+        delegate: SessionRow {
+            id: entry
+
             readonly property bool pending: modelData.state === "pending"
-            readonly property bool failed: modelData.state === "failed"
 
             width: list.width
             height: Theme.dp(96)
-            radius: Theme.dp(16)
-            color: lit ? Theme.text : Theme.surface
+            lit: index === page.index && !page.reading
+            muted: pending
+            title: pending ? "Writing the entry…" : modelData.title
+            subtitle: pending ? page.elapsedText(modelData.started_at)
+                    : modelData.state === "failed" ? modelData.reason
+                    : page.whenText(modelData)
+            mark: "film"
+            showMark: modelData.hasRecording
+            leadWidth: pending ? Theme.dp(12) : 0
+            gap: Theme.dp(16)
 
-            Behavior on color {
-                ColorAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-            }
-
-            Rectangle {
-                id: pulse
-                anchors.left: parent.left
-                anchors.leftMargin: Theme.dp(22)
+            PulseDot {
                 anchors.verticalCenter: parent.verticalCenter
                 width: Theme.dp(12)
-                height: width
-                radius: width / 2
-                visible: pending
-                color: lit ? Theme.onLight : Theme.text
-
-                SequentialAnimation on opacity {
-                    running: pending
-                    loops: Animation.Infinite
-                    NumberAnimation { to: 0.25; duration: 900; easing.type: Easing.InOutQuad }
-                    NumberAnimation { to: 1.0; duration: 900; easing.type: Easing.InOutQuad }
-                }
-            }
-
-            Column {
-                anchors.left: pending ? pulse.right : parent.left
-                anchors.right: recordingMark.visible ? recordingMark.left : parent.right
-                anchors.margins: Theme.dp(22)
-                anchors.leftMargin: pending ? Theme.dp(16) : Theme.dp(22)
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: Theme.dp(6)
-
-                Text {
-                    width: parent.width
-                    text: pending ? "Writing the entry…" : modelData.title
-                    color: lit ? Theme.onLight : (pending ? Theme.textSecondary : Theme.text)
-                    font.family: Theme.sans
-                    font.weight: Font.DemiBold
-                    font.pixelSize: Theme.dp(24)
-                    elide: Text.ElideRight
-                }
-
-                Text {
-                    width: parent.width
-                    text: pending ? page.elapsedText(modelData.started_at)
-                        : failed ? modelData.reason
-                        : page.whenText(modelData)
-                    color: lit ? Qt.rgba(0.063, 0.067, 0.086, 0.7) : Theme.textSecondary
-                    font.family: Theme.sans
-                    font.pixelSize: Theme.dp(20)
-                    elide: Text.ElideRight
-                }
-            }
-
-            MenuGlyph {
-                id: recordingMark
-                anchors.right: parent.right
-                anchors.rightMargin: Theme.dp(22)
-                anchors.verticalCenter: parent.verticalCenter
-                width: Theme.dp(24)
-                height: width
-                visible: modelData.hasRecording
-                kind: "film"
-                tint: lit ? Qt.rgba(0.063, 0.067, 0.086, 0.55) : Theme.textMuted
+                visible: entry.pending
+                running: entry.pending
+                color: entry.lit ? Theme.onLight : Theme.text
             }
         }
     }
@@ -511,106 +432,16 @@ FocusScope {
                 }
             }
 
-            Column {
-                id: shots
-
+            ScreenshotStrip {
                 width: parent.width
-                spacing: Theme.dp(18)
-                visible: page.images.length > 0
-
-                readonly property bool focused: page.mode === 2 && !page.lightbox
-                readonly property real shotWidth: Theme.dp(336)
-                readonly property real shotHeight: Theme.dp(189)
-
-                CapsLabel {
-                    text: "SCREENSHOTS"
-                    tracking: 0.11
-                    color: shots.focused ? Theme.textSecondary : Theme.textMuted
-                }
-
-                ListView {
-                    id: shotStrip
-
-                    // Room for the focus ring's halo inside the clip on every side.
-                    readonly property real inset: Theme.dp(24)
-
-                    x: -inset
-                    width: parent.width + page.sideMargin + inset
-                    height: shots.shotHeight + inset * 2
-                    leftMargin: inset
-                    orientation: ListView.Horizontal
-                    spacing: Theme.dp(20)
-                    model: page.images
-                    interactive: false
-                    clip: true
-                    currentIndex: page.shotIndex
-                    boundsBehavior: Flickable.StopAtBounds
-                    highlightFollowsCurrentItem: false
-
-                    onCurrentIndexChanged: slide()
-                    onWidthChanged: slide()
-
-                    function slide() {
-                        var pitch = shots.shotWidth + spacing;
-                        var target = currentIndex * pitch - (width - page.sideMargin) * 0.5 + shots.shotWidth * 0.5;
-                        contentX = Math.max(-inset, Math.min(target, Math.max(-inset, contentWidth - width + inset)));
-                    }
-
-                    Behavior on contentX {
-                        NumberAnimation { duration: Theme.durNudge; easing.type: Easing.OutQuint }
-                    }
-
-                    delegate: Item {
-                        width: shots.shotWidth
-                        height: shotStrip.height
-
-                        readonly property bool current: index === page.shotIndex && shots.focused
-
-                        RoundedMask {
-                            id: shotCard
-                            width: shots.shotWidth
-                            height: shots.shotHeight
-                            anchors.verticalCenter: parent.verticalCenter
-                            radius: Theme.dp(10)
-                            opacity: shots.focused && !current ? 0.6 : 1.0
-                            scale: current ? 1.03 : 1.0
-
-                            Behavior on opacity {
-                                NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-                            }
-                            Behavior on scale {
-                                NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutQuint }
-                            }
-
-                            Rectangle {
-                                anchors.fill: parent
-                                color: Theme.cardBase
-                            }
-
-                            Image {
-                                anchors.fill: parent
-                                source: modelData
-                                fillMode: Image.PreserveAspectCrop
-                                asynchronous: true
-                                mipmap: true
-                            }
-                        }
-
-                        Loader {
-                            anchors.fill: shotCard
-                            active: current
-                            sourceComponent: FocusRing {
-                                cornerRadius: shotCard.radius
-                                gapWidth: Theme.dp(4)
-                            }
-                        }
-                    }
-                }
+                images: page.images
+                index: page.shotIndex
+                focused: page.mode === 2 && !page.lightbox
+                sideMargin: page.sideMargin
             }
         }
     }
 
-    // Scrolled text runs out under the hint bar rather than into it.
     Rectangle {
         anchors.bottom: parent.bottom
         anchors.left: flick.left
@@ -646,7 +477,6 @@ FocusScope {
         anchors.fill: parent
         z: 5
 
-        onChosen: function(action) { page.menuAction(action); }
         onDismissed: page.forceActiveFocus()
     }
 }

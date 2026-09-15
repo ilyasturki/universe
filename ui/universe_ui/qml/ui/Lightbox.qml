@@ -1,8 +1,6 @@
 import QtQuick
 import "../core"
 
-// One picture at a time over a dark scrim, its neighbours waiting off screen. Display only:
-// the page that owns it steps `index` and flips `open`.
 Rectangle {
     id: root
 
@@ -46,8 +44,7 @@ Rectangle {
                 NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic }
             }
 
-            // Three slots keyed by residue, as the home logos are: the slot that
-            // just left the screen picks up the picture two steps ahead.
+            // Three slots keyed by residue: the slot that just left the screen picks up the picture two steps ahead.
             Repeater {
                 model: 3
 
@@ -61,7 +58,7 @@ Rectangle {
                     source: at >= 0 && at < root.images.length ? root.images[at] : ""
                     fillMode: Image.PreserveAspectFit
                     asynchronous: true
-                    mipmap: true
+                    sourceSize.width: 1920
                     opacity: at === root.index ? 1.0 : 0.4
 
                     Behavior on opacity {

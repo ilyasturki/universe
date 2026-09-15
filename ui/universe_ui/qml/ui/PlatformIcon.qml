@@ -14,7 +14,6 @@ Item {
     readonly property var collection: game && game.collections.count > 0 ? game.collections.get(0) : null
     readonly property string shortName: collection ? collection.shortName : ""
     readonly property bool hasIcon: icon.status === Image.Ready
-    readonly property bool software: GraphicsInfo.api === GraphicsInfo.Software
 
     implicitWidth: hasIcon ? icon.width : label.implicitWidth
     implicitHeight: hasIcon ? size : label.implicitHeight
@@ -36,14 +35,14 @@ Item {
         smooth: true
         mipmap: true
         // Uncoloured where the overlay cannot run.
-        visible: root.hasIcon && root.software
+        visible: root.hasIcon && Theme.software
     }
 
     ColorOverlay {
         anchors.fill: icon
         source: icon
         color: root.color
-        visible: root.hasIcon && !root.software
+        visible: root.hasIcon && !Theme.software
     }
 
     Text {

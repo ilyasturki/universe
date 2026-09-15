@@ -7,6 +7,39 @@ Canvas {
     property string kind: ""
     property color tint: "#ffffff"
 
+    readonly property var glyphs: ({
+        "play": { fill: "M6 3L21 12L6 21Z" },
+        "info": { stroke: "M22 12A10 10 0 1 1 2 12A10 10 0 1 1 22 12M12 11V16.5", fill: "M13.3 7.6A1.3 1.3 0 1 1 10.7 7.6A1.3 1.3 0 1 1 13.3 7.6" },
+        "stop": { fill: "M7 5H17A2 2 0 0 1 19 7V17A2 2 0 0 1 17 19H7A2 2 0 0 1 5 17V7A2 2 0 0 1 7 5Z" },
+        "sliders": { stroke: "M3 6H21M3 12H21M3 18H21", fill: "M17.4 6A2.4 2.4 0 1 1 12.6 6A2.4 2.4 0 1 1 17.4 6M10.4 12A2.4 2.4 0 1 1 5.6 12A2.4 2.4 0 1 1 10.4 12M14.4 18A2.4 2.4 0 1 1 9.6 18A2.4 2.4 0 1 1 14.4 18" },
+        "film": { stroke: "M5 5H19A2 2 0 0 1 21 7V17A2 2 0 0 1 19 19H5A2 2 0 0 1 3 17V7A2 2 0 0 1 5 5ZM7 5V19M12 5V19M17 5V19" },
+        "book": { stroke: "M12 6C9 4 5 4 3 5L3 19C5 18 9 18 12 20C15 18 19 18 21 19L21 5C19 4 15 4 12 6ZM12 6V20" },
+        "download": { stroke: "M12 3V15M6.5 10L12 15.5L17.5 10M4 20H20" },
+        "refresh": { stroke: "M15.63 4.87A8 8 0 1 1 8.37 4.87M17 3.5L17.6 8.3L12.8 7.6" },
+        "trash": { stroke: "M4 7H20M9 7V4H15V7M6 7L7 20H17L18 7M10 11V16.5M14 11V16.5" },
+        "eye-off": { stroke: "M3 12C6 6.5 18 6.5 21 12C18 17.5 6 17.5 3 12ZM15 12A3 3 0 1 1 9 12A3 3 0 1 1 15 12M5 20L19 4" },
+        "folder": { stroke: "M3 6H9.5L11.5 8.5H21V19H3Z" },
+        "check": { stroke: "M4.5 12.5L10 18L19.5 6.5" },
+        "grid": { stroke: "M4.5 3H9A1.5 1.5 0 0 1 10.5 4.5V9A1.5 1.5 0 0 1 9 10.5H4.5A1.5 1.5 0 0 1 3 9V4.5A1.5 1.5 0 0 1 4.5 3ZM15 3H19.5A1.5 1.5 0 0 1 21 4.5V9A1.5 1.5 0 0 1 19.5 10.5H15A1.5 1.5 0 0 1 13.5 9V4.5A1.5 1.5 0 0 1 15 3ZM4.5 13.5H9A1.5 1.5 0 0 1 10.5 15V19.5A1.5 1.5 0 0 1 9 21H4.5A1.5 1.5 0 0 1 3 19.5V15A1.5 1.5 0 0 1 4.5 13.5ZM15 13.5H19.5A1.5 1.5 0 0 1 21 15V19.5A1.5 1.5 0 0 1 19.5 21H15A1.5 1.5 0 0 1 13.5 19.5V15A1.5 1.5 0 0 1 15 13.5Z" },
+        "library": { fill: "M4.5 2H8.5A2.5 2.5 0 0 1 11 4.5V8.5A2.5 2.5 0 0 1 8.5 11H4.5A2.5 2.5 0 0 1 2 8.5V4.5A2.5 2.5 0 0 1 4.5 2ZM15.5 2H19.5A2.5 2.5 0 0 1 22 4.5V8.5A2.5 2.5 0 0 1 19.5 11H15.5A2.5 2.5 0 0 1 13 8.5V4.5A2.5 2.5 0 0 1 15.5 2ZM4.5 13H8.5A2.5 2.5 0 0 1 11 15.5V19.5A2.5 2.5 0 0 1 8.5 22H4.5A2.5 2.5 0 0 1 2 19.5V15.5A2.5 2.5 0 0 1 4.5 13ZM15.5 13H19.5A2.5 2.5 0 0 1 22 15.5V19.5A2.5 2.5 0 0 1 19.5 22H15.5A2.5 2.5 0 0 1 13 19.5V15.5A2.5 2.5 0 0 1 15.5 13Z" },
+        "image": { stroke: "M5 4H19A2 2 0 0 1 21 6V18A2 2 0 0 1 19 20H5A2 2 0 0 1 3 18V6A2 2 0 0 1 5 4ZM3.5 17L9 11.5L13 15.5L16 12.5L20.5 17", fill: "M17.1 8.5A1.6 1.6 0 1 1 13.9 8.5A1.6 1.6 0 1 1 17.1 8.5" },
+        "user": { stroke: "M16 8A4 4 0 1 1 8 8A4 4 0 1 1 16 8M4 21C4 15 20 15 20 21" },
+        "pulse": { stroke: "M2.5 12H7L9.5 5L13.5 19L16 12H21.5" },
+        "power": { stroke: "M16.29 6.25A8 8 0 1 1 7.71 6.25M12 3V12" },
+        "gamepad": { stroke: "M7 6H17C21 6 22.5 10 22 15C21.6 19 18 19.5 16.5 16.5L15.5 14.5H8.5L7.5 16.5C6 19.5 2.4 19 2 15C1.5 10 3 6 7 6ZM7.5 8.5V12.5M5.5 10.5H9.5", fill: "M16.6 9.2A1.1 1.1 0 1 1 14.4 9.2A1.1 1.1 0 1 1 16.6 9.2M18.9 11.5A1.1 1.1 0 1 1 16.7 11.5A1.1 1.1 0 1 1 18.9 11.5" },
+        "search": { stroke: "M18 11A7 7 0 1 1 4 11A7 7 0 1 1 18 11M16.5 16.5L21 21" },
+        "volume-down": { stroke: "M3 9.5H6.5L11.5 5.5V18.5L6.5 14.5H3ZM14.15 8.36A4.5 4.5 0 0 1 14.15 15.64" },
+        "volume-up": { stroke: "M3 9.5H6.5L11.5 5.5V18.5L6.5 14.5H3ZM14.15 8.36A4.5 4.5 0 0 1 14.15 15.64M16.5 5.12A8.5 8.5 0 0 1 16.5 18.88" },
+        "mute": { stroke: "M3 9.5H6.5L11.5 5.5V18.5L6.5 14.5H3ZM15.5 9.5L20.5 14.5M20.5 9.5L15.5 14.5" },
+        "camera": { stroke: "M3 8H8L9.8 5H14.2L16 8H21V19H3ZM15.4 13.2A3.4 3.4 0 1 1 8.6 13.2A3.4 3.4 0 1 1 15.4 13.2" },
+        "gauge": { stroke: "M3.5 14.5A8.5 8.5 0 0 1 20.5 14.5M12 14.5L16.8 9.2M3.5 19.5H20.5", fill: "M13.5 14.5A1.5 1.5 0 1 1 10.5 14.5A1.5 1.5 0 1 1 13.5 14.5" },
+        "terminal": { stroke: "M5 5H19A2 2 0 0 1 21 7V17A2 2 0 0 1 19 19H5A2 2 0 0 1 3 17V7A2 2 0 0 1 5 5ZM6.5 9.5L9.5 12L6.5 14.5M11.5 15H16.5" },
+        "sun": { stroke: "M16 12A4 4 0 1 1 8 12A4 4 0 1 1 16 12M19 12L22 12M16.95 16.95L19.07 19.07M12 19L12 22M7.05 16.95L4.93 19.07M5 12L2 12M7.05 7.05L4.93 4.93M12 5L12 2M16.95 7.05L19.07 4.93" },
+        "keyboard": { stroke: "M5 6H19A2 2 0 0 1 21 8V16A2 2 0 0 1 19 18H5A2 2 0 0 1 3 16V8A2 2 0 0 1 5 6ZM9.5 14H13.5", fill: "M7.9 10A0.9 0.9 0 1 1 6.1 10A0.9 0.9 0 1 1 7.9 10M11.9 10A0.9 0.9 0 1 1 10.1 10A0.9 0.9 0 1 1 11.9 10M15.9 10A0.9 0.9 0 1 1 14.1 10A0.9 0.9 0 1 1 15.9 10M7.9 14A0.9 0.9 0 1 1 6.1 14A0.9 0.9 0 1 1 7.9 14M15.9 14A0.9 0.9 0 1 1 14.1 14A0.9 0.9 0 1 1 15.9 14" },
+        "heart": { fill: "M12 20C12 20 4.5 15.3 4.5 10.4C4.5 7.2 9.2 5.4 12 7.6C14.8 5.4 19.5 7.2 19.5 10.4C19.5 15.3 12 20 12 20Z" },
+        "heart-outline": { stroke: "M12 20C12 20 4.5 15.3 4.5 10.4C4.5 7.2 9.2 5.4 12 7.6C14.8 5.4 19.5 7.2 19.5 10.4C19.5 15.3 12 20 12 20Z" }
+    })
+
     onKindChanged: requestPaint()
     onTintChanged: requestPaint()
 
@@ -14,289 +47,20 @@ Canvas {
         var ctx = getContext("2d");
         ctx.reset();
         var s = width / 24;
+        ctx.scale(s, s);
         ctx.fillStyle = tint;
         ctx.strokeStyle = tint;
-        ctx.lineWidth = 2 * s;
+        ctx.lineWidth = 2;
         ctx.lineCap = "round";
         ctx.lineJoin = "round";
-        ctx.beginPath();
-        if (kind === "play") {
-            ctx.moveTo(6 * s, 3 * s);
-            ctx.lineTo(21 * s, 12 * s);
-            ctx.lineTo(6 * s, 21 * s);
-            ctx.closePath();
+        var g = glyphs[kind] || glyphs["heart-outline"];
+        if (g.stroke) {
+            ctx.path = g.stroke;
+            ctx.stroke();
+        }
+        if (g.fill) {
+            ctx.path = g.fill;
             ctx.fill();
-        } else if (kind === "info") {
-            ctx.arc(12 * s, 12 * s, 10 * s, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(12 * s, 11 * s);
-            ctx.lineTo(12 * s, 16.5 * s);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.arc(12 * s, 7.6 * s, 1.3 * s, 0, Math.PI * 2);
-            ctx.fill();
-        } else if (kind === "stop") {
-            ctx.roundedRect(5 * s, 5 * s, 14 * s, 14 * s, 2 * s, 2 * s);
-            ctx.fill();
-        } else if (kind === "sliders") {
-            [6, 12, 18].forEach(function(y, i) {
-                ctx.beginPath();
-                ctx.moveTo(3 * s, y * s);
-                ctx.lineTo(21 * s, y * s);
-                ctx.stroke();
-                ctx.beginPath();
-                ctx.arc([15, 8, 12][i] * s, y * s, 2.4 * s, 0, Math.PI * 2);
-                ctx.fill();
-            });
-        } else if (kind === "film") {
-            ctx.roundedRect(3 * s, 5 * s, 18 * s, 14 * s, 2 * s, 2 * s);
-            ctx.stroke();
-            [7, 12, 17].forEach(function(x) {
-                ctx.beginPath();
-                ctx.moveTo(x * s, 5 * s);
-                ctx.lineTo(x * s, 19 * s);
-                ctx.stroke();
-            });
-        } else if (kind === "book") {
-            ctx.moveTo(12 * s, 6 * s);
-            ctx.bezierCurveTo(9 * s, 4 * s, 5 * s, 4 * s, 3 * s, 5 * s);
-            ctx.lineTo(3 * s, 19 * s);
-            ctx.bezierCurveTo(5 * s, 18 * s, 9 * s, 18 * s, 12 * s, 20 * s);
-            ctx.bezierCurveTo(15 * s, 18 * s, 19 * s, 18 * s, 21 * s, 19 * s);
-            ctx.lineTo(21 * s, 5 * s);
-            ctx.bezierCurveTo(19 * s, 4 * s, 15 * s, 4 * s, 12 * s, 6 * s);
-            ctx.closePath();
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(12 * s, 6 * s);
-            ctx.lineTo(12 * s, 20 * s);
-            ctx.stroke();
-        } else if (kind === "download") {
-            ctx.moveTo(12 * s, 3 * s);
-            ctx.lineTo(12 * s, 15 * s);
-            ctx.moveTo(6.5 * s, 10 * s);
-            ctx.lineTo(12 * s, 15.5 * s);
-            ctx.lineTo(17.5 * s, 10 * s);
-            ctx.moveTo(4 * s, 20 * s);
-            ctx.lineTo(20 * s, 20 * s);
-            ctx.stroke();
-        } else if (kind === "refresh") {
-            ctx.arc(12 * s, 12 * s, 8 * s, -Math.PI * 0.35, Math.PI * 1.35);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(17 * s, 3.5 * s);
-            ctx.lineTo(17.6 * s, 8.3 * s);
-            ctx.lineTo(12.8 * s, 7.6 * s);
-            ctx.stroke();
-        } else if (kind === "trash") {
-            ctx.moveTo(4 * s, 7 * s);
-            ctx.lineTo(20 * s, 7 * s);
-            ctx.moveTo(9 * s, 7 * s);
-            ctx.lineTo(9 * s, 4 * s);
-            ctx.lineTo(15 * s, 4 * s);
-            ctx.lineTo(15 * s, 7 * s);
-            ctx.moveTo(6 * s, 7 * s);
-            ctx.lineTo(7 * s, 20 * s);
-            ctx.lineTo(17 * s, 20 * s);
-            ctx.lineTo(18 * s, 7 * s);
-            ctx.moveTo(10 * s, 11 * s);
-            ctx.lineTo(10 * s, 16.5 * s);
-            ctx.moveTo(14 * s, 11 * s);
-            ctx.lineTo(14 * s, 16.5 * s);
-            ctx.stroke();
-        } else if (kind === "eye-off") {
-            ctx.moveTo(3 * s, 12 * s);
-            ctx.bezierCurveTo(6 * s, 6.5 * s, 18 * s, 6.5 * s, 21 * s, 12 * s);
-            ctx.bezierCurveTo(18 * s, 17.5 * s, 6 * s, 17.5 * s, 3 * s, 12 * s);
-            ctx.closePath();
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.arc(12 * s, 12 * s, 3 * s, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(5 * s, 20 * s);
-            ctx.lineTo(19 * s, 4 * s);
-            ctx.stroke();
-        } else if (kind === "folder") {
-            ctx.moveTo(3 * s, 6 * s);
-            ctx.lineTo(9.5 * s, 6 * s);
-            ctx.lineTo(11.5 * s, 8.5 * s);
-            ctx.lineTo(21 * s, 8.5 * s);
-            ctx.lineTo(21 * s, 19 * s);
-            ctx.lineTo(3 * s, 19 * s);
-            ctx.closePath();
-            ctx.stroke();
-        } else if (kind === "check") {
-            ctx.moveTo(4.5 * s, 12.5 * s);
-            ctx.lineTo(10 * s, 18 * s);
-            ctx.lineTo(19.5 * s, 6.5 * s);
-            ctx.stroke();
-        } else if (kind === "grid") {
-            [[3, 3], [13.5, 3], [3, 13.5], [13.5, 13.5]].forEach(function(p) {
-                ctx.beginPath();
-                ctx.roundedRect(p[0] * s, p[1] * s, 7.5 * s, 7.5 * s, 1.5 * s, 1.5 * s);
-                ctx.stroke();
-            });
-        } else if (kind === "image") {
-            ctx.roundedRect(3 * s, 4 * s, 18 * s, 16 * s, 2 * s, 2 * s);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(3.5 * s, 17 * s);
-            ctx.lineTo(9 * s, 11.5 * s);
-            ctx.lineTo(13 * s, 15.5 * s);
-            ctx.lineTo(16 * s, 12.5 * s);
-            ctx.lineTo(20.5 * s, 17 * s);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.arc(15.5 * s, 8.5 * s, 1.6 * s, 0, Math.PI * 2);
-            ctx.fill();
-        } else if (kind === "user") {
-            ctx.arc(12 * s, 8 * s, 4 * s, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(4 * s, 21 * s);
-            ctx.bezierCurveTo(4 * s, 15 * s, 20 * s, 15 * s, 20 * s, 21 * s);
-            ctx.stroke();
-        } else if (kind === "pulse") {
-            ctx.moveTo(2.5 * s, 12 * s);
-            ctx.lineTo(7 * s, 12 * s);
-            ctx.lineTo(9.5 * s, 5 * s);
-            ctx.lineTo(13.5 * s, 19 * s);
-            ctx.lineTo(16 * s, 12 * s);
-            ctx.lineTo(21.5 * s, 12 * s);
-            ctx.stroke();
-        } else if (kind === "power") {
-            ctx.arc(12 * s, 13 * s, 8 * s, -Math.PI * 0.32, Math.PI * 1.32);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(12 * s, 3 * s);
-            ctx.lineTo(12 * s, 12 * s);
-            ctx.stroke();
-        } else if (kind === "gamepad") {
-            ctx.moveTo(7 * s, 6 * s);
-            ctx.lineTo(17 * s, 6 * s);
-            ctx.bezierCurveTo(21 * s, 6 * s, 22.5 * s, 10 * s, 22 * s, 15 * s);
-            ctx.bezierCurveTo(21.6 * s, 19 * s, 18 * s, 19.5 * s, 16.5 * s, 16.5 * s);
-            ctx.lineTo(15.5 * s, 14.5 * s);
-            ctx.lineTo(8.5 * s, 14.5 * s);
-            ctx.lineTo(7.5 * s, 16.5 * s);
-            ctx.bezierCurveTo(6 * s, 19.5 * s, 2.4 * s, 19 * s, 2 * s, 15 * s);
-            ctx.bezierCurveTo(1.5 * s, 10 * s, 3 * s, 6 * s, 7 * s, 6 * s);
-            ctx.closePath();
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(7.5 * s, 8.5 * s);
-            ctx.lineTo(7.5 * s, 12.5 * s);
-            ctx.moveTo(5.5 * s, 10.5 * s);
-            ctx.lineTo(9.5 * s, 10.5 * s);
-            ctx.stroke();
-            [[15.5, 9.2], [17.8, 11.5]].forEach(function(p) {
-                ctx.beginPath();
-                ctx.arc(p[0] * s, p[1] * s, 1.1 * s, 0, Math.PI * 2);
-                ctx.fill();
-            });
-        } else if (kind === "search") {
-            ctx.arc(11 * s, 11 * s, 7 * s, 0, Math.PI * 2);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(16.5 * s, 16.5 * s);
-            ctx.lineTo(21 * s, 21 * s);
-            ctx.stroke();
-        } else if (kind === "volume-up" || kind === "volume-down" || kind === "mute") {
-            ctx.moveTo(3 * s, 9.5 * s);
-            ctx.lineTo(6.5 * s, 9.5 * s);
-            ctx.lineTo(11.5 * s, 5.5 * s);
-            ctx.lineTo(11.5 * s, 18.5 * s);
-            ctx.lineTo(6.5 * s, 14.5 * s);
-            ctx.lineTo(3 * s, 14.5 * s);
-            ctx.closePath();
-            ctx.stroke();
-            if (kind === "mute") {
-                ctx.beginPath();
-                ctx.moveTo(15.5 * s, 9.5 * s);
-                ctx.lineTo(20.5 * s, 14.5 * s);
-                ctx.moveTo(20.5 * s, 9.5 * s);
-                ctx.lineTo(15.5 * s, 14.5 * s);
-                ctx.stroke();
-            } else {
-                ctx.beginPath();
-                ctx.arc(11.5 * s, 12 * s, 4.5 * s, -Math.PI * 0.3, Math.PI * 0.3);
-                ctx.stroke();
-                if (kind === "volume-up") {
-                    ctx.beginPath();
-                    ctx.arc(11.5 * s, 12 * s, 8.5 * s, -Math.PI * 0.3, Math.PI * 0.3);
-                    ctx.stroke();
-                }
-            }
-        } else if (kind === "camera") {
-            ctx.moveTo(3 * s, 8 * s);
-            ctx.lineTo(8 * s, 8 * s);
-            ctx.lineTo(9.8 * s, 5 * s);
-            ctx.lineTo(14.2 * s, 5 * s);
-            ctx.lineTo(16 * s, 8 * s);
-            ctx.lineTo(21 * s, 8 * s);
-            ctx.lineTo(21 * s, 19 * s);
-            ctx.lineTo(3 * s, 19 * s);
-            ctx.closePath();
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.arc(12 * s, 13.2 * s, 3.4 * s, 0, Math.PI * 2);
-            ctx.stroke();
-        } else if (kind === "gauge") {
-            ctx.arc(12 * s, 14.5 * s, 8.5 * s, Math.PI * 1.0, Math.PI * 2.0);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(12 * s, 14.5 * s);
-            ctx.lineTo(16.8 * s, 9.2 * s);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.arc(12 * s, 14.5 * s, 1.5 * s, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.beginPath();
-            ctx.moveTo(3.5 * s, 19.5 * s);
-            ctx.lineTo(20.5 * s, 19.5 * s);
-            ctx.stroke();
-        } else if (kind === "terminal") {
-            ctx.roundedRect(3 * s, 5 * s, 18 * s, 14 * s, 2 * s, 2 * s);
-            ctx.stroke();
-            ctx.beginPath();
-            ctx.moveTo(6.5 * s, 9.5 * s);
-            ctx.lineTo(9.5 * s, 12 * s);
-            ctx.lineTo(6.5 * s, 14.5 * s);
-            ctx.moveTo(11.5 * s, 15 * s);
-            ctx.lineTo(16.5 * s, 15 * s);
-            ctx.stroke();
-        } else if (kind === "sun") {
-            ctx.arc(12 * s, 12 * s, 4 * s, 0, Math.PI * 2);
-            ctx.stroke();
-            for (var r = 0; r < 8; r++) {
-                var a = r * Math.PI / 4;
-                ctx.beginPath();
-                ctx.moveTo((12 + Math.cos(a) * 7) * s, (12 + Math.sin(a) * 7) * s);
-                ctx.lineTo((12 + Math.cos(a) * 10) * s, (12 + Math.sin(a) * 10) * s);
-                ctx.stroke();
-            }
-        } else if (kind === "keyboard") {
-            ctx.roundedRect(3 * s, 6 * s, 18 * s, 12 * s, 2 * s, 2 * s);
-            ctx.stroke();
-            [[7, 10], [11, 10], [15, 10], [7, 14], [15, 14]].forEach(function(p) {
-                ctx.beginPath();
-                ctx.arc(p[0] * s, p[1] * s, 0.9 * s, 0, Math.PI * 2);
-                ctx.fill();
-            });
-            ctx.beginPath();
-            ctx.moveTo(9.5 * s, 14 * s);
-            ctx.lineTo(13.5 * s, 14 * s);
-            ctx.stroke();
-        } else {
-            ctx.moveTo(12 * s, 20 * s);
-            ctx.bezierCurveTo(12 * s, 20 * s, 4.5 * s, 15.3 * s, 4.5 * s, 10.4 * s);
-            ctx.bezierCurveTo(4.5 * s, 7.2 * s, 9.2 * s, 5.4 * s, 12 * s, 7.6 * s);
-            ctx.bezierCurveTo(14.8 * s, 5.4 * s, 19.5 * s, 7.2 * s, 19.5 * s, 10.4 * s);
-            ctx.bezierCurveTo(19.5 * s, 15.3 * s, 12 * s, 20 * s, 12 * s, 20 * s);
-            ctx.closePath();
-            kind === "heart" ? ctx.fill() : ctx.stroke();
         }
     }
 }

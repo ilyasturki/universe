@@ -10,22 +10,19 @@ FocusScope {
 
     Component.onCompleted: Sound.preload()
 
-    readonly property var tabNames: ["Home", "Library", "Favourites", "Settings"]
+    readonly property var tabs: [
+        { name: "Home", source: "pages/HomePage.qml" },
+        { name: "Library", source: "pages/LibraryPage.qml" },
+        { name: "Favourites", source: "pages/FavouritesPage.qml" },
+        { name: "Settings", source: "pages/SettingsPage.qml" }
+    ]
     property int tabIndex: 0
     property bool detailOpen: false
     property var detailGame: null
     property bool searchOpen: false
-    // A screen over the detail page or the tabs: settings, recordings or journal of one game.
     property bool subOpen: false
-    property var subGame: null
-    property string subRunner: ""
-    property string subModule: ""
     property string subSource: ""
-    // The session the sub page opens on; recordings and journal jump to each other by it.
-    property string subSession: ""
-    // The artwork slot the sub page opens on, from the overview.
-    property string subSlot: ""
-    // One level of history: the page a jump left, restored by the next close.
+    property var subArgs: ({})
     property var subReturn: null
     property bool subSwapping: false
     // "page" | "chrome" | "search": one owner, so no two focus bindings race.
@@ -33,16 +30,14 @@ FocusScope {
 
     // Repeater.itemAt() is not a binding source; the active loader publishes itself.
     property var activePage: null
-    // What A, X and a held A act on: the search overlay while it is up.
     readonly property var focusTarget: searchOpen && searchLoader.item ? searchLoader.item : activePage
-    readonly property var focusedGame: subOpen ? subGame
+    readonly property var focusedGame: subOpen ? (subArgs.game || null)
                                                : detailOpen ? detailGame
                                                : (activePage ? activePage.currentGame : null)
-    readonly property bool menuOpen: contextMenu.open
+    readonly property bool menuOpen: gameMenu.open
     readonly property var session: api.universe.currentSession
-    readonly property bool sessionRunning: session !== null && session !== undefined && session.session_id !== undefined
+    readonly property bool sessionRunning: session != null && session.session_id !== undefined
     readonly property string playingId: sessionRunning ? session.id : ""
-    // The game to start once the running one has been quit for it.
     property var pendingLaunch: null
 
     Binding {
@@ -51,12 +46,22 @@ FocusScope {
         value: root.height / 1080
     }
 
+    Binding {
+        target: Theme
+        property: "software"
+        value: root.GraphicsInfo.api === GraphicsInfo.Software
+    }
+
     function goToTab(index) {
-        tabIndex = (index + tabNames.length) % tabNames.length;
+        tabIndex = (index + tabs.length) % tabs.length;
     }
 
     function restoreFocus() {
-        if (focusOwner === "search" && searchLoader.item)
+        if (subOpen && subLoader.item)
+            subLoader.item.forceActiveFocus();
+        else if (detailOpen && detailLoader.item)
+            detailLoader.item.forceActiveFocus();
+        else if (focusOwner === "search" && searchLoader.item)
             searchLoader.item.forceActiveFocus();
         else if (focusOwner === "chrome")
             tabBar.forceActiveFocus();
@@ -81,8 +86,7 @@ FocusScope {
         tabBar.index = tabBar.searchIndex;
         searchOpen = true;
         focusOwner = "search";
-        if (searchLoader.item)
-            searchLoader.item.forceActiveFocus();
+        restoreFocus();
     }
 
     function closeSearch() {
@@ -101,7 +105,6 @@ FocusScope {
 
     function closeDetail() {
         Sound.cancel();
-        // Scroll home first, so the hero rides back down through the fade instead of popping.
         if (detailLoader.item)
             detailLoader.item.reset();
         detailOpen = false;
@@ -109,7 +112,6 @@ FocusScope {
         restoreFocus();
     }
 
-    // Play on the running game is a return to it; on another one, a question first.
     function launchGame(game) {
         if (!game || launchOverlay.running || confirm.open)
             return;
@@ -142,54 +144,17 @@ FocusScope {
         api.universe.focusSession();
     }
 
-    function openSub(source, game, slot) {
-        if (!game)
+    function openSub(source, args) {
+        if (!args.game && !args.runner && !args.module)
             return;
         Sound.enter();
-        subGame = game;
-        subRunner = "";
+        subArgs = args;
         subSource = source;
-        subSession = "";
-        subSlot = slot === undefined ? "" : slot;
         subReturn = null;
         subOpen = true;
-        if (subLoader.item)
-            subLoader.item.forceActiveFocus();
+        restoreFocus();
     }
 
-    // A runner's or a module's page: no game under it, the settings tab's list waits behind.
-    function openRunner(runner) {
-        if (!runner)
-            return;
-        Sound.enter();
-        subGame = null;
-        subRunner = runner;
-        subModule = "";
-        subSource = "pages/RunnerSettingsPage.qml";
-        subSession = "";
-        subReturn = null;
-        subOpen = true;
-        if (subLoader.item)
-            subLoader.item.forceActiveFocus();
-    }
-
-    function openModule(module) {
-        if (!module)
-            return;
-        Sound.enter();
-        subGame = null;
-        subRunner = "";
-        subModule = module;
-        subSource = "pages/ModuleSettingsPage.qml";
-        subSession = "";
-        subReturn = null;
-        subOpen = true;
-        if (subLoader.item)
-            subLoader.item.forceActiveFocus();
-    }
-
-    // Recordings ↔ journal of the same game: the page fades, the source swaps, the session carries over.
-    // Jumping back to the page a jump came from is the return itself, so B then leaves.
     function jumpSub(source, session) {
         if (!subOpen || subSwapping || source === subSource)
             return;
@@ -205,11 +170,10 @@ FocusScope {
         property var target: null
         interval: Theme.durQuick
         onTriggered: {
-            root.subSession = target.session;
+            root.subArgs = { game: root.subArgs.game, session: target.session };
             root.subSource = target.source;
             root.subSwapping = false;
-            if (subLoader.item)
-                subLoader.item.forceActiveFocus();
+            root.restoreFocus();
         }
     }
 
@@ -224,10 +188,7 @@ FocusScope {
             return;
         }
         subOpen = false;
-        if (detailOpen && detailLoader.item)
-            detailLoader.item.forceActiveFocus();
-        else
-            restoreFocus();
+        restoreFocus();
     }
 
     // The unit gets a SIGTERM, a second one after ~3 s: the toast covers the wait.
@@ -243,11 +204,35 @@ FocusScope {
         if (!game || !anchor)
             return;
         Sound.panel();
-        contextMenu.show(game, anchor);
+        var items = sessionRunning && game.id === playingId
+            ? [ { icon: "play", label: "Resume", action: "resume" },
+                { icon: "stop", label: "Quit " + session.title, action: "stop" } ]
+            : [ { icon: "play", label: game.playTime > 0 ? "Continue" : "Play", action: "play" } ];
+        items.push({ icon: "info", label: "Details", action: "details" },
+                   { icon: game.favorite ? "heart" : "heart-outline",
+                     label: game.favorite ? "Remove from favourites" : "Add to favourites", action: "favourite" },
+                   { icon: "sliders", label: "Game settings", action: "settings" },
+                   { icon: "image", label: "Artwork", action: "artwork" },
+                   { icon: "film", label: "Recordings", action: "recordings" },
+                   { icon: "book", label: "Journal", action: "journal" });
+        var pages = { settings: "FormPage", artwork: "ArtworkPage", recordings: "RecordingsPage", journal: "JournalPage" };
+        gameMenu.show(items, anchor, Qt.rect(0, 0, anchor.width, anchor.height), "", function(action) {
+            root.restoreFocus();
+            if (action === "play")
+                root.launchGame(game);
+            else if (action === "details")
+                root.openDetail(game);
+            else if (action === "favourite")
+                root.toggleFavourite(game);
+            else if (action === "stop")
+                root.stopSession();
+            else if (action === "resume")
+                root.resumeSession();
+            else
+                root.openSub("pages/" + pages[action] + ".qml", { game: game });
+        });
     }
 
-    // A page that keeps a removed favourite in place does the flip itself, but
-    // only while it owns the focus: over search the game is not the page's.
     function toggleFavourite(game) {
         if (!searchOpen && activePage && activePage.toggleFavourite) {
             activePage.toggleFavourite();
@@ -273,8 +258,6 @@ FocusScope {
     property bool launching: false
     readonly property bool pageOwnsBackdrop: activePage ? activePage.ownsBackdrop : false
 
-    // One hero for home and detail: the same art item survives the page switch,
-    // so opening details is a rise, not a crossfade.
     readonly property bool heroActive: detailOpen || pageOwnsBackdrop
     readonly property real heroHeight: detailOpen ? Theme.dp(Theme.heroDetail)
                                                   : Theme.dp(Theme.tabBarHeight + Theme.heroBand)
@@ -287,6 +270,11 @@ FocusScope {
     Behavior on scrimTop { NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic } }
     Behavior on scrimMid { NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic } }
     Behavior on scrimBottom { NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic } }
+
+    component SceneFade: NumberAnimation {
+        duration: root.launching ? Theme.durLaunch : Theme.durScene
+        easing.type: root.launching ? Easing.InOutQuad : Easing.OutCubic
+    }
 
     Rectangle {
         anchors.fill: parent
@@ -303,18 +291,12 @@ FocusScope {
         Behavior on blurRadius {
             NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic }
         }
-        Behavior on opacity {
-            NumberAnimation {
-                duration: root.launching ? Theme.durLaunch : Theme.durScene
-                easing.type: root.launching ? Easing.InOutQuad : Easing.OutCubic
-            }
-        }
+        Behavior on opacity { SceneFade {} }
     }
 
     Item {
         id: heroFrame
 
-        // Scrolling the detail page pulls the hero up at half speed and dims it.
         y: -root.detailScroll * 0.45
         width: parent.width
         height: root.heroHeight
@@ -322,28 +304,11 @@ FocusScope {
         opacity: root.heroActive && !root.launching ? 1.0 : 0.0
         visible: opacity > 0.01
 
-        // Under the tab bar the art fades right out; on the detail page there is
-        // nothing above it, so it only settles.
-        property real topA: root.detailOpen ? 0.30 : 1.00
-        property real topB: root.detailOpen ? 0.12 : 0.62
-        property real topEnd: root.detailOpen ? 0.30 : 0.36
-        property real bottomA: root.detailOpen ? 0.80 : 0.55
-        property real sideA: root.detailOpen ? 0.72 : 0.92
-        property real sideB: root.detailOpen ? 0.36 : 0.66
+        property real detail: root.detailOpen ? 1.0 : 0.0
 
         Behavior on height { NumberAnimation { duration: Theme.durScene; easing.type: Easing.OutCubic } }
-        Behavior on opacity {
-            NumberAnimation {
-                duration: root.launching ? Theme.durLaunch : Theme.durScene
-                easing.type: root.launching ? Easing.InOutQuad : Easing.OutCubic
-            }
-        }
-        Behavior on topA { NumberAnimation { duration: Theme.durScene; easing.type: Easing.OutCubic } }
-        Behavior on topB { NumberAnimation { duration: Theme.durScene; easing.type: Easing.OutCubic } }
-        Behavior on topEnd { NumberAnimation { duration: Theme.durScene; easing.type: Easing.OutCubic } }
-        Behavior on bottomA { NumberAnimation { duration: Theme.durScene; easing.type: Easing.OutCubic } }
-        Behavior on sideA { NumberAnimation { duration: Theme.durScene; easing.type: Easing.OutCubic } }
-        Behavior on sideB { NumberAnimation { duration: Theme.durScene; easing.type: Easing.OutCubic } }
+        Behavior on opacity { SceneFade {} }
+        Behavior on detail { NumberAnimation { duration: Theme.durScene; easing.type: Easing.OutCubic } }
 
         BackgroundStage {
             anchors.fill: parent
@@ -357,8 +322,8 @@ FocusScope {
             anchors.fill: parent
             gradient: Gradient {
                 orientation: Gradient.Horizontal
-                GradientStop { position: 0.00; color: Qt.rgba(0.055, 0.059, 0.075, heroFrame.sideA) }
-                GradientStop { position: 0.38; color: Qt.rgba(0.055, 0.059, 0.075, heroFrame.sideB) }
+                GradientStop { position: 0.00; color: Qt.rgba(0.055, 0.059, 0.075, 0.92 - 0.20 * heroFrame.detail) }
+                GradientStop { position: 0.38; color: Qt.rgba(0.055, 0.059, 0.075, 0.66 - 0.30 * heroFrame.detail) }
                 GradientStop { position: 0.74; color: Qt.rgba(0.055, 0.059, 0.075, 0.10) }
                 GradientStop { position: 1.00; color: Qt.rgba(0.055, 0.059, 0.075, 0.00) }
             }
@@ -367,10 +332,10 @@ FocusScope {
         Rectangle {
             anchors.fill: parent
             gradient: Gradient {
-                GradientStop { position: 0.00; color: Qt.rgba(0.055, 0.059, 0.075, heroFrame.topA) }
-                GradientStop { position: 0.14; color: Qt.rgba(0.055, 0.059, 0.075, heroFrame.topB) }
-                GradientStop { position: heroFrame.topEnd; color: Qt.rgba(0.055, 0.059, 0.075, 0.00) }
-                GradientStop { position: 0.80; color: Qt.rgba(0.055, 0.059, 0.075, heroFrame.bottomA) }
+                GradientStop { position: 0.00; color: Qt.rgba(0.055, 0.059, 0.075, 1.00 - 0.70 * heroFrame.detail) }
+                GradientStop { position: 0.14; color: Qt.rgba(0.055, 0.059, 0.075, 0.62 - 0.50 * heroFrame.detail) }
+                GradientStop { position: 0.36 - 0.06 * heroFrame.detail; color: Qt.rgba(0.055, 0.059, 0.075, 0.00) }
+                GradientStop { position: 0.80; color: Qt.rgba(0.055, 0.059, 0.075, 0.55 + 0.25 * heroFrame.detail) }
                 GradientStop { position: 1.00; color: Theme.ground }
             }
         }
@@ -388,12 +353,7 @@ FocusScope {
                                Behavior on y { NumberAnimation { duration: Theme.durScene; easing.type: Easing.OutCubic } } }
         visible: opacity > 0.01
 
-        Behavior on opacity {
-            NumberAnimation {
-                duration: root.launching ? Theme.durLaunch : Theme.durScene
-                easing.type: root.launching ? Easing.InOutQuad : Easing.OutCubic
-            }
-        }
+        Behavior on opacity { SceneFade {} }
 
         Rectangle {
             anchors.fill: parent
@@ -404,40 +364,14 @@ FocusScope {
             }
         }
 
-        Item {
-            anchors.fill: parent
-            opacity: root.activePage ? root.activePage.chromeScrim : 0
-
-            Behavior on opacity {
-                NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic }
-            }
-
-            Rectangle {
-                anchors.top: parent.top
-                anchors.left: parent.left
-                anchors.right: parent.right
-                height: tabBar.height
-                color: Theme.ground
-            }
-
-            Rectangle {
-                anchors.bottom: parent.bottom
-                anchors.left: parent.left
-                anchors.right: parent.right
-                height: hintBar.height
-                color: Theme.ground
-            }
-        }
-
         TabBar {
             id: tabBar
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
-            tabs: root.tabNames
+            tabs: root.tabs.map(function(t) { return t.name; })
             currentIndex: root.tabIndex
-            // The glass searches the library: the pages that show games have it, Settings does not.
-            showSearch: root.tabNames[root.tabIndex] !== "Settings"
+            showSearch: root.tabs[root.tabIndex].name !== "Settings"
             focus: root.focusOwner === "chrome"
 
             onTabRequested: function(index) { root.goToTab(index); }
@@ -457,7 +391,7 @@ FocusScope {
             anchors.right: parent.right
 
             Repeater {
-                model: [ "pages/HomePage.qml", "pages/LibraryPage.qml", "pages/FavouritesPage.qml", "pages/SettingsPage.qml" ]
+                model: root.tabs
 
                 Loader {
                     id: pageLoader
@@ -467,7 +401,7 @@ FocusScope {
 
                     width: pageArea.width
                     height: pageArea.height
-                    source: modelData
+                    source: modelData.source
                     active: isActive || activated
                     focus: isActive && root.focusOwner === "page"
                     opacity: isActive ? 1.0 : 0.0
@@ -501,15 +435,16 @@ FocusScope {
                         target: pageLoader.item
                         ignoreUnknownSignals: true
                         function onDetailRequested(game) { root.openDetail(game); }
-                        function onSettingsRequested(game) { root.openSub("pages/GameSettingsPage.qml", game); }
-                        function onRunnerRequested(runner) { root.openRunner(runner); }
-                        function onModuleRequested(module) { root.openModule(module); }
-                        function onArtworkRequested(game, slot) { root.openSub("pages/ArtworkPage.qml", game, slot); }
+                        function onSettingsRequested(game) { root.openSub("pages/FormPage.qml", { game: game }); }
+                        function onRunnerRequested(runner) { root.openSub("pages/FormPage.qml", { runner: runner }); }
+                        function onModuleRequested(module) { root.openSub("pages/FormPage.qml", { module: module }); }
+                        function onArtworkRequested(game, slot) { root.openSub("pages/ArtworkPage.qml", { game: game, slot: slot }); }
                         function onTabRequested(index) {
                             Sound.enter();
                             root.goToTab(index);
                         }
                         function onChromeRequested() { root.focusChrome(); }
+                        function onMessage(text) { toast.show(text); }
                     }
                 }
             }
@@ -521,9 +456,12 @@ FocusScope {
             anchors.left: parent.left
             anchors.right: parent.right
             hints: confirm.open ? confirm.hints
-                 : root.menuOpen ? contextMenu.hints
+                 : root.menuOpen ? gameMenu.hints
                  : root.focusOwner === "chrome" ? tabBar.hints
-                 : (root.focusTarget ? root.focusTarget.hints : [])
+                 : root.focusOwner === "search" ? (searchLoader.item ? searchLoader.item.hints : [])
+                 : !root.activePage ? []
+                 : root.activePage.modal ? root.activePage.hints
+                 : root.activePage.hints.concat([ { glyph: "LB RB", label: "Tabs" } ])
         }
     }
 
@@ -533,7 +471,6 @@ FocusScope {
         property bool activated: false
 
         anchors.fill: parent
-        // The sheet rises to the hint bar's top edge, which is not a sibling.
         anchors.bottomMargin: Theme.dp(Theme.hintBarHeight)
         active: root.searchOpen || activated
         focus: root.focusOwner === "search"
@@ -541,12 +478,7 @@ FocusScope {
         opacity: (root.detailOpen || root.launching) ? 0.0 : 1.0
         visible: opacity > 0.01
 
-        Behavior on opacity {
-            NumberAnimation {
-                duration: root.launching ? Theme.durLaunch : Theme.durScene
-                easing.type: root.launching ? Easing.InOutQuad : Easing.OutCubic
-            }
-        }
+        Behavior on opacity { SceneFade {} }
 
         onLoaded: {
             activated = true;
@@ -584,16 +516,11 @@ FocusScope {
             function onLaunchRequested(game) { root.launchGame(game); }
             function onCloseRequested() { root.closeDetail(); }
             function onMenuRequested(game, anchor) { root.openMenu(game, anchor); }
-            function onRecordingsRequested(game) { root.openSub("pages/RecordingsPage.qml", game); }
-            function onJournalRequested(game) { root.openSub("pages/JournalPage.qml", game); }
+            function onRecordingsRequested(game) { root.openSub("pages/RecordingsPage.qml", { game: game }); }
+            function onJournalRequested(game) { root.openSub("pages/JournalPage.qml", { game: game }); }
         }
 
-        Behavior on opacity {
-            NumberAnimation {
-                duration: root.launching ? Theme.durLaunch : Theme.durScene
-                easing.type: root.launching ? Easing.InOutQuad : Easing.OutCubic
-            }
-        }
+        Behavior on opacity { SceneFade {} }
     }
 
     // Under the sub page: a jump fades one page out and the next in over this, not over the tabs.
@@ -621,16 +548,7 @@ FocusScope {
                                Behavior on y { NumberAnimation { duration: Theme.durScene; easing.type: Easing.OutCubic } } }
 
         onLoaded: {
-            if ("game" in item)
-                item.game = Qt.binding(function() { return root.subGame; });
-            if ("runner" in item)
-                item.runner = Qt.binding(function() { return root.subRunner; });
-            if ("module" in item)
-                item.module = Qt.binding(function() { return root.subModule; });
-            if ("session" in item)
-                item.session = Qt.binding(function() { return root.subSession; });
-            if ("slot" in item)
-                item.slot = Qt.binding(function() { return root.subSlot; });
+            item.args = Qt.binding(function() { return root.subArgs; });
             item.forceActiveFocus();
         }
 
@@ -639,45 +557,27 @@ FocusScope {
             ignoreUnknownSignals: true
             function onCloseRequested() { root.closeSub(); }
             function onJumpRequested(source, session) { root.jumpSub(source, session); }
+            function onMessage(text) { toast.show(text); }
         }
 
         Behavior on opacity {
-            // A jump is a quick dip; opening and closing take the scene's time.
             NumberAnimation { duration: root.subSwapping ? Theme.durQuick : Theme.durScene; easing.type: Easing.OutCubic }
         }
     }
 
-    ContextMenu {
-        id: contextMenu
+    ActionMenu {
+        id: gameMenu
         anchors.fill: parent
-        onPlayRequested: function(game) { root.launchGame(game); }
-        onDetailRequested: function(game) { root.openDetail(game); }
-        onFavouriteRequested: function(game) { root.toggleFavourite(game); }
-        onSettingsRequested: function(game) { root.openSub("pages/GameSettingsPage.qml", game); }
-        onArtworkRequested: function(game) { root.openSub("pages/ArtworkPage.qml", game); }
-        onRecordingsRequested: function(game) { root.openSub("pages/RecordingsPage.qml", game); }
-        onJournalRequested: function(game) { root.openSub("pages/JournalPage.qml", game); }
-        onStopRequested: root.stopSession()
-        onResumeRequested: root.resumeSession()
-        onClosed: {
-            if (root.subOpen && subLoader.item)
-                subLoader.item.forceActiveFocus();
-            else if (root.detailOpen && detailLoader.item)
-                detailLoader.item.forceActiveFocus();
-            else
-                root.restoreFocus();
-        }
+        // Covers the ring and halo, and the 5% a grid cover grows by.
+        copyMargin: Theme.dp(26)
+        gap: Theme.dp(44)
+        onDismissed: root.restoreFocus()
     }
 
     ConfirmDialog {
         id: confirm
         anchors.fill: parent
-        onClosed: {
-            if (root.detailOpen && detailLoader.item)
-                detailLoader.item.forceActiveFocus();
-            else
-                root.restoreFocus();
-        }
+        onClosed: root.restoreFocus()
     }
 
     LaunchOverlay {
@@ -733,10 +633,8 @@ FocusScope {
         }
         if (event.isAutoRepeat)
             return;
-
-        // Start opens the menu of the game on screen, whichever of the page's parts has focus.
+        event.accepted = true;
         if (api.keys.isMenu(event)) {
-            event.accepted = true;
             if (root.menuOpen)
                 return;
             var t = root.focusTarget;
@@ -744,37 +642,23 @@ FocusScope {
                 openMenu(t.currentGame, t.menuAnchor);
             else
                 Sound.edge();
-            return;
-        }
-        if (api.keys.isPrevPage(event)) {
-            event.accepted = true;
+        } else if (api.keys.isPrevPage(event)) {
             Sound.space();
             goToTab(root.tabIndex - 1);
-            return;
-        }
-        if (api.keys.isNextPage(event)) {
-            event.accepted = true;
+        } else if (api.keys.isNextPage(event)) {
             Sound.space();
             goToTab(root.tabIndex + 1);
-            return;
-        }
-        if (api.keys.isAccept(event)) {
-            event.accepted = true;
+        } else if (api.keys.isAccept(event)) {
             root.acceptHeld = true;
             holdTimer.restart();
-            return;
-        }
-        if (api.keys.isDetails(event)) {
-            event.accepted = true;
+        } else if (api.keys.isDetails(event)) {
             if (root.focusTarget)
                 openDetail(root.focusTarget.currentGame);
-            return;
-        }
-        if (api.keys.isCancel(event) && root.tabIndex !== 0) {
-            event.accepted = true;
+        } else if (api.keys.isCancel(event) && root.tabIndex !== 0) {
             Sound.cancel();
             goToTab(0);
-            return;
+        } else {
+            event.accepted = false;
         }
     }
 

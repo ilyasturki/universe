@@ -5,7 +5,6 @@ import "PadNames.js" as Names
 import "PadDraw.js" as Draw
 import "Prompts.js" as Prompts
 
-// One button of one family drawn small, the way the pad prints it: the rows' and the hint bar's glyph.
 Item {
     id: root
 
@@ -37,6 +36,9 @@ Item {
         : unit
     readonly property real textSize: unit * (spec.text.length >= 3 ? 0.33 : spec.text.length === 2 ? 0.4 : 0.48)
 
+    onSpecChanged: canvas.requestPaint()
+    onInkChanged: canvas.requestPaint()
+
     implicitWidth: boxWidth
     implicitHeight: unit
 
@@ -51,8 +53,7 @@ Item {
         transformOrigin: Item.TopLeft
         scale: root.sheetScale
         preferredRendererType: Shape.CurveRenderer
-        // The software scenegraph (offscreen tests) paints a Shape past its parents' clip; a layer
-        // turns it into a plain texture that is clipped like anything else.
+        // The software scenegraph (offscreen tests) paints a Shape past its parents' clip; a layer clips it.
         layer.enabled: GraphicsInfo.api === GraphicsInfo.Software
         layer.smooth: true
 
@@ -110,12 +111,6 @@ Item {
                 ctx.lineWidth = Math.max(1, Theme.dp(1.8));
                 Draw.symbol(ctx, root.spec.symbol, w / 2, h / 2, Math.min(w, h) / 2 - inset);
             }
-        }
-
-        Connections {
-            target: root
-            function onSpecChanged() { canvas.requestPaint(); }
-            function onInkChanged() { canvas.requestPaint(); }
         }
     }
 

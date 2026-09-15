@@ -5,16 +5,14 @@ import "../core/Format.js" as Format
 import "../sound"
 import "../ui"
 
-// A game's recorded sessions: the list on the left, the picked one playing on the right.
-// Right or A hands focus to the player; the right stick scrubs its seek bar.
 FocusScope {
     id: page
 
     focus: true
 
-    property var game: null
-    // Set by the shell when the journal jumps here.
-    property string session: ""
+    property var args: ({})
+    readonly property var game: args.game || null
+    readonly property string session: args.session || ""
     readonly property var store: api.screens.recordings
     readonly property var rows: store.rows
     property int index: 0
@@ -31,14 +29,8 @@ FocusScope {
                                    : frames && frames.duration > 0 ? frames.duration * 1000
                                    : current ? current.duration_s * 1000 : 0
 
-    // The seek in flight: the bar shows it at once, the player gets it on release.
-    property bool scrubbing: false
-    property real scrubPos: 0
-    readonly property real shownPos: scrubbing ? scrubPos : player.position
-    readonly property real stickX: api.pad.rightX
-    // ms per second at full tilt: a dozen seconds across the recording, never under a minute a second.
-    readonly property real scrubSpeed: Math.max(60000, duration / 12)
-    readonly property real seekStep: 10000
+    readonly property bool scrubbing: scrub.scrubbing
+    readonly property real shownPos: scrub.shownPos
 
     signal closeRequested()
     signal jumpRequested(string source, string session)
@@ -47,15 +39,13 @@ FocusScope {
         if (menu.open)
             return menu.hints;
         var out = [];
-        if (videoFocused) {
-            out.push({ glyph: "A", label: playing ? "Pause" : "Play" });
-            out.push({ glyph: "dpad", label: "Seek 10 s" });
-            out.push({ glyph: "RS", label: "Scrub" });
-        } else {
-            out.push({ glyph: "A", label: "Play" });
-        }
+        out.push({ glyph: "A", label: videoFocused && playing ? "Pause" : "Play" });
         out.push({ glyph: "X", label: fullscreen ? "Exit fullscreen" : "Fullscreen", dim: current === null });
         out.push({ glyph: "Y", label: "Journal entry", dim: !(current && current.hasJournal) });
+        if (videoFocused) {
+            out.push({ glyph: "RS", label: "Scrub" });
+            out.push({ glyph: "dpad", label: "Seek 10 s" });
+        }
         out.push({ glyph: "Start", label: "More", dim: current === null });
         out.push({ glyph: "B", label: videoFocused && !fullscreen ? "Back to list" : "Back" });
         return out;
@@ -82,28 +72,21 @@ FocusScope {
     }
 
     function landOnSession() {
-        if (session === "")
-            return;
-        for (var i = 0; i < rows.length; i++) {
-            if (rows[i].session === session) {
-                index = i;
-                return;
-            }
-        }
+        var i = rows.findIndex(function(r) { return r.session === session; });
+        if (i >= 0)
+            index = i;
     }
 
     onCurrentChanged: {
         player.stop();
-        scrubbing = false;
+        scrub.scrubbing = false;
         player.source = current ? current.url : "";
         if (current)
             store.select(current.session);
     }
 
     function step(d) {
-        var next = Math.max(0, Math.min(rows.length - 1, index + d));
-        next === index ? Sound.edge() : Sound.tick();
-        index = next;
+        index = Sound.stepped(index, d, rows.length);
     }
 
     function focusVideo(play) {
@@ -152,7 +135,12 @@ FocusScope {
         if (current.hasJournal)
             items.push({ icon: "book", label: "Journal entry", action: "journal" });
         items.push({ icon: "trash", label: "Remove recording…", action: "remove", danger: true });
-        menu.show(items, list, Qt.rect(list.currentItem.x, list.currentItem.y - list.contentY, list.currentItem.width, list.currentItem.height), current.dateText);
+        menu.show(items, list, rowRect(), current.dateText, menuAction);
+    }
+
+    function rowRect() {
+        var item = list.currentItem;
+        return Qt.rect(item.x, item.y - list.contentY, item.width, item.height);
     }
 
     function menuAction(action) {
@@ -166,8 +154,7 @@ FocusScope {
                           { icon: "trash", label: "Trash the recording", action: "remove!", danger: true } ];
             if (current.hasJournal)
                 items.push({ icon: "trash", label: "Trash it and its journal entry", action: "remove-both!", danger: true });
-            menu.show(items, list, Qt.rect(list.currentItem.x, list.currentItem.y - list.contentY, list.currentItem.width, list.currentItem.height),
-                      "Remove this recording?");
+            menu.show(items, list, rowRect(), "Remove this recording?", menuAction);
         } else if (action === "remove!" || action === "remove-both!") {
             Sound.enter();
             player.stop();
@@ -188,34 +175,8 @@ FocusScope {
             return;
         }
         Sound.enter();
-        if (playing)
-            player.pause();
-        else
-            player.play();
+        playing ? player.pause() : player.play();
         wake();
-    }
-
-    // Presses add up on the pending target; the player only hears the last one.
-    function seekBy(ms) {
-        if (duration <= 0)
-            return;
-        if (!scrubbing) {
-            scrubPos = player.position;
-            scrubbing = true;
-        }
-        scrubPos = Math.max(0, Math.min(duration, scrubPos + ms));
-        wake();
-    }
-
-    function commitSeek() {
-        if (!scrubbing)
-            return;
-        scrubbing = false;
-        if (stopped) {
-            player.play();
-            player.pause();
-        }
-        player.position = scrubPos;
     }
 
     function wake() {
@@ -229,34 +190,12 @@ FocusScope {
         onTriggered: controls.awake = false
     }
 
-    Timer {
-        id: commitTimer
-        interval: 220
-        onTriggered: page.commitSeek()
-    }
-
-    Timer {
-        id: stickTimer
-        interval: 16
-        repeat: true
-        running: page.videoFocused && page.stickX !== 0 && page.duration > 0
-        onRunningChanged: {
-            if (running) {
-                commitTimer.stop();
-                if (!page.scrubbing) {
-                    page.scrubPos = player.position;
-                    page.scrubbing = true;
-                }
-                page.wake();
-            } else if (page.scrubbing) {
-                commitTimer.restart();
-            }
-        }
-        onTriggered: {
-            var x = page.stickX;
-            var speed = (0.12 + 0.88 * x * x) * page.scrubSpeed;
-            page.scrubPos = Math.max(0, Math.min(page.duration, page.scrubPos + (x < 0 ? -1 : 1) * speed * interval / 1000));
-        }
+    Scrubber {
+        id: scrub
+        player: player
+        duration: page.duration
+        active: page.videoFocused
+        onWoke: page.wake()
     }
 
     Keys.onPressed: function(event) {
@@ -295,8 +234,7 @@ FocusScope {
             if (page.videoFocused) {
                 if (!event.isAutoRepeat)
                     Sound.tick();
-                commitTimer.stop();
-                seekBy(event.key === Qt.Key_Left ? -seekStep : seekStep);
+                scrub.seekBy(event.key === Qt.Key_Left ? -scrub.step : scrub.step);
             } else if (event.key === Qt.Key_Right) {
                 focusVideo(false);
             } else {
@@ -306,15 +244,8 @@ FocusScope {
     }
 
     Keys.onReleased: function(event) {
-        if (event.isAutoRepeat || !page.scrubbing || stickTimer.running)
-            return;
-        if (event.key === Qt.Key_Left || event.key === Qt.Key_Right)
-            commitTimer.restart();
-    }
-
-    Rectangle {
-        anchors.fill: parent
-        color: Theme.ground
+        if (!event.isAutoRepeat && (event.key === Qt.Key_Left || event.key === Qt.Key_Right))
+            scrub.release();
     }
 
     GameBackdrop {
@@ -371,27 +302,23 @@ FocusScope {
             NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
         }
 
-        delegate: Rectangle {
-            readonly property bool focused: index === page.index
-            readonly property bool lit: focused && !page.videoFocused
+        delegate: SessionRow {
             readonly property var frames: page.store.frameMap[modelData.session] || null
 
             width: list.width
             height: Theme.dp(120)
-            radius: Theme.dp(16)
-            color: lit ? Theme.text : Theme.surface
-
-            Behavior on color {
-                ColorAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-            }
+            lit: index === page.index && !page.videoFocused
+            title: modelData.dateText
+            subtitle: modelData.durationText + " · " + modelData.sizeText
+            mark: "book"
+            showMark: modelData.hasJournal
+            leadMargin: Theme.dp(10)
+            leadWidth: (height - Theme.dp(20)) * 16 / 9
 
             RoundedMask {
-                id: thumb
-                anchors.left: parent.left
-                anchors.top: parent.top
-                anchors.bottom: parent.bottom
-                anchors.margins: Theme.dp(10)
-                width: height * 16 / 9
+                anchors.fill: parent
+                anchors.topMargin: Theme.dp(10)
+                anchors.bottomMargin: Theme.dp(10)
                 radius: Theme.dp(10)
 
                 Rectangle {
@@ -410,46 +337,6 @@ FocusScope {
                         NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic }
                     }
                 }
-            }
-
-            Column {
-                anchors.left: thumb.right
-                anchors.leftMargin: Theme.dp(20)
-                anchors.right: journalMark.visible ? journalMark.left : parent.right
-                anchors.rightMargin: Theme.dp(20)
-                anchors.verticalCenter: parent.verticalCenter
-                spacing: Theme.dp(6)
-
-                Text {
-                    width: parent.width
-                    text: modelData.dateText
-                    color: lit ? Theme.onLight : Theme.text
-                    font.family: Theme.sans
-                    font.weight: Font.DemiBold
-                    font.pixelSize: Theme.dp(24)
-                    elide: Text.ElideRight
-                }
-
-                Text {
-                    width: parent.width
-                    text: modelData.durationText + " · " + modelData.sizeText
-                    color: lit ? Qt.rgba(0.063, 0.067, 0.086, 0.7) : Theme.textSecondary
-                    font.family: Theme.sans
-                    font.pixelSize: Theme.dp(20)
-                    elide: Text.ElideRight
-                }
-            }
-
-            MenuGlyph {
-                id: journalMark
-                anchors.right: parent.right
-                anchors.rightMargin: Theme.dp(22)
-                anchors.verticalCenter: parent.verticalCenter
-                width: Theme.dp(24)
-                height: width
-                visible: modelData.hasJournal
-                kind: "book"
-                tint: lit ? Qt.rgba(0.063, 0.067, 0.086, 0.55) : Theme.textMuted
             }
         }
     }
@@ -472,7 +359,6 @@ FocusScope {
             color: Theme.cardBase
         }
 
-        // 4×4 of the sampled frames: the poster while stopped.
         Grid {
             id: mosaic
             anchors.fill: parent
@@ -529,30 +415,25 @@ FocusScope {
             }
         }
 
-        Canvas {
+        Rectangle {
             anchors.centerIn: parent
             width: Theme.dp(96)
-            height: Theme.dp(96)
+            height: width
+            radius: width / 2
+            color: Qt.rgba(1, 1, 1, 0.92)
             opacity: page.playing ? 0.0 : 1.0
             scale: page.playing ? 0.8 : 1.0
 
             Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
             Behavior on scale { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutBack } }
 
-            onPaint: {
-                var ctx = getContext("2d");
-                ctx.reset();
-                ctx.fillStyle = Qt.rgba(1, 1, 1, 0.92);
-                ctx.beginPath();
-                ctx.arc(width / 2, height / 2, width / 2, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.fillStyle = "#101116";
-                ctx.beginPath();
-                ctx.moveTo(width * 0.40, height * 0.30);
-                ctx.lineTo(width * 0.72, height * 0.50);
-                ctx.lineTo(width * 0.40, height * 0.70);
-                ctx.closePath();
-                ctx.fill();
+            MenuGlyph {
+                anchors.centerIn: parent
+                anchors.horizontalCenterOffset: Theme.dp(3)
+                width: Theme.dp(50)
+                height: width
+                kind: "play"
+                tint: "#101116"
             }
         }
 
@@ -623,7 +504,6 @@ FocusScope {
                     color: Theme.text
                 }
 
-                // Lifted and grown while a seek is in flight, back with an overshoot once it lands.
                 Rectangle {
                     id: knob
                     x: parent.width * controls.fraction - width / 2
@@ -655,7 +535,6 @@ FocusScope {
                     }
                 }
 
-                // The sampled frame nearest the cursor.
                 RoundedMask {
                     id: peek
 
@@ -809,7 +688,6 @@ FocusScope {
         anchors.fill: parent
         z: 5
 
-        onChosen: function(action) { page.menuAction(action); }
         onDismissed: page.forceActiveFocus()
     }
 }

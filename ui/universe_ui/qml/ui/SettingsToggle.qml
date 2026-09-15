@@ -1,7 +1,6 @@
 import QtQuick
 import "../core"
 
-// A switch; on a focused (white) row its colours invert.
 Rectangle {
     id: root
 

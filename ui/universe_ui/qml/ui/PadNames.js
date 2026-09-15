@@ -1,8 +1,6 @@
 .pragma library
 
-// What each family prints on its buttons: a word for the rows, and for the glyphs a short text or
-// the symbol the canvas draws in its place. Slot ids are the core's; a family the table does not
-// know is drawn with Xbox names.
+// A family the table does not know is drawn with Xbox names.
 var STYLE = {
     "dualsense-edge": "sony", "dualsense": "sony", "dualshock4": "sony",
     "xbox": "xbox", "xbox-elite": "xbox", "generic": "xbox",
@@ -34,8 +32,6 @@ var EXTRA = {
 
 function style(family) { return STYLE[family] || "xbox"; }
 
-// The outline a slot is drawn in: a face button's circle, a bumper's wide pill, a trigger's tall
-// one, a stick, a small square (select, start and their kin), a tab (Fn, L4/R4) or a back paddle.
 function shape(slot) {
     if (slot.indexOf("dpad") === 0)
         return "dpad";

@@ -2,16 +2,12 @@ import QtQuick
 import "../core"
 import "../sound"
 
-// A value typed at the gamepad: the search sheet's field and keyboard, with a done key.
-FocusScope {
+Sheet {
     id: sheet
 
-    property bool open: false
-    property string title: ""
     property string text: ""
     property bool symbols: false
     property bool numeric: false
-    property bool secret: false
 
     signal accepted(string value)
     signal dismissed()
@@ -23,15 +19,15 @@ FocusScope {
         { glyph: "B", label: "Cancel" }
     ]
 
-    readonly property real inner: Math.min(Theme.dp(1000), width - Theme.dp(280))
-    readonly property real pad: Theme.dp(28)
     readonly property real fieldHeight: Theme.dp(66)
 
-    // mode: "text", "path" (adds the path symbols) or "number" (a keypad); true stands for "path".
+    contentHeight: Theme.dp(18) + fieldHeight + Theme.dp(22) + keyboard.height
+
+    // mode: "text", "path" (adds the path symbols) or "number" (a keypad).
     function show(label, value, mode) {
         title = label;
         text = value === undefined || value === null ? "" : String(value);
-        symbols = mode === true || mode === "path";
+        symbols = mode === "path";
         numeric = mode === "number";
         keyboard.shift = false;
         open = true;
@@ -48,9 +44,6 @@ FocusScope {
         Sound.cancel();
         dismissed();
     }
-
-    visible: scrim.opacity > 0.01
-    focus: open
 
     Keys.onLeftPressed: keyboard.move(0, -1) ? Sound.kbtick() : Sound.edge()
     Keys.onRightPressed: keyboard.move(0, 1) ? Sound.kbtick() : Sound.edge()
@@ -75,126 +68,80 @@ FocusScope {
     }
 
     Rectangle {
-        id: scrim
-        anchors.fill: parent
-        color: Qt.rgba(0.02, 0.02, 0.03, 1)
-        opacity: sheet.open ? 0.72 : 0.0
+        id: field
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
+        anchors.top: sheet.head.bottom
+        anchors.topMargin: Theme.dp(18)
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: sheet.inner
+        height: sheet.fieldHeight
+        radius: Theme.dp(16)
+        color: Theme.surface
+
+        Text {
+            id: valueText
+            anchors.left: parent.left
+            anchors.leftMargin: Theme.dp(26)
+            anchors.right: parent.right
+            anchors.rightMargin: Theme.dp(26)
+            anchors.verticalCenter: parent.verticalCenter
+            text: sheet.text
+            color: Theme.text
+            font.family: Theme.sans
+            font.weight: Font.Medium
+            font.pixelSize: Theme.dp(27)
+            elide: Text.ElideLeft
+        }
+
+        Rectangle {
+            anchors.left: valueText.left
+            anchors.leftMargin: Math.min(valueText.implicitWidth, valueText.width) + Theme.dp(10)
+            anchors.verticalCenter: parent.verticalCenter
+            width: Theme.dp(3)
+            height: Theme.dp(30)
+            color: Theme.text
+            visible: sheet.open && caret.on
         }
     }
 
-    Item {
-        id: panel
+    Timer {
+        id: caret
+        property bool on: true
+        interval: 560
+        running: sheet.open
+        repeat: true
+        onTriggered: on = !on
+    }
 
-        anchors.left: parent.left
-        anchors.right: parent.right
-        height: sheet.pad * 2 + heading.height + Theme.dp(18) + sheet.fieldHeight + Theme.dp(22) + keyboard.height
-        y: sheet.open ? parent.height - height - Theme.dp(Theme.hintBarHeight) : parent.height
+    VirtualKeyboard {
+        id: keyboard
 
-        Behavior on y {
-            NumberAnimation { duration: Theme.durView; easing.type: Easing.OutQuint }
+        anchors.top: field.bottom
+        anchors.topMargin: Theme.dp(22)
+        anchors.horizontalCenter: parent.horizontalCenter
+        width: sheet.inner
+        height: implicitHeight
+        keyHeight: Theme.dp(52)
+        keyGap: Theme.dp(9)
+        showDone: true
+        symbols: sheet.symbols
+        numeric: sheet.numeric
+
+        onCharEntered: function(value) {
+            Sound.type();
+            sheet.text += value;
         }
-
-        Rectangle {
-            anchors.fill: parent
-            anchors.bottomMargin: -Theme.dp(120)
-            radius: Theme.dp(30)
-            color: Qt.rgba(0.071, 0.075, 0.094, 1.0)
-            border.width: 1
-            border.color: Theme.surfaceBorder
+        onBackspaced: {
+            Sound.backspace();
+            sheet.text = sheet.text.slice(0, -1);
         }
-
-        Text {
-            id: heading
-            anchors.top: parent.top
-            anchors.topMargin: sheet.pad
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: sheet.inner
-            text: sheet.title
-            color: Theme.textSecondary
-            font.family: Theme.sans
-            font.weight: Font.Medium
-            font.pixelSize: Theme.dp(22)
+        onCleared: {
+            Sound.backspace();
+            sheet.text = "";
         }
-
-        Rectangle {
-            id: field
-
-            anchors.top: heading.bottom
-            anchors.topMargin: Theme.dp(18)
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: sheet.inner
-            height: sheet.fieldHeight
-            radius: Theme.dp(16)
-            color: Theme.surface
-
-            Text {
-                id: valueText
-                anchors.left: parent.left
-                anchors.leftMargin: Theme.dp(26)
-                anchors.right: parent.right
-                anchors.rightMargin: Theme.dp(26)
-                anchors.verticalCenter: parent.verticalCenter
-                text: sheet.secret ? sheet.text.replace(/./g, "•") : sheet.text
-                color: Theme.text
-                font.family: Theme.sans
-                font.weight: Font.Medium
-                font.pixelSize: Theme.dp(27)
-                elide: Text.ElideLeft
-            }
-
-            Rectangle {
-                anchors.left: valueText.left
-                anchors.leftMargin: Math.min(valueText.implicitWidth, valueText.width) + Theme.dp(10)
-                anchors.verticalCenter: parent.verticalCenter
-                width: Theme.dp(3)
-                height: Theme.dp(30)
-                color: Theme.text
-                visible: sheet.open && caret.on
-            }
-        }
-
-        Timer {
-            id: caret
-            property bool on: true
-            interval: 560
-            running: sheet.open
-            repeat: true
-            onTriggered: on = !on
-        }
-
-        VirtualKeyboard {
-            id: keyboard
-
-            anchors.top: field.bottom
-            anchors.topMargin: Theme.dp(22)
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: sheet.inner
-            height: implicitHeight
-            keyHeight: Theme.dp(52)
-            keyGap: Theme.dp(9)
-            showDone: true
-            symbols: sheet.symbols
-            numeric: sheet.numeric
-
-            onCharEntered: function(value) {
-                Sound.type();
-                sheet.text += value;
-            }
-            onBackspaced: {
-                Sound.backspace();
-                sheet.text = sheet.text.slice(0, -1);
-            }
-            onCleared: {
-                Sound.backspace();
-                sheet.text = "";
-            }
-            onDone: {
-                Sound.enter();
-                sheet.finish();
-            }
+        onDone: {
+            Sound.enter();
+            sheet.finish();
         }
     }
 }

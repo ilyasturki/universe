@@ -6,7 +6,6 @@ Row {
     id: root
 
     property var game: null
-    property bool showCollection: true
     property bool showYear: true
 
     spacing: Theme.dp(18)
@@ -24,7 +23,7 @@ Row {
 
     PlatformIcon {
         id: platform
-        visible: root.showCollection && root.game !== null && root.game.collections.count > 0
+        visible: root.game !== null && root.game.collections.count > 0
         game: root.game
         size: Theme.dp(28)
         color: Theme.textSecondary

@@ -22,6 +22,12 @@ QtObject {
         }
     }
 
+    function stepped(i, d, n) {
+        var next = Math.max(0, Math.min(n - 1, i + d));
+        play(next === i ? "edge" : "tick");
+        return next;
+    }
+
     function play(name) {
         var now = Date.now();
         if (now - (lastPlayed[name] || 0) < 15)

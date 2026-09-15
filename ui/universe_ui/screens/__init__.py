@@ -11,13 +11,13 @@ from .sources import LoginFlow, SourcesBrowser
 
 
 class Screens(QObject):
-    def __init__(self, client, memory, screen_mode, parent=None):
+    def __init__(self, client, memory, screen_mode, games, parent=None):
         super().__init__(parent)
         self._gameSettings = GameSettingsForm(client, screen_mode, self)
         self._modules = ModulesForm(client, self)
         self._module = ModuleForm(client, self)
         self._launch = LaunchForm(client, screen_mode, self)
-        self._sources = SourcesBrowser(client, self)
+        self._sources = SourcesBrowser(client, games, self)
         self._login = LoginFlow(client, self)
         self._recordings = RecordingsList(client, self)
         self._journal = JournalList(client, self)

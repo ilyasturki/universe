@@ -1,12 +1,12 @@
 import QtQuick
 import "../core"
+import "../core/Format.js" as Format
 
-// What is running right now, from Session1's Current property; a chrome slot the tab bar can land on.
 Rectangle {
     id: badge
 
     readonly property var session: api.universe.currentSession
-    readonly property bool active: session !== null && session !== undefined && session.title !== undefined
+    readonly property bool active: session != null && session.title !== undefined
     property bool focused: false
     property int elapsed: 0
 
@@ -39,25 +39,15 @@ Rectangle {
         anchors.centerIn: parent
         spacing: Theme.dp(10)
 
-        Rectangle {
+        PulseDot {
             anchors.verticalCenter: parent.verticalCenter
-            width: Theme.dp(10)
-            height: width
-            radius: width / 2
-            color: "#5fd48a"
-
-            SequentialAnimation on opacity {
-                running: badge.active
-                loops: Animation.Infinite
-                NumberAnimation { to: 0.3; duration: 900; easing.type: Easing.InOutQuad }
-                NumberAnimation { to: 1.0; duration: 900; easing.type: Easing.InOutQuad }
-            }
+            running: badge.active
         }
 
         Text {
             anchors.verticalCenter: parent.verticalCenter
             text: (badge.session && badge.session.title ? badge.session.title : "")
-                  + " · " + Math.floor(badge.elapsed / 60) + ":" + ("0" + (badge.elapsed % 60)).slice(-2)
+                  + " · " + Format.clockTime(badge.elapsed)
             color: badge.focused ? Theme.onLight : Theme.text
             font.family: Theme.sans
             font.weight: Font.Medium

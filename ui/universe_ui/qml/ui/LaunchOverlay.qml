@@ -1,23 +1,17 @@
 import QtQuick
 import QtQuick.Window
 import "../core"
-import "../sound"
 
-// The launch poster. The page rises into it, and the poster holds — art, logo and title — until
-// the game's window is up and focused; it then leaves under it, and the launcher is home again
-// with the game pinned first, ready for when the desktop hands back.
 FocusScope {
     id: overlay
 
     property var game: null
     readonly property var session: api.universe.currentSession
-    readonly property bool sessionRunning: session !== null && session !== undefined && session.session_id !== undefined
-    // A launch is in progress: from the first frame of the poster to its last.
+    readonly property bool sessionRunning: session != null && session.session_id !== undefined
     readonly property bool running: sequence.running || waiting || settle.running || exit.running
     // Nobody could tell when the window came up (no shell extension): the poster holds this long.
     readonly property int settleMs: 1500
 
-    // launch() was called; the poster holds until the window is on screen.
     property bool waiting: false
     property string launchedSession: ""
 
@@ -26,18 +20,10 @@ FocusScope {
     signal finished()
     signal failed(var game, string message)
 
-    function show(targetGame) {
-        game = targetGame;
-        frame.heroSource = targetGame ? targetGame.assets.background : "";
-        frame.boxSource = targetGame ? targetGame.assets.boxFront : "";
-        frame.logoSource = targetGame ? targetGame.assets.logo : "";
-        frame.title = targetGame ? targetGame.title : "";
-    }
-
     function begin(targetGame) {
         if (running)
             return;
-        show(targetGame);
+        game = targetGame;
         launchedSession = "";
         frame.opacity = 0.0;
         frame.artScale = 1.06;
@@ -50,10 +36,6 @@ FocusScope {
         waiting = false;
         launchedSession = "";
         frame.opacity = 0.0;
-        frame.heroSource = "";
-        frame.boxSource = "";
-        frame.logoSource = "";
-        frame.title = "";
         game = null;
     }
 
@@ -65,7 +47,6 @@ FocusScope {
         failed(g, message);
     }
 
-    // The game has the screen: the poster fades out behind it, the launcher goes home under it.
     function handOver() {
         if (!waiting)
             return;
@@ -103,6 +84,7 @@ FocusScope {
         id: frame
 
         anchors.fill: parent
+        game: overlay.game
         opacity: 0.0
         visible: opacity > 0.001
     }
@@ -116,27 +98,21 @@ FocusScope {
     SequentialAnimation {
         id: sequence
 
-        // The page fades on the same curve underneath: one crossfade into the poster.
         ParallelAnimation {
             NumberAnimation {
-                target: frame
-                property: "opacity"
+                target: frame; property: "opacity"
                 to: 1.0
-                duration: Theme.durLaunch
-                easing.type: Easing.InOutQuad
+                duration: Theme.durLaunch; easing.type: Easing.InOutQuad
             }
             NumberAnimation {
-                target: frame
-                property: "artScale"
+                target: frame; property: "artScale"
                 to: 1.0
-                duration: Theme.durLaunch
-                easing.type: Easing.OutCubic
+                duration: Theme.durLaunch; easing.type: Easing.OutCubic
             }
         }
 
-        // The poster is on screen before the handover starts, and goes with the launch: gamescope's
-        // keep-alive window shows this very frame until the game's own window, so the handover is
-        // poster over poster. A grab that cannot happen launches without it (a black keep-alive).
+        // The grab feeds gamescope's keep-alive window, which shows this very frame until the game's own;
+        // a grab that cannot happen launches without it (a black keep-alive).
         ScriptAction {
             script: {
                 if (overlay.game) {
@@ -155,11 +131,9 @@ FocusScope {
         id: exit
 
         NumberAnimation {
-            target: frame
-            property: "opacity"
+            target: frame; property: "opacity"
             to: 0.0
-            duration: Theme.durScene
-            easing.type: Easing.OutCubic
+            duration: Theme.durScene; easing.type: Easing.OutCubic
         }
         ScriptAction {
             script: {

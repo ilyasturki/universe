@@ -3,9 +3,6 @@ import "../core"
 import "../sound"
 import "../ui"
 
-// Settings › Artwork: one slot across the whole library. A row of slot chips, a row of filters
-// with their counts, then every game's art for that slot as a grid; A on a tile opens the game's
-// artwork page on that slot, X fetches every game's missing art. Fills the Settings tab's main column.
 FocusScope {
     id: view
 
@@ -31,31 +28,22 @@ FocusScope {
     readonly property real artHeight: Math.round((cellWidth - Theme.dp(16)) / store.aspect)
 
     readonly property var hints: {
-        var out = [];
-        if (zone === "grid")
-            out.push({ glyph: "A", label: "Open" });
-        else
-            out.push({ glyph: "A", label: "Show" });
-        out.push({ glyph: "dpad", label: "Navigate" });
+        var out = [ { glyph: "A", label: zone === "grid" ? "Open" : "Show" } ];
         if (!fetching)
             out.push({ glyph: "X", label: "Fetch missing art" });
+        out.push({ glyph: "dpad", label: "Navigate" });
         out.push({ glyph: "B", label: "Sections" });
         return out;
     }
 
     function load() {
         store.load();
-        for (var i = 0; i < slotNames.length; i++)
-            if (slotNames[i].slot === store.slot)
-                slotIndex = i;
-        for (var j = 0; j < filterNames.length; j++)
-            if (filterNames[j].filter === store.filter)
-                filterIndex = j;
+        slotIndex = Math.max(0, slotNames.findIndex(function(s) { return s.slot === store.slot; }));
+        filterIndex = Math.max(0, filterNames.findIndex(function(f) { return f.filter === store.filter; }));
     }
 
     onTilesChanged: if (gridIndex >= tiles.length) gridIndex = Math.max(0, tiles.length - 1)
 
-    // Off screen the store stops following the library.
     Component.onDestruction: store.unload()
 
     function chooseSlot(i) {
@@ -72,12 +60,7 @@ FocusScope {
 
     function activate() {
         if (zone === "grid") {
-            if (tiles.length === 0) {
-                Sound.edge();
-                return;
-            }
-            var tile = tiles[gridIndex];
-            var game = api.allGames.byId(tile.id);
+            var game = tiles.length > 0 ? api.allGames.byId(tiles[gridIndex].id) : null;
             if (!game) {
                 Sound.edge();
                 return;
@@ -93,29 +76,15 @@ FocusScope {
     }
 
     function moveChip(d) {
-        if (zone === "slots") {
-            var n = Math.max(0, Math.min(slotNames.length - 1, slotIndex + d));
-            if (n === slotIndex) {
-                Sound.edge();
-                return;
-            }
-            Sound.tick();
-            chooseSlot(n);
-        } else {
-            var m = Math.max(0, Math.min(filterNames.length - 1, filterIndex + d));
-            if (m === filterIndex) {
-                Sound.edge();
-                return;
-            }
-            Sound.tick();
-            chooseFilter(m);
-        }
+        var slots = zone === "slots";
+        var cur = slots ? slotIndex : filterIndex;
+        var n = Sound.stepped(cur, d, (slots ? slotNames : filterNames).length);
+        if (n !== cur)
+            slots ? chooseSlot(n) : chooseFilter(n);
     }
 
     function moveGrid(d) {
-        var n = Math.max(0, Math.min(tiles.length - 1, gridIndex + d));
-        n === gridIndex ? Sound.edge() : Sound.tick();
-        gridIndex = n;
+        gridIndex = Sound.stepped(gridIndex, d, tiles.length);
     }
 
     Keys.onPressed: function(event) {
@@ -196,7 +165,6 @@ FocusScope {
         }
     }
 
-    // Where the slot shows, so "square" and "banner" mean something.
     Text {
         anchors.left: slotChips.right
         anchors.leftMargin: Theme.dp(24)
@@ -210,7 +178,6 @@ FocusScope {
         elide: Text.ElideRight
     }
 
-    // The one action of the section, on X from anywhere in it.
     Row {
         id: fetchButton
         anchors.right: parent.right
@@ -340,7 +307,6 @@ FocusScope {
                         source: modelData.url
                         fillMode: view.store.slot === "logo" ? Image.PreserveAspectFit : Image.PreserveAspectCrop
                         asynchronous: true
-                        cache: false
                         sourceSize.width: 480
                     }
 

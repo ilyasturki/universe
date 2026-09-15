@@ -2,9 +2,8 @@ import QtQuick
 import "../core"
 import "PadNames.js" as Names
 
-// The hint bar's glyph: "A" | "B" | "X" | "Y" | "RS" | "LB RB" | "LT RT" | "Start+Select" | "dpad",
-// named the Xbox way and drawn the way the connected pad prints them. A space lists buttons that
-// each do the thing; a "+" joins the ones pressed together, and is drawn between them.
+// "A" | "B" | "X" | "Y" | "RS" | "LB RB" | "LT RT" | "Start+Select" | "dpad", named the Xbox way and
+// drawn as the connected pad prints them; a space lists alternatives, a "+" joins a chord.
 Item {
     id: root
 

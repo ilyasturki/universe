@@ -14,25 +14,35 @@ Item {
 
     implicitHeight: Theme.dp(Theme.hintBarHeight)
 
+    // The glyph delegates are rebuilt only when the glyph set changes; a label change repaints its Text.
     component HintRow: Row {
-        property var model: []
+        property var hints: []
+        property var glyphs: []
 
         spacing: Theme.dp(40)
 
+        onHintsChanged: {
+            var g = hints.map(function(h) { return h.glyph; });
+            if (g.join() !== glyphs.join())
+                glyphs = g;
+        }
+
         Repeater {
-            model: parent.model
+            model: parent.glyphs
 
             Row {
+                readonly property var hint: parent.hints[index] || ({})
+
                 spacing: Theme.dp(12)
-                opacity: modelData.dim === true ? 0.35 : 1.0
+                opacity: hint.dim === true ? 0.35 : 1.0
 
                 ButtonGlyph {
-                    glyph: modelData.glyph
+                    glyph: modelData
                     anchors.verticalCenter: parent.verticalCenter
                 }
 
                 Text {
-                    text: modelData.label
+                    text: hint.label || ""
                     color: Theme.textHint
                     font.family: Theme.sans
                     font.pixelSize: Theme.dp(21)
@@ -46,7 +56,7 @@ Item {
         anchors.left: parent.left
         anchors.leftMargin: root.sideMargin
         anchors.verticalCenter: parent.verticalCenter
-        model: root.arranged.left
+        hints: root.arranged.left
     }
 
     Row {
@@ -57,7 +67,7 @@ Item {
 
         HintRow {
             anchors.verticalCenter: parent.verticalCenter
-            model: root.arranged.right
+            hints: root.arranged.right
         }
 
         Text {

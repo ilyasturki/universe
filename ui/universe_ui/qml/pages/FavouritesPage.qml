@@ -16,18 +16,15 @@ FocusScope {
                                        ? favourites.get(row.currentIndex) : null
     readonly property bool ownsBackdrop: false
     readonly property real backdropBlur: 30
-    readonly property real chromeScrim: 0
     readonly property real scrimTop: 0.72
     readonly property real scrimMid: 0.82
     readonly property real scrimBottom: 0.96
-    readonly property Item focusedArtItem: row.currentItem ? row.currentItem.artItem : null
-    readonly property Item menuAnchor: focusedArtItem
+    readonly property Item menuAnchor: row.currentItem ? row.currentItem.artItem : null
 
     readonly property var hints: [
         { glyph: "A", label: "Launch" },
         { glyph: "X", label: "Details" },
-        { glyph: "Y", label: currentGame && !currentGame.favorite ? "Add to favourites" : "Remove from favourites" },
-        { glyph: "LB RB", label: "Tabs" }
+        { glyph: "Y", label: currentGame && !currentGame.favorite ? "Add to favourites" : "Remove from favourites" }
     ]
 
     readonly property real cellWidth: Theme.dp(336)
@@ -48,7 +45,6 @@ FocusScope {
         Sound.favourite(g.favorite);
     }
 
-    // Called by the shell when the tab is left or a game is launched.
     function leave() {
         if (pinned.length > 0)
             pinned = [];
@@ -60,27 +56,17 @@ FocusScope {
         pinned: page.pinned
     }
 
-    Item {
-        id: header
-
+    Text {
+        id: headTitle
         anchors.top: parent.top
         anchors.topMargin: Theme.dp(44)
         anchors.left: parent.left
-        anchors.right: parent.right
         anchors.leftMargin: Theme.dp(80)
-        anchors.rightMargin: Theme.dp(80)
-        height: headTitle.height
-
-        Text {
-            id: headTitle
-            anchors.left: parent.left
-            text: "Favourites"
-            color: Theme.text
-            font.family: Theme.sans
-            font.weight: Font.Bold
-            font.pixelSize: Theme.dp(46)
-        }
-
+        text: "Favourites"
+        color: Theme.text
+        font.family: Theme.sans
+        font.weight: Font.Bold
+        font.pixelSize: Theme.dp(46)
     }
 
     Text {
@@ -95,7 +81,7 @@ FocusScope {
     ListView {
         id: row
 
-        anchors.top: header.bottom
+        anchors.top: headTitle.bottom
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.right: parent.right
@@ -108,26 +94,14 @@ FocusScope {
         interactive: false
         // interactive:false would otherwise take arrow-key navigation with it.
         keyNavigationEnabled: true
-        highlightFollowsCurrentItem: false
         cacheBuffer: page.cellWidth * 2
+        highlightRangeMode: ListView.ApplyRange
+        preferredHighlightBegin: (width - page.cellWidth) / 2
+        preferredHighlightEnd: preferredHighlightBegin + page.cellWidth
+        highlightMoveDuration: Theme.durView
 
         leftMargin: Math.max(Theme.dp(80),
                              (width - (favourites.count * cellWidth + Math.max(0, favourites.count - 1) * spacing)) / 2)
-
-        function slideToCurrent() {
-            if (width <= 0 || contentWidth <= width)
-                return;
-            var step = page.cellWidth + spacing;
-            var target = currentIndex * step - (width - page.cellWidth) / 2;
-            var maxX = Math.max(0, contentWidth - width);
-            contentX = Math.max(-leftMargin, Math.min(target, maxX));
-        }
-
-        onCurrentIndexChanged: slideToCurrent()
-
-        Behavior on contentX {
-            NumberAnimation { duration: Theme.durView; easing.type: Easing.OutQuint }
-        }
 
         delegate: Item {
             id: card
@@ -175,28 +149,13 @@ FocusScope {
                             color: Qt.rgba(0.055, 0.059, 0.075, 0.62)
                         }
 
-                        Canvas {
+                        MenuGlyph {
                             anchors.top: parent.top
                             anchors.right: parent.right
                             anchors.margins: Theme.dp(16)
                             width: Theme.dp(30)
                             height: Theme.dp(30)
-                            onPaint: {
-                                var ctx = getContext("2d");
-                                ctx.reset();
-                                var s = width / 24;
-                                ctx.strokeStyle = "#ffffff";
-                                ctx.lineWidth = 2 * s;
-                                ctx.lineJoin = "round";
-                                ctx.beginPath();
-                                ctx.moveTo(12 * s, 20 * s);
-                                ctx.bezierCurveTo(12 * s, 20 * s, 4.5 * s, 15.3 * s, 4.5 * s, 10.4 * s);
-                                ctx.bezierCurveTo(4.5 * s, 7.2 * s, 9.2 * s, 5.4 * s, 12 * s, 7.6 * s);
-                                ctx.bezierCurveTo(14.8 * s, 5.4 * s, 19.5 * s, 7.2 * s, 19.5 * s, 10.4 * s);
-                                ctx.bezierCurveTo(19.5 * s, 15.3 * s, 12 * s, 20 * s, 12 * s, 20 * s);
-                                ctx.closePath();
-                                ctx.stroke();
-                            }
+                            kind: "heart-outline"
                         }
                     }
                 }
@@ -244,7 +203,6 @@ FocusScope {
             if (api.keys.isFilters(event)) {
                 event.accepted = true;
                 page.toggleFavourite();
-                return;
             }
         }
     }

@@ -12,15 +12,11 @@ Item {
     property real selectedScale: 1.05
     property real idleScale: 1.0
     property bool showHeart: true
-    // The session's game: a PLAYING mark over the art.
     property bool playing: false
     property int focusOrigin: Item.Center
-    property int focusDuration: Theme.durBase
     property real ringOpacity: 1.0
 
     readonly property bool artMissing: String(artSource) === "" || cover.status === Image.Error
-    // The software scenegraph (offscreen tests) drops every ShaderEffect: corners go square there.
-    readonly property bool software: GraphicsInfo.api === GraphicsInfo.Software
 
     // Only the selected card paints a ring, so only it needs to animate.
     Behavior on ringOpacity {
@@ -37,10 +33,10 @@ Item {
         scale: root.selected ? root.selectedScale : root.idleScale
 
         Behavior on opacity {
-            NumberAnimation { duration: root.focusDuration; easing.type: Easing.OutQuint }
+            NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutQuint }
         }
         Behavior on scale {
-            NumberAnimation { duration: root.focusDuration; easing.type: Easing.OutQuint }
+            NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutQuint }
         }
 
         // Behind the artwork: RectangularGlow paints its whole bounds, not just the halo.
@@ -56,19 +52,11 @@ Item {
             }
         }
 
-        // clip:true would square the corners off — it ignores radius.
-        Item {
+        RoundedMask {
             id: art
 
             anchors.fill: parent
-            layer.enabled: true
-            layer.smooth: true
-            layer.effect: root.software ? null : maskEffect
-
-            Component {
-                id: maskEffect
-                OpacityMask { maskSource: artMask }
-            }
+            radius: root.cornerRadius
 
             Rectangle {
                 anchors.fill: parent
@@ -112,16 +100,6 @@ Item {
             }
         }
 
-        Rectangle {
-            id: artMask
-
-            anchors.fill: art
-            radius: root.cornerRadius
-            color: "white"
-            antialiasing: true
-            visible: false
-        }
-
         Loader {
             active: root.playing
             anchors.left: parent.left
@@ -139,19 +117,10 @@ Item {
                     anchors.centerIn: parent
                     spacing: Theme.dp(8)
 
-                    Rectangle {
+                    PulseDot {
                         anchors.verticalCenter: parent.verticalCenter
                         width: Theme.dp(8)
-                        height: width
-                        radius: width / 2
-                        color: "#5fd48a"
-
-                        SequentialAnimation on opacity {
-                            running: root.playing
-                            loops: Animation.Infinite
-                            NumberAnimation { to: 0.3; duration: 900; easing.type: Easing.InOutQuad }
-                            NumberAnimation { to: 1.0; duration: 900; easing.type: Easing.InOutQuad }
-                        }
+                        running: root.playing
                     }
 
                     CapsLabel {

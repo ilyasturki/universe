@@ -1,4 +1,2 @@
-# Apart from core on purpose: a Qt without QtMultimedia can still import core,
-# and a module loads every singleton it lists.
 singleton Sound 1.0 Sound.qml
 SoundPool 1.0 SoundPool.qml

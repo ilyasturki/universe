@@ -1,10 +1,6 @@
 import QtQuick
 import "../core"
 
-// The live view of the current pad: a flash on every press, the sticks leaning, the triggers
-// filling with their pull, a button with no code on this connection dashed. The last thing
-// touched is named under the pad, a trigger with its pull, and the ways out are spelled out
-// beneath. The caption keeps its height from the start, so the first press does not resize the pad.
 Item {
     id: art
 
@@ -22,12 +18,11 @@ Item {
     readonly property real lastPull: lastIsTrigger ? (axes[lastSlot] || 0) : 0
 
     function press(slot, down) {
-        var next = {};
-        for (var k in pressed)
-            if (k !== slot)
-                next[k] = true;
+        var next = Object.assign({}, pressed);
         if (down)
             next[slot] = true;
+        else
+            delete next[slot];
         pressed = next;
         if (down)
             lastSlot = slot;
@@ -35,9 +30,7 @@ Item {
 
     // A trigger names itself as soon as it moves, so a light pull reads under the pad too.
     function axis(name, value) {
-        var next = {};
-        for (var k in axes)
-            next[k] = axes[k];
+        var next = Object.assign({}, axes);
         next[name] = value;
         axes = next;
         if ((name === "lt" || name === "rt") && value > 0.02)
@@ -51,10 +44,8 @@ Item {
     }
 
     function labelOf(slot) {
-        for (var i = 0; i < rows.length; i++)
-            if (rows[i].slot === slot)
-                return rows[i].label;
-        return slot;
+        var r = rows.find(function(r) { return r.slot === slot; });
+        return r ? r.label : slot;
     }
 
     onFamilyChanged: clear()
@@ -100,7 +91,6 @@ Item {
         anchors.rightMargin: art.inset
         spacing: Theme.dp(10)
 
-        // The last press, or "Press anything" until there is one: the same height either way.
         Item {
             width: parent.width
             height: Theme.dp(40)

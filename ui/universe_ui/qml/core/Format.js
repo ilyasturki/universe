@@ -34,10 +34,12 @@ function lastPlayed(date) {
     return Math.floor(days / 365) + " years ago";
 }
 
+function plural(n, one, many) {
+    return n + " " + (n === 1 ? one : many);
+}
+
 function sessions(count) {
-    if (!count || count <= 0)
-        return "";
-    return count + (count === 1 ? " session" : " sessions");
+    return count > 0 ? plural(count, "session", "sessions") : "";
 }
 
 // 1:02:03, or 4:05 under an hour: a player's counter.
@@ -50,6 +52,5 @@ function clockTime(seconds) {
 }
 
 function clock() {
-    var d = new Date();
-    return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2);
+    return Qt.formatTime(new Date(), "HH:mm");
 }

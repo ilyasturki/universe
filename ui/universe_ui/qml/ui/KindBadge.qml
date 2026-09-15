@@ -1,13 +1,11 @@
 import QtQuick
 import "../core"
 
-// Where a slot stands, as a small pill: picked (yours), fetched, guessed (on disk, unrecorded), missing.
 Rectangle {
     id: root
 
     property string kind: "missing"
     property string label: ""
-    // On a lit (white) row the pill inverts.
     property bool onLight: false
 
     readonly property color tint: kind === "picked" ? "#5fd48a"

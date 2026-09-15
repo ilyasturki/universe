@@ -256,8 +256,11 @@ class Collection(QObject):
 
 
 class GameListModel(ObjectListModel):
+    totalPlayTimeChanged = Signal()
+
     def __init__(self, parent=None):
         super().__init__(parent=parent, roles=GAME_ROLES)
+        self.countChanged.connect(self.totalPlayTimeChanged)
 
     def setGames(self, games):
         for game in self._objects:
@@ -274,6 +277,7 @@ class GameListModel(ObjectListModel):
         if row >= 0:
             index = self.index(row, 0)
             self.dataChanged.emit(index, index)
+            self.totalPlayTimeChanged.emit()
 
     def rowOf(self, game):
         return next((i for i, g in enumerate(self._objects) if g is game), -1)
@@ -281,6 +285,8 @@ class GameListModel(ObjectListModel):
     @Slot(str, result=QObject)
     def byId(self, ident):
         return next((g for g in self._objects if g.id == ident), None)
+
+    totalPlayTime = Property(int, lambda self: sum(g.playTime for g in self._objects), notify=totalPlayTimeChanged)
 
 
 def _game_at(model, row):

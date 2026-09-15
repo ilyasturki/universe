@@ -1,14 +1,11 @@
 import QtQuick
 import "../core"
 
-// A sub page's head: the game's tile, what the page is, its title and the meta line.
 Item {
     id: root
 
     property var game: null
-    // "GAME SETTINGS", "RECORDINGS"…
     property string label: ""
-    // Muted, after the meta line: "12 sessions".
     property string detail: ""
 
     height: Theme.dp(88)

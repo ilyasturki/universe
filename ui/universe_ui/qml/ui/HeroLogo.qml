@@ -1,7 +1,6 @@
 import QtQuick
 import "../core"
 
-// Two layers: reassigning one Image's source blanks it while the new one decodes.
 Item {
     id: root
 
@@ -17,58 +16,16 @@ Item {
     implicitWidth: logoWidth
     implicitHeight: titleMode ? title.height : logoHeight
 
-    property bool showA: true
-
-    onLogoSourceChanged: {
-        if (logoSource == "") {
-            a.source = "";
-            b.source = "";
-            return;
-        }
-        var incoming = showA ? b : a;
-        incoming.source = logoSource;
-        // A source the layer already holds fires no statusChanged; commit it here.
-        if (incoming.status === Image.Ready)
-            _commit(incoming);
-    }
-
-    function _commit(layer) {
-        if (layer.source != logoSource)
-            return;
-        if ((showA && layer === b) || (!showA && layer === a))
-            showA = !showA;
-    }
-
-    Image {
-        id: a
+    CrossfadeImage {
         width: root.logoWidth
         height: root.logoHeight
+        source: root.logoSource
         fillMode: Image.PreserveAspectFit
         horizontalAlignment: Image.AlignLeft
         verticalAlignment: Image.AlignBottom
-        asynchronous: true
-        sourceSize.width: root.logoWidth
-        sourceSize.height: root.logoHeight
-        opacity: root.showA && !root.titleMode ? 1.0 : 0.0
-        onStatusChanged: if (status === Image.Ready) root._commit(a)
-
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-        }
-    }
-
-    Image {
-        id: b
-        width: root.logoWidth
-        height: root.logoHeight
-        fillMode: Image.PreserveAspectFit
-        horizontalAlignment: Image.AlignLeft
-        verticalAlignment: Image.AlignBottom
-        asynchronous: true
-        sourceSize.width: root.logoWidth
-        sourceSize.height: root.logoHeight
-        opacity: !root.showA && !root.titleMode ? 1.0 : 0.0
-        onStatusChanged: if (status === Image.Ready) root._commit(b)
+        sourceSize: Qt.size(root.logoWidth, root.logoHeight)
+        duration: Theme.durBase
+        opacity: root.titleMode ? 0.0 : 1.0
 
         Behavior on opacity {
             NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }

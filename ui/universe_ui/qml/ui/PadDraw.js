@@ -1,20 +1,9 @@
 .pragma library
 
-// Canvas strokes shared by the button glyphs and the pad art: outlines and the symbols printed on
-// a pad's buttons, all on a unit radius so one call serves a 14 px glyph and a 60 px button.
-
 function roundRect(ctx, x, y, w, h, r) {
     r = Math.min(r, w / 2, h / 2);
     ctx.beginPath();
-    ctx.moveTo(x + r, y);
-    ctx.lineTo(x + w - r, y);
-    ctx.arcTo(x + w, y, x + w, y + r, r);
-    ctx.lineTo(x + w, y + h - r);
-    ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
-    ctx.lineTo(x + r, y + h);
-    ctx.arcTo(x, y + h, x, y + h - r, r);
-    ctx.lineTo(x, y + r);
-    ctx.arcTo(x, y, x + r, y, r);
+    ctx.roundedRect(x, y, w, h, r, r);
     ctx.closePath();
 }
 
@@ -43,7 +32,6 @@ function cross(ctx, cx, cy, l, a) {
     ctx.closePath();
 }
 
-// One arm of that cross, from the centre out.
 function arm(ctx, cx, cy, l, a, dir) {
     var h = a / 2;
     var dx = dir === "left" ? -1 : dir === "right" ? 1 : 0;
@@ -55,7 +43,6 @@ function arm(ctx, cx, cy, l, a, dir) {
     ctx.closePath();
 }
 
-// A back paddle: a lever, wider at the tip, hanging from y.
 function paddle(ctx, cx, y, w, h) {
     ctx.beginPath();
     ctx.moveTo(cx - w * 0.32, y);
@@ -66,120 +53,48 @@ function paddle(ctx, cx, y, w, h) {
     ctx.closePath();
 }
 
-// The symbol printed on a button, stroked (or filled) inside radius r about (cx, cy).
-function symbol(ctx, name, cx, cy, r) {
-    var s = r * 0.56;
-    ctx.beginPath();
-    if (name === "cross") {
-        ctx.moveTo(cx - s, cy - s);
-        ctx.lineTo(cx + s, cy + s);
-        ctx.moveTo(cx + s, cy - s);
-        ctx.lineTo(cx - s, cy + s);
-        ctx.stroke();
-    } else if (name === "circle") {
-        ctx.arc(cx, cy, s, 0, Math.PI * 2);
-        ctx.stroke();
-    } else if (name === "triangle") {
-        var t = s * 1.12;
-        ctx.moveTo(cx, cy - t * 0.98);
-        ctx.lineTo(cx + t, cy + t * 0.66);
-        ctx.lineTo(cx - t, cy + t * 0.66);
-        ctx.closePath();
-        ctx.stroke();
-    } else if (name === "square") {
-        var q = s * 0.94;
-        ctx.rect(cx - q, cy - q, q * 2, q * 2);
-        ctx.stroke();
-    } else if (name === "menu") {
-        for (var i = -1; i <= 1; i++) {
-            ctx.moveTo(cx - s, cy + i * s * 0.75);
-            ctx.lineTo(cx + s, cy + i * s * 0.75);
-        }
-        ctx.stroke();
-    } else if (name === "create") {
-        ctx.moveTo(cx - s, cy - s * 0.75);
-        ctx.lineTo(cx + s * 0.2, cy - s * 0.75);
-        ctx.moveTo(cx - s, cy);
-        ctx.lineTo(cx + s, cy);
-        ctx.moveTo(cx - s, cy + s * 0.75);
-        ctx.lineTo(cx - s * 0.2, cy + s * 0.75);
-        ctx.stroke();
-    } else if (name === "view") {
-        var v = s * 0.8;
-        ctx.rect(cx - v, cy - v * 0.55, v * 1.35, v * 1.2);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.rect(cx - v * 0.35, cy - v * 0.95, v * 1.35, v * 1.2);
-        ctx.stroke();
-    } else if (name === "minus") {
-        ctx.moveTo(cx - s, cy);
-        ctx.lineTo(cx + s, cy);
-        ctx.stroke();
-    } else if (name === "plus") {
-        ctx.moveTo(cx - s, cy);
-        ctx.lineTo(cx + s, cy);
-        ctx.moveTo(cx, cy - s);
-        ctx.lineTo(cx, cy + s);
-        ctx.stroke();
-    } else if (name === "home") {
-        ctx.moveTo(cx - s, cy);
-        ctx.lineTo(cx, cy - s);
-        ctx.lineTo(cx + s, cy);
-        ctx.moveTo(cx - s * 0.7, cy - s * 0.25);
-        ctx.lineTo(cx - s * 0.7, cy + s * 0.9);
-        ctx.lineTo(cx + s * 0.7, cy + s * 0.9);
-        ctx.lineTo(cx + s * 0.7, cy - s * 0.25);
-        ctx.stroke();
-    } else if (name === "xbox") {
-        ctx.arc(cx, cy, s * 1.1, 0, Math.PI * 2);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(cx - s * 0.55, cy - s * 0.55);
-        ctx.quadraticCurveTo(cx, cy, cx + s * 0.55, cy + s * 0.55);
-        ctx.moveTo(cx + s * 0.55, cy - s * 0.55);
-        ctx.quadraticCurveTo(cx, cy, cx - s * 0.55, cy + s * 0.55);
-        ctx.stroke();
-    } else if (name === "share") {
-        ctx.moveTo(cx, cy + s * 0.5);
-        ctx.lineTo(cx, cy - s);
-        ctx.moveTo(cx - s * 0.55, cy - s * 0.45);
-        ctx.lineTo(cx, cy - s);
-        ctx.lineTo(cx + s * 0.55, cy - s * 0.45);
-        ctx.moveTo(cx - s * 0.9, cy);
-        ctx.lineTo(cx - s * 0.9, cy + s);
-        ctx.lineTo(cx + s * 0.9, cy + s);
-        ctx.lineTo(cx + s * 0.9, cy);
-        ctx.stroke();
-    } else if (name === "capture") {
-        ctx.rect(cx - s, cy - s, s * 2, s * 2);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(cx, cy, s * 0.4, 0, Math.PI * 2);
-        ctx.stroke();
-    } else if (name === "mic") {
-        roundRect(ctx, cx - s * 0.35, cy - s, s * 0.7, s * 1.3, s * 0.35);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(cx, cy, s * 0.7, Math.PI * 0.15, Math.PI * 0.85);
-        ctx.stroke();
-        ctx.beginPath();
-        ctx.moveTo(cx, cy + s * 0.7);
-        ctx.lineTo(cx, cy + s * 1.05);
-        ctx.stroke();
-    } else if (name === "star") {
-        for (var k = 0; k < 10; k++) {
-            var rr = k % 2 === 0 ? s * 1.05 : s * 0.45;
-            var ang = -Math.PI / 2 + k * Math.PI / 5;
-            var px = cx + Math.cos(ang) * rr, py = cy + Math.sin(ang) * rr;
-            if (k === 0)
-                ctx.moveTo(px, py);
-            else
-                ctx.lineTo(px, py);
-        }
-        ctx.closePath();
-        ctx.stroke();
-    } else if (name === "dot") {
-        ctx.arc(cx, cy, s * 0.35, 0, Math.PI * 2);
-        ctx.fill();
+// The marks printed on buttons, on a unit radius about the origin: stroked, `fill` ones filled.
+var STAR = (function() {
+    var d = "";
+    for (var k = 0; k < 10; k++) {
+        var r = k % 2 === 0 ? 1.05 : 0.45, a = -Math.PI / 2 + k * Math.PI / 5;
+        d += (k === 0 ? "M" : "L") + (Math.cos(a) * r).toFixed(4) + " " + (Math.sin(a) * r).toFixed(4);
     }
+    return d + "Z";
+})();
+var SYMBOLS = {
+    cross: "M-1 -1L1 1M1 -1L-1 1",
+    circle: "M1 0A1 1 0 1 1 -1 0A1 1 0 1 1 1 0",
+    triangle: "M0 -1.0976L1.12 0.7392L-1.12 0.7392Z",
+    square: "M-0.94 -0.94H0.94V0.94H-0.94Z",
+    menu: "M-1 -0.75H1M-1 0H1M-1 0.75H1",
+    create: "M-1 -0.75H0.2M-1 0H1M-1 0.75H-0.2",
+    view: "M-0.8 -0.44H0.28V0.52H-0.8ZM-0.28 -0.76H0.8V0.2H-0.28Z",
+    minus: "M-1 0H1",
+    plus: "M-1 0H1M0 -1V1",
+    home: "M-1 0L0 -1L1 0M-0.7 -0.25V0.9H0.7V-0.25",
+    xbox: "M1.1 0A1.1 1.1 0 1 1 -1.1 0A1.1 1.1 0 1 1 1.1 0M-0.55 -0.55Q0 0 0.55 0.55M0.55 -0.55Q0 0 -0.55 0.55",
+    share: "M0 0.5V-1M-0.55 -0.45L0 -1L0.55 -0.45M-0.9 0V1H0.9V0",
+    capture: "M-1 -1H1V1H-1ZM0.4 0A0.4 0.4 0 1 1 -0.4 0A0.4 0.4 0 1 1 0.4 0",
+    mic: "M-0.35 -0.65A0.35 0.35 0 0 1 0.35 -0.65V-0.05A0.35 0.35 0 0 1 -0.35 -0.05ZM0.6237 0.3178A0.7 0.7 0 0 1 -0.6237 0.3178M0 0.7V1.05",
+    star: STAR,
+    dot: { fill: "M0.35 0A0.35 0.35 0 1 1 -0.35 0A0.35 0.35 0 1 1 0.35 0" }
+};
+
+function symbol(ctx, name, cx, cy, r) {
+    var sym = SYMBOLS[name];
+    if (!sym)
+        return;
+    var s = r * 0.56;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.scale(s, s);
+    ctx.lineWidth /= s;
+    ctx.beginPath();
+    ctx.path = sym.fill || sym;
+    if (sym.fill)
+        ctx.fill();
+    else
+        ctx.stroke();
+    ctx.restore();
 }

@@ -13,7 +13,6 @@ FocusScope {
 
     readonly property int searchIndex: tabs.length
     readonly property bool onSearch: showSearch && index === searchIndex
-    // Past the glass: the running game's badge, while there is one.
     readonly property int badgeIndex: showSearch ? searchIndex + 1 : searchIndex
     readonly property bool onBadge: badge.active && index === badgeIndex
     readonly property int slots: badgeIndex + (badge.active ? 1 : 0)
@@ -28,7 +27,7 @@ FocusScope {
     signal dismissed()
 
     readonly property var hints: onBadge
-        ? [ { glyph: "A", label: "Resume" }, { glyph: "≡", label: "Options" }, { glyph: "B", label: "Back" }, { glyph: "LB RB", label: "Tabs" } ]
+        ? [ { glyph: "A", label: "Resume" }, { glyph: "B", label: "Back" }, { glyph: "≡", label: "Options" }, { glyph: "LB RB", label: "Tabs" } ]
         : [ { glyph: "A", label: onSearch ? "Search" : "Open" }, { glyph: "B", label: "Back" }, { glyph: "LB RB", label: "Tabs" } ]
 
     implicitHeight: Theme.dp(Theme.tabBarHeight)
@@ -38,7 +37,6 @@ FocusScope {
         forceActiveFocus();
     }
 
-    // Round trip: the glass follows the last tab, the first tab follows the glass.
     function step(d) {
         var n = slots;
         var next = (index + d + n) % n;
@@ -58,7 +56,6 @@ FocusScope {
         if (activeFocus && index < searchIndex)
             index = currentIndex;
     }
-    // The glass leaves with the page that had it; a cursor on it steps back to the tab.
     onShowSearchChanged: {
         if (!showSearch && index >= searchIndex)
             index = currentIndex;
@@ -90,36 +87,27 @@ FocusScope {
                 Sound.panel();
                 root.entered();
             }
-            return;
-        }
-        if (api.keys.isMenu(event) && root.onBadge) {
+        } else if (api.keys.isMenu(event) && root.onBadge) {
             event.accepted = true;
             if (root.currentGame)
                 root.menuRequested(root.currentGame, badge);
-            return;
-        }
-        if (api.keys.isCancel(event)) {
+        } else if (api.keys.isCancel(event)) {
             event.accepted = true;
             Sound.cancel();
             root.dismissed();
-            return;
-        }
-        // Nothing up here owns a game, so the shell must not act on one.
-        if (api.keys.isDetails(event) || api.keys.isFilters(event)) {
+        } else if (api.keys.isDetails(event) || api.keys.isFilters(event)) {
+            // Nothing up here owns a game, so the shell must not act on one.
             event.accepted = true;
             Sound.edge();
-            return;
         }
     }
 
     Item {
         id: frame
 
-        // itemAt() is not a binding source, so the slot is picked by hand — but its
-        // geometry stays bound, or the frame keeps whatever the first layout gave it.
+        // itemAt() is not a binding source, so the slot is picked by hand.
         property Item target: null
         readonly property Item pane: root.index < root.searchIndex ? labels : rightSide
-        // A circle on the glass, a pill on a label; the badge is a pill of its own.
         readonly property real padX: root.onBadge ? 0 : root.onSearch ? padY : Theme.dp(20)
         readonly property real padY: root.onBadge ? 0 : Theme.dp(10)
 
@@ -188,7 +176,6 @@ FocusScope {
     Rectangle {
         id: underline
 
-        // itemAt() is not a binding source, so this is retargeted by hand.
         property Item target: null
         readonly property real baseWidth: Theme.dp(100)
 
@@ -203,7 +190,6 @@ FocusScope {
         height: Math.max(2, Theme.dp(3))
         color: Theme.text
         antialiasing: true
-        // The focus pill stands in for it while it sits on the same tab.
         opacity: root.activeFocus && root.index === root.currentIndex ? 0.0 : 1.0
 
         Behavior on opacity {
@@ -253,11 +239,9 @@ FocusScope {
             }
         }
 
-        Canvas {
+        MenuGlyph {
             id: glass
 
-            readonly property color stroke: root.activeFocus && root.onSearch ? Theme.text : Theme.textTab
-            onStrokeChanged: requestPaint()
             onWidthChanged: frame.retarget()
 
             anchors.verticalCenter: parent.verticalCenter
@@ -265,25 +249,11 @@ FocusScope {
             height: Theme.dp(26)
             visible: opacity > 0.01
             opacity: root.showSearch ? 1.0 : 0.0
+            kind: "search"
+            tint: root.activeFocus && root.onSearch ? Theme.text : Theme.textTab
 
             Behavior on opacity {
                 NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic }
-            }
-
-            onPaint: {
-                var ctx = getContext("2d");
-                ctx.reset();
-                var s = width / 24;
-                ctx.strokeStyle = stroke;
-                ctx.lineWidth = 2 * s;
-                ctx.lineCap = "round";
-                ctx.beginPath();
-                ctx.arc(11 * s, 11 * s, 7 * s, 0, Math.PI * 2);
-                ctx.stroke();
-                ctx.beginPath();
-                ctx.moveTo(16.5 * s, 16.5 * s);
-                ctx.lineTo(21 * s, 21 * s);
-                ctx.stroke();
             }
         }
 

@@ -6,7 +6,14 @@ QtObject {
     id: t
 
     property real vscale: 1.0
+    // The software scenegraph (offscreen tests) drops every ShaderEffect; set by the root.
+    property bool software: false
     function dp(v) { return Math.round(v * t.vscale) }
+
+    function reveal(flick, top, bottom, height) {
+        var target = top < flick.contentY ? top : bottom > flick.contentY + height ? bottom - height : flick.contentY;
+        flick.contentY = Math.max(0, Math.min(target, Math.max(0, flick.contentHeight - height)));
+    }
 
     readonly property color ground: "#0e0f13"
     readonly property color text: "#f2f3f5"
@@ -32,7 +39,6 @@ QtObject {
     readonly property real heroDetail: 620
 
     readonly property int durQuick: 160
-    readonly property int durDismiss: 200
     readonly property int durBase: 220
     readonly property int durNudge: 260
     readonly property int durView: 300

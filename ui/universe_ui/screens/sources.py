@@ -6,7 +6,7 @@ from PySide6.QtCore import Property, QObject, Signal, Slot
 from .settings import AsyncScreen
 
 
-def _source_row(game, updates):
+def _source_row(game, updates, art):
     pending = game.get("id") in updates
     if game.get("installed"):
         status = "Update available" if pending else "Installed"
@@ -16,7 +16,7 @@ def _source_row(game, updates):
         status = "Not owned"
     return {
         "id": str(game.get("id") or ""), "title": str(game.get("title") or ""),
-        "game_id": str(game.get("game_id") or ""), "image": str(game.get("image") or ""),
+        "game_id": str(game.get("game_id") or ""), "image": art(game.get("game_id")) or str(game.get("image") or ""),
         "installed": bool(game.get("installed")), "pending": pending, "status": status,
         "action": "Update" if pending else ("Play from library" if game.get("installed") else "Install"),
     }
@@ -35,11 +35,13 @@ class SourcesBrowser(AsyncScreen):
     queryChanged = Signal()
     message = Signal(str)
 
-    def __init__(self, client, parent=None):
+    def __init__(self, client, games, parent=None):
         super().__init__(client, parent)
+        self._games_model = games
         self._sources = []
         self._source = ""
         self._games = []
+        self._shown = []
         self._rows = []
         self._updates = []
         self._query = ""
@@ -47,6 +49,20 @@ class SourcesBrowser(AsyncScreen):
         self._loaded_at = 0.0
         client.progress.connect(self._on_progress)
         client.jobFinished.connect(self._on_job_finished)
+        client.mediaChanged.connect(lambda ident: self._show(self._shown))
+
+    # The library's own art when the game is in it, else the store's picture.
+    def _art(self, game_id):
+        game = self._games_model.byId(game_id) if game_id else None
+        if game is None:
+            return ""
+        return next((u.toString() for u in (game.assets.square, game.assets.boxFront) if not u.isEmpty()), "")
+
+    def _show(self, games):
+        pending = {u.get("id") for u in self._updates}
+        self._shown = games
+        self._rows = [_source_row(g, pending, self._art) for g in games]
+        self.rowsChanged.emit()
 
     @Slot()
     def load(self):
@@ -85,10 +101,7 @@ class SourcesBrowser(AsyncScreen):
         self._run(work, done)
 
     def _rebuild(self):
-        pending = {u.get("id") for u in self._updates}
-        games = sorted(self._games, key=lambda g: (not g.get("installed"), str(g.get("title", "")).casefold()))
-        self._rows = [_source_row(g, pending) for g in games]
-        self.rowsChanged.emit()
+        self._show(sorted(self._games, key=lambda g: (not g.get("installed"), str(g.get("title", "")).casefold())))
 
     @Slot(str)
     def search(self, query):
@@ -104,9 +117,7 @@ class SourcesBrowser(AsyncScreen):
                 self.message.emit(error)
             if self._query != query or error:
                 return
-            pending = {u.get("id") for u in self._updates}
-            self._rows = [_source_row(g, pending) for g in found or []]
-            self.rowsChanged.emit()
+            self._show(list(found or []))
 
         self._run(lambda: self._client.search(source, query), done)
 

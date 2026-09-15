@@ -21,23 +21,15 @@ FocusScope {
 
     readonly property var currentGame: railCount > 0 && rail.currentIndex >= 0
                                        ? railModel.get(rail.currentIndex) : null
-    // The shell paints the hero art behind this band, and stands its blurred stage down.
     readonly property bool ownsBackdrop: true
     readonly property real backdropBlur: 0
-    readonly property real chromeScrim: 0
     readonly property real scrimTop: 0
     readonly property real scrimMid: 0
     readonly property real scrimBottom: 0
-    readonly property Item focusedArtItem: rail.currentItem ? rail.currentItem.artItem : null
-    // Start acts on the card whether the rail or the hero actions hold focus; the Library tile is no game.
-    readonly property Item menuAnchor: tileSelected ? null : focusedArtItem
-    // Read by tools/shot: the tile and the Details button consume A themselves.
-    readonly property bool ownsAccept: tileSelected || (heroActions.activeFocus && heroActions.index === 1)
+    readonly property Item menuAnchor: tileSelected || !rail.currentItem ? null : rail.currentItem.artItem
     // Set by the shell; the rail keeps its ring lit while the menu holds focus.
     property bool menuOpen: false
 
-    // The Library tile sits past the last card. The rail's index stays where it
-    // was, so the hero art behind the Library hero is the last game's.
     property bool tileSelected: false
     readonly property int focusIndex: tileSelected ? railCount : rail.currentIndex
 
@@ -54,7 +46,6 @@ FocusScope {
         }
         if (heroActions.activeFocus)
             out.push({ glyph: "B", label: "Back to games" });
-        out.push({ glyph: "LB RB", label: "Tabs" });
         return out;
     }
 
@@ -66,25 +57,16 @@ FocusScope {
 
     readonly property real bandHeight: Theme.dp(Theme.heroBand)
     readonly property real railGapTop: Theme.dp(28)
-    // Cards are authored at 240 and scaled to 176 when idle, but the slot is the
-    // idle size — the focused card overhangs it and its neighbours step aside,
-    // which is what keeps every gap at 24 whatever has focus.
+    // Cards are authored at 240 and scaled to 176 when idle, but the slot is the idle size:
+    // the focused card overhangs it and its neighbours step aside, so every gap stays 24.
     readonly property real cellSize: Theme.dp(240)
     readonly property real slotSize: Theme.dp(176)
     readonly property real railGap: Theme.dp(24)
     readonly property real spread: (cellSize - slotSize) / 2
     readonly property real idleScale: 176 / 240
 
-    property int libraryCount: 0
-    property int librarySeconds: 0
-
-    function refreshLibraryStats() {
-        var seconds = 0;
-        for (var i = 0; i < api.allGames.count; i++)
-            seconds += api.allGames.get(i).playTime;
-        libraryCount = api.allGames.count;
-        librarySeconds = seconds;
-    }
+    readonly property int libraryCount: api.allGames.count
+    readonly property int librarySeconds: api.allGames.totalPlayTime
 
     function toggleFavourite() {
         if (!currentGame || tileSelected) {
@@ -95,11 +77,7 @@ FocusScope {
         Sound.favourite(currentGame.favorite);
     }
 
-    Component.onCompleted: refreshLibraryStats()
-
     onTileSelectedChanged: {
-        if (tileSelected)
-            refreshLibraryStats();
         heroActions.index = Math.min(heroActions.index, heroActions.last);
         rail.slideToCurrent();
     }
@@ -110,6 +88,12 @@ FocusScope {
         if (api.keys.isFilters(event)) {
             event.accepted = true;
             toggleFavourite();
+        } else if (page.tileSelected && api.keys.isAccept(event)) {
+            event.accepted = true;
+            page.tabRequested(1);
+        } else if (page.tileSelected && api.keys.isDetails(event)) {
+            event.accepted = true;
+            Sound.edge();
         }
     }
 
@@ -139,8 +123,7 @@ FocusScope {
         model: 5
 
         Image {
-            // By residue, so a slot keeps its logo across a step and never has a
-            // decode in flight handed to another slot.
+            // By residue, so a slot keeps its logo across a step.
             readonly property int base: rail.currentIndex - 2
             readonly property int at: base + (((index - base) % 5) + 5) % 5
             source: at >= 0 && at < page.railCount ? page.railModel.get(at).assets.logo : ""
@@ -214,7 +197,7 @@ FocusScope {
 
             Text {
                 anchors.verticalCenter: heroMeta.verticalCenter
-                text: page.libraryCount + (page.libraryCount === 1 ? " game · " : " games · ")
+                text: Format.plural(page.libraryCount, "game", "games") + " · "
                       + Format.totalPlayTime(page.librarySeconds) + " played"
                 color: Theme.textSecondary
                 font.family: Theme.sans
@@ -238,18 +221,11 @@ FocusScope {
                 readonly property int last: page.tileSelected ? 0 : 1
 
                 function step(d) {
-                    var next = Math.max(0, Math.min(last, index + d));
-                    if (next === index) {
-                        Sound.edge();
-                        return;
-                    }
-                    index = next;
-                    Sound.tick();
+                    index = Sound.stepped(index, d, last + 1);
                 }
 
                 Row {
                     id: buttons
-                    // Clears the focused pill's ring, which reaches 20 past its edge.
                     spacing: Theme.dp(36)
                     opacity: page.tileSelected ? 0.0 : 1.0
                     visible: opacity > 0.01
@@ -293,31 +269,15 @@ FocusScope {
                     rail.forceActiveFocus();
                 }
 
+                // Play falls through to the shell, which launches on release.
                 Keys.onPressed: function(event) {
-                    if (api.keys.isAccept(event)) {
-                        if (page.tileSelected) {
-                            event.accepted = true;
-                            if (!event.isAutoRepeat)
-                                page.tabRequested(1);
-                            return;
-                        }
-                        if (heroActions.index === 1) {
-                            event.accepted = true;
-                            page.detailRequested(page.currentGame);
-                            return;
-                        }
-                        // Play falls through to the shell, which launches on release.
-                    }
-                    if (api.keys.isDetails(event) && page.tileSelected) {
+                    if (api.keys.isAccept(event) && !page.tileSelected && heroActions.index === 1) {
                         event.accepted = true;
-                        Sound.edge();
-                        return;
-                    }
-                    if (api.keys.isCancel(event)) {
+                        page.detailRequested(page.currentGame);
+                    } else if (api.keys.isCancel(event)) {
                         event.accepted = true;
                         Sound.cancel();
                         rail.forceActiveFocus();
-                        return;
                     }
                 }
             }
@@ -349,10 +309,8 @@ FocusScope {
             anchors.topMargin: page.railGapTop + (page.standingIn ? standInNote.height + Theme.dp(14) : 0)
             anchors.left: parent.left
             anchors.right: parent.right
-            // The focused card overhangs its slot by `spread` at both ends. Absorbing
-            // the left overhang into the margin keeps contentX >= 0, which a
-            // ListView will honour; a header moves originX negative and the view
-            // then refuses to scroll the whole way to it.
+            // The left overhang goes into the margin so contentX stays >= 0: a header would move
+            // originX negative and the view then refuses to scroll the whole way to it.
             anchors.leftMargin: Theme.dp(90) + page.spread
             anchors.rightMargin: Theme.dp(90) - page.spread
             height: page.cellSize
@@ -364,16 +322,14 @@ FocusScope {
             interactive: false
             // interactive:false would otherwise take arrow-key navigation with it.
             keyNavigationEnabled: true
-            // The default overshoot fixup fights the contentX Behavior and settles
-            // short of originX, leaving the first card misaligned.
+            // The default overshoot fixup fights the contentX Behavior and settles short of originX.
             boundsBehavior: Flickable.StopAtBounds
             highlightFollowsCurrentItem: false
             cacheBuffer: page.cellSize * 3
 
             readonly property real pitch: page.slotSize + page.railGap
 
-            // The Library tile lives in the footer: it extends contentWidth without
-            // disturbing originX, and it is not a game the model has to carry.
+            // A footer extends contentWidth without disturbing originX.
             footer: Item {
                 width: page.railGap + page.slotSize + page.spread * 2
                 height: page.cellSize
@@ -437,24 +393,6 @@ FocusScope {
             }
             Keys.onDownPressed: Sound.edge()
 
-            // On the tile, A opens the library and X has nothing to show; neither
-            // may reach the shell, which would act on the last game.
-            Keys.onPressed: function(event) {
-                if (!page.tileSelected)
-                    return;
-                if (api.keys.isAccept(event)) {
-                    event.accepted = true;
-                    if (!event.isAutoRepeat)
-                        page.tabRequested(1);
-                    return;
-                }
-                if (api.keys.isDetails(event)) {
-                    event.accepted = true;
-                    Sound.edge();
-                    return;
-                }
-            }
-
             Behavior on contentX {
                 NumberAnimation { duration: Theme.durNudge; easing.type: Easing.OutQuint }
             }
@@ -495,8 +433,6 @@ FocusScope {
             }
         }
 
-        // The rail runs past the margin on both sides; without these it is
-        // guillotined at the screen edge.
         Rectangle {
             anchors.left: parent.left
             anchors.top: rail.top

@@ -1,7 +1,6 @@
 import QtQuick
 import "../core"
 
-// A line of feedback at the bottom, gone by itself.
 Item {
     id: toast
 

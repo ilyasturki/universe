@@ -15,27 +15,22 @@ FocusScope {
                                        ? sorted.get(grid.currentIndex) : null
     readonly property bool ownsBackdrop: false
     readonly property real backdropBlur: 18
-    readonly property real chromeScrim: 0
     readonly property real scrimTop: 0.58
     readonly property real scrimMid: 0.74
     readonly property real scrimBottom: 0.95
-    readonly property Item focusedArtItem: grid.focusedArtItem
     readonly property Item menuAnchor: grid.focusedArtItem
-    // Read by tools/shot: up here A opens a list instead of launching a game.
-    readonly property bool ownsAccept: chipBar.activeFocus
+    readonly property bool modal: picker.open
 
     readonly property var hints: picker.open
         ? picker.hints
         : chipBar.activeFocus
         ? [ { glyph: "A", label: "Change" },
             { glyph: "B", label: "Back to grid" },
-            { glyph: "LT RT", label: "Collection" },
-            { glyph: "LB RB", label: "Tabs" } ]
+            { glyph: "LT RT", label: "Collection" } ]
         : [ { glyph: "A", label: "Launch" },
             { glyph: "X", label: "Details" },
             { glyph: "Y", label: "Sort" },
-            { glyph: "LT RT", label: "Collection" },
-            { glyph: "LB RB", label: "Tabs" } ]
+            { glyph: "LT RT", label: "Collection" } ]
 
     function cycleCollection(step) {
         var n = api.collections.count + 1;
@@ -61,7 +56,6 @@ FocusScope {
         return sortNames.map(function(name) { return { label: name }; });
     }
 
-    // Called by the shell when the tab is left or a game launches.
     function leave() {
         picker.hide();
     }
@@ -105,7 +99,6 @@ FocusScope {
     Item {
         id: header
 
-        // The dropdown hangs over the grid, which is painted after this.
         z: 2
 
         anchors.top: parent.top
@@ -213,13 +206,10 @@ FocusScope {
                 if (api.keys.isAccept(event)) {
                     event.accepted = true;
                     chipBar.openPicker();
-                    return;
-                }
-                if (api.keys.isCancel(event)) {
+                } else if (api.keys.isCancel(event)) {
                     event.accepted = true;
                     Sound.cancel();
                     grid.forceActiveFocus();
-                    return;
                 }
             }
         }
@@ -249,29 +239,20 @@ FocusScope {
             if (api.keys.isFilters(event)) {
                 event.accepted = true;
                 page.cycleSort(1);
-                return;
-            }
-            // Pegasus turns every trigger axis sample into a fresh press, so a
-            // squeeze arrives as a burst of them and only its release is single.
-            if (api.keys.isPageUp(event) || api.keys.isPageDown(event)) {
+            } else if (api.keys.isPageUp(event) || api.keys.isPageDown(event)) {
+                // Pegasus turns every trigger axis sample into a fresh press; only the release is single.
                 event.accepted = true;
-                return;
             }
         }
 
         Keys.onReleased: function(event) {
             if (event.isAutoRepeat)
                 return;
-            if (api.keys.isPageUp(event)) {
-                event.accepted = true;
-                page.cycleCollection(-1);
+            var d = api.keys.isPageUp(event) ? -1 : api.keys.isPageDown(event) ? 1 : 0;
+            if (!d)
                 return;
-            }
-            if (api.keys.isPageDown(event)) {
-                event.accepted = true;
-                page.cycleCollection(1);
-                return;
-            }
+            event.accepted = true;
+            page.cycleCollection(d);
         }
     }
 

@@ -2,31 +2,23 @@ import QtQuick
 import Qt5Compat.GraphicalEffects
 import "../core"
 
-// The launch poster. The theme rises into it and holds it through launch();
-// gamescope's window then maps over it, black until the game draws into it.
 Item {
     id: frame
 
-    property url heroSource
-    property url boxSource
-    property url logoSource
-    property string title
+    property var game: null
+    readonly property url heroSource: game ? game.assets.background : ""
+    readonly property url boxSource: game ? game.assets.boxFront : ""
+    readonly property url logoSource: game ? game.assets.logo : ""
 
     property alias artScale: art.scale
-    readonly property int heroStatus: hero.status
 
     readonly property bool heroMissing: String(heroSource) === "" || hero.status === Image.Error
-    readonly property bool software: GraphicsInfo.api === GraphicsInfo.Software
-    // What the poster will show has decoded: the hero, or the box once the hero
-    // is known to be missing, or nothing but the title.
-    readonly property bool ready: hero.status === Image.Ready
-        || (heroMissing && (String(boxSource) === "" || box.status === Image.Ready || box.status === Image.Error))
 
     readonly property real boxWidth: Theme.dp(480)
     readonly property real boxHeight: Theme.dp(720)
     readonly property real logoWidth: Theme.dp(480)
     readonly property real logoHeight: Theme.dp(150)
-    property real captionBottom: Theme.dp(72)
+    readonly property real captionBottom: Theme.dp(72)
 
     Rectangle {
         anchors.fill: parent
@@ -45,8 +37,7 @@ Item {
 
             Image {
                 anchors.fill: parent
-                // Follows the hero's verdict rather than racing it: a hero that
-                // turns out missing would otherwise be tried, and warned about, twice.
+                // Follows the hero's verdict: a hero that turns out missing would otherwise be tried, and warned about, twice.
                 source: hero.status === Image.Ready ? frame.heroSource
                                                     : (frame.heroMissing ? frame.boxSource : "")
                 fillMode: Image.PreserveAspectCrop
@@ -58,7 +49,7 @@ Item {
 
         Loader {
             anchors.fill: parent
-            active: !frame.software
+            active: !Theme.software
 
             sourceComponent: Item {
                 ShaderEffectSource {
@@ -82,9 +73,8 @@ Item {
             color: Qt.rgba(0.055, 0.059, 0.075, 0.42)
         }
 
-        // Full width, letterboxed over the blur: SteamGridDB heroes are 3:1.
-        // The band's edges are feathered rather than cut, because a hard one
-        // crawls pixel by pixel under the scale the launch animates.
+        // SteamGridDB heroes are 3:1, letterboxed over the blur; the band's edges are feathered
+        // rather than cut, because a hard one crawls pixel by pixel under the scale the launch animates.
         Item {
             id: heroBand
 
@@ -94,7 +84,7 @@ Item {
             readonly property real bandHeight: hero.paintedHeight
             readonly property bool letterboxed: bandHeight > 0 && bandHeight < height - 1
 
-            layer.enabled: letterboxed && !frame.software
+            layer.enabled: letterboxed && !Theme.software
             layer.smooth: true
             layer.effect: OpacityMask { maskSource: heroMask }
 
@@ -129,18 +119,13 @@ Item {
             }
         }
 
-        Item {
-            id: boxArt
-
+        RoundedMask {
             x: (parent.width - frame.boxWidth) / 2
             y: (parent.height - frame.boxHeight) / 2
             width: frame.boxWidth
             height: frame.boxHeight
+            radius: Theme.dp(Theme.radiusCover)
             visible: frame.heroMissing && box.status === Image.Ready
-
-            layer.enabled: !frame.software
-            layer.smooth: true
-            layer.effect: OpacityMask { maskSource: boxMask }
 
             Image {
                 id: box
@@ -152,19 +137,6 @@ Item {
                 cache: true
                 mipmap: true
             }
-        }
-
-        Rectangle {
-            id: boxMask
-
-            x: boxArt.x
-            y: boxArt.y
-            width: boxArt.width
-            height: boxArt.height
-            radius: Theme.dp(Theme.radiusCover)
-            color: "white"
-            antialiasing: true
-            visible: false
         }
 
         Rectangle {
@@ -202,7 +174,7 @@ Item {
             anchors.bottomMargin: frame.captionBottom
             width: Theme.dp(1000)
             visible: String(frame.logoSource) === "" || logo.status === Image.Error
-            text: frame.title
+            text: frame.game ? frame.game.title : ""
             color: Theme.text
             font.family: Theme.sans
             font.weight: Font.Bold

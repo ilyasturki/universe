@@ -9,7 +9,7 @@ from .screens import Screens
 from .screens.paths import universe_home
 from .themes import ThemeSelector
 
-# Pegasus's default keyboard bindings, which tools/shot and the theme's hints assume.
+# Pegasus's default keyboard bindings, which the themes' hints assume.
 KEYS = {
     "Accept": (Qt.Key.Key_Return, Qt.Key.Key_Enter),
     "Cancel": (Qt.Key.Key_Escape,),
@@ -221,7 +221,7 @@ class Api(QObject):
         self._theme = ThemeSelector(self._memory, theme, self)
         self._library = Library(client, self)
         self._modes = {}
-        self._screens = Screens(client, self._memory, self.screenMode, self)
+        self._screens = Screens(client, self._memory, self.screenMode, self._library.allGames, self)
         controller = self._screens.controller
         controller.testingChanged.connect(lambda: self._pad.setMuted(controller.testing))
         self._window = None

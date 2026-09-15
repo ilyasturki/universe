@@ -2,35 +2,26 @@ import QtQuick
 import "../core"
 import "../sound"
 
-// The control a settings row opens, by its type: a list for an enum or for listed choices
-// (with a row to type another), a keypad for an integer, the folder picker for a path, the
-// keyboard for the rest. Fills the page; the list drops from the focused row of `cards`.
 FocusScope {
     id: editor
 
     property Item cards: null
-    // A page under the tabs' hint bar lets the sheets overhang it; one with its own keeps
-    // them inside and lowers the floor the list stays above.
+    // A page under the tabs' hint bar lets the sheets overhang it; one with its own hint bar keeps them inside.
     property real overhang: Theme.dp(Theme.hintBarHeight)
     property real floor: height
 
-    readonly property bool open: picker.open || sheet.open || paths.open
-    readonly property var hints: sheet.open ? sheet.hints : paths.open ? paths.hints : picker.open ? picker.hints : []
+    readonly property bool open: picker.open || (sheets.item !== null && sheets.item.open)
+    readonly property var hints: sheets.item !== null && sheets.item.open ? sheets.item.hints : picker.open ? picker.hints : []
 
-    // edit() answers with the row's index; prompt() with its tag.
-    signal accepted(int index, var value)
-    signal prompted(string tag, string value)
     signal closed()
 
-    property int pendingIndex: -1
-    property string pendingTag: ""
+    property var done: null
     property var pendingRow: null
 
     readonly property string customLabel: "Type a value…"
 
-    function edit(index, row) {
-        pendingIndex = index;
-        pendingTag = "";
+    function edit(row, after) {
+        done = after;
         pendingRow = row;
         var choices = row.choices || [];
         if (row.type === "enum" || ((row.type === "int" || row.type === "string") && choices.length > 0)) {
@@ -39,20 +30,22 @@ FocusScope {
                 opts.push({ label: customLabel });
             var current = choices.indexOf(String(row.value));
             picker.show(cards, opts, current >= 0 ? current : (row.type === "enum" ? 0 : opts.length - 1));
-            return;
+        } else if (row.type === "path") {
+            sheetsOf().paths.show(row.label, row.value, isFile(row));
+        } else {
+            sheetsOf().sheet.show(row.label, row.value, row.type === "int" ? "number" : "text");
         }
-        if (row.type === "path") {
-            paths.show(row.label, row.value, isFile(row));
-            return;
-        }
-        sheet.show(row.label, row.value, row.type === "int" ? "number" : "text");
     }
 
-    function prompt(tag, label, value) {
-        pendingIndex = -1;
-        pendingTag = tag;
+    function prompt(label, value, after) {
+        done = after;
         pendingRow = null;
-        sheet.show(label, value, "text");
+        sheetsOf().sheet.show(label, value, "text");
+    }
+
+    function sheetsOf() {
+        sheets.active = true;
+        return sheets.item;
     }
 
     // A key named as a file, or a value with an extension, picks files; the rest pick folders.
@@ -65,23 +58,24 @@ FocusScope {
     }
 
     function finish(value) {
-        if (pendingTag !== "")
-            prompted(pendingTag, value);
-        else if (pendingIndex >= 0)
-            accepted(pendingIndex, value);
+        var after = done;
+        done = null;
         closed();
+        if (after)
+            after(value);
     }
 
     function hide() {
         picker.hide();
-        paths.open = false;
-        sheet.open = false;
+        if (sheets.item) {
+            sheets.item.paths.open = false;
+            sheets.item.sheet.open = false;
+        }
     }
 
     ChipPicker {
         id: picker
 
-        // Drops from the focused row, its right edge on the row's value.
         x: editor.cards ? editor.cards.x + editor.cards.focusRect.x + editor.cards.focusRect.width - Theme.dp(16) - width : 0
         y: editor.cards ? Math.min(editor.floor - height - Theme.dp(20),
                                    editor.cards.y + editor.cards.focusRect.y + editor.cards.focusRect.height + Theme.dp(8)) : 0
@@ -96,7 +90,7 @@ FocusScope {
                 editor.finish(choices[index]);
             } else if (index === choices.length && row.type !== "enum") {
                 Sound.panel();
-                sheet.show(row.label, row.value, row.type === "int" ? "number" : "text");
+                editor.sheetsOf().sheet.show(row.label, row.value, row.type === "int" ? "number" : "text");
             } else {
                 editor.closed();
             }
@@ -107,29 +101,41 @@ FocusScope {
         }
     }
 
-    PathSheet {
-        id: paths
+    Loader {
+        id: sheets
 
         anchors.fill: parent
         anchors.bottomMargin: -editor.overhang
         z: 5
+        active: false
 
-        onAccepted: function(path) { editor.finish(path); }
-        onTypeRequested: function(path) {
-            var row = editor.pendingRow || ({});
-            sheet.show(row.label || "", path, "path");
+        sourceComponent: Item {
+            property alias paths: paths
+            property alias sheet: sheet
+            readonly property bool open: paths.open || sheet.open
+            readonly property var hints: sheet.open ? sheet.hints : paths.hints
+
+            PathSheet {
+                id: paths
+
+                anchors.fill: parent
+
+                onAccepted: function(path) { editor.finish(path); }
+                onTypeRequested: function(path) {
+                    var row = editor.pendingRow || ({});
+                    sheet.show(row.label || "", path, "path");
+                }
+                onDismissed: editor.closed()
+            }
+
+            KeyboardSheet {
+                id: sheet
+
+                anchors.fill: parent
+
+                onAccepted: function(value) { editor.finish(value); }
+                onDismissed: editor.closed()
+            }
         }
-        onDismissed: editor.closed()
-    }
-
-    KeyboardSheet {
-        id: sheet
-
-        anchors.fill: parent
-        anchors.bottomMargin: -editor.overhang
-        z: 5
-
-        onAccepted: function(value) { editor.finish(value); }
-        onDismissed: editor.closed()
     }
 }

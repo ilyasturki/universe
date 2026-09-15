@@ -1,5 +1,6 @@
 import QtQuick
 import "../core"
+import "../core/Format.js" as Format
 
 Item {
     id: root
@@ -42,22 +43,12 @@ Item {
             anchors.centerIn: parent
             spacing: Theme.dp(16)
 
-            Canvas {
+            MenuGlyph {
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: Theme.dp(56)
-                height: Theme.dp(56)
-                onPaint: {
-                    var ctx = getContext("2d");
-                    ctx.reset();
-                    var s = width / 24;
-                    ctx.fillStyle = Theme.text;
-                    var cells = [[2, 2], [13, 2], [2, 13], [13, 13]];
-                    for (var i = 0; i < cells.length; i++) {
-                        ctx.beginPath();
-                        ctx.roundedRect(cells[i][0] * s, cells[i][1] * s, 9 * s, 9 * s, 2.5 * s, 2.5 * s);
-                        ctx.fill();
-                    }
-                }
+                height: width
+                kind: "library"
+                tint: Theme.text
             }
 
             Text {
@@ -71,7 +62,7 @@ Item {
 
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: root.count + (root.count === 1 ? " game" : " games")
+                text: Format.plural(root.count, "game", "games")
                 color: Theme.textMuted
                 font.family: Theme.sans
                 font.pixelSize: Theme.dp(22)
