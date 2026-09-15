@@ -215,13 +215,6 @@ pub async fn activate_window(id: u64) -> Result<bool, String> {
     tokio::time::timeout(std::time::Duration::from_secs(5), proxy.call("Activate", &(id,))).await.map_err(|_| "gnome-shell did not answer".to_string())?.map_err(|e| e.to_string())
 }
 
-/// The cgroup path systemd reports for a unit, `None` while it is not loaded.
-pub async fn unit_cgroup(unit: &str) -> Option<String> {
-    let out = tokio::process::Command::new("systemctl").args(["--user", "show", "-p", "ControlGroup", "--value", unit]).output().await.ok()?;
-    let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-    (!s.is_empty()).then_some(s)
-}
-
 pub fn pid_in_cgroup(pid: i64, cgroup: &str) -> bool {
     let Ok(text) = std::fs::read_to_string(format!("/proc/{pid}/cgroup")) else { return false };
     cgroup_matches(&text, cgroup)

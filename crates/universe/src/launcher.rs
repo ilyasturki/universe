@@ -267,43 +267,6 @@ fn gamescope_args(config: &Config, r: &Resolved, screen: Option<crate::gamescope
     args
 }
 
-/// The `systemd-run` invocation: `ExitType=cgroup` ends the unit with the last game process; `bind_to` (the
-/// launcher's scope) takes the game down with the launcher, `BindsTo=` plus `After=` so the bond holds from the start.
-pub fn systemd_run_args(plan: &Plan, stop_post: &[String], passthrough: &BTreeMap<String, String>, timeout_stop_s: u64, bind_to: Option<&str>) -> Vec<String> {
-    let mut args: Vec<String> = vec!["--user".into(), "--collect".into(), "--quiet".into(), format!("--unit={}", plan.unit), "--property=ExitType=cgroup".into(), format!("--property=TimeoutStopSec={timeout_stop_s}"), format!("--property=ExecStopPost={}", unit_quote(stop_post))];
-    if let Some(scope) = bind_to {
-        args.push(format!("--property=BindsTo={scope}"));
-        args.push(format!("--property=After={scope}"));
-    }
-    if plan.cwd.is_dir() {
-        args.push(format!("--working-directory={}", plan.cwd.display()));
-    }
-    for (k, v) in passthrough.iter().chain(plan.env.iter()) {
-        args.push(format!("--setenv={k}={v}"));
-    }
-    args.push("--".into());
-    args.push(plan.program.clone());
-    args.extend(plan.args.iter().cloned());
-    args
-}
-
-/// A transient service, not a scope: env and cwd are passed explicitly, and systemd runs `stop_post`
-/// (`universe session-end …`) when the cgroup empties, whatever happened to the launcher.
-pub async fn spawn(plan: &Plan, stop_post: &[String], passthrough: &BTreeMap<String, String>, timeout_stop_s: u64, bind_to: Option<&str>) -> crate::Result<()> {
-    let mut cmd = tokio::process::Command::new("systemd-run");
-    cmd.args(systemd_run_args(plan, stop_post, passthrough, timeout_stop_s, bind_to)).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped());
-    let out = cmd.output().await.map_err(|e| crate::Error::Io(format!("systemd-run: {e}")))?;
-    if !out.status.success() {
-        return Err(crate::Error::Io(format!("systemd-run: {}", String::from_utf8_lossy(&out.stderr).trim())));
-    }
-    Ok(())
-}
-
-/// Unit-file quoting for an Exec= line: double quotes, backslash escapes.
-fn unit_quote(parts: &[String]) -> String {
-    parts.iter().map(|p| format!("\"{}\"", p.replace('\\', "\\\\").replace('"', "\\\""))).collect::<Vec<_>>().join(" ")
-}
-
 pub async fn run_shell(command: &str, env: &BTreeMap<String, String>, cwd: &Path) -> crate::Result<i32> {
     if command.trim().is_empty() {
         return Ok(0);
@@ -317,115 +280,11 @@ pub async fn run_shell(command: &str, env: &BTreeMap<String, String>, cwd: &Path
     Ok(st.code().unwrap_or(-1))
 }
 
-/// `deactivating` counts: `ExecStopPost` is still running the session's end.
-pub async fn is_active(unit: &str) -> bool {
-    let out = tokio::process::Command::new("systemctl").args(["--user", "is-active", unit]).output().await;
-    match out {
-        Ok(o) => matches!(String::from_utf8_lossy(&o.stdout).trim(), "active" | "activating" | "deactivating" | "reloading"),
-        Err(_) => false,
-    }
-}
-
-#[derive(Debug, Default, Clone)]
-pub struct UnitLog {
-    pub started: Option<chrono::DateTime<chrono::Local>>,
-    pub ended: Option<chrono::DateTime<chrono::Local>>,
-    pub exit: Option<i32>,
-}
-
-/// What the journal remembers of a unit: the start, the end and the main process's exit status.
-pub async fn unit_log(unit: &str) -> UnitLog {
-    let out = tokio::process::Command::new("journalctl").args(["--user", "-u", unit, "-o", "json", "--no-pager", "-q"]).output().await;
-    match out {
-        Ok(o) => parse_unit_log(&String::from_utf8_lossy(&o.stdout)),
-        Err(_) => UnitLog::default(),
-    }
-}
-
-pub fn parse_unit_log(json_lines: &str) -> UnitLog {
-    let mut log = UnitLog::default();
-    for line in json_lines.lines() {
-        let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else { continue };
-        let Some(msg) = v["MESSAGE"].as_str() else { continue };
-        let ts = v["__REALTIME_TIMESTAMP"].as_str().and_then(|s| s.parse::<i64>().ok()).and_then(chrono::DateTime::from_timestamp_micros).map(|t| t.with_timezone(&chrono::Local));
-        if msg.starts_with("Started ") && log.started.is_none() {
-            log.started = ts;
-        } else if msg.contains("Deactivated successfully") || msg.contains("Failed with result") || msg.starts_with("Stopped ") || msg.contains("Consumed ") {
-            log.ended = ts;
-        } else if let Some(rest) = msg.split("status=").nth(1) {
-            if msg.contains("Main process exited") {
-                log.exit = rest.split(|c: char| !c.is_ascii_digit()).next().and_then(|n| n.parse().ok());
-            }
-        }
-    }
-    log
-}
-
-// --no-block, then a second SIGTERM after ~3 s: Dolphin takes the first as a "quit?" prompt and
-// only exits on the second.
-pub async fn stop_unit(unit: &str) -> crate::Result<()> {
-    let out = tokio::process::Command::new("systemctl").args(["--user", "stop", "--no-block", unit]).output().await?;
-    let err = String::from_utf8_lossy(&out.stderr);
-    if !out.status.success() {
-        if err.contains("not loaded") || err.contains("could not be found") {
-            return Ok(());
-        }
-        return Err(crate::Error::Io(format!("systemctl stop {unit}: {}", err.trim())));
-    }
-    for _ in 0..10 {
-        tokio::time::sleep(Duration::from_millis(300)).await;
-        if !is_active(unit).await {
-            return Ok(());
-        }
-    }
-    let _ = tokio::process::Command::new("systemctl").args(["--user", "kill", "--signal=SIGTERM", "--kill-whom=main", unit]).output().await;
-    for _ in 0..20 {
-        tokio::time::sleep(Duration::from_millis(500)).await;
-        if !is_active(unit).await {
-            return Ok(());
-        }
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::game::Game;
     use crate::library::Effective;
-
-    #[test]
-    fn unit_log_from_journal_lines() {
-        let lines = concat!(
-            r#"{"MESSAGE":"Started [systemd-run] umu-run","__REALTIME_TIMESTAMP":"1789147978000000"}"#, "\n",
-            r#"{"MESSAGE":"universe-game-x.service: Main process exited, code=exited, status=3/NOTIMPLEMENTED","__REALTIME_TIMESTAMP":"1789147979000000"}"#, "\n",
-            r#"{"MESSAGE":"universe-game-x.service: Failed with result 'exit-code'.","__REALTIME_TIMESTAMP":"1789147980000000"}"#, "\n",
-            r#"{"MESSAGE":"universe-game-x.service: Consumed 17.224s CPU time over 54.416s wall clock time, 1.6G memory peak.","__REALTIME_TIMESTAMP":"1789147981000000"}"#, "\n",
-        );
-        let log = parse_unit_log(lines);
-        assert_eq!(log.exit, Some(3));
-        assert_eq!((log.ended.unwrap() - log.started.unwrap()).num_seconds(), 3);
-    }
-
-    #[test]
-    fn systemd_run_binds_to_the_launcher_scope_only_when_asked() {
-        let plan = Plan { unit: "universe-game-x-20260911-120000".into(), program: "umu-run".into(), args: vec!["/g/x.exe".into(), "-w".into()], cwd: "/nonexistent".into(), env: BTreeMap::from([("WINEPREFIX".to_string(), "/p".to_string())]), pre_command: String::new(), post_command: String::new(), gamescope: false, mangohud_conf: None };
-        let stop_post = vec!["/usr/bin/universe".to_string(), "session-end".into(), "x".into(), "20260911-120000".into()];
-        let passthrough = BTreeMap::from([("PATH".to_string(), "/bin".to_string())]);
-        let plain = systemd_run_args(&plan, &stop_post, &passthrough, 80, None);
-        assert_eq!(&plain[..3], &["--user", "--collect", "--quiet"]);
-        assert!(plain.contains(&"--unit=universe-game-x-20260911-120000".to_string()));
-        assert!(plain.contains(&"--property=ExitType=cgroup".to_string()));
-        assert!(plain.contains(&"--property=TimeoutStopSec=80".to_string()));
-        assert!(plain.contains(&"--property=ExecStopPost=\"/usr/bin/universe\" \"session-end\" \"x\" \"20260911-120000\"".to_string()));
-        assert!(!plain.iter().any(|a| a.starts_with("--property=BindsTo=") || a.starts_with("--property=After=") || a.starts_with("--working-directory=")));
-        assert!(plain.contains(&"--setenv=PATH=/bin".to_string()) && plain.contains(&"--setenv=WINEPREFIX=/p".to_string()));
-        assert_eq!(&plain[plain.len() - 4..], &["--", "umu-run", "/g/x.exe", "-w"]);
-        let bound = systemd_run_args(&plan, &stop_post, &passthrough, 80, Some("universe-launcher-4242.scope"));
-        assert!(bound.contains(&"--property=BindsTo=universe-launcher-4242.scope".to_string()));
-        assert!(bound.contains(&"--property=After=universe-launcher-4242.scope".to_string()));
-        assert_eq!(bound.len(), plain.len() + 2);
-    }
 
     fn game(dir: &Path, file: &str, runner: &str) -> Game {
         let exe = dir.join(file);

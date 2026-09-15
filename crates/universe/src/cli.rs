@@ -566,7 +566,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             use tokio::signal::unix::{signal, SignalKind};
             let (mut int, mut term) = (signal(SignalKind::interrupt())?, signal(SignalKind::terminate())?);
             let mut stopping = false;
-            while launcher::is_active(&unit).await {
+            while core.host.units.is_active(&unit).await {
                 let signalled = tokio::select! {
                     _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => false,
                     _ = int.recv() => true,

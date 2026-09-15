@@ -16,6 +16,8 @@ pub mod sessions;
 pub mod slug;
 pub mod splash;
 pub mod desktop;
+pub mod host;
+pub mod session;
 pub mod core;
 pub mod cli;
 pub mod doctor;

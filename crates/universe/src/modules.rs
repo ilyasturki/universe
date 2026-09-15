@@ -277,29 +277,24 @@ pub async fn run_blocking(module: &Module, hook: &str, env: &HookEnv) -> crate::
 
 /// Async hook (post-launch, post-process): a transient unit with the manifest limits; returns the unit name.
 /// `bind_to` (post-launch) ties the unit to the game's so it is stopped with it whatever happens to the caller.
-pub fn run_async(module: &Module, hook: &str, env: &HookEnv, session_id: &str, bind_to: Option<&str>) -> crate::Result<Option<String>> {
+pub async fn run_async(units: &crate::host::Units, module: &Module, hook: &str, env: &HookEnv, session_id: &str, bind_to: Option<&str>) -> crate::Result<Option<String>> {
     let Some(exe) = module.hook(hook) else { return Ok(None) };
     std::fs::create_dir_all(module.data_dir())?;
-    let unit = format!("universe-{}-{}-{}", module.id(), hook, session_id);
-    let mut cmd = std::process::Command::new("systemd-run");
-    cmd.arg("--user").arg("--collect").arg("--quiet").arg(format!("--unit={unit}"))
-        .arg(format!("--property=CPUWeight={}", module.manifest.limits.cpu_weight))
-        .arg(format!("--property=MemoryHigh={}", module.manifest.limits.memory_high))
-        .arg(format!("--working-directory={}", module.dir.display()));
-    if let Some(game_unit) = bind_to {
-        cmd.arg(format!("--property=BindsTo={game_unit}")).arg(format!("--property=After={game_unit}"));
-    }
-    for (k, v) in &env.vars {
-        cmd.arg(format!("--setenv={k}={v}"));
-    }
-    cmd.arg(format!("--setenv=MODULE_DIR={}", module.dir.display()));
-    cmd.arg(format!("--setenv=MODULE_DATA_DIR={}", module.data_dir().display()));
-    cmd.arg(&exe);
-    let status = cmd.stdin(Stdio::null()).status().map_err(|e| crate::Error::Io(format!("systemd-run: {e}")))?;
-    if !status.success() {
-        return Err(crate::Error::Io(format!("systemd-run failed for {unit}")));
-    }
-    Ok(Some(unit))
+    let mut unit_env: BTreeMap<String, String> = env.vars.iter().cloned().collect();
+    unit_env.insert("MODULE_DIR".into(), module.dir.to_string_lossy().into());
+    unit_env.insert("MODULE_DATA_DIR".into(), module.data_dir().to_string_lossy().into());
+    let spec = crate::host::UnitSpec {
+        name: format!("universe-{}-{}-{}", module.id(), hook, session_id),
+        program: exe.to_string_lossy().into(),
+        args: vec![],
+        env: unit_env,
+        cwd: Some(module.dir.clone()),
+        properties: vec![("CPUWeight".into(), module.manifest.limits.cpu_weight.to_string()), ("MemoryHigh".into(), module.manifest.limits.memory_high.clone())],
+        bind_to: bind_to.map(String::from),
+        stop_post: vec![],
+    };
+    units.start(&spec).await?;
+    Ok(Some(spec.name))
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

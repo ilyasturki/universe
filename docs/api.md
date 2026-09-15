@@ -18,16 +18,20 @@ a dash means the surface doesn't expose it.
 - A play session is a **transient systemd unit**, `universe-game-<id>-<session>.service`, with
   `ExitType=cgroup` — it lives as long as any process of the game lives. Its
   `ExecStopPost=universe session-end <id> <session>` runs when the cgroup empties, whatever became
-  of the launcher: it appends the `sessions.jsonl` line, restores the cursor extension, runs
-  `post_command`, the `session-end` hooks, then the `post-process` hooks.
+  of the launcher: it appends the `sessions.jsonl` line, undoes what the launch began in reverse
+  order (the cursor extension, InputPlumber, `post_command` for `pre_command`) as the marker lists
+  them, then runs the `session-end` hooks, then the `post-process` hooks.
 - **Who owns the game's lifetime** depends on the launcher. One that called `adopt_scope()` — the UI,
   and `universe play` without `--no-wait` — was moved into `universe-launcher-<pid>.scope`, and every
   game it launches carries `BindsTo=` + `After=` that scope: the game goes down with the launcher
   (a crash, a kill, Ctrl-C), `session-end` still runs. `universe play --no-wait`, hooks and anything
   else that never adopted a scope leave the game to systemd alone: it outlives them.
-- `state/current-session.json` (written `O_EXCL`) is the marker for the running session; the current
-  session is the marker whose unit is still active. On every open the core **reconciles**: a marker
-  with no live unit is closed from `journalctl` timestamps.
+- `state/current-session.json` (written `O_EXCL`) is the marker for the running session: the session
+  (`session_id`, `id`, `title`, `unit`, `screen`, `started_at`), the hook environment and the `undo`
+  list of the effects `launch` began. The current session is the marker whose unit is still active.
+  On every open the core **reconciles**: a marker with no live unit is closed from `journalctl`
+  timestamps, one it cannot read is dropped. A launch that fails after an effect began undoes the
+  same list.
 - Asynchronous hooks (`post-launch`, `post-process`) run as transient units. A `post-launch` hook
   that starts a process meant to last the whole session (the recorder) must put it in its own unit
   with `BindsTo=$SESSION_UNIT After=$SESSION_UNIT`, so it stops with the game even if nothing else

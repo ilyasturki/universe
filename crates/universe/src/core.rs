@@ -1,44 +1,18 @@
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use serde::{Deserialize, Serialize};
 use tokio::sync::{Mutex, RwLock};
 
 use crate::config::Config;
 use crate::game::Game;
-use crate::launcher;
+use crate::host::Host;
 use crate::library::{self, Resolved};
 use crate::modules::{self, HookEnv, Module, SourceEvent};
 use crate::paths;
-use crate::sessions::{self, Session};
 use crate::{Error, Result};
 
 /// Two lifetimes: a caller reborrows the same callback across several awaited calls.
 pub type Progress<'a, 'b> = &'a mut (dyn FnMut(u64, u64, &str) + 'b);
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct Current {
-    pub session_id: String,
-    pub id: String,
-    pub title: String,
-    pub unit: String,
-    pub screen: String,
-    pub started_at: String,
-}
-
-/// state/current-session.json: everything `session-end` needs to close the session from a process that never saw the launch.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct Marker {
-    #[serde(flatten)]
-    pub current: Current,
-    pub cursor_was_active: bool,
-    #[serde(default)]
-    pub inputplumber: bool,
-    pub post_command: String,
-    pub cwd: String,
-    pub env: BTreeMap<String, String>,
-    pub hook_env: Vec<(String, String)>,
-}
 
 fn trash(path: &Path) -> Result<()> {
     let st = std::process::Command::new("trash").arg(path).status();
@@ -46,35 +20,6 @@ fn trash(path: &Path) -> Result<()> {
         return Err(Error::Io(format!("trash {} failed", path.display())));
     }
     Ok(())
-}
-
-pub fn read_marker() -> Option<Marker> {
-    let s = std::fs::read_to_string(paths::current_session_file()).ok()?;
-    serde_json::from_str(&s).ok()
-}
-
-fn write_marker(m: &Marker) -> Result<()> {
-    let p = paths::current_session_file();
-    std::fs::create_dir_all(p.parent().unwrap())?;
-    let mut f = match std::fs::OpenOptions::new().write(true).create_new(true).open(&p) {
-        Ok(f) => f,
-        Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
-            let other = read_marker().map(|m| format!("{} ({})", m.current.title, m.current.session_id)).unwrap_or_else(|| "another launch".into());
-            return Err(Error::Busy(format!("{other} is running")));
-        }
-        Err(e) => return Err(e.into()),
-    };
-    use std::io::Write;
-    f.write_all(serde_json::to_string(m)?.as_bytes())?;
-    Ok(())
-}
-
-fn remove_marker() {
-    let _ = std::fs::remove_file(paths::current_session_file());
-}
-
-fn in_cgroup_of(unit: &str) -> bool {
-    std::fs::read_to_string("/proc/self/cgroup").map(|s| s.lines().any(|l| l.rsplit('/').next() == Some(unit))).unwrap_or(false)
 }
 
 pub fn title_of(path: &Path) -> String {
@@ -94,7 +39,7 @@ pub fn title_of(path: &Path) -> String {
 }
 
 /// What the hooks, `ExecStopPost` and the game need of the launcher's environment.
-fn passthrough_env() -> BTreeMap<String, String> {
+pub(crate) fn passthrough_env() -> BTreeMap<String, String> {
     let mut env = BTreeMap::new();
     for k in ["PATH", "HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS", "WAYLAND_DISPLAY", "DISPLAY", "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE", "GI_TYPELIB_PATH", "UNIVERSE_DATA_HOME", "UNIVERSE_CONFIG_HOME", "UNIVERSE_STATE_HOME", "UNIVERSE_MODULES_PATH", "RUST_LOG"] {
         if let Ok(v) = std::env::var(k) {
@@ -103,25 +48,6 @@ fn passthrough_env() -> BTreeMap<String, String> {
     }
     env.insert("UNIVERSE_BIN".into(), paths::self_exe().to_string_lossy().to_string());
     env
-}
-
-/// The macro engine for a launch the UI did not make: bound to the game's unit, it waits on the
-/// watcher lock, so it only reads the pads once no launcher does.
-fn spawn_controller_watch(session_id: &str, game_unit: &str) -> Result<()> {
-    let mut cmd = std::process::Command::new("systemd-run");
-    cmd.args(["--user", "--collect", "--quiet"])
-        .arg(format!("--unit=universe-controller-{session_id}"))
-        .arg(format!("--property=BindsTo={game_unit}"))
-        .arg(format!("--property=After={game_unit}"));
-    for (k, v) in passthrough_env() {
-        cmd.arg(format!("--setenv={k}={v}"));
-    }
-    cmd.arg(paths::self_exe()).args(["controller", "watch", "--wait"]);
-    let status = cmd.stdin(std::process::Stdio::null()).status().map_err(|e| Error::Io(format!("systemd-run: {e}")))?;
-    if !status.success() {
-        return Err(Error::Io("systemd-run failed for the controller watcher".into()));
-    }
-    Ok(())
 }
 
 fn load_source_caches(modules: &[Module]) -> BTreeMap<String, Vec<serde_json::Map<String, serde_json::Value>>> {
@@ -141,15 +67,16 @@ pub struct Core {
     pub source_libraries: Mutex<BTreeMap<String, Vec<serde_json::Map<String, serde_json::Value>>>>,
     pub source_logins: Mutex<BTreeMap<String, String>>,
     logins_probed: Mutex<bool>,
-    scope: std::sync::Mutex<Option<String>>,
+    pub(crate) scope: std::sync::Mutex<Option<String>>,
+    pub(crate) host: Host,
 }
 
 impl Core {
-    pub fn new(config: Config) -> Result<Core> {
+    fn new(config: Config, host: Host) -> Core {
         let modules = modules::discover(&config);
         let games = library::load_all(&config, &modules);
         let caches = load_source_caches(&modules);
-        Ok(Core {
+        Core {
             config: RwLock::new(config),
             modules: RwLock::new(modules),
             games: RwLock::new(games),
@@ -157,13 +84,20 @@ impl Core {
             source_logins: Mutex::new(BTreeMap::new()),
             logins_probed: Mutex::new(false),
             scope: std::sync::Mutex::new(None),
-        })
+            host,
+        }
     }
 
     pub async fn open() -> Result<Core> {
         let config = Config::load()?;
+        let host = Host::live(&config);
+        Core::open_with(config, host).await
+    }
+
+    /// The core over a given host: what the tests open on the in-memory one.
+    pub async fn open_with(config: Config, host: Host) -> Result<Core> {
         std::fs::create_dir_all(paths::games_dir())?;
-        let core = Core::new(config)?;
+        let core = Core::new(config, host);
         core.reconcile().await?;
         Ok(core)
     }
@@ -390,27 +324,7 @@ impl Core {
         Ok(serde_json::to_string(&report)?)
     }
 
-    /// A marker whose unit systemd still reports as active.
-    pub async fn current(&self) -> Option<Current> {
-        let m = read_marker()?;
-        launcher::is_active(&m.current.unit).await.then_some(m.current)
-    }
-
-    pub async fn current_json(&self) -> String {
-        self.current().await.map(|c| serde_json::to_string(&c).unwrap_or_default()).unwrap_or_default()
-    }
-
-    /// A marker without an active unit is a session whose `session-end` never ran (crash, reboot): close it now.
-    pub async fn reconcile(&self) -> Result<()> {
-        let Some(m) = read_marker() else { return Ok(()) };
-        if launcher::is_active(&m.current.unit).await {
-            return Ok(());
-        }
-        tracing::warn!("session {} of {} was left open; closing it", m.current.session_id, m.current.id);
-        self.session_end(&m.current.id, &m.current.session_id, None, None).await
-    }
-
-    fn hook_env_base(&self, r: &Resolved, cfg: &Config) -> HookEnv {
+    pub(crate) fn hook_env_base(&self, r: &Resolved, cfg: &Config) -> HookEnv {
         let mut env = HookEnv::default();
         env.set("GAME_ID", r.game.id.clone());
         env.set("GAME_SLUG", r.game.id.clone());
@@ -427,13 +341,13 @@ impl Core {
         env
     }
 
-    fn module_env(&self, m: &Module, r: &Resolved, cfg: &Config, base: &HookEnv) -> HookEnv {
+    pub(crate) fn module_env(&self, m: &Module, r: &Resolved, cfg: &Config, base: &HookEnv) -> HookEnv {
         let mut env = base.clone();
         env.set("MODULE_SETTINGS_JSON", serde_json::Value::Object(m.merged_settings(cfg, Some(&r.game))).to_string());
         env
     }
 
-    async fn hook_modules(&self, r: &Resolved, hook: &str) -> Vec<Module> {
+    pub(crate) async fn hook_modules(&self, r: &Resolved, hook: &str) -> Vec<Module> {
         let cfg = self.config.read().await.clone();
         self.modules
             .read()
@@ -449,259 +363,10 @@ impl Core {
         zbus::Connection::session().await.inspect_err(|e| tracing::warn!("session bus: {e}")).ok()
     }
 
-    /// Every game launched afterwards is bound to the scope, so it goes down with the launcher; idempotent.
-    pub async fn adopt_scope(&self) -> Result<String> {
-        if let Some(name) = self.scope.lock().unwrap().clone() {
-            return Ok(name);
-        }
-        let pid = std::process::id();
-        let name = format!("universe-launcher-{pid}.scope");
-        let conn = zbus::Connection::session().await.map_err(|e| Error::Unavailable(format!("session bus: {e}")))?;
-        let proxy = zbus::Proxy::new(&conn, "org.freedesktop.systemd1", "/org/freedesktop/systemd1", "org.freedesktop.systemd1.Manager").await.map_err(|e| Error::Unavailable(format!("systemd: {e}")))?;
-        let props: Vec<(&str, zbus::zvariant::Value)> = vec![("PIDs", vec![pid].into()), ("Description", "Universe launcher".into())];
-        let aux: Vec<(String, Vec<(String, zbus::zvariant::Value)>)> = vec![];
-        match proxy.call::<_, _, zbus::zvariant::OwnedObjectPath>("StartTransientUnit", &(name.as_str(), "fail", props, aux)).await {
-            Ok(_) => {}
-            // The scope survives from an earlier core of this process; it only counts if we are in it.
-            Err(e) if e.to_string().contains("UnitExists") && in_cgroup_of(&name) => {}
-            Err(e) => return Err(Error::Unavailable(format!("StartTransientUnit({name}): {e}"))),
-        }
-        // The reply only queues the start job; the move into the scope's cgroup lands when it runs.
-        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
-        while !in_cgroup_of(&name) {
-            if std::time::Instant::now() > deadline {
-                return Err(Error::Unavailable(format!("{name}: this process was not moved into it")));
-            }
-            tokio::time::sleep(std::time::Duration::from_millis(20)).await;
-        }
-        *self.scope.lock().unwrap() = Some(name.clone());
-        Ok(name)
-    }
-
-    /// Starts the game as a transient service and returns; systemd runs `universe session-end` when its cgroup empties.
-    /// `splash` is a poster the frontend grabbed for gamescope's keep-alive window (`splash.rs`'s format), `""` for none.
-    pub async fn launch(&self, id: &str, screen: &str, splash: &str) -> Result<String> {
-        self.reconcile().await?;
-        if let Some(c) = self.current().await {
-            return Err(Error::Busy(format!("{} is running ({})", c.title, c.session_id)));
-        }
-        let r = self.get(id).await?;
-        if !r.game.removed_at.is_empty() {
-            return Err(Error::Unavailable(format!("{id} was removed")));
-        }
-        let cfg = self.config.read().await.clone();
-        let started = chrono::Local::now();
-        let session_id = sessions::session_id(started);
-        let screen = crate::desktop::pick_screen(screen);
-        let unit = format!("{}.service", launcher::unit_name(id, &session_id));
-
-        let mut base = self.hook_env_base(&r, &cfg);
-        base.set("SESSION_ID", session_id.clone());
-        base.set("SESSION_UNIT", unit.clone());
-        base.set("SESSION_SCREEN", screen.clone());
-        base.set("SESSION_STARTED_AT", started.to_rfc3339());
-
-        let mut extra_env = BTreeMap::new();
-        let env_file = paths::state_home().join(format!("env-{session_id}"));
-        std::fs::create_dir_all(paths::state_home())?;
-        std::fs::write(&env_file, "")?;
-        for m in self.hook_modules(&r, "pre-launch").await {
-            let mut env = self.module_env(&m, &r, &cfg, &base);
-            env.set("UNIVERSE_ENV_FILE", env_file.to_string_lossy().to_string());
-            let out = modules::run_blocking(&m, "pre-launch", &env).await?;
-            if out.status != 0 {
-                let _ = std::fs::remove_file(&env_file);
-                return Err(Error::Io(format!("pre-launch {} refused the launch: {}", m.id(), out.stderr.trim())));
-            }
-        }
-        if let Ok(s) = std::fs::read_to_string(&env_file) {
-            for line in s.lines() {
-                if let Some((k, v)) = line.split_once('=') {
-                    if !k.trim().is_empty() {
-                        extra_env.insert(k.trim().to_string(), v.to_string());
-                    }
-                }
-            }
-        }
-        let _ = std::fs::remove_file(&env_file);
-
-        let mode = crate::desktop::screen_mode(&screen).await;
-        let splash = (!splash.is_empty()).then(|| std::path::PathBuf::from(splash));
-        let plan = launcher::plan(&r, &cfg, &session_id, &extra_env, mode, splash.as_deref())?;
-        if let Some((path, text)) = &plan.mangohud_conf {
-            std::fs::write(path, text)?;
-        }
-        launcher::run_shell(&plan.pre_command, &plan.env, &plan.cwd).await?;
-
-        let inputplumber = r.effective.inputplumber && tokio::task::spawn_blocking(crate::inputplumber::engage).await.unwrap_or(false);
-
-        let profile = crate::desktop::detect(&cfg);
-        let mut cursor_was_active = false;
-        if r.effective.hide_cursor {
-            if let Some(conn) = self.shell_conn().await {
-                cursor_was_active = crate::desktop::cursor_extension_enable(&conn, profile, &cfg.desktop.cursor_extension).await;
-            }
-        }
-        let marker = Marker {
-            current: Current { session_id: session_id.clone(), id: id.into(), title: r.game.title.clone(), unit: unit.clone(), screen: screen.clone(), started_at: started.to_rfc3339() },
-            cursor_was_active,
-            inputplumber,
-            post_command: plan.post_command.clone(),
-            cwd: plan.cwd.to_string_lossy().to_string(),
-            env: plan.env.clone(),
-            hook_env: base.vars.clone(),
-        };
-        if let Err(e) = write_marker(&marker) {
-            if inputplumber {
-                let _ = tokio::task::spawn_blocking(crate::inputplumber::release).await;
-            }
-            return Err(e);
-        }
-        tracing::info!("launch {id}: {}", plan.command_line());
-        let stop_post = vec![paths::self_exe().to_string_lossy().to_string(), "session-end".into(), id.into(), session_id.clone()];
-        let budget: u64 = 60 + self.hook_modules(&r, "session-end").await.iter().map(|m| m.timeout().as_secs()).sum::<u64>();
-        let scope = self.scope.lock().unwrap().clone();
-        if let Err(e) = launcher::spawn(&plan, &stop_post, &passthrough_env(), budget, scope.as_deref()).await {
-            remove_marker();
-            if inputplumber {
-                let _ = tokio::task::spawn_blocking(crate::inputplumber::release).await;
-            }
-            if r.effective.hide_cursor {
-                if let Some(conn) = self.shell_conn().await {
-                    crate::desktop::cursor_extension_restore(&conn, profile, &cfg.desktop.cursor_extension, cursor_was_active).await;
-                }
-            }
-            return Err(e);
-        }
-        for m in self.hook_modules(&r, "post-launch").await {
-            let env = self.module_env(&m, &r, &cfg, &base);
-            if let Err(e) = modules::run_async(&m, "post-launch", &env, &session_id, Some(&unit)) {
-                tracing::warn!("post-launch {}: {e}", m.id());
-            }
-        }
-        if cfg.controller.enabled {
-            if let Err(e) = spawn_controller_watch(&session_id, &unit) {
-                tracing::warn!("controller watch: {e}");
-            }
-        }
-        Ok(session_id)
-    }
-
-    /// Closes a session: run by systemd's `ExecStopPost`, or by `reconcile` for one that was left open. Idempotent.
-    pub async fn session_end(&self, id: &str, session_id: &str, exit: Option<i32>, ended: Option<chrono::DateTime<chrono::Local>>) -> Result<()> {
-        let marker = read_marker().filter(|m| m.current.session_id == session_id);
-        let r = match self.get(id).await {
-            Ok(r) => r,
-            Err(e) => {
-                if marker.is_some() {
-                    remove_marker();
-                }
-                return Err(e);
-            }
-        };
-        if sessions::read(&r.game.sessions_path()).unwrap_or_default().iter().any(|s| s.session == session_id) {
-            if marker.is_some() {
-                remove_marker();
-            }
-            return Ok(());
-        }
-        let cfg = self.config.read().await.clone();
-        let unit = marker.as_ref().map(|m| m.current.unit.clone()).unwrap_or_else(|| format!("{}.service", launcher::unit_name(id, session_id)));
-        let log = launcher::unit_log(&unit).await;
-        let started = marker
-            .as_ref()
-            .and_then(|m| chrono::DateTime::parse_from_rfc3339(&m.current.started_at).ok().map(|t| t.with_timezone(&chrono::Local)))
-            .or(log.started)
-            .or_else(|| sessions::parse_session_id(session_id))
-            .unwrap_or_else(chrono::Local::now);
-        let ended = ended.or(log.ended).unwrap_or_else(chrono::Local::now);
-        let exit = exit.or(log.exit).unwrap_or(-1);
-        let duration_s = (ended - started).num_seconds().max(0) as u64;
-        let screen = marker.as_ref().map(|m| m.current.screen.clone()).unwrap_or_default();
-        let session = Session {
-            session: session_id.into(),
-            game: id.into(),
-            started_at: started.to_rfc3339(),
-            ended_at: ended.to_rfc3339(),
-            duration_s,
-            source: "universe".into(),
-            unit: unit.clone(),
-            screen: screen.clone(),
-            exit,
-            recording: None,
-        };
-        sessions::append(&r.game.sessions_path(), &session)?;
-        remove_marker();
-
-        if let Some(m) = &marker {
-            if m.inputplumber {
-                let _ = tokio::task::spawn_blocking(crate::inputplumber::release).await;
-            }
-            if r.effective.hide_cursor {
-                if let Some(conn) = self.shell_conn().await {
-                    crate::desktop::cursor_extension_restore(&conn, crate::desktop::detect(&cfg), &cfg.desktop.cursor_extension, m.cursor_was_active).await;
-                }
-            }
-            let _ = launcher::run_shell(&m.post_command, &m.env, Path::new(&m.cwd)).await;
-        }
-        let mut env_end = match &marker {
-            Some(m) => HookEnv { vars: m.hook_env.clone() },
-            None => {
-                let mut e = self.hook_env_base(&r, &cfg);
-                e.set("SESSION_ID", session_id);
-                e.set("SESSION_UNIT", unit.clone());
-                e.set("SESSION_SCREEN", screen);
-                e.set("SESSION_STARTED_AT", started.to_rfc3339());
-                e
-            }
-        };
-        env_end.set("SESSION_ENDED_AT", ended.to_rfc3339());
-        env_end.set("SESSION_DURATION_S", duration_s.to_string());
-        for m in self.hook_modules(&r, "session-end").await {
-            let env = self.module_env(&m, &r, &cfg, &env_end);
-            if let Err(e) = modules::run_blocking(&m, "session-end", &env).await {
-                tracing::warn!("session-end {}: {e}", m.id());
-            }
-        }
-        self.reload_game(id).await?;
-        self.post_process(id, session_id).await;
-        Ok(())
-    }
-
-    /// post-process hooks, once the session-end hooks have filed the recording (or not).
-    async fn post_process(&self, id: &str, session_id: &str) {
-        let Ok(r) = self.get(id).await else { return };
-        let cfg = self.config.read().await.clone();
-        let sess = r.sessions.iter().find(|s| s.session == session_id).cloned();
-        let mut env = self.hook_env_base(&r, &cfg);
-        env.set("SESSION_ID", session_id);
-        env.set("RECORDING_PATH", sess.as_ref().and_then(|s| s.recording.clone()).unwrap_or_default());
-        if let Some(s) = sess {
-            env.set("SESSION_STARTED_AT", s.started_at);
-            env.set("SESSION_ENDED_AT", s.ended_at);
-            env.set("SESSION_DURATION_S", s.duration_s.to_string());
-            env.set("SESSION_SCREEN", s.screen);
-        }
-        for m in self.hook_modules(&r, "post-process").await {
-            let menv = self.module_env(&m, &r, &cfg, &env);
-            if let Err(e) = modules::run_async(&m, "post-process", &menv, session_id, None) {
-                tracing::warn!("post-process {}: {e}", m.id());
-            }
-        }
-    }
-
-    pub async fn stop(&self, session_id: &str) -> Result<()> {
-        let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
-        if !session_id.is_empty() && c.session_id != session_id {
-            return Err(Error::NotFound(session_id.into()));
-        }
-        launcher::stop_unit(&c.unit).await
-    }
-
     /// The running game's window, as the shell sees it: `None` before it maps; `Unavailable` off GNOME.
     pub async fn session_window(&self) -> Result<Option<crate::desktop::Toplevel>> {
         let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
-        let Some(cg) = crate::desktop::unit_cgroup(&c.unit).await else { return Ok(None) };
+        let Some(cg) = self.host.units.cgroup(&c.unit).await else { return Ok(None) };
         let windows = crate::desktop::list_windows().await.map_err(Error::Unavailable)?;
         Ok(crate::desktop::pick_window(&windows, &cg))
     }
@@ -786,7 +451,7 @@ impl Core {
     }
 
     async fn game_of_session(&self, session_id: &str) -> Option<String> {
-        if let Some(id) = read_marker().filter(|m| m.current.session_id == session_id).map(|m| m.current.id) {
+        if let Some(id) = crate::session::read_marker().filter(|m| m.current.session_id == session_id).map(|m| m.current.id) {
             return Some(id);
         }
         let games = self.games.read().await;
@@ -1383,19 +1048,6 @@ impl Core {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    // Needs a user systemd and a session bus: `cargo test -- --ignored adopt_scope`.
-    #[tokio::test]
-    #[ignore]
-    async fn adopt_scope_moves_the_process_and_is_idempotent() {
-        let core = Core::new(Config::default()).unwrap();
-        let name = core.adopt_scope().await.unwrap();
-        assert_eq!(name, format!("universe-launcher-{}.scope", std::process::id()));
-        assert_eq!(core.adopt_scope().await.unwrap(), name);
-        assert!(in_cgroup_of(&name), "{}", std::fs::read_to_string("/proc/self/cgroup").unwrap());
-        let out = std::process::Command::new("systemctl").args(["--user", "is-active", &name]).output().unwrap();
-        assert_eq!(String::from_utf8_lossy(&out.stdout).trim(), "active");
-    }
 
     #[test]
     fn titles_from_files() {
