@@ -1984,7 +1984,7 @@ checksum = "b4ac048d71ede7ee76d585517add45da530660ef4390e49b098733c6e897f254"
 
 [[package]]
 name = "universe"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "anyhow",
  "chrono",
@@ -2016,7 +2016,7 @@ dependencies = [
 
 [[package]]
 name = "universe-py"
-version = "0.0.1"
+version = "0.0.2"
 dependencies = [
  "pyo3",
  "pythonize",
