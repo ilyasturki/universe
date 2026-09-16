@@ -553,6 +553,10 @@ impl Watcher {
                     let _ = p.cmd.try_send(PadCmd::Rumble);
                 }
             }
+            "run" => {
+                let action = super::Macro { action: v["action"].as_str().unwrap_or("").into(), keys: v["keys"].as_str().unwrap_or("").into(), command: v["command"].as_str().unwrap_or("").into(), ..Default::default() };
+                self.fire(Fire { device: String::new(), slot: String::new(), trigger: "run", action });
+            }
             "quit" => return false,
             other => return self.out.emit(serde_json::json!({"event": "error", "message": format!("unknown command {other}")})),
         }

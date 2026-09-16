@@ -118,15 +118,20 @@ pub fn mangohud_toggle(config: &ControllerConfig) -> String {
     if !config.mangohud_toggle.trim().is_empty() {
         return config.mangohud_toggle.trim().to_string();
     }
-    let conf = crate::paths::xdg("XDG_CONFIG_HOME", ".config").join("MangoHud/MangoHud.conf");
-    std::fs::read_to_string(conf).ok().and_then(|s| toggle_hud_of(&s)).unwrap_or_else(|| "Shift_R+F12".into())
+    mangohud_combo("toggle_hud", "Shift_R+F12")
 }
 
-pub fn toggle_hud_of(conf: &str) -> Option<String> {
+/// `default` is MangoHud's own binding for `key`.
+pub fn mangohud_combo(key: &str, default: &str) -> String {
+    let conf = crate::paths::xdg("XDG_CONFIG_HOME", ".config").join("MangoHud/MangoHud.conf");
+    std::fs::read_to_string(conf).ok().and_then(|s| combo_of(&s, key)).unwrap_or_else(|| default.into())
+}
+
+pub fn combo_of(conf: &str, key: &str) -> Option<String> {
     conf.lines()
         .map(str::trim)
         .filter(|l| !l.starts_with('#'))
-        .find_map(|l| l.split_once('=').filter(|(k, _)| k.trim() == "toggle_hud").map(|(_, v)| v.split('#').next().unwrap_or("").trim().to_string()))
+        .find_map(|l| l.split_once('=').filter(|(k, _)| k.trim() == key).map(|(_, v)| v.split('#').next().unwrap_or("").trim().to_string()))
         .filter(|v| !v.is_empty())
 }
 
@@ -161,7 +166,8 @@ mod tests {
 
     #[test]
     fn mangohud_conf_toggle() {
-        assert_eq!(toggle_hud_of("legacy_layout=false\n# toggle_hud=F1\ntoggle_hud=Super_L+F12 # the one\n"), Some("Super_L+F12".into()));
-        assert_eq!(toggle_hud_of("toggle_hud_position=Super_L+F11\n"), None);
+        assert_eq!(combo_of("legacy_layout=false\n# toggle_hud=F1\ntoggle_hud=Super_L+F12 # the one\n", "toggle_hud"), Some("Super_L+F12".into()));
+        assert_eq!(combo_of("toggle_hud_position=Super_L+F11\n", "toggle_hud"), None);
+        assert_eq!(combo_of("reload_cfg=Shift_L+F4\n", "reload_cfg"), Some("Shift_L+F4".into()));
     }
 }

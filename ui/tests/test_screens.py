@@ -102,7 +102,7 @@ def test_launch_form(api, fake):
     expected = [(section, ["launch." + k["key"] for k in keys if k["section"] == section]) for section in ("Gamescope", "Overlay and cursor", "Proton")]
     expected[1][1].append("desktop.hide_cursor")
     assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups] == expected
-    assert expected[0][1][:2] == ["launch.gamescope", "launch.gamescope_resolution"] and expected[1][1] == ["launch.mangohud", "launch.fps_limit", "desktop.hide_cursor"]
+    assert expected[0][1][:2] == ["launch.gamescope", "launch.gamescope_resolution"] and expected[1][1] == ["launch.mangohud", "launch.fps_limit", "launch.pause_on_home", "desktop.hide_cursor"]
     assert expected[2][1][:2] == ["launch.proton", "launch.esync"] and len(expected[2][1]) == 10
     assert form.groups[0]["meta"] == form.screen
     rows = rows_by_key(form)

@@ -89,7 +89,7 @@ def test_game_settings_launch_group_by_runner(api, fake):
     form = api.screens.gameSettings
     form.load("mini-metro")
     assert launch_keys(form) == ["launch.runner", "launch.exe", "launch.runner_exe", "launch.options.fullscreen", "launch.options.inputplumber",
-                                 "launch.mangohud", "launch.fps_limit", "launch.wrapper", "launch.args", "launch.working_dir"]
+                                 "launch.mangohud", "launch.fps_limit", "launch.pause_on_home", "launch.wrapper", "launch.args", "launch.working_dir"]
     rows = rows_by_key(form)
     assert rows["launch.runner"]["value"] == "Eden" and rows["launch.runner"]["icon"] == "assets/runners/eden.svg"
     assert rows["launch.runner"]["choices"][:4] == ["Proton", "Wine", "Linux", "Dolphin"]
@@ -108,7 +108,7 @@ def test_game_settings_launch_group_by_runner(api, fake):
     form.load("the-technomancer")
     assert launch_keys(form) == ["launch.runner", "launch.exe", "launch.proton", "launch.esync", "launch.fsync", "launch.ntsync", "launch.wayland", "launch.hdr",
                                  "launch.dlss_upgrade", "launch.fsr4_upgrade", "launch.xess_upgrade", "launch.optiscaler", "launch.prefix",
-                                 "launch.mangohud", "launch.fps_limit", "launch.wrapper", "launch.args", "launch.working_dir"]
+                                 "launch.mangohud", "launch.fps_limit", "launch.pause_on_home", "launch.wrapper", "launch.args", "launch.working_dir"]
     rows = rows_by_key(form)
     assert rows["launch.runner"]["value"] == "Proton" and rows["launch.exe"]["label"] == "Program"
     assert rows["launch.wayland"]["value"] is True and rows["launch.wayland"]["inherited"] is True

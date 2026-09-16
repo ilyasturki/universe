@@ -7,6 +7,8 @@ pub enum Change {
     Up,
     Down,
     ToggleMute,
+    Set(u8),
+    Get,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -30,6 +32,8 @@ pub fn apply(change: Change, percent: u8) -> Result<Level, String> {
         Change::Up => wpctl(&["set-volume", "-l", "1.0", SINK, &format!("{percent}%+")])?,
         Change::Down => wpctl(&["set-volume", SINK, &format!("{percent}%-")])?,
         Change::ToggleMute => wpctl(&["set-mute", SINK, "toggle"])?,
+        Change::Set(p) => wpctl(&["set-volume", "-l", "1.0", SINK, &format!("{}%", p.min(100))])?,
+        Change::Get => String::new(),
     };
     let volume = wpctl(&["get-volume", SINK])?;
     let level: f64 = volume.split_whitespace().nth(1).and_then(|v| v.parse().ok()).ok_or_else(|| format!("wpctl get-volume: {volume:?}"))?;

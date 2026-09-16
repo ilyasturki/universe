@@ -44,6 +44,7 @@ pub struct Effective {
     pub xess_upgrade: bool,
     pub optiscaler: bool,
     pub mangohud: bool,
+    pub pause_on_home: bool,
     pub gamescope: bool,
     pub gamescope_args: String,
     #[serde(flatten)]
@@ -156,7 +157,7 @@ pub fn is_image(p: &Path) -> bool {
     p.extension().and_then(|s| s.to_str()).is_some_and(|e| IMAGE_EXTS.contains(&e.to_ascii_lowercase().as_str()))
 }
 
-fn gamescope_fields_of(game: &Game, config: &Config) -> crate::gamescope::Fields {
+pub(crate) fn gamescope_fields_of(game: &Game, config: &Config) -> crate::gamescope::Fields {
     let l = &game.launch;
     let d = &config.launch;
     let pick = |own: &str, global: &str| if own.is_empty() { global.to_string() } else { own.to_string() };
@@ -217,6 +218,7 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
         xess_upgrade: game.launch.xess_upgrade.unwrap_or(config.launch.xess_upgrade),
         optiscaler: game.launch.optiscaler.unwrap_or(config.launch.optiscaler),
         mangohud: game.launch.mangohud.unwrap_or(config.launch.mangohud),
+        pause_on_home: game.launch.pause_on_home.unwrap_or(config.launch.pause_on_home),
         gamescope,
         gamescope_args: game.launch.gamescope_args.clone(),
         gamescope_fields: gamescope_fields_of(&game, config),

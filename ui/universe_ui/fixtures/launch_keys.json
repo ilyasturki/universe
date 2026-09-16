@@ -183,6 +183,17 @@
     "description": "MangoHud holds the game to this many frames per second, overlay or not; auto is the refresh rate the game sees."
   },
   {
+    "key": "pause_on_home",
+    "type": "bool",
+    "default": false,
+    "choices": [],
+    "label": "Pause on HOME",
+    "section": "Overlay and cursor",
+    "scope": "both",
+    "runners": [],
+    "description": "Freeze the game while the home menu is up; it runs again when the menu closes."
+  },
+  {
     "key": "wrapper",
     "type": "string",
     "default": "",
@@ -224,7 +235,7 @@
     "section": "Gamescope",
     "scope": "both",
     "runners": [],
-    "description": "Run the game inside gamescope: one fullscreen window, black until the game draws."
+    "description": "Run the game inside a gamescope of its own; a launcher already inside gamescope puts it on that one instead."
   },
   {
     "key": "gamescope_resolution",

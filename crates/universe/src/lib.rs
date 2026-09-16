@@ -15,6 +15,7 @@ pub mod library;
 pub mod lutris;
 pub mod media;
 pub mod modules;
+pub mod nest;
 pub mod paths;
 pub mod recording;
 pub mod runners;

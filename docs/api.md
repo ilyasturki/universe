@@ -109,10 +109,15 @@ hooks write shows up that way, with no other channel.
 | `stop(session_id)` | `stop(session_id)` | `universe stop` | `systemctl --user stop` on the unit; waits for it, a second SIGTERM after ~3 s |
 | `session_window()` | `session_window()` | `universe session-window [--json]` | the running game's window as the Universe shell extension lists it (`{id, pid, wm_class, title, focused, width, height, hidden, minimized}`): the largest visible toplevel whose pid is in the unit's cgroup — gamescope's when the game runs inside it. `None` before it maps; `Unavailable` off GNOME |
 | `wait_session_window(session_id, timeout)` | `wait_session_window(session_id, timeout_ms)` | `universe session-window --wait <secs> [--json]` | blocks until that window is up, then `Activate`s it (focus and raise) and returns it; `None` when the session ended first or the timeout ran out (the CLI prints `null`, exit 0); `Unavailable` off GNOME, at once. Polls the extension every 150 ms |
-| `focus_session()` / `focus_pid(pid)` | `focus_session()` / `focus_pid(pid)` | — | `Activate` on the game's window / on the largest window of a process (a frontend's own, once the game is gone) |
+| `focus_session()` / `focus_pid(pid)` | `focus_session()` / `focus_pid(pid)` | — | `Activate` on the game's window / on the largest window of a process (a frontend's own, once the game is gone). On the launcher's gamescope (see Gamescope) `focus_session` shows the game again and `focus_pid(own pid)` takes the screen back from it |
+| `freeze(on)` | `freeze(on)` | — | `systemctl --user freeze` / `thaw` on the running game's unit: every process of it stops in place. A stop job thaws on its own, so `stop` works on a frozen game |
+| `volume(change, value)` | `volume(change, value=0)` | — | the default sink through `wpctl`: `up` / `down` by `controller.volume_step`, `mute` toggles, `set` to `value` percent, `get`; returns `{percent, muted, output}` |
+| `set_fps_limit()` | `set_fps_limit()` | — | rewrites the running game's `<state>/MangoHud.conf` from its `fps_limit` as launch resolves it and returns MangoHud's `reload_cfg` combo (`~/.config/MangoHud/MangoHud.conf`, else `Shift_L+F4`): typed into the game (the watcher's `run` command), the layer rereads the file |
+| `nest()` / `nest_game_shown()` / `nest_overlay(window, input, opacity)` / `nest_frame()` / `nest_filter(filter, sharpness)` | `nested()` / `nest_game_shown()` / … | — | the gamescope this process runs in (see Gamescope): whether there is one; whether it shows a window of another process; `STEAM_OVERLAY` on a window of this process, with its `STEAM_INPUT_FOCUS` and `_NET_WM_WINDOW_OPACITY`; the game's last painted frame into `<state>/frame.png` (`None` when no paint came within 400 ms); `GAMESCOPE_SCALING_FILTER` and `GAMESCOPE_FSR_SHARPNESS`. `Unavailable` on the desktop |
+| `host_gamescope(screen)` | `host_gamescope(screen)` | — | the gamescope a launcher starts itself in: `[program, args…]` from `launch.gamescope_bin`, the global `gamescope_*` fields at the screen's mode, `launch.gamescope_args`, `--mangoapp` when `launch.mangohud` is on and `--hdr-enabled` when `launch.hdr` is; `None` when the binary is not installed |
 | `adopt_scope()` | `adopt_scope()` | — (`universe play` does it unless `--no-wait`) | moves the calling process into the transient scope `universe-launcher-<pid>.scope` (`StartTransientUnit` on the user manager) and returns its name; every later `launch` binds the game to it. Idempotent. `Unavailable` without a user systemd |
 | `screenshot()` | `screenshot()` | `universe screenshot` | runs the `screenshot` hook of whichever module declares one; returns the PNG path |
-| `current()` | `current()` | `universe status` | `{session_id, id, title, unit, screen, started_at}`, or `None`. The CLI wraps it: `status --json` prints `{"current": … or null, "recent": [the 10 newest session rows across the library], "pending_journals": [see Journal]}` |
+| `current()` | `current()` | `universe status` | `{session_id, id, title, unit, screen, started_at, gamescope_pid, launcher_pid}` (`gamescope_pid` is the launcher's gamescope the game was started into and `launcher_pid` that launcher, both `0` for a gamescope of the game's own), or `None`. The CLI wraps it: `status --json` prints `{"current": … or null, "recent": [the 10 newest session rows across the library], "pending_journals": [see Journal]}` |
 | `sessions(id)` | `sessions(id)` | `universe sessions <name>` | `[SessionRow]`, newest first (by `ended_at`); `id = ""` spans every visible game (not removed, not hidden) |
 | `session_end(id, session_id, exit, ended)` | — | `universe session-end <id> <session>` | closes the session, idempotent. Run by systemd's `ExecStopPost`, or by reconciliation |
 
@@ -143,7 +148,26 @@ when it was killed by a signal (a `stop`).
 
 ### Gamescope
 
-Every runner's command runs inside gamescope by default: `gamescope -f --force-composition
+A launcher that runs **inside** gamescope is the one window: `universe-ui` fullscreen starts
+`gamescope` around itself (`host_gamescope`: `-f --force-composition -W -H -w -h -r` from the screen's
+mode and the global `gamescope_*` fields, `launch.gamescope_args`, `--mangoapp` when MangoHud is on)
+and re-executes itself as its child, and every game it launches lands on that gamescope: the plan is
+the plain command — no gamescope of the game's own, no `splash`, no `setpriv` — with the launcher's
+`DISPLAY`, `GAMESCOPE_WAYLAND_DISPLAY`, `STEAM_GAME_DISPLAY_0`, `SDL_VIDEODRIVER` and
+`SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS` passed to the unit, MangoHud's layer silent (`no_display`, the
+limit still applies) since mangoapp draws the HUD, `PROTON_ENABLE_WAYLAND` dropped. The marker keeps
+`gamescope_pid` and `launcher_pid` — whose windows are the one set that is not the game's, whichever
+process asks — so `session_window` from a hook's process returns the gamescope's toplevel (what
+shows the game) and `wait_session_window` waits until gamescope shows the game's window inside.
+
+The game keeps rendering behind the launcher; `freeze` stops it. The per-game `gamescope_resolution`, `gamescope_refresh`,
+`gamescope_scaler` and `gamescope_adaptive_sync` fields cannot reach a gamescope that is already
+running: only the global ones apply there, and `gamescope_filter` / `gamescope_sharpness` go through
+`nest_filter` at runtime. `pause_on_home` (global or per game, off by default) is the frontend's cue
+to `freeze` the game while its home menu is up.
+
+A game launched from **outside** gamescope (`universe play` from a terminal) gets a gamescope of its
+own, as follows. Every runner's command runs inside gamescope by default: `gamescope -f --force-composition
 -W <screen width> -H <screen height> -w <game width> -h <game height> -r <refresh> [-S scaler] [-F filter]
 [--sharpness N] [--adaptive-sync] [launch.gamescope_args] [the game's
 gamescope_args] [--mangoapp] -- universe splash [--image <poster>] -- <program> <args…>`. One
@@ -455,7 +479,9 @@ line: out — `{"event":"ready"}`, `{"event":"device","id":"event30","name","fam
 {message}`, and while `axes` is on, `axis {id, axis, value}` (`lx ly rx ry` as -1..1, `lt rt` as
 0..1, a hundredth's resolution, on change); in — `{"cmd":"suspend"}` (report, do not fire),
 `resume`, `axes {on}` (stream the sticks and triggers: the page's test mode), `reload` (config
-changed), `learn {id, slot}`, `cancel`, `rumble {id}`, `quit`. Stdin's end stops a `--json` watcher. A
+changed), `learn {id, slot}`, `cancel`, `rumble {id}`, `run {action, keys, command}` (fire an action as a
+macro would — `mangohud`, `keys` with a combo, `screenshot`…: the launcher's home menu types
+through the watcher, the process that owns the key typist), `quit`. Stdin's end stops a `--json` watcher. A
 watcher also reloads by itself when `config.toml`'s mtime moves (checked on the 2 s scan), so a
 bind from a terminal or from a launcher whose own watcher is waiting reaches the one holding the
 pads. Either reload rereads config.toml and the module list only, never the library, so pad
@@ -497,6 +523,7 @@ gamescope_filter = ""                # linear | nearest | fsr | nis | pixel (-F)
 # gamescope_sharpness = 2            # 0 (sharpest) to 20, for fsr and nis (--sharpness)
 gamescope_adaptive_sync = false      # --adaptive-sync: variable refresh when the screen has it
 fps_limit = "auto"                   # MangoHud's limiter in the game: auto (the refresh the game sees), none, or frames per second
+pause_on_home = false                # freeze the game while the launcher's home menu is up (the launcher's HOME button)
 
 [desktop]
 profile = "auto"                     # auto | gnome | none

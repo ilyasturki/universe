@@ -20,6 +20,11 @@ pub struct Current {
     pub unit: String,
     pub screen: String,
     pub started_at: String,
+    /// Both 0 when the game got a gamescope of its own.
+    #[serde(default)]
+    pub gamescope_pid: u32,
+    #[serde(default)]
+    pub launcher_pid: u32,
 }
 
 /// state/current-session.json: everything `session-end` needs to close the session from a process that never saw the launch.
@@ -140,12 +145,14 @@ impl Core {
 
         let mode = crate::desktop::screen_mode(&screen).await;
         let splash = (!splash.is_empty()).then(|| std::path::PathBuf::from(splash));
-        let plan = launcher::plan(&r, &cfg, &extra_env, mode, splash.as_deref())?;
+        let gamescope_pid = self.nest().map_or(0, |n| n.pid);
+        let launcher_pid = if gamescope_pid != 0 { std::process::id() } else { 0 };
+        let plan = launcher::plan(&r, &cfg, &extra_env, mode, splash.as_deref(), gamescope_pid != 0)?;
         if let Some((path, text)) = &plan.mangohud_conf {
             std::fs::write(path, text)?;
         }
 
-        let current = Current { session_id: session_id.clone(), id: id.into(), title: r.game.title.clone(), unit: unit.clone(), screen: screen.clone(), started_at: started.to_rfc3339() };
+        let current = Current { session_id: session_id.clone(), id: id.into(), title: r.game.title.clone(), unit: unit.clone(), screen: screen.clone(), started_at: started.to_rfc3339(), gamescope_pid, launcher_pid };
         let mut undo = Vec::new();
         if let Err(e) = self.begin(&r, &plan, &current, base.vars.clone(), &mut undo).await {
             if read_marker().is_some_and(|m| m.current.session_id == session_id) {
@@ -318,6 +325,11 @@ impl Core {
             return Err(Error::NotFound(session_id.into()));
         }
         self.host.units.stop(&c.unit).await
+    }
+
+    pub async fn freeze(&self, on: bool) -> Result<()> {
+        let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
+        self.host.units.freeze(&c.unit, on).await
     }
 }
 

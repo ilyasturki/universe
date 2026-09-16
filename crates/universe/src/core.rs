@@ -41,7 +41,8 @@ fn title_of(path: &Path) -> String {
 /// What the hooks, `ExecStopPost` and the game need of the launcher's environment.
 pub(crate) fn passthrough_env() -> BTreeMap<String, String> {
     let mut env = BTreeMap::new();
-    for k in ["PATH", "HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS", "WAYLAND_DISPLAY", "DISPLAY", "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE", "GI_TYPELIB_PATH", "UNIVERSE_DATA_HOME", "UNIVERSE_CONFIG_HOME", "UNIVERSE_STATE_HOME", "UNIVERSE_MODULES_PATH", "RUST_LOG"] {
+    // The GAMESCOPE_*, STEAM_GAME_DISPLAY_0 and SDL_* names are what gamescope exports to its child: a game started from inside it lands on its display.
+    for k in ["PATH", "HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS", "WAYLAND_DISPLAY", "DISPLAY", "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE", "GI_TYPELIB_PATH", "UNIVERSE_DATA_HOME", "UNIVERSE_CONFIG_HOME", "UNIVERSE_STATE_HOME", "UNIVERSE_MODULES_PATH", "RUST_LOG", "GAMESCOPE_WAYLAND_DISPLAY", "STEAM_GAME_DISPLAY_0", "SDL_VIDEODRIVER", "SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS", "vk_xwayland_wait_ready"] {
         if let Ok(v) = std::env::var(k) {
             env.insert(k.to_string(), v);
         }
@@ -73,6 +74,7 @@ pub struct Core {
     source_logins: Mutex<BTreeMap<String, String>>,
     logins_probed: tokio::sync::OnceCell<()>,
     pub(crate) scope: std::sync::OnceLock<String>,
+    nest: std::sync::OnceLock<Option<crate::nest::Nest>>,
     pub(crate) host: Host,
 }
 
@@ -89,6 +91,7 @@ impl Core {
             source_logins: Mutex::new(BTreeMap::new()),
             logins_probed: tokio::sync::OnceCell::new(),
             scope: std::sync::OnceLock::new(),
+            nest: std::sync::OnceLock::new(),
             host,
         }
     }
@@ -351,26 +354,52 @@ impl Core {
             .collect()
     }
 
+    pub fn nest(&self) -> Option<&crate::nest::Nest> {
+        self.nest.get_or_init(|| crate::nest::Nest::open().inspect_err(|e| tracing::debug!("nest: {e}")).ok()).as_ref()
+    }
+
+    fn nest_or(&self) -> Result<&crate::nest::Nest> {
+        self.nest().ok_or_else(|| Error::Unavailable("not inside gamescope".into()))
+    }
+
     /// The running game's window, as the shell sees it: `None` before it maps; `Unavailable` off GNOME.
     pub async fn session_window(&self) -> Result<Option<crate::desktop::Toplevel>> {
         let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
-        let Some(cg) = self.host.units.cgroup(&c.unit).await else { return Ok(None) };
         let windows = crate::desktop::list_windows().await.map_err(Error::Unavailable)?;
+        if c.gamescope_pid != 0 {
+            return Ok(crate::desktop::pick_window(&windows, |pid| pid == i64::from(c.gamescope_pid)));
+        }
+        let Some(cg) = self.host.units.cgroup(&c.unit).await else { return Ok(None) };
         Ok(crate::desktop::pick_window(&windows, |pid| crate::desktop::pid_in_cgroup(pid, &cg)))
     }
 
     /// Waits for the session's window, then focuses it; `None` once the session ended or `timeout` ran out.
     pub async fn wait_session_window(&self, session_id: &str, timeout: std::time::Duration) -> Result<Option<crate::desktop::Toplevel>> {
-        crate::desktop::list_windows().await.map_err(Error::Unavailable)?;
+        if !self.current().await.is_some_and(|c| c.gamescope_pid != 0) {
+            crate::desktop::list_windows().await.map_err(Error::Unavailable)?;
+        }
         let deadline = std::time::Instant::now() + timeout;
         loop {
             let Some(c) = self.current().await else { return Ok(None) };
             if c.session_id != session_id {
                 return Ok(None);
             }
-            if let Some(w) = self.session_window().await? {
-                if let Err(e) = crate::desktop::activate_window(w.id).await {
-                    tracing::warn!("activate {}: {e}", w.id);
+            // On the launcher's gamescope the shell's toplevel is the gamescope's; without the extension a stand-in carries its pid.
+            let window = if c.gamescope_pid == 0 {
+                self.session_window().await?
+            } else if self.nest_or()?.game_shown(c.launcher_pid)? {
+                match self.session_window().await {
+                    Err(Error::Unavailable(_)) => Some(crate::desktop::Toplevel { pid: i64::from(c.gamescope_pid), focused: true, ..Default::default() }),
+                    w => w?,
+                }
+            } else {
+                None
+            };
+            if let Some(w) = window {
+                if w.id != 0 {
+                    if let Err(e) = crate::desktop::activate_window(w.id).await {
+                        tracing::warn!("activate {}: {e}", w.id);
+                    }
                 }
                 return Ok(Some(w));
             }
@@ -382,6 +411,10 @@ impl Core {
     }
 
     pub async fn focus_session(&self) -> Result<()> {
+        let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
+        if c.gamescope_pid != 0 {
+            return self.nest_or()?.show(c.launcher_pid, true);
+        }
         let w = self.session_window().await?.ok_or_else(|| Error::NotFound("the game has no window yet".into()))?;
         match crate::desktop::activate_window(w.id).await {
             Ok(true) => Ok(()),
@@ -391,10 +424,74 @@ impl Core {
     }
 
     pub async fn focus_pid(&self, pid: u32) -> Result<()> {
+        if pid == std::process::id() {
+            if let Some(n) = self.nest() {
+                return n.show(self.launcher_pid(), false);
+            }
+        }
         let windows = crate::desktop::list_windows().await.map_err(Error::Unavailable)?;
         let w = windows.iter().filter(|w| w.pid == pid as i64 && !w.hidden).max_by_key(|w| w.width * w.height).ok_or_else(|| Error::NotFound(format!("no window of pid {pid}")))?;
         crate::desktop::activate_window(w.id).await.map_err(Error::Unavailable)?;
         Ok(())
+    }
+
+    pub fn nest_game_shown(&self) -> Result<bool> {
+        self.nest_or()?.game_shown(self.launcher_pid())
+    }
+
+    /// The launcher the running game was started from, as the marker says; this process before a launch.
+    fn launcher_pid(&self) -> u32 {
+        crate::session::read_marker().map(|m| m.current.launcher_pid).filter(|p| *p != 0).unwrap_or_else(std::process::id)
+    }
+
+    pub fn nest_overlay(&self, window: u32, input: bool, opacity: u32) -> Result<()> {
+        let n = self.nest_or()?;
+        n.set_card(window, "STEAM_OVERLAY", 1)?;
+        n.set_card(window, "STEAM_INPUT_FOCUS", u32::from(input))?;
+        n.set_card(window, "_NET_WM_WINDOW_OPACITY", opacity)
+    }
+
+    /// The game as gamescope last painted it, without the overlay: `state/frame.png`, or `None` when nothing was painted in time.
+    pub fn nest_frame(&self) -> Result<Option<String>> {
+        let shot = self.nest_or()?.frame(&paths::state_home().join("frame.png"), std::time::Duration::from_millis(400))?;
+        Ok(shot.map(|p| p.to_string_lossy().to_string()))
+    }
+
+    /// Rewrites the running game's MangoHud.conf from its `fps_limit` and returns the combo that makes the layer reread it.
+    pub async fn set_fps_limit(&self) -> Result<String> {
+        let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
+        let r = self.get(&c.id).await?;
+        let cfg = self.config.read().await;
+        let hz = crate::launcher::fps_limit_hz(&r.effective, crate::desktop::screen_mode(&c.screen).await).unwrap_or(0);
+        let hidden = c.gamescope_pid != 0 || (r.effective.gamescope && crate::runners::on_path(&cfg.launch.gamescope_bin).is_some()) || !r.effective.mangohud;
+        std::fs::write(paths::state_home().join("MangoHud.conf"), crate::launcher::mangohud_conf_text(hz, hidden))?;
+        Ok(crate::controller::keys::mangohud_combo("reload_cfg", "Shift_L+F4"))
+    }
+
+    pub fn nest_filter(&self, filter: &str, sharpness: Option<u32>) -> Result<()> {
+        self.nest_or()?.set_filter(filter, sharpness)
+    }
+
+    pub async fn volume(&self, change: &str, value: u8) -> Result<serde_json::Value> {
+        use crate::controller::volume::Change;
+        let change = match change {
+            "up" => Change::Up,
+            "down" => Change::Down,
+            "mute" => Change::ToggleMute,
+            "set" => Change::Set(value),
+            "get" => Change::Get,
+            other => return Err(Error::Invalid(format!("volume: up, down, mute, set or get, not '{other}'"))),
+        };
+        let step = self.config.read().await.controller.volume_step;
+        let level = tokio::task::spawn_blocking(move || crate::controller::volume::apply(change, step)).await.map_err(|e| Error::Io(e.to_string()))?.map_err(Error::Unavailable)?;
+        Ok(serde_json::json!({"percent": level.percent, "muted": level.muted, "output": level.output}))
+    }
+
+    pub async fn host_gamescope(&self, screen: &str) -> Option<(String, Vec<String>)> {
+        let cfg = self.config.read().await.clone();
+        let screen = crate::desktop::pick_screen(screen);
+        let mode = crate::desktop::screen_mode(&screen).await;
+        crate::launcher::host_gamescope(&cfg, mode)
     }
 
     pub async fn screenshot(&self) -> Result<String> {

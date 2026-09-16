@@ -111,6 +111,25 @@ impl Units {
         }
     }
 
+    /// systemd thaws a frozen unit on stop: `stop` needs no thaw first.
+    pub async fn freeze(&self, unit: &str, on: bool) -> Result<()> {
+        match self {
+            Units::Systemd => {
+                let verb = if on { "freeze" } else { "thaw" };
+                let out = tokio::process::Command::new("systemctl").args(["--user", verb, unit]).output().await?;
+                if !out.status.success() {
+                    return Err(Error::Io(format!("systemctl {verb} {unit}: {}", String::from_utf8_lossy(&out.stderr).trim())));
+                }
+                Ok(())
+            }
+            #[cfg(test)]
+            Units::Memory(m) => {
+                m.record(format!("unit:{} {unit}", if on { "freeze" } else { "thaw" }));
+                Ok(())
+            }
+        }
+    }
+
     pub async fn log(&self, unit: &str) -> UnitLog {
         match self {
             Units::Systemd => {

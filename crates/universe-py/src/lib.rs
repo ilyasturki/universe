@@ -150,6 +150,35 @@ impl Core {
     fn focus_pid(&self, py: Python<'_>, pid: u32) -> PyResult<()> {
         self.run(py, |c| async move { c.focus_pid(pid).await })
     }
+    fn freeze(&self, py: Python<'_>, on: bool) -> PyResult<()> {
+        self.run(py, |c| async move { c.freeze(on).await })
+    }
+    fn nested(&self) -> bool {
+        self.core.nest().is_some()
+    }
+    fn nest_game_shown(&self) -> PyResult<bool> {
+        self.core.nest_game_shown().map_err(err)
+    }
+    fn nest_overlay(&self, window: u32, input: bool, opacity: u32) -> PyResult<()> {
+        self.core.nest_overlay(window, input, opacity).map_err(err)
+    }
+    fn nest_frame(&self, py: Python<'_>) -> PyResult<Option<String>> {
+        py.detach(|| self.core.nest_frame()).map_err(err)
+    }
+    fn set_fps_limit(&self, py: Python<'_>) -> PyResult<String> {
+        self.run(py, |c| c.set_fps_limit())
+    }
+    #[pyo3(signature = (filter, sharpness = None))]
+    fn nest_filter(&self, filter: String, sharpness: Option<u32>) -> PyResult<()> {
+        self.core.nest_filter(&filter, sharpness).map_err(err)
+    }
+    #[pyo3(signature = (change, value = 0))]
+    fn volume(&self, py: Python<'_>, change: String, value: u8) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| async move { c.volume(&change, value).await })
+    }
+    fn host_gamescope(&self, py: Python<'_>, screen: String) -> Option<Vec<String>> {
+        self.run_infallible(py, |c| async move { c.host_gamescope(&screen).await }).map(|(p, a)| std::iter::once(p).chain(a).collect())
+    }
     fn screenshot(&self, py: Python<'_>) -> PyResult<String> {
         self.run(py, |c| c.screenshot())
     }
