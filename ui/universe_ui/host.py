@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+import shutil
 import signal
 import socket
 import sys
@@ -70,7 +71,10 @@ def exec_in_gamescope(client, argv):
     if not command:
         logging.getLogger("universe.host").warning("no gamescope: running on the desktop")
         return
-    os.execv(command[0], [*command, "--", sys.executable, sys.argv[0], *argv])
+    # argv[0] is the installed launcher: on Nix a compiled wrapper, not a script for the interpreter.
+    launcher = shutil.which(sys.argv[0])
+    launcher = [launcher] if launcher else [sys.executable, sys.argv[0]]
+    os.execv(command[0], [*command, "--", *launcher, *argv])
 
 
 def create_overlay(engine, size):
