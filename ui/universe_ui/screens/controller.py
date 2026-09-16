@@ -521,6 +521,12 @@ class ControllerScreen(QObject):
         if self._watcher is not None:
             self._watcher.send({"cmd": "resume"})
 
+    @Slot(str, result=bool)
+    def run(self, action, keys=""):
+        if self._watcher is None or self._status != "ready":
+            return False
+        return bool(self._watcher.send({"cmd": "run", "action": action, "keys": keys}))
+
     def reload(self):
         if self._watcher is not None:
             self._watcher.send({"cmd": "reload"})

@@ -141,7 +141,26 @@ FocusScope {
         if (!sessionRunning)
             return;
         Sound.enter();
-        api.universe.focusSession();
+        api.home.toGame();
+    }
+
+    function homePressed() {
+        if (root.launching || launchOverlay.running)
+            return;
+        if (!sessionRunning) {
+            if (root.subOpen || confirm.open || root.menuOpen)
+                return;
+            var t = root.focusTarget;
+            if (t && t.currentGame && t.menuAnchor)
+                openMenu(t.currentGame, t.menuAnchor);
+            return;
+        }
+        if (api.home.shown !== "game")
+            resumeSession();
+        else if (api.home.open)
+            api.home.closeDock();
+        else
+            api.home.openDock();
     }
 
     function openSub(source, args) {
@@ -607,6 +626,11 @@ FocusScope {
     Connections {
         target: api.screens.controller
         function onMacroNotice(text) { toast.show(text); }
+    }
+
+    Connections {
+        target: api.home
+        function onPressed() { root.homePressed(); }
     }
 
     Connections {

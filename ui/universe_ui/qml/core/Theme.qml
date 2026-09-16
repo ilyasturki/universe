@@ -39,6 +39,7 @@ QtObject {
     readonly property real heroDetail: 620
 
     readonly property int durQuick: 160
+    readonly property int durDismiss: 200
     readonly property int durBase: 220
     readonly property int durNudge: 260
     readonly property int durView: 300

@@ -1,0 +1,247 @@
+from PySide6.QtCore import Property, QObject, QTimer, QUrl, Signal, Slot
+
+OPAQUE = 0xFFFFFFFF
+POLL_MS = 250
+
+
+class Home(QObject):
+    pressed = Signal()
+    changed = Signal()
+    volumeChanged = Signal()
+    screenshotTaken = Signal(str)
+
+    def __init__(self, client, controller, screen_mode=dict, parent=None):
+        super().__init__(parent)
+        self._client = client
+        self._controller = controller
+        self._screen_mode = screen_mode
+        self._overlay = None
+        self._open = False
+        self._closing = False
+        self._shown = "launcher"
+        self._paused = False
+        self._pause_on_home = False
+        self._held = False
+        self._suspended = False
+        self._thaw_on_release = False
+        self._frame = ""
+        self._frames = 0
+        self._volume = {}
+        self._poll = QTimer(self)
+        self._poll.setInterval(POLL_MS)
+        self._poll.timeout.connect(self._refresh)
+        client.currentSessionChanged.connect(self._on_session)
+        client.sessionShown.connect(self._on_shown)
+        controller.buttonPressed.connect(self._on_button)
+        self._on_session()
+
+    def attachOverlay(self, window):
+        self._overlay = window
+        if not self._client.nested:
+            return False
+        self._client.overlay(window.winId(), False, 0)
+        window.show()
+        return True
+
+    def _overlay_state(self, input, opacity):
+        if self._overlay is not None and self._client.nested:
+            self._client.overlay(self._overlay.winId(), input, opacity)
+
+    def _session(self):
+        current = self._client.currentSession
+        return current if current and current.get("session_id") else None
+
+    def _game(self):
+        session = self._session()
+        return self._client.game(str(session.get("id") or "")) if session else {}
+
+    def _on_session(self):
+        if self._session():
+            self._pause_on_home = bool((self._game().get("effective") or {}).get("pause_on_home"))
+            if self._client.nested:
+                self._poll.start()
+                self._refresh()
+        else:
+            self._poll.stop()
+            self._drop()
+            self._open = self._closing = self._paused = self._thaw_on_release = False
+            self._shown = "launcher"
+        self.changed.emit()
+
+    def _on_shown(self, session_id, ok):
+        if ok and not self._client.nested and self._session():
+            self._shown = "game"
+            self.changed.emit()
+
+    def _refresh(self):
+        shown = "game" if self._client.gameShown() else "launcher"
+        if shown != self._shown:
+            self._shown = shown
+            self.changed.emit()
+
+    def _on_button(self, ident, slot, pressed):
+        if slot == "guide":
+            self.guide(pressed)
+
+    @Slot(bool)
+    def guide(self, pressed):
+        self._held = bool(pressed)
+        if pressed:
+            self.pressed.emit()
+        else:
+            if self._open:
+                self._suspend()
+            if self._thaw_on_release:
+                self._thaw_on_release = False
+                self._set_paused(False)
+        self.changed.emit()
+
+    @Slot()
+    def openDock(self):
+        if self._open or not self._session():
+            return
+        if self._overlay is None:
+            self.toLauncher()
+            return
+        self._open, self._closing = True, False
+        self._overlay_state(True, OPAQUE)
+        # A Guide hold is the watcher's stop macro: suspending before the release would eat it.
+        if not self._held:
+            self._suspend()
+        if self._pause_on_home:
+            self._set_paused(True)
+        self.changed.emit()
+
+    def _suspend(self):
+        if not self._suspended:
+            self._suspended = True
+            self._controller.suspend()
+
+    @Slot()
+    def closeDock(self):
+        if not self._open:
+            return
+        self._open, self._closing = False, True
+        self.changed.emit()
+
+    @Slot()
+    def dockClosed(self):
+        if not self._closing:
+            return
+        self._closing = False
+        self._drop()
+        if self._paused and self._shown == "game":
+            self._thaw()
+
+    def _drop(self):
+        self._overlay_state(False, 0)
+        if self._suspended:
+            self._suspended = False
+            self._controller.resume()
+
+    def _thaw(self):
+        if self._held:
+            self._thaw_on_release = True
+        else:
+            self._set_paused(False)
+
+    @Slot()
+    def toGame(self):
+        if not self._session():
+            return
+        if self._open:
+            self.closeDock()
+        self._client.focusSession()
+        if self._paused:
+            self._thaw()
+        self._shown = "game"
+        self.changed.emit()
+
+    @Slot()
+    def toLauncher(self):
+        if not self._session():
+            return
+        if self._open:
+            self.closeDock()
+        if self._client.nested:
+            self._client.frame(self._flip)
+        else:
+            self._flip("")
+
+    def _flip(self, path):
+        if path:
+            # The same file every time: the query keeps the image cache from showing the previous frame.
+            self._frames += 1
+            self._frame = QUrl.fromLocalFile(path).toString() + "?" + str(self._frames)
+        self._client.focusLauncher()
+        self._shown = "launcher"
+        self.changed.emit()
+
+    def _set_paused(self, on):
+        if on == self._paused or not self._session():
+            return
+        self._paused = on
+        self._client.freeze(on)
+        self.changed.emit()
+
+    @Slot(bool)
+    def setPauseOnHome(self, on):
+        session = self._session()
+        if not session:
+            return
+        self._pause_on_home = bool(on)
+        self._client.set(str(session.get("id") or ""), "launch.pause_on_home", "true" if on else "false")
+        if self._open:
+            self._set_paused(bool(on))
+        self.changed.emit()
+
+    @Slot()
+    def screenshot(self):
+        self._client.runAsync(self._client.screenshot, lambda path: self.screenshotTaken.emit(str(path or "")))
+
+    @Slot(str, result=str)
+    def launchValue(self, key):
+        value = (self._game().get("effective") or {}).get(key)
+        return "" if value is None else str(value)
+
+    @Slot(str, result="QVariantList")
+    def launchChoices(self, key):
+        for spec in self._client.launchKeys("both", self._screen_mode()):
+            if spec.get("key") == key:
+                return [str(c) for c in spec.get("choices") or []]
+        return []
+
+    @Slot(str, str)
+    def setLaunchValue(self, key, value):
+        session = self._session()
+        if not session:
+            return
+        self._client.set(str(session.get("id") or ""), "launch." + key, value)
+        if key == "fps_limit":
+            self._client.setFpsLimit(lambda combo: combo and self._controller.run("keys", combo))
+        elif key == "gamescope_filter" and self._client.nested:
+            sharpness = (self._game().get("effective") or {}).get("gamescope_sharpness")
+            self._client.nestFilter(value, None if sharpness in (None, "") else int(sharpness))
+        self.changed.emit()
+
+    @Slot(result=int)
+    def screenRefresh(self):
+        return int(self._screen_mode().get("refresh") or 0)
+
+    @Slot(str, int)
+    def volume(self, change, value=0):
+        def landed(level):
+            level = dict(level or {})
+            if level != self._volume:
+                self._volume = level
+                self.volumeChanged.emit()
+
+        self._client.volumeAsync(change, int(value), landed)
+
+    shown = Property(str, lambda self: self._shown, notify=changed)
+    open = Property(bool, lambda self: self._open, notify=changed)
+    paused = Property(bool, lambda self: self._paused, notify=changed)
+    pauseOnHome = Property(bool, lambda self: self._pause_on_home, notify=changed)
+    frame = Property(str, lambda self: self._frame, notify=changed)
+    volumePercent = Property(int, lambda self: int(self._volume.get("percent") or 0), notify=volumeChanged)
+    muted = Property(bool, lambda self: bool(self._volume.get("muted")), notify=volumeChanged)

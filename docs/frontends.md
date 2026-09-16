@@ -25,7 +25,8 @@ One context property, `api`:
 | `api.pad` | `rightX`: the right stick as a value, 0 without a controller |
 | `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed` and `--size` turn it off) |
-| `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `ground`, `detail`), `current`, `set(id)`, `fontPath` |
+| `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `ground`, `detail`), `current`, `set(id)`, `fontPath` |
+| `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `open`, `paused`, `pauseOnHome`, `frame`, `volumePercent`, `muted`; `pressed()`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotTaken(path)`), `volume(change, value)`, `launchValue(key)`, `launchChoices(key)`, `setLaunchValue(key, value)`, `screenRefresh()` |
 
 A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `playTime`,
 `playCount`, `lastPlayed`, `releaseYear`, `developerList`, `publisherList`, `genreList`, `players`,
@@ -61,7 +62,9 @@ the session badge while the count is not zero.
 
 `main.qml` is a window with one `Loader` whose source is `api.theme.entry`, so a theme is a root
 QML file under `qml/` and switching one for another rebuilds the tree in place: no restart, the
-navigation comes back at the home screen. The choice lives in `ui-memory.json` (`theme`; the ids
+navigation comes back at the home screen. `overlay.qml` is the second window, the one gamescope
+paints over the game; its `Loader` takes `api.theme.overlay` — Reprise's `ui/Dock.qml`, nothing for
+the Switch 2 look, whose HOME goes straight to its HOME menu. The choice lives in `ui-memory.json` (`theme`; the ids
 of the former white and black variants of `switch2` still resolve to it), `--theme ID` overrides it
 for one run, and both looks offer it in Settings › Themes. A theme calls the same `api` and the same `api.screens` objects;
 `api.screens.album` and `api.screens.news` are the recordings and journal lists across every
@@ -80,7 +83,7 @@ What it derives is derived this way, and any frontend needs the equivalent:
 | Signal | Derived from |
 |---|---|
 | `sessionStarted` | a successful `launch` |
-| `sessionShown` | `(session_id, ok)`: the game's window is on screen and has the focus — `wait_session_window` on a host thread, up to 60 s. `ok` false when nobody can tell: no GNOME, no shell extension, or the session ended first |
+| `sessionShown` | `(session_id, ok)`: the game's window is on screen and has the focus — `wait_session_window` on a host thread, up to 60 s. Inside gamescope `ok` is true once gamescope shows the game's window (a stand-in toplevel carrying the gamescope's pid when no extension lists it); on the desktop, false when nobody can tell: no GNOME, no shell extension, or the session ended first |
 | `sessionEnded` | the current-session marker going empty — the `state/` watch sees `session-end` remove it (debounced 300 ms), a 2 s poll stands behind it, since the game is a systemd unit, not a child. `currentSessionChanged` fires first; the pinned tile and the badge follow that property, and only the toast, the stats refresh and a pending launch follow the signal |
 | `libraryChanged`, `mediaChanged`, `entryWritten`, `recordingFiled` | a `QFileSystemWatcher` on `games/`, `games/<id>/{,journal,media}`, `state/` and the overrides directory with its `<id>/` subdirectories (a pick made from the CLI shows up), debounced 300 ms; `mediaChanged` also follows a pick or its removal made through the client |
 | `progress`, `jobFinished` | the job's own callback — install, update, scan and media refresh run on a host thread |
@@ -102,9 +105,15 @@ process**: closing the frontend mid-install interrupts it, by design.
 
 ## Launch and the running view
 
-The game runs inside gamescope (`docs/api.md` § Gamescope). The launcher never lowers, raises or
-hides itself — Mutter owns stacking and focus on Wayland — it times the handover on gamescope's
-window and asks the shell extension to focus it.
+The launcher is gamescope's base app (`docs/api.md` § Gamescope): fullscreen, `host.py` starts
+`gamescope` around itself (`client.hostGamescope("")`, `os.execv`) unless it is already inside one
+(`GAMESCOPE_WAYLAND_DISPLAY`), forces the `xcb` platform there, and every game lands on that
+gamescope, which shows the most recently mapped window — the game's, once it has one. The launcher
+never lowers, raises or hides itself; `api.home` flips which window gamescope shows (`toGame`,
+`toLauncher`: `focus_session` / `focus_pid`), and `Api.screenName()` is `""` inside gamescope, where
+the window's screen is the Xwayland's and not a connector. `--windowed` and `--size` skip gamescope
+and keep the desktop path below, where the game gets a gamescope of its own and the extension
+focuses windows.
 
 `launchGame` raises `ui/LaunchOverlay.qml` over the page: the poster (`ui/LaunchFrame.qml`) fades
 in over `Theme.durLaunch` as the page fades out, then grabs itself at the screen's pixel size
@@ -114,21 +123,47 @@ fails launches without one). The poster — art, logo and title — then holds (
 `sessionShown` says the game's window is up and focused: gamescope's window maps over it within
 about a second, showing that same grab from its keep-alive window (`docs/api.md` § Gamescope) until
 the game's own window, so the handover is poster over poster; the launcher's poster fades out under
-it. `sessionShown` with `ok` false (no GNOME,
+it. `sessionShown` with `ok` false (on the desktop: no GNOME,
 no extension) holds 1500 ms instead; a session that ends before its window, or `launchFailed`,
 ends the poster at once (a toast for the failure). Every key is swallowed while it runs.
 
 From there the launcher is home again, with the game pinned first on the rail (`RecentGames.
-playingId`, played before or not) under a PLAYING mark, its hero pill reading "Resume", and the
-tab bar's badge "<title> · m:ss" on every tab; the badge is a chrome slot past the glass: A
-resumes, Start opens the game menu. A resumes on the pinned game wherever it is (`focusSession()`:
-the extension's `Activate` on the game's window), the game menu offers "Resume" and "Quit
-<title>" for it. Play on another game asks "Quit X and start Y?" (`ui/ConfirmDialog.qml`); yes
-stops the session, and `sessionEnded` starts the pending launch. Nothing on the pad brings the
-launcher back over a running game: Alt-Tab, or the game's own exit, does — its window closes,
-Mutter focuses what was under it. A session already running when the host starts (`CoreClient`
-tracks the marker at construction), or one the CLI started (the `state/` watch), is the same
-state: home, pinned, badge.
+playingId`, played before or not) under a PLAYING mark (PAUSED while frozen), its art the last
+frame gamescope painted when HOME brought the launcher up (`api.home.frame`, `nest_frame`), its
+hero pill reading "Resume", and the tab bar's badge "<title> · m:ss" on every tab; the badge is a
+chrome slot past the glass: A resumes, Start opens the game menu. A resumes on the pinned game
+wherever it is (`api.home.toGame()`), the game menu offers "Resume" and "Quit <title>" for it.
+Play on another game asks "Quit X and start Y?" (`ui/ConfirmDialog.qml`); yes stops the session,
+and `sessionEnded` starts the pending launch. The game's own exit brings the launcher back by
+itself (gamescope shows what is left). A session already running when the host starts
+(`CoreClient` tracks the marker at construction), or one the CLI started (the `state/` watch), is
+the same state: home, pinned, badge.
+
+## HOME and the dock
+
+The Guide button is HOME. It comes from the evdev watcher (`button` events with slot `guide`),
+never from the SDL mapper — the game holds the focus, so no key would reach the launcher — and
+`api.home` turns it into `pressed()`; a hold stays the `stop` macro. What a press
+does is the theme's: the Switch 2 look flips to its HOME menu over the game (`toLauncher`) and
+back (`toGame`); Reprise opens its **dock** over the live game (`openDock`), a second press or
+B closes it, and from home a press resumes. With no session, Reprise treats it as Start (the
+game menu).
+
+The dock is `ui/Dock.qml` in the overlay window: the game's card at the left, a row of round
+buttons at the right (`row` in `Dock.qml`), a group's settings in a card above its button. ◀ ▶ move
+along the row or change the focused value, ▲ ▼ the rows of a card, A acts, flips or opens, B closes
+the card or the dock, X takes a screenshot with the band faded out so the shell grabs the game alone.
+
+The host owns what the QML cannot: the overlay window is created once (`create_overlay`,
+`Home.attachOverlay`) with `STEAM_OVERLAY=1`, mapped at opacity 0 and never unmapped — gamescope
+keeps painting an unmapped overlay's last buffer; opening sets `STEAM_INPUT_FOCUS=1` and full
+opacity, the fade-out done (`dockClosed()`) drops both and the game gets its input back. The
+watcher's macros are suspended while the dock has the pad — from the Guide release, so a hold
+on it still counts as the `stop` macro. `pause_on_home` (a launch key, per
+game) freezes the game as the dock opens and thaws it when the dock closes — on the Guide
+release when that is what closed it, so the game never sees Guide held. `Home.toLauncher` takes
+the frame first, then flips; the session ending drops the overlay whatever state it was in.
+Without an overlay window (the launcher on the desktop) `openDock` is `toLauncher`.
 
 ## Qt and QML notes
 
@@ -167,7 +202,8 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
 | X / Y | I / F | Details / Filters |
 | LB / RB | Q / E | previous / next tab |
 | LT / RT | PageUp / PageDown | collection, section, keyboard page |
-| Start, Guide | F1 | context menu of the game on screen, whichever part of the page has focus |
+| Start | F1 | context menu of the game on screen, whichever part of the page has focus |
+| Guide | — | HOME, through the watcher (`api.home`), not the mapper |
 | d-pad, left stick | arrows | navigation |
 | right stick | `api.pad.rightX` | analog, past a 0.18 deadzone: scrubs the recording player |
 

@@ -4,6 +4,7 @@ from pathlib import Path
 
 from PySide6.QtCore import Property, QObject, Qt, Signal, Slot
 
+from .home import Home
 from .models import Collection, CollectionGames, Game, GameListModel, ObjectListModel, collection_key
 from .screens import Screens
 from .screens.paths import universe_home
@@ -220,6 +221,7 @@ class Api(QObject):
         self._screens = Screens(client, self._memory, self.screenMode, self._library.allGames, self)
         controller = self._screens.controller
         controller.testingChanged.connect(lambda: self._pad.setMuted(controller.testing))
+        self._home = Home(client, controller, self.screenMode, self)
         self._window = None
         self._fullscreen = fullscreen
 
@@ -231,7 +233,10 @@ class Api(QObject):
         self._screens.shutdown()
         self._client.shutdown()
 
+    # Inside gamescope the window's screen is its Xwayland's, not a connector: the profile's default stands.
     def screenName(self):
+        if self._client.nested:
+            return ""
         screen = self._window.screen() if self._window is not None else None
         return screen.name() if screen is not None else ""
 
@@ -253,4 +258,5 @@ class Api(QObject):
     universe = Property(QObject, lambda self: self._client, constant=True)
     screens = Property(QObject, lambda self: self._screens, constant=True)
     theme = Property(QObject, lambda self: self._theme, constant=True)
+    home = Property(QObject, lambda self: self._home, constant=True)
     fullscreen = Property(bool, lambda self: self._fullscreen, constant=True)

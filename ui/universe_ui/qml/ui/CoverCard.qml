@@ -63,6 +63,8 @@ Item {
 
                 anchors.fill: parent
                 source: root.artSource
+                // The running tile's art is gamescope's frame at output size: decoded small, not at 4K.
+                sourceSize.width: root.playing ? 640 : 0
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
                 mipmap: true
@@ -120,7 +122,7 @@ Item {
 
                     CapsLabel {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: "PLAYING"
+                        text: api.home.paused ? "PAUSED" : "PLAYING"
                         color: Theme.text
                         size: Theme.dp(13)
                     }

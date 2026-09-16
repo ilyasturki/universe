@@ -65,8 +65,28 @@ def quit_on_signals(app, on_signal=None):
     return notifier
 
 
+def exec_in_gamescope(client, argv):
+    command = client.hostGamescope("")
+    if not command:
+        logging.getLogger("universe.host").warning("no gamescope: running on the desktop")
+        return
+    os.execv(command[0], [*command, "--", sys.executable, sys.argv[0], *argv])
+
+
+def create_overlay(engine, size):
+    from PySide6.QtCore import QUrl
+
+    before = len(engine.rootObjects())
+    engine.load(QUrl.fromLocalFile(str(QML_DIR / "overlay.qml")))
+    window = engine.rootObjects()[before] if len(engine.rootObjects()) > before else None
+    if window is not None:
+        window.setGeometry(0, 0, size.width(), size.height())
+    return window
+
+
 def run(argv=None):
-    args = parse_args(sys.argv[1:] if argv is None else argv)
+    argv = sys.argv[1:] if argv is None else argv
+    args = parse_args(argv)
     os.environ.setdefault("QT_FORCE_STDERR_LOGGING", "1")
     # With a desktop file name set, Qt's portal app-id registration warns when the process already has one.
     os.environ.setdefault("QT_LOGGING_RULES", "qt.multimedia.ffmpeg.info=false;qt.qpa.services.warning=false")
@@ -78,8 +98,14 @@ def run(argv=None):
     from PySide6.QtCore import Qt, QTimer, QUrl
     from PySide6.QtGui import QGuiApplication
     from PySide6.QtQml import QQmlApplicationEngine
-    from PySide6.QtQuick import QQuickWindow  # noqa: F401  (down-casts rootObjects() so grabWindow exists)
+    from PySide6.QtQuick import (
+        QQuickWindow,  # noqa: F401  (down-casts rootObjects() so grabWindow exists)
+    )
 
+    nested = bool(os.environ.get("GAMESCOPE_WAYLAND_DISPLAY"))
+    if nested:
+        # gamescope unsets WAYLAND_DISPLAY; a platform list naming wayland first would still try it.
+        os.environ["QT_QPA_PLATFORM"] = "xcb"
     app = QGuiApplication(sys.argv[:1])
     app.setApplicationName("universe-ui")
     app.setOrganizationName("universe")
@@ -89,6 +115,8 @@ def run(argv=None):
     from .api import Api
 
     client = build_client(args)
+    if args.fullscreen and not nested:
+        exec_in_gamescope(client, argv)
     if not args.fake:
         client.adoptScope()
     api = Api(client, fullscreen=args.fullscreen, theme=args.theme, parent=app)
@@ -109,6 +137,10 @@ def run(argv=None):
             window.setHeight(h)
         except ValueError:
             pass
+    if client.nested:
+        overlay = create_overlay(engine, window.screen().size())
+        if overlay is not None:
+            api.home.attachOverlay(overlay)
 
     gamepad = watcher = None
     if not args.no_gamepad:
@@ -130,7 +162,7 @@ def run(argv=None):
 
         # Keys only reach an active window; a bare X server hands focus to nobody by itself.
         window.requestActivate()
-        KeyScript(args.keys, args.key_gap, window, pad=api.pad, watcher=watcher if args.fake else None, parent=app).start(args.key_delay)
+        KeyScript(args.keys, args.key_gap, window, pad=api.pad, watcher=watcher if args.fake else None, home=api.home, parent=app).start(args.key_delay)
 
     if args.quit_after > 0:
         QTimer.singleShot(args.quit_after, app.quit)

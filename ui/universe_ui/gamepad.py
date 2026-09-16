@@ -20,7 +20,6 @@ BUTTON_KEYS = {
     BTN_LEFTSHOULDER: Qt.Key.Key_Q,
     BTN_RIGHTSHOULDER: Qt.Key.Key_E,
     BTN_START: Qt.Key.Key_F1,
-    BTN_GUIDE: Qt.Key.Key_F1,
     BTN_DPAD_UP: Qt.Key.Key_Up,
     BTN_DPAD_DOWN: Qt.Key.Key_Down,
     BTN_DPAD_LEFT: Qt.Key.Key_Left,
@@ -197,14 +196,15 @@ KEY_NAMES = {
 }
 
 
-# `--keys`, one name per gap: `Wait`, `Wait:N`, `Hold:A`/`Release:A`, `Stick:rightX=0.6`, `Shot:path.png`; with a fake watcher `Press:slot`/`Unpress:slot`, `Axis:lx=0.6`.
+# `--keys`, one name per gap: `Wait`, `Wait:N`, `Hold:A`/`Release:A`, `Stick:rightX=0.6`, `Shot:path.png`, `Guide`; with a fake watcher `Press:slot`/`Unpress:slot`, `Axis:lx=0.6`.
 class KeyScript(QObject):
-    def __init__(self, script, gap_ms, window, pad=None, watcher=None, parent=None):
+    def __init__(self, script, gap_ms, window, pad=None, watcher=None, home=None, parent=None):
         super().__init__(parent)
         self._queue = [k for k in script.split() if k]
         self._window = window
         self._pad = pad
         self._watcher = watcher
+        self._home = home
         self._timer = QTimer(self)
         self._timer.setInterval(gap_ms)
         self._timer.timeout.connect(self._step)
@@ -242,11 +242,19 @@ class KeyScript(QObject):
             return
         if not bare:
             phase, bare = "click", name
+        if bare == "Guide":
+            if self._home is not None:
+                if phase in ("click", "Hold"):
+                    self._home.guide(True)
+                if phase in ("click", "Release"):
+                    self._home.guide(False)
+            return
         key = KEY_NAMES.get(bare)
         if key is None:
             log.warning("unknown key %s", name)
             return
+        window = QGuiApplication.focusWindow() or self._window
         if phase in ("click", "Hold"):
-            post_key(key, True, window=self._window)
+            post_key(key, True, window=window)
         if phase in ("click", "Release"):
-            post_key(key, False, window=self._window)
+            post_key(key, False, window=window)

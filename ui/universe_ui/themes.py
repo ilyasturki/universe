@@ -1,9 +1,9 @@
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
 THEMES = [
-    {"id": "reprise", "name": "Reprise", "entry": "theme.qml", "ground": "#0e0f13",
+    {"id": "reprise", "name": "Reprise", "entry": "theme.qml", "overlay": "ui/Dock.qml", "ground": "#0e0f13",
      "detail": "Dark, cinematic: the game's art behind everything."},
-    {"id": "switch2", "name": "Switch 2", "entry": "switch2/theme.qml", "ground": "#ebebeb",
+    {"id": "switch2", "name": "Switch 2", "entry": "switch2/theme.qml", "overlay": "", "ground": "#ebebeb",
      "detail": "The Switch 2 HOME menu."},
 ]
 DEFAULT = "reprise"
@@ -54,5 +54,6 @@ class ThemeSelector(QObject):
     current = Property(str, lambda self: self._current["id"], notify=changed)
     name = Property(str, lambda self: self._current["name"], notify=changed)
     entry = Property(str, lambda self: self._current["entry"], notify=changed)
+    overlay = Property(str, lambda self: self._current["overlay"], notify=changed)
     ground = Property(str, lambda self: self._current["ground"], notify=changed)
     fontPath = Property(str, _font, _set_font, notify=fontChanged)

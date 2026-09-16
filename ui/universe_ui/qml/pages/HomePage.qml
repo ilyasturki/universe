@@ -394,7 +394,8 @@ FocusScope {
                        + (tile.delta === 0 ? 0 : (tile.delta < 0 ? -page.spread : page.spread))
 
                     game: model
-                    artSource: String(model.assets.square) !== "" ? model.assets.square : model.assets.boxFront
+                    artSource: model.id === page.playingId && api.home.frame !== "" ? api.home.frame
+                             : String(model.assets.square) !== "" ? model.assets.square : model.assets.boxFront
                     playing: model.id === page.playingId
                     selected: tile.selected
                     selectedScale: 1.0

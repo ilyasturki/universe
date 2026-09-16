@@ -232,6 +232,32 @@ class CoreClient(QObject):
     def focusLauncher(self):
         self._call_async(lambda: self._core.focus_pid(os.getpid()), on_error=lambda e: log.info("focus launcher: %s", e.message))
 
+    def freeze(self, on):
+        self._call_async(lambda: self._core.freeze(on))
+
+    nested = property(lambda self: bool(self._core.nested()))
+
+    def gameShown(self):
+        return self._guarded(False, self._core.nest_game_shown)
+
+    def overlay(self, window, input, opacity):
+        return self._done(self._core.nest_overlay, int(window), bool(input), int(opacity))
+
+    def frame(self, on_done):
+        self._call_async(self._core.nest_frame, lambda path: on_done(str(path or "")), lambda e: on_done(""))
+
+    def hostGamescope(self, screen):
+        return self._guarded(None, self._core.host_gamescope, screen or "")
+
+    def setFpsLimit(self, on_reply):
+        self._call_async(self._core.set_fps_limit, lambda combo: on_reply(str(combo or "")))
+
+    def nestFilter(self, filter, sharpness):
+        return self._done(self._core.nest_filter, filter, sharpness)
+
+    def volumeAsync(self, change, value, on_reply):
+        self._call_async(lambda: self._core.volume(change, int(value)), on_reply)
+
     def adoptScope(self):
         try:
             return str(self._call(self._core.adopt_scope) or "")

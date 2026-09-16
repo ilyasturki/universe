@@ -134,7 +134,7 @@ FocusScope {
             return;
         }
         Sound.play("ok");
-        api.universe.focusSession();
+        api.home.toGame();
     }
 
     function closeSoftware(game) {
@@ -370,6 +370,22 @@ FocusScope {
     Connections {
         target: api.screens.controller
         function onMacroNotice(text) { toast.show(text); }
+    }
+
+    Connections {
+        target: api.home
+        function onPressed() {
+            if (!root.sessionRunning || root.launching)
+                return;
+            if (api.home.shown === "game") {
+                if (root.depth === 0)
+                    Sound.play("home");
+                api.home.toLauncher();
+                root.goHome();
+            } else if (!root.modal) {
+                root.resume();
+            }
+        }
     }
 
     Keys.onPressed: function(event) {

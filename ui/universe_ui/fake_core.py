@@ -68,6 +68,9 @@ class FakeCore:
         self._session_started = None
         self._closed = False
         self.last_splash = ""
+        self.game_shown = False
+        self.frozen = False
+        self.level, self.muted = 62, False
         self._config.setdefault("paths", {})["overrides"] = str(self._root / "overrides")
         self._lay_out()
 
@@ -339,6 +342,7 @@ class FakeCore:
             current, self._session, self._process = self._session, None, None
             if not current or self._closed:
                 return
+            self.game_shown = self.frozen = False
             duration = max(1, int(round(time.monotonic() - self._session_started)))
             game = self._game(current["id"])
             stats = game.setdefault("stats", {"hours": 0, "play_count": 0, "last_played": None})
@@ -380,14 +384,62 @@ class FakeCore:
     def wait_session_window(self, session_id, timeout_ms):
         time.sleep(min(WINDOW_S, timeout_ms / 1000))
         current = self.current()
-        return self._window() if current and current["session_id"] == session_id else None
+        if not current or current["session_id"] != session_id:
+            return None
+        self.game_shown = True
+        return self._window()
 
     def focus_session(self):
         if not self.current():
             raise UniverseError("NotFound", "no session running")
+        self.game_shown = True
 
     def focus_pid(self, pid):
-        return None
+        if pid == os.getpid():
+            self.game_shown = False
+
+    def freeze(self, on):
+        if not self.current():
+            raise UniverseError("NotFound", "no session running")
+        self.frozen = bool(on)
+
+    def nested(self):
+        return bool(os.environ.get("GAMESCOPE_WAYLAND_DISPLAY"))
+
+    def nest_game_shown(self):
+        return bool(self.current()) and self.game_shown
+
+    def nest_overlay(self, window, input, opacity):
+        pass
+
+    def nest_frame(self):
+        return os.path.join(self._cache, "screenshot.png")
+
+    def host_gamescope(self, screen):
+        gamescope = shutil.which("gamescope")
+        return [gamescope, "-f", "--force-composition", "--mangoapp"] if gamescope else None
+
+    def set_fps_limit(self):
+        if not self.current():
+            raise UniverseError("NotFound", "no session running")
+        return "Shift_L+F4"
+
+    def nest_filter(self, filter, sharpness=None):
+        pass
+
+    def volume(self, change, value=0):
+        step = int((self._config.get("controller") or {}).get("volume_step") or 2)
+        if change == "up":
+            self.level = min(100, self.level + step)
+        elif change == "down":
+            self.level = max(0, self.level - step)
+        elif change == "mute":
+            self.muted = not self.muted
+        elif change == "set":
+            self.level = max(0, min(100, int(value)))
+        elif change != "get":
+            raise UniverseError("Invalid", f"volume: up, down, mute, set or get, not '{change}'")
+        return {"percent": self.level, "muted": self.muted, "output": "Fake speakers"}
 
     def screenshot(self):
         return os.path.join(self._cache, "screenshot.png")
