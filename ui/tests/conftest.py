@@ -29,7 +29,6 @@ def app(xdg):
 
 @pytest.fixture
 def fake(app, xdg, tmp_path):
-    """`CoreClient` over a `FakeCore` laid out under a fresh root; the core is `fake.core`."""
     from universe_ui.fake_core import FIXTURE, FakeCore
     from universe_ui.universe_client import CoreClient
 
@@ -73,7 +72,6 @@ def pump(ms):
 
 
 def settle(screen, timeout_ms=5000):
-    """Pumps until `screen.busy` clears: the client runs every screen's work on a thread."""
     from PySide6.QtCore import QDeadlineTimer
 
     deadline = QDeadlineTimer(timeout_ms)

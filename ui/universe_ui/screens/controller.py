@@ -1,6 +1,3 @@
-# The watcher is a child process speaking JSON lines both ways: events in on stdout, commands out on stdin.
-# A row is the settings row plus `slot`, `family`, `bound`, `code`, `extra`, `press`, `hold` (each macro with its `label`).
-
 import json
 import logging
 import os
@@ -78,7 +75,6 @@ class Watcher(QObject):
 
 
 class FakeWatcher(QObject):
-    # One pad of `family` ("none" for no pad), every slot bound but the `unbound` ones.
     event = Signal(object)
 
     def __init__(self, family="dualsense-edge", unbound=(), parent=None):
@@ -192,15 +188,14 @@ class ControllerScreen(QObject):
 
     @Slot()
     def load(self):
-        self._state = dict(self._client.controllerState() or {})
+        self._state = dict(self._client.controllerState())
         if self._passive:
             self._enumerate()
         self._rebuild()
         self.stateChanged.emit()
 
-    # Another watcher owns the pads: the core lists them as that watcher would announce them.
     def _enumerate(self):
-        self._devices = [self._entry(p) for p in self._client.controllerPads() or [] if p.get("id")]
+        self._devices = [self._entry(p) for p in self._client.controllerPads() if p.get("id")]
         if self._device() is None:
             self._current = self._devices[0]["id"] if self._devices else ""
             if self._devices:
@@ -285,7 +280,7 @@ class ControllerScreen(QObject):
                 QTimer.singleShot(self._restart_delay, self._restart)
                 self._restart_delay = min(max(self._restart_delay, 1) * 2, RESTART_MAX_MS)
 
-    # The MangoHud toggle types a key the launcher never sees: with the launcher up the press would look like nothing.
+    # MangoHud's toggle is a key the launcher never sees: on it the press would look like nothing.
     def _notice(self, action):
         if action != "mangohud":
             return ""
@@ -293,7 +288,7 @@ class ControllerScreen(QObject):
         if not current or not current.get("session_id"):
             return "MangoHud: no game running"
         title = str(current.get("title") or current.get("id") or "")
-        game = self._client.game(str(current.get("id") or "")) or {}
+        game = self._client.game(str(current.get("id") or ""))
         if (game.get("effective") or {}).get("mangohud", True):
             return f"MangoHud toggled · {title}"
         return f"MangoHud is off for {title}"
@@ -329,7 +324,6 @@ class ControllerScreen(QObject):
                 break
         else:
             self._devices.append(entry)
-        # The shown pad came back under a new node: stay on it rather than on the fallback.
         if self._device() is None or (self._wanted and entry["name"] == self._wanted):
             self._current = ident
             self._wanted = ""

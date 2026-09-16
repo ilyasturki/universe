@@ -1,5 +1,3 @@
-"""CoreClient over a FakeCore in a tmp root: what the client derives from the core's files and marker."""
-
 import json
 from pathlib import Path
 
@@ -95,7 +93,6 @@ def test_files_written_by_others_reach_the_screens(fake):
             break
     assert changed == [(["control"],)]
 
-    # A pick through the client: mediaChanged at once, and the overrides watch sees the file too.
     assert fake.mediaSetSlot("control", "banner", fake.game("control")["media"]["logo"])
     assert media == [("control",)]
     assert fake.game("control")["media"]["banner"].startswith(str(core._root / "overrides" / "control"))
@@ -141,7 +138,6 @@ def test_the_real_core_reads_writes_and_watches(app):
     assert client.game("nope") == {} and seen == [("NotFound", "nope")]
     assert client.set("sample", "favorite", "true") and client.game("sample")["favorite"] is True
 
-    # another process writes a journal entry: the watch reloads the game and tells the screens
     written = _collect(client.entryWritten)
     (games / "sample" / "journal").mkdir()
     pump(700)  # the new directory is itself a change; the watch on it starts here

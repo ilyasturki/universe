@@ -15,9 +15,9 @@ class LaunchForm(RowsForm):
 
     @Slot()
     def load(self):
-        config = self._client.config() or {}
+        config = self._client.config()
         launch = config.get("launch") or {}
-        mode = self._screen_mode() or {}
+        mode = self._screen_mode()
         self._screen = " ".join(p for p in (str(mode.get("screen") or ""), screen_label(mode)) if p)
         self.screenChanged.emit()
         keys = self._client.launchKeys("global", mode)

@@ -27,15 +27,13 @@ BUTTON_KEYS = {
     BTN_DPAD_RIGHT: Qt.Key.Key_Right,
 }
 
-# (negative key, positive key) per axis; triggers only go positive.
 AXIS_KEYS = {
-    AXIS_LEFTX: (Qt.Key.Key_Left, Qt.Key.Key_Right),
-    AXIS_LEFTY: (Qt.Key.Key_Up, Qt.Key.Key_Down),
-    AXIS_TRIGGERLEFT: (None, Qt.Key.Key_PageUp),
-    AXIS_TRIGGERRIGHT: (None, Qt.Key.Key_PageDown),
+    AXIS_LEFTX: {-1: Qt.Key.Key_Left, 1: Qt.Key.Key_Right},
+    AXIS_LEFTY: {-1: Qt.Key.Key_Up, 1: Qt.Key.Key_Down},
+    AXIS_TRIGGERLEFT: {1: Qt.Key.Key_PageUp},
+    AXIS_TRIGGERRIGHT: {1: Qt.Key.Key_PageDown},
 }
 
-# The right stick reaches the theme as a value, not a key: it scrubs the recording player.
 STICKS = {AXIS_RIGHTX: "rightX"}
 STICK_DEADZONE = 0.18
 
@@ -45,12 +43,10 @@ REPEAT_DELAY, REPEAT_INTERVAL = 0.35, 0.09
 
 
 class Mapper:
-    """Turns button/axis samples into (key, pressed, autorepeat) transitions."""
-
     def __init__(self, clock=time.monotonic):
         self._clock = clock
         self._axis = {}
-        self._held = {}
+        self.held = {}
         self._stick = {}
 
     def button(self, button, pressed):
@@ -61,7 +57,7 @@ class Mapper:
         keys = AXIS_KEYS.get(axis)
         if keys is None:
             return []
-        value = max(-1.0, min(1.0, value / 32767.0))
+        value /= 32767.0
         current = self._axis.get(axis, 0)
         direction = current
         if abs(value) < AXIS_RELEASE:
@@ -72,14 +68,13 @@ class Mapper:
             return []
         self._axis[axis] = direction
         out = []
-        if current != 0 and keys[(current + 1) // 2] is not None:
-            out += self._transition(keys[(current + 1) // 2], False)
-        if direction != 0 and keys[(direction + 1) // 2] is not None:
-            out += self._transition(keys[(direction + 1) // 2], True)
+        if keys.get(current) is not None:
+            out += self._transition(keys[current], False)
+        if keys.get(direction) is not None:
+            out += self._transition(keys[direction], True)
         return out
 
     def stick(self, axis, value):
-        """(name, value) for a stick axis the theme reads as analog, -1..1 past the deadzone; None if unchanged."""
         name = STICKS.get(axis)
         if name is None:
             return None
@@ -96,21 +91,21 @@ class Mapper:
 
     def _transition(self, key, pressed):
         if pressed:
-            if key in self._held:
+            if key in self.held:
                 return []
-            self._held[key] = self._clock() + REPEAT_DELAY
+            self.held[key] = self._clock() + REPEAT_DELAY
             return [(key, True, False)]
-        if key not in self._held:
+        if key not in self.held:
             return []
-        del self._held[key]
+        del self.held[key]
         return [(key, False, False)]
 
     def tick(self):
         now = self._clock()
         out = []
-        for key, due in self._held.items():
+        for key, due in self.held.items():
             if key in REPEATING and now >= due:
-                self._held[key] = due + REPEAT_INTERVAL if now - due < REPEAT_INTERVAL else now + REPEAT_INTERVAL
+                self.held[key] = due + REPEAT_INTERVAL if now - due < REPEAT_INTERVAL else now + REPEAT_INTERVAL
                 out.append((key, True, True))
         return out
 
@@ -136,7 +131,6 @@ class GamepadThread(QThread):
         self.mapper = Mapper()
         self.key.connect(self._post, Qt.ConnectionType.QueuedConnection)
 
-    # A muted pad posts no press; a release still lands, so nothing stays held across the mute.
     @Slot(int, bool, bool)
     def _post(self, key, pressed, autorepeat):
         if pressed and self._pad is not None and self._pad.muted:
@@ -163,7 +157,7 @@ class GamepadThread(QThread):
                     self._handle(sdl2, event, controllers)
                 for key, pressed, repeat in self.mapper.tick():
                     self.key.emit(key, pressed, repeat)
-                sdl2.SDL_WaitEventTimeout(None, 20 if self.mapper._held else 500)
+                sdl2.SDL_WaitEventTimeout(None, 20 if self.mapper.held else 500)
         finally:
             for c in controllers.values():
                 sdl2.SDL_GameControllerClose(c)
@@ -203,10 +197,8 @@ KEY_NAMES = {
 }
 
 
+# `--keys`, one name per gap: `Wait`, `Wait:N`, `Hold:A`/`Release:A`, `Stick:rightX=0.6`, `Shot:path.png`; with a fake watcher `Press:slot`/`Unpress:slot`, `Axis:lx=0.6`.
 class KeyScript(QObject):
-    """One name per gap: `Wait`, `Wait:N`, `Hold:A`/`Release:A`, `Stick:rightX=0.6`, `Shot:path.png`;
-    with a fake watcher, `Press:slot`/`Unpress:slot` and `Axis:lx=0.6` play the pad."""
-
     def __init__(self, script, gap_ms, window, pad=None, watcher=None, parent=None):
         super().__init__(parent)
         self._queue = [k for k in script.split() if k]

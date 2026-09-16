@@ -9,7 +9,6 @@ from .screens import Screens
 from .screens.paths import universe_home
 from .themes import ThemeSelector
 
-# Pegasus's default keyboard bindings, which the themes' hints assume.
 KEYS = {
     "Accept": (Qt.Key.Key_Return, Qt.Key.Key_Enter),
     "Cancel": (Qt.Key.Key_Escape,),
@@ -24,7 +23,6 @@ KEYS = {
 
 SOURCE_NAMES = {"gog": "GOG", "lutris": "Lutris", "steam": "Steam", "epic": "Epic", "itch": "itch.io"}
 
-# Platform names as the daemon reports them → the theme's collection shortnames (assets/platforms).
 PLATFORM_SHORT = {
     "windows": "windows", "linux": "linux", "mac": "mac", "macos": "mac", "steam": "steam",
     "nintendo switch": "switch", "nintendo wii": "wii", "nintendo wii u": "wiiu",
@@ -66,19 +64,18 @@ class Keys(QObject):
 
 
 class Pad(QObject):
-    # `muted` keeps the pad's presses from becoming keys while the controller section shows them live.
     changed = Signal()
     mutedChanged = Signal()
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._axes = {"rightX": 0.0}
+        self._right_x = 0.0
         self._muted = False
 
     @Slot(str, float)
     def set(self, name, value):
-        if name in self._axes and self._axes[name] != value:
-            self._axes[name] = value
+        if name == "rightX" and self._right_x != value:
+            self._right_x = value
             self.changed.emit()
 
     def setMuted(self, muted):
@@ -86,7 +83,7 @@ class Pad(QObject):
             self._muted = bool(muted)
             self.mutedChanged.emit()
 
-    rightX = Property(float, lambda self: self._axes["rightX"], notify=changed)
+    rightX = Property(float, lambda self: self._right_x, notify=changed)
     muted = Property(bool, lambda self: self._muted, setMuted, notify=mutedChanged)
 
 
@@ -144,9 +141,8 @@ class Library(QObject):
         self.reload()
 
     def reload(self):
-        rows = self._client.list() or []
         seen = set()
-        for data in rows:
+        for data in self._client.list():
             ident = str(data.get("id") or "")
             if not ident or data.get("removed"):
                 continue
@@ -186,11 +182,11 @@ class Library(QObject):
         if not data:
             return
         game = self._games.get(ident)
-        was_hidden = game.hidden if game else None
         if game is None:
             self._games[ident] = Game(data, self, self)
             self._rebuild()
             return
+        was_hidden = game.hidden
         game.update(data)
         if game.hidden != was_hidden:
             self._rebuild()
@@ -233,8 +229,7 @@ class Api(QObject):
 
     def shutdown(self):
         self._screens.shutdown()
-        if hasattr(self._client, "shutdown"):
-            self._client.shutdown()
+        self._client.shutdown()
 
     def screenName(self):
         screen = self._window.screen() if self._window is not None else None
@@ -243,7 +238,7 @@ class Api(QObject):
     def screenMode(self):
         name = self.screenName()
         if name not in self._modes:
-            self._modes[name] = self._client.screenMode(name) or {}
+            self._modes[name] = self._client.screenMode(name)
         return self._modes[name]
 
     @property

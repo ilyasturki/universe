@@ -7,8 +7,8 @@ def _expand(path):
     return os.path.abspath(os.path.expanduser(str(path or "") or "~"))
 
 
+# $UNIVERSE_<KIND>_HOME, else $XDG_<KIND>_HOME/universe, else ~/<fallback>/universe: universe(1)'s order.
 def universe_home(kind, fallback):
-    """$UNIVERSE_<KIND>_HOME, else $XDG_<KIND>_HOME/universe, else ~/<fallback>/universe — as universe(1) resolves them."""
     base = os.environ.get(f"UNIVERSE_{kind}_HOME")
     if base:
         return base
@@ -39,8 +39,7 @@ class PathBrowser(QObject):
         self._shortcuts = []
 
     def _load_shortcuts(self):
-        config = self._client.config() or {}
-        paths = config.get("paths") or {}
+        paths = self._client.config().get("paths") or {}
         wanted = [("Home", "~"), ("Games", paths.get("games_root")), ("Prefixes", paths.get("prefixes_root"))]
         wanted += [(os.path.basename(m), m) for m in _mounts()]
         wanted.append(("Root", "/"))

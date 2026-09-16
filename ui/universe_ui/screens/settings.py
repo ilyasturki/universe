@@ -70,12 +70,10 @@ def _to_bus(row, value):
     return payload
 
 
-# The catalogue's kinds as the rows' types; a `list` shows and edits as its comma-joined string.
 ROW_TYPES = {"resolution": "string", "refresh": "int", "fps": "string", "proton": "enum", "list": "string"}
 
 
 def screen_label(mode):
-    """`3840×2160 @ 60 Hz`, or empty when the mode is unknown."""
     w, h, hz = int(mode.get("width") or 0), int(mode.get("height") or 0), int(mode.get("refresh") or 0)
     if not w or not h:
         return ""
@@ -83,14 +81,12 @@ def screen_label(mode):
 
 
 def auto_rate(mode, gamescope, gamescope_refresh):
-    """The rate `fps_limit = auto` stands for: the gamescope one when set, else the screen's."""
     if gamescope and str(gamescope_refresh or "").isdigit():
         return int(gamescope_refresh)
     return int(mode.get("refresh") or 0)
 
 
 def proton_choices(config):
-    """The config's `[proton]` names, the default first when it is not one of them (a path)."""
     choices = sorted((config.get("proton") or {}).keys())
     default = str(_dig(config, "launch.proton", "") or "")
     if default and default not in choices:
@@ -99,8 +95,6 @@ def proton_choices(config):
 
 
 def launch_row(section, spec, value, inherited=False, protons=(), auto_hz=0):
-    """A row over a `launchKeys` entry and the value shown; an enum or int with choices lists a `default`
-    choice standing for the key left empty (`choiceValues` maps the choices to what is written)."""
     kind = ROW_TYPES.get(spec["type"], spec["type"])
     choices, values = [str(c) for c in spec["choices"]], None
     if spec["type"] in ("enum", "int") and choices:
@@ -110,7 +104,7 @@ def launch_row(section, spec, value, inherited=False, protons=(), auto_hz=0):
     if kind == "bool":
         value = bool(value)
     elif values:
-        value = choices[0] if value in (None, "") else choices[values.index(str(value))] if str(value) in values else str(value)
+        value = "default" if value in (None, "") else str(value)
     elif choices and value is not None:
         value = str(value)
     row = _row(section, "launch." + spec["key"], spec["label"], kind, value, choices, detail=spec["description"], inherited=inherited)
@@ -216,20 +210,19 @@ class GameSettingsForm(RowsForm):
     def load(self, game_id):
         self._game_id = game_id
         self.gameIdChanged.emit()
-        game = self._client.game(game_id) or {}
-        config = self._client.config() or {}
+        game = self._client.game(game_id)
+        config = self._client.config()
         self._title = str(game.get("title") or game_id)
         self.titleChanged.emit()
         effective = game.get("effective") or {}
         rows, runner_kind = self._launch_rows(game, effective)
         groups = [_group("Launch", range(len(rows)), caps=True)]
-        mode = self._screen_mode() or {}
+        mode = self._screen_mode()
         protons = proton_choices(config)
         hz = auto_rate(mode, effective.get("gamescope", True), effective.get("gamescope_refresh"))
         for spec in self._client.launchKeys("game", mode):
             if spec["runners"] and runner_kind not in spec["runners"]:
                 continue
-            # A key the game leaves empty takes the global value, `effective` says which.
             own = _dig(game, "launch." + spec["key"])
             value, inherited = own, False
             if own in (None, "") and spec["scope"] == "both":
@@ -244,8 +237,8 @@ class GameSettingsForm(RowsForm):
             if kind == "bool":
                 value = bool(value)
             _add(rows, groups, section, _row(section, key, label, kind, value, inherited=inherited), caps=True)
-        modules = {m["id"]: m for m in self._client.modules() or []}
-        for module_id, values in (self._client.settings(game_id) or {}).items():
+        modules = {m["id"]: m for m in self._client.modules()}
+        for module_id, values in self._client.settings(game_id).items():
             module = modules.get(module_id) or {}
             name = module.get("name", module_id)
             group = _group(name, [], meta=_module_meta(module))
@@ -262,7 +255,7 @@ class GameSettingsForm(RowsForm):
         self._set_rows(rows, groups)
 
     def _launch_rows(self, game, effective):
-        runners = list(self._client.runners() or [])
+        runners = self._client.runners()
         runner_id = str(effective.get("runner") or "proton")
         spec = next((r for r in runners if r["id"] == runner_id), None) or {"id": runner_id, "name": runner_id, "kind": "", "platforms": [], "options": []}
         kind = spec.get("kind") or ""
@@ -321,7 +314,7 @@ class ModulesForm(RowsForm):
     @Slot()
     def load(self):
         rows, on, off = [], [], []
-        for module in self._client.modules() or []:
+        for module in self._client.modules():
             ident = module["id"]
             name = module.get("name", ident)
             enabled = bool(module.get("enabled"))
@@ -347,9 +340,9 @@ class ModulesForm(RowsForm):
 
     @Slot()
     def loadDoctor(self):
-        names = {m["id"]: m.get("name", m["id"]) for m in self._client.modules() or []}
+        names = {m["id"]: m.get("name", m["id"]) for m in self._client.modules()}
         rows, groups = [], []
-        for check in self._client.doctor() or []:
+        for check in self._client.doctor():
             ident = check.get("module") or ""
             name = names.get(ident, ident) or "Core"
             group = next((g for g in groups if g["title"] == name), None)
@@ -372,7 +365,7 @@ class ModulesForm(RowsForm):
 
 
 class ModuleForm(RowsForm):
-    # A `dynamic` setting's choices come from the module, fetched once per state of its settings.
+    # A `dynamic` setting's choices are fetched once per state of the module's settings.
     moduleChanged = Signal()
 
     def __init__(self, client, parent=None):
@@ -383,25 +376,14 @@ class ModuleForm(RowsForm):
         self._pending = set()
         client.modulesChanged.connect(self.reload)
 
-    def _choices(self, ident, key, setting, values):
-        choices = [str(c) for c in setting.get("choices") or []]
-        if setting.get("dynamic"):
-            choices = self._dynamic.get(self._dynamic_key(ident, key, values), choices)
-        return choices
-
-    @staticmethod
-    def _dynamic_key(ident, key, values):
-        return (ident, key, json.dumps(values, sort_keys=True, default=str))
-
-    def _fetch_dynamic(self, ident, key, values):
-        cache_key = self._dynamic_key(ident, key, values)
-        if cache_key in self._dynamic or cache_key in self._pending:
+    def _fetch_dynamic(self, cache_key, ident, key):
+        if cache_key in self._pending:
             return
         self._pending.add(cache_key)
 
         def done(choices):
             self._pending.discard(cache_key)
-            self._dynamic[cache_key] = [str(c) for c in choices or []]
+            self._dynamic[cache_key] = [str(c) for c in choices]
             self.reload()
 
         self._client.runAsync(lambda: self._client.settingChoices(ident, key), done)
@@ -417,7 +399,7 @@ class ModuleForm(RowsForm):
         self.moduleChanged.emit()
 
     def _build(self, ident):
-        module = next((m for m in self._client.modules() or [] if m["id"] == ident), None)
+        module = next((m for m in self._client.modules() if m["id"] == ident), None)
         if module is None:
             self._module = {}
             return [], []
@@ -432,17 +414,21 @@ class ModuleForm(RowsForm):
         groups = [_group("", [0])]
         if not enabled:
             return rows, groups
-        values = self._client.getSettings(ident, "") or {}
+        values = self._client.getSettings(ident, "")
         settings = _group("Settings", [], caps=True)
         for setting in module.get("settings") or []:
             if setting.get("scope") != "global":
                 continue
             key = setting["key"]
+            choices = [str(c) for c in setting.get("choices") or []]
             if setting.get("dynamic"):
-                self._fetch_dynamic(ident, key, values)
+                cache_key = (ident, key, json.dumps(values, sort_keys=True, default=str))
+                if cache_key in self._dynamic:
+                    choices = self._dynamic[cache_key]
+                else:
+                    self._fetch_dynamic(cache_key, ident, key)
             settings["rows"].append(len(rows))
-            rows.append(_row(name, key, setting.get("label", key), setting.get("type", "string"),
-                             values.get(key, setting.get("default")), self._choices(ident, key, setting, values), ident))
+            rows.append(_row(name, key, setting.get("label", key), setting.get("type", "string"), values.get(key, setting.get("default")), choices, ident))
         if settings["rows"]:
             groups.append(settings)
         return rows, groups

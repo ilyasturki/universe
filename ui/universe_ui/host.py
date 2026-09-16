@@ -23,6 +23,7 @@ def parse_args(argv):
     parser.add_argument("--size", metavar="WxH", help="window size, implies --windowed (default 1920x1080)")
     parser.add_argument("--theme", default="", metavar="ID", help="the look for this run: reprise or switch2")
     args = parser.parse_args(argv)
+    args.fake = args.fake or args.fake_launch
     args.fullscreen = not (args.windowed or args.size)
     args.size = args.size or "1920x1080"
     return args
@@ -31,7 +32,7 @@ def parse_args(argv):
 def build_client(args):
     from .universe_client import CoreClient
 
-    if args.fake or args.fake_launch:
+    if args.fake:
         from .fake_core import FakeCore
 
         return CoreClient(FakeCore(fake_launch=args.fake_launch))
@@ -88,7 +89,7 @@ def run(argv=None):
     from .api import Api
 
     client = build_client(args)
-    if not (args.fake or args.fake_launch):
+    if not args.fake:
         client.adoptScope()
     api = Api(client, fullscreen=args.fullscreen, theme=args.theme, parent=app)
     quit_on_signals(app)
@@ -109,7 +110,7 @@ def run(argv=None):
         except ValueError:
             pass
 
-    gamepad = None
+    gamepad = watcher = None
     if not args.no_gamepad:
         from .gamepad import GamepadThread
         from .screens.controller import FakeWatcher, Watcher
@@ -117,7 +118,7 @@ def run(argv=None):
         gamepad = GamepadThread(app, pad=api.pad)
         gamepad.stick.connect(api.pad.set, Qt.ConnectionType.QueuedConnection)
         gamepad.start()
-        if args.fake or args.fake_launch:
+        if args.fake:
             unbound = [s for s in os.environ.get("UNIVERSE_FAKE_UNBOUND", "").split(",") if s]
             watcher = FakeWatcher(os.environ.get("UNIVERSE_FAKE_PAD") or "dualsense-edge", unbound, parent=app)
         else:
@@ -129,8 +130,7 @@ def run(argv=None):
 
         # Keys only reach an active window; a bare X server hands focus to nobody by itself.
         window.requestActivate()
-        fake_pad = watcher if gamepad is not None and (args.fake or args.fake_launch) else None
-        KeyScript(args.keys, args.key_gap, window, pad=api.pad, watcher=fake_pad, parent=app).start(args.key_delay)
+        KeyScript(args.keys, args.key_gap, window, pad=api.pad, watcher=watcher if args.fake else None, parent=app).start(args.key_delay)
 
     if args.quit_after > 0:
         QTimer.singleShot(args.quit_after, app.quit)
@@ -138,7 +138,6 @@ def run(argv=None):
     rc = app.exec()
     if gamepad is not None:
         gamepad.stop()
-    # The scope is ours now: the game goes with the launcher, and stopping it first lets session-end run.
     if client.currentSession:
         client.stopNow("")
     api.shutdown()

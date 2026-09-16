@@ -18,21 +18,17 @@ def _found(runner):
     return runner.get("kind") == "linux" or bool(runner.get("path"))
 
 
-def _games(n):
-    return f"{n} game" + ("" if n == 1 else "s")
-
-
 class RunnersForm(RowsForm):
     @Slot()
     def load(self):
         usage = {}
-        for game in self._client.list() or []:
+        for game in self._client.list():
             ident = str((game.get("effective") or {}).get("runner") or (game.get("launch") or {}).get("runner") or "")
             if not ident:
                 continue
             count, hours = usage.get(ident, (0, 0.0))
             usage[ident] = (count + 1, hours + float((game.get("stats") or {}).get("hours") or 0))
-        runners = sorted(self._client.runners() or [],
+        runners = sorted(self._client.runners(),
                          key=lambda r: (not _found(r), -usage.get(r["id"], (0, 0.0))[0], -usage.get(r["id"], (0, 0.0))[1],
                                         r.get("name", r["id"]).lower()))
         rows, found, missing = [], [], []
@@ -40,7 +36,7 @@ class RunnersForm(RowsForm):
             ident = runner["id"]
             count = usage.get(ident, (0, 0.0))[0]
             row = _row("Runners", "runner", runner.get("name", ident), "action", "", module=ident)
-            row.update(display=_games(count) if count else "", icon=runner_logo(ident), iconSlot=True, runner=ident, action="Open")
+            row.update(display=f"{count} game{'' if count == 1 else 's'}" if count else "", icon=runner_logo(ident), iconSlot=True, runner=ident, action="Open")
             (found if _found(runner) else missing).append(len(rows))
             rows.append(row)
         groups = [_group("", found)]
@@ -64,7 +60,7 @@ class RunnerForm(RowsForm):
 
     @Slot(str)
     def load(self, ident):
-        runner = next((r for r in self._client.runners() or [] if r["id"] == ident), None)
+        runner = next((r for r in self._client.runners() if r["id"] == ident), None)
         if runner is None:
             self._runner = {}
             self._set_rows([], [])
@@ -84,14 +80,13 @@ class RunnerForm(RowsForm):
         self._runner = {"id": ident, "name": name, "meta": meta, "warning": warning, "icon": runner_logo(ident)}
         rows, groups = [], []
         if runner.get("kind") != "linux":
-            # Not set: the program the core found stands in the row, its origin under it.
             own = runner.get("exe") or ""
             origin = {"path": "Found on PATH", "lutris": "Found in Lutris's runners"}.get(source, "Found") if found and not own else ""
             rows.append(_row(name, "exe", "Program", "path", own or found, module=ident, detail=origin, inherited=not own and bool(found)))
             rows.append(_row(name, "args", "Arguments", "string", runner.get("args") or "", module=ident))
             groups.append(_group("", list(range(len(rows)))))
         own = runner.get("gamescope")
-        default = bool(((self._client.config() or {}).get("launch") or {}).get("gamescope", True))
+        default = bool((self._client.config().get("launch") or {}).get("gamescope", True))
         rows.append(_row(name, "gamescope", "Gamescope", "bool", default if own is None else bool(own), module=ident, inherited=own is None))
         groups.append(_group("", [len(rows) - 1]))
         options = runner.get("options") or []

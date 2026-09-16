@@ -1,6 +1,3 @@
-"""`api.universe`: the core's methods as slots over one core object (`universe_core.Core`, or `FakeCore`),
-and the signals derived from its files and marker — the core pushes nothing."""
-
 import json
 import logging
 import os
@@ -8,14 +5,8 @@ import tempfile
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import (
-    Property,
-    QFileSystemWatcher,
-    QObject,
-    QTimer,
-    Signal,
-    Slot,
-)
+from PySide6.QtCore import Property, QFileSystemWatcher, QObject, QTimer, Signal, Slot
+from PySide6.QtGui import QImage
 
 from .errors import UniverseError
 
@@ -28,12 +19,9 @@ except ImportError:  # --fake without the extension built
 log = logging.getLogger("universe.client")
 
 
+# `universe splash`'s format: `<w> <h>\n` then RGB32 rows; the helper deletes the file once shown.
 def write_poster(image, ident):
-    """The poster in `universe splash`'s format — `<w> <h>\n` then RGB32 rows — under the runtime dir;
-    the helper deletes it once shown. `""` when it cannot be written: the launch goes on without it."""
     try:
-        from PySide6.QtGui import QImage
-
         image = image.convertToFormat(QImage.Format_RGB32)
         width, height, stride = image.width(), image.height(), image.bytesPerLine()
         base = Path(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()) / "universe"
@@ -48,15 +36,12 @@ def write_poster(image, ident):
                 for y in range(height):
                     f.write(bits[y * stride:y * stride + width * 4])
         return str(path)
-    except (OSError, AttributeError, ImportError) as e:
+    except OSError as e:
         log.warning("launch poster: %s", e)
         return ""
 
 
 class CoreClient(QObject):
-    """The surface QML sees as `api.universe`: the core's calls as slots, and the signals derived from
-    the files and the marker (docs/frontends.md § Changes)."""
-
     sessionStarted = Signal(str, str)
     sessionEnded = Signal(str, str, int)
     libraryChanged = Signal("QVariantList")
@@ -69,8 +54,6 @@ class CoreClient(QObject):
     currentSessionChanged = Signal()
     launched = Signal(str, str)
     launchFailed = Signal(str, str)
-    # The game's window is on screen and has the focus (`ok`), or nobody can tell: no shell
-    # extension, or no window within the wait.
     sessionShown = Signal(str, bool)
     error = Signal(str, str)
 
@@ -82,10 +65,10 @@ class CoreClient(QObject):
         self._current = None
         self._data = Path(core.data_home())
         self._state = Path(core.state_home())
-        self._overrides = self._overrides_dir()
+        overrides = (self.config().get("paths") or {}).get("overrides")
+        self._overrides = Path(os.path.expanduser(overrides)) if overrides else None
         self._job_seq = 0
         self._jobs = {}
-        self._tracked = None
         self._closed = False
         self._deliver.connect(lambda fn: None if self._closed else fn())
         self._dirty = set()
@@ -107,7 +90,6 @@ class CoreClient(QObject):
     def core(self):
         return self._core
 
-    # Nothing reaches the screens past this point: threads still out deliver into the void.
     def shutdown(self):
         self._closed = True
         close = getattr(self._core, "shutdown", None)
@@ -117,8 +99,6 @@ class CoreClient(QObject):
         self._debounce.stop()
         if self._watcher.directories():
             self._watcher.removePaths(self._watcher.directories())
-
-    # -- the core's errors, once ------------------------------------------------------------
 
     def _call(self, fn, *args):
         try:
@@ -131,10 +111,11 @@ class CoreClient(QObject):
 
     def _guarded(self, default, fn, *args):
         try:
-            return self._call(fn, *args)
+            value = self._call(fn, *args)
         except UniverseError as e:
             self.error.emit(e.kind, e.message)
             return default
+        return default if value is None else value
 
     def _done(self, fn, *args):
         try:
@@ -144,8 +125,9 @@ class CoreClient(QObject):
             return False
         return True
 
-    # Launch blocks on pre-launch hooks (up to 20 s): keep the event loop, hence the animation, alive.
-    def _call_async(self, work, on_reply, on_error):
+    def _call_async(self, work, on_reply=None, on_error=None):
+        on_error = on_error or (lambda e: self.error.emit(e.kind, e.message))
+
         def run():
             try:
                 value = self._call(work)
@@ -153,41 +135,37 @@ class CoreClient(QObject):
                 err = e
                 self._deliver.emit(lambda: on_error(err))
                 return
-            self._deliver.emit(lambda: on_reply(value))
+            if on_reply is not None:
+                self._deliver.emit(lambda: on_reply(value))
 
         threading.Thread(target=run, daemon=True, name="core-call").start()
 
     def runAsync(self, work, on_done):
-        """`work()` off the UI thread, `on_done(result)` back on it."""
         def run():
             result = work()
             self._deliver.emit(lambda: on_done(result))
 
         threading.Thread(target=run, daemon=True, name="runAsync").start()
 
-    # -- session state ---------------------------------------------------------------------
-
     def refreshCurrent(self):
-        current = self._guarded(None, self._core.current) or None
+        current = self._guarded(None, self._core.current)
         if current != self._current:
             self._current = current
             self.currentSessionChanged.emit()
 
     currentSession = Property("QVariant", lambda self: self._current, notify=currentSessionChanged)
 
-    # -- library ---------------------------------------------------------------------------
-
     @Slot(result="QVariant")
     def list(self):
-        return self._guarded([], self._core.list) or []
+        return self._guarded([], self._core.list)
 
     @Slot(str, result="QVariant")
     def game(self, ident):
-        return self._guarded({}, self._core.get, ident) or {}
+        return self._guarded({}, self._core.get, ident)
 
     @Slot(str, result="QVariant")
     def resolve(self, query):
-        return list(self._guarded([], self._core.resolve, query) or [])
+        return self._guarded([], self._core.resolve, query)
 
     @Slot(str, str, str, result=bool)
     def set(self, ident, key, value):
@@ -195,7 +173,7 @@ class CoreClient(QObject):
 
     @Slot(str, bool, result=bool)
     def remove(self, ident, purge):
-        return self._done(self._core.remove, ident, bool(purge))
+        return self._done(self._core.remove, ident, purge)
 
     @Slot(str, result=bool)
     def uninstall(self, ident):
@@ -207,29 +185,23 @@ class CoreClient(QObject):
 
     @Slot(bool, result="QVariant")
     def importLutris(self, apply):
-        return self._guarded({}, self._core.import_lutris, bool(apply)) or {}
+        return self._guarded({}, self._core.import_lutris, apply)
 
     @Slot(str, str, str, result=str)
     def addGame(self, runner, path, title):
-        ident = str(self._guarded("", self._core.add_game, {"runner": runner, "exe": path, "title": title}) or "")
+        ident = self._guarded("", self._core.add_game, {"runner": runner, "exe": path, "title": title})
         if ident:
             self.libraryChanged.emit([ident])
         return ident
 
-    # -- runners ---------------------------------------------------------------------------
-
     @Slot(result="QVariant")
     def runners(self):
-        return self._guarded([], self._core.runners) or []
+        return self._guarded([], self._core.runners)
 
     @Slot(str, str, str, result=bool)
     def setRunnerSetting(self, runner, key, value):
         return self._done(self._core.set_runner_setting, runner, key, str(value))
 
-    # -- the running session ---------------------------------------------------------------
-
-    # `poster` is the launch poster as a QImage: written for gamescope's keep-alive window (the game's
-    # splash from the first frame of gamescope to the game's own window), off the UI thread first.
     def launch(self, ident, screen, poster=None):
         def on_reply(session_id):
             session_id = str(session_id or "")
@@ -237,36 +209,29 @@ class CoreClient(QObject):
             self.launched.emit(session_id, ident)
             self._wait_window(session_id)
 
-        def on_error(e):
-            self.launchFailed.emit(ident, e.message)
-
         def start(splash):
-            self._call_async(lambda: self._core.launch(ident, screen, splash), on_reply, on_error)
+            self._call_async(lambda: self._core.launch(ident, screen, splash), on_reply, lambda e: self.launchFailed.emit(ident, e.message))
 
         if poster is None or poster.isNull():
             start("")
         else:
             self.runAsync(lambda: write_poster(poster, ident), start)
 
-    # Off the UI thread: a stop waits for the unit, up to a second SIGTERM some seconds later.
     @Slot(str)
     def stop(self, session_id):
-        self._call_async(lambda: self._core.stop(session_id), lambda value: None, lambda e: self.error.emit(e.kind, e.message))
+        self._call_async(lambda: self._core.stop(session_id))
 
-    # On this thread, for a host on its way out: the unit is down when it returns.
     def stopNow(self, session_id):
         self._guarded(None, self._core.stop, session_id)
 
     @Slot()
     def focusSession(self):
-        self._call_async(self._core.focus_session, lambda value: None, lambda e: self.error.emit(e.kind, e.message))
+        self._call_async(self._core.focus_session)
 
-    # Quiet: off GNOME the compositor decides, and it usually gets it right.
     @Slot()
     def focusLauncher(self):
-        self._call_async(lambda: self._core.focus_pid(os.getpid()), lambda value: None, lambda e: log.info("focus launcher: %s", e.message))
+        self._call_async(lambda: self._core.focus_pid(os.getpid()), on_error=lambda e: log.info("focus launcher: %s", e.message))
 
-    # Quiet on purpose: without a user systemd there is no scope, and a toast for that would be noise.
     def adoptScope(self):
         try:
             return str(self._call(self._core.adopt_scope) or "")
@@ -276,42 +241,34 @@ class CoreClient(QObject):
 
     @Slot(result=str)
     def screenshot(self):
-        return str(self._guarded("", self._core.screenshot) or "")
+        return self._guarded("", self._core.screenshot)
 
-    # Newest first; "" spans every visible game.
     @Slot(str, result="QVariant")
     def sessions(self, ident):
-        return self._guarded([], self._core.sessions, ident) or []
+        return self._guarded([], self._core.sessions, ident)
 
-    # Blocks in the core until the game's window maps and gets the focus, or the session ends first.
     def _wait_window(self, session_id):
-        def run():
-            try:
-                shown = bool(self._call(self._core.wait_session_window, session_id, 60000))
-            except UniverseError as e:
-                log.info("session window: %s", e.message)
-                shown = False
-            self._deliver.emit(lambda: self.sessionShown.emit(session_id, shown))
+        def missed(e):
+            log.info("session window: %s", e.message)
+            self.sessionShown.emit(session_id, False)
 
-        threading.Thread(target=run, daemon=True, name="session-window").start()
+        self._call_async(lambda: self._core.wait_session_window(session_id, 60000),
+                         lambda window: self.sessionShown.emit(session_id, bool(window)), missed)
 
     def _track(self, session_id, ident):
-        self._tracked = (session_id, ident)
         self.refreshCurrent()
         self.sessionStarted.emit(session_id, ident)
         self._poll.start()
 
-    # systemd owns the game; the session is over once `session-end` has run and the unit is gone.
     def _poll_session(self):
-        if not self._tracked:
+        if not self._current:
             self._poll.stop()
-            return
-        if self._guarded(None, self._core.current):
-            return
-        session_id, ident = self._tracked
-        self._tracked = None
+        elif not self._guarded(None, self._core.current):
+            self._ended(self._current)
+
+    def _ended(self, marker):
+        session_id, ident = marker["session_id"], marker["id"]
         self._poll.stop()
-        # The game's window is gone: home takes the screen, whatever Mutter's stack says.
         self.focusLauncher()
         self._guarded(None, self._core.reload_game, ident)
         line = next((s for s in self.sessions(ident) if s.get("session") == session_id), {})
@@ -321,15 +278,13 @@ class CoreClient(QObject):
         if line.get("recording"):
             self.recordingFiled.emit(session_id, ident, str(line["recording"].get("path") or ""))
 
-    # -- sources ---------------------------------------------------------------------------
-
     @Slot(result="QVariant")
     def sources(self):
-        return self._guarded([], self._core.sources) or []
+        return self._guarded([], self._core.sources)
 
     @Slot(str, result=str)
     def loginUrl(self, source):
-        return str(self._guarded("", self._core.login_url, source) or "")
+        return self._guarded("", self._core.login_url, source)
 
     @Slot(str, str, result=str)
     def login(self, source, code):
@@ -337,15 +292,15 @@ class CoreClient(QObject):
 
     @Slot(str, result="QVariant")
     def sourceLibrary(self, source):
-        return self._guarded([], self._core.library, source, False) or []
+        return self._guarded([], self._core.library, source, False)
 
     @Slot(str, str, result="QVariant")
     def search(self, source, query):
-        return self._guarded([], self._core.search, source, query) or []
+        return self._guarded([], self._core.search, source, query)
 
     @Slot(str, str, result="QVariant")
     def info(self, source, game_id):
-        return self._guarded({}, self._core.info, source, game_id) or {}
+        return self._guarded({}, self._core.info, source, game_id)
 
     @Slot(str, str, result=str)
     def install(self, source, game_id):
@@ -357,7 +312,7 @@ class CoreClient(QObject):
 
     @Slot(result="QVariant")
     def updates(self):
-        return self._guarded([], self._core.updates) or []
+        return self._guarded([], self._core.updates)
 
     @Slot(str, result=str)
     def scan(self, source):
@@ -367,51 +322,46 @@ class CoreClient(QObject):
     def jobs(self):
         return [dict(j) for j in self._jobs.values()]
 
-    # -- media -----------------------------------------------------------------------------
-
     @Slot(str, bool, result=str)
     def mediaRefresh(self, ident, force):
-        return self._job("media", ident, lambda progress: "%d/%d updated" % tuple(self._core.media_refresh(ident, bool(force), progress)))
+        return self._job("media", ident, lambda progress: "%d/%d updated" % tuple(self._core.media_refresh(ident, force, progress)))
 
     @Slot(str, result="QVariant")
     def mediaStatus(self, ident):
-        return self._guarded([], self._core.media_status, ident) or []
+        return self._guarded([], self._core.media_status, ident)
 
-    # A pick or its removal reaches the library through mediaChanged, as a refresh does.
     @Slot(str, str, str, result=str)
     def mediaSetSlot(self, ident, slot, path):
-        placed = str(self._guarded("", self._core.media_set_slot, ident, slot, path) or "")
+        placed = self._guarded("", self._core.media_set_slot, ident, slot, path)
         if placed:
             self.mediaChanged.emit(ident)
         return placed
 
     @Slot(str, str, str, result=str)
     def mediaSetUrl(self, ident, slot, url):
-        placed = str(self._guarded("", self._core.media_set_url, ident, slot, url) or "")
+        placed = self._guarded("", self._core.media_set_url, ident, slot, url)
         if placed:
             self.mediaChanged.emit(ident)
         return placed
 
     @Slot(str, str, result=bool)
     def mediaUnset(self, ident, slot):
-        gone = bool(self._guarded(False, self._core.media_unset, ident, slot))
+        gone = self._guarded(False, self._core.media_unset, ident, slot)
         if gone:
             self.mediaChanged.emit(ident)
         return gone
 
     @Slot(str, str, int, result="QVariant")
     def mediaCandidates(self, ident, slot, page=0):
-        return self._guarded({}, self._core.media_candidates, ident, slot, int(page)) or {}
+        return self._guarded({}, self._core.media_candidates, ident, slot, page)
 
     @Slot(str, str, result="QVariant")
     def mediaSearch(self, ident, query):
-        return self._guarded([], self._core.media_search, ident, query) or []
+        return self._guarded([], self._core.media_search, ident, query)
 
     @Slot(str, str, str, result=bool)
     def mediaPin(self, ident, provider, provider_id):
         return self._done(self._core.media_pin, ident, provider, provider_id)
-
-    # -- recordings and journal ------------------------------------------------------------
 
     @Slot(str, result="QVariant")
     def recordings(self, ident):
@@ -419,7 +369,7 @@ class CoreClient(QObject):
 
     @Slot(str, str, result=str)
     def fileRecording(self, session_id, path):
-        return str(self._guarded("", self._core.file_recording, session_id, path) or "")
+        return self._guarded("", self._core.file_recording, session_id, path)
 
     @Slot(str, str, result=bool)
     def removeRecording(self, ident, session_id):
@@ -430,7 +380,7 @@ class CoreClient(QObject):
 
     @Slot(str, result="QVariant")
     def journal(self, ident):
-        return self._guarded([], self._core.journal, ident) or []
+        return self._guarded([], self._core.journal, ident)
 
     @Slot(str, str, result=bool)
     def removeJournalEntry(self, ident, session_id):
@@ -441,7 +391,7 @@ class CoreClient(QObject):
 
     @Slot(str, result=str)
     def renderJournal(self, ident):
-        return str(self._guarded("", self._core.render_journal, ident) or "")
+        return self._guarded("", self._core.render_journal, ident)
 
     @Slot(str, "QVariant")
     def addEntry(self, session_id, entry):
@@ -456,24 +406,22 @@ class CoreClient(QObject):
             log.warning("pending_journals: %s", e.message)
             return []
 
-    # -- modules and settings --------------------------------------------------------------
-
     @Slot(result="QVariant")
     def modules(self):
-        return self._guarded([], self._core.modules) or []
+        return self._guarded([], self._core.modules)
 
     @Slot(str, bool)
     def enableModule(self, ident, enabled):
-        if self._done(self._core.enable_module, ident, bool(enabled)):
+        if self._done(self._core.enable_module, ident, enabled):
             self.modulesChanged.emit()
 
     @Slot(str, str, result="QVariant")
     def getSettings(self, module, game_id):
-        return self._guarded({}, self._core.module_settings, module, game_id) or {}
+        return self._guarded({}, self._core.module_settings, module, game_id)
 
     @Slot(str, str, result="QVariant")
     def settingChoices(self, module, key):
-        return list(self._guarded([], self._core.module_setting_choices, module, key) or [])
+        return self._guarded([], self._core.module_setting_choices, module, key)
 
     @Slot(str, str, str, str, result=bool)
     def setSetting(self, module, game_id, key, value):
@@ -481,23 +429,19 @@ class CoreClient(QObject):
 
     @Slot(str, result="QVariant")
     def settings(self, ident):
-        """Per-game module settings: {module id: merged settings} for enabled modules."""
         out = {}
         for module in self.modules():
-            if not module.get("enabled", False):
-                continue
-            if not any(s.get("scope") == "game" for s in module.get("settings") or []):
-                continue
-            out[module["id"]] = self.getSettings(module["id"], ident)
+            if module.get("enabled") and any(s.get("scope") == "game" for s in module.get("settings") or []):
+                out[module["id"]] = self.getSettings(module["id"], ident)
         return out
 
     @Slot(result="QVariant")
     def doctor(self):
-        return self._guarded([], self._core.doctor) or []
+        return self._guarded([], self._core.doctor)
 
     @Slot(result="QVariant")
     def config(self):
-        return self._guarded({}, self._core.settings) or {}
+        return self._guarded({}, self._core.settings)
 
     @Slot(str, str, result=bool)
     def setConfig(self, key, value):
@@ -505,29 +449,22 @@ class CoreClient(QObject):
 
     @Slot(str, result="QVariant")
     def screenMode(self, screen):
-        """`{screen, width, height, refresh}`: the mode gamescope is told, of `screen` or the default."""
-        return self._guarded({}, self._core.screen_mode, screen or "") or {}
+        return self._guarded({}, self._core.screen_mode, screen or "")
 
     @Slot(str, "QVariant", result="QVariant")
     def launchKeys(self, scope, screen):
-        """The launch keys of `scope` (game, global, both) as rows; `screen` (a `screenMode`) sizes the choices."""
-        return list(self._guarded([], self._core.launch_keys, scope, dict(screen) if screen else None) or [])
+        return self._guarded([], self._core.launch_keys, scope, dict(screen) if screen else None)
 
     @Slot(result=str)
     def version(self):
-        try:
-            return str(self._call(self._core.version) or "")
-        except UniverseError:
-            return ""
-
-    # -- controller ------------------------------------------------------------------------
+        return self._guarded("", self._core.version)
 
     @Slot(result="QVariant")
     def controllerState(self):
-        return self._guarded({}, self._core.controller_state) or {}
+        return self._guarded({}, self._core.controller_state)
 
     def controllerPads(self):
-        return self._guarded([], self._core.controller_pads) or []
+        return self._guarded([], self._core.controller_pads)
 
     @Slot(str, result=bool)
     def controllerBind(self, payload):
@@ -541,13 +478,6 @@ class CoreClient(QObject):
     def controllerSetButton(self, family, slot, codes):
         return self._done(self._core.set_controller_button, family, slot, json.loads(codes) if isinstance(codes, str) else codes)
 
-    # -- file watches ----------------------------------------------------------------------
-
-    def _overrides_dir(self):
-        paths = self.config().get("paths") or {}
-        return Path(os.path.expanduser(str(paths.get("overrides") or ""))) if paths.get("overrides") else None
-
-    # The picks the CLI makes land in the overrides directory: watched like games/<id>/media.
     def _rewatch(self):
         games = self._data / "games"
         for d in (games, self._state):
@@ -559,8 +489,7 @@ class CoreClient(QObject):
         if self._overrides and self._overrides.is_dir():
             wanted.add(str(self._overrides))
             wanted.update(str(p) for d in self._overrides.iterdir() if d.is_dir() for p in (d, d / "screenshots") if p.is_dir())
-        have = set(self._watcher.directories())
-        new = sorted(wanted - have)
+        new = sorted(wanted - set(self._watcher.directories()))
         if new:
             self._watcher.addPaths(new)
 
@@ -586,11 +515,9 @@ class CoreClient(QObject):
                 ids.update(d.name for d in self._overrides.iterdir() if d.is_dir() and str(d) not in watched)
             else:
                 for root in (games, self._overrides):
-                    try:
+                    if root and path.is_relative_to(root):
                         ids.add(path.relative_to(root).parts[0])
                         break
-                    except (ValueError, TypeError):
-                        continue
         self._rewatch()
         if whole:
             self._guarded(None, self._core.reload)
@@ -604,14 +531,12 @@ class CoreClient(QObject):
             self.recordingFiled.emit("", ident, "")
             self.entryWritten.emit("", ident)
         if state:
+            was = self._current
             self.refreshCurrent()
-            if self._current and not self._tracked:
+            if self._current and not was:
                 self._track(self._current["session_id"], self._current["id"])
-            elif self._tracked:
-                # The marker went: session-end has filed the session, no need to wait for the poll.
-                self._poll_session()
-
-    # -- jobs: the work runs in this process, on a thread; closing the UI aborts it -----------
+            elif was and not self._current:
+                self._ended(was)
 
     def _job(self, kind, target, work):
         self._job_seq += 1
@@ -626,7 +551,7 @@ class CoreClient(QObject):
                 message, ok = str(self._call(work, progress)), True
             except UniverseError as e:
                 message, ok = e.message, False
-            except Exception as e:  # noqa: BLE001 — a job always reports its end
+            except Exception as e:
                 message, ok = str(e), False
             self._deliver.emit(lambda: self._job_finished(job, ok, message))
 
@@ -634,14 +559,10 @@ class CoreClient(QObject):
         return job
 
     def _job_progress(self, job, done, total, message):
-        entry = self._jobs.get(job)
-        if entry:
-            entry.update(done=int(done), total=int(total), message=message)
+        self._jobs[job].update(done=int(done), total=int(total), message=message)
         self.progress.emit(job, int(done), int(total), message)
 
     def _job_finished(self, job, ok, message):
-        entry = self._jobs.get(job)
-        if entry:
-            entry.update(finished=True, ok=bool(ok), message=message)
-        self.jobFinished.emit(job, bool(ok), message)
+        self._jobs[job].update(finished=True, ok=ok, message=message)
+        self.jobFinished.emit(job, ok, message)
         self.libraryChanged.emit([])

@@ -97,7 +97,6 @@ def test_launch_form(api, fake):
     form = api.screens.launch
     form.load()
     assert form.screen == "DP-1 2560×1440 @ 144 Hz"
-    # The rows are the catalogue's global keys, card by card, the cursor switch after the limiter.
     keys = fake.launchKeys("global", fake.screenMode("DP-1"))
     assert {k["scope"] for k in keys} == {"both"} and "prefix" not in [k["key"] for k in keys]
     expected = [(section, ["launch." + k["key"] for k in keys if k["section"] == section]) for section in ("Gamescope", "Overlay and cursor", "Proton")]
@@ -157,7 +156,6 @@ def test_game_settings_gamescope_group(api, fake):
     launch = next(g for g in form.groups if g["title"] == "Launch")
     keys = [form.rows[i]["key"] for i in launch["rows"]]
     assert keys.index("launch.fps_limit") == keys.index("launch.mangohud") + 1
-    # A Proton game shows every key of its runner and none of another's; the rows carry the catalogue's sentence.
     assert keys[2:] == ["launch." + k["key"] for k in catalogue if k["section"] != "Gamescope" and (not k["runners"] or "proton" in k["runners"])]
     assert "launch.prefix" in keys and rows["launch.esync"]["detail"].startswith("Wine's eventfd")
     assert rows["launch.gamescope_resolution"]["value"] == "auto" and rows["launch.gamescope_resolution"]["inherited"] is True

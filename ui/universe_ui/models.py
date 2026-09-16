@@ -1,5 +1,3 @@
-# QtQml.Models' SortFilterProxyModel has no get(), no ExpressionFilter and a FunctionFilter that segfaults.
-
 import os
 
 from PySide6.QtCore import (
@@ -69,8 +67,7 @@ def _source_kind(value):
     return str(value or "")
 
 
-# The theme reads Pegasus extras as lists (`extra["metacritic"][0]`); the daemon keeps them as
-# scalars under metadata, so every unknown metadata key becomes an extra with a list value.
+# Pegasus extras are lists (`extra["metacritic"][0]`); the core keeps scalars under metadata.
 def _extras(meta):
     out = {}
     for key, value in meta.items():
@@ -173,7 +170,6 @@ class Game(QObject):
         if self._library is not None:
             self._library.launch(self)
 
-    # `grab` is an ItemGrabResult of the launch poster, gamescope's splash until the game's window.
     @Slot(QObject)
     def launchWith(self, grab):
         if self._library is not None:
@@ -289,10 +285,6 @@ class GameListModel(ObjectListModel):
     totalPlayTime = Property(int, lambda self: sum(g.playTime for g in self._objects), notify=totalPlayTimeChanged)
 
 
-def _game_at(model, row):
-    return model.data(model.index(row, 0), MODEL_DATA_ROLE)
-
-
 class GameProxy(QSortFilterProxyModel):
     countChanged = Signal()
     sortRoleNameChanged = Signal()
@@ -351,7 +343,8 @@ class GameProxy(QSortFilterProxyModel):
         return True
 
     def filterAcceptsRow(self, source_row, source_parent):
-        game = _game_at(self.sourceModel(), source_row)
+        source = self.sourceModel()
+        game = source.data(source.index(source_row, 0), MODEL_DATA_ROLE)
         return game is not None and self.acceptsGame(game, source_row)
 
     @Slot(int, result=QObject)
@@ -395,10 +388,10 @@ class RecentGames(GameProxy):
         self.invalidate()
 
     def acceptsGame(self, game, source_row):
-        return game.playCount > 0 or (self._playing != "" and game.id == self._playing)
+        return game.playCount > 0 or game.id == self._playing
 
     def sortKey(self, game):
-        return (2 if self._playing != "" and game.id == self._playing else 0,) + super().sortKey(game)
+        return (2 if game.id == self._playing else 0,) + super().sortKey(game)
 
     playingId = Property(str, lambda self: self._playing, _set_playing, notify=playingIdChanged)
 
@@ -426,7 +419,7 @@ class LimitedGames(GameProxy):
 
 @QmlElement
 class FavouriteGames(GameProxy):
-    # `pinned` holds source rows kept in place after Y removed them.
+    # `pinned`: source rows kept in place after Y unfavourited them.
     pinnedChanged = Signal()
 
     def __init__(self, parent=None):

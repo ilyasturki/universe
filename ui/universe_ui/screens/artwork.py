@@ -36,11 +36,9 @@ def _slot_row(raw):
 
 
 def _candidate_row(raw, index):
-    score = int(raw.get("score") or 0)
-    # `url` stays the provider's, for the core to download; `thumb` is what the grid shows.
     return {
         "index": index, "id": int(raw.get("id") or 0), "url": str(raw.get("url") or ""), "thumb": file_url(raw.get("thumb") or raw.get("url")).toString(),
-        "votes": score // 1000, "slot": str(raw.get("slot") or ""),
+        "votes": int(raw.get("score") or 0) // 1000, "slot": str(raw.get("slot") or ""),
     }
 
 
@@ -76,7 +74,6 @@ class ArtworkForm(AsyncScreen):
         self._hits = []
         self._search_busy = False
         self._search_error = ""
-        # One in-flight candidates fetch at a time; a slot change while it runs drops its result.
         self._fetch_seq = 0
         client.mediaChanged.connect(self._on_media_changed)
         client.libraryChanged.connect(self._on_library_changed)
@@ -101,7 +98,7 @@ class ArtworkForm(AsyncScreen):
     def reload(self):
         if not self._game_id:
             return
-        rows = self._client.mediaStatus(self._game_id) or []
+        rows = self._client.mediaStatus(self._game_id)
         status = rows[0] if rows else {}
         self._title = str(status.get("title") or self._game_id)
         sgdb_id = int(status.get("sgdb_id") or 0)
@@ -169,7 +166,6 @@ class ArtworkForm(AsyncScreen):
 
         self._run(lambda: self._client.mediaCandidates(game_id, slot, page), done)
 
-    # The core's refusals reach the toast through the client's `error`; the slots answer empty then.
     @Slot(str, str)
     def apply(self, slot, url):
         game_id = self._game_id
@@ -192,7 +188,7 @@ class ArtworkForm(AsyncScreen):
             self.message.emit(f"{label}: back to the default" + (f" from {row['originLabel']}" if row.get("originLabel") else "") if row.get("hasDefault") else f"{label}: pick removed, nothing under it")
         return gone
 
-    # A failed search shows its reason on the page: the client's `error` lands before the reply does.
+    # The client toasts the core's refusal and answers empty; the page shows the reason instead.
     @Slot(str)
     def search(self, query):
         game_id = self._game_id
@@ -218,9 +214,8 @@ class ArtworkForm(AsyncScreen):
             return
         self._sgdb_id = int(sgdb_id)
         self._hits = [dict(h, current=h["id"] == self._sgdb_id) for h in self._hits]
-        hit = next((h for h in self._hits if h["current"]), None)
-        self._sgdb_name = hit["name"] if hit else ""
-        self._sgdb_year = hit["year"] if hit else 0
+        hit = next((h for h in self._hits if h["current"]), {"name": "", "year": 0})
+        self._sgdb_name, self._sgdb_year = hit["name"], hit["year"]
         self.hitsChanged.emit()
         self.slotsChanged.emit()
         self._client.libraryChanged.emit([self._game_id])
@@ -228,8 +223,7 @@ class ArtworkForm(AsyncScreen):
         self._candidates_slot = ""
         if slot:
             self.loadCandidates(slot)
-        name = next((h["name"] for h in self._hits if h["current"]), str(sgdb_id))
-        self.message.emit(f"{self._title} now takes its art from {name}")
+        self.message.emit(f"{self._title} now takes its art from {self._sgdb_name or sgdb_id}")
 
     @Slot()
     def refresh(self):
@@ -285,7 +279,7 @@ class ArtworkOverview(AsyncScreen):
 
         def work():
             status = self._client.mediaStatus("")
-            hidden = {str(g.get("id") or "") for g in self._client.list() or [] if g.get("hidden") or g.get("removed")}
+            hidden = {str(g.get("id") or "") for g in self._client.list() if g.get("hidden") or g.get("removed")}
             rows = []
             for g in status:
                 ident = str(g.get("id") or "")
@@ -374,5 +368,4 @@ class ArtworkOverview(AsyncScreen):
     slotUse = Property(str, lambda self: SLOT_USES.get(self._slot, ""), notify=slotChanged)
     slotNames = Property("QVariantList", lambda self: [{"slot": s, "label": l, "use": u} for s, l, _, u in SLOTS], constant=True)
     filterNames = Property("QVariantList", lambda self: [{"filter": f, "label": FILTER_LABELS[f]} for f in FILTERS], constant=True)
-    # {id, message, done, total, ok (None while running)} or None
     job = Property("QVariant", lambda self: dict(self._job) if self._job else None, notify=jobChanged)

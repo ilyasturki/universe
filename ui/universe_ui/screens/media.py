@@ -81,15 +81,18 @@ class RecordingsList(QObject):
 
     @Slot(str)
     def load(self, game_id):
-        self._game_id = game_id
+        self._load(game_id, False)
+
+    @Slot()
+    def loadAll(self):
+        self._load("", True)
+
+    def _load(self, game_id, all_games):
+        self._game_id, self._all = game_id, all_games
         self.gameIdChanged.emit()
         self._queue.clear()
-        self._all = False
-        self._show(self._rows_of(game_id))
-
-    def _rows_of(self, game_id):
         rows = []
-        for line in self._client.sessions(game_id) or []:
+        for line in self._client.sessions(game_id):
             rec = line.get("recording")
             if not rec:
                 continue
@@ -104,25 +107,13 @@ class RecordingsList(QObject):
                 "created_at": str(line.get("ended_at") or ""), "gameId": str(line.get("game") or ""), "gameTitle": str(line.get("title") or ""),
             })
             if path and session and session not in self._frames:
-                # A line filed before the core probed lengths says 0: the session's span stands in.
                 self._frames[session] = Frames(path, rec.get("duration_s") or line.get("duration_s"))
-        return rows
-
-    def _show(self, rows):
         self._rows = rows
         self.rowsChanged.emit()
         self.framesChanged.emit()
         for row in rows:
             self._want_thumbnail(row["session"])
         self._pump()
-
-    @Slot()
-    def loadAll(self):
-        self._game_id = ""
-        self.gameIdChanged.emit()
-        self._queue.clear()
-        self._all = True
-        self._show(self._rows_of(""))
 
     @Slot()
     def unload(self):
@@ -163,21 +154,17 @@ class RecordingsList(QObject):
                 continue
             self._extract(job, frames)
 
-    def _start(self, job, program, args, done):
-        exe = shutil.which(program)
-        if not exe:
-            return
-        proc = QProcess(self)
-        self._running[job] = proc
-        proc.finished.connect(lambda code, status: done(job, proc, code))
-        proc.start(exe, args)
-
     def _extract(self, job, frames):
+        ffmpeg = shutil.which("ffmpeg")
+        if not ffmpeg:
+            return
         index = job[1]
         os.makedirs(frames.dir, exist_ok=True)
-        self._start(job, "ffmpeg", ["-loglevel", "error", "-y", "-ss", f"{frames.seconds(index):.3f}", "-i", frames.path,
-                                    "-frames:v", "1", "-vf", f"scale={FRAME_WIDTH}:-2", "-q:v", "4", frames.file(index)],
-                    self._extracted)
+        proc = QProcess(self)
+        self._running[job] = proc
+        proc.finished.connect(lambda code, status: self._extracted(job, proc, code))
+        proc.start(ffmpeg, ["-loglevel", "error", "-y", "-ss", f"{frames.seconds(index):.3f}", "-i", frames.path,
+                            "-frames:v", "1", "-vf", f"scale={FRAME_WIDTH}:-2", "-q:v", "4", frames.file(index)])
 
     def _extracted(self, job, proc, code):
         self._finish(job, proc)
@@ -219,7 +206,6 @@ class RecordingsList(QObject):
 
     rows = Property("QVariantList", lambda self: [dict(r) for r in self._rows], notify=rowsChanged)
     count = Property(int, lambda self: len(self._rows), notify=rowsChanged)
-    # session → { thumbnail, frames[16] ("" until extracted), complete, duration }
     frameMap = Property("QVariantMap", _frame_map, notify=framesChanged)
     gameId = Property(str, lambda self: self._game_id, notify=gameIdChanged)
 
@@ -237,10 +223,6 @@ def markdown_blocks(paragraphs):
     return blocks
 
 
-def _recorded(lines):
-    return {(str(line.get("game") or ""), str(line.get("session") or "")) for line in lines if line.get("recording")}
-
-
 class JournalList(QObject):
     rowsChanged = Signal()
     gameIdChanged = Signal()
@@ -255,17 +237,32 @@ class JournalList(QObject):
 
     @Slot(str)
     def load(self, game_id):
-        self._game_id = game_id
+        self._load(game_id, False)
+
+    @Slot()
+    def loadAll(self):
+        self._load("", True)
+
+    def _load(self, game_id, all_games):
+        self._game_id, self._all = game_id, all_games
         self.gameIdChanged.emit()
-        self._all = False
-        lines = self._client.sessions(game_id) or []
-        title = str((self._client.game(game_id) or {}).get("title") or game_id)
-        self._rows = self._rows_of(game_id, title, _recorded(lines))
+        lines = self._client.sessions(game_id)
+        recorded = {(str(line.get("game") or ""), str(line.get("session") or "")) for line in lines if line.get("recording")}
+        if game_id:
+            titles = {game_id: str(self._client.game(game_id).get("title") or game_id)}
+        else:
+            titles = {}
+            for line in lines:
+                titles.setdefault(str(line.get("game") or ""), str(line.get("title") or ""))
+        rows = [row for ident, title in titles.items() for row in self._rows_of(ident, title, recorded)]
+        # Session ids are timestamps: a pending entry sorts among the written ones by when it was played.
+        rows.sort(key=lambda r: r["session"], reverse=True)
+        self._rows = rows
         self.rowsChanged.emit()
 
     def _rows_of(self, game_id, title, recorded):
         rows = []
-        for entry in self._client.journal(game_id) or []:
+        for entry in self._client.journal(game_id):
             session = str(entry.get("session") or "")
             state = str(entry.get("state") or "written")
             paragraphs = [str(p) for p in entry.get("paragraphs") or []]
@@ -285,24 +282,7 @@ class JournalList(QObject):
                 "written_at": str(entry.get("written_at") or ""),
                 "gameId": game_id, "gameTitle": title,
             })
-        # Session ids are timestamps: a pending entry sorts among the written ones by when it was played.
-        rows.sort(key=lambda r: r["session"], reverse=True)
         return rows
-
-    @Slot()
-    def loadAll(self):
-        self._game_id = ""
-        self.gameIdChanged.emit()
-        self._all = True
-        lines = self._client.sessions("") or []
-        titles = {}
-        for line in lines:
-            titles.setdefault(str(line.get("game") or ""), str(line.get("title") or ""))
-        recorded = _recorded(lines)
-        rows = [r for game_id, title in titles.items() for r in self._rows_of(game_id, title, recorded)]
-        rows.sort(key=lambda r: r["session"], reverse=True)
-        self._rows = rows
-        self.rowsChanged.emit()
 
     @Slot()
     def unload(self):
@@ -321,7 +301,6 @@ POLL_MS = 10000
 
 
 class PendingJournals(QObject):
-    # Polled while any entry is pending: the elapsed time and the module's timeout move on their own.
     changed = Signal()
     appeared = Signal(str, str)
     resolved = Signal(str, str, str, str)
@@ -341,7 +320,7 @@ class PendingJournals(QObject):
     @Slot()
     def refresh(self):
         rows = []
-        for entry in self._client.pendingJournals() or []:
+        for entry in self._client.pendingJournals():
             rows.append({"game": str(entry.get("game") or ""), "title": str(entry.get("title") or ""),
                          "session": str(entry.get("session") or ""), "started_at": str(entry.get("started_at") or "")})
         before = {r["session"]: r for r in self._rows}
@@ -361,7 +340,7 @@ class PendingJournals(QObject):
                 self._resolve(session, row["game"])
 
     def _resolve(self, session, game):
-        entry = next((e for e in self._client.journal(game) or [] if str(e.get("session") or "") == session), None)
+        entry = next((e for e in self._client.journal(game) if str(e.get("session") or "") == session), None)
         if entry is None:
             return
         state = str(entry.get("state") or "written")

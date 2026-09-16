@@ -1,6 +1,4 @@
-"""`universe_core.Core`'s method surface over fixtures/library.json: reads come from memory, every write
-also lands under `root` the way the core writes it, so `CoreClient`'s watches see what they see in production."""
-
+import copy
 import json
 import os
 import re
@@ -41,7 +39,6 @@ def _epoch(value):
 
 
 def _place(src, dest):
-    """`src` under a new name: a hard link when the filesystem allows, a copy otherwise."""
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     if os.path.exists(dest):
         os.remove(dest)
@@ -53,15 +50,12 @@ def _place(src, dest):
 
 
 class FakeCore:
-    """`root` is the homes' parent; without one, a temporary directory that goes with `shutdown()`."""
-
     def __init__(self, fixture=FIXTURE, root=None, fake_launch=False):
         with open(fixture) as f:
             self._data = json.load(f)
         self._config = dict(self._data.get("config") or {})
         with open(LAUNCH_KEYS) as f:
             self._launch_keys = json.load(f)
-        # As the core's `settings()`: the resolved config, every global launch key at its default until set.
         self._config["launch"] = {**{k["key"]: k["default"] for k in self._launch_keys if k["scope"] != "game"}, **(self._config.get("launch") or {})}
         self._tmp = tempfile.TemporaryDirectory(prefix="universe-fake-") if root is None else None
         self._root = Path(root if root is not None else self._tmp.name)
@@ -76,8 +70,6 @@ class FakeCore:
         self.last_splash = ""
         self._config.setdefault("paths", {})["overrides"] = str(self._root / "overrides")
         self._lay_out()
-
-    # -- the homes on disk -------------------------------------------------------------------
 
     def data_home(self):
         return str(self._root / "data")
@@ -108,7 +100,7 @@ class FakeCore:
             for entry in entries:
                 self._write_entry(ident, entry)
 
-    # game.toml is what the core writes on every `set`; the stub carries what the watch needs to see change.
+    # The timestamp line makes every `set` a change the directory watch sees.
     def _write_game(self, game):
         d = self._game_dir(game["id"])
         for sub in ("media", "journal"):
@@ -146,8 +138,6 @@ class FakeCore:
         self._timers.append(timer)
         timer.start()
 
-    # -- the fixture -------------------------------------------------------------------------
-
     def _game(self, ident):
         for game in self._data["games"]:
             if game["id"] == ident:
@@ -155,39 +145,29 @@ class FakeCore:
         raise UniverseError("NotFound", f"no game '{ident}'")
 
     def _resolved(self, game):
-        out = json.loads(json.dumps(game))
+        out = copy.deepcopy(game)
         out.setdefault("stats", {"hours": 0, "play_count": 0, "last_played": None})
         out.setdefault("removed", False)
         out["media"] = self._effective_media(game)
         out.pop("overrides", None)
-        # As the core does: the game keeps only what it sets, `effective` fills the rest.
         launch = out.setdefault("launch", {})
-        desktop = out.setdefault("desktop", {})
-        defaults = {**(self._config.get("launch") or {}), **(self._config.get("desktop") or {})}
-        out["effective"] = {
-            key: (launch if key != "hide_cursor" else desktop).get(key, default)
-            for key, default in defaults.items()
-            if key in ("proton", "esync", "fsync", "ntsync", "wayland", "hdr", "dlss_upgrade", "fsr4_upgrade", "xess_upgrade", "optiscaler", "mangohud", "hide_cursor")
-        }
-        # The gamescope fields and the limiter: the game's own when set, else the global one, else the catalogue's default.
-        for key in ("gamescope", "gamescope_resolution", "gamescope_refresh", "gamescope_scaler", "gamescope_filter", "gamescope_sharpness", "gamescope_adaptive_sync", "fps_limit"):
-            own = launch.get(key)
-            fallback = defaults.get(key)
-            if fallback is None:
-                fallback = next(k["default"] for k in self._launch_keys if k["key"] == key)
-            out["effective"][key] = fallback if own in (None, "") else own
-        out["effective"]["gamescope_args"] = launch.get("gamescope_args") or ""
+        effective = out["effective"] = {}
+        for spec in (k for k in self._launch_keys if k["scope"] == "both"):
+            own = launch.get(spec["key"])
+            effective[spec["key"]] = own if own not in (None, "") else self._config["launch"].get(spec["key"], spec["default"])
+        effective["gamescope_args"] = launch.get("gamescope_args") or ""
+        effective["hide_cursor"] = out.setdefault("desktop", {}).get("hide_cursor", self._config.get("desktop", {}).get("hide_cursor", True))
         runner = self._runner_of(launch)
         spec = self._runner(runner) or {"id": runner, "name": runner, "kind": "", "platforms": [], "path": "", "options": []}
         options = {o["key"]: o.get("value", o.get("default")) for o in spec.get("options") or []}
         options.update(launch.get("options") or {})
-        out["effective"].update({
+        effective.update({
             "runner": spec["id"], "runner_name": spec.get("name", runner), "runner_kind": spec.get("kind", ""),
             "runner_path": launch.get("runner_exe") or spec.get("path") or "",
             "platform": out.get("platform") or (spec.get("platforms") or [""])[0],
             "options": options, "inputplumber": bool(options.get("inputplumber")),
         })
-        out.setdefault("platform", out["effective"]["platform"])
+        out.setdefault("platform", effective["platform"])
         modules = out.setdefault("modules", {})
         for module in self._data.get("modules", []):
             merged = modules.setdefault(module["id"], {})
@@ -205,8 +185,6 @@ class FakeCore:
 
     def _runner(self, ident):
         return next((r for r in self._data.get("runners", []) if r["id"] == ident), None)
-
-    # -- library -----------------------------------------------------------------------------
 
     def list(self):
         games = [self._resolved(g) for g in self._data["games"] if not g.get("removed")]
@@ -289,10 +267,8 @@ class FakeCore:
         self._write_game(game)
         return ident
 
-    # -- runners -----------------------------------------------------------------------------
-
     def runners(self):
-        return json.loads(json.dumps(self._data.get("runners", [])))
+        return copy.deepcopy(self._data.get("runners", []))
 
     def set_runner_setting(self, runner, key, value):
         spec = self._runner(self._runner_of({"runner": runner}))
@@ -316,8 +292,6 @@ class FakeCore:
             option["value"] = option.get("default") if value == "" else value == "true"
         else:
             option["value"] = value if value != "" else option.get("default")
-
-    # -- session: the marker on disk is the truth, as it is for the core ---------------------
 
     def _marker(self):
         return self._root / "state" / "current-session.json"
@@ -359,7 +333,7 @@ class FakeCore:
             self._later(SESSION_S, lambda: self._end_session(0))
         return session_id
 
-    # The order the core's `session-end` writes in: the session line first, the marker last.
+    # As `session-end`: the session line first, the marker last.
     def _end_session(self, exit_code):
         with self._lock:
             current, self._session, self._process = self._session, None, None
@@ -425,12 +399,11 @@ class FakeCore:
         return rows
 
     def _session_row(self, ident, line):
-        row = json.loads(json.dumps(line))
+        row = copy.deepcopy(line)
         row.pop("recording_duration_s", None)
         row["title"] = self._game(ident)["title"]
         row["recording"] = None
         if line.get("recording"):
-            # The fixture's paths stand for files that are not there: a painted clip plays in their place.
             path = line["recording"] if os.path.isfile(line["recording"]) else self._fake_clip(ident, line["session"])
             exists = os.path.isfile(path)
             size = self._data.get("recordings", {}).get(ident, {}).get(line["session"]) or (os.path.getsize(path) if exists else 0)
@@ -439,8 +412,6 @@ class FakeCore:
         entry = next((e for e in self._data.get("journal", {}).get(ident, []) if e.get("session") == line.get("session")), None)
         row["journal"] = None if entry is None else {"state": entry.get("state") or "written", "title": entry.get("title") or "", "written_at": entry.get("written_at") or ""}
         return row
-
-    # -- sources: a job blocks its caller and ticks `progress`, as the module's do -------------
 
     def _tick(self, progress, message, steps):
         for done in range(1, steps + 1):
@@ -451,7 +422,7 @@ class FakeCore:
                 progress(done, steps, f"{message} ({done}/{steps})")
 
     def sources(self):
-        return json.loads(json.dumps(self._data.get("sources", [])))
+        return copy.deepcopy(self._data.get("sources", []))
 
     def login_url(self, source):
         return self._data.get("login_url", "https://example.invalid/login")
@@ -464,7 +435,7 @@ class FakeCore:
         return f"Logging in to {source}: done"
 
     def library(self, source, refresh):
-        return json.loads(json.dumps(self._data.get("source_library", {}).get(source, [])))
+        return copy.deepcopy(self._data.get("source_library", {}).get(source, []))
 
     def search(self, source, query):
         q = query.casefold()
@@ -492,15 +463,12 @@ class FakeCore:
         return before - len(self._data["updates"])
 
     def updates(self):
-        return json.loads(json.dumps(self._data.get("updates", [])))
+        return copy.deepcopy(self._data.get("updates", []))
 
     def scan(self, source, progress=None):
         self._tick(progress, "Scanning", 4)
         return 0
 
-    # -- media: the fixture's two layers, `media` painted defaults and `overrides` the picks ----
-
-    # A refresh rewrites the defaults under media/, which is what the watch on it sees.
     def media_refresh(self, ident, force, progress=None):
         games = [self._game(ident)] if ident else [g for g in self._data["games"] if not g.get("removed")]
         self._tick(progress, "Refreshing media", 5)
@@ -517,13 +485,16 @@ class FakeCore:
         media.update({k: v for k, v in (game.get("overrides") or {}).items() if v})
         return media
 
+    def _sgdb_hits(self, game):
+        title, base = game.get("title", game["id"]), 5000 + len(game["id"])
+        return [{"provider": "sgdb", "id": base, "name": title, "year": 2016, "verified": True},
+                {"provider": "sgdb", "id": base + 1, "name": f"{title} Remastered", "year": 2021, "verified": False},
+                {"provider": "sgdb", "id": base + 2, "name": f"{title} II", "year": 2019, "verified": True}]
+
     def _sgdb_entry(self, game):
-        title = game.get("title", game["id"])
-        pinned = int((game.get("metadata") or {}).get("sgdb_id") or 0)
-        base = 5000 + len(game["id"])
-        names = {base: (title, 2016), base + 1: (f"{title} Remastered", 2021), base + 2: (f"{title} II", 2019)}
-        name, year = names.get(pinned or base, (title, 2016))
-        return {"id": pinned or base, "name": name, "year": year}
+        hits = self._sgdb_hits(game)
+        pinned = int((game.get("metadata") or {}).get("sgdb_id") or 0) or hits[0]["id"]
+        return next((h for h in hits if h["id"] == pinned), {**hits[0], "id": pinned})
 
     def _status_of(self, game):
         media = game.get("media") or {}
@@ -550,7 +521,6 @@ class FakeCore:
     def media_set_url(self, ident, slot, url):
         from .fixtures.art import paint_candidate
 
-        # A candidate is one of the painted fixtures already; a real URL gets a painted stand-in.
         path = url if os.path.isfile(url) else paint_candidate(self._cache, ident, slot, url)
         return self.media_set_slot(ident, slot, path)
 
@@ -569,26 +539,17 @@ class FakeCore:
 
         game = self._game(ident)
         items = [] if int(page) > 0 else paint_candidates(self._cache, ident, slot, game.get("title", ident))
-        entry = {"provider": "sgdb", "verified": True, "current": True, **self._sgdb_entry(game)}
-        return {"items": items, "page": int(page), "more": False, "entry": entry}
+        return {"items": items, "page": int(page), "more": False, "entry": {**self._sgdb_entry(game), "current": True}}
 
     def media_search(self, ident, query):
         game = self._game(ident)
-        title = game.get("title", ident)
         current = self._sgdb_entry(game)["id"]
-        base = 5000 + len(ident)
-        hits = [{"provider": "sgdb", "id": base, "name": title, "year": 2016, "verified": True, "current": current == base},
-                {"provider": "sgdb", "id": base + 1, "name": f"{title} Remastered", "year": 2021, "verified": False, "current": current == base + 1},
-                {"provider": "sgdb", "id": base + 2, "name": f"{title} II", "year": 2019, "verified": True, "current": current == base + 2}]
-        q = (query or "").casefold()
-        return [h for h in hits if q in h["name"].casefold()]
+        return [{**h, "current": h["id"] == current} for h in self._sgdb_hits(game) if query.casefold() in h["name"].casefold()]
 
     def media_pin(self, ident, provider, provider_id):
         game = self._game(ident)
         game.setdefault("metadata", {})[f"{provider}_id"] = provider_id
         self._write_game(game)
-
-    # -- recordings and journal --------------------------------------------------------------
 
     def _game_of_session(self, session_id):
         current = self.current()
@@ -620,7 +581,6 @@ class FakeCore:
         self._data.get("recordings", {}).get(ident, {}).pop(session_id, None)
         self._write_sessions(ident)
 
-    # A real clip when ffmpeg is around, so the preview has something to play; a name otherwise.
     def _fake_clip(self, ident, session):
         out = os.path.join(self._cache, f"{ident}-{session}.mkv")
         if os.path.exists(out):
@@ -635,8 +595,6 @@ class FakeCore:
             )
         return out
 
-    # Entries without pictures borrow the game's painted screenshots, so the strip has something to show;
-    # as the core does, each carries its session's times and a state.
     def journal(self, ident):
         entries = self._data.get("journal", {}).get(ident, [])
         shots = self._game(ident).get("media", {}).get("screenshots") or []
@@ -653,7 +611,6 @@ class FakeCore:
                 for game, entries in self._data.get("journal", {}).items()
                 for e in entries if e.get("state") == "pending"]
 
-    # What the journal module does after a session: a pending file, then the entry a few seconds later.
     def _pend_journal(self, ident, session_id):
         entries = self._data.setdefault("journal", {}).setdefault(ident, [])
         entry = {"session": session_id, "game": ident, "state": "pending", "started_at": _now(),
@@ -691,10 +648,8 @@ class FakeCore:
         self._data.setdefault("journal", {}).setdefault(ident, []).insert(0, entry)
         self._write_entry(ident, entry)
 
-    # -- modules and settings ----------------------------------------------------------------
-
     def modules(self):
-        return json.loads(json.dumps(self._data.get("modules", [])))
+        return copy.deepcopy(self._data.get("modules", []))
 
     def _module(self, ident):
         for module in self._data.get("modules", []):
@@ -713,7 +668,6 @@ class FakeCore:
             merged.update(self._game(game_id).get("modules", {}).get(module_id, {}))
         return merged
 
-    # The fixture lists a dynamic setting's choices under `dynamic_choices`, keyed by provider-like values.
     def module_setting_choices(self, module_id, key):
         for setting in self._module(module_id).get("settings", []):
             if setting["key"] == key:
@@ -729,7 +683,6 @@ class FakeCore:
         if kind == "bool":
             value = str(value).lower() in ("1", "true", "yes", "on")
         elif kind == "int":
-            # As the core: a listed non-numeric choice is a named value the module resolves.
             if value not in (schema[key].get("choices") or []):
                 try:
                     value = int(value)
@@ -745,10 +698,10 @@ class FakeCore:
             self._config.setdefault("modules", {}).setdefault(module_id, {})[key] = value
 
     def doctor(self):
-        return json.loads(json.dumps(self._data.get("doctor", [])))
+        return copy.deepcopy(self._data.get("doctor", []))
 
     def settings(self):
-        return json.loads(json.dumps(self._config))
+        return copy.deepcopy(self._config)
 
     def set_setting(self, key, value):
         node = self._config
@@ -769,7 +722,6 @@ class FakeCore:
         return dict(self._data.get("screen") or {"screen": screen or "DP-1", "width": 2560, "height": 1440, "refresh": 144})
 
     def launch_keys(self, scope, screen):
-        """The fixture's rows of `scope`; the resolution, refresh and limit choices follow `screen` as the core's do."""
         if scope not in ("game", "global", "both"):
             raise UniverseError("Invalid", f"scope must be game, global or both, not '{scope}'")
         mode = dict(screen or {})
@@ -787,12 +739,10 @@ class FakeCore:
         for spec in self._launch_keys:
             if scope != "both" and spec["scope"] not in ("both", scope):
                 continue
-            row = json.loads(json.dumps(spec))
+            row = copy.deepcopy(spec)
             row["choices"] = choices.get(spec["type"], row["choices"])
             out.append(row)
         return out
-
-    # -- controller --------------------------------------------------------------------------
 
     def _controller(self):
         return self._data.setdefault("controller", {"families": [], "macros": [], "presets": []})
@@ -804,7 +754,7 @@ class FakeCore:
         raise UniverseError("NotFound", f"no controller family '{ident}'")
 
     def controller_state(self):
-        return json.loads(json.dumps(self._controller()))
+        return copy.deepcopy(self._controller())
 
     def controller_pads(self):
         pads = []

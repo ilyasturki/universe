@@ -22,7 +22,6 @@ def _source_row(game, updates, art):
     }
 
 
-# The fetched library and updates stay until a job, a request, or this age.
 STALE_S = 15 * 60
 
 
@@ -51,7 +50,6 @@ class SourcesBrowser(AsyncScreen):
         client.jobFinished.connect(self._on_job_finished)
         client.mediaChanged.connect(lambda ident: self._show(self._shown))
 
-    # The library's own art when the game is in it, else the store's picture.
     def _art(self, game_id):
         game = self._games_model.byId(game_id) if game_id else None
         if game is None:
@@ -76,10 +74,10 @@ class SourcesBrowser(AsyncScreen):
             return
 
         def work():
-            sources = list(self._client.sources() or [])
+            sources = self._client.sources()
             source = self._source or (sources[0]["id"] if sources else "")
-            updates = list(self._client.updates() or []) if source else []
-            games = list(self._client.sourceLibrary(source) or []) if source else []
+            updates = self._client.updates() if source else []
+            games = self._client.sourceLibrary(source) if source else []
             return sources, source, updates, games
 
         def done(result, error):
@@ -117,7 +115,7 @@ class SourcesBrowser(AsyncScreen):
                 self.message.emit(error)
             if self._query != query or error:
                 return
-            self._show(list(found or []))
+            self._show(found)
 
         self._run(lambda: self._client.search(source, query), done)
 
@@ -143,7 +141,6 @@ class SourcesBrowser(AsyncScreen):
     def updateAll(self):
         return self._begin(self._client.update(self._source, ""), "Updating everything")
 
-    # By library id: a confirmation outlives a refresh that reorders the rows.
     def _title(self, game_id):
         return next((r["title"] for r in self._rows if r["game_id"] == game_id), game_id)
 
@@ -225,7 +222,7 @@ class LoginFlow(QObject):
     @Slot(str)
     def begin(self, source):
         self._source = source
-        self._url = self._client.loginUrl(source) or ""
+        self._url = self._client.loginUrl(source)
         self._matrix = qr_matrix(self._url) if self._url else []
         self._status = "Open the link, sign in, then enter the code it shows." if self._url else "This source has no login."
         self.changed.emit()
@@ -235,7 +232,7 @@ class LoginFlow(QObject):
         code = code.strip()
         if not code:
             return
-        self._job = self._client.login(self._source, code) or ""
+        self._job = self._client.login(self._source, code)
         self._status = "Checking the code…" if self._job else "Login could not start."
         self.changed.emit()
 
