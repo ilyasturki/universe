@@ -37,7 +37,6 @@ Item {
 
             Image {
                 anchors.fill: parent
-                // Follows the hero's verdict: a hero that turns out missing would otherwise be tried, and warned about, twice.
                 source: hero.status === Image.Ready ? frame.heroSource
                                                     : (frame.heroMissing ? frame.boxSource : "")
                 fillMode: Image.PreserveAspectCrop
@@ -73,8 +72,7 @@ Item {
             color: Qt.rgba(0.055, 0.059, 0.075, 0.42)
         }
 
-        // SteamGridDB heroes are 3:1, letterboxed over the blur; the band's edges are feathered
-        // rather than cut, because a hard one crawls pixel by pixel under the scale the launch animates.
+        // A hard edge on the 3:1 hero crawls pixel by pixel under the launch's scale; feathered instead.
         Item {
             id: heroBand
 

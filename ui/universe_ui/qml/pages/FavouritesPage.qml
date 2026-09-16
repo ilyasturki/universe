@@ -31,8 +31,7 @@ FocusScope {
     readonly property real cellHeight: Theme.dp(504)
     readonly property real idleScale: 304 / 336
 
-    // Source rows of games removed here: they stay in the row, hollow, until the
-    // page is left, so a slip of Y can be undone in place.
+    // Source rows unfavourited here: they stay, hollow, until the page is left, so Y can undo.
     property var pinned: []
 
     function toggleFavourite() {
@@ -136,12 +135,8 @@ FocusScope {
                         opacity: card.hollow ? 1.0 : 0.0
                         visible: opacity > 0.01
 
-                        Behavior on scale {
-                            NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutQuint }
-                        }
-                        Behavior on opacity {
-                            NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-                        }
+                        Behavior on scale { Ease { easing.type: Easing.OutQuint } }
+                        Behavior on opacity { Ease {} }
 
                         Rectangle {
                             anchors.fill: parent
@@ -185,7 +180,6 @@ FocusScope {
             }
         }
 
-        // Left unaccepted so the view's own navigation still moves the index.
         Keys.onLeftPressed: function(event) {
             event.accepted = false;
             row.currentIndex > 0 ? Sound.tick() : Sound.edge();

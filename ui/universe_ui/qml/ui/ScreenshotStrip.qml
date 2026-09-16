@@ -58,12 +58,8 @@ Column {
                 opacity: strip.focused && !current ? 0.6 : 1.0
                 scale: current ? 1.03 : 1.0
 
-                Behavior on opacity {
-                    NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-                }
-                Behavior on scale {
-                    NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutQuint }
-                }
+                Behavior on opacity { Ease { duration: Theme.durQuick } }
+                Behavior on scale { Ease { easing.type: Easing.OutQuint } }
 
                 Rectangle {
                     anchors.fill: parent

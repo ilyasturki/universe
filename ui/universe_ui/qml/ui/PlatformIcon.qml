@@ -2,7 +2,6 @@ import QtQuick
 import Qt5Compat.GraphicalEffects
 import "../core"
 
-// The collection's logo by shortname; a collection without one shows its name.
 Item {
     id: root
 

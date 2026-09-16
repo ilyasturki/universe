@@ -24,7 +24,6 @@ FocusScope {
     property bool fullscreen: false
     readonly property bool playing: player.playbackState === MediaPlayer.PlayingState
     readonly property bool stopped: player.playbackState === MediaPlayer.StoppedState
-    // ms: the player's once loaded, else the probed file's, else the session's.
     readonly property real duration: player.duration > 0 ? player.duration
                                    : frames && frames.duration > 0 ? frames.duration * 1000
                                    : current ? current.duration_s * 1000 : 0
@@ -298,9 +297,7 @@ FocusScope {
         preferredHighlightEnd: height
         highlightRangeMode: ListView.ApplyRange
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease { duration: Theme.durQuick } }
 
         delegate: SessionRow {
             readonly property var frames: page.store.frameMap[modelData.session] || null
@@ -333,9 +330,7 @@ FocusScope {
                     asynchronous: true
                     opacity: status === Image.Ready ? 1.0 : 0.0
 
-                    Behavior on opacity {
-                        NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic }
-                    }
+                    Behavior on opacity { Ease { duration: Theme.durView } }
                 }
             }
         }
@@ -366,9 +361,7 @@ FocusScope {
             visible: page.stopped
             opacity: page.stopped ? 1.0 : 0.0
 
-            Behavior on opacity {
-                NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic }
-            }
+            Behavior on opacity { Ease { duration: Theme.durView } }
 
             Repeater {
                 model: 16
@@ -384,9 +377,7 @@ FocusScope {
                         asynchronous: true
                         opacity: status === Image.Ready ? 1.0 : 0.0
 
-                        Behavior on opacity {
-                            NumberAnimation { duration: Theme.durScene; easing.type: Easing.OutCubic }
-                        }
+                        Behavior on opacity { Ease { duration: Theme.durScene } }
                     }
                 }
             }
@@ -410,9 +401,7 @@ FocusScope {
             color: Qt.rgba(0.02, 0.02, 0.03, page.stopped ? 0.42 : 0.30)
             opacity: page.playing ? 0.0 : 1.0
 
-            Behavior on opacity {
-                NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-            }
+            Behavior on opacity { Ease {} }
         }
 
         Rectangle {
@@ -424,8 +413,8 @@ FocusScope {
             opacity: page.playing ? 0.0 : 1.0
             scale: page.playing ? 0.8 : 1.0
 
-            Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
-            Behavior on scale { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutBack } }
+            Behavior on opacity { Ease {} }
+            Behavior on scale { Ease { easing.type: Easing.OutBack } }
 
             MenuGlyph {
                 anchors.centerIn: parent
@@ -459,9 +448,7 @@ FocusScope {
             visible: !page.stopped || page.scrubbing
             opacity: shown ? 1.0 : 0.0
 
-            Behavior on opacity {
-                NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-            }
+            Behavior on opacity { Ease {} }
 
             Rectangle {
                 anchors.left: parent.left
@@ -485,9 +472,7 @@ FocusScope {
                 anchors.bottomMargin: page.fullscreen ? hintBar.height + Theme.dp(64) : Theme.dp(64)
                 height: page.scrubbing ? Theme.dp(10) : Theme.dp(6)
 
-                Behavior on height {
-                    NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-                }
+                Behavior on height { Ease {} }
 
                 Rectangle {
                     anchors.fill: parent
@@ -519,7 +504,7 @@ FocusScope {
                         NumberAnimation { duration: page.scrubbing ? Theme.durBase : Theme.durNudge; easing.type: page.scrubbing ? Easing.OutCubic : Easing.OutBack }
                     }
                     Behavior on anchors.verticalCenterOffset {
-                        NumberAnimation { duration: Theme.durNudge; easing.type: Easing.OutBack }
+                        Ease { duration: Theme.durNudge; easing.type: Easing.OutBack }
                     }
 
                     Rectangle {
@@ -551,9 +536,9 @@ FocusScope {
                     scale: page.scrubbing ? 1.0 : 0.9
                     transformOrigin: Item.Bottom
 
-                    Behavior on opacity { NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic } }
-                    Behavior on scale { NumberAnimation { duration: Theme.durNudge; easing.type: Easing.OutBack } }
-                    Behavior on anchors.bottomMargin { NumberAnimation { duration: Theme.durNudge; easing.type: Easing.OutBack } }
+                    Behavior on opacity { Ease {} }
+                    Behavior on scale { Ease { duration: Theme.durNudge; easing.type: Easing.OutBack } }
+                    Behavior on anchors.bottomMargin { Ease { duration: Theme.durNudge; easing.type: Easing.OutBack } }
 
                     Rectangle {
                         anchors.fill: parent
@@ -677,9 +662,7 @@ FocusScope {
         z: 4
         opacity: page.fullscreen && !controls.shown ? 0.0 : 1.0
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease {} }
     }
 
     ActionMenu {

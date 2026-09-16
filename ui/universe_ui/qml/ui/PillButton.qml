@@ -5,7 +5,6 @@ Rectangle {
     id: root
 
     property string label: "Play"
-    // A MenuGlyph kind, or "" for none.
     property string icon: "play"
     property bool ghost: false
     property bool focused: false
@@ -23,12 +22,8 @@ Rectangle {
     opacity: root.dimmed ? 0.5 : 1.0
     scale: root.focused ? 1.04 : 1.0
 
-    Behavior on opacity {
-        NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-    }
-    Behavior on scale {
-        NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutQuint }
-    }
+    Behavior on opacity { Ease { duration: Theme.durQuick } }
+    Behavior on scale { Ease { easing.type: Easing.OutQuint } }
 
     Loader {
         anchors.fill: parent

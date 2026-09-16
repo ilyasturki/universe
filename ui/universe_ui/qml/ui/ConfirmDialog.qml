@@ -26,7 +26,7 @@ FocusScope {
         detail = spec.detail || "";
         yesLabel = spec.yes || "OK";
         noLabel = spec.no || "Cancel";
-        index = spec.index !== undefined ? spec.index : 1;
+        index = 1;
         callback = done || null;
         Sound.panel();
         open = true;
@@ -51,9 +51,7 @@ FocusScope {
         color: Qt.rgba(0.02, 0.02, 0.03, 1)
         opacity: dialog.open ? 0.62 : 0.0
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease {} }
     }
 
     Rectangle {
@@ -69,12 +67,8 @@ FocusScope {
         opacity: dialog.open ? 1.0 : 0.0
         scale: dialog.open ? 1.0 : 0.96
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-        }
-        Behavior on scale {
-            NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease {} }
+        Behavior on scale { Ease {} }
 
         Column {
             id: column

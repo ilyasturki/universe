@@ -70,7 +70,6 @@ FocusScope {
 
     function hide() {
         open = false;
-        // Or the chip bar's focus scope comes straight back to the hidden list.
         focus = false;
     }
 
@@ -107,11 +106,9 @@ FocusScope {
         anchors.fill: parent
         opacity: picker.open ? 1.0 : 0.0
         transform: Translate { y: picker.open ? 0 : -Theme.dp(10)
-                               Behavior on y { NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic } } }
+                               Behavior on y { Ease { duration: Theme.durQuick } } }
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease { duration: Theme.durQuick } }
 
         // RectangularGlow paints its whole bounds, so it sits behind the panel.
         RectangularGlow {
@@ -161,9 +158,7 @@ FocusScope {
                     radius: Theme.dp(14)
                     color: row.focused ? Theme.text : "transparent"
 
-                    Behavior on color {
-                        ColorAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-                    }
+                    Behavior on color { ColorEase {} }
                 }
 
                 Text {

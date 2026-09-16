@@ -3,7 +3,6 @@ import "../core"
 import "../../ui" as Pad
 import "../../ui/PadNames.js" as Names
 
-// A hint's button the HOME menu way: the pad's mark cut out of a filled disc, the ink showing through.
 Item {
     id: root
 

@@ -1,6 +1,5 @@
 .pragma library
 
-// A family the table does not know is drawn with Xbox names.
 var STYLE = {
     "dualsense-edge": "sony", "dualsense": "sony", "dualshock4": "sony",
     "xbox": "xbox", "xbox-elite": "xbox", "generic": "xbox",
@@ -62,7 +61,6 @@ function glyph(family, slot) {
     return out;
 }
 
-// The hint bar names buttons the Xbox way; the pad connected decides what is drawn.
 var HINT_SLOTS = {
     A: "south", B: "east", X: "west", Y: "north", LB: "lb", RB: "rb", LT: "lt", RT: "rt",
     LS: "ls", RS: "rs", Start: "start", Select: "select", dpad: "dpad"

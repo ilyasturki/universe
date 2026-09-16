@@ -18,9 +18,7 @@ Rectangle {
     border.width: 1
     border.color: Theme.surfaceBorder
 
-    Behavior on color {
-        ColorAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-    }
+    Behavior on color { ColorEase {} }
 
     onSessionChanged: {
         var started = session && session.started_at ? Date.parse(session.started_at) : NaN;

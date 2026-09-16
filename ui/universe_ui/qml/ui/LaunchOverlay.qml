@@ -74,7 +74,6 @@ FocusScope {
                 overlay.abort(message);
         }
         function onSessionEnded(sessionId, id, duration) {
-            // Over before its window came up: nothing to hand over to.
             if (overlay.waiting && sessionId === overlay.launchedSession)
                 overlay.handOver();
         }
@@ -111,8 +110,7 @@ FocusScope {
             }
         }
 
-        // The grab feeds gamescope's keep-alive window, which shows this very frame until the game's own;
-        // a grab that cannot happen launches without it (a black keep-alive).
+        // The grab feeds gamescope's keep-alive window; without one the keep-alive is black.
         ScriptAction {
             script: {
                 if (overlay.game) {

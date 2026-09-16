@@ -1,7 +1,6 @@
 import QtQuick
 import QtMultimedia
 
-// The seek in flight: the bar shows it at once, the player gets it once the input rests.
 QtObject {
     id: scrub
 
@@ -26,7 +25,6 @@ QtObject {
         }
     }
 
-    // Presses add up on the pending target; the player only hears the last one.
     function seekBy(ms) {
         if (duration <= 0)
             return;

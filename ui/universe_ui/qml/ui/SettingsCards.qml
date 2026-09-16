@@ -18,7 +18,6 @@ FocusScope {
     signal escapedLeft()
 
     readonly property var currentRow: index >= 0 && index < rows.length ? rows[index] : null
-    // The white row stays while a picker or the keyboard opened from it holds the focus.
     readonly property bool cursorShown: activeFocus || dimmed
 
     readonly property real gap: Theme.dp(compact ? 24 : 32)
@@ -181,12 +180,9 @@ FocusScope {
         readonly property color onFocus: Qt.rgba(0.063, 0.067, 0.086, 0.6)
 
         height: cards.cardHeight(group)
-        // A module that is off fades, except while its switch is the focused thing.
         opacity: group.off && !headerFocused ? 0.55 : 1.0
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease { duration: Theme.durQuick } }
 
         Rectangle {
             anchors.fill: parent
@@ -207,9 +203,7 @@ FocusScope {
             visible: card.headerHeight > 0
             color: card.headerFocused ? Theme.text : "transparent"
 
-            Behavior on color {
-                ColorAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-            }
+            Behavior on color { ColorEase {} }
 
             Image {
                 id: logo
@@ -319,9 +313,7 @@ FocusScope {
         clip: true
         opacity: cards.dimmed ? 0.55 : 1.0
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease { duration: Theme.durQuick } }
 
         function scrollToCurrent() {
             var s = cards.stopOf(cards.index);
@@ -329,9 +321,7 @@ FocusScope {
                 Theme.reveal(view, s.top, s.y1, height);
         }
 
-        Behavior on contentY {
-            NumberAnimation { duration: Theme.durView; easing.type: Easing.OutQuint }
-        }
+        Behavior on contentY { Ease { duration: Theme.durView; easing.type: Easing.OutQuint } }
 
         Repeater {
             model: cards.layout.cards

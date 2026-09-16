@@ -42,7 +42,6 @@ function sessions(count) {
     return count > 0 ? plural(count, "session", "sessions") : "";
 }
 
-// 1:02:03, or 4:05 under an hour: a player's counter.
 function clockTime(seconds) {
     var s = Math.max(0, Math.floor(seconds || 0));
     var h = Math.floor(s / 3600);

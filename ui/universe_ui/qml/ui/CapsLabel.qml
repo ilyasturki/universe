@@ -5,8 +5,7 @@ Text {
     id: root
 
     property real tracking: 0.13
-    // Reading font.pixelSize to set font.letterSpacing loops: they are one group
-    // property, so the write reinvalidates the read.
+    // font.pixelSize and font.letterSpacing are one group property: reading one to set the other loops.
     property real size: Theme.dp(19)
 
     color: Theme.textMuted

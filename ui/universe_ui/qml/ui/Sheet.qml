@@ -7,7 +7,6 @@ FocusScope {
     property bool open: false
     property string title: ""
     property real innerMax: Theme.dp(1000)
-    // The content's height under the heading; the panel wraps it.
     property real contentHeight: 0
     readonly property real inner: Math.min(innerMax, width - Theme.dp(280))
     readonly property real pad: Theme.dp(28)
@@ -23,9 +22,7 @@ FocusScope {
         color: Qt.rgba(0.02, 0.02, 0.03, 1)
         opacity: sheet.open ? 0.72 : 0.0
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease {} }
     }
 
     Item {
@@ -36,9 +33,7 @@ FocusScope {
         height: sheet.pad * 2 + heading.height + sheet.contentHeight
         y: sheet.open ? parent.height - height - Theme.dp(Theme.hintBarHeight) : parent.height
 
-        Behavior on y {
-            NumberAnimation { duration: Theme.durView; easing.type: Easing.OutQuint }
-        }
+        Behavior on y { Ease { duration: Theme.durView; easing.type: Easing.OutQuint } }
 
         Rectangle {
             anchors.fill: parent

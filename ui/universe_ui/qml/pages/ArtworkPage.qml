@@ -18,11 +18,11 @@ FocusScope {
     readonly property string currentSlot: current ? current.slot : ""
     readonly property var candidates: form.candidatesSlot === currentSlot ? form.candidates : []
     property int candIndex: 0
-    // "slots" | "cands" | "hits"
     property string zone: "slots"
     property int hitIndex: 0
     readonly property bool inCands: zone === "cands"
     readonly property bool inHits: zone === "hits"
+    readonly property bool searching: form.searchBusy
     readonly property int columns: currentSlot === "box_front" || currentSlot === "square" ? 4 : currentSlot === "background" ? 2 : 3
     readonly property int candCount: candidates.length + (form.more ? 1 : 0)
 
@@ -57,7 +57,6 @@ FocusScope {
         index = 0;
         candIndex = 0;
         zone = "slots";
-        hitsPanel.open = false;
         if (game) {
             form.load(game.id);
             landOnSlot();
@@ -67,6 +66,12 @@ FocusScope {
     onSlotChanged: landOnSlot()
     Component.onDestruction: form.unload()
     onSlotsChanged: if (index >= slots.length) index = Math.max(0, slots.length - 1)
+    onSearchingChanged: {
+        if (searching)
+            return;
+        hitIndex = 0;
+        zone = "hits";
+    }
 
     function landOnSlot() {
         var i = slots.findIndex(function(s) { return s.slot === slot; });
@@ -122,22 +127,9 @@ FocusScope {
         keyboard.show("Search SteamGridDB", form.title, "text");
     }
 
-    function leaveHits() {
-        hitsPanel.open = false;
-        zone = "slots";
-    }
-
     Connections {
         target: page.form
         function onMessage(text) { page.message(text); }
-        function onHitsChanged() {
-            if (!page.form.searchBusy && hitsPanel.pending) {
-                hitsPanel.pending = false;
-                hitsPanel.open = true;
-                page.hitIndex = 0;
-                page.zone = "hits";
-            }
-        }
     }
 
     Keys.onPressed: function(event) {
@@ -152,11 +144,11 @@ FocusScope {
                 if (hits.length > 0) {
                     Sound.enter();
                     page.form.pin(hits[page.hitIndex].id);
-                    leaveHits();
+                    page.zone = "slots";
                 }
             } else if (api.keys.isCancel(event)) {
                 Sound.cancel();
-                leaveHits();
+                page.zone = "slots";
             } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
                 page.hitIndex = Sound.stepped(page.hitIndex, event.key === Qt.Key_Up ? -1 : 1, hits.length);
             }
@@ -232,9 +224,7 @@ FocusScope {
         spacing: Theme.dp(12)
         opacity: page.inCands || page.inHits ? 0.55 : 1.0
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease { duration: Theme.durQuick } }
 
         Repeater {
             model: page.slots
@@ -249,9 +239,7 @@ FocusScope {
                 radius: Theme.dp(16)
                 color: lit ? Theme.text : Theme.surface
 
-                Behavior on color {
-                    ColorAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-                }
+                Behavior on color { ColorEase {} }
 
                 Loader {
                     anchors.fill: parent
@@ -482,9 +470,7 @@ FocusScope {
                     anchors.margins: Theme.dp(10)
                     scale: focused ? 1.03 : 1.0
 
-                    Behavior on scale {
-                        NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutQuint }
-                    }
+                    Behavior on scale { Ease { easing.type: Easing.OutQuint } }
 
                     Loader {
                         anchors.fill: parent
@@ -562,18 +548,12 @@ FocusScope {
     Item {
         id: hitsPanel
 
-        property bool open: false
-        // Set when the keyboard is done, cleared when the hits arrive.
-        property bool pending: false
-
         anchors.fill: dock
         visible: opacity > 0.01
-        opacity: open ? 1.0 : 0.0
+        opacity: page.inHits ? 1.0 : 0.0
         z: 2
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease {} }
 
         Rectangle {
             anchors.fill: parent
@@ -681,7 +661,6 @@ FocusScope {
         z: 2
 
         onAccepted: function(value) {
-            hitsPanel.pending = true;
             page.form.search(value);
             page.forceActiveFocus();
         }

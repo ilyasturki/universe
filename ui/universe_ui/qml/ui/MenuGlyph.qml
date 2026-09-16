@@ -1,6 +1,5 @@
 import QtQuick
 
-// One line icon of a menu row, drawn on a 24-unit grid in the row's ink.
 Canvas {
     id: glyph
 

@@ -7,7 +7,6 @@ GridView {
 
     property int columns: 8
     property real gap: Theme.dp(28)
-    // While the selection is inactive another group owns the d-pad; keys fall through.
     property bool selectionActive: true
     readonly property real coverWidth: cellWidth - gap
     readonly property Item focusedArtItem: currentItem ? currentItem.artItem : null

@@ -6,7 +6,6 @@ FocusScope {
     id: editor
 
     property Item cards: null
-    // A page under the tabs' hint bar lets the sheets overhang it; one with its own hint bar keeps them inside.
     property real overhang: Theme.dp(Theme.hintBarHeight)
     property real floor: height
 
@@ -48,7 +47,6 @@ FocusScope {
         return sheets.item;
     }
 
-    // A key named as a file, or a value with an extension, picks files; the rest pick folders.
     function isFile(row) {
         var key = String(row.key || "");
         if (/(_path|_file|file|exe)$/.test(key))

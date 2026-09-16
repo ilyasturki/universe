@@ -2,6 +2,7 @@ import QtQuick
 import "../core"
 import "../sound"
 import "../ui"
+import "../../ui" as Base
 import "Details.js" as Details
 import "Forms.js" as Forms
 
@@ -33,7 +34,6 @@ FocusScope {
     property int section: 0
     readonly property string sectionId: sections[section].id
     property string zone: "list"
-    // The runner or module whose page is open: the list reloads under it and the cursor finds it again.
     property var reopen: null
 
     readonly property var loaders: ({
@@ -338,8 +338,7 @@ FocusScope {
             width: Theme.dp(282)
             height: width
             active: page.login.url !== ""
-            source: "../../ui/QrCode.qml"
-            onLoaded: item.matrix = Qt.binding(function() { return page.login.matrix; })
+            sourceComponent: Base.QrCode { matrix: page.login.matrix }
         }
 
         Column {

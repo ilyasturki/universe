@@ -2,6 +2,7 @@ import QtQuick
 import "../core"
 import "../sound"
 import "../ui"
+import "../../ui" as Base
 
 FocusScope {
     id: page
@@ -14,7 +15,6 @@ FocusScope {
     property var pressed: ({})
     property var axes: ({})
     property string lastSlot: ""
-    property var held: ({})
 
     readonly property var hints: testing
         ? [ { glyph: "B", label: "Hold to finish" }, { glyph: "Start", label: "" }, { glyph: "Select", label: "Finish" } ]
@@ -78,7 +78,6 @@ FocusScope {
         pressed = ({});
         axes = ({});
         lastSlot = "";
-        held = ({});
         holdOut.stop();
     }
 
@@ -190,10 +189,9 @@ FocusScope {
             page.press(slot, isDown);
             if (!page.testing)
                 return;
-            page.held = page.toggled(page.held, slot, isDown);
             if (slot === "east")
                 holdOut.running = isDown;
-            if (isDown && page.held.start && page.held.select) {
+            if (isDown && page.pressed.start && page.pressed.select) {
                 Sound.play("back");
                 page.controller.setTesting(false);
             }
@@ -243,26 +241,20 @@ FocusScope {
         Behavior on width { Ease {} }
         Behavior on height { Ease {} }
 
-        Loader {
-            id: art
-
+        Base.PadArt {
             anchors.fill: parent
             anchors.margins: Theme.dp(40)
             anchors.bottomMargin: page.testing && page.lastSlot !== "" ? Theme.dp(110) : Theme.dp(40)
-            source: "../../ui/PadArt.qml"
             opacity: page.controller.connected ? 1.0 : 0.38
+            family: page.controller.family
+            focusedSlot: page.focusedSlot
+            learningSlot: page.controller.learning
+            unbound: page.controller.connected ? page.controller.unboundSlots : []
+            pressed: page.pressed
+            axes: page.axes
+            pulse: page.pulse
 
             Behavior on opacity { Ease { duration: Theme.durFade } }
-
-            onLoaded: {
-                item.family = Qt.binding(function() { return page.controller.family; });
-                item.focusedSlot = Qt.binding(function() { return page.focusedSlot; });
-                item.learningSlot = Qt.binding(function() { return page.controller.learning; });
-                item.unbound = Qt.binding(function() { return page.controller.connected ? page.controller.unboundSlots : []; });
-                item.pressed = Qt.binding(function() { return page.pressed; });
-                item.axes = Qt.binding(function() { return page.axes; });
-                item.pulse = Qt.binding(function() { return page.pulse; });
-            }
         }
 
         Row {
@@ -272,15 +264,12 @@ FocusScope {
             visible: page.testing && page.lastSlot !== ""
             spacing: Theme.dp(18)
 
-            Loader {
+            Base.PadGlyph {
                 anchors.verticalCenter: parent.verticalCenter
-                source: "../../ui/PadGlyph.qml"
-                onLoaded: {
-                    item.family = Qt.binding(function() { return page.controller.family; });
-                    item.slot = Qt.binding(function() { return page.lastSlot; });
-                    item.unit = Qt.binding(function() { return Theme.dp(48); });
-                    item.ink = "#f2f2f2";
-                }
+                family: page.controller.family
+                slot: page.lastSlot
+                unit: Theme.dp(48)
+                ink: "#f2f2f2"
             }
 
             Label {

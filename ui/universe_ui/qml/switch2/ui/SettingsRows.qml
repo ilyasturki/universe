@@ -1,6 +1,7 @@
 import QtQuick
 import "../core"
 import "../sound"
+import "../../ui" as Base
 
 FocusScope {
     id: rows
@@ -237,12 +238,11 @@ FocusScope {
                         Loader {
                             anchors.verticalCenter: parent.verticalCenter
                             active: row.hasGlyph
-                            source: "../../ui/PadGlyph.qml"
-                            onLoaded: {
-                                item.family = Qt.binding(function() { return String(row.entry.family); });
-                                item.slot = Qt.binding(function() { return String(row.entry.slot); });
-                                item.unit = Qt.binding(function() { return Theme.dp(44); });
-                                item.ink = Qt.binding(function() { return row.ink; });
+                            sourceComponent: Base.PadGlyph {
+                                family: String(row.entry.family)
+                                slot: String(row.entry.slot)
+                                unit: Theme.dp(44)
+                                ink: row.ink
                             }
                         }
 

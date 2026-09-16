@@ -21,7 +21,6 @@ Item {
     property real blurRadius: 18
     property bool drift: true
     property bool zoomEnabled: true
-    // How far the art is oversized past the frame, giving the drift room to run.
     property real overscan: 1.2
 
     readonly property real zoomLow: zoomEnabled ? 1.02 : 1.0
@@ -59,7 +58,6 @@ Item {
             mipmap: true
         }
 
-        // One texture, one blur, for the whole backdrop — never one per delegate.
         Loader {
             anchors.fill: parent
             active: root.blurRadius > 0 && !Theme.software

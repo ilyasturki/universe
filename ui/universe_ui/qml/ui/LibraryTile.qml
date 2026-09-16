@@ -13,7 +13,7 @@ Item {
 
     Behavior on ringOpacity {
         enabled: root.selected
-        NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
+        Ease { duration: Theme.durQuick }
     }
 
     Item {
@@ -24,12 +24,8 @@ Item {
         opacity: root.selected ? 1.0 : Theme.idleOpacity
         scale: root.selected ? 1.0 : root.idleScale
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutQuint }
-        }
-        Behavior on scale {
-            NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutQuint }
-        }
+        Behavior on opacity { Ease { easing.type: Easing.OutQuint } }
+        Behavior on scale { Ease { easing.type: Easing.OutQuint } }
 
         Rectangle {
             anchors.fill: parent

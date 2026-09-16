@@ -18,9 +18,7 @@ Rectangle {
     radius: Theme.dp(16)
     color: lit ? Theme.text : Theme.surface
 
-    Behavior on color {
-        ColorAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-    }
+    Behavior on color { ColorEase {} }
 
     Item {
         id: leadSlot

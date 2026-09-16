@@ -14,7 +14,6 @@ FocusScope {
     signal escapedLeft()
     signal escapedUp()
 
-    // "slots" | "filters" | "grid"
     property string zone: "slots"
     property int slotIndex: 0
     property int filterIndex: 0
@@ -263,9 +262,7 @@ FocusScope {
         highlightFollowsCurrentItem: true
         opacity: view.zone === "grid" || !view.activeFocus ? 1.0 : 0.8
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease { duration: Theme.durQuick } }
 
         delegate: Item {
             readonly property bool focused: view.zone === "grid" && index === view.gridIndex && view.activeFocus
@@ -281,9 +278,7 @@ FocusScope {
                 height: view.artHeight
                 scale: focused ? 1.04 : 1.0
 
-                Behavior on scale {
-                    NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutQuint }
-                }
+                Behavior on scale { Ease { easing.type: Easing.OutQuint } }
 
                 Loader {
                     anchors.fill: parent

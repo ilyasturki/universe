@@ -6,7 +6,6 @@ import "../sound"
 FocusScope {
     id: overlay
 
-    // The sheet parks below the bottom edge when closed.
     clip: true
 
     property bool open: false
@@ -105,9 +104,7 @@ FocusScope {
         color: Qt.rgba(0.055, 0.059, 0.075, 0.91)
         opacity: overlay.open ? 1.0 : 0.0
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease { duration: Theme.durView } }
     }
 
     Item {
@@ -120,9 +117,7 @@ FocusScope {
         anchors.right: parent.right
         opacity: overlay.open ? 1.0 : 0.0
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease { duration: Theme.durView } }
 
         Text {
             anchors.centerIn: parent
@@ -205,9 +200,7 @@ FocusScope {
         height: overlay.sheetPad * 2 + overlay.fieldHeight + Theme.dp(22) + keyboard.height
         y: overlay.open ? parent.height - height : parent.height
 
-        Behavior on y {
-            NumberAnimation { duration: Theme.durView; easing.type: Easing.OutQuint }
-        }
+        Behavior on y { Ease { duration: Theme.durView; easing.type: Easing.OutQuint } }
 
         Rectangle {
             anchors.fill: parent
@@ -311,9 +304,7 @@ FocusScope {
             keyGap: Theme.dp(9)
             opacity: overlay.typing ? 1.0 : 0.55
 
-            Behavior on opacity {
-                NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-            }
+            Behavior on opacity { Ease { duration: Theme.durQuick } }
 
             onCharEntered: function(value) {
                 Sound.type();

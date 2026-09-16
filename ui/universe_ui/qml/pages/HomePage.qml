@@ -27,7 +27,6 @@ FocusScope {
     readonly property real scrimMid: 0
     readonly property real scrimBottom: 0
     readonly property Item menuAnchor: tileSelected || !rail.currentItem ? null : rail.currentItem.artItem
-    // Set by the shell; the rail keeps its ring lit while the menu holds focus.
     property bool menuOpen: false
 
     property bool tileSelected: false
@@ -57,8 +56,7 @@ FocusScope {
 
     readonly property real bandHeight: Theme.dp(Theme.heroBand)
     readonly property real railGapTop: Theme.dp(28)
-    // Cards are authored at 240 and scaled to 176 when idle, but the slot is the idle size:
-    // the focused card overhangs it and its neighbours step aside, so every gap stays 24.
+    // The slot is the idle size: the focused card overhangs it and its neighbours step aside.
     readonly property real cellSize: Theme.dp(240)
     readonly property real slotSize: Theme.dp(176)
     readonly property real railGap: Theme.dp(24)
@@ -153,9 +151,7 @@ FocusScope {
 
             opacity: page.currentGame || page.tileSelected ? 1.0 : 0.0
 
-            Behavior on opacity {
-                NumberAnimation { duration: Theme.durScene; easing.type: Easing.OutCubic }
-            }
+            Behavior on opacity { Ease { duration: Theme.durScene } }
 
             HeroLogo {
                 id: heroLogo
@@ -163,9 +159,7 @@ FocusScope {
                 titleWidth: parent.width
                 opacity: page.tileSelected ? 0.0 : 1.0
 
-                Behavior on opacity {
-                    NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-                }
+                Behavior on opacity { Ease {} }
             }
 
             Text {
@@ -177,9 +171,7 @@ FocusScope {
                 font.pixelSize: Theme.dp(58)
                 opacity: page.tileSelected ? 1.0 : 0.0
 
-                Behavior on opacity {
-                    NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-                }
+                Behavior on opacity { Ease {} }
             }
 
             GameMetaLine {
@@ -190,9 +182,7 @@ FocusScope {
                 showYear: false
                 opacity: page.tileSelected ? 0.0 : 1.0
 
-                Behavior on opacity {
-                    NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-                }
+                Behavior on opacity { Ease {} }
             }
 
             Text {
@@ -204,9 +194,7 @@ FocusScope {
                 font.pixelSize: Theme.dp(24)
                 opacity: page.tileSelected ? 1.0 : 0.0
 
-                Behavior on opacity {
-                    NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-                }
+                Behavior on opacity { Ease {} }
             }
 
             FocusScope {
@@ -230,9 +218,7 @@ FocusScope {
                     opacity: page.tileSelected ? 0.0 : 1.0
                     visible: opacity > 0.01
 
-                    Behavior on opacity {
-                        NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-                    }
+                    Behavior on opacity { Ease {} }
 
                     PillButton {
                         label: page.playLabel
@@ -256,9 +242,7 @@ FocusScope {
                     opacity: page.tileSelected ? 1.0 : 0.0
                     visible: opacity > 0.01
 
-                    Behavior on opacity {
-                        NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-                    }
+                    Behavior on opacity { Ease {} }
                 }
 
                 Keys.onLeftPressed: heroActions.step(-1)
@@ -269,7 +253,6 @@ FocusScope {
                     rail.forceActiveFocus();
                 }
 
-                // Play falls through to the shell, which launches on release.
                 Keys.onPressed: function(event) {
                     if (api.keys.isAccept(event) && !page.tileSelected && heroActions.index === 1) {
                         event.accepted = true;
@@ -309,8 +292,7 @@ FocusScope {
             anchors.topMargin: page.railGapTop + (page.standingIn ? standInNote.height + Theme.dp(14) : 0)
             anchors.left: parent.left
             anchors.right: parent.right
-            // The left overhang goes into the margin so contentX stays >= 0: a header would move
-            // originX negative and the view then refuses to scroll the whole way to it.
+            // A header would move originX negative, and the view then refuses to scroll all the way to it.
             anchors.leftMargin: Theme.dp(90) + page.spread
             anchors.rightMargin: Theme.dp(90) - page.spread
             height: page.cellSize
@@ -344,9 +326,7 @@ FocusScope {
                     count: page.libraryCount
                     ringOpacity: rail.activeFocus || page.menuOpen ? 1.0 : Theme.ringIdle
 
-                    Behavior on x {
-                        NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutQuint }
-                    }
+                    Behavior on x { Ease { easing.type: Easing.OutQuint } }
                 }
             }
 
@@ -364,7 +344,6 @@ FocusScope {
             onWidthChanged: slideToCurrent()
             onCountChanged: slideToCurrent()
 
-            // Left unaccepted so the view's own navigation still moves the index.
             Keys.onLeftPressed: function(event) {
                 if (page.tileSelected) {
                     page.tileSelected = false;
@@ -393,9 +372,7 @@ FocusScope {
             }
             Keys.onDownPressed: Sound.edge()
 
-            Behavior on contentX {
-                NumberAnimation { duration: Theme.durNudge; easing.type: Easing.OutQuint }
-            }
+            Behavior on contentX { Ease { duration: Theme.durNudge; easing.type: Easing.OutQuint } }
 
             delegate: Item {
                 id: tile
@@ -426,9 +403,7 @@ FocusScope {
                     cornerRadius: Theme.dp(Theme.radiusTile)
                     ringOpacity: rail.activeFocus || page.menuOpen ? 1.0 : Theme.ringIdle
 
-                    Behavior on x {
-                        NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutQuint }
-                    }
+                    Behavior on x { Ease { easing.type: Easing.OutQuint } }
                 }
             }
         }

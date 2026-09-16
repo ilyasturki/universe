@@ -22,9 +22,7 @@ Item {
         border.width: 1
         border.color: root.active ? Theme.text : Qt.rgba(1, 1, 1, 0.14)
 
-        Behavior on color {
-            ColorAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-        }
+        Behavior on color { ColorEase {} }
     }
 
     Loader {

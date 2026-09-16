@@ -103,7 +103,6 @@ FocusScope {
         scrollTo(sectionTop(which));
     }
 
-    // Both return what moved: "section", "scroll" or "" — the sound follows it.
     function stepDown() {
         if (section === 0) {
             if (hasAbout) { goTo(1); return "section"; }
@@ -171,9 +170,7 @@ FocusScope {
         // The default overshoot fixup fights the contentY Behavior.
         boundsBehavior: Flickable.StopAtBounds
 
-        Behavior on contentY {
-            NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic }
-        }
+        Behavior on contentY { Ease { duration: Theme.durView } }
 
         Item {
             id: content
@@ -283,12 +280,8 @@ FocusScope {
                         opacity: actions.active && !focused ? 0.5 : 1.0
                         scale: focused ? 1.04 : 1.0
 
-                        Behavior on opacity {
-                            NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-                        }
-                        Behavior on scale {
-                            NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutQuint }
-                        }
+                        Behavior on opacity { Ease { duration: Theme.durQuick } }
+                        Behavior on scale { Ease { easing.type: Easing.OutQuint } }
 
                         Loader {
                             anchors.fill: parent
@@ -373,9 +366,7 @@ FocusScope {
                             lineHeight: 1.5
                             wrapMode: Text.WordWrap
 
-                            Behavior on color {
-                                ColorAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-                            }
+                            Behavior on color { ColorEase { duration: Theme.durBase } }
                         }
                     }
 

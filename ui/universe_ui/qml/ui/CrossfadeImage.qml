@@ -26,7 +26,6 @@ Item {
         commit();
     }
 
-    // Flips only once the hidden layer has decoded, so a slow disk never shows a half-painted crossfade.
     function commit() {
         var incoming = showA ? b : a;
         if (source != "" && incoming.source == source && incoming.status === Image.Ready)
@@ -44,9 +43,7 @@ Item {
         mipmap: root.mipmap
         onStatusChanged: if (status === Image.Ready) root.commit()
 
-        Behavior on opacity {
-            NumberAnimation { duration: root.duration; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease { duration: root.duration } }
     }
 
     Layer {

@@ -46,17 +46,21 @@ FocusScope {
     function scroll(d) {
         var next = Math.max(0, Math.min(maxScroll(), flick.contentY + d * Theme.dp(260)));
         if (next === flick.contentY) {
-            if (d > 0 && images.length > 0) {
-                Sound.play("tick");
-                mode = "shots";
-                flick.contentY = maxScroll();
-            } else {
-                Sound.play("edge");
-            }
+            d > 0 ? openShots() : Sound.play("edge");
             return;
         }
         Sound.play("tick");
         flick.contentY = next;
+    }
+
+    function openShots() {
+        if (images.length === 0) {
+            Sound.play("edge");
+            return;
+        }
+        Sound.play("tick");
+        mode = "shots";
+        flick.contentY = maxScroll();
     }
 
     function stepShot(d) { shotIndex = Sound.stepped(shotIndex, d, images.length); }
@@ -98,12 +102,8 @@ FocusScope {
             if (mode === "shots") {
                 Sound.play("ok");
                 lightbox = true;
-            } else if (images.length > 0) {
-                Sound.play("tick");
-                mode = "shots";
-                flick.contentY = maxScroll();
             } else {
-                Sound.play("edge");
+                openShots();
             }
         } else if (api.keys.isCancel(event)) {
             if (mode === "shots") {

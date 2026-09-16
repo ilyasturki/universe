@@ -1,7 +1,7 @@
 import QtQuick
 import "../core"
 
-// The login URL as a QR code: `matrix` is rows of booleans from the host.
+// matrix: rows of booleans.
 Rectangle {
     id: root
 

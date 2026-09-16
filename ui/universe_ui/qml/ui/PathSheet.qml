@@ -5,7 +5,6 @@ import "../sound"
 Sheet {
     id: sheet
 
-    // "chips" or "list"
     property string zone: "list"
     property int chipIndex: 0
     property int index: 0
@@ -186,9 +185,7 @@ Sheet {
                 return chips.edge - Math.min(shift, width - view);
             }
 
-            Behavior on x {
-                NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-            }
+            Behavior on x { Ease { duration: Theme.durQuick } }
 
             Repeater {
                 id: chipRepeater
@@ -237,9 +234,7 @@ Sheet {
                 radius: Theme.dp(14)
                 color: row.focused ? Theme.text : "transparent"
 
-                Behavior on color {
-                    ColorAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-                }
+                Behavior on color { ColorEase {} }
             }
 
             MenuGlyph {

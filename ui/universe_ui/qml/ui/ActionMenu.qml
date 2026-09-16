@@ -20,21 +20,16 @@ FocusScope {
     ]
 
     // The row's rect in the menu's coordinates, taken once at show().
-    property real ax: 0
-    property real ay: 0
-    property real aw: 0
-    property real ah: 0
+    property rect row: Qt.rect(0, 0, 0, 0)
     property real copyMargin: Theme.dp(6)
     property real gap: Theme.dp(28)
-    readonly property bool onRight: ax + aw + gap + panel.width <= width - Theme.dp(40)
+    readonly property bool onRight: row.x + row.width + gap + panel.width <= width - Theme.dp(40)
     property real slide: open ? 0.0 : 1.0
 
     focus: open
     visible: scrim.opacity > 0.01
 
-    Behavior on slide {
-        NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-    }
+    Behavior on slide { Ease {} }
 
     function show(list, anchor, rect, heading, after) {
         items = list;
@@ -42,10 +37,7 @@ FocusScope {
         done = after || null;
         index = 0;
         var p = anchor.mapToItem(menu, rect.x, rect.y);
-        ax = p.x;
-        ay = p.y;
-        aw = rect.width;
-        ah = rect.height;
+        row = Qt.rect(p.x, p.y, rect.width, rect.height);
         copy.sourceRect = Qt.rect(rect.x - copyMargin, rect.y - copyMargin, rect.width + copyMargin * 2, rect.height + copyMargin * 2);
         copy.sourceItem = anchor;
         shown++;
@@ -87,24 +79,20 @@ FocusScope {
         color: Qt.rgba(0.02, 0.02, 0.03, 1)
         opacity: menu.open ? 0.62 : 0.0
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease {} }
     }
 
     ShaderEffectSource {
         id: copy
         live: true
         hideSource: false
-        x: menu.ax - menu.copyMargin
-        y: menu.ay - menu.copyMargin
-        width: menu.aw + menu.copyMargin * 2
-        height: menu.ah + menu.copyMargin * 2
+        x: menu.row.x - menu.copyMargin
+        y: menu.row.y - menu.copyMargin
+        width: menu.row.width + menu.copyMargin * 2
+        height: menu.row.height + menu.copyMargin * 2
         opacity: menu.open ? 1.0 : 0.0
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease {} }
     }
 
     Rectangle {
@@ -116,9 +104,9 @@ FocusScope {
         color: "#1b1d24"
         border.width: 1
         border.color: Theme.surfaceBorder
-        x: (menu.onRight ? menu.ax + menu.aw + menu.gap : menu.ax - menu.gap - width)
+        x: (menu.onRight ? menu.row.x + menu.row.width + menu.gap : menu.row.x - menu.gap - width)
            + (menu.onRight ? -1 : 1) * menu.slide * Theme.dp(16)
-        y: Math.max(Theme.dp(40), Math.min(menu.ay + menu.ah / 2 - height / 2, menu.height - height - Theme.dp(40)))
+        y: Math.max(Theme.dp(40), Math.min(menu.row.y + menu.row.height / 2 - height / 2, menu.height - height - Theme.dp(40)))
         opacity: 1.0 - menu.slide
         scale: 1.0 - menu.slide * 0.04
         transformOrigin: menu.onRight ? Item.Left : Item.Right
@@ -169,9 +157,7 @@ FocusScope {
                     radius: Theme.dp(16)
                     color: focused ? (danger ? "#e0655a" : Theme.text) : "transparent"
 
-                    Behavior on color {
-                        ColorAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-                    }
+                    Behavior on color { ColorEase {} }
 
                     MenuGlyph {
                         id: glyph

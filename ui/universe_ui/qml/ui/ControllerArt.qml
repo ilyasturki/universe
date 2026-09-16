@@ -28,7 +28,6 @@ Item {
             lastSlot = slot;
     }
 
-    // A trigger names itself as soon as it moves, so a light pull reads under the pad too.
     function axis(name, value) {
         var next = Object.assign({}, axes);
         next[name] = value;
@@ -74,9 +73,7 @@ Item {
             axes: art.axes
             opacity: art.connected ? 1.0 : 0.38
 
-            Behavior on opacity {
-                NumberAnimation { duration: Theme.durScene; easing.type: Easing.OutCubic }
-            }
+            Behavior on opacity { Ease { duration: Theme.durScene } }
         }
     }
 

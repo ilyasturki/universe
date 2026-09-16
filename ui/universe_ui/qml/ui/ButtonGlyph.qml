@@ -2,8 +2,7 @@ import QtQuick
 import "../core"
 import "PadNames.js" as Names
 
-// "A" | "B" | "X" | "Y" | "RS" | "LB RB" | "LT RT" | "Start+Select" | "dpad", named the Xbox way and
-// drawn as the connected pad prints them; a space lists alternatives, a "+" joins a chord.
+// glyph: "A" | "LB RB" (alternatives) | "Start+Select" (a chord) | "dpad", named the Xbox way.
 Item {
     id: root
 

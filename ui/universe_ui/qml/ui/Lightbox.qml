@@ -12,9 +12,7 @@ Rectangle {
     opacity: open ? 1.0 : 0.0
     visible: opacity > 0.01
 
-    Behavior on opacity {
-        NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-    }
+    Behavior on opacity { Ease {} }
 
     Item {
         id: stage
@@ -27,9 +25,7 @@ Rectangle {
 
         readonly property real pitch: width + Theme.dp(64)
 
-        Behavior on scale {
-            NumberAnimation { duration: Theme.durScene; easing.type: Easing.OutCubic }
-        }
+        Behavior on scale { Ease { duration: Theme.durScene } }
 
         Item {
             id: strip
@@ -41,7 +37,7 @@ Rectangle {
             Behavior on x {
                 // Off while closed: opening lands on the picture, it does not slide to it.
                 enabled: root.open
-                NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic }
+                Ease { duration: Theme.durView }
             }
 
             // Three slots keyed by residue: the slot that just left the screen picks up the picture two steps ahead.
@@ -61,9 +57,7 @@ Rectangle {
                     sourceSize.width: 1920
                     opacity: at === root.index ? 1.0 : 0.4
 
-                    Behavior on opacity {
-                        NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic }
-                    }
+                    Behavior on opacity { Ease { duration: Theme.durView } }
                 }
             }
         }

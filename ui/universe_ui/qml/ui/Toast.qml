@@ -20,9 +20,7 @@ Item {
     opacity: shown ? 1.0 : 0.0
     visible: opacity > 0.01
 
-    Behavior on opacity {
-        NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-    }
+    Behavior on opacity { Ease {} }
 
     Timer {
         id: hideTimer

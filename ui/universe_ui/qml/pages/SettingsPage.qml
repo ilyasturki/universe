@@ -24,7 +24,6 @@ FocusScope {
     readonly property real scrimMid: 0.94
     readonly property real scrimBottom: 0.98
     readonly property Item menuAnchor: null
-    // The shell keeps its tab hint off the bar while these hold the keys.
     readonly property bool modal: editor.open || menu.open || testing || learning
 
     readonly property var sections: [
@@ -53,7 +52,6 @@ FocusScope {
     readonly property var login: api.screens.login
     readonly property var controller: api.screens.controller
 
-    // The watcher is suspended while the section is on screen: a paddle pressed to find its row must not fire.
     readonly property bool controllerOpen: section === controllerSection && activeFocus
     readonly property bool learning: section === controllerSection && controller.learning !== ""
     readonly property bool testing: section === controllerSection && controller.testing
@@ -118,7 +116,6 @@ FocusScope {
         if (section === runnersSection)
             return { rows: runners.rows, groups: runners.groups };
         if (section === installSection) {
-            // The search field is the first row of the first card; the cursor lands past it.
             rows.push({ section: sourceName, key: "search", label: "Search " + sourceName, type: "search", icon: "search",
                         display: sources.query || "", choices: [], detail: "" });
             var installed = [], owned = [], all = [];
@@ -248,7 +245,6 @@ FocusScope {
 
     function activate(index, row) {
         if (section === modulesSection) {
-            // The module's page takes the focus next and hands it back here, on this row.
             cards.forceActiveFocus();
             openedModule = row.module;
             page.moduleRequested(row.module);
@@ -546,9 +542,7 @@ FocusScope {
         current: page.section
         opacity: page.testing ? 0.35 : 1.0
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease { duration: Theme.durView } }
 
         onRequested: function(index) { page.section = index; }
         onEntered: page.section === page.artworkSection && artwork.item ? artwork.item.forceActiveFocus() : cards.forceActiveFocus()
@@ -633,9 +627,7 @@ FocusScope {
                     radius: height / 2
                     color: Theme.text
 
-                    Behavior on width {
-                        NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-                    }
+                    Behavior on width { Ease { duration: Theme.durQuick } }
                 }
             }
         }
@@ -696,9 +688,7 @@ FocusScope {
         opacity: page.testing || page.section === page.artworkSection ? 0.0 : 1.0
         visible: opacity > 0.01
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease { duration: Theme.durView } }
 
         onActivated: function(index, row) { page.activate(index, row); }
         onEscapedUp: page.chromeRequested()
@@ -822,7 +812,7 @@ FocusScope {
         visible: opacity > 0.01
         opacity: page.testing ? 1.0 : 0.0
 
-        Behavior on opacity { NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic } }
+        Behavior on opacity { Ease { duration: Theme.durView } }
 
         sourceComponent: ControllerArt {
             family: page.controller.family

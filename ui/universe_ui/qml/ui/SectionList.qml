@@ -19,7 +19,6 @@ FocusScope {
 
     implicitHeight: column.height
 
-    // The page owns `current`; a step only asks.
     function step(d) {
         var n = sections.length;
         list.requested((current + d + n) % n);
@@ -81,9 +80,7 @@ FocusScope {
                     radius: Theme.dp(14)
                     color: focused ? Theme.text : active ? Qt.rgba(1, 1, 1, 0.09) : "transparent"
 
-                    Behavior on color {
-                        ColorAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-                    }
+                    Behavior on color { ColorEase {} }
                 }
 
                 MenuGlyph {

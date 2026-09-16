@@ -20,7 +20,6 @@ FocusScope {
     readonly property var images: current ? current.images : []
     readonly property bool currentPending: current !== null && current.state === "pending"
     readonly property bool anyPending: rows.some(function(r) { return r.state === "pending"; })
-    // Ticks while an entry is being written, so its elapsed time moves.
     property double now: Date.now()
 
     // 0 entries, 1 the text, 2 the screenshots
@@ -91,17 +90,21 @@ FocusScope {
     function scroll(d) {
         var next = Math.max(0, Math.min(maxScroll(), flick.contentY + d * Theme.dp(260)));
         if (next === flick.contentY) {
-            if (d > 0 && images.length > 0) {
-                Sound.panel();
-                mode = 2;
-                flick.contentY = maxScroll();
-            } else {
-                Sound.edge();
-            }
+            d > 0 ? openShots() : Sound.edge();
             return;
         }
         Sound.tick();
         flick.contentY = next;
+    }
+
+    function openShots() {
+        if (images.length === 0) {
+            Sound.edge();
+            return;
+        }
+        Sound.panel();
+        mode = 2;
+        flick.contentY = maxScroll();
     }
 
     function stepShot(d) {
@@ -214,13 +217,7 @@ FocusScope {
                 Sound.enter();
                 lightbox = true;
             } else if (mode === 1) {
-                if (images.length > 0) {
-                    Sound.panel();
-                    mode = 2;
-                    flick.contentY = maxScroll();
-                } else {
-                    Sound.edge();
-                }
+                openShots();
             } else {
                 read();
             }
@@ -305,9 +302,7 @@ FocusScope {
         preferredHighlightEnd: height
         highlightRangeMode: ListView.ApplyRange
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease { duration: Theme.durQuick } }
 
         delegate: SessionRow {
             id: entry
@@ -352,9 +347,7 @@ FocusScope {
         clip: true
         visible: page.current !== null
 
-        Behavior on contentY {
-            NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic }
-        }
+        Behavior on contentY { Ease { duration: Theme.durView } }
 
         Column {
             id: article
@@ -403,9 +396,7 @@ FocusScope {
                     lineHeight: 1.5
                     wrapMode: Text.WordWrap
 
-                    Behavior on color {
-                        ColorAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-                    }
+                    Behavior on color { ColorEase { duration: Theme.durBase } }
                 }
             }
 

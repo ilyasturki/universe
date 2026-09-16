@@ -267,9 +267,9 @@ FocusScope {
     property real scrimMid: activePage ? activePage.scrimMid : 0
     property real scrimBottom: activePage ? activePage.scrimBottom : 0
 
-    Behavior on scrimTop { NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic } }
-    Behavior on scrimMid { NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic } }
-    Behavior on scrimBottom { NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic } }
+    Behavior on scrimTop { Ease { duration: Theme.durView } }
+    Behavior on scrimMid { Ease { duration: Theme.durView } }
+    Behavior on scrimBottom { Ease { duration: Theme.durView } }
 
     component SceneFade: NumberAnimation {
         duration: root.launching ? Theme.durLaunch : Theme.durScene
@@ -288,9 +288,7 @@ FocusScope {
         opacity: (root.launching || root.detailOpen || root.pageOwnsBackdrop) ? 0.0 : 1.0
         visible: opacity > 0.01
 
-        Behavior on blurRadius {
-            NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic }
-        }
+        Behavior on blurRadius { Ease { duration: Theme.durView } }
         Behavior on opacity { SceneFade {} }
     }
 
@@ -306,9 +304,9 @@ FocusScope {
 
         property real detail: root.detailOpen ? 1.0 : 0.0
 
-        Behavior on height { NumberAnimation { duration: Theme.durScene; easing.type: Easing.OutCubic } }
+        Behavior on height { Ease { duration: Theme.durScene } }
         Behavior on opacity { SceneFade {} }
-        Behavior on detail { NumberAnimation { duration: Theme.durScene; easing.type: Easing.OutCubic } }
+        Behavior on detail { Ease { duration: Theme.durScene } }
 
         BackgroundStage {
             anchors.fill: parent
@@ -350,7 +348,7 @@ FocusScope {
         anchors.fill: parent
         opacity: (root.launching || root.detailOpen) ? 0.0 : 1.0
         transform: Translate { y: root.detailOpen ? -Theme.dp(36) : 0
-                               Behavior on y { NumberAnimation { duration: Theme.durScene; easing.type: Easing.OutCubic } } }
+                               Behavior on y { Ease { duration: Theme.durScene } } }
         visible: opacity > 0.01
 
         Behavior on opacity { SceneFade {} }
@@ -408,12 +406,8 @@ FocusScope {
                     visible: opacity > 0.01
                     x: isActive ? 0 : (index > root.tabIndex ? 1 : -1) * Theme.dp(40)
 
-                    Behavior on opacity {
-                        NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic }
-                    }
-                    Behavior on x {
-                        NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic }
-                    }
+                    Behavior on opacity { Ease { duration: Theme.durView } }
+                    Behavior on x { Ease { duration: Theme.durView } }
 
                     function publish() {
                         if (isActive && item)
@@ -503,7 +497,7 @@ FocusScope {
         focus: root.detailOpen && !root.subOpen
         opacity: root.detailOpen && !root.launching && !root.subOpen ? 1.0 : 0.0
         transform: Translate { y: root.detailOpen ? 0 : Theme.dp(48)
-                               Behavior on y { NumberAnimation { duration: Theme.durScene; easing.type: Easing.OutCubic } } }
+                               Behavior on y { Ease { duration: Theme.durScene } } }
 
         onLoaded: {
             item.game = Qt.binding(function() { return root.detailGame; });
@@ -523,16 +517,14 @@ FocusScope {
         Behavior on opacity { SceneFade {} }
     }
 
-    // Under the sub page: a jump fades one page out and the next in over this, not over the tabs.
+    // A sub-page jump fades over this, not over the tabs.
     Rectangle {
         anchors.fill: parent
         color: Theme.ground
         opacity: root.subOpen && !root.launching ? 1.0 : 0.0
         visible: opacity > 0.01
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durScene; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease { duration: Theme.durScene } }
     }
 
     Loader {
@@ -545,7 +537,7 @@ FocusScope {
         opacity: root.subOpen && !root.launching && !root.subSwapping ? 1.0 : 0.0
         visible: opacity > 0.01
         transform: Translate { y: root.subOpen ? 0 : Theme.dp(48)
-                               Behavior on y { NumberAnimation { duration: Theme.durScene; easing.type: Easing.OutCubic } } }
+                               Behavior on y { Ease { duration: Theme.durScene } } }
 
         onLoaded: {
             item.args = Qt.binding(function() { return root.subArgs; });
@@ -560,9 +552,7 @@ FocusScope {
             function onMessage(text) { toast.show(text); }
         }
 
-        Behavior on opacity {
-            NumberAnimation { duration: root.subSwapping ? Theme.durQuick : Theme.durScene; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease { duration: root.subSwapping ? Theme.durQuick : Theme.durScene } }
     }
 
     ActionMenu {
@@ -586,7 +576,6 @@ FocusScope {
         anchors.fill: parent
         onFinished: {
             root.launching = false;
-            // The overlay's snapshot has let go of the page by now, so a prune is safe.
             if (root.activePage && root.activePage.leave)
                 root.activePage.leave();
             root.restoreFocus();

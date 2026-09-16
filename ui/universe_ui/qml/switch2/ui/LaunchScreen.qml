@@ -5,7 +5,6 @@ Item {
     id: screen
 
     property var game: null
-    // launch() was called; the screen holds until the game's window is up and focused.
     property bool waiting: false
     property string launchedSession: ""
     readonly property bool running: sequence.running || waiting || settle.running
@@ -60,7 +59,6 @@ Item {
             if (screen.game && screen.game.id === id)
                 screen.abort(message);
         }
-        // Over before its window came up: nothing to wait for.
         function onSessionEnded(sessionId, id, duration) {
             if (screen.waiting && sessionId === screen.launchedSession)
                 screen.done();

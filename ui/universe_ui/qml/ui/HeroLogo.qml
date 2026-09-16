@@ -10,7 +10,6 @@ Item {
     property real titleWidth: width
 
     readonly property url logoSource: game && game.assets.logo ? game.assets.logo : ""
-    // Null game shows nothing; a game with no logo shows its title.
     readonly property bool titleMode: logoSource == "" && game !== null
 
     implicitWidth: logoWidth
@@ -27,9 +26,7 @@ Item {
         duration: Theme.durBase
         opacity: root.titleMode ? 0.0 : 1.0
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease {} }
     }
 
     Text {
@@ -45,8 +42,6 @@ Item {
         elide: Text.ElideRight
         opacity: root.titleMode ? 1.0 : 0.0
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease {} }
     }
 }

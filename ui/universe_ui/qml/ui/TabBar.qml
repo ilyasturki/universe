@@ -96,7 +96,6 @@ FocusScope {
             Sound.cancel();
             root.dismissed();
         } else if (api.keys.isDetails(event) || api.keys.isFilters(event)) {
-            // Nothing up here owns a game, so the shell must not act on one.
             event.accepted = true;
             Sound.edge();
         }
@@ -123,11 +122,11 @@ FocusScope {
         opacity: root.activeFocus ? 1.0 : 0.0
         visible: opacity > 0.01
 
-        Behavior on x { NumberAnimation { duration: Theme.durNudge; easing.type: Easing.OutQuint } }
-        Behavior on y { NumberAnimation { duration: Theme.durNudge; easing.type: Easing.OutQuint } }
-        Behavior on width { NumberAnimation { duration: Theme.durNudge; easing.type: Easing.OutQuint } }
-        Behavior on height { NumberAnimation { duration: Theme.durNudge; easing.type: Easing.OutQuint } }
-        Behavior on opacity { NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic } }
+        Behavior on x { Ease { duration: Theme.durNudge; easing.type: Easing.OutQuint } }
+        Behavior on y { Ease { duration: Theme.durNudge; easing.type: Easing.OutQuint } }
+        Behavior on width { Ease { duration: Theme.durNudge; easing.type: Easing.OutQuint } }
+        Behavior on height { Ease { duration: Theme.durNudge; easing.type: Easing.OutQuint } }
+        Behavior on opacity { Ease { duration: Theme.durQuick } }
 
         Rectangle {
             anchors.fill: parent
@@ -166,9 +165,7 @@ FocusScope {
                 font.weight: active ? Font.DemiBold : Font.Medium
                 font.pixelSize: Theme.dp(25)
 
-                Behavior on color {
-                    ColorAnimation { duration: Theme.durBase; easing.type: Easing.OutCubic }
-                }
+                Behavior on color { ColorEase { duration: Theme.durBase } }
             }
         }
     }
@@ -192,9 +189,7 @@ FocusScope {
         antialiasing: true
         opacity: root.activeFocus && root.index === root.currentIndex ? 0.0 : 1.0
 
-        Behavior on opacity {
-            NumberAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-        }
+        Behavior on opacity { Ease { duration: Theme.durQuick } }
 
         anchors.top: labels.bottom
         anchors.topMargin: Theme.dp(8)
@@ -204,14 +199,10 @@ FocusScope {
             origin.x: 0
             xScale: underline.target ? underline.target.width / underline.baseWidth : 1
 
-            Behavior on xScale {
-                NumberAnimation { duration: Theme.durNudge; easing.type: Easing.OutQuint }
-            }
+            Behavior on xScale { Ease { duration: Theme.durNudge; easing.type: Easing.OutQuint } }
         }
 
-        Behavior on x {
-            NumberAnimation { duration: Theme.durNudge; easing.type: Easing.OutQuint }
-        }
+        Behavior on x { Ease { duration: Theme.durNudge; easing.type: Easing.OutQuint } }
     }
 
     Row {
@@ -252,9 +243,7 @@ FocusScope {
             kind: "search"
             tint: root.activeFocus && root.onSearch ? Theme.text : Theme.textTab
 
-            Behavior on opacity {
-                NumberAnimation { duration: Theme.durView; easing.type: Easing.OutCubic }
-            }
+            Behavior on opacity { Ease { duration: Theme.durView } }
         }
 
         SessionBadge {

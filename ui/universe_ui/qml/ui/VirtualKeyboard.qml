@@ -145,9 +145,7 @@ Item {
                         radius: Theme.dp(12)
                         color: selected ? Theme.text : latched ? Qt.rgba(1, 1, 1, 0.22) : Theme.surface
 
-                        Behavior on color {
-                            ColorAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-                        }
+                        Behavior on color { ColorEase {} }
 
                         Rectangle {
                             anchors.fill: parent

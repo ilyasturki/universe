@@ -19,7 +19,6 @@ Item {
     // An icon naming a file (a runner's logo) is drawn whole in a square; a bare name is a menu glyph.
     readonly property bool iconIsFile: entry.icon != null && String(entry.icon).indexOf("/") >= 0
     readonly property bool hasMark: !hasImage && iconIsFile && mark.status === Image.Ready
-    // A list where most rows carry a mark keeps the label aligned on the ones without.
     readonly property bool keepsMark: hasMark || entry.iconSlot === true
     readonly property bool hasIcon: !hasGlyph && !iconIsFile && entry.icon !== undefined && String(entry.icon) !== ""
     readonly property real labelInset: hasImage ? thumb.width + Theme.dp(24) : keepsMark ? mark.width + Theme.dp(28) : hasGlyph || hasIcon ? Theme.dp(18) + lead.width + Theme.dp(16) : Theme.dp(18)
@@ -44,9 +43,7 @@ Item {
         radius: Theme.dp(14)
         color: row.focused ? Theme.text : "transparent"
 
-        Behavior on color {
-            ColorAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
-        }
+        Behavior on color { ColorEase {} }
     }
 
     Loader {

@@ -104,9 +104,6 @@ Item {
         }
     }
 
-    // One button: its resting shape, the mark the pad prints on it, and its states — lit for the
-    // focused row, white on a press, pulsing while learned, dashed with no code; a stick leans
-    // with its axes, a trigger fills with its pull.
     component PadButton: Item {
         id: button
 
@@ -127,9 +124,7 @@ Item {
         readonly property color onDown: Theme.onLight
 
         property real glow: down ? 1.0 : 0.0
-        Behavior on glow {
-            NumberAnimation { duration: button.down ? 30 : Theme.durQuick; easing.type: Easing.OutCubic }
-        }
+        Behavior on glow { Ease { duration: button.down ? 30 : Theme.durQuick } }
         Behavior on leanX { NumberAnimation { duration: 60 } }
         Behavior on leanY { NumberAnimation { duration: 60 } }
         Behavior on pull { NumberAnimation { duration: 60 } }
@@ -181,7 +176,6 @@ Item {
                     ctx.restore();
                 }
 
-                // Solid over the body: the ground first, then the button's own shade.
                 function paintPath(shapeFn) {
                     halo(shapeFn);
                     shapeFn();
@@ -229,7 +223,6 @@ Item {
                             Draw.roundRect(ctx, bx - bw / 2, by - bh / 2, bw, bh, a * 0.22);
                         });
                     } else if (g > 0.01 || button.lit || button.learning || button.missing) {
-                        // The body draws the cross whole; only the arm's states are painted here.
                         Draw.arm(ctx, cx, cy, l, a, s.dir);
                         ctx.fillStyle = button.lit && g < 0.01 ? Qt.rgba(white.r, white.g, white.b, 0.3) : button.learning && g < 0.01 ? Qt.rgba(white.r, white.g, white.b, art.pulse) : Qt.rgba(white.r, white.g, white.b, g);
                         ctx.fill();
@@ -248,7 +241,6 @@ Item {
                     ctx.lineWidth = Math.max(1, Theme.dp(1.8));
                     ctx.stroke();
                 } else if (s.kind === "trigger") {
-                    // The pull is the fill; a press past the half only brightens the outline, so the gauge stays readable.
                     var tw = s.w * k, th = s.h * k;
                     var body = function() { Draw.roundRect(ctx, cx - tw / 2, cy - th / 2, tw, th, th * 0.32); };
                     halo(body);
@@ -273,7 +265,6 @@ Item {
                     var pw = s.w * k, ph = s.h * k;
                     paintPath(function() { Draw.paddle(ctx, cx, m, pw, ph); });
                 } else {
-                    // bumper, small, tab
                     var bw2 = s.w * k, bh2 = s.h * k;
                     var rr = s.round ? Math.min(bw2, bh2) / 2 : s.kind === "bumper" ? bh2 * 0.45 : Math.min(bw2, bh2) * 0.3;
                     ctx.save();
