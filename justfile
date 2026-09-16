@@ -4,6 +4,7 @@ dev := justfile_directory() / env("UNIVERSE_DEV", ".dev")
 export UNIVERSE_DATA_HOME := dev / "data"
 export UNIVERSE_CONFIG_HOME := dev / "config"
 export UNIVERSE_STATE_HOME := dev / "state"
+export UNIVERSE_CACHE_HOME := dev / "cache"
 export UNIVERSE_MODULES_PATH := justfile_directory() / "modules"
 export UNIVERSE_BIN := justfile_directory() / "target/debug/universe"
 export RUST_LOG := env("RUST_LOG", "info")

@@ -18,7 +18,7 @@ def take_in_shell(path, window, cursor):
         r = subprocess.run(
             ["busctl", "--user", "call", WINDOWS_BUS_NAME, "/org/universe/Windows", WINDOWS_BUS_NAME,
              "Screenshot", "sbb", path, "true" if window else "false", "true" if cursor else "false"],
-            capture_output=True, text=True, timeout=TAKE_TIMEOUT_S, check=False,
+            capture_output=True, text=True, timeout=TAKE_TIMEOUT_S,
         )
     except subprocess.TimeoutExpired:
         return False, "gnome-shell did not answer"
@@ -26,8 +26,7 @@ def take_in_shell(path, window, cursor):
 
 
 def take(screen, path):
-    # gsr leaves gsr-kms-server running (reparented), so a stderr pipe would block on it:
-    # a real file, and killpg reaps the helper too.
+    # gsr leaves gsr-kms-server running (reparented): a stderr pipe would block on it, and killpg reaps it.
     with tempfile.TemporaryFile(mode="w+") as errf:
         proc = subprocess.Popen(
             ["gpu-screen-recorder", "-w", screen, "-o", path],

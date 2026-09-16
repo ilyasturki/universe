@@ -17,10 +17,6 @@ def load_settings():
     return json.loads(os.environ.get("MODULE_SETTINGS_JSON") or "{}")
 
 
-def journal_root():
-    return os.path.expanduser(os.environ["UNIVERSE_JOURNAL_ROOT"])
-
-
 def read_json(path):
     try:
         with open(path, encoding="utf-8") as f:
@@ -137,9 +133,6 @@ def label_alt(key):
     return "|".join(re.escape(v) for v in dict.fromkeys(l[key] for l in LABELS.values()))
 
 
-MIGRATED_SESSIONS = ".migrated-sessions.jsonl"
-
-
 def read_jsonl(path):
     out = []
     try:
@@ -159,7 +152,7 @@ def read_jsonl(path):
 
 def read_sessions(journal_dir):
     sessions = {}
-    paths = [os.path.join(os.path.dirname(os.path.abspath(journal_dir)), "sessions.jsonl"), os.path.join(journal_dir, MIGRATED_SESSIONS)]
+    paths = [os.path.join(os.path.dirname(os.path.abspath(journal_dir)), "sessions.jsonl"), os.path.join(journal_dir, ".migrated-sessions.jsonl")]
     for path in paths:
         for s in read_jsonl(path):
             sid = s.get("session")
@@ -226,14 +219,7 @@ def read_entries(journal_dir):
     return entries
 
 
-def write_entry_file(journal_dir, entry):
-    path = os.path.join(journal_dir, f"{entry['session']}.json")
-    write_json(path, entry)
-    return path
-
-
 def add_entry_via_core(sid, entry_json):
-    """-> 'ok' | 'invalid' (the core rejected the entry) | 'unavailable'."""
     cmd = [os.environ.get("UNIVERSE_BIN") or "universe", "journal-add", sid, entry_json]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)

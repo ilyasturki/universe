@@ -6,15 +6,13 @@ import subprocess
 import sys
 import time
 
-# (AV1 q 0-255, H.26x q 0-51, target kbps, ceiling kbps): QVBR up to the ceiling.
-# very_high measured ~7-8 GB/h on AMD; uncapped vbr peaked at 18-21 GB/h.
+# (AV1 q 0-255, H.26x q 0-51, target kbps, ceiling kbps): QVBR up to the ceiling; very_high measured ~7-8 GB/h on AMD.
 QUALITY_PRESETS = {
     "medium": (150, 32, 6000, 12000),
     "high": (120, 27, 10000, 20000),
     "very_high": (95, 22, 16000, 32000),
     "ultra": (70, 17, 24000, 48000),
 }
-DEFAULT_QUALITY = "very_high"
 
 EXTENSION_UUID = "universe@ilyasturki.github.io"
 WINDOWS_BUS_NAME = "org.universe.Windows"
@@ -31,7 +29,6 @@ def load_settings():
 
 
 def cli_json(args, timeout=20):
-    """`universe <args> --json` parsed; None when the CLI refused (logged) or did not answer."""
     cmd = [os.environ.get("UNIVERSE_BIN") or "universe", *args, "--json"]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
@@ -48,7 +45,6 @@ def cli_json(args, timeout=20):
 
 
 def screen_refresh_hz(screen):
-    """The connector's current refresh rate as the core reads it ("" for the profile default); None when it cannot."""
     mode = cli_json(["screen-mode", *([screen] if screen else [])]) or {}
     return int(mode.get("refresh") or 0) or None
 
@@ -63,28 +59,19 @@ def resolve_fps(setting, screen):
     return hz
 
 
-def audio_args(setting):
-    return AUDIO_ARGS.get(setting, AUDIO_ARGS["output+input"])
-
-
 def ffmpeg_video_opts(settings):
     raw = settings.get("ffmpeg_video_opts") or ""
     if raw:
         return raw
-    q_av1, q_h26x, target, ceiling = QUALITY_PRESETS.get(settings.get("quality"), QUALITY_PRESETS[DEFAULT_QUALITY])
+    q_av1, q_h26x, target, ceiling = QUALITY_PRESETS.get(settings.get("quality"), QUALITY_PRESETS["very_high"])
     q = q_av1 if str(settings.get("codec", "av1_10bit")).startswith("av1") else q_h26x
     # Merged last, right before avcodec_open2, so rc_mode wins over -bm cbr and b over -q.
     return f"rc_mode=QVBR;global_quality={q};b={target * 1000};maxrate={ceiling * 1000};bufsize={ceiling * 2000}"
 
 
 def size_limit(settings):
-    raw = str(settings.get("size") or "native").strip().lower()
-    m = re.fullmatch(r"(\d+)x(\d+)", raw)
-    if not m or "0" in m.groups():
-        if raw not in ("native", "0x0"):
-            log(f"size {raw!r} is not WxH, recording at the source's size")
-        return None
-    return int(m.group(1)), int(m.group(2))
+    m = re.fullmatch(r"(\d+)x(\d+)", str(settings.get("size") or "").strip().lower())
+    return (int(m.group(1)), int(m.group(2))) if m and int(m.group(1)) and int(m.group(2)) else None
 
 
 def audio_bitrate_kbps(settings):
@@ -124,21 +111,11 @@ def gsr_args(settings, screen, output_path, token_path=None):
         # cbr is the base the QVBR override needs: gsr's vbr branch pins qmin = qmax.
         "-bm", "cbr",
         "-q", "20000",
-        *audio_args(settings.get("audio")),
+        *AUDIO_ARGS.get(settings.get("audio"), AUDIO_ARGS["output+input"]),
         "-ffmpeg-video-opts", ffmpeg_video_opts(settings),
         *gsr_extra_args(settings),
         "-o", output_path,
     ]
-
-
-def output_path(pending_dir, session_id, settings):
-    return os.path.join(pending_dir, f"{session_id}.{settings.get('container') or 'mkv'}")
-
-
-def wait_for_window(wait_s):
-    """The session's window once it maps (the core focuses it), None when none shows within `wait_s` or off GNOME."""
-    # The CLI opens the core and asks the shell before its own wait starts.
-    return cli_json(["session-window", "--wait", str(wait_s)], timeout=wait_s + 30)
 
 
 def extension_ready():

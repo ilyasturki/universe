@@ -4,14 +4,15 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import log, load_settings, gsr_args, output_path, extension_ready, wait_for_window, show_osd  # noqa: E402
+from _common import cli_json, extension_ready, gsr_args, load_settings, log, show_osd  # noqa: E402
 
 
 def window_token(settings, data_dir):
     if not extension_ready():
         return None
     wait_s = max(0, int(settings.get("window_wait_s", 60)))
-    if not wait_for_window(wait_s):
+    # The CLI opens the core and asks the shell before its own wait starts.
+    if not cli_json(["session-window", "--wait", str(wait_s)], timeout=wait_s + 30):
         log(f"no game window within {wait_s}s")
         return None
     tokens = os.path.join(data_dir, "portal")
@@ -29,12 +30,14 @@ def main():
     data_dir = os.environ["MODULE_DATA_DIR"]
     pending_dir = os.path.join(data_dir, "pending")
     os.makedirs(pending_dir, exist_ok=True)
-    screen = os.environ["SESSION_SCREEN"]
+    output = os.path.join(pending_dir, f"{session_id}.{settings.get('container') or 'mkv'}")
 
-    token = window_token(settings, data_dir) if settings.get("source") == "window" else None
-    if settings.get("source") == "window" and not token:
-        log("recording the screen")
-        show_osd("Recording the screen")
+    token = None
+    if settings.get("source") == "window":
+        token = window_token(settings, data_dir)
+        if not token:
+            log("recording the screen")
+            show_osd("Recording the screen")
 
     game_unit = os.environ["SESSION_UNIT"]
     cmd = [
@@ -43,7 +46,7 @@ def main():
         "-p", f"BindsTo={game_unit}", "-p", f"After={game_unit}",
         # systemd's 90s default TimeoutStopSec would blow session-end's timeout_s=20 if gsr hangs.
         "-p", "TimeoutStopSec=10",
-        *gsr_args(settings, screen, output_path(pending_dir, session_id, settings), token),
+        *gsr_args(settings, os.environ["SESSION_SCREEN"], output, token),
     ]
     log(" ".join(cmd))
     result = subprocess.run(cmd, capture_output=True, text=True)

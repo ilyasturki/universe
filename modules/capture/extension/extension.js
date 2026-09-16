@@ -56,7 +56,6 @@ export default class UniverseExtension extends Extension {
             if (!w || w.is_override_redirect())
                 continue;
             const r = w.get_frame_rect();
-            const ws = w.get_workspace();
             windows.push({
                 id: w.get_id(),
                 pid: w.get_pid(),
@@ -65,7 +64,6 @@ export default class UniverseExtension extends Extension {
                 focused: w === focus,
                 width: r.width,
                 height: r.height,
-                workspace: ws ? ws.index() : -1,
                 hidden: w.is_hidden(),
                 minimized: w.minimized,
             });
@@ -84,8 +82,7 @@ export default class UniverseExtension extends Extension {
         return false;
     }
 
-    // org.gnome.Shell.Screenshot refuses background callers. Mutter grabs the pixels synchronously
-    // in screenshot*(), so the cue and the reply go out before the async PNG encode.
+    // org.gnome.Shell.Screenshot refuses background callers; screenshot*() grabs the pixels before its async PNG encode.
     ScreenshotAsync([path, window, cursor], invocation) {
         const reply = ok => invocation.return_value(new GLib.Variant('(b)', [ok]));
         let stream;
@@ -156,8 +153,7 @@ export default class UniverseExtension extends Extension {
         }
     }
 
-    // The shell's own media-key OSD, on every monitor; org.gnome.Shell.ShowOSD refuses callers other
-    // than gsd. A negative level draws no bar, an empty label none. Shell 50 renamed show(-1, …) showAll.
+    // org.gnome.Shell.ShowOSD refuses callers other than gsd; a negative level draws no bar; Shell 50 renamed show(-1, …) showAll.
     ShowOSD(icon, label, level) {
         const manager = Main.osdWindowManager;
         const gicon = Gio.ThemedIcon.new(icon);

@@ -11,21 +11,21 @@ Plain files are the truth: one `game.toml`, one `sessions.jsonl` and a `journal/
 inputs.universe.url = "github:ilyasturki/universe";
 ```
 
-NixOS side (KMS capture helper, packages):
+NixOS side (what the modules need from the system):
 
 ```nix
 imports = [ universe.nixosModules.default ];
-programs.universe.enable = true;          # programs.gpu-screen-recorder + packages
+programs.universe.enable = true;          # gpu-screen-recorder's setcap KMS helper, uinput, InputPlumber, gamescope
 ```
 
-Home-manager side (config.toml, enabled modules):
+Home-manager side (the packages, config.toml):
 
 ```nix
 imports = [ universe.homeModules.default ];
 programs.universe = {
   enable = true;
-  modules.enabled = [ "gog" "capture" "journal" ];
   settings = {
+    modules.enabled = [ "gog" "capture" "journal" ];
     paths.games_root = "/mnt/games/PC";
     paths.prefixes_root = "/mnt/games/prefixes";
     paths.recordings_root = "/mnt/recordings/games";
@@ -44,7 +44,7 @@ The home-manager module also installs Universe's GNOME Shell extension (window r
 
 Without home-manager: `nix profile install github:ilyasturki/universe`, then write `~/.config/universe/config.toml` (defaults in `docs/api.md`).
 
-Packages: `universe` (default: core wrapped with the shipped modules and their runtime on `PATH`), `universe-ui`, `core`, `universe-core-py` (the `universe_core` Python module), `modules`. `nix run .#universe-ui` starts the host. `universe` ships Fish completions (game names, modules and sources come from the library); both ship man pages: `man universe`, `man universe-play`, `man universe-ui`.
+Packages: `universe` (default: core wrapped with the shipped modules and their runtime on `PATH`), `universe-ui`, `core`, `universe-core-py` (the `universe_core` Python module), `modules`, `universe-shell-extension`. `nix run .#universe-ui` starts the host. `universe` ships Fish completions (game names, modules and sources come from the library); both ship man pages: `man universe`, `man universe-play`, `man universe-ui`.
 
 ## Use
 
@@ -114,7 +114,7 @@ Cursor hiding on GNOME toggles the `hide-cursor@elcste.com` shell extension arou
 
 Settings › Modules lists the modules, on or off, and opens each one's page with its settings; the same on the CLI: `universe module ls · enable capture · settings journal`.
 
-Third-party modules: drop a directory with a `module.toml` under `~/.local/share/universe/modules/` (user modules override shipped ones). The manifest, the hook environment and the source protocol (JSON lines) are frozen in `docs/api.md`.
+Third-party modules: drop a directory with a `module.toml` under `~/.config/universe/modules/` (user modules override shipped ones). The manifest, the hook environment and the source protocol (JSON lines) are frozen in `docs/api.md`.
 
 ## Develop
 

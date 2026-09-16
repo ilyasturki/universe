@@ -141,11 +141,10 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
   `CollectionGames` is instantiated Python-side, one per collection. `get(i)` returns the `Game`;
   `sourceRow(i)` stands in for `mapToSource(i)`, whose C++ name is virtual and breaks sorting if
   shadowed.
-- **QML import paths.** Under a bare `nix shell` nothing sets `QML2_IMPORT_PATH`, so `host.py`
-  derives the paths by running `ldd` over PySide6's own `.so` files and adding the `qt5compat` and
-  `qtsvg` plugins from the store that link the *same* qtbase — several coexist and a plugin bound to
-  a different qtbase is refused. Once `QML2_IMPORT_PATH` or `QML_IMPORT_PATH` is set (the flake's
-  `wrapQtAppsHook`, `nix flake check`), it leaves them alone.
+- **QML import paths.** The host sets none: `QML2_IMPORT_PATH` comes from the flake — the dev
+  shell's hook (every `just` recipe), `wrapQtAppsHook` for the package, the pytest check — and so
+  does `QT_PLUGIN_PATH` for the first two; a plugin must link the *same* qtbase as PySide6, or it is
+  refused. `.venv/bin/universe-ui` from a plain shell finds no QML modules.
 - **Software rendering has no shaders.** The `offscreen` QPA loads the software scenegraph, where
   `OpacityMask`, `FastBlur`, `ColorOverlay` and `ShaderEffect` render nothing. The affected components
   test `GraphicsInfo.api === GraphicsInfo.Software` and degrade — square corners, no blur, untinted

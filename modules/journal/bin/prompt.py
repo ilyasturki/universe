@@ -1,10 +1,6 @@
 import re
 
-from _common import COLONS, JOURNAL_LANGUAGES, LANG_ENGLISH, fmt_duration, journal_lang, label_alt
-
-CODEX_EFFORT = "high"
-CODEX_VERBOSITY = "medium"
-IMAGE_INTRO = "Images of THIS session, ATTACHED TO THIS MESSAGE in this exact chronological order:"
+from _common import COLONS, JOURNAL_LANGUAGES, LANG_ENGLISH, fmt_duration, fmt_time, journal_lang, label_alt, log
 
 SYSTEM_PROMPT = "\n".join([
     "You keep the user's play journal.",
@@ -113,10 +109,6 @@ def image_label(im):
     return "image auto-extracted from the recording"
 
 
-def clock(d):
-    return d.strftime("%H:%M")
-
-
 def ordinal(n):
     suffix = "th" if 10 <= n % 100 <= 20 else {1: "st", 2: "nd", 3: "rd"}.get(n % 10, "th")
     return f"{n}{suffix}"
@@ -124,7 +116,7 @@ def ordinal(n):
 
 # Numbered by position: the same order as the -i flags.
 def image_lines(images):
-    return [f"- image {i}: {image_label(im)}, around {clock(im.t)}" for i, im in enumerate(images, 1)]
+    return [f"- image {i}: {image_label(im)}, around {fmt_time(im.t)}" for i, im in enumerate(images, 1)]
 
 
 def memory_context(memory):
@@ -158,14 +150,14 @@ def build_user_prompt(title, start, end, duration_s, session_number, total_sec, 
     profile = (memory or {}).get("profile")
     return "\n".join([
         f"Game: {title}",
-        f"Session: {start.strftime('%Y-%m-%d')}, {clock(start)} to {clock(end)} ({fmt_duration(duration_s)})",
+        f"Session: {start.strftime('%Y-%m-%d')}, {fmt_time(start)} to {fmt_time(end)} ({fmt_duration(duration_s)})",
         f"History: {ordinal(session_number)} session on this game, about {fmt_duration(total_sec)} of play time in total.",
         "",
         mem_ctx or no_memory_note,
         "",
         f'Previous journal entry (for continuity, do not repeat it):\n"""\n{prev}\n"""' if prev else "",
         "",
-        IMAGE_INTRO,
+        "Images of THIS session, ATTACHED TO THIS MESSAGE in this exact chronological order:",
         *image_lines(images),
         "",
         f"Profile already established for this game: {profile} (default {PROFILE_SHAPES.get(profile, PROFILE_SHAPES['arcade'])}). Keep it in the memory, and tip to the other shape only if the content of THIS session justifies it."
@@ -268,19 +260,18 @@ def paragraphs_from_body(body):
 SYNOPSIS_SHRINK_FLOOR = 0.8
 
 
-def pick_synopsis(old, new, warn=None):
+def pick_synopsis(old, new):
     o = (old or "").strip()
     n = (new or "").strip()
     if not n:
         return o
     if o and len(n) < len(o) * SYNOPSIS_SHRINK_FLOOR:
-        if warn:
-            warn(f"synopsis rewrite shrank {len(o)} -> {len(n)} chars; keeping the previous one")
+        log(f"synopsis rewrite shrank {len(o)} -> {len(n)} chars; keeping the previous one")
         return o
     return n
 
 
-def merge_memory(old, new, warn=None):
+def merge_memory(old, new):
     if not new:
         return old
 
@@ -296,10 +287,10 @@ def merge_memory(old, new, warn=None):
     ne = new.get("entities") or {}
     old_profile = (old or {}).get("profile")
     profile = old_profile if old_profile in PROFILE_SHAPES else (new.get("profile") if new.get("profile") in PROFILE_SHAPES else None)
-    if old_profile and new.get("profile") and old_profile != new.get("profile") and warn:
-        warn(f"model proposed profile {new['profile']!r} over the stored {old_profile!r}; keeping the stored one")
+    if old_profile and new.get("profile") and old_profile != new.get("profile"):
+        log(f"model proposed profile {new['profile']!r} over the stored {old_profile!r}; keeping the stored one")
     mem = {
-        "synopsis": pick_synopsis((old or {}).get("synopsis"), new.get("synopsis"), warn),
+        "synopsis": pick_synopsis((old or {}).get("synopsis"), new.get("synopsis")),
         "entities": {
             "characters": union(oe.get("characters"), ne.get("characters")),
             "places": union(oe.get("places"), ne.get("places")),

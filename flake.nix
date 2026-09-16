@@ -14,7 +14,7 @@
         src = ./.;
         filter = path: type:
           let rel = lib.removePrefix (toString ./. + "/") (toString path);
-          in lib.hasPrefix "crates" rel || rel == "Cargo.toml" || rel == "Cargo.lock" || rel == "crates";
+          in lib.hasPrefix "crates" rel || rel == "Cargo.toml" || rel == "Cargo.lock";
       };
 
       core = pkgs.rustPlatform.buildRustPackage {
@@ -73,6 +73,9 @@
 
       # No gpu-screen-recorder here: it must match the host's setcap gsr-kms-server (nixos.nix pins that package).
       moduleRuntime = with pkgs; [ gogdl ffmpeg trash-cli util-linux ];
+      runtimePath = lib.makeBinPath (moduleRuntime ++ [ pkgs.umu-launcher pkgs.systemd ]);
+      modulesDir = "${modulesPkg}/share/universe/modules";
+      qmlImportPath = lib.concatMapStringsSep ":" (p: "${p}/lib/qt-6/qml") (with pkgs.qt6; [ qtdeclarative qt5compat qtmultimedia ]);
 
       uiDesktopItem = pkgs.makeDesktopItem {
         name = "universe-ui";
@@ -107,8 +110,8 @@
           qtWrapperArgs+=(--prefix LD_LIBRARY_PATH : ${lib.makeLibraryPath [ pkgs.SDL2 pkgs.pipewire ]})
           qtWrapperArgs+=(--set QT_FORCE_STDERR_LOGGING 1)
           qtWrapperArgs+=(--set UNIVERSE_BIN ${universe}/bin/universe)
-          qtWrapperArgs+=(--set UNIVERSE_MODULES_PATH ${modulesPkg}/share/universe/modules)
-          qtWrapperArgs+=(--prefix PATH : ${lib.makeBinPath (moduleRuntime ++ [ pkgs.umu-launcher pkgs.systemd ])})
+          qtWrapperArgs+=(--set UNIVERSE_MODULES_PATH ${modulesDir})
+          qtWrapperArgs+=(--prefix PATH : ${runtimePath})
         '';
         postFixup = ''
           for f in $out/bin/*; do wrapQtApp "$f"; done
@@ -122,9 +125,7 @@
         paths = [ core modulesPkg ];
         nativeBuildInputs = [ pkgs.makeWrapper ];
         postBuild = ''
-          wrapProgram $out/bin/universe \
-            --set UNIVERSE_MODULES_PATH "${modulesPkg}/share/universe/modules" \
-            --prefix PATH : "${lib.makeBinPath (moduleRuntime ++ [ pkgs.umu-launcher pkgs.systemd ])}"
+          wrapProgram $out/bin/universe --set UNIVERSE_MODULES_PATH "${modulesDir}" --prefix PATH : "${runtimePath}"
         '';
         meta.mainProgram = "universe";
       };
@@ -136,7 +137,7 @@
         nativeBuildInputs = [ (pkgs.python3.withPackages (ps: [ ps.pyside6 ps.pysdl2 ps.qrcode ps.pytest corePy ])) pkgs.qt6.qt5compat pkgs.qt6.qtmultimedia pkgs.qt6.qtdeclarative pkgs.systemd pkgs.ffmpeg ];
         buildPhase = ''
           export HOME=$TMPDIR QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 LC_ALL=C.UTF-8 TZ=Europe/Paris TZDIR=${pkgs.tzdata}/share/zoneinfo
-          export QML2_IMPORT_PATH=${pkgs.qt6.qtdeclarative}/lib/qt-6/qml:${pkgs.qt6.qt5compat}/lib/qt-6/qml:${pkgs.qt6.qtmultimedia}/lib/qt-6/qml
+          export QML2_IMPORT_PATH=${qmlImportPath}
           python3 -m pytest -q -p no:cacheprovider
         '';
         installPhase = "touch $out";
@@ -162,13 +163,11 @@
         default = universe;
       };
 
-      overlays.default = final: prev: { universe = universe; universe-ui = ui; universe-core = core; universe-modules = modulesPkg; };
-
       devShells.${system}.default = pkgs.mkShell {
         packages = with pkgs; [ cargo rustc clippy rustfmt rust-analyzer pkg-config ruff maturin (python3.withPackages (ps: [ ps.pyside6 ps.pysdl2 ps.qrcode ps.pytest ps.setuptools ])) qt6.qtdeclarative qt6.qt5compat qt6.qtmultimedia qt6.qtsvg SDL2 ] ++ moduleRuntime;
         shellHook = ''
           export UNIVERSE_MODULES_PATH="$PWD/modules"
-          export QML2_IMPORT_PATH="${pkgs.qt6.qtdeclarative}/lib/qt-6/qml:${pkgs.qt6.qt5compat}/lib/qt-6/qml:${pkgs.qt6.qtmultimedia}/lib/qt-6/qml"
+          export QML2_IMPORT_PATH="${qmlImportPath}"
           export QT_PLUGIN_PATH="${pkgs.qt6.qtsvg}/lib/qt-6/plugins:${pkgs.qt6.qtmultimedia}/lib/qt-6/plugins"
           export LD_LIBRARY_PATH="${lib.makeLibraryPath [ pkgs.pipewire ]}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           export QT_FORCE_STDERR_LOGGING=1
@@ -181,7 +180,7 @@
         pytest-modules = pytestModules;
       };
 
-      nixosModules.default = import ./nix/nixos.nix { universePkg = universe; uiPkg = ui; gsrPkg = pkgs.gpu-screen-recorder; };
+      nixosModules.default = import ./nix/nixos.nix { gsrPkg = pkgs.gpu-screen-recorder; };
       homeModules.default = import ./nix/home-manager.nix { universePkg = universe; uiPkg = ui; extensionPkg = universe-shell-extension; };
     };
 }

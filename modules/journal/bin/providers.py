@@ -5,11 +5,11 @@ import subprocess
 from datetime import datetime, timedelta
 
 from _common import journal_lang, log, read_json, remove
-from prompt import CODEX_EFFORT, CODEX_VERBOSITY, OUTPUT_SCHEMA, system_prompt
+from prompt import OUTPUT_SCHEMA, system_prompt
 
 # A 20-image session measured 159 s; course-based games with one web lookup per level passed 420 s.
 TIMEOUT_S = 900
-RETRIES = 1
+ATTEMPTS = 2
 # The quota wall lasts days; transient failures ("Reconnecting") must stay on the retry path.
 LIMIT_RE = re.compile(r"hit your usage limit", re.I)
 LIMIT_FALLBACK_HOURS = 6
@@ -25,8 +25,8 @@ _MONTHS = {m: i for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun",
 _RESET_RE = re.compile(r"try again at ([A-Za-z]+) (\d{1,2})(?:st|nd|rd|th)?,? (\d{4}),? (\d{1,2}):(\d{2})(?: ?([AP]M))?", re.I)
 
 
+# Codex prints the reset in English whatever the locale; strptime %b/%p would not.
 def parse_limit_reset(text):
-    """Codex prints the reset in English whatever the locale; strptime %b/%p would not."""
     m = _RESET_RE.search(text or "")
     if not m:
         return None
@@ -42,7 +42,7 @@ def parse_limit_reset(text):
         return None
 
 
-def codex_args(model, images, schema_path, out_path, prompt, cwd, effort=CODEX_EFFORT, verbosity=CODEX_VERBOSITY):
+def codex_args(model, images, schema_path, out_path, prompt, cwd):
     args = [
         "codex", "exec",
         "--skip-git-repo-check",
@@ -54,8 +54,8 @@ def codex_args(model, images, schema_path, out_path, prompt, cwd, effort=CODEX_E
         "-s", "read-only",
         "-c", "approval_policy=never",
         "-c", f"model={model}",
-        "-c", f"model_reasoning_effort={effort}",
-        "-c", f"model_verbosity={verbosity}",
+        "-c", "model_reasoning_effort=high",
+        "-c", "model_verbosity=medium",
         "-c", "project_doc_max_bytes=0",
         "-c", "tools.web_search=true",
         "-c", "mcp_servers={}",
@@ -66,20 +66,20 @@ def codex_args(model, images, schema_path, out_path, prompt, cwd, effort=CODEX_E
     return args
 
 
+# codex has no system-prompt flag, so the brief carries it.
 def run_codex(model, brief, images, work_dir, forced_lang=None):
-    """codex has no system-prompt flag, so the brief carries it."""
     prompt = f"{system_prompt(forced_lang)}\n\n---\n\n{brief}"
     schema_path = os.path.join(work_dir, "schema.json")
     out_path = os.path.join(work_dir, "entry.json")
     with open(schema_path, "w", encoding="utf-8") as f:
         json.dump(OUTPUT_SCHEMA, f)
     args = codex_args(model, [im.file for im in images], schema_path, out_path, prompt, work_dir)
-    for attempt in range(1, RETRIES + 2):
+    for attempt in range(1, ATTEMPTS + 1):
         remove(out_path)
         try:
             res = subprocess.run(args, cwd=work_dir, capture_output=True, text=True, timeout=TIMEOUT_S, stdin=subprocess.DEVNULL)
         except subprocess.TimeoutExpired:
-            log(f"codex attempt {attempt}/{RETRIES + 1} timed out after {TIMEOUT_S}s")
+            log(f"codex attempt {attempt}/{ATTEMPTS} timed out after {TIMEOUT_S}s")
             continue
         except OSError as e:
             log(f"codex could not start: {e}")
@@ -88,11 +88,11 @@ def run_codex(model, brief, images, work_dir, forced_lang=None):
             output = f"{res.stdout or ''}\n{res.stderr or ''}"
             if LIMIT_RE.search(output):
                 raise QuotaExceeded(parse_limit_reset(output) or datetime.now() + timedelta(hours=LIMIT_FALLBACK_HOURS))
-            log(f"codex attempt {attempt}/{RETRIES + 1} returned exit={res.returncode}: {(res.stderr or '').strip()[-400:]}")
+            log(f"codex attempt {attempt}/{ATTEMPTS} returned exit={res.returncode}: {(res.stderr or '').strip()[-400:]}")
             continue
         out = read_json(out_path)
         if not out or not out.get("body"):
-            log(f"codex attempt {attempt}/{RETRIES + 1}: no usable structured output")
+            log(f"codex attempt {attempt}/{ATTEMPTS}: no usable structured output")
             continue
         return out
     return None
@@ -121,6 +121,4 @@ def run_stub(title, images, forced_lang=None):
 def generate(provider, *, model, title, brief, images, work_dir, forced_lang=None):
     if provider == "stub":
         return run_stub(title, images, forced_lang)
-    if provider != "codex":
-        log(f"unknown provider {provider!r}, using codex")
     return run_codex(model, brief, images, work_dir, forced_lang)

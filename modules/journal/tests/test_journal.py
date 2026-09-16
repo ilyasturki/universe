@@ -91,7 +91,6 @@ def test_dhash_and_review_normalization():
     ramp = bytes(range(71, -1, -1))
     assert img.dhash(flat) == 0
     assert img.hamming(img.dhash(flat), img.dhash(ramp)) == 64
-    assert img.dhash(b"short") is None
     order, unusable = img.normalize_review({"gallery": [3, 1, 9, 3, True], "unusable": [2, 3, 0]}, 4)
     assert (order, unusable) == ([1, 4], {2, 3})
     assert img.normalize_review(None, 2) == ([1, 2], set())
@@ -265,7 +264,7 @@ def test_model_failure_marks_the_session_failed(tmp_path, fakebin):
     res, journal_dir = run_process(tmp_path, fakebin, {"provider": "codex"})
     assert res.returncode == 1 and not (fakebin / "universe.args").exists()
     assert failed_file(journal_dir) == "the model produced no usable entry"
-    assert len((fakebin / "codex.calls").read_text().splitlines()) == providers.RETRIES + 1
+    assert len((fakebin / "codex.calls").read_text().splitlines()) == providers.ATTEMPTS
 
 
 def test_blank_recording_marks_the_session_failed(tmp_path, fakebin):
@@ -384,7 +383,7 @@ def test_codex_quota_wall_and_retry(tmp_path, monkeypatch):
     attempts.clear()
     monkeypatch.setattr(providers.subprocess, "run", flaky)
     assert providers.run_codex("m", "brief", [], str(tmp_path)) is None
-    assert len(attempts) == providers.RETRIES + 1
+    assert len(attempts) == providers.ATTEMPTS
 
 
 def test_acceptance_of_model_fields():

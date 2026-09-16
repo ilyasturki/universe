@@ -11,9 +11,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import images as img  # noqa: E402
 import prompt as pr  # noqa: E402
 import providers  # noqa: E402
-from _common import (add_entry_via_core, fmt_date, fmt_time, journal_lang, journal_root, load_settings, log,  # noqa: E402
-                     parse_rfc3339, parse_session_id, read_entries, read_json, read_sessions, remove, rfc3339_local,
-                     use_system_locale, validate_entry, write_entry_file, write_json)
+from _common import (add_entry_via_core, fmt_date, fmt_time, journal_lang, load_settings, log, parse_rfc3339,  # noqa: E402
+                     parse_session_id, read_entries, read_json, read_sessions, remove, rfc3339_local, use_system_locale,
+                     validate_entry, write_json)
 from note import write_note  # noqa: E402
 
 EX_TEMPFAIL = 75
@@ -72,20 +72,10 @@ def previous_entry_text(entries, sid):
     return ""
 
 
-def play_stats(sessions, entries, sid, duration_s):
-    """Counts only sessions before this one, so a backfill is not told the player is further along."""
-    earlier = [s for s in sessions.values() if s.get("session") and s["session"] < sid]
-    if earlier or sid in sessions:
-        total = sum(int(s.get("duration_s") or 0) for s in earlier) + duration_s
-        return len(earlier) + 1, total
-    try:
-        stats = (json.loads(env("UNIVERSE_GAME_JSON") or "null") or {}).get("stats") or {}
-    except ValueError:
-        stats = {}
-    if stats.get("play_count"):
-        return max(1, int(stats["play_count"])), int(float(stats.get("hours") or 0) * 3600) or duration_s
-    older = sum(1 for e in entries if e["session"] < sid)
-    return older + 1, duration_s
+# Counts only the sessions before this one, so a backfill is not told the player is further along.
+def play_stats(sessions, sid, duration_s):
+    earlier = [s for other, s in sessions.items() if other < sid]
+    return len(earlier) + 1, sum(int(s.get("duration_s") or 0) for s in earlier) + duration_s
 
 
 def deliver(entry, journal_dir):
@@ -97,7 +87,8 @@ def deliver(entry, journal_dir):
         return
     if outcome == "invalid":
         raise Failed("the core rejected the entry")
-    path = write_entry_file(journal_dir, entry)
+    path = os.path.join(journal_dir, f"{sid}.json")
+    write_json(path, entry)
     log(f"warning: core unavailable, wrote {path} directly")
 
 
@@ -142,24 +133,19 @@ def main(argv):
         return 0
 
     provider = str(settings.get("provider") or "codex")
+    pending = state_path(journal_dir, sid, "pending")
     mark_pending(journal_dir, sid, game_id, provider)
-    reason = "crashed"
     try:
         journal_session(settings, sid, start_id, game_id, provider, journal_dir, data_dir)
-        reason = None
     except Failed as e:
         log(f"no entry for {sid}: {e}")
-        reason = str(e)
+        mark_failed(journal_dir, sid, game_id, str(e))
         return e.code
     except Exception as e:
-        reason = f"error: {e}"
+        if os.path.exists(pending):
+            mark_failed(journal_dir, sid, game_id, f"error: {e}")
         raise
-    finally:
-        pending = state_path(journal_dir, sid, "pending")
-        if reason is None:
-            remove(pending)
-        elif os.path.exists(pending):
-            mark_failed(journal_dir, sid, game_id, reason)
+    remove(pending)
     return 0
 
 
@@ -197,7 +183,6 @@ def journal_session(settings, sid, start_id, game_id, provider, journal_dir, dat
     entries = read_entries(journal_dir)
     memory = read_json(memory_path(data_dir, game_id))
     memory = memory if isinstance(memory, dict) else None
-    known_lang = forced_lang or (memory or {}).get("language") or (entries[0].get("lang") if entries else None)
 
     work_root = os.path.join(data_dir, "work")
     os.makedirs(work_root, exist_ok=True)
@@ -219,7 +204,7 @@ def journal_session(settings, sid, start_id, game_id, provider, journal_dir, dat
             raise Failed("no images")
 
         prev = previous_entry_text(entries, sid)
-        number, total = play_stats(sessions, entries, sid, duration_s)
+        number, total = play_stats(sessions, sid, duration_s)
         brief = pr.build_user_prompt(title, start, end, duration_s, number, total, fed, prev, memory)
 
         log(f"asking {provider} for the entry ({len(shots)} screenshot(s) + {len(frames)} frame(s))…")
@@ -237,8 +222,8 @@ def journal_session(settings, sid, start_id, game_id, provider, journal_dir, dat
         if not result:
             raise Failed("the model produced no usable entry")
 
-        merged = pr.merge_memory(memory, result["memory"], warn=log)
-        lang = forced_lang or journal_lang((merged or {}).get("language") or known_lang)
+        merged = pr.merge_memory(memory, result["memory"])
+        lang = forced_lang or journal_lang((merged or {}).get("language") or (entries[0].get("lang") if entries else None))
         order, unusable = img.normalize_review(result["images"], len(fed))
         kept_shots, picked = img.pick_gallery(fed, order, unusable, shots, frames)
         rels = [os.path.relpath(s.file, journal_dir) for s in kept_shots] + persist_frames(picked, attachments, sid)
@@ -269,7 +254,7 @@ def journal_session(settings, sid, start_id, game_id, provider, journal_dir, dat
     if settings.get("markdown_export", True):
         entries = [e for e in entries if e["session"] != sid] + [entry]
         try:
-            path, changed = write_note(entries, sessions, title, journal_dir, os.path.join(journal_root(), game_id))
+            path, changed = write_note(entries, sessions, title, journal_dir, os.path.join(os.path.expanduser(os.environ["UNIVERSE_JOURNAL_ROOT"]), game_id))
             log(f"markdown note {'updated' if changed else 'unchanged'}: {path}")
         except OSError as e:
             log(f"markdown render failed: {e}")

@@ -104,8 +104,8 @@ def render_note(entries, sessions, title):
     return frontmatter(title, body) + body
 
 
+# <Title>.md, or the folder's single marked note so a renamed game does not fork its history.
 def resolve_note_path(note_dir, title):
-    """<Title>.md, or the folder's single marked note so a renamed game does not fork its history."""
     preferred = os.path.join(note_dir, f"{game_note_name(title)}.md")
     try:
         names = os.listdir(note_dir)
@@ -130,11 +130,10 @@ def resolve_note_path(note_dir, title):
     return os.path.join(note_dir, notes[0]) if len(notes) == 1 else preferred
 
 
+# Obsidian only follows links inside the vault, so referenced images are copied beside the note.
 def mirror_images(entries, journal_dir, note_dir):
-    """Obsidian only follows links inside the vault, so referenced images are copied beside the note."""
     if os.path.abspath(journal_dir) == os.path.abspath(note_dir):
-        return 0
-    copied = 0
+        return
     for e in entries:
         for rel in e.get("images") or []:
             if os.path.isabs(rel) or ".." in rel.split("/"):
@@ -146,8 +145,6 @@ def mirror_images(entries, journal_dir, note_dir):
                 continue
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             shutil.copyfile(src, dst)
-            copied += 1
-    return copied
 
 
 def write_note(entries, sessions, title, journal_dir, note_dir):

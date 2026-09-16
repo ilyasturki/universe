@@ -601,7 +601,7 @@ label = "Model"
 | `MODULE_SETTINGS_JSON` | global settings merged with the game's | all |
 | `UNIVERSE_ENV_FILE` | write `KEY=VALUE` lines here to add them to the game's environment, ahead of `launch.env` | `pre-launch` |
 | `MODULE_DIR`, `MODULE_DATA_DIR` | the module's directory, `$XDG_DATA_HOME/universe/modules/<id>` | all |
-| `UNIVERSE_BIN`, `UNIVERSE_{DATA,CONFIG,STATE,CACHE}_HOME`, `UNIVERSE_MODULES_PATH`, `PATH` | the CLI to call back (`recording-file`, `journal-add`, `session-window`, `screen-mode`) and the environment that makes it open the same core | all |
+| `UNIVERSE_BIN`, `UNIVERSE_{DATA,CONFIG,STATE}_HOME`, `UNIVERSE_MODULES_PATH`, `PATH` | the CLI to call back (`recording-file`, `journal-add`, `session-window`, `screen-mode`) and the environment that makes it open the same core | all |
 | `UNIVERSE_GAME_JSON`, `UNIVERSE_JOURNAL_ROOT` | the resolved `Game`, serialized; `paths.journal_root` | all |
 
 Exit codes: 0 is success; anything else is logged and the session continues — except a `pre-launch`

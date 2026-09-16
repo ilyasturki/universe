@@ -36,8 +36,6 @@ def fakebin(tmp_path):
 
     _write_shim(bindir / "systemd-run", f'printf "%s\\n" "$@" > "{logs}/systemd-run.args"\nexit 0\n')
     _write_shim(bindir / "systemctl", 'exit 0')
-    # The CLI: screen-mode answers DP-1 at 120 Hz, HDMI-A-1 at 60 Hz (FAKE_REFRESH overrides, 0 for an unreadable
-    # mode); session-window answers FAKE_WINDOW_JSON, null without it; FAKE_UNIVERSE_EXIT fails every command.
     _write_shim(bindir / "universe", f'''printf "%s\\n" "$@" >> "{logs}/universe.args"
 if [ "${{FAKE_UNIVERSE_EXIT:-0}}" != "0" ]; then echo "universe: unavailable: no shell" >&2; exit "${{FAKE_UNIVERSE_EXIT}}"; fi
 case "$1" in
@@ -122,12 +120,6 @@ def test_start_composes_gsr_command(tmp_path, fakebin):
     assert flag_values(args, "-a") == ["default_output"]
     assert flag_values(args, "-ffmpeg-video-opts") == [QVBR_OPTS.replace("global_quality=95", "global_quality=22")]
     assert flag_values(args, "-o") == [pending_path(tmp_path)]
-
-
-def test_audio_and_cursor_args():
-    assert _common.audio_args("none") == []
-    assert _common.audio_args("output+input") == ["-a", "default_output", "-a", "default_input"]
-    assert flag_values(_common.gsr_args({"cursor": False, "audio": "none"}, "DP-1", "/o.mkv"), "-cursor") == ["no"]
 
 
 def test_start_fps_auto_takes_the_screens_refresh_rate(tmp_path, fakebin):
@@ -383,7 +375,8 @@ def test_gsr_args_container_size_audio_and_extra_args():
     assert flag_values(args, "-ab") == ["160"]
     assert args[args.index("-cr"):] == ["-cr", "full", "-keyint", "2", "-o", "/o.mp4"]
     plain = _common.gsr_args({"audio": "none"}, "DP-1", "/o.mkv")
-    assert "-s" not in plain and "-ab" not in plain and flag_values(plain, "-c") == ["mkv"]
+    assert "-s" not in plain and "-ab" not in plain and "-a" not in plain and flag_values(plain, "-c") == ["mkv"]
+    assert flag_values(plain, "-cursor") == ["no"]
     assert flag_values(_common.gsr_args({"audio": "output", "audio_codec": "flac"}, "DP-1", "/o.mkv"), "-ac") == ["opus"]
 
 
@@ -396,8 +389,3 @@ def test_size_limit_and_audio_bitrate_parse():
         assert _common.audio_bitrate_kbps({"audio_bitrate": raw}) is None
     assert _common.gsr_extra_args({"gsr_extra_args": "-x 'a b'"}) == ["-x", "a b"]
     assert _common.gsr_extra_args({"gsr_extra_args": "-x 'unterminated"}) == []
-
-
-def test_output_path_follows_the_container():
-    assert _common.output_path("/p", "s", {"container": "mp4"}) == "/p/s.mp4"
-    assert _common.output_path("/p", "s", {}) == "/p/s.mkv"

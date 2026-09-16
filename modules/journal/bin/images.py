@@ -81,10 +81,8 @@ def probe_duration(path):
         return None
 
 
+# 64-bit difference hash of 9x8 row-major gray bytes.
 def dhash(raw):
-    """64-bit difference hash of 9x8 row-major gray bytes."""
-    if len(raw) < 72:
-        return None
     bits = 0
     for r in range(8):
         row = raw[r * 9:(r + 1) * 9]
@@ -250,13 +248,13 @@ def normalize_review(review, count):
     return order, unusable
 
 
-def pick_gallery(fed, order, unusable, shots, frames, frames_target=GALLERY_FRAME_TARGET):
+def pick_gallery(fed, order, unusable, shots, frames):
     rejected = {fed[n - 1].file for n in unusable}
     kept_shots = [s for s in shots if s.file not in rejected]
     if shots and not kept_shots:
         log(f"model marked all {len(shots)} screenshot(s) unusable; keeping them")
         kept_shots = list(shots)
-    want = max(0, frames_target - len(kept_shots))
+    want = max(0, GALLERY_FRAME_TARGET - len(kept_shots))
     ranked = [fed[n - 1] for n in order if fed[n - 1].kind == "frame"]
     picked = ranked[:want]
     if want > 0 and not any(f.tail for f in picked):
