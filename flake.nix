@@ -59,17 +59,18 @@
         '';
       };
 
-      universe-shell-extension = pkgs.stdenvNoCC.mkDerivation {
+      universe-shell-extension = pkgs.stdenvNoCC.mkDerivation (finalAttrs: {
         pname = "universe-shell-extension";
         inherit version;
         src = ./modules/capture/extension;
         installPhase = ''
           runHook preInstall
           install -Dm644 metadata.json extension.js -t \
-            "$out/share/gnome-shell/extensions/universe@ilyasturki.github.io"
+            "$out/share/gnome-shell/extensions/${finalAttrs.passthru.extensionUuid}"
           runHook postInstall
         '';
-      };
+        passthru.extensionUuid = "universe@ilyasturki.github.io";
+      });
 
       # No gpu-screen-recorder here: it must match the host's setcap gsr-kms-server (nixos.nix pins that package).
       moduleRuntime = with pkgs; [ gogdl ffmpeg trash-cli util-linux ];
