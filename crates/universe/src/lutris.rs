@@ -168,7 +168,8 @@ pub struct EnvDiff {
 
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct Report {
-    pub runners_promoted: Vec<String>,
+    /// Pre-runner files whose `[launch] backend` became `runner`.
+    pub backend_promoted: Vec<String>,
     /// Existing games given what a first-class field now holds: a wrapper, an override, a switch.
     pub options_promoted: Vec<String>,
     pub runners: Vec<RunnerHint>,
@@ -404,6 +405,7 @@ pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
     let runners_dir = paths::expand(&config.lutris.runners_dir);
     let global_env = lutris_global_env(&lutris_dir);
     let mut report = Report { applied: apply, ..Default::default() };
+    report.backend_promoted = crate::game::promote_backend(&paths::games_dir(), apply)?;
     let mut located = std::collections::HashMap::new();
     for p in read_pga(&pga)? {
         if p.name.trim().is_empty() {
@@ -415,12 +417,6 @@ pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
         let game = if existed {
             match Game::load(&toml_path) {
                 Ok(g) => {
-                    if g.launch.runner.is_empty() && g.launch.backend == "emulator" && !imp.game.launch.runner.is_empty() {
-                        report.runners_promoted.push(g.id.clone());
-                        if apply {
-                            crate::game::set_key(&toml_path, "launch.runner", &imp.game.launch.runner)?;
-                        }
-                    }
                     let promotions = promotions(&g, &imp.game);
                     if !promotions.is_empty() {
                         report.options_promoted.push(g.id.clone());
@@ -582,7 +578,7 @@ mod tests {
         assert!(ge.launch.proton.is_empty());
         let sys = game("sys", "game:\n  exe: /g/a.exe\nwine:\n  version: system\n");
         assert_eq!(sys.runner_id(), "wine");
-        assert!(sys.launch.runner_exe.is_empty() && sys.launch.backend.is_empty());
+        assert!(sys.launch.runner_exe.is_empty());
         let mut existing = Game::new("re4");
         existing.launch.env.insert("LC_ALL".into(), "C".into());
         existing.launch.env.insert("PROTON_ENABLE_HDR".into(), "1".into());
@@ -626,7 +622,6 @@ mod tests {
         let p = PgaGame { name: "F-Zero GX".into(), slug: "f-zero-gx".into(), runner: "dolphin".into(), platform: "Nintendo GameCube".into(), playtime_h: 4.3, configpath: "none".into(), ..Default::default() };
         let g = convert(&p, dir.path(), dir.path(), &BTreeMap::new()).game;
         assert_eq!(g.launch.runner, "dolphin");
-        assert!(g.launch.backend.is_empty());
         assert_eq!(g.platform, "Nintendo GameCube");
     }
 

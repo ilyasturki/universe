@@ -177,7 +177,7 @@ class FakeCore:
         return out
 
     def _runner_of(self, launch):
-        runner = str(launch.get("runner") or "") or {"wine": "wine", "native": "linux"}.get(str(launch.get("backend") or ""), "proton")
+        runner = str(launch.get("runner") or "") or "proton"
         for spec in self._data.get("runners", []):
             if runner == spec["id"] or runner in (spec.get("aliases") or []):
                 return spec["id"]

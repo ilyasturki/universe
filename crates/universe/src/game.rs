@@ -41,9 +41,6 @@ pub struct Source {
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Launch {
-    /// Pre-runner key of old files; dropped once `runner` is written.
-    #[serde(skip_serializing_if = "String::is_empty")]
-    pub backend: String,
     pub runner: String,
     pub runner_exe: String,
     /// For an emulator, the ROM, image or folder.
@@ -136,7 +133,6 @@ impl Default for Source {
 impl Default for Launch {
     fn default() -> Self {
         Launch {
-            backend: String::new(),
             runner: String::new(),
             runner_exe: String::new(),
             exe: String::new(),
@@ -234,16 +230,41 @@ impl Game {
     }
 
     pub fn runner_id(&self) -> String {
-        if !self.launch.runner.is_empty() {
-            return crate::runners::canonical(&self.launch.runner);
+        if self.launch.runner.is_empty() {
+            return "proton".into();
         }
-        match self.launch.backend.as_str() {
-            "" => "proton".into(),
-            // Pre-runner imports parked the emulator's id under [lutris] runner.
-            "emulator" => crate::runners::canonical(self.extra.get("lutris").and_then(|v| v.get("runner")).and_then(|v| v.as_str()).filter(|s| !s.is_empty()).unwrap_or("emulator")),
-            other => crate::runners::canonical(other),
-        }
+        crate::runners::canonical(&self.launch.runner)
     }
+}
+
+/// `emulator` takes the id parked under `[lutris] runner`; any other backend is canonicalised as a runner id.
+pub fn promote_backend(games_dir: &Path, apply: bool) -> crate::Result<Vec<String>> {
+    let mut changed = vec![];
+    let Ok(rd) = std::fs::read_dir(games_dir) else { return Ok(changed) };
+    let mut files: Vec<PathBuf> = rd.flatten().map(|e| e.path().join("game.toml")).filter(|p| p.is_file()).collect();
+    files.sort();
+    for path in files {
+        let text = std::fs::read_to_string(&path)?;
+        let mut doc: toml_edit::DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| crate::Error::Invalid(e.to_string()))?;
+        let lutris_runner = doc.get("lutris").and_then(|l| l.get("runner")).and_then(|v| v.as_str()).filter(|s| !s.is_empty()).map(str::to_string);
+        let Some(launch) = doc.get_mut("launch").and_then(|l| l.as_table_like_mut()) else { continue };
+        if launch.get("runner").and_then(|v| v.as_str()).is_some_and(|s| !s.is_empty()) {
+            continue;
+        }
+        let Some(backend) = launch.get("backend").and_then(|v| v.as_str()).map(str::to_string) else { continue };
+        let runner = match backend.as_str() {
+            "" => "proton".to_string(),
+            "emulator" => crate::runners::canonical(lutris_runner.as_deref().unwrap_or("emulator")),
+            other => crate::runners::canonical(other),
+        };
+        launch.remove("backend");
+        launch.insert("runner", toml_edit::value(runner));
+        if apply {
+            atomic_write(&path, doc.to_string().as_bytes())?;
+        }
+        changed.push(path.parent().and_then(|p| p.file_name()).map(|s| s.to_string_lossy().into()).unwrap_or_default());
+    }
+    Ok(changed)
 }
 
 pub fn atomic_write(path: &Path, bytes: &[u8]) -> crate::Result<()> {
@@ -320,11 +341,6 @@ pub fn set_key(game_toml: &Path, key: &str, value: &str) -> crate::Result<Game> 
         return Err(crate::Error::Invalid(format!("unknown key {key}")));
     }
     set_dotted(&mut doc, key, value)?;
-    if key == "launch.runner" && !value.is_empty() {
-        if let Some(t) = doc.get_mut("launch").and_then(|l| l.as_table_mut()) {
-            t.remove("backend");
-        }
-    }
     let g: Game = toml::from_str(&doc.to_string())?;
     atomic_write(game_toml, doc.to_string().as_bytes())?;
     Ok(g)
@@ -348,7 +364,6 @@ dir = "/mnt/games/PC/The Technomancer"
 build_id = "52654527801265271"
 
 [launch]
-backend = "proton"
 exe = "/mnt/games/PC/The Technomancer/TheTechnomancer.exe"
 prefix = "/mnt/games/gog/the-technomancer"
 proton = "proton-ge"
@@ -406,32 +421,39 @@ configpath = "the-technomancer-1780794348"
     }
 
     #[test]
-    fn runner_id_from_old_backends() {
+    fn runner_id_canonical_or_proton() {
         let g: Game = toml::from_str(SAMPLE).unwrap();
         assert_eq!(g.runner_id(), "proton");
-        let emu: Game = toml::from_str("id = \"f-zero-gx\"\ntitle = \"F-Zero GX\"\n[launch]\nbackend = \"emulator\"\n[lutris]\nrunner = \"dolphin\"\n").unwrap();
-        assert_eq!(emu.runner_id(), "dolphin");
-        let nat: Game = toml::from_str("id = \"x\"\n[launch]\nbackend = \"native\"\n").unwrap();
-        assert_eq!(nat.runner_id(), "linux");
-        let set: Game = toml::from_str("id = \"x\"\n[launch]\nbackend = \"emulator\"\nrunner = \"citra\"\n").unwrap();
+        let set: Game = toml::from_str("id = \"x\"\n[launch]\nrunner = \"citra\"\n").unwrap();
         assert_eq!(set.runner_id(), "azahar");
         assert_eq!(Game::new("n").runner_id(), "proton");
     }
 
     #[test]
-    fn setting_runner_retires_backend() {
+    fn promote_backend_once() {
         let dir = tempfile::tempdir().unwrap();
-        let p = dir.path().join("game.toml");
-        std::fs::write(&p, "title = \"X\"\n[launch]\nbackend = \"emulator\"\nexe = \"/r/a.iso\"\n").unwrap();
-        let g = set_key(&p, "launch.runner", "dolphin").unwrap();
-        assert_eq!(g.launch.runner, "dolphin");
-        assert!(g.launch.backend.is_empty());
-        let text = std::fs::read_to_string(&p).unwrap();
-        assert!(!text.contains("backend"));
-        assert!(text.contains("exe = \"/r/a.iso\""));
+        let file = |id: &str, body: &str| {
+            std::fs::create_dir_all(dir.path().join(id)).unwrap();
+            std::fs::write(dir.path().join(id).join("game.toml"), body).unwrap();
+        };
+        file("f-zero-gx", "title = \"F-Zero GX\"\n\n[launch]\nbackend = \"emulator\"\nexe = \"/r/a.iso\"\n\n[launch.options]\nbatch = true\n\n[lutris]\nrunner = \"yuzu\"\n");
+        file("odyssey", "title = \"O\"\n[launch]\nbackend = \"wine\"\nexe = \"/g/o.exe\"\n");
+        file("technomancer", "title = \"T\"\n[launch]\nbackend = \"proton\"\nrunner = \"\"\nexe = \"/g/t.exe\"\n");
+        file("done", "title = \"D\"\n[launch]\nrunner = \"dolphin\"\n");
+        assert_eq!(promote_backend(dir.path(), false).unwrap(), vec!["f-zero-gx", "odyssey", "technomancer"]);
+        assert!(std::fs::read_to_string(dir.path().join("odyssey/game.toml")).unwrap().contains("backend"), "a dry run writes nothing");
+        assert_eq!(promote_backend(dir.path(), true).unwrap(), vec!["f-zero-gx", "odyssey", "technomancer"]);
+        for (id, runner) in [("f-zero-gx", "eden"), ("odyssey", "wine"), ("technomancer", "proton"), ("done", "dolphin")] {
+            let p = dir.path().join(id).join("game.toml");
+            let g = Game::load(&p).unwrap();
+            assert_eq!((g.id.as_str(), g.launch.runner.as_str()), (id, runner));
+            assert!(!std::fs::read_to_string(&p).unwrap().contains("backend"));
+        }
+        let emu = std::fs::read_to_string(dir.path().join("f-zero-gx/game.toml")).unwrap();
+        assert!(emu.contains("exe = \"/r/a.iso\"\nrunner = \"eden\"\n\n[launch.options]\nbatch = true\n"), "{emu}");
+        assert!(promote_backend(dir.path(), true).unwrap().is_empty());
+        let p = dir.path().join("f-zero-gx/game.toml");
         set_key(&p, "launch.options.batch", "false").unwrap();
-        let g = Game::load(&p).unwrap();
-        assert_eq!(g.launch.options["batch"].as_bool(), Some(false));
-        assert_eq!(g.id, dir.path().file_name().unwrap().to_string_lossy());
+        assert_eq!(Game::load(&p).unwrap().launch.options["batch"].as_bool(), Some(false));
     }
 }

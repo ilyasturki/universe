@@ -64,7 +64,7 @@ operation; a dash means the surface doesn't expose it.
 | `uninstall(id)` | `uninstall(id)` | `universe uninstall <name>` | trashes `source.dir` and clears `source.dir`, `source.build_id` and `launch.exe`; the game stays in the library, not installed. Refuses a root, a home or the games root |
 | `reload_all()` | `reload()` | `universe rescan` | rereads config and `games/*/game.toml`, runs each source's `scan` |
 | `reload_game(id)` | `reload_game(id)` | — | rereads one game |
-| `import_lutris(apply)` | `import_lutris(apply)` | `universe migrate [--apply]` | a report: imported games, per-game env diff (`{id, lutris_env, universe_env, added, removed, changed}`), imported hours, games whose art was copied from `[lutris] pegasus_library` (`<platform>/media/<slug>/`, once, never over an existing `media/`), `runners_promoted` (emulator games from before runners that now name theirs), `options_promoted` (games already imported that take what a field now holds — a `wrapper`, a DLL override, a Proton switch — only where the file had nothing) and `runners` (what Lutris's runner configs say: a wrapper script is seen through, the program is written to `[runners.<id>] exe` when it is not on PATH, its extra arguments to `args`). Without `apply` it only reports |
+| `import_lutris(apply)` | `import_lutris(apply)` | `universe migrate [--apply]` | a report: imported games, per-game env diff (`{id, lutris_env, universe_env, added, removed, changed}`), imported hours, games whose art was copied from `[lutris] pegasus_library` (`<platform>/media/<slug>/`, once, never over an existing `media/`), `backend_promoted` (files from before runners whose `[launch] backend` became `runner`: `emulator` takes the id parked under `[lutris] runner`, an empty one is `proton`, any other value is taken as a runner id: `wine`, `native` → `linux`), `options_promoted` (games already imported that take what a field now holds — a `wrapper`, a DLL override, a Proton switch — only where the file had nothing) and `runners` (what Lutris's runner configs say: a wrapper script is seen through, the program is written to `[runners.<id>] exe` when it is not on PATH, its extra arguments to `args`). Without `apply` it only reports |
 | `add_game(spec)` | `add_game(spec)` | `universe add <file> --runner <id> [--title T] [--platform P] [--media]` | `{"runner", "exe", "title"?, "platform"?}` → the new id. The title defaults to the file's name cleaned of release tags; the platform to the runner's first. Refuses an id already in the library |
 
 `set` takes dotted keys: the `launch.*` keys of `universe launch-keys` — the one catalogue
@@ -75,7 +75,7 @@ or global-only key is refused — with the maps `launch.dll_overrides.d3d11`, `l
 `favorite`, `tags`, `sort_title`, `platform`, `metadata.sgdb_id`, and `capture.cursor` as a
 validated shorthand for `modules.capture.cursor`. Values are strings: `true`/`false` for booleans,
 comma-separated for lists, `""` deletes the key. A runner is written under its shipped id (`yuzu` →
-`eden`), and writing one retires the pre-runner `launch.backend` key.
+`eden`).
 
 `Game` (JSON) is the contents of `game.toml` plus:
 

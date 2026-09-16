@@ -1031,8 +1031,8 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     println!("  hours {k}: {v}");
                 }
             }
-            if n("runners_promoted") > 0 {
-                println!("  runners: {} emulator game(s) {} their runner instead of backend = \"emulator\"", n("runners_promoted"), if apply { "now name" } else { "would name" });
+            if n("backend_promoted") > 0 {
+                println!("  backend: {} pre-runner game(s) {} launch.runner instead of backend: {}", n("backend_promoted"), if apply { "now have" } else { "would have" }, joined(&report["backend_promoted"], ", "));
             }
             if n("options_promoted") > 0 {
                 println!("  options: {} {} what Lutris's prefix command and PROTON_* env now have fields for: {}", n("options_promoted"), if apply { "game(s) took" } else { "game(s) would take" }, joined(&report["options_promoted"], ", "));
