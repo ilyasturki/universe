@@ -45,6 +45,8 @@ pub enum Undo {
     Pads,
     Cursor { was_active: bool },
     PostCommand { command: String, cwd: String, env: BTreeMap<String, String> },
+    /// The launcher's mangoapp was shown or hidden for the game; hidden again after it.
+    Hud,
 }
 
 pub fn read_marker() -> Option<Marker> {
@@ -148,7 +150,7 @@ impl Core {
         let gamescope_pid = self.nest().map_or(0, |n| n.pid);
         let launcher_pid = if gamescope_pid != 0 { std::process::id() } else { 0 };
         let plan = launcher::plan(&r, &cfg, &extra_env, mode, splash.as_deref(), gamescope_pid != 0)?;
-        if let Some((path, text)) = &plan.mangohud_conf {
+        for (path, text) in plan.mangohud_conf.iter().chain(&plan.mangoapp_conf) {
             std::fs::write(path, text)?;
         }
 
@@ -188,6 +190,10 @@ impl Core {
             let was_active = self.host.shell.cursor_enable().await;
             undo.push(Undo::Cursor { was_active });
         }
+        if current.gamescope_pid != 0 {
+            self.apply_mangoapp(r.effective.mangohud, true)?;
+            undo.push(Undo::Hud);
+        }
         write_marker(&Marker { current: current.clone(), hook_env, undo: undo.clone() })?;
         tracing::info!("launch {}: {}", r.game.id, plan.command_line());
         let budget: u64 = 60 + self.hook_modules(r, "session-end").await.iter().map(|m| m.timeout().as_secs()).sum::<u64>();
@@ -215,6 +221,12 @@ impl Core {
             match step {
                 Undo::Cursor { was_active } => self.host.shell.cursor_restore(*was_active).await,
                 Undo::Pads => self.host.pads.release().await,
+                // From ExecStopPost the launcher's gamescope may be gone already: told only while it is there.
+                Undo::Hud => {
+                    if let Err(e) = self.apply_mangoapp(false, self.nest().is_some()) {
+                        tracing::warn!("mangoapp: {e}");
+                    }
+                }
                 Undo::PostCommand { command, cwd, env } => {
                     if let Err(e) = launcher::run_shell(command, env, Path::new(cwd)).await {
                         tracing::warn!("post_command: {e}");
@@ -385,6 +397,7 @@ mod tests {
                 Undo::PostCommand { .. } => "post_command",
                 Undo::Pads => "pads",
                 Undo::Cursor { .. } => "cursor",
+                Undo::Hud => "hud",
             })
             .collect()
     }
@@ -426,6 +439,28 @@ mod tests {
 
         core.session_end("sample", &sid, None, None).await.unwrap();
         assert_eq!(sessions::read(&core.get("sample").await.unwrap().game.sessions_path()).unwrap().len(), 1, "idempotent");
+    }
+
+    #[tokio::test]
+    async fn the_hud_toggle_is_the_games_key_and_the_layers_conf() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let _sb = sandbox();
+        let (core, _memory) = open().await;
+        assert!(matches!(core.set_mangohud(None).await, Err(Error::NotFound(_))), "no game, nothing to show");
+        core.launch("sample", "", "").await.unwrap();
+        let conf = launcher::layer_conf_path();
+        assert!(std::fs::read_to_string(&conf).map(|t| t.contains("no_display\n")).unwrap_or(true), "off by config, hidden: {:?}", std::fs::read_to_string(&conf));
+
+        assert!(core.set_mangohud(None).await.unwrap(), "off flips on");
+        assert_eq!(core.get("sample").await.unwrap().game.launch.mangohud, Some(true), "written as the game's own key");
+        let text = std::fs::read_to_string(&conf).unwrap();
+        assert!(!text.contains("no_display") && text.contains("control=universe-mangohud-sample\n"), "{text}");
+
+        crate::game::set_key(&core.get("sample").await.unwrap().game.toml_path(), "launch.mangohud", "false").unwrap();
+        assert!(core.set_mangohud(None).await.unwrap(), "a key another process wrote is read before the flip");
+        assert!(!core.set_mangohud(Some(false)).await.unwrap());
+        let text = std::fs::read_to_string(&conf).unwrap();
+        assert!(text.contains("no_display\n") && text.contains("control=universe-mangohud-sample\n"), "hidden, still the desktop's HUD: {text}");
     }
 
     #[tokio::test]

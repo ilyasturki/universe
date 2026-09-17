@@ -31,6 +31,7 @@ class Home(QObject):
         self._thaw_on_release = False
         self._stopping = False
         self._flipping = False
+        self._keys_on_thaw = []
         self._frame = ""
         self._frames = 0
         self._volume = {}
@@ -80,6 +81,7 @@ class Home(QObject):
             self._swap.stop()
             self._drop()
             self._open = self._closing = self._flipped = self._flipping = self._paused = self._thaw_on_release = self._stopping = False
+            self._keys_on_thaw = []
             self._shown = "launcher"
             self._frame = ""
         self.changed.emit()
@@ -246,8 +248,21 @@ class Home(QObject):
         if on == self._paused or not self._session() or (on and self._stopping):
             return
         self._paused = on
-        self._client.freeze(on)
+        self._client.freeze(on, None if on else lambda _: self._type_held())
         self.changed.emit()
+
+    # A frozen game reads no key: what the dock asks of the game's MangoHud waits for the thaw.
+    def _type(self, combo):
+        if self._paused:
+            if combo not in self._keys_on_thaw:
+                self._keys_on_thaw.append(combo)
+        else:
+            self._controller.run("keys", combo)
+
+    def _type_held(self):
+        keys, self._keys_on_thaw = self._keys_on_thaw, []
+        for combo in keys:
+            self._controller.run("keys", combo)
 
     @Slot(bool)
     def setPauseOnHome(self, on):
@@ -267,6 +282,8 @@ class Home(QObject):
     @Slot(str, result=str)
     def launchValue(self, key):
         value = (self._game().get("effective") or {}).get(key)
+        if isinstance(value, bool):
+            return "true" if value else "false"
         return "" if value is None else str(value)
 
     @Slot(str, result="QVariantList")
@@ -281,9 +298,13 @@ class Home(QObject):
         session = self._session()
         if not session:
             return
+        if key == "mangohud":
+            self._client.setMangohud(value == "true")
+            self.changed.emit()
+            return
         self._client.set(str(session.get("id") or ""), "launch." + key, value)
         if key == "fps_limit":
-            self._client.setFpsLimit(lambda combo: combo and self._controller.run("keys", combo))
+            self._client.setFpsLimit(lambda combo: combo and self._type(combo))
         elif key == "gamescope_filter" and self._client.nested:
             sharpness = (self._game().get("effective") or {}).get("gamescope_sharpness")
             self._client.nestFilter(value, None if sharpness in (None, "") else int(sharpness))

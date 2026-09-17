@@ -457,15 +457,62 @@ impl Core {
         Ok(shot.map(|p| p.to_string_lossy().to_string()))
     }
 
-    /// Rewrites the running game's MangoHud.conf from its `fps_limit` and returns the combo that makes the layer reread it.
-    pub async fn set_fps_limit(&self) -> Result<String> {
+    async fn running(&self) -> Result<(crate::session::Current, Resolved)> {
         let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
         let r = self.get(&c.id).await?;
-        let cfg = self.config.read().await;
-        let hz = crate::launcher::fps_limit_hz(&r.effective, crate::desktop::screen_mode(&c.screen).await).unwrap_or(0);
-        let hidden = c.gamescope_pid != 0 || (r.effective.gamescope && crate::runners::on_path(&cfg.launch.gamescope_bin).is_some()) || !r.effective.mangohud;
-        std::fs::write(paths::state_home().join("MangoHud.conf"), crate::launcher::mangohud_conf_text(hz, hidden))?;
-        Ok(crate::controller::keys::mangohud_combo("reload_cfg", "Shift_L+F4"))
+        Ok((c, r))
+    }
+
+    /// Whether a mangoapp draws the running game's HUD: the launcher's gamescope, or one of the game's own.
+    async fn mangoapp_draws(&self, c: &crate::session::Current, r: &Resolved) -> bool {
+        c.gamescope_pid != 0 || (r.effective.gamescope && crate::runners::on_path(&self.config.read().await.launch.gamescope_bin).is_some())
+    }
+
+    /// The in-game layer's conf for the running game as its `fps_limit` and `mangohud` now resolve; the layer rereads it on `RELOAD_CFG`.
+    async fn write_layer_conf(&self, c: &crate::session::Current, r: &Resolved) -> Result<()> {
+        let hz = crate::launcher::fps_limit_hz(&r.effective, crate::desktop::screen_mode(&c.screen).await);
+        let mangoapp = self.mangoapp_draws(c, r).await;
+        Ok(std::fs::write(crate::launcher::layer_conf_path(), crate::launcher::layer_conf_text((!mangoapp).then_some(c.id.as_str()), hz, mangoapp || !r.effective.mangohud))?)
+    }
+
+    /// Rewrites the running game's layer conf from its `fps_limit` and returns the combo that makes the layer reread it.
+    pub async fn set_fps_limit(&self) -> Result<String> {
+        let (c, r) = self.running().await?;
+        self.write_layer_conf(&c, &r).await?;
+        Ok(crate::launcher::RELOAD_CFG.into())
+    }
+
+    /// mangoapp's visibility: its conf for the next reload, and with `tell` the running one now. The queue outlives mangoapp, so nothing is told when none runs: the next to start would obey.
+    pub(crate) fn apply_mangoapp(&self, shown: bool, tell: bool) -> Result<()> {
+        std::fs::write(crate::launcher::mangoapp_conf_path(), crate::launcher::mangoapp_conf_text(shown))?;
+        if tell {
+            if let Err(e) = crate::mangoapp::set_shown(shown, false) {
+                tracing::debug!("mangoapp: {e}");
+            }
+        }
+        Ok(())
+    }
+
+    /// The running game's HUD, `None` flipping it: written as its `launch.mangohud`, then shown or hidden in the game. Returns the new state.
+    pub async fn set_mangohud(&self, on: Option<bool>) -> Result<bool> {
+        let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
+        // The dock and the watcher each hold a library: the other may have written the key since this one loaded.
+        self.reload_game(&c.id).await?;
+        let was = self.get(&c.id).await?.effective.mangohud;
+        let on = on.unwrap_or(!was);
+        self.set(&c.id, "launch.mangohud", if on { "true" } else { "false" }).await?;
+        let r = self.get(&c.id).await?;
+        if self.mangoapp_draws(&c, &r).await {
+            self.apply_mangoapp(on, true)?;
+        } else {
+            self.write_layer_conf(&c, &r).await?;
+            if on != was {
+                if let Err(e) = crate::mangoapp::layer_toggle(&c.id) {
+                    tracing::debug!("mangohud layer: {e}");
+                }
+            }
+        }
+        Ok(on)
     }
 
     pub fn nest_filter(&self, filter: &str, sharpness: Option<u32>) -> Result<()> {
@@ -487,11 +534,17 @@ impl Core {
         Ok(serde_json::json!({"percent": level.percent, "muted": level.muted, "output": level.output}))
     }
 
+    /// Its mangoapp starts hidden: the HUD is a game's, shown when one runs with it on.
     pub async fn host_gamescope(&self, screen: &str) -> Option<(String, Vec<String>)> {
         let cfg = self.config.read().await.clone();
         let screen = crate::desktop::pick_screen(screen);
         let mode = crate::desktop::screen_mode(&screen).await;
-        crate::launcher::host_gamescope(&cfg, mode)
+        let command = crate::launcher::host_gamescope(&cfg, mode)?;
+        let _ = std::fs::create_dir_all(paths::state_home());
+        if let Err(e) = std::fs::write(crate::launcher::mangoapp_conf_path(), crate::launcher::mangoapp_conf_text(false)) {
+            tracing::warn!("mangoapp.conf: {e}");
+        }
+        Some(command)
     }
 
     pub async fn screenshot(&self) -> Result<String> {

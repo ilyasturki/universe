@@ -250,10 +250,8 @@ class ControllerScreen(QObject):
                 self.axisMoved.emit(ident, axis, float(line.get("value") or 0.0))
         elif kind == "unknown":
             self.unknownPressed.emit(ident, str(line.get("code") or ""))
-        elif kind == "macro":
-            notice = self._notice(str(line.get("action") or ""))
-            if notice:
-                self.macroNotice.emit(notice)
+        elif kind == "hud":
+            self.macroNotice.emit(self._hud_notice(line))
         elif kind == "learned":
             self._learned(line)
         elif kind == "learn_timeout":
@@ -284,18 +282,14 @@ class ControllerScreen(QObject):
                 QTimer.singleShot(self._restart_delay, self._restart)
                 self._restart_delay = min(max(self._restart_delay, 1) * 2, RESTART_MAX_MS)
 
-    # MangoHud's toggle is a key the launcher never sees: on it the press would look like nothing.
-    def _notice(self, action):
-        if action != "mangohud":
-            return ""
-        current = self._client.currentSession
-        if not current or not current.get("session_id"):
+    # The HUD flips in the game, never on the launcher: the watcher says what it became.
+    @staticmethod
+    def _hud_notice(line):
+        shown = line.get("shown")
+        if shown is None:
             return "MangoHud: no game running"
-        title = str(current.get("title") or current.get("id") or "")
-        game = self._client.game(str(current.get("id") or ""))
-        if (game.get("effective") or {}).get("mangohud", True):
-            return f"MangoHud toggled · {title}"
-        return f"MangoHud is off for {title}"
+        title = str(line.get("title") or "")
+        return f"MangoHud {'shown' if shown else 'hidden'}" + (f" · {title}" if title else "")
 
     def _stop_learning(self):
         if not self._learning:

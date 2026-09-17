@@ -151,24 +151,20 @@ def test_learn_timeout_and_error_clear_learning(started, fake):
     assert len(messages) == 2, "a timeout with nothing to stop says nothing"
 
 
-def test_the_mangohud_macro_gets_a_toast_the_others_do_not(started, fake):
+def test_the_hud_event_gets_a_toast_the_macros_do_not(started, fake):
     screen, watcher = started
     notices = []
     screen.macroNotice.connect(notices.append)
     fire = lambda action: watcher.emit({"event": "macro", "id": "event30", "slot": "fn_right", "trigger": "press", "action": action})
     fire("mangohud")
-    assert notices == ["MangoHud: no game running"]
     fire("volume_up")
     fire("screenshot")
-    assert len(notices) == 1, "volume and the screenshot draw their own cue"
-
-    fake.launch("control", "DP-1")
-    wait_for(fake.launched, 3000)
-    fire("mangohud")
-    assert notices[-1] == "MangoHud toggled · Control"
-    fake.set("control", "launch.mangohud", "false")
-    fire("mangohud")
-    assert notices[-1] == "MangoHud is off for Control"
+    assert notices == [], "the fire says nothing: the HUD event after it does"
+    watcher.emit({"event": "hud", "shown": None, "title": ""})
+    assert notices == ["MangoHud: no game running"]
+    watcher.emit({"event": "hud", "shown": True, "title": "Control"})
+    watcher.emit({"event": "hud", "shown": False, "title": "Control"})
+    assert notices[1:] == ["MangoHud shown · Control", "MangoHud hidden · Control"]
 
 
 def test_waiting_lists_the_cores_pads_passively(api, fake):

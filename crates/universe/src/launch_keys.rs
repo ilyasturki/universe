@@ -88,7 +88,7 @@ pub static LAUNCH_KEYS: &[LaunchKey] = &[
     key!("gamescope_resolution", Kind::Resolution, "auto", "Resolution", "Display", Both, &[], "What the game renders at; auto is the screen's own. A lower one is upscaled to the screen, lighter on the GPU."),
     key!("gamescope_refresh", Kind::Refresh, "auto", "Refresh rate", "Display", Both, &[], "The refresh rate the game sees; auto is the screen's own."),
     key!("gamescope_adaptive_sync", Kind::Bool, "false", "Adaptive sync", "Display", Both, &[], "Variable refresh rate (FreeSync, G-Sync) when the screen supports it: no tearing, no stutter below the refresh rate."),
-    key!("mangohud", Kind::Bool, "true", "MangoHud", "Overlay", Both, &[], "Show MangoHud's overlay in the game: frame rate, frame time, GPU and CPU load."),
+    key!("mangohud", Kind::Bool, "true", "MangoHud", "Overlay", Both, &[], "MangoHud's overlay over the game (frame rate, frame time, GPU and CPU load), shown at launch; the in-game menu and the pad macro flip it and write it back here."),
     key!("fps_limit", Kind::Fps, "auto", "Frame rate limit", "Overlay", Both, &[], "MangoHud holds the game to this many frames per second, overlay or not; auto is the refresh rate the game sees."),
     key!("pause_on_home", Kind::Bool, "true", "Pause on HOME", "Overlay", Both, &[], "Freeze the game while the launcher covers it, so the pad drives the menu alone; it runs again on Resume. Off for a game that must keep running (online play)."),
     key!("gamescope_scaler", Kind::Enum(&gamescope::SCALERS), "", "Scaler", "Advanced", Both, &[], "How a smaller picture fills the screen: integer keeps pixels whole, fit keeps the aspect, fill and stretch do not."),

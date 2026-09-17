@@ -168,6 +168,10 @@ impl Core {
     fn set_fps_limit(&self, py: Python<'_>) -> PyResult<String> {
         self.run(py, |c| c.set_fps_limit())
     }
+    #[pyo3(signature = (on = None))]
+    fn set_mangohud(&self, py: Python<'_>, on: Option<bool>) -> PyResult<bool> {
+        self.run(py, |c| async move { c.set_mangohud(on).await })
+    }
     #[pyo3(signature = (filter, sharpness = None))]
     fn nest_filter(&self, filter: String, sharpness: Option<u32>) -> PyResult<()> {
         self.core.nest_filter(&filter, sharpness).map_err(err)

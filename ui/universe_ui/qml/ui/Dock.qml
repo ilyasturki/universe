@@ -35,7 +35,7 @@ FocusScope {
             { id: "source", icon: "screen", label: "Source", kind: "value", options: ["screen", "window"], names: ["Screen", "Window"], later: true },
             { id: "cursor", icon: "cursor", label: "Cursor", kind: "toggle", later: true } ] },
         { id: "perf", icon: "pulse", label: "Performance", kind: "group", children: [
-            { id: "hud", icon: "pulse", label: "MangoHud", kind: "action", value: "toggle" },
+            { id: "hud", key: "mangohud", icon: "pulse", label: "MangoHud", kind: "toggle" },
             { id: "fps", key: "fps_limit", icon: "gauge", label: "FPS limit", kind: "value", options: [], names: [] },
             { id: "filter", key: "gamescope_filter", icon: "sliders", label: "Filter", kind: "value", options: ["", "linear", "nearest", "fsr", "nis", "pixel"], names: ["Default", "Linear", "Nearest", "FSR", "NIS", "Pixel"] } ] },
         { id: "sound", icon: "volume-up", label: "Sound", kind: "group", children: [
@@ -55,6 +55,7 @@ FocusScope {
             rec: on && cap.enabled !== false,
             source: String(cap.source || "screen"),
             cursor: cap.cursor === true,
+            hud: api.home.launchValue("mangohud") === "true",
             fps: api.home.launchValue("fps_limit") || "auto",
             fpsOptions: api.home.launchChoices("fps_limit"),
             hz: api.home.screenRefresh(),
@@ -79,6 +80,7 @@ FocusScope {
         var v = vals;
         switch (item.id) {
         case "pause": return v.pause ? "On" : "Off";
+        case "hud": return v.hud ? "On" : "Off";
         case "rec": return v.rec ? "On · " + Format.clockTime(dock.elapsed) : "Off";
         case "source": return (v.source === "window" ? "Window" : "Screen") + " · next session";
         case "cursor": return (v.cursor ? "On" : "Off") + " · next session";
@@ -118,7 +120,10 @@ FocusScope {
         Sound.enter();
         if (item.id === "pause")
             api.home.setPauseOnHome(!vals.pause);
-        else if (item.id === "cursor") {
+        else if (item.id === "hud") {
+            api.home.setLaunchValue("mangohud", vals.hud ? "false" : "true");
+            patch("hud", !vals.hud);
+        } else if (item.id === "cursor") {
             api.universe.setSetting("capture", session.id, "cursor", vals.cursor ? "false" : "true");
             patch("cursor", !vals.cursor);
         } else if (item.id === "mute")
@@ -139,11 +144,6 @@ FocusScope {
             Sound.enter();
             hidden = true;
             shotTimer.restart();
-            break;
-        case "hud":
-            Sound.enter();
-            api.screens.controller.run("mangohud");
-            toast.show("MangoHud toggled");
             break;
         case "quit":
             confirm.ask({ message: "Quit " + (dock.session ? dock.session.title : "the game") + "?",

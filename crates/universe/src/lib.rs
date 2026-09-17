@@ -14,6 +14,7 @@ pub mod launch_keys;
 pub mod launcher;
 pub mod library;
 pub mod lutris;
+pub mod mangoapp;
 pub mod media;
 pub mod modules;
 pub mod nest;

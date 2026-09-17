@@ -70,7 +70,7 @@
     "section": "Overlay",
     "scope": "both",
     "runners": [],
-    "description": "Show MangoHud's overlay in the game: frame rate, frame time, GPU and CPU load."
+    "description": "MangoHud's overlay over the game (frame rate, frame time, GPU and CPU load), shown at launch; the in-game menu and the pad macro flip it and write it back here."
   },
   {
     "key": "fps_limit",

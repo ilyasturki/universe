@@ -1135,7 +1135,7 @@ async fn controller(core: Core, action: ControllerCmd, json: bool) -> anyhow::Re
                 }
                 println!("{t}");
             }
-            println!("{} enabled {} · hold {} ms · volume step {}% · mangohud {}", "engine".bold(), cfg.enabled, cfg.hold_ms, cfg.volume_step, s(&state, "mangohud_toggle"));
+            println!("{} enabled {} · hold {} ms · volume step {}%", "engine".bold(), cfg.enabled, cfg.hold_ms, cfg.volume_step);
             let mut t = table(&["Family", "Button", "Trigger", "Action", "Keys / command"]);
             for m in cfg.macros() {
                 t.add_row(vec![m.family, m.button, m.trigger, m.action, format!("{}{}", m.keys, m.command)]);
@@ -1318,7 +1318,7 @@ fn config_keys() -> Vec<String> {
     keys.extend(
         [
             "runners.", "desktop.profile", "desktop.hide_cursor", "desktop.cursor_extension", "keys.sgdb", "keys.sgdb_file", "keys.rawg", "keys.rawg_file",
-            "controller.enabled", "controller.hold_ms", "controller.volume_step", "controller.mangohud_toggle",
+            "controller.enabled", "controller.hold_ms", "controller.volume_step",
         ]
         .map(String::from),
     );

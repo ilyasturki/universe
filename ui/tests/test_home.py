@@ -232,6 +232,41 @@ def test_quitting_from_the_game_brings_the_launcher_up_first(api, fake, monkeypa
     assert len(ended) == 1 and home.shown == "launcher" and not home.paused
 
 
+def test_the_hud_is_the_games_key_and_the_reload_key_waits_for_the_thaw(api, fake):
+    from universe_ui.screens.controller import FakeWatcher
+
+    home = api.home
+    home.attachOverlay(object())
+    watcher = FakeWatcher("dualsense-edge")
+    api.screens.controller.restart_ms = 0
+    api.screens.controller.start(watcher)
+    fake.launch("mirrors-edge", "")
+    wait_for(fake.sessionShown, 3000)
+    pump(300)
+    assert home.launchValue("mangohud") == "true" and fake.core.hud_shown is True, "on by default, shown at launch"
+    home.setLaunchValue("mangohud", "false")
+    pump(50)
+    assert fake.game("mirrors-edge")["launch"]["mangohud"] is False and fake.core.hud_shown is False, "written as the game's own key, hidden in the game"
+    assert home.launchValue("mangohud") == "false"
+    assert not any(c.get("action") == "keys" for c in watcher.commands), "no key typed for the HUD"
+
+    home.setPauseOnHome(True)
+    home.openDock()
+    pump(50)
+    assert home.paused and fake.core.frozen is True
+    home.setLaunchValue("fps_limit", "60")
+    home.setLaunchValue("fps_limit", "30")
+    pump(100)
+    assert not any(c.get("action") == "keys" for c in watcher.commands), "a frozen game reads no key"
+    home.closeDock()
+    home.dockClosed()
+    pump(100)
+    assert not home.paused and fake.core.frozen is False
+    typed = [c for c in watcher.commands if c.get("action") == "keys"]
+    assert typed == [{"cmd": "run", "action": "keys", "keys": "Shift_L+F4"}], "the reload, once, after the thaw"
+    stop(api)
+
+
 def covered_fraction(image):
     small = image.scaled(96, 54)
     covered = sum(1 for y in range(small.height()) for x in range(small.width()) if small.pixelColor(x, y).alpha() > 10)

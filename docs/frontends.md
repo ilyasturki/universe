@@ -189,6 +189,13 @@ is up freezes at once. The session ending drops the overlay whatever state it wa
 overlay window (the launcher on the desktop) `openDock` is `toLauncher`, and only `toGame`
 thaws: a game window raised from the desktop's own switcher stays frozen until Resume.
 
+A frozen game reads no key, so what the dock asks of the game's MangoHud goes two ways. The
+MangoHud row is a toggle of `launch.mangohud` (`setLaunchValue("mangohud", …)` →
+`set_mangohud`): the core writes the key and tells the HUD itself, no key typed, so it lands
+frozen or not and the row shows the state it wrote. The FPS limit row rewrites the layer's conf
+and types its `reload_cfg` combo through the watcher — held back while the game is paused and
+typed once the thaw has landed (`freeze(False)`'s reply), one press however many changes.
+
 ## Qt and QML notes
 
 These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11, not of Universe.

@@ -30,9 +30,7 @@ pub async fn run(config: &Config, modules: &[Module], shell: Option<&zbus::Conne
     if config.launch.gamescope {
         let bin = &config.launch.gamescope_bin;
         push("gamescope", which(bin).is_some(), which(bin).unwrap_or_else(|| format!("{bin} not found: games launch on the desktop (launch.gamescope = false to stop asking)")), "core");
-        if config.launch.mangohud {
-            push("mangoapp", which("mangoapp").is_some(), which("mangoapp").unwrap_or_else(|| "missing: no HUD inside gamescope (the mangohud package ships it)".into()), "core");
-        }
+        push("mangoapp", which("mangoapp").is_some(), which("mangoapp").unwrap_or_else(|| "missing: no HUD inside gamescope (the mangohud package ships it)".into()), "core");
         let screen = crate::desktop::pick_screen("");
         let mode = crate::desktop::screen_mode(&screen).await;
         push("screen", mode.is_some(), match mode {

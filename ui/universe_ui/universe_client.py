@@ -232,8 +232,8 @@ class CoreClient(QObject):
     def focusLauncher(self):
         self._call_async(lambda: self._core.focus_pid(os.getpid()), on_error=lambda e: log.info("focus launcher: %s", e.message))
 
-    def freeze(self, on):
-        self._call_async(lambda: self._core.freeze(on))
+    def freeze(self, on, on_reply=None):
+        self._call_async(lambda: self._core.freeze(on), on_reply)
 
     nested = property(lambda self: bool(self._core.nested()))
 
@@ -251,6 +251,9 @@ class CoreClient(QObject):
 
     def setFpsLimit(self, on_reply):
         self._call_async(self._core.set_fps_limit, lambda combo: on_reply(str(combo or "")))
+
+    def setMangohud(self, on, on_reply=None):
+        self._call_async(lambda: self._core.set_mangohud(on), on_reply)
 
     def nestFilter(self, filter, sharpness):
         return self._done(self._core.nest_filter, filter, sharpness)

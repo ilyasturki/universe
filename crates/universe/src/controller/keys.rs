@@ -2,8 +2,6 @@ use std::str::FromStr;
 
 use evdev::KeyCode;
 
-use super::ControllerConfig;
-
 /// Codes the evdev crate has no name for yet.
 const EXTRA_NAMES: [(&str, u16); 4] = [("BTN_GRIPL", 0x224), ("BTN_GRIPR", 0x225), ("BTN_GRIPL2", 0x226), ("BTN_GRIPR2", 0x227)];
 
@@ -114,27 +112,6 @@ pub fn parse_combo(text: &str) -> Result<Vec<u16>, String> {
     Ok(codes)
 }
 
-pub fn mangohud_toggle(config: &ControllerConfig) -> String {
-    if !config.mangohud_toggle.trim().is_empty() {
-        return config.mangohud_toggle.trim().to_string();
-    }
-    mangohud_combo("toggle_hud", "Shift_R+F12")
-}
-
-/// `default` is MangoHud's own binding for `key`.
-pub fn mangohud_combo(key: &str, default: &str) -> String {
-    let conf = crate::paths::xdg("XDG_CONFIG_HOME", ".config").join("MangoHud/MangoHud.conf");
-    std::fs::read_to_string(conf).ok().and_then(|s| combo_of(&s, key)).unwrap_or_else(|| default.into())
-}
-
-pub fn combo_of(conf: &str, key: &str) -> Option<String> {
-    conf.lines()
-        .map(str::trim)
-        .filter(|l| !l.starts_with('#'))
-        .find_map(|l| l.split_once('=').filter(|(k, _)| k.trim() == key).map(|(_, v)| v.split('#').next().unwrap_or("").trim().to_string()))
-        .filter(|v| !v.is_empty())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -162,12 +139,5 @@ mod tests {
         assert_eq!(parse_combo("a").unwrap(), vec![30]);
         assert!(parse_combo("Ctrl+Nope").is_err());
         assert!(parse_combo("").is_err());
-    }
-
-    #[test]
-    fn mangohud_conf_toggle() {
-        assert_eq!(combo_of("legacy_layout=false\n# toggle_hud=F1\ntoggle_hud=Super_L+F12 # the one\n", "toggle_hud"), Some("Super_L+F12".into()));
-        assert_eq!(combo_of("toggle_hud_position=Super_L+F11\n", "toggle_hud"), None);
-        assert_eq!(combo_of("reload_cfg=Shift_L+F4\n", "reload_cfg"), Some("Shift_L+F4".into()));
     }
 }

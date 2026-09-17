@@ -72,6 +72,7 @@ class FakeCore:
         self.last_splash = ""
         self.game_shown = False
         self.frozen = False
+        self.hud_shown = False
         self.level, self.muted = 62, False
         self._config.setdefault("paths", {})["overrides"] = str(self._root / "overrides")
         self._lay_out()
@@ -323,6 +324,7 @@ class FakeCore:
             }
             self._session = current
             self._session_started = time.monotonic()
+            self.hud_shown = bool(self._resolved(game)["effective"].get("mangohud"))
             self._marker().write_text(json.dumps({**current, "hook_env": [], "undo": []}))
         if self._fake_launch and shutil.which("sleep"):
             self._process = subprocess.Popen(["sleep", str(int(SESSION_S))])
@@ -344,7 +346,7 @@ class FakeCore:
             current, self._session, self._process = self._session, None, None
             if not current or self._closed:
                 return
-            self.game_shown = self.frozen = False
+            self.game_shown = self.frozen = self.hud_shown = False
             duration = max(1, int(round(time.monotonic() - self._session_started)))
             game = self._game(current["id"])
             stats = game.setdefault("stats", {"hours": 0, "play_count": 0, "last_played": None})
@@ -425,6 +427,16 @@ class FakeCore:
         if not self.current():
             raise UniverseError("NotFound", "no session running")
         return "Shift_L+F4"
+
+    def set_mangohud(self, on=None):
+        current = self.current()
+        if not current:
+            raise UniverseError("NotFound", "no session running")
+        if on is None:
+            on = not self.get(current["id"])["effective"]["mangohud"]
+        self.set(current["id"], "launch.mangohud", "true" if on else "false")
+        self.hud_shown = on
+        return on
 
     def nest_filter(self, filter, sharpness=None):
         pass

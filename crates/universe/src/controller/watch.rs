@@ -18,8 +18,6 @@ use crate::paths;
 const BTN_GAMEPAD: u16 = 0x130;
 const SCAN_EVERY: Duration = Duration::from_secs(2);
 const COMBO_HOLD: Duration = Duration::from_millis(40);
-// MangoHud samples the keyboard per frame, so a combo has to outlast one.
-const MANGOHUD_HOLD: Duration = Duration::from_millis(200);
 const LEARN_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[derive(Debug, Clone, Copy, Default)]
@@ -28,6 +26,7 @@ pub struct WatchOptions {
     pub wait: bool,
 }
 
+#[derive(Clone, Copy)]
 struct Out {
     json: bool,
 }
@@ -454,14 +453,27 @@ impl Watcher {
                     }
                 });
             }
-            "mangohud" | "keys" => {
-                let (text, hold) = if m.action == "keys" { (m.keys.clone(), COMBO_HOLD) } else { (keys::mangohud_toggle(&self.cfg), MANGOHUD_HOLD) };
-                let Ok(codes) = keys::parse_combo(&text) else { return };
+            // No key: the HUD is told directly, so the fire reports what it became.
+            "mangohud" => {
+                let out = self.out;
+                tokio::spawn(async move {
+                    let (shown, title) = match (core.set_mangohud(None).await, core.current().await) {
+                        (Ok(shown), current) => (Some(shown), current.map(|c| c.title).unwrap_or_default()),
+                        (Err(e), _) => {
+                            tracing::warn!("mangohud: {e}");
+                            (None, String::new())
+                        }
+                    };
+                    out.emit(serde_json::json!({"event": "hud", "shown": shown, "title": title}));
+                });
+            }
+            "keys" => {
+                let Ok(codes) = keys::parse_combo(&m.keys) else { return };
                 let typist = self.typist.clone();
                 tokio::spawn(async move {
                     let mut t = typist.lock().await;
                     t.set(&codes, true);
-                    tokio::time::sleep(hold).await;
+                    tokio::time::sleep(COMBO_HOLD).await;
                     let up: Vec<u16> = codes.iter().rev().copied().collect();
                     t.set(&up, false);
                 });

@@ -112,9 +112,10 @@ hooks write shows up that way, with no other channel.
 | `focus_session()` / `focus_pid(pid)` | `focus_session()` / `focus_pid(pid)` | — | `Activate` on the game's window / on the largest window of a process (a frontend's own, once the game is gone). On the launcher's gamescope (see Gamescope) `focus_session` shows the game again and `focus_pid(own pid)` takes the screen back from it |
 | `freeze(on)` | `freeze(on)` | — | `systemctl --user freeze` / `thaw` on the running game's unit: every process of it stops in place. A stop job thaws on its own, so `stop` works on a frozen game |
 | `volume(change, value)` | `volume(change, value=0)` | — | the default sink through `wpctl`: `up` / `down` by `controller.volume_step`, `mute` toggles, `set` to `value` percent, `get`; returns `{percent, muted, output}` |
-| `set_fps_limit()` | `set_fps_limit()` | — | rewrites the running game's `<state>/MangoHud.conf` from its `fps_limit` as launch resolves it and returns MangoHud's `reload_cfg` combo (`~/.config/MangoHud/MangoHud.conf`, else `Shift_L+F4`): typed into the game (the watcher's `run` command), the layer rereads the file |
+| `set_fps_limit()` | `set_fps_limit()` | — | rewrites the running game's `<state>/MangoHud.conf` from its `fps_limit` as launch resolves it and returns the `reload_cfg` combo the file pins (`Shift_L+F4`): typed into the game (the watcher's `run` command, once the game is thawed), the layer rereads the file |
+| `set_mangohud(on)` | `set_mangohud(on=None)` | — | the running game's HUD: `None` flips it. Written as the game's `launch.mangohud` (reread from disk first: the dock and the watcher each hold a library), then applied in the game — mangoapp told over its control queue where one draws (see MangoHud), the layer over its control socket on the desktop — and the new state returned. `NotFound` without a session |
 | `nest()` / `nest_game_shown()` / `nest_overlay(window, input, opacity)` / `nest_frame()` / `nest_filter(filter, sharpness)` | `nested()` / `nest_game_shown()` / … | — | the gamescope this process runs in (see Gamescope): whether there is one; whether it shows a window of another process; `STEAM_OVERLAY` on a window of this process, with its `STEAM_INPUT_FOCUS` and `_NET_WM_WINDOW_OPACITY`; the game's last painted frame into `<state>/frame.png` (`None` when no paint came within 400 ms); `GAMESCOPE_SCALING_FILTER` and `GAMESCOPE_FSR_SHARPNESS`. `Unavailable` on the desktop |
-| `host_gamescope(screen)` | `host_gamescope(screen)` | — | the gamescope a launcher starts itself in: `[program, args…]` from `launch.gamescope_bin`, the global `gamescope_*` fields at the screen's mode, `launch.gamescope_args`, `--mangoapp` when `launch.mangohud` is on and `--hdr-enabled` when `launch.hdr` is; `None` when the binary is not installed |
+| `host_gamescope(screen)` | `host_gamescope(screen)` | — | the gamescope a launcher starts itself in: `[env, MANGOHUD_CONFIGFILE=<state>/mangoapp.conf, gamescope, args…]` from `launch.gamescope_bin`, the global `gamescope_*` fields at the screen's mode, `launch.gamescope_args`, `--mangoapp` always and `--hdr-enabled` when `launch.hdr` is; writes that conf with the HUD hidden (a game shows it). `None` when the binary is not installed |
 | `adopt_scope()` | `adopt_scope()` | — (`universe play` does it unless `--no-wait`) | moves the calling process into the transient scope `universe-launcher-<pid>.scope` (`StartTransientUnit` on the user manager) and returns its name; every later `launch` binds the game to it. Idempotent. `Unavailable` without a user systemd |
 | `screenshot()` | `screenshot()` | `universe screenshot` | runs the `screenshot` hook of whichever module declares one; returns the PNG path |
 | `current()` | `current()` | `universe status` | `{session_id, id, title, unit, screen, started_at, gamescope_pid, launcher_pid}` (`gamescope_pid` is the launcher's gamescope the game was started into and `launcher_pid` that launcher, both `0` for a gamescope of the game's own), or `None`. The CLI wraps it: `status --json` prints `{"current": … or null, "recent": [the 10 newest session rows across the library], "pending_journals": [see Journal]}` |
@@ -150,7 +151,7 @@ when it was killed by a signal (a `stop`).
 
 A launcher that runs **inside** gamescope is the one window: `universe-ui` fullscreen starts
 `gamescope` around itself (`host_gamescope`: `-f --force-composition -W -H -w -h -r` from the screen's
-mode and the global `gamescope_*` fields, `launch.gamescope_args`, `--mangoapp` when MangoHud is on)
+mode and the global `gamescope_*` fields, `launch.gamescope_args`, `--mangoapp`)
 and re-executes itself as its child, and every game it launches lands on that gamescope: the plan is
 the plain command — no gamescope of the game's own, no `splash`, no `setpriv` — with the launcher's
 `DISPLAY`, `GAMESCOPE_WAYLAND_DISPLAY`, `STEAM_GAME_DISPLAY_0`, `SDL_VIDEODRIVER` and
@@ -213,9 +214,31 @@ binary (`gamescope` on PATH, `/run/wrappers/bin` included). The game itself runs
 gamescope (NixOS `capSysNice`) hands CAP_SYS_NICE down to the game, and bwrap — umu's runtime —
 refuses to start holding one. With gamescope off — or not found: a warning, and the game runs on
 the desktop as before — the plain command runs. Inside gamescope
-MangoHud is `--mangoapp` rather than `MANGOHUD=1`, `launch.hdr` adds `--hdr-enabled`, and
+the HUD is gamescope's `--mangoapp` rather than the game's layer, `launch.hdr` adds `--hdr-enabled`, and
 `PROTON_ENABLE_WAYLAND` is dropped (Proton goes X11 through gamescope's Xwayland) unless the
-arguments carry `--expose-wayland`. `doctor` checks the binary, and `mangoapp` when MangoHud is on.
+arguments carry `--expose-wayland`. `doctor` checks the binary and `mangoapp`.
+
+### MangoHud
+
+Two MangoHuds can be in play, and Universe owns the state of both — nothing depends on
+`~/.config/MangoHud/MangoHud.conf` but the layout. **mangoapp** draws the HUD inside gamescope:
+the launcher's own (`host_gamescope` passes `--mangoapp`, always) or the game's. It reads
+`<state>/mangoapp.conf` (`MANGOHUD_CONFIGFILE` on the gamescope, harmless there: the file alone
+loads no layer) — the user's lines minus `no_display`, `fps_limit`, `reload_cfg` and `control`,
+plus `no_display` when the HUD is off — and is told live over its SysV control queue, the one
+`mangohudctl` speaks (`ftok("mangoapp", 65)`, message type 2, `no_display` 1 hides, 2 shows): no
+key, no focus, and it lands while the game is frozen. The **layer** inside the game process is
+loaded whenever it has a job — the limit anywhere, on the desktop the HUD itself — on
+`<state>/MangoHud.conf`: the same lines, `no_display` when mangoapp draws or the HUD is off,
+`fps_limit` ours, `reload_cfg=Shift_L+F4` pinned, and where no mangoapp draws
+`control=universe-mangohud-<id>` (an abstract socket its first Vulkan instance binds; `:hud;`
+flips it, and a frozen game reads it on the thaw).
+
+`launch.mangohud` is the HUD's state: shown at launch when true — on the launcher's gamescope
+mangoapp is told at `begin` and hidden again when the session ends (`Undo::Hud`), between sessions
+it stays hidden — and flipped in game by `set_mangohud`, which writes the key back, so the game
+reopens as it was left. The user's own `no_display` no longer hides a HUD that is on, and the
+`toggle_hud` key MangoHud itself listens to is nothing Universe types or reads.
 
 ### Frame rate limit
 
@@ -224,16 +247,15 @@ and holds the game to it through MangoHud's limiter inside the game process, ove
 gamescope's `--framerate-limit` paces nothing on a nested gamescope (measured: an uncapped
 client stays uncapped, a vsynced one at the refresh, with or without its WSI layer), and its `-r`
 only paces clients that vsync. `auto` is the refresh the game sees: its `gamescope_refresh` when
-set, else the screen's; unknown (no screen read) means no limit. The launcher writes
-`<state>/MangoHud.conf` before each launch — `~/.config/MangoHud/MangoHud.conf`'s lines, so the
-layout and `fps_limit_method` hold, with `fps_limit` swapped for ours and `no_display` added unless
-the HUD is the game's own (desktop, MangoHud on) — and gives the game `MANGOHUD=1
-MANGOHUD_CONFIGFILE=<that>` through `env` in front of the program: after `setpriv`, never on the
-unit, where gamescope (a Vulkan client itself) and mangoapp would read it. Inside gamescope the
-layer limits and draws nothing while mangoapp shows the HUD. A native or emulator program (not one
-run through Proton) goes through the `mangohud` wrapper so an OpenGL game is limited too; Proton
-and Wine get the Vulkan layer alone, nothing preloaded into the runtime. No `mangohud` on PATH: a
-warning, no limit; `doctor` checks for it unless the limit is `none`.
+set, else the screen's; unknown (no screen read) means no limit. The launcher writes the layer's
+`<state>/MangoHud.conf` before each launch and gives the game `MANGOHUD=1
+MANGOHUD_CONFIGFILE=<that>`: on the unit when no gamescope runs there, else through `env` in
+front of the program, after `setpriv`, since gamescope (a Vulkan client itself) would draw the
+layer. Inside gamescope the layer limits and draws nothing while mangoapp shows the HUD. A native
+or emulator program (not one run through Proton) with a limit goes through the `mangohud` wrapper
+so an OpenGL game is limited too; Proton and Wine get the Vulkan layer alone, nothing preloaded
+into the runtime. No `mangohud` on PATH: a warning, no limit, no layer; `doctor` checks for it
+unless the limit is `none`.
 
 ### Proton and Wine
 
@@ -444,7 +466,7 @@ set when the manifest names a `choices_exec`: `<module dir>/<choices_exec> <key>
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `controller_state()` | `controller_state()` | `universe controller ls` | `{enabled, hold_ms, volume_step (a percent, number), mangohud_toggle, families: [{id, name, slots: [{id, label, codes, extra}]}], macros: [Macro], presets: [{id, label, hold_only}]}`; the CLI adds `devices`, the pads readable now with every slot's code or `bound: false` |
+| `controller_state()` | `controller_state()` | `universe controller ls` | `{enabled, hold_ms, volume_step (a percent, number), families: [{id, name, slots: [{id, label, codes, extra}]}], macros: [Macro], presets: [{id, label, hold_only}]}`; the CLI adds `devices`, the pads readable now with every slot's code or `bound: false` |
 | `controller_pads()` | `controller_pads()` | — | the `devices` list alone, in the shape `watch` announces; for a frontend whose watcher waits on the lock |
 | `set_controller_macro(macro)` | same | `universe controller bind <family> <button> <press\|hold> <action> [--keys K] [--command C]` | validates, replaces the macro with the same family, button and trigger |
 | `remove_controller_macro(family, button, trigger)` | same | `universe controller unbind <family> <button> [trigger]` | an empty trigger removes both |
@@ -463,10 +485,10 @@ the sink; no key is typed, so nothing reaches the game. On GNOME the new level s
 OSD through `org.universe.Windows.ShowOSD` on the Universe extension, labelled with the output as
 GNOME's own volume keys print it (the sink's active port, else the sink); without the extension the
 macro runs silently. `screenshot` has the capture's own cue (the capture module's flash and
-shutter). `keys` types through uinput; `mangohud` sends MangoHud's own `toggle_hud` (from
-`~/.config/MangoHud/MangoHud.conf`, `Shift_R+F12` by default) and holds it 200 ms; the launcher,
-which that key never reaches, shows a toast on the fire — "MangoHud toggled · <title>", "MangoHud is
-off for <title>" when the running game has it disabled, "MangoHud: no game running".
+shutter). `keys` types through uinput; `mangohud` is `set_mangohud(None)` — no key: the running
+game's `launch.mangohud` flipped and the HUD told (see MangoHud) — and the watcher reports the
+outcome as a `hud` event, which the launcher toasts: "MangoHud shown · <title>", "MangoHud hidden ·
+<title>", "MangoHud: no game running".
 
 Families: `dualsense-edge` (fn_left, fn_right, paddle_left, paddle_right), `dualsense`,
 `dualshock4`, `xbox-elite` (paddle_p1…p4), `xbox` (share), `switch-pro` (capture), `8bitdo-pro-3`
@@ -483,13 +505,13 @@ InputPlumber hides by chmod 000 are dropped while hidden), and with `--json` spe
 line: out — `{"event":"ready"}`, `{"event":"device","id":"event30","name","family","family_name",
 "bus","slots":{"<slot>":{"code","bound"}}}`, `gone {id}`, `button {id, slot, code, pressed}`,
 `unknown {id, code}` (a key no slot owns), `macro {id, slot, trigger, action, keys, command}`,
-`learned {family, slot, code, from}`, `learn_timeout`, `waiting` / `busy` (the lock), `error
+`hud {shown, title}` (after a `mangohud` fire: `shown` null when no game runs), `learned {family, slot, code, from}`, `learn_timeout`, `waiting` / `busy` (the lock), `error
 {message}`, and while `axes` is on, `axis {id, axis, value}` (`lx ly rx ry` as -1..1, `lt rt` as
 0..1, a hundredth's resolution, on change); in — `{"cmd":"suspend"}` (report, do not fire),
 `resume`, `axes {on}` (stream the sticks and triggers: the page's test mode), `reload` (config
 changed), `learn {id, slot}`, `cancel`, `rumble {id}`, `run {action, keys, command}` (fire an action as a
 macro would — `mangohud`, `keys` with a combo, `screenshot`…: the launcher's home menu types
-through the watcher, the process that owns the key typist), `quit`. Stdin's end stops a `--json` watcher. A
+through the watcher, the process that owns the key typist, and only once the game is thawed), `quit`. Stdin's end stops a `--json` watcher. A
 watcher also reloads by itself when `config.toml`'s mtime moves (checked on the 2 s scan), so a
 bind from a terminal or from a launcher whose own watcher is waiting reaches the one holding the
 pads. Either reload rereads config.toml and the module list only, never the library, so pad
@@ -520,7 +542,7 @@ dlss_upgrade = false                 # PROTON_DLSS_UPGRADE, PROTON_FSR4_UPGRADE,
 fsr4_upgrade = false                 # on RDNA 3 PROTON_FSR4_RDNA3_UPGRADE instead
 xess_upgrade = false
 optiscaler = false
-mangohud = true                      # --mangoapp inside gamescope, MANGOHUD=1 without
+mangohud = true                      # the HUD shown at launch; flipped in game by the dock and the mangohud macro, which write it back
 gamescope = true                     # every game inside gamescope: one window, black until the game draws
 gamescope_args = ""                  # after the flags below, and over them; --expose-wayland keeps PROTON_ENABLE_WAYLAND
 gamescope_bin = "gamescope"          # a name on PATH (/run/wrappers/bin included) or a path
@@ -564,7 +586,6 @@ rawg = ""
 enabled = true
 hold_ms = 600                        # a press this long is a hold
 volume_step = 2                      # percent of the normal volume per press, 1–100 ("precise" = 2, "normal" = 6 still read)
-mangohud_toggle = ""                 # empty: toggle_hud from ~/.config/MangoHud/MangoHud.conf, else Shift_R+F12
 # [controller.buttons.xbox-elite]    # learned codes: a slot's list replaces its seeds, [] leaves it unbound
 # paddle_p1 = ["BTN_GRIPR", "BTN_TRIGGER_HAPPY5"]
 # [[controller.macros]]              # {family, button, trigger, action} (`universe controller bind`); absent: the seeded workflow, `macros = []` none at all

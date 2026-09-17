@@ -71,7 +71,6 @@ pub struct ControllerConfig {
     pub enabled: bool,
     pub hold_ms: u64,
     pub volume_step: u8,
-    pub mangohud_toggle: String,
     /// family → slot → learned codes, first present on the pad wins
     pub buttons: BTreeMap<String, BTreeMap<String, Vec<String>>>,
     /// absent: the seeded workflow; `macros = []` is none at all
@@ -80,7 +79,7 @@ pub struct ControllerConfig {
 
 impl Default for ControllerConfig {
     fn default() -> Self {
-        ControllerConfig { enabled: true, hold_ms: 600, volume_step: 2, mangohud_toggle: String::new(), buttons: BTreeMap::new(), macros: None }
+        ControllerConfig { enabled: true, hold_ms: 600, volume_step: 2, buttons: BTreeMap::new(), macros: None }
     }
 }
 
@@ -323,7 +322,6 @@ pub fn state_json(config: &ControllerConfig) -> serde_json::Value {
         "enabled": config.enabled,
         "hold_ms": config.hold_ms,
         "volume_step": config.volume_step,
-        "mangohud_toggle": keys::mangohud_toggle(config),
         "families": families,
         "macros": config.macros(),
         "presets": PRESETS.iter().map(|p| serde_json::json!({"id": p.id, "label": p.label, "hold_only": p.hold_only})).collect::<Vec<_>>(),
