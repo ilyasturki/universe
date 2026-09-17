@@ -10,6 +10,8 @@ from .settings import _group, _row
 log = logging.getLogger("universe.controller")
 
 TRIGGERS = ("press", "hold")
+HOME_SLOT = "guide"
+HOME_TEXT = "HOME · press for the menu, hold to go home"
 AXES = ("lx", "ly", "rx", "ry", "lt", "rt")
 BUS_NAMES = {"bluetooth": "Bluetooth", "usb": "USB"}
 PASSIVE_TEXT = "Macros are running in the game session"
@@ -416,11 +418,13 @@ class ControllerScreen(QObject):
             for slot in slots:
                 binding = device["slots"].get(slot["id"]) or {}
                 bound = bool(binding.get("bound"))
-                press = self._macro(device["family"], slot["id"], "press")
-                hold = self._macro(device["family"], slot["id"], "hold")
-                row = _row(name, slot["id"], str(slot.get("label") or slot["id"]), "action", self._display(bound, press, hold))
+                home = slot["id"] == HOME_SLOT
+                press = None if home else self._macro(device["family"], slot["id"], "press")
+                hold = None if home else self._macro(device["family"], slot["id"], "hold")
+                display = HOME_TEXT if home and bound else self._display(bound, press, hold)
+                row = _row(name, slot["id"], str(slot.get("label") or slot["id"]), "action", display)
                 row.update(slot=slot["id"], family=device["family"], bound=bound, code=str(binding.get("code") or ""),
-                           extra=bool(slot.get("extra")), press=press, hold=hold, action="Configure")
+                           extra=bool(slot.get("extra")), press=press, hold=hold, home=home, action="Configure")
                 rows.append(row)
             extras = sum(1 for s in slots if s.get("extra"))
             meta = [BUS_NAMES.get(device["bus"], device["bus"])]
@@ -457,6 +461,9 @@ class ControllerScreen(QObject):
             self.message.emit("No controller connected")
             return False
         if trigger not in TRIGGERS or not action:
+            return False
+        if slot == HOME_SLOT:
+            self.message.emit("Guide is HOME: a press opens the menu, a hold goes home")
             return False
         if self._presets().get(action, {}).get("hold_only") and trigger != "hold":
             self.message.emit(self._presets()[action].get("label", action) + " only fires on a hold")

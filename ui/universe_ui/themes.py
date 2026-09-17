@@ -26,7 +26,9 @@ class ThemeSelector(QObject):
         super().__init__(parent)
         self._memory = memory
         self._current = theme_by_id(initial) or theme_by_id(memory.get(MEMORY_KEY)) or theme_by_id(DEFAULT)
+        self._landing = ""
 
+    # A switch rebuilds the whole tree: the new look opens on its Themes page, once.
     @Slot(str, result=bool)
     def set(self, ident):
         theme = theme_by_id(ident)
@@ -35,8 +37,14 @@ class ThemeSelector(QObject):
         self._memory.set(MEMORY_KEY, theme["id"])
         if theme is not self._current:
             self._current = theme
+            self._landing = "themes"
             self.changed.emit()
         return True
+
+    @Slot(result=str)
+    def takeLanding(self):
+        landing, self._landing = self._landing, ""
+        return landing
 
     def _font(self):
         return self._memory.get(FONT_KEY) or ""
@@ -52,6 +60,7 @@ class ThemeSelector(QObject):
 
     themes = Property("QVariantList", lambda self: [dict(t) for t in THEMES], constant=True)
     current = Property(str, lambda self: self._current["id"], notify=changed)
+    landing = Property(str, lambda self: self._landing, notify=changed)
     name = Property(str, lambda self: self._current["name"], notify=changed)
     entry = Property(str, lambda self: self._current["entry"], notify=changed)
     overlay = Property(str, lambda self: self._current["overlay"], notify=changed)

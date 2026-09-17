@@ -290,15 +290,6 @@ impl Typist {
     }
 }
 
-async fn osd(icon: &str, label: Option<&str>, level: Option<f64>) {
-    static REPORTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-    if let Err(e) = crate::desktop::show_osd(icon, label, level).await {
-        if !REPORTED.swap(true, std::sync::atomic::Ordering::Relaxed) {
-            tracing::warn!("no OSD: {e} (installed extensions load after a logout)");
-        }
-    }
-}
-
 struct Watcher {
     core: Arc<Core>,
     cfg: ControllerConfig,
@@ -458,18 +449,8 @@ impl Watcher {
                 };
                 let percent = self.cfg.volume_step;
                 tokio::spawn(async move {
-                    match tokio::task::spawn_blocking(move || super::volume::apply(change, percent)).await {
-                        Ok(Ok(level)) => {
-                            let icon = match level.percent {
-                                p if level.muted || p == 0 => "audio-volume-muted-symbolic",
-                                1..=33 => "audio-volume-low-symbolic",
-                                34..=66 => "audio-volume-medium-symbolic",
-                                _ => "audio-volume-high-symbolic",
-                            };
-                            osd(icon, Some(&level.output), Some(f64::from(level.percent) / 100.0)).await;
-                        }
-                        Ok(Err(e)) => tracing::warn!("{change:?}: {e}"),
-                        Err(e) => tracing::warn!("{change:?}: {e}"),
+                    if let Err(e) = super::volume::change(change, percent).await {
+                        tracing::warn!("{change:?}: {e}");
                     }
                 });
             }

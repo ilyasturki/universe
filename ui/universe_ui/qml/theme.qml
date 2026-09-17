@@ -8,7 +8,11 @@ FocusScope {
 
     focus: true
 
-    Component.onCompleted: Sound.preload()
+    Component.onCompleted: {
+        Sound.preload();
+        if (api.theme.landing === "themes")
+            tabIndex = settingsTab;
+    }
 
     readonly property var tabs: [
         { name: "Home", source: "pages/HomePage.qml" },
@@ -16,6 +20,7 @@ FocusScope {
         { name: "Favourites", source: "pages/FavouritesPage.qml" },
         { name: "Settings", source: "pages/SettingsPage.qml" }
     ]
+    readonly property int settingsTab: 3
     property int tabIndex: 0
     property bool detailOpen: false
     property var detailGame: null
@@ -137,11 +142,19 @@ FocusScope {
         launchOverlay.begin(game);
     }
 
+    // The tile grows back into the last frame before the game takes the screen; no frame, no zoom.
     function resumeSession() {
-        if (!sessionRunning)
+        if (!sessionRunning || flip.growing)
             return;
         Sound.enter();
-        api.home.toGame();
+        if (api.home.frame === "") {
+            api.home.toGame();
+            return;
+        }
+        var page = root.activePage;
+        var rect = root.tabIndex === 0 && !root.detailOpen && !root.subOpen && !root.searchOpen && page && page.playingTileRect
+                 ? page.playingTileRect(flip) : null;
+        flip.fromTile(rect, function() { api.home.toGame(); });
     }
 
     function homePressed() {
@@ -210,13 +223,11 @@ FocusScope {
         restoreFocus();
     }
 
-    // The unit gets a SIGTERM, a second one after ~3 s: the toast covers the wait.
     function stopSession() {
         if (!sessionRunning)
             return;
         Sound.cancel();
-        toast.show("Quitting " + session.title + "…");
-        api.universe.stop(session.session_id);
+        api.home.stop();
     }
 
     function openMenu(game, anchor) {
@@ -602,6 +613,12 @@ FocusScope {
         onFailed: function(game, message) { toast.show("Could not launch" + (game ? " " + game.title : "") + (message ? ": " + message : "")); }
     }
 
+    HomeFlip {
+        id: flip
+        objectName: "homeFlip"
+        anchors.fill: parent
+    }
+
     Toast {
         id: toast
     }
@@ -631,6 +648,35 @@ FocusScope {
     Connections {
         target: api.home
         function onPressed() { root.homePressed(); }
+        // The unit gets a SIGTERM, a second one after ~3 s: the toast covers the wait.
+        function onStopping(title) { toast.show("Quitting " + title + "…"); }
+        function onChanged() {
+            var shown = api.home.shown;
+            if (shown === "launcher" && root.lastShown === "game")
+                root.landHome();
+            root.lastShown = shown;
+        }
+    }
+
+    property string lastShown: api.home.shown
+
+    // HOME from the game: everything closes, the playing game takes the cursor, its last frame zooms into its tile.
+    // A game that exits by itself also leaves the launcher on screen: no flip, nothing to zoom.
+    function landHome() {
+        if (root.launching || !api.home.flipped || api.home.frame === "") {
+            api.home.covered();
+            return;
+        }
+        subReturn = null;
+        subOpen = false;
+        if (detailLoader.item)
+            detailLoader.item.reset();
+        detailOpen = false;
+        searchOpen = false;
+        goToTab(0);
+        focusPage();
+        var page = root.activePage;
+        flip.cover(page && page.landOnPlaying ? page.landOnPlaying(flip) : null);
     }
 
     Connections {

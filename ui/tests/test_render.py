@@ -47,11 +47,18 @@ def test_themes_render_and_switch_live(api):
     api.theme.set("switch2")
     settle(window)
     image = window.grabWindow()
-    assert lit_fraction(image, api.theme.ground) > 0.05
+    assert lit_fraction(image, api.theme.ground) > 0.01
     assert image.pixelColor(4, 4).name() == api.theme.ground
+    root = window.property("contentItem").childItems()[0].property("item")
+    top = root.property("topPage")
+    assert root.property("depth") == 1 and top is not None and top.property("sectionId") == "themes", "a switch lands on the new look's Themes page"
+    assert api.theme.landing == "", "taken once"
     api.theme.set("reprise")
     settle(window)
-    assert lit_fraction(window.grabWindow(), api.theme.ground) > 0.05
+    assert lit_fraction(window.grabWindow(), api.theme.ground) > 0.01
+    root = window.property("contentItem").childItems()[0].property("item")
+    page = root.property("activePage")
+    assert root.property("tabIndex") == 3 and page is not None and page.property("section") == page.property("themesSection")
     window.close()
     pump(50)
 

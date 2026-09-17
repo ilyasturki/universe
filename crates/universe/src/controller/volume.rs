@@ -1,4 +1,5 @@
 //! Volume macros as `wpctl` calls on the default sink: nothing is typed, so no key reaches the game.
+//! Every change shows GNOME's own volume OSD, whichever way it was asked for.
 
 use std::process::Command;
 
@@ -24,6 +25,29 @@ fn wpctl(args: &[&str]) -> Result<String, String> {
         return Err(format!("wpctl {}: {}", args.join(" "), String::from_utf8_lossy(&out.stderr).trim()));
     }
     Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+pub async fn change(change: Change, percent: u8) -> Result<Level, String> {
+    let level = tokio::task::spawn_blocking(move || apply(change, percent)).await.map_err(|e| e.to_string())??;
+    if change != Change::Get {
+        osd(&level).await;
+    }
+    Ok(level)
+}
+
+async fn osd(level: &Level) {
+    static REPORTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    let icon = match level.percent {
+        p if level.muted || p == 0 => "audio-volume-muted-symbolic",
+        1..=33 => "audio-volume-low-symbolic",
+        34..=66 => "audio-volume-medium-symbolic",
+        _ => "audio-volume-high-symbolic",
+    };
+    if let Err(e) = crate::desktop::show_osd(icon, Some(&level.output), Some(f64::from(level.percent) / 100.0)).await {
+        if !REPORTED.swap(true, std::sync::atomic::Ordering::Relaxed) {
+            tracing::warn!("no OSD: {e} (installed extensions load after a logout)");
+        }
+    }
 }
 
 pub fn apply(change: Change, percent: u8) -> Result<Level, String> {

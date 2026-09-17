@@ -26,9 +26,12 @@ def test_home_flips_between_the_game_and_the_launcher(api, fake, monkeypatch):
     assert home.shown == "game", "gamescope's root says the game's window is up"
     assert home.pauseOnHome and not home.paused and fake.core.frozen is False, "on by default, and the game runs while it is shown"
     home.toLauncher()
+    pump(250)
+    assert home.shown == "launcher" and home.frame != "" and fake.core.game_shown is True, "the frame is taken and offered to the theme before the swap"
     pump(400)
-    assert home.shown == "launcher" and fake.core.game_shown is False
+    assert fake.core.game_shown is False, "a theme that never says it has painted the frame still gets the swap"
     assert home.paused and fake.core.frozen is True, "the launcher over the game: frozen, so the pad drives the menu alone"
+    home.changed.connect(home.covered)
     home.toGame()
     pump(400)
     assert home.shown == "game" and fake.core.game_shown is True
@@ -80,11 +83,12 @@ def test_the_dock_pauses_on_home_and_thaws_on_the_release(api, fake):
     home.openDock()
     pump(50)
     assert home.open and home.paused and fake.core.frozen is True
-    assert api.screens.controller._suspended is False, "the macros run while HOME is held: a hold on it still counts"
+    assert api.screens.controller._suspended is True, "the dock has the pad from the moment it opens"
     home.closeDock()
     home.dockClosed()
     pump(50)
     assert not home.open and home.paused and fake.core.frozen is True, "HOME still held: the game stays frozen until the release"
+    assert api.screens.controller._suspended is False
     home.guide(False)
     pump(50)
     assert not home.paused and fake.core.frozen is False
@@ -92,14 +96,140 @@ def test_the_dock_pauses_on_home_and_thaws_on_the_release(api, fake):
     home.guide(True)
     home.openDock()
     home.guide(False)
-    assert home.open and not home.paused and api.screens.controller._suspended is True, "released with the dock up: the macros stop"
+    assert home.open and not home.paused and api.screens.controller._suspended is True
     home.closeDock()
     home.dockClosed()
     assert api.screens.controller._suspended is False
-    home.openDock()
-    assert api.screens.controller._suspended is True, "opened without HOME: nothing to wait for"
     stop(api)
     assert not home.open and home.shown == "launcher"
+
+
+def test_a_guide_hold_from_the_game_goes_home(api, fake, monkeypatch):
+    from universe_ui import fake_core
+
+    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+    monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
+    home = api.home
+    home.changed.connect(home.covered)
+    fake.launch("mirrors-edge", "")
+    wait_for(fake.sessionShown, 3000)
+    pump(400)
+    presses = []
+
+    def theme_press():
+        # What Reprise does with a press: home from the game opens its dock, home from the launcher resumes.
+        presses.append(home.shown)
+        if home.shown == "launcher":
+            home.toGame()
+
+    home.pressed.connect(theme_press)
+    home.guide(True)
+    pump(200)
+    home.guide(False)
+    pump(300)
+    assert presses == ["game"] and home.shown == "game", "a tap is the theme's press alone"
+    home.guide(True)
+    pump(800)
+    assert home.shown == "launcher" and fake.core.game_shown is False, "held past hold_ms: the launcher comes up before the release"
+    home.guide(False)
+    pump(50)
+    assert home.shown == "launcher" and presses == ["game", "game"]
+    home.guide(True)
+    pump(800)
+    home.guide(False)
+    pump(400)
+    assert presses == ["game", "game", "launcher"] and home.shown == "game", "from the launcher a press resumes, and holding it there does not bounce back"
+    stop(api)
+
+
+def test_a_theme_that_covers_at_once_gets_the_swap_at_once(api, fake, monkeypatch):
+    from universe_ui import fake_core
+
+    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+    monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
+    home = api.home
+    seen = {"shown": home.shown}
+
+    def theme_changed():
+        # As the Switch 2 look: one answer per game-to-launcher edge, from the first `changed` it sees.
+        if home.shown == "launcher" and seen["shown"] == "game":
+            home.covered()
+        seen["shown"] = home.shown
+
+    home.changed.connect(theme_changed)
+    fake.launch("mirrors-edge", "")
+    wait_for(fake.sessionShown, 3000)
+    pump(400)
+    home.toLauncher()
+    pump(120)
+    assert home.shown == "launcher" and home.paused and fake.core.game_shown is False, "swapped well inside COVER_MS"
+    stop(api)
+
+
+def test_a_hold_that_flips_leaves_nothing_to_thaw_on_the_release(api, fake, monkeypatch):
+    from universe_ui import fake_core
+
+    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+    monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
+    home = api.home
+    home.changed.connect(home.covered)
+    fake.launch("mirrors-edge", "")
+    wait_for(fake.sessionShown, 3000)
+    pump(400)
+    home.guide(True)
+    home.openDock()
+    pump(50)
+    assert home.shown == "launcher", "no overlay: the press itself went home"
+    stop(api)
+    fake.launch("mirrors-edge", "")
+    wait_for(fake.sessionShown, 3000)
+    pump(400)
+    assert home.attachOverlay(FakeOverlay()) is True
+    home.guide(True)
+    home.openDock()
+    home.closeDock()
+    home.dockClosed()
+    pump(50)
+    assert home.paused and fake.core.frozen is True, "closed while HOME is held: frozen until the release"
+    pump(700)
+    assert home.shown == "launcher" and home.paused, "the hold went home meanwhile"
+    home.guide(False)
+    pump(50)
+    assert home.paused and fake.core.frozen is True, "the release thaws nothing under the launcher"
+    stop(api)
+
+
+class FakeOverlay:
+    def winId(self):
+        return 1
+
+    def show(self):
+        pass
+
+
+def test_quitting_from_the_game_brings_the_launcher_up_first(api, fake, monkeypatch):
+    from universe_ui import fake_core
+
+    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+    monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
+    home = api.home
+    home.changed.connect(home.covered)
+    fake.launch("mirrors-edge", "")
+    wait_for(fake.sessionShown, 3000)
+    pump(400)
+    titles, ended, stops = [], [], []
+    home.stopping.connect(titles.append)
+    api.universe.sessionEnded.connect(lambda *a: ended.append(a))
+    real_stop = fake.core.stop
+    monkeypatch.setattr(fake.core, "stop", lambda sid: (stops.append((fake.core.game_shown, fake.core.frozen)), real_stop(sid)))
+    home.stop()
+    home.stop()
+    assert titles == ["Mirror's Edge"], "a second Quit while one is under way is nothing"
+    if not ended:
+        wait_for(api.universe.sessionEnded, 5000)
+    pump(50)
+    assert stops == [(False, False)], "the launcher is up, and the game never frozen, when it is asked to quit: the SIGTERM has to land"
+    assert len(ended) == 1 and home.shown == "launcher" and not home.paused
 
 
 def covered_fraction(image):
@@ -134,7 +264,7 @@ def test_the_dock_renders_over_a_running_game(api, fake, tmp_path, monkeypatch):
     image = overlay.grabWindow()
     assert 0.3 < covered_fraction(image) < 0.6, "the band covers the lower part of the frame"
     assert image.pixelColor(4, 4).alpha() == 0, "the top of the frame stays clear"
-    assert lit_fraction(image, "#000000") > 0.01, "the card, the pill and the hints are drawn on it"
+    assert lit_fraction(image, "#000000") > 0.01, "the card and the buttons are drawn on it"
     key(overlay, Qt.Key.Key_Right)
     key(overlay, Qt.Key.Key_Right)
     assert dock.property("index") == 2
@@ -153,4 +283,63 @@ def test_the_dock_renders_over_a_running_game(api, fake, tmp_path, monkeypatch):
     stop(api)
     window.close()
     overlay.close()
+    pump(50)
+
+
+def red_fraction(image):
+    small = image.scaled(96, 54)
+    red = sum(1 for y in range(small.height()) for x in range(small.width())
+              if small.pixelColor(x, y).red() > 150 and small.pixelColor(x, y).green() < 90)
+    return red / (small.width() * small.height())
+
+
+def test_home_from_the_game_zooms_the_frame_into_its_tile(api, fake, monkeypatch):
+    from PySide6.QtCore import QMetaObject, QObject
+    from PySide6.QtGui import QColor, QImage
+    from universe_ui import fake_core
+
+    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+    monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
+    shot = QImage(640, 360, QImage.Format.Format_RGB32)
+    shot.fill(QColor("#d02020"))
+    assert shot.save(fake.core.nest_frame())
+    engine, window = render(api, activate=True)
+    root = window.property("contentItem").childItems()[0].property("item")
+    flip = window.findChild(QObject, "homeFlip")
+    fake.launch("mirrors-edge", "")
+    wait_for(fake.sessionShown, 3000)
+    pump(400)
+    root.setProperty("tabIndex", 1)
+    pump(350)
+    swaps = []
+    real_focus = fake.core.focus_pid
+    monkeypatch.setattr(fake.core, "focus_pid", lambda pid: (swaps.append(flip.property("covering")), real_focus(pid)))
+    api.home.toLauncher()
+    wait_for(api.home.changed, 3000)
+    pump(60)
+    assert flip.property("covering") is True and root.property("tabIndex") == 0, "the frame covers the launcher, home first"
+    assert red_fraction(window.grabWindow()) > 0.9, "full screen at the swap"
+    pump(700)
+    assert swaps == [True], "gamescope swapped while the frame covered everything"
+    assert flip.property("covering") is False and fake.core.game_shown is False
+    home = root.property("activePage")
+    assert home.property("currentGame").property("id") == "mirrors-edge", "the cursor lands on the playing game"
+    pump(200)
+    red = red_fraction(window.grabWindow())
+    assert 0.005 < red < 0.2, f"the frame is the tile's art now, nothing more ({red:.3f})"
+    QMetaObject.invokeMethod(root, "resumeSession")
+    pump(120)
+    assert flip.property("growing") is True and api.home.shown == "launcher", "the tile grows first"
+    pump(240)
+    assert api.home.shown == "game" and fake.core.game_shown is True and red_fraction(window.grabWindow()) > 0.9
+    pump(500)
+    assert flip.property("covering") is False, "let go once the game has the screen"
+    root.setProperty("tabIndex", 1)
+    pump(350)
+    fake.core.game_shown = False
+    pump(400)
+    assert api.home.shown == "launcher" and not api.home.flipped
+    assert flip.property("covering") is False and root.property("tabIndex") == 1, "a game that leaves by itself gets no zoom of its stale frame"
+    stop(api)
+    window.close()
     pump(50)

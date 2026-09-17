@@ -79,6 +79,37 @@ FocusScope {
         rail.slideToCurrent();
     }
 
+    function playingIndex() {
+        for (var i = 0; i < railCount; i++)
+            if (railModel.get(i).id === playingId)
+                return i;
+        return -1;
+    }
+
+    // The playing game's tile as it is on screen now, in `target`'s coordinates; null when it is not on the rail.
+    function playingTileRect(target) {
+        var i = playingIndex();
+        var item = i < 0 ? null : rail.itemAtIndex(i);
+        if (!item || tileSelected)
+            return null;
+        var art = item.artItem;
+        var a = art.mapToItem(target, 0, 0);
+        var b = art.mapToItem(target, art.width, art.height);
+        return Qt.rect(a.x, a.y, b.x - a.x, b.y - a.y);
+    }
+
+    // Puts the cursor on the playing game and returns where its tile will sit once the rail has slid there.
+    function landOnPlaying(target) {
+        var i = playingIndex();
+        if (i < 0)
+            return null;
+        tileSelected = false;
+        rail.currentIndex = i;
+        var restX = Math.max(0, Math.min(i * rail.pitch - spread - rail.width * 0.25, Math.max(0, rail.contentWidth - rail.width)));
+        var p = rail.parent.mapToItem(target, rail.x + i * rail.pitch - restX + (slotSize - cellSize) / 2, rail.y);
+        return Qt.rect(p.x, p.y, cellSize, cellSize);
+    }
+
     Keys.onPressed: function(event) {
         if (event.isAutoRepeat)
             return;

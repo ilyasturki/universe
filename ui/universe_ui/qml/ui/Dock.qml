@@ -39,7 +39,7 @@ FocusScope {
             { id: "fps", key: "fps_limit", icon: "gauge", label: "FPS limit", kind: "value", options: [], names: [] },
             { id: "filter", key: "gamescope_filter", icon: "sliders", label: "Filter", kind: "value", options: ["", "linear", "nearest", "fsr", "nis", "pixel"], names: ["Default", "Linear", "Nearest", "FSR", "NIS", "Pixel"] } ] },
         { id: "sound", icon: "volume-up", label: "Sound", kind: "group", children: [
-            { id: "vol", icon: "volume-up", label: "Volume", kind: "range", step: 5 },
+            { id: "vol", icon: "volume-up", label: "Volume", kind: "range" },
             { id: "mute", icon: "mute", label: "Mute", kind: "toggle" } ] }
     ]
     readonly property var buttons: row.filter(function(b) { return b !== "|"; })
@@ -78,8 +78,6 @@ FocusScope {
     function shows(item) {
         var v = vals;
         switch (item.id) {
-        case "resume": return dock.paused ? "paused · resumes" : "";
-        case "home": return v.pause ? "pauses" : "";
         case "pause": return v.pause ? "On" : "Off";
         case "rec": return v.rec ? "On · " + Format.clockTime(dock.elapsed) : "Off";
         case "source": return (v.source === "window" ? "Window" : "Screen") + " · next session";
@@ -98,7 +96,7 @@ FocusScope {
 
     function step(item, dir) {
         if (item.kind === "range") {
-            api.home.volume("set", Math.max(0, Math.min(100, vals.vol + dir * item.step)));
+            api.home.volume(dir > 0 ? "up" : "down", 0);
             Sound.tick();
             return;
         }
@@ -150,7 +148,7 @@ FocusScope {
         case "quit":
             confirm.ask({ message: "Quit " + (dock.session ? dock.session.title : "the game") + "?",
                           detail: "Unsaved progress will be lost.", yes: "Quit", no: "Keep playing" },
-                        function(yes) { if (yes) api.universe.stop(dock.session.session_id); });
+                        function(yes) { if (yes) api.home.stop(); });
             break;
         }
     }
@@ -440,7 +438,6 @@ FocusScope {
                     readonly property bool separator: modelData === "|"
                     readonly property int position: dock.row.slice(0, index).filter(function(b) { return b !== "|"; }).length
                     readonly property bool focused: !separator && position === dock.index
-                    readonly property string value: separator ? "" : dock.shows(modelData)
 
                     width: separator ? Theme.dp(17) : Theme.dp(70)
                     height: Theme.dp(70)
@@ -499,17 +496,6 @@ FocusScope {
                         opacity: slot.focused && !dock.opened ? 1.0 : 0.0
 
                         Behavior on opacity { Ease { duration: Theme.durQuick } }
-                    }
-
-                    Text {
-                        anchors.horizontalCenter: parent.horizontalCenter
-                        anchors.top: parent.bottom
-                        anchors.topMargin: Theme.dp(10)
-                        text: slot.value
-                        visible: text !== ""
-                        color: slot.focused ? Qt.rgba(0.949, 0.953, 0.961, 0.8) : Qt.rgba(0.949, 0.953, 0.961, 0.55)
-                        font.family: Theme.sans
-                        font.pixelSize: Theme.dp(16.5)
                     }
                 }
             }
@@ -645,28 +631,6 @@ FocusScope {
                 }
             }
         }
-
-        HintBar {
-            anchors.bottom: parent.bottom
-            anchors.left: parent.left
-            anchors.right: parent.right
-            hints: confirm.open ? confirm.hints : dock.hints
-        }
-    }
-
-    readonly property var hints: {
-        var t = target;
-        if (opened) {
-            var accept = t.kind === "toggle" ? (isOn(t) ? "Turn off" : "Turn on")
-                       : t.kind === "action" ? t.label
-                       : t.kind === "info" ? "—" : "Keep";
-            return [ { glyph: "A", label: accept, dim: t.kind === "info" },
-                     { glyph: "B", label: "Close" },
-                     { glyph: "dpad", label: current.children.length > 1 ? "Rows · Adjust" : "Adjust" } ];
-        }
-        return [ { glyph: "A", label: t.kind === "group" ? "Open" : t.label },
-                 { glyph: "B", label: "Back to game" },
-                 { glyph: "X", label: "Screenshot" } ];
     }
 
     ConfirmDialog {

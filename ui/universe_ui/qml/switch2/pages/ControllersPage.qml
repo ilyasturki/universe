@@ -104,7 +104,8 @@ FocusScope {
 
     function slotMenu(row) {
         var items = row.bound ? [] : [{ label: "Learn the button", act: "learn" }];
-        items.push({ label: "On press…", act: "press" }, { label: "On hold…", act: "hold" });
+        if (!row.home)
+            items.push({ label: "On press…", act: "press" }, { label: "On hold…", act: "hold" });
         if (row.press)
             items.push({ label: "Clear press", act: "clear-press" });
         if (row.hold)

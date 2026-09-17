@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use crate::paths;
 
 pub const TRIGGERS: [&str; 2] = ["press", "hold"];
+/// The launcher's own button: `api.home` reads its press and hold, so no macro fires on it.
+pub const HOME_SLOT: &str = "guide";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[serde(default)]
@@ -39,6 +41,9 @@ impl Macro {
         let bad = crate::Error::Invalid;
         if !TRIGGERS.contains(&self.trigger.as_str()) {
             return Err(bad(format!("trigger must be press or hold, not '{}'", self.trigger)));
+        }
+        if self.button == HOME_SLOT {
+            return Err(bad("Guide is HOME: a press opens the dock, a hold goes home".into()));
         }
         let preset = PRESETS.iter().find(|p| p.id == self.action).ok_or_else(|| bad(format!("unknown action '{}'", self.action)))?;
         if preset.hold_only && self.trigger != "hold" {
@@ -96,6 +101,9 @@ impl ControllerConfig {
 
     /// The macros bound to one slot of a family: the family's own, then the `*` ones it does not shadow.
     pub fn macros_for(&self, family: &str, slot: &str) -> Vec<Macro> {
+        if slot == HOME_SLOT {
+            return vec![];
+        }
         let all = self.macros();
         let mut out: Vec<Macro> = all.iter().filter(|m| m.family == family && m.button == slot).cloned().collect();
         for m in all.iter().filter(|m| m.family == "*" && m.button == slot) {
@@ -460,8 +468,9 @@ mod tests {
         assert_eq!(cfg.macros().len(), 11);
         let cfg: ControllerConfig = toml::from_str("macros = []").unwrap();
         assert!(cfg.macros().is_empty());
-        let cfg: ControllerConfig = toml::from_str("[[macros]]\nfamily = \"*\"\nbutton = \"guide\"\ntrigger = \"hold\"\naction = \"stop\"\n").unwrap();
-        assert_eq!(cfg.macros_for("dualsense", "guide")[0].action, "stop");
+        let cfg: ControllerConfig = toml::from_str("[[macros]]\nfamily = \"*\"\nbutton = \"start\"\ntrigger = \"hold\"\naction = \"stop\"\n[[macros]]\nfamily = \"*\"\nbutton = \"guide\"\ntrigger = \"hold\"\naction = \"stop\"\n").unwrap();
+        assert_eq!(cfg.macros_for("dualsense", "start")[0].action, "stop");
+        assert!(cfg.macros_for("dualsense", "guide").is_empty(), "Guide is HOME, whatever an older config bound on it");
         assert!(cfg.macros_for("dualsense-edge", "fn_left").is_empty(), "written macros replace the seeds");
     }
 
@@ -479,7 +488,8 @@ mod tests {
     #[test]
     fn macro_validation() {
         assert!(Macro { family: "dualsense-edge".into(), button: "paddle_left".into(), trigger: "press".into(), action: "screenshot".into(), ..Macro::default() }.validate().is_ok());
-        assert!(Macro { family: "*".into(), button: "guide".into(), trigger: "press".into(), action: "stop".into(), ..Macro::default() }.validate().is_err(), "stop is hold only");
+        assert!(Macro { family: "*".into(), button: "start".into(), trigger: "press".into(), action: "stop".into(), ..Macro::default() }.validate().is_err(), "stop is hold only");
+        assert!(Macro { family: "*".into(), button: "guide".into(), trigger: "hold".into(), action: "stop".into(), ..Macro::default() }.validate().is_err(), "Guide is HOME");
         assert!(Macro { family: "*".into(), button: "paddle_left".into(), trigger: "press".into(), action: "mute".into(), ..Macro::default() }.validate().is_err(), "paddles are not standard");
         assert!(Macro { family: "xbox".into(), button: "share".into(), trigger: "press".into(), action: "keys".into(), keys: "Ctrl+Shift+F12".into(), ..Macro::default() }.validate().is_ok());
         assert!(Macro { family: "xbox".into(), button: "share".into(), trigger: "press".into(), action: "keys".into(), keys: "Ctrl+Nope".into(), ..Macro::default() }.validate().is_err());

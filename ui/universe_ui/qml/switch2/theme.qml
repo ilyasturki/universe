@@ -10,7 +10,11 @@ FocusScope {
 
     focus: true
 
-    Component.onCompleted: Sound.preload()
+    Component.onCompleted: {
+        Sound.preload();
+        if (api.theme.takeLanding() === "themes")
+            push("pages/SettingsPage.qml", { section: "themes" });
+    }
 
     Binding {
         target: Theme
@@ -152,7 +156,7 @@ FocusScope {
         if (!sessionRunning)
             return;
         toast.show("Closing " + session.title + "…");
-        api.universe.stop(session.session_id);
+        api.home.stop();
     }
 
     function showToast(text) { toast.show(text); }
@@ -373,8 +377,16 @@ FocusScope {
         function onMacroNotice(text) { toast.show(text); }
     }
 
+    property string lastShown: api.home.shown
+
     Connections {
         target: api.home
+        // Nothing bridges the swap here: the HOME menu is up as soon as the host asks.
+        function onChanged() {
+            if (api.home.shown === "launcher" && root.lastShown === "game")
+                api.home.covered();
+            root.lastShown = api.home.shown;
+        }
         function onPressed() {
             if (!root.sessionRunning || root.launching)
                 return;

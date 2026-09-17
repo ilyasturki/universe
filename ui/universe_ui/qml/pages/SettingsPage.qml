@@ -310,6 +310,8 @@ FocusScope {
         var out = [];
         if (!row.bound)
             out.push({ icon: "keyboard", label: "Learn the button", action: "learn" });
+        if (row.home)
+            return row.bound ? [ { icon: "keyboard", label: "Learn the button again", action: "learn" } ] : out;
         out.push({ icon: "play", label: "On press…", action: "press" });
         out.push({ icon: "stop", label: "On hold…", action: "hold" });
         if (row.press)
@@ -460,6 +462,8 @@ FocusScope {
         modulesForm.load();
         runners.load();
         sources.load();
+        if (api.theme.takeLanding() === "themes")
+            section = themesSection;
     }
 
     // The cards' rows rebind on the same signal; the cursor resets once they have.

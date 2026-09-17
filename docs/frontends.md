@@ -26,8 +26,8 @@ One context property, `api`:
 | `api.power` | the batteries the kernel lists under `/sys/class/power_supply`: `sources` (`kind` `system` or `pad`, `percent`, `charging`, `inputs` — the pad's evdev nodes), `count`; polled every 10 s. Both looks draw them next to every clock (`ui/PowerBadge.qml`), the controller pages next to the pad they belong to; `--fake` reads `fixtures/power_supply` |
 | `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed` and `--size` turn it off) |
-| `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `ground`, `detail`), `current`, `set(id)`, `fontPath` |
-| `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `open`, `paused`, `pauseOnHome`, `frame`, `volumePercent`, `muted`; `pressed()`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotTaken(path)`), `volume(change, value)`, `launchValue(key)`, `launchChoices(key)`, `setLaunchValue(key, value)`, `screenRefresh()` |
+| `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `ground`, `detail`), `current`, `set(id)`, `landing` / `takeLanding()`, `fontPath` |
+| `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `open`, `paused`, `pauseOnHome`, `flipped`, `frame`, `volumePercent`, `muted`; `pressed()`, `stopping(title)`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher()`, `covered()`, `stop()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotTaken(path)`), `volume(change, value)`, `launchValue(key)`, `launchChoices(key)`, `setLaunchValue(key, value)`, `screenRefresh()` |
 
 A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `playTime`,
 `playCount`, `lastPlayed`, `releaseYear`, `developerList`, `publisherList`, `genreList`, `players`,
@@ -62,8 +62,9 @@ the session badge while the count is not zero.
 ## Themes
 
 `main.qml` is a window with one `Loader` whose source is `api.theme.entry`, so a theme is a root
-QML file under `qml/` and switching one for another rebuilds the tree in place: no restart, the
-navigation comes back at the home screen. `overlay.qml` is the second window, the one gamescope
+QML file under `qml/` and switching one for another rebuilds the tree in place: no restart, and
+the new look opens on its own Settings › Themes (`set(id)` leaves `landing = "themes"`, which the
+theme reads and `takeLanding()` clears). `overlay.qml` is the second window, the one gamescope
 paints over the game; its `Loader` takes `api.theme.overlay` — Reprise's `ui/Dock.qml`, nothing for
 the Switch 2 look, whose HOME goes straight to its HOME menu. The choice lives in `ui-memory.json` (`theme`; the ids
 of the former white and black variants of `switch2` still resolve to it), `--theme ID` overrides it
@@ -135,7 +136,10 @@ hero pill reading "Resume", and the tab bar's badge "<title> · m:ss" on every t
 chrome slot past the glass: A resumes, Start opens the game menu. A resumes on the pinned game
 wherever it is (`api.home.toGame()`), the game menu offers "Resume" and "Quit <title>" for it.
 Play on another game asks "Quit X and start Y?" (`ui/ConfirmDialog.qml`); yes stops the session,
-and `sessionEnded` starts the pending launch. The game's own exit brings the launcher back by
+and `sessionEnded` starts the pending launch. Every quit goes through `api.home.stop()`: the
+launcher comes up first (a flip, when the game is on screen), the unit is stopped once it has,
+`stopping(title)` is the theme's cue for a "Quitting…" toast, and nothing freezes a game that is
+on its way out. The game's own exit brings the launcher back by
 itself (gamescope shows what is left). A session already running when the host starts
 (`CoreClient` tracks the marker at construction), or one the CLI started (the `state/` watch), is
 the same state: home, pinned, badge.
@@ -144,28 +148,42 @@ the same state: home, pinned, badge.
 
 The Guide button is HOME. It comes from the evdev watcher (`button` events with slot `guide`),
 never from the SDL mapper — the game holds the focus, so no key would reach the launcher — and
-`api.home` turns it into `pressed()`; a hold stays the `stop` macro. What a press
-does is the theme's: the Switch 2 look flips to its HOME menu over the game (`toLauncher`) and
-back (`toGame`); Reprise opens its **dock** over the live game (`openDock`), a second press or
-B closes it, and from home a press resumes. With no session, Reprise treats it as Start (the
-game menu).
+`api.home` turns it into `pressed()`. The button is the launcher's alone: no macro binds on the
+`guide` slot (the core refuses one, `macros_for` ignores an old config's, the Controller section
+offers only Learn on its row), and a hold of `controller.hold_ms` from the game goes home
+(`toLauncher`) whatever the press opened. What a press does is the theme's: the Switch 2 look
+flips to its HOME menu over the game (`toLauncher`) and back (`toGame`); Reprise opens its
+**dock** over the live game (`openDock`), a second press or B closes it, and from home a press
+resumes. With no session, Reprise treats it as Start (the game menu).
 
 The dock is `ui/Dock.qml` in the overlay window: the game's card at the left, a row of round
 buttons at the right (`row` in `Dock.qml`), a group's settings in a card above its button. ◀ ▶ move
 along the row or change the focused value, ▲ ▼ the rows of a card, A acts, flips or opens, B closes
 the card or the dock, X takes a screenshot with the band faded out so the shell grabs the game alone.
+Its volume row is the controller's macro by another route (`volume("up" | "down" | "mute")`,
+`controller.volume_step` per step, GNOME's OSD through `desktop::show_osd` on every change but a
+`get`). Quit asks, then `api.home.stop()`.
+
+The swap between the game and the launcher is gamescope's, one cut, so the last frame it painted
+bridges it. `toLauncher` takes it (`nest_frame`, up to 400 ms), sets `frame` and `shown`, and waits
+for the theme's `covered()` — Reprise's `ui/HomeFlip.qml` paints the frame full screen and calls
+it once the image is up, the Switch 2 look calls it at once — before `focusLauncher` (`COVER_MS`
+later regardless); the root's poll is held off meanwhile, and `flipped` says the host did it (a
+game that exits by itself leaves the launcher on screen too, with nothing to zoom). Reprise then lands on Home with the
+cursor on the playing game (`HomePage.landOnPlaying`, every detail, sub page and search closed)
+and shrinks the frame into that tile, which shows the same frame as its art; resuming grows the
+tile back to full screen (`HomePage.playingTileRect`) and only then `toGame()`.
 
 The host owns what the QML cannot: the overlay window is created once (`create_overlay`,
 `Home.attachOverlay`) with `STEAM_OVERLAY=1`, mapped at opacity 0 and never unmapped — gamescope
 keeps painting an unmapped overlay's last buffer; opening sets `STEAM_INPUT_FOCUS=1` and full
 opacity, the fade-out done (`dockClosed()`) drops both and the game gets its input back. The
-watcher's macros are suspended while the dock has the pad — from the Guide release, so a hold
-on it still counts as the `stop` macro. Nothing takes the pad away from the game — gamescope
-routes keyboard and mouse only, and the game keeps its own evdev or hidraw readers — so
-`pause_on_home` (a launch key, global and per game, on by default) freezes the game whenever the
-launcher covers it: as the dock opens, and as `toLauncher` flips (after the frame is taken: a
-frozen game paints nothing); `dockClosed` and `toGame` thaw it — on the Guide release when that
-is what closed the dock, so the game never sees Guide held. Off, the game runs on behind the
+watcher's macros are suspended while the dock has the pad. Nothing takes the pad away from the
+game — gamescope routes keyboard and mouse only, and the game keeps its own evdev or hidraw
+readers — so `pause_on_home` (a launch key, global and per game, on by default) freezes the game
+whenever the launcher covers it: as the dock opens, and as `toLauncher` flips (after the frame is
+taken: a frozen game paints nothing); `dockClosed` and `toGame` thaw it — on the Guide release
+when that is what closed the dock, so the game never sees Guide held. Off, the game runs on behind the
 launcher and answers every press the menu gets; turning it on from the dock while the launcher
 is up freezes at once. The session ending drops the overlay whatever state it was in. Without an
 overlay window (the launcher on the desktop) `openDock` is `toLauncher`, and only `toGame`

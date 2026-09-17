@@ -483,7 +483,7 @@ impl Core {
             other => return Err(Error::Invalid(format!("volume: up, down, mute, set or get, not '{other}'"))),
         };
         let step = self.config.read().await.controller.volume_step;
-        let level = tokio::task::spawn_blocking(move || crate::controller::volume::apply(change, step)).await.map_err(|e| Error::Io(e.to_string()))?.map_err(Error::Unavailable)?;
+        let level = crate::controller::volume::change(change, step).await.map_err(Error::Unavailable)?;
         Ok(serde_json::json!({"percent": level.percent, "muted": level.muted, "output": level.output}))
     }
 

@@ -2,6 +2,9 @@ from PySide6.QtCore import Property, QObject, QTimer, QUrl, Signal, Slot
 
 OPAQUE = 0xFFFFFFFF
 POLL_MS = 250
+HOLD_MS = 600
+# How long the swap waits for the theme to say the frame is painted (`covered`) before going ahead anyway.
+COVER_MS = 400
 
 
 class Home(QObject):
@@ -9,6 +12,7 @@ class Home(QObject):
     changed = Signal()
     volumeChanged = Signal()
     screenshotTaken = Signal(str)
+    stopping = Signal(str)
 
     def __init__(self, client, controller, screen_mode=dict, parent=None):
         super().__init__(parent)
@@ -25,12 +29,21 @@ class Home(QObject):
         self._held = False
         self._suspended = False
         self._thaw_on_release = False
+        self._stopping = False
+        self._flipping = False
         self._frame = ""
         self._frames = 0
         self._volume = {}
         self._poll = QTimer(self)
         self._poll.setInterval(POLL_MS)
         self._poll.timeout.connect(self._refresh)
+        self._hold = QTimer(self)
+        self._hold.setSingleShot(True)
+        self._hold.timeout.connect(self._on_hold)
+        self._hold_from_game = False
+        self._swap = QTimer(self)
+        self._swap.setSingleShot(True)
+        self._swap.timeout.connect(self._show_launcher)
         client.currentSessionChanged.connect(self._on_session)
         client.sessionShown.connect(self._on_shown)
         controller.buttonPressed.connect(self._on_button)
@@ -64,9 +77,11 @@ class Home(QObject):
                 self._refresh()
         else:
             self._poll.stop()
+            self._swap.stop()
             self._drop()
-            self._open = self._closing = self._flipped = self._paused = self._thaw_on_release = False
+            self._open = self._closing = self._flipped = self._flipping = self._paused = self._thaw_on_release = self._stopping = False
             self._shown = "launcher"
+            self._frame = ""
         self.changed.emit()
 
     def _on_shown(self, session_id, ok):
@@ -84,18 +99,24 @@ class Home(QObject):
         if slot == "guide":
             self.guide(pressed)
 
+    # A press is the theme's (`pressed`); a hold from the game goes home whatever the press opened.
     @Slot(bool)
     def guide(self, pressed):
         self._held = bool(pressed)
         if pressed:
+            self._hold_from_game = self._shown == "game" and self._session() is not None
+            self._hold.start(int((self._controller.state or {}).get("hold_ms") or HOLD_MS))
             self.pressed.emit()
         else:
-            if self._open:
-                self._suspend()
+            self._hold.stop()
             if self._thaw_on_release:
                 self._thaw_on_release = False
                 self._set_paused(False)
         self.changed.emit()
+
+    def _on_hold(self):
+        if self._hold_from_game and self._shown == "game":
+            self.toLauncher()
 
     @Slot()
     def openDock(self):
@@ -106,9 +127,7 @@ class Home(QObject):
             return
         self._open, self._closing = True, False
         self._overlay_state(True, OPAQUE)
-        # A Guide hold is the watcher's stop macro: suspending before the release would eat it.
-        if not self._held:
-            self._suspend()
+        self._suspend()
         if self._pause_on_home:
             self._set_paused(True)
         self.changed.emit()
@@ -131,7 +150,7 @@ class Home(QObject):
             return
         self._closing = False
         self._drop()
-        if self._paused and self._shown == "game":
+        if self._paused and self._shown == "game" and not self._flipping:
             self._thaw()
 
     def _drop(self):
@@ -150,6 +169,10 @@ class Home(QObject):
     def toGame(self):
         if not self._session():
             return
+        if self._swap.isActive():
+            self._swap.stop()
+            if self._client.nested:
+                self._poll.start()
         if self._open:
             self.closeDock()
         self._client.focusSession()
@@ -161,29 +184,66 @@ class Home(QObject):
 
     @Slot()
     def toLauncher(self):
-        if not self._session():
+        if not self._session() or self._flipping:
             return
         if self._open:
             self.closeDock()
         if self._client.nested:
+            self._flipping = True
             self._client.frame(self._flip)
         else:
             self._flip("")
 
     def _flip(self, path):
+        self._flipping = False
+        if not self._session():
+            return
         if path:
             # The same file every time: the query keeps the image cache from showing the previous frame.
             self._frames += 1
             self._frame = QUrl.fromLocalFile(path).toString() + "?" + str(self._frames)
-        self._client.focusLauncher()
         self._shown = "launcher"
         self._flipped = True
+        self._thaw_on_release = False
+        # The theme paints the frame first, so the swap shows it and not the launcher beneath: armed before
+        # anything emits, since a theme with nothing to paint answers from the first `changed`.
+        self._poll.stop()
+        self._swap.start(COVER_MS)
         if self._pause_on_home:
             self._set_paused(True)
         self.changed.emit()
 
+    @Slot()
+    def covered(self):
+        if self._swap.isActive():
+            self._swap.stop()
+            self._show_launcher()
+
+    def _show_launcher(self):
+        self._client.focusLauncher()
+        session = self._session()
+        if not session:
+            return
+        if self._stopping:
+            self._client.stop(str(session.get("session_id") or ""))
+        if self._client.nested:
+            self._poll.start()
+
+    # The launcher comes up first: the game is stopped once the frame is taken, since a quitting one paints nothing.
+    @Slot()
+    def stop(self):
+        session = self._session()
+        if not session or self._stopping:
+            return
+        self._stopping = True
+        self.stopping.emit(str(session.get("title") or ""))
+        if self._shown == "game" or self._open:
+            self.toLauncher()
+        else:
+            self._client.stop(str(session.get("session_id") or ""))
+
     def _set_paused(self, on):
-        if on == self._paused or not self._session():
+        if on == self._paused or not self._session() or (on and self._stopping):
             return
         self._paused = on
         self._client.freeze(on)
@@ -247,6 +307,7 @@ class Home(QObject):
     open = Property(bool, lambda self: self._open, notify=changed)
     paused = Property(bool, lambda self: self._paused, notify=changed)
     pauseOnHome = Property(bool, lambda self: self._pause_on_home, notify=changed)
+    flipped = Property(bool, lambda self: self._flipped, notify=changed)
     frame = Property(str, lambda self: self._frame, notify=changed)
     volumePercent = Property(int, lambda self: int(self._volume.get("percent") or 0), notify=volumeChanged)
     muted = Property(bool, lambda self: bool(self._volume.get("muted")), notify=volumeChanged)
