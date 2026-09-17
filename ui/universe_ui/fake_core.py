@@ -21,6 +21,7 @@ RESOLUTION_HEIGHTS = [2160, 1800, 1440, 1080, 720]
 STEP_S = 0.15
 SESSION_S = 2.0
 WINDOW_S = 0.4
+FRAME_S = 0.0
 JOURNAL_S = 8.0
 CLIP_S = 20
 
@@ -73,6 +74,7 @@ class FakeCore:
         self.game_shown = False
         self.frozen = False
         self.hud_shown = False
+        self.frames = 0
         self.level, self.muted = 62, False
         self._config.setdefault("paths", {})["overrides"] = str(self._root / "overrides")
         self._lay_out()
@@ -417,6 +419,8 @@ class FakeCore:
         pass
 
     def nest_frame(self):
+        self.frames += 1
+        time.sleep(FRAME_S)
         return os.path.join(self._cache, "screenshot.png")
 
     def host_gamescope(self, screen):

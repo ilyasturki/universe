@@ -11,6 +11,9 @@ use crate::modules::{self, HookEnv, Module, SourceEvent};
 use crate::paths;
 use crate::{Error, Result};
 
+// gamescope encodes its screenshot png on one thread: a launcher frame takes ~450 ms at 4K, a game's more.
+const FRAME_WAIT: std::time::Duration = std::time::Duration::from_millis(2000);
+
 /// Two lifetimes: a caller reborrows the same callback across several awaited calls.
 pub type Progress<'a, 'b> = &'a mut (dyn FnMut(u64, u64, &str) + 'b);
 
@@ -453,7 +456,12 @@ impl Core {
 
     /// The game as gamescope last painted it, without the overlay: `state/frame.png`, or `None` when nothing was painted in time.
     pub fn nest_frame(&self) -> Result<Option<String>> {
-        let shot = self.nest_or()?.frame(&paths::state_home().join("frame.png"), std::time::Duration::from_millis(400))?;
+        let started = std::time::Instant::now();
+        let shot = self.nest_or()?.frame(&paths::state_home().join("frame.png"), FRAME_WAIT)?;
+        match &shot {
+            Some(_) => tracing::debug!("nest: frame in {} ms", started.elapsed().as_millis()),
+            None => tracing::warn!("nest: no frame within {} ms", FRAME_WAIT.as_millis()),
+        }
         Ok(shot.map(|p| p.to_string_lossy().to_string()))
     }
 

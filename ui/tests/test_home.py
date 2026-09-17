@@ -28,7 +28,7 @@ def test_home_flips_between_the_game_and_the_launcher(api, fake, monkeypatch):
     home.toLauncher()
     pump(250)
     assert home.shown == "launcher" and home.frame != "" and fake.core.game_shown is True, "the frame is taken and offered to the theme before the swap"
-    pump(400)
+    pump(500)
     assert fake.core.game_shown is False, "a theme that never says it has painted the frame still gets the swap"
     assert home.paused and fake.core.frozen is True, "the launcher over the game: frozen, so the pad drives the menu alone"
     home.changed.connect(home.covered)
@@ -139,6 +139,71 @@ def test_a_guide_hold_from_the_game_goes_home(api, fake, monkeypatch):
     home.guide(False)
     pump(400)
     assert presses == ["game", "game", "launcher"] and home.shown == "game", "from the launcher a press resumes, and holding it there does not bounce back"
+    stop(api)
+
+
+def test_the_press_takes_the_frame_the_flip_waits_on(api, fake, monkeypatch):
+    from universe_ui import fake_core
+
+    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+    monkeypatch.setattr(fake_core, "FRAME_S", 0.5)
+    monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
+    home = api.home
+    home.changed.connect(home.covered)
+    home.pressed.connect(lambda: home.toGame() if home.shown == "launcher" else None)
+    fake.launch("mirrors-edge", "")
+    wait_for(fake.sessionShown, 3000)
+    pump(400)
+    home.guide(True)
+    pump(200)
+    home.guide(False)
+    pump(500)
+    assert fake.core.frames == 1 and home.shown == "game" and home.frame == "", "a tap asks for the frame; landing late, it flips nothing"
+    home.guide(True)
+    pump(700)
+    assert home.shown == "launcher" and home.frame != "" and fake.core.frames == 2, "the hold flips with the frame its press took, at hold_ms"
+    home.guide(False)
+    pump(50)
+    home.toGame()
+    pump(300)
+    home.guide(True)
+    pump(100)
+    home.toLauncher()
+    pump(200)
+    assert home.shown == "game" and fake.core.frames == 3, "asked while the press's frame is on its way: the flip waits for it, and asks for no other"
+    pump(400)
+    assert home.shown == "launcher" and fake.core.game_shown is False
+    home.guide(False)
+    home.setPauseOnHome(False)
+    home.toGame()
+    pump(300)
+    home.guide(True)
+    pump(200)
+    home.guide(False)
+    pump(1500)
+    frame = home.frame
+    home.toLauncher()
+    pump(100)
+    assert home.shown == "game" and fake.core.frames == 5, "a game that ran on under the dock: the press's frame is stale, a new one is taken"
+    pump(600)
+    assert home.shown == "launcher" and home.frame != frame
+    home.toGame()
+    pump(300)
+    monkeypatch.setattr(fake.core, "nest_frame", lambda: None)
+    home.toLauncher()
+    pump(300)
+    assert home.shown == "launcher" and home.frame == "" and fake.core.game_shown is False, "no frame in time: the swap goes ahead, nothing to zoom"
+    home.toGame()
+    pump(300)
+    monkeypatch.undo()
+    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+    monkeypatch.setattr(fake_core, "FRAME_S", 0.5)
+    assert api.theme.set("switch2")
+    home.guide(True)
+    home.toLauncher()
+    pump(100)
+    assert home.shown == "launcher" and fake.core.game_shown is False and fake.core.frames == 5, "a look that paints no frame waits for none"
+    home.guide(False)
     stop(api)
 
 

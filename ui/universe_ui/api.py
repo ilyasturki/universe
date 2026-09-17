@@ -223,7 +223,7 @@ class Api(QObject):
         self._screens = Screens(client, self._memory, self.screenMode, self._library.allGames, self._power, self)
         controller = self._screens.controller
         controller.testingChanged.connect(lambda: self._pad.setMuted(controller.testing))
-        self._home = Home(client, controller, self.screenMode, self)
+        self._home = Home(client, controller, self.screenMode, self, frames=lambda: self._theme.frame)
         self._window = None
         self._fullscreen = fullscreen
 

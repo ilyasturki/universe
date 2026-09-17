@@ -26,7 +26,7 @@ One context property, `api`:
 | `api.power` | the batteries the kernel lists under `/sys/class/power_supply`: `sources` (`kind` `system` or `pad`, `percent`, `charging`, `inputs` — the pad's evdev nodes), `count`; polled every 10 s. Both looks draw them next to every clock (`ui/PowerBadge.qml`), the controller pages next to the pad they belong to; `--fake` reads `fixtures/power_supply` |
 | `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed` and `--size` turn it off) |
-| `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `ground`, `detail`), `current`, `set(id)`, `landing` / `takeLanding()`, `fontPath` |
+| `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `frame`, `ground`, `detail`), `current`, `frame`, `set(id)`, `landing` / `takeLanding()`, `fontPath` |
 | `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `open`, `paused`, `pauseOnHome`, `flipped`, `frame`, `volumePercent`, `muted`; `pressed()`, `stopping(title)`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher()`, `covered()`, `stop()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotTaken(path)`), `volume(change, value)`, `launchValue(key)`, `launchChoices(key)`, `setLaunchValue(key, value)`, `screenRefresh()` |
 
 A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `playTime`,
@@ -165,11 +165,16 @@ Its volume row is the controller's macro by another route (`volume("up" | "down"
 `get`). Quit asks, then `api.home.stop()`.
 
 The swap between the game and the launcher is gamescope's, one cut, so the last frame it painted
-bridges it. `toLauncher` takes it (`nest_frame`, up to 400 ms), sets `frame` and `shown`, and waits
-for the theme's `covered()` — Reprise's `ui/HomeFlip.qml` paints the frame full screen and calls
-it once the image is up, the Switch 2 look calls it at once — before `focusLauncher` (`COVER_MS`
-later regardless); the root's poll is held off meanwhile, and `flipped` says the host did it (a
-game that exits by itself leaves the launcher on screen too, with nothing to zoom). Reprise then lands on Home with the
+bridges it. gamescope writes that frame as a png on one thread, a second or two at 4K, so the
+Guide press from the game asks for it (`nest_frame`, `FRAME_WAIT` at most) and the flip — the
+hold, the dock's Home or Quit — reuses what the press took, or waits for it to land; a frame
+older than `FRESH_S` from a game that ran on under the dock is taken again, a frozen game's stands.
+A look registered with `frame: False` (the Switch 2 one) paints nothing and waits for none.
+`toLauncher` then sets `frame` (`""` when none came) and `shown`, and waits for the theme's
+`covered()` — Reprise's `ui/HomeFlip.qml` paints the frame full screen and calls it once the image
+is up, the Switch 2 look calls it at once — before `focusLauncher` (`COVER_MS` later regardless);
+the root's poll is held off meanwhile, and `flipped` says the host did it (a game that exits by
+itself leaves the launcher on screen too, with nothing to zoom). Reprise then lands on Home with the
 cursor on the playing game (`HomePage.landOnPlaying`, every detail, sub page and search closed)
 and shrinks the frame into that tile, which shows the same frame as its art; resuming grows the
 tile back to full screen (`HomePage.playingTileRect`) and only then `toGame()`.

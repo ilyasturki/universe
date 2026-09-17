@@ -1,10 +1,14 @@
+import time
+
 from PySide6.QtCore import Property, QObject, QTimer, QUrl, Signal, Slot
 
 OPAQUE = 0xFFFFFFFF
 POLL_MS = 250
 HOLD_MS = 600
-# How long the swap waits for the theme to say the frame is painted (`covered`) before going ahead anyway.
-COVER_MS = 400
+# How long the swap waits for the theme to say the frame is painted (`covered`) before going ahead anyway: a 4K png decodes slowly.
+COVER_MS = 700
+# A frame taken at the press still stands for a flip this much later while the game runs on under the dock.
+FRESH_S = 1.0
 
 
 class Home(QObject):
@@ -14,11 +18,12 @@ class Home(QObject):
     screenshotTaken = Signal(str)
     stopping = Signal(str)
 
-    def __init__(self, client, controller, screen_mode=dict, parent=None):
+    def __init__(self, client, controller, screen_mode=dict, parent=None, frames=lambda: True):
         super().__init__(parent)
         self._client = client
         self._controller = controller
         self._screen_mode = screen_mode
+        self._frames = frames
         self._overlay = None
         self._open = False
         self._closing = False
@@ -33,7 +38,11 @@ class Home(QObject):
         self._flipping = False
         self._keys_on_thaw = []
         self._frame = ""
-        self._frames = 0
+        self._taken = 0
+        self._capturing = False
+        self._captured = None
+        self._captured_at = 0.0
+        self._captured_still = False
         self._volume = {}
         self._poll = QTimer(self)
         self._poll.setInterval(POLL_MS)
@@ -84,6 +93,7 @@ class Home(QObject):
             self._keys_on_thaw = []
             self._shown = "launcher"
             self._frame = ""
+            self._captured = None
         self.changed.emit()
 
     def _on_shown(self, session_id, ok):
@@ -107,6 +117,8 @@ class Home(QObject):
         self._held = bool(pressed)
         if pressed:
             self._hold_from_game = self._shown == "game" and self._session() is not None
+            if self._hold_from_game:
+                self._capture()
             self._hold.start(int((self._controller.state or {}).get("hold_ms") or HOLD_MS))
             self.pressed.emit()
         else:
@@ -179,10 +191,34 @@ class Home(QObject):
             self.closeDock()
         self._client.focusSession()
         self._flipped = False
+        self._captured = None
         if self._paused:
             self._thaw()
         self._shown = "game"
         self.changed.emit()
+
+    # The frame gamescope writes takes up to a second or two at 4K: the press asks for it, so the hold or the dock
+    # waits on it rather than the flip. One request at a time; a late one lands nowhere unless a flip is waiting.
+    def _capture(self):
+        if self._capturing or not self._client.nested or not self._frames():
+            return
+        self._capturing = True
+        self._captured = None
+        self._client.frame(self._captured_done)
+
+    def _captured_done(self, path):
+        self._capturing = False
+        if not self._session():
+            return
+        self._captured = path
+        self._captured_at = time.monotonic()
+        self._captured_still = self._paused
+        if self._flipping:
+            self._flip(path)
+
+    # A frozen game has painted nothing since: its frame stands however old.
+    def _fresh(self):
+        return self._captured is not None and (self._captured_still or time.monotonic() - self._captured_at < FRESH_S)
 
     @Slot()
     def toLauncher(self):
@@ -190,20 +226,27 @@ class Home(QObject):
             return
         if self._open:
             self.closeDock()
-        if self._client.nested:
-            self._flipping = True
-            self._client.frame(self._flip)
-        else:
+        if not self._client.nested or not self._frames():
             self._flip("")
+            return
+        self._flipping = True
+        if self._fresh():
+            self._flip(self._captured)
+        elif not self._capturing:
+            self._captured = None
+            self._capture()
 
     def _flip(self, path):
         self._flipping = False
+        self._captured = None
         if not self._session():
             return
         if path:
             # The same file every time: the query keeps the image cache from showing the previous frame.
-            self._frames += 1
-            self._frame = QUrl.fromLocalFile(path).toString() + "?" + str(self._frames)
+            self._taken += 1
+            self._frame = QUrl.fromLocalFile(path).toString() + "?" + str(self._taken)
+        else:
+            self._frame = ""
         self._shown = "launcher"
         self._flipped = True
         self._thaw_on_release = False
@@ -248,6 +291,8 @@ class Home(QObject):
         if on == self._paused or not self._session() or (on and self._stopping):
             return
         self._paused = on
+        if not on:
+            self._captured_still = False
         self._client.freeze(on, None if on else lambda _: self._type_held())
         self.changed.emit()
 
