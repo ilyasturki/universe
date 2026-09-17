@@ -19,6 +19,7 @@ class Home(QObject):
         self._open = False
         self._closing = False
         self._shown = "launcher"
+        self._flipped = False
         self._paused = False
         self._pause_on_home = False
         self._held = False
@@ -64,7 +65,7 @@ class Home(QObject):
         else:
             self._poll.stop()
             self._drop()
-            self._open = self._closing = self._paused = self._thaw_on_release = False
+            self._open = self._closing = self._flipped = self._paused = self._thaw_on_release = False
             self._shown = "launcher"
         self.changed.emit()
 
@@ -152,6 +153,7 @@ class Home(QObject):
         if self._open:
             self.closeDock()
         self._client.focusSession()
+        self._flipped = False
         if self._paused:
             self._thaw()
         self._shown = "game"
@@ -175,6 +177,9 @@ class Home(QObject):
             self._frame = QUrl.fromLocalFile(path).toString() + "?" + str(self._frames)
         self._client.focusLauncher()
         self._shown = "launcher"
+        self._flipped = True
+        if self._pause_on_home:
+            self._set_paused(True)
         self.changed.emit()
 
     def _set_paused(self, on):
@@ -191,7 +196,7 @@ class Home(QObject):
             return
         self._pause_on_home = bool(on)
         self._client.set(str(session.get("id") or ""), "launch.pause_on_home", "true" if on else "false")
-        if self._open:
+        if self._open or self._flipped:
             self._set_paused(bool(on))
         self.changed.emit()
 

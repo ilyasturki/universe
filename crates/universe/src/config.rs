@@ -140,7 +140,7 @@ impl Default for LaunchDefaults {
             xess_upgrade: false,
             optiscaler: false,
             mangohud: true,
-            pause_on_home: false,
+            pause_on_home: true,
             gamescope: true,
             gamescope_args: String::new(),
             gamescope_bin: "gamescope".into(),

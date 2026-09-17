@@ -185,13 +185,13 @@
   {
     "key": "pause_on_home",
     "type": "bool",
-    "default": false,
+    "default": true,
     "choices": [],
     "label": "Pause on HOME",
     "section": "Overlay and cursor",
     "scope": "both",
     "runners": [],
-    "description": "Freeze the game while the home menu is up; it runs again when the menu closes."
+    "description": "Freeze the game while the launcher covers it, so the pad drives the menu alone; it runs again on Resume. Off for a game that must keep running (online play)."
   },
   {
     "key": "wrapper",

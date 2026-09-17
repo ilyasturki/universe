@@ -24,17 +24,31 @@ def test_home_flips_between_the_game_and_the_launcher(api, fake, monkeypatch):
     wait_for(fake.sessionShown, 3000)
     pump(400)
     assert home.shown == "game", "gamescope's root says the game's window is up"
+    assert home.pauseOnHome and not home.paused and fake.core.frozen is False, "on by default, and the game runs while it is shown"
     home.toLauncher()
     pump(400)
     assert home.shown == "launcher" and fake.core.game_shown is False
+    assert home.paused and fake.core.frozen is True, "the launcher over the game: frozen, so the pad drives the menu alone"
     home.toGame()
     pump(400)
     assert home.shown == "game" and fake.core.game_shown is True
+    assert not home.paused and fake.core.frozen is False
+    home.setPauseOnHome(False)
+    home.toLauncher()
+    pump(400)
+    assert home.shown == "launcher" and fake.core.frozen is False, "off for this game: it keeps running behind the launcher"
+    home.setPauseOnHome(True)
+    pump(50)
+    assert fake.core.frozen is True, "turned on while the launcher covers it: frozen now"
+    home.toGame()
+    pump(400)
+    assert fake.core.frozen is False
     home.openDock()
     pump(400)
     assert not home.open and home.shown == "launcher", "no overlay window: HOME goes home instead"
+    assert fake.core.frozen is True
     stop(api)
-    assert home.shown == "launcher"
+    assert home.shown == "launcher" and not home.paused
 
 
 def test_on_the_desktop_the_game_is_shown_once_its_window_maps(api, fake):
@@ -59,6 +73,7 @@ def test_the_dock_pauses_on_home_and_thaws_on_the_release(api, fake):
     fake.launch("mirrors-edge", "")
     wait_for(fake.sessionShown, 3000)
     pump(300)
+    home.setPauseOnHome(False)
     home.setPauseOnHome(True)
     assert home.pauseOnHome and fake.game("mirrors-edge")["launch"]["pause_on_home"] is True
     home.guide(True)
@@ -125,8 +140,9 @@ def test_the_dock_renders_over_a_running_game(api, fake, tmp_path, monkeypatch):
     assert dock.property("index") == 2
     key(overlay, Qt.Key.Key_Return)
     assert dock.property("opened") is True, "Game opens its card"
+    assert api.home.pauseOnHome is True
     key(overlay, Qt.Key.Key_Return)
-    assert api.home.pauseOnHome is True, "the first row is Pause on HOME"
+    assert api.home.pauseOnHome is False, "the first row is Pause on HOME, on by default: A turns it off"
     key(overlay, Qt.Key.Key_Escape)
     assert dock.property("opened") is False
     key(overlay, Qt.Key.Key_Escape)

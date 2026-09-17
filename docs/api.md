@@ -163,8 +163,13 @@ shows the game) and `wait_session_window` waits until gamescope shows the game's
 The game keeps rendering behind the launcher; `freeze` stops it. The per-game `gamescope_resolution`, `gamescope_refresh`,
 `gamescope_scaler` and `gamescope_adaptive_sync` fields cannot reach a gamescope that is already
 running: only the global ones apply there, and `gamescope_filter` / `gamescope_sharpness` go through
-`nest_filter` at runtime. `pause_on_home` (global or per game, off by default) is the frontend's cue
-to `freeze` the game while its home menu is up.
+`nest_filter` at runtime. `pause_on_home` (global or per game, on by default) is the frontend's cue
+to `freeze` the game whenever the launcher covers it — its dock, its home menu, its home over the
+game — and to `thaw` it on the way back. Nothing else takes the pad away from a running game:
+gamescope's `STEAM_INPUT_FOCUS` routes keyboard and mouse only, and the game keeps its evdev and
+hidraw readers open, so an unfrozen game answers every press the menu gets. A frozen game's input
+queues still fill: an evdev reader replays the last 64 events on thaw (or resyncs past a
+`SYN_DROPPED`), a hidraw reader's 64-report buffer fills with the first ~¼ s after the freeze.
 
 A game launched from **outside** gamescope (`universe play` from a terminal) gets a gamescope of its
 own, as follows. Every runner's command runs inside gamescope by default: `gamescope -f --force-composition
@@ -523,7 +528,7 @@ gamescope_filter = ""                # linear | nearest | fsr | nis | pixel (-F)
 # gamescope_sharpness = 2            # 0 (sharpest) to 20, for fsr and nis (--sharpness)
 gamescope_adaptive_sync = false      # --adaptive-sync: variable refresh when the screen has it
 fps_limit = "auto"                   # MangoHud's limiter in the game: auto (the refresh the game sees), none, or frames per second
-pause_on_home = false                # freeze the game while the launcher's home menu is up (the launcher's HOME button)
+pause_on_home = true                 # freeze the game while the launcher covers it (HOME); off for a game that must keep running
 
 [desktop]
 profile = "auto"                     # auto | gnome | none

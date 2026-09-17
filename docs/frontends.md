@@ -159,11 +159,16 @@ The host owns what the QML cannot: the overlay window is created once (`create_o
 keeps painting an unmapped overlay's last buffer; opening sets `STEAM_INPUT_FOCUS=1` and full
 opacity, the fade-out done (`dockClosed()`) drops both and the game gets its input back. The
 watcher's macros are suspended while the dock has the pad — from the Guide release, so a hold
-on it still counts as the `stop` macro. `pause_on_home` (a launch key, per
-game) freezes the game as the dock opens and thaws it when the dock closes — on the Guide
-release when that is what closed it, so the game never sees Guide held. `Home.toLauncher` takes
-the frame first, then flips; the session ending drops the overlay whatever state it was in.
-Without an overlay window (the launcher on the desktop) `openDock` is `toLauncher`.
+on it still counts as the `stop` macro. Nothing takes the pad away from the game — gamescope
+routes keyboard and mouse only, and the game keeps its own evdev or hidraw readers — so
+`pause_on_home` (a launch key, global and per game, on by default) freezes the game whenever the
+launcher covers it: as the dock opens, and as `toLauncher` flips (after the frame is taken: a
+frozen game paints nothing); `dockClosed` and `toGame` thaw it — on the Guide release when that
+is what closed the dock, so the game never sees Guide held. Off, the game runs on behind the
+launcher and answers every press the menu gets; turning it on from the dock while the launcher
+is up freezes at once. The session ending drops the overlay whatever state it was in. Without an
+overlay window (the launcher on the desktop) `openDock` is `toLauncher`, and only `toGame`
+thaws: a game window raised from the desktop's own switcher stays frozen until Resume.
 
 ## Qt and QML notes
 

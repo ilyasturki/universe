@@ -102,7 +102,7 @@ pub static LAUNCH_KEYS: &[LaunchKey] = &[
     key!("env", Kind::Map, "", "Environment", "", Both, &[], "Environment variables for the game; a game's win over the global ones."),
     key!("mangohud", Kind::Bool, "true", "MangoHud", "Overlay and cursor", Both, &[], "Show MangoHud's overlay in the game."),
     key!("fps_limit", Kind::Fps, "auto", "Frame rate limit", "Overlay and cursor", Both, &[], "MangoHud holds the game to this many frames per second, overlay or not; auto is the refresh rate the game sees."),
-    key!("pause_on_home", Kind::Bool, "false", "Pause on HOME", "Overlay and cursor", Both, &[], "Freeze the game while the home menu is up; it runs again when the menu closes."),
+    key!("pause_on_home", Kind::Bool, "true", "Pause on HOME", "Overlay and cursor", Both, &[], "Freeze the game while the launcher covers it, so the pad drives the menu alone; it runs again on Resume. Off for a game that must keep running (online play)."),
     key!("wrapper", Kind::Str, "", "Wrapper command", "Launch", Game, &[], "A command the game runs through, innermost: gamemoderun, taskset -c 0-7…"),
     key!("args", Kind::List, "", "Arguments", "Launch", Game, &[], "Arguments appended to the game's command line."),
     key!("working_dir", Kind::Path, "", "Working directory", "Launch", Game, &[], "The folder the game starts in."),
