@@ -14,6 +14,9 @@ def stop(api):
 
 
 def test_home_flips_between_the_game_and_the_launcher(api, fake, monkeypatch):
+    from universe_ui import fake_core
+
+    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
     home = api.home
     assert home.shown == "launcher" and not home.open
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
