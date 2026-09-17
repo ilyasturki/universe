@@ -13,7 +13,7 @@ FocusScope {
     readonly property int allIndex: gameCount
     property int index: 0
     readonly property bool onAll: index === allIndex
-    readonly property var currentGame: !onAll && index >= 0 && index < gameCount ? recent.get(index) : null
+    readonly property var currentGame: anchor.game
     readonly property var session: api.universe.currentSession
     readonly property string playingId: session && session.id !== undefined ? session.id : ""
 
@@ -40,6 +40,14 @@ FocusScope {
         id: recent
         sourceModel: played
         limit: 12
+    }
+
+    GameAnchor {
+        id: anchor
+        client: api.universe
+        model: recent
+        index: page.onAll ? -1 : page.index
+        onMoved: function(next) { page.index = next; }
     }
 
     function step(d) { index = Sound.stepped(index, d, allIndex + 1); }

@@ -1,8 +1,10 @@
 from PySide6.QtCore import QDateTime, QUrl
 
+from conftest import pump
 from universe_ui.models import (
     FavouriteGames,
     Game,
+    GameAnchor,
     LibraryGames,
     LimitedGames,
     RecentGames,
@@ -102,6 +104,49 @@ def test_recent_games(api):
     assert titles(recent)[:2] == ["Dead Cells", "The Technomancer"] and recent.count == 6
     recent.playingId = ""
     assert titles(recent)[:3] == ["The Technomancer", "Mini Metro", "Dead Cells"]
+
+
+def test_anchor_follows_the_game_across_a_reorder(api):
+    recent = RecentGames()
+    recent.setSourceModel(api.allGames)
+    anchor = GameAnchor()
+    anchor.model = recent
+    moves = []
+
+    def follow(index):
+        moves.append(index)
+        anchor.index = index
+
+    anchor.moved.connect(follow)
+    anchor.index = 2
+    assert anchor.game.id == "dead-cells"
+    recent.playingId = "mirrors-edge"
+    assert anchor.game.id == "dead-cells"
+    pump(10)
+    assert moves == [3] and anchor.game.id == "dead-cells"
+    recent.playingId = ""
+    pump(10)
+    assert moves == [3, 2]
+    anchor.hold("mini-metro")
+    assert moves == [3, 2, 1] and anchor.game.id == "mini-metro"
+    anchor.hold("mirrors-edge")
+    assert moves == [3, 2, 1] and anchor.game.id == "mini-metro", "not in the rows yet: held until it shows up"
+    recent.playingId = "mirrors-edge"
+    pump(10)
+    assert moves == [3, 2, 1, 0] and anchor.game.id == "mirrors-edge"
+    anchor.hold("no-such-game")
+    anchor.index = 2
+    recent.playingId = ""
+    pump(10)
+    assert moves == [3, 2, 1, 0, 1] and anchor.game.id == "mini-metro", "the cursor's move re-holds"
+    library = LibraryGames()
+    library.setSourceModel(api.allGames)
+    anchor.model = library
+    anchor.index = 0
+    assert anchor.game.id == "the-technomancer"
+    library.setSourceModel(api.collections.get(0).games)
+    pump(10)
+    assert moves == [3, 2, 1, 0, 1] and anchor.game is library.get(0), "a reset is another list: the row stands"
 
 
 def test_sorted_and_limited(api):

@@ -19,8 +19,7 @@ FocusScope {
     readonly property var railModel: standingIn ? newest : recent
     readonly property int railCount: railModel ? railModel.count : 0
 
-    readonly property var currentGame: railCount > 0 && rail.currentIndex >= 0
-                                       ? railModel.get(rail.currentIndex) : null
+    readonly property var currentGame: anchor.game
     readonly property bool ownsBackdrop: true
     readonly property real backdropBlur: 0
     readonly property real scrimTop: 0
@@ -99,6 +98,14 @@ FocusScope {
         id: recent
         sourceModel: api.allGames
         playingId: page.playingId
+    }
+
+    GameAnchor {
+        id: anchor
+        client: api.universe
+        model: page.railModel
+        index: page.tileSelected ? -1 : rail.currentIndex
+        onMoved: function(index) { page.tileSelected = false; rail.currentIndex = index; }
     }
 
     // The library exposes no date added; releaseYear is the closest "what is new".

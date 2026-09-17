@@ -138,10 +138,11 @@ class ControllerScreen(QObject):
     macroNotice = Signal(str)
     message = Signal(str)
 
-    def __init__(self, client, memory, parent=None):
+    def __init__(self, client, memory, power, parent=None):
         super().__init__(parent)
         self._client = client
         self._memory = memory
+        self._power = power
         self._watcher = None
         self._devices = []
         self._current = ""
@@ -157,6 +158,7 @@ class ControllerScreen(QObject):
         self.restart_ms = RESTART_MS
         self._restart_delay = RESTART_MS
         self._last_family = str(memory.get("controllerFamily") or "dualsense")
+        power.sourcesChanged.connect(self._rebuild)
         self._rebuild()
 
     def start(self, watcher):
@@ -424,6 +426,9 @@ class ControllerScreen(QObject):
             meta = [BUS_NAMES.get(device["bus"], device["bus"])]
             if device["name"] != name:
                 meta.insert(0, device["name"])
+            battery = self._power.forInput(device["id"])
+            if battery is not None:
+                meta.append(f"{battery['percent']}%" + (", charging" if battery["charging"] else ""))
             meta.append(f"{extras} extra button" + ("" if extras == 1 else "s"))
             groups.append(_group(name, list(range(len(rows))), meta=" · ".join(m for m in meta if m)))
         self._rows = rows

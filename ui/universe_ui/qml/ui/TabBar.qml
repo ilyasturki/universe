@@ -254,6 +254,10 @@ FocusScope {
             onWidthChanged: frame.retarget()
         }
 
+        PowerBadge {
+            anchors.verticalCenter: parent.verticalCenter
+        }
+
         Text {
             anchors.verticalCenter: parent.verticalCenter
             text: Theme.clock

@@ -117,13 +117,14 @@ def run(argv=None):
 
     from . import models  # noqa: F401  (registers the Universe QML module)
     from .api import Api
+    from .screens.power import FAKE as FAKE_POWER
 
     client = build_client(args)
     if args.fullscreen and not nested:
         exec_in_gamescope(client, argv)
     if not args.fake:
         client.adoptScope()
-    api = Api(client, fullscreen=args.fullscreen, theme=args.theme, parent=app)
+    api = Api(client, fullscreen=args.fullscreen, theme=args.theme, power_root=FAKE_POWER if args.fake else None, parent=app)
     quit_on_signals(app)
 
     engine = QQmlApplicationEngine()

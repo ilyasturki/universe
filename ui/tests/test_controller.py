@@ -36,7 +36,7 @@ def test_rows_follow_the_watcher_and_the_macros(api, fake):
     assert rows["test"]["type"] == "action" and rows["test"]["action"] == "Start" and "slot" not in rows["test"]
     assert screen.rows[-1]["key"] == "dpad_right"
     group = screen.groups[0]
-    assert group["title"] == "DualSense Edge" and group["meta"] == "Bluetooth · 4 extra buttons"
+    assert group["title"] == "DualSense Edge" and group["meta"] == "Bluetooth · 85% · 4 extra buttons"
     assert group["rows"] == list(range(len(screen.rows)))
 
     presses = []

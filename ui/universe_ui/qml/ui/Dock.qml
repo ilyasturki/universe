@@ -295,6 +295,12 @@ FocusScope {
                 }
             }
 
+            PowerBadge {
+                anchors.verticalCenter: parent.verticalCenter
+                tint: Qt.rgba(0.949, 0.953, 0.961, 0.85)
+                size: Theme.dp(24)
+            }
+
             Item {
                 width: clock.width
                 height: clock.height

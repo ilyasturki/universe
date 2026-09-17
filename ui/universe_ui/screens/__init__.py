@@ -11,7 +11,7 @@ from .sources import LoginFlow, SourcesBrowser
 
 
 class Screens(QObject):
-    def __init__(self, client, memory, screen_mode, games, parent=None):
+    def __init__(self, client, memory, screen_mode, games, power, parent=None):
         super().__init__(parent)
         self._gameSettings = GameSettingsForm(client, screen_mode, self)
         self._modules = ModulesForm(client, self)
@@ -23,7 +23,7 @@ class Screens(QObject):
         self._journal = JournalList(client, self)
         self._pendingJournals = PendingJournals(client, self)
         self._paths = PathBrowser(client, self)
-        self._controller = ControllerScreen(client, memory, self)
+        self._controller = ControllerScreen(client, memory, power, self)
         self._runners = RunnersForm(client, self)
         self._runner = RunnerForm(client, self)
         self._artwork = ArtworkForm(client, self)

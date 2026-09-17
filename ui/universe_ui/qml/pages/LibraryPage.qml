@@ -11,8 +11,7 @@ FocusScope {
 
     signal chromeRequested()
 
-    readonly property var currentGame: grid.currentIndex >= 0 && sorted.count > 0
-                                       ? sorted.get(grid.currentIndex) : null
+    readonly property var currentGame: anchor.game
     readonly property bool ownsBackdrop: false
     readonly property real backdropBlur: 18
     readonly property real scrimTop: 0.58
@@ -94,6 +93,14 @@ FocusScope {
         id: sorted
         sourceModel: page.activeSource
         sortMode: page.sortMode
+    }
+
+    GameAnchor {
+        id: anchor
+        client: api.universe
+        model: sorted
+        index: grid.currentIndex
+        onMoved: function(index) { grid.currentIndex = index; }
     }
 
     Item {

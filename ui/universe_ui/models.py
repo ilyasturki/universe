@@ -8,6 +8,7 @@ from PySide6.QtCore import (
     QObject,
     QSortFilterProxyModel,
     Qt,
+    QTimer,
     QUrl,
     Signal,
     Slot,
@@ -502,3 +503,92 @@ class CollectionGames(GameProxy):
 
     def acceptsGame(self, game, source_row):
         return collection_key(game) == self._key
+
+
+@QmlElement
+class GameAnchor(QObject):
+    clientChanged = Signal()
+    modelChanged = Signal()
+    indexChanged = Signal()
+    gameChanged = Signal()
+    moved = Signal(int)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._client = None
+        self._model = None
+        self._index = -1
+        self._game = None
+        self._game_id = ""
+        self._settling = False
+
+    def _set_client(self, client):
+        if client is self._client:
+            return
+        if self._client is not None:
+            self._client.sessionEnded.disconnect(self._session_ended)
+        self._client = client
+        if client is not None:
+            client.sessionEnded.connect(self._session_ended)
+        self.clientChanged.emit()
+
+    def _session_ended(self, session_id, ident, duration):
+        self.hold(ident)
+
+    def _set_model(self, model):
+        if model is self._model:
+            return
+        if self._model is not None:
+            self._model.countChanged.disconnect(self._changed)
+            self._model.modelReset.disconnect(self._on_reset)
+        self._model = model
+        if model is not None:
+            model.countChanged.connect(self._changed)
+            model.modelReset.connect(self._on_reset)
+        self.modelChanged.emit()
+        self._resolve()
+
+    def _set_index(self, index):
+        if index == self._index:
+            return
+        self._index = index
+        self.indexChanged.emit()
+        if not self._settling:
+            self._refresh()
+
+    def _refresh(self, adopt=True):
+        game = self._model.get(self._index) if self._model is not None else None
+        if adopt or not self._game_id:
+            self._game_id = game.id if game is not None else ""
+        if game is not self._game:
+            self._game = game
+            self.gameChanged.emit()
+
+    @Slot(str)
+    def hold(self, ident):
+        self._game_id = str(ident or "")
+        self._resolve()
+
+    # A reset is another list (a collection switched, the library reloaded): the cursor's row stands.
+    def _on_reset(self):
+        self._game_id = ""
+
+    def _changed(self):
+        # The view adjusts its own index while the rows move; settle once the whole change is in.
+        if self._settling:
+            return
+        self._settling = True
+        QTimer.singleShot(0, self._resolve)
+
+    def _resolve(self):
+        self._settling = False
+        ident = self._game_id if self._model is not None else ""
+        index = next((i for i in range(self._model.rowCount()) if self._model.get(i).id == ident), -1) if ident else -1
+        if index >= 0 and index != self._index:
+            self.moved.emit(index)
+        self._refresh(adopt=index >= 0)
+
+    client = Property(QObject, lambda self: self._client, _set_client, notify=clientChanged)
+    model = Property(QObject, lambda self: self._model, _set_model, notify=modelChanged)
+    index = Property(int, lambda self: self._index, _set_index, notify=indexChanged)
+    game = Property(QObject, lambda self: self._game, notify=gameChanged)

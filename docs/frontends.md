@@ -23,6 +23,7 @@ One context property, `api`:
 | `api.memory` | `get`/`set`/`has`/`unset`, persisted to `$XDG_STATE_HOME/universe/ui-memory.json` |
 | `api.universe` | the client: every core call, plus the signals below. `adoptScope()` and `pendingJournals()` wrap `adopt_scope` and `pending_journals`; their failures get a log line, not a toast. `recordings(id)` is the client's own: `sessions(id)` kept to the rows with a `recording` |
 | `api.pad` | `rightX`: the right stick as a value, 0 without a controller |
+| `api.power` | the batteries the kernel lists under `/sys/class/power_supply`: `sources` (`kind` `system` or `pad`, `percent`, `charging`, `inputs` — the pad's evdev nodes), `count`; polled every 10 s. Both looks draw them next to every clock (`ui/PowerBadge.qml`), the controller pages next to the pad they belong to; `--fake` reads `fixtures/power_supply` |
 | `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed` and `--size` turn it off) |
 | `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `ground`, `detail`), `current`, `set(id)`, `fontPath` |
@@ -193,6 +194,11 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
   `--keys` scripting cannot drive the host behind a running game, and neither can the gamepad
   (`focusWindow()` is null). That is the wanted behaviour: home is operable once the game has
   handed the focus back (Alt-Tab, or its own exit, after which `focusLauncher()` asks for it).
+- **A view's cursor is a row, not a game.** `RecentGames` pins the playing game first and the
+  stats re-sort a game after its session; no view index follows, and a positional `model.get(index)`
+  binding does not re-evaluate on a reorder. `GameAnchor` (`import Universe`) does: bind `model` and
+  `index` to the view's and `client` to `api.universe`, read `game`, follow `moved(index)`; `hold(id)`
+  picks the game to follow, and the anchor holds the one whose session just ended.
 - **Collections are platforms.** The theme labels a collection by its `shortName` and looks for
   `assets/platforms/<shortName>.svg`; the core gives a platform string, which `api.py` maps
   (`windows`, `switch`, `wii`, `gamecube`, `nds`, `ps3`, …) and falls back to the source id.
@@ -268,6 +274,13 @@ through `remove_recording`, drops the row's cached frames and reloads the list o
 `pages/JournalPage.qml` has the same menu (Read, Recording, Remove entry… — Cancel the writing…
 on a pending row) through `api.screens.journal.remove`, which cancels a pending entry's writer
 before trashing; the offer to take the recording along works the other way round.
+
+The two pages preview each other for the session under the cursor, so a jump (Y, `jumpRequested`)
+is a choice and not a guess. The journal article ends with a RECORDING card (`ui/RecordingCard.qml`)
+between NEXT UP and the screenshots — ▼ from the end of the text lands on it, A opens the recordings
+page on that session. Under the recordings pane a JOURNAL block shows the entry's title and first
+paragraph; ▼ from the video focuses it, A reads it. Each page loads the other's store for the game
+unless it already holds it, so the jump finds them warm.
 
 ## The launch and modules sections
 

@@ -11,6 +11,8 @@ Column {
 
     readonly property real shotWidth: Theme.dp(336)
     readonly property real shotHeight: Theme.dp(189)
+    // Room for the focus ring's halo inside the clip on every side.
+    readonly property real inset: Theme.dp(24)
 
     spacing: Theme.dp(18)
     visible: images.length > 0
@@ -23,9 +25,6 @@ Column {
 
     ListView {
         id: list
-
-        // Room for the focus ring's halo inside the clip on every side.
-        readonly property real inset: Theme.dp(24)
 
         x: -inset
         width: parent.width + strip.sideMargin + inset

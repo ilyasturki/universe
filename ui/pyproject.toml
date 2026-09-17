@@ -17,7 +17,7 @@ universe-ui = "universe_ui.host:main"
 include = ["universe_ui*"]
 
 [tool.setuptools.package-data]
-universe_ui = ["qml/**/*", "fixtures/*.json"]
+universe_ui = ["qml/**/*", "fixtures/*.json", "fixtures/power_supply/*/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

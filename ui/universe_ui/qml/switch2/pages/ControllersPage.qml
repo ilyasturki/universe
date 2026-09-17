@@ -298,6 +298,8 @@ FocusScope {
             model: page.controller.devices
 
             Row {
+                readonly property var battery: api.power.sources.find(function(s) { return s.inputs.indexOf(modelData.id) >= 0; }) || null
+
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: Theme.dp(14)
 
@@ -312,6 +314,7 @@ FocusScope {
                 Label {
                     anchors.verticalCenter: parent.verticalCenter
                     text: modelData.name + (modelData.bus ? " · " + (modelData.bus === "bluetooth" ? "Bluetooth" : modelData.bus === "usb" ? "USB" : modelData.bus) : "")
+                        + (parent.battery ? " · " + parent.battery.percent + "%" + (parent.battery.charging ? ", charging" : "") : "")
                 }
             }
         }

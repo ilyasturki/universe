@@ -70,6 +70,11 @@ Item {
             hints: root.arranged.right
         }
 
+        PowerBadge {
+            anchors.verticalCenter: parent.verticalCenter
+            visible: root.showClock && api.power.count > 0
+        }
+
         Text {
             visible: root.showClock
             anchors.verticalCenter: parent.verticalCenter

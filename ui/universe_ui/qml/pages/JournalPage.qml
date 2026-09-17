@@ -22,7 +22,11 @@ FocusScope {
     readonly property bool anyPending: rows.some(function(r) { return r.state === "pending"; })
     property double now: Date.now()
 
-    // 0 entries, 1 the text, 2 the screenshots
+    readonly property var recordings: api.screens.recordings
+    readonly property var recording: current && current.hasRecording
+        ? recordings.rows.find(function(r) { return r.session === current.session; }) || null : null
+
+    // 0 entries, 1 the text, 2 the screenshots, 3 the recording card
     property int mode: 0
     property int shotIndex: 0
     property bool lightbox: false
@@ -37,13 +41,16 @@ FocusScope {
         if (menu.open)
             return menu.hints;
         var out = [];
-        if (mode === 2)
+        if (mode === 3)
+            out.push({ glyph: "A", label: "Watch" });
+        else if (mode === 2)
             out.push({ glyph: "A", label: "View" });
         else if (mode === 1)
-            out.push({ glyph: "A", label: "Screenshots", dim: images.length === 0 });
+            out.push({ glyph: "A", label: recording ? "Recording" : "Screenshots", dim: !recording && images.length === 0 });
         else
             out.push({ glyph: "A", label: currentPending ? "Being written" : "Read", dim: currentPending });
-        out.push({ glyph: "Y", label: "Recording", dim: !(current && current.hasRecording) });
+        if (mode !== 3)
+            out.push({ glyph: "Y", label: "Recording", dim: !(current && current.hasRecording) });
         out.push({ glyph: "Start", label: "More", dim: current === null });
         out.push({ glyph: "B", label: reading ? "Back to entries" : "Back" });
         return out;
@@ -56,8 +63,11 @@ FocusScope {
         index = 0;
         mode = 0;
         lightbox = false;
-        if (game)
+        if (game) {
             store.load(game.id);
+            if (recordings.gameId !== game.id)
+                recordings.load(game.id);
+        }
         landOnSession();
     }
 
@@ -79,6 +89,11 @@ FocusScope {
         shotIndex = 0;
     }
 
+    onRecordingChanged: {
+        if (mode === 3 && !recording)
+            mode = 1;
+    }
+
     function step(d) {
         index = Sound.stepped(index, d, rows.length);
     }
@@ -90,7 +105,7 @@ FocusScope {
     function scroll(d) {
         var next = Math.max(0, Math.min(maxScroll(), flick.contentY + d * Theme.dp(260)));
         if (next === flick.contentY) {
-            d > 0 ? openShots() : Sound.edge();
+            d > 0 ? (recording ? openRecordingCard() : openShots()) : Sound.edge();
             return;
         }
         Sound.tick();
@@ -105,6 +120,12 @@ FocusScope {
         Sound.panel();
         mode = 2;
         flick.contentY = maxScroll();
+    }
+
+    function openRecordingCard() {
+        Sound.panel();
+        mode = 3;
+        flick.contentY = Math.max(0, Math.min(maxScroll(), recordingCard.y + recordingCard.height + Theme.dp(60) - flick.height));
     }
 
     function stepShot(d) {
@@ -213,11 +234,13 @@ FocusScope {
                 stepShot(event.key === Qt.Key_Left ? -1 : 1);
             }
         } else if (api.keys.isAccept(event)) {
-            if (mode === 2) {
+            if (mode === 3) {
+                openRecording();
+            } else if (mode === 2) {
                 Sound.enter();
                 lightbox = true;
             } else if (mode === 1) {
-                openShots();
+                recording ? openRecordingCard() : openShots();
             } else {
                 read();
             }
@@ -228,7 +251,9 @@ FocusScope {
         } else if (api.keys.isMenu(event)) {
             openMenu();
         } else if (event.key === Qt.Key_Up) {
-            if (mode === 2) {
+            if (mode === 2 && recording) {
+                openRecordingCard();
+            } else if (mode >= 2) {
                 Sound.panel();
                 mode = 1;
             } else if (mode === 1) {
@@ -237,14 +262,16 @@ FocusScope {
                 step(-1);
             }
         } else if (event.key === Qt.Key_Down) {
-            if (mode === 2)
+            if (mode === 3)
+                openShots();
+            else if (mode === 2)
                 Sound.edge();
             else if (mode === 1)
                 scroll(1);
             else
                 step(1);
         } else if (event.key === Qt.Key_Right) {
-            mode === 2 ? stepShot(1) : mode === 1 ? Sound.edge() : read();
+            mode === 2 ? stepShot(1) : mode >= 1 ? Sound.edge() : read();
         } else if (event.key === Qt.Key_Left) {
             mode === 2 ? stepShot(-1) : mode === 1 ? leave() : Sound.edge();
         } else {
@@ -335,10 +362,12 @@ FocusScope {
     Flickable {
         id: flick
 
+        readonly property real room: shots.inset
+
         anchors.top: list.top
         anchors.bottom: hintBar.top
         anchors.left: list.right
-        anchors.leftMargin: Theme.dp(60)
+        anchors.leftMargin: Theme.dp(60) - room
         anchors.right: parent.right
         anchors.rightMargin: page.sideMargin
         contentWidth: width
@@ -352,7 +381,8 @@ FocusScope {
         Column {
             id: article
 
-            width: flick.width
+            x: flick.room
+            width: flick.width - flick.room
             spacing: Theme.dp(28)
 
             Text {
@@ -423,7 +453,18 @@ FocusScope {
                 }
             }
 
+            RecordingCard {
+                id: recordingCard
+
+                width: parent.width
+                recording: page.recording
+                focused: page.mode === 3
+                dimmed: page.mode === 2 && !page.lightbox
+            }
+
             ScreenshotStrip {
+                id: shots
+
                 width: parent.width
                 images: page.images
                 index: page.shotIndex
@@ -436,6 +477,7 @@ FocusScope {
     Rectangle {
         anchors.bottom: parent.bottom
         anchors.left: flick.left
+        anchors.leftMargin: flick.room
         anchors.right: parent.right
         height: hintBar.height + Theme.dp(50)
         gradient: Gradient {

@@ -79,6 +79,57 @@ def test_a_session_running_at_startup_is_home_with_the_game_pinned(api, fake):
     pump(50)
 
 
+def test_the_cursor_follows_the_game_through_its_session(api, fake, monkeypatch):
+    from PySide6.QtCore import Q_ARG, QMetaObject, QObject
+
+    from universe_ui import fake_core
+
+    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+    engine, window = render(api, activate=True)
+    root = window.property("contentItem").childItems()[0].property("item")
+    home = root.property("activePage")
+    overlay = window.findChild(QObject, "launchOverlay")
+    assert home.property("currentGame").property("id") == "the-technomancer"
+    for ident in ("dead-cells", "mirrors-edge"):  # a row on the rail, then a first play that has none yet
+        while overlay.property("running"):
+            pump(20)
+        before = home.property("currentGame").property("id")
+        QMetaObject.invokeMethod(root, "launchGame", Q_ARG("QVariant", api.allGames.byId(ident)))
+        wait_for(fake.sessionStarted, 3000)
+        pump(50)
+        assert home.property("currentGame").property("id") == before
+        fake.stop("")
+        wait_for(fake.sessionEnded, 3000)
+        pump(50)
+        assert root.property("playingId") == ""
+        assert home.property("currentGame").property("id") == ident
+    window.close()
+    pump(50)
+
+
+def test_the_switch2_home_row_follows_the_game_too(api, fake, monkeypatch):
+    from PySide6.QtCore import Q_ARG, QMetaObject, QObject
+
+    from universe_ui import fake_core
+
+    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+    api.theme.set("switch2")
+    engine, window = render(api, activate=True)
+    root = window.property("contentItem").childItems()[0].property("item")
+    home = root.findChild(QObject, "homePage")
+    assert home.property("currentGame").property("id") == "the-technomancer"
+    QMetaObject.invokeMethod(root, "launch", Q_ARG("QVariant", api.allGames.byId("dead-cells")))
+    wait_for(fake.sessionStarted, 3000)
+    pump(50)
+    assert home.property("currentGame").property("id") == "the-technomancer" and home.property("index") == 1
+    fake.stop("")
+    wait_for(fake.sessionEnded, 3000)
+    pump(50)
+    assert home.property("currentGame").property("id") == "dead-cells" and home.property("index") == 0
+    window.close()
+    pump(50)
+
+
 def test_a_launch_holds_the_poster_until_the_window_is_shown(api, fake):
     from PySide6.QtCore import Q_ARG, QMetaObject, QObject
 

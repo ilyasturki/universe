@@ -1,5 +1,6 @@
 import QtQuick
 import "../core"
+import "../../ui" as Base
 
 Item {
     id: bar
@@ -30,7 +31,19 @@ Item {
         }
     }
 
+    Base.PowerBadge {
+        anchors.right: clockLabel.left
+        anchors.rightMargin: Theme.dp(34)
+        anchors.verticalCenter: clockLabel.verticalCenter
+        tint: Theme.text
+        size: Theme.dp(Theme.fontSmall)
+        fontFamily: Theme.sans
+        fontWeight: Font.Normal
+        padGlyph: Glyph { anchors.fill: parent; kind: "controllers"; tint: parent.ink }
+    }
+
     Label {
+        id: clockLabel
         anchors.right: parent.right
         anchors.rightMargin: Theme.dp(72)
         y: Theme.dp(90)

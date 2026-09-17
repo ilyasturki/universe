@@ -12,8 +12,7 @@ FocusScope {
 
     signal chromeRequested()
 
-    readonly property var currentGame: row.currentIndex >= 0 && favourites.count > 0
-                                       ? favourites.get(row.currentIndex) : null
+    readonly property var currentGame: anchor.game
     readonly property bool ownsBackdrop: false
     readonly property real backdropBlur: 30
     readonly property real scrimTop: 0.72
@@ -53,6 +52,14 @@ FocusScope {
         id: favourites
         sourceModel: api.allGames
         pinned: page.pinned
+    }
+
+    GameAnchor {
+        id: anchor
+        client: api.universe
+        model: favourites
+        index: row.currentIndex
+        onMoved: function(index) { row.currentIndex = index; }
     }
 
     Text {

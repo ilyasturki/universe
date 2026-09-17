@@ -20,7 +20,13 @@ FocusScope {
     readonly property string currentSession: current ? current.session : ""
     readonly property var frames: current && store.frameMap[current.session] ? store.frameMap[current.session] : null
 
+    readonly property var journal: api.screens.journal
+    readonly property var entry: current && current.hasJournal
+        ? journal.rows.find(function(r) { return r.session === current.session; }) || null : null
+    readonly property bool entryPending: entry !== null && entry.state === "pending"
+
     property bool videoFocused: false
+    property bool journalFocused: false
     property bool fullscreen: false
     readonly property bool playing: player.playbackState === MediaPlayer.PlayingState
     readonly property bool stopped: player.playbackState === MediaPlayer.StoppedState
@@ -38,6 +44,11 @@ FocusScope {
         if (menu.open)
             return menu.hints;
         var out = [];
+        if (journalFocused) {
+            out.push({ glyph: "A", label: entryPending ? "Being written" : "Read", dim: entryPending });
+            out.push({ glyph: "B", label: "Back to list" });
+            return out;
+        }
         out.push({ glyph: "A", label: videoFocused && playing ? "Pause" : "Play" });
         out.push({ glyph: "X", label: fullscreen ? "Exit fullscreen" : "Fullscreen", dim: current === null });
         out.push({ glyph: "Y", label: "Journal entry", dim: !(current && current.hasJournal) });
@@ -57,9 +68,13 @@ FocusScope {
         player.stop();
         index = 0;
         videoFocused = false;
+        journalFocused = false;
         fullscreen = false;
-        if (game)
+        if (game) {
             store.load(game.id);
+            if (journal.gameId !== game.id)
+                journal.load(game.id);
+        }
         landOnSession();
     }
 
@@ -79,6 +94,7 @@ FocusScope {
     onCurrentChanged: {
         player.stop();
         scrub.scrubbing = false;
+        journalFocused = false;
         player.source = current ? current.url : "";
         if (current)
             store.select(current.session);
@@ -118,10 +134,16 @@ FocusScope {
     }
 
     function openJournal() {
-        if (current && current.hasJournal)
+        if (current && current.hasJournal && !entryPending)
             page.jumpRequested("pages/JournalPage.qml", current.session);
         else
             Sound.edge();
+    }
+
+    function focusJournal() {
+        Sound.panel();
+        videoFocused = false;
+        journalFocused = true;
     }
 
     function openMenu() {
@@ -201,6 +223,24 @@ FocusScope {
         var arrow = event.key === Qt.Key_Left || event.key === Qt.Key_Right;
         if (event.isAutoRepeat && !(page.videoFocused && arrow))
             return;
+        if (page.journalFocused) {
+            event.accepted = true;
+            if (api.keys.isAccept(event) || api.keys.isFilters(event)) {
+                openJournal();
+            } else if (api.keys.isCancel(event)) {
+                Sound.cancel();
+                page.journalFocused = false;
+            } else if (event.key === Qt.Key_Up) {
+                Sound.panel();
+                page.journalFocused = false;
+                page.videoFocused = true;
+            } else if (api.keys.isMenu(event)) {
+                openMenu();
+            } else {
+                Sound.edge();
+            }
+            return;
+        }
         if (api.keys.isAccept(event)) {
             event.accepted = true;
             page.videoFocused ? togglePlay() : focusVideo(true);
@@ -227,7 +267,12 @@ FocusScope {
             openJournal();
         } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
             event.accepted = true;
-            page.videoFocused ? Sound.edge() : step(event.key === Qt.Key_Up ? -1 : 1);
+            if (!page.videoFocused)
+                step(event.key === Qt.Key_Up ? -1 : 1);
+            else if (event.key === Qt.Key_Down && page.entry && !page.fullscreen)
+                focusJournal();
+            else
+                Sound.edge();
         } else if (arrow) {
             event.accepted = true;
             if (page.videoFocused) {
@@ -291,7 +336,7 @@ FocusScope {
         interactive: false
         clip: true
         spacing: Theme.dp(12)
-        opacity: page.videoFocused ? 0.55 : 1.0
+        opacity: page.videoFocused || page.journalFocused ? 0.55 : 1.0
         highlightFollowsCurrentItem: true
         preferredHighlightBegin: 0
         preferredHighlightEnd: height
@@ -304,7 +349,7 @@ FocusScope {
 
             width: list.width
             height: Theme.dp(120)
-            lit: index === page.index && !page.videoFocused
+            lit: index === page.index && !page.videoFocused && !page.journalFocused
             title: modelData.dateText
             subtitle: modelData.durationText + " · " + modelData.sizeText
             mark: "book"
@@ -649,6 +694,74 @@ FocusScope {
         font.family: Theme.sans
         font.pixelSize: Theme.dp(20)
         elide: Text.ElideMiddle
+    }
+
+    Item {
+        anchors.top: pane.bottom
+        anchors.topMargin: Theme.dp(72)
+        anchors.left: pane.left
+        anchors.right: pane.right
+        visible: page.entry !== null && !page.fullscreen
+
+        Column {
+            id: journalText
+
+            anchors.left: parent.left
+            anchors.right: parent.right
+            spacing: Theme.dp(8)
+
+            Row {
+                spacing: Theme.dp(12)
+
+                MenuGlyph {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Theme.dp(20)
+                    height: width
+                    kind: "book"
+                    tint: page.journalFocused ? Theme.textSecondary : Theme.textMuted
+                }
+
+                CapsLabel {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "JOURNAL"
+                    tracking: 0.11
+                    color: page.journalFocused ? Theme.textSecondary : Theme.textMuted
+                }
+            }
+
+            Text {
+                width: parent.width
+                text: page.entry ? (page.entryPending ? "Writing the entry…" : page.entry.title) : ""
+                color: page.entryPending ? Theme.textSecondary : Theme.text
+                font.family: Theme.sans
+                font.weight: Font.DemiBold
+                font.pixelSize: Theme.dp(26)
+                elide: Text.ElideRight
+            }
+
+            Text {
+                width: parent.width
+                text: page.entry ? (page.entryPending ? "The journal module is writing this entry." : page.entry.paragraphs[0] || "") : ""
+                textFormat: Text.MarkdownText
+                color: page.journalFocused ? Theme.text : Theme.textSecondary
+                font.family: Theme.sans
+                font.pixelSize: Theme.dp(22)
+                lineHeight: 1.4
+                wrapMode: Text.WordWrap
+
+                Behavior on color { ColorEase { duration: Theme.durBase } }
+            }
+        }
+
+        Loader {
+            anchors.fill: journalText
+            anchors.margins: -Theme.dp(14)
+            active: page.journalFocused
+            sourceComponent: FocusRing {
+                cornerRadius: Theme.dp(14)
+                gapWidth: 0
+            }
+        }
     }
 
     HintBar {

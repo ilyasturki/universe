@@ -179,6 +179,7 @@ FocusScope {
 
         HomePage {
             id: home
+            objectName: "homePage"
             anchors.fill: parent
             shell: root
             focus: root.onHome && root.homeFocus === "home"

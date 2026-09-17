@@ -8,6 +8,7 @@ from .home import Home
 from .models import Collection, CollectionGames, Game, GameListModel, ObjectListModel, collection_key
 from .screens import Screens
 from .screens.paths import universe_home
+from .screens.power import SYSFS, Power
 from .themes import ThemeSelector
 
 KEYS = {
@@ -209,16 +210,17 @@ class Library(QObject):
 
 
 class Api(QObject):
-    def __init__(self, client, memory_path=None, fullscreen=False, theme="", parent=None):
+    def __init__(self, client, memory_path=None, fullscreen=False, theme="", power_root=None, parent=None):
         super().__init__(parent)
         self._client = client
         self._keys = Keys(self)
         self._pad = Pad(self)
+        self._power = Power(power_root or SYSFS, self)
         self._memory = Memory(memory_path, self)
         self._theme = ThemeSelector(self._memory, theme, self)
         self._library = Library(client, self)
         self._modes = {}
-        self._screens = Screens(client, self._memory, self.screenMode, self._library.allGames, self)
+        self._screens = Screens(client, self._memory, self.screenMode, self._library.allGames, self._power, self)
         controller = self._screens.controller
         controller.testingChanged.connect(lambda: self._pad.setMuted(controller.testing))
         self._home = Home(client, controller, self.screenMode, self)
@@ -252,6 +254,7 @@ class Api(QObject):
 
     keys = Property(QObject, lambda self: self._keys, constant=True)
     pad = Property(QObject, lambda self: self._pad, constant=True)
+    power = Property(QObject, lambda self: self._power, constant=True)
     memory = Property(QObject, lambda self: self._memory, constant=True)
     allGames = Property(QObject, lambda self: self._library.allGames, constant=True)
     collections = Property(QObject, lambda self: self._library.collections, constant=True)

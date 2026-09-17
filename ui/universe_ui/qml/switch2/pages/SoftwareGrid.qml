@@ -1,4 +1,5 @@
 import QtQuick
+import Universe
 import "../core"
 import "../sound"
 import "../ui"
@@ -13,7 +14,7 @@ FocusScope {
     property bool escapesLeft: true
     readonly property bool listed: Array.isArray(games)
     readonly property int count: listed ? games.length : games ? games.count : 0
-    readonly property var current: index < 0 ? null : listed ? (index < games.length ? games[index] : null) : (games && index < games.count ? games.get(index) : null)
+    readonly property var current: listed ? (index >= 0 && index < games.length ? games[index] : null) : anchor.game
     readonly property bool cursorShown: activeFocus
 
     signal escapedLeft()
@@ -74,7 +75,36 @@ FocusScope {
             index = Math.max(0, count - 1);
         view.scrollToCurrent();
     }
-    onIndexChanged: view.scrollToCurrent()
+    onIndexChanged: {
+        view.scrollToCurrent();
+        if (listed && !groups)
+            heldId = current ? current.id : "";
+    }
+
+    GameAnchor {
+        id: anchor
+        model: grid.listed ? null : grid.games
+        index: grid.index
+        onMoved: function(next) { grid.index = next; }
+    }
+
+    property string heldId: ""
+    onGamesChanged: if (listed) hold(heldId)
+
+    function hold(id) {
+        if (!listed) {
+            anchor.hold(id);
+            return;
+        }
+        var i = games.findIndex(function(g) { return g.id === id; });
+        if (i >= 0)
+            index = i;
+    }
+
+    Connections {
+        target: api.universe
+        function onSessionEnded(sessionId, id, duration) { grid.hold(id); }
+    }
     onHeightChanged: view.scrollToCurrent()
 
     Label {
