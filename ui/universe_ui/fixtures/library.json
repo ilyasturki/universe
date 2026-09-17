@@ -394,6 +394,7 @@
       ]
     }
   ],
+  "lutris": {"imported": ["celeste", "hades"], "hours_imported": {"celeste": 12.5, "hades": 30.2}},
   "login_url": "https://auth.gog.com/auth?client_id=46755278331571209&redirect_uri=https%3A%2F%2Fembed.gog.com%2Fon_login_success%3Forigin%3Dclient&response_type=code&layout=client2",
   "source_library": {
     "gog": [
@@ -744,6 +745,7 @@
       "id": "proton",
       "name": "Proton",
       "kind": "proton",
+      "extensions": ["exe", "bat", "msi"],
       "aliases": ["umu"],
       "platforms": ["windows"],
       "exe": "",
@@ -758,6 +760,7 @@
       "id": "wine",
       "name": "Wine",
       "kind": "wine",
+      "extensions": ["exe", "bat", "msi"],
       "platforms": ["windows"],
       "exe": "",
       "args": "",
@@ -771,6 +774,7 @@
       "id": "linux",
       "name": "Linux",
       "kind": "linux",
+      "extensions": [],
       "aliases": ["native"],
       "platforms": ["linux"],
       "exe": "",
@@ -785,6 +789,7 @@
       "id": "dolphin",
       "name": "Dolphin",
       "kind": "emulator",
+      "extensions": ["iso", "gcm", "gcz", "ciso", "wbfs", "rvz", "wia", "dol", "elf", "m3u", "wad"],
       "platforms": ["Nintendo GameCube", "Nintendo Wii"],
       "exe": "",
       "args": "",
@@ -802,6 +807,7 @@
       "id": "eden",
       "name": "Eden",
       "kind": "emulator",
+      "extensions": ["nsp", "xci", "nca", "nro", "nso", "nsz", "xcz"],
       "aliases": ["yuzu", "citron", "sudachi", "suyu"],
       "platforms": ["Nintendo Switch"],
       "exe": "",
@@ -819,6 +825,7 @@
       "id": "rpcs3",
       "name": "RPCS3",
       "kind": "emulator",
+      "extensions": ["bin", "self", "elf", "pkg"],
       "platforms": ["Sony PlayStation 3"],
       "exe": "",
       "args": "",
@@ -835,6 +842,7 @@
       "id": "melonds",
       "name": "melonDS",
       "kind": "emulator",
+      "extensions": ["nds", "dsi", "ids", "srl"],
       "platforms": ["Nintendo DS"],
       "exe": "/home/yasso/.local/share/lutris/runners/melonds/melonDS-x86_64.AppImage",
       "args": "--fullscreen",

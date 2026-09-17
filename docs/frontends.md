@@ -383,6 +383,36 @@ page as `switch2/pages/FormPage.qml`, pushed on its stack. The game settings pag
 shown, ids written), then the rows the runner takes. The detail page shows the runner's logo next
 to the platform.
 
+## Adding a game
+
+The runner page's row is for someone who already knows the runner. Everyone else adds a game from
+the Library: `ui/CoverGrid.qml` and `switch2/pages/SoftwareGrid.qml` take `addTile`, one more cell
+after the last game (a "+" tile, the cursor on it as `addSelected` / `atAddTile`, never a model
+index; `currentGame` is null there and A emits `addRequested`). With nothing in the library, Home
+and the Library are the prompt: Reprise's hero band reads "Add your first game" and its rail
+tile (`ui/LibraryTile.qml` `kind: "add"`) adds one instead of opening the Library; the Switch 2
+HOME row's disc does the same and All Software says so under its tile.
+
+Both open `api.screens.add` — Reprise as `pages/AddGamePage.qml` over the tab (`openSub` with
+`{ add: true }`), the Switch 2 look as `switch2/pages/AddGamePage.qml` on its stack. `load()`
+builds three cards: a "Pick a game file…" action, one action row per source of `sources()`
+(`store`, `loggedIn`; its `display` says whether it is signed in) and "Import from Lutris". The
+file flow is file first: `setFile(path)` keeps it and sorts `runners()` into `runnerChoices` /
+`runnerIds` — the ones whose `extensions` take the file first (`linux` takes a bare binary, `.sh`,
+`.x86_64`, `.AppImage`), found before missing, Proton before Wine, then by name — with `runnerIndex` on the
+first; the page shows that list as a picker, `pickRunner(i)` takes the choice, `pendingTitle()`
+proposes the title and `addGame(title)` calls `add_game`, toasting `message`. A store row leaves
+the hub for Settings › Install (Reprise: `installRequested(source, section)` → `theme.qml`
+`openSettings(section)`, whose `deliverLanding` calls the Settings page's `land(name)` once it is
+the active page; the Switch 2 look pushes its Install page), signed out for Login / Sign-in, and
+with the source's module off (`available` false) for Modules. The
+Lutris row is two presses: `previewLutris()` runs `import_lutris(false)` off the UI thread
+(`busy`) into `lutris` (the report) or `lutrisError` (Lutris absent: shown on the row, never
+toasted — the client's `attempt(work)` returns the error instead of emitting it), the row then
+reads "N games to import" and the same press asks to confirm; `importLutris()` applies, emits
+`libraryChanged([])` — a full reload, the import updates games too — and toasts the count and hours. Nothing here touches the core: the
+CLI's `universe add` and `universe migrate` are the same calls.
+
 ## The artwork page and section
 
 `api.screens.artwork` is one game's artwork page (Reprise: the Artwork entry of a game's menu, or a

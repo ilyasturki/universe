@@ -5,6 +5,7 @@ import "../core/Format.js" as Format
 Item {
     id: root
 
+    property string kind: "library"
     property bool selected: false
     property real idleScale: 1.0
     property int count: 0
@@ -43,13 +44,13 @@ Item {
                 anchors.horizontalCenter: parent.horizontalCenter
                 width: Theme.dp(56)
                 height: width
-                kind: "library"
+                kind: root.kind === "add" ? "plus" : "library"
                 tint: Theme.text
             }
 
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: "Library"
+                text: root.kind === "add" ? "Add a game" : "Library"
                 color: Theme.text
                 font.family: Theme.sans
                 font.weight: Font.DemiBold
@@ -58,6 +59,7 @@ Item {
 
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
+                visible: root.kind !== "add"
                 text: Format.plural(root.count, "game", "games")
                 color: Theme.textMuted
                 font.family: Theme.sans

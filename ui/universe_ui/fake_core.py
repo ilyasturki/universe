@@ -270,7 +270,20 @@ class FakeCore:
         return None
 
     def import_lutris(self, apply):
-        return {"imported": [], "env_diff": [], "hours": 0, "applied": bool(apply)}
+        report = self._data.get("lutris")
+        if report is None:
+            raise UniverseError("NotFound", "~/.local/share/lutris/pga.db")
+        if apply:
+            for ident in report.get("imported", []):
+                if any(g["id"] == ident for g in self._data["games"]):
+                    continue
+                game = {"id": ident, "title": ident.replace("-", " ").title(), "source": "lutris", "favorite": False, "hidden": False,
+                        "platform": "windows", "launch": {"runner": "proton", "exe": f"/games/{ident}/{ident}.exe"},
+                        "stats": {"hours": report.get("hours_imported", {}).get(ident, 0)}, "metadata": {}, "media": {"screenshots": []}}
+                self._data["games"].append(game)
+                self._write_game(game)
+        return {"backend_promoted": [], "options_promoted": [], "runners": [], "skipped": [], "updated": [], "media_imported": [],
+                "env_diffs": [], **copy.deepcopy(report), "applied": bool(apply)}
 
     def add_game(self, spec):
         runner = self._runner_of({"runner": spec.get("runner", "")})

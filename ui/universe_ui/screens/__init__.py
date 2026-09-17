@@ -1,5 +1,6 @@
 from PySide6.QtCore import Property, QObject
 
+from .add import AddGameForm
 from .artwork import ArtworkForm, ArtworkOverview
 from .controller import ControllerScreen
 from .launch import LaunchForm
@@ -31,6 +32,7 @@ class Screens(QObject):
         self._runner = RunnerForm(client, screen_mode, self)
         self._artwork = ArtworkForm(client, self)
         self._artworkOverview = ArtworkOverview(client, self)
+        self._add = AddGameForm(client, self)
 
     def shutdown(self):
         self._recordings.shutdown()
@@ -56,3 +58,4 @@ class Screens(QObject):
     runner = Property(QObject, lambda self: self._runner, constant=True)
     artwork = Property(QObject, lambda self: self._artwork, constant=True)
     artworkOverview = Property(QObject, lambda self: self._artworkOverview, constant=True)
+    add = Property(QObject, lambda self: self._add, constant=True)

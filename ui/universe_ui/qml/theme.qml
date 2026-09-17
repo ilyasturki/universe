@@ -61,6 +61,29 @@ FocusScope {
         tabIndex = (index + tabs.length) % tabs.length;
     }
 
+    // A section's name the Settings tab lands on once it is the active page.
+    property string settingsLanding: ""
+
+    function openSettings(section) {
+        settingsLanding = section;
+        goToTab(settingsTab);
+        deliverLanding();
+    }
+
+    function deliverLanding() {
+        if (settingsLanding === "" || tabIndex !== settingsTab || !activePage || !activePage.land)
+            return;
+        var section = settingsLanding;
+        settingsLanding = "";
+        activePage.land(section);
+    }
+
+    onActivePageChanged: deliverLanding()
+
+    function openAdd() {
+        openSub("pages/AddGamePage.qml", { add: true });
+    }
+
     function restoreFocus() {
         if (subOpen && subLoader.item)
             subLoader.item.forceActiveFocus();
@@ -177,7 +200,7 @@ FocusScope {
     }
 
     function openSub(source, args) {
-        if (!args.game && !args.runner && !args.module && !args.source)
+        if (!args.game && !args.runner && !args.module && !args.source && !args.add)
             return;
         Sound.enter();
         subArgs = args;
@@ -469,6 +492,7 @@ FocusScope {
                             root.goToTab(index);
                         }
                         function onChromeRequested() { root.focusChrome(); }
+                        function onAddRequested() { root.openAdd(); }
                         function onMessage(text) { toast.show(text); }
                     }
                 }
@@ -580,6 +604,10 @@ FocusScope {
             ignoreUnknownSignals: true
             function onCloseRequested() { root.closeSub(); }
             function onJumpRequested(source, session) { root.jumpSub(source, session); }
+            function onInstallRequested(source, section) {
+                root.closeSub();
+                root.openSettings(section);
+            }
             function onMessage(text) { toast.show(text); }
         }
 

@@ -13,6 +13,7 @@ FocusScope {
     signal detailRequested(var game)
     signal tabRequested(int index)
     signal chromeRequested()
+    signal addRequested()
 
     readonly property int railFloor: 5
     readonly property bool standingIn: (recent ? recent.count : 0) < railFloor
@@ -34,7 +35,7 @@ FocusScope {
     readonly property var hints: {
         var out = [];
         if (tileSelected) {
-            out.push({ glyph: "A", label: "Open library" });
+            out.push({ glyph: "A", label: page.empty ? "Add a game" : "Open library" });
             out.push({ glyph: "X", label: "Details", dim: true });
             out.push({ glyph: "Y", label: favouriteLabel, dim: true });
         } else {
@@ -64,6 +65,10 @@ FocusScope {
 
     readonly property int libraryCount: api.allGames.count
     readonly property int librarySeconds: api.allGames.totalPlayTime
+    readonly property bool empty: libraryCount === 0
+
+    onRailCountChanged: if (railCount === 0) tileSelected = true
+    Component.onCompleted: if (railCount === 0) tileSelected = true
 
     function toggleFavourite() {
         if (!currentGame || tileSelected) {
@@ -118,7 +123,7 @@ FocusScope {
             toggleFavourite();
         } else if (page.tileSelected && api.keys.isAccept(event)) {
             event.accepted = true;
-            page.tabRequested(1);
+            page.empty ? page.addRequested() : page.tabRequested(1);
         } else if (page.tileSelected && api.keys.isDetails(event)) {
             event.accepted = true;
             Sound.edge();
@@ -202,7 +207,7 @@ FocusScope {
 
             Text {
                 anchors.bottom: heroLogo.bottom
-                text: "Library"
+                text: page.empty ? "Add your first game" : "Library"
                 color: Theme.text
                 font.family: Theme.sans
                 font.weight: Font.Bold
@@ -225,7 +230,8 @@ FocusScope {
 
             Text {
                 anchors.verticalCenter: heroMeta.verticalCenter
-                text: Format.plural(page.libraryCount, "game", "games") + " · "
+                text: page.empty ? "Nothing in the library yet: a file on this machine, a store, or your Lutris games."
+                    : Format.plural(page.libraryCount, "game", "games") + " · "
                       + Format.totalPlayTime(page.librarySeconds) + " played"
                 color: Theme.textSecondary
                 font.family: Theme.sans
@@ -274,8 +280,8 @@ FocusScope {
                 }
 
                 PillButton {
-                    icon: "library"
-                    label: "Open library"
+                    icon: page.empty ? "plus" : "library"
+                    label: page.empty ? "Add a game" : "Open library"
                     focused: heroActions.activeFocus && page.tileSelected
                     opacity: page.tileSelected ? 1.0 : 0.0
                     visible: opacity > 0.01
@@ -319,7 +325,7 @@ FocusScope {
             anchors.left: parent.left
             anchors.leftMargin: Theme.dp(90)
             size: Theme.dp(15)
-            visible: page.standingIn
+            visible: page.standingIn && !page.empty
             text: "FROM YOUR LIBRARY · RECENTLY PLAYED GOES HERE"
         }
 
@@ -327,7 +333,7 @@ FocusScope {
             id: rail
 
             anchors.top: parent.top
-            anchors.topMargin: page.railGapTop + (page.standingIn ? standInNote.height + Theme.dp(14) : 0)
+            anchors.topMargin: page.railGapTop + (standInNote.visible ? standInNote.height + Theme.dp(14) : 0)
             anchors.left: parent.left
             anchors.right: parent.right
             // A header would move originX negative, and the view then refuses to scroll all the way to it.
@@ -359,6 +365,7 @@ FocusScope {
                     height: page.cellSize
                     anchors.bottom: parent.bottom
                     x: page.railGap + (page.slotSize - width) / 2 + (page.tileSelected ? 0 : page.spread)
+                    kind: page.empty ? "add" : "library"
                     selected: page.tileSelected
                     idleScale: page.idleScale
                     count: page.libraryCount
@@ -384,6 +391,10 @@ FocusScope {
 
             Keys.onLeftPressed: function(event) {
                 if (page.tileSelected) {
+                    if (rail.count === 0) {
+                        Sound.edge();
+                        return;
+                    }
                     page.tileSelected = false;
                     Sound.tick();
                     return;

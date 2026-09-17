@@ -46,6 +46,14 @@ FocusScope {
     readonly property int quitSection: 10
     property int section: 0
 
+    function land(name) {
+        var index = sections.findIndex(function(s) { return s.name.toLowerCase() === name; });
+        if (index < 0)
+            return;
+        section = index;
+        cards.forceActiveFocus();
+    }
+
     readonly property var modulesForm: api.screens.modules
     readonly property var sourceList: api.screens.sourceList
     // The Modules and Sources sections are the same list: a switch per entry, A opens its page, Y flips it.

@@ -118,6 +118,12 @@ class CoreClient(QObject):
             return default
         return default if value is None else value
 
+    def attempt(self, work):
+        try:
+            return self._call(work), ""
+        except UniverseError as e:
+            return None, e.message or e.kind
+
     def _done(self, fn, *args):
         try:
             self._call(fn, *args)

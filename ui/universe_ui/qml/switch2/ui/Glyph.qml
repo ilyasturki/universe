@@ -67,6 +67,8 @@ Canvas {
             ctx.moveTo(5 * s, 12.5 * s); ctx.lineTo(10 * s, 17.5 * s); ctx.lineTo(19 * s, 7 * s); ctx.stroke();
         } else if (kind === "cross") {
             line(5, 5, 19, 19); line(19, 5, 5, 19);
+        } else if (kind === "plus") {
+            line(12, 4.5, 12, 19.5); line(4.5, 12, 19.5, 12);
         } else if (kind === "chevron-left") {
             ctx.moveTo(14.5 * s, 6 * s); ctx.lineTo(9 * s, 12 * s); ctx.lineTo(14.5 * s, 18 * s); ctx.stroke();
         } else if (kind === "film") {

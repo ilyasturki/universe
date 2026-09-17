@@ -18,7 +18,7 @@ FocusScope {
 
     readonly property var sortNames: ["By Recently Played", "By Title", "By Play Time", "By Release"]
 
-    readonly property var hints: tab === 1 || zone === "rail" ? [ { glyph: "B", label: "Back" }, { glyph: "A", label: "OK" } ]
+    readonly property var hints: tab === 1 || zone === "rail" || softwareGrid.atAddTile ? [ { glyph: "B", label: "Back" }, { glyph: "A", label: "OK" } ]
                                : [ { glyph: "Start", label: "Options" }, { glyph: "B", label: "Back" }, { glyph: "A", label: "Start" } ]
 
     readonly property real gridX: Theme.dp(253)
@@ -127,6 +127,7 @@ FocusScope {
             width: implicitWidth
             height: parent.height - y - Theme.dp(Theme.hintBarHeight)
             games: sorted
+            addTile: page.query === ""
             focus: page.zone === "grid"
             onEscapedLeft: {
                 page.zone = "rail";
@@ -134,6 +135,7 @@ FocusScope {
             }
             onActivated: page.shell.launch(current)
             onOptionsRequested: page.shell.push("pages/SoftwareOptionsPage.qml", { gameId: current.id })
+            onAddRequested: page.shell.push("pages/AddGamePage.qml", {})
         }
     }
 

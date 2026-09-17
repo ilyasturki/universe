@@ -8,8 +8,13 @@ GridView {
     property int columns: 8
     property real gap: Theme.dp(28)
     property bool selectionActive: true
+    // One more cell after the last game: the tile that adds one. It holds the cursor as `addSelected`, never `currentIndex`.
+    property bool addTile: false
+    property bool addSelected: false
     readonly property real coverWidth: cellWidth - gap
-    readonly property Item focusedArtItem: currentItem ? currentItem.artItem : null
+    readonly property Item focusedArtItem: currentItem && !addSelected ? currentItem.artItem : null
+    readonly property int cells: count + (addTile ? 1 : 0)
+    readonly property int cursor: addSelected ? count : currentIndex
     // Room inside the clip for the focused cover's ring and its 5% growth.
     readonly property real inset: Theme.dp(12)
 
@@ -25,36 +30,44 @@ GridView {
     clip: true
     cacheBuffer: cellHeight * 2
 
-    readonly property int lastRow: count > 0 ? Math.floor((count - 1) / columns) : 0
+    readonly property int lastRow: cells > 0 ? Math.floor((cells - 1) / columns) : 0
 
-    function scrollToCurrent() {
-        scroller.stop();
-        if (height <= 0 || cellHeight <= 0)
-            return;
-        if (contentHeight + topMargin + bottomMargin <= height) {
-            // A Flickable whose content fits rests at -topMargin, not 0.
-            contentY = -topMargin;
-            return;
-        }
-        var rowTop = Math.floor(currentIndex / columns) * cellHeight;
+    function targetY(index) {
+        // A Flickable whose content fits rests at -topMargin, not 0.
+        if (contentHeight + topMargin + bottomMargin <= height)
+            return -topMargin;
+        var rowTop = Math.floor(index / columns) * cellHeight;
         var target = contentY;
         if (rowTop - inset < contentY)
             target = rowTop - inset;
         else if (rowTop + cellHeight + inset > contentY + height)
             target = rowTop + cellHeight + inset - height;
         var maxY = contentHeight - height + bottomMargin;
-        contentY = Math.max(-topMargin, Math.min(target, maxY));
+        return Math.max(-topMargin, Math.min(target, maxY));
+    }
+
+    function scrollToCurrent() {
+        scroller.stop();
+        if (height <= 0 || cellHeight <= 0)
+            return;
+        contentY = targetY(cursor);
     }
 
     // Setting currentIndex moves contentY synchronously, past any Behavior: snapshot, restore, animate.
     function moveCurrent(index) {
-        if (index < 0 || index >= count || index === currentIndex) {
+        if (index < 0 || index >= cells || index === cursor) {
             Sound.edge();
             return;
         }
         Sound.tick();
         var from = contentY;
-        currentIndex = index;
+        if (index === count) {
+            addSelected = true;
+            contentY = targetY(index);
+        } else {
+            addSelected = false;
+            currentIndex = index;
+        }
         var to = contentY;
         if (Math.abs(to - from) < 0.5)
             return;
@@ -74,20 +87,25 @@ GridView {
 
     onCurrentIndexChanged: scrollToCurrent()
     onHeightChanged: scrollToCurrent()
-    onCountChanged: scrollToCurrent()
+    onCountChanged: {
+        if (addTile && count === 0)
+            addSelected = true;
+        scrollToCurrent();
+    }
+    onAddTileChanged: if (addTile && count === 0) addSelected = true
 
     Keys.onDownPressed: function(event) {
         if (!selectionActive)
             event.accepted = false;
-        else if (Math.floor(currentIndex / columns) < lastRow)
-            moveCurrent(Math.min(currentIndex + columns, count - 1));
+        else if (Math.floor(cursor / columns) < lastRow)
+            moveCurrent(Math.min(cursor + columns, cells - 1));
         else
             Sound.edge();
     }
 
     Keys.onUpPressed: function(event) {
-        if (selectionActive && currentIndex >= columns)
-            moveCurrent(currentIndex - columns);
+        if (selectionActive && cursor >= columns)
+            moveCurrent(cursor - columns);
         else
             event.accepted = false;
     }
@@ -96,20 +114,44 @@ GridView {
         if (!selectionActive)
             event.accepted = false;
         else
-            moveCurrent(currentIndex - 1);
+            moveCurrent(cursor - 1);
     }
 
     Keys.onRightPressed: function(event) {
         if (!selectionActive)
             event.accepted = false;
         else
-            moveCurrent(currentIndex + 1);
+            moveCurrent(cursor + 1);
+    }
+
+    // The footer only lengthens the content when the add tile starts a row of its own.
+    footer: Item {
+        width: 1
+        height: grid.addTile && grid.count % grid.columns === 0 ? grid.cellHeight : 0
+    }
+
+    Item {
+        visible: grid.addTile
+        x: (grid.count % grid.columns) * grid.cellWidth
+        y: Math.floor(grid.count / grid.columns) * grid.cellHeight
+        width: grid.cellWidth
+        height: grid.cellHeight
+
+        LibraryTile {
+            anchors.centerIn: parent
+            width: grid.coverWidth
+            height: grid.coverWidth * 1.5
+            kind: "add"
+            cornerRadius: Theme.dp(Theme.radiusCover)
+            selected: grid.addSelected
+            ringOpacity: grid.selectionActive ? 1.0 : Theme.ringIdle
+        }
     }
 
     delegate: Item {
         id: cell
 
-        readonly property bool selected: GridView.isCurrentItem
+        readonly property bool selected: GridView.isCurrentItem && !grid.addSelected
         property alias artItem: cover
 
         width: grid.cellWidth

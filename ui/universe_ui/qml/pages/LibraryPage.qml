@@ -10,8 +10,11 @@ FocusScope {
     focus: true
 
     signal chromeRequested()
+    signal addRequested()
 
     readonly property var currentGame: anchor.game
+    readonly property bool onAddTile: grid.addSelected
+    readonly property bool empty: api.allGames.count === 0
     readonly property bool ownsBackdrop: false
     readonly property real backdropBlur: 18
     readonly property real scrimTop: 0.58
@@ -25,6 +28,10 @@ FocusScope {
         : chipBar.activeFocus
         ? [ { glyph: "A", label: "Change" },
             { glyph: "B", label: "Back to grid" },
+            { glyph: "LT RT", label: "Collection" } ]
+        : onAddTile
+        ? [ { glyph: "A", label: "Add a game" },
+            { glyph: "Y", label: "Sort" },
             { glyph: "LT RT", label: "Collection" } ]
         : [ { glyph: "A", label: "Launch" },
             { glyph: "X", label: "Details" },
@@ -85,6 +92,7 @@ FocusScope {
     onSortModeChanged: api.memory.set("librarySort", sortMode)
     onCollectionIndexChanged: {
         api.memory.set("libraryCollection", collectionIndex);
+        grid.addSelected = false;
         grid.currentIndex = 0;
         grid.contentY = 0;
     }
@@ -99,8 +107,8 @@ FocusScope {
         id: anchor
         client: api.universe
         model: sorted
-        index: grid.currentIndex
-        onMoved: function(index) { grid.currentIndex = index; }
+        index: grid.addSelected ? -1 : grid.currentIndex
+        onMoved: function(index) { grid.addSelected = false; grid.currentIndex = index; }
     }
 
     Item {
@@ -121,7 +129,7 @@ FocusScope {
             anchors.left: parent.left
             anchors.right: chipBar.left
             anchors.rightMargin: Theme.dp(40)
-            text: page.currentGame ? page.currentGame.title : ""
+            text: page.currentGame ? page.currentGame.title : page.onAddTile ? (page.empty ? "Add your first game" : "Add a game") : ""
             color: Theme.text
             font.family: Theme.sans
             font.weight: Font.Bold
@@ -135,6 +143,18 @@ FocusScope {
             anchors.topMargin: Theme.dp(14)
             anchors.left: parent.left
             game: page.currentGame
+        }
+
+        Text {
+            anchors.top: titleText.bottom
+            anchors.topMargin: Theme.dp(14)
+            anchors.left: parent.left
+            visible: page.onAddTile
+            text: page.empty ? "Nothing in the library yet: a file on this machine, a store, or your Lutris games."
+                             : "A file on this machine, a store, or your Lutris games."
+            color: Theme.textSecondary
+            font.family: Theme.sans
+            font.pixelSize: Theme.dp(24)
         }
 
         FocusScope {
@@ -239,11 +259,18 @@ FocusScope {
         gap: page.gap
         cellWidth: page.cellWidth
         selectionActive: !chipBar.activeFocus
+        addTile: true
 
         Keys.onPressed: function(event) {
             if (event.isAutoRepeat)
                 return;
-            if (api.keys.isFilters(event)) {
+            if (grid.addSelected && api.keys.isAccept(event)) {
+                event.accepted = true;
+                page.addRequested();
+            } else if (grid.addSelected && (api.keys.isDetails(event) || api.keys.isMenu(event))) {
+                event.accepted = true;
+                Sound.edge();
+            } else if (api.keys.isFilters(event)) {
                 event.accepted = true;
                 page.cycleSort(1);
             } else if (api.keys.isPageUp(event) || api.keys.isPageDown(event)) {

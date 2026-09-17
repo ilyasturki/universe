@@ -12,14 +12,19 @@ FocusScope {
     property bool groups: false
     property int index: 0
     property bool escapesLeft: true
+    // One more cell after the last game: the tile that adds one, at index `count`.
+    property bool addTile: false
     readonly property bool listed: Array.isArray(games)
     readonly property int count: listed ? games.length : games ? games.count : 0
-    readonly property var current: listed ? (index >= 0 && index < games.length ? games[index] : null) : anchor.game
+    readonly property int cells: count + (addTile ? 1 : 0)
+    readonly property bool atAddTile: addTile && index === count
+    readonly property var current: atAddTile ? null : listed ? (index >= 0 && index < games.length ? games[index] : null) : anchor.game
     readonly property bool cursorShown: activeFocus
 
     signal escapedLeft()
     signal activated(int index)
     signal optionsRequested(int index)
+    signal addRequested()
 
     readonly property int columns: 6
     readonly property real tile: Theme.dp(237)
@@ -28,13 +33,13 @@ FocusScope {
     readonly property real inset: Theme.dp(Theme.ringRoom)
     readonly property real cornerRadius: Math.round(Theme.dp(Theme.radiusTile) * tile / Theme.dp(Theme.tileSize))
     readonly property real cellHeight: groups ? pitch + inset + Theme.dp(64) : pitch
-    readonly property int lastRow: count > 0 ? Math.floor((count - 1) / columns) : 0
+    readonly property int lastRow: cells > 0 ? Math.floor((cells - 1) / columns) : 0
 
     implicitWidth: columns * pitch
 
-    function go(next) { index = Sound.stepped(index, next - index, count); }
+    function go(next) { index = Sound.stepped(index, next - index, cells); }
 
-    Keys.onRightPressed: index % columns === columns - 1 || index === count - 1 ? Sound.play("edge") : go(index + 1)
+    Keys.onRightPressed: index % columns === columns - 1 || index === cells - 1 ? Sound.play("edge") : go(index + 1)
     Keys.onLeftPressed: {
         if (index % columns !== 0) {
             go(index - 1);
@@ -45,7 +50,7 @@ FocusScope {
             Sound.play("edge");
         }
     }
-    Keys.onDownPressed: Math.floor(index / columns) < lastRow ? go(Math.min(index + columns, count - 1)) : Sound.play("edge")
+    Keys.onDownPressed: Math.floor(index / columns) < lastRow ? go(Math.min(index + columns, cells - 1)) : Sound.play("edge")
     Keys.onUpPressed: index >= columns ? go(index - columns) : Sound.play("edge")
 
     Keys.onPressed: function(event) {
@@ -53,7 +58,10 @@ FocusScope {
             return;
         if (api.keys.isAccept(event)) {
             event.accepted = true;
-            if (current) {
+            if (atAddTile) {
+                Sound.play("ok");
+                grid.addRequested();
+            } else if (current) {
                 Sound.play("ok");
                 grid.activated(index);
             } else {
@@ -71,8 +79,8 @@ FocusScope {
     }
 
     onCountChanged: {
-        if (index >= count)
-            index = Math.max(0, count - 1);
+        if (index >= cells)
+            index = Math.max(0, cells - 1);
         view.scrollToCurrent();
     }
     onIndexChanged: {
@@ -84,7 +92,7 @@ FocusScope {
     GameAnchor {
         id: anchor
         model: grid.listed ? null : grid.games
-        index: grid.index
+        index: grid.atAddTile ? -1 : grid.index
         onMoved: function(next) { grid.index = next; }
     }
 
@@ -115,7 +123,8 @@ FocusScope {
         horizontalAlignment: Text.AlignHCenter
         wrapMode: Text.WordWrap
         text: grid.groups ? "Groups gather your games: your favourites, each platform, each tag you give a game."
-                          : "No software matches."
+            : grid.addTile && api.allGames.count === 0 ? "Nothing in the library yet. Add a file on this machine, a store's games, or your Lutris library."
+            : "No software matches."
         lineHeight: 1.3
     }
 
@@ -138,7 +147,7 @@ FocusScope {
         cacheBuffer: grid.cellHeight * 2
 
         function scrollToCurrent() {
-            if (height <= 0 || grid.count === 0)
+            if (height <= 0 || grid.cells === 0)
                 return;
             if (contentHeight + topMargin + bottomMargin <= height) {
                 contentY = -topMargin;
@@ -154,6 +163,47 @@ FocusScope {
         }
 
         Behavior on contentY { Ease {} }
+
+        // The footer only lengthens the content when the add tile starts a row of its own.
+        footer: Item {
+            width: 1
+            height: grid.addTile && grid.count % grid.columns === 0 ? grid.cellHeight : 0
+        }
+
+        Item {
+            id: addCell
+
+            readonly property bool focused: grid.cursorShown && grid.atAddTile
+
+            visible: grid.addTile
+            x: (grid.count % grid.columns) * grid.pitch
+            y: Math.floor(grid.count / grid.columns) * grid.cellHeight
+            width: grid.tile
+            height: grid.tile
+            z: focused ? 2 : 1
+
+            Rectangle {
+                id: addFace
+                anchors.fill: parent
+                radius: grid.cornerRadius
+                color: Theme.slot
+            }
+
+            Glyph {
+                anchors.centerIn: parent
+                width: Theme.dp(96)
+                height: width
+                kind: "plus"
+                tint: Theme.barGrey
+                stroke: 1.6
+            }
+
+            FocusOutline {
+                target: addFace
+                cornerRadius: addFace.radius
+                shown: addCell.focused
+            }
+        }
 
         delegate: Item {
             id: cell
@@ -248,8 +298,8 @@ FocusScope {
     Item {
         id: card
 
-        readonly property bool shown: !grid.groups && grid.cursorShown && grid.current !== null
-                                      && grid.index + grid.columns >= grid.count
+        readonly property bool shown: !grid.groups && grid.cursorShown && (grid.current !== null || grid.atAddTile)
+                                      && grid.index + grid.columns >= grid.cells
         readonly property real cellX: (grid.index % grid.columns) * grid.pitch
         readonly property real cellY: Math.floor(grid.index / grid.columns) * grid.cellHeight - view.contentY - grid.inset
 
@@ -290,7 +340,7 @@ FocusScope {
             id: cardText
             anchors.centerIn: parent
             width: Math.min(implicitWidth, Theme.dp(760))
-            text: grid.current && !grid.groups ? grid.current.title : ""
+            text: grid.atAddTile ? "Add a game" : grid.current && !grid.groups ? grid.current.title : ""
             color: Theme.accent
             elide: Text.ElideRight
         }

@@ -11,6 +11,7 @@ FocusScope {
 
     readonly property int gameCount: recent.count
     readonly property int allIndex: gameCount
+    readonly property bool empty: api.allGames.count === 0
     property int index: 0
     readonly property bool onAll: index === allIndex
     readonly property var currentGame: anchor.game
@@ -55,7 +56,7 @@ FocusScope {
     function activate() {
         if (onAll) {
             Sound.play("ok");
-            shell.push("pages/AllSoftwarePage.qml", {});
+            shell.push(empty ? "pages/AddGamePage.qml" : "pages/AllSoftwarePage.qml", {});
             return;
         }
         if (!currentGame) {
@@ -115,7 +116,7 @@ FocusScope {
         y: Theme.dp(Theme.tileRowY) - Theme.dp(66)
         width: Math.max(0, Math.min(implicitWidth, page.pitch * 2.5, room))
         visible: page.activeFocus && (page.currentGame !== null || page.onAll)
-        text: page.onAll ? "All Software" : (page.currentGame ? page.currentGame.title : "")
+        text: page.onAll ? (page.empty ? "Add a game" : "All Software") : (page.currentGame ? page.currentGame.title : "")
         color: Theme.accent
         horizontalAlignment: Text.AlignHCenter
         elide: Text.ElideRight
@@ -211,11 +212,24 @@ FocusScope {
                     anchors.centerIn: parent
                     width: Theme.dp(96)
                     height: width
-                    kind: "grid"
+                    kind: page.empty ? "plus" : "grid"
                     tint: Theme.barGrey
                     stroke: 1.6
                 }
             }
         }
+    }
+
+    Label {
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: Theme.dp(Theme.tileRowY) + page.tile + Theme.dp(20)
+        width: parent.width - Theme.dp(400)
+        visible: page.empty
+        horizontalAlignment: Text.AlignHCenter
+        wrapMode: Text.WordWrap
+        text: "Nothing in the library yet. Add a file on this machine, a store's games, or your Lutris library."
+        color: Theme.textSecondary
+        font.pixelSize: Theme.dp(Theme.fontSmall)
+        lineHeight: 1.3
     }
 }
