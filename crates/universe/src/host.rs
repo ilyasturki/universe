@@ -33,6 +33,7 @@ pub struct UnitSpec {
     pub program: String,
     pub args: Vec<String>,
     pub env: BTreeMap<String, String>,
+    pub unset_env: Vec<String>,
     pub cwd: Option<PathBuf>,
     pub properties: Vec<(String, String)>,
     pub bind_to: Option<String>,
@@ -79,6 +80,8 @@ impl Units {
     pub async fn stop(&self, unit: &str) -> Result<()> {
         match self {
             Units::Systemd => {
+                // systemd 260 drops the stop job of a frozen unit ("Cannot stop frozen unit") and reports success.
+                let _ = tokio::process::Command::new("systemctl").args(["--user", "thaw", unit]).output().await;
                 let out = tokio::process::Command::new("systemctl").args(["--user", "stop", "--no-block", unit]).output().await?;
                 let err = String::from_utf8_lossy(&out.stderr);
                 if !out.status.success() {
@@ -111,7 +114,6 @@ impl Units {
         }
     }
 
-    /// systemd thaws a frozen unit on stop: `stop` needs no thaw first.
     pub async fn freeze(&self, unit: &str, on: bool) -> Result<()> {
         match self {
             Units::Systemd => {
@@ -212,6 +214,9 @@ fn systemd_run_args(spec: &UnitSpec) -> Vec<String> {
     }
     for (k, v) in &spec.env {
         args.push(format!("--setenv={k}={v}"));
+    }
+    for k in &spec.unset_env {
+        args.push(format!("--property=UnsetEnvironment={k}"));
     }
     args.push("--".into());
     args.push(spec.program.clone());
@@ -400,6 +405,7 @@ mod tests {
             program: "umu-run".into(),
             args: vec!["/g/x.exe".into(), "-w".into()],
             env: BTreeMap::from([("PATH".to_string(), "/bin".to_string()), ("WINEPREFIX".to_string(), "/p".to_string())]),
+            unset_env: vec!["WAYLAND_DISPLAY".into()],
             cwd: Some("/nonexistent".into()),
             properties: vec![("ExitType".into(), "cgroup".into()), ("TimeoutStopSec".into(), "80".into())],
             bind_to: None,
@@ -413,6 +419,7 @@ mod tests {
         assert!(plain.contains(&"--property=ExecStopPost=\"/usr/bin/universe\" \"session-end\" \"x\" \"20260911-120000\"".to_string()));
         assert!(!plain.iter().any(|a| a.starts_with("--property=BindsTo=") || a.starts_with("--property=After=") || a.starts_with("--working-directory=")));
         assert!(plain.contains(&"--setenv=PATH=/bin".to_string()) && plain.contains(&"--setenv=WINEPREFIX=/p".to_string()));
+        assert!(plain.contains(&"--property=UnsetEnvironment=WAYLAND_DISPLAY".to_string()));
         assert_eq!(&plain[plain.len() - 4..], &["--", "umu-run", "/g/x.exe", "-w"]);
         let bound = systemd_run_args(&UnitSpec { bind_to: Some("universe-launcher-4242.scope".into()), ..spec });
         assert!(bound.contains(&"--property=BindsTo=universe-launcher-4242.scope".to_string()));

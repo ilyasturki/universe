@@ -193,11 +193,14 @@ impl Core {
         let budget: u64 = 60 + self.hook_modules(r, "session-end").await.iter().map(|m| m.timeout().as_secs()).sum::<u64>();
         let mut env = passthrough_env();
         env.extend(plan.env.clone());
+        // gamescope strips WAYLAND_DISPLAY from its child, but a --user unit inherits the manager's, and Qt connects there before DISPLAY.
+        let unset_env = if env.contains_key("WAYLAND_DISPLAY") { vec![] } else { vec!["WAYLAND_DISPLAY".to_string()] };
         let spec = UnitSpec {
             name: current.unit.clone(),
             program: plan.program.clone(),
             args: plan.args.clone(),
             env,
+            unset_env,
             cwd: Some(plan.cwd.clone()),
             // ExitType=cgroup: the unit ends with the last game process, not with the one systemd-run started.
             properties: vec![("ExitType".into(), "cgroup".into()), ("TimeoutStopSec".into(), budget.to_string())],
