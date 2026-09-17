@@ -183,7 +183,7 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
     let (media, screenshots) = media_of(&game, &config.overrides_dir());
     let journal_count = crate::journal::count_written(&game.journal_dir());
     let mut mods = BTreeMap::new();
-    for m in modules.iter().filter(|m| m.active() && m.is_hooks()) {
+    for m in modules.iter().filter(|m| m.active()) {
         mods.insert(m.id().to_string(), m.merged_settings(config, Some(&game)));
     }
     let proton = if game.launch.proton.is_empty() { config.launch.proton.clone() } else { game.launch.proton.clone() };

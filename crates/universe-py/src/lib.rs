@@ -301,6 +301,18 @@ impl Core {
     fn set_module_setting(&self, py: Python<'_>, module: String, game_id: String, key: String, value: String) -> PyResult<()> {
         self.run(py, |c| async move { c.set_module_setting(&module, &game_id, &key, &value).await })
     }
+    fn enable_source(&self, py: Python<'_>, id: String, enabled: bool) -> PyResult<()> {
+        self.run(py, |c| async move { c.enable_source(&id, enabled).await })
+    }
+    fn source_settings(&self, py: Python<'_>, source: String) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| async move { c.source_settings(&source).await })
+    }
+    fn source_setting_choices(&self, py: Python<'_>, source: String, key: String) -> PyResult<Vec<String>> {
+        self.run(py, |c| async move { c.source_setting_choices(&source, &key).await })
+    }
+    fn set_source_setting(&self, py: Python<'_>, source: String, key: String, value: String) -> PyResult<()> {
+        self.run(py, |c| async move { c.set_source_setting(&source, &key, &value).await })
+    }
     fn settings(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| c.settings())
     }

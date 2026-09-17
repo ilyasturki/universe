@@ -14,16 +14,16 @@ A game starts through its runner: proton (umu-run), wine, linux, or an emulator 
 A game runs as the transient unit universe-game-<id>-<session>.service; `universe session-end` closes it when its cgroup empties.
 
 Files:
-  ~/.config/universe/config.toml — paths, launch defaults, enabled modules, [modules.<id>] settings, keys
+  ~/.config/universe/config.toml — paths, launch defaults, enabled modules and sources, [modules.<id>] and [sources.<id>] settings, keys
   ~/.local/share/universe/games/<id>/ — game.toml, sessions.jsonl, journal/, media/
-  ~/.config/universe/modules/<id>/ — user modules, overriding the shipped ones
-  ~/.local/share/universe/modules/<id>/ — module data: caches, logins
+  ~/.config/universe/modules/<id>/, ~/.config/universe/sources/<id>/ — user modules and sources, overriding the shipped ones
+  ~/.local/share/universe/modules/<id>/, ~/.local/share/universe/sources/<id>/ — their data: caches, logins
   ~/.local/state/universe/current-session.json — the running session
   $XDG_RUNTIME_DIR/universe/controller.lock — held by the one controller watcher (the launcher's, or a session's)
 
 Environment:
   UNIVERSE_CONFIG_HOME, UNIVERSE_DATA_HOME, UNIVERSE_STATE_HOME — replace the XDG directories
-  UNIVERSE_MODULES_PATH — extra module roots, colon-separated
+  UNIVERSE_MODULES_PATH, UNIVERSE_SOURCES_PATH — extra module and source roots, colon-separated
   RUST_LOG — tracing filter, warn by default
 
 Errors are printed as `universe: <kind>: <message>` on stderr with exit status 1; --json works on every command.";
@@ -70,7 +70,7 @@ pub enum Cmd {
     /// Search a source's catalogue
     Search {
         query: String,
-        /// Source module
+        /// Source id
         #[arg(long, default_value = "gog")]
         source: String,
     },
@@ -78,7 +78,7 @@ pub enum Cmd {
     Install {
         /// Id in the source's catalogue
         id: String,
-        /// Source module
+        /// Source id
         #[arg(long, default_value = "gog")]
         source: String,
     },
@@ -186,18 +186,23 @@ pub enum Cmd {
         #[command(subcommand)]
         action: ModuleCmd,
     },
-    /// Sources and their state
+    /// Sources and their settings
+    Source {
+        #[command(subcommand)]
+        action: SourceCmd,
+    },
+    /// Sources and their state: login, cached library, install folder
     Sources,
     /// Log into a source (prints the URL, then takes the code)
     Login {
-        /// Source module
+        /// Source id
         source: String,
         /// The code= value from the address bar after logging in
         code: Option<String>,
     },
     /// Owned titles of a source
     Library {
-        /// Source module
+        /// Source id
         #[arg(default_value = "gog")]
         source: String,
         /// Fetch again instead of reading the cache
@@ -206,7 +211,7 @@ pub enum Cmd {
     },
     /// Scan installed games of the sources (all by default)
     Scan {
-        /// Source module; every source when omitted
+        /// Source id; every source when omitted
         source: Option<String>,
     },
     /// Import the Lutris library (report only without --apply)
@@ -215,7 +220,7 @@ pub enum Cmd {
         #[arg(long)]
         apply: bool,
     },
-    /// Check prerequisites of the core and enabled modules
+    /// Check prerequisites of the core, the enabled modules and sources
     Doctor,
     /// Global config
     Config {
@@ -262,7 +267,7 @@ pub enum Cmd {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true, required = true)]
         cmd: Vec<String>,
     },
-    /// Completion candidates for the shell: games | sources | modules
+    /// Completion candidates for the shell: games | sources | modules | …
     #[command(name = "__complete", hide = true)]
     Complete { what: String },
     /// Write the Fish completions and the man pages under <dir>
@@ -330,6 +335,35 @@ pub enum RunnerCmd {
         /// Runner id
         id: String,
         /// key=value, validated against the runner's options
+        pairs: Vec<String>,
+    },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum SourceCmd {
+    /// Installed sources
+    #[command(alias = "list")]
+    Ls,
+    /// Enable a source
+    Enable {
+        /// Source id
+        id: String,
+    },
+    /// Disable a source
+    Disable {
+        /// Source id
+        id: String,
+    },
+    /// Settings of a source
+    Settings {
+        /// Source id
+        id: String,
+    },
+    /// Set source settings: key=value…
+    Set {
+        /// Source id
+        id: String,
+        /// key=value, validated against the source's settings
         pairs: Vec<String>,
     },
 }
@@ -941,10 +975,10 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     if json {
                         return print_json(&list);
                     }
-                    let mut t = table(&["Id", "Name", "Kind", "Enabled", "Available", "Missing", "Hooks"]);
+                    let mut t = table(&["Id", "Name", "Version", "Enabled", "Available", "Missing", "Hooks"]);
                     for m in list {
                         let hooks: Vec<String> = m["hooks"].as_object().map(|o| o.keys().cloned().collect()).unwrap_or_default();
-                        t.add_row(vec![s(&m, "id"), s(&m, "name"), joined(&m["kind"], ","), flag(&m["enabled"]), flag(&m["available"]), joined(&m["missing"], ","), hooks.join(",")]);
+                        t.add_row(vec![s(&m, "id"), s(&m, "name"), s(&m, "version"), flag(&m["enabled"]), flag(&m["available"]), joined(&m["missing"], ","), hooks.join(",")]);
                     }
                     println!("{t}");
                 }
@@ -966,6 +1000,39 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                         let (k, v) = p.split_once('=').ok_or_else(|| anyhow::anyhow!("expected key=value"))?;
                         core.set_module_setting(&id, &gid, k, v).await?;
                         println!("{id}.{k} = {v}{}", if gid.is_empty() { String::new() } else { format!(" ({gid})") });
+                    }
+                }
+            }
+        }
+        Cmd::Source { action } => {
+            match action {
+                SourceCmd::Ls => {
+                    let list = core.sources().await;
+                    if json {
+                        return print_json(&list);
+                    }
+                    let mut t = table(&["Id", "Name", "Version", "Enabled", "Available", "Missing"]);
+                    for m in list {
+                        t.add_row(vec![s(&m, "id"), s(&m, "name"), s(&m, "version"), flag(&m["enabled"]), flag(&m["available"]), joined(&m["missing"], ",")]);
+                    }
+                    println!("{t}");
+                }
+                SourceCmd::Enable { id } => {
+                    core.enable_source(&id, true).await?;
+                    println!("{id} enabled");
+                }
+                SourceCmd::Disable { id } => {
+                    core.enable_source(&id, false).await?;
+                    println!("{id} disabled");
+                }
+                SourceCmd::Settings { id } => {
+                    print_json(&core.source_settings(&id).await?)?;
+                }
+                SourceCmd::Set { id, pairs } => {
+                    for p in &pairs {
+                        let (k, v) = p.split_once('=').ok_or_else(|| anyhow::anyhow!("expected key=value"))?;
+                        core.set_source_setting(&id, k, v).await?;
+                        println!("{id}.{k} = {v}");
                     }
                 }
             }
@@ -1256,13 +1323,16 @@ fn complete(what: &str) -> anyhow::Result<()> {
                 }
             }
         }
-        "sources" | "modules" => {
+        "modules" => {
             let config = crate::config::Config::load()?;
             for m in crate::modules::discover(&config) {
-                if what == "sources" && !m.is_source() {
-                    continue;
-                }
                 println!("{}\t{}", m.id(), m.manifest.name);
+            }
+        }
+        "sources" => {
+            let config = crate::config::Config::load()?;
+            for m in crate::sources::discover(&config) {
+                println!("{}\t{}", m.id(), m.name());
             }
         }
         other => anyhow::bail!("unknown completion set {other}"),
@@ -1350,6 +1420,10 @@ const POSITIONALS: &[(&str, usize, &str)] = &[
     ("module settings", 1, "modules"),
     ("module settings", 2, "games"),
     ("module set", 1, "modules"),
+    ("source enable", 1, "sources"),
+    ("source disable", 1, "sources"),
+    ("source settings", 1, "sources"),
+    ("source set", 1, "sources"),
     ("login", 1, "sources"),
     ("library", 1, "sources"),
     ("scan", 1, "sources"),

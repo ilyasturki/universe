@@ -52,6 +52,24 @@ def _place(src, dest):
     return dest
 
 
+def _coerce(schema, owner, key, value):
+    if key not in schema:
+        raise UniverseError("Invalid", f"{owner} has no setting '{key}'")
+    kind = schema[key].get("type")
+    if kind == "bool":
+        return str(value).lower() in ("1", "true", "yes", "on")
+    if kind == "int":
+        if value in (schema[key].get("choices") or []):
+            return value
+        try:
+            return int(value)
+        except ValueError:
+            raise UniverseError("Invalid", f"{key} must be an integer") from None
+    if kind == "enum" and value not in (schema[key].get("choices") or []):
+        raise UniverseError("Invalid", f"'{value}' is not a choice of {key}")
+    return value
+
+
 class FakeCore:
     def __init__(self, fixture=FIXTURE, root=None, fake_launch=False):
         with open(fixture) as f:
@@ -494,6 +512,33 @@ class FakeCore:
     def sources(self):
         return copy.deepcopy(self._data.get("sources", []))
 
+    def _source(self, ident):
+        for source in self._data.get("sources", []):
+            if source["id"] == ident:
+                return source
+        if any(m["id"] == ident for m in self._data.get("modules", [])):
+            raise UniverseError("Invalid", f"{ident} is a module, not a source")
+        raise UniverseError("NotFound", f"no source '{ident}'")
+
+    def enable_source(self, ident, enabled):
+        self._source(ident)["enabled"] = bool(enabled)
+
+    def source_settings(self, ident):
+        source = self._source(ident)
+        merged = {s["key"]: s.get("default") for s in source.get("settings", [])}
+        merged.update(self._config.get("sources", {}).get(ident, {}))
+        return merged
+
+    def source_setting_choices(self, ident, key):
+        for setting in self._source(ident).get("settings", []):
+            if setting["key"] == key:
+                return list(setting.get("dynamic_choices") or setting.get("choices") or [])
+        raise UniverseError("Invalid", f"{ident} has no setting '{key}'")
+
+    def set_source_setting(self, ident, key, value):
+        schema = {s["key"]: s for s in self._source(ident).get("settings", [])}
+        self._config.setdefault("sources", {}).setdefault(ident, {})[key] = _coerce(schema, ident, key, value)
+
     def login_url(self, source):
         return self._data.get("login_url", "https://example.invalid/login")
 
@@ -725,6 +770,8 @@ class FakeCore:
         for module in self._data.get("modules", []):
             if module["id"] == ident:
                 return module
+        if any(s["id"] == ident for s in self._data.get("sources", [])):
+            raise UniverseError("Invalid", f"{ident} is a source, not a module")
         raise UniverseError("NotFound", f"no module '{ident}'")
 
     def enable_module(self, ident, enabled):
@@ -747,19 +794,7 @@ class FakeCore:
     def set_module_setting(self, module_id, game_id, key, value):
         module = self._module(module_id)
         schema = {s["key"]: s for s in module.get("settings", [])}
-        if key not in schema:
-            raise UniverseError("Invalid", f"{module_id} has no setting '{key}'")
-        kind = schema[key].get("type")
-        if kind == "bool":
-            value = str(value).lower() in ("1", "true", "yes", "on")
-        elif kind == "int":
-            if value not in (schema[key].get("choices") or []):
-                try:
-                    value = int(value)
-                except ValueError:
-                    raise UniverseError("Invalid", f"{key} must be an integer") from None
-        elif kind == "enum" and value not in (schema[key].get("choices") or []):
-            raise UniverseError("Invalid", f"'{value}' is not a choice of {key}")
+        value = _coerce(schema, module_id, key, value)
         if game_id:
             game = self._game(game_id)
             game.setdefault("modules", {}).setdefault(module_id, {})[key] = value

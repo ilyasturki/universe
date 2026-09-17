@@ -6,6 +6,7 @@ export UNIVERSE_CONFIG_HOME := dev / "config"
 export UNIVERSE_STATE_HOME := dev / "state"
 export UNIVERSE_CACHE_HOME := dev / "cache"
 export UNIVERSE_MODULES_PATH := justfile_directory() / "modules"
+export UNIVERSE_SOURCES_PATH := justfile_directory() / "sources"
 export UNIVERSE_BIN := justfile_directory() / "target/debug/universe"
 export RUST_LOG := env("RUST_LOG", "info")
 export VIRTUAL_ENV := justfile_directory() / ".venv"
@@ -53,7 +54,7 @@ logs:
 test: build develop env
     @{{ nix }} cargo test
     @{{ nix }} {{ python }} -m pytest -q ui
-    @{{ nix }} python3 -m pytest -q modules
+    @{{ nix }} python3 -m pytest -q modules sources
 
 # Build the flake packages and run the sandboxed checks: what nixos-rebuild and CI run
 check:
@@ -107,9 +108,11 @@ env:
     journal_root = "{{ dev }}/journal"
     overrides = "~/Dotfiles/home/config/pegasus-art"   # hand-picked art; drop the line to test without
     [modules]
-    enabled = ["gog", "capture", "journal"]
+    enabled = ["capture", "journal"]
     [modules.capture]
     min_duration_s = 20
+    [sources]
+    enabled = ["gog"]
     EOF
     echo "wrote $cfg"
 
@@ -130,7 +133,7 @@ bump level: check
     [[ "$new" != "$cur" ]] || { echo "bump: already at $cur" >&2; exit 1; }
     git diff --quiet && git diff --cached --quiet || { echo "bump: working tree is not clean" >&2; exit 1; }
     ! git rev-parse -q --verify "refs/tags/v$new" >/dev/null || { echo "bump: tag v$new exists" >&2; exit 1; }
-    copies=(ui/pyproject.toml modules/*/module.toml docs/api.md)
+    copies=(ui/pyproject.toml modules/*/module.toml sources/*/source.toml docs/api.md)
     sed -i "/^\[workspace.package\]/,/^\[/s/^version = \"$cur\"$/version = \"$new\"/" Cargo.toml
     sed -i "s/^version = \"$cur\"$/version = \"$new\"/" "${copies[@]}"
     cargo update --workspace --offline --quiet

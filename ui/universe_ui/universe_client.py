@@ -51,6 +51,7 @@ class CoreClient(QObject):
     jobFinished = Signal(str, bool, str)
     mediaChanged = Signal(str)
     modulesChanged = Signal()
+    sourcesChanged = Signal()
     currentSessionChanged = Signal()
     launched = Signal(str, str)
     launchFailed = Signal(str, str)
@@ -455,6 +456,23 @@ class CoreClient(QObject):
     @Slot(str, str, str, str, result=bool)
     def setSetting(self, module, game_id, key, value):
         return self._done(self._core.set_module_setting, module, game_id, key, str(value))
+
+    @Slot(str, bool)
+    def enableSource(self, ident, enabled):
+        if self._done(self._core.enable_source, ident, enabled):
+            self.sourcesChanged.emit()
+
+    @Slot(str, result="QVariant")
+    def getSourceSettings(self, source):
+        return self._guarded({}, self._core.source_settings, source)
+
+    @Slot(str, str, result="QVariant")
+    def sourceSettingChoices(self, source, key):
+        return self._guarded([], self._core.source_setting_choices, source, key)
+
+    @Slot(str, str, str, result=bool)
+    def setSourceSetting(self, source, key, value):
+        return self._done(self._core.set_source_setting, source, key, str(value))
 
     @Slot(str, result="QVariant")
     def settings(self, ident):

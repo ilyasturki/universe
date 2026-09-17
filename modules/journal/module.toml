@@ -1,7 +1,6 @@
-api = 1
+api = 2
 id = "journal"
 name = "Play journal"
-kind = ["hooks"]
 version = "0.0.2"
 
 [requires]

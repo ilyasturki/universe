@@ -68,8 +68,8 @@ Pegasus's default bindings; the gamepad posts the same keys.
 *UNIVERSE_BIN*
 	The *universe* CLI hooks and systemd's ExecStopPost run; set by the Nix wrapper.
 
-*UNIVERSE_MODULES_PATH*
-	Extra module roots, colon-separated.
+*UNIVERSE_MODULES_PATH*, *UNIVERSE_SOURCES_PATH*
+	Extra module and source roots, colon-separated.
 
 *UNIVERSE_CONFIG_HOME*, *UNIVERSE_DATA_HOME*, *UNIVERSE_STATE_HOME*
 	Replace the XDG directories, as for *universe*(1).

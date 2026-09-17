@@ -177,7 +177,7 @@ FocusScope {
     }
 
     function openSub(source, args) {
-        if (!args.game && !args.runner && !args.module)
+        if (!args.game && !args.runner && !args.module && !args.source)
             return;
         Sound.enter();
         subArgs = args;
@@ -462,6 +462,7 @@ FocusScope {
                         function onSettingsRequested(game) { root.openSub("pages/FormPage.qml", { game: game }); }
                         function onRunnerRequested(runner) { root.openSub("pages/FormPage.qml", { runner: runner }); }
                         function onModuleRequested(module) { root.openSub("pages/FormPage.qml", { module: module }); }
+                        function onSourceRequested(source) { root.openSub("pages/FormPage.qml", { source: source }); }
                         function onArtworkRequested(game, slot) { root.openSub("pages/ArtworkPage.qml", { game: game, slot: slot }); }
                         function onTabRequested(index) {
                             Sound.enter();

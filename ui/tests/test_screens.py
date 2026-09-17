@@ -25,7 +25,7 @@ def test_game_settings_form(api, fake):
         "the launch page's cards, the runner's, then the program"
     assert groups["Launch"]["caps"] is True and groups["Video capture"]["caps"] is False
     assert groups["Display"]["meta"] == "DP-1 2560×1440 @ 144 Hz" and groups["Upscaling"]["meta"] == "AMD Radeon RX 7900 GRE · RDNA 3"
-    assert groups["Video capture"]["meta"] == "v0.1.0 · hooks"
+    assert groups["Video capture"]["meta"] == "v0.1.0"
     assert sorted(i for g in form.groups for i in g["rows"]) == list(range(len(form.rows)))
 
     index = next(i for i, r in enumerate(form.rows) if r["module"] == "capture" and r["key"] == "enabled")
@@ -39,21 +39,68 @@ def test_modules_list(api, fake):
     journal_module.update(enabled=False, available=False, missing=["ffmpeg"])
     form = api.screens.modules
     form.load()
-    assert [r["module"] for r in form.rows] == ["capture", "journal", "gog"], "the manifests' order"
-    assert all(r["type"] == "action" and r["key"] == "module" for r in form.rows)
-    assert [(g["title"], [form.rows[i]["module"] for i in g["rows"]], g["off"]) for g in form.groups] == [("", ["capture", "gog"], False), ("Off", ["journal"], True)]
+    assert [r["module"] for r in form.rows] == ["capture", "journal"], "the manifests' order, sources apart"
+    assert all(r["type"] == "action" and r["key"] == "module" and r["switch"] is True and r["source"] is False for r in form.rows)
+    assert [(g["title"], [form.rows[i]["module"] for i in g["rows"]], g["off"]) for g in form.groups] == [("", ["capture"], False), ("Off", ["journal"], True)]
     capture = form.rows[form.indexOf("capture")]
-    assert capture["label"] == "Video capture" and capture["value"] is True and capture["display"] == "On" and capture["meta"] == "v0.1.0 · hooks"
+    assert capture["label"] == "Video capture" and capture["value"] is True and capture["display"] == "On" and capture["meta"] == "v0.1.0"
     journal = form.rows[form.indexOf("journal")]
     assert journal["value"] is False and journal["display"] == "Unavailable" and journal["detail"] == "Cannot be enabled: missing ffmpeg"
     form.toggle(form.indexOf("capture"))
     assert form.rows[form.indexOf("capture")]["value"] is False and form.rows[form.indexOf("capture")]["display"] == "Off"
     assert next(m for m in fake.modules() if m["id"] == "capture")["enabled"] is False
     form.loadDoctor()
+    wait_for(form.doctorChanged, 3000)  # the checks run off the UI thread
     assert form.doctor and all("value" in r for r in form.doctor)
     doctor = {g["title"]: g for g in form.doctorGroups}
     assert form.doctorGroups[0]["title"] == "Core" and doctor["Core"]["meta"] == "1 of 2 checks pass"
-    assert form.doctor[doctor["GOG"]["rows"][0]]["label"] == "gogdl on PATH"
+    assert form.doctor[doctor["GOG"]["rows"][0]]["label"] == "gogdl on PATH", "a source's checks are grouped under its name"
+
+
+def test_sources_list(api, fake):
+    form = api.screens.sourceList
+    form.load()
+    wait_for(form.rowsChanged, 3000)  # the listing probes the logins: off the UI thread
+    assert [r["module"] for r in form.rows] == ["gog"]
+    gog = form.rows[0]
+    assert gog["section"] == "Sources" and gog["switch"] is True and gog["source"] is True
+    assert gog["label"] == "GOG" and gog["value"] is True and gog["display"] == "On" and gog["meta"] == "v0.1.0"
+    assert [(g["title"], g["rows"]) for g in form.groups] == [("", [0])]
+    form.toggle(0)
+    wait_for(form.rowsChanged, 3000)
+    assert next(s for s in fake.sources() if s["id"] == "gog")["enabled"] is False
+    assert form.rows[0]["value"] is False and form.rows[0]["display"] == "Off"
+    assert [g["title"] for g in form.groups] == ["Off"], "no empty card for the running ones"
+
+
+def test_source_form(api, fake):
+    form = api.screens.source
+    form.load("gog")
+    wait_for(form.rowsChanged, 3000)
+    assert form.info["name"] == "GOG" and form.info["source"] is True and form.info["logged_in"] is True and form.info["user"] == "yasso"
+    rows = form.rows
+    assert rows[0]["key"] == "enabled" and rows[0]["value"] is True and rows[0]["disabled"] is False
+    groups = {g["title"]: g for g in form.groups}
+    assert [rows[i]["key"] for i in groups["Sign-in"]["rows"]] == ["logged_in", "link", "code"]
+    assert rows[groups["Sign-in"]["rows"][0]]["type"] == "info" and rows[groups["Sign-in"]["rows"][0]]["detail"] == "yasso"
+    assert [rows[i]["key"] for i in groups["Settings"]["rows"]] == ["games_dir", "scan_dirs", "platform", "with_dlcs", "auth_path", "install_timeout_s"], "every setting: a source's are all global"
+    platform = index_of(form, "platform")
+    assert rows[platform]["choices"] == ["windows", "linux"]
+    assert form.setValue(platform, "linux") is True
+    wait_for(form.rowsChanged, 3000)
+    assert fake.getSourceSettings("gog")["platform"] == "linux"
+    assert form.rows[index_of(form, "platform")]["value"] == "linux"
+    form.toggle(0)
+    wait_for(form.rowsChanged, 3000)
+    assert form.info["enabled"] is False and [r["key"] for r in form.rows] == ["enabled"], "off: the switch alone"
+    gog = next(s for s in fake.core._data["sources"] if s["id"] == "gog")
+    gog.update(available=False, missing=["gogdl"])
+    form.load("gog")
+    wait_for(form.rowsChanged, 3000)
+    assert "missing gogdl" in form.info["warning"] and form.rows[0]["disabled"] is True
+    form.load("capture")
+    wait_for(form.rowsChanged, 3000)
+    assert form.rows == [] and form.info == {}, "a module is not a source"
 
 
 def test_module_form(api, fake):
@@ -66,7 +113,7 @@ def test_module_form(api, fake):
     assert form.rows[0]["value"] is False and form.rows[0]["disabled"] is True
     assert form.groups == [{"title": "", "meta": "", "warning": "", "caps": False, "control": -1, "off": False, "rows": [0]}], "the page header carries the name and the warning"
     form.load("capture")
-    assert form.info["meta"] == "v0.1.0 · hooks" and form.info["warning"] == "" and form.info["kind"] == ["hooks"]
+    assert form.info["meta"] == "v0.1.0" and form.info["warning"] == "" and form.info["source"] is False
     rows = form.rows
     assert rows[0]["key"] == "enabled" and rows[0]["value"] is True and rows[0]["disabled"] is False
     settings = next(g for g in form.groups if g["title"] == "Settings")

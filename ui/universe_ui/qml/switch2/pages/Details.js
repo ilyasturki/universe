@@ -13,7 +13,12 @@ var SENTENCES = {
     "journal.model": "The model asked for the entry.",
     "journal.markdown_export": "Also render each entry as a Markdown note.",
     "journal.journal_root": "Where the Markdown notes go.",
-    "gog.games_dir": "Where GOG installs games.",
+    "gog.games_dir": "Where GOG installs games; empty, the library's games folder.",
+    "gog.scan_dirs": "Folders scanned for GOG installs, comma-separated; empty, the install folder.",
+    "gog.platform": "The depot gogdl downloads: Windows builds run through Proton.",
+    "gog.with_dlcs": "Install the DLCs you own along with the game.",
+    "gog.auth_path": "The token file gogdl writes at login.",
+    "gog.install_timeout_s": "An install or update longer than this is stopped.",
     "desktop.hide_cursor": "Hide the desktop cursor while the game runs.",
     "favorite": "Kept in the Favourites group of All Software.",
     "hidden": "Left out of every list; the CLI still sees it.",
@@ -34,8 +39,8 @@ function withDetail(row, module) {
     return out;
 }
 
-function enabledSentence(name, kind) {
-    if (kind && kind.indexOf("source") >= 0)
+function enabledSentence(name, source) {
+    if (source)
         return "Games from " + name + " can be installed and updated.";
     return name + " runs its hooks around every session.";
 }

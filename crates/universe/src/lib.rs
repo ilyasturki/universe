@@ -24,6 +24,7 @@ pub mod runners;
 pub mod session;
 pub mod sessions;
 pub mod slug;
+pub mod sources;
 pub mod splash;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -73,9 +74,10 @@ mod version_tests {
     #[test]
     fn copies_match_cargo_version() {
         let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-        let Ok(modules) = std::fs::read_dir(root.join("modules")) else { return };
+        let (Ok(modules), Ok(sources)) = (std::fs::read_dir(root.join("modules")), std::fs::read_dir(root.join("sources"))) else { return };
         let mut files = vec![root.join("ui/pyproject.toml"), root.join("docs/api.md")];
         files.extend(modules.flatten().map(|d| d.path().join("module.toml")).filter(|p| p.exists()));
+        files.extend(sources.flatten().map(|d| d.path().join("source.toml")).filter(|p| p.exists()));
         let version = format!("version = \"{}\"", super::VERSION);
         for f in files {
             let s = std::fs::read_to_string(&f).unwrap();

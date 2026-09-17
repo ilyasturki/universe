@@ -1,7 +1,6 @@
-api = 1
+api = 2
 id = "capture"
 name = "Video capture"
-kind = ["hooks"]
 version = "0.0.2"
 
 [requires]

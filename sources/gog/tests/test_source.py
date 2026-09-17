@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-MODULE_DIR = Path(__file__).resolve().parents[1]
-SOURCE = MODULE_DIR / "bin" / "source"
+SOURCE_DIR = Path(__file__).resolve().parents[1]
+SOURCE = SOURCE_DIR / "bin" / "source"
 
 SHIM = r'''#!SHIM_PYTHON
 import json, os, sys, time
@@ -100,8 +100,8 @@ def env(tmp_path, monkeypatch):
     write_info(scan / "Mini Metro", "1434554947", "1434554947", "Mini Metro", exe="Mini Metro.exe")
     monkeypatch.setenv("PATH", f"{shim_dir}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.setenv("SHIM_LOG", str(log))
-    monkeypatch.setenv("MODULE_DATA_DIR", str(tmp_path / "data"))
-    monkeypatch.setenv("MODULE_SETTINGS_JSON", json.dumps({
+    monkeypatch.setenv("SOURCE_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("SOURCE_SETTINGS_JSON", json.dumps({
         "games_dir": str(games), "scan_dirs": f"{scan},{tmp_path / 'missing'}",
         "auth_path": str(tmp_path / "auth" / "auth.json"), "install_timeout_s": 30, "platform": "windows", "with_dlcs": True}))
     return {"tmp": tmp_path, "log": log, "games": games, "scan": scan, "data": tmp_path / "data"}
@@ -244,9 +244,9 @@ def test_info(src, env, capsys):
 
 
 def test_info_skip_dlcs(src, env, capsys, monkeypatch):
-    settings = json.loads(os.environ["MODULE_SETTINGS_JSON"])
+    settings = json.loads(os.environ["SOURCE_SETTINGS_JSON"])
     settings.update({"with_dlcs": False, "platform": "linux"})
-    monkeypatch.setenv("MODULE_SETTINGS_JSON", json.dumps(settings))
+    monkeypatch.setenv("SOURCE_SETTINGS_JSON", json.dumps(settings))
     code, _, _ = run(src, capsys, "info", "1")
     assert code == 0
     assert calls(env)[0]["args"][-3:] == ["--platform", "linux", "--skip-dlcs"]
@@ -280,9 +280,9 @@ def test_install_critical_kills(src, env, capsys, monkeypatch):
 
 def test_install_timeout_kills(src, env, capsys, monkeypatch):
     monkeypatch.setenv("SHIM_MODE", "hang")
-    settings = json.loads(os.environ["MODULE_SETTINGS_JSON"])
+    settings = json.loads(os.environ["SOURCE_SETTINGS_JSON"])
     settings["install_timeout_s"] = 1
-    monkeypatch.setenv("MODULE_SETTINGS_JSON", json.dumps(settings))
+    monkeypatch.setenv("SOURCE_SETTINGS_JSON", json.dumps(settings))
     started = time.monotonic()
     code, events, err = run(src, capsys, "install", "1434554947")
     assert time.monotonic() - started < 5

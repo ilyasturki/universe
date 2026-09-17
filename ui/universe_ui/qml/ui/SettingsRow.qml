@@ -11,6 +11,7 @@ Item {
     property bool separator: false
 
     readonly property bool info: entry.type === "info"
+    readonly property bool hasSwitch: entry.switch === true
     // A button with no code on this connection says "Unbound" instead: its macros cannot fire.
     readonly property var macros: entry.bound === false ? []
         : [ entry.press && { tag: "PRESS", macro: entry.press }, entry.hold && { tag: "HOLD", macro: entry.hold } ].filter(Boolean)
@@ -205,13 +206,22 @@ Item {
 
             Text {
                 anchors.verticalCenter: parent.verticalCenter
-                visible: text !== "" && row.macros.length === 0
+                visible: text !== "" && row.macros.length === 0 && !(row.hasSwitch && !row.entry.warning)
                 text: row.entry.display || ""
                 color: row.focused ? row.onFocus : Theme.textSecondary
                 font.family: Theme.sans
                 font.pixelSize: Theme.dp(21)
                 elide: Text.ElideMiddle
                 width: Math.min(implicitWidth, row.valueMax)
+            }
+
+            // A list entry that opens a page and flips in place: its state as a switch, ahead of the chevron.
+            SettingsToggle {
+                visible: row.hasSwitch
+                anchors.verticalCenter: parent.verticalCenter
+                on: row.entry.value === true
+                focused: row.focused
+                opacity: row.entry.warning && row.entry.value !== true ? 0.35 : 1.0
             }
 
             Loader {

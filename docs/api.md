@@ -1,6 +1,7 @@
-# Universe — core API and module protocol
+# Universe — core API, module and source protocols
 
-`api = 1`. The core is a Rust library (`crates/universe`, `universe::core::Core`). **No Universe
+`api = 2` (1 had sources as a kind of module; a manifest still saying `api = 1` is left out with a
+warning). The core is a Rust library (`crates/universe`, `universe::core::Core`). **No Universe
 process runs in the background.** There are three ways into it, all in-process:
 
 - **the crate** — `Core::open().await`, every method `async`;
@@ -287,7 +288,11 @@ none of those variables).
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `sources()` | `sources()` | `universe sources` | `[{id, name, available, enabled, missing, logged_in, user, games_dir, library_cached}]` |
+| `sources()` | `sources()` | `universe sources`, `universe source ls` | `[{id, name, version, dir, enabled, available, missing: [bin], settings: [Setting], logged_in, user, games_dir, library_cached}]`; the login probe reaches the network once per process, on the first call |
+| `enable_source(id, enabled)` | `enable_source(id, enabled)` | `universe source enable\|disable <id>` | writes `[sources] enabled` in `config.toml` |
+| `source_settings(source)` | `source_settings(source)` | `universe source settings <id>` | the source's settings, defaults under `config.toml [sources.<id>]`; an empty `games_dir` default reads `paths.games_root` |
+| `set_source_setting(source, key, value)` | `set_source_setting(…)` | `universe source set <id> k=v` | validated against `[[settings]]`; writes `config.toml [sources.<id>]` |
+| `source_setting_choices(source, key)` | `source_setting_choices(…)` | — | the setting's choices, live through `choices_exec` (as for modules) |
 | `source_login_url(source)` | `login_url(source)` | `universe login <source>` | URL to open |
 | `source_login(source, code)` | `login(source, code)` | `universe login <source> <code>` | returns the user name |
 | `source_library(source, refresh)` | `library(source, refresh)` | `universe library [source] [--refresh]` | `[SourceGame]`, served from cache unless `refresh` |
@@ -302,6 +307,9 @@ none of those variables).
 
 `SourceGame` = `{"id": "1434554947", "title": "Mini Metro", "owned": true, "installed": true,
 "dir": "path|null", "build": "…|null", "remote_build": "…|null"}`.
+
+A source's `Setting` is a module's without `scope`: a source has no per-game settings. A module
+named to a source call (or the reverse) is refused with the command that does take it.
 
 ## Runners
 
@@ -439,9 +447,9 @@ that is not `*.json` are ignored, and `render_journal` only renders `written` en
 | `module_settings(module, game_id)` | `module_settings(…)` | `universe module settings <id> [game]` | global settings merged with the game's; `game_id=""` is global only |
 | `set_module_setting(module, game_id, key, value)` | `set_module_setting(…)` | `universe module set <id> k=v [--game g]` | validated against `[[settings]]`. `game_id=""` writes `config.toml [modules.<id>]`, otherwise `game.toml [modules.<id>]` |
 | `module_setting_choices(module, key)` | `module_setting_choices(…)` | — | the global setting's choices; a setting with `choices_exec` gets them from the module, live (see below) |
-| `doctor()` | `doctor()` | `universe doctor` | `[{check, ok, detail, module}]`: required binaries, `gsr-kms-server`, Proton, cursor extension, tokens, one `runner-<id>` check per runner a library game uses (its program resolved), `inputplumber` when an emulator wants it |
+| `doctor()` | `doctor()` | `universe doctor` | `[{check, ok, detail, module}]`: required binaries of the enabled modules and sources (`module` names the one, or `core`, `runners`, `media`, `controller`), `gsr-kms-server`, Proton, cursor extension, tokens, one `runner-<id>` check per runner a library game uses (its program resolved), `inputplumber` when an emulator wants it; `modules` and `sources` say what `config.toml` enables that is not found |
 
-A module entry is `{id, name, kind: [], version, dir, enabled, available, missing: [bin],
+A module entry is `{id, name, version, dir, enabled, available, missing: [bin],
 hooks: {}, settings: [Setting]}`, and
 `Setting` = `{"key", "type": "bool|string|int|enum|path", "default", "label",
 "scope": "global|game", "choices": [], "dynamic": bool}`. `choices` binds an `enum`; on an `int`
@@ -566,11 +574,17 @@ proton-ge = "~/.local/share/lutris/runners/wine/proton-ge"
 # [runners.<id>]                     # per runner (`universe runner set`): exe (absent: detected), args, gamescope, its options
 
 [modules]
-enabled = ["gog", "capture", "journal"]
+enabled = ["capture", "journal"]
 
 [modules.capture]                    # the settings rows: `universe module settings capture`
 # ffmpeg_video_opts = "rc_mode=CQP;qp=20"   # config-only: replaces the quality preset
 # gsr_extra_args = "-cr full -keyint 2"      # config-only: appended to gpu-screen-recorder
+
+[sources]
+enabled = ["gog"]
+
+[sources.gog]                        # the settings rows: `universe source settings gog`
+# platform = "linux"
 
 [lutris]                             # what `universe migrate` reads
 config_dir = "~/.config/lutris"
@@ -593,16 +607,15 @@ volume_step = 2                      # percent of the normal volume per press, 1
 
 ## Module protocol
 
-A module is a directory `modules/<id>/` — system-wide under `$out/share/universe/modules/<id>`,
-per-user under `$XDG_CONFIG_HOME/universe/modules/<id>`, where a user module overrides a system one
-with the same id. It holds a `module.toml` and its executables. **The core never loads module
-code**; it only runs the executables.
+A module runs hooks around a session. It is a directory `modules/<id>/` — system-wide under
+`$out/share/universe/modules/<id>`, per-user under `$XDG_CONFIG_HOME/universe/modules/<id>`, where a
+user module overrides a system one with the same id. It holds a `module.toml` and its executables.
+**The core never loads module code**; it only runs the executables.
 
 ```toml
-api = 1
+api = 2
 id = "capture"
 name = "Video capture"
-kind = ["hooks"]                  # hooks | source; a module may be both
 version = "0.0.2"
 
 [requires]
@@ -619,9 +632,6 @@ timeout_s    = 20                 # for blocking hooks; the sum bounds the game 
 [limits]                          # applied to the transient units of async hooks
 cpu_weight   = 100                # default 20
 memory_high  = "4G"               # default 2G
-
-[source]                          # kind = source
-exe = "bin/source"                # run as: bin/source <verb> [args]
 
 [[settings]]
 key = "enabled"                   # reserved: always present, game scope
@@ -657,15 +667,39 @@ label = "Model"
 | `MODULE_SETTINGS_JSON` | global settings merged with the game's | all |
 | `UNIVERSE_ENV_FILE` | write `KEY=VALUE` lines here to add them to the game's environment, ahead of `launch.env` | `pre-launch` |
 | `MODULE_DIR`, `MODULE_DATA_DIR` | the module's directory, `$XDG_DATA_HOME/universe/modules/<id>` | all |
-| `UNIVERSE_BIN`, `UNIVERSE_{DATA,CONFIG,STATE}_HOME`, `UNIVERSE_MODULES_PATH`, `PATH` | the CLI to call back (`recording-file`, `journal-add`, `session-window`, `screen-mode`) and the environment that makes it open the same core | all |
+| `UNIVERSE_BIN`, `UNIVERSE_{DATA,CONFIG,STATE}_HOME`, `UNIVERSE_{MODULES,SOURCES}_PATH`, `PATH` | the CLI to call back (`recording-file`, `journal-add`, `session-window`, `screen-mode`) and the environment that makes it open the same core | all |
 | `UNIVERSE_GAME_JSON`, `UNIVERSE_JOURNAL_ROOT` | the resolved `Game`, serialized; `paths.journal_root` | all |
 
 Exit codes: 0 is success; anything else is logged and the session continues — except a `pre-launch`
 hook, where a non-zero exit cancels the launch.
 
-### Source protocol
+## Source protocol
 
-`bin/source <verb> [args]`, with `MODULE_SETTINGS_JSON` and `MODULE_DATA_DIR` in the environment.
+A source installs and updates games from a store. It is a directory `sources/<id>/` — system-wide
+under `$out/share/universe/sources/<id>` (`UNIVERSE_SOURCES_PATH` adds roots), per-user under
+`$XDG_CONFIG_HOME/universe/sources/<id>`, a user source overriding a system one with the same id —
+holding a `source.toml` and its executable; its data lives in `$XDG_DATA_HOME/universe/sources/<id>`.
+
+```toml
+api = 2
+id = "gog"
+name = "GOG"
+version = "0.0.2"
+exe = "bin/source"                # run as: bin/source <verb> [args]
+
+[requires]
+bins = ["gogdl"]                  # a missing binary makes the source "unavailable" and it is never run
+
+[[settings]]                      # as a module's, without `scope`: every setting is global, in config.toml [sources.<id>]
+key = "platform"
+type = "enum"
+default = "windows"
+choices = ["windows", "linux"]
+label = "Depot platform"
+```
+
+`<exe> <verb> [args]` runs in the source's directory with `SOURCE_SETTINGS_JSON`, `SOURCE_DIR`,
+`SOURCE_DATA_DIR` and `UNIVERSE_BIN` in the environment (a `choices_exec` gets the same).
 A `games_dir` setting whose manifest default is empty arrives filled with `paths.games_root`.
 One JSON object per line on stdout, human-readable logs on stderr, meaningful exit code.
 **Every verb ends with `{"event":"done"}`**, `login` included.
@@ -689,7 +723,7 @@ One JSON object per line on stdout, human-readable logs on stderr, meaningful ex
 {"event":"done"}
 ```
 
-`exe` is relative to `dir`. `owned` may be `null` when the module cannot tell.
+`exe` is relative to `dir`. `owned` may be `null` when the source cannot tell.
 
 ---
 

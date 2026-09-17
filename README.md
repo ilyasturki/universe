@@ -1,6 +1,6 @@
 <p align="center"><picture><source media="(prefers-color-scheme: dark)" srcset="brand/universe-lockup-dark.svg"><img src="brand/universe-lockup.svg" width="420" alt="Universe"></picture></p>
 
-A gamepad-first game launcher for Linux. A Rust core (a library, the `universe` CLI and a Python module for the host) owns the library, launches games through their runner — Proton via [umu-run](https://github.com/Open-Wine-Components/umu-launcher), Wine, the program itself, or an emulator — as transient systemd units, and records sessions and playtime. There is no daemon: systemd runs `universe session-end` when the game's cgroup empties, whatever happened to the process that launched it. A launcher that adopts a scope (the UI, `universe play` without `--no-wait`) binds the game to itself, so closing it takes the game down cleanly; `universe play --no-wait` and hooks leave the game to systemd. A Qt 6 / PySide6 host (`universe-ui`) renders the interface on top of the core, in-process, in one of two looks: [Reprise](https://github.com/ilyasturki/pegasus-theme-reprise), dark and cinematic, or the Switch 2 HOME menu, switched live from Settings › Themes. Everything else — GOG installs, dialog-free recording, an AI play journal — is a module.
+A gamepad-first game launcher for Linux. A Rust core (a library, the `universe` CLI and a Python module for the host) owns the library, launches games through their runner — Proton via [umu-run](https://github.com/Open-Wine-Components/umu-launcher), Wine, the program itself, or an emulator — as transient systemd units, and records sessions and playtime. There is no daemon: systemd runs `universe session-end` when the game's cgroup empties, whatever happened to the process that launched it. A launcher that adopts a scope (the UI, `universe play` without `--no-wait`) binds the game to itself, so closing it takes the game down cleanly; `universe play --no-wait` and hooks leave the game to systemd. A Qt 6 / PySide6 host (`universe-ui`) renders the interface on top of the core, in-process, in one of two looks: [Reprise](https://github.com/ilyasturki/pegasus-theme-reprise), dark and cinematic, or the Switch 2 HOME menu, switched live from Settings › Themes. Everything else is a source — GOG installs — or a module: dialog-free recording, an AI play journal.
 
 Plain files are the truth: one `game.toml`, one `sessions.jsonl` and a `journal/` per game under `$XDG_DATA_HOME/universe/games/<id>/`.
 
@@ -11,7 +11,7 @@ Plain files are the truth: one `game.toml`, one `sessions.jsonl` and a `journal/
 inputs.universe.url = "github:ilyasturki/universe";
 ```
 
-NixOS side (what the modules need from the system):
+NixOS side (what the modules and sources need from the system):
 
 ```nix
 imports = [ universe.nixosModules.default ];
@@ -25,7 +25,8 @@ imports = [ universe.homeModules.default ];
 programs.universe = {
   enable = true;
   settings = {
-    modules.enabled = [ "gog" "capture" "journal" ];
+    modules.enabled = [ "capture" "journal" ];
+    sources.enabled = [ "gog" ];
     paths.games_root = "/mnt/games/PC";
     paths.prefixes_root = "/mnt/games/prefixes";
     paths.recordings_root = "/mnt/recordings/games";
@@ -40,11 +41,11 @@ programs.universe = {
 
 The home-manager module also installs Universe's GNOME Shell extension (window recording and in-shell screenshots for `capture`, the volume OSD for the controller macros); **log out once** to let GNOME load it (until then `capture`'s window source records the screen, screenshots come from gpu-screen-recorder without a flash, and the volume macros show nothing).
 
-`settings = null` installs the packages and leaves `~/.config/universe/config.toml` to you: the core edits that file in place (`universe config set`, `universe module enable`, the UI's settings), which a symlink into the store refuses.
+`settings = null` installs the packages and leaves `~/.config/universe/config.toml` to you: the core edits that file in place (`universe config set`, `universe module enable`, `universe source enable`, the UI's settings), which a symlink into the store refuses.
 
 Without home-manager: `nix profile install github:ilyasturki/universe`, then write `~/.config/universe/config.toml` (defaults in `docs/api.md`).
 
-Packages: `universe` (default: core wrapped with the shipped modules and their runtime on `PATH`), `universe-ui`, `core`, `universe-core-py` (the `universe_core` Python module), `modules`, `universe-shell-extension`. `nix run .#universe-ui` starts the host. `universe` ships Fish completions (game names, modules and sources come from the library); both ship man pages: `man universe`, `man universe-play`, `man universe-ui`.
+Packages: `universe` (default: core wrapped with the shipped modules and sources and their runtime on `PATH`), `universe-ui`, `core`, `universe-core-py` (the `universe_core` Python module), `modules`, `sources`, `universe-shell-extension`. `nix run .#universe-ui` starts the host. `universe` ships Fish completions (game names, modules and sources come from the library); both ship man pages: `man universe`, `man universe-play`, `man universe-ui`.
 
 ## Use
 
@@ -74,7 +75,7 @@ universe media technomancer set logo https://…   # or a file: a pick, kept ove
 universe media technomancer search    # SteamGridDB's entries for the name, to `pin sgdb <id>` a wrong match
 universe journal technomancer --render
 universe recordings technomancer --remove 20260909-213045   # trashes the mkv, keeps the hours; journal --remove for an entry
-universe doctor                # prerequisites of the core and every enabled module
+universe doctor                # prerequisites of the core, every enabled module and source
 universe controller ls         # connected pads, every button and what it does
 universe controller bind xbox-elite paddle_p1 hold stop    # a macro; `learn` when a paddle is not recognised
 universe ls --json | jq '.[] | select(.stats.hours > 10) | .title'
@@ -98,23 +99,23 @@ Pads and emulators: every emulator has an `inputplumber` option, on by default, 
 
 The spare buttons of a pad — the Edge's paddles and Fn buttons, the Elite's paddles, the Pro 3's back buttons — carry macros: volume, mute, a screenshot, the MangoHud toggle, stopping the game on a long hold, any key combo, any command — on every button but Guide, which is HOME (a press for the menu, a hold to go home). The Settings tab has a Controller section that lists each button with its macros, learns a button by pressing it, and draws the pad live — every press, stick and trigger pull — in its test view. Nothing is grabbed: the engine reads the pad over evdev next to the game, so the game keeps rumble, the lightbar and every button it already saw. It runs only while the launcher is open or a session is running (`universe controller watch`, one instance at a time through a lock), never on the bare desktop. Pads can come and go while it runs, several pads each fire their family's macros, and a bind made anywhere reaches the running instance within its next scan. Paddle codes are not trusted: they differ between USB and Bluetooth and between drivers, so a slot is checked against what the pad advertises on every connect, and a button the seeds got wrong is fixed by pressing it (`universe controller learn xbox-elite paddle_p1`). The DualSense Edge's paddles reach evdev from kernel 7.2. An Elite Series 2 only reports its paddles on profile slot 0 (LED off) over Bluetooth (xpadneo) and on the in-tree xpad driver over USB; xone has no such gating. Volume and mute go straight to the default sink through `wpctl`, by `controller.volume_step` percent per press, so no synthetic key leaks into the game, and volume and mute show GNOME's own OSD (output name and level) through the Universe shell extension; a screenshot flashes the captured area and plays the shutter, at the press; the MangoHud macro flips the game's `mangohud` key and shows or hides the HUD in place (mangoapp told over its control queue, no key typed: it works while the game is paused, and the launcher toasts what it became); key macros type through uinput: enable `hardware.uinput` and put your user in the `uinput` group (the NixOS module does the first).
 
-## Modules and their prerequisites
+## Sources, modules and their prerequisites
 
-`universe doctor` checks these for every enabled module.
+A source installs and updates games from a store; a module runs hooks around every session. `universe doctor` checks these for every enabled one.
 
-| Module | Kind | Needs | Notes |
+| | Kind | Needs | Notes |
 |---|---|---|---|
-| `gog` | source | `gogdl` | login via `universe login gog`; a dedicated `GOGDL_CONFIG_PATH` under the module's data dir |
-| `capture` | hooks | `gpu-screen-recorder` + its setcap `gsr-kms-server`, `ffprobe`, `trash`; the `universe@ilyasturki.github.io` shell extension for the window source (GNOME) | the screen by default, or the game's window through GNOME's picker: `docs/api.md` § Recordings |
-| `journal` | hooks | `ffmpeg`, `codex` (or `provider = "stub"`) | one Markdown entry per session from frames and screenshots |
+| `gog` | source | `gogdl` | login via `universe login gog`; a dedicated `GOGDL_CONFIG_PATH` under the source's data dir |
+| `capture` | module | `gpu-screen-recorder` + its setcap `gsr-kms-server`, `ffprobe`, `trash`; the `universe@ilyasturki.github.io` shell extension for the window source (GNOME) | the screen by default, or the game's window through GNOME's picker: `docs/api.md` § Recordings |
+| `journal` | module | `ffmpeg`, `codex` (or `provider = "stub"`) | one Markdown entry per session from frames and screenshots |
 | metadata | core | SteamGridDB and RAWG keys in `[keys]` | artwork slots `box_front`, `square`, `banner`, `background`, `logo`, screenshots |
 | runners | core | the emulator on `PATH` (or `[runners.<id>] exe`); `inputplumber` for the pad option | `universe runner ls`; one doctor check per runner in use |
 
 Cursor hiding on GNOME toggles the `hide-cursor@elcste.com` shell extension around the session.
 
-Settings › Modules lists the modules, on or off, and opens each one's page with its settings; the same on the CLI: `universe module ls · enable capture · settings journal`.
+Settings › Modules and Settings › Sources list each one with its switch — flipped in place, or from its page, which holds its settings (and a source's sign-in); the same on the CLI: `universe module ls · enable capture · settings journal`, `universe source ls · enable gog · set gog platform=linux`.
 
-Third-party modules: drop a directory with a `module.toml` under `~/.config/universe/modules/` (user modules override shipped ones). The manifest, the hook environment and the source protocol (JSON lines) are frozen in `docs/api.md`.
+Third-party modules and sources: drop a directory with a `module.toml` under `~/.config/universe/modules/`, or a `source.toml` under `~/.config/universe/sources/` (user ones override shipped ones). The manifests, the hook environment and the source protocol (JSON lines) are frozen in `docs/api.md`.
 
 ## Develop
 
@@ -122,4 +123,4 @@ A `justfile` wraps everything in `nix develop` and points the core at an isolate
 
 `just setup` first; `just --list` names the rest. `UNIVERSE_DEV=.dev-empty just ui` runs any recipe on another profile; a new one starts as an empty library.
 
-`docs/api.md` is the core API, the process model and the module contract; `docs/frontends.md` is what a frontend binds to.
+`docs/api.md` is the core API, the process model and the module and source contracts; `docs/frontends.md` is what a frontend binds to.

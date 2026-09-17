@@ -44,13 +44,13 @@ def log(message):
 
 
 def data_dir():
-    path = Path(os.environ["MODULE_DATA_DIR"])
+    path = Path(os.environ["SOURCE_DATA_DIR"])
     path.mkdir(parents=True, exist_ok=True)
     return path
 
 
 def load_settings():
-    settings = json.loads(os.environ["MODULE_SETTINGS_JSON"])
+    settings = json.loads(os.environ["SOURCE_SETTINGS_JSON"])
     for key in ("games_dir", "auth_path"):
         settings[key] = os.path.expanduser(str(settings[key]))
     dirs = [d.strip() for d in settings["scan_dirs"].split(",") if d.strip()]

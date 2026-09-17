@@ -1,5 +1,5 @@
 {
-  description = "Universe: a gamepad-first game launcher for Linux (core in Rust, UI in Qt 6 via PySide6, modules; no daemon)";
+  description = "Universe: a gamepad-first game launcher for Linux (core in Rust, UI in Qt 6 via PySide6, modules and sources; no daemon)";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
 
@@ -59,6 +59,19 @@
         '';
       };
 
+      sourcesPkg = pkgs.stdenvNoCC.mkDerivation {
+        pname = "universe-sources";
+        inherit version;
+        src = ./sources;
+        nativeBuildInputs = [ pkgs.python3 ];
+        installPhase = ''
+          mkdir -p $out/share/universe
+          cp -r . $out/share/universe/sources
+          rm -rf $out/share/universe/sources/*/tests
+          patchShebangs $out/share/universe/sources
+        '';
+      };
+
       universe-shell-extension = pkgs.stdenvNoCC.mkDerivation (finalAttrs: {
         pname = "universe-shell-extension";
         inherit version;
@@ -73,9 +86,11 @@
       });
 
       # No gpu-screen-recorder here: it must match the host's setcap gsr-kms-server (nixos.nix pins that package).
-      moduleRuntime = with pkgs; [ gogdl ffmpeg trash-cli util-linux ];
-      runtimePath = lib.makeBinPath (moduleRuntime ++ [ pkgs.umu-launcher pkgs.systemd pkgs.vulkan-tools ]);
+      moduleRuntime = with pkgs; [ ffmpeg trash-cli util-linux ];
+      sourceRuntime = with pkgs; [ gogdl ];
+      runtimePath = lib.makeBinPath (moduleRuntime ++ sourceRuntime ++ [ pkgs.umu-launcher pkgs.systemd pkgs.vulkan-tools ]);
       modulesDir = "${modulesPkg}/share/universe/modules";
+      sourcesDir = "${sourcesPkg}/share/universe/sources";
       qmlImportPath = lib.concatMapStringsSep ":" (p: "${p}/lib/qt-6/qml") (with pkgs.qt6; [ qtdeclarative qt5compat qtmultimedia ]);
 
       uiDesktopItem = pkgs.makeDesktopItem {
@@ -112,6 +127,7 @@
           qtWrapperArgs+=(--set QT_FORCE_STDERR_LOGGING 1)
           qtWrapperArgs+=(--set UNIVERSE_BIN ${universe}/bin/universe)
           qtWrapperArgs+=(--set UNIVERSE_MODULES_PATH ${modulesDir})
+          qtWrapperArgs+=(--set UNIVERSE_SOURCES_PATH ${sourcesDir})
           qtWrapperArgs+=(--prefix PATH : ${runtimePath})
         '';
         postFixup = ''
@@ -123,10 +139,10 @@
 
       universe = pkgs.symlinkJoin {
         name = "universe-${version}";
-        paths = [ core modulesPkg ];
+        paths = [ core modulesPkg sourcesPkg ];
         nativeBuildInputs = [ pkgs.makeWrapper ];
         postBuild = ''
-          wrapProgram $out/bin/universe --set UNIVERSE_MODULES_PATH "${modulesDir}" --prefix PATH : "${runtimePath}"
+          wrapProgram $out/bin/universe --set UNIVERSE_MODULES_PATH "${modulesDir}" --set UNIVERSE_SOURCES_PATH "${sourcesDir}" --prefix PATH : "${runtimePath}"
         '';
         meta.mainProgram = "universe";
       };
@@ -144,10 +160,9 @@
         installPhase = "touch $out";
       };
 
-      pytestModules = pkgs.stdenvNoCC.mkDerivation {
-        name = "universe-pytest-modules";
-        src = ./modules;
-        nativeBuildInputs = [ (pkgs.python3.withPackages (ps: [ ps.pytest ])) ] ++ moduleRuntime;
+      pytestOf = name: src: runtime: pkgs.stdenvNoCC.mkDerivation {
+        inherit name src;
+        nativeBuildInputs = [ (pkgs.python3.withPackages (ps: [ ps.pytest ])) ] ++ runtime;
         postPatch = "patchShebangs .";
         buildPhase = ''
           export HOME=$TMPDIR LC_ALL=C.UTF-8 TZ=Europe/Paris TZDIR=${pkgs.tzdata}/share/zoneinfo
@@ -155,19 +170,23 @@
         '';
         installPhase = "touch $out";
       };
+      pytestModules = pytestOf "universe-pytest-modules" ./modules moduleRuntime;
+      pytestSources = pytestOf "universe-pytest-sources" ./sources sourceRuntime;
     in {
       packages.${system} = {
         inherit core universe universe-shell-extension;
         universe-core-py = corePy;
         modules = modulesPkg;
+        sources = sourcesPkg;
         universe-ui = ui;
         default = universe;
       };
 
       devShells.${system}.default = pkgs.mkShell {
-        packages = with pkgs; [ cargo rustc clippy rustfmt rust-analyzer pkg-config ruff maturin (python3.withPackages (ps: [ ps.pyside6 ps.pysdl2 ps.qrcode ps.pytest ps.setuptools ])) qt6.qtdeclarative qt6.qt5compat qt6.qtmultimedia qt6.qtsvg SDL2 ] ++ moduleRuntime;
+        packages = with pkgs; [ cargo rustc clippy rustfmt rust-analyzer pkg-config ruff maturin (python3.withPackages (ps: [ ps.pyside6 ps.pysdl2 ps.qrcode ps.pytest ps.setuptools ])) qt6.qtdeclarative qt6.qt5compat qt6.qtmultimedia qt6.qtsvg SDL2 ] ++ moduleRuntime ++ sourceRuntime;
         shellHook = ''
           export UNIVERSE_MODULES_PATH="$PWD/modules"
+          export UNIVERSE_SOURCES_PATH="$PWD/sources"
           export QML2_IMPORT_PATH="${qmlImportPath}"
           export QT_PLUGIN_PATH="${pkgs.qt6.qtsvg}/lib/qt-6/plugins:${pkgs.qt6.qtmultimedia}/lib/qt-6/plugins"
           export LD_LIBRARY_PATH="${lib.makeLibraryPath [ pkgs.pipewire ]}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
@@ -179,6 +198,7 @@
         core = core;
         pytest-ui = pytestUi;
         pytest-modules = pytestModules;
+        pytest-sources = pytestSources;
       };
 
       nixosModules.default = import ./nix/nixos.nix { gsrPkg = pkgs.gpu-screen-recorder; };

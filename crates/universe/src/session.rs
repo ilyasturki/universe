@@ -364,7 +364,7 @@ mod tests {
 
     fn sandbox() -> Sandbox {
         let dir = tempfile::tempdir().unwrap();
-        for (var, sub) in [("UNIVERSE_DATA_HOME", "data"), ("UNIVERSE_STATE_HOME", "state"), ("UNIVERSE_CONFIG_HOME", "config"), ("UNIVERSE_MODULES_PATH", "modules")] {
+        for (var, sub) in [("UNIVERSE_DATA_HOME", "data"), ("UNIVERSE_STATE_HOME", "state"), ("UNIVERSE_CONFIG_HOME", "config"), ("UNIVERSE_MODULES_PATH", "modules"), ("UNIVERSE_SOURCES_PATH", "sources")] {
             std::fs::create_dir_all(dir.path().join(sub)).unwrap();
             std::env::set_var(var, dir.path().join(sub));
         }

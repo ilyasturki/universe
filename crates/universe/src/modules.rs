@@ -13,14 +13,15 @@ pub struct Manifest {
     pub api: u32,
     pub id: String,
     pub name: String,
-    pub kind: Vec<String>,
     pub version: String,
     pub requires: Requires,
     pub hooks: BTreeMap<String, toml::Value>,
     pub limits: Limits,
-    pub source: SourceSpec,
     pub settings: Vec<Setting>,
 }
+
+/// The manifest api both module.toml and source.toml speak; an older one is left out with a warning.
+pub const API: u32 = 2;
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
@@ -39,12 +40,6 @@ impl Default for Limits {
     fn default() -> Self {
         Limits { cpu_weight: 20, memory_high: "2G".into() }
     }
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(default)]
-pub struct SourceSpec {
-    pub exe: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -80,12 +75,6 @@ impl Module {
     pub fn id(&self) -> &str {
         &self.manifest.id
     }
-    pub fn is_hooks(&self) -> bool {
-        self.manifest.kind.iter().any(|k| k == "hooks")
-    }
-    pub fn is_source(&self) -> bool {
-        self.manifest.kind.iter().any(|k| k == "source") && !self.manifest.source.exe.is_empty()
-    }
     pub fn hook(&self, name: &str) -> Option<PathBuf> {
         self.manifest.hooks.get(name).and_then(|v| v.as_str()).map(|p| self.dir.join(p))
     }
@@ -110,7 +99,6 @@ impl Module {
         serde_json::json!({
             "id": m.id,
             "name": if m.name.is_empty() { m.id.clone() } else { m.name.clone() },
-            "kind": m.kind,
             "version": m.version,
             "dir": self.dir,
             "enabled": self.enabled,
@@ -124,19 +112,13 @@ impl Module {
     pub fn settings_json(&self) -> serde_json::Value {
         let mut list: Vec<serde_json::Value> = Vec::new();
         let has_enabled = self.manifest.settings.iter().any(|s| s.key == "enabled");
-        if !has_enabled && self.is_hooks() {
+        if !has_enabled {
             list.push(serde_json::json!({"key": "enabled", "type": "bool", "default": true, "label": "Enable", "scope": "game", "choices": []}));
         }
         for s in &self.manifest.settings {
-            list.push(serde_json::json!({
-                "key": s.key,
-                "type": s.kind,
-                "default": toml_to_json(&s.default),
-                "label": s.label,
-                "scope": s.scope,
-                "choices": s.choices,
-                "dynamic": !s.choices_exec.is_empty(),
-            }));
+            let mut j = setting_json(s);
+            j["scope"] = serde_json::Value::String(s.scope.clone());
+            list.push(j);
         }
         serde_json::Value::Array(list)
     }
@@ -144,14 +126,9 @@ impl Module {
     /// Global defaults ← config.toml [modules.<id>] ← game.toml [modules.<id>].
     pub fn merged_settings(&self, config: &Config, game: Option<&crate::game::Game>) -> serde_json::Map<String, serde_json::Value> {
         let mut out = serde_json::Map::new();
-        if self.is_hooks() {
-            out.insert("enabled".into(), serde_json::Value::Bool(true));
-        }
+        out.insert("enabled".into(), serde_json::Value::Bool(true));
         for s in &self.manifest.settings {
             out.insert(s.key.clone(), toml_to_json(&s.default));
-        }
-        if out.get("games_dir").and_then(|v| v.as_str()) == Some("") {
-            out.insert("games_dir".into(), serde_json::Value::String(config.games_root().to_string_lossy().into()));
         }
         for t in config.modules.settings.get(self.id()).into_iter().chain(game.and_then(|g| g.modules.get(self.id()))) {
             for (k, v) in t {
@@ -169,16 +146,31 @@ impl Module {
         let (kind, choices): (&str, &[String]) = match self.manifest.settings.iter().find(|s| s.key == key) {
             Some(s) if scope_game && s.scope != "game" => return Err(crate::Error::Invalid(format!("{}.{key} is a global setting", self.id()))),
             Some(s) => (&s.kind, &s.choices),
-            None if key == "enabled" && self.is_hooks() => ("bool", &[]),
+            None if key == "enabled" => ("bool", &[]),
             None => return Err(crate::Error::Invalid(format!("{}: unknown setting {key}", self.id()))),
         };
-        match kind {
-            "bool" if !matches!(value, "true" | "false") => Err(crate::Error::Invalid(format!("{key} must be true or false"))),
-            // A listed non-numeric choice is a named value ("auto") the module resolves itself.
-            "int" if value.parse::<i64>().is_err() && !choices.iter().any(|c| c == value) => Err(crate::Error::Invalid(format!("{key} must be an integer"))),
-            "enum" if !choices.iter().any(|c| c == value) => Err(crate::Error::Invalid(format!("{key} must be one of {}", choices.join(", ")))),
-            _ => Ok(()),
-        }
+        validate_value(key, kind, choices, value)
+    }
+}
+
+pub fn setting_json(s: &Setting) -> serde_json::Value {
+    serde_json::json!({
+        "key": s.key,
+        "type": s.kind,
+        "default": toml_to_json(&s.default),
+        "label": s.label,
+        "choices": s.choices,
+        "dynamic": !s.choices_exec.is_empty(),
+    })
+}
+
+pub fn validate_value(key: &str, kind: &str, choices: &[String], value: &str) -> crate::Result<()> {
+    match kind {
+        "bool" if !matches!(value, "true" | "false") => Err(crate::Error::Invalid(format!("{key} must be true or false"))),
+        // A listed non-numeric choice is a named value ("auto") the module resolves itself.
+        "int" if value.parse::<i64>().is_err() && !choices.iter().any(|c| c == value) => Err(crate::Error::Invalid(format!("{key} must be an integer"))),
+        "enum" if !choices.iter().any(|c| c == value) => Err(crate::Error::Invalid(format!("{key} must be one of {}", choices.join(", ")))),
+        _ => Ok(()),
     }
 }
 
@@ -194,30 +186,47 @@ pub fn toml_to_json(v: &toml::Value) -> serde_json::Value {
     }
 }
 
-/// User modules override system modules on the same id.
-pub fn discover(config: &Config) -> Vec<Module> {
-    let mut found: BTreeMap<String, Module> = BTreeMap::new();
-    for root in paths::system_module_dirs().into_iter().rev().chain([paths::user_modules_dir()]) {
+/// `<root>/*/<file>` over the roots in order, a later root overriding an earlier one on the same id; a manifest of an older api is left out.
+pub fn read_manifests<M: serde::de::DeserializeOwned>(roots: impl Iterator<Item = PathBuf>, file: &str, id_api: impl Fn(&M) -> (&str, u32)) -> BTreeMap<String, (PathBuf, M)> {
+    let mut found = BTreeMap::new();
+    for root in roots {
         let Ok(rd) = std::fs::read_dir(root) else { continue };
         for e in rd.flatten() {
             let dir = e.path();
-            let mp = dir.join("module.toml");
+            let mp = dir.join(file);
             if !mp.is_file() {
                 continue;
             }
-            match std::fs::read_to_string(&mp).map_err(crate::Error::from).and_then(|s| toml::from_str::<Manifest>(&s).map_err(Into::into)) {
-                Ok(m) if !m.id.is_empty() => {
-                    let missing: Vec<String> = m.requires.bins.iter().filter(|b| crate::runners::on_path(b).is_none()).cloned().collect();
-                    let enabled = config.modules.enabled.iter().any(|e| e == &m.id);
-                    let module = Module { available: missing.is_empty(), missing, enabled, dir: dir.clone(), manifest: m };
-                    found.insert(module.id().to_string(), module);
-                }
-                Ok(_) => tracing::warn!("{}: manifest without id", mp.display()),
+            match std::fs::read_to_string(&mp).map_err(crate::Error::from).and_then(|s| toml::from_str::<M>(&s).map_err(Into::into)) {
+                Ok(m) => match id_api(&m) {
+                    ("", _) => tracing::warn!("{}: manifest without id", mp.display()),
+                    (_, api) if api != 0 && api < API => tracing::warn!("{}: api {api} manifest ignored; api {API} keeps modules and sources apart (sources/<id>/source.toml)", mp.display()),
+                    (id, _) => {
+                        found.insert(id.to_string(), (dir, m));
+                    }
+                },
                 Err(err) => tracing::warn!("{}: {err}", mp.display()),
             }
         }
     }
-    found.into_values().collect()
+    found
+}
+
+pub fn missing_bins(requires: &Requires) -> Vec<String> {
+    requires.bins.iter().filter(|b| crate::runners::on_path(b).is_none()).cloned().collect()
+}
+
+/// User modules override system modules on the same id.
+pub fn discover(config: &Config) -> Vec<Module> {
+    let roots = paths::system_module_dirs().into_iter().rev().chain([paths::user_modules_dir()]);
+    read_manifests::<Manifest>(roots, "module.toml", |m| (&m.id, m.api))
+        .into_values()
+        .map(|(dir, m)| {
+            let missing = missing_bins(&m.requires);
+            let enabled = config.modules.enabled.iter().any(|e| e == &m.id);
+            Module { available: missing.is_empty(), missing, enabled, dir, manifest: m }
+        })
+        .collect()
 }
 
 #[derive(Debug, Clone, Default)]
@@ -238,11 +247,16 @@ pub struct HookOutcome {
     pub stderr: String,
 }
 
-fn module_cmd(module: &Module, exe: &Path) -> crate::Result<tokio::process::Command> {
-    std::fs::create_dir_all(module.data_dir())?;
+/// An executable of a module or a source: run in its directory with `<PREFIX>_DIR` and `<PREFIX>_DATA_DIR`, stdout and stderr piped.
+pub(crate) fn command(exe: &Path, dir: &Path, data_dir: &Path, prefix: &str) -> crate::Result<tokio::process::Command> {
+    std::fs::create_dir_all(data_dir)?;
     let mut cmd = tokio::process::Command::new(exe);
-    cmd.env("MODULE_DIR", &module.dir).env("MODULE_DATA_DIR", module.data_dir()).current_dir(&module.dir).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
+    cmd.env(format!("{prefix}_DIR"), dir).env(format!("{prefix}_DATA_DIR"), data_dir).current_dir(dir).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
     Ok(cmd)
+}
+
+fn module_cmd(module: &Module, exe: &Path) -> crate::Result<tokio::process::Command> {
+    command(exe, &module.dir, &module.data_dir(), "MODULE")
 }
 
 pub async fn run_blocking(module: &Module, hook: &str, env: &HookEnv) -> crate::Result<HookOutcome> {
@@ -286,57 +300,6 @@ pub async fn run_async(units: &crate::host::Units, module: &Module, hook: &str, 
     Ok(Some(spec.name))
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(tag = "event", rename_all = "snake_case")]
-pub enum SourceEvent {
-    LoginUrl { url: String },
-    LoggedIn { #[serde(default)] user: String },
-    Game(serde_json::Map<String, serde_json::Value>),
-    Progress { #[serde(default)] done: u64, #[serde(default)] total: u64, #[serde(default)] message: String },
-    Info { data: serde_json::Value },
-    Update(serde_json::Map<String, serde_json::Value>),
-    Done,
-    #[serde(other)]
-    Unknown,
-}
-
-pub async fn run_source<F>(module: &Module, settings: &serde_json::Map<String, serde_json::Value>, verb: &str, args: &[String], mut on_event: F) -> crate::Result<()>
-where
-    F: FnMut(SourceEvent),
-{
-    use tokio::io::AsyncBufReadExt;
-    let exe = module.dir.join(&module.manifest.source.exe);
-    let mut child = module_cmd(module, &exe)?.arg(verb).args(args).env("MODULE_SETTINGS_JSON", serde_json::Value::Object(settings.clone()).to_string()).env("UNIVERSE_BIN", paths::self_exe()).spawn().map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
-    let stdout = child.stdout.take().unwrap();
-    let stderr = child.stderr.take().unwrap();
-    let id = module.id().to_string();
-    let err_task = tokio::spawn(async move {
-        let mut lines = tokio::io::BufReader::new(stderr).lines();
-        let mut last = String::new();
-        while let Ok(Some(l)) = lines.next_line().await {
-            tracing::info!("source {id}: {l}");
-            last = l;
-        }
-        last
-    });
-    let mut lines = tokio::io::BufReader::new(stdout).lines();
-    while let Some(line) = lines.next_line().await? {
-        if line.trim().is_empty() {
-            continue;
-        }
-        match serde_json::from_str::<SourceEvent>(&line) {
-            Ok(ev) => on_event(ev),
-            Err(e) => tracing::warn!("source {}: bad event {e}: {line}", module.id()),
-        }
-    }
-    let status = child.wait().await?;
-    let last_err = err_task.await.unwrap_or_default();
-    if !status.success() {
-        return Err(crate::Error::Io(format!("{} {verb} failed ({}): {last_err}", module.id(), status.code().unwrap_or(-1))));
-    }
-    Ok(())
-}
-
 /// `<exec> <key>` prints a JSON array of strings, bounded to 20 s; the static list when there is no exec.
 pub async fn setting_choices(module: &Module, settings: &serde_json::Map<String, serde_json::Value>, key: &str) -> crate::Result<Vec<String>> {
     let s = module.manifest.settings.iter().find(|s| s.key == key).ok_or_else(|| crate::Error::Invalid(format!("{}: unknown setting {key}", module.id())))?;
@@ -344,15 +307,19 @@ pub async fn setting_choices(module: &Module, settings: &serde_json::Map<String,
         return Ok(s.choices.clone());
     }
     let exe = module.dir.join(&s.choices_exec);
-    let child = module_cmd(module, &exe)?.arg(key).env("MODULE_SETTINGS_JSON", serde_json::Value::Object(settings.clone()).to_string()).env("UNIVERSE_BIN", paths::self_exe()).spawn().map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
+    run_choices(module_cmd(module, &exe)?, &exe, "MODULE", module.id(), settings, key).await
+}
+
+pub(crate) async fn run_choices(mut cmd: tokio::process::Command, exe: &Path, prefix: &str, id: &str, settings: &serde_json::Map<String, serde_json::Value>, key: &str) -> crate::Result<Vec<String>> {
+    let child = cmd.arg(key).env(format!("{prefix}_SETTINGS_JSON"), serde_json::Value::Object(settings.clone()).to_string()).env("UNIVERSE_BIN", paths::self_exe()).spawn().map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
     let out = tokio::time::timeout(Duration::from_secs(20), child.wait_with_output())
         .await
-        .map_err(|_| crate::Error::Io(format!("{} {key}: choices timed out", module.id())))??;
+        .map_err(|_| crate::Error::Io(format!("{id} {key}: choices timed out")))??;
     if !out.status.success() {
         let err = String::from_utf8_lossy(&out.stderr);
-        return Err(crate::Error::Io(format!("{} {key}: choices failed ({}): {}", module.id(), out.status.code().unwrap_or(-1), err.trim())));
+        return Err(crate::Error::Io(format!("{id} {key}: choices failed ({}): {}", out.status.code().unwrap_or(-1), err.trim())));
     }
-    serde_json::from_slice(&out.stdout).map_err(|e| crate::Error::Io(format!("{} {key}: bad choices: {e}", module.id())))
+    serde_json::from_slice(&out.stdout).map_err(|e| crate::Error::Io(format!("{id} {key}: bad choices: {e}")))
 }
 
 #[cfg(test)]
@@ -362,10 +329,9 @@ mod tests {
     #[test]
     fn manifest_and_settings_merge() {
         let m: Manifest = toml::from_str(r#"
-api = 1
+api = 2
 id = "capture"
 name = "Capture"
-kind = ["hooks"]
 [requires]
 bins = ["definitely-missing-binary-xyz"]
 [hooks]
@@ -442,7 +408,6 @@ printf '["provider:%s"]\n' "$provider"
         std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).unwrap();
         let m: Manifest = toml::from_str(r#"
 id = "journal"
-kind = ["hooks"]
 [[settings]]
 key = "provider"
 type = "enum"

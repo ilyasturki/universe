@@ -274,13 +274,13 @@ dimmed (`dim: true`), never dropped; hints for what the pad makes obvious — mo
 
 ## The Settings tab
 
-`pages/SettingsPage.qml` is a sidebar (`ui/SectionList.qml`: Runners, Launch, Modules, Install,
-Updates, Login, Controller, Themes, Doctor, Artwork, Quit) beside one column of `ui/SettingsCards.qml`
+`pages/SettingsPage.qml` is a sidebar (`ui/SectionList.qml`: Runners, Launch, Modules, Sources, Install,
+Updates, Controller, Themes, Doctor, Artwork, Quit) beside one column of `ui/SettingsCards.qml`
 (`columns: 1`; the game settings page keeps two). Quit is one row, confirmed in place (`Stay` /
 `Quit Universe`, which says when the running game closes with it), then `Qt.quit()` — the host
 stops the session and shuts the core down after the loop. Up and Down in the sidebar switch the section as they go, Right or A
 enter the cards, Left or B come back, L2/R2 cycle the section from anywhere, and □ refreshes the
-sections that fetch (Install, Updates, Login, Doctor). A source's search is the first row of its
+sections that fetch (Install, Updates, Doctor). A source's search is the first row of its
 first card, reached by going up: the cursor lands on the first game (`SettingsCards.reset` skips
 `type: "search"` rows). The tab bar's search glass shows only on the tabs that list games
 (`TabBar.showSearch`), so Settings has none. A row's `icon` names a `MenuGlyph` kind; a pad
@@ -342,16 +342,25 @@ no GPU is known. In Reprise, `ui/SettingsCards.qml` shows the focused row's `det
 under the cards (two lines, reserved whenever a row has one); the Switch 2 look prints it under
 every row.
 
-`api.screens.modules` is Settings › Modules: one `action` row per module (`module`, its name,
-`value` whether it runs, `display` On / Off / Unavailable, `meta` version and kind, `warning`
-what is missing), the ones running first, the others in an "Off" card. A opens the module's page;
+`api.screens.modules` is Settings › Modules and `api.screens.sourceList` Settings › Sources, the
+same list (`screens/settings.py`'s `ListForm`): one `action` row per entry (`module` its id, its
+name, `value` whether it runs, `switch: true` so the row draws its state as a switch ahead of the
+chevron, `display` On / Off / Unavailable, `meta` the version, `warning` what is missing, `source`
+which list it is), the ones running first, the others in an "Off" card. A opens the entry's page;
 △ (Y in Reprise, X in the Switch 2 look) toggles it in the list (`toggle(index)`, refused with a
-warning while it is off). `indexOf(id)` finds a module's row for the cursor to land on again.
-`pages/FormPage.qml` with `{ module }` (`theme.qml` `openSub`; `switch2/pages/FormPage.qml` on the
-stack) is on `api.screens.module`: `load(id)` builds its head (`info`: name, meta, warning,
-`enabled`) and cards for the switch (`enabled`, `disabled` while the module's programs are
-missing) and, once on, its global settings, a `dynamic` setting's choices fetched off the UI
-thread. Doctor's checks stay on `api.screens.modules` (`loadDoctor`, `doctor`, `doctorGroups`).
+warning while it is off). `indexOf(id)` finds an entry's row for the cursor to land on again.
+`pages/FormPage.qml` with `{ module }` or `{ source }` (`theme.qml` `openSub`;
+`switch2/pages/FormPage.qml` on the stack) is on `api.screens.module` or `api.screens.source`
+(`PageForm`): `load(id)` builds its head (`info`: name, meta, warning, `enabled`, `source`, and a
+source's `logged_in` and `user`) and cards for the switch (`enabled`, `disabled` while the entry's
+programs are missing) and, once on, its settings — a module's global ones, a source's all — a
+`dynamic` setting's choices fetched off the UI thread. A source's page adds a Sign-in card: `Signed
+in` (an `info` row, the user as its detail), `Get a sign-in link` (`link`: `api.screens.login.begin`,
+the QR code and the URL then show under the cards) and `Enter the code` (`code`: a prompt into
+`login.submit`); `login.finished` reloads both source screens. Listing the sources probes their
+logins once per process, on the network, so the sources list and page load off the UI thread and
+announce `rowsChanged` when they land. Doctor's checks stay on `api.screens.modules`
+(`loadDoctor`, `doctor`, `doctorGroups`), grouped by module or source name and run off the UI thread too.
 
 ## The runners section
 

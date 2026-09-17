@@ -232,7 +232,6 @@
     {
       "id": "capture",
       "name": "Video capture",
-      "kind": ["hooks"],
       "version": "0.1.0",
       "enabled": true,
       "available": true,
@@ -351,7 +350,6 @@
     {
       "id": "journal",
       "name": "Play journal",
-      "kind": ["hooks"],
       "version": "0.1.0",
       "enabled": true,
       "available": true,
@@ -373,22 +371,28 @@
         {"key": "markdown_export", "type": "bool", "default": true, "label": "Render Markdown notes", "scope": "global"},
         {"key": "journal_root", "type": "path", "default": "~/Documents/notes/games/journal", "label": "Notes folder", "scope": "global"}
       ]
-    },
+    }
+  ],
+  "sources": [
     {
       "id": "gog",
       "name": "GOG",
-      "kind": ["source"],
       "version": "0.1.0",
       "enabled": true,
       "available": true,
       "missing": [],
+      "logged_in": true,
+      "user": "yasso",
+      "games_dir": "/mnt/games/PC",
       "settings": [
-        {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder", "scope": "global"}
+        {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder (empty: paths.games_root)", "choices": [], "dynamic": false},
+        {"key": "scan_dirs", "type": "string", "default": "", "label": "Scanned folders (comma-separated, empty: the install folder)", "choices": [], "dynamic": false},
+        {"key": "platform", "type": "enum", "default": "windows", "label": "Depot platform", "choices": ["windows", "linux"], "dynamic": false},
+        {"key": "with_dlcs", "type": "bool", "default": true, "label": "Install owned DLCs", "choices": [], "dynamic": false},
+        {"key": "auth_path", "type": "path", "default": "~/.config/gogdl/auth.json", "label": "gogdl token file", "choices": [], "dynamic": false},
+        {"key": "install_timeout_s", "type": "int", "default": 7200, "label": "Maximum install or update time (s)", "choices": [], "dynamic": false}
       ]
     }
-  ],
-  "sources": [
-    {"id": "gog", "name": "GOG", "available": true, "logged_in": true, "games_dir": "/mnt/games/PC"}
   ],
   "login_url": "https://auth.gog.com/auth?client_id=46755278331571209&redirect_uri=https%3A%2F%2Fembed.gog.com%2Fon_login_success%3Forigin%3Dclient&response_type=code&layout=client2",
   "source_library": {
@@ -500,8 +504,12 @@
       "proton-cachyos": "~/.local/share/lutris/runners/wine/proton-cachyos"
     },
     "modules": {
-      "enabled": ["gog", "capture", "journal"],
+      "enabled": ["capture", "journal"],
       "capture": {"codec": "av1_10bit"}
+    },
+    "sources": {
+      "enabled": ["gog"],
+      "gog": {"platform": "windows"}
     }
   },
   "controller": {

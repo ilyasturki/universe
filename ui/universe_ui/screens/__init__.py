@@ -6,7 +6,7 @@ from .launch import LaunchForm
 from .media import JournalList, PendingJournals, RecordingsList
 from .paths import PathBrowser
 from .runners import RunnerForm, RunnersForm
-from .settings import GameSettingsForm, ModuleForm, ModulesForm
+from .settings import GameSettingsForm, ModuleForm, ModulesForm, SourceForm, SourcesForm
 from .sources import LoginFlow, SourcesBrowser
 
 
@@ -16,9 +16,12 @@ class Screens(QObject):
         self._gameSettings = GameSettingsForm(client, screen_mode, self)
         self._modules = ModulesForm(client, self)
         self._module = ModuleForm(client, self)
+        self._sourceList = SourcesForm(client, self)
+        self._source = SourceForm(client, self)
         self._launch = LaunchForm(client, screen_mode, self)
         self._sources = SourcesBrowser(client, games, self)
         self._login = LoginFlow(client, self)
+        self._login.finished.connect(lambda ok, text: (self._sourceList.load(), self._source.reload()))
         self._recordings = RecordingsList(client, self)
         self._journal = JournalList(client, self)
         self._pendingJournals = PendingJournals(client, self)
@@ -37,6 +40,8 @@ class Screens(QObject):
     gameSettings = Property(QObject, lambda self: self._gameSettings, constant=True)
     modules = Property(QObject, lambda self: self._modules, constant=True)
     module = Property(QObject, lambda self: self._module, constant=True)
+    sourceList = Property(QObject, lambda self: self._sourceList, constant=True)
+    source = Property(QObject, lambda self: self._source, constant=True)
     launch = Property(QObject, lambda self: self._launch, constant=True)
     sources = Property(QObject, lambda self: self._sources, constant=True)
     login = Property(QObject, lambda self: self._login, constant=True)

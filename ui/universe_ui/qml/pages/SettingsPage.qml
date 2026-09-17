@@ -14,6 +14,7 @@ FocusScope {
     signal settingsRequested(var game)
     signal runnerRequested(string runner)
     signal moduleRequested(string module)
+    signal sourceRequested(string source)
     signal artworkRequested(var game, string slot)
     signal message(string text)
 
@@ -28,16 +29,16 @@ FocusScope {
 
     readonly property var sections: [
         { name: "Runners", icon: "play" }, { name: "Launch", icon: "sliders" }, { name: "Modules", icon: "grid" },
-        { name: "Install", icon: "download" }, { name: "Updates", icon: "refresh" }, { name: "Login", icon: "user" },
+        { name: "Sources", icon: "cloud" }, { name: "Install", icon: "download" }, { name: "Updates", icon: "refresh" },
         { name: "Controller", icon: "gamepad" }, { name: "Themes", icon: "sun" }, { name: "Doctor", icon: "pulse" },
         { name: "Artwork", icon: "image" }, { name: "Quit", icon: "power" }
     ]
     readonly property int runnersSection: 0
     readonly property int launchSection: 1
     readonly property int modulesSection: 2
-    readonly property int installSection: 3
-    readonly property int updatesSection: 4
-    readonly property int loginSection: 5
+    readonly property int sourcesSection: 3
+    readonly property int installSection: 4
+    readonly property int updatesSection: 5
     readonly property int controllerSection: 6
     readonly property int themesSection: 7
     readonly property int doctorSection: 8
@@ -46,10 +47,12 @@ FocusScope {
     property int section: 0
 
     readonly property var modulesForm: api.screens.modules
+    readonly property var sourceList: api.screens.sourceList
+    // The Modules and Sources sections are the same list: a switch per entry, A opens its page, Y flips it.
+    readonly property var listForm: section === modulesSection ? modulesForm : section === sourcesSection ? sourceList : null
     readonly property var launch: api.screens.launch
     readonly property var runners: api.screens.runners
     readonly property var sources: api.screens.sources
-    readonly property var login: api.screens.login
     readonly property var controller: api.screens.controller
 
     readonly property bool controllerOpen: section === controllerSection && activeFocus
@@ -59,6 +62,7 @@ FocusScope {
     property string pendingTrigger: ""
     property string openedRunner: ""
     property string openedModule: ""
+    property string openedSource: ""
 
     readonly property var hints: editor.open ? editor.hints
         : menu.open ? menu.hints
@@ -67,7 +71,7 @@ FocusScope {
         : learning ? [ { glyph: "B", label: "Stop learning" } ]
         : side.activeFocus
         ? [ { glyph: "A", label: "Open" }, { glyph: "B", label: "Back" }, { glyph: "LT RT", label: "Section" } ]
-        : section === modulesSection
+        : listForm !== null
         ? [ { glyph: "A", label: "Open" },
             { glyph: "Y", label: cards.currentRow && cards.currentRow.value === true ? "Disable" : "Enable", dim: !cards.currentRow || (cards.currentRow.warning !== "" && cards.currentRow.value !== true) },
             { glyph: "B", label: "Sections" }, { glyph: "LT RT", label: "Section" } ]
@@ -88,7 +92,7 @@ FocusScope {
         return "Change";
     }
 
-    readonly property bool refreshable: section >= installSection && section <= loginSection
+    readonly property bool refreshable: section === installSection || section === updatesSection
 
     readonly property real sideMargin: Theme.dp(80)
     readonly property real sideWidth: Theme.dp(300)
@@ -98,19 +102,13 @@ FocusScope {
 
     readonly property var currentSource: sources.current
     readonly property string sourceName: currentSource ? currentSource.name : sources.source
-    readonly property bool loggedIn: currentSource ? currentSource.logged_in === true : false
-
-    readonly property string sourceMeta: {
-        var row = modulesForm.rows.find(function(r) { return r.module === sources.source; });
-        return row ? row.meta || "" : "";
-    }
 
     readonly property var content: {
         var rows = [], groups = [];
         if (section === artworkSection)
             return { rows: rows, groups: groups };
-        if (section === modulesSection)
-            return { rows: modulesForm.rows, groups: modulesForm.groups };
+        if (listForm !== null)
+            return { rows: listForm.rows, groups: listForm.groups };
         if (section === launchSection)
             return { rows: launch.rows, groups: launch.groups };
         if (section === runnersSection)
@@ -155,13 +153,6 @@ FocusScope {
                           rows: rows.map(function(r, i) { return i; }) });
             return { rows: rows, groups: groups };
         }
-        if (section === loginSection) {
-            rows.push({ section: sourceName, key: "", label: "Signed in", type: "info", value: loggedIn, detail: loggedIn ? "yes" : "no" });
-            rows.push({ section: sourceName, key: "link", label: "Get a sign-in link", type: "action", display: login.url ? "ready" : "", detail: "" });
-            rows.push({ section: sourceName, key: "code", label: "Enter the code", type: "action", display: "", detail: "" });
-            groups.push({ title: sourceName, meta: sourceMeta, rows: [0, 1, 2] });
-            return { rows: rows, groups: groups };
-        }
         if (section === controllerSection) {
             if (!learning)
                 return { rows: controller.rows, groups: controller.groups };
@@ -194,8 +185,8 @@ FocusScope {
     }
 
     function refresh() {
-        if (section === modulesSection)
-            modulesForm.load();
+        if (listForm !== null)
+            listForm.load();
         else if (section === launchSection)
             launch.load();
         else if (section === runnersSection)
@@ -225,12 +216,12 @@ FocusScope {
 
     function toggleModule() {
         var row = cards.currentRow;
-        if (section !== modulesSection || !row || (row.warning !== "" && row.value !== true)) {
+        if (listForm === null || !row || (row.warning !== "" && row.value !== true)) {
             Sound.edge();
             return;
         }
         Sound.favourite(!row.value);
-        modulesForm.toggle(cards.index);
+        listForm.toggle(cards.index);
     }
 
     function confirm(keep, icon, label, title, done) {
@@ -248,6 +239,10 @@ FocusScope {
             cards.forceActiveFocus();
             openedModule = row.module;
             page.moduleRequested(row.module);
+        } else if (section === sourcesSection) {
+            cards.forceActiveFocus();
+            openedSource = row.module;
+            page.sourceRequested(row.module);
         } else if (section === launchSection) {
             if (row.type === "bool") {
                 launch.toggle(index);
@@ -272,14 +267,6 @@ FocusScope {
                 sources.updateAll();
             else
                 sources.update(row.row);
-        } else if (section === loginSection) {
-            if (row.key === "link") {
-                Sound.enter();
-                login.begin(sources.source);
-            } else if (row.key === "code") {
-                Sound.panel();
-                editor.prompt("Code from " + sourceName, "", function(code) { login.submit(code); });
-            }
         } else if (section === themesSection) {
             Sound.panel();
             editor.edit(row, function(value) {
@@ -376,11 +363,11 @@ FocusScope {
     onActiveFocusChanged: {
         if (!activeFocus)
             return;
-        var store = openedRunner !== "" ? runners : openedModule !== "" ? modulesForm : null;
+        var store = openedRunner !== "" ? runners : openedModule !== "" ? modulesForm : openedSource !== "" ? sourceList : null;
         if (!store)
             return;
-        var name = openedRunner || openedModule;
-        openedRunner = openedModule = "";
+        var name = openedRunner || openedModule || openedSource;
+        openedRunner = openedModule = openedSource = "";
         store.load();
         var i = store.indexOf(name);
         if (i >= 0)
@@ -460,6 +447,7 @@ FocusScope {
 
     Component.onCompleted: {
         modulesForm.load();
+        sourceList.load();
         runners.load();
         sources.load();
         if (api.theme.takeLanding() === "themes")
@@ -481,14 +469,6 @@ FocusScope {
     Connections {
         target: page.sources
         function onMessage(text) { page.message(text); }
-    }
-
-    Connections {
-        target: page.login
-        function onFinished(ok, text) {
-            page.message(text);
-            page.sources.load();
-        }
     }
 
     Connections {
@@ -711,96 +691,9 @@ FocusScope {
             } else if (api.keys.isDetails(event)) {
                 event.accepted = true;
                 page.refreshNow();
-            } else if (api.keys.isFilters(event) && page.section === page.modulesSection) {
+            } else if (api.keys.isFilters(event) && page.listForm !== null) {
                 event.accepted = true;
                 page.toggleModule();
-            }
-        }
-    }
-
-    Item {
-        id: loginCard
-
-        x: page.mainX
-        y: cards.y + cards.layout.height + Theme.dp(32)
-        width: page.mainWidth
-        height: Math.max(Theme.dp(74), loginHead.height) + loginBody.height + Theme.dp(8) * 2 + 2
-        visible: page.section === page.loginSection && (page.login.url !== "" || page.login.status !== "")
-
-        Rectangle {
-            anchors.fill: parent
-            radius: Theme.dp(24)
-            color: Qt.rgba(1, 1, 1, 0.04)
-            border.width: 1
-            border.color: Qt.rgba(1, 1, 1, 0.10)
-        }
-
-        Text {
-            id: loginHead
-            x: Theme.dp(8) + 1 + Theme.dp(18)
-            y: Theme.dp(8) + 1
-            height: Theme.dp(74)
-            verticalAlignment: Text.AlignVCenter
-            text: "Sign-in link"
-            color: Theme.text
-            font.family: Theme.sans
-            font.weight: Font.Bold
-            font.pixelSize: Theme.dp(27)
-        }
-
-        Row {
-            id: loginBody
-
-            x: Theme.dp(8) + 1 + Theme.dp(16)
-            y: loginHead.y + loginHead.height
-            width: parent.width - x * 2
-            height: Math.max(qr.height, loginText.height) + Theme.dp(36)
-            spacing: Theme.dp(28)
-
-            QrCode {
-                id: qr
-                y: Theme.dp(18)
-                width: Theme.dp(300)
-                height: width
-                matrix: page.login.matrix
-                visible: page.login.url !== ""
-            }
-
-            Column {
-                id: loginText
-                y: Theme.dp(18)
-                width: parent.width - (qr.visible ? qr.width + parent.spacing : 0)
-                spacing: Theme.dp(14)
-
-                Text {
-                    width: parent.width
-                    text: "Scan to sign in on your phone"
-                    color: Theme.text
-                    font.family: Theme.sans
-                    font.weight: Font.Medium
-                    font.pixelSize: Theme.dp(22)
-                }
-
-                Text {
-                    width: parent.width
-                    text: page.login.url
-                    color: Theme.textSecondary
-                    font.family: Theme.sans
-                    font.pixelSize: Theme.dp(18)
-                    lineHeight: 1.3
-                    wrapMode: Text.WrapAnywhere
-                    maximumLineCount: 5
-                    elide: Text.ElideRight
-                }
-
-                Text {
-                    width: parent.width
-                    text: page.login.status
-                    color: Theme.textMuted
-                    font.family: Theme.sans
-                    font.pixelSize: Theme.dp(20)
-                    wrapMode: Text.WordWrap
-                }
             }
         }
     }

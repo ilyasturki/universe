@@ -7,7 +7,8 @@ use crate::config::Config;
 use crate::game::Game;
 use crate::host::Host;
 use crate::library::{self, Resolved};
-use crate::modules::{self, HookEnv, Module, SourceEvent};
+use crate::modules::{self, HookEnv, Module};
+use crate::sources::{self, Source, SourceEvent};
 use crate::paths;
 use crate::{Error, Result};
 
@@ -45,7 +46,7 @@ fn title_of(path: &Path) -> String {
 pub(crate) fn passthrough_env() -> BTreeMap<String, String> {
     let mut env = BTreeMap::new();
     // The GAMESCOPE_*, STEAM_GAME_DISPLAY_0 and SDL_* names are what gamescope exports to its child: a game started from inside it lands on its display.
-    for k in ["PATH", "HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS", "WAYLAND_DISPLAY", "DISPLAY", "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE", "GI_TYPELIB_PATH", "UNIVERSE_DATA_HOME", "UNIVERSE_CONFIG_HOME", "UNIVERSE_STATE_HOME", "UNIVERSE_MODULES_PATH", "RUST_LOG", "GAMESCOPE_WAYLAND_DISPLAY", "STEAM_GAME_DISPLAY_0", "SDL_VIDEODRIVER", "SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS", "vk_xwayland_wait_ready"] {
+    for k in ["PATH", "HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS", "WAYLAND_DISPLAY", "DISPLAY", "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE", "GI_TYPELIB_PATH", "UNIVERSE_DATA_HOME", "UNIVERSE_CONFIG_HOME", "UNIVERSE_STATE_HOME", "UNIVERSE_MODULES_PATH", "UNIVERSE_SOURCES_PATH", "RUST_LOG", "GAMESCOPE_WAYLAND_DISPLAY", "STEAM_GAME_DISPLAY_0", "SDL_VIDEODRIVER", "SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS", "vk_xwayland_wait_ready"] {
         if let Ok(v) = std::env::var(k) {
             env.insert(k.to_string(), v);
         }
@@ -59,9 +60,9 @@ async fn blocking<T: Send + 'static>(f: impl FnOnce() -> Result<T> + Send + 'sta
     tokio::task::spawn_blocking(f).await.map_err(|e| Error::Io(e.to_string()))?
 }
 
-fn load_source_caches(modules: &[Module]) -> BTreeMap<String, Vec<serde_json::Map<String, serde_json::Value>>> {
+fn load_source_caches(sources: &[Source]) -> BTreeMap<String, Vec<serde_json::Map<String, serde_json::Value>>> {
     let mut caches = BTreeMap::new();
-    for m in modules.iter().filter(|m| m.is_source()) {
+    for m in sources {
         if let Some(v) = std::fs::read_to_string(m.data_dir().join("library.json")).ok().and_then(|s| serde_json::from_str(&s).ok()) {
             caches.insert(m.id().to_string(), v);
         }
@@ -72,6 +73,7 @@ fn load_source_caches(modules: &[Module]) -> BTreeMap<String, Vec<serde_json::Ma
 pub struct Core {
     pub config: RwLock<Config>,
     pub modules: RwLock<Vec<Module>>,
+    pub sources: RwLock<Vec<Source>>,
     pub games: RwLock<Vec<Resolved>>,
     source_libraries: Mutex<BTreeMap<String, Vec<serde_json::Map<String, serde_json::Value>>>>,
     source_logins: Mutex<BTreeMap<String, String>>,
@@ -84,11 +86,13 @@ pub struct Core {
 impl Core {
     fn new(config: Config, host: Host) -> Core {
         let modules = modules::discover(&config);
+        let sources = sources::discover(&config);
         let games = library::load_all(&config, &modules);
-        let caches = load_source_caches(&modules);
+        let caches = load_source_caches(&sources);
         Core {
             config: RwLock::new(config),
             modules: RwLock::new(modules),
+            sources: RwLock::new(sources),
             games: RwLock::new(games),
             source_libraries: Mutex::new(caches),
             source_logins: Mutex::new(BTreeMap::new()),
@@ -112,7 +116,7 @@ impl Core {
         Ok(core)
     }
 
-    async fn refresh_login(&self, m: &Module) {
+    async fn refresh_login(&self, m: &Source) {
         let user = self.run_verb(m, "status", &[], None).await.ok().and_then(|ev| ev.into_iter().find_map(|e| if let SourceEvent::LoggedIn { user } = e { Some(user) } else { None }));
         let mut logins = self.source_logins.lock().await;
         match user {
@@ -125,7 +129,7 @@ impl Core {
     async fn ensure_logins(&self) {
         self.logins_probed
             .get_or_init(|| async {
-                let sources: Vec<Module> = self.modules.read().await.iter().filter(|m| m.is_source() && m.active()).cloned().collect();
+                let sources: Vec<Source> = self.sources.read().await.iter().filter(|m| m.active()).cloned().collect();
                 for m in sources {
                     self.refresh_login(&m).await;
                 }
@@ -351,7 +355,7 @@ impl Core {
             .read()
             .await
             .iter()
-            .filter(|m| m.active() && m.is_hooks() && m.hook(hook).is_some())
+            .filter(|m| m.active() && m.hook(hook).is_some())
             .filter(|m| m.merged_settings(&cfg, Some(&r.game)).get("enabled").and_then(|v| v.as_bool()).unwrap_or(true))
             .cloned()
             .collect()
@@ -727,21 +731,54 @@ impl Core {
         self.modules.read().await.iter().map(|m| m.to_json()).collect()
     }
 
+    /// The module and source lists, from their manifests and config.toml.
     pub async fn reload_modules(&self) {
         let cfg = self.config.read().await.clone();
         *self.modules.write().await = modules::discover(&cfg);
+        *self.sources.write().await = sources::discover(&cfg);
     }
 
-    pub async fn enable_module(&self, id: &str, enabled: bool) -> Result<()> {
-        if !self.modules.read().await.iter().any(|m| m.id() == id) {
-            return Err(Error::NotFound(format!("module {id}")));
+    /// A source named as a module (or the reverse) gets the command that does take it.
+    async fn module_or_hint(&self, id: &str) -> Result<Module> {
+        if let Some(m) = self.modules.read().await.iter().find(|m| m.id() == id) {
+            return Ok(m.clone());
         }
-        let mut list = self.config.read().await.modules.enabled.clone();
+        if self.sources.read().await.iter().any(|s| s.id() == id) {
+            return Err(Error::Invalid(format!("{id} is a source, not a module: universe source … {id}")));
+        }
+        Err(Error::NotFound(format!("module {id}")))
+    }
+
+    async fn source_or_hint(&self, id: &str) -> Result<Source> {
+        if let Some(s) = self.sources.read().await.iter().find(|s| s.id() == id) {
+            return Ok(s.clone());
+        }
+        if self.modules.read().await.iter().any(|m| m.id() == id) {
+            return Err(Error::Invalid(format!("{id} is a module, not a source: universe module … {id}")));
+        }
+        Err(Error::NotFound(format!("source {id}")))
+    }
+
+    /// An empty list is written as `[]`: an absent key would fall back to the defaults, which enable it again.
+    fn enabled_list(mut list: Vec<String>, id: &str, enabled: bool) -> String {
         list.retain(|m| m != id);
         if enabled {
             list.push(id.into());
         }
-        Config::set_key(&paths::config_file(), "modules.enabled", &list.join(","))?;
+        if list.is_empty() { "[]".into() } else { list.join(",") }
+    }
+
+    pub async fn enable_module(&self, id: &str, enabled: bool) -> Result<()> {
+        self.module_or_hint(id).await?;
+        let list = self.config.read().await.modules.enabled.clone();
+        Config::set_key(&paths::config_file(), "modules.enabled", &Self::enabled_list(list, id, enabled))?;
+        self.reload_config().await
+    }
+
+    pub async fn enable_source(&self, id: &str, enabled: bool) -> Result<()> {
+        self.source_or_hint(id).await?;
+        let list = self.config.read().await.sources.enabled.clone();
+        Config::set_key(&paths::config_file(), "sources.enabled", &Self::enabled_list(list, id, enabled))?;
         self.reload_config().await
     }
 
@@ -761,26 +798,22 @@ impl Core {
 
     pub async fn module_settings(&self, module: &str, game_id: &str) -> Result<serde_json::Value> {
         let cfg = self.config.read().await.clone();
-        let modules = self.modules.read().await;
-        let m = modules.iter().find(|m| m.id() == module).ok_or_else(|| Error::NotFound(format!("module {module}")))?;
+        let m = self.module_or_hint(module).await?;
         let game = if game_id.is_empty() { None } else { Some(self.get(game_id).await?.game) };
         Ok(serde_json::Value::Object(m.merged_settings(&cfg, game.as_ref())))
     }
 
     pub async fn module_setting_choices(&self, module: &str, key: &str) -> Result<Vec<String>> {
         let cfg = self.config.read().await.clone();
-        let m = self.modules.read().await.iter().find(|m| m.id() == module).cloned().ok_or_else(|| Error::NotFound(format!("module {module}")))?;
+        let m = self.module_or_hint(module).await?;
         let settings = m.merged_settings(&cfg, None);
         modules::setting_choices(&m, &settings, key).await
     }
 
     pub async fn set_module_setting(&self, module: &str, game_id: &str, key: &str, value: &str) -> Result<()> {
-        {
-            let modules = self.modules.read().await;
-            let m = modules.iter().find(|m| m.id() == module).ok_or_else(|| Error::NotFound(format!("module {module}")))?;
-            if !value.is_empty() {
-                m.validate_setting(key, value, !game_id.is_empty())?;
-            }
+        let m = self.module_or_hint(module).await?;
+        if !value.is_empty() {
+            m.validate_setting(key, value, !game_id.is_empty())?;
         }
         if game_id.is_empty() {
             Config::set_key(&paths::config_file(), &format!("modules.{module}.{key}"), value)?;
@@ -790,6 +823,27 @@ impl Core {
             crate::game::set_key(&r.game.toml_path(), &format!("modules.{module}.{key}"), value)?;
             self.reload_game(game_id).await
         }
+    }
+
+    pub async fn source_settings(&self, source: &str) -> Result<serde_json::Value> {
+        let cfg = self.config.read().await.clone();
+        Ok(serde_json::Value::Object(self.source_or_hint(source).await?.merged_settings(&cfg)))
+    }
+
+    pub async fn source_setting_choices(&self, source: &str, key: &str) -> Result<Vec<String>> {
+        let cfg = self.config.read().await.clone();
+        let m = self.source_or_hint(source).await?;
+        let settings = m.merged_settings(&cfg);
+        sources::setting_choices(&m, &settings, key).await
+    }
+
+    pub async fn set_source_setting(&self, source: &str, key: &str, value: &str) -> Result<()> {
+        let m = self.source_or_hint(source).await?;
+        if !value.is_empty() {
+            m.validate_setting(key, value)?;
+        }
+        Config::set_key(&paths::config_file(), &format!("sources.{source}.{key}"), value)?;
+        self.reload_config().await
     }
 
     pub async fn settings(&self) -> serde_json::Value {
@@ -876,14 +930,15 @@ impl Core {
     pub async fn doctor(&self) -> Vec<crate::doctor::Check> {
         let cfg = self.config.read().await.clone();
         let modules = self.modules.read().await.clone();
+        let sources = self.sources.read().await.clone();
         let conn = if crate::desktop::detect(&cfg) == crate::desktop::Profile::Gnome { crate::host::session_bus().await } else { None };
         let runners: Vec<String> = self.games.read().await.iter().filter(|g| g.game.removed_at.is_empty()).map(|g| g.effective.runner.clone()).collect();
-        crate::doctor::run(&cfg, &modules, conn.as_ref(), &runners).await
+        crate::doctor::run(&cfg, &modules, &sources, conn.as_ref(), &runners).await
     }
 
-    pub async fn source(&self, id: &str) -> Result<Module> {
-        let modules = self.modules.read().await;
-        let m = modules.iter().find(|m| m.id() == id && m.is_source()).cloned().ok_or_else(|| Error::NotFound(format!("source {id}")))?;
+    /// A source ready to run: found, its programs present, enabled.
+    pub async fn source(&self, id: &str) -> Result<Source> {
+        let m = self.source_or_hint(id).await?;
         if !m.available {
             return Err(Error::Unavailable(format!("{id}: missing {}", m.missing.join(", "))));
         }
@@ -893,32 +948,32 @@ impl Core {
         Ok(m)
     }
 
+    /// Every source with its manifest and state; the login probe runs once per process, here.
     pub async fn sources(&self) -> Vec<serde_json::Value> {
         self.ensure_logins().await;
         let cfg = self.config.read().await.clone();
-        let modules = self.modules.read().await;
+        let sources = self.sources.read().await;
         let caches = self.source_libraries.lock().await;
         let logins = self.source_logins.lock().await;
-        modules
+        sources
             .iter()
-            .filter(|m| m.is_source())
             .map(|m| {
-                let s = m.merged_settings(&cfg, None);
-                serde_json::json!({
-                    "id": m.id(), "name": m.manifest.name, "available": m.available, "enabled": m.enabled,
-                    "missing": m.missing, "games_dir": s.get("games_dir").cloned().unwrap_or(serde_json::Value::Null),
-                    "library_cached": caches.get(m.id()).map(|v| v.len()).unwrap_or(0),
-                    "logged_in": logins.contains_key(m.id()), "user": logins.get(m.id()).cloned().unwrap_or_default(),
-                })
+                let s = m.merged_settings(&cfg);
+                let mut j = m.to_json();
+                j["games_dir"] = s.get("games_dir").cloned().unwrap_or(serde_json::Value::Null);
+                j["library_cached"] = serde_json::json!(caches.get(m.id()).map(|v| v.len()).unwrap_or(0));
+                j["logged_in"] = serde_json::Value::Bool(logins.contains_key(m.id()));
+                j["user"] = serde_json::Value::String(logins.get(m.id()).cloned().unwrap_or_default());
+                j
             })
             .collect()
     }
 
-    async fn run_verb(&self, m: &Module, verb: &str, args: &[String], mut progress: Option<Progress<'_, '_>>) -> Result<Vec<SourceEvent>> {
+    async fn run_verb(&self, m: &Source, verb: &str, args: &[String], mut progress: Option<Progress<'_, '_>>) -> Result<Vec<SourceEvent>> {
         let cfg = self.config.read().await.clone();
-        let settings = m.merged_settings(&cfg, None);
+        let settings = m.merged_settings(&cfg);
         let mut events = Vec::new();
-        modules::run_source(m, &settings, verb, args, |ev| {
+        sources::run(m, &settings, verb, args, |ev| {
             if let (SourceEvent::Progress { done, total, message }, Some(p)) = (&ev, progress.as_mut()) {
                 p(*done, *total, message);
             }
@@ -1042,7 +1097,7 @@ impl Core {
     /// Scans the installed games of one source (all active ones when empty); returns how many entered the library.
     pub async fn source_scan(&self, source: &str, mut progress: Option<Progress<'_, '_>>) -> Result<usize> {
         let ids: Vec<String> = if source.is_empty() {
-            self.modules.read().await.iter().filter(|m| m.is_source() && m.active()).map(|m| m.id().to_string()).collect()
+            self.sources.read().await.iter().filter(|m| m.active()).map(|m| m.id().to_string()).collect()
         } else {
             vec![self.source(source).await?.id().to_string()]
         };
@@ -1078,7 +1133,7 @@ impl Core {
 
     pub async fn source_updates(&self) -> Result<Vec<serde_json::Value>> {
         let mut out = Vec::new();
-        let sources: Vec<Module> = self.modules.read().await.iter().filter(|m| m.is_source() && m.active()).cloned().collect();
+        let sources: Vec<Source> = self.sources.read().await.iter().filter(|m| m.active()).cloned().collect();
         for m in sources {
             let events = self.run_verb(&m, "update", &[], None).await?;
             for e in events {

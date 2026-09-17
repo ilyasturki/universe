@@ -2,7 +2,9 @@ use serde::Serialize;
 
 use crate::config::Config;
 use crate::modules::Module;
+use crate::sources::Source;
 
+/// `module` is the module or source the check belongs to, `core`, `runners`, `media` or `controller` otherwise.
 #[derive(Debug, Clone, Serialize)]
 pub struct Check {
     pub check: String,
@@ -15,7 +17,7 @@ fn which(bin: &str) -> Option<String> {
     crate::runners::on_path(bin).map(|p| p.to_string_lossy().into())
 }
 
-pub async fn run(config: &Config, modules: &[Module], shell: Option<&zbus::Connection>, game_runners: &[String]) -> Vec<Check> {
+pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell: Option<&zbus::Connection>, game_runners: &[String]) -> Vec<Check> {
     let mut out = Vec::new();
     let mut push = |check: &str, ok: bool, detail: String, module: &str| out.push(Check { check: check.into(), ok, detail, module: module.into() });
 
@@ -96,8 +98,16 @@ pub async fn run(config: &Config, modules: &[Module], shell: Option<&zbus::Conne
         if m.id() == "capture" {
             push("gsr-kms-server", which("gsr-kms-server").is_some(), which("gsr-kms-server").unwrap_or_else(|| "missing (programs.gpu-screen-recorder.enable)".into()), "capture");
         }
-        if m.is_source() && m.id() == "gog" {
-            let auth = crate::paths::expand(m.merged_settings(config, None).get("auth_path").and_then(|v| v.as_str()).unwrap_or("~/.config/gogdl/auth.json"));
+    }
+    for m in sources {
+        if !m.enabled {
+            continue;
+        }
+        for bin in &m.manifest.requires.bins {
+            push(bin, which(bin).is_some(), which(bin).unwrap_or_else(|| "missing".into()), m.id());
+        }
+        if m.id() == "gog" {
+            let auth = crate::paths::expand(m.merged_settings(config).get("auth_path").and_then(|v| v.as_str()).unwrap_or("~/.config/gogdl/auth.json"));
             let logged = std::fs::read_to_string(&auth).map(|s| s.contains("refresh_token")).unwrap_or(false);
             push("gog-auth", logged, if logged { auth.to_string_lossy().into() } else { "not logged in (universe login gog)".into() }, "gog");
         }
@@ -124,6 +134,15 @@ pub async fn run(config: &Config, modules: &[Module], shell: Option<&zbus::Conne
         push("pad-buttons", unbound.is_empty(), if unbound.is_empty() { "every button of every pad answers".into() } else { format!("not seen on this connection, learn them: {}", unbound.join(", ")) }, "controller");
     }
     let enabled_missing: Vec<&str> = config.modules.enabled.iter().filter(|e| !modules.iter().any(|m| m.id() == e.as_str())).map(|s| s.as_str()).collect();
-    push("modules", enabled_missing.is_empty(), if enabled_missing.is_empty() { format!("{} found", modules.len()) } else { format!("enabled but not found: {}", enabled_missing.join(", ")) }, "core");
+    let detail = if enabled_missing.is_empty() {
+        format!("{} found", modules.len())
+    } else if enabled_missing.iter().any(|e| sources.iter().any(|s| s.id() == *e)) {
+        format!("enabled but not found: {} (a source: [sources] enabled in config.toml, `universe source enable`)", enabled_missing.join(", "))
+    } else {
+        format!("enabled but not found: {}", enabled_missing.join(", "))
+    };
+    push("modules", enabled_missing.is_empty(), detail, "core");
+    let sources_missing: Vec<&str> = config.sources.enabled.iter().filter(|e| !sources.iter().any(|s| s.id() == e.as_str())).map(|s| s.as_str()).collect();
+    push("sources", sources_missing.is_empty(), if sources_missing.is_empty() { format!("{} found", sources.len()) } else { format!("enabled but not found: {}", sources_missing.join(", ")) }, "core");
     out
 }

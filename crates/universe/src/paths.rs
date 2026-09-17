@@ -62,6 +62,10 @@ pub fn modules_data_dir(id: &str) -> PathBuf {
     data_home().join("modules").join(id)
 }
 
+pub fn sources_data_dir(id: &str) -> PathBuf {
+    data_home().join("sources").join(id)
+}
+
 pub fn current_session_file() -> PathBuf {
     state_home().join("current-session.json")
 }
@@ -80,20 +84,33 @@ pub fn self_exe() -> PathBuf {
     resolved.filter(|p| p.is_file()).or_else(|| std::env::current_exe().ok()).unwrap_or(argv0)
 }
 
-pub fn system_module_dirs() -> Vec<PathBuf> {
+/// `$UNIVERSE_<VAR>_PATH` roots first, then `<XDG_DATA_DIRS>/universe/<sub>`.
+fn system_dirs(var: &str, sub: &str) -> Vec<PathBuf> {
     let mut out = Vec::new();
-    if let Some(p) = std::env::var_os("UNIVERSE_MODULES_PATH") {
+    if let Some(p) = std::env::var_os(var) {
         out.extend(std::env::split_paths(&p));
     }
     let dirs = std::env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/local/share:/usr/share".into());
     for d in dirs.split(':').filter(|s| !s.is_empty()) {
-        out.push(Path::new(d).join("universe/modules"));
+        out.push(Path::new(d).join("universe").join(sub));
     }
     out
 }
 
+pub fn system_module_dirs() -> Vec<PathBuf> {
+    system_dirs("UNIVERSE_MODULES_PATH", "modules")
+}
+
 pub fn user_modules_dir() -> PathBuf {
     config_home().join("modules")
+}
+
+pub fn system_source_dirs() -> Vec<PathBuf> {
+    system_dirs("UNIVERSE_SOURCES_PATH", "sources")
+}
+
+pub fn user_sources_dir() -> PathBuf {
+    config_home().join("sources")
 }
 
 pub fn expand(p: &str) -> PathBuf {

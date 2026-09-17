@@ -2,7 +2,6 @@ import QtQuick
 import "../core"
 import "../sound"
 import "../ui"
-import "../../ui" as Base
 import "Details.js" as Details
 import "Forms.js" as Forms
 
@@ -15,17 +14,19 @@ FocusScope {
     focus: true
 
     readonly property var modulesForm: api.screens.modules
+    readonly property var sourceList: api.screens.sourceList
     readonly property var launch: api.screens.launch
     readonly property var runners: api.screens.runners
     readonly property var sources: api.screens.sources
-    readonly property var login: api.screens.login
+    // Modules and Sources are the same list: a switch per entry, A opens its page, X flips it.
+    readonly property var listForm: sectionId === "modules" ? modulesForm : sectionId === "sources" ? sourceList : null
 
     readonly property var sections: [
         { id: "runners", label: "Runners", group: 0 },
         { id: "launch", label: "Launch", group: 0 },
         { id: "modules", label: "Modules", group: 0 },
+        { id: "sources", label: "Sources", group: 0 },
         { id: "updates", label: "Updates", detail: sources.updates.length > 0 ? sources.updates.length + " pending" : "", group: 0 },
-        { id: "signin", label: "Sign-in", group: 0 },
         { id: "controllers", label: "Controllers", group: 1 },
         { id: "themes", label: "Themes", group: 1 },
         { id: "doctor", label: "Doctor", group: 2 },
@@ -40,12 +41,12 @@ FocusScope {
         runners: function() { runners.load(); },
         launch: function() { launch.load(); },
         modules: function() { modulesForm.load(); },
+        sources: function() { sourceList.load(); },
         doctor: function() { modulesForm.loadDoctor(); }
     })
     readonly property var refreshers: ({
         runners: function() { runners.load(); },
         updates: function() { sources.refresh(); },
-        signin: function() { sources.refresh(); },
         doctor: function() { modulesForm.loadDoctor(); }
     })
     readonly property var loaded: ({})
@@ -55,17 +56,15 @@ FocusScope {
         if (refreshers[sectionId])
             out.push({ glyph: "Y", label: "Refresh" });
         var row = rows.currentRow;
-        if (sectionId === "modules" && zone === "rows" && row && !row.heading)
+        if (listForm !== null && zone === "rows" && row && !row.heading)
             out.push({ glyph: "X", label: row.value === true ? "Disable" : "Enable", dim: row.dim === true });
         out.push({ glyph: "B", label: "Back" });
         var label = zone !== "rows" ? "OK" : !row || row.heading || row.type === "info" || row.type === "static" || row.disabled ? "OK"
-                  : row.type === "bool" ? "Toggle" : row.type === "radio" ? "Select" : row.type === "action" ? (sectionId === "modules" ? "Open" : "Select") : "Change";
+                  : row.type === "bool" ? "Toggle" : row.type === "radio" ? "Select" : row.type === "action" ? (listForm !== null ? "Open" : "Select") : "Change";
         out.push({ glyph: "A", label: label });
         return out;
     }
 
-    readonly property string sourceName: sources.current ? sources.current.name : (sources.source || "Source")
-    readonly property bool loggedIn: sources.current ? sources.current.logged_in === true : false
 
     function sectionIndex(id) {
         return Math.max(0, sections.map(function(s) { return s.id; }).indexOf(id));
@@ -110,10 +109,10 @@ FocusScope {
             });
         if (sectionId === "launch")
             return Forms.grouped(launch.groups, launch.rows, function(r, i) { return Object.assign(Details.withDetail(r, ""), { form: i }); });
-        if (sectionId === "modules")
-            return Forms.grouped(modulesForm.groups, modulesForm.rows, function(m, i) {
-                return { label: m.label, type: "action", action: "module", module: m.module, value: m.value, display: m.display,
-                         detail: m.warning && !m.value ? m.detail : Details.enabledSentence(m.label, m.kind.join(" · ")),
+        if (listForm !== null)
+            return Forms.grouped(listForm.groups, listForm.rows, function(m, i) {
+                return { label: m.label, type: "action", action: "module", module: m.module, value: m.value, display: m.display, switch: true, warning: m.warning,
+                         detail: m.warning && !m.value ? m.detail : Details.enabledSentence(m.label, m.source),
                          form: i, dim: m.warning !== "" && m.value !== true };
             });
         if (sectionId === "updates") {
@@ -125,11 +124,6 @@ FocusScope {
                     return { label: u.title, type: "action", display: (u.version ? u.version + " · " : "") + (u.date || ""), action: "update", row: i, detail: "" };
                 }));
         }
-        if (sectionId === "signin")
-            return [{ heading: true, label: sourceName, display: "" },
-                    { label: "Signed in", type: "info", value: loggedIn, display: loggedIn ? "Yes" : "No", detail: "" },
-                    { label: "Get a sign-in link", type: "action", action: "link", display: login.url ? "Ready" : "", detail: "" },
-                    { label: "Enter the code", type: "action", action: "code", display: "", detail: "" }];
         if (sectionId === "doctor") {
             var checks = Forms.grouped(modulesForm.doctorGroups, modulesForm.doctor, function(c) {
                 return { label: c.label, type: "info", value: c.value === true, display: c.detail || "", detail: "" };
@@ -169,22 +163,16 @@ FocusScope {
             Sound.play("ok");
             reopen = { form: modulesForm, field: "module", id: row.module };
             shell.push("pages/FormPage.qml", { module: row.module });
+        } else if (sectionId === "sources") {
+            Sound.play("ok");
+            reopen = { form: sourceList, field: "module", id: row.module };
+            shell.push("pages/FormPage.qml", { source: row.module });
         } else if (sectionId === "updates") {
             Sound.play("ok");
             if (row.action === "update-all")
                 sources.updateAll();
             else
                 sources.update(row.row);
-        } else if (sectionId === "signin") {
-            if (row.action === "link") {
-                Sound.play("ok");
-                login.begin(sources.source);
-            } else if (row.action === "code") {
-                shell.prompt({ title: "Code from " + sourceName, value: "" }, function(value) {
-                    if (value !== null && value !== "")
-                        login.submit(value);
-                });
-            }
         } else if (sectionId === "controllers") {
             Sound.play("ok");
             shell.push("pages/ControllersPage.qml", {});
@@ -200,12 +188,12 @@ FocusScope {
 
     function toggleModule() {
         var row = rows.currentRow;
-        if (sectionId !== "modules" || zone !== "rows" || !row || row.heading || row.dim === true) {
+        if (listForm === null || zone !== "rows" || !row || row.heading || row.dim === true) {
             Sound.play("edge");
             return;
         }
         Sound.play("select");
-        modulesForm.toggle(row.form);
+        listForm.toggle(row.form);
     }
 
     function refreshNow() {
@@ -228,14 +216,6 @@ FocusScope {
         function onMessage(text) { page.shell.showToast(text); }
     }
 
-    Connections {
-        target: page.login
-        function onFinished(ok, text) {
-            page.shell.showToast(text);
-            page.sources.refresh();
-        }
-    }
-
     Keys.onPressed: function(event) {
         if (event.isAutoRepeat)
             return;
@@ -247,7 +227,7 @@ FocusScope {
         } else if (api.keys.isFilters(event)) {
             event.accepted = true;
             page.refreshNow();
-        } else if (api.keys.isDetails(event) && page.sectionId === "modules") {
+        } else if (api.keys.isDetails(event) && page.listForm !== null) {
             event.accepted = true;
             page.toggleModule();
         }
@@ -302,7 +282,7 @@ FocusScope {
         x: Theme.dp(705)
         y: header.height + Theme.dp(64) + jobLine.height
         width: Theme.dp(1023)
-        height: parent.height - y - Theme.dp(Theme.hintBarHeight) - Theme.dp(20) - (qrCard.visible ? qrCard.height + Theme.dp(20) : 0)
+        height: parent.height - y - Theme.dp(Theme.hintBarHeight) - Theme.dp(20)
         model: page.content
         focus: page.zone === "rows"
 
@@ -310,65 +290,6 @@ FocusScope {
         onEscapedLeft: {
             page.zone = "list";
             list.forceActiveFocus();
-        }
-    }
-
-    Item {
-        id: qrCard
-
-        x: rows.x
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: Theme.dp(Theme.hintBarHeight) + Theme.dp(20)
-        width: rows.width
-        height: Theme.dp(330)
-        visible: page.sectionId === "signin" && (page.login.url !== "" || page.login.status !== "")
-
-        Rectangle {
-            anchors.fill: parent
-            radius: Theme.dp(6)
-            color: Theme.card
-            border.width: 1
-            border.color: Theme.hairline
-        }
-
-        Loader {
-            id: qr
-            x: Theme.dp(24)
-            y: Theme.dp(24)
-            width: Theme.dp(282)
-            height: width
-            active: page.login.url !== ""
-            sourceComponent: Base.QrCode { matrix: page.login.matrix }
-        }
-
-        Column {
-            x: qr.active ? qr.x + qr.width + Theme.dp(30) : Theme.dp(30)
-            y: Theme.dp(30)
-            width: parent.width - x - Theme.dp(30)
-            spacing: Theme.dp(14)
-
-            Label {
-                width: parent.width
-                text: "Scan to sign in on your phone"
-            }
-
-            Label {
-                width: parent.width
-                text: page.login.url
-                color: Theme.accent
-                wrapMode: Text.WrapAnywhere
-                maximumLineCount: 4
-                elide: Text.ElideRight
-                font.pixelSize: Theme.dp(Theme.fontTiny)
-            }
-
-            Label {
-                width: parent.width
-                text: page.login.status
-                color: Theme.textSecondary
-                wrapMode: Text.WordWrap
-                font.pixelSize: Theme.dp(Theme.fontSmall)
-            }
         }
     }
 }

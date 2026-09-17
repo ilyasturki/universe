@@ -15,6 +15,7 @@ pub struct Config {
     /// [runners.<id>]: `exe`, `args`, and the runner's options.
     pub runners: BTreeMap<String, toml::Table>,
     pub modules: ModulesConfig,
+    pub sources: SourcesConfig,
     pub keys: Keys,
     pub lutris: LutrisConfig,
     pub controller: crate::controller::ControllerConfig,
@@ -77,6 +78,14 @@ pub struct ModulesConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
+pub struct SourcesConfig {
+    pub enabled: Vec<String>,
+    #[serde(flatten)]
+    pub settings: BTreeMap<String, toml::Table>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Keys {
     pub sgdb: String,
     pub rawg: String,
@@ -107,6 +116,7 @@ impl Default for Config {
             ]),
             runners: BTreeMap::new(),
             modules: ModulesConfig::default(),
+            sources: SourcesConfig::default(),
             keys: Keys::default(),
             lutris: LutrisConfig::default(),
             controller: crate::controller::ControllerConfig::default(),
@@ -170,7 +180,16 @@ impl Default for DesktopConfig {
 impl Default for ModulesConfig {
     fn default() -> Self {
         ModulesConfig {
-            enabled: vec!["gog".into(), "capture".into(), "journal".into()],
+            enabled: vec!["capture".into(), "journal".into()],
+            settings: BTreeMap::new(),
+        }
+    }
+}
+
+impl Default for SourcesConfig {
+    fn default() -> Self {
+        SourcesConfig {
+            enabled: vec!["gog".into()],
             settings: BTreeMap::new(),
         }
     }
@@ -288,11 +307,14 @@ mod tests {
 
     #[test]
     fn defaults_parse_and_override() {
-        let c: Config = toml::from_str("[launch]\nproton = \"proton-em\"\n[modules]\nenabled = [\"gog\"]\n[modules.capture]\ncodec = \"hevc\"\n").unwrap();
+        let c: Config = toml::from_str("[launch]\nproton = \"proton-em\"\n[modules]\nenabled = [\"capture\"]\n[modules.capture]\ncodec = \"hevc\"\n[sources]\nenabled = []\n[sources.gog]\nplatform = \"linux\"\n").unwrap();
         assert_eq!(c.launch.proton, "proton-em");
         assert!(c.launch.esync);
-        assert_eq!(c.modules.enabled, vec!["gog"]);
+        assert_eq!(c.modules.enabled, vec!["capture"]);
         assert_eq!(c.modules.settings["capture"]["codec"].as_str(), Some("hevc"));
+        assert!(c.sources.enabled.is_empty());
+        assert_eq!(c.sources.settings["gog"]["platform"].as_str(), Some("linux"));
+        assert_eq!(Config::default().sources.enabled, vec!["gog"]);
         assert!(c.paths.games_root.ends_with("/Games"), "{}", c.paths.games_root);
         assert!(c.paths.prefixes_root.ends_with("/prefixes"));
     }

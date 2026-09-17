@@ -43,9 +43,9 @@ def _add(rows, groups, section, row, **group):
     rows.append(row)
 
 
-def _module_meta(module):
-    version = module.get("version")
-    return " · ".join(p for p in (f"v{version}" if version else "", *(module.get("kind") or [])) if p)
+def _meta(entry):
+    version = entry.get("version")
+    return f"v{version}" if version else ""
 
 
 def _dig(data, dotted, default=None):
@@ -269,7 +269,7 @@ class GameSettingsForm(RowsForm):
         for module_id, values in self._client.settings(game_id).items():
             module = modules.get(module_id) or {}
             name = module.get("name", module_id)
-            group = _group(name, [], meta=_module_meta(module))
+            group = _group(name, [], meta=_meta(module))
             for setting in module.get("settings") or []:
                 if setting.get("scope") != "game":
                     continue
@@ -323,14 +323,56 @@ class GameSettingsForm(RowsForm):
     title = Property(str, lambda self: self._title, notify=titleChanged)
 
 
-def _module_state(module):
-    if not module.get("available", True):
-        missing = ", ".join(module.get("missing") or [])
+def _state(entry):
+    if not entry.get("available", True):
+        missing = ", ".join(entry.get("missing") or [])
         return "unavailable" + (f": missing {missing}" if missing else "")
     return ""
 
 
-class ModulesForm(RowsForm):
+# Modules and sources share the list and the page: a `switch` row per entry, then a page of its switch and settings.
+class ListForm(RowsForm):
+    section = "Modules"
+    source = False
+
+    def _entries(self):
+        raise NotImplementedError
+
+    def _enable(self, ident, enabled):
+        raise NotImplementedError
+
+    def _show(self, entries):
+        rows, on, off = [], [], []
+        for entry in entries:
+            ident = entry["id"]
+            name = entry.get("name", ident)
+            enabled = bool(entry.get("enabled"))
+            warning = _state(entry)
+            row = _row(self.section, "module", name, "action", enabled, module=ident)
+            row.update(display="On" if enabled else "Unavailable" if warning else "Off", action="Open", runner="", switch=True,
+                       meta=_meta(entry), warning=warning, source=self.source,
+                       detail=warning.replace("unavailable", "Cannot be enabled", 1) if warning and not enabled else _meta(entry))
+            (on if enabled else off).append(len(rows))
+            rows.append(row)
+        groups = [_group("", on)] if on else []
+        if off:
+            groups.append(_group("Off", off, caps=True, off=True))
+        self._set_rows(rows, groups)
+
+    @Slot()
+    def load(self):
+        self._show(self._entries())
+
+    @Slot(int)
+    def toggle(self, index):
+        row = self.row(index)
+        if not row:
+            return
+        self._enable(row["module"], not row["value"])
+        self.load()
+
+
+class ModulesForm(ListForm):
     doctorChanged = Signal()
 
     def __init__(self, client, parent=None):
@@ -339,38 +381,24 @@ class ModulesForm(RowsForm):
         self._doctor_groups = []
         client.modulesChanged.connect(self.load)
 
-    @Slot()
-    def load(self):
-        rows, on, off = [], [], []
-        for module in self._client.modules():
-            ident = module["id"]
-            name = module.get("name", ident)
-            enabled = bool(module.get("enabled"))
-            warning = _module_state(module)
-            row = _row("Modules", "module", name, "action", enabled, module=ident)
-            row.update(display="On" if enabled else "Unavailable" if warning else "Off", action="Open", runner="",
-                       meta=_module_meta(module), warning=warning, kind=list(module.get("kind") or []),
-                       detail=warning.replace("unavailable", "Cannot be enabled", 1) if warning and not enabled else _module_meta(module))
-            (on if enabled else off).append(len(rows))
-            rows.append(row)
-        groups = [_group("", on)]
-        if off:
-            groups.append(_group("Off", off, caps=True, off=True))
-        self._set_rows(rows, groups)
+    def _entries(self):
+        return self._client.modules()
 
-    @Slot(int)
-    def toggle(self, index):
-        row = self.row(index)
-        if not row:
-            return
-        self._client.enableModule(row["module"], not row["value"])
-        self.load()
+    def _enable(self, ident, enabled):
+        self._client.enableModule(ident, enabled)
 
+    # The checks probe programs, the bus and the pads, and the source names come with the login probe: off the UI thread.
     @Slot()
     def loadDoctor(self):
-        names = {m["id"]: m.get("name", m["id"]) for m in self._client.modules()}
+        def work():
+            names = {m["id"]: m.get("name", m["id"]) for m in self._client.modules() + self._client.sources()}
+            return names, self._client.doctor()
+
+        self._client.runAsync(work, lambda result: self._show_doctor(*result))
+
+    def _show_doctor(self, names, checks):
         rows, groups = [], []
-        for check in self._client.doctor():
+        for check in checks:
             ident = check.get("module") or ""
             name = names.get(ident, ident) or "Core"
             group = next((g for g in groups if g["title"] == name), None)
@@ -392,9 +420,30 @@ class ModulesForm(RowsForm):
     doctorGroups = Property("QVariantList", lambda self: list(self._doctor_groups), notify=doctorChanged)
 
 
-class ModuleForm(RowsForm):
-    # A `dynamic` setting's choices are fetched once per state of the module's settings.
+class SourcesForm(ListForm):
+    # Listing the sources probes their logins once per process, on the network: off the UI thread.
+    section = "Sources"
+    source = True
+
+    def __init__(self, client, parent=None):
+        super().__init__(client, parent)
+        client.sourcesChanged.connect(self.load)
+
+    def _entries(self):
+        return self._client.sources()
+
+    def _enable(self, ident, enabled):
+        self._client.enableSource(ident, enabled)
+
+    @Slot()
+    def load(self):
+        self._client.runAsync(self._entries, self._show)
+
+
+class PageForm(RowsForm):
+    # A `dynamic` setting's choices are fetched once per state of the entry's settings.
     moduleChanged = Signal()
+    source = False
 
     def __init__(self, client, parent=None):
         super().__init__(client, parent)
@@ -402,7 +451,27 @@ class ModuleForm(RowsForm):
         self._ident = ""
         self._dynamic = {}
         self._pending = set()
-        client.modulesChanged.connect(self.reload)
+
+    def _entries(self):
+        raise NotImplementedError
+
+    def _enable(self, ident, enabled):
+        raise NotImplementedError
+
+    def _settings(self, ident):
+        raise NotImplementedError
+
+    def _choices(self, ident, key):
+        raise NotImplementedError
+
+    def _set(self, ident, key, value):
+        raise NotImplementedError
+
+    def _listed(self, setting):
+        return True
+
+    def _extra_rows(self, entry, name, rows, groups):
+        pass
 
     def _fetch_dynamic(self, cache_key, ident, key):
         if cache_key in self._pending:
@@ -414,8 +483,9 @@ class ModuleForm(RowsForm):
             self._dynamic[cache_key] = [str(c) for c in choices]
             self.reload()
 
-        self._client.runAsync(lambda: self._client.settingChoices(ident, key), done)
+        self._client.runAsync(lambda: self._choices(ident, key), done)
 
+    @Slot()
     def reload(self):
         if self._ident:
             self.load(self._ident)
@@ -423,29 +493,30 @@ class ModuleForm(RowsForm):
     @Slot(str)
     def load(self, ident):
         self._ident = ident
-        self._set_rows(*self._build(ident))
+        self._set_rows(*self._build(ident, self._entries()))
         self.moduleChanged.emit()
 
-    def _build(self, ident):
-        module = next((m for m in self._client.modules() if m["id"] == ident), None)
-        if module is None:
+    def _build(self, ident, entries):
+        entry = next((m for m in entries if m["id"] == ident), None)
+        if entry is None:
             self._module = {}
             return [], []
-        name = module.get("name", ident)
-        enabled = bool(module.get("enabled"))
-        warning = _module_state(module)
-        self._module = {"id": ident, "name": name, "meta": _module_meta(module), "warning": warning,
-                        "kind": list(module.get("kind") or []), "enabled": enabled}
+        name = entry.get("name", ident)
+        enabled = bool(entry.get("enabled"))
+        warning = _state(entry)
+        self._module = {"id": ident, "name": name, "meta": _meta(entry), "warning": warning, "enabled": enabled,
+                        "source": self.source, "logged_in": bool(entry.get("logged_in")), "user": str(entry.get("user") or "")}
         control = _row(name, "enabled", "Enabled", "bool", enabled, module=ident)
         control["disabled"] = bool(warning) and not enabled
         rows = [control]
         groups = [_group("", [0])]
         if not enabled:
             return rows, groups
-        values = self._client.getSettings(ident, "")
+        self._extra_rows(entry, name, rows, groups)
+        values = self._settings(ident)
         settings = _group("Settings", [], caps=True)
-        for setting in module.get("settings") or []:
-            if setting.get("scope") != "global":
+        for setting in entry.get("settings") or []:
+            if not self._listed(setting):
                 continue
             key = setting["key"]
             choices = [str(c) for c in setting.get("choices") or []]
@@ -465,9 +536,81 @@ class ModuleForm(RowsForm):
 
     def _write(self, row, payload):
         if row["key"] == "enabled":
-            self._client.enableModule(row["module"], payload == "true")
+            self._enable(row["module"], payload == "true")
             return True
-        return self._client.setSetting(row["module"], "", row["key"], payload)
+        return self._set(row["module"], row["key"], payload)
 
     def _reload(self, row):
         self.load(row["module"])
+
+
+class ModuleForm(PageForm):
+    def __init__(self, client, parent=None):
+        super().__init__(client, parent)
+        client.modulesChanged.connect(self.reload)
+
+    def _entries(self):
+        return self._client.modules()
+
+    def _enable(self, ident, enabled):
+        self._client.enableModule(ident, enabled)
+
+    def _settings(self, ident):
+        return self._client.getSettings(ident, "")
+
+    def _choices(self, ident, key):
+        return self._client.settingChoices(ident, key)
+
+    def _set(self, ident, key, value):
+        return self._client.setSetting(ident, "", key, value)
+
+    def _listed(self, setting):
+        return setting.get("scope") == "global"
+
+
+class SourceForm(PageForm):
+    # The sources listing probes the logins on the network: fetched off the UI thread, like the list.
+    source = True
+
+    def __init__(self, client, parent=None):
+        super().__init__(client, parent)
+        client.sourcesChanged.connect(self.reload)
+
+    def _entries(self):
+        return self._client.sources()
+
+    def _enable(self, ident, enabled):
+        self._client.enableSource(ident, enabled)
+
+    def _settings(self, ident):
+        return self._client.getSourceSettings(ident)
+
+    def _choices(self, ident, key):
+        return self._client.sourceSettingChoices(ident, key)
+
+    def _set(self, ident, key, value):
+        return self._client.setSourceSetting(ident, key, value)
+
+    def _extra_rows(self, entry, name, rows, groups):
+        logged_in = bool(entry.get("logged_in"))
+        user = str(entry.get("user") or "")
+        signin = _group("Sign-in", [], caps=True)
+        for row in (
+            _row(name, "logged_in", "Signed in", "info", logged_in, module=entry["id"], detail=user or ("yes" if logged_in else "no")),
+            {**_row(name, "link", "Get a sign-in link", "action", "", module=entry["id"]), "action": "Sign in", "display": ""},
+            {**_row(name, "code", "Enter the code", "action", "", module=entry["id"]), "action": "Enter", "display": ""},
+        ):
+            signin["rows"].append(len(rows))
+            rows.append(row)
+        groups.append(signin)
+
+    @Slot(str)
+    def load(self, ident):
+        self._ident = ident
+
+        def done(entries):
+            if self._ident == ident:
+                self._set_rows(*self._build(ident, entries))
+                self.moduleChanged.emit()
+
+        self._client.runAsync(self._entries, done)
