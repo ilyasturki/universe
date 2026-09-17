@@ -102,6 +102,7 @@ env:
     cat > "$cfg" <<EOF
     schema = 1
     [paths]
+    games_root = "{{ dev }}/data/games"
     recordings_root = "{{ dev }}/recordings"
     journal_root = "{{ dev }}/journal"
     overrides = "~/Dotfiles/home/config/pegasus-art"   # hand-picked art; drop the line to test without
