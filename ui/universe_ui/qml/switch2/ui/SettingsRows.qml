@@ -260,7 +260,7 @@ FocusScope {
                             anchors.verticalCenter: parent.verticalCenter
                             width: Theme.dp(44)
                             height: width
-                            source: row.iconIsFile ? Qt.resolvedUrl("../../" + row.entry.icon) : ""
+                            source: !row.iconIsFile ? "" : String(row.entry.icon).indexOf("://") >= 0 ? row.entry.icon : Qt.resolvedUrl("../../" + row.entry.icon)
                             asynchronous: true
                             fillMode: Image.PreserveAspectFit
                             sourceSize.height: 128

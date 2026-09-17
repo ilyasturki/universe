@@ -31,6 +31,8 @@ FocusScope {
         var r = Object.assign({}, runner ? src : Details.withDetail(src, src.module), { form: i });
         if (runner && src.key === "exe")
             r.detail = "";
+        else if (src.key === "game")
+            r.icon = src.image, r.iconSlot = true;
         else if (src.key === "enabled")
             r.detail = info.warning ? "Cannot be enabled: " + info.warning.replace(/^unavailable:?\s*/, "") : Details.enabledSentence(info.name, info.source === true);
         else if (src.key === "logged_in") {
@@ -41,6 +43,27 @@ FocusScope {
             r.display = login.source === args.source && login.url ? "Ready" : "";
         return r;
     })
+
+    function gameMenu(row) {
+        var items = [], gameId = row.gameId, title = row.label;
+        if (api.allGames.byId(gameId))
+            items.push({ label: "Game Settings", act: "settings" });
+        if (row.installed)
+            items.push({ label: "Uninstall…", act: "uninstall" });
+        items.push({ label: "Remove from library…", act: "remove" });
+        shell.menu(title, items, function(a) {
+            if (a === "settings") {
+                Sound.play("ok");
+                shell.push("pages/GameSettingsPage.qml", { gameId: gameId });
+            } else if (a === "uninstall") {
+                shell.dialogAsk({ message: "Uninstall " + title + "?", detail: "The install folder goes to the trash; the hours and the journal stay.",
+                                  buttons: ["Cancel", "Uninstall"], danger: 1 }, function(k) { if (k === 1) form.uninstall(gameId); });
+            } else if (a === "remove") {
+                shell.dialogAsk({ message: "Remove " + title + " from the library?", detail: "The entry is archived; the files are left where they are.",
+                                  buttons: ["Cancel", "Remove"], danger: 1 }, function(k) { if (k === 1) form.remove(gameId); });
+            }
+        });
+    }
 
     function activate(index, row) {
         if (row.type === "bool") {
@@ -54,6 +77,9 @@ FocusScope {
                 if (value !== null && value !== "")
                     login.submit(value);
             });
+        } else if (row.key === "game") {
+            Sound.play("ok");
+            gameMenu(row);
         } else if (row.key === "add_file") {
             Sound.play("ok");
             shell.browse({ title: "Game file for " + info.name, path: "", files: true }, function(path) {

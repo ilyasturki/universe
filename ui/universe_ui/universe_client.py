@@ -542,7 +542,7 @@ class CoreClient(QObject):
         wanted = {str(games), str(self._state)}
         for d in games.iterdir():
             if d.is_dir():
-                wanted.update(str(p) for p in (d, d / "journal", d / "media") if p.is_dir())
+                wanted.update(str(p) for p in (d, d / "journal", d / "journal" / "attachments", d / "media") if p.is_dir())
         if self._overrides and self._overrides.is_dir():
             wanted.add(str(self._overrides))
             wanted.update(str(p) for d in self._overrides.iterdir() if d.is_dir() for p in (d, d / "screenshots") if p.is_dir())

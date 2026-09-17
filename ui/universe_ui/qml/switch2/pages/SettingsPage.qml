@@ -45,7 +45,6 @@ FocusScope {
         doctor: function() { modulesForm.loadDoctor(); }
     })
     readonly property var refreshers: ({
-        runners: function() { runners.load(); },
         updates: function() { sources.refresh(); },
         doctor: function() { modulesForm.loadDoctor(); }
     })

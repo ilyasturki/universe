@@ -22,6 +22,7 @@ FocusScope {
     readonly property real scrimBottom: 0.95
     readonly property Item menuAnchor: grid.focusedArtItem
     readonly property bool modal: picker.open
+    property bool menuOpen: false
 
     readonly property var hints: picker.open
         ? picker.hints
@@ -258,7 +259,7 @@ FocusScope {
         columns: page.columns
         gap: page.gap
         cellWidth: page.cellWidth
-        selectionActive: !chipBar.activeFocus
+        selectionActive: grid.activeFocus || page.menuOpen
         addTile: true
 
         Keys.onPressed: function(event) {

@@ -225,11 +225,22 @@ FocusScope {
         property var target: null
         interval: Theme.durQuick
         onTriggered: {
-            root.subArgs = { game: root.subArgs.game, session: target.session };
+            root.subArgs = target.args !== undefined ? target.args : { game: root.subArgs.game, session: target.session };
             root.subSource = target.source;
             root.subSwapping = false;
             root.restoreFocus();
         }
+    }
+
+    // Another sub over this one — a runner's game to its settings — with the way back on B.
+    function pushSub(source, args) {
+        if (!subOpen || subSwapping)
+            return;
+        Sound.enter();
+        subReturn = { source: subSource, args: subArgs };
+        subSwapping = true;
+        subSwap.target = { source: source, args: args };
+        subSwap.restart();
     }
 
     function closeSub() {
@@ -608,6 +619,7 @@ FocusScope {
                 root.closeSub();
                 root.openSettings(section);
             }
+            function onSettingsRequested(game) { root.pushSub("pages/FormPage.qml", { game: game }); }
             function onMessage(text) { toast.show(text); }
         }
 

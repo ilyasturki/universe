@@ -30,6 +30,7 @@ Column {
         width: parent.width + strip.sideMargin + inset
         height: strip.shotHeight + inset * 2
         leftMargin: inset
+        rightMargin: strip.sideMargin + inset
         orientation: ListView.Horizontal
         spacing: Theme.dp(20)
         model: strip.images

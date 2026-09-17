@@ -1,4 +1,4 @@
-from conftest import index_of, rows_by_key
+from conftest import index_of, rows_by_key, wait_for
 from universe_ui.screens.runners import suggested_title
 
 
@@ -26,8 +26,12 @@ def test_runner_form_cards(api, fake):
     assert form.info["name"] == "Dolphin" and form.info["warning"] == "" and form.info["icon"] == "assets/runners/dolphin.svg"
     assert form.info["meta"] == "Nintendo GameCube, Nintendo Wii · /run/current-system/sw/bin/dolphin-emu"
     assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups] == \
-        [("", ["exe", "args"]), ("", ["gamescope"]), ("Options", ["batch", "user_directory", "inputplumber"]), ("", ["add_file"])]
+        [("", ["exe", "args"]), ("", ["gamescope"]), ("Options", ["batch", "user_directory", "inputplumber"]), ("Games", ["game"]), ("", ["add_file"])]
     rows = rows_by_key(form)
+    game = rows["game"]
+    assert game["type"] == "action" and game["action"] == "Options" and game["gameId"] == "lego-batman" and game["label"] == "LEGO Batman: The Videogame"
+    assert game["image"].startswith("file://") and game["display"] == "1.1 h" and game["installed"] is False
+    assert next(g for g in form.groups if g["title"] == "Games")["meta"] == "1 game"
     assert rows["exe"]["type"] == "path" and rows["exe"]["inherited"] is True
     assert rows["exe"]["value"].endswith("dolphin-emu") and rows["exe"]["display"] == rows["exe"]["value"], "the found program is the value shown"
     assert rows["exe"]["detail"] == "Found on PATH"
@@ -50,8 +54,8 @@ def test_runner_form_carries_its_launch_keys(api, fake):
     cards = [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups]
     assert cards == [("", ["exe", "args"]), ("", ["gamescope"]), ("Proton", ["launch.proton", "launch.wayland", "launch.hdr"]),
                      ("Sync", ["launch.esync", "launch.fsync", "launch.ntsync"]),
-                     ("Upscaling", ["launch.dlss_upgrade", "launch.fsr4_upgrade", "launch.xess_upgrade", "launch.optiscaler"]), ("", ["add_file"])], \
-        "config.toml's [launch] keys tied to Proton, the global values"
+                     ("Upscaling", ["launch.dlss_upgrade", "launch.fsr4_upgrade", "launch.xess_upgrade", "launch.optiscaler"]), ("Games", ["game"] * 7), ("", ["add_file"])], \
+        "config.toml's [launch] keys tied to Proton, the global values, then its games"
     groups = {g["title"]: g for g in form.groups}
     assert groups["Upscaling"]["meta"] == "AMD Radeon RX 7900 GRE · RDNA 3" and groups["Upscaling"]["caps"] is True
     rows = rows_by_key(form)
@@ -86,6 +90,7 @@ def test_runner_form_writes_through(api, fake):
 
 
 def test_add_game_flow(api, fake):
+    api.screens.runners.load()
     form = api.screens.runner
     form.load("dolphin")
     messages = []
@@ -101,10 +106,26 @@ def test_add_game_flow(api, fake):
     assert game["platform"] == "Nintendo GameCube"
     assert game["effective"]["runner"] == "dolphin" and game["effective"]["runner_name"] == "Dolphin"
     assert api.allGames.byId(ident) is not None, "the library picked the new game up"
+    games = next(g for g in form.groups if g["title"] == "Games")
+    assert [form.rows[i]["gameId"] for i in games["rows"]] == ["lego-batman", ident], "the page followed the library change"
     assert form.addGame("again") == "", "nothing pending twice"
+    add = index_of(form, "add_file")
     assert form.setValue(add, "/x/a.iso") and form.addGame("Mario Kart: Double Dash") == ""
-    api.screens.runners.load()
-    assert api.screens.runners.rows[1]["runner"] == "dolphin", "two games now, ahead of Eden's one"
+    assert api.screens.runners.rows[1]["runner"] == "dolphin", "two games now, ahead of Eden's one, without a reload"
+
+
+def test_runner_form_removes_a_game(api, fake):
+    form = api.screens.runner
+    form.load("dolphin")
+    messages = []
+    form.message.connect(messages.append)
+    form.remove("lego-batman")
+    assert wait_for(form.message) is not None
+    assert messages == ["Removed LEGO Batman: The Videogame from the library"]
+    assert wait_for(fake.libraryChanged) is not None
+    assert not any(r.get("gameId") == "lego-batman" for r in form.rows), "the Games group followed the library change"
+    form.uninstall("")
+    assert messages[1:] == [], "no game, no call"
 
 
 def test_suggested_titles():

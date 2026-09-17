@@ -98,7 +98,8 @@ comma-separated for lists, `""` deletes the key. A runner is written under its s
 
 `effective` is what the launch will use: the game's own keys over the global defaults, the runner
 resolved (`runner_path` empty when its program was not found), the platform the runner implies when
-the game sets none.
+the game sets none. `media.screenshots` is the player's own shots first (`journal/attachments/YYYYMMDD-HHMMSS.*`,
+newest first — what the `screenshot` hook writes), then `screenshots/` under the overrides and `media/`.
 
 There is no change notification: the files are the truth, so a frontend watches `games/`,
 `games/<id>/{,journal,media}`, `state/` and the overrides directory and rereads. Everything the CLI, `session-end` and the

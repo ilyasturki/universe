@@ -131,7 +131,9 @@ class FakeCore:
         d = self._game_dir(game["id"])
         for sub in ("media", "journal"):
             (d / sub).mkdir(parents=True, exist_ok=True)
-        (d / "game.toml").write_text(f'schema = 1\nid = "{game["id"]}"\ntitle = {json.dumps(game.get("title", game["id"]))}\n# {_now()} {json.dumps(game.get("launch") or {})}\n')
+        # A rename, as the core's atomic write: the directory watch sees it, a rewrite in place it would not.
+        (d / "game.toml.tmp").write_text(f'schema = 1\nid = "{game["id"]}"\ntitle = {json.dumps(game.get("title", game["id"]))}\n# {_now()} {json.dumps(game.get("launch") or {})}\n')
+        os.replace(d / "game.toml.tmp", d / "game.toml")
 
     def _write_sessions(self, ident):
         lines = list(reversed(self._data.get("sessions", {}).get(ident, [])))

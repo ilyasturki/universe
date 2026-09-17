@@ -87,7 +87,7 @@ What it derives is derived this way, and any frontend needs the equivalent:
 | `sessionStarted` | a successful `launch` |
 | `sessionShown` | `(session_id, ok)`: the game's window is on screen and has the focus — `wait_session_window` on a host thread, up to 60 s. Inside gamescope `ok` is true once gamescope shows the game's window (a stand-in toplevel carrying the gamescope's pid when no extension lists it); on the desktop, false when nobody can tell: no GNOME, no shell extension, or the session ended first |
 | `sessionEnded` | the current-session marker going empty — the `state/` watch sees `session-end` remove it (debounced 300 ms), a 2 s poll stands behind it, since the game is a systemd unit, not a child. `currentSessionChanged` fires first; the pinned tile and the badge follow that property, and only the toast, the stats refresh and a pending launch follow the signal |
-| `libraryChanged`, `mediaChanged`, `entryWritten`, `recordingFiled` | a `QFileSystemWatcher` on `games/`, `games/<id>/{,journal,media}`, `state/` and the overrides directory with its `<id>/` subdirectories (a pick made from the CLI shows up), debounced 300 ms; `mediaChanged` also follows a pick or its removal made through the client |
+| `libraryChanged`, `mediaChanged`, `entryWritten`, `recordingFiled` | a `QFileSystemWatcher` on `games/`, `games/<id>/{,journal,journal/attachments,media}`, `state/` and the overrides directory with its `<id>/` subdirectories (a pick made from the CLI shows up), debounced 300 ms; `mediaChanged` also follows a pick or its removal made through the client |
 | `progress`, `jobFinished` | the job's own callback — install, update, scan and media refresh run on a host thread |
 | `launched`, `launchFailed`, `error` | the call's result |
 
@@ -377,9 +377,15 @@ and cards for the program (`exe`, a path; the detected one shown as the value, i
 origin as the detail) and arguments, the gamescope switch, then — for Proton and Wine — the launch
 keys tied to its kind (`launchKeys("global")` filtered by `runners`, cards Proton, Sync, Upscaling as
 on the game page, the global `[launch]` values written through `set_setting`), each option by
-its type, and an "Add a game…" action. `setValue(index, value)` writes through `set_runner_setting`
+its type, a Games card — one `game` row per library game running through it (`gameId`, its
+square or box art as `image`, its hours as the display, `installed` when it has an install folder),
+by title — and an "Add a game…" action. `setValue(index, value)` writes through `set_runner_setting`
 (a `launch.*` row through `set_setting`); on the add row it keeps the picked file and `pendingTitle()` proposes a title from it, which
-`addGame(title)` sends to `add_game`. Back on the tab, the list reloads and the cursor finds
+`addGame(title)` sends to `add_game`. A game row opens the Install page's options: Game settings
+(Reprise: `settingsRequested(game)`, which `theme.qml` `pushSub`s over the runner page, B coming
+back to the row; Switch 2: its GameSettingsPage), Uninstall… when installed, Remove from library…,
+through `uninstall(id)` / `remove(id)` on the form (a `message` when done). Both lists follow
+`libraryChanged` — the counts, the Games card — so neither has a Refresh. Back on the tab, the cursor finds
 the runner again. The Switch 2 look has the same list as System Settings › Runners and the same
 page as `switch2/pages/FormPage.qml`, pushed on its stack. The game settings page's Launch group follows the runner: a Runner picker (names
 shown, ids written), then the rows the runner takes. The detail page shows the runner's logo next

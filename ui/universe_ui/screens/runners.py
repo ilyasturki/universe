@@ -3,6 +3,7 @@ import re
 
 from PySide6.QtCore import Property, Signal, Slot
 
+from ..models import file_url
 from .settings import RowsForm, _add, _card_meta, _group, _row, _to_bus, auto_rate, launch_row, proton_choices, runner_logo
 
 
@@ -18,12 +19,29 @@ def _found(runner):
     return runner.get("kind") == "linux" or bool(runner.get("path"))
 
 
+def _runner_of(game):
+    return str((game.get("effective") or {}).get("runner") or (game.get("launch") or {}).get("runner") or "")
+
+
+def _play_time(hours):
+    seconds = float(hours or 0) * 3600
+    if seconds <= 0:
+        return ""
+    if seconds < 3600:
+        return f"{max(1, round(seconds / 60))} min"
+    return f"{seconds / 3600:.1f} h"
+
+
 class RunnersForm(RowsForm):
+    def __init__(self, client, parent=None):
+        super().__init__(client, parent)
+        client.libraryChanged.connect(lambda ids: self.load() if self._rows else None)
+
     @Slot()
     def load(self):
         usage = {}
         for game in self._client.list():
-            ident = str((game.get("effective") or {}).get("runner") or (game.get("launch") or {}).get("runner") or "")
+            ident = _runner_of(game)
             if not ident:
                 continue
             count, hours = usage.get(ident, (0, 0.0))
@@ -58,6 +76,7 @@ class RunnerForm(RowsForm):
         self._screen_mode = screen_mode
         self._runner = {}
         self._pending = None
+        client.libraryChanged.connect(lambda ids: self.load(self._runner["id"]) if self._runner else None)
 
     @Slot(str)
     def load(self, ident):
@@ -112,6 +131,17 @@ class RunnerForm(RowsForm):
                 rows.append(_row(name, option["key"], option.get("label", option["key"]), option.get("type", "string"),
                                  option.get("value", option.get("default")), option.get("choices"), ident))
             groups.append(_group("Options", list(range(first, len(rows))), caps=True))
+        games = sorted((g for g in self._client.list() if _runner_of(g) == ident), key=lambda g: str(g.get("title") or "").casefold())
+        if games:
+            first = len(rows)
+            for game in games:
+                media, source = game.get("media") or {}, game.get("source")
+                art = next((p for p in (media.get("square"), media.get("box_front")) if p), "")
+                rows.append({**_row(name, "game", str(game.get("title") or game.get("id")), "action", "", module=ident),
+                             "display": _play_time((game.get("stats") or {}).get("hours")), "action": "Options",
+                             "gameId": str(game.get("id")), "image": file_url(art).toString(),
+                             "installed": isinstance(source, dict) and bool(source.get("dir"))})
+            groups.append(_group("Games", list(range(first, len(rows))), caps=True, meta=f"{len(games)} game{'' if len(games) == 1 else 's'}"))
         rows.append({**_row(name, "add_file", "Add a game…", "action", "", module=ident), "display": "", "action": "Pick a file", "runner": ident})
         groups.append(_group("", [len(rows) - 1]))
         self._set_rows(rows, groups)
@@ -134,6 +164,24 @@ class RunnerForm(RowsForm):
         if ok:
             self.load(self._runner["id"])
         return bool(ok)
+
+    def _title(self, game_id):
+        return next((r["label"] for r in self._rows if r.get("gameId") == game_id), game_id)
+
+    # The client's call reports its failure itself (`error`); the toast here says what was done, or that it was not.
+    def _act(self, work, game_id, done_text, failed_text):
+        title = self._title(game_id)
+        self._client.runAsync(work, lambda ok: self.message.emit((done_text if ok else failed_text).format(title)))
+
+    @Slot(str)
+    def uninstall(self, game_id):
+        if game_id:
+            self._act(lambda: self._client.uninstall(game_id), game_id, "Uninstalled {}", "Could not uninstall {}")
+
+    @Slot(str)
+    def remove(self, game_id):
+        if game_id:
+            self._act(lambda: self._client.remove(game_id, False), game_id, "Removed {} from the library", "Could not remove {}")
 
     @Slot(result=str)
     def pendingTitle(self):

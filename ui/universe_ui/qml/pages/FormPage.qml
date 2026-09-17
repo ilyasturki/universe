@@ -15,17 +15,21 @@ FocusScope {
     readonly property string module: args.module || ""
     readonly property string source: args.source || ""
     readonly property var form: formOf(args)
-    readonly property var info: game ? null : form.info
+    readonly property var info: game || form.info === undefined ? null : form.info
     readonly property var login: api.screens.login
+    // The row to come back to when a game's settings, opened from here, close.
+    property int returnIndex: -1
 
     function formOf(a) {
         return a.game ? api.screens.gameSettings : a.runner ? api.screens.runner : a.source ? api.screens.source : api.screens.module;
     }
 
     signal closeRequested()
+    signal settingsRequested(var game)
     signal message(string text)
 
     readonly property var hints: editor.open ? editor.hints
+        : menu.open ? menu.hints
         : [ { glyph: "A", label: cards.currentRow && cards.currentRow.type === "bool" ? "Toggle"
                                 : cards.currentRow && cards.currentRow.key === "add_file" ? "Pick a file"
                                 : cards.currentRow && cards.currentRow.type === "action" ? cards.currentRow.action || "Select" : "Change",
@@ -41,11 +45,61 @@ FocusScope {
         var id = args.game ? args.game.id : args.runner || args.module || args.source || "";
         if (id !== "")
             formOf(args).load(id);
+        Qt.callLater(function() {
+            cards.reset();
+            if (page.returnIndex >= 0 && page.runner !== "") {
+                cards.index = page.returnIndex;
+                page.returnIndex = -1;
+            }
+        });
+    }
+
+    function confirm(keep, icon, label, title, done) {
+        Sound.panel();
+        menu.show([ { icon: "", label: keep, action: "" }, { icon: icon, label: label, action: "yes", danger: true } ],
+                  cards, cards.focusRect, title, function(action) {
+                      if (action === "yes")
+                          done();
+                      cards.forceActiveFocus();
+                  });
+    }
+
+    function gameActions(row) {
+        var out = [];
+        if (api.allGames.byId(row.gameId))
+            out.push({ icon: "sliders", label: "Game settings", action: "settings" });
+        if (row.installed)
+            out.push({ icon: "trash", label: "Uninstall…", action: "uninstall", danger: true });
+        out.push({ icon: "eye-off", label: "Remove from library…", action: "remove", danger: true });
+        return out;
+    }
+
+    function gameAction(row, action) {
+        if (action === "settings") {
+            cards.forceActiveFocus();
+            page.returnIndex = cards.index;
+            page.settingsRequested(api.allGames.byId(row.gameId));
+        } else if (action === "uninstall") {
+            confirm("Keep it", "trash", "Trash the install folder", "Uninstall " + row.label + "?", function() {
+                Sound.enter();
+                form.uninstall(row.gameId);
+            });
+        } else if (action === "remove") {
+            confirm("Keep it", "eye-off", "Remove from the library", "Remove " + row.label + "?", function() {
+                Sound.enter();
+                form.remove(row.gameId);
+            });
+        } else {
+            cards.forceActiveFocus();
+        }
     }
 
     function activate(index, row) {
         if (row.disabled === true || row.type === "info") {
             Sound.edge();
+        } else if (row.key === "game") {
+            Sound.panel();
+            menu.show(gameActions(row), cards, cards.focusRect, row.label, function(action) { page.gameAction(row, action); });
         } else if (row.type === "bool") {
             form.toggle(index);
             Sound.favourite(!row.value);
@@ -174,7 +228,7 @@ FocusScope {
         compact: true
         rows: page.form.rows
         groups: page.form.groups
-        dimmed: editor.open
+        dimmed: editor.open || menu.open
 
         onActivated: function(index, row) { page.activate(index, row); }
         onEscapedUp: Sound.edge()
@@ -302,5 +356,14 @@ FocusScope {
         z: 2
 
         onClosed: cards.forceActiveFocus()
+    }
+
+    ActionMenu {
+        id: menu
+
+        anchors.fill: parent
+        z: 4
+
+        onDismissed: cards.forceActiveFocus()
     }
 }

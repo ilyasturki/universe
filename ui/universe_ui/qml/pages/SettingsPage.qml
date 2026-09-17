@@ -83,9 +83,9 @@ FocusScope {
         ? [ { glyph: "A", label: "Open" },
             { glyph: "Y", label: cards.currentRow && cards.currentRow.value === true ? "Disable" : "Enable", dim: !cards.currentRow || (cards.currentRow.warning !== "" && cards.currentRow.value !== true) },
             { glyph: "B", label: "Sections" }, { glyph: "LT RT", label: "Section" } ]
-        : [ { glyph: "A", label: acceptLabel !== "" ? acceptLabel : "Select", dim: acceptLabel === "" },
-            { glyph: "X", label: "Refresh", dim: !refreshable },
-            { glyph: "B", label: "Sections" }, { glyph: "LT RT", label: "Section" } ]
+        : [ { glyph: "A", label: acceptLabel !== "" ? acceptLabel : "Select", dim: acceptLabel === "" } ]
+            .concat(canRefresh ? [ { glyph: "X", label: "Refresh" } ] : [])
+            .concat([ { glyph: "B", label: "Sections" }, { glyph: "LT RT", label: "Section" } ])
 
     readonly property string acceptLabel: {
         var row = cards.currentRow;
@@ -101,6 +101,8 @@ FocusScope {
     }
 
     readonly property bool refreshable: section === installSection || section === updatesSection
+    // What X reloads: the sources' lists from the store, the doctor's checks, the controller's pads.
+    readonly property bool canRefresh: refreshable || section === doctorSection || section === controllerSection
 
     readonly property real sideMargin: Theme.dp(80)
     readonly property real sideWidth: Theme.dp(300)
@@ -211,7 +213,7 @@ FocusScope {
     }
 
     function refreshNow() {
-        if (!(refreshable || section === doctorSection || section === controllerSection || section === runnersSection)) {
+        if (!canRefresh) {
             Sound.edge();
             return;
         }
