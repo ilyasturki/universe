@@ -5,7 +5,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import log, load_settings  # noqa: E402
+from _common import drop_timeline, load_settings, log, now_rfc3339, timeline, timeline_path  # noqa: E402
 
 
 def stop_unit(unit):
@@ -25,13 +25,19 @@ def probe_duration(path):
 def main():
     session_id = os.environ["SESSION_ID"]
     min_duration_s = load_settings().get("min_duration_s", 240)
-    pending_dir = os.path.join(os.environ["MODULE_DATA_DIR"], "pending")
+    data_dir = os.environ["MODULE_DATA_DIR"]
+    pending_dir = os.path.join(data_dir, "pending")
 
     stop_unit(f"universe-capture-{session_id}.service")
+    with timeline(data_dir, session_id) as state:
+        if state is not None and state["paused"]:
+            state["paused"] = False
+            state["pauses"][-1][1] = now_rfc3339()
 
     path = next(iter(glob.glob(os.path.join(pending_dir, f"{session_id}.mkv")) + glob.glob(os.path.join(pending_dir, f"{session_id}.mp4"))), None)
     if not path:
         log(f"no recording file for session {session_id}, nothing to do")
+        drop_timeline(data_dir, session_id)
         return 0
 
     duration = probe_duration(path)
@@ -40,15 +46,19 @@ def main():
     if duration < min_duration_s:
         log(f"recording shorter than {min_duration_s}s, discarding")
         subprocess.run(["trash", path], check=False)
+        drop_timeline(data_dir, session_id)
         return 0
 
     cmd = [os.environ.get("UNIVERSE_BIN") or "universe", "recording-file", session_id, path]
+    if os.path.exists(timeline_path(data_dir, session_id)):
+        cmd += ["--timeline", timeline_path(data_dir, session_id)]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         log(f"universe recording-file failed ({result.returncode}): {result.stderr.strip()} — left in pending/: {path}")
         return 1
 
     log(f"filed: {result.stdout.strip()}")
+    drop_timeline(data_dir, session_id)
     return 0
 
 

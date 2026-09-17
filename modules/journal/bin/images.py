@@ -1,3 +1,4 @@
+import json
 import math
 import os
 import re
@@ -36,6 +37,40 @@ class Image:
     off: float = 0.0
     hash: int | None = None
     gi: object = None
+
+
+class Timeline:
+    """Wall clock to recording offset and back: the recorder began at `start` and skipped each of `pauses`."""
+
+    def __init__(self, start, pauses=()):
+        self.start = start
+        self.pauses = sorted((a, b) for a, b in pauses if a and b and b > a)
+
+    def offset(self, t):
+        off = (t - self.start).total_seconds()
+        for a, b in self.pauses:
+            if t <= a:
+                break
+            off -= (min(t, b) - a).total_seconds()
+        return off
+
+    def time(self, off):
+        t = self.start + timedelta(seconds=off)
+        for a, b in self.pauses:
+            if t < a:
+                break
+            t += b - a
+        return t
+
+    @classmethod
+    def from_env(cls, started_at, pauses_json, session_start, parse):
+        start = parse(started_at) or session_start
+        try:
+            pairs = [(parse(a), parse(b)) for a, b in json.loads(pauses_json or "[]")]
+        except (ValueError, TypeError):
+            log(f"recording pauses unreadable: {pauses_json!r}")
+            pairs = []
+        return cls(start, pairs)
 
 
 def shot_time(name):
@@ -166,7 +201,7 @@ def dedupe(images):
     return kept
 
 
-def extract_frames(recording, shots, start, need, frames_dir, duration_s):
+def extract_frames(recording, shots, timeline, need, frames_dir, duration_s):
     if need <= 0 or not duration_s or duration_s <= 3 or not os.path.exists(recording):
         return []
     os.makedirs(frames_dir, exist_ok=True)
@@ -179,7 +214,7 @@ def extract_frames(recording, shots, start, need, frames_dir, duration_s):
     tail_start = dur - min(TAIL_WINDOW_SEC, dur / 4) if tail_reserve else dur
     grid_need = need - tail_reserve
 
-    offsets = sorted((s.t - start).total_seconds() for s in shots)
+    offsets = sorted(timeline.offset(s.t) for s in shots)
     bounds = [0.0] + [o for o in offsets if 0 < o < tail_start] + [tail_start]
     gaps = [(a, b) for a, b in zip(bounds, bounds[1:]) if b - a > 2]
     if not gaps and not tail_reserve:
@@ -214,7 +249,7 @@ def extract_frames(recording, shots, start, need, frames_dir, duration_s):
         if sd < FLAT_STDDEV:
             os.remove(png)
             return None
-        return Image(png, start + timedelta(seconds=off), "frame", gi == "tail", off, h, gi)
+        return Image(png, timeline.time(off), "frame", gi == "tail", off, h, gi)
 
     with ThreadPoolExecutor(max_workers=FRAMES_WORKERS) as pool:
         cands = [c for c in pool.map(work, enumerate(specs)) if c]

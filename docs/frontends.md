@@ -188,7 +188,9 @@ game — gamescope routes keyboard and mouse only, and the game keeps its own ev
 readers — so `pause_on_home` (a launch key, global and per game, on by default) freezes the game
 whenever the launcher covers it: as the dock opens, and as `toLauncher` flips (after the frame is
 taken: a frozen game paints nothing); `dockClosed` and `toGame` thaw it — on the Guide release
-when that is what closed the dock, so the game never sees Guide held. Off, the game runs on behind the
+when that is what closed the dock, so the game never sees Guide held. The recording pauses and
+resumes with the freeze (the capture module's `freeze` / `thaw` hooks), so menu time never lands
+in the file. Off, the game runs on behind the
 launcher and answers every press the menu gets; turning it on from the dock while the launcher
 is up freezes at once. The session ending drops the overlay whatever state it was in. Without an
 overlay window (the launcher on the desktop) `openDock` is `toLauncher`, and only `toGame`

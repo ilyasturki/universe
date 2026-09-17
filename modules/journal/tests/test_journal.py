@@ -5,7 +5,7 @@ import shutil
 import stat
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -64,7 +64,7 @@ def test_extract_frames_from_mkv(tmp_path):
     rec = tmp_path / "rec.mkv"
     make_mkv(rec, "testsrc", 120)
     start = datetime(2026, 9, 11, 12, 0, 0)
-    frames = img.extract_frames(str(rec), [], start, 8, str(tmp_path / "frames"), 120)
+    frames = img.extract_frames(str(rec), [], img.Timeline(start), 8, str(tmp_path / "frames"), 120)
     assert 1 <= len(frames) <= 8
     offs = [f.off for f in frames]
     assert offs == sorted(offs)
@@ -80,10 +80,40 @@ def test_extract_frames_dedupes_static_and_drops_black(tmp_path):
     static = tmp_path / "static.mkv"
     make_mkv(static, "smptebars", 100)
     start = datetime(2026, 9, 11, 12, 0, 0)
-    assert len(img.extract_frames(str(static), [], start, 6, str(tmp_path / "f1"), 100)) == 1
+    assert len(img.extract_frames(str(static), [], img.Timeline(start), 6, str(tmp_path / "f1"), 100)) == 1
     black = tmp_path / "black.mkv"
     make_mkv(black, "color=c=black", 100)
-    assert img.extract_frames(str(black), [], start, 6, str(tmp_path / "f2"), 100) == []
+    assert img.extract_frames(str(black), [], img.Timeline(start), 6, str(tmp_path / "f2"), 100) == []
+
+
+def test_timeline_skips_the_pauses_both_ways():
+    t0 = datetime(2026, 9, 11, 12, 0, 0)
+    tl = img.Timeline(t0, [(t0 + timedelta(minutes=10), t0 + timedelta(minutes=15)), (t0 + timedelta(minutes=30), t0 + timedelta(minutes=31))])
+    assert tl.offset(t0 + timedelta(minutes=5)) == 300
+    assert tl.offset(t0 + timedelta(minutes=12)) == 600
+    assert tl.offset(t0 + timedelta(minutes=20)) == 900
+    assert tl.offset(t0 + timedelta(minutes=40)) == 34 * 60
+    assert tl.time(300) == t0 + timedelta(minutes=5)
+    assert tl.time(600) == t0 + timedelta(minutes=15)
+    assert tl.time(900) == t0 + timedelta(minutes=20)
+    assert tl.time(34 * 60) == t0 + timedelta(minutes=40)
+    parsed = img.Timeline.from_env("2026-09-11T12:00:30", '[["2026-09-11T12:10:00", "2026-09-11T12:12:00"]]', t0, lambda s: datetime.fromisoformat(s) if s else None)
+    assert parsed.start == t0 + timedelta(seconds=30) and parsed.offset(t0 + timedelta(minutes=13)) == 12 * 60 + 30 - 120
+    fallback = img.Timeline.from_env("", "nope", t0, lambda s: None)
+    assert fallback.start == t0 and fallback.pauses == []
+
+
+def test_extract_frames_places_a_shot_after_a_pause_earlier_in_the_file(tmp_path):
+    rec = tmp_path / "rec.mkv"
+    make_mkv(rec, "testsrc", 120)
+    t0 = datetime(2026, 9, 11, 12, 0, 0)
+    shot = img.Image(str(tmp_path / "s.png"), t0 + timedelta(seconds=100))
+    straight = img.extract_frames(str(rec), [shot], img.Timeline(t0), 10, str(tmp_path / "f1"), 120)
+    paused = img.extract_frames(str(rec), [shot], img.Timeline(t0, [(t0 + timedelta(seconds=20), t0 + timedelta(seconds=80))]), 10, str(tmp_path / "f2"), 120)
+    # The shot sits at 100 s straight (past the tail window: one gap), at 40 s once the minute-long pause is skipped (two gaps).
+    assert max(f.off for f in straight if f.gi == 0) > 40 and not any(f.gi == 1 for f in straight)
+    assert all(f.off < 40 for f in paused if f.gi == 0)
+    assert all(f.t >= t0 + timedelta(seconds=80) for f in paused if f.off >= 20)
 
 
 def test_dhash_and_review_normalization():

@@ -1,7 +1,17 @@
 use std::path::{Path, PathBuf};
 
+use serde::{Deserialize, Serialize};
+
 use crate::game::Game;
 use crate::sessions::{self, Session};
+
+/// The recorder's clock against the wall's: it began at `started_at` and skipped each of `pauses`.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct Timeline {
+    pub started_at: String,
+    pub pauses: Vec<(String, String)>,
+}
 
 /// `NNN-YYYYMMDD-HHMMSS-<dur>.mkv` (process-game-recording.mjs) or `<session>.mkv` / `.mp4`.
 pub fn parse_name(name: &str) -> Option<(String, u64)> {
@@ -72,7 +82,7 @@ pub fn import_existing(game: &Game, recordings_root: &Path) -> crate::Result<usi
     Ok(added)
 }
 
-pub fn file(game: &Game, session_id: &str, src: &Path, recordings_root: &Path) -> crate::Result<PathBuf> {
+pub fn file(game: &Game, session_id: &str, src: &Path, recordings_root: &Path, timeline: Option<&Timeline>) -> crate::Result<PathBuf> {
     if !src.is_file() {
         return Err(crate::Error::NotFound(src.display().to_string()));
     }
@@ -86,13 +96,16 @@ pub fn file(game: &Game, session_id: &str, src: &Path, recordings_root: &Path) -
     }
     let ds = dest.to_string_lossy().to_string();
     let duration_s = probe_duration(&dest).unwrap_or(0);
+    let timeline = timeline.cloned().unwrap_or_default();
     let found = sessions::update(&game.sessions_path(), session_id, |s| {
         s.recording = Some(ds.clone());
         s.recording_duration_s = duration_s;
+        s.recording_started_at = timeline.started_at.clone();
+        s.recording_pauses = timeline.pauses.clone();
     })?;
     if !found {
         let (started_at, ended_at) = session_times(session_id, duration_s);
-        sessions::append(&game.sessions_path(), &Session { session: session_id.into(), game: game.id.clone(), started_at, ended_at, duration_s, source: "import-recording".into(), recording: Some(ds), recording_duration_s: duration_s, ..Default::default() })?;
+        sessions::append(&game.sessions_path(), &Session { session: session_id.into(), game: game.id.clone(), started_at, ended_at, duration_s, source: "import-recording".into(), recording: Some(ds), recording_duration_s: duration_s, recording_started_at: timeline.started_at, recording_pauses: timeline.pauses, ..Default::default() })?;
     }
     Ok(dest)
 }
@@ -123,12 +136,17 @@ mod tests {
         assert_eq!(import_existing(&g, rec.path()).unwrap(), 0);
         let pending = data.path().join("p.mkv");
         std::fs::write(&pending, b"y").unwrap();
-        let dest = file(&g, "20260911-120000", &pending, rec.path()).unwrap();
+        let timeline = Timeline { started_at: "2026-09-11T12:00:05+02:00".into(), pauses: vec![("2026-09-11T12:10:00+02:00".into(), "2026-09-11T12:12:00+02:00".into())] };
+        let dest = file(&g, "20260911-120000", &pending, rec.path(), Some(&timeline)).unwrap();
         assert!(dest.ends_with("dead-cells/20260911-120000.mkv"));
         let all = sessions::read(&g.sessions_path()).unwrap();
         assert_eq!(all.len(), 2);
         assert_eq!((all[0].session.as_str(), all[0].recording_duration_s), ("20241211-012656", 1800));
         assert_eq!(all[1].session, "20260911-120000");
         assert!(all[1].recording.as_deref().unwrap().ends_with("dead-cells/20260911-120000.mkv"));
+        assert_eq!((all[1].recording_started_at.as_str(), &all[1].recording_pauses), (timeline.started_at.as_str(), &timeline.pauses));
+        let row = serde_json::to_value(sessions::SessionRow::new(&all[1], "Dead Cells", None)).unwrap();
+        assert_eq!(row["recording"]["pauses"][0][1], "2026-09-11T12:12:00+02:00");
+        assert!(row.get("recording_pauses").is_none());
     }
 }

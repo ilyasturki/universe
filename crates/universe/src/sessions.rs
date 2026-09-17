@@ -17,6 +17,10 @@ pub struct Session {
     pub recording: Option<String>,
     /// The recording's media length; 0 when never probed
     pub recording_duration_s: u64,
+    /// When the recorder began, RFC3339; empty when unknown
+    pub recording_started_at: String,
+    /// Stretches the recorder skipped while the game was frozen, RFC3339 pairs
+    pub recording_pauses: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -25,6 +29,8 @@ pub struct RecordingInfo {
     pub size: u64,
     pub exists: bool,
     pub duration_s: u64,
+    pub started_at: String,
+    pub pauses: Vec<(String, String)>,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -46,7 +52,7 @@ impl SessionRow {
     pub fn new(session: &Session, title: &str, entry: Option<&crate::journal::Entry>) -> SessionRow {
         let recording = session.recording.as_deref().filter(|p| !p.is_empty()).map(|p| {
             let md = std::fs::metadata(p).ok();
-            RecordingInfo { path: p.into(), size: md.as_ref().map(|m| m.len()).unwrap_or(0), exists: md.is_some(), duration_s: session.recording_duration_s }
+            RecordingInfo { path: p.into(), size: md.as_ref().map(|m| m.len()).unwrap_or(0), exists: md.is_some(), duration_s: session.recording_duration_s, started_at: session.recording_started_at.clone(), pauses: session.recording_pauses.clone() }
         });
         let journal = entry.map(|e| JournalState { state: e.state.clone(), title: e.title.clone(), written_at: e.written_at.clone() });
         SessionRow { session: session.clone(), title: title.into(), recording, journal }
@@ -59,7 +65,9 @@ impl Serialize for SessionRow {
         use serde::ser::Error;
         let mut v = serde_json::to_value(&self.session).map_err(S::Error::custom)?;
         let m = v.as_object_mut().ok_or_else(|| S::Error::custom("session is not an object"))?;
-        m.remove("recording_duration_s");
+        for k in ["recording_duration_s", "recording_started_at", "recording_pauses"] {
+            m.remove(k);
+        }
         m.insert("title".into(), self.title.clone().into());
         m.insert("recording".into(), serde_json::to_value(&self.recording).map_err(S::Error::custom)?);
         m.insert("journal".into(), serde_json::to_value(&self.journal).map_err(S::Error::custom)?);
@@ -180,7 +188,7 @@ mod tests {
         let entry = crate::journal::Entry { session: s.session.clone(), title: "Into the Dome".into(), state: "written".into(), ..Default::default() };
         let v = serde_json::to_value(SessionRow::new(&s, "X", Some(&entry))).unwrap();
         assert_eq!(v["title"], "X");
-        assert_eq!(v["recording"], serde_json::json!({"path": rec.to_string_lossy(), "size": 3, "exists": true, "duration_s": 1790}));
+        assert_eq!(v["recording"], serde_json::json!({"path": rec.to_string_lossy(), "size": 3, "exists": true, "duration_s": 1790, "started_at": "", "pauses": []}));
         assert_eq!(v["journal"], serde_json::json!({"state": "written", "title": "Into the Dome", "written_at": ""}));
         assert!(v.get("recording_duration_s").is_none());
         let bare = serde_json::to_value(SessionRow::new(&Session::default(), "", None)).unwrap();

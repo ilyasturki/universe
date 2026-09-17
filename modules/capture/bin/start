@@ -4,7 +4,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import cli_json, extension_ready, gsr_args, load_settings, log, show_osd  # noqa: E402
+from _common import cli_json, extension_ready, game_frozen, gsr_args, load_settings, log, set_paused, show_osd, timeline  # noqa: E402
 
 
 def window_token(settings, data_dir):
@@ -53,6 +53,10 @@ def main():
     if result.returncode != 0:
         log(f"systemd-run failed ({result.returncode}): {result.stderr.strip()}")
         return 1
+    # gpu-screen-recorder takes SIGUSR2 from its first instruction, so the unit up is the recorder ready.
+    with timeline(data_dir, session_id, create=True) as state:
+        if game_frozen(game_unit):
+            set_paused(state, session_id, True)
     return 0
 
 

@@ -35,7 +35,11 @@ def fakebin(tmp_path):
     logs.mkdir()
 
     _write_shim(bindir / "systemd-run", f'printf "%s\\n" "$@" > "{logs}/systemd-run.args"\nexit 0\n')
-    _write_shim(bindir / "systemctl", 'exit 0')
+    _write_shim(bindir / "systemctl", f'''printf "%s\\n" "$@" >> "{logs}/systemctl.args"
+case "$*" in
+  *FreezerState*) echo "${{FAKE_FREEZER_STATE:-running}}";;
+esac
+exit "${{FAKE_KILL_EXIT:-0}}"''')
     _write_shim(bindir / "universe", f'''printf "%s\\n" "$@" >> "{logs}/universe.args"
 if [ "${{FAKE_UNIVERSE_EXIT:-0}}" != "0" ]; then echo "universe: unavailable: no shell" >&2; exit "${{FAKE_UNIVERSE_EXIT}}"; fi
 case "$1" in
@@ -355,7 +359,83 @@ def test_start_and_stop_follow_the_container(tmp_path, fakebin):
     final.write_bytes(b"x")
     result = run("stop", env)
     assert result.returncode == 0, result.stderr
-    assert (fakebin["logs"] / "universe.args").read_text().splitlines() == ["recording-file", SESSION_ID, str(final)]
+    assert (fakebin["logs"] / "universe.args").read_text().splitlines()[:3] == ["recording-file", SESSION_ID, str(final)]
+
+
+def _timeline(tmp_path):
+    path = tmp_path / "data" / "pending" / f"{SESSION_ID}.timeline.json"
+    return json.loads(path.read_text()) if path.exists() else None
+
+
+def _signals(fakebin):
+    lines = (fakebin["logs"] / "systemctl.args").read_text().splitlines() if (fakebin["logs"] / "systemctl.args").exists() else []
+    return lines.count("--signal=SIGUSR2")
+
+
+def test_freeze_before_start_is_a_noop_and_start_catches_up(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {})
+    assert run("freeze", env).returncode == 0
+    assert _timeline(tmp_path) is None and _signals(fakebin) == 0
+
+    result = run("start", dict(env, FAKE_FREEZER_STATE="frozen"))
+    assert result.returncode == 0, result.stderr
+    state = _timeline(tmp_path)
+    assert state["paused"] and len(state["pauses"]) == 1 and state["pauses"][0][1] is None
+    assert state["started_at"] <= state["pauses"][0][0]
+    assert _signals(fakebin) == 1
+    args = (fakebin["logs"] / "systemctl.args").read_text().splitlines()
+    assert args[args.index("--signal=SIGUSR2") - 1] == "--kill-whom=main"
+    assert args[args.index("--signal=SIGUSR2") + 1] == f"universe-capture-{SESSION_ID}.service"
+
+
+def test_freeze_and_thaw_toggle_the_recorder_once_each(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {})
+    assert run("start", env).returncode == 0
+    assert _timeline(tmp_path) == {"started_at": _timeline(tmp_path)["started_at"], "paused": False, "pauses": []}
+    assert _signals(fakebin) == 0
+
+    assert run("freeze", env).returncode == 0
+    assert run("freeze", env).returncode == 0
+    assert _signals(fakebin) == 1 and _timeline(tmp_path)["paused"]
+
+    assert run("thaw", env).returncode == 0
+    assert run("thaw", env).returncode == 0
+    state = _timeline(tmp_path)
+    assert _signals(fakebin) == 2 and not state["paused"]
+    assert len(state["pauses"]) == 1 and state["pauses"][0][0] <= state["pauses"][0][1]
+
+
+def test_freeze_keeps_its_state_when_the_signal_fails(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {})
+    assert run("start", env).returncode == 0
+    result = run("freeze", dict(env, FAKE_KILL_EXIT="1"))
+    assert result.returncode == 0 and "pause failed" in result.stderr
+    assert _timeline(tmp_path) == {"started_at": _timeline(tmp_path)["started_at"], "paused": False, "pauses": []}
+
+
+def test_stop_closes_an_open_pause_and_hands_the_timeline_over(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {"min_duration_s": 240}, extra={"FAKE_DURATION": "999"})
+    assert run("start", env).returncode == 0
+    assert run("freeze", env).returncode == 0
+    mkv = tmp_path / "data" / "pending" / f"{SESSION_ID}.mkv"
+    mkv.write_bytes(b"x")
+    timeline = tmp_path / "data" / "pending" / f"{SESSION_ID}.timeline.json"
+
+    _write_shim(fakebin["bin"] / "universe", f'cp "$5" "{tmp_path}/handed.json"\necho filed\nexit 0')
+    result = run("stop", env)
+    assert result.returncode == 0, result.stderr
+    handed = json.loads((tmp_path / "handed.json").read_text())
+    assert not handed["paused"] and len(handed["pauses"]) == 1 and handed["pauses"][0][1] is not None
+    assert not timeline.exists() and not (tmp_path / "data" / "pending" / f"{SESSION_ID}.timeline.json.lock").exists()
+
+
+def test_stop_drops_the_timeline_with_a_short_recording(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {"min_duration_s": 240}, extra={"FAKE_DURATION": "5"})
+    assert run("start", env).returncode == 0
+    (tmp_path / "data" / "pending" / f"{SESSION_ID}.mkv").write_bytes(b"x")
+    assert run("stop", env).returncode == 0
+    assert _timeline(tmp_path) is None
+    assert not (fakebin["logs"] / "universe.args").exists()
 
 
 def test_gsr_args_quality_presets_and_overrides():

@@ -80,6 +80,8 @@ pub struct Core {
     logins_probed: tokio::sync::OnceCell<()>,
     pub(crate) scope: std::sync::OnceLock<String>,
     nest: std::sync::OnceLock<Option<crate::nest::Nest>>,
+    /// A freeze and the thaw behind it run in order: the hooks behind them toggle state.
+    pub(crate) freezes: tokio::sync::Mutex<()>,
     pub(crate) host: Host,
 }
 
@@ -99,6 +101,7 @@ impl Core {
             logins_probed: tokio::sync::OnceCell::new(),
             scope: std::sync::OnceLock::new(),
             nest: std::sync::OnceLock::new(),
+            freezes: tokio::sync::Mutex::new(()),
             host,
         }
     }
@@ -615,11 +618,11 @@ impl Core {
         games.iter().find(|g| g.sessions.iter().any(|s| s.session == session_id)).map(|g| g.game.id.clone())
     }
 
-    pub async fn file_recording(&self, session_id: &str, path: &str) -> Result<String> {
+    pub async fn file_recording(&self, session_id: &str, path: &str, timeline: Option<&crate::recording::Timeline>) -> Result<String> {
         let id = self.game_of_session(session_id).await.ok_or_else(|| Error::NotFound(format!("session {session_id}")))?;
         let r = self.get(&id).await?;
         let cfg = self.config.read().await.clone();
-        let dest = crate::recording::file(&r.game, session_id, Path::new(path), &cfg.recordings_root())?;
+        let dest = crate::recording::file(&r.game, session_id, Path::new(path), &cfg.recordings_root(), timeline)?;
         self.reload_game(&id).await?;
         Ok(dest.to_string_lossy().to_string())
     }

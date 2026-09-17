@@ -69,7 +69,7 @@ pub struct Module {
     pub missing: Vec<String>,
 }
 
-pub const HOOKS: [&str; 5] = ["pre-launch", "post-launch", "session-end", "post-process", "screenshot"];
+pub const HOOKS: [&str; 7] = ["pre-launch", "post-launch", "freeze", "thaw", "session-end", "post-process", "screenshot"];
 
 impl Module {
     pub fn id(&self) -> &str {

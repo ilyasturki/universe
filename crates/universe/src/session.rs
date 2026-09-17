@@ -320,6 +320,8 @@ impl Core {
         let mut env = self.hook_env_base(&r, &cfg);
         env.set("SESSION_ID", session_id);
         env.set("RECORDING_PATH", sess.as_ref().and_then(|s| s.recording.clone()).unwrap_or_default());
+        env.set("RECORDING_STARTED_AT", sess.as_ref().map(|s| s.recording_started_at.clone()).unwrap_or_default());
+        env.set("RECORDING_PAUSES", serde_json::to_string(&sess.as_ref().map(|s| s.recording_pauses.clone()).unwrap_or_default()).unwrap_or_default());
         if let Some(s) = sess {
             env.set("SESSION_STARTED_AT", s.started_at);
             env.set("SESSION_ENDED_AT", s.ended_at);
@@ -342,9 +344,25 @@ impl Core {
         self.host.units.stop(&c.unit).await
     }
 
+    /// The unit first, then the `freeze` / `thaw` hooks with the marker's environment: what the pad feels is the game.
     pub async fn freeze(&self, on: bool) -> Result<()> {
-        let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
-        self.host.units.freeze(&c.unit, on).await
+        let _in_order = self.freezes.lock().await;
+        let Some(marker) = read_marker() else { return Err(Error::NotFound("no session running".into())) };
+        if !self.host.units.is_active(&marker.current.unit).await {
+            return Err(Error::NotFound("no session running".into()));
+        }
+        self.host.units.freeze(&marker.current.unit, on).await?;
+        let hook = if on { "freeze" } else { "thaw" };
+        let Ok(r) = self.get(&marker.current.id).await else { return Ok(()) };
+        let cfg = self.config.read().await.clone();
+        let base = HookEnv { vars: marker.hook_env };
+        for m in self.hook_modules(&r, hook).await {
+            let env = self.module_env(&m, &r, &cfg, &base);
+            if let Err(e) = modules::run_blocking(&m, hook, &env).await {
+                tracing::warn!("{hook} {}: {e}", m.id());
+            }
+        }
+        Ok(())
     }
 }
 
@@ -524,6 +542,34 @@ mod tests {
         assert!(core.current().await.is_none());
         assert!(read_marker().is_some(), "the marker waits for session-end");
         assert!(matches!(core.stop("").await, Err(Error::NotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn freeze_runs_the_hooks_behind_the_unit() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let _sb = sandbox();
+        let probe = std::path::PathBuf::from(std::env::var_os("UNIVERSE_MODULES_PATH").unwrap()).join("probe");
+        std::fs::create_dir_all(probe.join("bin")).unwrap();
+        std::fs::write(probe.join("module.toml"), "api = 2\nid = \"probe\"\n[hooks]\nfreeze = \"bin/freeze\"\nthaw = \"bin/thaw\"\n").unwrap();
+        let log = paths::state_home().join("hooks.log");
+        use std::os::unix::fs::PermissionsExt;
+        for hook in ["freeze", "thaw"] {
+            let exe = probe.join("bin").join(hook);
+            std::fs::write(&exe, format!("#!/bin/sh\necho {hook} $SESSION_ID $MODULE_SETTINGS_JSON >> {}\n", log.display())).unwrap();
+            std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        std::fs::write(paths::config_home().join("config.toml"), "[launch]\ngamescope = false\nmangohud = false\nfps_limit = \"none\"\n[modules]\nenabled = [\"probe\"]\n").unwrap();
+        let (core, memory) = open().await;
+        assert!(matches!(core.freeze(true).await, Err(Error::NotFound(_))));
+        let sid = core.launch("sample", "", "").await.unwrap();
+        let unit = format!("universe-game-sample-{sid}.service");
+        core.freeze(true).await.unwrap();
+        core.freeze(false).await.unwrap();
+        let calls = memory.calls();
+        assert!(calls.contains(&format!("unit:freeze {unit}")) && calls.contains(&format!("unit:thaw {unit}")), "{calls:?}");
+        let lines: Vec<String> = std::fs::read_to_string(&log).unwrap().lines().map(String::from).collect();
+        assert_eq!(lines.len(), 2, "{lines:?}");
+        assert!(lines[0].starts_with(&format!("freeze {sid} {{")) && lines[1].starts_with(&format!("thaw {sid} {{")), "{lines:?}");
     }
 
     #[tokio::test]

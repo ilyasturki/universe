@@ -192,7 +192,8 @@ def journal_session(settings, sid, start_id, game_id, provider, journal_dir, dat
         frames = []
         if recording and need > 0:
             footage = img.probe_duration(recording) or duration_s
-            frames = img.extract_frames(recording, shots, start, need, os.path.join(work_dir, "frames"), footage)
+            timeline = img.Timeline.from_env(env("RECORDING_STARTED_AT"), env("RECORDING_PAUSES"), start, parse_rfc3339)
+            frames = img.extract_frames(recording, shots, timeline, need, os.path.join(work_dir, "frames"), footage)
         clear_session_frames(attachments, sid)
 
         if len(shots) > max_images:

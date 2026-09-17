@@ -264,7 +264,7 @@ impl Core {
     }
 
     fn file_recording(&self, py: Python<'_>, session_id: String, path: String) -> PyResult<String> {
-        self.run(py, |c| async move { c.file_recording(&session_id, &path).await })
+        self.run(py, |c| async move { c.file_recording(&session_id, &path, None).await })
     }
     fn remove_recording(&self, py: Python<'_>, id: String, session_id: String) -> PyResult<()> {
         self.run(py, |c| async move { c.remove_recording(&id, &session_id).await })

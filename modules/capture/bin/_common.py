@@ -1,3 +1,5 @@
+import contextlib
+import fcntl
 import json
 import os
 import re
@@ -5,6 +7,7 @@ import shlex
 import subprocess
 import sys
 import time
+from datetime import datetime
 
 # (AV1 q 0-255, H.26x q 0-51, target kbps, ceiling kbps): QVBR up to the ceiling; very_high measured ~7-8 GB/h on AMD.
 QUALITY_PRESETS = {
@@ -163,3 +166,66 @@ def bus_name_has_owner(name):
         capture_output=True, text=True,
     )
     return r.returncode == 0 and r.stdout.strip() == "b true"
+
+
+def capture_unit(session_id):
+    return f"universe-capture-{session_id}.service"
+
+
+def timeline_path(data_dir, session_id):
+    return os.path.join(data_dir, "pending", f"{session_id}.timeline.json")
+
+
+def now_rfc3339():
+    return datetime.now().astimezone().isoformat(timespec="seconds")
+
+
+@contextlib.contextmanager
+def timeline(data_dir, session_id, create=False):
+    """The recorder's clock, `{"started_at", "paused", "pauses": [[from, to]]}`, locked for the block; None when no recording runs."""
+    path = timeline_path(data_dir, session_id)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path + ".lock", "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        if create:
+            state = {"started_at": now_rfc3339(), "paused": False, "pauses": []}
+        else:
+            try:
+                with open(path) as f:
+                    state = json.load(f)
+            except (OSError, ValueError):
+                yield None
+                return
+        yield state
+        with open(path + ".tmp", "w") as f:
+            json.dump(state, f)
+        os.replace(path + ".tmp", path)
+
+
+def drop_timeline(data_dir, session_id):
+    path = timeline_path(data_dir, session_id)
+    for p in (path, path + ".lock"):
+        try:
+            os.remove(p)
+        except OSError:
+            pass
+
+
+def set_paused(state, session_id, on):
+    if state["paused"] == on:
+        return
+    # SIGUSR2 toggles gpu-screen-recorder's pause; main only, or gsr-kms-server in the same cgroup dies of it.
+    r = subprocess.run(["systemctl", "--user", "kill", "--kill-whom=main", "--signal=SIGUSR2", capture_unit(session_id)], capture_output=True, text=True)
+    if r.returncode != 0:
+        log(f"{'pause' if on else 'resume'} failed: {r.stderr.strip()}")
+        return
+    if on:
+        state["pauses"].append([now_rfc3339(), None])
+    elif state["pauses"] and state["pauses"][-1][1] is None:
+        state["pauses"][-1][1] = now_rfc3339()
+    state["paused"] = on
+
+
+def game_frozen(unit):
+    r = subprocess.run(["systemctl", "--user", "show", "-p", "FreezerState", "--value", unit], capture_output=True, text=True)
+    return r.stdout.strip() in ("frozen", "freezing")

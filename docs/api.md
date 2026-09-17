@@ -39,7 +39,9 @@ operation; a dash means the surface doesn't expose it.
 - Asynchronous hooks (`post-launch`, `post-process`) run as transient units. A `post-launch` hook
   that starts a process meant to last the whole session (the recorder) must put it in its own unit
   with `BindsTo=$SESSION_UNIT After=$SESSION_UNIT`, so it stops with the game even if nothing else
-  is watching.
+  is watching. The `freeze` and `thaw` hooks run blocking, in the calling process, right after
+  `freeze(on)` froze or thawed the game's unit — one at a time, in call order — with the marker's
+  environment: what a module keeps beside the game (the recorder) pauses and resumes with it.
 - Long jobs (`install`, `update`, `scan`, media refresh) run **in the calling process** with a
   progress callback. Closing the frontend interrupts them.
 - The one exception to "nothing in the background" is the **controller watcher**
@@ -111,7 +113,7 @@ hooks write shows up that way, with no other channel.
 | `session_window()` | `session_window()` | `universe session-window [--json]` | the running game's window as the Universe shell extension lists it (`{id, pid, wm_class, title, focused, width, height, hidden, minimized}`): the largest visible toplevel whose pid is in the unit's cgroup — gamescope's when the game runs inside it. `None` before it maps; `Unavailable` off GNOME |
 | `wait_session_window(session_id, timeout)` | `wait_session_window(session_id, timeout_ms)` | `universe session-window --wait <secs> [--json]` | blocks until that window is up, then `Activate`s it (focus and raise) and returns it; `None` when the session ended first or the timeout ran out (the CLI prints `null`, exit 0); `Unavailable` off GNOME, at once. Polls the extension every 150 ms |
 | `focus_session()` / `focus_pid(pid)` | `focus_session()` / `focus_pid(pid)` | — | `Activate` on the game's window / on the largest window of a process (a frontend's own, once the game is gone). On the launcher's gamescope (see Gamescope) `focus_session` shows the game again and `focus_pid(own pid)` takes the screen back from it |
-| `freeze(on)` | `freeze(on)` | — | `systemctl --user freeze` / `thaw` on the running game's unit: every process of it stops in place. A stop job thaws on its own, so `stop` works on a frozen game |
+| `freeze(on)` | `freeze(on)` | — | `systemctl --user freeze` / `thaw` on the running game's unit: every process of it stops in place, then the `freeze` / `thaw` hooks run (the capture module pauses its recorder). A stop job thaws on its own, so `stop` works on a frozen game |
 | `volume(change, value)` | `volume(change, value=0)` | — | the default sink through `wpctl`: `up` / `down` by `controller.volume_step`, `mute` toggles, `set` to `value` percent, `get`; returns `{percent, muted, output}` |
 | `set_fps_limit()` | `set_fps_limit()` | — | rewrites the running game's `<state>/MangoHud.conf` from its `fps_limit` as launch resolves it and returns the `reload_cfg` combo the file pins (`Shift_L+F4`): typed into the game (the watcher's `run` command, once the game is thawed), the layer rereads the file |
 | `set_mangohud(on)` | `set_mangohud(on=None)` | — | the running game's HUD: `None` flips it. Written as the game's `launch.mangohud` (reread from disk first: the dock and the watcher each hold a library), then applied in the game — mangoapp told over its control queue where one draws (see MangoHud), the layer over its control socket on the desktop — and the new state returned. `NotFound` without a session |
@@ -129,21 +131,28 @@ One `sessions.jsonl` line:
 {"session":"20260910-213045","game":"the-technomancer","started_at":"RFC3339",
  "ended_at":"RFC3339","duration_s":1234,"source":"universe",
  "unit":"universe-game-the-technomancer-20260910-213045.service","screen":"DP-1",
- "exit":0,"recording":"path or null","recording_duration_s":1230}
+ "exit":0,"recording":"path or null","recording_duration_s":1230,
+ "recording_started_at":"RFC3339 or empty","recording_pauses":[["RFC3339","RFC3339"]]}
 ```
 
 `recording_duration_s` is the media's length as `ffprobe` reported it when the file was filed or
-imported, `0` when unknown (older lines lack the key). A `SessionRow` is the line with what every
+imported, `0` when unknown (older lines lack the key). `recording_started_at` and
+`recording_pauses` are the recorder's clock against the wall's: when it began, and the stretches it
+skipped while the game was frozen (the capture module pauses on `freeze`, see Recordings) — a
+wall-clock moment maps onto the file at `moment − started_at − the pauses before it`. Empty and
+`[]` when unknown (an import, an older line). A `SessionRow` is the line with what every
 listing joins onto it, in the line's place:
 
 ```json
 {"session":…, "game":…, "title":"The Technomancer", …,
- "recording":{"path":"…/20260910-213045.mkv","size":2147483648,"exists":true,"duration_s":1230} or null,
+ "recording":{"path":"…/20260910-213045.mkv","size":2147483648,"exists":true,"duration_s":1230,
+              "started_at":"RFC3339 or empty","pauses":[["RFC3339","RFC3339"]]} or null,
  "journal":{"state":"written","title":"Into the Dome","written_at":"RFC3339"} or null}
 ```
 
-`recording` stands for the file (`duration_s` is `recording_duration_s`); `journal` is the entry's
-state, `title` and `written_at` (see Journal), `null` when the session has none.
+`recording` stands for the file (`duration_s`, `started_at` and `pauses` are the line's
+`recording_*` keys); `journal` is the entry's state, `title` and `written_at` (see Journal),
+`null` when the session has none.
 
 `source ∈ universe, import-recording, import-lutris`. `exit` is the main process's exit code, `-1`
 when it was killed by a signal (a `stop`).
@@ -373,12 +382,22 @@ Two layers per slot: the **default** under `games/<id>/media/`, which `refresh` 
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `file_recording(session_id, path)` | `file_recording(session_id, path)` | `universe recording-file <session> <path>` | files the mkv as `<recordings_root>/<id>/<session>.mkv` (rename within a filesystem, copy across), writes `recording` and the probed `recording_duration_s` into the session line, prints the final path |
+| `file_recording(session_id, path, timeline)` | `file_recording(session_id, path)` | `universe recording-file <session> <path> [--timeline <json>]` | files the mkv as `<recordings_root>/<id>/<session>.mkv` (rename within a filesystem, copy across), writes `recording`, the probed `recording_duration_s` and the timeline's `recording_started_at` / `recording_pauses` into the session line, prints the final path. The timeline is `{"started_at": RFC3339, "pauses": [[from, to]]}`, a file path on the CLI, `None` for none |
 | — | `recordings(id)` (a filter on the client) | `universe recordings <name>` | the `SessionRow`s of `sessions(id)` that have a `recording` |
 | `remove_recording(id, session_id)` | `remove_recording(id, session_id)` | `universe recordings <name> --remove <session> [-y]` | trashes the mkv (`trash`), clears `recording` on the session line; the hours stay |
 
 `recording-file` is called by the capture module's `session-end` hook, so it lands before any
 `post-process` hook runs.
+
+The recording **pauses with the game**: the module's `freeze` hook sends gpu-screen-recorder its
+`SIGUSR2` (pause) and `thaw` sends it again (resume), so a frozen game — the launcher over it with
+`pause_on_home` on — adds nothing to the file; with `pause_on_home` off the game plays on behind
+the launcher and so does the recording. `SIGUSR2` toggles, so the module keeps the recorder's
+state in `pending/<session>.timeline.json` (`{"started_at", "paused", "pauses"}`, under a lock):
+the hooks are no-ops until `start` has written it, and `start` reads the game unit's
+`FreezerState` once the recorder is up, for a HOME pressed while it waited for the window. `stop`
+closes a pause left open and hands the timeline to `recording-file`. The paused stretches are cut
+from the file, not held as a still, so `min_duration_s` measures play recorded, not the sitting.
 
 The capture module records the whole **screen** (`source = "screen"`, the default: gpu-screen-recorder's
 KMS capture of the session's output) or the game's **window** (`source = "window"`, per game). The
@@ -429,7 +448,10 @@ writes itself (core unavailable) is self-contained. While the hook runs the sess
 removed once the entry is in, or replaced by `<session>.failed.json` (`{"session", "game",
 "written_at", "reason"}`, the reason being "codex quota reached", "provider error: …" or "no
 images") when the run ends without one. A session with neither a recording nor a screenshot gets
-no entry and no failed file.
+no entry and no failed file. The frames the module samples from the recording sit between the
+session's screenshots, placed on the file through `RECORDING_STARTED_AT` and `RECORDING_PAUSES`
+(the wall-clock moment less the recorder's start and the pauses before it); without them, the
+session's start and no pause.
 
 The core lists those files as entries, sorted with the real ones: `state ∈ written, pending,
 failed`. A `pending` entry has the file's `started_at` and `provider`, an empty title and no
@@ -624,6 +646,8 @@ bins = ["gpu-screen-recorder"]    # a missing binary makes the module "unavailab
 [hooks]                           # paths relative to the module directory
 pre-launch   = "bin/pre"          # blocking, before the game's unit; may write UNIVERSE_ENV_FILE
 post-launch  = "bin/start"        # async (transient unit); anything that must last the session goes in its own unit with BindsTo=$SESSION_UNIT
+freeze       = "bin/freeze"       # blocking, right after the game's unit froze (HOME over the game); thaw = right after it thawed
+thaw         = "bin/thaw"
 session-end  = "bin/stop"         # short and blocking, inside the game unit's ExecStopPost; this is where a recording is filed
 post-process = "bin/process"      # async (transient unit), after the session-end hooks
 screenshot   = "bin/shot"         # on demand
@@ -663,6 +687,7 @@ label = "Model"
 | `GAME_ID`, `GAME_SLUG`, `GAME_TITLE`, `GAME_DIR`, `GAME_EXE`, `GAME_TOML` | identity and paths (the TOML is read-only) | all |
 | `SESSION_ID`, `SESSION_UNIT`, `SESSION_SCREEN`, `SESSION_STARTED_AT`, `SESSION_ENDED_AT`, `SESSION_DURATION_S` | the session; `SESSION_SCREEN` is a DRM connector | as applicable |
 | `RECORDING_PATH` | the filed mkv, empty if there is none | `post-process` |
+| `RECORDING_STARTED_AT`, `RECORDING_PAUSES` | the session line's `recording_started_at` and `recording_pauses` (the latter as JSON), empty / `[]` when unknown | `post-process` |
 | `JOURNAL_DIR` | `games/<id>/journal` | all |
 | `MODULE_SETTINGS_JSON` | global settings merged with the game's | all |
 | `UNIVERSE_ENV_FILE` | write `KEY=VALUE` lines here to add them to the game's environment, ahead of `launch.env` | `pre-launch` |

@@ -241,7 +241,13 @@ pub enum Cmd {
     SessionEnd { id: String, session: String },
     /// File a recording under the session (capture module's session-end hook)
     #[command(name = "recording-file", hide = true)]
-    RecordingFile { session: String, path: String },
+    RecordingFile {
+        session: String,
+        path: String,
+        /// JSON `{"started_at": RFC3339, "pauses": [[from, to]]}`: the recorder's clock against the wall's
+        #[arg(long)]
+        timeline: Option<String>,
+    },
     /// Add a journal entry to the session (journal module's post-process hook)
     #[command(name = "journal-add", hide = true)]
     JournalAdd { session: String, entry: String },
@@ -584,7 +590,10 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             };
             core.session_end(&id, &session, exit, None).await?;
         }
-        Cmd::RecordingFile { session, path } => println!("{}", core.file_recording(&session, &path).await?),
+        Cmd::RecordingFile { session, path, timeline } => {
+            let timeline = timeline.map(|p| std::fs::read_to_string(&p).map_err(crate::Error::from).and_then(|s| serde_json::from_str(&s).map_err(Into::into))).transpose()?;
+            println!("{}", core.file_recording(&session, &path, timeline.as_ref()).await?)
+        }
         Cmd::JournalAdd { session, entry } => core.add_entry(&session, serde_json::from_str(&entry).map_err(crate::Error::from)?).await?,
         Cmd::SessionWindow { wait } => {
             let window = match wait {
