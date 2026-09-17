@@ -80,9 +80,10 @@ fn dll_overrides_env(g: &crate::game::Game, env: &mut BTreeMap<String, String>) 
     }
 }
 
-pub fn proton_toggles(e: &crate::library::Effective) -> BTreeMap<String, String> {
+/// `rdna3`: the FSR 4 upgrade goes through Proton's RDNA 3 variant (its own DLL build and workarounds) instead of the generic one.
+pub fn proton_toggles(e: &crate::library::Effective, rdna3: bool) -> BTreeMap<String, String> {
     let mut env = BTreeMap::new();
-    for (on, key) in [(!e.esync, "PROTON_NO_ESYNC"), (!e.fsync, "PROTON_NO_FSYNC"), (!e.ntsync, "PROTON_NO_NTSYNC"), (e.wayland, "PROTON_ENABLE_WAYLAND"), (e.hdr, "PROTON_ENABLE_HDR"), (e.dlss_upgrade, "PROTON_DLSS_UPGRADE"), (e.fsr4_upgrade, "PROTON_FSR4_UPGRADE"), (e.xess_upgrade, "PROTON_XESS_UPGRADE"), (e.optiscaler, "PROTON_USE_OPTISCALER")] {
+    for (on, key) in [(!e.esync, "PROTON_NO_ESYNC"), (!e.fsync, "PROTON_NO_FSYNC"), (!e.ntsync, "PROTON_NO_NTSYNC"), (e.wayland, "PROTON_ENABLE_WAYLAND"), (e.hdr, "PROTON_ENABLE_HDR"), (e.dlss_upgrade, "PROTON_DLSS_UPGRADE"), (e.fsr4_upgrade && !rdna3, "PROTON_FSR4_UPGRADE"), (e.fsr4_upgrade && rdna3, "PROTON_FSR4_RDNA3_UPGRADE"), (e.xess_upgrade, "PROTON_XESS_UPGRADE"), (e.optiscaler, "PROTON_USE_OPTISCALER")] {
         if on {
             env.insert(key.into(), "1".into());
         }
@@ -107,7 +108,7 @@ fn proton_env(g: &crate::game::Game, r: &Resolved, config: &Config, env: &mut BT
     for key in ["PROTON_ENABLE_WAYLAND", "PROTON_ENABLE_HDR"] {
         env.remove(key);
     }
-    env.extend(proton_toggles(&r.effective));
+    env.extend(proton_toggles(&r.effective, crate::gpu::detected().is_some_and(|g| g.needs_fsr4_rdna3())));
     dll_overrides_env(g, env);
     Ok(())
 }
@@ -345,6 +346,21 @@ mod tests {
         assert_eq!(p.env["PROTON_ENABLE_HDR"], "1");
         assert_eq!(p.env["PROTON_DLSS_UPGRADE"], "1");
         assert!(!p.env.contains_key("PROTON_FSR4_UPGRADE"));
+    }
+
+    #[test]
+    fn fsr4_on_rdna3_takes_protons_rdna3_variant() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut e = crate::library::resolve(game(dir.path(), "Game.exe", ""), &Config::default(), &[]).effective;
+        e.fsr4_upgrade = true;
+        let rdna3 = proton_toggles(&e, true);
+        assert_eq!(rdna3["PROTON_FSR4_RDNA3_UPGRADE"], "1");
+        assert!(!rdna3.contains_key("PROTON_FSR4_UPGRADE"), "one variant or the other, never both");
+        let other = proton_toggles(&e, false);
+        assert_eq!(other["PROTON_FSR4_UPGRADE"], "1");
+        assert!(!other.contains_key("PROTON_FSR4_RDNA3_UPGRADE"));
+        e.fsr4_upgrade = false;
+        assert!(!proton_toggles(&e, true).contains_key("PROTON_FSR4_RDNA3_UPGRADE"), "the variant rides on the switch");
     }
 
     #[test]

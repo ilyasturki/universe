@@ -6,6 +6,7 @@ pub mod desktop;
 pub mod doctor;
 pub mod game;
 pub mod gamescope;
+pub mod gpu;
 pub mod host;
 pub mod inputplumber;
 pub mod journal;

@@ -311,6 +311,9 @@ impl Core {
         let screen: Option<universe::gamescope::Mode> = screen.map(typed).transpose()?;
         py_of(py, &self.core.launch_keys(&scope, screen).map_err(err)?)
     }
+    fn gpu(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.value_infallible(py, |c| c.gpu())
+    }
     fn doctor(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| c.doctor())
     }

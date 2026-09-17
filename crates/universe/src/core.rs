@@ -746,6 +746,11 @@ impl Core {
         Ok(crate::launch_keys::rows(crate::launch_keys::Scope::parse(scope)?, screen))
     }
 
+    /// The GPU the games run on (`gpu::Gpu::to_json`), `null` when none is known; probed once, vulkaninfo included.
+    pub async fn gpu(&self) -> serde_json::Value {
+        blocking(|| Ok(crate::gpu::detected().map(|g| g.to_json()).unwrap_or(serde_json::Value::Null))).await.unwrap_or(serde_json::Value::Null)
+    }
+
     pub async fn set_setting(&self, key: &str, value: &str) -> Result<()> {
         if key == "controller.volume_step" {
             crate::controller::volume_step_value(value)?;

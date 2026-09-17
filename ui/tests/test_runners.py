@@ -44,6 +44,34 @@ def test_runner_form_cards(api, fake):
     assert form.rows == [] and form.info == {}
 
 
+def test_runner_form_carries_its_launch_keys(api, fake):
+    form = api.screens.runner
+    form.load("proton")
+    cards = [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups]
+    assert cards == [("", ["exe", "args"]), ("", ["gamescope"]), ("Proton", ["launch.proton", "launch.wayland", "launch.hdr"]),
+                     ("Sync", ["launch.esync", "launch.fsync", "launch.ntsync"]),
+                     ("Upscaling", ["launch.dlss_upgrade", "launch.fsr4_upgrade", "launch.xess_upgrade", "launch.optiscaler"]), ("", ["add_file"])], \
+        "config.toml's [launch] keys tied to Proton, the global values"
+    groups = {g["title"]: g for g in form.groups}
+    assert groups["Upscaling"]["meta"] == "AMD Radeon RX 7900 GRE · RDNA 3" and groups["Upscaling"]["caps"] is True
+    rows = rows_by_key(form)
+    assert rows["launch.proton"]["value"] == "proton-ge" and rows["launch.proton"]["choices"] == ["proton-cachyos", "proton-em", "proton-ge"]
+    assert rows["launch.esync"]["value"] is True and rows["launch.esync"]["inherited"] is False
+    assert rows["launch.dlss_upgrade"]["detail"].endswith("NVIDIA GeForce RTX only. Not for your GPU.")
+    assert rows["launch.fsr4_upgrade"]["detail"].endswith("Works on your GPU.") and rows["launch.optiscaler"]["detail"].endswith("Works on your GPU.")
+    form.toggle(index_of(form, "launch.fsr4_upgrade"))
+    assert fake.config()["launch"]["fsr4_upgrade"] is True and rows_by_key(form)["launch.fsr4_upgrade"]["value"] is True
+    assert form.setValue(index_of(form, "launch.proton"), "proton-em") is True and fake.config()["launch"]["proton"] == "proton-em"
+    form.load("wine")
+    assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups][2] == ("Sync", ["launch.esync", "launch.fsync"]), "no NTSync, no Proton build on plain Wine"
+    assert [g["title"] for g in form.groups] == ["", "", "Sync", ""]
+    form.load("dolphin")
+    assert "launch.esync" not in rows_by_key(form)
+    fake.core._data["gpu"] = None
+    form.load("proton")
+    assert {g["title"]: g["meta"] for g in form.groups}["Upscaling"] == "" and rows_by_key(form)["launch.dlss_upgrade"]["detail"].endswith("RTX only.")
+
+
 def test_runner_form_writes_through(api, fake):
     form = api.screens.runner
     form.load("dolphin")
@@ -89,7 +117,7 @@ def test_game_settings_launch_group_by_runner(api, fake):
     form = api.screens.gameSettings
     form.load("mini-metro")
     assert launch_keys(form) == ["launch.runner", "launch.exe", "launch.runner_exe", "launch.options.fullscreen", "launch.options.inputplumber",
-                                 "launch.mangohud", "launch.fps_limit", "launch.pause_on_home", "launch.wrapper", "launch.args", "launch.working_dir"]
+                                 "launch.wrapper", "launch.args", "launch.working_dir"]
     rows = rows_by_key(form)
     assert rows["launch.runner"]["value"] == "Eden" and rows["launch.runner"]["icon"] == "assets/runners/eden.svg"
     assert rows["launch.runner"]["choices"][:4] == ["Proton", "Wine", "Linux", "Dolphin"]
@@ -106,9 +134,10 @@ def test_game_settings_launch_group_by_runner(api, fake):
     assert rows["platform"]["choices"] == ["Nintendo GameCube", "Nintendo Wii"]
 
     form.load("the-technomancer")
-    assert launch_keys(form) == ["launch.runner", "launch.exe", "launch.proton", "launch.esync", "launch.fsync", "launch.ntsync", "launch.wayland", "launch.hdr",
-                                 "launch.dlss_upgrade", "launch.fsr4_upgrade", "launch.xess_upgrade", "launch.optiscaler", "launch.prefix",
-                                 "launch.mangohud", "launch.fps_limit", "launch.pause_on_home", "launch.wrapper", "launch.args", "launch.working_dir"]
+    assert launch_keys(form) == ["launch.runner", "launch.exe", "launch.wrapper", "launch.args", "launch.working_dir"]
+    assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups if g["title"] in ("Proton", "Sync", "Upscaling")] == [
+        ("Proton", ["launch.proton", "launch.wayland", "launch.hdr", "launch.prefix"]), ("Sync", ["launch.esync", "launch.fsync", "launch.ntsync"]),
+        ("Upscaling", ["launch.dlss_upgrade", "launch.fsr4_upgrade", "launch.xess_upgrade", "launch.optiscaler"])]
     rows = rows_by_key(form)
     assert rows["launch.runner"]["value"] == "Proton" and rows["launch.exe"]["label"] == "Program"
     assert rows["launch.wayland"]["value"] is True and rows["launch.wayland"]["inherited"] is True

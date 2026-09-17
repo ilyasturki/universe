@@ -242,7 +242,9 @@ warning, no limit; `doctor` checks for it unless the limit is `none`.
 Proton reads: `esync`/`fsync`/`ntsync` off are `PROTON_NO_ESYNC`/`_FSYNC`/`_NTSYNC=1`; `wayland`,
 `hdr`, `dlss_upgrade`, `fsr4_upgrade`, `xess_upgrade` and `optiscaler` on are
 `PROTON_ENABLE_WAYLAND`, `PROTON_ENABLE_HDR`, `PROTON_DLSS_UPGRADE`, `PROTON_FSR4_UPGRADE`,
-`PROTON_XESS_UPGRADE`, `PROTON_USE_OPTISCALER=1`. A switch off removes the same name from
+`PROTON_XESS_UPGRADE`, `PROTON_USE_OPTISCALER=1`; on an RDNA 3 card (`gpu()`, below) `fsr4_upgrade`
+is `PROTON_FSR4_RDNA3_UPGRADE=1` instead, Proton's variant for it (its own DLL build and
+workarounds; the generic one does nothing there). A switch off removes the same name from
 `[launch.env]`; `launch.env` on the game still wins. `launch.dll_overrides` (`d3d11 = "n,b"`, keys
 without `.dll`) is `WINEDLLOVERRIDES`. `wine` runs `<launch.runner_exe or wine> <exe>` with
 `WINEPREFIX`, `WINEARCH` (`launch.arch`), `WINEESYNC`/`WINEFSYNC` as `1`/`0` and
@@ -434,6 +436,7 @@ set when the manifest names a `choices_exec`: `<module dir>/<choices_exec> <key>
 | `settings()` | `settings()` | `universe config get` | resolved `config.toml`: absolute paths, defaults applied |
 | `set_setting(key, value)` | `set_setting(key, value)` | `universe config set <key> <value>` | dotted `config.toml` key (`launch.proton`, `paths.recordings_root`, `desktop.profile`); a `launch.*` key is validated against the catalogue, an unknown or game-only one refused |
 | `launch_keys(scope, screen)` | `launch_keys(scope, screen)` | `universe launch-keys [--json]` | the launch keys of `scope` (`game`, `global`, `both`) that have a settings row: `[{key, type, default, choices, label, section, scope, runners, description}]`, `type` one of bool, int, string, path, list, enum, resolution, refresh, fps, proton; `screen` (a `screen_mode`, or none) sizes the resolution, refresh and fps choices; `runners` empty means every runner. The maps (`env`, `dll_overrides`, `options`) and the rowless keys (`runner`, `exe`, `umu_run`…) are settable but not listed; the CLI's table prints all of them |
+| `gpu()` | `gpu()` | — | the GPU the games run on: `{vendor (amd, nvidia, intel), name, rdna (rdna1…rdna4 or null), label, fits: {dlss_upgrade, fsr4_upgrade, xess_upgrade, optiscaler}}`, `fits` whether each upscaler upgrade does anything on it; `null` when sysfs shows no card of a known vendor. Vendor and AMD generation come from `/sys/class/drm` (amdgpu's `ip_discovery` GC major: 10 RDNA 1/2, 11 RDNA 3, 12 RDNA 4), the name and the discrete/integrated pick from `vulkaninfo --summary` when it is on PATH, else the card with the most VRAM (an NVIDIA card, which reports none, beats an iGPU). Probed once per process |
 | `screen_mode(screen)` | `screen_mode(screen)` | `universe screen-mode [<screen>] [--json]` | `{screen, width, height, refresh}`: the connector's current mode as gamescope is told it (see Gamescope), `screen=""` for the profile default; zeros when none can be read |
 | — | `version()`, `data_home()`, `state_home()` | `universe --version` | |
 
@@ -514,7 +517,7 @@ ntsync = true                        # a sync mode off is PROTON_NO_*=1 (WINEESY
 wayland = true                       # PROTON_ENABLE_WAYLAND=1; dropped inside gamescope unless --expose-wayland
 hdr = false                          # PROTON_ENABLE_HDR=1, and --hdr-enabled on gamescope
 dlss_upgrade = false                 # PROTON_DLSS_UPGRADE, PROTON_FSR4_UPGRADE, PROTON_XESS_UPGRADE, PROTON_USE_OPTISCALER
-fsr4_upgrade = false
+fsr4_upgrade = false                 # on RDNA 3 PROTON_FSR4_RDNA3_UPGRADE instead
 xess_upgrade = false
 optiscaler = false
 mangohud = true                      # --mangoapp inside gamescope, MANGOHUD=1 without

@@ -19,6 +19,10 @@ FocusScope {
 
     readonly property var currentRow: index >= 0 && index < rows.length ? rows[index] : null
     readonly property bool cursorShown: activeFocus || dimmed
+    // The focused row's detail, up to two lines under the cards; an info row prints its own inline.
+    readonly property string caption: currentRow && currentRow.type !== "info" && currentRow.detail ? currentRow.detail : ""
+    readonly property bool hasCaptions: rows.some(function(r) { return r.type !== "info" && r.detail; })
+    readonly property real captionHeight: hasCaptions ? Theme.dp(compact ? 78 : 86) : 0
 
     readonly property real gap: Theme.dp(compact ? 24 : 32)
     readonly property real pad: Theme.dp(compact ? 6 : 8)
@@ -303,10 +307,33 @@ FocusScope {
         font.pixelSize: Theme.dp(26)
     }
 
+    Text {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.leftMargin: Theme.dp(18)
+        anchors.rightMargin: Theme.dp(18)
+        height: cards.captionHeight
+        visible: cards.hasCaptions
+        verticalAlignment: Text.AlignTop
+        topPadding: Theme.dp(18)
+        wrapMode: Text.WordWrap
+        maximumLineCount: 2
+        text: cards.caption
+        color: Theme.textSecondary
+        font.family: Theme.sans
+        font.pixelSize: Theme.dp(cards.compact ? 19 : 21)
+        elide: Text.ElideRight
+        opacity: cards.cursorShown && text !== "" ? 1.0 : 0.0
+
+        Behavior on opacity { Ease { duration: Theme.durQuick } }
+    }
+
     Flickable {
         id: view
 
         anchors.fill: parent
+        anchors.bottomMargin: cards.captionHeight
         contentWidth: width
         contentHeight: cards.layout.height
         interactive: false

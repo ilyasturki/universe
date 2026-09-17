@@ -304,18 +304,31 @@ unless it already holds it, so the jump finds them warm.
 
 `api.screens.launch` is Settings › Launch, what every game starts with, each row a `config.toml`
 key written through `set_setting`. The rows are the core's launch-key catalogue
-(`launch_keys(scope, screen)`, `client.launchKeys`): each entry's `section` is the card —
-Gamescope (the switch, the fields, the raw arguments), Overlay and cursor (MangoHud, the frame
-rate limit, then `desktop.hide_cursor` added by the screen), Proton — its `label` and `description`
-(the row's `detail`) come with it, and its `choices` are sized by the screen the window is on
-(`screen_mode`: `auto`, the screen's mode, the standard heights below it at its aspect ratio; the
-rates below its own). `screens/settings.py`'s `launch_row` is the presentation over an entry: an
-`enum` or `int` with choices lists a `default` choice that clears the key (through
-`choiceValues`), a `proton` entry lists the config's `[proton]` names, `fps_limit`'s `auto`
-displays as `auto · 60`, the rate it stands for; the card's meta is the screen (`screen`:
-`DP-1 3840×2160 @ 60 Hz`). The game settings page reads the same catalogue with scope `game`,
-filtered by the runner's kind (`runners`), its Gamescope entries in their own group and the rest in
-Launch, a `both` key inherited from the global value until set. `load()` reads the config again.
+(`launch_keys(scope, screen)`, `client.launchKeys`) in the catalogue's order, the keys tied to no
+runner (`runners` empty): each entry's `section` is the card — Display (the gamescope switch,
+resolution, refresh rate, adaptive sync; the card's meta is the screen, `screen`: `DP-1 3840×2160 @
+60 Hz`), Overlay (MangoHud, the frame rate limit, pause on HOME, then `desktop.hide_cursor` added by
+the screen), Advanced (scaler, filter, sharpness, the raw gamescope arguments) — beginner first,
+expert last. Its `label` and `description` (the row's `detail`) come with it, and its `choices` are
+sized by the screen the window is on (`screen_mode`: `auto`, the screen's mode, the standard heights
+below it at its aspect ratio; the rates below its own). `screens/settings.py`'s `launch_row` is the
+presentation over an entry: an `enum` or `int` with choices lists a `default` choice that clears the
+key (through `choiceValues`), a `proton` entry lists the config's `[proton]` names, `fps_limit`'s
+`auto` displays as `auto · 60`, the rate it stands for. The keys tied to a runner (`proton`, the
+sync modes, Wayland, HDR, the upscaler upgrades) are set on that runner's page instead (below).
+`load()` reads the config again.
+
+The game settings page reads the same catalogue with scope `game`, filtered by the runner's kind
+(`runners`), and mirrors the cards — Display, Overlay, Advanced — then the runner's own, named
+after it (Proton: the build, Wayland, HDR, the Wine prefix; Sync; Upscaling), then Launch (the
+runner picker, the program, an emulator's options, the wrapper, arguments and working directory);
+a `both` key inherited from the global value until set.
+
+Upscaling's meta names the GPU (`client.gpu()`: `label`, `AMD Radeon RX 7900 GRE · RDNA 3`) and each
+of its rows ends its `detail` with `Works on your GPU.` or `Not for your GPU.` (`fits`), nothing when
+no GPU is known. In Reprise, `ui/SettingsCards.qml` shows the focused row's `detail` as a caption
+under the cards (two lines, reserved whenever a row has one); the Switch 2 look prints it under
+every row.
 
 `api.screens.modules` is Settings › Modules: one `action` row per module (`module`, its name,
 `value` whether it runs, `display` On / Off / Unavailable, `meta` version and kind, `warning`
@@ -338,9 +351,11 @@ by name; the runners whose program was not found come last, in a dimmed "Not fou
 tab (`theme.qml` `openSub`, the same loader as the game's sub pages), on `api.screens.runner`:
 `load(id)` builds its head (`info`: name, platforms and where its program was found, a warning)
 and cards for the program (`exe`, a path; the detected one shown as the value, inherited, its
-origin as the detail) and arguments, each option by
-its type, and an "Add a game…" action. `setValue(index, value)` writes through `set_runner_setting`; on
-the add row it keeps the picked file and `pendingTitle()` proposes a title from it, which
+origin as the detail) and arguments, the gamescope switch, then — for Proton and Wine — the launch
+keys tied to its kind (`launchKeys("global")` filtered by `runners`, cards Proton, Sync, Upscaling as
+on the game page, the global `[launch]` values written through `set_setting`), each option by
+its type, and an "Add a game…" action. `setValue(index, value)` writes through `set_runner_setting`
+(a `launch.*` row through `set_setting`); on the add row it keeps the picked file and `pendingTitle()` proposes a title from it, which
 `addGame(title)` sends to `add_game`. Back on the tab, the list reloads and the cursor finds
 the runner again. The Switch 2 look has the same list as System Settings › Runners and the same
 page as `switch2/pages/FormPage.qml`, pushed on its stack. The game settings page's Launch group follows the runner: a Runner picker (names

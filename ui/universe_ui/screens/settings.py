@@ -35,9 +35,11 @@ def _group(title, rows, meta="", warning="", caps=False, control=-1, off=False):
 
 
 def _add(rows, groups, section, row, **group):
-    if not groups or groups[-1]["title"] != section:
-        groups.append(_group(section, [], **group))
-    groups[-1]["rows"].append(len(rows))
+    target = next((g for g in groups if g["title"] == section), None)
+    if target is None:
+        target = _group(section, [], **group)
+        groups.append(target)
+    target["rows"].append(len(rows))
     rows.append(row)
 
 
@@ -80,6 +82,14 @@ def screen_label(mode):
     return f"{w}×{h}" + (f" @ {hz} Hz" if hz else "")
 
 
+def _card_meta(section, mode, gpu):
+    if section == "Display":
+        return " ".join(p for p in (str(mode.get("screen") or ""), screen_label(mode)) if p)
+    if section == UPSCALING:
+        return str(gpu.get("label") or "")
+    return ""
+
+
 def auto_rate(mode, gamescope, gamescope_refresh):
     if gamescope and str(gamescope_refresh or "").isdigit():
         return int(gamescope_refresh)
@@ -94,7 +104,17 @@ def proton_choices(config):
     return choices
 
 
-def launch_row(section, spec, value, inherited=False, protons=(), auto_hz=0):
+UPSCALING = "Upscaling"
+
+
+def gpu_note(spec, gpu):
+    fit = (gpu.get("fits") or {}).get(spec["key"])
+    if fit is None:
+        return spec["description"]
+    return spec["description"] + (" Works on your GPU." if fit else " Not for your GPU.")
+
+
+def launch_row(section, spec, value, inherited=False, protons=(), auto_hz=0, gpu=None):
     kind = ROW_TYPES.get(spec["type"], spec["type"])
     choices, values = [str(c) for c in spec["choices"]], None
     if spec["type"] in ("enum", "int") and choices:
@@ -107,7 +127,7 @@ def launch_row(section, spec, value, inherited=False, protons=(), auto_hz=0):
         value = "default" if value in (None, "") else str(value)
     elif choices and value is not None:
         value = str(value)
-    row = _row(section, "launch." + spec["key"], spec["label"], kind, value, choices, detail=spec["description"], inherited=inherited)
+    row = _row(section, "launch." + spec["key"], spec["label"], kind, value, choices, detail=gpu_note(spec, gpu or {}), inherited=inherited)
     if values:
         row["choiceValues"] = values
     if spec["type"] == "fps" and value == "auto" and auto_hz:
@@ -186,6 +206,8 @@ class RowsForm(QObject):
     count = Property(int, lambda self: len(self._rows), notify=rowsChanged)
 
 
+HIDE_CURSOR = "Hide the desktop cursor while the game runs."
+
 CORE_ROWS = [
     ("Desktop and library", "desktop.hide_cursor", "Hide the cursor while playing", "bool"),
     ("Desktop and library", "favorite", "Favourite", "bool"),
@@ -215,11 +237,12 @@ class GameSettingsForm(RowsForm):
         self._title = str(game.get("title") or game_id)
         self.titleChanged.emit()
         effective = game.get("effective") or {}
-        rows, runner_kind = self._launch_rows(game, effective)
-        groups = [_group("Launch", range(len(rows)), caps=True)]
+        launch, runner_name, runner_kind = self._launch_rows(game, effective)
+        rows, groups = [], []
         mode = self._screen_mode()
         protons = proton_choices(config)
         hz = auto_rate(mode, effective.get("gamescope", True), effective.get("gamescope_refresh"))
+        gpu = self._client.gpu()
         for spec in self._client.launchKeys("game", mode):
             if spec["runners"] and runner_kind not in spec["runners"]:
                 continue
@@ -227,8 +250,13 @@ class GameSettingsForm(RowsForm):
             value, inherited = own, False
             if own in (None, "") and spec["scope"] == "both":
                 value, inherited = effective.get(spec["key"]), True
-            section = "Gamescope" if spec["section"] == "Gamescope" else "Launch"
-            _add(rows, groups, section, launch_row(section, spec, value, inherited, protons, hz), caps=True)
+            section = runner_name if spec["section"] == "Proton" else spec["section"]
+            if section == "Launch":
+                launch.append(launch_row(section, spec, value, inherited, protons, hz))
+                continue
+            _add(rows, groups, section, launch_row(section, spec, value, inherited, protons, hz, gpu), caps=True, meta=_card_meta(section, mode, gpu))
+        for row in launch:
+            _add(rows, groups, "Launch", row, caps=True)
         for section, key, label, kind in CORE_ROWS:
             value = _dig(game, key)
             inherited = False
@@ -236,7 +264,7 @@ class GameSettingsForm(RowsForm):
                 value, inherited = effective.get("hide_cursor"), True
             if kind == "bool":
                 value = bool(value)
-            _add(rows, groups, section, _row(section, key, label, kind, value, inherited=inherited), caps=True)
+            _add(rows, groups, section, _row(section, key, label, kind, value, inherited=inherited, detail=HIDE_CURSOR if key == "desktop.hide_cursor" else ""), caps=True)
         modules = {m["id"]: m for m in self._client.modules()}
         for module_id, values in self._client.settings(game_id).items():
             module = modules.get(module_id) or {}
@@ -281,7 +309,7 @@ class GameSettingsForm(RowsForm):
                     value = bool(value)
                 rows.append(_row("Launch", f"launch.options.{key}", option.get("label", key), option.get("type", "string"),
                                  value, option.get("choices"), inherited=key not in own))
-        return rows, kind
+        return rows, spec["name"], kind
 
     def _write(self, row, payload):
         if row["module"]:

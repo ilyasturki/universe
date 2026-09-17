@@ -437,7 +437,7 @@ pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
         };
         let r = crate::library::resolve_with(game.clone(), config, &[], &mut located);
         let mut env_for_diff = r.effective.env.clone();
-        env_for_diff.extend(crate::launcher::proton_toggles(&r.effective));
+        env_for_diff.extend(crate::launcher::proton_toggles(&r.effective, false));
         if r.effective.mangohud {
             env_for_diff.insert("MANGOHUD".into(), "1".into());
         }

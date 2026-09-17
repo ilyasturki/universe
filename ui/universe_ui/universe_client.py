@@ -481,6 +481,10 @@ class CoreClient(QObject):
     def launchKeys(self, scope, screen):
         return self._guarded([], self._core.launch_keys, scope, dict(screen) if screen else None)
 
+    @Slot(result="QVariant")
+    def gpu(self):
+        return self._guarded(None, self._core.gpu) or {}
+
     @Slot(result=str)
     def version(self):
         return self._guarded("", self._core.version)

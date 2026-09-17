@@ -1,149 +1,65 @@
 [
   {
-    "key": "proton",
-    "type": "proton",
-    "default": "proton-ge",
-    "choices": [],
-    "label": "Proton",
-    "section": "Proton",
-    "scope": "both",
-    "runners": [
-      "proton"
-    ],
-    "description": "The Proton build umu-run starts the game with."
-  },
-  {
-    "key": "esync",
+    "key": "gamescope",
     "type": "bool",
     "default": true,
     "choices": [],
-    "label": "Esync",
-    "section": "Proton",
+    "label": "Gamescope",
+    "section": "Display",
     "scope": "both",
-    "runners": [
-      "proton",
-      "wine"
-    ],
-    "description": "Wine's eventfd synchronisation; faster, on for most games."
+    "runners": [],
+    "description": "Run the game in a window of its own, at the resolution and refresh rate below; a launcher already inside gamescope puts it on that one instead."
   },
   {
-    "key": "fsync",
-    "type": "bool",
-    "default": true,
-    "choices": [],
-    "label": "Fsync",
-    "section": "Proton",
-    "scope": "both",
-    "runners": [
-      "proton",
-      "wine"
+    "key": "gamescope_resolution",
+    "type": "resolution",
+    "default": "auto",
+    "choices": [
+      "auto",
+      "1920x1080",
+      "1280x720"
     ],
-    "description": "Futex synchronisation; needs a kernel with futex2, faster than esync."
+    "label": "Resolution",
+    "section": "Display",
+    "scope": "both",
+    "runners": [],
+    "description": "What the game renders at; auto is the screen's own. A lower one is upscaled to the screen, lighter on the GPU."
   },
   {
-    "key": "ntsync",
-    "type": "bool",
-    "default": true,
-    "choices": [],
-    "label": "NTSync",
-    "section": "Proton",
-    "scope": "both",
-    "runners": [
-      "proton"
+    "key": "gamescope_refresh",
+    "type": "refresh",
+    "default": "auto",
+    "choices": [
+      "auto",
+      "240",
+      "165",
+      "144",
+      "120",
+      "100",
+      "90",
+      "75",
+      "60",
+      "50",
+      "48",
+      "40",
+      "30"
     ],
-    "description": "The kernel's NT synchronisation driver; needs Linux 6.14 and a Proton built for it."
+    "label": "Refresh rate",
+    "section": "Display",
+    "scope": "both",
+    "runners": [],
+    "description": "The refresh rate the game sees; auto is the screen's own."
   },
   {
-    "key": "wayland",
-    "type": "bool",
-    "default": true,
-    "choices": [],
-    "label": "Wayland",
-    "section": "Proton",
-    "scope": "both",
-    "runners": [
-      "proton"
-    ],
-    "description": "Proton's own Wayland driver instead of Xwayland; dropped inside gamescope unless it exposes Wayland."
-  },
-  {
-    "key": "hdr",
+    "key": "gamescope_adaptive_sync",
     "type": "bool",
     "default": false,
     "choices": [],
-    "label": "HDR",
-    "section": "Proton",
+    "label": "Adaptive sync",
+    "section": "Display",
     "scope": "both",
-    "runners": [
-      "proton"
-    ],
-    "description": "HDR output: Proton's PROTON_ENABLE_HDR, and --hdr-enabled on gamescope."
-  },
-  {
-    "key": "dlss_upgrade",
-    "type": "bool",
-    "default": false,
-    "choices": [],
-    "label": "DLSS upgrade",
-    "section": "Proton",
-    "scope": "both",
-    "runners": [
-      "proton"
-    ],
-    "description": "Swap the game's DLSS for the latest the driver ships."
-  },
-  {
-    "key": "fsr4_upgrade",
-    "type": "bool",
-    "default": false,
-    "choices": [],
-    "label": "FSR 4 upgrade",
-    "section": "Proton",
-    "scope": "both",
-    "runners": [
-      "proton"
-    ],
-    "description": "Swap the game's FSR for FSR 4; RDNA 4, or RDNA 3 with Proton's override."
-  },
-  {
-    "key": "xess_upgrade",
-    "type": "bool",
-    "default": false,
-    "choices": [],
-    "label": "XeSS upgrade",
-    "section": "Proton",
-    "scope": "both",
-    "runners": [
-      "proton"
-    ],
-    "description": "Swap the game's XeSS for the latest."
-  },
-  {
-    "key": "optiscaler",
-    "type": "bool",
-    "default": false,
-    "choices": [],
-    "label": "OptiScaler",
-    "section": "Proton",
-    "scope": "both",
-    "runners": [
-      "proton"
-    ],
-    "description": "Run OptiScaler: FSR 4 or XeSS where the game only offers DLSS."
-  },
-  {
-    "key": "prefix",
-    "type": "path",
-    "default": "",
-    "choices": [],
-    "label": "Wine prefix",
-    "section": "Proton",
-    "scope": "game",
-    "runners": [
-      "proton",
-      "wine"
-    ],
-    "description": "The Wine prefix the game runs in; empty: <prefixes_root>/<id>."
+    "runners": [],
+    "description": "Variable refresh rate (FreeSync, G-Sync) when the screen supports it: no tearing, no stutter below the refresh rate."
   },
   {
     "key": "mangohud",
@@ -151,10 +67,10 @@
     "default": true,
     "choices": [],
     "label": "MangoHud",
-    "section": "Overlay and cursor",
+    "section": "Overlay",
     "scope": "both",
     "runners": [],
-    "description": "Show MangoHud's overlay in the game."
+    "description": "Show MangoHud's overlay in the game: frame rate, frame time, GPU and CPU load."
   },
   {
     "key": "fps_limit",
@@ -177,7 +93,7 @@
       "30"
     ],
     "label": "Frame rate limit",
-    "section": "Overlay and cursor",
+    "section": "Overlay",
     "scope": "both",
     "runners": [],
     "description": "MangoHud holds the game to this many frames per second, overlay or not; auto is the refresh rate the game sees."
@@ -188,10 +104,73 @@
     "default": true,
     "choices": [],
     "label": "Pause on HOME",
-    "section": "Overlay and cursor",
+    "section": "Overlay",
     "scope": "both",
     "runners": [],
     "description": "Freeze the game while the launcher covers it, so the pad drives the menu alone; it runs again on Resume. Off for a game that must keep running (online play)."
+  },
+  {
+    "key": "gamescope_scaler",
+    "type": "enum",
+    "default": "",
+    "choices": [
+      "auto",
+      "integer",
+      "fit",
+      "fill",
+      "stretch"
+    ],
+    "label": "Scaler",
+    "section": "Advanced",
+    "scope": "both",
+    "runners": [],
+    "description": "How a smaller picture fills the screen: integer keeps pixels whole, fit keeps the aspect, fill and stretch do not."
+  },
+  {
+    "key": "gamescope_filter",
+    "type": "enum",
+    "default": "",
+    "choices": [
+      "linear",
+      "nearest",
+      "fsr",
+      "nis",
+      "pixel"
+    ],
+    "label": "Filter",
+    "section": "Advanced",
+    "scope": "both",
+    "runners": [],
+    "description": "The upscaling filter: fsr and nis sharpen, nearest and pixel keep pixel art crisp."
+  },
+  {
+    "key": "gamescope_sharpness",
+    "type": "int",
+    "default": null,
+    "choices": [
+      "0",
+      "2",
+      "5",
+      "10",
+      "15",
+      "20"
+    ],
+    "label": "Sharpness",
+    "section": "Advanced",
+    "scope": "both",
+    "runners": [],
+    "description": "For fsr and nis: 0 is sharpest, 20 softest."
+  },
+  {
+    "key": "gamescope_args",
+    "type": "string",
+    "default": "",
+    "choices": [],
+    "label": "Gamescope arguments",
+    "section": "Advanced",
+    "scope": "both",
+    "runners": [],
+    "description": "Extra gamescope flags, after and over the fields above."
   },
   {
     "key": "wrapper",
@@ -227,128 +206,149 @@
     "description": "The folder the game starts in."
   },
   {
-    "key": "gamescope",
+    "key": "proton",
+    "type": "proton",
+    "default": "proton-ge",
+    "choices": [],
+    "label": "Proton build",
+    "section": "Proton",
+    "scope": "both",
+    "runners": [
+      "proton"
+    ],
+    "description": "The Proton build umu-run starts the game with."
+  },
+  {
+    "key": "wayland",
     "type": "bool",
     "default": true,
     "choices": [],
-    "label": "Gamescope",
-    "section": "Gamescope",
+    "label": "Wayland",
+    "section": "Proton",
     "scope": "both",
-    "runners": [],
-    "description": "Run the game inside a gamescope of its own; a launcher already inside gamescope puts it on that one instead."
-  },
-  {
-    "key": "gamescope_resolution",
-    "type": "resolution",
-    "default": "auto",
-    "choices": [
-      "auto",
-      "1920x1080",
-      "1280x720"
+    "runners": [
+      "proton"
     ],
-    "label": "Resolution",
-    "section": "Gamescope",
-    "scope": "both",
-    "runners": [],
-    "description": "What the game renders at; auto is the screen's own. Lower is upscaled to the screen."
+    "description": "Proton's own Wayland driver instead of Xwayland: lower latency, proper scaling; dropped inside gamescope unless it exposes Wayland."
   },
   {
-    "key": "gamescope_refresh",
-    "type": "refresh",
-    "default": "auto",
-    "choices": [
-      "auto",
-      "240",
-      "165",
-      "144",
-      "120",
-      "100",
-      "90",
-      "75",
-      "60",
-      "50",
-      "48",
-      "40",
-      "30"
-    ],
-    "label": "Refresh rate",
-    "section": "Gamescope",
-    "scope": "both",
-    "runners": [],
-    "description": "The refresh rate the game sees; auto is the screen's own."
-  },
-  {
-    "key": "gamescope_scaler",
-    "type": "enum",
-    "default": "",
-    "choices": [
-      "auto",
-      "integer",
-      "fit",
-      "fill",
-      "stretch"
-    ],
-    "label": "Scaler",
-    "section": "Gamescope",
-    "scope": "both",
-    "runners": [],
-    "description": "How a smaller picture fills the screen: integer keeps pixels whole, fit keeps the aspect, fill and stretch do not."
-  },
-  {
-    "key": "gamescope_filter",
-    "type": "enum",
-    "default": "",
-    "choices": [
-      "linear",
-      "nearest",
-      "fsr",
-      "nis",
-      "pixel"
-    ],
-    "label": "Filter",
-    "section": "Gamescope",
-    "scope": "both",
-    "runners": [],
-    "description": "The upscaling filter: fsr and nis sharpen, nearest and pixel keep pixel art crisp."
-  },
-  {
-    "key": "gamescope_sharpness",
-    "type": "int",
-    "default": null,
-    "choices": [
-      "0",
-      "2",
-      "5",
-      "10",
-      "15",
-      "20"
-    ],
-    "label": "Sharpness",
-    "section": "Gamescope",
-    "scope": "both",
-    "runners": [],
-    "description": "For fsr and nis: 0 is sharpest, 20 softest."
-  },
-  {
-    "key": "gamescope_adaptive_sync",
+    "key": "hdr",
     "type": "bool",
     "default": false,
     "choices": [],
-    "label": "Adaptive sync",
-    "section": "Gamescope",
+    "label": "HDR",
+    "section": "Proton",
     "scope": "both",
-    "runners": [],
-    "description": "Variable refresh rate when the screen supports it."
+    "runners": [
+      "proton"
+    ],
+    "description": "HDR output on an HDR screen: Proton's PROTON_ENABLE_HDR, and --hdr-enabled on gamescope."
   },
   {
-    "key": "gamescope_args",
-    "type": "string",
+    "key": "prefix",
+    "type": "path",
     "default": "",
     "choices": [],
-    "label": "Arguments",
-    "section": "Gamescope",
+    "label": "Wine prefix",
+    "section": "Proton",
+    "scope": "game",
+    "runners": [
+      "proton",
+      "wine"
+    ],
+    "description": "The Wine prefix the game runs in; empty: <prefixes_root>/<id>."
+  },
+  {
+    "key": "esync",
+    "type": "bool",
+    "default": true,
+    "choices": [],
+    "label": "Esync",
+    "section": "Sync",
     "scope": "both",
-    "runners": [],
-    "description": "Extra gamescope flags, after and over the fields above."
+    "runners": [
+      "proton",
+      "wine"
+    ],
+    "description": "Faster thread synchronisation through eventfd; on for most games, off if one hangs or stutters."
+  },
+  {
+    "key": "fsync",
+    "type": "bool",
+    "default": true,
+    "choices": [],
+    "label": "Fsync",
+    "section": "Sync",
+    "scope": "both",
+    "runners": [
+      "proton",
+      "wine"
+    ],
+    "description": "Faster still, through the kernel's futex2; takes over from esync when the kernel has it."
+  },
+  {
+    "key": "ntsync",
+    "type": "bool",
+    "default": true,
+    "choices": [],
+    "label": "NTSync",
+    "section": "Sync",
+    "scope": "both",
+    "runners": [
+      "proton"
+    ],
+    "description": "The kernel's NT synchronisation driver, the fastest; needs Linux 6.14 and a Proton built for it, else falls back."
+  },
+  {
+    "key": "dlss_upgrade",
+    "type": "bool",
+    "default": false,
+    "choices": [],
+    "label": "DLSS upgrade",
+    "section": "Upscaling",
+    "scope": "both",
+    "runners": [
+      "proton"
+    ],
+    "description": "Games with DLSS use the newest DLSS from the NVIDIA driver instead of the one they ship. NVIDIA GeForce RTX only."
+  },
+  {
+    "key": "fsr4_upgrade",
+    "type": "bool",
+    "default": false,
+    "choices": [],
+    "label": "FSR 4 upgrade",
+    "section": "Upscaling",
+    "scope": "both",
+    "runners": [
+      "proton"
+    ],
+    "description": "Games with FSR 3.1 use FSR 4 instead, sharper and cleaner. Radeon RX 9000 (RDNA 4), or RX 7000 (RDNA 3) at a cost, through Proton's RDNA 3 variant picked for it."
+  },
+  {
+    "key": "xess_upgrade",
+    "type": "bool",
+    "default": false,
+    "choices": [],
+    "label": "XeSS upgrade",
+    "section": "Upscaling",
+    "scope": "both",
+    "runners": [
+      "proton"
+    ],
+    "description": "Games with XeSS use the newest XeSS instead of the one they ship. Any GPU; best on Intel Arc."
+  },
+  {
+    "key": "optiscaler",
+    "type": "bool",
+    "default": false,
+    "choices": [],
+    "label": "OptiScaler",
+    "section": "Upscaling",
+    "scope": "both",
+    "runners": [
+      "proton"
+    ],
+    "description": "Adds FSR 4 or XeSS to games that only offer DLSS, through OptiScaler. For AMD and Intel; needs a Proton that ships it (CachyOS, GE)."
   }
 ]

@@ -26,7 +26,7 @@ FocusScope {
 
     readonly property var content: Forms.grouped(form.groups, form.rows, function(src, i) {
         var r = Object.assign({}, runner ? src : Details.withDetail(src, src.module), { form: i });
-        if (runner)
+        if (runner && src.key === "exe")
             r.detail = "";
         else if (src.key === "enabled")
             r.detail = info.warning ? "Cannot be enabled: " + info.warning.replace(/^unavailable:?\s*/, "") : Details.enabledSentence(info.name, info.kind ? info.kind.join(" · ") : "");

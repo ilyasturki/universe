@@ -25,7 +25,7 @@ class Screens(QObject):
         self._paths = PathBrowser(client, self)
         self._controller = ControllerScreen(client, memory, power, self)
         self._runners = RunnersForm(client, self)
-        self._runner = RunnerForm(client, self)
+        self._runner = RunnerForm(client, screen_mode, self)
         self._artwork = ArtworkForm(client, self)
         self._artworkOverview = ArtworkOverview(client, self)
 

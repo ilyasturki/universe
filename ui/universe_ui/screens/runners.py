@@ -3,7 +3,7 @@ import re
 
 from PySide6.QtCore import Property, Signal, Slot
 
-from .settings import RowsForm, _group, _row, _to_bus, runner_logo
+from .settings import RowsForm, _add, _card_meta, _group, _row, _to_bus, auto_rate, launch_row, proton_choices, runner_logo
 
 
 def suggested_title(path):
@@ -53,8 +53,9 @@ class RunnerForm(RowsForm):
     message = Signal(str)
     runnerChanged = Signal()
 
-    def __init__(self, client, parent=None):
+    def __init__(self, client, screen_mode=lambda: {}, parent=None):
         super().__init__(client, parent)
+        self._screen_mode = screen_mode
         self._runner = {}
         self._pending = None
 
@@ -85,10 +86,25 @@ class RunnerForm(RowsForm):
             rows.append(_row(name, "exe", "Program", "path", own or found, module=ident, detail=origin, inherited=not own and bool(found)))
             rows.append(_row(name, "args", "Arguments", "string", runner.get("args") or "", module=ident))
             groups.append(_group("", list(range(len(rows)))))
+        config = self._client.config()
+        launch = config.get("launch") or {}
         own = runner.get("gamescope")
-        default = bool((self._client.config().get("launch") or {}).get("gamescope", True))
-        rows.append(_row(name, "gamescope", "Gamescope", "bool", default if own is None else bool(own), module=ident, inherited=own is None))
+        rows.append(_row(name, "gamescope", "Gamescope", "bool", bool(launch.get("gamescope", True)) if own is None else bool(own), module=ident, inherited=own is None))
         groups.append(_group("", [len(rows) - 1]))
+        # The launch keys tied to this runner's kind: what every game through it starts with, config.toml's [launch].
+        kind = runner.get("kind") or ""
+        mode = self._screen_mode()
+        protons = proton_choices(config)
+        hz = auto_rate(mode, launch.get("gamescope", True), launch.get("gamescope_refresh"))
+        gpu = self._client.gpu()
+        for spec in self._client.launchKeys("global", mode):
+            if kind not in spec["runners"]:
+                continue
+            value = launch.get(spec["key"])
+            if value in (None, ""):
+                value = spec["default"]
+            section = spec["section"]
+            _add(rows, groups, section, launch_row(section, spec, value, protons=protons, auto_hz=hz, gpu=gpu), caps=True, meta=_card_meta(section, mode, gpu))
         options = runner.get("options") or []
         if options:
             first = len(rows)
@@ -111,9 +127,12 @@ class RunnerForm(RowsForm):
         if row["key"] == "add_file":
             self._pending = {"runner": row["module"], "name": row["section"], "file": str(value or "")}
             return bool(self._pending["file"])
-        ok = self._client.setRunnerSetting(row["module"], row["key"], _to_bus(row, value))
+        if row["key"].startswith("launch."):
+            ok = self._client.setConfig(row["key"], _to_bus(row, value))
+        else:
+            ok = self._client.setRunnerSetting(row["module"], row["key"], _to_bus(row, value))
         if ok:
-            self.load(row["module"])
+            self.load(self._runner["id"])
         return bool(ok)
 
     @Slot(result=str)

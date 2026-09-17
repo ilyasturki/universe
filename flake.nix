@@ -74,7 +74,7 @@
 
       # No gpu-screen-recorder here: it must match the host's setcap gsr-kms-server (nixos.nix pins that package).
       moduleRuntime = with pkgs; [ gogdl ffmpeg trash-cli util-linux ];
-      runtimePath = lib.makeBinPath (moduleRuntime ++ [ pkgs.umu-launcher pkgs.systemd ]);
+      runtimePath = lib.makeBinPath (moduleRuntime ++ [ pkgs.umu-launcher pkgs.systemd pkgs.vulkan-tools ]);
       modulesDir = "${modulesPkg}/share/universe/modules";
       qmlImportPath = lib.concatMapStringsSep ":" (p: "${p}/lib/qt-6/qml") (with pkgs.qt6; [ qtdeclarative qt5compat qtmultimedia ]);
 

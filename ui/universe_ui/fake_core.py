@@ -14,6 +14,8 @@ from .errors import UniverseError
 
 FIXTURE = Path(__file__).parent / "fixtures" / "library.json"
 LAUNCH_KEYS = Path(__file__).parent / "fixtures" / "launch_keys.json"
+GPU = {"vendor": "amd", "name": "AMD Radeon RX 7900 GRE", "rdna": "rdna3", "label": "AMD Radeon RX 7900 GRE · RDNA 3",
+       "fits": {"dlss_upgrade": False, "fsr4_upgrade": True, "xess_upgrade": True, "optiscaler": True}}
 REFRESH_RATES = [240, 165, 144, 120, 100, 90, 75, 60, 50, 48, 40, 30]
 RESOLUTION_HEIGHTS = [2160, 1800, 1440, 1080, 720]
 STEP_S = 0.15
@@ -772,6 +774,9 @@ class FakeCore:
 
     def screen_mode(self, screen):
         return dict(self._data.get("screen") or {"screen": screen or "DP-1", "width": 2560, "height": 1440, "refresh": 144})
+
+    def gpu(self):
+        return copy.deepcopy(self._data.get("gpu", GPU))
 
     def launch_keys(self, scope, screen):
         if scope not in ("game", "global", "both"):

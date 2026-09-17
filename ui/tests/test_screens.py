@@ -21,8 +21,10 @@ def test_game_settings_form(api, fake):
     assert capture["enabled"]["value"] is True and capture["enabled"]["type"] == "bool"
     assert "codec" not in capture, "global settings do not belong to a game"
     groups = {g["title"]: g for g in form.groups}
-    assert [g["title"] for g in form.groups][:4] == ["Launch", "Gamescope", "Desktop and library", "Artwork"]
+    assert [g["title"] for g in form.groups][:9] == ["Display", "Overlay", "Advanced", "Proton", "Sync", "Upscaling", "Launch", "Desktop and library", "Artwork"], \
+        "the launch page's cards, the runner's, then the program"
     assert groups["Launch"]["caps"] is True and groups["Video capture"]["caps"] is False
+    assert groups["Display"]["meta"] == "DP-1 2560×1440 @ 144 Hz" and groups["Upscaling"]["meta"] == "AMD Radeon RX 7900 GRE · RDNA 3"
     assert groups["Video capture"]["meta"] == "v0.1.0 · hooks"
     assert sorted(i for g in form.groups for i in g["rows"]) == list(range(len(form.rows)))
 
@@ -99,12 +101,13 @@ def test_launch_form(api, fake):
     assert form.screen == "DP-1 2560×1440 @ 144 Hz"
     keys = fake.launchKeys("global", fake.screenMode("DP-1"))
     assert {k["scope"] for k in keys} == {"both"} and "prefix" not in [k["key"] for k in keys]
-    expected = [(section, ["launch." + k["key"] for k in keys if k["section"] == section]) for section in ("Gamescope", "Overlay and cursor", "Proton")]
+    expected = [(section, ["launch." + k["key"] for k in keys if k["section"] == section and not k["runners"]]) for section in ("Display", "Overlay", "Advanced")]
     expected[1][1].append("desktop.hide_cursor")
-    assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups] == expected
-    assert expected[0][1][:2] == ["launch.gamescope", "launch.gamescope_resolution"] and expected[1][1] == ["launch.mangohud", "launch.fps_limit", "launch.pause_on_home", "desktop.hide_cursor"]
-    assert expected[2][1][:2] == ["launch.proton", "launch.esync"] and len(expected[2][1]) == 10
-    assert form.groups[0]["meta"] == form.screen
+    assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups] == expected, "beginner first; a runner's keys sit on its page"
+    assert expected[0][1] == ["launch.gamescope", "launch.gamescope_resolution", "launch.gamescope_refresh", "launch.gamescope_adaptive_sync"]
+    assert expected[1][1] == ["launch.mangohud", "launch.fps_limit", "launch.pause_on_home", "desktop.hide_cursor"]
+    assert expected[2][1] == ["launch.gamescope_scaler", "launch.gamescope_filter", "launch.gamescope_sharpness", "launch.gamescope_args"]
+    assert form.groups[0]["meta"] == form.screen and form.groups[1]["meta"] == ""
     rows = rows_by_key(form)
     assert rows["launch.gamescope"]["detail"] == next(k["description"] for k in keys if k["key"] == "gamescope")
     assert rows["launch.gamescope"]["value"] is True
@@ -118,8 +121,7 @@ def test_launch_form(api, fake):
     assert rows["launch.fps_limit"]["value"] == "auto" and rows["launch.fps_limit"]["display"] == "auto · 144", "auto shows the rate it stands for"
     assert rows["launch.fps_limit"]["choices"] == ["auto", "none", "144", "120", "100", "90", "75", "60", "50", "48", "40", "30"]
     assert rows["launch.gamescope_adaptive_sync"]["value"] is False and rows["launch.gamescope_args"]["value"] == ""
-    assert rows["launch.proton"]["value"] == "proton-ge" and rows["launch.proton"]["choices"] == ["proton-cachyos", "proton-em", "proton-ge"]
-    assert rows["desktop.hide_cursor"]["value"] is True and rows["launch.esync"]["value"] is True
+    assert rows["desktop.hide_cursor"]["value"] is True and "launch.esync" not in rows
 
     index = index_of(form, "launch.gamescope_scaler")
     assert form.setValue(index, "integer") is True
@@ -144,20 +146,20 @@ def test_launch_form(api, fake):
     assert rows_by_key(form)["launch.fps_limit"]["display"] == "auto · 144", "on the desktop the gamescope rate means nothing"
 
 
-def test_game_settings_gamescope_group(api, fake):
+def test_game_settings_mirrors_the_cards(api, fake):
     form = api.screens.gameSettings
     form.load("the-technomancer")
-    group = next(g for g in form.groups if g["title"] == "Gamescope")
     catalogue = fake.launchKeys("game", fake.screenMode("DP-1"))
-    assert [form.rows[i]["key"] for i in group["rows"]] == ["launch." + k["key"] for k in catalogue if k["section"] == "Gamescope"]
-    assert [form.rows[i]["key"] for i in group["rows"]][:2] == ["launch.gamescope", "launch.gamescope_resolution"]
+    cards = {g["title"]: [form.rows[i]["key"] for i in g["rows"]] for g in form.groups}
+    for section in ("Display", "Overlay", "Advanced", "Sync", "Upscaling"):
+        assert cards[section] == ["launch." + k["key"] for k in catalogue if k["section"] == section], section
+    assert cards["Proton"] == ["launch.proton", "launch.wayland", "launch.hdr", "launch.prefix"], "the runner's card carries its name"
+    assert cards["Launch"] == ["launch.runner", "launch.exe", "launch.wrapper", "launch.args", "launch.working_dir"]
     rows = rows_by_key(form, "")
     assert rows["launch.fps_limit"]["value"] == "auto" and rows["launch.fps_limit"]["inherited"] is True and rows["launch.fps_limit"]["display"] == "auto · 144"
-    launch = next(g for g in form.groups if g["title"] == "Launch")
-    keys = [form.rows[i]["key"] for i in launch["rows"]]
-    assert keys.index("launch.fps_limit") == keys.index("launch.mangohud") + 1
-    assert keys[2:] == ["launch." + k["key"] for k in catalogue if k["section"] != "Gamescope" and (not k["runners"] or "proton" in k["runners"])]
-    assert "launch.prefix" in keys and rows["launch.esync"]["detail"].startswith("Wine's eventfd")
+    assert rows["launch.esync"]["detail"].startswith("Faster thread synchronisation")
+    assert rows["launch.dlss_upgrade"]["detail"].endswith("Not for your GPU.") and rows["launch.fsr4_upgrade"]["detail"].endswith("Works on your GPU.")
+    assert rows["launch.gamescope"]["detail"].startswith("Run the game in a window"), "no GPU note outside Upscaling"
     assert rows["launch.gamescope_resolution"]["value"] == "auto" and rows["launch.gamescope_resolution"]["inherited"] is True
     assert rows["launch.gamescope_resolution"]["choices"][:2] == ["auto", "2560x1440"]
     assert rows["launch.gamescope_scaler"]["value"] == "default" and rows["launch.gamescope_scaler"]["inherited"] is True
@@ -167,8 +169,9 @@ def test_game_settings_gamescope_group(api, fake):
     rows = rows_by_key(form, "")
     assert rows["launch.gamescope_resolution"]["value"] == "1920x1080" and rows["launch.gamescope_resolution"]["inherited"] is False
     form.load("mini-metro")
-    emulator = [r["key"] for r in form.rows if r["section"] == "Launch"]
-    assert "launch.esync" not in emulator and "launch.proton" not in emulator and "launch.wrapper" in emulator
+    titles = [g["title"] for g in form.groups]
+    assert "Proton" not in titles and "Sync" not in titles and "Upscaling" not in titles and "Eden" not in titles, "an emulator has no runner card"
+    assert "launch.wrapper" in [r["key"] for r in form.rows if r["section"] == "Launch"]
 
 
 def test_sources_browser_statuses(api):
