@@ -207,7 +207,10 @@ FocusScope {
             if (dock.open && dock.vals.pause !== api.home.pauseOnHome)
                 patch("pause", api.home.pauseOnHome);
         }
+        // A pad's shot fires this too: closed, the dock has nothing to unhide and no toast to paint under the flash.
         function onScreenshotTaken(path) {
+            if (!dock.open)
+                return;
             dock.hidden = false;
             toast.show(path ? "Screenshot saved" : "Screenshot failed");
         }

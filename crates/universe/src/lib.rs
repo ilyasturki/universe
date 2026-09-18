@@ -21,6 +21,7 @@ pub mod nest;
 pub mod paths;
 pub mod recording;
 pub mod runners;
+pub mod screenshots;
 pub mod session;
 pub mod sessions;
 pub mod slug;

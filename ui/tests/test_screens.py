@@ -1,6 +1,6 @@
 import pytest
 
-from conftest import index_of, rows_by_key, settle, wait_for
+from conftest import index_of, pump, rows_by_key, settle, wait_for
 
 PENDING = {"session": "20260912-200000", "game": "the-technomancer", "state": "pending",
            "started_at": "2026-09-12T20:00:00+02:00", "written_at": "", "title": "", "paragraphs": [], "images": []}
@@ -393,6 +393,38 @@ def test_album_and_news_span_every_game(api):
     news.loadAll()
     assert news.count == 2 and news.rows[0]["gameTitle"] == "The Technomancer" and news.gameId == ""
     assert news.rows[0]["written_at"] >= news.rows[1]["written_at"]
+
+
+def test_screenshots_list_per_game_and_across_games(api, fake):
+    shots = api.screens.shots
+    shots.load("the-technomancer")
+    assert shots.count > 0 and shots.gameId == "the-technomancer"
+    first = shots.rows[0]
+    assert first["gameId"] == "the-technomancer" and first["name"].endswith(".png") and first["url"].startswith("file://")
+    assert first["session"] != "" and first["hasJournal"] is True, "a shot taken during a journaled session knows its entry"
+    assert [r["name"] for r in shots.rows] == sorted((r["name"] for r in shots.rows), reverse=True), "newest first"
+    per_game = shots.count
+    shots.loadAll()
+    assert shots.gameId == "" and shots.count >= per_game and first in shots.rows
+    name, ident, before = shots.rows[0]["name"], shots.rows[0]["gameId"], shots.count
+    assert shots.remove(ident, name)
+    pump(500)
+    assert shots.count == before - 1 and not any(r["name"] == name and r["gameId"] == ident for r in shots.rows)
+
+
+def test_media_timeline_merges_the_three_kinds(api):
+    media = api.screens.media
+    media.load()
+    kinds = {r["kind"] for r in media.rows}
+    assert kinds == {"shot", "recording", "journal"}
+    whens = [r["when"] for r in media.rows]
+    assert whens == sorted(whens, reverse=True), "one timeline, newest first"
+    shot = next(r for r in media.rows if r["kind"] == "shot")
+    assert shot["image"].startswith("file://") and shot["name"].endswith(".png") and shot["gameTitle"]
+    entry = next(r for r in media.rows if r["kind"] == "journal")
+    assert entry["title"] and entry["hasJournal"] and entry["session"]
+    rec = next(r for r in media.rows if r["kind"] == "recording")
+    assert rec["title"] and rec["session"] and rec["path"]
 
 
 def test_journal_paragraphs_become_markdown_blocks():

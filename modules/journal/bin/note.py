@@ -130,15 +130,22 @@ def resolve_note_path(note_dir, title):
     return os.path.join(note_dir, notes[0]) if len(notes) == 1 else preferred
 
 
+# A shot is named by basename (older entries: attachments/<name>) and lives in the game's screenshots/.
+def image_path(journal_dir, screenshots_dir, rel):
+    if SHOT_IMAGE_RE.search(rel):
+        return os.path.join(screenshots_dir, os.path.basename(rel))
+    return os.path.join(journal_dir, rel)
+
+
 # Obsidian only follows links inside the vault, so referenced images are copied beside the note.
-def mirror_images(entries, journal_dir, note_dir):
+def mirror_images(entries, journal_dir, screenshots_dir, note_dir):
     if os.path.abspath(journal_dir) == os.path.abspath(note_dir):
         return
     for e in entries:
         for rel in e.get("images") or []:
             if os.path.isabs(rel) or ".." in rel.split("/"):
                 continue
-            src, dst = os.path.join(journal_dir, rel), os.path.join(note_dir, rel)
+            src, dst = image_path(journal_dir, screenshots_dir, rel), os.path.join(note_dir, rel)
             if not os.path.isfile(src):
                 continue
             if os.path.isfile(dst) and os.path.getsize(dst) == os.path.getsize(src):
@@ -147,11 +154,11 @@ def mirror_images(entries, journal_dir, note_dir):
             shutil.copyfile(src, dst)
 
 
-def write_note(entries, sessions, title, journal_dir, note_dir):
+def write_note(entries, sessions, title, journal_dir, screenshots_dir, note_dir):
     os.makedirs(note_dir, exist_ok=True)
     path = resolve_note_path(note_dir, title)
     text = render_note(entries, sessions, title)
-    mirror_images(entries, journal_dir, note_dir)
+    mirror_images(entries, journal_dir, screenshots_dir, note_dir)
     try:
         with open(path, encoding="utf-8") as f:
             if f.read() == text:

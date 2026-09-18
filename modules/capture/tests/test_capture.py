@@ -73,6 +73,7 @@ def env_for(tmp_path, fakebin, settings, extra=None):
     env["SESSION_UNIT"] = GAME_UNIT
     env["MODULE_DATA_DIR"] = str(tmp_path / "data")
     env["JOURNAL_DIR"] = str(tmp_path / "journal")
+    env["SCREENSHOTS_DIR"] = str(tmp_path / "screenshots")
     env["UNIVERSE_BIN"] = str(fakebin["bin"] / "universe")
     env["MODULE_SETTINGS_JSON"] = json.dumps(settings)
     env.setdefault("SESSION_SCREEN", "DP-1")
@@ -225,11 +226,11 @@ def test_stop_no_recording_is_a_noop(tmp_path, fakebin):
     assert not (fakebin["logs"] / "universe.args").exists()
 
 
-def test_shot_under_journal_dir_attachments(tmp_path, fakebin):
+def test_shot_under_the_screenshots_dir(tmp_path, fakebin):
     result = run("shot", env_for(tmp_path, fakebin, {}))
     assert result.returncode == 0, result.stderr
     path = Path(result.stdout.strip())
-    assert path.parent == tmp_path / "journal" / "attachments"
+    assert path.parent == tmp_path / "screenshots"
     assert path.suffix == ".png"
     assert path.exists() and path.stat().st_size > 0
 
@@ -240,7 +241,7 @@ def test_shot_grabs_in_the_shell_when_the_extension_is_loaded(tmp_path, fakebin)
     result = run("shot", env)
     assert result.returncode == 0, result.stderr
     path = Path(result.stdout.strip())
-    assert path.parent == tmp_path / "journal" / "attachments" and path.suffix == ".png"
+    assert path.parent == tmp_path / "screenshots" and path.suffix == ".png"
     calls = (fakebin["logs"] / "busctl.args").read_text()
     assert f"Screenshot\nsbb\n{path}\ntrue\ntrue\n" in calls
     assert not (fakebin["logs"] / "gsr.args").exists()

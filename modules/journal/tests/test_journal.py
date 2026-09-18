@@ -156,7 +156,8 @@ def run_process(tmp_path, fakebin, settings, extra_env=None, recording=None):
         "SESSION_ID": SID, "SESSION_STARTED_AT": "2026-09-11T12:00:00+02:00",
         "SESSION_ENDED_AT": "2026-09-11T12:03:20+02:00", "SESSION_DURATION_S": "200",
         "RECORDING_PATH": str(recording or ""),
-        "JOURNAL_DIR": str(journal_dir), "MODULE_DATA_DIR": str(tmp_path / "data"), "UNIVERSE_JOURNAL_ROOT": str(tmp_path / "root"),
+        "JOURNAL_DIR": str(journal_dir), "SCREENSHOTS_DIR": str(tmp_path / "games" / "testgame" / "screenshots"),
+        "MODULE_DATA_DIR": str(tmp_path / "data"), "UNIVERSE_JOURNAL_ROOT": str(tmp_path / "root"),
         "MODULE_SETTINGS_JSON": json.dumps({"provider": "stub", "max_images": 40, **settings}),
     })
     env.update(extra_env or {})
@@ -165,9 +166,9 @@ def run_process(tmp_path, fakebin, settings, extra_env=None, recording=None):
 
 
 def add_shot(tmp_path, name=SHOT):
-    att = tmp_path / "games" / "testgame" / "journal" / "attachments"
-    att.mkdir(parents=True, exist_ok=True)
-    (att / name).write_bytes(b"png")  # never decoded: selection keys on the name
+    shots = tmp_path / "games" / "testgame" / "screenshots"
+    shots.mkdir(parents=True, exist_ok=True)
+    (shots / name).write_bytes(b"png")  # never decoded: selection keys on the name
 
 
 def state_files(journal_dir):
@@ -193,8 +194,9 @@ def test_stub_pipeline_writes_entry_note_and_memory(tmp_path, fakebin):
     rec = tmp_path / "rec.mkv"
     make_mkv(rec, "testsrc", 200)
     att = tmp_path / "games" / "testgame" / "journal" / "attachments"
+    shots_dir = tmp_path / "games" / "testgame" / "screenshots"
     for name in ("20260911-120130.png", "20260911-120245.png", "20260911-130000.png"):
-        make_png(att / name)
+        make_png(shots_dir / name)
     (tmp_path / "games" / "testgame" / "sessions.jsonl").write_text(json.dumps({
         "session": SID, "game": "testgame", "started_at": "2026-09-11T12:00:00+02:00",
         "ended_at": "2026-09-11T12:03:20+02:00", "duration_s": 200, "source": "daemon", "recording": str(rec),
@@ -216,10 +218,11 @@ def test_stub_pipeline_writes_entry_note_and_memory(tmp_path, fakebin):
     assert datetime.fromisoformat(entry["ended_at"]) == datetime.fromisoformat("2026-09-11T12:03:20+02:00") and entry["duration_s"] == 200
     shots = [i for i in entry["images"] if note.SHOT_IMAGE_RE.search(i)]
     frames = [i for i in entry["images"] if not note.SHOT_IMAGE_RE.search(i)]
-    assert shots == ["attachments/20260911-120130.png", "attachments/20260911-120245.png"]
+    assert shots == ["20260911-120130.png", "20260911-120245.png"]
     assert 1 <= len(frames) <= img.GALLERY_FRAME_TARGET - 2
     assert frames == [f"attachments/{SID}-{n}.png" for n in range(1, len(frames) + 1)]
-    assert all((journal_dir / f).stat().st_size > 0 for f in entry["images"])
+    assert all((shots_dir / f).stat().st_size > 0 for f in shots)
+    assert all((journal_dir / f).stat().st_size > 0 for f in frames)
 
     args = (fakebin / "universe.args").read_text().splitlines()
     assert args[:2] == ["journal-add", SID]
@@ -232,7 +235,7 @@ def test_stub_pipeline_writes_entry_note_and_memory(tmp_path, fakebin):
 
     note_path = tmp_path / "root" / "testgame" / "Test Game Redux.md"
     text = note_path.read_text()
-    assert text.startswith('---\ngame: "Test Game: Redux"\nsessions: 1\nfirst_played: 2026-09-11\nlast_played: 2026-09-11\ncover: attachments/20260911-120130.png\n---\n\n# Journal: Test Game: Redux\n\n')
+    assert text.startswith('---\ngame: "Test Game: Redux"\nsessions: 1\nfirst_played: 2026-09-11\nlast_played: 2026-09-11\ncover: 20260911-120130.png\n---\n\n# Journal: Test Game: Redux\n\n')
     assert f"## #1 · Stub session of Test Game: Redux\n*09/11/26 · 12:00–12:03 · 3 min*\n<!-- session: {SID} -->\n\n" in text
     assert "\n\n**Next up:** Resume at the first checkpoint and keep going.\n\n**Recording:** [rec.mkv](file://" in text
     assert "\n\n*Frames from the recording*\n\n![](attachments/" in text
@@ -251,7 +254,7 @@ def test_stub_pipeline_hands_off_to_the_core(tmp_path, fakebin):
     assert not (journal_dir / f"{SID}.json").exists()
     assert "journal-add" in res.stderr and not (tmp_path / "root").exists()
     entry = json.loads((fakebin / "universe.args").read_text().splitlines()[2])
-    assert entry["provider"] == "stub" and entry["images"] == [f"attachments/{SHOT}"]
+    assert entry["provider"] == "stub" and entry["images"] == [SHOT]
     pending_seen_by_core(fakebin)
     assert state_files(journal_dir) == []
 
@@ -313,7 +316,7 @@ def test_disabled_and_forced_language(tmp_path, fakebin):
     res, journal_dir = run_process(tmp_path, fakebin, {"language": "fr"}, {"FAKE_UNIVERSE_EXIT": "1"})
     assert res.returncode == 0, res.stderr
     entry = json.loads((journal_dir / f"{SID}.json").read_text())
-    assert entry["lang"] == "fr" and entry["images"] == [f"attachments/{SHOT}"]
+    assert entry["lang"] == "fr" and entry["images"] == [SHOT]
     text = (tmp_path / "root" / "testgame" / "Test Game Redux.md").read_text()
     assert "# Journal : Test Game: Redux\n\n## Stub session of Test Game: Redux\n*09/11/26 · 12:00–12:03 · 3 min*\n<!-- session:" in text
     assert "\n**Reprise :** Resume at the first checkpoint and keep going.\n" in text

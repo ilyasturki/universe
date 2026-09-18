@@ -166,7 +166,7 @@ def journal_session(settings, sid, start_id, game_id, provider, journal_dir, dat
 
     attachments = os.path.join(journal_dir, "attachments")
     log(f"journaling {title!r} ({game_id}) session {sid}, provider {provider}")
-    shots = img.select_screenshots(attachments, start, end)
+    shots = img.select_screenshots(env("SCREENSHOTS_DIR"), start, end)
     if not recording and not shots:
         log("no recording and no screenshot for this session; nothing to journal")
         return
@@ -227,7 +227,8 @@ def journal_session(settings, sid, start_id, game_id, provider, journal_dir, dat
         lang = forced_lang or journal_lang((merged or {}).get("language") or (entries[0].get("lang") if entries else None))
         order, unusable = img.normalize_review(result["images"], len(fed))
         kept_shots, picked = img.pick_gallery(fed, order, unusable, shots, frames)
-        rels = [os.path.relpath(s.file, journal_dir) for s in kept_shots] + persist_frames(picked, attachments, sid)
+        # A shot is named bare: the core resolves it to the game's screenshots/, wherever the journal sits.
+        rels = [os.path.basename(s.file) for s in kept_shots] + persist_frames(picked, attachments, sid)
         entry = {
             "session": sid,
             "game": game_id,
@@ -255,7 +256,7 @@ def journal_session(settings, sid, start_id, game_id, provider, journal_dir, dat
     if settings.get("markdown_export", True):
         entries = [e for e in entries if e["session"] != sid] + [entry]
         try:
-            path, changed = write_note(entries, sessions, title, journal_dir, os.path.join(os.path.expanduser(os.environ["UNIVERSE_JOURNAL_ROOT"]), game_id))
+            path, changed = write_note(entries, sessions, title, journal_dir, env("SCREENSHOTS_DIR"), os.path.join(os.path.expanduser(os.environ["UNIVERSE_JOURNAL_ROOT"]), game_id))
             log(f"markdown note {'updated' if changed else 'unchanged'}: {path}")
         except OSError as e:
             log(f"markdown render failed: {e}")

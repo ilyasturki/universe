@@ -13,6 +13,22 @@ def stop(api):
     pump(50)
 
 
+def test_a_shot_from_the_pad_or_the_dock_cues_the_same_way(api, fake):
+    home = api.home
+    taken = []
+    home.screenshotTaken.connect(lambda path: taken.append(path))
+    api.screens.controller._on_event({"event": "screenshot", "path": "/tmp/x.png"})
+    assert taken == ["/tmp/x.png"], "the watcher's event reaches the theme through api.home"
+    api.screens.controller._on_event({"event": "screenshot", "path": ""})
+    assert taken == ["/tmp/x.png", ""], "a failed shot is reported too, silently"
+    home.screenshot()
+    for _ in range(50):
+        pump(50)
+        if len(taken) == 3:
+            break
+    assert len(taken) == 3 and taken[2].endswith("screenshot.png"), "the dock's shot goes through the same signal"
+
+
 def test_home_flips_between_the_game_and_the_launcher(api, fake, monkeypatch):
     from universe_ui import fake_core
 

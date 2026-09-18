@@ -2,7 +2,6 @@ import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Shell from 'gi://Shell';
 import * as Main from 'resource:///org/gnome/shell/ui/main.js';
-import {Flashspot} from 'resource:///org/gnome/shell/ui/screenshot.js';
 import {Extension} from 'resource:///org/gnome/shell/extensions/extension.js';
 
 const BUS_NAME = 'org.universe.Windows';
@@ -127,7 +126,6 @@ export default class UniverseExtension extends Extension {
             reply(false);
             return;
         }
-        this._screenshotCue(area);
         reply(true);
     }
 
@@ -142,15 +140,6 @@ export default class UniverseExtension extends Extension {
     _primaryMonitorRect() {
         const m = Main.layoutManager.primaryMonitor;
         return m ? {x: m.x, y: m.y, width: m.width, height: m.height} : null;
-    }
-
-    _screenshotCue(area) {
-        try {
-            new Flashspot(area).fire();
-            global.display.get_sound_player().play_from_theme('screen-capture', 'Screenshot taken', null);
-        } catch (e) {
-            logError(e, 'Universe: screenshot cue failed');
-        }
     }
 
     // org.gnome.Shell.ShowOSD refuses callers other than gsd; a negative level draws no bar; Shell 50 renamed show(-1, …) showAll.

@@ -186,6 +186,12 @@ impl Core {
     fn screenshot(&self, py: Python<'_>) -> PyResult<String> {
         self.run(py, |c| c.screenshot())
     }
+    fn screenshots(&self, py: Python<'_>, id: String) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| async move { c.screenshots(&id).await })
+    }
+    fn remove_screenshot(&self, py: Python<'_>, id: String, name: String) -> PyResult<()> {
+        self.run(py, |c| async move { c.remove_screenshot(&id, &name).await })
+    }
     fn sessions(&self, py: Python<'_>, id: String) -> PyResult<Py<PyAny>> {
         self.value(py, |c| async move { c.sessions(&id).await })
     }

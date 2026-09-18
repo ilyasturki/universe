@@ -122,9 +122,47 @@ class FakeCore:
                 if media.get(slot):
                     media[slot] = _place(media[slot], str(self._game_dir(game["id"]) / "media" / f"{slot}.png"))
             media["screenshots"] = [_place(p, str(self._game_dir(game["id"]) / "media" / f"screenshot{n + 1}.png")) for n, p in enumerate(media.get("screenshots") or [])]
+            self._lay_out_shots(game)
         for ident, entries in self._data.get("journal", {}).items():
             for entry in entries:
                 self._write_entry(ident, entry)
+
+    # Two shots a session, a minute and ten minutes in, from the store's promo art: the gallery has something to show.
+    def _lay_out_shots(self, game):
+        from datetime import datetime, timedelta
+
+        shots = game.get("media", {}).get("screenshots") or []
+        if not shots:
+            return
+        directory = self._game_dir(game["id"]) / "screenshots"
+        for n, line in enumerate(self._data.get("sessions", {}).get(game["id"], [])[:3]):
+            try:
+                start = datetime.fromisoformat(line["started_at"])
+            except (KeyError, ValueError):
+                continue
+            for k, minutes in enumerate((1, 10)):
+                name = (start + timedelta(minutes=minutes)).strftime("%Y%m%d-%H%M%S") + ".png"
+                _place(shots[(n + k) % len(shots)], str(directory / name))
+
+    def screenshots(self, ident):
+        idents = [self._game(ident)["id"]] if ident else [g["id"] for g in self._data["games"] if not (g.get("removed") or g.get("hidden"))]
+        out = []
+        for i in idents:
+            directory = self._game_dir(i) / "screenshots"
+            sessions = self._data.get("sessions", {}).get(i, [])
+            for p in sorted(directory.glob("*.png"), reverse=True) if directory.is_dir() else []:
+                stem = p.stem
+                taken = f"{stem[:4]}-{stem[4:6]}-{stem[6:8]}T{stem[9:11]}:{stem[11:13]}:{stem[13:15]}+02:00"
+                session = next((s["session"] for s in sessions if s.get("started_at", "") <= taken <= s.get("ended_at", "")), "")
+                out.append({"game": i, "title": self._game(i)["title"], "path": str(p), "taken_at": taken, "session": session})
+        out.sort(key=lambda r: os.path.basename(r["path"]), reverse=True)
+        return out
+
+    def remove_screenshot(self, ident, name):
+        p = self._game_dir(ident) / "screenshots" / name
+        if not p.is_file():
+            raise UniverseError("NotFound", str(p))
+        p.unlink()
 
     # The timestamp line makes every `set` a change the directory watch sees.
     def _write_game(self, game):

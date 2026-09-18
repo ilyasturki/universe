@@ -119,6 +119,13 @@ class RecordingsList(QObject):
     def unload(self):
         self._all = False
 
+    # A recording another list shows: its frames join the cache and its thumbnail the queue, the rows untouched.
+    def warm(self, session, path, duration):
+        if path and session and session not in self._frames:
+            self._frames[session] = Frames(path, duration)
+        self._want_thumbnail(session)
+        self._pump()
+
     @Slot(str, str, result=bool)
     def remove(self, game_id, session):
         if not self._client.removeRecording(game_id, session):
@@ -208,6 +215,136 @@ class RecordingsList(QObject):
     count = Property(int, lambda self: len(self._rows), notify=rowsChanged)
     frameMap = Property("QVariantMap", _frame_map, notify=framesChanged)
     gameId = Property(str, lambda self: self._game_id, notify=gameIdChanged)
+
+
+class ScreenshotsList(QObject):
+    rowsChanged = Signal()
+    gameIdChanged = Signal()
+
+    def __init__(self, client, parent=None):
+        super().__init__(parent)
+        self._client = client
+        self._game_id = ""
+        self._rows = []
+        self._all = False
+        client.libraryChanged.connect(self._changed)
+
+    def _changed(self, ids):
+        if self._all:
+            self.loadAll()
+        elif self._game_id and (not ids or self._game_id in ids):
+            self.load(self._game_id)
+
+    @Slot(str)
+    def load(self, game_id):
+        self._load(game_id, False)
+
+    @Slot()
+    def loadAll(self):
+        self._load("", True)
+
+    def _load(self, game_id, all_games):
+        self._game_id, self._all = game_id, all_games
+        self.gameIdChanged.emit()
+        lines = self._client.sessions(game_id) if game_id else self._client.sessions("")
+        journaled = {(str(line.get("game") or ""), str(line.get("session") or "")) for line in lines if line.get("journal")}
+        rows = []
+        for shot in self._client.screenshots(game_id):
+            path = str(shot.get("path") or "")
+            session = str(shot.get("session") or "")
+            ident = str(shot.get("game") or "")
+            rows.append({
+                "name": os.path.basename(path), "path": path,
+                "url": QUrl.fromLocalFile(path).toString() if path else "",
+                "taken_at": str(shot.get("taken_at") or ""), "dateText": _when(shot.get("taken_at")),
+                "session": session, "hasJournal": (ident, session) in journaled,
+                "gameId": ident, "gameTitle": str(shot.get("title") or ""),
+            })
+        self._rows = rows
+        self.rowsChanged.emit()
+
+    @Slot()
+    def unload(self):
+        self._all = False
+
+    @Slot(str, str, result=bool)
+    def remove(self, game_id, name):
+        return bool(self._client.removeScreenshot(game_id, name))
+
+    rows = Property("QVariantList", lambda self: [dict(r) for r in self._rows], notify=rowsChanged)
+    count = Property(int, lambda self: len(self._rows), notify=rowsChanged)
+    gameId = Property(str, lambda self: self._game_id, notify=gameIdChanged)
+
+
+class MediaTimeline(QObject):
+    """Every game's shots, recordings and journal entries as one list, newest first; `kind` tells them apart."""
+
+    rowsChanged = Signal()
+
+    def __init__(self, client, recordings, parent=None):
+        super().__init__(parent)
+        self._client = client
+        self._recordings = recordings
+        self._rows = []
+        self._loaded = False
+        client.libraryChanged.connect(lambda ids: self._loaded and self.load())
+        client.recordingFiled.connect(lambda session, ident, path: self._loaded and self.load())
+        client.entryWritten.connect(lambda session, ident: self._loaded and self.load())
+        recordings.framesChanged.connect(lambda: self._loaded and self._thumbnails())
+
+    @Slot()
+    def load(self):
+        self._loaded = True
+        lines = self._client.sessions("")
+        titles = {}
+        for line in lines:
+            titles.setdefault(str(line.get("game") or ""), str(line.get("title") or ""))
+        journaled = {(str(line.get("game") or ""), str(line.get("session") or "")) for line in lines if line.get("journal")}
+        rows = []
+        for shot in self._client.screenshots(""):
+            path = str(shot.get("path") or "")
+            ident, session = str(shot.get("game") or ""), str(shot.get("session") or "")
+            rows.append({"kind": "shot", "key": f"shot:{path}", "gameId": ident, "gameTitle": str(shot.get("title") or ""),
+                         "when": str(shot.get("taken_at") or ""), "dateText": _when(shot.get("taken_at")),
+                         "image": QUrl.fromLocalFile(path).toString() if path else "", "path": path, "name": os.path.basename(path),
+                         "session": session, "hasJournal": (ident, session) in journaled, "title": ""})
+        for line in lines:
+            rec = line.get("recording")
+            if not rec:
+                continue
+            path, session, ident = str(rec.get("path") or ""), str(line.get("session") or ""), str(line.get("game") or "")
+            self._recordings.warm(session, path, rec.get("duration_s") or line.get("duration_s"))
+            rows.append({"kind": "recording", "key": f"rec:{ident}:{session}", "gameId": ident, "gameTitle": str(line.get("title") or ""),
+                         "when": str(line.get("ended_at") or ""), "dateText": _when(line.get("ended_at")),
+                         "image": "", "path": path, "name": "", "session": session,
+                         "hasJournal": (ident, session) in journaled, "title": _duration(line.get("duration_s"))})
+        for ident, title in titles.items():
+            for entry in self._client.journal(ident):
+                if str(entry.get("state") or "written") != "written":
+                    continue
+                session = str(entry.get("session") or "")
+                images = [str(i) for i in entry.get("images") or []]
+                rows.append({"kind": "journal", "key": f"journal:{ident}:{session}", "gameId": ident, "gameTitle": title,
+                             "when": str(entry.get("written_at") or entry.get("started_at") or ""), "dateText": _when(entry.get("started_at") or entry.get("written_at")),
+                             "image": QUrl.fromLocalFile(images[0]).toString() if images else "", "path": "", "name": "", "session": session,
+                             "hasJournal": True, "title": str(entry.get("title") or "Untitled")})
+        rows.sort(key=lambda r: r["when"], reverse=True)
+        self._rows = rows
+        self._thumbnails()
+
+    def _thumbnails(self):
+        frames = self._recordings.frameMap
+        for row in self._rows:
+            if row["kind"] == "recording":
+                row["image"] = (frames.get(row["session"]) or {}).get("thumbnail") or ""
+        self.rowsChanged.emit()
+
+    @Slot()
+    def unload(self):
+        self._loaded = False
+
+    rows = Property("QVariantList", lambda self: [dict(r) for r in self._rows], notify=rowsChanged)
+    count = Property(int, lambda self: len(self._rows), notify=rowsChanged)
 
 
 LIST_ITEM = re.compile(r"^\s*(?:[-*+]|\d+[.)])\s+")

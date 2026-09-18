@@ -299,14 +299,17 @@ fn fmt_duration(total_sec: u64) -> String {
 }
 
 fn is_shot(image: &str) -> bool {
-    let name = image.rsplit('/').next().unwrap_or(image);
-    let Some((stem, ext)) = name.rsplit_once('.') else { return false };
-    let ext = ext.to_ascii_lowercase();
-    if ext != "png" && ext != "jpg" && ext != "jpeg" {
-        return false;
+    crate::screenshots::is_shot_name(image.rsplit('/').next().unwrap_or(image))
+}
+
+/// An entry names the player's shots by basename (older entries by `attachments/<name>`): they live in the
+/// game's `screenshots/`; anything else is relative to the journal dir.
+pub fn image_path(journal_dir: &Path, screenshots_dir: &Path, rel: &str) -> PathBuf {
+    if is_shot(rel) {
+        screenshots_dir.join(rel.rsplit('/').next().unwrap_or(rel))
+    } else {
+        journal_dir.join(rel)
     }
-    let b = stem.as_bytes();
-    b.len() == 15 && b[8] == b'-' && b[..8].iter().chain(&b[9..]).all(|c| c.is_ascii_digit())
 }
 
 /// Like Python's urllib quote with the note's safe set; parentheses are encoded for Markdown.
@@ -466,7 +469,7 @@ fn resolve_note_path(note_dir: &Path, title: &str) -> PathBuf {
 }
 
 /// Obsidian only follows links inside the vault, so referenced images are copied beside the note.
-fn mirror_images(entries: &[Entry], journal_dir: &Path, note_dir: &Path) -> crate::Result<()> {
+fn mirror_images(entries: &[Entry], journal_dir: &Path, screenshots_dir: &Path, note_dir: &Path) -> crate::Result<()> {
     if std::path::absolute(journal_dir)? == std::path::absolute(note_dir)? {
         return Ok(());
     }
@@ -474,7 +477,7 @@ fn mirror_images(entries: &[Entry], journal_dir: &Path, note_dir: &Path) -> crat
         if rel.starts_with('/') || rel.split('/').any(|seg| seg == "..") {
             continue;
         }
-        let (src, dst) = (journal_dir.join(rel), note_dir.join(rel));
+        let (src, dst) = (image_path(journal_dir, screenshots_dir, rel), note_dir.join(rel));
         let Ok(meta) = std::fs::metadata(&src) else { continue };
         if !meta.is_file() || std::fs::metadata(&dst).is_ok_and(|d| d.is_file() && d.len() == meta.len()) {
             continue;
@@ -487,11 +490,11 @@ fn mirror_images(entries: &[Entry], journal_dir: &Path, note_dir: &Path) -> crat
     Ok(())
 }
 
-pub fn write_note(title: &str, entries: &[Entry], sessions: &HashMap<String, Session>, journal_dir: &Path, note_dir: &Path, loc: &Locale) -> crate::Result<PathBuf> {
+pub fn write_note(title: &str, entries: &[Entry], sessions: &HashMap<String, Session>, journal_dir: &Path, screenshots_dir: &Path, note_dir: &Path, loc: &Locale) -> crate::Result<PathBuf> {
     std::fs::create_dir_all(note_dir)?;
     let path = resolve_note_path(note_dir, title);
     let text = render_note(title, entries, sessions, loc);
-    mirror_images(entries, journal_dir, note_dir)?;
+    mirror_images(entries, journal_dir, screenshots_dir, note_dir)?;
     if std::fs::read_to_string(&path).is_ok_and(|old| old == text) {
         return Ok(path);
     }
@@ -662,20 +665,25 @@ You reached the title screen.
     fn write_read_note() {
         let dir = tempfile::tempdir().unwrap();
         let journal_dir = dir.path().join("journal");
+        let shots_dir = dir.path().join("screenshots");
         std::fs::create_dir_all(journal_dir.join("attachments")).unwrap();
+        std::fs::create_dir_all(&shots_dir).unwrap();
         std::fs::write(journal_dir.join("attachments/a.png"), b"png").unwrap();
-        let e = Entry { session: "20260910-213045".into(), game: "x".into(), title: "Into the Dome".into(), paragraphs: vec!["A.".into(), "B.".into()], next_up: "Go.".into(), images: vec!["attachments/a.png".into()], ..Default::default() };
+        std::fs::write(shots_dir.join("20260910-214000.png"), b"shot").unwrap();
+        let e = Entry { session: "20260910-213045".into(), game: "x".into(), title: "Into the Dome".into(), paragraphs: vec!["A.".into(), "B.".into()], next_up: "Go.".into(), images: vec!["20260910-214000.png".into(), "attachments/a.png".into()], ..Default::default() };
         write(&journal_dir, &e).unwrap();
         let all = read_all(&journal_dir).unwrap();
         assert_eq!(all, vec![e.clone()]);
         std::fs::write(journal_dir.join(MIGRATED_SESSIONS), "{\"session\": \"20260910-213045\", \"game\": \"x\", \"started_at\": \"2026-09-10T21:30:45+02:00\", \"ended_at\": \"2026-09-10T22:00:00+02:00\", \"duration_s\": 1755, \"source\": \"import-journal\", \"recording\": null}\n").unwrap();
         let sessions = sessions_for_note(&[], &journal_dir);
         let note_dir = dir.path().join("vault").join("x");
-        let path = write_note("X", &all, &sessions, &journal_dir, &note_dir, &Locale::posix()).unwrap();
+        let path = write_note("X", &all, &sessions, &journal_dir, &shots_dir, &note_dir, &Locale::posix()).unwrap();
         assert_eq!(path, note_dir.join("X.md"));
         let md = std::fs::read_to_string(&path).unwrap();
-        assert!(md.contains("## Into the Dome\n*09/10/26 · 21:30–22:00 · 29 min*\n<!-- session: 20260910-213045 -->\n\nA.\n\nB.\n\n**Next up:** Go.\n\n*Frames from the recording*\n\n![](attachments/a.png)\n"), "{md}");
+        assert!(md.contains("## Into the Dome\n*09/10/26 · 21:30–22:00 · 29 min*\n<!-- session: 20260910-213045 -->\n\nA.\n\nB.\n\n**Next up:** Go.\n\n![](20260910-214000.png)\n\n*Frames from the recording*\n\n![](attachments/a.png)\n"), "{md}");
         assert_eq!(std::fs::read(note_dir.join("attachments/a.png")).unwrap(), b"png");
+        assert_eq!(std::fs::read(note_dir.join("20260910-214000.png")).unwrap(), b"shot");
+        assert_eq!(image_path(&journal_dir, &shots_dir, "attachments/20260910-214000.png"), shots_dir.join("20260910-214000.png"));
         let bad = Entry { images: vec!["/etc/passwd".into()], ..e };
         assert!(write(&journal_dir, &bad).is_err());
     }

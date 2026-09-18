@@ -116,6 +116,10 @@ impl Core {
         std::fs::create_dir_all(paths::games_dir())?;
         let core = Core::new(config, host);
         core.reconcile().await?;
+        let moved: usize = core.games.read().await.iter().map(|r| crate::screenshots::migrate(&r.game)).sum();
+        if moved > 0 {
+            tracing::info!("{moved} screenshot(s) moved out of journal/attachments");
+        }
         Ok(core)
     }
 
@@ -338,6 +342,7 @@ impl Core {
         env.set("GAME_EXE", r.game.exe_path().to_string_lossy().to_string());
         env.set("GAME_TOML", r.game.toml_path().to_string_lossy().to_string());
         env.set("JOURNAL_DIR", r.game.journal_dir().to_string_lossy().to_string());
+        env.set("SCREENSHOTS_DIR", r.game.screenshots_dir().to_string_lossy().to_string());
         for (k, v) in passthrough_env() {
             env.set(&k, v);
         }
@@ -578,7 +583,7 @@ impl Core {
                 let r = games.first().cloned().ok_or_else(|| Error::NotFound("no session running".into()))?;
                 let mut env = self.hook_env_base(&r, &cfg);
                 env.set("SESSION_SCREEN", crate::desktop::pick_screen(""));
-                env.set("JOURNAL_DIR", paths::state_home().join("screenshots").to_string_lossy().to_string());
+                env.set("SCREENSHOTS_DIR", paths::state_home().join("screenshots").to_string_lossy().to_string());
                 (r, env)
             }
         };
@@ -591,6 +596,53 @@ impl Core {
             }
         }
         Err(Error::Unavailable("no module provides a screenshot hook".into()))
+    }
+
+    /// The player's own shots, newest first; an empty `id` lists every visible game's. Read from disk on every call.
+    pub async fn screenshots(&self, id: &str) -> Result<Vec<crate::screenshots::Shot>> {
+        let games = self.games.read().await;
+        let picked: Vec<&Resolved> = if id.is_empty() {
+            games.iter().filter(|g| g.game.removed_at.is_empty() && !g.game.hidden).collect()
+        } else {
+            vec![games.iter().find(|g| g.game.id == id).ok_or_else(|| Error::NotFound(id.into()))?]
+        };
+        let mut shots: Vec<crate::screenshots::Shot> = picked.iter().flat_map(|r| crate::screenshots::list(r)).collect();
+        shots.sort_by(|a, b| b.path.rsplit('/').next().cmp(&a.path.rsplit('/').next()));
+        Ok(shots)
+    }
+
+    /// Trashes one of the game's shots by name; the journal entry naming it, when one does, drops it, its note with it.
+    pub async fn remove_screenshot(&self, id: &str, name: &str) -> Result<()> {
+        let r = self.get(id).await?;
+        if !crate::screenshots::is_shot_name(name) || name.contains('/') {
+            return Err(Error::Invalid(format!("not a screenshot name: {name}")));
+        }
+        let path = r.game.screenshots_dir().join(name);
+        if !path.is_file() {
+            return Err(Error::NotFound(path.to_string_lossy().into()));
+        }
+        trash(&path)?;
+        let journal_dir = r.game.journal_dir();
+        let mut named = false;
+        for mut entry in crate::journal::read_all(&journal_dir).unwrap_or_default() {
+            if entry.images.iter().any(|i| i.rsplit('/').next() == Some(name)) {
+                entry.images.retain(|i| i.rsplit('/').next() != Some(name));
+                crate::journal::write(&journal_dir, &entry)?;
+                named = true;
+            }
+        }
+        if named {
+            let cfg = self.config.read().await.clone();
+            let note_dir = cfg.journal_root().join(id);
+            let mirrored = note_dir.join(name);
+            if mirrored.is_file() {
+                trash(&mirrored)?;
+            }
+            if note_dir.is_dir() {
+                self.render_journal(id).await?;
+            }
+        }
+        Ok(())
     }
 
     /// Newest first; an empty `id` lists every visible game. The entry state is read from disk on every call, as `journal` is.
@@ -663,7 +715,7 @@ impl Core {
         let journal_dir = r.game.journal_dir();
         let mut entries = crate::journal::load(&journal_dir, &r.sessions);
         for img in entries.iter_mut().flat_map(|e| e.images.iter_mut()) {
-            *img = journal_dir.join(&*img).to_string_lossy().into_owned();
+            *img = crate::journal::image_path(&journal_dir, &r.game.screenshots_dir(), img).to_string_lossy().into_owned();
         }
         Ok(entries)
     }
@@ -690,7 +742,8 @@ impl Core {
         if written.is_file() {
             trash(&written)?;
         }
-        for rel in &entry.images {
+        // The frames go with the entry; the player's own shots are theirs, not the entry's.
+        for rel in entry.images.iter().filter(|rel| !crate::screenshots::is_shot_name(rel.rsplit('/').next().unwrap_or(rel))) {
             if rel.starts_with('/') || rel.split('/').any(|seg| seg == "..") {
                 continue;
             }
@@ -726,7 +779,7 @@ impl Core {
         let journal_dir = r.game.journal_dir();
         let sessions = crate::journal::sessions_for_note(&r.sessions, &journal_dir);
         let entries = crate::journal::load(&journal_dir, &r.sessions);
-        let path = crate::journal::write_note(&r.game.title, &entries, &sessions, &journal_dir, &note_dir, &crate::journal::Locale::from_env())?;
+        let path = crate::journal::write_note(&r.game.title, &entries, &sessions, &journal_dir, &r.game.screenshots_dir(), &note_dir, &crate::journal::Locale::from_env())?;
         Ok(path.to_string_lossy().into())
     }
 

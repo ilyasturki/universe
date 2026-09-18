@@ -138,6 +138,7 @@ class ControllerScreen(QObject):
     unknownPressed = Signal(str, str)
     learned = Signal(str, str, str)
     macroNotice = Signal(str)
+    screenshotTaken = Signal(str)
     message = Signal(str)
 
     def __init__(self, client, memory, power, parent=None):
@@ -252,6 +253,8 @@ class ControllerScreen(QObject):
             self.unknownPressed.emit(ident, str(line.get("code") or ""))
         elif kind == "hud":
             self.macroNotice.emit(self._hud_notice(line))
+        elif kind == "screenshot":
+            self.screenshotTaken.emit(str(line.get("path") or ""))
         elif kind == "learned":
             self._learned(line)
         elif kind == "learn_timeout":

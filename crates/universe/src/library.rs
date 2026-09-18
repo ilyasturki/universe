@@ -153,21 +153,6 @@ pub fn media_of(game: &Game, overrides: &Path) -> (Vec<(String, String)>, Vec<St
     (media, shots)
 }
 
-/// The shots the player took in-game, newest first: `journal/attachments/YYYYMMDD-HHMMSS.<ext>`; the frames
-/// the journal module persists there are `<session>-<n>.png` and stay out.
-pub fn journal_shots(journal_dir: &Path) -> Vec<String> {
-    let Ok(rd) = std::fs::read_dir(journal_dir.join("attachments")) else { return Vec::new() };
-    let is_shot = |stem: &str| stem.len() == 15 && stem.as_bytes()[8] == b'-' && stem.bytes().enumerate().all(|(i, b)| i == 8 || b.is_ascii_digit());
-    let mut shots: Vec<String> = rd
-        .flatten()
-        .map(|e| e.path())
-        .filter(|p| is_image(p) && p.file_stem().and_then(|s| s.to_str()).is_some_and(is_shot))
-        .map(|p| p.to_string_lossy().into())
-        .collect();
-    shots.sort_unstable_by(|a, b| b.cmp(a));
-    shots
-}
-
 pub fn is_image(p: &Path) -> bool {
     p.extension().and_then(|s| s.to_str()).is_some_and(|e| IMAGE_EXTS.contains(&e.to_ascii_lowercase().as_str()))
 }
@@ -195,8 +180,7 @@ pub fn resolve(game: Game, config: &Config, modules: &[crate::modules::Module]) 
 pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Module], located: &mut HashMap<String, String>) -> Resolved {
     let sessions = sessions::read(&game.sessions_path()).unwrap_or_default();
     let stats = sessions::stats(&sessions);
-    let (media, mut screenshots) = media_of(&game, &config.overrides_dir());
-    screenshots.splice(0..0, journal_shots(&game.journal_dir()));
+    let (media, screenshots) = media_of(&game, &config.overrides_dir());
     let journal_count = crate::journal::count_written(&game.journal_dir());
     let mut mods = BTreeMap::new();
     for m in modules.iter().filter(|m| m.active()) {
@@ -313,19 +297,6 @@ mod tests {
         let mut g = Game::new(title);
         g.launch.exe = exe.into();
         Resolved { game: g, ..Default::default() }
-    }
-
-    #[test]
-    fn journal_shots_are_the_players_only_newest_first() {
-        let dir = tempfile::tempdir().unwrap();
-        let att = dir.path().join("attachments");
-        std::fs::create_dir_all(&att).unwrap();
-        for f in ["20251219-215949.png", "20251223-004111.jpg", "20251219-215949-1.png", "frame.png", "notes.txt"] {
-            std::fs::write(att.join(f), b"x").unwrap();
-        }
-        let shots = journal_shots(dir.path());
-        assert_eq!(shots, [att.join("20251223-004111.jpg").to_string_lossy().to_string(), att.join("20251219-215949.png").to_string_lossy().to_string()]);
-        assert!(journal_shots(&dir.path().join("none")).is_empty());
     }
 
     #[test]

@@ -58,7 +58,76 @@ def test_themes_render_and_switch_live(api):
     assert lit_fraction(window.grabWindow(), api.theme.ground) > 0.01
     root = window.property("contentItem").childItems()[0].property("item")
     page = root.property("activePage")
-    assert root.property("tabIndex") == 3 and page is not None and page.property("section") == page.property("themesSection")
+    assert root.property("tabIndex") == 4 and page is not None and page.property("section") == page.property("themesSection")
+    window.close()
+    pump(50)
+
+
+def test_the_media_tab_and_the_screenshots_page(api, fake):
+    engine, window = render(api, activate=True)
+    root = window.property("contentItem").childItems()[0].property("item")
+    root.goToTab(3)
+    settle(window)
+    page = root.property("activePage")
+    def rows():
+        value = page.property("rows")
+        return value.toVariant() if hasattr(value, "toVariant") else value
+
+    def current():
+        value = page.property("current")
+        return value.toVariant() if hasattr(value, "toVariant") else value
+
+    assert root.property("tabIndex") == 3 and page is not None and rows() and current()["kind"] in ("shot", "recording", "journal")
+    before = lit_fraction(window.grabWindow(), api.theme.ground)
+    assert before > 0.05
+    page.setProperty("kindIndex", 1)
+    pump(100)
+    assert all(r["kind"] == "shot" for r in rows()) and rows()
+    page.setProperty("gameFilter", "the-technomancer")
+    pump(100)
+    assert all(r["gameId"] == "the-technomancer" for r in rows()) and rows()
+    page.open()
+    pump(100)
+    assert page.property("lightbox") is True and page.property("modal") is True
+    page.setProperty("lightbox", False)
+    game = page.property("currentGame")
+    assert game is not None and game.property("id") == "the-technomancer"
+    page.screenshotsRequested.emit(game, current()["name"])
+    settle(window)
+    assert root.property("subOpen") is True and root.property("subSource") == "pages/ScreenshotsPage.qml"
+    shots = api.screens.shots
+    assert shots.gameId == "the-technomancer" and shots.count > 0, "the sub-page loaded the game's shots"
+    assert lit_fraction(window.grabWindow(), api.theme.ground) > 0.05
+    root.closeSub()
+    settle(window)
+    assert root.property("subOpen") is False
+    window.close()
+    pump(50)
+
+
+def test_the_switch2_album_holds_the_shots_too(api):
+    from PySide6.QtCore import Q_ARG, QMetaObject
+
+    api.theme.set("switch2")
+    engine, window = render(api, activate=True)
+    root = window.property("contentItem").childItems()[0].property("item")
+    QMetaObject.invokeMethod(root, "push", Q_ARG("QVariant", "pages/AlbumPage.qml"), Q_ARG("QVariant", {}))
+    settle(window)
+    top = root.property("topPage")
+    assert top is not None
+    shown = top.property("shown")
+    shown = shown.toVariant() if hasattr(shown, "toVariant") else shown
+    kinds = {r["kind"] for r in shown}
+    assert kinds == {"shot", "recording"} and [r["when"] for r in shown] == sorted((r["when"] for r in shown), reverse=True)
+    top.setProperty("kindFilter", "shot")
+    pump(100)
+    shown = top.property("shown")
+    shown = shown.toVariant() if hasattr(shown, "toVariant") else shown
+    assert shown and all(r["kind"] == "shot" for r in shown)
+    top.play()
+    pump(100)
+    assert top.property("viewing") is True
+    assert lit_fraction(window.grabWindow(), api.theme.ground) > 0.05
     window.close()
     pump(50)
 

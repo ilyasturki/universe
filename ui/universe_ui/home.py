@@ -1,3 +1,4 @@
+import os
 import time
 
 from PySide6.QtCore import Property, QObject, QTimer, QUrl, Signal, Slot
@@ -5,6 +6,9 @@ from PySide6.QtCore import Property, QObject, QTimer, QUrl, Signal, Slot
 OPAQUE = 0xFFFFFFFF
 POLL_MS = 250
 HOLD_MS = 600
+# The overlay stays painted over the game this long for the flash the theme draws on a shot.
+CUE_MS = 450
+SHUTTER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "qml", "assets", "sounds", "shutter.wav")
 # How long the swap waits for the theme to say the frame is painted (`covered`) before going ahead anyway: a 4K png decodes slowly.
 COVER_MS = 700
 # A frame taken at the press still stands for a flip this much later while the game runs on under the dock.
@@ -54,9 +58,15 @@ class Home(QObject):
         self._swap = QTimer(self)
         self._swap.setSingleShot(True)
         self._swap.timeout.connect(self._show_launcher)
+        self._cue = QTimer(self)
+        self._cue.setSingleShot(True)
+        self._cue.setInterval(CUE_MS)
+        self._cue.timeout.connect(self._cue_done)
+        self._shutter = None
         client.currentSessionChanged.connect(self._on_session)
         client.sessionShown.connect(self._on_shown)
         controller.buttonPressed.connect(self._on_button)
+        controller.screenshotTaken.connect(self._shot_taken)
         self._on_session()
 
     def attachOverlay(self, window):
@@ -322,7 +332,33 @@ class Home(QObject):
 
     @Slot()
     def screenshot(self):
-        self._client.runAsync(self._client.screenshot, lambda path: self.screenshotTaken.emit(str(path or "")))
+        self._client.runAsync(self._client.screenshot, lambda path: self._shot_taken(str(path or "")))
+
+    # The hook answers once the pixels are grabbed, so the cue never lands in the shot: the shutter here, the
+    # flash in overlay.qml, painted over the game for CUE_MS when the dock is not already holding the overlay up.
+    def _shot_taken(self, path):
+        if path:
+            self._play_shutter()
+            if not self._open and not self._closing and self._shown == "game":
+                self._overlay_state(False, OPAQUE)
+                self._cue.start()
+        self.screenshotTaken.emit(path)
+
+    def _cue_done(self):
+        if not self._open and not self._closing:
+            self._overlay_state(False, 0)
+
+    def _play_shutter(self):
+        if self._shutter is None:
+            try:
+                from PySide6.QtMultimedia import QSoundEffect
+            except ImportError:
+                self._shutter = False
+                return
+            self._shutter = QSoundEffect(self)
+            self._shutter.setSource(QUrl.fromLocalFile(SHUTTER))
+        if self._shutter:
+            self._shutter.play()
 
     @Slot(str, result=str)
     def launchValue(self, key):

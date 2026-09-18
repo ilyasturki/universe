@@ -14,4 +14,28 @@ Window {
         source: api.theme.overlay
         focus: true
     }
+
+    // The shutter's flash, whichever theme and whichever way the shot was taken; the sound is api.home's.
+    Rectangle {
+        id: flash
+
+        anchors.fill: parent
+        color: "white"
+        opacity: 0.0
+        z: 10
+
+        SequentialAnimation {
+            id: flashAnim
+            NumberAnimation { target: flash; property: "opacity"; to: 0.85; duration: 40 }
+            NumberAnimation { target: flash; property: "opacity"; to: 0.0; duration: 320; easing.type: Easing.OutQuad }
+        }
+
+        Connections {
+            target: api.home
+            function onScreenshotTaken(path) {
+                if (path)
+                    flashAnim.restart();
+            }
+        }
+    }
 }

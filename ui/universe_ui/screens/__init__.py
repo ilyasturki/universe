@@ -4,7 +4,7 @@ from .add import AddGameForm
 from .artwork import ArtworkForm, ArtworkOverview
 from .controller import ControllerScreen
 from .launch import LaunchForm
-from .media import JournalList, PendingJournals, RecordingsList
+from .media import JournalList, MediaTimeline, PendingJournals, RecordingsList, ScreenshotsList
 from .paths import PathBrowser
 from .runners import RunnerForm, RunnersForm
 from .settings import GameSettingsForm, ModuleForm, ModulesForm, SourceForm, SourcesForm
@@ -25,6 +25,8 @@ class Screens(QObject):
         self._login.finished.connect(lambda ok, text: (self._sourceList.load(), self._source.reload()))
         self._recordings = RecordingsList(client, self)
         self._journal = JournalList(client, self)
+        self._shots = ScreenshotsList(client, self)
+        self._media = MediaTimeline(client, self._recordings, self)
         self._pendingJournals = PendingJournals(client, self)
         self._paths = PathBrowser(client, self)
         self._controller = ControllerScreen(client, memory, power, self)
@@ -49,6 +51,8 @@ class Screens(QObject):
     login = Property(QObject, lambda self: self._login, constant=True)
     recordings = Property(QObject, lambda self: self._recordings, constant=True)
     journal = Property(QObject, lambda self: self._journal, constant=True)
+    shots = Property(QObject, lambda self: self._shots, constant=True)
+    media = Property(QObject, lambda self: self._media, constant=True)
     pendingJournals = Property(QObject, lambda self: self._pendingJournals, constant=True)
     album = Property(QObject, lambda self: self._recordings, constant=True)
     news = Property(QObject, lambda self: self._journal, constant=True)

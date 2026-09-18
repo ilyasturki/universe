@@ -52,6 +52,17 @@ module is still writing: no title, no paragraphs; the row pulses with the time s
 and cannot be opened) or `failed` (`reason` is the module's message, its one paragraph).
 `durationText` is the session's length — `42 min`, `1 h 05` — next to the date in the row and in
 the article header; the date is `written_at`, or `started_at` while there is none.
+`api.screens.shots` maps the player's own screenshots to rows — `name`, `path`, `url`,
+`taken_at`, `dateText`, `session`, `hasJournal` (a written or pending entry covers the session),
+`gameId`, `gameTitle` — newest first, from `screenshots(id)` (`load(id)`) or `screenshots("")`
+(`loadAll()`), reloaded on `libraryChanged` for the game it holds; `remove(gameId, name)` is
+`remove_screenshot`. `api.screens.media` is every visible game's shots, recordings and written
+journal entries as one list (`load()`, `rows`, `count`), newest first by `when` — `kind` is
+`shot`, `recording` or `journal`; `image` the shot, the recording's thumbnail (warmed through
+`api.screens.recordings` so the two share one cache) or the entry's first picture; `title` the
+recording's length or the entry's title; `gameId`, `gameTitle`, `dateText`, `session`, `name`
+(a shot's file name), `path`, `hasJournal`. It follows `libraryChanged`, `recordingFiled`,
+`entryWritten` and the recordings' `framesChanged` while loaded (`unload()` stops that).
 `api.screens.pendingJournals` is `pending_journals()` as `rows` and `count`, refreshed on
 `entryWritten`, on `sessionEnded` and every 10 s while any is pending (so the elapsed time and
 the module's 30-min timeout show up); `appeared(session, title)` and
@@ -70,7 +81,9 @@ the Switch 2 look, whose HOME goes straight to its HOME menu. The choice lives i
 of the former white and black variants of `switch2` still resolve to it), `--theme ID` overrides it
 for one run, and both looks offer it in Settings › Themes. A theme calls the same `api` and the same `api.screens` objects;
 `api.screens.album` and `api.screens.news` are the recordings and journal lists across every
-visible game (`loadAll()`, over `sessions("")`), which the Switch 2 look shows as its Album and News.
+visible game (`loadAll()`, over `sessions("")`), which the Switch 2 look shows as its Album and News;
+the Album lays `api.screens.shots` (`loadAll()`) on the same grid, newest first, a Show pick
+narrowing it to screenshots or videos, A on a shot opening it full-screen (◀ ▶ step between shots).
 
 ## Changes
 
@@ -160,6 +173,16 @@ The dock is `ui/Dock.qml` in the overlay window: the game's card at the left, a 
 buttons at the right (`row` in `Dock.qml`), a group's settings in a card above its button. ◀ ▶ move
 along the row or change the focused value, ▲ ▼ the rows of a card, A acts, flips or opens, B closes
 the card or the dock, X takes a screenshot with the band faded out so the shell grabs the game alone.
+
+The shutter is the launcher's, not the shell's, so it is the same for the dock's camera, a pad
+macro and `universe screenshot`: `api.home` plays `qml/assets/sounds/shutter.wav` and emits
+`screenshotTaken(path)` when the shot returns — the dock's through its own call, the pad's through
+the watcher's `screenshot` event (`api.screens.controller.screenshotTaken`) — and `overlay.qml`,
+outside the theme's loader, answers a non-empty path with a white flash. Inside gamescope
+`api.home` lifts the overlay window to opaque for 450 ms around it when the dock is not already
+holding it up; on the desktop there is no window over the game, so only the shutter is heard. The
+hook answers once the pixels are grabbed, so neither ever lands in the shot. A failed shot emits
+an empty path: the dock toasts it, the flash stays off.
 Its volume row is the controller's macro by another route (`volume("up" | "down" | "mute")`,
 `controller.volume_step` per step, GNOME's OSD through `desktop::show_osd` on every change but a
 `get`). Quit asks, then `api.home.stop()`.
@@ -313,6 +336,29 @@ between NEXT UP and the screenshots — ▼ from the end of the text lands on it
 page on that session. Under the recordings pane a JOURNAL block shows the entry's title and first
 paragraph; ▼ from the video focuses it, A reads it. Each page loads the other's store for the game
 unless it already holds it, so the jump finds them warm.
+
+The hero's Screenshots pill (`screenshotsRequested`, when `screenshots(id)` lists any; the game
+menu has the same entry) opens `pages/ScreenshotsPage.qml` on `api.screens.shots`: a four-wide
+16:9 grid of the player's own shots, newest first, A a `Lightbox` (◀ ▶ step, B closes), Y the
+journal entry covering the shot (`jumpRequested` to the journal page on that session), Start an
+`ActionMenu` — View, Journal entry, Remove screenshot… (Keep it / Trash the screenshot, through
+`shots.remove`). An `args.name` lands the cursor on that file. The detail strip keeps the store's
+promotional shots only (`assets.screenshotList`).
+
+## The Media tab
+
+`pages/MediaPage.qml`, the fourth tab, is `api.screens.media` on one four-wide grid of
+`ui/ShotCard.qml` (a 16:9 picture with the kind's glyph in a corner, a book when a journal entry
+covers it, the game and the date below): screenshots, recordings and journal entries of every
+game, newest first. Two chips above it, reached with ▲ from the top row, narrow the list — the
+kind (All, Screenshots, Recordings, Journal; also cycled by `LT RT`, kept in `ui-memory.json`
+as `mediaKind`) and the game (every game with something on the list). A opens the row: a shot in
+the `Lightbox` (◀ ▶ step between the shots on the list), a recording on the game's recordings
+page at that session (`recordingsRequested(game, session)`), an entry on its journal page
+(`journalRequested(game, session)`); X is the game's details, Y the journal entry covering a shot
+or a recording; Start an `ActionMenu` with those and, for a shot, All of this game's
+(`screenshotsRequested(game, name)`) and Remove screenshot…. The shell opens each request as a
+sub-page over the tab, so B comes back to the list where it was.
 
 ## The launch and modules sections
 

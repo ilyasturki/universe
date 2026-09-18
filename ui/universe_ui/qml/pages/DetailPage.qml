@@ -15,14 +15,16 @@ FocusScope {
     signal menuRequested(var game, Item anchor)
     signal recordingsRequested(var game)
     signal journalRequested(var game)
+    signal screenshotsRequested(var game)
 
     readonly property int recordingCount: game && filed >= 0 ? (api.universe.recordings(game.id) || []).length : 0
     readonly property int entryCount: game && filed >= 0 ? (api.universe.journal(game.id) || []).length : 0
+    readonly property int shotCount: game && filed >= 0 ? (api.universe.screenshots(game.id) || []).length : 0
     property int filed: 0
-    readonly property var pills: [ "play", "favourite" ].concat(recordingCount > 0 ? [ "recordings" ] : [], entryCount > 0 ? [ "journal" ] : [])
+    readonly property var pills: [ "play", "favourite" ].concat(shotCount > 0 ? [ "shots" ] : [], recordingCount > 0 ? [ "recordings" ] : [], entryCount > 0 ? [ "journal" ] : [])
     readonly property string action: pills[Math.max(0, Math.min(actionIndex, pills.length - 1))] || "play"
     readonly property string acceptLabel: action === "favourite" ? favouriteLabel
-        : action === "recordings" ? "Recordings" : action === "journal" ? "Journal"
+        : action === "shots" ? "Screenshots" : action === "recordings" ? "Recordings" : action === "journal" ? "Journal"
         : game && game.playTime > 0 ? "Continue" : "Play"
 
     readonly property real scrollY: flick.contentY
@@ -76,6 +78,7 @@ FocusScope {
         target: api.universe
         function onRecordingFiled(session, id, path) { page.filed++; }
         function onEntryWritten(session, id) { page.filed++; }
+        function onLibraryChanged(ids) { page.filed++; }
     }
 
     function reset() {
@@ -302,6 +305,15 @@ FocusScope {
                     }
 
                     PillButton {
+                        visible: page.shotCount > 0
+                        label: "Screenshots"
+                        icon: "camera"
+                        ghost: true
+                        focused: actions.active && page.action === "shots"
+                        dimmed: actions.active && page.action !== "shots"
+                    }
+
+                    PillButton {
                         visible: page.recordingCount > 0
                         label: "Recordings"
                         icon: "film"
@@ -466,6 +478,8 @@ FocusScope {
                 page.lightbox = true;
             } else if (page.section === 0 && page.action === "favourite") {
                 page.toggleFavourite();
+            } else if (page.section === 0 && page.action === "shots") {
+                page.screenshotsRequested(page.game);
             } else if (page.section === 0 && page.action === "recordings") {
                 page.recordingsRequested(page.game);
             } else if (page.section === 0 && page.action === "journal") {

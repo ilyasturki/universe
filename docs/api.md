@@ -98,8 +98,8 @@ comma-separated for lists, `""` deletes the key. A runner is written under its s
 
 `effective` is what the launch will use: the game's own keys over the global defaults, the runner
 resolved (`runner_path` empty when its program was not found), the platform the runner implies when
-the game sets none. `media.screenshots` is the player's own shots first (`journal/attachments/YYYYMMDD-HHMMSS.*`,
-newest first — what the `screenshot` hook writes), then `screenshots/` under the overrides and `media/`.
+the game sets none. `media.screenshots` is the store's promotional shots: `screenshots/` under the
+overrides, then under `media/`. The player's own are `screenshots(id)` (see Screenshots).
 
 There is no change notification: the files are the truth, so a frontend watches `games/`,
 `games/<id>/{,journal,media}`, `state/` and the overrides directory and rereads. Everything the CLI, `session-end` and the
@@ -121,7 +121,7 @@ hooks write shows up that way, with no other channel.
 | `nest()` / `nest_game_shown()` / `nest_overlay(window, input, opacity)` / `nest_frame()` / `nest_filter(filter, sharpness)` | `nested()` / `nest_game_shown()` / … | — | the gamescope this process runs in (see Gamescope): whether there is one; whether it shows a window of another process; `STEAM_OVERLAY` on a window of this process, with its `STEAM_INPUT_FOCUS` and `_NET_WM_WINDOW_OPACITY`; the game's last painted frame into `<state>/frame.png` (`None` when no paint came within 400 ms); `GAMESCOPE_SCALING_FILTER` and `GAMESCOPE_FSR_SHARPNESS`. `Unavailable` on the desktop |
 | `host_gamescope(screen)` | `host_gamescope(screen)` | — | the gamescope a launcher starts itself in: `[env, MANGOHUD_CONFIGFILE=<state>/mangoapp.conf, gamescope, args…]` from `launch.gamescope_bin`, the global `gamescope_*` fields at the screen's mode, `launch.gamescope_args`, `--mangoapp` always and `--hdr-enabled` when `launch.hdr` is; writes that conf with the HUD hidden (a game shows it). `None` when the binary is not installed |
 | `adopt_scope()` | `adopt_scope()` | — (`universe play` does it unless `--no-wait`) | moves the calling process into the transient scope `universe-launcher-<pid>.scope` (`StartTransientUnit` on the user manager) and returns its name; every later `launch` binds the game to it. Idempotent. `Unavailable` without a user systemd |
-| `screenshot()` | `screenshot()` | `universe screenshot` | runs the `screenshot` hook of whichever module declares one; returns the PNG path |
+| `screenshot()` | `screenshot()` | `universe screenshot` | runs the `screenshot` hook of whichever module declares one; returns the PNG path (see Screenshots) |
 | `current()` | `current()` | `universe status` | `{session_id, id, title, unit, screen, started_at, gamescope_pid, launcher_pid}` (`gamescope_pid` is the launcher's gamescope the game was started into and `launcher_pid` that launcher, both `0` for a gamescope of the game's own), or `None`. The CLI wraps it: `status --json` prints `{"current": … or null, "recent": [the 10 newest session rows across the library], "pending_journals": [see Journal]}` |
 | `sessions(id)` | `sessions(id)` | `universe sessions <name>` | `[SessionRow]`, newest first (by `ended_at`); `id = ""` spans every visible game (not removed, not hidden) |
 | `session_end(id, session_id, exit, ended)` | — | `universe session-end <id> <session>` | closes the session, idempotent. Run by systemd's `ExecStopPost`, or by reconciliation |
@@ -422,10 +422,32 @@ to the command). `-bm cbr` stays pinned: it is the base the QVBR override needs.
 The module's `screenshot` hook grabs the frame in the shell through the extension
 (`org.universe.Windows.Screenshot(path, window, cursor)`): the focused window's client area with
 `source = "window"`, every monitor with `"screen"`, the cursor per `cursor`. Mutter reads the
-framebuffer synchronously, so the shell's own cue — a flash over the captured area and the shutter —
-fires and the hook returns at the press, before the PNG is encoded; a write that fails afterwards
-is a shell notification. Off GNOME or before the shell has loaded the extension it is a
-gpu-screen-recorder `-o` capture of the session's screen, with no cue.
+framebuffer synchronously, so the hook returns at the press, before the PNG is encoded, and the
+launcher's cue (see Screenshots) follows without landing in the picture; a write that fails
+afterwards is a shell notification. Off GNOME or before the shell has loaded the extension it is a
+gpu-screen-recorder `-o` capture of the session's screen. Either way the PNG goes to
+`SCREENSHOTS_DIR`.
+
+## Screenshots
+
+| Rust | Python | CLI | Role |
+|---|---|---|---|
+| `screenshots(id)` | `screenshots(id)` | `universe screenshots [name]` | `[Shot]`, newest first, read from disk on every call; `id = ""` spans every visible game |
+| `remove_screenshot(id, name)` | `remove_screenshot(id, name)` | `universe screenshots <name> --remove <file> [-y]` | trashes `screenshots/<name>` and drops it from the `images` of the journal entry naming it, when one does |
+
+`Shot` = `{"game", "title", "path", "taken_at", "session"}`. A shot the player takes — the dock's
+camera, a pad macro, `universe screenshot` — lands in `games/<id>/screenshots/YYYYMMDD-HHMMSS.png`:
+the `screenshot` hook writes wherever `SCREENSHOTS_DIR` points, and with no session running that is
+`<state>/screenshots/`, a shot of the launcher that no listing shows. `taken_at` is the name's
+moment; `session` is the session whose span covers it, with the journal module's own grace (90 s
+before the start, 120 s after the end), or empty. The hook answers once the pixels are grabbed, so
+a cue that follows its return never lands in the shot: the launcher plays the shutter and, inside
+gamescope, paints a flash over the game (see `frontends.md`); the pad's `screenshot` macro reports
+back as a `screenshot` event on the watcher (`{"event": "screenshot", "path": …}`, the path empty
+when it failed). Shots taken before this directory existed sat in `journal/attachments/`: a core
+opening the library moves them once (a name already taken stays), and a journal entry keeps
+naming them as it did — by basename, `attachments/<name>` in older entries — which resolves to
+`screenshots/` either way.
 
 ## Journal
 
@@ -435,12 +457,13 @@ gpu-screen-recorder `-o` capture of the session's screen, with no cue.
 | `journal(id)` | `journal(id)` | `universe journal <name>` | `[Entry]`, last first, read from disk on every call, `images` made absolute; the state files below are entries too |
 | `pending_journals()` | `pending_journals()` | `universe status` (a `journal: writing <title>…` line; `pending_journals` in `--json`) | `[{game, title, session, started_at}]` for every `pending` entry across the library; `title` is the game's |
 | `render_journal(id)` | `render_journal(id)` | `universe journal <name> --render` | renders `<journal_root>/<id>/<Title>.md` from the `written` entries, returns the path |
-| `remove_journal_entry(id, session_id)` | `remove_journal_entry(id, session_id)` | `universe journal <name> --remove <session> [-y]` | trashes `journal/<session>.json` and the images it lists (their mirrors beside the note too); a `pending` entry has its `universe-journal-post-process-<session>` unit stopped and its state file removed; the note is rendered again when its folder exists |
+| `remove_journal_entry(id, session_id)` | `remove_journal_entry(id, session_id)` | `universe journal <name> --remove <session> [-y]` | trashes `journal/<session>.json` and the frames it lists (their mirrors beside the note too) — the player's own shots stay, they are the game's, not the entry's; a `pending` entry has its `universe-journal-post-process-<session>` unit stopped and its state file removed; the note is rendered again when its folder exists |
 
 `Entry` = `{"session", "game", "written_at", "started_at", "ended_at", "duration_s", "lang",
 "title", "provider", "paragraphs": [], "next_up": "", "images": ["relative path"],
-"state": "written"}`. On disk and in `add_entry` the images are relative to `games/<id>/journal/`;
-`journal(id)` hands them out absolute. `started_at`, `ended_at` and `duration_s` are the session's span; an entry
+"state": "written"}`. On disk and in `add_entry` the images are relative to `games/<id>/journal/`,
+except the player's own shots, named by basename (`YYYYMMDD-HHMMSS.<ext>`) and read from
+`games/<id>/screenshots/`; `journal(id)` hands them all out absolute. `started_at`, `ended_at` and `duration_s` are the session's span; an entry
 written before the core stamped them gets them at read time from `sessions.jsonl` (or the module's
 migration sidecar), so every listing has one shape. `journal-add` is called by the journal module's
 `post-process` hook, which also passes `started_at`, `ended_at` and `duration_s` so an entry it
@@ -515,8 +538,8 @@ the PulseAudio server (PipeWire's included) through libpulse: the default sink's
 the sink; no key is typed, so nothing reaches the game. On GNOME the new level shows on the shell's
 OSD through `org.universe.Windows.ShowOSD` on the Universe extension, labelled with the output as
 GNOME's own volume keys print it (the sink's active port, else the sink); without the extension the
-macro runs silently. `screenshot` has the capture's own cue (the capture module's flash and
-shutter). `keys` types through uinput; `mangohud` is `set_mangohud(None)` — no key: the running
+macro runs silently. `screenshot` is `screenshot()`, reported back as a `screenshot` event
+(`{"event": "screenshot", "path"}`) that the launcher turns into its flash and shutter. `keys` types through uinput; `mangohud` is `set_mangohud(None)` — no key: the running
 game's `launch.mangohud` flipped and the HUD told (see MangoHud) — and the watcher reports the
 outcome as a `hud` event, which the launcher toasts: "MangoHud shown · <title>", "MangoHud hidden ·
 <title>", "MangoHud: no game running".
@@ -690,6 +713,7 @@ label = "Model"
 | `RECORDING_PATH` | the filed mkv, empty if there is none | `post-process` |
 | `RECORDING_STARTED_AT`, `RECORDING_PAUSES` | the session line's `recording_started_at` and `recording_pauses` (the latter as JSON), empty / `[]` when unknown | `post-process` |
 | `JOURNAL_DIR` | `games/<id>/journal` | all |
+| `SCREENSHOTS_DIR` | `games/<id>/screenshots`; `<state>/screenshots` for a `screenshot` with no session running | all |
 | `MODULE_SETTINGS_JSON` | global settings merged with the game's | all |
 | `UNIVERSE_ENV_FILE` | write `KEY=VALUE` lines here to add them to the game's environment, ahead of `launch.env` | `pre-launch` |
 | `MODULE_DIR`, `MODULE_DATA_DIR` | the module's directory, `$XDG_DATA_HOME/universe/modules/<id>` | all |

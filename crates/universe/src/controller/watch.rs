@@ -478,12 +478,18 @@ impl Watcher {
                     t.set(&up, false);
                 });
             }
-            // The cue (a flash, the shutter) is the capture's own, at grab time; an OSD after it would only lag.
+            // The hook answers once the pixels are grabbed: the launcher's cue (the flash, the shutter) follows the event.
             "screenshot" => {
+                let out = self.out;
                 tokio::spawn(async move {
-                    if let Err(e) = core.screenshot().await {
-                        tracing::warn!("screenshot: {e}");
-                    }
+                    let path = match core.screenshot().await {
+                        Ok(p) => p,
+                        Err(e) => {
+                            tracing::warn!("screenshot: {e}");
+                            String::new()
+                        }
+                    };
+                    out.emit(serde_json::json!({"event": "screenshot", "path": path}));
                 });
             }
             "stop" => {

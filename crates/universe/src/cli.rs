@@ -229,6 +229,17 @@ pub enum Cmd {
     },
     /// Take a screenshot through the module that provides one
     Screenshot,
+    /// The player's own screenshots, newest first: of one game, or of every game
+    Screenshots {
+        /// Game: exact id, then whole word, substring or path
+        name: Option<String>,
+        /// Trash this shot (its file name) and drop it from the journal entry naming it
+        #[arg(long, value_name = "NAME")]
+        remove: Option<String>,
+        /// Skip the confirmation
+        #[arg(short, long)]
+        yes: bool,
+    },
     /// Controller macros: paddles and spare buttons bound to actions
     Controller {
         #[command(subcommand)]
@@ -1168,6 +1179,31 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
         }
         Cmd::Screenshot => println!("{}", core.screenshot().await?),
+        Cmd::Screenshots { name, remove, yes } => {
+            let id = match &name {
+                Some(n) => pick(&core, n).await?,
+                None => String::new(),
+            };
+            if let Some(shot) = remove {
+                if id.is_empty() {
+                    anyhow::bail!("--remove takes a game");
+                }
+                if yes || confirm(&format!("trash the screenshot {shot} of {id}?")) {
+                    core.remove_screenshot(&id, &shot).await?;
+                    println!("removed {shot}");
+                }
+                return Ok(());
+            }
+            let list = core.screenshots(&id).await?;
+            if json {
+                return print_json(&list);
+            }
+            let mut t = table(&["Taken", "Game", "Session", "Path"]);
+            for r in rows(&list) {
+                t.add_row(vec![when(&s(&r, "taken_at"), &loc), s(&r, "title"), s(&r, "session"), s(&r, "path")]);
+            }
+            println!("{t}");
+        }
         Cmd::Controller { action } => return controller(core, action, json).await,
         Cmd::Rescan => {
             core.reload_config().await?;
@@ -1415,6 +1451,7 @@ const POSITIONALS: &[(&str, usize, &str)] = &[
     ("rm", 1, "games"),
     ("uninstall", 1, "games"),
     ("sessions", 1, "games"),
+    ("screenshots", 1, "games"),
     ("journal", 1, "games"),
     ("recordings", 1, "games"),
     ("update", 1, "games"),

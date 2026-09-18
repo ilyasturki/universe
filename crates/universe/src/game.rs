@@ -194,6 +194,9 @@ impl Game {
     pub fn media_dir(&self) -> PathBuf {
         self.dir().join("media")
     }
+    pub fn screenshots_dir(&self) -> PathBuf {
+        self.dir().join("screenshots")
+    }
 
     pub fn exe_path(&self) -> PathBuf {
         paths::expand(&self.launch.exe)

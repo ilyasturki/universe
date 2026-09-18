@@ -18,9 +18,10 @@ FocusScope {
         { name: "Home", source: "pages/HomePage.qml" },
         { name: "Library", source: "pages/LibraryPage.qml" },
         { name: "Favourites", source: "pages/FavouritesPage.qml" },
+        { name: "Media", source: "pages/MediaPage.qml" },
         { name: "Settings", source: "pages/SettingsPage.qml" }
     ]
-    readonly property int settingsTab: 3
+    readonly property int settingsTab: 4
     property int tabIndex: 0
     property bool detailOpen: false
     property var detailGame: null
@@ -277,9 +278,10 @@ FocusScope {
                      label: game.favorite ? "Remove from favourites" : "Add to favourites", action: "favourite" },
                    { icon: "sliders", label: "Game settings", action: "settings" },
                    { icon: "image", label: "Artwork", action: "artwork" },
+                   { icon: "camera", label: "Screenshots", action: "screenshots" },
                    { icon: "film", label: "Recordings", action: "recordings" },
                    { icon: "book", label: "Journal", action: "journal" });
-        var pages = { settings: "FormPage", artwork: "ArtworkPage", recordings: "RecordingsPage", journal: "JournalPage" };
+        var pages = { settings: "FormPage", artwork: "ArtworkPage", screenshots: "ScreenshotsPage", recordings: "RecordingsPage", journal: "JournalPage" };
         gameMenu.show(items, anchor, Qt.rect(0, 0, anchor.width, anchor.height), "", function(action) {
             root.restoreFocus();
             if (action === "play")
@@ -498,6 +500,9 @@ FocusScope {
                         function onModuleRequested(module) { root.openSub("pages/FormPage.qml", { module: module }); }
                         function onSourceRequested(source) { root.openSub("pages/FormPage.qml", { source: source }); }
                         function onArtworkRequested(game, slot) { root.openSub("pages/ArtworkPage.qml", { game: game, slot: slot }); }
+                        function onScreenshotsRequested(game, name) { root.openSub("pages/ScreenshotsPage.qml", { game: game, name: name || "" }); }
+                        function onRecordingsRequested(game, session) { root.openSub("pages/RecordingsPage.qml", { game: game, session: session || "" }); }
+                        function onJournalRequested(game, session) { root.openSub("pages/JournalPage.qml", { game: game, session: session || "" }); }
                         function onTabRequested(index) {
                             Sound.enter();
                             root.goToTab(index);
@@ -578,6 +583,7 @@ FocusScope {
             function onMenuRequested(game, anchor) { root.openMenu(game, anchor); }
             function onRecordingsRequested(game) { root.openSub("pages/RecordingsPage.qml", { game: game }); }
             function onJournalRequested(game) { root.openSub("pages/JournalPage.qml", { game: game }); }
+            function onScreenshotsRequested(game) { root.openSub("pages/ScreenshotsPage.qml", { game: game }); }
         }
 
         Behavior on opacity { SceneFade {} }

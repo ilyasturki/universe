@@ -279,6 +279,17 @@ class CoreClient(QObject):
     def screenshot(self):
         return self._guarded("", self._core.screenshot)
 
+    @Slot(str, result="QVariantList")
+    def screenshots(self, ident):
+        return self._guarded([], self._core.screenshots, ident)
+
+    @Slot(str, str, result=bool)
+    def removeScreenshot(self, ident, name):
+        if not self._done(self._core.remove_screenshot, ident, name):
+            return False
+        self.libraryChanged.emit([ident])
+        return True
+
     @Slot(str, result="QVariant")
     def sessions(self, ident):
         return self._guarded([], self._core.sessions, ident)
@@ -542,7 +553,7 @@ class CoreClient(QObject):
         wanted = {str(games), str(self._state)}
         for d in games.iterdir():
             if d.is_dir():
-                wanted.update(str(p) for p in (d, d / "journal", d / "journal" / "attachments", d / "media") if p.is_dir())
+                wanted.update(str(p) for p in (d, d / "journal", d / "journal" / "attachments", d / "media", d / "screenshots") if p.is_dir())
         if self._overrides and self._overrides.is_dir():
             wanted.add(str(self._overrides))
             wanted.update(str(p) for d in self._overrides.iterdir() if d.is_dir() for p in (d, d / "screenshots") if p.is_dir())
