@@ -15,7 +15,6 @@ FocusScope {
     readonly property var shots: api.screens.shots
     readonly property var frameMap: store.frameMap
 
-    // Screenshots and recordings on one grid, newest first, like the console's Album.
     readonly property var rows: {
         var out = store.rows.map(function(r) { return Object.assign({ kind: "recording", when: r.created_at }, r); })
             .concat(shots.rows.map(function(r) { return Object.assign({ kind: "shot", when: r.taken_at }, r); }));

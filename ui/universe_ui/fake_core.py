@@ -14,7 +14,7 @@ from .errors import UniverseError
 
 FIXTURE = Path(__file__).parent / "fixtures" / "library.json"
 LAUNCH_KEYS = Path(__file__).parent / "fixtures" / "launch_keys.json"
-GPU = {"vendor": "amd", "name": "AMD Radeon RX 7900 GRE", "rdna": "rdna3", "label": "AMD Radeon RX 7900 GRE · RDNA 3",
+GPU = {"vendor": "amd", "name": "AMD Radeon RX 7900 GRE", "rdna": 3, "label": "AMD Radeon RX 7900 GRE · RDNA 3",
        "fits": {"dlss_upgrade": False, "fsr4_upgrade": True, "xess_upgrade": True, "optiscaler": True}}
 REFRESH_RATES = [240, 165, 144, 120, 100, 90, 75, 60, 50, 48, 40, 30]
 RESOLUTION_HEIGHTS = [2160, 1800, 1440, 1080, 720]
@@ -127,7 +127,6 @@ class FakeCore:
             for entry in entries:
                 self._write_entry(ident, entry)
 
-    # Two shots a session, a minute and ten minutes in, from the store's promo art: the gallery has something to show.
     def _lay_out_shots(self, game):
         from datetime import datetime, timedelta
 

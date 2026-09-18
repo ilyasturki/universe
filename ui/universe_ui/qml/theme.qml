@@ -62,7 +62,6 @@ FocusScope {
         tabIndex = (index + tabs.length) % tabs.length;
     }
 
-    // A section's name the Settings tab lands on once it is the active page.
     property string settingsLanding: ""
 
     function openSettings(section) {
@@ -166,7 +165,6 @@ FocusScope {
         launchOverlay.begin(game);
     }
 
-    // The tile grows back into the last frame before the game takes the screen; no frame, no zoom.
     function resumeSession() {
         if (!sessionRunning || flip.growing)
             return;
@@ -233,7 +231,6 @@ FocusScope {
         }
     }
 
-    // Another sub over this one — a runner's game to its settings — with the way back on B.
     function pushSub(source, args) {
         if (!subOpen || subSwapping)
             return;
@@ -707,8 +704,7 @@ FocusScope {
 
     property string lastShown: api.home.shown
 
-    // HOME from the game: everything closes, the playing game takes the cursor, its last frame zooms into its tile.
-    // A game that exits by itself also leaves the launcher on screen: no flip, nothing to zoom.
+    // A game that exits by itself leaves the launcher on screen too: no flip, nothing to zoom.
     function landHome() {
         if (root.launching || !api.home.flipped || api.home.frame === "") {
             api.home.covered();

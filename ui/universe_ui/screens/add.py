@@ -32,13 +32,11 @@ def _source_status(source):
 
 class AddGameForm(RowsForm):
     message = Signal(str)
-    busyChanged = Signal()
     pendingChanged = Signal()
     lutrisChanged = Signal()
 
     def __init__(self, client, parent=None):
         super().__init__(client, parent)
-        self._busy = 0
         self._pending = None
         self._candidates = []
         self._runner = -1
@@ -111,17 +109,6 @@ class AddGameForm(RowsForm):
         self._pending = None
         self.pendingChanged.emit()
 
-    def _run(self, work, done):
-        self._busy += 1
-        self.busyChanged.emit()
-
-        def finish(result):
-            self._busy -= 1
-            done(*result)
-            self.busyChanged.emit()
-
-        self._client.runAsync(lambda: self._client.attempt(work), finish)
-
     @Slot()
     def previewLutris(self):
         if self._busy:
@@ -154,7 +141,6 @@ class AddGameForm(RowsForm):
 
         self._run(lambda: self._client.core.import_lutris(True), done)
 
-    busy = Property(bool, lambda self: self._busy > 0, notify=busyChanged)
     pendingFile = Property(str, lambda self: self._pending["file"] if self._pending else "", notify=pendingChanged)
     runnerChoices = Property("QVariantList", lambda self: [r.get("name", r["id"]) for r in self._candidates], notify=pendingChanged)
     runnerIds = Property("QVariantList", lambda self: [r["id"] for r in self._candidates], notify=pendingChanged)

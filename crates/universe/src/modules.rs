@@ -115,11 +115,7 @@ impl Module {
         if !has_enabled {
             list.push(serde_json::json!({"key": "enabled", "type": "bool", "default": true, "label": "Enable", "scope": "game", "choices": []}));
         }
-        for s in &self.manifest.settings {
-            let mut j = setting_json(s);
-            j["scope"] = serde_json::Value::String(s.scope.clone());
-            list.push(j);
-        }
+        list.extend(self.manifest.settings.iter().map(setting_json));
         serde_json::Value::Array(list)
     }
 
@@ -159,6 +155,7 @@ pub fn setting_json(s: &Setting) -> serde_json::Value {
         "type": s.kind,
         "default": toml_to_json(&s.default),
         "label": s.label,
+        "scope": s.scope,
         "choices": s.choices,
         "dynamic": !s.choices_exec.is_empty(),
     })
@@ -186,7 +183,7 @@ pub fn toml_to_json(v: &toml::Value) -> serde_json::Value {
     }
 }
 
-/// `<root>/*/<file>` over the roots in order, a later root overriding an earlier one on the same id; a manifest of an older api is left out.
+/// A later root wins on the same id; an older api is skipped.
 pub fn read_manifests<M: serde::de::DeserializeOwned>(roots: impl Iterator<Item = PathBuf>, file: &str, id_api: impl Fn(&M) -> (&str, u32)) -> BTreeMap<String, (PathBuf, M)> {
     let mut found = BTreeMap::new();
     for root in roots {
@@ -247,7 +244,6 @@ pub struct HookOutcome {
     pub stderr: String,
 }
 
-/// An executable of a module or a source: run in its directory with `<PREFIX>_DIR` and `<PREFIX>_DATA_DIR`, stdout and stderr piped.
 pub(crate) fn command(exe: &Path, dir: &Path, data_dir: &Path, prefix: &str) -> crate::Result<tokio::process::Command> {
     std::fs::create_dir_all(data_dir)?;
     let mut cmd = tokio::process::Command::new(exe);
@@ -302,16 +298,16 @@ pub async fn run_async(units: &crate::host::Units, module: &Module, hook: &str, 
 
 /// `<exec> <key>` prints a JSON array of strings, bounded to 20 s; the static list when there is no exec.
 pub async fn setting_choices(module: &Module, settings: &serde_json::Map<String, serde_json::Value>, key: &str) -> crate::Result<Vec<String>> {
-    let s = module.manifest.settings.iter().find(|s| s.key == key).ok_or_else(|| crate::Error::Invalid(format!("{}: unknown setting {key}", module.id())))?;
+    run_choices(&module.manifest.settings, &module.dir, &module.data_dir(), "MODULE", module.id(), settings, key).await
+}
+
+pub(crate) async fn run_choices(list: &[Setting], dir: &Path, data_dir: &Path, prefix: &str, id: &str, settings: &serde_json::Map<String, serde_json::Value>, key: &str) -> crate::Result<Vec<String>> {
+    let s = list.iter().find(|s| s.key == key).ok_or_else(|| crate::Error::Invalid(format!("{id}: unknown setting {key}")))?;
     if s.choices_exec.is_empty() {
         return Ok(s.choices.clone());
     }
-    let exe = module.dir.join(&s.choices_exec);
-    run_choices(module_cmd(module, &exe)?, &exe, "MODULE", module.id(), settings, key).await
-}
-
-pub(crate) async fn run_choices(mut cmd: tokio::process::Command, exe: &Path, prefix: &str, id: &str, settings: &serde_json::Map<String, serde_json::Value>, key: &str) -> crate::Result<Vec<String>> {
-    let child = cmd.arg(key).env(format!("{prefix}_SETTINGS_JSON"), serde_json::Value::Object(settings.clone()).to_string()).env("UNIVERSE_BIN", paths::self_exe()).spawn().map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
+    let exe = dir.join(&s.choices_exec);
+    let child = command(&exe, dir, data_dir, prefix)?.arg(key).env(format!("{prefix}_SETTINGS_JSON"), serde_json::Value::Object(settings.clone()).to_string()).env("UNIVERSE_BIN", paths::self_exe()).spawn().map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
     let out = tokio::time::timeout(Duration::from_secs(20), child.wait_with_output())
         .await
         .map_err(|_| crate::Error::Io(format!("{id} {key}: choices timed out")))??;

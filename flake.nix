@@ -46,31 +46,19 @@
         pythonImportsCheck = [ "universe_core" ];
       };
 
-      modulesPkg = pkgs.stdenvNoCC.mkDerivation {
-        pname = "universe-modules";
-        inherit version;
-        src = ./modules;
+      treePkg = kind: src: pkgs.stdenvNoCC.mkDerivation {
+        pname = "universe-${kind}";
+        inherit version src;
         nativeBuildInputs = [ pkgs.python3 ];
         installPhase = ''
           mkdir -p $out/share/universe
-          cp -r . $out/share/universe/modules
-          rm -rf $out/share/universe/modules/*/tests $out/share/universe/modules/capture/extension
-          patchShebangs $out/share/universe/modules
+          cp -r . $out/share/universe/${kind}
+          rm -rf $out/share/universe/${kind}/*/tests $out/share/universe/${kind}/*/extension
+          patchShebangs $out/share/universe/${kind}
         '';
       };
-
-      sourcesPkg = pkgs.stdenvNoCC.mkDerivation {
-        pname = "universe-sources";
-        inherit version;
-        src = ./sources;
-        nativeBuildInputs = [ pkgs.python3 ];
-        installPhase = ''
-          mkdir -p $out/share/universe
-          cp -r . $out/share/universe/sources
-          rm -rf $out/share/universe/sources/*/tests
-          patchShebangs $out/share/universe/sources
-        '';
-      };
+      modulesPkg = treePkg "modules" ./modules;
+      sourcesPkg = treePkg "sources" ./sources;
 
       universe-shell-extension = pkgs.stdenvNoCC.mkDerivation (finalAttrs: {
         pname = "universe-shell-extension";
@@ -88,7 +76,7 @@
       # No gpu-screen-recorder here: it must match the host's setcap gsr-kms-server (nixos.nix pins that package).
       moduleRuntime = with pkgs; [ ffmpeg trash-cli util-linux ];
       sourceRuntime = with pkgs; [ gogdl ];
-      runtimePath = lib.makeBinPath (moduleRuntime ++ sourceRuntime ++ [ pkgs.umu-launcher pkgs.systemd pkgs.vulkan-tools ]);
+      runtimePath = lib.makeBinPath (moduleRuntime ++ sourceRuntime ++ [ pkgs.umu-launcher pkgs.systemd ]);
       modulesDir = "${modulesPkg}/share/universe/modules";
       sourcesDir = "${sourcesPkg}/share/universe/sources";
       qmlImportPath = lib.concatMapStringsSep ":" (p: "${p}/lib/qt-6/qml") (with pkgs.qt6; [ qtdeclarative qt5compat qtmultimedia ]);

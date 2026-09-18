@@ -8,7 +8,6 @@ FocusScope {
 
     focus: true
 
-    // { add: true }: the hub that adds games — a file through a runner, a store, the Lutris library.
     property var args: ({})
     readonly property var form: api.screens.add
 

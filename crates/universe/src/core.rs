@@ -116,7 +116,7 @@ impl Core {
         std::fs::create_dir_all(paths::games_dir())?;
         let core = Core::new(config, host);
         core.reconcile().await?;
-        let moved: usize = core.games.read().await.iter().map(|r| crate::screenshots::migrate(&r.game)).sum();
+        let moved: usize = core.games.read().await.iter().map(|r| crate::screenshots::migrate_dirs(&r.game.journal_dir().join("attachments"), &r.game.screenshots_dir())).sum();
         if moved > 0 {
             tracing::info!("{moved} screenshot(s) moved out of journal/attachments");
         }
@@ -477,43 +477,34 @@ impl Core {
         Ok(shot.map(|p| p.to_string_lossy().to_string()))
     }
 
-    async fn running(&self) -> Result<(crate::session::Current, Resolved)> {
-        let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
-        let r = self.get(&c.id).await?;
-        Ok((c, r))
-    }
-
-    /// Whether a mangoapp draws the running game's HUD: the launcher's gamescope, or one of the game's own.
     async fn mangoapp_draws(&self, c: &crate::session::Current, r: &Resolved) -> bool {
         c.gamescope_pid != 0 || (r.effective.gamescope && crate::runners::on_path(&self.config.read().await.launch.gamescope_bin).is_some())
     }
 
-    /// The in-game layer's conf for the running game as its `fps_limit` and `mangohud` now resolve; the layer rereads it on `RELOAD_CFG`.
     async fn write_layer_conf(&self, c: &crate::session::Current, r: &Resolved) -> Result<()> {
         let hz = crate::launcher::fps_limit_hz(&r.effective, crate::desktop::screen_mode(&c.screen).await);
         let mangoapp = self.mangoapp_draws(c, r).await;
         Ok(std::fs::write(crate::launcher::layer_conf_path(), crate::launcher::layer_conf_text((!mangoapp).then_some(c.id.as_str()), hz, mangoapp || !r.effective.mangohud))?)
     }
 
-    /// Rewrites the running game's layer conf from its `fps_limit` and returns the combo that makes the layer reread it.
     pub async fn set_fps_limit(&self) -> Result<String> {
-        let (c, r) = self.running().await?;
-        self.write_layer_conf(&c, &r).await?;
+        let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
+        self.write_layer_conf(&c, &self.get(&c.id).await?).await?;
         Ok(crate::launcher::RELOAD_CFG.into())
     }
 
-    /// mangoapp's visibility: its conf for the next reload, and with `tell` the running one now. The queue outlives mangoapp, so nothing is told when none runs: the next to start would obey.
+    /// The SysV queue outlives mangoapp: told with none running, the next to start obeys.
     pub(crate) fn apply_mangoapp(&self, shown: bool, tell: bool) -> Result<()> {
         std::fs::write(crate::launcher::mangoapp_conf_path(), crate::launcher::mangoapp_conf_text(shown))?;
         if tell {
-            if let Err(e) = crate::mangoapp::set_shown(shown, false) {
+            if let Err(e) = crate::mangoapp::set_shown(shown) {
                 tracing::debug!("mangoapp: {e}");
             }
         }
         Ok(())
     }
 
-    /// The running game's HUD, `None` flipping it: written as its `launch.mangohud`, then shown or hidden in the game. Returns the new state.
+    /// `None` flips it; returns the new state.
     pub async fn set_mangohud(&self, on: Option<bool>) -> Result<bool> {
         let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
         // The dock and the watcher each hold a library: the other may have written the key since this one loaded.
@@ -554,7 +545,6 @@ impl Core {
         Ok(serde_json::json!({"percent": level.percent, "muted": level.muted, "output": level.output}))
     }
 
-    /// Its mangoapp starts hidden: the HUD is a game's, shown when one runs with it on.
     pub async fn host_gamescope(&self, screen: &str) -> Option<(String, Vec<String>)> {
         let cfg = self.config.read().await.clone();
         let screen = crate::desktop::pick_screen(screen);
@@ -611,10 +601,9 @@ impl Core {
         Ok(shots)
     }
 
-    /// Trashes one of the game's shots by name; the journal entry naming it, when one does, drops it, its note with it.
     pub async fn remove_screenshot(&self, id: &str, name: &str) -> Result<()> {
         let r = self.get(id).await?;
-        if !crate::screenshots::is_shot_name(name) || name.contains('/') {
+        if !crate::screenshots::is_shot_name(name) {
             return Err(Error::Invalid(format!("not a screenshot name: {name}")));
         }
         let path = r.game.screenshots_dir().join(name);
@@ -787,14 +776,12 @@ impl Core {
         self.modules.read().await.iter().map(|m| m.to_json()).collect()
     }
 
-    /// The module and source lists, from their manifests and config.toml.
     pub async fn reload_modules(&self) {
         let cfg = self.config.read().await.clone();
         *self.modules.write().await = modules::discover(&cfg);
         *self.sources.write().await = sources::discover(&cfg);
     }
 
-    /// A source named as a module (or the reverse) gets the command that does take it.
     async fn module_or_hint(&self, id: &str) -> Result<Module> {
         if let Some(m) = self.modules.read().await.iter().find(|m| m.id() == id) {
             return Ok(m.clone());
@@ -917,7 +904,6 @@ impl Core {
         Ok(crate::launch_keys::rows(crate::launch_keys::Scope::parse(scope)?, screen))
     }
 
-    /// The GPU the games run on (`gpu::Gpu::to_json`), `null` when none is known; probed once, vulkaninfo included.
     pub async fn gpu(&self) -> serde_json::Value {
         blocking(|| Ok(crate::gpu::detected().map(|g| g.to_json()).unwrap_or(serde_json::Value::Null))).await.unwrap_or(serde_json::Value::Null)
     }
@@ -992,7 +978,6 @@ impl Core {
         crate::doctor::run(&cfg, &modules, &sources, conn.as_ref(), &runners).await
     }
 
-    /// A source ready to run: found, its programs present, enabled.
     pub async fn source(&self, id: &str) -> Result<Source> {
         let m = self.source_or_hint(id).await?;
         if !m.available {
@@ -1004,7 +989,6 @@ impl Core {
         Ok(m)
     }
 
-    /// Every source with its manifest and state; the login probe runs once per process, here.
     pub async fn sources(&self) -> Vec<serde_json::Value> {
         self.ensure_logins().await;
         let cfg = self.config.read().await.clone();

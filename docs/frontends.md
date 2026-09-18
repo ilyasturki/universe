@@ -100,7 +100,7 @@ What it derives is derived this way, and any frontend needs the equivalent:
 | `sessionStarted` | a successful `launch` |
 | `sessionShown` | `(session_id, ok)`: the game's window is on screen and has the focus — `wait_session_window` on a host thread, up to 60 s. Inside gamescope `ok` is true once gamescope shows the game's window (a stand-in toplevel carrying the gamescope's pid when no extension lists it); on the desktop, false when nobody can tell: no GNOME, no shell extension, or the session ended first |
 | `sessionEnded` | the current-session marker going empty — the `state/` watch sees `session-end` remove it (debounced 300 ms), a 2 s poll stands behind it, since the game is a systemd unit, not a child. `currentSessionChanged` fires first; the pinned tile and the badge follow that property, and only the toast, the stats refresh and a pending launch follow the signal |
-| `libraryChanged`, `mediaChanged`, `entryWritten`, `recordingFiled` | a `QFileSystemWatcher` on `games/`, `games/<id>/{,journal,journal/attachments,media}`, `state/` and the overrides directory with its `<id>/` subdirectories (a pick made from the CLI shows up), debounced 300 ms; `mediaChanged` also follows a pick or its removal made through the client |
+| `libraryChanged`, `mediaChanged`, `entryWritten`, `recordingFiled` | a `QFileSystemWatcher` on `games/`, `games/<id>/{,journal,journal/attachments,media,screenshots}`, `state/` and the overrides directory with its `<id>/` subdirectories (a pick made from the CLI shows up), debounced 300 ms; `mediaChanged` also follows a pick or its removal made through the client |
 | `progress`, `jobFinished` | the job's own callback — install, update, scan and media refresh run on a host thread |
 | `launched`, `launchFailed`, `error` | the call's result |
 
@@ -180,24 +180,21 @@ macro and `universe screenshot`: `api.home` plays `qml/assets/sounds/shutter.wav
 the watcher's `screenshot` event (`api.screens.controller.screenshotTaken`) — and `overlay.qml`,
 outside the theme's loader, answers a non-empty path with a white flash. Inside gamescope
 `api.home` lifts the overlay window to opaque for 450 ms around it when the dock is not already
-holding it up; on the desktop there is no window over the game, so only the shutter is heard. The
-hook answers once the pixels are grabbed, so neither ever lands in the shot. A failed shot emits
-an empty path: the dock toasts it, the flash stays off.
+holding it up; on the desktop there is no window over the game, so only the shutter is heard (the
+hook answers before either, see api.md § Screenshots). A failed shot emits an empty path: the dock
+toasts it, the flash stays off.
 Its volume row is the controller's macro by another route (`volume("up" | "down" | "mute")`,
 `controller.volume_step` per step, GNOME's OSD through `desktop::show_osd` on every change but a
 `get`). Quit asks, then `api.home.stop()`.
 
 The swap between the game and the launcher is gamescope's, one cut, so the last frame it painted
-bridges it. gamescope writes that frame as a png on one thread, a second or two at 4K, so the
-Guide press from the game asks for it (`nest_frame`, `FRAME_WAIT` at most) and the flip — the
-hold, the dock's Home or Quit — reuses what the press took, or waits for it to land; a frame
-older than `FRESH_S` from a game that ran on under the dock is taken again, a frozen game's stands.
-A look registered with `frame: False` (the Switch 2 one) paints nothing and waits for none.
-`toLauncher` then sets `frame` (`""` when none came) and `shown`, and waits for the theme's
-`covered()` — Reprise's `ui/HomeFlip.qml` paints the frame full screen and calls it once the image
-is up, the Switch 2 look calls it at once — before `focusLauncher` (`COVER_MS` later regardless);
-the root's poll is held off meanwhile, and `flipped` says the host did it (a game that exits by
-itself leaves the launcher on screen too, with nothing to zoom). Reprise then lands on Home with the
+bridges it: the Guide press from the game asks for it (`nest_frame`) and the flip — the hold, the
+dock's Home or Quit — reuses what the press took, or waits for it to land. A look registered with
+`frame: False` (the Switch 2 one) paints nothing and waits for none. `toLauncher` then sets
+`frame` (`""` when none came) and `shown`; with a frame it waits for the theme's `covered()` —
+Reprise's `ui/HomeFlip.qml` paints the frame full screen and calls it once the image is up — before
+`focusLauncher` (`COVER_MS` later regardless), without one it swaps at once; `flipped` says the
+host did it (a game that exits by itself leaves the launcher on screen too, with nothing to zoom). Reprise then lands on Home with the
 cursor on the playing game (`HomePage.landOnPlaying`, every detail, sub page and search closed)
 and shrinks the frame into that tile, which shows the same frame as its art; resuming grows the
 tile back to full screen (`HomePage.playingTileRect`) and only then `toGame()`.

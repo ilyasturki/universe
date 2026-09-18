@@ -15,7 +15,6 @@ Window {
         focus: true
     }
 
-    // The shutter's flash, whichever theme and whichever way the shot was taken; the sound is api.home's.
     Rectangle {
         id: flash
 

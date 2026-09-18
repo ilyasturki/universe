@@ -93,19 +93,8 @@ def test_files_written_by_others_reach_the_screens(fake):
             break
     assert changed == [(["control"],)]
 
-    changed.clear()
-    (games / "control" / "screenshots").mkdir(exist_ok=True)
-    for _ in range(30):
-        pump(100)
-        if changed:
-            break
-    changed.clear()
-    (games / "control" / "screenshots" / "20260914-120500.png").write_bytes(b"")
-    for _ in range(30):
-        pump(100)
-        if changed:
-            break
-    assert changed == [(["control"],)], "a shot taken in-game lands in screenshots/"
+    (games / "the-technomancer" / "screenshots" / "20260914-120500.png").write_bytes(b"")
+    assert wait_for(fake.libraryChanged, 3000) == (["the-technomancer"],), "a shot taken in-game lands in screenshots/"
 
     assert fake.mediaSetSlot("control", "banner", fake.game("control")["media"]["logo"])
     assert media == [("control",)]

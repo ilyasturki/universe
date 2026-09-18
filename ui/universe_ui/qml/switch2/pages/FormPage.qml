@@ -25,6 +25,7 @@ FocusScope {
         return [ { glyph: "B", label: "Back" }, { glyph: "A", label: label } ];
     }
 
+    Component.onDestruction: if (page.runner) api.screens.runner.load("")
     onArgsChanged: (args.runner ? api.screens.runner : args.source ? api.screens.source : api.screens.module).load(args.runner || args.source || args.module)
 
     readonly property var content: Forms.grouped(form.groups, form.rows, function(src, i) {
@@ -146,7 +147,6 @@ FocusScope {
         onEscapedLeft: Sound.play("edge")
     }
 
-    // The sign-in link of a source, as a QR code and the URL, under the rows once asked for.
     Item {
         id: qrCard
 

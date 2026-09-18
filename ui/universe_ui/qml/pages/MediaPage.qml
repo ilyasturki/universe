@@ -3,7 +3,6 @@ import "../core"
 import "../sound"
 import "../ui"
 
-// Every game's screenshots, recordings and journal entries on one timeline, newest first; chips narrow it.
 FocusScope {
     id: page
 
@@ -22,9 +21,7 @@ FocusScope {
     readonly property real scrimTop: 0.62
     readonly property real scrimMid: 0.78
     readonly property real scrimBottom: 0.95
-    readonly property Item menuAnchor: null
     readonly property bool modal: picker.open || menu.open || lightbox
-    property bool menuOpen: false
     property bool lightbox: false
 
     readonly property var kinds: [ "All", "Screenshots", "Recordings", "Journal" ]
@@ -33,9 +30,9 @@ FocusScope {
     property string gameFilter: ""
 
     readonly property var games: {
-        var seen = {}, out = [];
-        for (var i = 0; i < store.rows.length; i++) {
-            var r = store.rows[i];
+        var seen = {}, out = [], all = store.rows;
+        for (var i = 0; i < all.length; i++) {
+            var r = all[i];
             if (!seen[r.gameId]) {
                 seen[r.gameId] = true;
                 out.push({ id: r.gameId, title: r.gameTitle });
@@ -99,19 +96,17 @@ FocusScope {
     }
 
     function gameOptions() {
-        var out = [ { label: "All games", trailing: store.rows.length.toString() } ];
+        var all = store.rows;
+        var out = [ { label: "All games", trailing: all.length.toString() } ];
         for (var i = 0; i < games.length; i++) {
             var id = games[i].id;
-            out.push({ label: games[i].title, trailing: store.rows.filter(function(r) { return r.gameId === id; }).length.toString() });
+            out.push({ label: games[i].title, trailing: all.filter(function(r) { return r.gameId === id; }).length.toString() });
         }
         return out;
     }
 
     function gameFilterIndex() {
-        for (var i = 0; i < games.length; i++)
-            if (games[i].id === gameFilter)
-                return i + 1;
-        return 0;
+        return games.findIndex(function(g) { return g.id === gameFilter; }) + 1;
     }
 
     function step(d) {

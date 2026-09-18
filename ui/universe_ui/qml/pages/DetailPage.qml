@@ -78,7 +78,7 @@ FocusScope {
         target: api.universe
         function onRecordingFiled(session, id, path) { page.filed++; }
         function onEntryWritten(session, id) { page.filed++; }
-        function onLibraryChanged(ids) { page.filed++; }
+        function onLibraryChanged(ids) { if (page.game && (ids.length === 0 || ids.indexOf(page.game.id) >= 0)) page.filed++; }
     }
 
     function reset() {

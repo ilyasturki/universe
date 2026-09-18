@@ -1,7 +1,6 @@
 import QtQuick
 import "../core"
 
-// A 16:9 media card: a screenshot, a recording's thumbnail or a journal entry's cover, with its caption below.
 Item {
     id: root
 
@@ -16,6 +15,25 @@ Item {
 
     readonly property real captionHeight: caption === "" ? 0 : Theme.dp(subcaption === "" ? 34 : 58)
     readonly property real radius: Theme.dp(14)
+    readonly property string glyph: kind === "recording" ? "film" : kind === "journal" ? "book" : "camera"
+
+    component Badge: Rectangle {
+        property alias glyph: badgeGlyph.kind
+        anchors.top: parent.top
+        anchors.margins: Theme.dp(10)
+        width: Theme.dp(34)
+        height: width
+        radius: width / 2
+        color: Qt.rgba(0, 0, 0, 0.55)
+
+        MenuGlyph {
+            id: badgeGlyph
+            anchors.centerIn: parent
+            width: Theme.dp(20)
+            height: Theme.dp(20)
+            tint: "#f2f3f5"
+        }
+    }
 
     scale: focused ? 1.0 : 0.96
     opacity: dimmed ? Theme.idleOpacity : 1.0
@@ -57,46 +75,20 @@ Item {
             width: Theme.dp(44)
             height: Theme.dp(44)
             visible: root.source === "" && root.kind !== ""
-            kind: root.kind === "recording" ? "film" : root.kind === "journal" ? "book" : "camera"
+            kind: root.glyph
             tint: Theme.textFaint
         }
 
-        Rectangle {
+        Badge {
             anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.margins: Theme.dp(10)
-            width: Theme.dp(34)
-            height: width
-            radius: width / 2
-            color: Qt.rgba(0, 0, 0, 0.55)
             visible: root.kind !== "" && root.source !== ""
-
-            MenuGlyph {
-                anchors.centerIn: parent
-                width: Theme.dp(20)
-                height: Theme.dp(20)
-                kind: root.kind === "recording" ? "film" : root.kind === "journal" ? "book" : "camera"
-                tint: "#f2f3f5"
-            }
+            glyph: root.glyph
         }
 
-        Rectangle {
+        Badge {
             anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.margins: Theme.dp(10)
-            width: Theme.dp(34)
-            height: width
-            radius: width / 2
-            color: Qt.rgba(0, 0, 0, 0.55)
             visible: root.journaled && root.kind !== "journal"
-
-            MenuGlyph {
-                anchors.centerIn: parent
-                width: Theme.dp(20)
-                height: Theme.dp(20)
-                kind: "book"
-                tint: "#f2f3f5"
-            }
+            glyph: "book"
         }
     }
 

@@ -121,7 +121,6 @@ class Home(QObject):
         if slot == "guide":
             self.guide(pressed)
 
-    # A press is the theme's (`pressed`); a hold from the game goes home whatever the press opened.
     @Slot(bool)
     def guide(self, pressed):
         self._held = bool(pressed)
@@ -207,8 +206,7 @@ class Home(QObject):
         self._shown = "game"
         self.changed.emit()
 
-    # The frame gamescope writes takes up to a second or two at 4K: the press asks for it, so the hold or the dock
-    # waits on it rather than the flip. One request at a time; a late one lands nowhere unless a flip is waiting.
+    # Asked at the press so the flip need not wait: gamescope takes up to 2 s at 4K.
     def _capture(self):
         if self._capturing or not self._client.nested or not self._frames():
             return
@@ -242,8 +240,7 @@ class Home(QObject):
         self._flipping = True
         if self._fresh():
             self._flip(self._captured)
-        elif not self._capturing:
-            self._captured = None
+        else:
             self._capture()
 
     def _flip(self, path):
@@ -260,10 +257,12 @@ class Home(QObject):
         self._shown = "launcher"
         self._flipped = True
         self._thaw_on_release = False
-        # The theme paints the frame first, so the swap shows it and not the launcher beneath: armed before
-        # anything emits, since a theme with nothing to paint answers from the first `changed`.
+        # Armed before `changed`: the theme answers `covered()` once the frame is painted.
         self._poll.stop()
-        self._swap.start(COVER_MS)
+        if path:
+            self._swap.start(COVER_MS)
+        else:
+            self._show_launcher()
         if self._pause_on_home:
             self._set_paused(True)
         self.changed.emit()
@@ -334,8 +333,7 @@ class Home(QObject):
     def screenshot(self):
         self._client.runAsync(self._client.screenshot, lambda path: self._shot_taken(str(path or "")))
 
-    # The hook answers once the pixels are grabbed, so the cue never lands in the shot: the shutter here, the
-    # flash in overlay.qml, painted over the game for CUE_MS when the dock is not already holding the overlay up.
+    # The hook answers after the grab: the cue never lands in the shot.
     def _shot_taken(self, path):
         if path:
             self._play_shutter()

@@ -53,7 +53,6 @@ impl Source {
         })
     }
 
-    /// Defaults ← config.toml [sources.<id>]; an empty `games_dir` default is `paths.games_root`.
     pub fn merged_settings(&self, config: &Config) -> serde_json::Map<String, serde_json::Value> {
         let mut out = serde_json::Map::new();
         for s in &self.manifest.settings {
@@ -107,18 +106,13 @@ pub enum SourceEvent {
     Unknown,
 }
 
-fn source_cmd(source: &Source, exe: &std::path::Path) -> crate::Result<tokio::process::Command> {
-    modules::command(exe, &source.dir, &source.data_dir(), "SOURCE")
-}
-
-/// `<exe> <verb> [args]` with `SOURCE_SETTINGS_JSON`; one event per stdout line, stderr logged.
 pub async fn run<F>(source: &Source, settings: &serde_json::Map<String, serde_json::Value>, verb: &str, args: &[String], mut on_event: F) -> crate::Result<()>
 where
     F: FnMut(SourceEvent),
 {
     use tokio::io::AsyncBufReadExt;
     let exe = source.dir.join(&source.manifest.exe);
-    let mut child = source_cmd(source, &exe)?.arg(verb).args(args).env("SOURCE_SETTINGS_JSON", serde_json::Value::Object(settings.clone()).to_string()).env("UNIVERSE_BIN", paths::self_exe()).spawn().map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
+    let mut child = modules::command(&exe, &source.dir, &source.data_dir(), "SOURCE")?.arg(verb).args(args).env("SOURCE_SETTINGS_JSON", serde_json::Value::Object(settings.clone()).to_string()).env("UNIVERSE_BIN", paths::self_exe()).spawn().map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();
     let id = source.id().to_string();
@@ -149,14 +143,8 @@ where
     Ok(())
 }
 
-/// `<exec> <key>` prints a JSON array of strings, bounded to 20 s; the static list when there is no exec.
 pub async fn setting_choices(source: &Source, settings: &serde_json::Map<String, serde_json::Value>, key: &str) -> crate::Result<Vec<String>> {
-    let s = source.manifest.settings.iter().find(|s| s.key == key).ok_or_else(|| crate::Error::Invalid(format!("{}: unknown setting {key}", source.id())))?;
-    if s.choices_exec.is_empty() {
-        return Ok(s.choices.clone());
-    }
-    let exe = source.dir.join(&s.choices_exec);
-    modules::run_choices(source_cmd(source, &exe)?, &exe, "SOURCE", source.id(), settings, key).await
+    modules::run_choices(&source.manifest.settings, &source.dir, &source.data_dir(), "SOURCE", source.id(), settings, key).await
 }
 
 #[cfg(test)]
@@ -193,11 +181,10 @@ choices = ["windows", "linux"]
         let j = source.to_json();
         assert_eq!(j["name"], "GOG");
         assert_eq!(j["settings"][1]["choices"][1], "linux");
-        assert!(j["settings"][0].get("scope").is_none(), "a source's settings are global: no scope");
+        assert_eq!(j["settings"][0]["scope"], "global");
     }
 
     #[test]
-    #[allow(clippy::await_holding_lock)]
     fn discover_reads_source_toml_and_skips_old_manifests() {
         let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let dir = tempfile::tempdir().unwrap();

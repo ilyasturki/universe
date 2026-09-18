@@ -533,6 +533,18 @@ fn rows(v: &impl serde::Serialize) -> Vec<Value> {
     serde_json::to_value(v).ok().and_then(|v| v.as_array().cloned()).unwrap_or_default()
 }
 
+fn print_sources(list: &[Value], json: bool) -> anyhow::Result<()> {
+    if json {
+        return print_json(&list);
+    }
+    let mut t = table(&["Id", "Name", "Version", "Enabled", "Available", "Missing", "Library (cached)", "Games dir"]);
+    for m in list {
+        t.add_row(vec![s(m, "id"), s(m, "name"), s(m, "version"), flag(&m["enabled"]), flag(&m["available"]), joined(&m["missing"], ","), m["library_cached"].to_string(), s(m, "games_dir")]);
+    }
+    println!("{t}");
+    Ok(())
+}
+
 fn print_json(v: &impl serde::Serialize) -> anyhow::Result<()> {
     println!("{}", serde_json::to_string_pretty(v)?);
     Ok(())
@@ -1024,19 +1036,10 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 }
             }
         }
+        Cmd::Sources => print_sources(&core.sources().await, json)?,
         Cmd::Source { action } => {
             match action {
-                SourceCmd::Ls => {
-                    let list = core.sources().await;
-                    if json {
-                        return print_json(&list);
-                    }
-                    let mut t = table(&["Id", "Name", "Version", "Enabled", "Available", "Missing"]);
-                    for m in list {
-                        t.add_row(vec![s(&m, "id"), s(&m, "name"), s(&m, "version"), flag(&m["enabled"]), flag(&m["available"]), joined(&m["missing"], ",")]);
-                    }
-                    println!("{t}");
-                }
+                SourceCmd::Ls => print_sources(&core.sources().await, json)?,
                 SourceCmd::Enable { id } => {
                     core.enable_source(&id, true).await?;
                     println!("{id} enabled");
@@ -1055,18 +1058,6 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                         println!("{id}.{k} = {v}");
                     }
                 }
-            }
-        }
-        Cmd::Sources => {
-            let list = core.sources().await;
-            if json {
-                print_json(&list)?;
-            } else {
-                let mut t = table(&["Id", "Name", "Enabled", "Available", "Library (cached)", "Games dir"]);
-                for m in list {
-                    t.add_row(vec![s(&m, "id"), s(&m, "name"), flag(&m["enabled"]), flag(&m["available"]), m["library_cached"].to_string(), s(&m, "games_dir")]);
-                }
-                println!("{t}");
             }
         }
         Cmd::Login { source, code } => {
@@ -1368,16 +1359,15 @@ fn complete(what: &str) -> anyhow::Result<()> {
                 }
             }
         }
-        "modules" => {
+        "modules" | "sources" => {
             let config = crate::config::Config::load()?;
-            for m in crate::modules::discover(&config) {
-                println!("{}\t{}", m.id(), m.manifest.name);
-            }
-        }
-        "sources" => {
-            let config = crate::config::Config::load()?;
-            for m in crate::sources::discover(&config) {
-                println!("{}\t{}", m.id(), m.name());
+            let rows: Vec<(String, String)> = if what == "modules" {
+                crate::modules::discover(&config).into_iter().map(|m| (m.id().into(), m.manifest.name)).collect()
+            } else {
+                crate::sources::discover(&config).into_iter().map(|m| (m.id().into(), m.name().into())).collect()
+            };
+            for (id, name) in rows {
+                println!("{id}\t{name}");
             }
         }
         other => anyhow::bail!("unknown completion set {other}"),

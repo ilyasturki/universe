@@ -8,10 +8,9 @@ from _common import set_paused, timeline  # noqa: E402
 
 def main():
     session_id = os.environ["SESSION_ID"]
-    # No timeline yet: the recorder is not up, and `start` reads the game's freezer state once it is.
     with timeline(os.environ["MODULE_DATA_DIR"], session_id) as state:
         if state is not None:
-            set_paused(state, session_id, True)
+            set_paused(state, session_id, os.path.basename(sys.argv[0]) == "freeze")
     return 0
 
 

@@ -91,7 +91,6 @@ FocusScope {
         return -1;
     }
 
-    // The playing game's tile as it is on screen now, in `target`'s coordinates; null when it is not on the rail.
     function playingTileRect(target) {
         var i = playingIndex();
         var item = i < 0 ? null : rail.itemAtIndex(i);
@@ -103,7 +102,7 @@ FocusScope {
         return Qt.rect(a.x, a.y, b.x - a.x, b.y - a.y);
     }
 
-    // Puts the cursor on the playing game and returns where its tile will sit once the rail has slid there.
+    // Where the tile will sit once the rail has slid, not where it is now.
     function landOnPlaying(target) {
         var i = playingIndex();
         if (i < 0)

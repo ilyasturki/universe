@@ -84,7 +84,6 @@ pub fn self_exe() -> PathBuf {
     resolved.filter(|p| p.is_file()).or_else(|| std::env::current_exe().ok()).unwrap_or(argv0)
 }
 
-/// `$UNIVERSE_<VAR>_PATH` roots first, then `<XDG_DATA_DIRS>/universe/<sub>`.
 fn system_dirs(var: &str, sub: &str) -> Vec<PathBuf> {
     let mut out = Vec::new();
     if let Some(p) = std::env::var_os(var) {

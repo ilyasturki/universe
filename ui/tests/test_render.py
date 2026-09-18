@@ -70,8 +70,7 @@ def test_the_media_tab_and_the_screenshots_page(api, fake):
     settle(window)
     page = root.property("activePage")
     def rows():
-        value = page.property("rows")
-        return value.toVariant() if hasattr(value, "toVariant") else value
+        return page.property("rows").toVariant()
 
     def current():
         value = page.property("current")
@@ -115,14 +114,12 @@ def test_the_switch2_album_holds_the_shots_too(api):
     settle(window)
     top = root.property("topPage")
     assert top is not None
-    shown = top.property("shown")
-    shown = shown.toVariant() if hasattr(shown, "toVariant") else shown
+    shown = top.property("shown").toVariant()
     kinds = {r["kind"] for r in shown}
     assert kinds == {"shot", "recording"} and [r["when"] for r in shown] == sorted((r["when"] for r in shown), reverse=True)
     top.setProperty("kindFilter", "shot")
     pump(100)
-    shown = top.property("shown")
-    shown = shown.toVariant() if hasattr(shown, "toVariant") else shown
+    shown = top.property("shown").toVariant()
     assert shown and all(r["kind"] == "shot" for r in shown)
     top.play()
     pump(100)

@@ -453,17 +453,11 @@ impl Watcher {
                     }
                 });
             }
-            // No key: the HUD is told directly, so the fire reports what it became.
             "mangohud" => {
                 let out = self.out;
                 tokio::spawn(async move {
-                    let (shown, title) = match (core.set_mangohud(None).await, core.current().await) {
-                        (Ok(shown), current) => (Some(shown), current.map(|c| c.title).unwrap_or_default()),
-                        (Err(e), _) => {
-                            tracing::warn!("mangohud: {e}");
-                            (None, String::new())
-                        }
-                    };
+                    let shown = core.set_mangohud(None).await.inspect_err(|e| tracing::warn!("mangohud: {e}")).ok();
+                    let title = if shown.is_some() { core.current().await.map(|c| c.title).unwrap_or_default() } else { String::new() };
                     out.emit(serde_json::json!({"event": "hud", "shown": shown, "title": title}));
                 });
             }
@@ -482,13 +476,7 @@ impl Watcher {
             "screenshot" => {
                 let out = self.out;
                 tokio::spawn(async move {
-                    let path = match core.screenshot().await {
-                        Ok(p) => p,
-                        Err(e) => {
-                            tracing::warn!("screenshot: {e}");
-                            String::new()
-                        }
-                    };
+                    let path = core.screenshot().await.inspect_err(|e| tracing::warn!("screenshot: {e}")).unwrap_or_default();
                     out.emit(serde_json::json!({"event": "screenshot", "path": path}));
                 });
             }

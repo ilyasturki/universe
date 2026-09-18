@@ -45,7 +45,6 @@ pub enum Undo {
     Pads,
     Cursor { was_active: bool },
     PostCommand { command: String, cwd: String, env: BTreeMap<String, String> },
-    /// The launcher's mangoapp was shown or hidden for the game; hidden again after it.
     Hud,
 }
 
@@ -344,7 +343,6 @@ impl Core {
         self.host.units.stop(&c.unit).await
     }
 
-    /// The unit first, then the `freeze` / `thaw` hooks with the marker's environment: what the pad feels is the game.
     pub async fn freeze(&self, on: bool) -> Result<()> {
         let _in_order = self.freezes.lock().await;
         let Some(marker) = read_marker() else { return Err(Error::NotFound("no session running".into())) };

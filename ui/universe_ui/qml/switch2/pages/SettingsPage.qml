@@ -18,7 +18,6 @@ FocusScope {
     readonly property var launch: api.screens.launch
     readonly property var runners: api.screens.runners
     readonly property var sources: api.screens.sources
-    // Modules and Sources are the same list: a switch per entry, A opens its page, X flips it.
     readonly property var listForm: sectionId === "modules" ? modulesForm : sectionId === "sources" ? sourceList : null
 
     readonly property var sections: [
@@ -63,7 +62,6 @@ FocusScope {
         out.push({ glyph: "A", label: label });
         return out;
     }
-
 
     function sectionIndex(id) {
         return Math.max(0, sections.map(function(s) { return s.id; }).indexOf(id));

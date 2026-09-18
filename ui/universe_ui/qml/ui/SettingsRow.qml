@@ -215,7 +215,6 @@ Item {
                 width: Math.min(implicitWidth, row.valueMax)
             }
 
-            // A list entry that opens a page and flips in place: its state as a switch, ahead of the chevron.
             SettingsToggle {
                 visible: row.hasSwitch
                 anchors.verticalCenter: parent.verticalCenter

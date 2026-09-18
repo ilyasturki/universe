@@ -56,7 +56,6 @@ FocusScope {
 
     readonly property var modulesForm: api.screens.modules
     readonly property var sourceList: api.screens.sourceList
-    // The Modules and Sources sections are the same list: a switch per entry, A opens its page, Y flips it.
     readonly property var listForm: section === modulesSection ? modulesForm : section === sourcesSection ? sourceList : null
     readonly property var launch: api.screens.launch
     readonly property var runners: api.screens.runners
@@ -101,7 +100,6 @@ FocusScope {
     }
 
     readonly property bool refreshable: section === installSection || section === updatesSection
-    // What X reloads: the sources' lists from the store, the doctor's checks, the controller's pads.
     readonly property bool canRefresh: refreshable || section === doctorSection || section === controllerSection
 
     readonly property real sideMargin: Theme.dp(80)
@@ -234,15 +232,6 @@ FocusScope {
         listForm.toggle(cards.index);
     }
 
-    function confirm(keep, icon, label, title, done) {
-        Sound.panel();
-        menu.show([ { icon: "", label: keep, action: "" }, { icon: icon, label: label, action: "yes", danger: true } ],
-                  cards, cards.focusRect, title, function(action) {
-                      if (action === "yes")
-                          done();
-                      cards.forceActiveFocus();
-                  });
-    }
 
     function activate(index, row) {
         if (section === modulesSection) {
@@ -286,7 +275,8 @@ FocusScope {
                     Qt.callLater(function() { api.theme.set(theme.id); });
             });
         } else if (section === quitSection) {
-            confirm("Stay", "power", api.universe.currentSession ? "Quit and close the game" : "Quit Universe", "Quit Universe?", function() { Qt.quit(); });
+            Sound.panel();
+            menu.confirm("Stay", "power", api.universe.currentSession ? "Quit and close the game" : "Quit Universe", "Quit Universe?", cards, cards.focusRect, function() { Qt.quit(); });
         } else if (section === controllerSection) {
             if (row.key === "test") {
                 if (controller.setTesting(true))
@@ -440,13 +430,15 @@ FocusScope {
             page.settingsRequested(api.allGames.byId(row.gameId));
             return;
         } else if (action === "uninstall") {
-            confirm("Keep it", "trash", "Trash the install folder", "Uninstall " + row.label + "?", function() {
+            Sound.panel();
+            menu.confirm("Keep it", "trash", "Trash the install folder", "Uninstall " + row.label + "?", cards, cards.focusRect, function() {
                 Sound.enter();
                 sources.uninstall(row.gameId);
             });
             return;
         } else if (action === "remove") {
-            confirm("Keep it", "eye-off", "Remove from the library", "Remove " + row.label + "?", function() {
+            Sound.panel();
+            menu.confirm("Keep it", "eye-off", "Remove from the library", "Remove " + row.label + "?", cards, cards.focusRect, function() {
                 Sound.enter();
                 sources.remove(row.gameId);
             });

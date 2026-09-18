@@ -4,7 +4,7 @@ import re
 from PySide6.QtCore import Property, Signal, Slot
 
 from ..models import file_url
-from .settings import RowsForm, _add, _card_meta, _group, _row, _to_bus, auto_rate, launch_row, proton_choices, runner_logo
+from .settings import RowsForm, _group, _row, _to_bus, global_launch_rows, runner_logo
 
 
 def suggested_title(path):
@@ -110,20 +110,8 @@ class RunnerForm(RowsForm):
         own = runner.get("gamescope")
         rows.append(_row(name, "gamescope", "Gamescope", "bool", bool(launch.get("gamescope", True)) if own is None else bool(own), module=ident, inherited=own is None))
         groups.append(_group("", [len(rows) - 1]))
-        # The launch keys tied to this runner's kind: what every game through it starts with, config.toml's [launch].
         kind = runner.get("kind") or ""
-        mode = self._screen_mode()
-        protons = proton_choices(config)
-        hz = auto_rate(mode, launch.get("gamescope", True), launch.get("gamescope_refresh"))
-        gpu = self._client.gpu()
-        for spec in self._client.launchKeys("global", mode):
-            if kind not in spec["runners"]:
-                continue
-            value = launch.get(spec["key"])
-            if value in (None, ""):
-                value = spec["default"]
-            section = spec["section"]
-            _add(rows, groups, section, launch_row(section, spec, value, protons=protons, auto_hz=hz, gpu=gpu), caps=True, meta=_card_meta(section, mode, gpu))
+        global_launch_rows(rows, groups, self._client, config, self._screen_mode(), lambda spec: kind in spec["runners"], self._client.gpu())
         options = runner.get("options") or []
         if options:
             first = len(rows)
@@ -157,10 +145,7 @@ class RunnerForm(RowsForm):
         if row["key"] == "add_file":
             self._pending = {"runner": row["module"], "name": row["section"], "file": str(value or "")}
             return bool(self._pending["file"])
-        if row["key"].startswith("launch."):
-            ok = self._client.setConfig(row["key"], _to_bus(row, value))
-        else:
-            ok = self._client.setRunnerSetting(row["module"], row["key"], _to_bus(row, value))
+        ok = self._client.setConfig(row["key"], _to_bus(row, value)) if row["key"].startswith("launch.") else self._client.setRunnerSetting(row["module"], row["key"], _to_bus(row, value))
         if ok:
             self.load(self._runner["id"])
         return bool(ok)
@@ -168,7 +153,7 @@ class RunnerForm(RowsForm):
     def _title(self, game_id):
         return next((r["label"] for r in self._rows if r.get("gameId") == game_id), game_id)
 
-    # The client's call reports its failure itself (`error`); the toast here says what was done, or that it was not.
+    # The client's `error` signal carries the failure; the toast only says which.
     def _act(self, work, game_id, done_text, failed_text):
         title = self._title(game_id)
         self._client.runAsync(work, lambda ok: self.message.emit((done_text if ok else failed_text).format(title)))

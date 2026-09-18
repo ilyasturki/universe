@@ -377,16 +377,8 @@ FocusScope {
         function onMacroNotice(text) { toast.show(text); }
     }
 
-    property string lastShown: api.home.shown
-
     Connections {
         target: api.home
-        // Nothing bridges the swap here: the HOME menu is up as soon as the host asks.
-        function onChanged() {
-            if (api.home.shown === "launcher" && root.lastShown === "game")
-                api.home.covered();
-            root.lastShown = api.home.shown;
-        }
         function onPressed() {
             if (!root.sessionRunning || root.launching)
                 return;

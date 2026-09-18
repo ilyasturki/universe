@@ -385,12 +385,12 @@
       "user": "yasso",
       "games_dir": "/mnt/games/PC",
       "settings": [
-        {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder (empty: paths.games_root)", "choices": [], "dynamic": false},
-        {"key": "scan_dirs", "type": "string", "default": "", "label": "Scanned folders (comma-separated, empty: the install folder)", "choices": [], "dynamic": false},
-        {"key": "platform", "type": "enum", "default": "windows", "label": "Depot platform", "choices": ["windows", "linux"], "dynamic": false},
-        {"key": "with_dlcs", "type": "bool", "default": true, "label": "Install owned DLCs", "choices": [], "dynamic": false},
-        {"key": "auth_path", "type": "path", "default": "~/.config/gogdl/auth.json", "label": "gogdl token file", "choices": [], "dynamic": false},
-        {"key": "install_timeout_s", "type": "int", "default": 7200, "label": "Maximum install or update time (s)", "choices": [], "dynamic": false}
+        {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder (empty: paths.games_root)", "scope": "global", "choices": [], "dynamic": false},
+        {"key": "scan_dirs", "type": "string", "default": "", "label": "Scanned folders (comma-separated, empty: the install folder)", "scope": "global", "choices": [], "dynamic": false},
+        {"key": "platform", "type": "enum", "default": "windows", "label": "Depot platform", "scope": "global", "choices": ["windows", "linux"], "dynamic": false},
+        {"key": "with_dlcs", "type": "bool", "default": true, "label": "Install owned DLCs", "scope": "global", "choices": [], "dynamic": false},
+        {"key": "auth_path", "type": "path", "default": "~/.config/gogdl/auth.json", "label": "gogdl token file", "scope": "global", "choices": [], "dynamic": false},
+        {"key": "install_timeout_s", "type": "int", "default": 7200, "label": "Maximum install or update time (s)", "scope": "global", "choices": [], "dynamic": false}
       ]
     }
   ],

@@ -39,9 +39,7 @@ operation; a dash means the surface doesn't expose it.
 - Asynchronous hooks (`post-launch`, `post-process`) run as transient units. A `post-launch` hook
   that starts a process meant to last the whole session (the recorder) must put it in its own unit
   with `BindsTo=$SESSION_UNIT After=$SESSION_UNIT`, so it stops with the game even if nothing else
-  is watching. The `freeze` and `thaw` hooks run blocking, in the calling process, right after
-  `freeze(on)` froze or thawed the game's unit — one at a time, in call order — with the marker's
-  environment: what a module keeps beside the game (the recorder) pauses and resumes with it.
+  is watching. The `freeze` and `thaw` hooks run blocking after `freeze(on)` (see Recordings).
 - Long jobs (`install`, `update`, `scan`, media refresh) run **in the calling process** with a
   progress callback. Closing the frontend interrupts them.
 - The one exception to "nothing in the background" is the **controller watcher**
@@ -102,7 +100,7 @@ the game sets none. `media.screenshots` is the store's promotional shots: `scree
 overrides, then under `media/`. The player's own are `screenshots(id)` (see Screenshots).
 
 There is no change notification: the files are the truth, so a frontend watches `games/`,
-`games/<id>/{,journal,media}`, `state/` and the overrides directory and rereads. Everything the CLI, `session-end` and the
+`games/<id>/{,journal,journal/attachments,media,screenshots}`, `state/` and the overrides directory and rereads. Everything the CLI, `session-end` and the
 hooks write shows up that way, with no other channel.
 
 ## Sessions
@@ -118,7 +116,7 @@ hooks write shows up that way, with no other channel.
 | `volume(change, value)` | `volume(change, value=0)` | — | the default sink through `wpctl`: `up` / `down` by `controller.volume_step`, `mute` toggles, `set` to `value` percent, `get`; returns `{percent, muted, output}` |
 | `set_fps_limit()` | `set_fps_limit()` | — | rewrites the running game's `<state>/MangoHud.conf` from its `fps_limit` as launch resolves it and returns the `reload_cfg` combo the file pins (`Shift_L+F4`): typed into the game (the watcher's `run` command, once the game is thawed), the layer rereads the file |
 | `set_mangohud(on)` | `set_mangohud(on=None)` | — | the running game's HUD: `None` flips it. Written as the game's `launch.mangohud` (reread from disk first: the dock and the watcher each hold a library), then applied in the game — mangoapp told over its control queue where one draws (see MangoHud), the layer over its control socket on the desktop — and the new state returned. `NotFound` without a session |
-| `nest()` / `nest_game_shown()` / `nest_overlay(window, input, opacity)` / `nest_frame()` / `nest_filter(filter, sharpness)` | `nested()` / `nest_game_shown()` / … | — | the gamescope this process runs in (see Gamescope): whether there is one; whether it shows a window of another process; `STEAM_OVERLAY` on a window of this process, with its `STEAM_INPUT_FOCUS` and `_NET_WM_WINDOW_OPACITY`; the game's last painted frame into `<state>/frame.png` (`None` when no paint came within 400 ms); `GAMESCOPE_SCALING_FILTER` and `GAMESCOPE_FSR_SHARPNESS`. `Unavailable` on the desktop |
+| `nest()` / `nest_game_shown()` / `nest_overlay(window, input, opacity)` / `nest_frame()` / `nest_filter(filter, sharpness)` | `nested()` / `nest_game_shown()` / … | — | the gamescope this process runs in (see Gamescope): whether there is one; whether it shows a window of another process; `STEAM_OVERLAY` on a window of this process, with its `STEAM_INPUT_FOCUS` and `_NET_WM_WINDOW_OPACITY`; the game's last painted frame into `<state>/frame.png` (`None` when no paint came within 2 s); `GAMESCOPE_SCALING_FILTER` and `GAMESCOPE_FSR_SHARPNESS`. `Unavailable` on the desktop |
 | `host_gamescope(screen)` | `host_gamescope(screen)` | — | the gamescope a launcher starts itself in: `[env, MANGOHUD_CONFIGFILE=<state>/mangoapp.conf, gamescope, args…]` from `launch.gamescope_bin`, the global `gamescope_*` fields at the screen's mode, `launch.gamescope_args`, `--mangoapp` always and `--hdr-enabled` when `launch.hdr` is; writes that conf with the HUD hidden (a game shows it). `None` when the binary is not installed |
 | `adopt_scope()` | `adopt_scope()` | — (`universe play` does it unless `--no-wait`) | moves the calling process into the transient scope `universe-launcher-<pid>.scope` (`StartTransientUnit` on the user manager) and returns its name; every later `launch` binds the game to it. Idempotent. `Unavailable` without a user systemd |
 | `screenshot()` | `screenshot()` | `universe screenshot` | runs the `screenshot` hook of whichever module declares one; returns the PNG path (see Screenshots) |
@@ -318,7 +316,7 @@ none of those variables).
 `SourceGame` = `{"id": "1434554947", "title": "Mini Metro", "owned": true, "installed": true,
 "dir": "path|null", "build": "…|null", "remote_build": "…|null"}`.
 
-A source's `Setting` is a module's without `scope`: a source has no per-game settings. A module
+A source's `Setting` is a module's, every one `scope: global`: a source has no per-game settings. A module
 named to a source call (or the reverse) is refused with the command that does take it.
 
 ## Runners
@@ -422,9 +420,8 @@ to the command). `-bm cbr` stays pinned: it is the base the QVBR override needs.
 The module's `screenshot` hook grabs the frame in the shell through the extension
 (`org.universe.Windows.Screenshot(path, window, cursor)`): the focused window's client area with
 `source = "window"`, every monitor with `"screen"`, the cursor per `cursor`. Mutter reads the
-framebuffer synchronously, so the hook returns at the press, before the PNG is encoded, and the
-launcher's cue (see Screenshots) follows without landing in the picture; a write that fails
-afterwards is a shell notification. Off GNOME or before the shell has loaded the extension it is a
+framebuffer synchronously, so the hook returns at the press, before the PNG is encoded; a write
+that fails afterwards is a shell notification. Off GNOME or before the shell has loaded the extension it is a
 gpu-screen-recorder `-o` capture of the session's screen. Either way the PNG goes to
 `SCREENSHOTS_DIR`.
 
@@ -512,7 +509,7 @@ set when the manifest names a `choices_exec`: `<module dir>/<choices_exec> <key>
 | `settings()` | `settings()` | `universe config get` | resolved `config.toml`: absolute paths, defaults applied |
 | `set_setting(key, value)` | `set_setting(key, value)` | `universe config set <key> <value>` | dotted `config.toml` key (`launch.proton`, `paths.recordings_root`, `desktop.profile`); a `launch.*` key is validated against the catalogue, an unknown or game-only one refused |
 | `launch_keys(scope, screen)` | `launch_keys(scope, screen)` | `universe launch-keys [--json]` | the launch keys of `scope` (`game`, `global`, `both`) that have a settings row: `[{key, type, default, choices, label, section, scope, runners, description}]`, `type` one of bool, int, string, path, list, enum, resolution, refresh, fps, proton; `screen` (a `screen_mode`, or none) sizes the resolution, refresh and fps choices; `runners` empty means every runner. The maps (`env`, `dll_overrides`, `options`) and the rowless keys (`runner`, `exe`, `umu_run`…) are settable but not listed; the CLI's table prints all of them |
-| `gpu()` | `gpu()` | — | the GPU the games run on: `{vendor (amd, nvidia, intel), name, rdna (rdna1…rdna4 or null), label, fits: {dlss_upgrade, fsr4_upgrade, xess_upgrade, optiscaler}}`, `fits` whether each upscaler upgrade does anything on it; `null` when sysfs shows no card of a known vendor. Vendor and AMD generation come from `/sys/class/drm` (amdgpu's `ip_discovery` GC major: 10 RDNA 1/2, 11 RDNA 3, 12 RDNA 4), the name and the discrete/integrated pick from `vulkaninfo --summary` when it is on PATH, else the card with the most VRAM (an NVIDIA card, which reports none, beats an iGPU). Probed once per process |
+| `gpu()` | `gpu()` | — | the GPU the games run on: `{vendor (amd, nvidia, intel), name (the vendor's), rdna (1…4 or null), label (`AMD · RDNA 3`), fits: {dlss_upgrade, fsr4_upgrade, xess_upgrade, optiscaler}}`, `fits` whether each upscaler upgrade does anything on it; `null` when sysfs shows no card of a known vendor. Vendor and AMD generation come from `/sys/class/drm` (amdgpu's `ip_discovery` GC major: 10 RDNA 1/2, 11 RDNA 3, 12 RDNA 4); the card with the most VRAM wins (an NVIDIA card, which reports none, beats an iGPU). Probed once per process |
 | `screen_mode(screen)` | `screen_mode(screen)` | `universe screen-mode [<screen>] [--json]` | `{screen, width, height, refresh}`: the connector's current mode as gamescope is told it (see Gamescope), `screen=""` for the profile default; zeros when none can be read |
 | — | `version()`, `data_home()`, `state_home()` | `universe --version` | |
 

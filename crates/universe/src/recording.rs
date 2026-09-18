@@ -5,7 +5,6 @@ use serde::{Deserialize, Serialize};
 use crate::game::Game;
 use crate::sessions::{self, Session};
 
-/// The recorder's clock against the wall's: it began at `started_at` and skipped each of `pauses`.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Timeline {

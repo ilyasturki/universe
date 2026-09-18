@@ -13,7 +13,7 @@ TAKE_TIMEOUT_S = 15
 
 
 def take_in_shell(path, window, cursor):
-    """org.universe.Windows.Screenshot: answers once the pixels are grabbed, the PNG lands a moment later; the cue is the launcher's."""
+    """org.universe.Windows.Screenshot: answers once the pixels are grabbed, the PNG lands a moment later."""
     try:
         r = subprocess.run(
             ["busctl", "--user", "call", WINDOWS_BUS_NAME, "/org/universe/Windows", WINDOWS_BUS_NAME,

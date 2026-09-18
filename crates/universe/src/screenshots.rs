@@ -1,11 +1,8 @@
-//! The player's own screenshots: `games/<id>/screenshots/YYYYMMDD-HHMMSS.<ext>`, one per shot, named by the moment.
-
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Local};
 use serde::Serialize;
 
-use crate::game::Game;
 use crate::library::{is_image, Resolved};
 use crate::sessions::Session;
 
@@ -25,64 +22,59 @@ pub struct Shot {
 
 /// `YYYYMMDD-HHMMSS` with an image extension: the shape both the hook and the journal key on.
 pub fn is_shot_name(name: &str) -> bool {
-    let Some((stem, ext)) = name.rsplit_once('.') else { return false };
-    if !crate::library::IMAGE_EXTS.contains(&ext.to_ascii_lowercase().as_str()) {
-        return false;
-    }
+    let Some((stem, _)) = name.rsplit_once('.') else { return false };
     let b = stem.as_bytes();
-    b.len() == 15 && b[8] == b'-' && b.iter().enumerate().all(|(i, c)| i == 8 || c.is_ascii_digit())
+    is_image(Path::new(name)) && b.len() == 15 && b[8] == b'-' && b.iter().enumerate().all(|(i, c)| i == 8 || c.is_ascii_digit())
 }
 
 pub fn taken_at(path: &Path) -> Option<DateTime<Local>> {
     crate::sessions::parse_session_id(path.file_stem()?.to_str()?)
 }
 
-/// Newest first.
 pub fn list_dir(dir: &Path) -> Vec<PathBuf> {
     let Ok(rd) = std::fs::read_dir(dir) else { return Vec::new() };
-    let mut shots: Vec<PathBuf> = rd.flatten().map(|e| e.path()).filter(|p| is_image(p) && p.file_name().and_then(|s| s.to_str()).is_some_and(is_shot_name)).collect();
+    let mut shots: Vec<PathBuf> = rd.flatten().map(|e| e.path()).filter(|p| p.file_name().and_then(|s| s.to_str()).is_some_and(is_shot_name)).collect();
     shots.sort_unstable_by(|a, b| b.cmp(a));
     shots
 }
 
-fn session_of(t: DateTime<Local>, sessions: &[Session]) -> String {
+fn spans(sessions: &[Session]) -> Vec<(DateTime<Local>, DateTime<Local>, &str)> {
     let parse = |s: &str| DateTime::parse_from_rfc3339(s.trim()).ok().map(|t| t.with_timezone(&Local));
     sessions
         .iter()
-        .find(|s| {
-            let Some(start) = parse(&s.started_at) else { return false };
+        .filter_map(|s| {
+            let start = parse(&s.started_at)?;
             let end = parse(&s.ended_at).unwrap_or_else(|| start + chrono::Duration::seconds(s.duration_s as i64));
-            start - chrono::Duration::seconds(HEAD_GRACE_S) <= t && t <= end + chrono::Duration::seconds(TAIL_GRACE_S)
-        })
-        .map(|s| s.session.clone())
-        .unwrap_or_default()
-}
-
-pub fn list(r: &Resolved) -> Vec<Shot> {
-    list_dir(&r.game.screenshots_dir())
-        .into_iter()
-        .map(|p| Shot {
-            game: r.game.id.clone(),
-            title: r.game.title.clone(),
-            taken_at: taken_at(&p).map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)).unwrap_or_default(),
-            session: taken_at(&p).map(|t| session_of(t, &r.sessions)).unwrap_or_default(),
-            path: p.to_string_lossy().into_owned(),
+            Some((start - chrono::Duration::seconds(HEAD_GRACE_S), end + chrono::Duration::seconds(TAIL_GRACE_S), s.session.as_str()))
         })
         .collect()
 }
 
-/// Shots taken before they had a directory of their own sat in `journal/attachments/`; each moves once, a name
-/// already taken stays where it is. Entries keep naming them by basename, which resolves to either place.
-pub fn migrate(game: &Game) -> usize {
-    migrate_dirs(&game.journal_dir().join("attachments"), &game.screenshots_dir())
+fn session_of(t: DateTime<Local>, spans: &[(DateTime<Local>, DateTime<Local>, &str)]) -> String {
+    spans.iter().find(|(start, end, _)| *start <= t && t <= *end).map(|(_, _, id)| id.to_string()).unwrap_or_default()
 }
 
+pub fn list(r: &Resolved) -> Vec<Shot> {
+    let spans = spans(&r.sessions);
+    list_dir(&r.game.screenshots_dir())
+        .into_iter()
+        .map(|p| {
+            let t = taken_at(&p);
+            Shot {
+                game: r.game.id.clone(),
+                title: r.game.title.clone(),
+                taken_at: t.map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)).unwrap_or_default(),
+                session: t.map(|t| session_of(t, &spans)).unwrap_or_default(),
+                path: p.to_string_lossy().into_owned(),
+            }
+        })
+        .collect()
+}
+
+/// Shots older than `screenshots/` sat in `journal/attachments/`; entries name them by basename, which resolves to either place.
 pub fn migrate_dirs(old: &Path, dir: &Path) -> usize {
     let shots = list_dir(old);
-    if shots.is_empty() {
-        return 0;
-    }
-    if std::fs::create_dir_all(dir).is_err() {
+    if shots.is_empty() || std::fs::create_dir_all(dir).is_err() {
         return 0;
     }
     let mut moved = 0;
@@ -126,11 +118,12 @@ mod tests {
             Session { session: "20260301-210000".into(), started_at: "2026-03-01T21:00:00+01:00".into(), ended_at: "2026-03-01T22:00:00+01:00".into(), duration_s: 3600, ..Default::default() },
             Session { session: "20260301-180000".into(), started_at: "2026-03-01T18:00:00+01:00".into(), ended_at: "".into(), duration_s: 600, ..Default::default() },
         ];
+        let spans = spans(&sessions);
         let at = |s: &str| DateTime::parse_from_rfc3339(s).unwrap().with_timezone(&Local);
-        assert_eq!(session_of(at("2026-03-01T21:30:00+01:00"), &sessions), "20260301-210000");
-        assert_eq!(session_of(at("2026-03-01T22:01:30+01:00"), &sessions), "20260301-210000");
-        assert_eq!(session_of(at("2026-03-01T18:05:00+01:00"), &sessions), "20260301-180000");
-        assert_eq!(session_of(at("2026-03-01T19:00:00+01:00"), &sessions), "");
+        assert_eq!(session_of(at("2026-03-01T21:30:00+01:00"), &spans), "20260301-210000");
+        assert_eq!(session_of(at("2026-03-01T22:01:30+01:00"), &spans), "20260301-210000");
+        assert_eq!(session_of(at("2026-03-01T18:05:00+01:00"), &spans), "20260301-180000");
+        assert_eq!(session_of(at("2026-03-01T19:00:00+01:00"), &spans), "");
     }
 
     #[test]

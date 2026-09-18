@@ -89,14 +89,10 @@ def test_extract_frames_dedupes_static_and_drops_black(tmp_path):
 def test_timeline_skips_the_pauses_both_ways():
     t0 = datetime(2026, 9, 11, 12, 0, 0)
     tl = img.Timeline(t0, [(t0 + timedelta(minutes=10), t0 + timedelta(minutes=15)), (t0 + timedelta(minutes=30), t0 + timedelta(minutes=31))])
-    assert tl.offset(t0 + timedelta(minutes=5)) == 300
+    for off, minutes in [(300, 5), (900, 20), (34 * 60, 40)]:
+        assert (tl.offset(t0 + timedelta(minutes=minutes)), tl.time(off)) == (off, t0 + timedelta(minutes=minutes))
     assert tl.offset(t0 + timedelta(minutes=12)) == 600
-    assert tl.offset(t0 + timedelta(minutes=20)) == 900
-    assert tl.offset(t0 + timedelta(minutes=40)) == 34 * 60
-    assert tl.time(300) == t0 + timedelta(minutes=5)
     assert tl.time(600) == t0 + timedelta(minutes=15)
-    assert tl.time(900) == t0 + timedelta(minutes=20)
-    assert tl.time(34 * 60) == t0 + timedelta(minutes=40)
     parsed = img.Timeline.from_env("2026-09-11T12:00:30", '[["2026-09-11T12:10:00", "2026-09-11T12:12:00"]]', t0, lambda s: datetime.fromisoformat(s) if s else None)
     assert parsed.start == t0 + timedelta(seconds=30) and parsed.offset(t0 + timedelta(minutes=13)) == 12 * 60 + 30 - 120
     fallback = img.Timeline.from_env("", "nope", t0, lambda s: None)
@@ -193,7 +189,6 @@ def failed_file(journal_dir):
 def test_stub_pipeline_writes_entry_note_and_memory(tmp_path, fakebin):
     rec = tmp_path / "rec.mkv"
     make_mkv(rec, "testsrc", 200)
-    att = tmp_path / "games" / "testgame" / "journal" / "attachments"
     shots_dir = tmp_path / "games" / "testgame" / "screenshots"
     for name in ("20260911-120130.png", "20260911-120245.png", "20260911-130000.png"):
         make_png(shots_dir / name)

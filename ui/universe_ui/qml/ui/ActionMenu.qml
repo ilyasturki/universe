@@ -45,6 +45,15 @@ FocusScope {
         forceActiveFocus();
     }
 
+    // Keep or do: `done` runs on the second item; the focus goes back to `anchor` either way.
+    function confirm(keep, icon, label, title, anchor, rect, done) {
+        show([ { icon: "", label: keep, action: "" }, { icon: icon, label: label, action: "yes", danger: true } ], anchor, rect, title, function(action) {
+            if (action === "yes")
+                done();
+            anchor.forceActiveFocus();
+        });
+    }
+
     function hide() {
         open = false;
         focus = false;

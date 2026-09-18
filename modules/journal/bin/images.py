@@ -40,8 +40,6 @@ class Image:
 
 
 class Timeline:
-    """Wall clock to recording offset and back: the recorder began at `start` and skipped each of `pauses`."""
-
     def __init__(self, start, pauses=()):
         self.start = start
         self.pauses = sorted((a, b) for a, b in pauses if a and b and b > a)

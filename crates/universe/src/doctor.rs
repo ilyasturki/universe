@@ -99,10 +99,7 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
             push("gsr-kms-server", which("gsr-kms-server").is_some(), which("gsr-kms-server").unwrap_or_else(|| "missing (programs.gpu-screen-recorder.enable)".into()), "capture");
         }
     }
-    for m in sources {
-        if !m.enabled {
-            continue;
-        }
+    for m in sources.iter().filter(|m| m.enabled) {
         for bin in &m.manifest.requires.bins {
             push(bin, which(bin).is_some(), which(bin).unwrap_or_else(|| "missing".into()), m.id());
         }
@@ -134,14 +131,8 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         push("pad-buttons", unbound.is_empty(), if unbound.is_empty() { "every button of every pad answers".into() } else { format!("not seen on this connection, learn them: {}", unbound.join(", ")) }, "controller");
     }
     let enabled_missing: Vec<&str> = config.modules.enabled.iter().filter(|e| !modules.iter().any(|m| m.id() == e.as_str())).map(|s| s.as_str()).collect();
-    let detail = if enabled_missing.is_empty() {
-        format!("{} found", modules.len())
-    } else if enabled_missing.iter().any(|e| sources.iter().any(|s| s.id() == *e)) {
-        format!("enabled but not found: {} (a source: [sources] enabled in config.toml, `universe source enable`)", enabled_missing.join(", "))
-    } else {
-        format!("enabled but not found: {}", enabled_missing.join(", "))
-    };
-    push("modules", enabled_missing.is_empty(), detail, "core");
+    let hint = if enabled_missing.iter().any(|e| sources.iter().any(|s| s.id() == *e)) { " (a source: [sources] enabled in config.toml, `universe source enable`)" } else { "" };
+    push("modules", enabled_missing.is_empty(), if enabled_missing.is_empty() { format!("{} found", modules.len()) } else { format!("enabled but not found: {}{hint}", enabled_missing.join(", ")) }, "core");
     let sources_missing: Vec<&str> = config.sources.enabled.iter().filter(|e| !sources.iter().any(|s| s.id() == e.as_str())).map(|s| s.as_str()).collect();
     push("sources", sources_missing.is_empty(), if sources_missing.is_empty() { format!("{} found", sources.len()) } else { format!("enabled but not found: {}", sources_missing.join(", ")) }, "core");
     out

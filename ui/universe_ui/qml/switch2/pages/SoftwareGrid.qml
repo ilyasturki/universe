@@ -12,7 +12,7 @@ FocusScope {
     property bool groups: false
     property int index: 0
     property bool escapesLeft: true
-    // One more cell after the last game: the tile that adds one, at index `count`.
+    // One more cell after the last game: the tile that adds one.
     property bool addTile: false
     readonly property bool listed: Array.isArray(games)
     readonly property int count: listed ? games.length : games ? games.count : 0
@@ -164,7 +164,7 @@ FocusScope {
 
         Behavior on contentY { Ease {} }
 
-        // The footer only lengthens the content when the add tile starts a row of its own.
+        // Room for the add tile, drawn outside the delegates, when it starts a row.
         footer: Item {
             width: 1
             height: grid.addTile && grid.count % grid.columns === 0 ? grid.cellHeight : 0

@@ -288,7 +288,6 @@ FocusScope {
                         height: rows.rowHeight
                         width: toggle.visible ? toggle.width : radio.visible ? radio.width : valueText.visible ? valueText.width : check.visible ? check.width : 0
 
-                        // A bool row's own control, or the state of a list entry that opens a page and flips in place.
                         Toggle {
                             id: toggle
                             visible: row.entry.type === "bool" || (row.entry.switch === true && !row.entry.warning)

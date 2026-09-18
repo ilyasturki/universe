@@ -17,7 +17,6 @@ FocusScope {
     readonly property var form: formOf(args)
     readonly property var info: game || form.info === undefined ? null : form.info
     readonly property var login: api.screens.login
-    // The row to come back to when a game's settings, opened from here, close.
     property int returnIndex: -1
 
     function formOf(a) {
@@ -40,6 +39,9 @@ FocusScope {
     readonly property real sideMargin: Theme.dp(90)
     readonly property bool hasLogo: info !== null && info.icon !== undefined && String(info.icon) !== "" && logo.status === Image.Ready
 
+    // A runner's form reloads on every library change; unloaded once its page is gone.
+    Component.onDestruction: if (page.runner !== "") api.screens.runner.load("")
+
     // The derived game/runner/module/source are still stale here: read the args themselves.
     onArgsChanged: {
         var id = args.game ? args.game.id : args.runner || args.module || args.source || "";
@@ -54,15 +56,6 @@ FocusScope {
         });
     }
 
-    function confirm(keep, icon, label, title, done) {
-        Sound.panel();
-        menu.show([ { icon: "", label: keep, action: "" }, { icon: icon, label: label, action: "yes", danger: true } ],
-                  cards, cards.focusRect, title, function(action) {
-                      if (action === "yes")
-                          done();
-                      cards.forceActiveFocus();
-                  });
-    }
 
     function gameActions(row) {
         var out = [];
@@ -80,12 +73,14 @@ FocusScope {
             page.returnIndex = cards.index;
             page.settingsRequested(api.allGames.byId(row.gameId));
         } else if (action === "uninstall") {
-            confirm("Keep it", "trash", "Trash the install folder", "Uninstall " + row.label + "?", function() {
+            Sound.panel();
+            menu.confirm("Keep it", "trash", "Trash the install folder", "Uninstall " + row.label + "?", cards, cards.focusRect, function() {
                 Sound.enter();
                 form.uninstall(row.gameId);
             });
         } else if (action === "remove") {
-            confirm("Keep it", "eye-off", "Remove from the library", "Remove " + row.label + "?", function() {
+            Sound.panel();
+            menu.confirm("Keep it", "eye-off", "Remove from the library", "Remove " + row.label + "?", cards, cards.focusRect, function() {
                 Sound.enter();
                 form.remove(row.gameId);
             });
@@ -244,7 +239,6 @@ FocusScope {
         }
     }
 
-    // The sign-in link of a source, as a QR code and the URL, under the cards once asked for.
     Item {
         id: loginCard
 

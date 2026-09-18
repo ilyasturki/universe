@@ -14,9 +14,7 @@ pub struct Plan {
     pub env: BTreeMap<String, String>,
     pub pre_command: String,
     pub post_command: String,
-    /// Written before the launch: the in-game layer's conf, the user's lines plus the limit.
     pub mangohud_conf: Option<(PathBuf, String)>,
-    /// Written before the launch when the game gets a gamescope of its own: its mangoapp's conf.
     pub mangoapp_conf: Option<(PathBuf, String)>,
 }
 
@@ -60,17 +58,15 @@ pub fn fps_limit_hz(e: &crate::library::Effective, screen: Option<crate::gamesco
     }
 }
 
-/// The combo the launcher types so the in-game layer rereads its conf: MangoHud's own default, pinned in the conf.
+/// MangoHud's own default for `reload_cfg`, pinned in the conf.
 pub const RELOAD_CFG: &str = "Shift_L+F4";
 
-/// The user's `~/.config/MangoHud/MangoHud.conf` minus what Universe decides: the limit, the visibility, the reload key, the control socket.
 fn users_conf_lines() -> String {
     let own = std::fs::read_to_string(crate::paths::xdg("XDG_CONFIG_HOME", ".config").join("MangoHud/MangoHud.conf")).unwrap_or_default();
     let key = |l: &str| l.split('=').next().unwrap_or("").trim().to_string();
     own.lines().filter(|l| !matches!(key(l).as_str(), "fps_limit" | "no_display" | "reload_cfg" | "control")).map(|l| format!("{l}\n")).collect()
 }
 
-/// The in-game layer's conf: `hidden` when mangoapp draws the HUD or it is off, `hz` the limit; `hud_of` is the game whose HUD the layer is (no mangoapp), listening on that game's control socket.
 pub fn layer_conf_text(hud_of: Option<&str>, hz: Option<u32>, hidden: bool) -> String {
     let mut out = users_conf_lines();
     if hidden {
@@ -86,7 +82,6 @@ pub fn layer_conf_text(hud_of: Option<&str>, hz: Option<u32>, hidden: bool) -> S
     out
 }
 
-/// mangoapp's conf: the user's layout, the visibility Universe's. Read at its start and on every reload.
 pub fn mangoapp_conf_text(shown: bool) -> String {
     let mut out = users_conf_lines();
     if !shown {
@@ -118,7 +113,6 @@ fn dll_overrides_env(g: &crate::game::Game, env: &mut BTreeMap<String, String>) 
     }
 }
 
-/// `rdna3`: the FSR 4 upgrade goes through Proton's RDNA 3 variant (its own DLL build and workarounds) instead of the generic one.
 pub fn proton_toggles(e: &crate::library::Effective, rdna3: bool) -> BTreeMap<String, String> {
     let mut env = BTreeMap::new();
     for (on, key) in [(!e.esync, "PROTON_NO_ESYNC"), (!e.fsync, "PROTON_NO_FSYNC"), (!e.ntsync, "PROTON_NO_NTSYNC"), (e.wayland, "PROTON_ENABLE_WAYLAND"), (e.hdr, "PROTON_ENABLE_HDR"), (e.dlss_upgrade, "PROTON_DLSS_UPGRADE"), (e.fsr4_upgrade && !rdna3, "PROTON_FSR4_UPGRADE"), (e.fsr4_upgrade && rdna3, "PROTON_FSR4_RDNA3_UPGRADE"), (e.xess_upgrade, "PROTON_XESS_UPGRADE"), (e.optiscaler, "PROTON_USE_OPTISCALER")] {
@@ -221,7 +215,7 @@ pub fn plan(r: &Resolved, config: &Config, extra_env: &BTreeMap<String, String>,
         tracing::warn!("{}: {} not found, launching on the desktop", g.id, config.launch.gamescope_bin);
     }
     let inside = nested || gamescope.is_some();
-    // The layer is loaded whenever it has a job: the limit anywhere, on the desktop the HUD itself (hidden or not: it is shown mid-game).
+    // On the desktop the layer loads hidden too: the HUD is flipped mid-game.
     // Native and emulator programs run through MangoHud's wrapper (OpenGL too), Proton and Wine on its Vulkan layer alone.
     let limit = fps_limit_hz(&r.effective, screen);
     let mangohud = runners::on_path("mangohud");
@@ -302,7 +296,6 @@ fn gamescope_args(fields: &crate::gamescope::Fields, extras: [&str; 2], hdr: boo
     args
 }
 
-/// The gamescope a launcher starts itself in, its mangoapp on Universe's conf: `env MANGOHUD_CONFIGFILE=… gamescope …`.
 pub fn host_gamescope(config: &Config, screen: Option<crate::gamescope::Mode>) -> Option<(String, Vec<String>)> {
     let bin = crate::runners::on_path(&config.launch.gamescope_bin)?;
     let fields = crate::library::gamescope_fields_of(&crate::game::Game::default(), config);

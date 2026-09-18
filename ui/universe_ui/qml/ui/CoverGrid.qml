@@ -124,7 +124,7 @@ GridView {
             moveCurrent(cursor + 1);
     }
 
-    // The footer only lengthens the content when the add tile starts a row of its own.
+    // Room for the add tile, drawn outside the delegates, when it starts a row.
     footer: Item {
         width: 1
         height: grid.addTile && grid.count % grid.columns === 0 ? grid.cellHeight : 0

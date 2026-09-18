@@ -78,8 +78,7 @@ def exec_in_gamescope(client, argv):
 
 
 def own_cursor(window):
-    """A window without a cursor of its own shows gamescope's default: GNOME's X cursor, in physical pixels, handed to
-    the Wayland host at scale 1 — twice the size on a 2× screen. Qt's arrow is XCURSOR_SIZE, the logical size."""
+    """gamescope's default cursor is GNOME's X cursor at scale 1, twice the size on a 2× screen; Qt's arrow is the logical size."""
     from PySide6.QtCore import Qt
     from PySide6.QtGui import QCursor
 

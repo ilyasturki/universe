@@ -285,7 +285,6 @@ class ControllerScreen(QObject):
                 QTimer.singleShot(self._restart_delay, self._restart)
                 self._restart_delay = min(max(self._restart_delay, 1) * 2, RESTART_MAX_MS)
 
-    # The HUD flips in the game, never on the launcher: the watcher says what it became.
     @staticmethod
     def _hud_notice(line):
         shown = line.get("shown")

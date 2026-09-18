@@ -1,6 +1,6 @@
 import pytest
 
-from conftest import index_of, pump, rows_by_key, settle, wait_for
+from conftest import index_of, rows_by_key, settle, wait_for
 
 PENDING = {"session": "20260912-200000", "game": "the-technomancer", "state": "pending",
            "started_at": "2026-09-12T20:00:00+02:00", "written_at": "", "title": "", "paragraphs": [], "images": []}
@@ -408,7 +408,6 @@ def test_screenshots_list_per_game_and_across_games(api, fake):
     assert shots.gameId == "" and shots.count >= per_game and first in shots.rows
     name, ident, before = shots.rows[0]["name"], shots.rows[0]["gameId"], shots.count
     assert shots.remove(ident, name)
-    pump(500)
     assert shots.count == before - 1 and not any(r["name"] == name and r["gameId"] == ident for r in shots.rows)
 
 

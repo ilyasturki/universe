@@ -302,8 +302,7 @@ fn is_shot(image: &str) -> bool {
     crate::screenshots::is_shot_name(image.rsplit('/').next().unwrap_or(image))
 }
 
-/// An entry names the player's shots by basename (older entries by `attachments/<name>`): they live in the
-/// game's `screenshots/`; anything else is relative to the journal dir.
+/// Older entries name shots as `attachments/<name>`; the basename alone resolves them.
 pub fn image_path(journal_dir: &Path, screenshots_dir: &Path, rel: &str) -> PathBuf {
     if is_shot(rel) {
         screenshots_dir.join(rel.rsplit('/').next().unwrap_or(rel))

@@ -1,4 +1,5 @@
 import os
+from types import SimpleNamespace
 
 from conftest import pump, wait_for
 from PySide6.QtCore import Qt
@@ -112,7 +113,7 @@ def test_the_dock_pauses_on_home_and_thaws_on_the_release(api, fake):
     home.guide(True)
     home.openDock()
     home.guide(False)
-    assert home.open and not home.paused and api.screens.controller._suspended is True
+    assert home.open and not home.paused and api.screens.controller._suspended is True, "released with the dock up: the macros stop"
     home.closeDock()
     home.dockClosed()
     assert api.screens.controller._suspended is False
@@ -155,6 +156,10 @@ def test_a_guide_hold_from_the_game_goes_home(api, fake, monkeypatch):
     home.guide(False)
     pump(400)
     assert presses == ["game", "game", "launcher"] and home.shown == "game", "from the launcher a press resumes, and holding it there does not bounce back"
+    home.guide(True)
+    home.openDock()
+    pump(50)
+    assert home.shown == "launcher", "no overlay: the press itself went home"
     stop(api)
 
 
@@ -257,15 +262,7 @@ def test_a_hold_that_flips_leaves_nothing_to_thaw_on_the_release(api, fake, monk
     fake.launch("mirrors-edge", "")
     wait_for(fake.sessionShown, 3000)
     pump(400)
-    home.guide(True)
-    home.openDock()
-    pump(50)
-    assert home.shown == "launcher", "no overlay: the press itself went home"
-    stop(api)
-    fake.launch("mirrors-edge", "")
-    wait_for(fake.sessionShown, 3000)
-    pump(400)
-    assert home.attachOverlay(FakeOverlay()) is True
+    assert home.attachOverlay(SimpleNamespace(winId=lambda: 1, show=lambda: None)) is True
     home.guide(True)
     home.openDock()
     home.closeDock()
@@ -278,14 +275,6 @@ def test_a_hold_that_flips_leaves_nothing_to_thaw_on_the_release(api, fake, monk
     pump(50)
     assert home.paused and fake.core.frozen is True, "the release thaws nothing under the launcher"
     stop(api)
-
-
-class FakeOverlay:
-    def winId(self):
-        return 1
-
-    def show(self):
-        pass
 
 
 def test_quitting_from_the_game_brings_the_launcher_up_first(api, fake, monkeypatch):

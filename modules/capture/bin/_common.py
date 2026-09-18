@@ -168,10 +168,6 @@ def bus_name_has_owner(name):
     return r.returncode == 0 and r.stdout.strip() == "b true"
 
 
-def capture_unit(session_id):
-    return f"universe-capture-{session_id}.service"
-
-
 def timeline_path(data_dir, session_id):
     return os.path.join(data_dir, "pending", f"{session_id}.timeline.json")
 
@@ -182,7 +178,7 @@ def now_rfc3339():
 
 @contextlib.contextmanager
 def timeline(data_dir, session_id, create=False):
-    """The recorder's clock, `{"started_at", "paused", "pauses": [[from, to]]}`, locked for the block; None when no recording runs."""
+    """Locked for the block; None when no recording runs."""
     path = timeline_path(data_dir, session_id)
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path + ".lock", "w") as lock:
@@ -215,7 +211,7 @@ def set_paused(state, session_id, on):
     if state["paused"] == on:
         return
     # SIGUSR2 toggles gpu-screen-recorder's pause; main only, or gsr-kms-server in the same cgroup dies of it.
-    r = subprocess.run(["systemctl", "--user", "kill", "--kill-whom=main", "--signal=SIGUSR2", capture_unit(session_id)], capture_output=True, text=True)
+    r = subprocess.run(["systemctl", "--user", "kill", "--kill-whom=main", "--signal=SIGUSR2", f"universe-capture-{session_id}.service"], capture_output=True, text=True)
     if r.returncode != 0:
         log(f"{'pause' if on else 'resume'} failed: {r.stderr.strip()}")
         return

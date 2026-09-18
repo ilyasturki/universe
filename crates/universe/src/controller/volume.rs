@@ -1,5 +1,4 @@
 //! Volume macros as `wpctl` calls on the default sink: nothing is typed, so no key reaches the game.
-//! Every change shows GNOME's own volume OSD, whichever way it was asked for.
 
 use std::process::Command;
 

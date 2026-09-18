@@ -5,8 +5,6 @@ import os
 
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
-from ..errors import UniverseError
-
 ASSETS = os.path.join(os.path.dirname(os.path.dirname(__file__)), "qml", "assets", "runners")
 LOGOS = {os.path.splitext(f)[0]: f"assets/runners/{f}" for f in sorted(os.listdir(ASSETS))}
 
@@ -114,6 +112,20 @@ def gpu_note(spec, gpu):
     return spec["description"] + (" Works on your GPU." if fit else " Not for your GPU.")
 
 
+def global_launch_rows(rows, groups, client, config, mode, takes, gpu=None):
+    launch = config.get("launch") or {}
+    protons = proton_choices(config)
+    hz = auto_rate(mode, launch.get("gamescope", True), launch.get("gamescope_refresh"))
+    for spec in client.launchKeys("global", mode):
+        if not takes(spec):
+            continue
+        value = launch.get(spec["key"])
+        if value in (None, ""):
+            value = spec["default"]
+        section = spec["section"]
+        _add(rows, groups, section, launch_row(section, spec, value, protons=protons, auto_hz=hz, gpu=gpu), caps=True, meta=_card_meta(section, mode, gpu or {}))
+
+
 def launch_row(section, spec, value, inherited=False, protons=(), auto_hz=0, gpu=None):
     kind = ROW_TYPES.get(spec["type"], spec["type"])
     choices, values = [str(c) for c in spec["choices"]], None
@@ -147,28 +159,21 @@ class AsyncScreen(QObject):
         self._busy += 1
         self.busyChanged.emit()
 
-        def guarded():
-            try:
-                return work(), ""
-            except UniverseError as e:
-                return None, e.message or e.kind
-
         def finish(result):
             self._busy -= 1
             done(*result)
             self.busyChanged.emit()
 
-        self._client.runAsync(guarded, finish)
+        self._client.runAsync(lambda: self._client.attempt(work), finish)
 
     busy = Property(bool, lambda self: self._busy > 0, notify=busyChanged)
 
 
-class RowsForm(QObject):
+class RowsForm(AsyncScreen):
     rowsChanged = Signal()
 
     def __init__(self, client, parent=None):
-        super().__init__(parent)
-        self._client = client
+        super().__init__(client, parent)
         self._rows = []
         self._groups = []
 
@@ -330,16 +335,46 @@ def _state(entry):
     return ""
 
 
-# Modules and sources share the list and the page: a `switch` row per entry, then a page of its switch and settings.
-class ListForm(RowsForm):
-    section = "Modules"
+class ModuleApi:
     source = False
 
     def _entries(self):
-        raise NotImplementedError
+        return self._client.modules()
 
     def _enable(self, ident, enabled):
-        raise NotImplementedError
+        self._client.enableModule(ident, enabled)
+
+    def _settings(self, ident):
+        return self._client.getSettings(ident, "")
+
+    def _choices(self, ident, key):
+        return self._client.settingChoices(ident, key)
+
+    def _set(self, ident, key, value):
+        return self._client.setSetting(ident, "", key, value)
+
+
+class SourceApi:
+    source = True
+
+    def _entries(self):
+        return self._client.sources()
+
+    def _enable(self, ident, enabled):
+        self._client.enableSource(ident, enabled)
+
+    def _settings(self, ident):
+        return self._client.getSourceSettings(ident)
+
+    def _choices(self, ident, key):
+        return self._client.sourceSettingChoices(ident, key)
+
+    def _set(self, ident, key, value):
+        return self._client.setSourceSetting(ident, key, value)
+
+
+class ListForm(RowsForm):
+    section = "Modules"
 
     def _show(self, entries):
         rows, on, off = [], [], []
@@ -372,7 +407,7 @@ class ListForm(RowsForm):
         self.load()
 
 
-class ModulesForm(ListForm):
+class ModulesForm(ModuleApi, ListForm):
     doctorChanged = Signal()
 
     def __init__(self, client, parent=None):
@@ -381,13 +416,6 @@ class ModulesForm(ListForm):
         self._doctor_groups = []
         client.modulesChanged.connect(self.load)
 
-    def _entries(self):
-        return self._client.modules()
-
-    def _enable(self, ident, enabled):
-        self._client.enableModule(ident, enabled)
-
-    # The checks probe programs, the bus and the pads, and the source names come with the login probe: off the UI thread.
     @Slot()
     def loadDoctor(self):
         def work():
@@ -420,20 +448,12 @@ class ModulesForm(ListForm):
     doctorGroups = Property("QVariantList", lambda self: list(self._doctor_groups), notify=doctorChanged)
 
 
-class SourcesForm(ListForm):
-    # Listing the sources probes their logins once per process, on the network: off the UI thread.
+class SourcesForm(SourceApi, ListForm):
     section = "Sources"
-    source = True
 
     def __init__(self, client, parent=None):
         super().__init__(client, parent)
         client.sourcesChanged.connect(self.load)
-
-    def _entries(self):
-        return self._client.sources()
-
-    def _enable(self, ident, enabled):
-        self._client.enableSource(ident, enabled)
 
     @Slot()
     def load(self):
@@ -443,7 +463,6 @@ class SourcesForm(ListForm):
 class PageForm(RowsForm):
     # A `dynamic` setting's choices are fetched once per state of the entry's settings.
     moduleChanged = Signal()
-    source = False
 
     def __init__(self, client, parent=None):
         super().__init__(client, parent)
@@ -451,24 +470,6 @@ class PageForm(RowsForm):
         self._ident = ""
         self._dynamic = {}
         self._pending = set()
-
-    def _entries(self):
-        raise NotImplementedError
-
-    def _enable(self, ident, enabled):
-        raise NotImplementedError
-
-    def _settings(self, ident):
-        raise NotImplementedError
-
-    def _choices(self, ident, key):
-        raise NotImplementedError
-
-    def _set(self, ident, key, value):
-        raise NotImplementedError
-
-    def _listed(self, setting):
-        return True
 
     def _extra_rows(self, entry, name, rows, groups):
         pass
@@ -516,7 +517,7 @@ class PageForm(RowsForm):
         values = self._settings(ident)
         settings = _group("Settings", [], caps=True)
         for setting in entry.get("settings") or []:
-            if not self._listed(setting):
+            if setting.get("scope") != "global":
                 continue
             key = setting["key"]
             choices = [str(c) for c in setting.get("choices") or []]
@@ -544,52 +545,16 @@ class PageForm(RowsForm):
         self.load(row["module"])
 
 
-class ModuleForm(PageForm):
+class ModuleForm(ModuleApi, PageForm):
     def __init__(self, client, parent=None):
         super().__init__(client, parent)
         client.modulesChanged.connect(self.reload)
 
-    def _entries(self):
-        return self._client.modules()
 
-    def _enable(self, ident, enabled):
-        self._client.enableModule(ident, enabled)
-
-    def _settings(self, ident):
-        return self._client.getSettings(ident, "")
-
-    def _choices(self, ident, key):
-        return self._client.settingChoices(ident, key)
-
-    def _set(self, ident, key, value):
-        return self._client.setSetting(ident, "", key, value)
-
-    def _listed(self, setting):
-        return setting.get("scope") == "global"
-
-
-class SourceForm(PageForm):
-    # The sources listing probes the logins on the network: fetched off the UI thread, like the list.
-    source = True
-
+class SourceForm(SourceApi, PageForm):
     def __init__(self, client, parent=None):
         super().__init__(client, parent)
         client.sourcesChanged.connect(self.reload)
-
-    def _entries(self):
-        return self._client.sources()
-
-    def _enable(self, ident, enabled):
-        self._client.enableSource(ident, enabled)
-
-    def _settings(self, ident):
-        return self._client.getSourceSettings(ident)
-
-    def _choices(self, ident, key):
-        return self._client.sourceSettingChoices(ident, key)
-
-    def _set(self, ident, key, value):
-        return self._client.setSourceSetting(ident, key, value)
 
     def _extra_rows(self, entry, name, rows, groups):
         logged_in = bool(entry.get("logged_in"))

@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-SOURCE_DIR = Path(__file__).resolve().parents[1]
-SOURCE = SOURCE_DIR / "bin" / "source"
+MODULE_DIR = Path(__file__).resolve().parents[1]
+SOURCE = MODULE_DIR / "bin" / "source"
 
 SHIM = r'''#!SHIM_PYTHON
 import json, os, sys, time

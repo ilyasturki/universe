@@ -1,8 +1,7 @@
 import QtQuick
 import "../core"
 
-// gamescope swaps windows in one cut, so the last frame it painted bridges it: full screen at the swap,
-// shrinking into the playing game's tile as the launcher comes up, growing back out of it before the game does.
+// gamescope swaps windows in one cut: the game's last frame bridges it.
 Item {
     id: flip
 
@@ -18,7 +17,6 @@ Item {
     visible: covering || running
     enabled: false
 
-    // Home from the game: covers, tells the host the frame is painted so it can swap, then shrinks into `rect`.
     function cover(rect) {
         shrink.stop();
         grow.stop();
@@ -33,7 +31,6 @@ Item {
             frame.statusChanged();
     }
 
-    // Back to the game: grows out of `rect` and runs `done` once the frame covers everything.
     function fromTile(rect, done) {
         var midway = shrink.running;
         shrink.stop();
