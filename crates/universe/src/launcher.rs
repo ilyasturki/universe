@@ -352,7 +352,7 @@ mod tests {
         assert_eq!(p.env["PROTONPATH"], "/nix/store/proton");
         assert_eq!(p.env["PROTON_NO_FSYNC"], "1");
         assert!(!p.env.contains_key("PROTON_NO_ESYNC"));
-        assert_eq!(p.env["MANGOHUD"], "1");
+        assert_eq!(p.env.get("MANGOHUD").map(String::as_str), crate::runners::on_path("mangohud").map(|_| "1"), "the layer rides on the unit when its binary is around");
         assert_eq!(p.env["WINEDLLOVERRIDES"], "d3d11=n,b");
         assert_eq!(p.env["WINE_CPU_TOPOLOGY"], "4:0,1,2,3");
         assert_eq!(p.env["FROM_HOOK"], "1");
@@ -443,7 +443,7 @@ mod tests {
         let p = plan(&r, &cfg, &BTreeMap::new(), None, None, false).unwrap();
         assert_eq!(p.program, emu.to_string_lossy());
         assert_eq!(p.args, vec!["--config", "Dolphin.Display.Fullscreen=True", "--batch", "-e", &rom, "--extra"]);
-        assert_eq!(p.env["MANGOHUD"], "1");
+        assert_eq!(p.env.get("MANGOHUD").map(String::as_str), crate::runners::on_path("mangohud").map(|_| "1"), "the layer rides on the unit when its binary is around");
         assert!(!p.env.contains_key("WINEPREFIX"));
         assert_eq!(p.cwd, dir.path());
     }
@@ -683,7 +683,7 @@ mod tests {
         let r = crate::library::resolve(g, &cfg, &[]);
         let p = plan(&r, &cfg, &BTreeMap::new(), None, None, false).unwrap();
         assert_eq!(p.program, exe);
-        assert_eq!(p.env["MANGOHUD"], "1");
+        assert_eq!(p.env.get("MANGOHUD").map(String::as_str), crate::runners::on_path("mangohud").map(|_| "1"), "the layer rides on the unit when its binary is around");
     }
 
     #[test]
