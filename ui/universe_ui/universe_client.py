@@ -337,9 +337,10 @@ class CoreClient(QObject):
     def login(self, source, code):
         return self._job("login", source, lambda progress: self._core.login(source, code))
 
-    @Slot(str, result="QVariant")
-    def sourceLibrary(self, source):
-        return self._guarded([], self._core.library, source, False)
+    @Slot(str, bool, result="QVariant")
+    def sourceLibrary(self, source, refresh):
+        """Raises when the store cannot be reached, so the caller keeps the listing it has instead of an empty one."""
+        return self._call(self._core.library, source, refresh) or []
 
     @Slot(str, str, result="QVariant")
     def search(self, source, query):
@@ -351,11 +352,20 @@ class CoreClient(QObject):
 
     @Slot(str, str, result=str)
     def install(self, source, game_id):
-        return self._job("install", game_id, lambda progress: self._core.install(source, game_id, progress))
+        return self._job("install", game_id, lambda progress: self._core.install(source, game_id, progress), source=source)
 
     @Slot(str, str, result=str)
     def update(self, source, game_id):
-        return self._job("update", game_id, lambda progress: "%d updated" % self._core.update(source, game_id, progress))
+        return self._job("update", game_id, lambda progress: "%d updated" % self._core.update(source, game_id, progress), source=source)
+
+    @Slot(str, result=bool)
+    def cancel(self, job):
+        """SIGTERMs the source behind an install or update job; it finishes as failed with `cancelled` set."""
+        j = self._jobs.get(job)
+        if not j or j["finished"] or j["kind"] not in ("install", "update") or not j["target"]:
+            return False
+        j["cancelled"] = True
+        return bool(self._guarded(False, self._core.cancel, j["source"], j["target"]))
 
     @Slot(result="QVariant")
     def updates(self):
@@ -606,10 +616,11 @@ class CoreClient(QObject):
             elif was and not self._current:
                 self._ended(was)
 
-    def _job(self, kind, target, work):
+    def _job(self, kind, target, work, source=""):
         self._job_seq += 1
         job = f"job-{self._job_seq}"
-        self._jobs[job] = {"id": job, "kind": kind, "target": target, "done": 0, "total": 0, "message": "", "finished": False, "ok": False}
+        self._jobs[job] = {"id": job, "kind": kind, "target": target, "source": source, "done": 0, "total": 0, "message": "",
+                           "finished": False, "ok": False, "cancelled": False}
 
         def progress(done, total, message):
             self._deliver.emit(lambda: self._job_progress(job, done, total, message))

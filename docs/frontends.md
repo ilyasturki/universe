@@ -311,6 +311,38 @@ from `ui/Macros.js`, the macro's `label`). A source's game row shows the library
 game is in it — the `square` slot, else the banner, else the cover — and the thumbnail takes the
 art's shape, square or 2:3; the home rail's tiles pick their art the same way.
 
+## The Install page
+
+`api.screens.sources` (`SourcesBrowser`) lists one source's games: `rows` of `{id, title, game_id,
+image, installed, pending, partial, busy, status, action, disk_size, download_size, partial_bytes,
+size, sizeText, sizeKind}`, installed first. `load()` (opening the page) serves the core's cache and the
+disk, re-listed once 15 min old, never the store; `refresh()` (Y) asks the store, so a game
+bought since shows up — `libraryAt` and `libraryAge` say when that last happened, for the header.
+A refresh the store refuses keeps the listing shown, toasts the reason and leaves it in `error`
+until a reload succeeds. `freeSpace` is the install folder's free bytes (`games_dir`; 0 when it
+is missing), for the confirm and a disk strip.
+Sizes: an install's is measured (`sizeKind` `disk`); a game not installed shows its download size
+once known (`download`), and `peek(index)` — call it as the cursor lands on a row — fetches one
+`info` at a time, off the busy flag, and the core remembers it. `install(index)` installs, resumes
+a stopped download (the same call: the source continues over its folder) or updates; while it runs
+`job` is `{id, game, title, label, message, done, total, ok, cancelled}`, `done`/`total` in bytes and
+`message` the live line ("Installing X · 42% · 3.4 GB of 8.2 GB"); the rows are rebuilt at its start
+and end only, the busy row's `status` "Installing…" and its `action` `Cancel`. `cancel()` stops it: the job ends
+failed with `cancelled`, the toast says what was kept, and the row turns `partial` — `status`
+"Paused · X of Y kept", `action` `Resume`. Reloads after a job, an uninstall or a removal stay off
+the network.
+
+Reprise keeps it as Settings › Install: an Installing card (running and paused, a hairline of
+progress under a paused row) over Installed and Owned, every game with its size in figures of one
+width, the library's age or the store's failure in the card meta; A opens the row's menu (Cancel
+install · Resume · Update · Game settings · Uninstall… · Remove…), Install first asks in a
+`ConfirmDialog` with the download, the disk and the free space; X refreshes; the cursor on a game
+without a size peeks it. The Switch 2 look's `pages/InstallPage.qml` is two tabs on the bumpers:
+Store, the tiles of what is owned and not installed (a download or a pause painted on the tile's
+foot) and the search's results, A installs after the same confirm; Manage, the install folder's
+strip (used · free), then Installing and Installed as rows with a size and an action — A is the
+row's menu, X cancels the running job from either tab.
+
 ## Detail, recordings and journal
 
 The detail page's hero holds Play, the heart and, when the game has any, a Recordings and a

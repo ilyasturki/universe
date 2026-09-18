@@ -296,16 +296,17 @@ none of those variables).
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `sources()` | `sources()` | `universe sources`, `universe source ls` | `[{id, name, version, dir, enabled, available, missing: [bin], settings: [Setting], logged_in, user, games_dir, library_cached}]`; the login probe reaches the network once per process, on the first call |
+| `sources()` | `sources()` | `universe sources`, `universe source ls` | `[{id, name, version, dir, enabled, available, missing: [bin], settings: [Setting], logged_in, user, games_dir, library_cached, library_at}]`; `library_at` is when the store was last listed (RFC 3339, empty before the first); the login probe reaches the network once per process, on the first call |
 | `enable_source(id, enabled)` | `enable_source(id, enabled)` | `universe source enable\|disable <id>` | writes `[sources] enabled` in `config.toml` |
 | `source_settings(source)` | `source_settings(source)` | `universe source settings <id>` | the source's settings, defaults under `config.toml [sources.<id>]`; an empty `games_dir` default reads `paths.games_root` |
 | `set_source_setting(source, key, value)` | `set_source_setting(…)` | `universe source set <id> k=v` | validated against `[[settings]]`; writes `config.toml [sources.<id>]` |
 | `source_setting_choices(source, key)` | `source_setting_choices(…)` | — | the setting's choices, live through `choices_exec` (as for modules) |
 | `source_login_url(source)` | `login_url(source)` | `universe login <source>` | URL to open |
 | `source_login(source, code)` | `login(source, code)` | `universe login <source> <code>` | returns the user name |
-| `source_library(source, refresh)` | `library(source, refresh)` | `universe library [source] [--refresh]` | `[SourceGame]`, served from cache unless `refresh` |
+| `source_library(source, refresh)` | `library(source, refresh)` | `universe library [source] [--refresh]` | `[SourceGame]`: the store's listing from cache unless `refresh` (the cache is the core's `library.json` under the source's data dir; a failed refresh keeps it), crossed with the disk through the source's `scan` every time: an install's `disk_size`, a stopped download's `partial_dir` and `partial_bytes` |
 | `source_search(source, query)` | `search(source, query)` | `universe search <query> [--source]` | `[SourceGame]` |
-| `source_info(source, game_id)` | `info(source, game_id)` | — | the source's raw `info` payload |
+| `source_info(source, game_id)` | `info(source, game_id)` | — | the source's raw `info` payload, plus the `download_size` and `disk_size` it reports; those two are remembered in the library cache, so a listing carries them from then on |
+| `source_cancel(source, game_id)` | `cancel(source, game_id)` | Ctrl-C | SIGTERMs the source process installing or updating `game_id`; it stops its downloader and keeps the files, so the next `install` resumes. False when nothing was running for it. The interrupted `install`/`update` call fails |
 | `source_install(source, game_id, progress)` | `install(source, game_id, progress)` | `universe install <id> [--source]` | id of the installed game |
 | `source_update(source, game_id, progress)` | `update(source, game_id, progress)` | `universe update [name] [-y]` | how many were updated; `game_id=""` updates everything pending |
 | `source_updates()` | `updates()` | `universe update` | `[{id, title, local_build, remote_build, version, date}]` |
@@ -314,7 +315,10 @@ none of those variables).
 `progress` is called `(done, total, message)` as the job runs.
 
 `SourceGame` = `{"id": "1434554947", "title": "Mini Metro", "owned": true, "installed": true,
-"dir": "path|null", "build": "…|null", "remote_build": "…|null"}`.
+"dir": "path|null", "build": "…|null", "remote_build": "…|null", "disk_size": bytes|null,
+"download_size": bytes|null, "partial_dir": "path|null", "partial_bytes": bytes|null}`. `disk_size` is what
+the install takes (measured) or would take (from `info`); `partial_*` name a download stopped by `cancel`
+that `install` resumes.
 
 A source's `Setting` is a module's, every one `scope: global`: a source has no per-game settings. A module
 named to a source call (or the reverse) is refused with the command that does take it.
@@ -757,20 +761,22 @@ One JSON object per line on stdout, human-readable logs on stderr, meaningful ex
 | `status` | — | `{"event":"logged_in","user":…}` if the session is valid, otherwise just `done`. Probed once per process, on the first listing |
 | `library` | | `{"event":"game", …}` per owned title |
 | `search` | `<text>` | `{"event":"game", …}` |
-| `info` | `<id>` | `{"event":"info","data":{…}}` |
-| `install` | `<id>` | `progress` lines, then the installed `game` |
+| `info` | `<id>` | `{"event":"info","data":{…},"download_size":…,"disk_size":…}`, the sizes optional |
+| `install` | `<id>` | `progress` lines (`done`/`total` in bytes when the source knows them), then the installed `game`. On SIGTERM the source stops its downloader, keeps the files and exits non-zero; a later `install` of the same id resumes |
 | `update` | `[id]` | without an id: `{"event":"update","id","title","local_build","remote_build","version","date"}` per pending update; with one: `progress` then `game` |
-| `scan` | | `{"event":"game", …}` per installation found, `owned` crossed with the cached library |
+| `scan` | | `{"event":"game", …}` per installation found (`disk_size` measured) and per stopped download (`installed: false`, `partial_dir`, `partial_bytes`), `owned` crossed with the cached library |
 
 ```json
 {"event":"game","id":"1434554947","title":"Mini Metro","dir":"/mnt/games/PC/Mini Metro",
  "exe":"MiniMetro.exe","build":"5904…","owned":true,"installed":true,
- "release_year":2015,"dlcs":[]}
+ "release_year":2015,"dlcs":[],"disk_size":167772160}
+{"event":"game","id":"1207658930","title":"Alan Wake","owned":true,"installed":false,
+ "partial_dir":"/mnt/games/PC/Alan Wake","partial_bytes":3400000000,"download_size":7900000000,"disk_size":8200000000}
 {"event":"progress","done":123,"total":456,"message":"27.0%"}
 {"event":"done"}
 ```
 
-`exe` is relative to `dir`. `owned` may be `null` when the source cannot tell.
+`exe` is relative to `dir`. `owned` may be `null` when the source cannot tell. The core writes `library.json` (the last `library` run's games) in the source's data dir after every listing; a source reads it for ownership and writes nothing there itself.
 
 ---
 

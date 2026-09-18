@@ -1,28 +1,70 @@
+import shutil
 import time
+from datetime import datetime, timezone
 
 import qrcode
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
+from .media import _size
 from .settings import AsyncScreen
 
 
-def _source_row(game, updates, art):
+def _source_row(game, updates, art, job):
     pending = game.get("id") in updates
-    if game.get("installed"):
+    installed = bool(game.get("installed"))
+    disk, download = int(game.get("disk_size") or 0), int(game.get("download_size") or 0)
+    partial_bytes = int(game.get("partial_bytes") or 0)
+    partial = bool(game.get("partial_dir")) and not installed
+    busy = bool(job) and job.get("ok") is None and job.get("game") == game.get("id")
+    if busy:
+        status = job["label"].split(" ")[0] + "…"  # the live line is `job.message`; rows stay put while it runs
+    elif installed:
         status = "Update available" if pending else "Installed"
+    elif partial:
+        status = "Paused · " + (f"{_size(partial_bytes)} of {_size(disk)} kept" if disk else f"{_size(partial_bytes)} kept")
     elif game.get("owned"):
         status = "Owned"
     else:
         status = "Not owned"
+    size = disk if installed or partial else download
     return {
         "id": str(game.get("id") or ""), "title": str(game.get("title") or ""),
         "game_id": str(game.get("game_id") or ""), "image": art(game.get("game_id")) or str(game.get("image") or ""),
-        "installed": bool(game.get("installed")), "pending": pending, "status": status,
-        "action": "Update" if pending else ("Play from library" if game.get("installed") else "Install"),
+        "installed": installed, "pending": pending, "partial": partial, "busy": busy, "status": status,
+        "disk_size": disk, "download_size": download, "partial_bytes": partial_bytes,
+        "size": size, "sizeText": _size(size) if size else "",
+        "sizeKind": "disk" if installed or partial else ("download" if download else ""),
+        "action": "Cancel" if busy else "Update" if pending else "Play from library" if installed else "Resume" if partial else "Install",
     }
 
 
+def _age(iso):
+    try:
+        then = datetime.fromisoformat(iso)
+    except (TypeError, ValueError):
+        return ""
+    if then.tzinfo is None:
+        then = then.replace(tzinfo=timezone.utc)
+    s = int((datetime.now(timezone.utc) - then).total_seconds())
+    if s < 90:
+        return "just now"
+    if s < 3600:
+        return f"{s // 60} min ago"
+    if s < 86400:
+        return f"{s // 3600} h ago"
+    if s < 7 * 86400:
+        return f"{s // 86400} days ago"
+    return then.astimezone().strftime("%-d %b")
+
+
 STALE_S = 15 * 60
+
+
+def _free_space(path):
+    try:
+        return shutil.disk_usage(path).free if path else 0
+    except OSError:
+        return 0
 
 
 class SourcesBrowser(AsyncScreen):
@@ -46,6 +88,9 @@ class SourcesBrowser(AsyncScreen):
         self._query = ""
         self._job = None
         self._loaded_at = 0.0
+        self._peeking = ""
+        self._error = ""
+        self._free = 0
         client.progress.connect(self._on_progress)
         client.jobFinished.connect(self._on_job_finished)
         client.mediaChanged.connect(lambda ident: self._show(self._shown))
@@ -59,17 +104,22 @@ class SourcesBrowser(AsyncScreen):
     def _show(self, games):
         pending = {u.get("id") for u in self._updates}
         self._shown = games
-        self._rows = [_source_row(g, pending, self._art) for g in games]
+        self._rows = [_source_row(g, pending, self._art, self._job) for g in games]
         self.rowsChanged.emit()
 
     @Slot()
     def load(self):
+        """On opening the page: the cached listing and the disk, re-listed once `STALE_S` old; never the store."""
         if self._busy or (self._loaded_at and time.monotonic() - self._loaded_at < STALE_S):
             return
-        self.refresh()
+        self._reload(False)
 
     @Slot()
     def refresh(self):
+        """Y: the store's listing, so games bought since show up."""
+        self._reload(True)
+
+    def _reload(self, store):
         if self._busy:
             return
 
@@ -77,15 +127,21 @@ class SourcesBrowser(AsyncScreen):
             sources = self._client.sources()
             source = self._source or (sources[0]["id"] if sources else "")
             updates = self._client.updates() if source else []
-            games = self._client.sourceLibrary(source) if source else []
-            return sources, source, updates, games
+            games = self._client.sourceLibrary(source, store) if source else []
+            if store and source:
+                sources = self._client.sources()  # library_at moved
+            current = next((s for s in sources if s.get("id") == source), {})
+            return sources, source, updates, games, _free_space(str(current.get("games_dir") or ""))
 
         def done(result, error):
+            self._error = error or ""
             if error:
+                self.sourceChanged.emit()
                 self.message.emit(error)
                 return
-            sources, source, updates, games = result
+            sources, source, updates, games, free = result
             self._sources = sources
+            self._free = free
             self.sourcesChanged.emit()
             self._source = source
             self.sourceChanged.emit()
@@ -97,6 +153,32 @@ class SourcesBrowser(AsyncScreen):
                 self._rebuild()
 
         self._run(work, done)
+
+    @Slot(int)
+    def peek(self, index):
+        """The cursor on a row without a size: one `info` at a time fills it in, and the core remembers it."""
+        if not (0 <= index < len(self._rows)) or self._peeking:
+            return
+        row = self._rows[index]
+        if row["installed"] or row["download_size"] or not row["id"]:
+            return
+        source, game_id = self._source, row["id"]
+        self._peeking = game_id
+
+        def done(info, error):
+            self._peeking = ""
+            if error or not isinstance(info, dict):
+                return
+            sizes = {k: int(info[k]) for k in ("download_size", "disk_size") if info.get(k)}
+            if not sizes:
+                return
+            for g in (*self._games, *self._shown):
+                if g.get("id") == game_id:
+                    g.update(sizes)
+            self._show(self._shown)
+
+        # Off the busy counter: a cursor move must not flip the page to "Loading…".
+        self._client.runAsync(lambda: self._client.info(source, game_id), lambda info: done(info, ""))
 
     def _rebuild(self):
         self._show(sorted(self._games, key=lambda g: (not g.get("installed"), str(g.get("title", "")).casefold())))
@@ -121,25 +203,39 @@ class SourcesBrowser(AsyncScreen):
 
     @Slot(int, result=str)
     def install(self, index):
+        """Install, resume a stopped download (the same call: gogdl continues over the folder) or update."""
         if not (0 <= index < len(self._rows)):
+            return ""
+        if self._job and self._job["ok"] is None:
+            self.message.emit(f"{self._job['label']} first — cancel it or wait")
             return ""
         row = self._rows[index]
         if row["pending"]:
-            return self._begin(self._client.update(self._source, row["id"]), f"Updating {row['title']}")
+            return self._begin(self._client.update(self._source, row["id"]), row, f"Updating {row['title']}")
         if row["installed"]:
             return ""
-        return self._begin(self._client.install(self._source, row["id"]), f"Installing {row['title']}")
+        return self._begin(self._client.install(self._source, row["id"]), row, f"Installing {row['title']}")
 
     @Slot(int, result=str)
     def update(self, index):
         if not (0 <= index < len(self._updates)):
             return ""
         item = self._updates[index]
-        return self._begin(self._client.update(self._source, item.get("id", "")), f"Updating {item.get('title', '')}")
+        row = next((r for r in self._rows if r["id"] == item.get("id")), {"id": item.get("id", ""), "title": item.get("title", "")})
+        return self._begin(self._client.update(self._source, item.get("id", "")), row, f"Updating {item.get('title', '')}")
 
     @Slot(result=str)
     def updateAll(self):
-        return self._begin(self._client.update(self._source, ""), "Updating everything")
+        return self._begin(self._client.update(self._source, ""), {"id": "", "title": ""}, "Updating everything")
+
+    @Slot(result=bool)
+    def cancel(self):
+        """Stops the running install or update; the files stay, the row turns to Paused with a Resume."""
+        if not self._job or self._job["ok"] is not None or not self._client.cancel(self._job["id"]):
+            return False
+        self._job.update({"cancelled": True, "message": f"Stopping {self._job['title']}…"})
+        self.jobChanged.emit()
+        return True
 
     def _title(self, game_id):
         return next((r["title"] for r in self._rows if r["game_id"] == game_id), game_id)
@@ -152,7 +248,7 @@ class SourcesBrowser(AsyncScreen):
 
         def done(ok, error):
             self.message.emit(error or (f"Uninstalled {title}" if ok else f"Could not uninstall {title}"))
-            self.refresh()
+            self._reload(False)
 
         self._run(lambda: self._client.uninstall(game_id), done)
 
@@ -164,34 +260,57 @@ class SourcesBrowser(AsyncScreen):
 
         def done(ok, error):
             self.message.emit(error or (f"Removed {title} from the library" if ok else f"Could not remove {title}"))
-            self.refresh()
+            self._reload(False)
 
         self._run(lambda: self._client.remove(game_id, False), done)
 
-    def _begin(self, job_id, label):
+    def _begin(self, job_id, row, label):
         if not job_id:
             return ""
-        self._job = {"id": job_id, "message": label, "done": 0, "total": 0, "ok": None}
+        self._job = {"id": job_id, "game": row["id"], "title": row["title"], "label": label, "message": label,
+                     "done": 0, "total": 0, "ok": None, "cancelled": False}
         self.jobChanged.emit()
+        self._show(self._shown)
         return job_id
 
     def _on_progress(self, job_id, done, total, message):
-        if self._job and self._job["id"] == job_id:
-            self._job.update({"done": int(done), "total": int(total), "message": message or self._job["message"]})
-            self.jobChanged.emit()
+        if not self._job or self._job["id"] != job_id or self._job["cancelled"]:
+            return
+        done, total = int(done), int(total)
+        # The source's message is the percentage; the bytes are the progress itself.
+        text = f"{self._job['label']} · {message}" if message else self._job["label"]
+        if total > 0:
+            text += f" · {_size(done)} of {_size(total)}"
+        self._job.update({"done": done, "total": total, "message": text})
+        self.jobChanged.emit()
 
     def _on_job_finished(self, job_id, ok, text):
-        if self._job and self._job["id"] == job_id:
-            self._job.update({"ok": bool(ok), "message": text or self._job["message"]})
-            self.jobChanged.emit()
-            self.message.emit(text)
-            self.refresh()
-            if self._query:
-                self.search(self._query)
+        if not self._job or self._job["id"] != job_id:
+            return
+        if self._job["cancelled"] and not ok:
+            kept = _size(self._job["done"]) + " kept, " if self._job["done"] else ""
+            text = f"Stopped {self._job['label'].split(' ')[0].lower()} {self._job['title']} · {kept}resume any time"
+        self._job.update({"ok": bool(ok), "message": text or self._job["message"]})
+        self.jobChanged.emit()
+        self.message.emit(text)
+        self._reload(False)
+        if self._query:
+            self.search(self._query)
+
+    def _current_source(self):
+        return next((dict(s) for s in self._sources if s.get("id") == self._source), None)
+
+    def _library_at(self):
+        current = self._current_source()
+        return str((current or {}).get("library_at") or "")
 
     sources = Property("QVariantList", lambda self: list(self._sources), notify=sourcesChanged)
     source = Property(str, lambda self: self._source, notify=sourceChanged)
-    current = Property("QVariant", lambda self: next((dict(s) for s in self._sources if s.get("id") == self._source), None), notify=sourceChanged)
+    current = Property("QVariant", _current_source, notify=sourceChanged)
+    libraryAt = Property(str, _library_at, notify=sourceChanged)
+    libraryAge = Property(str, lambda self: _age(self._library_at()), notify=sourceChanged)
+    error = Property(str, lambda self: self._error, notify=sourceChanged)
+    freeSpace = Property(float, lambda self: float(self._free), notify=sourcesChanged)
     rows = Property("QVariantList", lambda self: list(self._rows), notify=rowsChanged)
     updates = Property("QVariantList", lambda self: list(self._updates), notify=updatesChanged)
     query = Property(str, lambda self: self._query, notify=queryChanged)

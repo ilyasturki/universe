@@ -248,3 +248,62 @@ def test_signals_end_the_loop_while_it_idles(app):
         signal.signal(signal.SIGTERM, signal.SIG_DFL)
         notifier.setEnabled(False)
         notifier.deleteLater()
+
+
+def test_the_install_pages_render_a_running_install_in_both_looks(api, fake):
+    from PySide6.QtCore import Q_ARG, QMetaObject, Qt
+    from PySide6.QtTest import QTest
+
+    sources = api.screens.sources
+    engine, window = render(api, activate=True)
+    root = window.property("contentItem").childItems()[0].property("item")
+
+    def js(obj, name):
+        value = obj.property(name)
+        return value.toVariant() if hasattr(value, "toVariant") else value
+
+    root.setProperty("tabIndex", 3)
+    pump(100)
+    page = root.property("activePage")
+    page.setProperty("section", page.property("installSection"))
+    pump(400)
+    content = js(page, "content")
+    groups = content["groups"]
+    assert [content["rows"][i]["label"] for i in groups[0]["rows"]] == ["Disco Elysium"], "the paused download sits in the Installing card"
+    assert [g["title"] for g in groups] == ["Installing", "Installed", "Owned, not installed"]
+    assert groups[0]["meta"] == "1 paused" and " GB · /mnt/games/PC" in groups[1]["meta"]
+    row = next(i for i, r in enumerate(sources.rows) if r["title"] == "Stardew Valley")
+    sources.install(row)
+    pump(300)
+    assert js(page, "content")["groups"][0]["meta"] == "1 running · 1 paused"
+    assert sources.cancel()
+    wait_for(fake.jobFinished, 5000)
+    pump(300)
+    assert js(page, "content")["groups"][0]["meta"] == "2 paused"
+
+    api.theme.set("switch2")
+    settle(window)
+    root = window.property("contentItem").childItems()[0].property("item")
+    QMetaObject.invokeMethod(root, "push", Q_ARG("QVariant", "pages/InstallPage.qml"), Q_ARG("QVariant", {}))
+    pump(500)
+    install = root.property("topPage")
+    assert [c["label"] for c in js(install, "cells") if c.get("heading")] == ["Owned, not installed"]
+    assert [l["label"] for l in js(install, "lines") if l.get("heading")] == ["Installing", "Installed"]
+    assert [h["glyph"] for h in js(install, "hints")] == ["Y", "B", "A"]
+    QTest.keyClick(window, Qt.Key.Key_E)  # RB: Manage
+    pump(100)
+    assert install.property("tab") == 1
+    sources.install(row)
+    pump(300)
+    assert "X" in [h["glyph"] for h in js(install, "hints")], "X cancels while a job runs"
+    other = next(i for i, r in enumerate(sources.rows) if r["title"] == "The Witcher 3: Wild Hunt")
+    said = []
+    sources.message.connect(said.append)
+    assert sources.install(other) == "" and said == ["Installing Stardew Valley first — cancel it or wait"]
+    assert sources.job["game"] == sources.rows[row]["id"], "one job at a time"
+    QTest.keyClick(window, Qt.Key.Key_I)
+    wait_for(fake.jobFinished, 5000)
+    pump(300)
+    assert sources.job["cancelled"] and next(r for r in sources.rows if r["title"] == "Stardew Valley")["partial"]
+    window.close()
+    pump(50)

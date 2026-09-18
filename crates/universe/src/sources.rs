@@ -99,20 +99,24 @@ pub enum SourceEvent {
     LoggedIn { #[serde(default)] user: String },
     Game(serde_json::Map<String, serde_json::Value>),
     Progress { #[serde(default)] done: u64, #[serde(default)] total: u64, #[serde(default)] message: String },
-    Info { data: serde_json::Value },
+    Info { data: serde_json::Value, #[serde(default)] download_size: Option<u64>, #[serde(default)] disk_size: Option<u64> },
     Update(serde_json::Map<String, serde_json::Value>),
     Done,
     #[serde(other)]
     Unknown,
 }
 
-pub async fn run<F>(source: &Source, settings: &serde_json::Map<String, serde_json::Value>, verb: &str, args: &[String], mut on_event: F) -> crate::Result<()>
+/// `spawned` gets the process id as soon as there is one, so a `cancel` can SIGTERM it.
+pub async fn run<F>(source: &Source, settings: &serde_json::Map<String, serde_json::Value>, verb: &str, args: &[String], spawned: impl FnOnce(u32), mut on_event: F) -> crate::Result<()>
 where
     F: FnMut(SourceEvent),
 {
     use tokio::io::AsyncBufReadExt;
     let exe = source.dir.join(&source.manifest.exe);
     let mut child = modules::command(&exe, &source.dir, &source.data_dir(), "SOURCE")?.arg(verb).args(args).env("SOURCE_SETTINGS_JSON", serde_json::Value::Object(settings.clone()).to_string()).env("UNIVERSE_BIN", paths::self_exe()).spawn().map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
+    if let Some(pid) = child.id() {
+        spawned(pid);
+    }
     let stdout = child.stdout.take().unwrap();
     let stderr = child.stderr.take().unwrap();
     let id = source.id().to_string();

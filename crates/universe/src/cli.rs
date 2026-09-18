@@ -1077,9 +1077,18 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             if json {
                 return print_json(&list);
             }
-            let mut t = table(&["Id", "Title", "Installed", "Dir"]);
+            let mut t = table(&["Id", "Title", "Installed", "Size", "Dir"]);
             for g in list {
-                t.add_row(vec![s(&g, "id"), s(&g, "title"), flag(&g["installed"]), s(&g, "dir")]);
+                let installed = g["installed"].as_bool().unwrap_or(false);
+                let partial = g["partial_bytes"].as_u64();
+                let size = match (installed, partial, g["disk_size"].as_u64(), g["download_size"].as_u64()) {
+                    (true, _, Some(d), _) => human_size(d),
+                    (false, Some(p), Some(d), _) => format!("{} of {} kept", human_size(p), human_size(d)),
+                    (false, Some(p), None, _) => format!("{} kept", human_size(p)),
+                    (false, None, _, Some(d)) => format!("{} download", human_size(d)),
+                    _ => String::new(),
+                };
+                t.add_row(vec![s(&g, "id"), s(&g, "title"), if partial.is_some() && !installed { "paused".into() } else { flag(&g["installed"]) }, size, if installed { s(&g, "dir") } else { s(&g, "partial_dir") }]);
             }
             println!("{t}");
         }
@@ -1556,6 +1565,14 @@ fn generate(dir: &std::path::Path) -> anyhow::Result<()> {
     std::fs::create_dir_all(&man)?;
     clap_mangen::generate_to(cmd, &man)?;
     Ok(())
+}
+
+fn human_size(bytes: u64) -> String {
+    match bytes {
+        b if b >= 1_000_000_000 => format!("{:.1} GB", b as f64 / 1e9),
+        b if b >= 1_000_000 => format!("{:.0} MB", b as f64 / 1e6),
+        b => format!("{:.0} kB", b as f64 / 1e3),
+    }
 }
 
 fn flag(v: &Value) -> String {

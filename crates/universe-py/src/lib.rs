@@ -221,6 +221,9 @@ impl Core {
             c.source_install(&source, &game_id, p.as_deref_mut()).await
         })
     }
+    fn cancel(&self, source: String, game_id: String) -> bool {
+        self.core.source_cancel(&source, &game_id)
+    }
     #[pyo3(signature = (source, game_id, progress=None))]
     fn update(&self, py: Python<'_>, source: String, game_id: String, progress: Option<Py<PyAny>>) -> PyResult<usize> {
         self.run(py, |c| async move {

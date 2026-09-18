@@ -14,7 +14,7 @@ Item {
 
     Label {
         width: parent.width
-        text: line.job ? line.job.message + (line.job.ok === true ? " ✓" : line.job.ok === false ? " ✗" : "") : ""
+        text: line.job ? line.job.message + (line.job.ok === true ? " ✓" : line.job.ok === false && !line.job.cancelled ? " ✗" : "") : ""
         elide: Text.ElideRight
         font.pixelSize: Theme.dp(Theme.fontSmall)
     }

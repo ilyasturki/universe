@@ -88,6 +88,8 @@ class FakeCore:
         self._session = None
         self._session_started = None
         self._closed = False
+        self._installing, self._cancel = "", ""
+        self.library_calls = []
         self.last_splash = ""
         self.game_shown = False
         self.frozen = False
@@ -602,25 +604,62 @@ class FakeCore:
         return f"Logging in to {source}: done"
 
     def library(self, source, refresh):
-        return copy.deepcopy(self._data.get("source_library", {}).get(source, []))
+        """`refresh` is the store: games under `source_store` bought since the cache join the listing."""
+        self.library_calls.append(refresh)
+        library = self._data.setdefault("source_library", {}).setdefault(source, [])
+        if refresh:
+            known = {g["id"] for g in library}
+            library.extend(dict(g) for g in self._data.get("source_store", {}).get(source, []) if g["id"] not in known)
+            self._source(source)["library_at"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
+        return copy.deepcopy(library)
 
     def search(self, source, query):
         q = query.casefold()
         catalog = self._data.get("source_library", {}).get(source, []) + self._data.get("catalog", [])
         return [dict(g) for g in catalog if q in g["title"].casefold()]
 
+    def _source_game(self, source, game_id):
+        return next((g for g in self._data.get("source_library", {}).get(source, []) if g["id"] == game_id), None)
+
     def info(self, source, game_id):
-        for g in self._data.get("source_library", {}).get(source, []):
-            if g["id"] == game_id:
-                return dict(g)
-        return None
+        """The sizes come from `sizes` in the fixture and are remembered in the listing, as the core does."""
+        game = self._source_game(source, game_id)
+        if game is None:
+            return None
+        sizes = dict(self._data.get("sizes", {}).get(game_id) or {})
+        game.update(sizes)
+        return {"folder_name": game["title"], **sizes}
+
+    def cancel(self, source, game_id):
+        if self._installing != game_id:
+            return False
+        self._cancel = game_id
+        return True
 
     def install(self, source, game_id, progress=None):
-        self._tick(progress, f"Installing {game_id}", 20)
-        for g in self._data.get("source_library", {}).get(source, []):
-            if g["id"] == game_id:
-                g["installed"] = True
-                g["dir"] = f"/mnt/games/PC/{g['title']}"
+        game = self._source_game(source, game_id)
+        total = int((game or {}).get("disk_size") or self._data.get("sizes", {}).get(game_id, {}).get("disk_size") or 20)
+        start = int((game or {}).get("partial_bytes") or 0)
+        steps = 20
+        self._installing, self._cancel = game_id, ""
+        try:
+            for step in range(int(start * steps / total) + 1, steps + 1):
+                if self._closed:
+                    raise UniverseError("Io", "the core is closed")
+                time.sleep(STEP_S)
+                done = total * step // steps
+                if self._cancel == game_id:
+                    if game is not None:
+                        game.update({"partial_dir": f"/mnt/games/PC/{game['title']}", "partial_bytes": done})
+                    raise UniverseError("Io", "gog install failed (143): stopped")
+                if progress:
+                    progress(done, total, f"{100 * step // steps}%")
+        finally:
+            self._installing = ""
+        if game is not None:
+            game.update({"installed": True, "dir": f"/mnt/games/PC/{game['title']}", "disk_size": total})
+            game.pop("partial_dir", None)
+            game.pop("partial_bytes", None)
         return f"Installing {game_id}: done"
 
     def update(self, source, game_id, progress=None):

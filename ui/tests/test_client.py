@@ -110,8 +110,21 @@ def test_install_job_reports_progress(fake):
     assert fake.jobs()[0]["id"] == job and fake.jobs()[0]["finished"] is False
     args = wait_for(fake.jobFinished, 10000)
     assert args is not None and args[0] == job and args[1] is True
-    assert steps and steps[-1][1:3] == (20, 20)
-    assert next(g for g in fake.sourceLibrary("gog") if g["id"] == "1207658930")["installed"] is True
+    assert steps and steps[-1][1:3] == (50000000000, 50000000000), "progress is in bytes of the install"
+    assert next(g for g in fake.sourceLibrary("gog", False) if g["id"] == "1207658930")["installed"] is True
+
+
+def test_cancel_reaches_the_running_install_only(fake):
+    assert fake.cancel("job-none") is False
+    job = fake.install("gog", "1207658930")
+    wait_for(fake.progress, 5000)
+    assert fake.cancel(job) is True
+    args = wait_for(fake.jobFinished, 5000)
+    assert args[0] == job and args[1] is False and "143" in args[2]
+    assert fake.jobs()[0]["cancelled"] is True
+    assert fake.cancel(job) is False, "finished"
+    row = next(g for g in fake.sourceLibrary("gog", False) if g["id"] == "1207658930")
+    assert row["installed"] is False and row["partial_bytes"] > 0
 
 
 def test_a_failing_job_reports_its_end(fake):

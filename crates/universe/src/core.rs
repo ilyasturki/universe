@@ -77,6 +77,8 @@ pub struct Core {
     pub games: RwLock<Vec<Resolved>>,
     source_libraries: Mutex<BTreeMap<String, Vec<serde_json::Map<String, serde_json::Value>>>>,
     source_logins: Mutex<BTreeMap<String, String>>,
+    /// `<source>:<game_id>` → the pid of the source process installing or updating it, while it runs.
+    source_jobs: std::sync::Mutex<BTreeMap<String, u32>>,
     logins_probed: tokio::sync::OnceCell<()>,
     pub(crate) scope: std::sync::OnceLock<String>,
     nest: std::sync::OnceLock<Option<crate::nest::Nest>>,
@@ -98,6 +100,7 @@ impl Core {
             games: RwLock::new(games),
             source_libraries: Mutex::new(caches),
             source_logins: Mutex::new(BTreeMap::new()),
+            source_jobs: std::sync::Mutex::new(BTreeMap::new()),
             logins_probed: tokio::sync::OnceCell::new(),
             scope: std::sync::OnceLock::new(),
             nest: std::sync::OnceLock::new(),
@@ -1002,6 +1005,7 @@ impl Core {
                 let mut j = m.to_json();
                 j["games_dir"] = s.get("games_dir").cloned().unwrap_or(serde_json::Value::Null);
                 j["library_cached"] = serde_json::json!(caches.get(m.id()).map(|v| v.len()).unwrap_or(0));
+                j["library_at"] = serde_json::Value::String(Self::library_at(m));
                 j["logged_in"] = serde_json::Value::Bool(logins.contains_key(m.id()));
                 j["user"] = serde_json::Value::String(logins.get(m.id()).cloned().unwrap_or_default());
                 j
@@ -1009,18 +1013,47 @@ impl Core {
             .collect()
     }
 
+    /// When the library was last fetched from the store: the cache file's mtime, RFC 3339; empty without one.
+    fn library_at(m: &Source) -> String {
+        std::fs::metadata(m.data_dir().join("library.json")).and_then(|md| md.modified()).map(|t| chrono::DateTime::<chrono::Local>::from(t).to_rfc3339_opts(chrono::SecondsFormat::Secs, true)).unwrap_or_default()
+    }
+
     async fn run_verb(&self, m: &Source, verb: &str, args: &[String], mut progress: Option<Progress<'_, '_>>) -> Result<Vec<SourceEvent>> {
         let cfg = self.config.read().await.clone();
         let settings = m.merged_settings(&cfg);
         let mut events = Vec::new();
-        sources::run(m, &settings, verb, args, |ev| {
-            if let (SourceEvent::Progress { done, total, message }, Some(p)) = (&ev, progress.as_mut()) {
-                p(*done, *total, message);
-            }
-            events.push(ev);
-        })
-        .await?;
+        let key = (matches!(verb, "install" | "update") && !args.is_empty()).then(|| format!("{}:{}", m.id(), args[0]));
+        let result = sources::run(
+            m,
+            &settings,
+            verb,
+            args,
+            |pid| {
+                if let Some(k) = &key {
+                    self.source_jobs.lock().unwrap().insert(k.clone(), pid);
+                }
+            },
+            |ev| {
+                if let (SourceEvent::Progress { done, total, message }, Some(p)) = (&ev, progress.as_mut()) {
+                    p(*done, *total, message);
+                }
+                events.push(ev);
+            },
+        )
+        .await;
+        if let Some(k) = &key {
+            self.source_jobs.lock().unwrap().remove(k);
+        }
+        result?;
         Ok(events)
+    }
+
+    /// SIGTERMs the source process installing or updating `game_id`; the source stops its downloader and keeps
+    /// what it has, so the next `install` resumes. False when nothing was running for it.
+    pub fn source_cancel(&self, source: &str, game_id: &str) -> bool {
+        let Some(pid) = self.source_jobs.lock().unwrap().get(&format!("{source}:{game_id}")).copied() else { return false };
+        // SAFETY: kill(2) with a pid this process spawned and still holds a handle to.
+        unsafe { libc::kill(pid as libc::pid_t, libc::SIGTERM) == 0 }
     }
 
     pub async fn source_login_url(&self, source: &str) -> Result<String> {
@@ -1041,17 +1074,52 @@ impl Core {
         events.iter().filter_map(|e| if let SourceEvent::Game(g) = e { Some(g.clone()) } else { None }).collect()
     }
 
+    const SIZE_KEYS: [&'static str; 2] = ["download_size", "disk_size"];
+
+    fn save_source_library(m: &Source, games: &[serde_json::Map<String, serde_json::Value>]) {
+        let _ = std::fs::create_dir_all(m.data_dir());
+        let _ = std::fs::write(m.data_dir().join("library.json"), serde_json::to_string(games).unwrap_or_default());
+    }
+
+    /// The store's listing into the cache: on `refresh`, or when there is none yet.
+    async fn fetch_source_library(&self, m: &Source, refresh: bool) -> Result<()> {
+        let source = m.id();
+        if !refresh && self.source_libraries.lock().await.contains_key(source) {
+            return Ok(());
+        }
+        let events = self.run_verb(m, "library", &[], None).await?;
+        let mut games = Self::game_events(&events);
+        let mut caches = self.source_libraries.lock().await;
+        // Sizes come one `info` at a time; a listing without them keeps what was learnt.
+        if let Some(old) = caches.get(source) {
+            for g in games.iter_mut() {
+                let Some(prev) = old.iter().find(|p| p.get("id") == g.get("id")) else { continue };
+                for k in Self::SIZE_KEYS {
+                    if g.get(k).map_or(true, |v| v.is_null()) {
+                        if let Some(v) = prev.get(k).filter(|v| !v.is_null()) {
+                            g.insert(k.into(), v.clone());
+                        }
+                    }
+                }
+            }
+        }
+        Self::save_source_library(m, &games);
+        caches.insert(source.into(), games);
+        Ok(())
+    }
+
     pub async fn source_library(&self, source: &str, refresh: bool) -> Result<Vec<serde_json::Value>> {
         let m = self.source(source).await?;
-        if refresh || !self.source_libraries.lock().await.contains_key(source) {
-            let events = self.run_verb(&m, "library", &[], None).await?;
-            let games = Self::game_events(&events);
-            let _ = std::fs::create_dir_all(m.data_dir());
-            let _ = std::fs::write(m.data_dir().join("library.json"), serde_json::to_string(&games).unwrap_or_default());
-            self.source_libraries.lock().await.insert(source.into(), games);
-        }
-        let caches = self.source_libraries.lock().await;
-        let list = caches.get(source).cloned().unwrap_or_default();
+        self.fetch_source_library(&m, refresh).await?;
+        let list = self.source_libraries.lock().await.get(source).cloned().unwrap_or_default();
+        // What is on the disk right now: an install's size, a stopped download's folder and bytes.
+        let on_disk: BTreeMap<String, serde_json::Map<String, serde_json::Value>> = match self.run_verb(&m, "scan", &[], None).await {
+            Ok(events) => Self::game_events(&events).into_iter().filter_map(|g| g.get("id").and_then(|v| v.as_str()).map(|id| id.to_string()).map(|id| (id, g))).collect(),
+            Err(e) => {
+                tracing::warn!("{source}: scan failed, listing without disk state: {e}");
+                BTreeMap::new()
+            }
+        };
         let games = self.games.read().await;
         let list: Vec<serde_json::Value> = list
             .into_iter()
@@ -1061,6 +1129,19 @@ impl Core {
                     g.insert("installed".into(), serde_json::Value::Bool(local.game.is_installed()));
                     g.insert("game_id".into(), serde_json::Value::String(local.game.id.clone()));
                     g.insert("build".into(), serde_json::Value::String(local.game.source.build_id.clone()));
+                }
+                if let Some(d) = on_disk.get(&gid) {
+                    for k in ["partial_dir", "partial_bytes"] {
+                        g.insert(k.into(), d.get(k).cloned().unwrap_or(serde_json::Value::Null));
+                    }
+                    let installed = d.get("installed").and_then(|v| v.as_bool()).unwrap_or(false);
+                    for k in Self::SIZE_KEYS {
+                        if let Some(v) = d.get(k).filter(|v| !v.is_null()) {
+                            if installed || g.get(k).map_or(true, |v| v.is_null()) {
+                                g.insert(k.into(), v.clone());
+                            }
+                        }
+                    }
                 }
                 serde_json::Value::Object(g)
             })
@@ -1074,10 +1155,43 @@ impl Core {
         Ok(Self::game_events(&events).into_iter().map(serde_json::Value::Object).collect())
     }
 
+    /// The source's raw `info` payload; the `download_size` and `disk_size` it reports are added to it and
+    /// remembered in the library cache, so the listing carries them from then on.
     pub async fn source_info(&self, source: &str, game_id: &str) -> Result<serde_json::Value> {
         let m = self.source(source).await?;
         let events = self.run_verb(&m, "info", &[game_id.to_string()], None).await?;
-        Ok(events.iter().find_map(|e| if let SourceEvent::Info { data } = e { Some(data.clone()) } else { None }).unwrap_or(serde_json::Value::Null))
+        let Some((data, sizes)) = events.iter().find_map(|e| match e {
+            SourceEvent::Info { data, download_size, disk_size } => Some((data.clone(), [*download_size, *disk_size])),
+            _ => None,
+        }) else {
+            return Ok(serde_json::Value::Null);
+        };
+        let sizes: Vec<(&str, u64)> = Self::SIZE_KEYS.iter().zip(sizes).filter_map(|(k, v)| v.map(|v| (*k, v))).collect();
+        if sizes.is_empty() {
+            return Ok(data);
+        }
+        let mut data = data;
+        if let Some(obj) = data.as_object_mut() {
+            for (k, v) in &sizes {
+                obj.insert((*k).into(), serde_json::json!(v));
+            }
+        }
+        let mut caches = self.source_libraries.lock().await;
+        if let Some(games) = caches.get_mut(source) {
+            if let Some(g) = games.iter_mut().find(|g| g.get("id").and_then(|v| v.as_str()) == Some(game_id)) {
+                for (k, v) in &sizes {
+                    g.insert((*k).into(), serde_json::json!(v));
+                }
+                // The file's mtime is `library_at`, the store fetch; learning a size must not move it.
+                let path = m.data_dir().join("library.json");
+                let fetched = std::fs::metadata(&path).and_then(|md| md.modified()).ok();
+                Self::save_source_library(&m, games);
+                if let Some(t) = fetched {
+                    let _ = std::fs::File::options().write(true).open(&path).and_then(|f| f.set_modified(t));
+                }
+            }
+        }
+        Ok(data)
     }
 
     /// Creates the game when owned and installed, updates its source fields otherwise.
@@ -1144,7 +1258,7 @@ impl Core {
         let mut found = 0;
         for sid in ids {
             let m = self.source(&sid).await?;
-            if let Err(e) = self.source_library(&sid, false).await {
+            if let Err(e) = self.fetch_source_library(&m, false).await {
                 tracing::warn!("{sid}: library unavailable, scanning without ownership: {e}");
             }
             let events = self.run_verb(&m, "scan", &[], progress.as_deref_mut()).await?;
@@ -1297,6 +1411,84 @@ impl Core {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A `fake` source whose script is a shell case over the verb; every Universe home under one tempdir.
+    fn fake_source(script: &str) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        for (var, sub) in [("UNIVERSE_DATA_HOME", "data"), ("UNIVERSE_STATE_HOME", "state"), ("UNIVERSE_CONFIG_HOME", "config"), ("UNIVERSE_MODULES_PATH", "modules"), ("UNIVERSE_SOURCES_PATH", "sources")] {
+            std::fs::create_dir_all(dir.path().join(sub)).unwrap();
+            std::env::set_var(var, dir.path().join(sub));
+        }
+        std::fs::write(dir.path().join("config/config.toml"), "[modules]\nenabled = []\n[sources]\nenabled = [\"fake\"]\n").unwrap();
+        let src = dir.path().join("sources/fake");
+        std::fs::create_dir_all(&src).unwrap();
+        std::fs::write(src.join("source.toml"), "api = 2\nid = \"fake\"\nname = \"Fake\"\nexe = \"run\"\n").unwrap();
+        std::fs::write(src.join("run"), format!("#!/bin/sh\ncase \"$1\" in\n{script}\nesac\necho '{{\"event\":\"done\"}}'\n")).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(src.join("run"), std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        dir
+    }
+
+    async fn open() -> Core {
+        Core::open_with(crate::config::Config::load().unwrap(), Host::memory().0).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn sizes_learnt_by_info_survive_a_refresh_and_leave_library_at_alone() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let _dir = fake_source(
+            r#"library) echo '{"event":"game","id":"1","title":"One","owned":true,"installed":false}' ;;
+info) echo '{"event":"info","data":{"folder_name":"One"},"download_size":700,"disk_size":1000}' ;;
+scan) echo '{"event":"game","id":"1","title":"One","owned":true,"installed":false,"partial_dir":"/g/One","partial_bytes":300}' ;;"#,
+        );
+        let core = open().await;
+        assert_eq!(core.sources().await[0]["library_at"], "", "no fetch yet");
+        let list = core.source_library("fake", true).await.unwrap();
+        assert!(list[0].get("download_size").is_none());
+        assert_eq!((list[0]["partial_dir"].as_str(), list[0]["partial_bytes"].as_u64()), (Some("/g/One"), Some(300)), "the disk state rides on every listing");
+        let at = core.sources().await[0]["library_at"].as_str().unwrap().to_string();
+        assert!(!at.is_empty());
+        std::fs::File::options().write(true).open(paths::sources_data_dir("fake").join("library.json")).unwrap().set_modified(std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000)).unwrap();
+        let at = core.sources().await[0]["library_at"].as_str().unwrap().to_string();
+        let info = core.source_info("fake", "1").await.unwrap();
+        assert_eq!((info["download_size"].as_u64(), info["disk_size"].as_u64(), info["folder_name"].as_str()), (Some(700), Some(1000), Some("One")));
+        assert_eq!(core.sources().await[0]["library_at"], at, "learning a size is not a fetch");
+        let list = core.source_library("fake", false).await.unwrap();
+        assert_eq!(list[0]["download_size"], 700);
+        let list = core.source_library("fake", true).await.unwrap();
+        assert_eq!((list[0]["download_size"].as_u64(), list[0]["disk_size"].as_u64()), (Some(700), Some(1000)), "a listing without sizes keeps the learnt ones");
+        assert_eq!(core.sources().await[0]["library_at"].as_str().unwrap() >= at.as_str(), true);
+        let saved: Vec<serde_json::Value> = serde_json::from_str(&std::fs::read_to_string(paths::sources_data_dir("fake").join("library.json")).unwrap()).unwrap();
+        assert_eq!(saved[0]["disk_size"], 1000, "the file carries them too");
+    }
+
+    #[tokio::test]
+    async fn cancel_sigterms_the_running_install_and_nothing_else() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        // The downloader child is detached from the pipes and killed on TERM, as the gog source does with gogdl.
+        let _dir = fake_source(r#"install) sleep 30 >/dev/null 2>&1 & dl=$!; trap 'kill $dl; exit 143' TERM; echo '{"event":"progress","done":1,"total":10,"message":"10%"}'; wait $dl; exit 1 ;;"#);
+        let core = open().await;
+        assert!(!core.source_cancel("fake", "1"), "nothing running");
+        let started = std::time::Instant::now();
+        let mut seen = 0u64;
+        let mut p = |done: u64, _total: u64, _m: &str| seen = done;
+        let install = core.source_install("fake", "1", Some(&mut p));
+        let cancel = async {
+            while !core.source_jobs.lock().unwrap().contains_key("fake:1") {
+                assert!(started.elapsed() < std::time::Duration::from_secs(5), "the install never registered");
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            assert!(core.source_cancel("fake", "1"));
+        };
+        let (result, ()) = tokio::time::timeout(std::time::Duration::from_secs(5), async { tokio::join!(install, cancel) }).await.expect("cancel ends the install");
+        assert!(result.unwrap_err().to_string().contains("143"), "the source exits on the TERM");
+        assert_eq!(seen, 1, "progress reached the caller before the cancel");
+        assert!(core.source_jobs.lock().unwrap().is_empty(), "the registry is cleared on the way out");
+    }
 
     #[test]
     fn titles_from_files() {

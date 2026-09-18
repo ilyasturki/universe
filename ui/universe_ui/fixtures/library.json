@@ -384,6 +384,7 @@
       "logged_in": true,
       "user": "yasso",
       "games_dir": "/mnt/games/PC",
+      "library_at": "2026-09-11T19:03:00+02:00",
       "settings": [
         {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder (empty: paths.games_root)", "scope": "global", "choices": [], "dynamic": false},
         {"key": "scan_dirs", "type": "string", "default": "", "label": "Scanned folders (comma-separated, empty: the install folder)", "scope": "global", "choices": [], "dynamic": false},
@@ -400,6 +401,7 @@
     "gog": [
       {
         "id": "1972906591",
+        "disk_size": 8100000000,
         "title": "The Technomancer",
         "owned": true,
         "installed": true,
@@ -411,6 +413,7 @@
       },
       {
         "id": "1434554947",
+        "disk_size": 160000000,
         "title": "Mini Metro",
         "owned": true,
         "installed": true,
@@ -422,6 +425,7 @@
       },
       {
         "id": "1237807960",
+        "disk_size": 1400000000,
         "title": "Dead Cells",
         "owned": true,
         "installed": true,
@@ -433,6 +437,7 @@
       },
       {
         "id": "2010311939",
+        "disk_size": 42000000000,
         "title": "Control Ultimate Edition",
         "owned": true,
         "installed": true,
@@ -465,6 +470,10 @@
       {
         "id": "1441974651",
         "title": "Disco Elysium",
+        "partial_dir": "/mnt/games/PC/Disco Elysium",
+        "partial_bytes": 6100000000,
+        "download_size": 14000000000,
+        "disk_size": 15400000000,
         "owned": true,
         "installed": false,
         "dir": null,
@@ -473,6 +482,16 @@
         "image": "https://images.gog-statics.com/1441974651.jpg"
       }
     ]
+  },
+  "source_store": {
+    "gog": [
+      {"id": "1207658967", "title": "Alan Wake", "owned": true, "installed": false, "dir": null, "build": null, "remote_build": "2", "image": "https://images.gog-statics.com/1207658967.jpg"}
+    ]
+  },
+  "sizes": {
+    "1207658930": {"download_size": 32000000000, "disk_size": 50000000000},
+    "1207666883": {"download_size": 500000000, "disk_size": 1100000000},
+    "1207658967": {"download_size": 7900000000, "disk_size": 8200000000}
   },
   "catalog": [
     {"id": "1207658924", "title": "The Witcher: Enhanced Edition", "owned": false, "installed": false, "dir": null, "build": null, "remote_build": null},

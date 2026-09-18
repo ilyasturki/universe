@@ -47,6 +47,29 @@ Item {
         Behavior on color { ColorEase {} }
     }
 
+    // How much of a download is on the disk, as a hairline along the row's foot.
+    Rectangle {
+        anchors.left: parent.left
+        anchors.right: parent.right
+        anchors.bottom: parent.bottom
+        anchors.leftMargin: row.labelInset
+        anchors.rightMargin: Theme.dp(16)
+        anchors.bottomMargin: Theme.dp(5)
+        height: Theme.dp(3)
+        radius: height / 2
+        visible: row.entry.progress !== undefined && row.entry.progress > 0
+        color: row.focused ? Qt.rgba(0.063, 0.067, 0.086, 0.15) : Qt.rgba(1, 1, 1, 0.10)
+
+        Rectangle {
+            anchors.left: parent.left
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            width: parent.width * Math.min(1, row.entry.progress || 0)
+            radius: height / 2
+            color: row.focused ? Theme.onLight : Theme.textSecondary
+        }
+    }
+
     Loader {
         id: thumb
 
@@ -204,11 +227,23 @@ Item {
                 }
             }
 
+            // A game's size, in figures of one width so a column of them lines up.
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: text !== ""
+                text: row.entry.size || ""
+                color: row.focused ? Theme.onLight : Theme.text
+                font.family: Theme.sans
+                font.weight: Font.Medium
+                font.pixelSize: Theme.dp(21)
+                font.features: { "tnum": 1 }
+            }
+
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 visible: text !== "" && row.macros.length === 0 && !(row.hasSwitch && !row.entry.warning)
                 text: row.entry.display || ""
-                color: row.focused ? row.onFocus : Theme.textSecondary
+                color: row.focused ? row.onFocus : row.entry.accent === true ? "#5aa0ff" : Theme.textSecondary
                 font.family: Theme.sans
                 font.pixelSize: Theme.dp(21)
                 elide: Text.ElideMiddle

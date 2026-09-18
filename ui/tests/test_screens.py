@@ -1,6 +1,7 @@
 import pytest
 
 from conftest import index_of, rows_by_key, settle, wait_for
+from universe_ui.screens.media import _size
 
 PENDING = {"session": "20260912-200000", "game": "the-technomancer", "state": "pending",
            "started_at": "2026-09-12T20:00:00+02:00", "written_at": "", "title": "", "paragraphs": [], "images": []}
@@ -230,10 +231,110 @@ def test_sources_browser_statuses(api):
     assert status["The Technomancer"] == "Installed"
     assert status["Mini Metro"] == "Update available"
     assert status["Stardew Valley"] == "Owned"
+    assert status["Disco Elysium"] == f"Paused · {_size(6100000000)} of {_size(15400000000)} kept"
     assert [r["title"] for r in browser.updates] == ["Mini Metro"]
     rows = {r["title"]: r for r in browser.rows}
     assert rows["Dead Cells"]["game_id"] == "dead-cells" and rows["Stardew Valley"]["game_id"] == ""
     assert rows["Stardew Valley"]["image"].startswith("https://")
+    assert (rows["The Technomancer"]["sizeText"], rows["The Technomancer"]["sizeKind"]) == (_size(8100000000), "disk")
+    assert (rows["Stardew Valley"]["sizeText"], rows["Stardew Valley"]["sizeKind"]) == ("", ""), "unknown until peeked"
+    assert (rows["Disco Elysium"]["sizeText"], rows["Disco Elysium"]["action"], rows["Disco Elysium"]["partial"]) == (_size(15400000000), "Resume", True)
+    assert browser.libraryAt == "2026-09-11T19:03:00+02:00" and (browser.libraryAge.endswith("Sep") or browser.libraryAge.endswith("ago"))
+
+
+def test_sources_browser_refresh_hits_the_store_and_page_open_does_not(api, fake):
+    core = fake._core
+    browser = api.screens.sources
+    browser.load()
+    settle(browser)
+    assert core.library_calls == [False], "opening the page serves the cache"
+    assert "Alan Wake" not in [r["title"] for r in browser.rows]
+    browser.refresh()
+    settle(browser)
+    assert core.library_calls == [False, True], "Y asks the store"
+    assert "Alan Wake" in [r["title"] for r in browser.rows], "a game bought since shows up"
+    assert browser.libraryAge == "just now"
+    browser.uninstall("dead-cells")
+    settle(browser)
+    assert core.library_calls == [False, True, False], "a reload after a job stays off the network"
+
+
+def test_sources_browser_free_space_and_a_failed_refresh(api, fake, tmp_path):
+    import shutil
+
+    from universe_ui.universe_client import UniverseError
+
+    core = fake._core
+    core._data["sources"][0]["games_dir"] = str(tmp_path)
+    browser = api.screens.sources
+    browser.load()
+    settle(browser)
+    assert browser.error == "" and browser.freeSpace > 0
+    assert abs(browser.freeSpace - shutil.disk_usage(tmp_path).free) < 1 << 30, "the install folder's free bytes"
+    before = [r["title"] for r in browser.rows]
+    library = core.library
+
+    def offline(source, refresh):
+        raise UniverseError("Io", "gog library failed: offline")
+
+    core.library = offline
+    browser.refresh()
+    settle(browser)
+    assert browser.error == "gog library failed: offline"
+    assert [r["title"] for r in browser.rows] == before, "the listing shown stays"
+    core.library = library
+    browser.refresh()
+    settle(browser)
+    assert browser.error == ""
+
+
+def test_sources_browser_peek_fills_a_size_once(api, fake):
+    browser = api.screens.sources
+    browser.load()
+    settle(browser)
+    rows = {r["title"]: i for i, r in enumerate(browser.rows)}
+    browser.peek(rows["The Technomancer"])
+    assert fake._core._source_game("gog", "1972906591").get("download_size") is None, "installed rows have their size"
+    seen = []
+    browser.rowsChanged.connect(lambda: seen.append(1))
+    browser.peek(rows["Stardew Valley"])
+    wait_for(browser.rowsChanged, 5000)
+    row = browser.rows[rows["Stardew Valley"]]
+    assert (row["sizeText"], row["sizeKind"], row["disk_size"]) == (_size(500000000), "download", 1100000000)
+    assert not browser.busy, "a peek never shows Loading…"
+
+
+def test_sources_browser_cancel_pauses_the_install(api, fake):
+    browser = api.screens.sources
+    browser.load()
+    settle(browser)
+    messages = []
+    browser.message.connect(messages.append)
+    index = next(i for i, r in enumerate(browser.rows) if r["title"] == "The Witcher 3: Wild Hunt")
+    job = browser.install(index)
+    assert job and browser.job["game"] == "1207658930"
+    rebuilds = []
+    browser.rowsChanged.connect(lambda: rebuilds.append(1))
+    wait_for(browser.jobChanged, 5000)
+    wait_for(browser.jobChanged, 5000)
+    row = browser.rows[index]
+    assert row["busy"] and row["action"] == "Cancel" and row["status"] == "Installing…"
+    assert browser.job["message"].startswith("Installing The Witcher 3: Wild Hunt · ") and f" of {_size(50000000000)}" in browser.job["message"]
+    assert rebuilds == [], "progress moves the job line, not the rows"
+    assert browser.install(index) == "", "one job at a time"
+    assert browser.cancel() is True
+    assert browser.job["cancelled"] and browser.job["message"].startswith("Stopping")
+    assert wait_for(browser.message, 5000)
+    settle(browser)
+    assert messages[-1].startswith("Stopped installing The Witcher 3: Wild Hunt · ") and messages[-1].endswith("kept, resume any time")
+    row = browser.rows[index]
+    assert row["partial"] and row["action"] == "Resume" and row["status"].startswith("Paused · ")
+    assert browser.cancel() is False, "nothing running"
+    browser.install(index)
+    assert wait_for(browser.message, 10000)[0] == "Installing 1207658930: done"
+    settle(browser)
+    row = next(r for r in browser.rows if r["title"] == "The Witcher 3: Wild Hunt")
+    assert row["installed"] and row["sizeText"] == _size(50000000000) and row["status"] == "Installed"
     browser.search("disco")
     settle(browser)
     assert [r["title"] for r in browser.rows] == ["Disco Elysium"]

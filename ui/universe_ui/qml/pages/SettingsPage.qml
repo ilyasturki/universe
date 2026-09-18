@@ -25,7 +25,7 @@ FocusScope {
     readonly property real scrimMid: 0.94
     readonly property real scrimBottom: 0.98
     readonly property Item menuAnchor: null
-    readonly property bool modal: editor.open || menu.open || testing || learning
+    readonly property bool modal: editor.open || menu.open || dialog.open || testing || learning
 
     readonly property var sections: [
         { name: "Runners", icon: "play" }, { name: "Launch", icon: "sliders" }, { name: "Modules", icon: "grid" },
@@ -73,6 +73,7 @@ FocusScope {
 
     readonly property var hints: editor.open ? editor.hints
         : menu.open ? menu.hints
+        : dialog.open ? dialog.hints
         : artwork.item && artwork.item.activeFocus ? artwork.item.hints
         : testing ? [ { glyph: "B", label: "Hold to finish" }, { glyph: "Start+Select", label: "Finish" } ]
         : learning ? [ { glyph: "B", label: "Stop learning" } ]
@@ -124,22 +125,35 @@ FocusScope {
         if (section === installSection) {
             rows.push({ section: sourceName, key: "search", label: "Search " + sourceName, type: "search", icon: "search",
                         display: sources.query || "", choices: [], detail: "" });
-            var installed = [], owned = [], all = [];
+            var jobs = [], installed = [], owned = [], all = [], running = 0, paused = 0, onDisk = 0;
             for (var i = 0; i < sources.rows.length; i++) {
                 var g = sources.rows[i];
                 rows.push({ section: sourceName, key: "game", label: g.title, type: "action",
-                            display: g.status, choices: [], detail: "", row: i, installed: g.installed,
-                            pending: g.pending, gameId: g.game_id, image: g.image, action: "Options" });
+                            display: g.partial ? "Paused · " + Format.bytes(g.partial_bytes) + " kept" : g.status,
+                            choices: [], detail: "", row: i, installed: g.installed, busy: g.busy, partial: g.partial,
+                            pending: g.pending, gameId: g.game_id, image: g.image, action: "Options", size: g.sizeText,
+                            accent: g.busy || g.pending, progress: g.partial && g.disk_size > 0 ? g.partial_bytes / g.disk_size : 0 });
                 all.push(rows.length - 1);
-                (g.installed ? installed : owned).push(rows.length - 1);
+                if (g.busy || g.partial) {
+                    jobs.push(rows.length - 1);
+                    g.busy ? running++ : paused++;
+                } else
+                    (g.installed ? installed : owned).push(rows.length - 1);
+                if (g.installed)
+                    onDisk += g.disk_size;
             }
             var busy = sources.busy ? (all.length > 0 ? " · refreshing…" : "loading…") : "";
+            var stale = sources.error !== "" ? sourceName + " could not be reached" + (sources.libraryAge ? " · listing from " + sources.libraryAge : "") : "";
             if (sources.query)
                 groups.push({ title: "Results", meta: Format.plural(all.length, "game", "games") + " · “" + sources.query + "”" + busy, rows: [0].concat(all) });
             else {
+                if (jobs.length > 0)
+                    groups.push({ title: "Installing", meta: [running > 0 ? running + " running" : "", paused > 0 ? paused + " paused" : ""].filter(Boolean).join(" · "), rows: jobs });
                 var where = currentSource && currentSource.games_dir ? " · " + currentSource.games_dir : "";
-                groups.push({ title: "Installed", meta: (all.length > 0 || !busy ? Format.plural(installed.length, "game", "games") + where : "") + busy, rows: [0].concat(installed) });
-                groups.push({ title: "Owned, not installed", meta: Format.plural(owned.length, "game", "games"), rows: owned });
+                var sized = onDisk > 0 ? " · " + Format.bytes(onDisk) : "";
+                groups.push({ title: "Installed", meta: (all.length > 0 || !busy ? Format.plural(installed.length, "game", "games") + sized + where : "") + busy, rows: [0].concat(installed) });
+                groups.push({ title: "Owned, not installed", meta: Format.plural(owned.length, "game", "games") + (sources.libraryAge && !stale ? " · refreshed " + sources.libraryAge : ""),
+                              warning: stale, rows: owned });
             }
             return { rows: rows, groups: groups };
         }
@@ -406,8 +420,10 @@ FocusScope {
 
     function gameActions(row) {
         var out = [];
+        if (row.busy)
+            return [ { icon: "stop", label: "Cancel " + (row.pending ? "update" : "install"), action: "cancel", danger: true } ];
         if (!row.installed) {
-            out.push({ icon: "download", label: "Install", action: "install" });
+            out.push({ icon: "download", label: row.partial ? "Resume" : "Install", action: row.partial ? "resume" : "install" });
             return out;
         }
         if (row.pending)
@@ -422,9 +438,24 @@ FocusScope {
     }
 
     function gameAction(row, action) {
-        if (action === "install" || action === "update") {
-            Sound.enter();
-            sources.install(row.row);
+        if (action === "install") {
+            var g = sources.rows[row.row], parts = [];
+            if (g.download_size > 0)
+                parts.push(Format.bytes(g.download_size) + " to download");
+            if (g.disk_size > 0)
+                parts.push(Format.bytes(g.disk_size) + " on disk");
+            var where = currentSource && currentSource.games_dir ? currentSource.games_dir : "";
+            var free = sources.freeSpace > 0 ? Format.bytes(sources.freeSpace) + " free" + (where ? " in " + where : "") : where ? "Into " + where : "";
+            dialog.ask({ message: "Install " + row.label + "?", detail: [parts.length > 0 ? parts.join(" · ") : "Size not known yet", free].filter(Boolean).join("\n"), yes: "Install", no: "Not now" }, function(yes) {
+                if (yes)
+                    sources.install(row.row) !== "" ? Sound.enter() : Sound.edge();
+                cards.forceActiveFocus();
+            });
+            return;
+        } else if (action === "resume" || action === "update") {
+            sources.install(row.row) !== "" ? Sound.enter() : Sound.edge();
+        } else if (action === "cancel") {
+            sources.cancel() ? Sound.cancel() : Sound.edge();
         } else if (action === "settings") {
             cards.forceActiveFocus();
             page.settingsRequested(api.allGames.byId(row.gameId));
@@ -588,7 +619,7 @@ FocusScope {
                 anchors.rightMargin: Theme.dp(22)
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.verticalCenterOffset: -Theme.dp(6)
-                text: jobBar.job ? jobBar.job.message + (jobBar.job.ok === true ? " ✓" : jobBar.job.ok === false ? " ✗" : "") : ""
+                text: jobBar.job ? jobBar.job.message + (jobBar.job.ok === true ? " ✓" : jobBar.job.ok === false && !jobBar.job.cancelled ? " ✗" : "") : ""
                 color: Theme.text
                 font.family: Theme.sans
                 font.weight: Font.Medium
@@ -755,6 +786,23 @@ FocusScope {
         z: 4
 
         onDismissed: cards.forceActiveFocus()
+    }
+
+    ConfirmDialog {
+        id: dialog
+
+        anchors.fill: parent
+        z: 4
+    }
+
+    // The cursor on a game without a size: ask the store for it, one at a time.
+    Connections {
+        target: cards
+        function onIndexChanged() {
+            var row = cards.currentRow;
+            if (page.section === page.installSection && row && row.key === "game")
+                page.sources.peek(row.row);
+        }
     }
 
     Keys.onPressed: function(event) {

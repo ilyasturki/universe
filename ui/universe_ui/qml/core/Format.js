@@ -38,6 +38,18 @@ function plural(n, one, many) {
     return n + " " + (n === 1 ? one : many);
 }
 
+// The host's `_size`: 1024-based, one decimal past bytes.
+function bytes(n) {
+    var units = ["KB", "MB", "GB", "TB"], v = Math.max(0, n || 0);
+    if (v < 1024)
+        return Math.round(v) + " bytes";
+    for (var i = 0; i < units.length; i++) {
+        v /= 1024;
+        if (v < 1024 || i === units.length - 1)
+            return v.toFixed(1) + " " + units[i];
+    }
+}
+
 function sessions(count) {
     return count > 0 ? plural(count, "session", "sessions") : "";
 }
