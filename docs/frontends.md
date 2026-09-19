@@ -300,7 +300,8 @@ Every page and overlay exposes `hints`, `[{ glyph, label, dim }]`, and the bar o
 the one with the focus (`theme.qml` picks the menu's, the tab bar's or the page's). `ui/Hints.js`
 splits them: the page's hints on the left in the order the page wrote them, the near-global ones
 — `LT RT` (the section or collection cycled by the triggers) and `LB RB` (the tabs, appended by
-the shell) — on the right before the clock, so they never move as the labels around them change.
+the shell) — on the right, so they never move as the labels around them change. The clock and the pad's
+battery live in the tab bar alone; a sub page's bar carries hints only.
 A hint whose action the page has nothing for
 right now (no journal entry for this recording, no refresh in this section) is kept in place and
 dimmed (`dim: true`), never dropped; hints for what the pad makes obvious — moving with the d-pad
@@ -519,11 +520,14 @@ page below unloads it). `load(id)` reads `media_status` into `slots` — one row
 (`picked`, `default`, `missing`), `kindLabel` (the one pill both looks draw: "Your pick", the
 provider that fetched the default, or "Missing"), `originLabel` and `defaultOriginLabel`,
 `hasOverride`, `hasDefault`, `aspect`, `use` (where the themes show the slot) — and `entry`, the
-SteamGridDB entry the candidates come from ("Name (year)"), which heads the page so a wrong
-match is seen. Reprise's page has two levels: the five slots as art cards (two rows: box front,
-square, banner; background, logo), then a slot's browser — what shows now, the default under a
-pick, and the candidates as a grid — opened by A, or straight away when the page is opened with
-a `slot` (the Settings section's A). `loadCandidates(slot)` fetches `media_candidates` off the UI
+SteamGridDB entry the candidates come from ("Name (year)"), named above the candidates only
+when `entryDiffers` (its name is not the game's), so a wrong match is seen and a right one says
+nothing. Reprise's page has two levels: the five slots as art cards (`ui/ArtFrame.qml`, the one
+slot tile both the page and the Settings matrix draw — the box front tall on the left, square
+and banner, then background and logo, in two rows beside it, sized to fill the width), then a
+slot's browser — what shows now, the default under a pick, and the candidates as a grid —
+opened by A, or straight away when the page is opened with a `slot` (the Settings section's A;
+B then leaves the page, the cards were never shown). `loadCandidates(slot)` fetches `media_candidates` off the UI
 thread into `candidates` (`url` is the provider's, `thumb` what the grid shows, `votes`), `more`
 and `candidatesBusy`; `moreCandidates()` takes the next page. `apply(slot, url)` runs
 `media_set_url` on a thread, `useFile(slot, path)` `media_set_slot` (the page's menu, through
@@ -532,16 +536,17 @@ and `candidatesBusy`; `moreCandidates()` takes the next page. `apply(slot, url)`
 cell or the options menu on the Switch 2); `refresh()` fetches the missing art. All report
 through `message`. The wrong-match flow is `search(query)` → `hits` (`name`, `year`, `verified`,
 `current`) → `pin(id)`, which writes `metadata.sgdb_id` through `media_pin` and reloads the
-candidates; Reprise puts the hits in a sheet (Y), the Switch 2 look runs it through the shell's
-`prompt` and `pick` (`switch2/pages/Artwork.js`). Local URLs carry the file's mtime as a query
+candidates; both looks search the game's own title first — Reprise's Y opens the hits in a sheet
+whose Y takes another name, the Switch 2 look runs it through the shell's `pick` with "Another
+name…" as the last choice, then `prompt` (`switch2/pages/Artwork.js`). Local URLs carry the file's mtime as a query
 (`models.file_url`), so a pick that replaces a file at the same path repaints instead of showing
 the image cache's copy.
 
 `api.screens.artworkOverview` is the Artwork section of the Settings tab (`ArtworkOverview.qml`, a
 column of its own next to the sidebar): the library as a matrix, `rows` (`id`, `title`, `slots` —
-the five slot rows above, in slot order — `missing`, `picked`), `columns` (`slot`, `label`,
-`aspect`, `use`, `missing`: how many games lack it) and `totals` (`games`, `missing`, `picked`);
-`refreshAll()` fetches the missing art of every game (the section's X). `load()` reads
+the five slot rows above, in slot order) and `columns` (`slot`, `label`, `aspect`, `use`); a
+missing slot and a pick are marked on the cell, nothing is counted. `refreshAll()` fetches the
+missing art of every game (the section's X, which carries the job's progress while it runs). `load()` reads
 `media_status` for the whole library on a thread; a `mediaChanged` or `libraryChanged` reloads it
 after a short debounce while the section is on screen.
 

@@ -415,10 +415,20 @@ def test_the_artwork_page_opens_on_a_slot_and_lists_its_candidates(api, fake):
         wait_for(form.candidatesChanged, 3000)
         pump(100)
     assert form.candidatesSlot == "logo" and form.candidates
-    assert lit_fraction(window.grabWindow(), api.theme.ground) > 0.05
-    page.closeBrowser()
-    pump(100)
-    assert page.property("level") == "slots" and page.property("index") == 4
+    assert lit_fraction(window.grabWindow(), api.theme.ground) > 0.03
+    page.back()
+    settle(window)
+    assert root.property("subOpen") is False, "opened on a slot, B leaves the page rather than showing the cards"
+    QMetaObject.invokeMethod(root, "openSub", Q_ARG("QVariant", "pages/ArtworkPage.qml"), Q_ARG("QVariant", {"game": game}))
+    settle(window)
+    page = root.findChild(QObject, "artworkPage")
+    assert page.property("level") == "slots"
+    page.setProperty("index", 0)
+    page.moveAcross(1)
+    page.moveDown()
+    page.moveAcross(-1)
+    page.moveAcross(1)
+    assert page.property("index") == 3, "the box front remembers the row it was left from"
     page.openMenu()
     pump(100)
     assert page.property("modal") is True

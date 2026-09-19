@@ -251,6 +251,7 @@ class ArtworkForm(AsyncScreen):
     title = Property(str, lambda self: self._title, notify=slotsChanged)
     sgdbId = Property(int, lambda self: self._sgdb_id, notify=slotsChanged)
     entry = Property(str, lambda self: (self._sgdb_name + (f" ({self._sgdb_year})" if self._sgdb_year else "")) if self._sgdb_name else (f"entry {self._sgdb_id}" if self._sgdb_id else ""), notify=slotsChanged)
+    entryDiffers = Property(bool, lambda self: bool(self._sgdb_name) and self._sgdb_name.casefold() != self._title.casefold(), notify=slotsChanged)
     slots = Property("QVariantList", lambda self: [dict(s) for s in self._slots], notify=slotsChanged)
     candidates = Property("QVariantList", lambda self: [dict(c) for c in self._candidates], notify=candidatesChanged)
     candidatesSlot = Property(str, lambda self: self._candidates_slot, notify=candidatesChanged)
@@ -300,8 +301,7 @@ class ArtworkOverview(AsyncScreen):
                     continue
                 by_slot = {str(s.get("slot") or ""): _slot_row(s) for s in g.get("slots") or []}
                 slots = [by_slot.get(slot) or _slot_row({"slot": slot}) for slot, *_ in SLOTS]
-                rows.append({"id": ident, "title": str(g.get("title") or ident), "slots": slots,
-                             "missing": sum(s["kind"] == "missing" for s in slots), "picked": sum(s["kind"] == "picked" for s in slots)})
+                rows.append({"id": ident, "title": str(g.get("title") or ident), "slots": slots})
             return sorted(rows, key=lambda r: r["title"].casefold())
 
         def done(rows, error):
@@ -318,16 +318,6 @@ class ArtworkOverview(AsyncScreen):
     def unload(self):
         self._loaded = False
         self._reload.stop()
-
-    def _columns(self):
-        out = []
-        for i, (slot, label, aspect, use) in enumerate(SLOTS):
-            missing = sum(r["slots"][i]["kind"] == "missing" for r in self._rows)
-            out.append({"slot": slot, "label": label, "aspect": aspect, "use": use, "missing": missing})
-        return out
-
-    def _totals(self):
-        return {"games": len(self._rows), "missing": sum(r["missing"] for r in self._rows), "picked": sum(r["picked"] for r in self._rows)}
 
     @Slot()
     def refreshAll(self):
@@ -353,6 +343,5 @@ class ArtworkOverview(AsyncScreen):
             self._stale()
 
     rows = Property("QVariantList", lambda self: [dict(r, slots=[dict(s) for s in r["slots"]]) for r in self._rows], notify=rowsChanged)
-    columns = Property("QVariantList", _columns, notify=rowsChanged)
-    totals = Property("QVariantMap", _totals, notify=rowsChanged)
+    columns = Property("QVariantList", lambda self: [{"slot": slot, "label": label, "aspect": aspect, "use": use} for slot, label, aspect, use in SLOTS], constant=True)
     job = Property("QVariant", lambda self: dict(self._job) if self._job else None, notify=jobChanged)

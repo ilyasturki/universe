@@ -7,7 +7,6 @@ Item {
 
     // [{ glyph: "A", label: "Launch", dim: false }, ...]
     property var hints: []
-    property bool showClock: false
     property real sideMargin: Theme.dp(Theme.edgeMargin)
 
     readonly property var arranged: Hints.arrange(hints)
@@ -59,30 +58,10 @@ Item {
         hints: root.arranged.left
     }
 
-    Row {
+    HintRow {
         anchors.right: parent.right
         anchors.rightMargin: root.sideMargin
         anchors.verticalCenter: parent.verticalCenter
-        spacing: Theme.dp(48)
-
-        HintRow {
-            anchors.verticalCenter: parent.verticalCenter
-            hints: root.arranged.right
-        }
-
-        PowerBadge {
-            anchors.verticalCenter: parent.verticalCenter
-            visible: root.showClock && api.power.count > 0
-        }
-
-        Text {
-            visible: root.showClock
-            anchors.verticalCenter: parent.verticalCenter
-            text: Theme.clock
-            color: Theme.textSecondary
-            font.family: Theme.sans
-            font.weight: Font.Medium
-            font.pixelSize: Theme.dp(22)
-        }
+        hints: root.arranged.right
     }
 }

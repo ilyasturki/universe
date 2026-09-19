@@ -779,7 +779,6 @@ FocusScope {
         anchors.left: parent.left
         anchors.right: parent.right
         sideMargin: page.sideMargin
-        showClock: true
         hints: page.hints
         z: 4
         opacity: page.fullscreen && !controls.shown ? 0.0 : 1.0

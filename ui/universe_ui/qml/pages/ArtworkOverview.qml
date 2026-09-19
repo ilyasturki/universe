@@ -9,7 +9,6 @@ FocusScope {
     readonly property var store: api.screens.artworkOverview
     readonly property var rows: store.rows
     readonly property var columns: store.columns
-    readonly property var totals: store.totals
 
     signal openRequested(var game, string slot)
     signal escapedLeft()
@@ -20,7 +19,8 @@ FocusScope {
     property int col: 0
     readonly property var currentRow: row >= 0 && row < rows.length ? rows[row] : null
     readonly property var currentColumn: col >= 0 && col < columns.length ? columns[col] : null
-    readonly property bool fetching: store.job !== null && store.job !== undefined && (store.job.ok === null || store.job.ok === undefined)
+    readonly property var job: store.job
+    readonly property bool fetching: job !== null && job !== undefined && (job.ok === null || job.ok === undefined)
 
     readonly property real titleWidth: Theme.dp(300)
     readonly property real thumbHeight: Theme.dp(96)
@@ -29,7 +29,7 @@ FocusScope {
 
     readonly property var hints: [
         { glyph: "A", label: currentRow && currentColumn ? "Open " + currentColumn.label.toLowerCase() : "Open", dim: currentRow === null },
-        { glyph: "X", label: fetching ? "Fetching…" : "Fetch missing art", dim: fetching },
+        { glyph: "X", label: fetching ? "Fetching" + (job.total > 0 ? " " + job.done + "/" + job.total : "") + "…" : "Fetch missing art", dim: fetching },
         { glyph: "B", label: "Sections" }
     ]
 
@@ -102,59 +102,21 @@ FocusScope {
     Row {
         id: head
 
+        x: view.titleWidth + view.cellGap
         spacing: view.cellGap
-
-        Text {
-            width: view.titleWidth
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: Theme.dp(4)
-            text: {
-                var job = view.store.job;
-                if (job && (job.ok === null || job.ok === undefined))
-                    return (job.total > 0 ? job.done + "/" + job.total + " · " : "") + job.message;
-                if (view.store.busy && view.rows.length === 0)
-                    return "reading…";
-                var parts = [ view.totals.games + (view.totals.games === 1 ? " game" : " games") ];
-                if (view.totals.missing > 0)
-                    parts.push(view.totals.missing + " missing");
-                if (view.totals.picked > 0)
-                    parts.push(view.totals.picked + (view.totals.picked === 1 ? " pick" : " picks"));
-                return parts.join(" · ");
-            }
-            color: Theme.textSecondary
-            font.family: Theme.sans
-            font.pixelSize: Theme.dp(19)
-            elide: Text.ElideRight
-        }
 
         Repeater {
             model: view.columns
 
             // A narrow column's name may run into the gap after it.
-            Column {
-                width: view.widthOf(modelData)
-                anchors.bottom: parent.bottom
-                spacing: Theme.dp(2)
-
-                Text {
-                    width: parent.width + view.cellGap - Theme.dp(4)
-                    text: modelData.label
-                    color: Theme.text
-                    font.family: Theme.sans
-                    font.weight: Font.DemiBold
-                    font.pixelSize: Theme.dp(17)
-                    elide: Text.ElideRight
-                }
-
-                Text {
-                    width: parent.width + view.cellGap - Theme.dp(4)
-                    visible: modelData.missing > 0
-                    text: modelData.missing + " missing"
-                    color: "#e0655a"
-                    font.family: Theme.sans
-                    font.pixelSize: Theme.dp(15)
-                    elide: Text.ElideRight
-                }
+            Text {
+                width: view.widthOf(modelData) + view.cellGap - Theme.dp(4)
+                text: modelData.label
+                color: Theme.text
+                font.family: Theme.sans
+                font.weight: Font.DemiBold
+                font.pixelSize: Theme.dp(17)
+                elide: Text.ElideRight
             }
         }
     }
@@ -195,6 +157,7 @@ FocusScope {
         preferredHighlightEnd: height - Theme.dp(14)
         highlightRangeMode: ListView.ApplyRange
         highlightFollowsCurrentItem: true
+        highlightMoveDuration: Theme.durView
 
         delegate: Item {
             readonly property var game: modelData
@@ -226,7 +189,6 @@ FocusScope {
 
                         readonly property var slot: modelData
                         readonly property bool focused: onRow && index === view.col && view.activeFocus
-                        readonly property bool empty: slot.kind === "missing"
 
                         width: view.widthOf(slot)
                         height: view.thumbHeight
@@ -240,43 +202,15 @@ FocusScope {
                             sourceComponent: FocusRing { cornerRadius: Theme.dp(8) }
                         }
 
-                        RoundedMask {
+                        ArtFrame {
                             anchors.fill: parent
                             radius: Theme.dp(8)
-
-                            Rectangle {
-                                anchors.fill: parent
-                                color: cell.empty ? Qt.rgba(0.88, 0.40, 0.35, 0.10) : cell.slot.slot === "logo" ? Qt.rgba(1, 1, 1, 0.05) : Theme.surface
-                                border.width: cell.empty ? 1 : 0
-                                border.color: Qt.rgba(0.88, 0.40, 0.35, 0.5)
-                            }
-
-                            Image {
-                                anchors.fill: parent
-                                source: cell.slot.url
-                                fillMode: cell.slot.slot === "logo" ? Image.PreserveAspectFit : Image.PreserveAspectCrop
-                                asynchronous: true
-                                sourceSize.width: 480
-                            }
-
-                            Text {
-                                anchors.centerIn: parent
-                                visible: cell.empty
-                                text: "missing"
-                                color: "#e0655a"
-                                font.family: Theme.sans
-                                font.weight: Font.DemiBold
-                                font.pixelSize: Theme.dp(15)
-                            }
-
-                            KindBadge {
-                                anchors.left: parent.left
-                                anchors.top: parent.top
-                                anchors.margins: Theme.dp(6)
-                                visible: cell.slot.kind === "picked"
-                                kind: "picked"
-                                label: "Pick"
-                            }
+                            row: cell.slot
+                            badge: cell.slot.kind === "picked"
+                            badgeLabel: "Pick"
+                            badgeMargin: Theme.dp(6)
+                            emptyText: "missing"
+                            emptySize: Theme.dp(15)
                         }
                     }
                 }

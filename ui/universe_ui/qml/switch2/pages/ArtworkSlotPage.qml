@@ -80,7 +80,7 @@ FocusScope {
         var items = [];
         if (picked)
             items.push({ label: "Back to default", act: "default" });
-        items.push({ label: "Fetch missing art", act: "fetch" }, { label: "Search SteamGridDB…", act: "search" }, { label: "Use a file for the " + label + "…", act: "file" });
+        items.push({ label: "Fetch missing art", act: "fetch" }, { label: "Wrong game?", act: "search" }, { label: "Use a file for the " + label + "…", act: "file" });
         shell.menu(current.label, items, function(act) {
             if (act === "default")
                 form.removeOverride(page.slot);
@@ -102,8 +102,8 @@ FocusScope {
         title: page.current ? page.current.label : ""
         subtitle: "Artwork · " + (page.game ? page.game.title : "")
         trailing: page.form.candidatesBusy && page.candidates.length === 0 ? "Fetching…"
-            : page.form.entry !== "" ? "SteamGridDB · " + page.form.entry + (page.candidates.length > 0 ? " · " + page.candidates.length + (page.form.more ? "+" : "") : "")
-            : ""
+            : page.candidates.length === 0 ? ""
+            : page.candidates.length + (page.form.more ? "+" : "") + " on SteamGridDB" + (page.form.entryDiffers ? " as " + page.form.entry : "")
     }
 
     CellGrid {

@@ -1,69 +1,55 @@
 import QtQuick
 import "../core"
 
-Item {
+// A slot row's art at the slot's shape: a logo fitted, the rest cropped, an empty slot said so.
+RoundedMask {
     id: root
 
-    property string source: ""
-    property bool logo: false
-    property string caption: ""
-    property string kind: "missing"
-    property string kindLabel: ""
+    property var row: null
+    property bool badge: false
     property bool dim: false
+    property string emptyText: "Nothing yet"
+    property real emptySize: Theme.dp(20)
+    property real badgeMargin: Theme.dp(12)
+    property string badgeLabel: ""
+    readonly property bool empty: row === null || !row.url
+    readonly property bool logo: row !== null && row.slot === "logo"
 
-    readonly property real captionHeight: Theme.dp(30)
+    radius: Theme.dp(12)
+    opacity: dim ? 0.6 : 1.0
 
-    RoundedMask {
-        id: frame
-        anchors.top: parent.top
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: root.captionHeight
-        radius: Theme.dp(14)
-        opacity: root.dim ? 0.7 : 1.0
+    Rectangle {
+        anchors.fill: parent
+        radius: root.radius
+        color: root.empty ? Qt.rgba(0.88, 0.40, 0.35, 0.08) : root.logo ? Qt.rgba(1, 1, 1, 0.05) : Theme.surface
+        border.width: root.empty ? 2 : 0
+        border.color: Qt.rgba(0.88, 0.40, 0.35, 0.5)
+    }
 
-        Rectangle {
-            anchors.fill: parent
-            color: root.logo ? Qt.rgba(1, 1, 1, 0.05) : Theme.surface
-        }
-
-        Image {
-            anchors.fill: parent
-            source: root.source
-            fillMode: root.logo ? Image.PreserveAspectFit : Image.PreserveAspectCrop
-            asynchronous: true
-            sourceSize.width: 1200
-        }
-
-        Text {
-            anchors.centerIn: parent
-            visible: root.source === ""
-            text: "—"
-            color: Theme.textFaint
-            font.family: Theme.sans
-            font.pixelSize: Theme.dp(40)
-        }
-
-        KindBadge {
-            anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.margins: Theme.dp(12)
-            visible: root.kindLabel !== ""
-            kind: root.kind
-            label: root.kindLabel
-        }
+    Image {
+        anchors.fill: parent
+        source: root.row && root.row.url ? root.row.url : ""
+        fillMode: root.logo ? Image.PreserveAspectFit : Image.PreserveAspectCrop
+        asynchronous: true
+        sourceSize.width: 1200
     }
 
     Text {
-        anchors.top: frame.bottom
-        anchors.topMargin: Theme.dp(8)
-        anchors.left: parent.left
-        anchors.right: parent.right
-        text: root.caption
-        color: Theme.textMuted
+        anchors.centerIn: parent
+        visible: root.empty
+        text: root.emptyText
+        color: "#e0655a"
         font.family: Theme.sans
-        font.pixelSize: Theme.dp(18)
-        elide: Text.ElideRight
+        font.weight: Font.DemiBold
+        font.pixelSize: root.emptySize
+    }
+
+    KindBadge {
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.margins: root.badgeMargin
+        visible: root.badge && root.row !== null && (root.badgeLabel !== "" || !!root.row.kindLabel)
+        kind: root.row ? root.row.kind : "missing"
+        label: root.badgeLabel !== "" ? root.badgeLabel : root.row && root.row.kindLabel ? root.row.kindLabel : ""
     }
 }

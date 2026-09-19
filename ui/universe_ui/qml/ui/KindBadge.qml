@@ -15,9 +15,9 @@ Rectangle {
     width: body.width + Theme.dp(22)
     height: Theme.dp(28)
     radius: height / 2
-    color: root.onLight ? Qt.rgba(0, 0, 0, 0.10) : Qt.rgba(tint.r, tint.g, tint.b, 0.18)
+    color: root.onLight ? Qt.rgba(0, 0, 0, 0.10) : Qt.rgba(0, 0, 0, 0.62)
     border.width: 1
-    border.color: root.onLight ? Qt.rgba(0, 0, 0, 0.18) : Qt.rgba(tint.r, tint.g, tint.b, 0.45)
+    border.color: root.onLight ? Qt.rgba(0, 0, 0, 0.18) : Qt.rgba(1, 1, 1, 0.14)
 
     Row {
         id: body
@@ -36,7 +36,7 @@ Rectangle {
             id: text
             anchors.verticalCenter: parent.verticalCenter
             text: root.label
-            color: root.onLight ? Theme.onLight : Theme.text
+            color: root.onLight ? Theme.onLight : "#f2f3f5"
             font.family: Theme.sans
             font.weight: Font.DemiBold
             font.pixelSize: Theme.dp(16)

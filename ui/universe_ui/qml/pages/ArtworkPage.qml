@@ -15,7 +15,7 @@ FocusScope {
     readonly property var form: api.screens.artwork
     readonly property var slots: form.slots
     property int index: 0
-    property int lastTop: 0
+    property int lastRow: 0
     readonly property var current: index >= 0 && index < slots.length ? slots[index] : null
     readonly property string currentSlot: current ? current.slot : ""
     readonly property real currentAspect: current ? current.aspect : 1
@@ -51,14 +51,13 @@ FocusScope {
     }
 
     readonly property real sideMargin: Theme.dp(90)
-    readonly property real topRow: Theme.dp(350)
-    readonly property real bottomRow: Theme.dp(260)
     readonly property real cardGap: Theme.dp(40)
-    readonly property string entryLine: form.entry !== "" ? "SteamGridDB · " + form.entry : ""
+    readonly property real rowGap: Theme.dp(44)
+    readonly property real captionHeight: Theme.dp(70)
 
     onGameChanged: {
         index = 0;
-        lastTop = 0;
+        lastRow = 0;
         candIndex = 0;
         level = "slots";
         if (game) {
@@ -67,16 +66,15 @@ FocusScope {
         }
     }
 
-    onSlotChanged: land()
+    onSlotChanged: {
+        if (slot !== "")
+            land();
+        else
+            level = "slots";
+    }
     Component.onDestruction: form.unload()
     onSlotsChanged: if (index >= slots.length) index = Math.max(0, slots.length - 1)
-    onSearchingChanged: {
-        if (searching)
-            return;
-        hitIndex = Math.max(0, form.hits.findIndex(function(h) { return h.current; }));
-        hits.open = true;
-        hits.forceActiveFocus();
-    }
+    onSearchingChanged: if (!searching) hitIndex = Math.max(0, form.hits.findIndex(function(h) { return h.current; }))
 
     function land() {
         var i = slots.findIndex(function(s) { return s.slot === slot; });
@@ -96,41 +94,45 @@ FocusScope {
         form.loadCandidates(currentSlot);
     }
 
-    function closeBrowser() {
+    // Opened on a slot from the overview, B leaves the page: the cards were never shown.
+    function back() {
+        if (!browsing || slot !== "") {
+            closeRequested();
+            return;
+        }
         Sound.cancel();
         level = "slots";
     }
 
-    // The cards sit in two rows: box front, square, banner; background, logo.
-    readonly property var rowOf: [0, 0, 0, 1, 1]
+    // The box front stands tall on the left; square and banner, then background and logo, fill the rows beside it.
+    readonly property var rowOf: [-1, 0, 0, 1, 1]
 
-    function moveAcross(d) {
-        var next = index + d;
-        if (next < 0 || next >= slots.length || rowOf[next] !== rowOf[index]) {
+    function go(next) {
+        if (next < 0 || next >= slots.length) {
             Sound.edge();
             return;
         }
         Sound.tick();
+        if (rowOf[index] >= 0)
+            lastRow = rowOf[index];
         index = next;
     }
 
+    function moveAcross(d) {
+        if (index === 0)
+            go(d < 0 ? -1 : (lastRow === 1 ? 3 : 1));
+        else if (index === 1 || index === 3)
+            go(d < 0 ? 0 : index + 1);
+        else
+            go(d < 0 ? index - 1 : -1);
+    }
+
     function moveDown() {
-        if (rowOf[index] === 1) {
-            Sound.edge();
-            return;
-        }
-        Sound.tick();
-        lastTop = index;
-        index = index === 2 ? 4 : 3;
+        go(rowOf[index] === 0 ? index + 2 : -1);
     }
 
     function moveUp() {
-        if (rowOf[index] === 0) {
-            Sound.edge();
-            return;
-        }
-        Sound.tick();
-        index = index === 4 ? 2 : (lastTop <= 1 ? lastTop : 0);
+        go(rowOf[index] === 1 ? index - 2 : -1);
     }
 
     function stepCand(d) {
@@ -161,17 +163,21 @@ FocusScope {
         form.removeOverride(currentSlot);
     }
 
+    function searchFor(query) {
+        hits.open = true;
+        hits.forceActiveFocus();
+        form.search(query);
+    }
+
     function askWrongGame() {
         Sound.panel();
-        typing = "search";
-        keyboard.show("Search SteamGridDB", form.title, "text");
+        searchFor(form.title);
     }
 
     function menuAnchor() {
         if (browsing)
             return nowFrame;
-        var row = rowOf[index] === 0 ? topCards : bottomCards;
-        var item = row.itemAt(index - (rowOf[index] === 0 ? 0 : 3));
+        var item = index === 0 ? leftCard : rowOf[index] === 0 ? topCards.itemAt(index - 1) : bottomCards.itemAt(index - 3);
         return item ? item.art : page;
     }
 
@@ -211,7 +217,7 @@ FocusScope {
         if (api.keys.isAccept(event)) {
             page.browsing ? pick() : openBrowser(false);
         } else if (api.keys.isCancel(event)) {
-            page.browsing ? closeBrowser() : page.closeRequested();
+            back();
         } else if (api.keys.isDetails(event)) {
             backToDefault();
         } else if (api.keys.isFilters(event)) {
@@ -249,8 +255,9 @@ FocusScope {
         anchors.leftMargin: page.sideMargin
         anchors.rightMargin: page.sideMargin
         game: page.game
+        tile: false
         label: page.browsing && page.current ? page.current.label.toUpperCase() : "ARTWORK"
-        detail: page.browsing && page.current ? page.current.use + (page.entryLine !== "" ? " · " + page.entryLine : "") : page.entryLine
+        detail: page.browsing && page.current ? page.current.use : ""
     }
 
     component SlotCard: Item {
@@ -259,20 +266,20 @@ FocusScope {
         required property var modelData
         required property int index
         property int slotIndex: 0
-        property real rowHeight: 0
+        property real artHeight: 0
         readonly property bool focused: slotIndex === page.index
         readonly property Item art: artFrame
 
         width: artFrame.width
-        height: rowHeight + Theme.dp(14) + caption.height
+        height: artHeight + page.captionHeight
         opacity: focused || page.browsing ? 1.0 : Theme.idleOpacity
 
         Behavior on opacity { Ease { duration: Theme.durQuick } }
 
         Item {
             id: artFrame
-            width: Math.round(card.rowHeight * card.modelData.aspect)
-            height: card.rowHeight
+            width: Math.round(card.artHeight * card.modelData.aspect)
+            height: card.artHeight
             scale: card.focused && !page.browsing ? 1.02 : 1.0
 
             Behavior on scale { Ease { easing.type: Easing.OutQuint } }
@@ -283,7 +290,7 @@ FocusScope {
                 sourceComponent: FocusRing { cornerRadius: Theme.dp(12) }
             }
 
-            SlotArt {
+            ArtFrame {
                 anchors.fill: parent
                 row: card.modelData
                 badge: true
@@ -292,7 +299,6 @@ FocusScope {
 
         // A narrow card's caption may run into the gap after it, never into the next card.
         Column {
-            id: caption
             anchors.top: artFrame.bottom
             anchors.topMargin: Theme.dp(14)
             width: artFrame.width + page.cardGap - Theme.dp(16)
@@ -319,52 +325,6 @@ FocusScope {
         }
     }
 
-    component SlotArt: RoundedMask {
-        id: slotArt
-
-        property var row: null
-        property bool dim: false
-        property bool badge: false
-        readonly property bool empty: row === null || row.url === ""
-
-        radius: Theme.dp(12)
-        opacity: dim ? 0.6 : 1.0
-
-        Rectangle {
-            anchors.fill: parent
-            color: slotArt.empty ? Qt.rgba(0.88, 0.40, 0.35, 0.08) : slotArt.row && slotArt.row.slot === "logo" ? Qt.rgba(1, 1, 1, 0.05) : Theme.surface
-            border.width: slotArt.empty ? 2 : 0
-            border.color: Qt.rgba(0.88, 0.40, 0.35, 0.5)
-        }
-
-        Image {
-            anchors.fill: parent
-            source: slotArt.row ? slotArt.row.url : ""
-            fillMode: slotArt.row && slotArt.row.slot === "logo" ? Image.PreserveAspectFit : Image.PreserveAspectCrop
-            asynchronous: true
-            sourceSize.width: 1200
-        }
-
-        Text {
-            anchors.centerIn: parent
-            visible: slotArt.empty
-            text: "Nothing yet"
-            color: "#e0655a"
-            font.family: Theme.sans
-            font.weight: Font.DemiBold
-            font.pixelSize: Theme.dp(20)
-        }
-
-        KindBadge {
-            anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.margins: Theme.dp(12)
-            visible: slotArt.badge && slotArt.row !== null && slotArt.row.kindLabel !== undefined
-            kind: slotArt.row ? slotArt.row.kind : "missing"
-            label: slotArt.row && slotArt.row.kindLabel ? slotArt.row.kindLabel : ""
-        }
-    }
-
     Item {
         id: gallery
 
@@ -380,24 +340,46 @@ FocusScope {
 
         Behavior on opacity { Ease { duration: Theme.durView } }
 
+        // The box front as tall as the two rows beside it, all three filling the width — unless the height runs out first.
+        readonly property real leftAspect: page.slots.length > 0 ? page.slots[0].aspect : 2 / 3
+        readonly property real topAspects: page.slots.length > 2 ? page.slots[1].aspect + page.slots[2].aspect : 1
+        readonly property real bottomAspects: page.slots.length > 4 ? page.slots[3].aspect + page.slots[4].aspect : 1
+        readonly property real perWidth: 1 / topAspects + 1 / bottomAspects
+        readonly property real leftHeight: Math.floor(Math.min(
+            (perWidth * (width - 2 * page.cardGap) + page.rowGap + page.captionHeight) / (1 + perWidth * leftAspect),
+            height - page.captionHeight))
+        readonly property real rowWidth: (leftHeight - page.rowGap - page.captionHeight) / perWidth
+
+        SlotCard {
+            id: leftCard
+            modelData: page.slots.length > 0 ? page.slots[0] : ({ slot: "", label: "", use: "", aspect: 1, url: "", kind: "missing" })
+            index: 0
+            slotIndex: 0
+            artHeight: gallery.leftHeight
+        }
+
         Row {
             id: topRowItems
+            anchors.left: leftCard.right
+            anchors.leftMargin: page.cardGap
             spacing: page.cardGap
 
             Repeater {
                 id: topCards
-                model: page.slots.slice(0, 3)
+                model: page.slots.slice(1, 3)
 
                 SlotCard {
-                    slotIndex: index
-                    rowHeight: page.topRow
+                    slotIndex: index + 1
+                    artHeight: Math.floor(gallery.rowWidth / gallery.topAspects)
                 }
             }
         }
 
         Row {
+            anchors.left: leftCard.right
+            anchors.leftMargin: page.cardGap
             anchors.top: topRowItems.bottom
-            anchors.topMargin: Theme.dp(44)
+            anchors.topMargin: page.rowGap
             spacing: page.cardGap
 
             Repeater {
@@ -406,7 +388,7 @@ FocusScope {
 
                 SlotCard {
                     slotIndex: index + 3
-                    rowHeight: page.bottomRow
+                    artHeight: Math.floor(gallery.rowWidth / gallery.bottomAspects)
                 }
             }
         }
@@ -435,7 +417,7 @@ FocusScope {
                     width: Math.round(browser.nowHeight * page.currentAspect)
                     height: browser.nowHeight
 
-                    SlotArt {
+                    ArtFrame {
                         anchors.fill: parent
                         row: page.current
                         badge: true
@@ -455,7 +437,7 @@ FocusScope {
                     width: nowFrame.width
                     height: browser.nowHeight
 
-                    SlotArt {
+                    ArtFrame {
                         anchors.fill: parent
                         row: page.current ? { slot: page.current.slot, url: page.current.defaultUrl, kind: "default", kindLabel: page.current.defaultOriginLabel } : null
                         dim: true
@@ -483,7 +465,7 @@ FocusScope {
 
             Text {
                 anchors.verticalCenter: parent.verticalCenter
-                visible: page.form.entry !== ""
+                visible: page.form.entryDiffers
                 text: page.form.entry
                 color: Theme.text
                 font.family: Theme.sans
@@ -521,6 +503,7 @@ FocusScope {
             preferredHighlightEnd: height
             highlightRangeMode: GridView.ApplyRange
             highlightFollowsCurrentItem: true
+            highlightMoveDuration: Theme.durView
 
             delegate: Item {
                 readonly property bool isMore: index >= page.candidates.length
@@ -620,8 +603,8 @@ FocusScope {
         innerMax: Theme.dp(1000)
         contentHeight: Theme.dp(12) + note.height + Theme.dp(18) + hitsList.height
 
-        readonly property var hints: [ { glyph: "A", label: "Use this game", dim: page.form.hits.length === 0 },
-                                       { glyph: "Y", label: "Search again" }, { glyph: "B", label: "Close" } ]
+        readonly property var hints: [ { glyph: "A", label: "Use this game", dim: page.searching || page.form.hits.length === 0 },
+                                       { glyph: "Y", label: "Another name" }, { glyph: "B", label: "Close" } ]
 
         function close() {
             open = false;
@@ -635,7 +618,7 @@ FocusScope {
                 return;
             var list = page.form.hits;
             if (api.keys.isAccept(event)) {
-                if (list.length === 0) {
+                if (page.searching || list.length === 0) {
                     Sound.edge();
                     return;
                 }
@@ -647,7 +630,8 @@ FocusScope {
                 hits.close();
             } else if (api.keys.isFilters(event)) {
                 hits.close();
-                page.askWrongGame();
+                page.typing = "search";
+                keyboard.show("Search SteamGridDB", page.form.title, "text");
             } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
                 page.hitIndex = Sound.stepped(page.hitIndex, event.key === Qt.Key_Up ? -1 : 1, list.length);
             }
@@ -659,7 +643,8 @@ FocusScope {
             anchors.topMargin: Theme.dp(12)
             anchors.horizontalCenter: parent.horizontalCenter
             width: hits.inner
-            text: page.form.searchError !== "" ? page.form.searchError
+            text: page.searching ? "Searching SteamGridDB…"
+                : page.form.searchError !== "" ? page.form.searchError
                 : page.form.hits.length === 0 ? "Nothing matched — Y searches with another name."
                 : "The candidates and the next fetch follow the one you pick."
             color: Theme.textSecondary
@@ -675,7 +660,7 @@ FocusScope {
             anchors.horizontalCenter: parent.horizontalCenter
             width: hits.inner
             height: Math.min(count, 5) * Theme.dp(96)
-            model: page.form.hits
+            model: page.searching ? [] : page.form.hits
             currentIndex: page.hitIndex
             interactive: false
             clip: true
@@ -683,6 +668,7 @@ FocusScope {
             preferredHighlightEnd: height
             highlightRangeMode: ListView.ApplyRange
             highlightFollowsCurrentItem: true
+            highlightMoveDuration: Theme.durView
 
             delegate: Item {
                 readonly property bool lit: index === page.hitIndex && hits.open
@@ -778,7 +764,6 @@ FocusScope {
         anchors.right: parent.right
         z: 6
         sideMargin: page.sideMargin
-        showClock: true
         hints: page.hints
     }
 
@@ -788,11 +773,12 @@ FocusScope {
         z: 5
 
         onAccepted: function(value) {
-            if (page.typing === "path")
+            if (page.typing === "path") {
                 page.form.useFile(page.currentSlot, value);
-            else
-                page.form.search(value);
-            page.forceActiveFocus();
+                page.forceActiveFocus();
+            } else {
+                page.searchFor(value);
+            }
         }
         onDismissed: page.forceActiveFocus()
     }

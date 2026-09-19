@@ -349,7 +349,6 @@ FocusScope {
         anchors.right: parent.right
         z: 3
         sideMargin: page.sideMargin
-        showClock: true
         hints: page.hints
     }
 

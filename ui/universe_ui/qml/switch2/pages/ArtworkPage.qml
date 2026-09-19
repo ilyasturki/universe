@@ -52,7 +52,7 @@ FocusScope {
         }
         Sound.play("ok");
         var slot = current.slot, label = current.label.toLowerCase();
-        var items = [ { label: "Fetch missing art", act: "fetch" }, { label: "Search SteamGridDB…", act: "search" }, { label: "Use a file for the " + label + "…", act: "file" } ];
+        var items = [ { label: "Fetch missing art", act: "fetch" }, { label: "Wrong game?", act: "search" }, { label: "Use a file for the " + label + "…", act: "file" } ];
         shell.menu(current.label, items, function(act) {
             if (act === "fetch")
                 form.refresh();
@@ -86,7 +86,6 @@ FocusScope {
         icon: "album"
         title: "Artwork"
         subtitle: page.game ? page.game.title : ""
-        trailing: page.form.entry !== "" ? "SteamGridDB · " + page.form.entry : ""
     }
 
     Column {

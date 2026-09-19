@@ -445,7 +445,6 @@ FocusScope {
         anchors.left: parent.left
         anchors.right: parent.right
         sideMargin: page.sideMargin
-        showClock: true
         hints: page.hints
     }
 

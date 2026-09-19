@@ -7,11 +7,13 @@ Item {
     property var game: null
     property string label: ""
     property string detail: ""
+    property bool tile: true
 
     height: Theme.dp(88)
 
     CoverCard {
-        id: tile
+        id: cover
+        visible: root.tile
         width: Theme.dp(88)
         height: width
         game: root.game
@@ -23,8 +25,8 @@ Item {
     }
 
     Column {
-        anchors.left: tile.right
-        anchors.leftMargin: Theme.dp(28)
+        anchors.left: root.tile ? cover.right : parent.left
+        anchors.leftMargin: root.tile ? Theme.dp(28) : 0
         anchors.right: parent.right
         anchors.verticalCenter: parent.verticalCenter
         spacing: Theme.dp(4)
@@ -45,15 +47,7 @@ Item {
                 font.weight: Font.Bold
                 font.pixelSize: Theme.dp(42)
                 elide: Text.ElideRight
-                width: Math.min(implicitWidth, parent.width - meta.width - detail.width - parent.spacing * 2)
-            }
-
-            GameMetaLine {
-                id: meta
-                anchors.bottom: title.bottom
-                anchors.bottomMargin: Theme.dp(6)
-                game: root.game
-                showYear: false
+                width: Math.min(implicitWidth, parent.width - detail.width - parent.spacing)
             }
 
             Text {
