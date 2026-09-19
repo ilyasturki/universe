@@ -68,7 +68,7 @@ pub fn pick_screen(requested: &str) -> String {
     connected_outputs().into_iter().next().unwrap_or_default()
 }
 
-/// Mutter's DisplayConfig on GNOME, else the preferred DRM mode at 60 Hz; `None` when the connector is not there.
+/// Mutter's DisplayConfig on GNOME, else the connector's preferred DRM mode; `None` when the connector is not there.
 pub async fn screen_mode(screen: &str) -> Option<crate::gamescope::Mode> {
     if screen.is_empty() {
         return None;
@@ -106,14 +106,28 @@ async fn mutter_current_mode(screen: &str) -> zbus::Result<Option<crate::gamesco
     Ok(None)
 }
 
-/// The first line of the connector's `modes` is the preferred one, `WxH`; DRM lists no rate there.
+struct Card(std::fs::File);
+impl std::os::fd::AsFd for Card {
+    fn as_fd(&self) -> std::os::fd::BorrowedFd<'_> {
+        self.0.as_fd()
+    }
+}
+impl drm::Device for Card {}
+impl drm::control::Device for Card {}
+
+/// The connector's preferred mode with its rate, asked of the card that owns it (`card1-DP-1` in sysfs).
 fn drm_preferred_mode(screen: &str) -> Option<crate::gamescope::Mode> {
     let rd = std::fs::read_dir("/sys/class/drm").ok()?;
     for e in rd.flatten() {
         let name = e.file_name().to_string_lossy().to_string();
-        if name.split_once('-').map(|(_, c)| c) != Some(screen) {
+        let Some((card, connector)) = name.split_once('-') else { continue };
+        if connector != screen {
             continue;
         }
+        if let Some(mode) = card_preferred_mode(card, screen) {
+            return Some(mode);
+        }
+        // Without the device (no seat, no video group): the first line of `modes` is the preferred one, `WxH`, no rate.
         let modes = std::fs::read_to_string(e.path().join("modes")).ok()?;
         let first = modes.lines().next()?.trim();
         if let Ok(Some((w, h))) = crate::gamescope::parse_resolution(first) {
@@ -121,6 +135,16 @@ fn drm_preferred_mode(screen: &str) -> Option<crate::gamescope::Mode> {
         }
     }
     None
+}
+
+fn card_preferred_mode(card: &str, screen: &str) -> Option<crate::gamescope::Mode> {
+    use drm::control::{Device as _, ModeTypeFlags};
+    let dev = Card(std::fs::OpenOptions::new().read(true).write(true).open(format!("/dev/dri/{card}")).ok()?);
+    let handles = dev.resource_handles().ok()?;
+    let info = handles.connectors().iter().filter_map(|h| dev.get_connector(*h, false).ok()).find(|c| format!("{}-{}", c.interface().as_str(), c.interface_id()) == screen)?;
+    let mode = info.modes().iter().find(|m| m.mode_type().contains(ModeTypeFlags::PREFERRED)).or_else(|| info.modes().first())?;
+    let (w, h) = mode.size();
+    Some(crate::gamescope::Mode { width: w.into(), height: h.into(), refresh: mode.vrefresh() })
 }
 
 /// Returns whether the extension was already active.

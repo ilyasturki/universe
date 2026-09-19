@@ -206,8 +206,9 @@ without it (`universe play`) the window is black. Left to itself gamescope's nes
 is 1280×720 whatever the window covers, so the session screen's mode is passed explicitly: the
 output (`-W -H`) is always the screen, and the game's resolution and refresh follow it unless set.
 The mode is the connector's `is-current` one from Mutter's DisplayConfig (`GetCurrentState`,
-physical pixels — gamescope handles the desktop's scale itself), else its preferred DRM mode
-(`/sys/class/drm/*/modes`) at 60 Hz; no screen at all leaves gamescope's own defaults.
+physical pixels — gamescope handles the desktop's scale itself), else its preferred DRM mode with
+its rate, read from the card (`/sys/class/drm/*/modes` at 60 Hz when the card cannot be opened);
+no screen at all leaves gamescope's own defaults.
 `universe doctor` prints the mode it read. The `gamescope_*` fields, global in `[launch]` and per
 game in `game.toml`'s `[launch]` (a field left empty takes the global one), are launch keys:
 `universe launch-keys` prints each one's values and default. Each is a flag: `gamescope_resolution`

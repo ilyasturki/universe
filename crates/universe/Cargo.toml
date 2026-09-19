@@ -35,6 +35,7 @@ rustix = { version = "1", features = ["fs", "process"] }
 futures-util = { version = "0.3", default-features = false }
 percent-encoding = "2"
 anstream = "1"
+drm = "0.15"
 
 [dev-dependencies]
 tempfile = "3"
