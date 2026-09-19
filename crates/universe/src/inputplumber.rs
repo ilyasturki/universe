@@ -85,3 +85,22 @@ pub async fn release() {
         tracing::warn!("inputplumber: pads still hidden after release");
     }
 }
+
+/// Restarts the InputPlumber daemon and hides the pads for the ~10 s the cycle takes: `just test-live`.
+#[cfg(test)]
+mod live {
+    #[tokio::test]
+    #[ignore]
+    async fn engage_takes_the_pads_and_release_gives_them_back() {
+        if !super::reachable().await {
+            eprintln!("no InputPlumber daemon on the system bus; skipped");
+            return;
+        }
+        assert!(super::engage().await);
+        let conn = zbus::Connection::system().await.unwrap();
+        assert!(super::composite_present(&conn).await, "a composite device for the session");
+        assert!(super::hidden_present(), "the raw nodes hidden");
+        super::release().await;
+        assert!(!super::hidden_present(), "the raw nodes back");
+    }
+}

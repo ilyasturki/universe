@@ -300,3 +300,20 @@ mod tests {
         assert!(pick_window(&windows, |_| false).is_none());
     }
 }
+
+/// Reads the card of every connected output: `just test-live`.
+#[cfg(test)]
+mod live {
+    #[test]
+    #[ignore]
+    fn the_preferred_mode_of_every_connected_output_carries_a_rate() {
+        let outputs = super::connected_outputs();
+        assert!(!outputs.is_empty(), "a connected output");
+        for name in outputs {
+            let mode = super::drm_preferred_mode(&name).unwrap_or_else(|| panic!("{name}: no mode"));
+            assert!(mode.width > 0 && mode.height > 0 && mode.refresh > 0, "{name}: {mode:?}");
+            let modes = std::fs::read_to_string(format!("/sys/class/drm/card1-{name}/modes")).or_else(|_| std::fs::read_to_string(format!("/sys/class/drm/card0-{name}/modes"))).unwrap_or_default();
+            assert_eq!(modes.lines().next().map(str::trim), Some(format!("{}x{}", mode.width, mode.height).as_str()), "{name}: the card's preferred mode is sysfs's first");
+        }
+    }
+}

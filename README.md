@@ -121,6 +121,6 @@ Third-party modules and sources: drop a directory with a `module.toml` under `~/
 
 A `justfile` wraps everything in `nix develop` and points the core at an isolated `.dev/` (its own config, data, recordings, journal), so nothing touches `~/.config/universe`. The host runs from `.venv/`, a venv on the dev shell's Python where `maturin develop` installs `universe_core` and `universe_ui` is installed editable (`just develop`, run by `ui` and `test`):
 
-`just setup` first; `just --list` names the rest. `UNIVERSE_DEV=.dev-empty just ui` runs any recipe on another profile; a new one starts as an empty library.
+`just setup` first; `just --list` names the rest. `just test` is what CI runs; `just test-live` adds the checks that need this machine — a transient unit through the user systemd, a scope around the test process, an InputPlumber engage/release cycle (the pads vanish for ~10 s), the preferred mode of every connected output. `UNIVERSE_DEV=.dev-empty just ui` runs any recipe on another profile; a new one starts as an empty library.
 
 `docs/api.md` is the core API, the process model and the module and source contracts; `docs/frontends.md` is what a frontend binds to.

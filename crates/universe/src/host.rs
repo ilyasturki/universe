@@ -618,3 +618,54 @@ mod tests {
         assert_eq!(qualified("universe-game-x.y-1"), "universe-game-x.y-1.service");
     }
 }
+
+/// Against the user manager on the session bus: `just test-live`.
+#[cfg(test)]
+mod live {
+    use super::*;
+
+    fn units() -> Units {
+        Units::Systemd(Systemd::default())
+    }
+
+    async fn freezer_state(units: &Units, unit: &str) -> String {
+        let Units::Systemd(sd) = units else { unreachable!() };
+        sd.unit_proxy(unit, "org.freedesktop.systemd1.Unit").await.unwrap().unwrap().get_property::<String>("FreezerState").await.unwrap()
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn a_transient_unit_starts_freezes_thaws_and_stops() {
+        let units = units();
+        let name = format!("universe-test-{}", std::process::id());
+        let spec = UnitSpec { name: name.clone(), description: "Universe live test".into(), program: "sleep".into(), args: vec!["300".into()], ..Default::default() };
+        units.start(&spec).await.unwrap();
+        assert!(units.is_active(&name).await);
+        assert!(units.cgroup(&name).await.is_some_and(|cg| cg.ends_with(&format!("{name}.service"))));
+        units.freeze(&name, true).await.unwrap();
+        assert_eq!(freezer_state(&units, &format!("{name}.service")).await, "frozen");
+        units.freeze(&name, false).await.unwrap();
+        assert_eq!(freezer_state(&units, &format!("{name}.service")).await, "running");
+        // A frozen unit stops all the same
+        units.freeze(&name, true).await.unwrap();
+        units.stop(&name).await.unwrap();
+        assert!(!units.is_active(&name).await);
+        assert!(units.cgroup(&name).await.is_none(), "collected once inactive");
+        assert!(units.stop_unit(&name).await.is_ok(), "stopping an unloaded unit is fine");
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn a_program_off_path_is_refused_before_systemd_sees_it() {
+        let spec = UnitSpec { name: "universe-test-nowhere".into(), program: "universe-no-such-program".into(), ..Default::default() };
+        assert!(matches!(units().start(&spec).await, Err(Error::NotFound(_))));
+    }
+
+    #[tokio::test]
+    #[ignore]
+    async fn adopt_scope_moves_this_process_into_it() {
+        let name = units().adopt_scope(std::process::id()).await.unwrap();
+        assert!(in_cgroup_of(&name));
+        assert_eq!(units().adopt_scope(std::process::id()).await.unwrap(), name, "idempotent");
+    }
+}

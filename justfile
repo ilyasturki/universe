@@ -56,6 +56,10 @@ test: build develop env
     @{{ nix }} {{ python }} -m pytest -q ui
     @{{ nix }} python3 -m pytest -q modules sources
 
+# Against this machine: transient units on the user systemd, a scope around the test process, the InputPlumber daemon (pads hidden ~10 s), the DRM cards
+test-live: build
+    @{{ nix }} cargo test -- --ignored live
+
 # Build the flake packages and run the sandboxed checks: what nixos-rebuild and CI run
 check:
     nix build .#universe .#universe-ui --no-link

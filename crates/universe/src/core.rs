@@ -1412,6 +1412,19 @@ impl Core {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn trash_puts_a_file_in_the_xdg_trash() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("XDG_DATA_HOME", dir.path().join("share"));
+        let doomed = dir.path().join("game.toml");
+        std::fs::write(&doomed, "x").unwrap();
+        super::trash(&doomed).unwrap();
+        assert!(!doomed.exists());
+        assert!(dir.path().join("share/Trash/files/game.toml").is_file(), "{:?}", std::fs::read_dir(dir.path().join("share")).map(|r| r.count()));
+        assert!(matches!(super::trash(&doomed), Err(crate::Error::Io(_))), "a missing file is a typed error");
+    }
+
     use super::*;
 
     /// A `fake` source whose script is a shell case over the verb; every Universe home under one tempdir.
