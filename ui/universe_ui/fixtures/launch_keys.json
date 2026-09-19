@@ -8,7 +8,8 @@
     "section": "Display",
     "scope": "both",
     "runners": [],
-    "description": "Run the game in a window of its own, at the resolution and refresh rate below; a launcher already inside gamescope puts it on that one instead."
+    "description": "Run the game in a window of its own, at the resolution and refresh rate below; a launcher already inside gamescope puts it on that one instead.",
+    "advanced": false
   },
   {
     "key": "gamescope_resolution",
@@ -23,7 +24,8 @@
     "section": "Display",
     "scope": "both",
     "runners": [],
-    "description": "What the game renders at; auto is the screen's own. A lower one is upscaled to the screen, lighter on the GPU."
+    "description": "What the game renders at; auto is the screen's own. A lower one is upscaled to the screen, lighter on the GPU.",
+    "advanced": false
   },
   {
     "key": "gamescope_refresh",
@@ -48,7 +50,8 @@
     "section": "Display",
     "scope": "both",
     "runners": [],
-    "description": "The refresh rate the game sees; auto is the screen's own."
+    "description": "The refresh rate the game sees; auto is the screen's own.",
+    "advanced": false
   },
   {
     "key": "gamescope_adaptive_sync",
@@ -59,7 +62,8 @@
     "section": "Display",
     "scope": "both",
     "runners": [],
-    "description": "Variable refresh rate (FreeSync, G-Sync) when the screen supports it: no tearing, no stutter below the refresh rate."
+    "description": "Variable refresh rate (FreeSync, G-Sync) when the screen supports it: no tearing, no stutter below the refresh rate.",
+    "advanced": false
   },
   {
     "key": "mangohud",
@@ -70,7 +74,8 @@
     "section": "Overlay",
     "scope": "both",
     "runners": [],
-    "description": "MangoHud's overlay over the game (frame rate, frame time, GPU and CPU load), shown at launch; the in-game menu and the pad macro flip it and write it back here."
+    "description": "MangoHud's overlay over the game (frame rate, frame time, GPU and CPU load), shown at launch; the in-game menu and the pad macro flip it and write it back here.",
+    "advanced": false
   },
   {
     "key": "fps_limit",
@@ -96,7 +101,8 @@
     "section": "Overlay",
     "scope": "both",
     "runners": [],
-    "description": "MangoHud holds the game to this many frames per second, overlay or not; auto is the refresh rate the game sees, and no limit for an emulator, which paces itself."
+    "description": "MangoHud holds the game to this many frames per second, overlay or not; auto is the refresh rate the game sees, and no limit for an emulator, which paces itself.",
+    "advanced": false
   },
   {
     "key": "pause_on_home",
@@ -107,7 +113,8 @@
     "section": "Overlay",
     "scope": "both",
     "runners": [],
-    "description": "Freeze the game while the launcher covers it, so the pad drives the menu alone; it runs again on Resume. Off for a game that must keep running (online play)."
+    "description": "Freeze the game while the launcher covers it, so the pad drives the menu alone; it runs again on Resume. Off for a game that must keep running (online play).",
+    "advanced": false
   },
   {
     "key": "gamescope_scaler",
@@ -121,10 +128,11 @@
       "stretch"
     ],
     "label": "Scaler",
-    "section": "Advanced",
+    "section": "Scaling",
     "scope": "both",
     "runners": [],
-    "description": "How a smaller picture fills the screen: integer keeps pixels whole, fit keeps the aspect, fill and stretch do not."
+    "description": "How a smaller picture fills the screen: integer keeps pixels whole, fit keeps the aspect, fill and stretch do not.",
+    "advanced": true
   },
   {
     "key": "gamescope_filter",
@@ -138,10 +146,11 @@
       "pixel"
     ],
     "label": "Filter",
-    "section": "Advanced",
+    "section": "Scaling",
     "scope": "both",
     "runners": [],
-    "description": "The upscaling filter: fsr and nis sharpen, nearest and pixel keep pixel art crisp."
+    "description": "The upscaling filter: fsr and nis sharpen, nearest and pixel keep pixel art crisp.",
+    "advanced": true
   },
   {
     "key": "gamescope_sharpness",
@@ -156,10 +165,11 @@
       "20"
     ],
     "label": "Sharpness",
-    "section": "Advanced",
+    "section": "Scaling",
     "scope": "both",
     "runners": [],
-    "description": "For fsr and nis: 0 is sharpest, 20 softest."
+    "description": "For fsr and nis: 0 is sharpest, 20 softest.",
+    "advanced": true
   },
   {
     "key": "gamescope_args",
@@ -167,10 +177,23 @@
     "default": "",
     "choices": [],
     "label": "Gamescope arguments",
-    "section": "Advanced",
+    "section": "Scaling",
     "scope": "both",
     "runners": [],
-    "description": "Extra gamescope flags, after and over the fields above."
+    "description": "Extra gamescope flags, after and over the fields above.",
+    "advanced": true
+  },
+  {
+    "key": "env",
+    "type": "map",
+    "default": "",
+    "choices": [],
+    "label": "Environment variables",
+    "section": "Environment",
+    "scope": "both",
+    "runners": [],
+    "description": "Environment variables for the game; a game's win over the global ones.",
+    "advanced": true
   },
   {
     "key": "wrapper",
@@ -181,7 +204,8 @@
     "section": "Launch",
     "scope": "game",
     "runners": [],
-    "description": "A command the game runs through, innermost: gamemoderun, taskset -c 0-7…"
+    "description": "A command the game runs through, innermost: gamemoderun, taskset -c 0-7…",
+    "advanced": true
   },
   {
     "key": "args",
@@ -192,7 +216,8 @@
     "section": "Launch",
     "scope": "game",
     "runners": [],
-    "description": "Arguments appended to the game's command line."
+    "description": "Arguments appended to the game's command line.",
+    "advanced": true
   },
   {
     "key": "working_dir",
@@ -203,7 +228,32 @@
     "section": "Launch",
     "scope": "game",
     "runners": [],
-    "description": "The folder the game starts in."
+    "description": "The folder the game starts in.",
+    "advanced": true
+  },
+  {
+    "key": "pre_command",
+    "type": "string",
+    "default": "",
+    "choices": [],
+    "label": "Before the game",
+    "section": "Launch",
+    "scope": "game",
+    "runners": [],
+    "description": "A shell line run before the game starts.",
+    "advanced": true
+  },
+  {
+    "key": "post_command",
+    "type": "string",
+    "default": "",
+    "choices": [],
+    "label": "After the game",
+    "section": "Launch",
+    "scope": "game",
+    "runners": [],
+    "description": "A shell line run once the game has ended.",
+    "advanced": true
   },
   {
     "key": "proton",
@@ -216,7 +266,8 @@
     "runners": [
       "proton"
     ],
-    "description": "The Proton build umu-run starts the game with."
+    "description": "The Proton build umu-run starts the game with.",
+    "advanced": false
   },
   {
     "key": "wayland",
@@ -229,7 +280,8 @@
     "runners": [
       "proton"
     ],
-    "description": "Proton's own Wayland driver instead of Xwayland: lower latency, proper scaling; dropped inside gamescope unless it exposes Wayland."
+    "description": "Proton's own Wayland driver instead of Xwayland: lower latency, proper scaling; dropped inside gamescope unless it exposes Wayland.",
+    "advanced": false
   },
   {
     "key": "hdr",
@@ -242,7 +294,8 @@
     "runners": [
       "proton"
     ],
-    "description": "HDR output on an HDR screen: Proton's PROTON_ENABLE_HDR, and --hdr-enabled on gamescope."
+    "description": "HDR output on an HDR screen: Proton's PROTON_ENABLE_HDR, and --hdr-enabled on gamescope.",
+    "advanced": false
   },
   {
     "key": "prefix",
@@ -256,7 +309,68 @@
       "proton",
       "wine"
     ],
-    "description": "The Wine prefix the game runs in; empty: <prefixes_root>/<id>."
+    "description": "The Wine prefix the game runs in; empty: <prefixes_root>/<id>.",
+    "advanced": true
+  },
+  {
+    "key": "arch",
+    "type": "enum",
+    "default": "win64",
+    "choices": [
+      "win64",
+      "win32"
+    ],
+    "label": "Architecture",
+    "section": "Proton",
+    "scope": "game",
+    "runners": [
+      "wine"
+    ],
+    "description": "WINEARCH for a plain Wine prefix.",
+    "advanced": true
+  },
+  {
+    "key": "umu_id",
+    "type": "string",
+    "default": "",
+    "choices": [],
+    "label": "umu id",
+    "section": "Proton",
+    "scope": "game",
+    "runners": [
+      "proton"
+    ],
+    "description": "GAMEID for umu-run's protonfixes; empty: umu-default.",
+    "advanced": true
+  },
+  {
+    "key": "store",
+    "type": "string",
+    "default": "",
+    "choices": [],
+    "label": "Store",
+    "section": "Proton",
+    "scope": "game",
+    "runners": [
+      "proton"
+    ],
+    "description": "STORE for umu-run's protonfixes.",
+    "advanced": true
+  },
+  {
+    "key": "dll_overrides",
+    "type": "map",
+    "default": "",
+    "choices": [],
+    "label": "DLL overrides",
+    "section": "Proton",
+    "scope": "game",
+    "runners": [
+      "proton",
+      "wine"
+    ],
+    "description": "WINEDLLOVERRIDES, one key per DLL without .dll: d3d11 = \"n,b\".",
+    "advanced": true
   },
   {
     "key": "esync",
@@ -270,7 +384,8 @@
       "proton",
       "wine"
     ],
-    "description": "Faster thread synchronisation through eventfd; on for most games, off if one hangs or stutters."
+    "description": "Faster thread synchronisation through eventfd; on for most games, off if one hangs or stutters.",
+    "advanced": true
   },
   {
     "key": "fsync",
@@ -284,7 +399,8 @@
       "proton",
       "wine"
     ],
-    "description": "Faster still, through the kernel's futex2; takes over from esync when the kernel has it."
+    "description": "Faster still, through the kernel's futex2; takes over from esync when the kernel has it.",
+    "advanced": true
   },
   {
     "key": "ntsync",
@@ -297,7 +413,8 @@
     "runners": [
       "proton"
     ],
-    "description": "The kernel's NT synchronisation driver, the fastest; needs Linux 6.14 and a Proton built for it, else falls back."
+    "description": "The kernel's NT synchronisation driver, the fastest; needs Linux 6.14 and a Proton built for it, else falls back.",
+    "advanced": true
   },
   {
     "key": "dlss_upgrade",
@@ -310,7 +427,8 @@
     "runners": [
       "proton"
     ],
-    "description": "Games with DLSS use the newest DLSS from the NVIDIA driver instead of the one they ship. NVIDIA GeForce RTX only."
+    "description": "Games with DLSS use the newest DLSS from the NVIDIA driver instead of the one they ship. NVIDIA GeForce RTX only.",
+    "advanced": true
   },
   {
     "key": "fsr4_upgrade",
@@ -323,7 +441,8 @@
     "runners": [
       "proton"
     ],
-    "description": "Games with FSR 3.1 use FSR 4 instead, sharper and cleaner. Radeon RX 9000 (RDNA 4), or RX 7000 (RDNA 3) at a cost, through Proton's RDNA 3 variant picked for it."
+    "description": "Games with FSR 3.1 use FSR 4 instead, sharper and cleaner. Radeon RX 9000 (RDNA 4), or RX 7000 (RDNA 3) at a cost, through Proton's RDNA 3 variant picked for it.",
+    "advanced": true
   },
   {
     "key": "xess_upgrade",
@@ -336,7 +455,8 @@
     "runners": [
       "proton"
     ],
-    "description": "Games with XeSS use the newest XeSS instead of the one they ship. Any GPU; best on Intel Arc."
+    "description": "Games with XeSS use the newest XeSS instead of the one they ship. Any GPU; best on Intel Arc.",
+    "advanced": true
   },
   {
     "key": "optiscaler",
@@ -349,6 +469,31 @@
     "runners": [
       "proton"
     ],
-    "description": "Adds FSR 4 or XeSS to games that only offer DLSS, through OptiScaler. For AMD and Intel; needs a Proton that ships it (CachyOS, GE)."
+    "description": "Adds FSR 4 or XeSS to games that only offer DLSS, through OptiScaler. For AMD and Intel; needs a Proton that ships it (CachyOS, GE).",
+    "advanced": true
+  },
+  {
+    "key": "gamescope_bin",
+    "type": "path",
+    "default": "gamescope",
+    "choices": [],
+    "label": "Gamescope program",
+    "section": "Programs",
+    "scope": "global",
+    "runners": [],
+    "description": "The gamescope binary: a name on PATH or a path.",
+    "advanced": true
+  },
+  {
+    "key": "umu_run",
+    "type": "path",
+    "default": "umu-run",
+    "choices": [],
+    "label": "umu-run program",
+    "section": "Programs",
+    "scope": "global",
+    "runners": [],
+    "description": "The umu-run binary: a name on PATH or a path.",
+    "advanced": true
   }
 ]

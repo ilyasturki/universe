@@ -238,9 +238,9 @@
       "available": true,
       "missing": [],
       "settings": [
-        {"key": "enabled", "type": "bool", "default": true, "label": "Record the session", "scope": "game", "dynamic": false},
-        {"key": "source", "type": "enum", "default": "window", "label": "Capture", "scope": "game", "choices": ["window", "screen"], "dynamic": false},
-        {"key": "cursor", "type": "bool", "default": false, "label": "Show the cursor in the recording", "scope": "game", "dynamic": false},
+        {"key": "enabled", "type": "bool", "default": true, "label": "Record the session", "scope": "game", "dynamic": false, "advanced": false},
+        {"key": "source", "type": "enum", "default": "window", "label": "Capture", "scope": "game", "choices": ["window", "screen"], "dynamic": false, "advanced": false},
+        {"key": "cursor", "type": "bool", "default": false, "label": "Show the cursor in the recording", "scope": "game", "dynamic": false, "advanced": false},
         {
           "key": "codec",
           "type": "enum",
@@ -248,7 +248,8 @@
           "label": "Video codec",
           "scope": "global",
           "choices": ["av1_10bit", "av1", "hevc", "h264"],
-          "dynamic": false
+          "dynamic": false,
+          "advanced": false
         },
         {
           "key": "quality",
@@ -257,7 +258,8 @@
           "label": "Quality (constant, up to a size ceiling)",
           "scope": "global",
           "choices": ["medium", "high", "very_high", "ultra"],
-          "dynamic": false
+          "dynamic": false,
+          "advanced": false
         },
         {
           "key": "fps",
@@ -266,7 +268,8 @@
           "label": "Frame rate (auto: the screen's)",
           "scope": "global",
           "choices": ["auto", "120", "90", "60", "30"],
-          "dynamic": true
+          "dynamic": true,
+          "advanced": false
         },
         {
           "key": "size",
@@ -275,7 +278,8 @@
           "label": "Fit the video in (native: no scaling)",
           "scope": "global",
           "choices": ["native", "3840x2160", "2560x1440", "1920x1080"],
-          "dynamic": false
+          "dynamic": false,
+          "advanced": false
         },
         {
           "key": "container",
@@ -284,7 +288,8 @@
           "label": "Container (mkv survives a crash, mp4 plays anywhere)",
           "scope": "global",
           "choices": ["mkv", "mp4"],
-          "dynamic": false
+          "dynamic": false,
+          "advanced": true
         },
         {
           "key": "audio",
@@ -293,7 +298,8 @@
           "label": "Audio tracks captured",
           "scope": "global",
           "choices": ["output", "output+input", "none"],
-          "dynamic": false
+          "dynamic": false,
+          "advanced": false
         },
         {
           "key": "audio_codec",
@@ -302,7 +308,8 @@
           "label": "Audio codec",
           "scope": "global",
           "choices": ["opus", "aac", "flac"],
-          "dynamic": false
+          "dynamic": false,
+          "advanced": true
         },
         {
           "key": "audio_bitrate",
@@ -311,16 +318,18 @@
           "label": "Audio bitrate (kbps)",
           "scope": "global",
           "choices": ["auto", "96", "128", "160", "192", "256", "320"],
-          "dynamic": false
+          "dynamic": false,
+          "advanced": true
         },
-        {"key": "min_duration_s", "type": "int", "default": 240, "label": "Minimum duration kept (s)", "scope": "global", "dynamic": false},
+        {"key": "min_duration_s", "type": "int", "default": 240, "label": "Minimum duration kept (s)", "scope": "global", "dynamic": false, "advanced": true},
         {
           "key": "window_wait_s",
           "type": "int",
           "default": 60,
           "label": "Wait for the game's window (s), then record the screen",
           "scope": "global",
-          "dynamic": false
+          "dynamic": false,
+          "advanced": true
         },
         {
           "key": "ffmpeg_video_opts",
@@ -328,7 +337,8 @@
           "default": "",
           "label": "gpu-screen-recorder -ffmpeg-video-opts, replacing the quality preset (screen capture)",
           "scope": "config",
-          "dynamic": false
+          "dynamic": false,
+          "advanced": true
         },
         {
           "key": "va_encoder_opts",
@@ -336,7 +346,8 @@
           "default": "",
           "label": "VA encoder properties (key=value …), replacing the quality preset (window capture)",
           "scope": "config",
-          "dynamic": false
+          "dynamic": false,
+          "advanced": true
         },
         {
           "key": "gsr_extra_args",
@@ -344,7 +355,8 @@
           "default": "",
           "label": "Extra gpu-screen-recorder arguments (screen capture)",
           "scope": "config",
-          "dynamic": false
+          "dynamic": false,
+          "advanced": true
         }
       ]
     },
@@ -357,9 +369,9 @@
       "available": true,
       "missing": [],
       "settings": [
-        {"key": "enabled", "type": "bool", "default": true, "label": "Write a journal entry", "scope": "game"},
-        {"key": "language", "type": "enum", "default": "fr", "label": "Language", "scope": "game", "choices": ["fr", "en"]},
-        {"key": "provider", "type": "enum", "default": "codex", "label": "Provider", "scope": "global", "choices": ["codex", "anthropic", "ollama"]},
+        {"key": "enabled", "type": "bool", "default": true, "label": "Write a journal entry", "scope": "game", "advanced": false},
+        {"key": "language", "type": "enum", "default": "fr", "label": "Language", "scope": "game", "choices": ["fr", "en"], "advanced": false},
+        {"key": "provider", "type": "enum", "default": "codex", "label": "Provider", "scope": "global", "choices": ["codex", "anthropic", "ollama"], "advanced": false},
         {
           "key": "model",
           "type": "string",
@@ -368,10 +380,11 @@
           "scope": "global",
           "choices": [],
           "dynamic": true,
-          "dynamic_choices": ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.5"]
+          "dynamic_choices": ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.5"],
+          "advanced": false
         },
-        {"key": "markdown_export", "type": "bool", "default": true, "label": "Render Markdown notes", "scope": "global"},
-        {"key": "journal_root", "type": "path", "default": "~/Documents/notes/games/journal", "label": "Notes folder", "scope": "global"}
+        {"key": "markdown_export", "type": "bool", "default": true, "label": "Render Markdown notes", "scope": "global", "advanced": false},
+        {"key": "journal_root", "type": "path", "default": "~/Documents/notes/games/journal", "label": "Notes folder", "scope": "global", "advanced": false}
       ]
     }
   ],
@@ -389,12 +402,12 @@
       "games_dir": "/mnt/games/PC",
       "library_at": "2026-09-11T19:03:00+02:00",
       "settings": [
-        {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder (empty: paths.games_root)", "scope": "global", "choices": [], "dynamic": false},
-        {"key": "scan_dirs", "type": "string", "default": "", "label": "Scanned folders (comma-separated, empty: the install folder)", "scope": "global", "choices": [], "dynamic": false},
-        {"key": "platform", "type": "enum", "default": "windows", "label": "Depot platform", "scope": "global", "choices": ["windows", "linux"], "dynamic": false},
-        {"key": "with_dlcs", "type": "bool", "default": true, "label": "Install owned DLCs", "scope": "global", "choices": [], "dynamic": false},
-        {"key": "auth_path", "type": "path", "default": "~/.config/gogdl/auth.json", "label": "gogdl token file", "scope": "global", "choices": [], "dynamic": false},
-        {"key": "install_timeout_s", "type": "int", "default": 7200, "label": "Maximum install or update time (s)", "scope": "global", "choices": [], "dynamic": false}
+        {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder (empty: paths.games_root)", "scope": "global", "choices": [], "dynamic": false, "advanced": false},
+        {"key": "scan_dirs", "type": "string", "default": "", "label": "Scanned folders (comma-separated, empty: the install folder)", "scope": "global", "choices": [], "dynamic": false, "advanced": true},
+        {"key": "platform", "type": "enum", "default": "windows", "label": "Depot platform", "scope": "global", "choices": ["windows", "linux"], "dynamic": false, "advanced": false},
+        {"key": "with_dlcs", "type": "bool", "default": true, "label": "Install owned DLCs", "scope": "global", "choices": [], "dynamic": false, "advanced": false},
+        {"key": "auth_path", "type": "path", "default": "~/.config/gogdl/auth.json", "label": "gogdl token file", "scope": "global", "choices": [], "dynamic": false, "advanced": true},
+        {"key": "install_timeout_s", "type": "int", "default": 7200, "label": "Maximum install or update time (s)", "scope": "global", "choices": [], "dynamic": false, "advanced": true}
       ]
     }
   ],
@@ -820,9 +833,9 @@
       "source": "path",
       "available": true,
       "options": [
-        {"key": "batch", "type": "bool", "default": true, "label": "Batch mode (quit with the game)", "value": true},
-        {"key": "user_directory", "type": "path", "default": "", "label": "User directory", "value": ""},
-        {"key": "inputplumber", "type": "bool", "default": true, "label": "Manage pads with InputPlumber", "value": true}
+        {"key": "batch", "type": "bool", "default": true, "label": "Batch mode (quit with the game)", "value": true, "advanced": false},
+        {"key": "user_directory", "type": "path", "default": "", "label": "User directory", "value": "", "advanced": false},
+        {"key": "inputplumber", "type": "bool", "default": true, "label": "Manage pads with InputPlumber", "value": true, "advanced": false}
       ]
     },
     {
@@ -839,8 +852,8 @@
       "source": "path",
       "available": true,
       "options": [
-        {"key": "fullscreen", "type": "bool", "default": true, "label": "Fullscreen", "value": true},
-        {"key": "inputplumber", "type": "bool", "default": true, "label": "Manage pads with InputPlumber", "value": true}
+        {"key": "fullscreen", "type": "bool", "default": true, "label": "Fullscreen", "value": true, "advanced": false},
+        {"key": "inputplumber", "type": "bool", "default": true, "label": "Manage pads with InputPlumber", "value": true, "advanced": false}
       ]
     },
     {
@@ -856,8 +869,8 @@
       "source": "",
       "available": false,
       "options": [
-        {"key": "nogui", "type": "bool", "default": true, "label": "No GUI (quit with the game)", "value": true},
-        {"key": "inputplumber", "type": "bool", "default": true, "label": "Manage pads with InputPlumber", "value": true}
+        {"key": "nogui", "type": "bool", "default": true, "label": "No GUI (quit with the game)", "value": true, "advanced": false},
+        {"key": "inputplumber", "type": "bool", "default": true, "label": "Manage pads with InputPlumber", "value": true, "advanced": false}
       ]
     },
     {
@@ -873,8 +886,8 @@
       "source": "config",
       "available": true,
       "options": [
-        {"key": "fullscreen", "type": "bool", "default": true, "label": "Fullscreen", "value": false},
-        {"key": "inputplumber", "type": "bool", "default": true, "label": "Manage pads with InputPlumber", "value": true}
+        {"key": "fullscreen", "type": "bool", "default": true, "label": "Fullscreen", "value": false, "advanced": false},
+        {"key": "inputplumber", "type": "bool", "default": true, "label": "Manage pads with InputPlumber", "value": true, "advanced": false}
       ]
     }
   ],

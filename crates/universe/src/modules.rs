@@ -73,10 +73,11 @@ pub struct Setting {
     pub scope: String,
     pub choices: Vec<String>,
     pub choices_exec: String,
+    pub advanced: bool,
 }
 impl Default for Setting {
     fn default() -> Self {
-        Setting { key: String::new(), kind: "string".into(), default: toml::Value::String(String::new()), label: String::new(), scope: "global".into(), choices: vec![], choices_exec: String::new() }
+        Setting { key: String::new(), kind: "string".into(), default: toml::Value::String(String::new()), label: String::new(), scope: "global".into(), choices: vec![], choices_exec: String::new(), advanced: false }
     }
 }
 
@@ -134,7 +135,7 @@ impl Module {
         let mut list: Vec<serde_json::Value> = Vec::new();
         let has_enabled = self.manifest.settings.iter().any(|s| s.key == "enabled");
         if !has_enabled {
-            list.push(serde_json::json!({"key": "enabled", "type": "bool", "default": true, "label": "Enable", "scope": "game", "choices": []}));
+            list.push(serde_json::json!({"key": "enabled", "type": "bool", "default": true, "label": "Enable", "scope": "game", "choices": [], "dynamic": false, "advanced": false}));
         }
         list.extend(self.manifest.settings.iter().map(setting_json));
         serde_json::Value::Array(list)
@@ -179,6 +180,7 @@ pub fn setting_json(s: &Setting) -> serde_json::Value {
         "scope": s.scope,
         "choices": s.choices,
         "dynamic": !s.choices_exec.is_empty(),
+        "advanced": s.advanced || s.scope == "config",
     })
 }
 
@@ -418,6 +420,7 @@ scope = "config"
         assert_eq!(j["settings"][0]["key"], "enabled");
         assert_eq!(j["settings"][3]["dynamic"], false);
         assert_eq!(j["settings"][4]["dynamic"], true);
+        assert_eq!((j["settings"][2]["advanced"].as_bool(), j["settings"][5]["advanced"].as_bool()), (Some(false), Some(true)), "a config-scope setting is advanced");
     }
 
     #[tokio::test]

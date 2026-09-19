@@ -82,6 +82,7 @@ default = "mkv"
 label = "Container (mkv survives a crash, mp4 plays anywhere)"
 scope = "global"
 choices = ["mkv", "mp4"]
+advanced = true
 
 [[settings]]
 key = "audio"
@@ -98,6 +99,7 @@ default = "opus"
 label = "Audio codec"
 scope = "global"
 choices = ["opus", "aac", "flac"]
+advanced = true
 
 [[settings]]
 key = "audio_bitrate"
@@ -106,6 +108,7 @@ default = "auto"
 label = "Audio bitrate (kbps)"
 scope = "global"
 choices = ["auto", "96", "128", "160", "192", "256", "320"]
+advanced = true
 
 [[settings]]
 key = "min_duration_s"
@@ -113,6 +116,7 @@ type = "int"
 default = 240
 label = "Minimum duration kept (s)"
 scope = "global"
+advanced = true
 
 [[settings]]
 key = "window_wait_s"
@@ -120,6 +124,7 @@ type = "int"
 default = 60
 label = "Wait for the game's window (s) before the pick, then record the screen"
 scope = "global"
+advanced = true
 
 [[settings]]
 key = "ffmpeg_video_opts"

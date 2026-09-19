@@ -19,6 +19,7 @@ key = "scan_dirs"
 type = "string"
 default = ""
 label = "Scanned folders (comma-separated, empty: the install folder)"
+advanced = true
 
 [[settings]]
 key = "platform"
@@ -38,9 +39,11 @@ key = "auth_path"
 type = "path"
 default = "~/.config/gogdl/auth.json"
 label = "gogdl token file"
+advanced = true
 
 [[settings]]
 key = "install_timeout_s"
 type = "int"
 default = 7200
 label = "Maximum install or update time (s)"
+advanced = true

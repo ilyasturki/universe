@@ -59,3 +59,4 @@ type = "int"
 default = 40
 label = "Maximum images sent to the model"
 scope = "global"
+advanced = true

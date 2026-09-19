@@ -69,6 +69,8 @@ pub struct LaunchKey {
     /// Empty: every runner; else the runner kinds the key applies to.
     pub runners: &'static [&'static str],
     pub description: &'static str,
+    /// Shown behind the settings pages' Advanced row.
+    pub advanced: bool,
 }
 
 const WINE: &[&str] = &["proton", "wine"];
@@ -76,7 +78,13 @@ const PROTON: &[&str] = &["proton"];
 
 macro_rules! key {
     ($key:literal, $kind:expr, $default:literal, $label:literal, $section:literal, $scope:ident, $runners:expr, $description:literal) => {
-        LaunchKey { key: $key, kind: $kind, default: $default, label: $label, section: $section, scope: Scope::$scope, runners: $runners, description: $description }
+        LaunchKey { key: $key, kind: $kind, default: $default, label: $label, section: $section, scope: Scope::$scope, runners: $runners, description: $description, advanced: false }
+    };
+}
+
+macro_rules! advanced {
+    ($key:literal, $kind:expr, $default:literal, $label:literal, $section:literal, $scope:ident, $runners:expr, $description:literal) => {
+        LaunchKey { key: $key, kind: $kind, default: $default, label: $label, section: $section, scope: Scope::$scope, runners: $runners, description: $description, advanced: true }
     };
 }
 
@@ -91,33 +99,33 @@ pub static LAUNCH_KEYS: &[LaunchKey] = &[
     key!("mangohud", Kind::Bool, "true", "MangoHud", "Overlay", Both, &[], "MangoHud's overlay over the game (frame rate, frame time, GPU and CPU load), shown at launch; the in-game menu and the pad macro flip it and write it back here."),
     key!("fps_limit", Kind::Fps, "auto", "Frame rate limit", "Overlay", Both, &[], "MangoHud holds the game to this many frames per second, overlay or not; auto is the refresh rate the game sees, and no limit for an emulator, which paces itself."),
     key!("pause_on_home", Kind::Bool, "true", "Pause on HOME", "Overlay", Both, &[], "Freeze the game while the launcher covers it, so the pad drives the menu alone; it runs again on Resume. Off for a game that must keep running (online play)."),
-    key!("gamescope_scaler", Kind::Enum(&gamescope::SCALERS), "", "Scaler", "Advanced", Both, &[], "How a smaller picture fills the screen: integer keeps pixels whole, fit keeps the aspect, fill and stretch do not."),
-    key!("gamescope_filter", Kind::Enum(&gamescope::FILTERS), "", "Filter", "Advanced", Both, &[], "The upscaling filter: fsr and nis sharpen, nearest and pixel keep pixel art crisp."),
-    key!("gamescope_sharpness", Kind::Int { max: Some(gamescope::SHARPNESS_MAX) }, "", "Sharpness", "Advanced", Both, &[], "For fsr and nis: 0 is sharpest, 20 softest."),
-    key!("gamescope_args", Kind::Str, "", "Gamescope arguments", "Advanced", Both, &[], "Extra gamescope flags, after and over the fields above."),
-    key!("wrapper", Kind::Str, "", "Wrapper command", "Launch", Game, &[], "A command the game runs through, innermost: gamemoderun, taskset -c 0-7…"),
-    key!("args", Kind::List, "", "Arguments", "Launch", Game, &[], "Arguments appended to the game's command line."),
-    key!("working_dir", Kind::Path, "", "Working directory", "Launch", Game, &[], "The folder the game starts in."),
+    advanced!("gamescope_scaler", Kind::Enum(&gamescope::SCALERS), "", "Scaler", "Scaling", Both, &[], "How a smaller picture fills the screen: integer keeps pixels whole, fit keeps the aspect, fill and stretch do not."),
+    advanced!("gamescope_filter", Kind::Enum(&gamescope::FILTERS), "", "Filter", "Scaling", Both, &[], "The upscaling filter: fsr and nis sharpen, nearest and pixel keep pixel art crisp."),
+    advanced!("gamescope_sharpness", Kind::Int { max: Some(gamescope::SHARPNESS_MAX) }, "", "Sharpness", "Scaling", Both, &[], "For fsr and nis: 0 is sharpest, 20 softest."),
+    advanced!("gamescope_args", Kind::Str, "", "Gamescope arguments", "Scaling", Both, &[], "Extra gamescope flags, after and over the fields above."),
+    advanced!("env", Kind::Map, "", "Environment variables", "Environment", Both, &[], "Environment variables for the game; a game's win over the global ones."),
+    advanced!("wrapper", Kind::Str, "", "Wrapper command", "Launch", Game, &[], "A command the game runs through, innermost: gamemoderun, taskset -c 0-7…"),
+    advanced!("args", Kind::List, "", "Arguments", "Launch", Game, &[], "Arguments appended to the game's command line."),
+    advanced!("working_dir", Kind::Path, "", "Working directory", "Launch", Game, &[], "The folder the game starts in."),
+    advanced!("pre_command", Kind::Str, "", "Before the game", "Launch", Game, &[], "A shell line run before the game starts."),
+    advanced!("post_command", Kind::Str, "", "After the game", "Launch", Game, &[], "A shell line run once the game has ended."),
     key!("proton", Kind::Proton, "proton-ge", "Proton build", "Proton", Both, PROTON, "The Proton build umu-run starts the game with."),
     key!("wayland", Kind::Bool, "true", "Wayland", "Proton", Both, PROTON, "Proton's own Wayland driver instead of Xwayland: lower latency, proper scaling; dropped inside gamescope unless it exposes Wayland."),
     key!("hdr", Kind::Bool, "false", "HDR", "Proton", Both, PROTON, "HDR output on an HDR screen: Proton's PROTON_ENABLE_HDR, and --hdr-enabled on gamescope."),
-    key!("prefix", Kind::Path, "", "Wine prefix", "Proton", Game, WINE, "The Wine prefix the game runs in; empty: <prefixes_root>/<id>."),
-    key!("esync", Kind::Bool, "true", "Esync", "Sync", Both, WINE, "Faster thread synchronisation through eventfd; on for most games, off if one hangs or stutters."),
-    key!("fsync", Kind::Bool, "true", "Fsync", "Sync", Both, WINE, "Faster still, through the kernel's futex2; takes over from esync when the kernel has it."),
-    key!("ntsync", Kind::Bool, "true", "NTSync", "Sync", Both, PROTON, "The kernel's NT synchronisation driver, the fastest; needs Linux 6.14 and a Proton built for it, else falls back."),
-    key!("dlss_upgrade", Kind::Bool, "false", "DLSS upgrade", "Upscaling", Both, PROTON, "Games with DLSS use the newest DLSS from the NVIDIA driver instead of the one they ship. NVIDIA GeForce RTX only."),
-    key!("fsr4_upgrade", Kind::Bool, "false", "FSR 4 upgrade", "Upscaling", Both, PROTON, "Games with FSR 3.1 use FSR 4 instead, sharper and cleaner. Radeon RX 9000 (RDNA 4), or RX 7000 (RDNA 3) at a cost, through Proton's RDNA 3 variant picked for it."),
-    key!("xess_upgrade", Kind::Bool, "false", "XeSS upgrade", "Upscaling", Both, PROTON, "Games with XeSS use the newest XeSS instead of the one they ship. Any GPU; best on Intel Arc."),
-    key!("optiscaler", Kind::Bool, "false", "OptiScaler", "Upscaling", Both, PROTON, "Adds FSR 4 or XeSS to games that only offer DLSS, through OptiScaler. For AMD and Intel; needs a Proton that ships it (CachyOS, GE)."),
-    key!("arch", Kind::Enum(&["win64", "win32"]), "win64", "Architecture", "", Game, &["wine"], "WINEARCH for a plain Wine prefix."),
-    key!("umu_id", Kind::Str, "", "umu id", "", Game, PROTON, "GAMEID for umu-run's protonfixes; empty: umu-default."),
-    key!("store", Kind::Str, "", "Store", "", Game, PROTON, "STORE for umu-run's protonfixes."),
-    key!("dll_overrides", Kind::Map, "", "DLL overrides", "", Game, WINE, "WINEDLLOVERRIDES, one key per DLL without .dll: d3d11 = \"n,b\"."),
-    key!("env", Kind::Map, "", "Environment", "", Both, &[], "Environment variables for the game; a game's win over the global ones."),
-    key!("pre_command", Kind::Str, "", "Before the game", "", Game, &[], "A shell line run before the game starts."),
-    key!("post_command", Kind::Str, "", "After the game", "", Game, &[], "A shell line run once the game has ended."),
-    key!("gamescope_bin", Kind::Path, "gamescope", "Gamescope program", "", Global, &[], "The gamescope binary: a name on PATH or a path."),
-    key!("umu_run", Kind::Path, "umu-run", "umu-run program", "", Global, &[], "The umu-run binary: a name on PATH or a path."),
+    advanced!("prefix", Kind::Path, "", "Wine prefix", "Proton", Game, WINE, "The Wine prefix the game runs in; empty: <prefixes_root>/<id>."),
+    advanced!("arch", Kind::Enum(&["win64", "win32"]), "win64", "Architecture", "Proton", Game, &["wine"], "WINEARCH for a plain Wine prefix."),
+    advanced!("umu_id", Kind::Str, "", "umu id", "Proton", Game, PROTON, "GAMEID for umu-run's protonfixes; empty: umu-default."),
+    advanced!("store", Kind::Str, "", "Store", "Proton", Game, PROTON, "STORE for umu-run's protonfixes."),
+    advanced!("dll_overrides", Kind::Map, "", "DLL overrides", "Proton", Game, WINE, "WINEDLLOVERRIDES, one key per DLL without .dll: d3d11 = \"n,b\"."),
+    advanced!("esync", Kind::Bool, "true", "Esync", "Sync", Both, WINE, "Faster thread synchronisation through eventfd; on for most games, off if one hangs or stutters."),
+    advanced!("fsync", Kind::Bool, "true", "Fsync", "Sync", Both, WINE, "Faster still, through the kernel's futex2; takes over from esync when the kernel has it."),
+    advanced!("ntsync", Kind::Bool, "true", "NTSync", "Sync", Both, PROTON, "The kernel's NT synchronisation driver, the fastest; needs Linux 6.14 and a Proton built for it, else falls back."),
+    advanced!("dlss_upgrade", Kind::Bool, "false", "DLSS upgrade", "Upscaling", Both, PROTON, "Games with DLSS use the newest DLSS from the NVIDIA driver instead of the one they ship. NVIDIA GeForce RTX only."),
+    advanced!("fsr4_upgrade", Kind::Bool, "false", "FSR 4 upgrade", "Upscaling", Both, PROTON, "Games with FSR 3.1 use FSR 4 instead, sharper and cleaner. Radeon RX 9000 (RDNA 4), or RX 7000 (RDNA 3) at a cost, through Proton's RDNA 3 variant picked for it."),
+    advanced!("xess_upgrade", Kind::Bool, "false", "XeSS upgrade", "Upscaling", Both, PROTON, "Games with XeSS use the newest XeSS instead of the one they ship. Any GPU; best on Intel Arc."),
+    advanced!("optiscaler", Kind::Bool, "false", "OptiScaler", "Upscaling", Both, PROTON, "Adds FSR 4 or XeSS to games that only offer DLSS, through OptiScaler. For AMD and Intel; needs a Proton that ships it (CachyOS, GE)."),
+    advanced!("gamescope_bin", Kind::Path, "gamescope", "Gamescope program", "Programs", Global, &[], "The gamescope binary: a name on PATH or a path."),
+    advanced!("umu_run", Kind::Path, "umu-run", "umu-run program", "Programs", Global, &[], "The umu-run binary: a name on PATH or a path."),
     key!("options", Kind::Map, "", "Runner options", "", Game, &[], "The runner's options, validated against `universe runner options <id>`."),
 ];
 
@@ -172,6 +180,7 @@ pub struct Row {
     pub scope: &'static str,
     pub runners: &'static [&'static str],
     pub description: &'static str,
+    pub advanced: bool,
 }
 
 fn kind_name(kind: Kind) -> &'static str {
@@ -217,7 +226,7 @@ fn choices_of(k: &LaunchKey, screen: Option<Mode>) -> Vec<String> {
 pub fn rows(scope: Scope, screen: Option<Mode>) -> Vec<Row> {
     LAUNCH_KEYS
         .iter()
-        .filter(|k| !k.section.is_empty() && k.kind != Kind::Map && scope.takes(k.scope))
+        .filter(|k| !k.section.is_empty() && scope.takes(k.scope))
         .map(|k| Row {
             key: k.key,
             kind: kind_name(k.kind),
@@ -228,6 +237,7 @@ pub fn rows(scope: Scope, screen: Option<Mode>) -> Vec<Row> {
             scope: k.scope.as_str(),
             runners: k.runners,
             description: k.description,
+            advanced: k.advanced,
         })
         .collect()
 }
@@ -275,7 +285,8 @@ mod tests {
             assert_eq!((in_game, in_global), expected, "{}: scope {:?} does not match the structs", k.key, k.scope);
         }
         let keys: Vec<&str> = rows(Scope::Both, None).iter().map(|r| r.key).collect();
-        assert!(!keys.contains(&"env") && !keys.contains(&"options") && !keys.contains(&"runner"), "maps and rowless keys stay out of rows()");
+        assert!(keys.contains(&"env") && !keys.contains(&"options") && !keys.contains(&"runner"), "a rowless key stays out of rows(); a map with a section is a row");
+        assert!(LAUNCH_KEYS.iter().filter(|k| !k.section.is_empty()).all(|k| k.advanced || matches!(k.section, "Display" | "Overlay" | "Proton")), "every card but the first three is advanced");
         assert!(rows(Scope::Game, None).iter().all(|r| r.scope != "global") && rows(Scope::Global, None).iter().all(|r| r.scope != "game"));
     }
 

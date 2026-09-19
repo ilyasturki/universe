@@ -429,7 +429,7 @@ and the shell's OSD says so.
 
 `quality` is a QVBR preset — constant quality up to a bitrate ceiling (`very_high`: 16 Mbps target,
 32 Mbps ceiling, ~7-8 GB/h at 4K on AMD). Two config-scope keys, for `config.toml` or `universe
-module set capture <key>=<value>` and never a settings row, replace what the presets choose:
+module set capture <key>=<value>` — advanced rows on the module's page — replace what the presets choose:
 `ffmpeg_video_opts` (gpu-screen-recorder's `-ffmpeg-video-opts`) and `gsr_extra_args` (appended
 to the command). `-bm cbr` stays pinned: it is the base the QVBR override needs.
 
@@ -524,7 +524,7 @@ set when the manifest names a `choices_exec`: `<module dir>/<choices_exec> <key>
 |---|---|---|---|
 | `settings()` | `settings()` | `universe config get` | resolved `config.toml`: absolute paths, defaults applied |
 | `set_setting(key, value)` | `set_setting(key, value)` | `universe config set <key> <value>` | dotted `config.toml` key (`launch.proton`, `paths.recordings_root`, `desktop.profile`); a `launch.*` key is validated against the catalogue, an unknown or game-only one refused |
-| `launch_keys(scope, screen)` | `launch_keys(scope, screen)` | `universe launch-keys [--json]` | the launch keys of `scope` (`game`, `global`, `both`) that have a settings row: `[{key, type, default, choices, label, section, scope, runners, description}]`, `type` one of bool, int, string, path, list, enum, resolution, refresh, fps, proton; `screen` (a `screen_mode`, or none) sizes the resolution, refresh and fps choices; `runners` empty means every runner. The maps (`env`, `dll_overrides`, `options`) and the rowless keys (`runner`, `exe`, `umu_run`…) are settable but not listed; the CLI's table prints all of them |
+| `launch_keys(scope, screen)` | `launch_keys(scope, screen)` | `universe launch-keys [--json]` | the launch keys of `scope` (`game`, `global`, `both`) that have a settings row: `[{key, type, default, choices, label, section, scope, runners, description, advanced}]`, `type` one of bool, int, string, path, list, enum, resolution, refresh, fps, proton, map; `screen` (a `screen_mode`, or none) sizes the resolution, refresh and fps choices; `runners` empty means every runner; `advanced` puts the row behind the page's Advanced row (every card but Display, Overlay and the Proton basics). `runner`, `runner_exe`, `exe` and the `options` map are settable but not listed — the frontends build their rows themselves; the CLI's table prints all of them |
 | `gpu()` | `gpu()` | — | the GPU the games run on: `{vendor (amd, nvidia, intel), name (the vendor's), rdna (1…4 or null), label (`AMD · RDNA 3`), fits: {dlss_upgrade, fsr4_upgrade, xess_upgrade, optiscaler}}`, `fits` whether each upscaler upgrade does anything on it; `null` when sysfs shows no card of a known vendor. Vendor and AMD generation come from `/sys/class/drm` (amdgpu's `ip_discovery` GC major: 10 RDNA 1/2, 11 RDNA 3, 12 RDNA 4); the card with the most VRAM wins (an NVIDIA card, which reports none, beats an iGPU). Probed once per process |
 | `screen_mode(screen)` | `screen_mode(screen)` | `universe screen-mode [<screen>] [--json]` | `{screen, width, height, refresh}`: the connector's current mode as gamescope is told it (see Gamescope), `screen=""` for the profile default; zeros when none can be read |
 | — | `version()`, `data_home()`, `state_home()` | `universe --version` | `version()` is the build: the semver with the short git rev behind it (`0.0.2 (410391a)`, `-dirty` when the tree was; the flake passes its rev, a checkout asks git) |
@@ -701,7 +701,8 @@ type = "bool"
 default = true
 label = "Record the session"
 scope = "game"                    # global → config.toml [modules.<id>]; game → game.toml [modules.<id>];
-                                  # config → config.toml / `universe module set` only, no settings row
+                                  # config → config.toml / `universe module set`; its row sits behind the page's Advanced row
+advanced = true                   # behind the settings page's Advanced row (a config-scope setting always is)
 
 [[settings]]
 key = "fps"
