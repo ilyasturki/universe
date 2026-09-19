@@ -1,4 +1,6 @@
 import copy
+import ctypes
+import ctypes.util
 import json
 import os
 import re
@@ -26,6 +28,105 @@ JOURNAL_S = 8.0
 CLIP_S = 20
 
 SLOTS = ("box_front", "square", "banner", "background", "logo")
+
+
+class X11Cards:
+    """CARDINAL properties on gamescope's X server through libX11, what the core's nest does with x11rb. Any other server is left alone."""
+
+    XA_CARDINAL = 6
+
+    def __init__(self):
+        self._lib = self._display = None
+
+    def set(self, window, name, value):
+        if self._display is None:
+            self._display = self._open() or 0
+        if not self._display:
+            return
+        # Format 32 takes long-sized elements, not uint32.
+        self._lib.XChangeProperty(self._display, window, self._atom(name), self.XA_CARDINAL, 32, 0, ctypes.byref(ctypes.c_ulong(value)), 1)
+        self._lib.XFlush(self._display)
+
+    def _atom(self, name):
+        return self._lib.XInternAtom(self._display, name.encode(), False)
+
+    def _open(self):
+        path = ctypes.util.find_library("X11")
+        if not path:
+            return None
+        lib = self._lib = ctypes.CDLL(path)
+        lib.XOpenDisplay.restype = ctypes.c_void_p
+        lib.XOpenDisplay.argtypes = [ctypes.c_char_p]
+        lib.XDefaultRootWindow.restype = ctypes.c_ulong
+        lib.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
+        lib.XInternAtom.restype = ctypes.c_ulong
+        lib.XInternAtom.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int]
+        lib.XChangeProperty.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_int, ctypes.c_int, ctypes.c_void_p, ctypes.c_int]
+        lib.XGetWindowProperty.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_long, ctypes.c_long, ctypes.c_int, ctypes.c_ulong,
+                                           ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_void_p)]
+        lib.XFree.argtypes = [ctypes.c_void_p]
+        lib.XFlush.argtypes = [ctypes.c_void_p]
+        lib.XCloseDisplay.argtypes = [ctypes.c_void_p]
+        display = self._display = lib.XOpenDisplay(None)
+        if not display:
+            return None
+        actual_type, fmt, nitems, after, prop = ctypes.c_ulong(), ctypes.c_int(), ctypes.c_ulong(), ctypes.c_ulong(), ctypes.c_void_p()
+        lib.XGetWindowProperty(display, lib.XDefaultRootWindow(display), self._atom("GAMESCOPE_FOCUSED_WINDOW"), 0, 1, False, self.XA_CARDINAL,
+                               ctypes.byref(actual_type), ctypes.byref(fmt), ctypes.byref(nitems), ctypes.byref(after), ctypes.byref(prop))
+        if prop.value:
+            lib.XFree(prop)
+        if nitems.value:
+            return display
+        lib.XCloseDisplay(display)
+        return None
+
+
+def connected_outputs():
+    """Connector names from DRM sysfs, sorted, as the core picks its screen."""
+    names = []
+    for entry in Path("/sys/class/drm").glob("card*-*"):
+        try:
+            if (entry / "status").read_text().strip() == "connected":
+                names.append(entry.name.split("-", 1)[1])
+        except OSError:
+            pass
+    return sorted(names)
+
+
+def screen_mode(screen):
+    """`(width, height, hz)` of `screen`: Mutter's current mode, else the preferred DRM mode at 60 Hz, else None."""
+    if not screen:
+        return None
+    return _mutter_current_mode(screen) or _drm_preferred_mode(screen)
+
+
+def _mutter_current_mode(screen):
+    try:
+        out = subprocess.run(["busctl", "--user", "--timeout=5", "--json=short", "call", "org.gnome.Mutter.DisplayConfig", "/org/gnome/Mutter/DisplayConfig",
+                              "org.gnome.Mutter.DisplayConfig", "GetCurrentState"], capture_output=True, text=True, timeout=6)
+        monitors = json.loads(out.stdout)["data"][1]
+    except (OSError, subprocess.TimeoutExpired, ValueError, LookupError, TypeError):
+        return None
+    wanted = screen.replace("-A-", "-")
+    for info, modes, _ in monitors:
+        if info[0] != screen and info[0].replace("-A-", "-") != wanted:
+            continue
+        for _, w, h, hz, _, _, props in modes:
+            current = props.get("is-current")
+            if (current.get("data") if isinstance(current, dict) else current) and w > 0 and h > 0:
+                return (w, h, round(hz))
+    return None
+
+
+def _drm_preferred_mode(screen):
+    for entry in Path("/sys/class/drm").glob(f"card*-{screen}"):
+        try:
+            first = (entry / "modes").read_text().split("\n", 1)[0].strip()
+            w, h = (int(v) for v in first.split("x"))
+            return (w, h, 60)
+        except (OSError, ValueError):
+            continue
+    return None
 
 
 def _now():
@@ -96,6 +197,7 @@ class FakeCore:
         self.hud_shown = False
         self.frames = 0
         self.level, self.muted = 62, False
+        self._cards = X11Cards()
         self._config.setdefault("paths", {})["overrides"] = str(self._root / "overrides")
         self._lay_out()
 
@@ -487,7 +589,9 @@ class FakeCore:
         return bool(self.current()) and self.game_shown
 
     def nest_overlay(self, window, input, opacity):
-        pass
+        self._cards.set(window, "STEAM_OVERLAY", 1)
+        self._cards.set(window, "STEAM_INPUT_FOCUS", int(bool(input)))
+        self._cards.set(window, "_NET_WM_WINDOW_OPACITY", int(opacity))
 
     def nest_frame(self):
         self.frames += 1
@@ -496,7 +600,11 @@ class FakeCore:
 
     def host_gamescope(self, screen):
         gamescope = shutil.which("gamescope")
-        return [gamescope, "-f", "--force-composition", "--mangoapp"] if gamescope else None
+        if not gamescope:
+            return None
+        mode = screen_mode(screen or next(iter(connected_outputs()), ""))
+        size = ["-W", str(mode[0]), "-H", str(mode[1]), "-w", str(mode[0]), "-h", str(mode[1]), "-r", str(mode[2])] if mode else []
+        return [gamescope, "-f", "--force-composition", *size, "--mangoapp"]
 
     def set_fps_limit(self):
         if not self.current():
