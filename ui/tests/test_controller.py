@@ -105,7 +105,7 @@ def test_bind_unbind_and_learn(started, fake):
     screen.cancelLearn()
     assert screen.learning == "" and watcher.commands[-1] == {"cmd": "cancel"}
     screen.suspend()
-    assert watcher.commands[-1] == {"cmd": "suspend"}
+    assert watcher.commands[-1] == {"cmd": "suspend", "dock": False}
     screen.learn("fn_left")
     screen.resume()
     assert watcher.commands[-2:] == [{"cmd": "cancel"}, {"cmd": "resume"}], "leaving the section drops a pending learn"
@@ -292,7 +292,7 @@ def test_watcher_process_round_trip(api, monkeypatch):
     screen.learn("share")
     wait_for(watcher.event, 5000)
     wait_for(watcher.event, 5000)
-    assert [e["command"] for e in echoed] == [{"cmd": "suspend"}, {"cmd": "learn", "id": "event9", "slot": "share"}]
+    assert [e["command"] for e in echoed] == [{"cmd": "suspend", "dock": False}, {"cmd": "learn", "id": "event9", "slot": "share"}]
     screen.shutdown()
     assert watcher._process is None
 

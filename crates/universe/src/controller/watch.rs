@@ -299,6 +299,8 @@ struct Watcher {
     tx: mpsc::Sender<DevEvent>,
     typist: Arc<Mutex<Typist>>,
     suspended: bool,
+    // Under the dock: the docked presets still fire.
+    docked: bool,
     axes: bool,
     learning: Option<(String, String, Instant)>,
     started: Instant,
@@ -421,11 +423,13 @@ impl Watcher {
             if !self.out.emit(serde_json::json!({"event": "button", "id": id, "slot": slot, "code": source.to_string(), "pressed": down})) {
                 return false;
             }
-            // A release always reaches the engine, so nothing stays held across a suspend.
-            if self.suspended && down {
-                continue;
+            let mut binding = pad.bindings.get(&slot).cloned().unwrap_or_default();
+            // Suspended, a slot keeps its docked macros under the dock and nothing elsewhere; a release always reaches the engine, so nothing stays held.
+            if self.suspended {
+                let keep = |m: &super::Macro| self.docked && super::preset(&m.action).is_some_and(|p| p.docked);
+                binding.press = binding.press.filter(keep);
+                binding.hold = binding.hold.filter(keep);
             }
-            let binding = pad.bindings.get(&slot).cloned().unwrap_or_default();
             let now = self.now();
             let fires = if down { self.engine.press(&id, &slot, binding, now) } else { self.engine.release(&id, &slot, now) };
             for f in fires {
@@ -516,6 +520,7 @@ impl Watcher {
         match v["cmd"].as_str().unwrap_or("") {
             "suspend" => {
                 self.suspended = true;
+                self.docked = v["dock"].as_bool().unwrap_or(false);
                 self.engine.clear();
             }
             "resume" => self.suspended = false,
@@ -559,7 +564,7 @@ pub async fn watch(core: Arc<Core>, opts: WatchOptions) -> crate::Result<()> {
     };
     let cfg = core.config.read().await.controller.clone();
     let (tx, mut rx) = mpsc::channel::<DevEvent>(256);
-    let mut w = Watcher { core, engine: Engine::new(cfg.hold_ms), cfg, out, pads: BTreeMap::new(), ignored: BTreeSet::new(), tx, typist: Arc::new(Mutex::new(Typist { dev: None })), suspended: false, axes: false, learning: None, started: Instant::now(), config_mtime: config_mtime() };
+    let mut w = Watcher { core, engine: Engine::new(cfg.hold_ms), cfg, out, pads: BTreeMap::new(), ignored: BTreeSet::new(), tx, typist: Arc::new(Mutex::new(Typist { dev: None })), suspended: false, docked: false, axes: false, learning: None, started: Instant::now(), config_mtime: config_mtime() };
     if !w.out.emit(serde_json::json!({"event": "ready", "enabled": w.cfg.enabled})) {
         return Ok(());
     }

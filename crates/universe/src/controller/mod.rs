@@ -143,17 +143,19 @@ pub struct Preset {
     pub label: &'static str,
     pub hold_only: bool,
     pub repeats: bool,
+    /// Still fires while the launcher's dock has the pad: nothing that reads the screen, types, or ends the game.
+    pub docked: bool,
 }
 
 pub const PRESETS: [Preset; 8] = [
-    Preset { id: "volume_up", label: "Volume up", hold_only: false, repeats: true },
-    Preset { id: "volume_down", label: "Volume down", hold_only: false, repeats: true },
-    Preset { id: "mute", label: "Mute", hold_only: false, repeats: false },
-    Preset { id: "screenshot", label: "Screenshot", hold_only: false, repeats: false },
-    Preset { id: "mangohud", label: "Toggle MangoHud", hold_only: false, repeats: false },
-    Preset { id: "stop", label: "Stop the game", hold_only: true, repeats: false },
-    Preset { id: "keys", label: "Key combo…", hold_only: false, repeats: false },
-    Preset { id: "command", label: "Command…", hold_only: false, repeats: false },
+    Preset { id: "volume_up", label: "Volume up", hold_only: false, repeats: true, docked: true },
+    Preset { id: "volume_down", label: "Volume down", hold_only: false, repeats: true, docked: true },
+    Preset { id: "mute", label: "Mute", hold_only: false, repeats: false, docked: true },
+    Preset { id: "screenshot", label: "Screenshot", hold_only: false, repeats: false, docked: false },
+    Preset { id: "mangohud", label: "Toggle MangoHud", hold_only: false, repeats: false, docked: true },
+    Preset { id: "stop", label: "Stop the game", hold_only: true, repeats: false, docked: false },
+    Preset { id: "keys", label: "Key combo…", hold_only: false, repeats: false, docked: false },
+    Preset { id: "command", label: "Command…", hold_only: false, repeats: false, docked: false },
 ];
 
 pub fn preset(id: &str) -> Option<&'static Preset> {

@@ -565,7 +565,7 @@ line: out — `{"event":"ready"}`, `{"event":"device","id":"event30","name","fam
 `unknown {id, code}` (a key no slot owns), `macro {id, slot, trigger, action, keys, command}`,
 `hud {shown, title}` (after a `mangohud` fire: `shown` null when no game runs), `learned {family, slot, code, from}`, `learn_timeout`, `waiting` / `busy` (the lock), `error
 {message}`, and while `axes` is on, `axis {id, axis, value}` (`lx ly rx ry` as -1..1, `lt rt` as
-0..1, a hundredth's resolution, on change); in — `{"cmd":"suspend"}` (report, do not fire),
+0..1, a hundredth's resolution, on change); in — `{"cmd":"suspend", "dock"?}` (report, do not fire; with `dock` true the presets marked docked — volume, mute, MangoHud — still do),
 `resume`, `axes {on}` (stream the sticks and triggers: the page's test mode), `reload` (config
 changed), `learn {id, slot}`, `cancel`, `rumble {id}`, `run {action, keys, command}` (fire an action as a
 macro would — `mangohud`, `keys` with a combo, `screenshot`…: the launcher's home menu types

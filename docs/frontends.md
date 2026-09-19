@@ -213,7 +213,8 @@ The host owns what the QML cannot: the overlay window is created once (`create_o
 `Home.attachOverlay`) with `STEAM_OVERLAY=1`, mapped at opacity 0 and never unmapped — gamescope
 keeps painting an unmapped overlay's last buffer; opening sets `STEAM_INPUT_FOCUS=1` and full
 opacity, the fade-out done (`dockClosed()`) drops both and the game gets its input back. The
-watcher's macros are suspended while the dock has the pad. Nothing takes the pad away from the
+watcher's macros are suspended while the dock has the pad (`suspend {dock: true}`: volume, mute
+and the MangoHud toggle still fire, nothing that grabs the screen, types or ends the game). Nothing takes the pad away from the
 game — gamescope routes keyboard and mouse only, and the game keeps its own evdev or hidraw
 readers — so `pause_on_home` (a launch key, global and per game, on by default) freezes the game
 whenever the launcher covers it: as the dock opens, and as `toLauncher` flips (after the frame is

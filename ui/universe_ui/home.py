@@ -160,7 +160,7 @@ class Home(QObject):
     def _suspend(self):
         if not self._suspended:
             self._suspended = True
-            self._controller.suspend()
+            self._controller.suspend(dock=True)
 
     @Slot()
     def closeDock(self):

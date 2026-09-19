@@ -100,7 +100,7 @@ def test_the_dock_pauses_on_home_and_thaws_on_the_release(api, fake):
     home.openDock()
     pump(50)
     assert home.open and home.paused and fake.core.frozen is True
-    assert api.screens.controller._suspended is True, "the dock has the pad from the moment it opens"
+    assert api.screens.controller._suspended is True and api.screens.controller._docked is True, "the dock has the pad from the moment it opens; the docked macros still fire"
     home.closeDock()
     home.dockClosed()
     pump(50)

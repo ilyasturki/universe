@@ -156,6 +156,7 @@ class ControllerScreen(QObject):
         self._learning = ""
         self._testing = False
         self._suspended = False
+        self._docked = False
         self._passive = False
         self._wanted = ""
         self.restart_ms = RESTART_MS
@@ -177,7 +178,7 @@ class ControllerScreen(QObject):
             self._watcher = None
             return False
         if self._suspended:
-            self._watcher.send({"cmd": "suspend"})
+            self._watcher.send({"cmd": "suspend", "dock": self._docked})
         return True
 
     def _restart(self):
@@ -515,11 +516,13 @@ class ControllerScreen(QObject):
         self.testingChanged.emit()
         return True
 
+    # `dock`: the presets marked docked (volume, mute, MangoHud) still fire.
     @Slot()
-    def suspend(self):
+    def suspend(self, dock=False):
         self._suspended = True
+        self._docked = bool(dock)
         if self._watcher is not None:
-            self._watcher.send({"cmd": "suspend"})
+            self._watcher.send({"cmd": "suspend", "dock": self._docked})
 
     @Slot()
     def resume(self):
