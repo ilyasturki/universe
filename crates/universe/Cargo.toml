@@ -12,8 +12,8 @@ tokio = { version = "1", features = ["full"] }
 zbus = { version = "5", default-features = false, features = ["tokio"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-toml = "0.8"
-toml_edit = "0.22"
+toml = "1"
+toml_edit = "0.25"
 rusqlite = "0.40"
 clap = { version = "4", features = ["derive"] }
 clap_complete = "4"
@@ -23,7 +23,7 @@ unicode-normalization = "0.1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
-comfy-table = "7"
+comfy-table = "8"
 owo-colors = "4"
 shell-words = "1"
 libc = "0.2"

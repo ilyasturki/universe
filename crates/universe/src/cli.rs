@@ -489,7 +489,7 @@ pub enum ControllerCmd {
 
 fn table(headers: &[&str]) -> Table {
     let mut t = Table::new();
-    t.load_preset(UTF8_FULL_CONDENSED);
+    t.load_style(UTF8_FULL_CONDENSED);
     t.set_content_arrangement(ContentArrangement::Dynamic);
     t.set_header(headers.iter().map(|h| Cell::new(h).add_attribute(Attribute::Bold)));
     t
