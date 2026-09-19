@@ -1,9 +1,30 @@
 import os
+import sys
+import traceback
 
 import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault("QT_FORCE_STDERR_LOGGING", "1")
+
+
+@pytest.fixture(autouse=True)
+def raising_slots_fail(request):
+    """PySide6 prints an exception raised inside a slot and carries on; the test that let it happen fails instead."""
+    caught = []
+    previous = sys.excepthook
+    sys.excepthook = lambda *exc: caught.append("".join(traceback.format_exception(*exc)))
+    yield
+    sys.excepthook = previous
+    if caught and request.node.rep_call_passed:
+        pytest.fail("an exception escaped a Qt slot:\n" + "\n".join(caught), pytrace=False)
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    if call.when == "call":
+        item.rep_call_passed = outcome.get_result().passed
 
 
 @pytest.fixture(scope="session")
