@@ -352,6 +352,16 @@ def sample_sessions():
     ]
 
 
+def test_yaml_and_uri_helpers_match_the_core():
+    # The same table as journal.rs's helpers_match_python: the two renderers must agree byte for byte.
+    for typed in ["#DRIVE", "0x1F", "0o17", "0b101", "1_000", ".5", "1e3", "1:30", "2024-05-01", "2024-5-1 10:00", ".inf", ".NaN", "On", "y", "N", "1979", "- x", "Sample: The Game"]:
+        assert note.yaml_str(typed) == json.dumps(typed, ensure_ascii=False), typed
+    for plain in ["Cuphead", "Cuphead 2", "Half-Life 2", "1979 Revolution", "F.E.A.R.", "v1.0", "2024 Game", "Portal 2", "2001-a-space"]:
+        assert note.yaml_str(plain) == plain
+    assert note.file_uri("/mnt/rec (1)/é.mkv") == "file:///mnt/rec%20%281%29/%C3%A9.mkv"
+    assert note.file_uri("/mnt/#DRIVE/What? A Game/x.mkv") == "file:///mnt/%23DRIVE/What%3F%20A%20Game/x.mkv"
+
+
 def test_render_note():
     text = note.render_note(sample_entries(), {s["session"]: s for s in sample_sessions()}, "Sample: The Game")
     assert text.startswith("---\ngame: \"Sample: The Game\"\nsessions: 5\nfirst_played: 2025-12-01\nlast_played: 2026-03-01\ncover: attachments/20260301-211500.png\n---\n\n# Journal: Sample: The Game\n\n")

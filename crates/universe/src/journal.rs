@@ -311,9 +311,9 @@ pub fn image_path(journal_dir: &Path, screenshots_dir: &Path, rel: &str) -> Path
     }
 }
 
-/// Like Python's urllib quote with the note's safe set; parentheses are encoded for Markdown.
+/// Like Python's urllib quote with the note's safe set; parentheses are encoded for Markdown, `?` and `#` would start a query or a fragment.
 fn file_uri(path: &str) -> String {
-    const SAFE: &[u8] = b"/;,?:@&=+$!~*'#-_.";
+    const SAFE: &[u8] = b"/;,:@&=+$!~*'-_.";
     let mut out = String::from("file://");
     for b in path.bytes() {
         if b.is_ascii_alphanumeric() || SAFE.contains(&b) {
@@ -325,8 +325,44 @@ fn file_uri(path: &str) -> String {
     out
 }
 
+/// A plain scalar YAML 1.1 (PyYAML) or 1.2 (js-yaml, Obsidian) would type as something other than a string.
+fn yaml_typed(s: &str) -> bool {
+    if matches!(s.to_lowercase().as_str(), "true" | "false" | "null" | "yes" | "no" | "on" | "off" | "y" | "n" | "~" | ".inf" | "-.inf" | "+.inf" | ".nan") {
+        return true;
+    }
+    let t = s.strip_prefix(['+', '-']).unwrap_or(s);
+    let b: Vec<u8> = t.bytes().collect();
+    let radix = |digits: &[u8], radix: u32| digits.len() > 0 && digits.iter().all(|&c| c == b'_' || (c as char).is_digit(radix));
+    if b.len() > 2 && b[0] == b'0' && matches!(b[1], b'x' | b'o' | b'b') && radix(&b[2..], match b[1] { b'x' => 16, b'o' => 8, _ => 2 }) {
+        return true;
+    }
+    let digit_first = b.first().is_some_and(|c| c.is_ascii_digit() || *c == b'.');
+    if digit_first && b.contains(&b':') && b.iter().all(|c| c.is_ascii_digit() || matches!(c, b':' | b'_' | b'.')) {
+        return true;
+    }
+    if digit_first && s.replace('_', "").parse::<f64>().is_ok() {
+        return true;
+    }
+    yaml_date(s.as_bytes())
+}
+
+/// `YYYY-M-D`, alone or followed by a time.
+fn yaml_date(b: &[u8]) -> bool {
+    if b.len() < 8 || !b[..4].iter().all(u8::is_ascii_digit) || b[4] != b'-' {
+        return false;
+    }
+    let rest = &b[5..];
+    let m = rest.iter().take_while(|c| c.is_ascii_digit()).count();
+    if m == 0 || rest.get(m) != Some(&b'-') {
+        return false;
+    }
+    let rest = &rest[m + 1..];
+    let d = rest.iter().take_while(|c| c.is_ascii_digit()).count();
+    (1..=2).contains(&d) && rest.get(d).is_none_or(|c| matches!(c, b'T' | b't' | b' '))
+}
+
 fn yaml_str(s: &str) -> String {
-    let unsafe_start = |c: char| c.is_whitespace() || "\"'-*&![]{}|>%@`?".contains(c);
+    let unsafe_start = |c: char| c.is_whitespace() || "\"'-*&![]{}|>%@`?#".contains(c);
     let chars: Vec<char> = s.chars().collect();
     let pair = |a: fn(char) -> bool, b: fn(char) -> bool| chars.windows(2).any(|w| a(w[0]) && b(w[1]));
     let needs_quotes = s.is_empty()
@@ -334,8 +370,7 @@ fn yaml_str(s: &str) -> String {
         || pair(char::is_whitespace, |c| c == '#')
         || s.chars().next().is_some_and(unsafe_start)
         || s.chars().last().is_some_and(char::is_whitespace)
-        || matches!(s.to_lowercase().as_str(), "true" | "false" | "null" | "yes" | "no" | "~")
-        || s.parse::<f64>().is_ok();
+        || yaml_typed(s);
     if needs_quotes {
         serde_json::to_string(s).unwrap_or_default()
     } else {
@@ -698,7 +733,14 @@ You reached the title screen.
         assert_eq!(yaml_str("Sample: The Game"), "\"Sample: The Game\"");
         assert_eq!(yaml_str("1979"), "\"1979\"");
         assert_eq!(yaml_str("- x"), "\"- x\"");
+        for typed in ["#DRIVE", "0x1F", "0o17", "0b101", "1_000", ".5", "1e3", "1:30", "2024-05-01", "2024-5-1 10:00", ".inf", ".NaN", "On", "y", "N"] {
+            assert_eq!(yaml_str(typed), serde_json::to_string(typed).unwrap(), "{typed}");
+        }
+        for plain in ["Cuphead 2", "Half-Life 2", "1979 Revolution", "F.E.A.R.", "v1.0", "2024 Game", "Portal 2", "2001-a-space"] {
+            assert_eq!(yaml_str(plain), plain);
+        }
         assert_eq!(file_uri("/mnt/rec (1)/é.mkv"), "file:///mnt/rec%20%281%29/%C3%A9.mkv");
+        assert_eq!(file_uri("/mnt/#DRIVE/What? A Game/x.mkv"), "file:///mnt/%23DRIVE/What%3F%20A%20Game/x.mkv");
         assert!(is_shot("attachments/20260301-211500.png") && !is_shot("attachments/20260301-210000-1.png") && !is_shot("attachments/frames/frame-20260301-210000-02.jpg"));
     }
 }

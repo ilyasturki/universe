@@ -14,18 +14,37 @@ DOC_TITLE_RE = re.compile(rf"^#\s*(?:{label_alt('journal')})\s*{COLONS}\s*(.+?)\
 
 
 def file_uri(path):
-    return "file://" + quote(path, safe="/;,?:@&=+$!~*'#").replace("(", "%28").replace(")", "%29")
+    # Parentheses encoded for Markdown; ? and # would start a query or a fragment
+    return "file://" + quote(path, safe="/;,:@&=+$!~*'").replace("(", "%28").replace(")", "%29")
+
+
+YAML_WORDS = ("true", "false", "null", "yes", "no", "on", "off", "y", "n", "~", ".inf", "-.inf", "+.inf", ".nan")
+YAML_RADIX = re.compile(r"^[-+]?0(?:x[0-9a-fA-F_]+|o[0-7_]+|b[01_]+)$")
+YAML_SEXAGESIMAL = re.compile(r"^[-+]?[0-9.][0-9_.:]*$")
+YAML_DATE = re.compile(r"^[0-9]{4}-[0-9]+-[0-9]{1,2}(?:[Tt ]|$)")
+
+
+def yaml_typed(s):
+    """A plain scalar YAML 1.1 (PyYAML) or 1.2 (js-yaml, Obsidian) would type as something other than a string."""
+    if s.lower() in YAML_WORDS or YAML_RADIX.match(s) or YAML_DATE.match(s):
+        return True
+    t = s[1:] if s[:1] in "+-" else s
+    if t[:1] in "0123456789." and t[:1]:
+        if ":" in t and YAML_SEXAGESIMAL.match(s):
+            return True
+        try:
+            float(s.replace("_", ""))
+            return True
+        except ValueError:
+            pass
+    return False
 
 
 def yaml_str(s):
     s = str(s)
-    if re.search(r"(:\s|\s#|^[\s\"'\-*&!\[\]{}|>%@`?]|[\s]$|^$)", s) or s.lower() in ("true", "false", "null", "yes", "no", "~"):
+    if re.search(r"(:\s|\s#|^[\s\"'\-*&!\[\]{}|>%@`?#]|[\s]$|^$)", s) or yaml_typed(s):
         return json.dumps(s, ensure_ascii=False)
-    try:
-        float(s)
-        return json.dumps(s)
-    except ValueError:
-        return s
+    return s
 
 
 def body_from_paragraphs(paragraphs, italic=False):
