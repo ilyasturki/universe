@@ -178,7 +178,7 @@ class FakeCore:
         self._config = dict(self._data.get("config") or {})
         with open(LAUNCH_KEYS) as f:
             self._launch_keys = json.load(f)
-        self._config["launch"] = {**{k["key"]: k["default"] for k in self._launch_keys if k["scope"] != "game"}, **(self._config.get("launch") or {})}
+        self._config["launch"] = {**{k["key"]: ({} if k["type"] == "map" else k["default"]) for k in self._launch_keys if k["scope"] != "game"}, **(self._config.get("launch") or {})}
         self._tmp = tempfile.TemporaryDirectory(prefix="universe-fake-") if root is None else None
         self._root = Path(root if root is not None else self._tmp.name)
         self._cache = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "universe", "fake-art")
@@ -1029,9 +1029,13 @@ class FakeCore:
         node = self._config
         parts = key.split(".")
         for part in parts[:-1]:
-            node = node.setdefault(part, {})
+            if not isinstance(node.get(part), dict):
+                node[part] = {}
+            node = node[part]
         if value == "":
             node.pop(parts[-1], None)
+        elif len(parts) == 3 and parts[0] == "launch" and parts[1] in ("env", "dll_overrides"):
+            node[parts[-1]] = value
         elif value in ("true", "false"):
             node[parts[-1]] = value == "true"
         else:

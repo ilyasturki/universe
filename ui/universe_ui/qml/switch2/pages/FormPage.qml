@@ -25,8 +25,29 @@ FocusScope {
         return [ { glyph: "B", label: "Back" }, { glyph: "A", label: label } ];
     }
 
+    // `key` lands the cursor on that row, the Advanced row opened if it sits behind it; a source's rows come back from a thread.
+    property string landKey: ""
+
     Component.onDestruction: if (page.runner) api.screens.runner.load("")
-    onArgsChanged: (args.runner ? api.screens.runner : args.source ? api.screens.source : api.screens.module).load(args.runner || args.source || args.module)
+    onArgsChanged: {
+        landKey = args.key || "";
+        (args.runner ? api.screens.runner : args.source ? api.screens.source : api.screens.module).load(args.runner || args.source || args.module);
+        Qt.callLater(landNow);
+    }
+
+    function landNow() {
+        if (landKey === "")
+            return;
+        var i = form.reveal(landKey, "");
+        if (i < 0)
+            return;
+        landKey = "";
+        Qt.callLater(function() {
+            var at = Forms.rowOf(content, i);
+            if (at >= 0)
+                rows.index = at;
+        });
+    }
 
     readonly property var content: Forms.grouped(form.groups, form.rows, function(src, i) {
         var r = Object.assign({}, runner ? src : Details.withDetail(src, src.module), { form: i });
@@ -67,7 +88,15 @@ FocusScope {
     }
 
     function activate(index, row) {
-        if (row.type === "bool") {
+        if (row.key === "advanced") {
+            Sound.play("ok");
+            form.showAdvanced = !form.showAdvanced;
+            if (form.showAdvanced)
+                Qt.callLater(function() { rows.index = Forms.firstAfter(content, Forms.rowOf(content, row.form)); });
+        } else if (row.type === "map") {
+            Sound.play("ok");
+            Forms.editMap(shell, row, function(name, value) { form.setMapEntry(row.form, name, value); });
+        } else if (row.type === "bool") {
             form.toggle(row.form);
             Sound.play("select");
         } else if (row.key === "link" && source) {
@@ -100,6 +129,7 @@ FocusScope {
         target: page.form
         ignoreUnknownSignals: true
         function onMessage(text) { page.shell.showToast(text); }
+        function onRowsChanged() { page.landNow(); }
     }
 
     Connections {

@@ -8,6 +8,8 @@ FocusScope {
     id: page
 
     property var shell: null
+    // { key }: a search hit lands on that row, the Advanced row opened if it sits behind it.
+    property var args: ({})
     readonly property var controller: api.screens.controller
 
     readonly property bool testing: controller.testing
@@ -44,7 +46,31 @@ FocusScope {
             out.push({ heading: true, label: "Buttons", display: "" });
             out = out.concat(buttons);
         }
+        // The Timing card behind the Advanced row.
+        var gate = source.findIndex(function(r) { return r.key === "advanced"; });
+        if (gate >= 0) {
+            out.push({ key: "advanced", label: "Advanced", type: "action", display: "", detail: source[gate].detail, form: gate });
+            if (controller.showAdvanced) {
+                out.push({ heading: true, label: "Timing", display: "" });
+                source.forEach(function(r, i) {
+                    if (r.advanced)
+                        out.push({ key: r.key, label: r.label, type: r.type, display: r.display, detail: r.detail, choices: r.choices, value: r.value, form: i });
+                });
+            }
+        }
         return out;
+    }
+
+    function landNow() {
+        var key = args && args.key ? args.key : "";
+        if (key === "")
+            return;
+        controller.reveal(key, "");
+        Qt.callLater(function() {
+            var at = entries.findIndex(function(e) { return e.key === key; });
+            if (at >= 0)
+                rows.index = at;
+        });
     }
 
     readonly property string focusedSlot: rows.cursorShown && rows.currentRow && rows.currentRow.slot ? rows.currentRow.slot : ""
@@ -82,7 +108,14 @@ FocusScope {
     }
 
     function activate(index, row) {
-        if (row.key === "test") {
+        if (row.key === "advanced") {
+            Sound.play("ok");
+            controller.showAdvanced = !controller.showAdvanced;
+            if (controller.showAdvanced)
+                Qt.callLater(function() { rows.index = Math.min(entries.length - 1, index + 2); });
+        } else if (String(row.key).indexOf("controller.") === 0) {
+            rows.edit(row, function(value) { controller.setValue(row.form, value); });
+        } else if (row.key === "test") {
             if (controller.setTesting(true))
                 Sound.play("ok");
             else
@@ -156,10 +189,13 @@ FocusScope {
     }
 
     Component.onCompleted: {
+        controller.showAdvanced = false;
         controller.load();
         controller.suspend();
+        landNow();
     }
     Component.onDestruction: controller.resume()
+    onArgsChanged: landNow()
 
     onTestingChanged: {
         clearArt();
@@ -349,6 +385,7 @@ FocusScope {
     SettingsRows {
         id: rows
 
+        shell: page.shell
         x: Theme.dp(1230)
         y: Theme.dp(170)
         width: Theme.dp(560)

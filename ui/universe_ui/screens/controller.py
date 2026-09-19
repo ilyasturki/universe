@@ -5,7 +5,7 @@ import shutil
 
 from PySide6.QtCore import Property, QObject, QProcess, QTimer, Signal, Slot
 
-from .settings import _group, _row
+from .settings import AdvancedRows, _add, _dig, _group, _row
 
 log = logging.getLogger("universe.controller")
 
@@ -18,6 +18,13 @@ PASSIVE_TEXT = "Macros are running in the game session"
 PASSIVE_DETAIL = "Live presses and learning resume when it ends"
 RESTART_MS = 2000
 RESTART_MAX_MS = 30000
+
+# [controller] keys behind the page's Advanced row: (key, label, choices, detail).
+TIMING_ROWS = [
+    ("controller.hold_ms", "Hold length (ms)", ("400", "600", "800", "1000"), "A press this long is a hold; a macro on hold fires then."),
+    ("controller.volume_step", "Volume step (%)", ("1", "2", "5", "10"), "How much a volume macro moves the default sink per press, 1 to 100."),
+]
+TIMING_DEFAULTS = {"controller.hold_ms": 600, "controller.volume_step": 2}
 
 
 class Watcher(QObject):
@@ -126,11 +133,12 @@ class FakeWatcher(QObject):
         self.started = False
 
 
-class ControllerScreen(QObject):
+class ControllerScreen(AdvancedRows, QObject):
     devicesChanged = Signal()
     currentChanged = Signal()
     stateChanged = Signal()
     rowsChanged = Signal()
+    advancedChanged = Signal()
     statusChanged = Signal()
     testingChanged = Signal()
     buttonPressed = Signal(str, str, bool)
@@ -150,8 +158,7 @@ class ControllerScreen(QObject):
         self._devices = []
         self._current = ""
         self._state = {}
-        self._rows = []
-        self._groups = []
+        self._init_rows()
         self._status = "off"
         self._learning = ""
         self._testing = False
@@ -432,17 +439,29 @@ class ControllerScreen(QObject):
                 meta.append(f"{battery['percent']}%" + (", charging" if battery["charging"] else ""))
             meta.append(f"{extras} extra button" + ("" if extras == 1 else "s"))
             groups.append(_group(name, list(range(len(rows))), meta=" · ".join(m for m in meta if m)))
-        self._rows = rows
-        self._groups = groups
-        self.rowsChanged.emit()
+        config = self._client.config()
+        for key, label, choices, detail in TIMING_ROWS:
+            value = _dig(config, key)
+            row = _row("Timing", key, label, "int", str(TIMING_DEFAULTS[key] if value in (None, "") else value), choices, detail=detail, advanced=True)
+            _add(rows, groups, "Timing", row, caps=True)
+        self._set_rows(rows, groups)
 
     @Slot(int, result="QVariant")
     def row(self, index):
-        return self._rows[index] if 0 <= index < len(self._rows) else {}
+        return self._row_at(index)
+
+    @Slot(str, str, result=int)
+    def reveal(self, key, module=""):
+        return self._reveal(key, module)
 
     @Slot(int, "QVariant", result=bool)
     def setValue(self, index, value):
         row = self.row(index)
+        if str(row.get("key") or "").startswith("controller."):
+            if not self._client.setConfig(row["key"], str(value)):
+                return False
+            self._rebuild()
+            return True
         if row.get("key") != "device":
             return False
         device = next((d for d in self._devices if d["name"] == str(value)), None)
@@ -567,7 +586,8 @@ class ControllerScreen(QObject):
     state = Property("QVariant", lambda self: dict(self._state), notify=stateChanged)
     presets = Property("QVariantList", lambda self: list(self._state.get("presets") or []), notify=stateChanged)
     rows = Property("QVariantList", lambda self: list(self._rows), notify=rowsChanged)
-    groups = Property("QVariantList", lambda self: list(self._groups), notify=rowsChanged)
+    groups = Property("QVariantList", AdvancedRows._shown_groups, notify=rowsChanged)
+    showAdvanced = Property(bool, lambda self: self._show_advanced, AdvancedRows._set_show_advanced, notify=advancedChanged)
     count = Property(int, lambda self: len(self._rows), notify=rowsChanged)
     unboundSlots = Property("QVariantList", _unbound, notify=rowsChanged)
     family = Property(str, _family, notify=devicesChanged)

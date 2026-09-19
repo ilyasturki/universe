@@ -2,7 +2,7 @@ import QtQuick
 import "../core"
 import "../sound"
 
-// groups: { title, meta, warning, caps, control, off, rows, icon }; `rows` and `control` index the flat list.
+// groups: { title, meta, warning, caps, control, off, rows, icon, wide }; `rows` and `control` index the flat list; a `wide` card spans the columns.
 FocusScope {
     id: cards
 
@@ -15,6 +15,7 @@ FocusScope {
 
     signal activated(int index, var row)
     signal escapedUp()
+    signal escapedDown()
     signal escapedLeft()
 
     readonly property var currentRow: index >= 0 && index < rows.length ? rows[index] : null
@@ -32,7 +33,7 @@ FocusScope {
         var s = stopOf(index);
         if (!s)
             return Qt.rect(0, 0, 0, 0);
-        return Qt.rect(columnX(s.col) + 1 + pad, s.y0 - view.contentY, columnWidth - 2 - pad * 2, s.y1 - s.y0);
+        return Qt.rect(columnX(s.col) + 1 + pad, s.y0 - view.contentY, (s.wide ? width : columnWidth) - 2 - pad * 2, s.y1 - s.y0);
     }
 
     function columnX(c) { return c * (columnWidth + gap); }
@@ -57,23 +58,31 @@ FocusScope {
             tops.push(0);
         }
         for (i = 0; i < groups.length; i++) {
-            var group = groups[i];
+            var group = groups[i], wide = group.wide === true, k;
             c = 0;
-            for (var k = 1; k < columns; k++)
-                if (tops[k] < tops[c])
-                    c = k;
-            var top = tops[c];
-            cardsOut.push({ group: i, col: c, y: top });
+            var top = tops[0];
+            if (wide) {
+                for (k = 1; k < columns; k++)
+                    top = Math.max(top, tops[k]);
+            } else {
+                for (k = 1; k < columns; k++)
+                    if (tops[k] < tops[c])
+                        c = k;
+                top = tops[c];
+            }
+            cardsOut.push({ group: i, col: c, y: top, wide: wide });
             var cy = top + 1 + pad;
             if (group.control >= 0)
-                stops[c].push({ row: group.control, col: c, top: top, y0: cy, y1: cy + headerHeight(group) });
+                stops[c].push({ row: group.control, col: c, top: top, y0: cy, y1: cy + headerHeight(group), wide: wide });
             cy += headerHeight(group);
             for (r = 0; r < group.rows.length; r++) {
                 var first = r === 0 && !(group.control >= 0);
-                stops[c].push({ row: group.rows[r], col: c, top: first ? top : cy, y0: cy, y1: cy + rowHeight });
+                stops[c].push({ row: group.rows[r], col: c, top: first ? top : cy, y0: cy, y1: cy + rowHeight, wide: wide });
                 cy += rowHeight;
             }
-            tops[c] = top + cardHeight(group) + gap;
+            for (k = 0; k < columns; k++)
+                if (wide || k === c)
+                    tops[k] = top + cardHeight(group) + gap;
         }
         var height = Math.max.apply(null, tops);
         return { cards: cardsOut, stops: stops, height: height > 0 ? height - gap : 0 };
@@ -112,6 +121,13 @@ FocusScope {
         Sound.tick();
     }
 
+    // The Advanced row just opened: the cursor moves onto the first row it revealed.
+    function stepInto() {
+        var k = groups.findIndex(function(g) { return g.rows.indexOf(index) >= 0; });
+        if (k >= 0 && k + 1 < groups.length && groups[k + 1].rows.length > 0)
+            index = groups[k + 1].rows[0];
+    }
+
     function step(d) {
         var s = stopOf(index);
         var list = s ? layout.stops[s.col] : [];
@@ -121,7 +137,7 @@ FocusScope {
         else if (d < 0)
             cards.escapedUp();
         else
-            Sound.edge();
+            cards.escapedDown();
     }
 
     function stepScreen(d) {
@@ -172,6 +188,8 @@ FocusScope {
     }
     onIndexChanged: view.scrollToCurrent()
     onHeightChanged: view.scrollToCurrent()
+
+    onEscapedDown: Sound.edge()
 
     Keys.onUpPressed: step(-1)
     Keys.onDownPressed: step(1)
@@ -380,7 +398,7 @@ FocusScope {
             SettingsCard {
                 x: cards.columnX(modelData.col)
                 y: modelData.y
-                width: cards.columnWidth
+                width: modelData.wide ? cards.width : cards.columnWidth
                 group: cards.groups[modelData.group]
             }
         }

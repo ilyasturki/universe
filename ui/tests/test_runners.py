@@ -2,9 +2,13 @@ from conftest import index_of, rows_by_key, wait_for
 from universe_ui.screens.runners import suggested_title
 
 
+# The Launch card and, behind the Advanced row, its advanced half.
 def launch_keys(form):
-    launch = next(g for g in form.groups if g["title"] == "Launch")
-    return [form.rows[i]["key"] for i in launch["rows"]]
+    return [form.rows[i]["key"] for g in form.basicGroups + form.advancedGroups if g["title"] == "Launch" for i in g["rows"]]
+
+
+def cards(form):
+    return [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups]
 
 
 def test_runners_list_by_usage(api, fake):
@@ -51,11 +55,14 @@ def test_runner_form_cards(api, fake):
 def test_runner_form_carries_its_launch_keys(api, fake):
     form = api.screens.runner
     form.load("proton")
-    cards = [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups]
-    assert cards == [("", ["exe", "args"]), ("", ["gamescope"]), ("Proton", ["launch.proton", "launch.wayland", "launch.hdr"]),
-                     ("Sync", ["launch.esync", "launch.fsync", "launch.ntsync"]),
-                     ("Upscaling", ["launch.dlss_upgrade", "launch.fsr4_upgrade", "launch.xess_upgrade", "launch.optiscaler"]), ("Games", ["game"] * 7), ("", ["add_file"])], \
-        "config.toml's [launch] keys tied to Proton, the global values, then its games"
+    assert cards(form) == [("", ["exe", "args"]), ("", ["gamescope"]), ("Proton", ["launch.proton", "launch.wayland", "launch.hdr"]), ("Games", ["game"] * 7), ("", ["add_file"]),
+                           ("", ["advanced"])], "config.toml's [launch] keys tied to Proton, the global values, its games, then the Advanced row"
+    assert not form.showAdvanced and form.hasAdvanced and form.rows[-1]["key"] == "advanced" and form.rows[-1]["action"] == "Show"
+    form.showAdvanced = True
+    assert form.rows[-1]["action"] == "Hide"
+    assert cards(form)[6:] == [("Sync", ["launch.esync", "launch.fsync", "launch.ntsync"]),
+                               ("Upscaling", ["launch.dlss_upgrade", "launch.fsr4_upgrade", "launch.xess_upgrade", "launch.optiscaler"])], "the switches sit behind the gate"
+    assert all(form.rows[i]["advanced"] for g in form.advancedGroups for i in g["rows"]) and all(g["advanced"] for g in form.advancedGroups)
     groups = {g["title"]: g for g in form.groups}
     assert groups["Upscaling"]["meta"] == "AMD Radeon RX 7900 GRE · RDNA 3" and groups["Upscaling"]["caps"] is True
     rows = rows_by_key(form)
@@ -67,13 +74,15 @@ def test_runner_form_carries_its_launch_keys(api, fake):
     assert fake.config()["launch"]["fsr4_upgrade"] is True and rows_by_key(form)["launch.fsr4_upgrade"]["value"] is True
     assert form.setValue(index_of(form, "launch.proton"), "proton-em") is True and fake.config()["launch"]["proton"] == "proton-em"
     form.load("wine")
-    assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups][2] == ("Sync", ["launch.esync", "launch.fsync"]), "no NTSync, no Proton build on plain Wine"
-    assert [g["title"] for g in form.groups] == ["", "", "Sync", ""]
+    assert not form.showAdvanced, "another runner opens collapsed"
+    assert form.reveal("launch.fsync", "") == index_of(form, "launch.fsync") and form.showAdvanced, "revealing an advanced row opens the gate"
+    assert cards(form)[4] == ("Sync", ["launch.esync", "launch.fsync"]), "no NTSync, no Proton build on plain Wine"
+    assert [g["title"] for g in form.groups] == ["", "", "", "", "Sync"]
     form.load("dolphin")
     assert "launch.esync" not in rows_by_key(form)
     fake.core._data["gpu"] = None
     form.load("proton")
-    assert {g["title"]: g["meta"] for g in form.groups}["Upscaling"] == "" and rows_by_key(form)["launch.dlss_upgrade"]["detail"].endswith("RTX only.")
+    assert {g["title"]: g["meta"] for g in form.advancedGroups}["Upscaling"] == "" and rows_by_key(form)["launch.dlss_upgrade"]["detail"].endswith("RTX only.")
 
 
 def test_runner_form_writes_through(api, fake):
@@ -138,7 +147,7 @@ def test_game_settings_launch_group_by_runner(api, fake):
     form = api.screens.gameSettings
     form.load("mini-metro")
     assert launch_keys(form) == ["launch.runner", "launch.exe", "launch.runner_exe", "launch.options.fullscreen", "launch.options.inputplumber",
-                                 "launch.wrapper", "launch.args", "launch.working_dir"]
+                                 "launch.wrapper", "launch.args", "launch.working_dir", "launch.pre_command", "launch.post_command"]
     rows = rows_by_key(form)
     assert rows["launch.runner"]["value"] == "Eden" and rows["launch.runner"]["icon"] == "assets/runners/eden.svg"
     assert rows["launch.runner"]["choices"][:4] == ["Proton", "Wine", "Linux", "Dolphin"]
@@ -155,10 +164,12 @@ def test_game_settings_launch_group_by_runner(api, fake):
     assert rows["platform"]["choices"] == ["Nintendo GameCube", "Nintendo Wii"]
 
     form.load("the-technomancer")
-    assert launch_keys(form) == ["launch.runner", "launch.exe", "launch.wrapper", "launch.args", "launch.working_dir"]
-    assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups if g["title"] in ("Proton", "Sync", "Upscaling")] == [
-        ("Proton", ["launch.proton", "launch.wayland", "launch.hdr", "launch.prefix"]), ("Sync", ["launch.esync", "launch.fsync", "launch.ntsync"]),
-        ("Upscaling", ["launch.dlss_upgrade", "launch.fsr4_upgrade", "launch.xess_upgrade", "launch.optiscaler"])]
+    assert launch_keys(form) == ["launch.runner", "launch.exe", "launch.wrapper", "launch.args", "launch.working_dir", "launch.pre_command", "launch.post_command"]
+    form.showAdvanced = True
+    assert [c for c in cards(form) if c[0] in ("Proton", "Sync", "Upscaling")] == [
+        ("Proton", ["launch.proton", "launch.wayland", "launch.hdr"]),
+        ("Proton", ["launch.prefix", "launch.umu_id", "launch.store", "launch.dll_overrides"]), ("Sync", ["launch.esync", "launch.fsync", "launch.ntsync"]),
+        ("Upscaling", ["launch.dlss_upgrade", "launch.fsr4_upgrade", "launch.xess_upgrade", "launch.optiscaler"])], "the Proton card's advanced half is a second card behind the gate"
     rows = rows_by_key(form)
     assert rows["launch.runner"]["value"] == "Proton" and rows["launch.exe"]["label"] == "Program"
     assert rows["launch.wayland"]["value"] is True and rows["launch.wayland"]["inherited"] is True

@@ -67,6 +67,60 @@ class RunnersForm(RowsForm):
         return runner_logo(ident)
 
 
+def build_runner(client, ident, screen_mode):
+    """A runner's page: its program, gamescope, the global launch keys of its kind (the switches behind the gate), its options, its games."""
+    runner = next((r for r in client.runners() if r["id"] == ident), None)
+    if runner is None:
+        return {}, [], []
+    name = runner.get("name", ident)
+    found = runner.get("path") or ""
+    source = runner.get("source") or ""
+    platforms = ", ".join(runner.get("platforms") or [])
+    if runner.get("kind") == "linux":
+        meta, warning = platforms, ""
+    elif found:
+        meta = f"{platforms} · {found}" + (f" ({source})" if source and source != "path" else "")
+        warning = "" if runner.get("available", True) else "Proton not found"
+    else:
+        meta, warning = platforms, "not found"
+    info = {"id": ident, "name": name, "meta": meta, "warning": warning, "icon": runner_logo(ident)}
+    rows, groups = [], []
+    if runner.get("kind") != "linux":
+        own = runner.get("exe") or ""
+        origin = {"path": "Found on PATH", "lutris": "Found in Lutris's runners"}.get(source, "Found") if found and not own else ""
+        rows.append(_row(name, "exe", "Program", "path", own or found, module=ident, detail=origin, inherited=not own and bool(found)))
+        rows.append(_row(name, "args", "Arguments", "string", runner.get("args") or "", module=ident))
+        groups.append(_group("", list(range(len(rows)))))
+    config = client.config()
+    launch = config.get("launch") or {}
+    own = runner.get("gamescope")
+    rows.append(_row(name, "gamescope", "Gamescope", "bool", bool(launch.get("gamescope", True)) if own is None else bool(own), module=ident, inherited=own is None))
+    groups.append(_group("", [len(rows) - 1]))
+    kind = runner.get("kind") or ""
+    global_launch_rows(rows, groups, client, config, screen_mode(), lambda spec: kind in spec["runners"], client.gpu())
+    options = runner.get("options") or []
+    if options:
+        first = len(rows)
+        for option in options:
+            rows.append(_row(name, option["key"], option.get("label", option["key"]), option.get("type", "string"),
+                             option.get("value", option.get("default")), option.get("choices"), ident))
+        groups.append(_group("Options", list(range(first, len(rows))), caps=True))
+    games = sorted((g for g in client.list() if _runner_of(g) == ident), key=lambda g: str(g.get("title") or "").casefold())
+    if games:
+        first = len(rows)
+        for game in games:
+            media, source = game.get("media") or {}, game.get("source")
+            art = next((p for p in (media.get("square"), media.get("box_front")) if p), "")
+            rows.append({**_row(name, "game", str(game.get("title") or game.get("id")), "action", "", module=ident),
+                         "display": _play_time((game.get("stats") or {}).get("hours")), "action": "Options",
+                         "gameId": str(game.get("id")), "image": file_url(art).toString(),
+                         "installed": isinstance(source, dict) and bool(source.get("dir"))})
+        groups.append(_group("Games", list(range(first, len(rows))), caps=True, meta=f"{len(games)} game{'' if len(games) == 1 else 's'}"))
+    rows.append({**_row(name, "add_file", "Add a game…", "action", "", module=ident), "display": "", "action": "Pick a file", "runner": ident})
+    groups.append(_group("", [len(rows) - 1]))
+    return info, rows, groups
+
+
 class RunnerForm(RowsForm):
     message = Signal(str)
     runnerChanged = Signal()
@@ -80,58 +134,9 @@ class RunnerForm(RowsForm):
 
     @Slot(str)
     def load(self, ident):
-        runner = next((r for r in self._client.runners() if r["id"] == ident), None)
-        if runner is None:
-            self._runner = {}
-            self._set_rows([], [])
-            self.runnerChanged.emit()
-            return
-        name = runner.get("name", ident)
-        found = runner.get("path") or ""
-        source = runner.get("source") or ""
-        platforms = ", ".join(runner.get("platforms") or [])
-        if runner.get("kind") == "linux":
-            meta, warning = platforms, ""
-        elif found:
-            meta = f"{platforms} · {found}" + (f" ({source})" if source and source != "path" else "")
-            warning = "" if runner.get("available", True) else "Proton not found"
-        else:
-            meta, warning = platforms, "not found"
-        self._runner = {"id": ident, "name": name, "meta": meta, "warning": warning, "icon": runner_logo(ident)}
-        rows, groups = [], []
-        if runner.get("kind") != "linux":
-            own = runner.get("exe") or ""
-            origin = {"path": "Found on PATH", "lutris": "Found in Lutris's runners"}.get(source, "Found") if found and not own else ""
-            rows.append(_row(name, "exe", "Program", "path", own or found, module=ident, detail=origin, inherited=not own and bool(found)))
-            rows.append(_row(name, "args", "Arguments", "string", runner.get("args") or "", module=ident))
-            groups.append(_group("", list(range(len(rows)))))
-        config = self._client.config()
-        launch = config.get("launch") or {}
-        own = runner.get("gamescope")
-        rows.append(_row(name, "gamescope", "Gamescope", "bool", bool(launch.get("gamescope", True)) if own is None else bool(own), module=ident, inherited=own is None))
-        groups.append(_group("", [len(rows) - 1]))
-        kind = runner.get("kind") or ""
-        global_launch_rows(rows, groups, self._client, config, self._screen_mode(), lambda spec: kind in spec["runners"], self._client.gpu())
-        options = runner.get("options") or []
-        if options:
-            first = len(rows)
-            for option in options:
-                rows.append(_row(name, option["key"], option.get("label", option["key"]), option.get("type", "string"),
-                                 option.get("value", option.get("default")), option.get("choices"), ident))
-            groups.append(_group("Options", list(range(first, len(rows))), caps=True))
-        games = sorted((g for g in self._client.list() if _runner_of(g) == ident), key=lambda g: str(g.get("title") or "").casefold())
-        if games:
-            first = len(rows)
-            for game in games:
-                media, source = game.get("media") or {}, game.get("source")
-                art = next((p for p in (media.get("square"), media.get("box_front")) if p), "")
-                rows.append({**_row(name, "game", str(game.get("title") or game.get("id")), "action", "", module=ident),
-                             "display": _play_time((game.get("stats") or {}).get("hours")), "action": "Options",
-                             "gameId": str(game.get("id")), "image": file_url(art).toString(),
-                             "installed": isinstance(source, dict) and bool(source.get("dir"))})
-            groups.append(_group("Games", list(range(first, len(rows))), caps=True, meta=f"{len(games)} game{'' if len(games) == 1 else 's'}"))
-        rows.append({**_row(name, "add_file", "Add a game…", "action", "", module=ident), "display": "", "action": "Pick a file", "runner": ident})
-        groups.append(_group("", [len(rows) - 1]))
+        if ident != self._runner.get("id"):
+            self._set_show_advanced(False)
+        self._runner, rows, groups = build_runner(self._client, ident, self._screen_mode)
         self._set_rows(rows, groups)
         self.runnerChanged.emit()
 

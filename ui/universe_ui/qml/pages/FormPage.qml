@@ -2,13 +2,15 @@ import QtQuick
 import "../core"
 import "../sound"
 import "../ui"
+import "../ui/Maps.js" as Maps
 
 FocusScope {
     id: page
 
     focus: true
 
-    // { game } | { runner } | { module } | { source }: one game's, one runner's, one module's or one source's settings.
+    // { game } | { runner } | { module } | { source }: one game's, one runner's, one module's or one source's settings;
+    // `key` (and a module setting's `settingModule`) lands the cursor on that row, the Advanced row opened if it sits behind it.
     property var args: ({})
     readonly property var game: args.game || null
     readonly property string runner: args.runner || ""
@@ -18,6 +20,8 @@ FocusScope {
     readonly property var info: game || form.info === undefined ? null : form.info
     readonly property var login: api.screens.login
     property int returnIndex: -1
+    property string landKey: ""
+    property string landModule: ""
 
     function formOf(a) {
         return a.game ? api.screens.gameSettings : a.runner ? api.screens.runner : a.source ? api.screens.source : api.screens.module;
@@ -45,13 +49,53 @@ FocusScope {
     // The derived game/runner/module/source are still stale here: read the args themselves.
     onArgsChanged: {
         var id = args.game ? args.game.id : args.runner || args.module || args.source || "";
+        var form = formOf(args);
+        landKey = args.key || "";
+        landModule = args.settingModule || "";
         if (id !== "")
-            formOf(args).load(id);
+            form.load(id);
         Qt.callLater(function() {
             cards.reset();
             if (page.returnIndex >= 0 && page.runner !== "") {
                 cards.index = page.returnIndex;
                 page.returnIndex = -1;
+            }
+            page.landNow();
+        });
+    }
+
+    // A source's rows come back from a thread: land once they are there.
+    function landNow() {
+        if (landKey === "")
+            return;
+        var i = form.reveal(landKey, landModule);
+        if (i < 0)
+            return;
+        landKey = "";
+        Qt.callLater(function() { cards.index = i; });
+    }
+
+    function editMap(index, row) {
+        Sound.panel();
+        menu.show(Maps.items(row), cards, cards.focusRect, row.label, function(action) {
+            if (action === "add") {
+                editor.prompt("Name of " + Maps.noun(row), "", function(name) {
+                    name = Maps.cleanName(name);
+                    if (name === "")
+                        return;
+                    editor.prompt("Value of " + name, "", function(value) { form.setMapEntry(index, name, value); });
+                });
+            } else if (action.indexOf("entry:") === 0) {
+                var name = action.substring(6);
+                menu.show(Maps.entryItems(name), cards, cards.focusRect, name, function(next) {
+                    if (next === "value")
+                        editor.prompt("Value of " + name, Maps.valueOf(row, name), function(value) { form.setMapEntry(index, name, value); });
+                    else if (next === "remove") {
+                        Sound.cancel();
+                        form.setMapEntry(index, name, "");
+                    }
+                    cards.forceActiveFocus();
+                });
             }
         });
     }
@@ -92,6 +136,13 @@ FocusScope {
     function activate(index, row) {
         if (row.disabled === true || row.type === "info") {
             Sound.edge();
+        } else if (row.key === "advanced") {
+            Sound.panel();
+            form.showAdvanced = !form.showAdvanced;
+            if (form.showAdvanced)
+                Qt.callLater(cards.stepInto);
+        } else if (row.type === "map") {
+            editMap(index, row);
         } else if (row.key === "game") {
             Sound.panel();
             menu.show(gameActions(row), cards, cards.focusRect, row.label, function(action) { page.gameAction(row, action); });
@@ -122,6 +173,7 @@ FocusScope {
         target: page.form
         ignoreUnknownSignals: true
         function onMessage(text) { page.message(text); }
+        function onRowsChanged() { page.landNow(); }
     }
 
     Connections {

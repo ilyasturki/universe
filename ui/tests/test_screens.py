@@ -21,13 +21,26 @@ def test_game_settings_form(api, fake):
     capture = rows_by_key(form, "capture")
     assert capture["enabled"]["value"] is True and capture["enabled"]["type"] == "bool"
     assert "codec" not in capture, "global settings do not belong to a game"
+    assert [g["title"] for g in form.groups] == ["Display", "Overlay", "Proton", "Launch", "Desktop and library", "Video capture", "Play journal", ""], \
+        "the launch page's cards, the runner's, the program, the modules, then the Advanced row"
+    assert [g["title"] for g in form.advancedGroups] == ["Scaling", "Environment", "Proton", "Sync", "Upscaling", "Launch", "Artwork"], "the power user's cards, in the same order"
+    form.showAdvanced = True
     groups = {g["title"]: g for g in form.groups}
-    assert [g["title"] for g in form.groups][:9] == ["Display", "Overlay", "Advanced", "Proton", "Sync", "Upscaling", "Launch", "Desktop and library", "Artwork"], \
-        "the launch page's cards, the runner's, then the program"
+    assert [g["title"] for g in form.groups][7:] == ["", "Scaling", "Environment", "Proton", "Sync", "Upscaling", "Launch", "Artwork"]
     assert groups["Launch"]["caps"] is True and groups["Video capture"]["caps"] is False
     assert groups["Display"]["meta"] == "DP-1 2560×1440 @ 144 Hz" and groups["Upscaling"]["meta"] == "AMD Radeon RX 7900 GRE · RDNA 3"
     assert groups["Video capture"]["meta"] == "v0.1.0"
     assert sorted(i for g in form.groups for i in g["rows"]) == list(range(len(form.rows)))
+    env = rows_by_key(form, "")["launch.env"]
+    assert env["type"] == "map" and env["value"] == {} and env["display"] == "—" and env["entries"] == [] and env["advanced"] is True
+    assert form.setMapEntry(index_of(form, "launch.env"), "DXVK_HUD", "fps") is True
+    assert fake.game("the-technomancer")["launch"]["env"] == {"DXVK_HUD": "fps"}
+    env = rows_by_key(form, "")["launch.env"]
+    assert env["entries"] == [{"name": "DXVK_HUD", "value": "fps"}] and env["display"] == "DXVK_HUD=fps" and env["inherited"] is False
+    assert form.setMapEntry(index_of(form, "launch.env"), "DXVK_HUD", "") is True and fake.game("the-technomancer")["launch"].get("env", {}) == {}
+    form.load("mini-metro")
+    assert not form.showAdvanced, "another game opens collapsed"
+    form.load("the-technomancer")
 
     index = next(i for i, r in enumerate(form.rows) if r["module"] == "capture" and r["key"] == "enabled")
     form.toggle(index)
@@ -84,7 +97,8 @@ def test_source_form(api, fake):
     groups = {g["title"]: g for g in form.groups}
     assert [rows[i]["key"] for i in groups["Sign-in"]["rows"]] == ["logged_in", "link", "code"]
     assert rows[groups["Sign-in"]["rows"][0]]["type"] == "info" and rows[groups["Sign-in"]["rows"][0]]["detail"] == "yasso"
-    assert [rows[i]["key"] for i in groups["Settings"]["rows"]] == ["games_dir", "scan_dirs", "platform", "with_dlcs", "auth_path", "install_timeout_s"], "every setting: a source's are all global"
+    assert [rows[i]["key"] for i in groups["Settings"]["rows"]] == ["games_dir", "platform", "with_dlcs"], "every setting: a source's are all global; the advanced ones behind the gate"
+    assert [rows[i]["key"] for g in form.advancedGroups for i in g["rows"]] == ["scan_dirs", "auth_path", "install_timeout_s"]
     platform = index_of(form, "platform")
     assert rows[platform]["choices"] == ["windows", "linux"]
     assert form.setValue(platform, "linux") is True
@@ -93,7 +107,7 @@ def test_source_form(api, fake):
     assert form.rows[index_of(form, "platform")]["value"] == "linux"
     form.toggle(0)
     wait_for(form.rowsChanged, 3000)
-    assert form.info["enabled"] is False and [r["key"] for r in form.rows] == ["enabled"], "off: the switch alone"
+    assert form.info["enabled"] is False and [r["key"] for r in form.rows] == ["enabled"], "off: the switch alone, no Advanced row"
     gog = next(s for s in fake.core._data["sources"] if s["id"] == "gog")
     gog.update(available=False, missing=["gogdl"])
     form.load("gog")
@@ -113,14 +127,17 @@ def test_module_form(api, fake):
     assert form.info["description"].startswith("After each session, a model writes an entry")
     assert [r["key"] for r in form.rows] == ["enabled"], "off: the switch alone"
     assert form.rows[0]["value"] is False and form.rows[0]["disabled"] is True
-    assert form.groups == [{"title": "", "meta": "", "warning": "", "caps": False, "control": -1, "off": False, "rows": [0]}], "the page header carries the name and the warning"
+    assert form.groups == [{"title": "", "meta": "", "warning": "", "caps": False, "control": -1, "off": False, "advanced": False, "rows": [0]}], "the page header carries the name and the warning"
     form.load("capture")
     assert form.info["meta"] == "v0.1.0" and form.info["warning"] == "" and form.info["source"] is False
     assert form.info["description"].startswith("Records each session")
     rows = form.rows
     assert rows[0]["key"] == "enabled" and rows[0]["value"] is True and rows[0]["disabled"] is False
     settings = next(g for g in form.groups if g["title"] == "Settings")
-    assert [rows[i]["key"] for i in settings["rows"]] == ["codec", "quality", "fps", "size", "container", "audio", "audio_codec", "audio_bitrate", "min_duration_s", "window_wait_s"]
+    assert [rows[i]["key"] for i in settings["rows"]] == ["codec", "quality", "fps", "size", "audio"]
+    assert [rows[i]["key"] for g in form.advancedGroups for i in g["rows"]] == ["container", "audio_codec", "audio_bitrate", "min_duration_s", "window_wait_s", "ffmpeg_video_opts", "va_encoder_opts", "gsr_extra_args"], \
+        "the advanced settings, then the config-only ones"
+    assert form.setValue(form.reveal("gsr_extra_args", "capture"), "-cr full") is True and fake.getSettings("capture", "")["gsr_extra_args"] == "-cr full"
     assert form.setValue(index_of(form, "codec"), "av1") is True
     assert fake.getSettings("capture", "")["codec"] == "av1"
     form.toggle(0)
@@ -150,14 +167,27 @@ def test_launch_form(api, fake):
     form.load()
     assert form.screen == "DP-1 2560×1440 @ 144 Hz"
     keys = fake.launchKeys("global", fake.screenMode("DP-1"))
-    assert {k["scope"] for k in keys} == {"both"} and "prefix" not in [k["key"] for k in keys]
-    expected = [(section, ["launch." + k["key"] for k in keys if k["section"] == section and not k["runners"]]) for section in ("Display", "Overlay", "Advanced")]
+    assert {k["scope"] for k in keys} == {"both", "global"} and "prefix" not in [k["key"] for k in keys]
+    expected = [(section, ["launch." + k["key"] for k in keys if k["section"] == section and not k["runners"]]) for section in ("Display", "Overlay", "Scaling", "Environment", "Programs")]
     expected[1][1].append("desktop.hide_cursor")
-    assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups] == expected, "beginner first; a runner's keys sit on its page"
+    assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups] == expected[:2] + [("", ["advanced"])], "beginner first; a runner's keys sit on its page"
+    form.showAdvanced = True
+    assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups][3:] == expected[2:] + [
+        ("Folders", ["paths.games_root", "paths.prefixes_root", "paths.recordings_root", "paths.journal_root", "paths.overrides"]),
+        ("API keys", ["keys.sgdb", "keys.sgdb_file", "keys.rawg", "keys.rawg_file"]), ("Desktop", ["desktop.profile", "desktop.cursor_extension"])], \
+        "behind the gate: the scaling flags, the environment, the programs, then config.toml's own sections"
     assert expected[0][1] == ["launch.gamescope", "launch.gamescope_resolution", "launch.gamescope_refresh", "launch.gamescope_adaptive_sync"]
     assert expected[1][1] == ["launch.mangohud", "launch.fps_limit", "launch.pause_on_home", "desktop.hide_cursor"]
     assert expected[2][1] == ["launch.gamescope_scaler", "launch.gamescope_filter", "launch.gamescope_sharpness", "launch.gamescope_args"]
+    assert expected[3][1] == ["launch.env"] and expected[4][1] == ["launch.gamescope_bin", "launch.umu_run"]
     assert form.groups[0]["meta"] == form.screen and form.groups[1]["meta"] == ""
+    config_rows = rows_by_key(form)
+    assert config_rows["paths.games_root"]["value"] == "/mnt/games/PC" and config_rows["paths.games_root"]["type"] == "path"
+    assert config_rows["keys.sgdb"]["display"] == "—" and config_rows["keys.sgdb"]["secret"] is True
+    assert config_rows["desktop.profile"]["value"] == "auto" and config_rows["desktop.profile"]["choices"] == ["auto", "gnome", "none"]
+    assert form.setValue(index_of(form, "keys.sgdb"), "abc123") is True and fake.config()["keys"]["sgdb"] == "abc123"
+    assert rows_by_key(form)["keys.sgdb"]["display"] == "Set" and rows_by_key(form)["keys.sgdb"]["value"] == "abc123"
+    assert form.setMapEntry(index_of(form, "launch.env"), "MANGOHUD", "1") is True and fake.config()["launch"]["env"] == {"MANGOHUD": "1"}, "a map's entry stays text"
     rows = rows_by_key(form)
     assert rows["launch.gamescope"]["detail"] == next(k["description"] for k in keys if k["key"] == "gamescope")
     assert rows["launch.gamescope"]["value"] is True
@@ -200,11 +230,14 @@ def test_game_settings_mirrors_the_cards(api, fake):
     form = api.screens.gameSettings
     form.load("the-technomancer")
     catalogue = fake.launchKeys("game", fake.screenMode("DP-1"))
-    cards = {g["title"]: [form.rows[i]["key"] for i in g["rows"]] for g in form.groups}
-    for section in ("Display", "Overlay", "Advanced", "Sync", "Upscaling"):
+    form.showAdvanced = True
+    cards = {}
+    for g in form.groups:
+        cards.setdefault(g["title"], []).extend(form.rows[i]["key"] for i in g["rows"])
+    for section in ("Display", "Overlay", "Scaling", "Environment", "Sync", "Upscaling"):
         assert cards[section] == ["launch." + k["key"] for k in catalogue if k["section"] == section], section
-    assert cards["Proton"] == ["launch.proton", "launch.wayland", "launch.hdr", "launch.prefix"], "the runner's card carries its name"
-    assert cards["Launch"] == ["launch.runner", "launch.exe", "launch.wrapper", "launch.args", "launch.working_dir"]
+    assert cards["Proton"] == ["launch.proton", "launch.wayland", "launch.hdr", "launch.prefix", "launch.umu_id", "launch.store", "launch.dll_overrides"], "no arch on Proton"
+    assert cards["Launch"] == ["launch.runner", "launch.exe", "launch.wrapper", "launch.args", "launch.working_dir", "launch.pre_command", "launch.post_command"]
     rows = rows_by_key(form, "")
     assert rows["launch.fps_limit"]["value"] == "auto" and rows["launch.fps_limit"]["inherited"] is True and rows["launch.fps_limit"]["display"] == "auto · 144"
     assert rows["launch.esync"]["detail"].startswith("Faster thread synchronisation")

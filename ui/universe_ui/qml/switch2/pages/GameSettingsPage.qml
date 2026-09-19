@@ -3,6 +3,7 @@ import "../core"
 import "../sound"
 import "../ui"
 import "Details.js" as Details
+import "Forms.js" as Forms
 
 FocusScope {
     id: page
@@ -15,11 +16,15 @@ FocusScope {
     readonly property var form: api.screens.gameSettings
     readonly property var game: args && args.gameId ? api.allGames.byId(args.gameId) : null
 
-    readonly property var sections: form.groups.map(function(g) {
+    // The basic cards as sections; the advanced ones together behind one Advanced entry.
+    readonly property var sections: form.basicGroups.map(function(g) {
         return { label: g.title, detail: g.meta || "", group: g.caps === true ? 0 : 1 };
-    })
+    }).concat(form.hasAdvanced ? [{ label: "Advanced", detail: "Settings for power users", group: 2 }] : [])
+    readonly property bool onAdvanced: form.hasAdvanced && section === form.basicGroups.length
     property int section: 0
     property string zone: "list"
+    property string landKey: ""
+    property string landModule: ""
 
     readonly property var hints: {
         var row = rows.currentRow;
@@ -29,28 +34,56 @@ FocusScope {
     }
 
     onArgsChanged: {
+        landKey = args && args.key ? args.key : "";
+        landModule = args && args.settingModule ? args.settingModule : "";
         if (args && args.gameId)
             form.load(args.gameId);
+        Qt.callLater(landNow);
+    }
+
+    // A search hit: the section holding the row, the cursor on it.
+    function landNow() {
+        if (landKey === "")
+            return;
+        var i = form.reveal(landKey, landModule);
+        if (i < 0)
+            return;
+        landKey = "";
+        var basic = form.basicGroups;
+        var k = basic.findIndex(function(g) { return g.rows.indexOf(i) >= 0; });
+        section = k >= 0 ? k : basic.length;
+        list.index = section;
+        zone = "rows";
+        rows.forceActiveFocus();
+        Qt.callLater(function() {
+            var at = Forms.rowOf(content, i);
+            if (at >= 0)
+                rows.index = at;
+        });
+    }
+
+    function row(i) {
+        var src = form.rows[i], r = Details.withDetail(src, src.module);
+        r.form = i;
+        if (src.inherited === true)
+            r.detail += (r.detail ? " " : "") + "Inherited from the global setting.";
+        return r;
     }
 
     readonly property var content: {
-        var g = form.groups[section];
-        if (!g)
-            return [];
-        var out = g.rows.map(function(i) {
-            var src = form.rows[i], r = Details.withDetail(src, src.module);
-            r.form = i;
-            if (src.inherited === true)
-                r.detail += (r.detail ? " " : "") + "Inherited from the global setting.";
-            return r;
-        });
-        return out;
+        if (onAdvanced)
+            return Forms.grouped(form.advancedGroups, form.rows, function(src, i) { return page.row(i); });
+        var g = form.basicGroups[section];
+        return g ? g.rows.map(page.row) : [];
     }
 
     function activate(index, row) {
         if (row.type === "bool") {
             form.toggle(row.form);
             Sound.play("select");
+        } else if (row.type === "map") {
+            Sound.play("ok");
+            Forms.editMap(shell, row, function(name, value) { form.setMapEntry(row.form, name, value); });
         } else {
             rows.edit(row, function(value) { form.setValue(row.form, value); });
         }

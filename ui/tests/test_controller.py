@@ -6,6 +6,11 @@ from conftest import pump, rows_by_key, wait_for
 from universe_ui.screens.controller import FakeWatcher, Watcher
 
 
+# The pad's rows: the Timing card and the Advanced row sit behind them on every state.
+def pad_rows(screen):
+    return [r for r in screen.rows if not r["advanced"] and r["key"] != "advanced"]
+
+
 @pytest.fixture
 def started(api):
     screen = api.screens.controller
@@ -18,7 +23,16 @@ def started(api):
 def test_rows_follow_the_watcher_and_the_macros(api, fake):
     screen = api.screens.controller
     assert not screen.connected and screen.family == "dualsense"
-    assert [r["type"] for r in screen.rows] == ["info"] and len(screen.groups) == 1
+    assert [r["type"] for r in pad_rows(screen)] == ["info"] and len(screen.groups) == 2, "the pad card, the Advanced row"
+    timing = {r["key"]: r for r in screen.rows if r["advanced"]}
+    assert timing["controller.hold_ms"]["value"] == "600" and timing["controller.volume_step"]["value"] == "2" and timing["controller.hold_ms"]["type"] == "int"
+    assert screen.rows[-1]["key"] == "advanced" and screen.groups[-1]["rows"] == [len(screen.rows) - 1]
+    assert not screen.showAdvanced and [g["title"] for g in screen.groups] == ["Controller", ""]
+    screen.showAdvanced = True
+    assert [g["title"] for g in screen.groups] == ["Controller", "", "Timing"] and screen.groups[-1]["advanced"] is True
+    assert screen.setValue(screen.reveal("controller.hold_ms", ""), "800") is True
+    assert fake.config()["controller"]["hold_ms"] == 800 and {r["key"]: r for r in screen.rows}["controller.hold_ms"]["value"] == "800"
+    screen.showAdvanced = False
 
     watcher = FakeWatcher("dualsense-edge")
     assert screen.start(watcher) is True
@@ -34,10 +48,10 @@ def test_rows_follow_the_watcher_and_the_macros(api, fake):
     assert rows["paddle_left"]["label"] == "Left back button (LB)" and rows["paddle_left"]["family"] == "dualsense-edge"
     assert [r["key"] for r in screen.rows][:3] == ["test", "fn_left", "fn_right"], "the live view, then the extras: they are what the page is for"
     assert rows["test"]["type"] == "action" and rows["test"]["action"] == "Start" and "slot" not in rows["test"]
-    assert screen.rows[-1]["key"] == "dpad_right"
+    assert pad_rows(screen)[-1]["key"] == "dpad_right"
     group = screen.groups[0]
     assert group["title"] == "DualSense Edge" and group["meta"] == "Bluetooth · 85% · 4 extra buttons"
-    assert group["rows"] == list(range(len(screen.rows)))
+    assert group["rows"] == list(range(len(pad_rows(screen))))
 
     presses = []
     screen.buttonPressed.connect(lambda ident, slot, pressed: presses.append((ident, slot, pressed)))
@@ -119,7 +133,7 @@ def test_two_pads_and_hotplug(started, fake):
     assert rows["device"]["type"] == "enum" and rows["device"]["choices"] == ["DualSense Edge", "Xbox Elite Series 2"]
     assert rows["device"]["value"] == "DualSense Edge" and screen.groups[0]["rows"][0] == 0
     assert [r["key"] for r in screen.rows][:2] == ["device", "test"]
-    assert len(screen.groups) == 1, "one card, the art takes the other column"
+    assert len(screen.groups) == 2, "one card and the Advanced row, the art takes the other column"
 
     assert screen.setValue(0, "Xbox Elite Series 2") is True
     assert screen.current == "event40" and screen.family == "xbox-elite"
@@ -133,7 +147,7 @@ def test_two_pads_and_hotplug(started, fake):
     assert "device" not in rows_by_key(screen)
     watcher.emit({"event": "gone", "id": "event30"})
     assert not screen.connected and screen.family == "dualsense-edge", "the art keeps the last pad"
-    assert [r["type"] for r in screen.rows] == ["info"]
+    assert [r["type"] for r in pad_rows(screen)] == ["info"]
     assert screen.bind("south", "press", "screenshot", "", "") is False
 
 
@@ -190,7 +204,7 @@ def test_waiting_lists_the_cores_pads_passively(api, fake):
     assert watcher.commands[-1] == {"cmd": "reload"}
     watcher.emit({"event": "ready"})
     assert screen.status == "ready" and not screen.passive and not screen.connected
-    assert [r["type"] for r in screen.rows] == ["info"]
+    assert [r["type"] for r in pad_rows(screen)] == ["info"]
     watcher.emit(watcher.device("event31", "dualsense-edge"))
     assert screen.connected and screen.rows[0]["type"] != "info"
     assert screen.learn("paddle_left") is True
@@ -210,7 +224,7 @@ def test_watcher_restarts_after_it_dies(started, fake):
     screen.shutdown()
     assert not watcher.started
     watcher.exit(1)
-    assert screen.status == "off" and [r["type"] for r in screen.rows] == ["info"]
+    assert screen.status == "off" and [r["type"] for r in pad_rows(screen)] == ["info"]
     pump(50)
     assert not watcher.started, "no restart after shutdown"
 
