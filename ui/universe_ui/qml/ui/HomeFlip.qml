@@ -28,7 +28,7 @@ Item {
         pending = true;
         // The binding to the new frame may not have run yet: a stale Ready is not painted.
         if (String(frame.source) === api.home.frame)
-            frame.statusChanged();
+            frame.statusChanged(frame.status);
     }
 
     function fromTile(rect, done) {

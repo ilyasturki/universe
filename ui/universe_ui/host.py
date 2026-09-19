@@ -74,6 +74,10 @@ def exec_in_gamescope(client, argv):
     # argv[0] is the installed launcher: on Nix a compiled wrapper, not a script for the interpreter.
     launcher = shutil.which(sys.argv[0])
     launcher = [launcher] if launcher else [sys.executable, sys.argv[0]]
+    # gamescope's CAP_SYS_NICE wrapper runs secure: the loader drops LD_LIBRARY_PATH before its children see it.
+    libs = os.environ.get("LD_LIBRARY_PATH")
+    if libs:
+        launcher = [shutil.which("env") or "env", f"LD_LIBRARY_PATH={libs}", *launcher]
     os.execv(command[0], [*command, "--", *launcher, *argv])
 
 

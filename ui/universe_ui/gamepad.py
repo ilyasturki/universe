@@ -171,7 +171,7 @@ class GamepadThread(QThread):
             if controller:
                 joystick = sdl2.SDL_GameControllerGetJoystick(controller)
                 controllers[sdl2.SDL_JoystickInstanceID(joystick)] = controller
-                log.info("controller: %s", sdl2.SDL_GameControllerName(controller))
+                log.info("controller: %s", (sdl2.SDL_GameControllerName(controller) or b"?").decode(errors="replace"))
         elif t == sdl2.SDL_CONTROLLERDEVICEREMOVED:
             controller = controllers.pop(event.cdevice.which, None)
             if controller:

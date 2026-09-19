@@ -12,8 +12,8 @@ use crate::sources::{self, Source, SourceEvent};
 use crate::paths;
 use crate::{Error, Result};
 
-// gamescope encodes its screenshot png on one thread: a launcher frame takes ~450 ms at 4K, a game's more.
-const FRAME_WAIT: std::time::Duration = std::time::Duration::from_millis(2000);
+// gamescope encodes its screenshot png on one thread: a launcher frame takes ~450 ms at 4K, a busy game's ~4 s.
+const FRAME_WAIT: std::time::Duration = std::time::Duration::from_millis(5000);
 
 /// Two lifetimes: a caller reborrows the same callback across several awaited calls.
 pub type Progress<'a, 'b> = &'a mut (dyn FnMut(u64, u64, &str) + 'b);

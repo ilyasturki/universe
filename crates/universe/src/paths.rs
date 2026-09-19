@@ -93,6 +93,9 @@ fn system_dirs(var: &str, sub: &str) -> Vec<PathBuf> {
     for d in dirs.split(':').filter(|s| !s.is_empty()) {
         out.push(Path::new(d).join("universe").join(sub));
     }
+    // A profile listed twice in XDG_DATA_DIRS would read every manifest twice.
+    let mut seen = std::collections::HashSet::new();
+    out.retain(|p| seen.insert(p.clone()));
     out
 }
 
@@ -119,5 +122,26 @@ pub fn expand(p: &str) -> PathBuf {
         home()
     } else {
         PathBuf::from(p)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_data_dir_listed_twice_is_read_once() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let was = (std::env::var_os("XDG_DATA_DIRS"), std::env::var_os("UNIVERSE_MODULES_PATH"));
+        std::env::set_var("XDG_DATA_DIRS", "/a/share:/b/share:/a/share:");
+        std::env::remove_var("UNIVERSE_MODULES_PATH");
+        let dirs = system_module_dirs();
+        for (var, v) in [("XDG_DATA_DIRS", was.0), ("UNIVERSE_MODULES_PATH", was.1)] {
+            match v {
+                Some(v) => std::env::set_var(var, v),
+                None => std::env::remove_var(var),
+            }
+        }
+        assert_eq!(dirs, [PathBuf::from("/a/share/universe/modules"), PathBuf::from("/b/share/universe/modules")]);
     }
 }

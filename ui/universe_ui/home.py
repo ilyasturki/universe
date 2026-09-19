@@ -209,7 +209,7 @@ class Home(QObject):
         self._shown = "game"
         self.changed.emit()
 
-    # Asked at the press so the flip need not wait: gamescope takes up to 2 s at 4K.
+    # Asked at the press so the flip need not wait: gamescope takes up to 5 s at 4K.
     def _capture(self):
         if self._capturing or not self._client.nested or not self._frames():
             return
