@@ -16,6 +16,7 @@ transient systemd units bound to the UI's own scope: quitting the UI (SIGINT
 and SIGTERM included) stops the running game first, and *universe session-end*
 closes the session when its cgroup empties. While a game runs the launcher
 stays home with the game pinned first: A resumes it, its menu quits it.
+B held asks to quit the launcher; Settings › About shows its build.
 
 # OPTIONS
 

@@ -640,6 +640,7 @@ FocusScope {
 
     ConfirmDialog {
         id: confirm
+        objectName: "confirm"
         anchors.fill: parent
         onClosed: root.restoreFocus()
     }
@@ -742,6 +743,17 @@ FocusScope {
             openDetail(game);
         else
             openSub("pages/" + { journal: "JournalPage", recordings: "RecordingsPage", screenshots: "ScreenshotsPage" }[landing] + ".qml", { game: game });
+    }
+
+    // B held: the way out of the launcher from anywhere, the same question Settings › Quit asks.
+    Connections {
+        target: api.keys
+        function onCancelHeld() {
+            if (root.launching || launchOverlay.running || confirm.open || root.searchOpen || root.menuOpen || (root.activePage && root.activePage.modal))
+                return;
+            confirm.ask({ message: "Quit Universe?", detail: api.universe.currentSession ? "The running game is closed with it." : "", yes: "Quit", no: "Stay" },
+                        function(yes) { if (yes) Qt.quit(); });
+        }
     }
 
     Connections {

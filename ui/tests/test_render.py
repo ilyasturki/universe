@@ -458,3 +458,49 @@ def test_the_switch2_artwork_page_opens_a_slot_with_what_shows_first(api, fake):
     assert lit_fraction(window.grabWindow(), api.theme.ground) > 0.02
     window.close()
     pump(50)
+
+
+def test_b_held_asks_to_quit_in_both_looks(api):
+    from PySide6.QtCore import QObject, Qt
+    from PySide6.QtTest import QTest
+
+    def hold(ms):
+        QTest.keyPress(window, Qt.Key.Key_Escape)
+        pump(ms)
+        QTest.keyRelease(window, Qt.Key.Key_Escape)
+        pump(50)
+
+    engine, window = render(api, activate=True)
+    confirm = window.findChild(QObject, "confirm")
+    hold(150)
+    assert confirm.property("open") is False, "a tap is a tap"
+    hold(600)
+    assert confirm.property("open") is True and confirm.property("message") == "Quit Universe?"
+    QTest.keyClick(window, Qt.Key.Key_Escape)
+    pump(100)
+    assert confirm.property("open") is False, "B on the question stays"
+    api.theme.set("switch2")
+    settle(window)
+    dialog = window.findChild(QObject, "dialog")
+    hold(600)
+    assert dialog.property("open") is True and dialog.property("message") == "Quit Universe?"
+    hold(600)
+    assert dialog.property("open") is False, "held on the question: B closes it and the hold asks nothing more"
+    window.close()
+    pump(50)
+
+
+def test_reprise_about_shows_the_build(api, fake):
+    engine, window = render(api)
+    root = window.property("contentItem").childItems()[0].property("item")
+    root.goToTab(4)
+    settle(window)
+    page = root.property("activePage")
+    page.setProperty("section", page.property("aboutSection"))
+    pump(100)
+    content = page.property("content").toVariant()
+    rows = {r["label"]: r["display"] for r in content["rows"]}
+    assert rows["Universe"] == fake.version() and rows["Look"] == "Reprise" and rows["Library"].endswith(" games")
+    assert page.property("acceptLabel") == "", "nothing to select"
+    window.close()
+    pump(50)

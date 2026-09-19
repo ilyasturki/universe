@@ -17,7 +17,7 @@ One context property, `api`:
 
 | Member | What it is |
 |---|---|
-| `api.keys` | `is{Accept,Cancel,Details,Filters,PageUp,PageDown,PrevPage,NextPage,Menu}(event)` — the Pegasus key-action contract — plus `isScreenUp` / `isScreenDown` (`[` / `]`, the right stick up and down): a screenful in a long list |
+| `api.keys` | `is{Accept,Cancel,Details,Filters,PageUp,PageDown,PrevPage,NextPage,Menu}(event)` — the Pegasus key-action contract — plus `isScreenUp` / `isScreenDown` (`[` / `]`, the right stick up and down): a screenful in a long list; `cancelHeld()` fires when B is held 450 ms on the window, whatever has the focus (an event filter, so the press still lands): both looks ask "Quit Universe?" on it; `dropHold()` from a question B just closed keeps the hold from asking again |
 | `api.allGames` | the library model |
 | `api.collections` | collections, one per platform |
 | `api.memory` | `get`/`set`/`has`/`unset`, persisted to `$XDG_STATE_HOME/universe/ui-memory.json` |
@@ -309,8 +309,8 @@ dimmed (`dim: true`), never dropped; hints for what the pad makes obvious — mo
 ## The Settings tab
 
 `pages/SettingsPage.qml` is a sidebar (`ui/SectionList.qml`: Runners, Launch, Modules, Sources, Install,
-Updates, Controller, Themes, Doctor, Artwork, Quit) beside one column of `ui/SettingsCards.qml`
-(`columns: 1`; the game settings page keeps two). Quit is one row, confirmed in place (`Stay` /
+Updates, Controller, Themes, Doctor, Artwork, About, Quit) beside one column of `ui/SettingsCards.qml`
+(`columns: 1`; the game settings page keeps two). About is three `static` rows (the build — `api.universe.version()`, the version with the short git rev behind it — the look, the library's count), nothing to select. Quit is one row, confirmed in place (`Stay` /
 `Quit Universe`, which says when the running game closes with it), then `Qt.quit()` — the host
 stops the session and shuts the core down after the loop. Up and Down in the sidebar switch the section as they go, Right or A
 enter the cards, Left or B come back, L2/R2 cycle the section from anywhere, and □ refreshes the

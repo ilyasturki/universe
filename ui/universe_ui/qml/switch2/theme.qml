@@ -335,6 +335,7 @@ FocusScope {
 
     Dialog {
         id: dialog
+        objectName: "dialog"
         z: 11
     }
 
@@ -375,6 +376,15 @@ FocusScope {
     Connections {
         target: api.screens.controller
         function onMacroNotice(text) { toast.show(text); }
+    }
+
+    // B held: the way out from anywhere, the bar's own Quit question.
+    Connections {
+        target: api.keys
+        function onCancelHeld() {
+            if (!root.modal)
+                openBar({ id: "power" });
+        }
     }
 
     Connections {

@@ -2,7 +2,7 @@ import json
 import os
 from pathlib import Path
 
-from PySide6.QtCore import Property, QObject, Qt, Signal, Slot
+from PySide6.QtCore import Property, QEvent, QObject, QTimer, Qt, Signal, Slot
 
 from .home import Home
 from .models import Collection, CollectionGames, Game, GameListModel, ObjectListModel, collection_key
@@ -24,6 +24,9 @@ KEYS = {
     "ScreenUp": (Qt.Key.Key_BracketLeft,),
     "ScreenDown": (Qt.Key.Key_BracketRight,),
 }
+
+# B held this long asks to quit the launcher: the A-hold that opens a game's menu.
+CANCEL_HOLD_MS = 450
 
 SOURCE_NAMES = {"gog": "GOG", "lutris": "Lutris", "steam": "Steam", "epic": "Epic", "itch": "itch.io"}
 
@@ -56,6 +59,33 @@ def _is(name):
 
 
 class Keys(QObject):
+    cancelHeld = Signal()
+
+    # Watches the window's own key events, so the hold counts whatever page has the focus and however it takes B.
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._hold = QTimer(self)
+        self._hold.setSingleShot(True)
+        self._hold.setInterval(CANCEL_HOLD_MS)
+        self._hold.timeout.connect(self.cancelHeld)
+
+    def watch(self, window):
+        window.installEventFilter(self)
+
+    # A question B just closed: holding on does not ask again.
+    @Slot()
+    def dropHold(self):
+        self._hold.stop()
+
+    def eventFilter(self, obj, event):
+        kind = event.type()
+        if kind in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease) and not event.isAutoRepeat() and event.key() in KEYS["Cancel"]:
+            if kind == QEvent.Type.KeyPress:
+                self._hold.start()
+            else:
+                self._hold.stop()
+        return False
+
     isAccept = _is("Accept")
     isCancel = _is("Cancel")
     isDetails = _is("Details")
@@ -233,6 +263,7 @@ class Api(QObject):
 
     def attachWindow(self, window):
         self._window = window
+        self._keys.watch(window)
         window.screenChanged.connect(lambda screen: self._modes.clear())
 
     def shutdown(self):

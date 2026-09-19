@@ -135,6 +135,7 @@ FocusScope {
             choose(index === 1);
         } else if (api.keys.isCancel(event)) {
             Sound.cancel();
+            api.keys.dropHold();
             choose(false);
         }
     }

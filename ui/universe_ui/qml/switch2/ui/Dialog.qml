@@ -34,6 +34,7 @@ Modal {
             finish(index);
         } else if (api.keys.isCancel(event)) {
             Sound.play("back");
+            api.keys.dropHold();
             finish(0);
         } else if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
             index = Sound.stepped(index, event.key === Qt.Key_Left ? -1 : 1, buttons.length);

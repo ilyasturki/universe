@@ -41,6 +41,7 @@ FocusScope {
         copy.sourceRect = Qt.rect(rect.x - copyMargin, rect.y - copyMargin, rect.width + copyMargin * 2, rect.height + copyMargin * 2);
         copy.sourceItem = anchor;
         shown++;
+        asking = false;
         open = true;
         forceActiveFocus();
     }
@@ -52,6 +53,7 @@ FocusScope {
                 done();
             anchor.forceActiveFocus();
         });
+        asking = true;
     }
 
     function hide() {
@@ -60,8 +62,13 @@ FocusScope {
         done = null;
     }
 
+    // A question B just closed: holding on does not ask to quit over it.
+    property bool asking: false
+
     function cancel() {
         Sound.cancel();
+        if (asking)
+            api.keys.dropHold();
         hide();
         dismissed();
     }
