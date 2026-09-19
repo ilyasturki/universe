@@ -33,7 +33,7 @@ APP_SERVER_TIMEOUT_S = 15
 def read_limit_reset(timeout_s=APP_SERVER_TIMEOUT_S):
     """When the exhausted window resets, from `account/rateLimits/read`; None when codex cannot say."""
     try:
-        proc = subprocess.Popen(["codex", "app-server", "--listen", "stdio://"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+        proc = subprocess.Popen(["codex", "app-server", "--listen", "stdio://"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0)
     except OSError as e:
         log(f"codex app-server could not start: {e}")
         return None
@@ -41,21 +41,26 @@ def read_limit_reset(timeout_s=APP_SERVER_TIMEOUT_S):
         for msg in ({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"clientInfo": {"name": "universe-journal", "title": "Universe", "version": "0.0.2"}}},
                     {"jsonrpc": "2.0", "method": "initialized", "params": {}},
                     {"jsonrpc": "2.0", "id": 2, "method": "account/rateLimits/read", "params": {}}):
-            proc.stdin.write(json.dumps(msg) + "\n")
+            proc.stdin.write((json.dumps(msg) + "\n").encode())
         proc.stdin.flush()
+        # Unbuffered reads: with a buffered pipe, lines already read ahead would leave select() waiting on an empty fd
         deadline = datetime.now() + timedelta(seconds=timeout_s)
+        pending = b""
         while (remaining := (deadline - datetime.now()).total_seconds()) > 0:
             if not select.select([proc.stdout], [], [], remaining)[0]:
                 break
-            line = proc.stdout.readline()
-            if not line:
+            chunk = os.read(proc.stdout.fileno(), 65536)
+            if not chunk:
                 break
-            try:
-                reply = json.loads(line)
-            except ValueError:
-                continue
-            if isinstance(reply, dict) and reply.get("id") == 2:
-                return limit_reset_from(reply.get("result"))
+            pending += chunk
+            while b"\n" in pending:
+                line, pending = pending.split(b"\n", 1)
+                try:
+                    reply = json.loads(line)
+                except ValueError:
+                    continue
+                if isinstance(reply, dict) and reply.get("id") == 2:
+                    return limit_reset_from(reply.get("result"))
         log("codex app-server gave no rate limits in time")
         return None
     except (OSError, ValueError) as e:
