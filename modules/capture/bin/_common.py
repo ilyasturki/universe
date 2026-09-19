@@ -91,7 +91,30 @@ def gsr_extra_args(settings):
         return []
 
 
-def gsr_args(settings, screen, output_path, token_path=None):
+def ipc_socket(session_id):
+    """gpu-screen-recorder's command socket for the session; unix paths are short, so the runtime dir, not the data dir."""
+    return os.path.join(os.environ.get("XDG_RUNTIME_DIR") or "/tmp", f"universe-capture-{session_id}.sock")
+
+
+def gsr_cli(session_id, *command, timeout=30):
+    return subprocess.run(["gsr-cli", "-ipc", ipc_socket(session_id), *command], capture_output=True, text=True, timeout=timeout)
+
+
+def wait_recorder(session_id, timeout_s=5):
+    """The socket comes up with the recorder, a moment after its unit."""
+    deadline = time.monotonic() + timeout_s
+    while True:
+        try:
+            if gsr_cli(session_id, "status", timeout=5).returncode == 0:
+                return True
+        except (OSError, subprocess.SubprocessError):
+            pass
+        if time.monotonic() > deadline:
+            return False
+        time.sleep(0.25)
+
+
+def gsr_args(settings, screen, output_path, token_path=None, session_id=None):
     size = size_limit(settings)
     bitrate = audio_bitrate_kbps(settings)
     ac = settings.get("audio_codec") or "opus"
@@ -116,6 +139,9 @@ def gsr_args(settings, screen, output_path, token_path=None):
         "-q", "20000",
         *AUDIO_ARGS.get(settings.get("audio"), AUDIO_ARGS["output+input"]),
         "-ffmpeg-video-opts", ffmpeg_video_opts(settings),
+        *(["-ipc", ipc_socket(session_id)] if session_id else []),
+        # The muxer's own first-frame instant, next to the file as <output>.ts
+        "-write-first-frame-ts", "yes",
         *gsr_extra_args(settings),
         "-o", output_path,
     ]
@@ -130,11 +156,7 @@ def extension_ready():
         return False
     if bus_name_has_owner(WINDOWS_BUS_NAME):
         return True
-    enabled = subprocess.run(
-        ["busctl", "--user", "call", "org.gnome.Shell.Extensions",
-         "/org/gnome/Shell/Extensions", "org.gnome.Shell.Extensions", "EnableExtension", "s", EXTENSION_UUID],
-        capture_output=True, text=True,
-    ).stdout.strip() == "b true"
+    enabled = bus_call_bool(["org.gnome.Shell.Extensions", "/org/gnome/Shell/Extensions", "org.gnome.Shell.Extensions", "EnableExtension", "s", EXTENSION_UUID])
     if not enabled:
         log(f"{EXTENSION_UUID} installed but not loaded (log out once to load it)")
         return False
@@ -159,13 +181,17 @@ def show_osd(label, icon="video-display-symbolic"):
         pass
 
 
+def bus_call_bool(call, timeout=None):
+    """A session-bus call whose reply is one boolean; False on any failure."""
+    try:
+        r = subprocess.run(["busctl", "--user", "--json=short", "call", *call], capture_output=True, text=True, timeout=timeout)
+        return r.returncode == 0 and json.loads(r.stdout)["data"] == [True]
+    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError):
+        return False
+
+
 def bus_name_has_owner(name):
-    r = subprocess.run(
-        ["busctl", "--user", "call", "org.freedesktop.DBus", "/org/freedesktop/DBus",
-         "org.freedesktop.DBus", "NameHasOwner", "s", name],
-        capture_output=True, text=True,
-    )
-    return r.returncode == 0 and r.stdout.strip() == "b true"
+    return bus_call_bool(["org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "NameHasOwner", "s", name])
 
 
 def timeline_path(data_dir, session_id):
@@ -210,10 +236,13 @@ def drop_timeline(data_dir, session_id):
 def set_paused(state, session_id, on):
     if state["paused"] == on:
         return
-    # SIGUSR2 toggles gpu-screen-recorder's pause; main only, or gsr-kms-server in the same cgroup dies of it.
-    r = subprocess.run(["systemctl", "--user", "kill", "--kill-whom=main", "--signal=SIGUSR2", f"universe-capture-{session_id}.service"], capture_output=True, text=True)
+    try:
+        r = gsr_cli(session_id, "set-paused", "true" if on else "false")
+    except (OSError, subprocess.SubprocessError) as e:
+        log(f"{'pause' if on else 'resume'} failed: {e}")
+        return
     if r.returncode != 0:
-        log(f"{'pause' if on else 'resume'} failed: {r.stderr.strip()}")
+        log(f"{'pause' if on else 'resume'} failed: {(r.stderr or r.stdout).strip()}")
         return
     if on:
         state["pauses"].append([now_rfc3339(), None])

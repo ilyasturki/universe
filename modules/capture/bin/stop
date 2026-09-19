@@ -3,9 +3,10 @@ import glob
 import os
 import subprocess
 import sys
+from datetime import datetime
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import drop_timeline, load_settings, log, now_rfc3339, timeline, timeline_path  # noqa: E402
+from _common import drop_timeline, gsr_cli, load_settings, log, now_rfc3339, timeline, timeline_path  # noqa: E402
 
 
 def stop_unit(unit):
@@ -14,12 +15,45 @@ def stop_unit(unit):
         log(f"systemctl stop {unit} failed: {result.stderr.strip()}")
 
 
+def stop_recorder(session_id, pending_dir):
+    """The saved file's path, from the recorder once it has written it; the unit's stop and a glob when the socket is already gone."""
+    try:
+        r = gsr_cli(session_id, "stop", timeout=60)
+        if r.returncode == 0 and r.stdout.strip():
+            return r.stdout.strip()
+        log(f"gsr-cli stop: {(r.stderr or r.stdout).strip() or 'no path'}")
+    except (OSError, subprocess.SubprocessError) as e:
+        log(f"gsr-cli stop: {e}")
+    stop_unit(f"universe-capture-{session_id}.service")
+    return next(iter(glob.glob(os.path.join(pending_dir, f"{session_id}.mkv")) + glob.glob(os.path.join(pending_dir, f"{session_id}.mp4"))), None)
+
+
 def probe_duration(path):
-    result = subprocess.run(
-        ["ffprobe", "-i", path, "-show_entries", "format=duration", "-v", "quiet", "-of", "csv=p=0"],
-        capture_output=True, text=True,
-    )
-    return float(result.stdout.strip())
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-i", path, "-show_entries", "format=duration", "-v", "quiet", "-of", "csv=p=0"],
+            capture_output=True, text=True, timeout=60,
+        )
+        return float(result.stdout.strip())
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+
+
+def first_frame_at(path):
+    """`-write-first-frame-ts`: `<monotonic_us> <realtime_us>` on the second line of <path>.ts; None without it."""
+    try:
+        with open(path + ".ts") as f:
+            realtime_us = int(f.read().splitlines()[1].split()[1])
+        return datetime.fromtimestamp(realtime_us / 1_000_000).astimezone().isoformat(timespec="seconds")
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def remove_sidecar(path):
+    try:
+        os.remove(path + ".ts")
+    except OSError:
+        pass
 
 
 def main():
@@ -28,19 +62,29 @@ def main():
     data_dir = os.environ["MODULE_DATA_DIR"]
     pending_dir = os.path.join(data_dir, "pending")
 
-    stop_unit(f"universe-capture-{session_id}.service")
+    path = stop_recorder(session_id, pending_dir)
+    started_at = first_frame_at(path) if path else None
     with timeline(data_dir, session_id) as state:
         if state is not None and state["paused"]:
             state["paused"] = False
             state["pauses"][-1][1] = now_rfc3339()
+        if state is not None and started_at:
+            # The file starts at its first frame, not when the unit did; a pause opened before it (HOME while the picker was up) starts with the file
+            state["started_at"] = started_at
+            state["pauses"] = [[max(a, started_at), b] for a, b in state["pauses"] if b is None or b > started_at]
 
-    path = next(iter(glob.glob(os.path.join(pending_dir, f"{session_id}.mkv")) + glob.glob(os.path.join(pending_dir, f"{session_id}.mp4"))), None)
     if not path:
         log(f"no recording file for session {session_id}, nothing to do")
         drop_timeline(data_dir, session_id)
         return 0
+    remove_sidecar(path)
 
     duration = probe_duration(path)
+    if duration is None:
+        log(f"unreadable recording {path}, discarding")
+        subprocess.run(["trash", path], check=False)
+        drop_timeline(data_dir, session_id)
+        return 0
     log(f"recording duration: {duration:.1f}s (min {min_duration_s}s)")
 
     if duration < min_duration_s:

@@ -106,7 +106,7 @@ A source installs and updates games from a store; a module runs hooks around eve
 | | Kind | Needs | Notes |
 |---|---|---|---|
 | `gog` | source | `gogdl` | login via `universe login gog`; a dedicated `GOGDL_CONFIG_PATH` under the source's data dir |
-| `capture` | module | `gpu-screen-recorder` + its setcap `gsr-kms-server`, `ffprobe`, `trash`; the `universe@ilyasturki.github.io` shell extension for the window source (GNOME) | the screen by default, or the game's window through GNOME's picker: `docs/api.md` § Recordings |
+| `capture` | module | `gpu-screen-recorder` ≥ 6.1 with `gsr-cli` and its setcap `gsr-kms-server`, `ffprobe`, `trash`; the `universe@ilyasturki.github.io` shell extension for the window source (GNOME) | the screen by default, or the game's window through GNOME's picker: `docs/api.md` § Recordings |
 | `journal` | module | `ffmpeg`, `codex` (or `provider = "stub"`) | one Markdown entry per session from frames and screenshots |
 | metadata | core | SteamGridDB and RAWG keys in `[keys]` | artwork slots `box_front`, `square`, `banner`, `background`, `logo`, screenshots |
 | runners | core | the emulator on `PATH` (or `[runners.<id>] exe`); `inputplumber` for the pad option | `universe runner ls`; one doctor check per runner in use |

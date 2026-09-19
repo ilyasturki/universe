@@ -5,6 +5,7 @@ import shutil
 import stat
 import subprocess
 import sys
+from datetime import datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -52,15 +53,22 @@ exit 0''')
     _write_shim(bindir / "ffprobe", 'echo "${FAKE_DURATION:-300}"\nexit 0\n')
     _write_shim(bindir / "busctl", f'''printf "%s\\n" "$@" >> "{logs}/busctl.args"
 case "$*" in
-  *NameHasOwner*) echo "b ${{FAKE_NAME_OWNED:-false}}"; exit 0;;
-  *EnableExtension*) echo "b ${{FAKE_NAME_OWNED:-false}}"; exit 0;;
-  *" Screenshot "*) [ "${{FAKE_SHOT_OK:-true}}" = true ] && echo fake > "$8"; echo "b ${{FAKE_SHOT_OK:-true}}"; exit 0;;
+  *NameHasOwner*) echo "{{\\"type\\":\\"b\\",\\"data\\":[${{FAKE_NAME_OWNED:-false}}]}}"; exit 0;;
+  *EnableExtension*) echo "{{\\"type\\":\\"b\\",\\"data\\":[${{FAKE_NAME_OWNED:-false}}]}}"; exit 0;;
+  *" Screenshot "*) [ "${{FAKE_SHOT_OK:-true}}" = true ] && echo fake > "$9"; echo "{{\\"type\\":\\"b\\",\\"data\\":[${{FAKE_SHOT_OK:-true}}]}}"; exit 0;;
+esac
+exit 0''')
+    _write_shim(bindir / "gsr-cli", f'''printf "%s\\n" "$@" >> "{logs}/gsr-cli.args"
+case "$3" in
+  status) exit "${{FAKE_RECORDER_DOWN:-0}}";;
+  set-paused) [ "${{FAKE_PAUSE_EXIT:-0}}" = 0 ] || {{ echo "error: no recording" >&2; exit "$FAKE_PAUSE_EXIT"; }}; exit 0;;
+  stop) [ -z "${{FAKE_STOP_PATH:-}}" ] && {{ echo "error: not running" >&2; exit 1; }}; echo "$FAKE_STOP_PATH"; exit 0;;
 esac
 exit 0''')
     _write_shim(bindir / "trash", f'printf "%s\\n" "$@" > "{logs}/trash.args"\nrm -f "$1"\nexit 0\n')
     _write_shim(bindir / "gpu-screen-recorder", f'''printf "%s\\n" "$@" >> "{logs}/gsr.args"
 for ((i=1; i<=$#; i++)); do
-  if [ "${{!i}}" = "-o" ]; then j=$((i+1)); echo fake > "${{!j}}"; fi
+  if [ "${{!i}}" = "-o" ]; then j=$((i+1)); echo fake > "${{!j}}"; [ -n "${{FAKE_FIRST_FRAME_US:-}}" ] && printf "monotonic_microsec realtime_microsec\\n1000 %s\\n" "$FAKE_FIRST_FRAME_US" > "${{!j}}.ts"; fi
 done
 exit 0''')
     return {"bin": bindir, "logs": logs}
@@ -377,48 +385,50 @@ def _timeline(tmp_path):
     return json.loads(path.read_text()) if path.exists() else None
 
 
-def _signals(fakebin):
-    lines = (fakebin["logs"] / "systemctl.args").read_text().splitlines() if (fakebin["logs"] / "systemctl.args").exists() else []
-    return lines.count("--signal=SIGUSR2")
+def _pauses(fakebin):
+    """The `set-paused` values sent to the recorder, in order."""
+    lines = (fakebin["logs"] / "gsr-cli.args").read_text().splitlines() if (fakebin["logs"] / "gsr-cli.args").exists() else []
+    return [lines[i + 1] for i, a in enumerate(lines) if a == "set-paused"]
 
 
 def test_freeze_before_start_is_a_noop_and_start_catches_up(tmp_path, fakebin):
     env = env_for(tmp_path, fakebin, {})
     assert run("freeze", env).returncode == 0
-    assert _timeline(tmp_path) is None and _signals(fakebin) == 0
+    assert _timeline(tmp_path) is None and _pauses(fakebin) == []
 
     result = run("start", dict(env, FAKE_FREEZER_STATE="frozen"))
     assert result.returncode == 0, result.stderr
     state = _timeline(tmp_path)
     assert state["paused"] and len(state["pauses"]) == 1 and state["pauses"][0][1] is None
     assert state["started_at"] <= state["pauses"][0][0]
-    assert _signals(fakebin) == 1
-    args = (fakebin["logs"] / "systemctl.args").read_text().splitlines()
-    assert args[args.index("--signal=SIGUSR2") - 1] == "--kill-whom=main"
-    assert args[args.index("--signal=SIGUSR2") + 1] == f"universe-capture-{SESSION_ID}.service"
+    assert _pauses(fakebin) == ["true"]
+    args = (fakebin["logs"] / "gsr-cli.args").read_text().splitlines()
+    assert args[:2] == ["-ipc", _common.ipc_socket(SESSION_ID)] and args[2] == "status", "the socket is waited for before the catch-up"
+    gsr = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
+    assert flag_values(gsr, "-ipc") == [_common.ipc_socket(SESSION_ID)] and flag_values(gsr, "-write-first-frame-ts") == ["yes"]
 
 
 def test_freeze_and_thaw_toggle_the_recorder_once_each(tmp_path, fakebin):
     env = env_for(tmp_path, fakebin, {})
     assert run("start", env).returncode == 0
     assert _timeline(tmp_path) == {"started_at": _timeline(tmp_path)["started_at"], "paused": False, "pauses": []}
-    assert _signals(fakebin) == 0
+    assert _pauses(fakebin) == []
 
     assert run("freeze", env).returncode == 0
     assert run("freeze", env).returncode == 0
-    assert _signals(fakebin) == 1 and _timeline(tmp_path)["paused"]
+    assert _pauses(fakebin) == ["true"] and _timeline(tmp_path)["paused"]
 
     assert run("thaw", env).returncode == 0
     assert run("thaw", env).returncode == 0
     state = _timeline(tmp_path)
-    assert _signals(fakebin) == 2 and not state["paused"]
+    assert _pauses(fakebin) == ["true", "false"] and not state["paused"]
     assert len(state["pauses"]) == 1 and state["pauses"][0][0] <= state["pauses"][0][1]
 
 
-def test_freeze_keeps_its_state_when_the_signal_fails(tmp_path, fakebin):
+def test_freeze_keeps_its_state_when_the_recorder_refuses(tmp_path, fakebin):
     env = env_for(tmp_path, fakebin, {})
     assert run("start", env).returncode == 0
-    result = run("freeze", dict(env, FAKE_KILL_EXIT="1"))
+    result = run("freeze", dict(env, FAKE_PAUSE_EXIT="1"))
     assert result.returncode == 0 and "pause failed" in result.stderr
     assert _timeline(tmp_path) == {"started_at": _timeline(tmp_path)["started_at"], "paused": False, "pauses": []}
 
@@ -432,11 +442,55 @@ def test_stop_closes_an_open_pause_and_hands_the_timeline_over(tmp_path, fakebin
     timeline = tmp_path / "data" / "pending" / f"{SESSION_ID}.timeline.json"
 
     _write_shim(fakebin["bin"] / "universe", f'cp "$5" "{tmp_path}/handed.json"\necho filed\nexit 0')
-    result = run("stop", env)
+    result = run("stop", dict(env, FAKE_STOP_PATH=str(mkv)))
     assert result.returncode == 0, result.stderr
     handed = json.loads((tmp_path / "handed.json").read_text())
     assert not handed["paused"] and len(handed["pauses"]) == 1 and handed["pauses"][0][1] is not None
     assert not timeline.exists() and not (tmp_path / "data" / "pending" / f"{SESSION_ID}.timeline.json.lock").exists()
+    args = (fakebin["logs"] / "gsr-cli.args").read_text().splitlines()
+    assert args[-3:] == ["-ipc", _common.ipc_socket(SESSION_ID), "stop"]
+    assert not (fakebin["logs"] / "systemctl.args").exists() or "stop" not in (fakebin["logs"] / "systemctl.args").read_text(), "the recorder saved on its own"
+
+
+def test_stop_falls_back_to_the_unit_when_the_socket_is_gone(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {"min_duration_s": 240}, extra={"FAKE_DURATION": "999"})
+    assert run("start", env).returncode == 0
+    mkv = tmp_path / "data" / "pending" / f"{SESSION_ID}.mkv"
+    mkv.write_bytes(b"x")
+    result = run("stop", env)
+    assert result.returncode == 0, result.stderr
+    assert "gsr-cli stop" in result.stderr
+    assert (fakebin["logs"] / "systemctl.args").read_text().splitlines()[-3:] == ["--user", "stop", f"universe-capture-{SESSION_ID}.service"]
+    assert (fakebin["logs"] / "universe.args").read_text().splitlines()[:3] == ["recording-file", SESSION_ID, str(mkv)]
+
+
+def test_stop_takes_started_at_from_the_first_frame(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {"min_duration_s": 240}, extra={"FAKE_DURATION": "999"})
+    assert run("start", env).returncode == 0
+    assert run("freeze", env).returncode == 0
+    assert run("thaw", env).returncode == 0
+    before = _timeline(tmp_path)
+    # The recorder's first frame lands an hour after the unit started (the picker sat open), after the pause the timeline saw
+    first_frame = datetime.fromisoformat(before["started_at"]) + timedelta(hours=1)
+    mkv = tmp_path / "data" / "pending" / f"{SESSION_ID}.mkv"
+    mkv.write_bytes(b"x")
+    (tmp_path / "data" / "pending" / f"{SESSION_ID}.mkv.ts").write_text(f"monotonic_microsec realtime_microsec\n1000 {int(first_frame.timestamp() * 1_000_000)}\n")
+    _write_shim(fakebin["bin"] / "universe", f'cp "$5" "{tmp_path}/handed.json"\necho filed\nexit 0')
+    assert run("stop", dict(env, FAKE_STOP_PATH=str(mkv))).returncode == 0
+    handed = json.loads((tmp_path / "handed.json").read_text())
+    assert datetime.fromisoformat(handed["started_at"]) == first_frame.replace(microsecond=0)
+    assert handed["pauses"] == [], "a pause closed before the first frame is not on the file"
+    assert not (tmp_path / "data" / "pending" / f"{SESSION_ID}.mkv.ts").exists()
+
+
+def test_stop_discards_an_unreadable_recording(tmp_path, fakebin):
+    mkv = _seed_pending(tmp_path)
+    _write_shim(fakebin["bin"] / "ffprobe", "exit 1\n")
+    result = run("stop", env_for(tmp_path, fakebin, {"min_duration_s": 240}, extra={"FAKE_STOP_PATH": str(mkv)}))
+    assert result.returncode == 0, result.stderr
+    assert "unreadable recording" in result.stderr
+    assert (fakebin["logs"] / "trash.args").read_text().splitlines() == [str(mkv)]
+    assert not (fakebin["logs"] / "universe.args").exists()
 
 
 def test_stop_drops_the_timeline_with_a_short_recording(tmp_path, fakebin):

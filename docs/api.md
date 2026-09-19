@@ -397,15 +397,21 @@ Two layers per slot: the **default** under `games/<id>/media/`, which `refresh` 
 `recording-file` is called by the capture module's `session-end` hook, so it lands before any
 `post-process` hook runs.
 
-The recording **pauses with the game**: the module's `freeze` hook sends gpu-screen-recorder its
-`SIGUSR2` (pause) and `thaw` sends it again (resume), so a frozen game — the launcher over it with
-`pause_on_home` on — adds nothing to the file; with `pause_on_home` off the game plays on behind
-the launcher and so does the recording. `SIGUSR2` toggles, so the module keeps the recorder's
-state in `pending/<session>.timeline.json` (`{"started_at", "paused", "pauses"}`, under a lock):
+The recording **pauses with the game**: the module's `freeze` hook tells gpu-screen-recorder
+`set-paused true` over its command socket (`-ipc`, through `gsr-cli`) and `thaw` `set-paused false`,
+so a frozen game — the launcher over it with `pause_on_home` on — adds nothing to the file; with
+`pause_on_home` off the game plays on behind the launcher and so does the recording. The state is
+absolute, so a hook that runs twice or lands late cannot flip it the wrong way; the module keeps the
+pauses in `pending/<session>.timeline.json` (`{"started_at", "paused", "pauses"}`, under a lock):
 the hooks are no-ops until `start` has written it, and `start` reads the game unit's
-`FreezerState` once the recorder is up, for a HOME pressed while it waited for the window. `stop`
-closes a pause left open and hands the timeline to `recording-file`. The paused stretches are cut
-from the file, not held as a still, so `min_duration_s` measures play recorded, not the sitting.
+`FreezerState` once the recorder answers on its socket, for a HOME pressed while it waited for the
+window. `stop` asks the recorder to stop and answers with the saved file once it is written (the
+unit's stop and a look in `pending/` when the socket is already gone), takes `started_at` from the
+recorder's first-frame timestamp (`-write-first-frame-ts`: the file starts at its first frame, not
+when the unit did — the window picker may have sat open in between), closes a pause left open and
+hands the timeline to `recording-file`. The paused stretches are cut from the file, not held as a
+still, so `min_duration_s` measures play recorded, not the sitting. gpu-screen-recorder 6.1 or
+later, for `-ipc` and `gsr-cli`.
 
 The capture module records the whole **screen** (`source = "screen"`, the default: gpu-screen-recorder's
 KMS capture of the session's output) or the game's **window** (`source = "window"`, per game). The

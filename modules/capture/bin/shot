@@ -7,22 +7,15 @@ import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import WINDOWS_BUS_NAME, extension_ready, load_settings, log  # noqa: E402
+from _common import WINDOWS_BUS_NAME, bus_call_bool, extension_ready, load_settings, log  # noqa: E402
 
 TAKE_TIMEOUT_S = 15
 
 
 def take_in_shell(path, window, cursor):
     """org.universe.Windows.Screenshot: answers once the pixels are grabbed, the PNG lands a moment later."""
-    try:
-        r = subprocess.run(
-            ["busctl", "--user", "call", WINDOWS_BUS_NAME, "/org/universe/Windows", WINDOWS_BUS_NAME,
-             "Screenshot", "sbb", path, "true" if window else "false", "true" if cursor else "false"],
-            capture_output=True, text=True, timeout=TAKE_TIMEOUT_S,
-        )
-    except subprocess.TimeoutExpired:
-        return False, "gnome-shell did not answer"
-    return r.returncode == 0 and r.stdout.strip() == "b true", r.stderr
+    ok = bus_call_bool([WINDOWS_BUS_NAME, "/org/universe/Windows", WINDOWS_BUS_NAME, "Screenshot", "sbb", path, "true" if window else "false", "true" if cursor else "false"], timeout=TAKE_TIMEOUT_S)
+    return ok, "" if ok else "gnome-shell refused or did not answer"
 
 
 def take(screen, path):
