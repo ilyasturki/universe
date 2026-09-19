@@ -86,8 +86,8 @@
       modulesDir = "${modulesPkg}/share/universe/modules";
       sourcesDir = "${sourcesPkg}/share/universe/sources";
       qmlImportPath = lib.concatMapStringsSep ":" (p: "${p}/lib/qt-6/qml") (with pkgs.qt6; [ qtdeclarative qt5compat qtmultimedia ]);
-      # Only wrapQtAppsHook sets this for a built app; the check and the dev shell run the host bare
-      qtPluginPath = lib.concatMapStringsSep ":" (p: "${p}/lib/qt-6/plugins") (with pkgs.qt6; [ qtsvg qtmultimedia ]);
+      # Only wrapQtAppsHook sets this for a built app; the check and the dev shell run the host bare. qtimageformats: webp, which SteamGridDB serves
+      qtPluginPath = lib.concatMapStringsSep ":" (p: "${p}/lib/qt-6/plugins") (with pkgs.qt6; [ qtsvg qtimageformats qtmultimedia ]);
 
       uiDesktopItem = pkgs.makeDesktopItem {
         name = "universe-ui";
@@ -115,7 +115,7 @@
           install -Dm644 icons/hicolor/scalable/apps/universe-ui.svg $out/share/icons/hicolor/scalable/apps/universe-ui.svg
           install -Dm644 icons/hicolor/symbolic/apps/universe-ui-symbolic.svg $out/share/icons/hicolor/symbolic/apps/universe-ui-symbolic.svg
         '';
-        buildInputs = with pkgs.qt6; [ qtbase qtdeclarative qt5compat qtmultimedia qtwayland qtsvg ];
+        buildInputs = with pkgs.qt6; [ qtbase qtdeclarative qt5compat qtmultimedia qtwayland qtsvg qtimageformats ];
         desktopItems = [ uiDesktopItem ];
         # The hooks and systemd's ExecStopPost need the CLI; a Python process has no argv[0] to find it by.
         preFixup = ''
@@ -147,7 +147,7 @@
         name = "universe-pytest-ui";
         src = ./ui;
         dontWrapQtApps = true;
-        nativeBuildInputs = [ (pkgs.python3.withPackages (ps: [ ps.pyside6 ps.pysdl2 ps.qrcode ps.pytest corePy ])) pkgs.qt6.qt5compat pkgs.qt6.qtmultimedia pkgs.qt6.qtdeclarative pkgs.qt6.qtsvg pkgs.systemd pkgs.ffmpeg ];
+        nativeBuildInputs = [ (pkgs.python3.withPackages (ps: [ ps.pyside6 ps.pysdl2 ps.qrcode ps.pytest corePy ])) pkgs.qt6.qt5compat pkgs.qt6.qtmultimedia pkgs.qt6.qtdeclarative pkgs.qt6.qtsvg pkgs.qt6.qtimageformats pkgs.systemd pkgs.ffmpeg ];
         buildPhase = ''
           export HOME=$TMPDIR QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 LC_ALL=C.UTF-8 TZ=Europe/Paris TZDIR=${pkgs.tzdata}/share/zoneinfo
           export QML2_IMPORT_PATH=${qmlImportPath} QT_PLUGIN_PATH=${qtPluginPath}
@@ -179,7 +179,7 @@
       };
 
       devShells.${system}.default = pkgs.mkShell {
-        packages = with pkgs; [ cargo rustc clippy rustfmt rust-analyzer pkg-config sqlite ruff maturin (python3.withPackages (ps: [ ps.pyside6 ps.pysdl2 ps.qrcode ps.pytest ps.setuptools ])) qt6.qtdeclarative qt6.qt5compat qt6.qtmultimedia qt6.qtsvg SDL2 ] ++ moduleRuntime ++ sourceRuntime;
+        packages = with pkgs; [ cargo rustc clippy rustfmt rust-analyzer pkg-config sqlite ruff maturin (python3.withPackages (ps: [ ps.pyside6 ps.pysdl2 ps.qrcode ps.pytest ps.setuptools ])) qt6.qtdeclarative qt6.qt5compat qt6.qtmultimedia qt6.qtsvg qt6.qtimageformats SDL2 ] ++ moduleRuntime ++ sourceRuntime;
         shellHook = ''
           export UNIVERSE_MODULES_PATH="$PWD/modules"
           export UNIVERSE_SOURCES_PATH="$PWD/sources"
