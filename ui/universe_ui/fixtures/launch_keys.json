@@ -96,7 +96,7 @@
     "section": "Overlay",
     "scope": "both",
     "runners": [],
-    "description": "MangoHud holds the game to this many frames per second, overlay or not; auto is the refresh rate the game sees."
+    "description": "MangoHud holds the game to this many frames per second, overlay or not; auto is the refresh rate the game sees, and no limit for an emulator, which paces itself."
   },
   {
     "key": "pause_on_home",
