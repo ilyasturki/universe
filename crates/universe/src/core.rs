@@ -1048,8 +1048,7 @@ impl Core {
     /// what it has, so the next `install` resumes. False when nothing was running for it.
     pub fn source_cancel(&self, source: &str, game_id: &str) -> bool {
         let Some(pid) = self.source_jobs.lock().unwrap().get(&format!("{source}:{game_id}")).copied() else { return false };
-        // SAFETY: kill(2) with a pid this process spawned and still holds a handle to.
-        unsafe { libc::kill(pid as libc::pid_t, libc::SIGTERM) == 0 }
+        rustix::process::Pid::from_raw(pid as i32).is_some_and(|pid| rustix::process::kill_process(pid, rustix::process::Signal::TERM).is_ok())
     }
 
     pub async fn source_login_url(&self, source: &str) -> Result<String> {

@@ -1,6 +1,5 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
-use std::os::fd::AsRawFd;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -54,20 +53,16 @@ async fn take_lock(wait: bool, out: &Out) -> crate::Result<Option<std::fs::File>
         std::fs::create_dir_all(p)?;
     }
     let file = std::fs::OpenOptions::new().create(true).truncate(false).write(true).open(&path)?;
-    let fd = file.as_raw_fd();
-    if unsafe { libc::flock(fd, libc::LOCK_EX | libc::LOCK_NB) } == 0 {
-        return Ok(Some(file));
+    match file.try_lock() {
+        Ok(()) => return Ok(Some(file)),
+        Err(std::fs::TryLockError::WouldBlock) => {}
+        Err(std::fs::TryLockError::Error(e)) => return Err(e.into()),
     }
     if !wait {
         return Ok(None);
     }
     out.emit(serde_json::json!({"event": "waiting"}));
-    let file = tokio::task::spawn_blocking(move || {
-        let rc = unsafe { libc::flock(file.as_raw_fd(), libc::LOCK_EX) };
-        if rc == 0 { Ok(file) } else { Err(std::io::Error::last_os_error()) }
-    })
-    .await
-    .map_err(|e| crate::Error::Io(e.to_string()))??;
+    let file = tokio::task::spawn_blocking(move || file.lock().map(|()| file)).await.map_err(|e| crate::Error::Io(e.to_string()))??;
     Ok(Some(file))
 }
 
@@ -200,8 +195,7 @@ fn slots_json(slots: &BTreeMap<String, Option<Source>>) -> serde_json::Map<Strin
 }
 
 fn readable(path: &Path) -> bool {
-    let Ok(c) = std::ffi::CString::new(path.to_string_lossy().as_bytes()) else { return false };
-    unsafe { libc::access(c.as_ptr(), libc::R_OK) == 0 }
+    rustix::fs::access(path, rustix::fs::Access::READ_OK).is_ok()
 }
 
 pub fn enumerate_json(cfg: &ControllerConfig) -> Vec<serde_json::Value> {

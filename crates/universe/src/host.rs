@@ -90,9 +90,8 @@ impl Units {
                             break;
                         }
                         if round % 6 == 0 {
-                            for pid in &game {
-                                // SAFETY: kill(2) with a pid read from the unit's own cgroup.
-                                unsafe { libc::kill(*pid as libc::pid_t, libc::SIGTERM) };
+                            for pid in game.iter().filter_map(|p| rustix::process::Pid::from_raw(*p as i32)) {
+                                let _ = rustix::process::kill_process(pid, rustix::process::Signal::TERM);
                             }
                         }
                         tokio::time::sleep(Duration::from_millis(500)).await;
