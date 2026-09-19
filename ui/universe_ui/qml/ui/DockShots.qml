@@ -91,7 +91,7 @@ FocusScope {
         anchors.right: parent.right
         anchors.leftMargin: grid.sideMargin
         anchors.rightMargin: grid.sideMargin
-        height: title.height + Theme.dp(10) + meta.height
+        height: title.height
 
         Text {
             id: title
@@ -104,18 +104,6 @@ FocusScope {
             font.pixelSize: Theme.dp(46)
             elide: Text.ElideRight
         }
-
-        Text {
-            id: meta
-            anchors.top: title.bottom
-            anchors.topMargin: Theme.dp(10)
-            text: "SCREENSHOTS  ·  " + grid.ordered.length + (panel.current ? "  ·  " + panel.current.dateText : "")
-            color: Theme.textSecondary
-            font.family: Theme.sans
-            font.weight: Font.Medium
-            font.pixelSize: Theme.dp(20)
-            font.letterSpacing: 1.5
-        }
     }
 
     ShotGrid {
@@ -126,7 +114,7 @@ FocusScope {
         anchors.bottomMargin: Theme.dp(Theme.hintBarHeight)
         anchors.left: parent.left
         anchors.right: parent.right
-        topPadding: Theme.dp(10)
+        topPadding: Theme.dp(34)
         rows: panel.store.rows
         since: panel.session && panel.session.started_at ? panel.session.started_at : ""
         active: panel.open && !panel.lightbox

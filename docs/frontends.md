@@ -174,9 +174,9 @@ buttons at the right (`row` in `Dock.qml`), a group's settings in a card above i
 along the row or change the focused value, ▲ ▼ the rows of a card, A acts, flips or opens, B closes
 the card or the dock, X takes a screenshot with the band faded out so the shell grabs the game alone.
 ▼ from the row raises `ui/DockShots.qml` over the whole frame: the playing game's own screenshots
-(`api.screens.shots`, `load(id)` on opening) on a `ui/ShotGrid.qml` — THIS SESSION first (taken
+(`api.screens.shots`, `load(id)` on opening) on a `ui/ShotGrid.qml` — this session's first (taken
 since the session's `started_at`: a running session is not in `sessions.jsonl` yet, so its shots
-carry no `session`), EARLIER below — A a `Lightbox`, Y "Remove this screenshot?" through the
+carry no `session`), a hairline, the rest — A a `Lightbox`, Y "Remove this screenshot?" through the
 dock's `ConfirmDialog` (Keep it focused, Trash the screenshot → `shots.remove`), B or ▲ past the top
 row lowers it onto the dock. A shot taken meanwhile lands through the screenshots watcher. The
 Game card's Details, Journal and Recordings rows call `toLauncher(landing)`: the launcher comes up
@@ -384,8 +384,8 @@ menu has the same entry) opens `pages/ScreenshotsPage.qml` on `api.screens.shots
 journal entry covering the shot (`jumpRequested` to the journal page on that session), Start an
 `ActionMenu` — View, Journal entry, Remove screenshot… (Keep it / Trash the screenshot, through
 `shots.remove`). An `args.name` lands the cursor on that file. While this game is the one playing
-the grid splits at the session's start, THIS SESSION over EARLIER, as the dock's panel does. The
-detail strip keeps the store's promotional shots only (`assets.screenshotList`).
+a hairline parts the session's shots from the rest, as in the dock's panel. The detail strip keeps
+the store's promotional shots only (`assets.screenshotList`).
 
 ## The Media tab
 

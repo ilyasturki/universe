@@ -178,7 +178,7 @@ FocusScope {
         anchors.right: parent.right
         anchors.leftMargin: page.sideMargin
         anchors.rightMargin: page.sideMargin
-        height: title.height + Theme.dp(10) + meta.height
+        height: title.height
 
         Text {
             id: title
@@ -190,18 +190,6 @@ FocusScope {
             font.weight: Font.Bold
             font.pixelSize: Theme.dp(46)
             elide: Text.ElideRight
-        }
-
-        Text {
-            id: meta
-            anchors.top: title.bottom
-            anchors.topMargin: Theme.dp(10)
-            text: "SCREENSHOTS  ·  " + page.rows.length + (page.current ? "  ·  " + page.current.dateText : "")
-            color: Theme.textSecondary
-            font.family: Theme.sans
-            font.weight: Font.Medium
-            font.pixelSize: Theme.dp(20)
-            font.letterSpacing: 1.5
         }
     }
 
