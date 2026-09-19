@@ -2,7 +2,8 @@ import QtQuick
 import "../core"
 import "../sound"
 
-// Items: [{ icon, label, action, danger }]; the row stays lit above the scrim as a live copy.
+// Items: [{ icon, label, action, danger, detail, more, gap }]; the row stays lit above the scrim as a live copy.
+// `detail` sits at the row's right, `more` draws a chevron there, `gap` parts the row from the one above.
 FocusScope {
     id: menu
 
@@ -16,13 +17,14 @@ FocusScope {
 
     readonly property var hints: [
         { glyph: "A", label: "Select" },
-        { glyph: "B", label: "Close" }
+        { glyph: "B", label: stack.length > 0 ? "Back" : "Close" }
     ]
 
     // The row's rect in the menu's coordinates, taken once at show().
     property rect row: Qt.rect(0, 0, 0, 0)
     property real copyMargin: Theme.dp(6)
     property real gap: Theme.dp(28)
+    readonly property real gapHeight: Theme.dp(17)
     readonly property bool onRight: row.x + row.width + gap + panel.width <= width - Theme.dp(40)
     property real slide: open ? 0.0 : 1.0
 
@@ -56,10 +58,32 @@ FocusScope {
         asking = true;
     }
 
+    // A list over the one showing: B comes back to it, A on a row runs `after` in its place.
+    property var stack: []
+
+    function push(list, heading, after) {
+        stack = stack.concat([ { items: items, title: title, done: done, index: index } ]);
+        items = list;
+        title = heading || "";
+        done = after || null;
+        index = 0;
+        shown++;
+    }
+
+    function pop() {
+        var top = stack[stack.length - 1];
+        stack = stack.slice(0, -1);
+        items = top.items;
+        title = top.title;
+        done = top.done;
+        index = top.index;
+    }
+
     function hide() {
         open = false;
         focus = false;
         done = null;
+        stack = [];
     }
 
     // A question B just closed: holding on does not ask to quit over it.
@@ -67,6 +91,10 @@ FocusScope {
 
     function cancel() {
         Sound.cancel();
+        if (stack.length > 0) {
+            pop();
+            return;
+        }
         if (asking)
             api.keys.dropHold();
         hide();
@@ -161,45 +189,96 @@ FocusScope {
             Repeater {
                 model: menu.items
 
-                Rectangle {
-                    id: row
+                Item {
+                    id: slot
 
-                    readonly property bool focused: index === menu.index
-                    readonly property bool danger: modelData.danger === true
-                    readonly property color ink: focused ? Theme.onLight : danger ? "#e0655a" : Theme.text
+                    readonly property bool parted: modelData.gap === true
 
                     width: rows.width
-                    height: Theme.dp(66)
-                    radius: Theme.dp(16)
-                    color: focused ? (danger ? "#e0655a" : Theme.text) : "transparent"
+                    height: row.height + (parted ? menu.gapHeight : 0)
 
-                    Behavior on color { ColorEase {} }
-
-                    MenuGlyph {
-                        id: glyph
-
+                    Rectangle {
+                        anchors.top: parent.top
+                        anchors.topMargin: (menu.gapHeight - height) / 2
                         anchors.left: parent.left
-                        anchors.leftMargin: Theme.dp(22)
-                        anchors.verticalCenter: parent.verticalCenter
-                        width: Theme.dp(26)
-                        height: Theme.dp(26)
-                        visible: modelData.icon !== undefined && modelData.icon !== ""
-                        kind: modelData.icon || ""
-                        tint: row.ink
+                        anchors.right: parent.right
+                        anchors.leftMargin: Theme.dp(10)
+                        anchors.rightMargin: Theme.dp(10)
+                        height: 1
+                        visible: slot.parted
+                        color: Theme.surfaceBorder
                     }
 
-                    Text {
-                        anchors.left: glyph.visible ? glyph.right : parent.left
-                        anchors.leftMargin: glyph.visible ? Theme.dp(18) : Theme.dp(22)
-                        anchors.right: parent.right
-                        anchors.rightMargin: Theme.dp(20)
-                        anchors.verticalCenter: parent.verticalCenter
-                        text: modelData.label
-                        color: row.ink
-                        font.family: Theme.sans
-                        font.weight: row.focused ? Font.DemiBold : Font.Medium
-                        font.pixelSize: Theme.dp(25)
-                        elide: Text.ElideRight
+                    Rectangle {
+                        id: row
+
+                        readonly property bool focused: index === menu.index
+                        readonly property bool danger: modelData.danger === true
+                        readonly property color ink: focused ? Theme.onLight : danger ? "#e0655a" : Theme.text
+                        readonly property color inkSoft: focused ? Theme.onLight : Theme.textSecondary
+
+                        anchors.bottom: parent.bottom
+                        width: parent.width
+                        height: Theme.dp(66)
+                        radius: Theme.dp(16)
+                        color: focused ? (danger ? "#e0655a" : Theme.text) : "transparent"
+
+                        Behavior on color { ColorEase {} }
+
+                        MenuGlyph {
+                            id: glyph
+
+                            anchors.left: parent.left
+                            anchors.leftMargin: Theme.dp(22)
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: Theme.dp(26)
+                            height: Theme.dp(26)
+                            visible: modelData.icon !== undefined && modelData.icon !== ""
+                            kind: modelData.icon || ""
+                            tint: row.ink
+                        }
+
+                        Text {
+                            anchors.left: glyph.visible ? glyph.right : parent.left
+                            anchors.leftMargin: glyph.visible ? Theme.dp(18) : Theme.dp(22)
+                            anchors.right: trailing.left
+                            anchors.rightMargin: Theme.dp(12)
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: modelData.label
+                            color: row.ink
+                            font.family: Theme.sans
+                            font.weight: row.focused ? Font.DemiBold : Font.Medium
+                            font.pixelSize: Theme.dp(25)
+                            elide: Text.ElideRight
+                        }
+
+                        Row {
+                            id: trailing
+
+                            anchors.right: parent.right
+                            anchors.rightMargin: Theme.dp(20)
+                            anchors.verticalCenter: parent.verticalCenter
+                            spacing: Theme.dp(8)
+
+                            Text {
+                                anchors.verticalCenter: parent.verticalCenter
+                                visible: modelData.detail !== undefined && modelData.detail !== ""
+                                text: modelData.detail || ""
+                                color: row.inkSoft
+                                font.family: Theme.sans
+                                font.weight: Font.Medium
+                                font.pixelSize: Theme.dp(21)
+                            }
+
+                            MenuGlyph {
+                                anchors.verticalCenter: parent.verticalCenter
+                                width: Theme.dp(22)
+                                height: Theme.dp(22)
+                                visible: modelData.more === true
+                                kind: "chevron"
+                                tint: row.inkSoft
+                            }
+                        }
                     }
                 }
             }
@@ -216,7 +295,11 @@ FocusScope {
             Sound.edge();
         else if (api.keys.isAccept(event))
             activate();
-        else if (api.keys.isCancel(event) || api.keys.isMenu(event))
+        else if (api.keys.isCancel(event))
             cancel();
+        else if (api.keys.isMenu(event)) {
+            stack = [];
+            cancel();
+        }
     }
 }

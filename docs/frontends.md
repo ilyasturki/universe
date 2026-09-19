@@ -294,6 +294,20 @@ out, which the Switch 2 look lays over the outline for its discs — so one comp
 14 px hint and a 48 px caption; a button no set draws (a paddle, a star) keeps its canvas
 outline and letters.
 
+## The game menu
+
+Start, A held 450 ms or Guide with no session opens `ui/ActionMenu.qml` beside the game on
+screen (`theme.qml` `openMenu`, fed by `focusTarget.currentGame` and `menuAnchor`), three groups
+parted by a hairline: play (Play / Continue — Resume and Quit *title* for the running game); look
+(Details, dropped when the detail page is already open on it; the favourite toggle; Media ›, only
+when the game has a screenshot, a recording or a journal entry); manage (Game settings, Artwork,
+Remove from library…). Media › pushes a second list in place — the non-empty pages with their
+counts at the right — and B comes back to the first; Remove asks in place (Keep it / Remove from
+the library) and goes through `api.universe.remove(id, false)`: the watcher drops the game, the
+detail page closes if it was on it. An item's `gap` draws the hairline above it, `detail` a
+secondary text at the right, `more` a chevron; `push(list, heading, after)` stacks a list over the
+one showing, `cancel()` pops before it closes.
+
 ## The hint bar
 
 Every page and overlay exposes `hints`, `[{ glyph, label, dim }]`, and the bar on screen shows
@@ -360,7 +374,7 @@ row's menu, X cancels the running job from either tab.
 
 The detail page's hero holds Play, the heart and, when the game has any, a Recordings and a
 Journal pill (`recordingsRequested` / `journalRequested`, the shell's `openSub`); the counts
-follow `recordingFiled` and `entryWritten`. Start is the game's menu, with the same two entries.
+follow `recordingFiled` and `entryWritten`. Start is the game's menu, with the same pages under Media ›.
 
 `pages/RecordingsPage.qml` plays in a pane beside the list; □ (X) toggles it fullscreen — the
 pane fills the page, the hint bar rides the controls' auto-hide, ○ leaves fullscreen first, then

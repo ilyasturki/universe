@@ -262,24 +262,65 @@ FocusScope {
         api.home.stop();
     }
 
+    function mediaItems(game) {
+        var out = [];
+        var shots = (api.universe.screenshots(game.id) || []).length;
+        var recordings = (api.universe.recordings(game.id) || []).length;
+        var entries = (api.universe.journal(game.id) || []).length;
+        if (shots > 0)
+            out.push({ icon: "camera", label: "Screenshots", action: "screenshots", detail: String(shots) });
+        if (recordings > 0)
+            out.push({ icon: "film", label: "Recordings", action: "recordings", detail: String(recordings) });
+        if (entries > 0)
+            out.push({ icon: "book", label: "Journal", action: "journal", detail: String(entries) });
+        return out;
+    }
+
     function openMenu(game, anchor) {
         if (!game || !anchor)
             return;
         Sound.panel();
-        var items = sessionRunning && game.id === playingId
+        var media = mediaItems(game);
+        var play = sessionRunning && game.id === playingId
             ? [ { icon: "play", label: "Resume", action: "resume" },
                 { icon: "stop", label: "Quit " + session.title, action: "stop" } ]
             : [ { icon: "play", label: game.playTime > 0 ? "Continue" : "Play", action: "play" } ];
-        items.push({ icon: "info", label: "Details", action: "details" },
-                   { icon: game.favorite ? "heart" : "heart-outline",
-                     label: game.favorite ? "Remove from favourites" : "Add to favourites", action: "favourite" },
-                   { icon: "sliders", label: "Game settings", action: "settings" },
-                   { icon: "image", label: "Artwork", action: "artwork" },
-                   { icon: "camera", label: "Screenshots", action: "screenshots" },
-                   { icon: "film", label: "Recordings", action: "recordings" },
-                   { icon: "book", label: "Journal", action: "journal" });
+        var look = [];
+        if (!(detailOpen && detailGame === game))
+            look.push({ icon: "info", label: "Details", action: "details" });
+        look.push({ icon: game.favorite ? "heart" : "heart-outline",
+                    label: game.favorite ? "Remove from favourites" : "Add to favourites", action: "favourite" });
+        if (media.length > 0)
+            look.push({ icon: "photos", label: "Media", action: "media", more: true });
+        var manage = [ { icon: "sliders", label: "Game settings", action: "settings" },
+                       { icon: "image", label: "Artwork", action: "artwork" },
+                       { icon: "eye-off", label: "Remove from library…", action: "remove", danger: true } ];
+        var items = [];
+        [ play, look, manage ].forEach(function(group) {
+            group[0].gap = items.length > 0;
+            items = items.concat(group);
+        });
         var pages = { settings: "FormPage", artwork: "ArtworkPage", screenshots: "ScreenshotsPage", recordings: "RecordingsPage", journal: "JournalPage" };
         gameMenu.show(items, anchor, Qt.rect(0, 0, anchor.width, anchor.height), "", function(action) {
+            if (action === "media") {
+                Sound.enter();
+                gameMenu.push(media, "Media", function(page) {
+                    root.restoreFocus();
+                    root.openSub("pages/" + pages[page] + ".qml", { game: game });
+                });
+                return;
+            }
+            if (action === "remove") {
+                Sound.panel();
+                gameMenu.push([ { icon: "", label: "Keep it", action: "" },
+                                { icon: "eye-off", label: "Remove from the library", action: "yes", danger: true } ],
+                              "Remove " + game.title + "?", function(answer) {
+                    if (answer === "yes")
+                        root.removeGame(game);
+                    root.restoreFocus();
+                });
+                return;
+            }
             root.restoreFocus();
             if (action === "play")
                 root.launchGame(game);
@@ -294,6 +335,16 @@ FocusScope {
             else
                 root.openSub("pages/" + pages[action] + ".qml", { game: game });
         });
+    }
+
+    // The install folder, the hours and the journal stay on disk; the watcher drops the game from the library.
+    function removeGame(game) {
+        var title = game.title;
+        if (detailOpen && detailGame === game)
+            closeDetail();
+        Sound.enter();
+        if (api.universe.remove(game.id, false))
+            toast.show("Removed " + title + " from the library");
     }
 
     function toggleFavourite(game) {
@@ -631,6 +682,7 @@ FocusScope {
 
     ActionMenu {
         id: gameMenu
+        objectName: "gameMenu"
         anchors.fill: parent
         // Covers the ring and halo, and the 5% a grid cover grows by.
         copyMargin: Theme.dp(26)

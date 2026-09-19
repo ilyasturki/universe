@@ -391,6 +391,7 @@ class FakeCore:
     def remove(self, ident, purge):
         game = self._game(ident)
         game["removed"] = True
+        game["hidden"] = True
         if purge:
             shutil.rmtree(self._game_dir(ident), ignore_errors=True)
         else:
