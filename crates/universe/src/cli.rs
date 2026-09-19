@@ -1,3 +1,5 @@
+// Colour reaches a terminal only; NO_COLOR and CLICOLOR_FORCE are honoured.
+use anstream::{eprintln, print, println};
 use clap::{Parser, Subcommand};
 use comfy_table::{presets::UTF8_FULL_CONDENSED, Attribute, Cell, ColumnConstraint, ContentArrangement, Table};
 use owo_colors::OwoColorize;
@@ -553,7 +555,7 @@ fn print_json(v: &impl serde::Serialize) -> anyhow::Result<()> {
 fn ask(prompt: &str) -> String {
     use std::io::Write;
     print!("{prompt} ");
-    let _ = std::io::stdout().flush();
+    let _ = anstream::stdout().flush();
     let mut s = String::new();
     let _ = std::io::stdin().read_line(&mut s);
     s.trim().to_string()
