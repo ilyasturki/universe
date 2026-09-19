@@ -4,7 +4,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 
 use crate::core::{passthrough_env, Core};
-use crate::host::UnitSpec;
+use crate::host::{Prop, UnitSpec};
 use crate::launcher::{self, Plan};
 use crate::library::Resolved;
 use crate::modules::{self, HookEnv};
@@ -202,13 +202,14 @@ impl Core {
         let unset_env = if env.contains_key("WAYLAND_DISPLAY") { vec![] } else { vec!["WAYLAND_DISPLAY".to_string()] };
         let spec = UnitSpec {
             name: current.unit.clone(),
+            description: format!("Universe: {}", r.game.title),
             program: plan.program.clone(),
             args: plan.args.clone(),
             env,
             unset_env,
             cwd: Some(plan.cwd.clone()),
             // ExitType=cgroup: the unit ends with the last game process, not with the one systemd-run started.
-            properties: vec![("ExitType".into(), "cgroup".into()), ("TimeoutStopSec".into(), budget.to_string())],
+            properties: vec![("ExitType".into(), Prop::Str("cgroup".into())), ("TimeoutStopUSec".into(), Prop::U64(budget * 1_000_000))],
             bind_to: self.scope.get().cloned(),
             stop_post: vec![paths::self_exe().to_string_lossy().to_string(), "session-end".into(), current.id.clone(), current.session_id.clone()],
         };
@@ -239,6 +240,7 @@ impl Core {
     async fn spawn_controller_watch(&self, session_id: &str, game_unit: &str) -> Result<()> {
         let spec = UnitSpec {
             name: format!("universe-controller-{session_id}"),
+            description: "Universe controller watch".into(),
             program: paths::self_exe().to_string_lossy().to_string(),
             args: vec!["controller".into(), "watch".into(), "--wait".into()],
             env: passthrough_env(),
@@ -426,8 +428,8 @@ mod tests {
         let sid = core.launch("sample", "", "").await.unwrap();
         let unit = format!("universe-game-sample-{sid}.service");
         let spec = memory.spec(&unit).expect("the game unit started");
-        assert!(spec.properties.contains(&("ExitType".to_string(), "cgroup".to_string())));
-        assert!(spec.properties.contains(&("TimeoutStopSec".to_string(), "60".to_string())), "{:?}", spec.properties);
+        assert!(spec.properties.contains(&("ExitType".to_string(), Prop::Str("cgroup".into()))));
+        assert!(spec.properties.contains(&("TimeoutStopUSec".to_string(), Prop::U64(60_000_000))), "{:?}", spec.properties);
         assert_eq!(spec.stop_post[0], paths::self_exe().to_string_lossy());
         assert_eq!(spec.stop_post[1..], ["session-end".to_string(), "sample".into(), sid.clone()]);
         assert!(spec.bind_to.is_none(), "no scope adopted");

@@ -43,6 +43,25 @@ impl Default for Limits {
     }
 }
 
+/// systemd's size syntax for `MemoryHigh=`: bytes, a K/M/G/T suffix on 1024, or `infinity`.
+pub fn parse_bytes(s: &str) -> crate::Result<u64> {
+    let s = s.trim();
+    if s == "infinity" {
+        return Ok(u64::MAX);
+    }
+    let (digits, unit) = s.split_at(s.find(|c: char| !c.is_ascii_digit() && c != '.').unwrap_or(s.len()));
+    let scale: u64 = match unit.trim() {
+        "" => 1,
+        "K" => 1 << 10,
+        "M" => 1 << 20,
+        "G" => 1 << 30,
+        "T" => 1 << 40,
+        _ => return Err(crate::Error::Invalid(format!("memory_high {s:?}: bytes, K/M/G/T or infinity"))),
+    };
+    let n: f64 = digits.parse().map_err(|_| crate::Error::Invalid(format!("memory_high {s:?}: bytes, K/M/G/T or infinity")))?;
+    Ok((n * scale as f64) as u64)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Setting {
@@ -285,12 +304,13 @@ pub async fn run_async(units: &crate::host::Units, module: &Module, hook: &str, 
     unit_env.insert("MODULE_DATA_DIR".into(), module.data_dir().to_string_lossy().into());
     let spec = crate::host::UnitSpec {
         name: format!("universe-{}-{}-{}", module.id(), hook, session_id),
+        description: format!("Universe {} {hook}", module.id()),
         program: exe.to_string_lossy().into(),
         args: vec![],
         env: unit_env,
         unset_env: vec![],
         cwd: Some(module.dir.clone()),
-        properties: vec![("CPUWeight".into(), module.manifest.limits.cpu_weight.to_string()), ("MemoryHigh".into(), module.manifest.limits.memory_high.clone())],
+        properties: vec![("CPUWeight".into(), crate::host::Prop::U64(module.manifest.limits.cpu_weight.into())), ("MemoryHigh".into(), crate::host::Prop::U64(parse_bytes(&module.manifest.limits.memory_high)?))],
         bind_to: bind_to.map(String::from),
         stop_post: vec![],
     };
@@ -322,6 +342,17 @@ pub(crate) async fn run_choices(list: &[Setting], dir: &Path, data_dir: &Path, p
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn memory_high_sizes() {
+        assert_eq!(super::parse_bytes("2G").unwrap(), 2 << 30);
+        assert_eq!(super::parse_bytes("512M").unwrap(), 512 << 20);
+        assert_eq!(super::parse_bytes("1.5G").unwrap(), 3 << 29);
+        assert_eq!(super::parse_bytes("4096").unwrap(), 4096);
+        assert_eq!(super::parse_bytes("infinity").unwrap(), u64::MAX);
+        assert!(super::parse_bytes("2GB").is_err());
+        assert!(super::parse_bytes("lots").is_err());
+    }
+
     use super::*;
 
     #[test]

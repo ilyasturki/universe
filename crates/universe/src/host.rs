@@ -1,7 +1,9 @@
 use std::collections::BTreeMap;
-use std::path::PathBuf;
-use std::process::Stdio;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
+
+use futures_util::StreamExt;
+use zbus::zvariant::{OwnedObjectPath, Value};
 #[cfg(test)]
 use std::sync::Arc;
 
@@ -17,7 +19,7 @@ pub struct Host {
 
 impl Host {
     pub fn live(cfg: &Config) -> Host {
-        Host { units: Units::Systemd, shell: Shell::Live { profile: crate::desktop::detect(cfg), extension: cfg.desktop.cursor_extension.clone() }, pads: Pads::Inputplumber }
+        Host { units: Units::Systemd(Systemd::default()), shell: Shell::Live { profile: crate::desktop::detect(cfg), extension: cfg.desktop.cursor_extension.clone() }, pads: Pads::Inputplumber }
     }
 
     #[cfg(test)]
@@ -27,34 +29,168 @@ impl Host {
     }
 }
 
+/// A transient unit's property, typed as systemd's bus API takes it.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Prop {
+    Str(String),
+    U64(u64),
+}
+
 #[derive(Debug, Clone, Default)]
 pub struct UnitSpec {
     pub name: String,
+    pub description: String,
     pub program: String,
     pub args: Vec<String>,
     pub env: BTreeMap<String, String>,
     pub unset_env: Vec<String>,
     pub cwd: Option<PathBuf>,
-    pub properties: Vec<(String, String)>,
+    pub properties: Vec<(String, Prop)>,
     pub bind_to: Option<String>,
     pub stop_post: Vec<String>,
 }
 
 pub enum Units {
-    Systemd,
+    Systemd(Systemd),
     #[cfg(test)]
     Memory(Arc<Memory>),
+}
+
+const SYSTEMD: &str = "org.freedesktop.systemd1";
+const MANAGER_PATH: &str = "/org/freedesktop/systemd1";
+const MANAGER_IFACE: &str = "org.freedesktop.systemd1.Manager";
+const NO_SUCH_UNIT: &str = "org.freedesktop.systemd1.NoSuchUnit";
+const UNIT_EXISTS: &str = "org.freedesktop.systemd1.UnitExists";
+/// A start job ends once the main process is forked; a stop job only after `ExecStopPost`, which the launcher's Stop must not wait through.
+const START_WAIT: Duration = Duration::from_secs(30);
+const STOP_WAIT: Duration = Duration::from_secs(10);
+
+/// The user manager over the session bus, one connection subscribed to its job signals.
+#[derive(Default)]
+pub struct Systemd {
+    conn: tokio::sync::OnceCell<zbus::Connection>,
+}
+
+type JobResult = (u32, OwnedObjectPath, String, String);
+
+impl Systemd {
+    async fn manager(&self) -> Result<zbus::Proxy<'static>> {
+        let conn = self
+            .conn
+            .get_or_try_init(|| async {
+                let conn = zbus::Connection::session().await?;
+                // JobRemoved reaches subscribed clients only.
+                manager_proxy(&conn).await?.call::<_, _, ()>("Subscribe", &()).await?;
+                Ok::<_, zbus::Error>(conn)
+            })
+            .await
+            .map_err(|e| Error::Unavailable(format!("user systemd: {e}")))?;
+        manager_proxy(conn).await.map_err(|e| Error::Unavailable(format!("user systemd: {e}")))
+    }
+
+    async fn unit_proxy(&self, unit: &str, iface: &str) -> Result<Option<zbus::Proxy<'static>>> {
+        let manager = self.manager().await?;
+        let path = match manager.call::<_, _, OwnedObjectPath>("GetUnit", &(unit,)).await {
+            Ok(p) => p,
+            Err(e) if is_dbus_error(&e, NO_SUCH_UNIT) => return Ok(None),
+            Err(e) => return Err(Error::Io(format!("GetUnit({unit}): {e}"))),
+        };
+        let iface = zbus::names::InterfaceName::try_from(iface.to_string()).map_err(|e| Error::Io(format!("{unit}: {e}")))?;
+        let build = || zbus::proxy::Builder::new(manager.connection()).destination(SYSTEMD)?.path(path.clone())?.interface(iface).map(|b| b.cache_properties(zbus::proxy::CacheProperties::No).build());
+        match build() {
+            Ok(fut) => fut.await.map(Some).map_err(|e| Error::Io(format!("{unit}: {e}"))),
+            Err(e) => Err(Error::Io(format!("{unit}: {e}"))),
+        }
+    }
+}
+
+async fn manager_proxy(conn: &zbus::Connection) -> zbus::Result<zbus::Proxy<'static>> {
+    zbus::proxy::Builder::new(conn).destination(SYSTEMD)?.path(MANAGER_PATH)?.interface(MANAGER_IFACE)?.cache_properties(zbus::proxy::CacheProperties::No).build().await
+}
+
+fn is_dbus_error(e: &zbus::Error, name: &str) -> bool {
+    matches!(e, zbus::Error::MethodError(n, _, _) if n.as_str() == name)
+}
+
+/// `JobRemoved` for `job`: its result, `None` past `timeout`.
+async fn wait_job(jobs: &mut zbus::proxy::SignalStream<'_>, job: &OwnedObjectPath, timeout: Duration) -> Option<String> {
+    tokio::time::timeout(timeout, async {
+        while let Some(msg) = jobs.next().await {
+            if let Ok((_, path, _, result)) = msg.body().deserialize::<JobResult>() {
+                if &path == job {
+                    return Some(result);
+                }
+            }
+        }
+        None
+    })
+    .await
+    .ok()
+    .flatten()
+}
+
+/// systemctl's rule: a name without a type is a service.
+fn qualified(unit: &str) -> String {
+    if unit.rsplit('.').next().is_some_and(|t| matches!(t, "service" | "scope")) { unit.to_string() } else { format!("{unit}.service") }
+}
+
+/// An `Exec*=` command: the program's path, its argv, failure not ignored.
+fn exec_value(argv: Vec<String>) -> Value<'static> {
+    let path = argv.first().cloned().unwrap_or_default();
+    vec![(path, argv, false)].into()
+}
+
+/// `BindsTo=` plus `After=`: the unit goes down with `bind_to` (the launcher's scope, or a hook's game unit) from the start.
+fn unit_properties(spec: &UnitSpec, program: &Path) -> Vec<(String, Value<'static>)> {
+    let mut props: Vec<(String, Value<'static>)> = vec![("Description".into(), spec.description.clone().into()), ("CollectMode".into(), "inactive-or-failed".into())];
+    let mut argv = vec![program.to_string_lossy().into_owned()];
+    argv.extend(spec.args.iter().cloned());
+    props.push(("ExecStart".into(), exec_value(argv)));
+    if !spec.stop_post.is_empty() {
+        props.push(("ExecStopPost".into(), exec_value(spec.stop_post.clone())));
+    }
+    if let Some(bound) = &spec.bind_to {
+        props.push(("BindsTo".into(), vec![bound.clone()].into()));
+        props.push(("After".into(), vec![bound.clone()].into()));
+    }
+    if let Some(cwd) = spec.cwd.as_ref().filter(|d| d.is_dir()) {
+        props.push(("WorkingDirectory".into(), cwd.to_string_lossy().into_owned().into()));
+    }
+    props.push(("Environment".into(), spec.env.iter().map(|(k, v)| format!("{k}={v}")).collect::<Vec<_>>().into()));
+    if !spec.unset_env.is_empty() {
+        props.push(("UnsetEnvironment".into(), spec.unset_env.clone().into()));
+    }
+    for (k, v) in &spec.properties {
+        let v: Value<'static> = match v {
+            Prop::Str(s) => s.clone().into(),
+            Prop::U64(n) => (*n).into(),
+        };
+        props.push((k.clone(), v));
+    }
+    props
 }
 
 impl Units {
     pub async fn start(&self, spec: &UnitSpec) -> Result<()> {
         match self {
-            Units::Systemd => {
-                let out = tokio::process::Command::new("systemd-run").args(systemd_run_args(spec)).stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::piped()).output().await.map_err(|e| Error::Io(format!("systemd-run: {e}")))?;
-                if !out.status.success() {
-                    return Err(Error::Io(format!("systemd-run {}: {}", spec.name, String::from_utf8_lossy(&out.stderr).trim())));
+            Units::Systemd(sd) => {
+                // The manager looks a bare name up on its own compile-time path only.
+                let program = crate::runners::on_path(&spec.program).ok_or_else(|| Error::NotFound(format!("{}: not on PATH", spec.program)))?;
+                let name = qualified(&spec.name);
+                let props = unit_properties(spec, &program);
+                let manager = sd.manager().await?;
+                let mut jobs = manager.receive_signal("JobRemoved").await.map_err(|e| Error::Io(format!("JobRemoved: {e}")))?;
+                let aux: Vec<(String, Vec<(String, Value)>)> = vec![];
+                let job = match manager.call::<_, _, OwnedObjectPath>("StartTransientUnit", &(name.as_str(), "fail", &props, &aux)).await {
+                    Ok(job) => job,
+                    Err(e) if is_dbus_error(&e, UNIT_EXISTS) => return Err(Error::Busy(format!("{name} is already running"))),
+                    Err(e) => return Err(Error::Io(format!("StartTransientUnit({name}): {e}"))),
+                };
+                match wait_job(&mut jobs, &job, START_WAIT).await.as_deref() {
+                    Some("done") => Ok(()),
+                    Some(result) => Err(Error::Io(format!("{name}: start job {result}"))),
+                    None => Err(Error::Io(format!("{name}: start job still queued after {}s", START_WAIT.as_secs()))),
                 }
-                Ok(())
             }
             #[cfg(test)]
             Units::Memory(m) => m.start(spec),
@@ -64,25 +200,22 @@ impl Units {
     /// `deactivating` counts: `ExecStopPost` is still running the session's end.
     pub async fn is_active(&self, unit: &str) -> bool {
         match self {
-            Units::Systemd => {
-                let out = tokio::process::Command::new("systemctl").args(["--user", "is-active", unit]).output().await;
-                match out {
-                    Ok(o) => matches!(String::from_utf8_lossy(&o.stdout).trim(), "active" | "activating" | "deactivating" | "reloading"),
-                    Err(_) => false,
-                }
-            }
+            Units::Systemd(sd) => match sd.unit_proxy(&qualified(unit), "org.freedesktop.systemd1.Unit").await {
+                Ok(Some(p)) => p.get_property::<String>("ActiveState").await.is_ok_and(|s| matches!(s.as_str(), "active" | "activating" | "deactivating" | "reloading")),
+                _ => false,
+            },
             #[cfg(test)]
             Units::Memory(m) => m.units.lock().unwrap().get(unit).map(|u| u.active).unwrap_or(false),
         }
     }
 
-    /// The game first, then the unit: `systemctl stop` SIGTERMs the whole cgroup at once, and gamescope dies before the game, which loses its X server and can save nothing.
+    /// The game first, then the unit: a stop job SIGTERMs the whole cgroup at once, and gamescope dies before the game, which loses its X server and can save nothing.
     // A second SIGTERM after ~3 s: Dolphin takes the first as a "quit?" prompt and only exits on the second.
     pub async fn stop(&self, unit: &str) -> Result<()> {
         match self {
-            Units::Systemd => {
+            Units::Systemd(sd) => {
                 // systemd 260 drops the stop job of a frozen unit ("Cannot stop frozen unit") and reports success.
-                let _ = tokio::process::Command::new("systemctl").args(["--user", "thaw", unit]).output().await;
+                let _ = sd.manager().await?.call::<_, _, ()>("ThawUnit", &(qualified(unit).as_str(),)).await;
                 if let Some(cg) = self.cgroup(unit).await {
                     let mut game = game_pids(&cgroup_procs(&cg));
                     for round in 0..20 {
@@ -98,20 +231,30 @@ impl Units {
                         game = game_pids(&cgroup_procs(&cg));
                     }
                 }
-                let out = tokio::process::Command::new("systemctl").args(["--user", "stop", "--no-block", unit]).output().await?;
-                let err = String::from_utf8_lossy(&out.stderr);
-                if !out.status.success() {
-                    if err.contains("not loaded") || err.contains("could not be found") {
-                        return Ok(());
-                    }
-                    return Err(Error::Io(format!("systemctl stop {unit}: {}", err.trim())));
-                }
-                for _ in 0..20 {
-                    tokio::time::sleep(Duration::from_millis(500)).await;
-                    if !self.is_active(unit).await {
-                        return Ok(());
-                    }
-                }
+                self.stop_unit(unit).await
+            }
+            #[cfg(test)]
+            Units::Memory(m) => {
+                m.record(format!("unit:stop {unit}"));
+                m.finish(unit, 143);
+                Ok(())
+            }
+        }
+    }
+
+    /// The stop job alone, waited for `STOP_WAIT` at most; an unloaded unit is already stopped.
+    pub async fn stop_unit(&self, unit: &str) -> Result<()> {
+        match self {
+            Units::Systemd(sd) => {
+                let name = qualified(unit);
+                let manager = sd.manager().await?;
+                let mut jobs = manager.receive_signal("JobRemoved").await.map_err(|e| Error::Io(format!("JobRemoved: {e}")))?;
+                let job = match manager.call::<_, _, OwnedObjectPath>("StopUnit", &(name.as_str(), "replace")).await {
+                    Ok(job) => job,
+                    Err(e) if is_dbus_error(&e, NO_SUCH_UNIT) => return Ok(()),
+                    Err(e) => return Err(Error::Io(format!("StopUnit({name}): {e}"))),
+                };
+                let _ = wait_job(&mut jobs, &job, STOP_WAIT).await;
                 Ok(())
             }
             #[cfg(test)]
@@ -125,13 +268,9 @@ impl Units {
 
     pub async fn freeze(&self, unit: &str, on: bool) -> Result<()> {
         match self {
-            Units::Systemd => {
-                let verb = if on { "freeze" } else { "thaw" };
-                let out = tokio::process::Command::new("systemctl").args(["--user", verb, unit]).output().await?;
-                if !out.status.success() {
-                    return Err(Error::Io(format!("systemctl {verb} {unit}: {}", String::from_utf8_lossy(&out.stderr).trim())));
-                }
-                Ok(())
+            Units::Systemd(sd) => {
+                let method = if on { "FreezeUnit" } else { "ThawUnit" };
+                sd.manager().await?.call::<_, _, ()>(method, &(qualified(unit).as_str(),)).await.map_err(|e| Error::Io(format!("{method}({unit}): {e}")))
             }
             #[cfg(test)]
             Units::Memory(m) => {
@@ -141,9 +280,10 @@ impl Units {
         }
     }
 
+    /// From the journal, the one source left once the unit is collected (a reboot, `reconcile`).
     pub async fn log(&self, unit: &str) -> UnitLog {
         match self {
-            Units::Systemd => {
+            Units::Systemd(_) => {
                 let out = tokio::process::Command::new("journalctl").args(["--user", "-u", unit, "-o", "json", "--no-pager", "-q"]).output().await;
                 match out {
                     Ok(o) => parse_unit_log(&String::from_utf8_lossy(&o.stdout)),
@@ -158,10 +298,11 @@ impl Units {
     /// The cgroup path the manager reports for a unit, `None` while it is not loaded.
     pub async fn cgroup(&self, unit: &str) -> Option<String> {
         match self {
-            Units::Systemd => {
-                let out = tokio::process::Command::new("systemctl").args(["--user", "show", "-p", "ControlGroup", "--value", unit]).output().await.ok()?;
-                let s = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                (!s.is_empty()).then_some(s)
+            Units::Systemd(sd) => {
+                let name = qualified(unit);
+                let iface = if name.ends_with(".scope") { "org.freedesktop.systemd1.Scope" } else { "org.freedesktop.systemd1.Service" };
+                let proxy = sd.unit_proxy(&name, iface).await.ok().flatten()?;
+                proxy.get_property::<String>("ControlGroup").await.ok().filter(|s| !s.is_empty())
             }
             #[cfg(test)]
             Units::Memory(m) => m.units.lock().unwrap().contains_key(unit).then(|| format!("/memory/{unit}")),
@@ -171,24 +312,23 @@ impl Units {
     pub async fn adopt_scope(&self, pid: u32) -> Result<String> {
         let name = format!("universe-launcher-{pid}.scope");
         match self {
-            Units::Systemd => {
-                let conn = zbus::Connection::session().await.map_err(|e| Error::Unavailable(format!("session bus: {e}")))?;
-                let proxy = zbus::Proxy::new(&conn, "org.freedesktop.systemd1", "/org/freedesktop/systemd1", "org.freedesktop.systemd1.Manager").await.map_err(|e| Error::Unavailable(format!("systemd: {e}")))?;
-                let props: Vec<(&str, zbus::zvariant::Value)> = vec![("PIDs", vec![pid].into()), ("Description", "Universe launcher".into())];
-                let aux: Vec<(String, Vec<(String, zbus::zvariant::Value)>)> = vec![];
-                match proxy.call::<_, _, zbus::zvariant::OwnedObjectPath>("StartTransientUnit", &(name.as_str(), "fail", props, aux)).await {
-                    Ok(_) => {}
+            Units::Systemd(sd) => {
+                let manager = sd.manager().await?;
+                let mut jobs = manager.receive_signal("JobRemoved").await.map_err(|e| Error::Unavailable(format!("JobRemoved: {e}")))?;
+                let props: Vec<(&str, Value)> = vec![("PIDs", vec![pid].into()), ("Description", "Universe launcher".into())];
+                let aux: Vec<(String, Vec<(String, Value)>)> = vec![];
+                match manager.call::<_, _, OwnedObjectPath>("StartTransientUnit", &(name.as_str(), "fail", props, aux)).await {
+                    Ok(job) => match wait_job(&mut jobs, &job, START_WAIT).await.as_deref() {
+                        Some("done") => {}
+                        Some(result) => return Err(Error::Unavailable(format!("{name}: start job {result}"))),
+                        None => return Err(Error::Unavailable(format!("{name}: start job still queued"))),
+                    },
                     // A scope left by an earlier core of this process counts only if we are in it.
-                    Err(e) if e.to_string().contains("UnitExists") && in_cgroup_of(&name) => {}
+                    Err(e) if is_dbus_error(&e, UNIT_EXISTS) && in_cgroup_of(&name) => {}
                     Err(e) => return Err(Error::Unavailable(format!("StartTransientUnit({name}): {e}"))),
                 }
-                // The reply only queues the start job; the move into the scope's cgroup lands when it runs.
-                let deadline = std::time::Instant::now() + Duration::from_secs(5);
-                while !in_cgroup_of(&name) {
-                    if std::time::Instant::now() > deadline {
-                        return Err(Error::Unavailable(format!("{name}: this process was not moved into it")));
-                    }
-                    tokio::time::sleep(Duration::from_millis(20)).await;
+                if !in_cgroup_of(&name) {
+                    return Err(Error::Unavailable(format!("{name}: this process was not moved into it")));
                 }
                 Ok(name)
             }
@@ -203,39 +343,6 @@ impl Units {
 
 fn in_cgroup_of(unit: &str) -> bool {
     std::fs::read_to_string("/proc/self/cgroup").map(|s| s.lines().any(|l| l.rsplit('/').next() == Some(unit))).unwrap_or(false)
-}
-
-/// `BindsTo=` plus `After=`: the unit goes down with `bind_to` (the launcher's scope, or a hook's game unit) from the start.
-fn systemd_run_args(spec: &UnitSpec) -> Vec<String> {
-    let mut args: Vec<String> = vec!["--user".into(), "--collect".into(), "--quiet".into(), format!("--unit={}", spec.name)];
-    for (k, v) in &spec.properties {
-        args.push(format!("--property={k}={v}"));
-    }
-    if !spec.stop_post.is_empty() {
-        args.push(format!("--property=ExecStopPost={}", unit_quote(&spec.stop_post)));
-    }
-    if let Some(bound) = &spec.bind_to {
-        args.push(format!("--property=BindsTo={bound}"));
-        args.push(format!("--property=After={bound}"));
-    }
-    if let Some(cwd) = spec.cwd.as_ref().filter(|d| d.is_dir()) {
-        args.push(format!("--working-directory={}", cwd.display()));
-    }
-    for (k, v) in &spec.env {
-        args.push(format!("--setenv={k}={v}"));
-    }
-    for k in &spec.unset_env {
-        args.push(format!("--property=UnsetEnvironment={k}"));
-    }
-    args.push("--".into());
-    args.push(spec.program.clone());
-    args.extend(spec.args.iter().cloned());
-    args
-}
-
-/// Unit-file quoting for an Exec= line: double quotes, backslash escapes.
-fn unit_quote(parts: &[String]) -> String {
-    parts.iter().map(|p| format!("\"{}\"", p.replace('\\', "\\\\").replace('"', "\\\""))).collect::<Vec<_>>().join(" ")
 }
 
 #[derive(Debug, Clone)]
@@ -468,32 +575,46 @@ mod tests {
         assert_eq!((log.ended.unwrap() - log.started.unwrap()).num_seconds(), 3);
     }
 
+    fn prop<'a>(props: &'a [(String, Value<'static>)], name: &str) -> Option<&'a Value<'static>> {
+        props.iter().find(|(k, _)| k == name).map(|(_, v)| v)
+    }
+
     #[test]
-    fn systemd_run_binds_to_the_launcher_scope_only_when_asked() {
+    fn transient_unit_binds_to_the_launcher_scope_only_when_asked() {
         let spec = UnitSpec {
             name: "universe-game-x-20260911-120000.service".into(),
+            description: "Universe: X".into(),
             program: "umu-run".into(),
             args: vec!["/g/x.exe".into(), "-w".into()],
             env: BTreeMap::from([("PATH".to_string(), "/bin".to_string()), ("WINEPREFIX".to_string(), "/p".to_string())]),
             unset_env: vec!["WAYLAND_DISPLAY".into()],
             cwd: Some("/nonexistent".into()),
-            properties: vec![("ExitType".into(), "cgroup".into()), ("TimeoutStopSec".into(), "80".into())],
+            properties: vec![("ExitType".into(), Prop::Str("cgroup".into())), ("TimeoutStopUSec".into(), Prop::U64(80_000_000))],
             bind_to: None,
             stop_post: vec!["/usr/bin/universe".into(), "session-end".into(), "x".into(), "20260911-120000".into()],
         };
-        let plain = systemd_run_args(&spec);
-        assert_eq!(&plain[..3], &["--user", "--collect", "--quiet"]);
-        assert!(plain.contains(&"--unit=universe-game-x-20260911-120000.service".to_string()));
-        assert!(plain.contains(&"--property=ExitType=cgroup".to_string()));
-        assert!(plain.contains(&"--property=TimeoutStopSec=80".to_string()));
-        assert!(plain.contains(&"--property=ExecStopPost=\"/usr/bin/universe\" \"session-end\" \"x\" \"20260911-120000\"".to_string()));
-        assert!(!plain.iter().any(|a| a.starts_with("--property=BindsTo=") || a.starts_with("--property=After=") || a.starts_with("--working-directory=")));
-        assert!(plain.contains(&"--setenv=PATH=/bin".to_string()) && plain.contains(&"--setenv=WINEPREFIX=/p".to_string()));
-        assert!(plain.contains(&"--property=UnsetEnvironment=WAYLAND_DISPLAY".to_string()));
-        assert_eq!(&plain[plain.len() - 4..], &["--", "umu-run", "/g/x.exe", "-w"]);
-        let bound = systemd_run_args(&UnitSpec { bind_to: Some("universe-launcher-4242.scope".into()), ..spec });
-        assert!(bound.contains(&"--property=BindsTo=universe-launcher-4242.scope".to_string()));
-        assert!(bound.contains(&"--property=After=universe-launcher-4242.scope".to_string()));
+        let plain = unit_properties(&spec, Path::new("/nix/store/u/bin/umu-run"));
+        let exec = |v: &Value<'static>| -> Vec<(String, Vec<String>, bool)> { v.try_clone().unwrap().downcast().unwrap() };
+        assert_eq!(exec(prop(&plain, "ExecStart").unwrap()), [("/nix/store/u/bin/umu-run".to_string(), vec!["/nix/store/u/bin/umu-run".to_string(), "/g/x.exe".into(), "-w".into()], false)]);
+        assert_eq!(exec(prop(&plain, "ExecStopPost").unwrap()), [("/usr/bin/universe".to_string(), vec!["/usr/bin/universe".to_string(), "session-end".into(), "x".into(), "20260911-120000".into()], false)]);
+        assert_eq!(prop(&plain, "Description").unwrap(), &Value::from("Universe: X"));
+        assert_eq!(prop(&plain, "CollectMode").unwrap(), &Value::from("inactive-or-failed"));
+        assert_eq!(prop(&plain, "ExitType").unwrap(), &Value::from("cgroup"));
+        assert_eq!(prop(&plain, "TimeoutStopUSec").unwrap(), &Value::from(80_000_000u64));
+        assert_eq!(prop(&plain, "Environment").unwrap(), &Value::from(vec!["PATH=/bin".to_string(), "WINEPREFIX=/p".into()]));
+        assert_eq!(prop(&plain, "UnsetEnvironment").unwrap(), &Value::from(vec!["WAYLAND_DISPLAY".to_string()]));
+        assert!(prop(&plain, "BindsTo").is_none() && prop(&plain, "After").is_none() && prop(&plain, "WorkingDirectory").is_none());
+        let bound = unit_properties(&UnitSpec { bind_to: Some("universe-launcher-4242.scope".into()), ..spec }, Path::new("/nix/store/u/bin/umu-run"));
+        assert_eq!(prop(&bound, "BindsTo").unwrap(), &Value::from(vec!["universe-launcher-4242.scope".to_string()]));
+        assert_eq!(prop(&bound, "After").unwrap(), &Value::from(vec!["universe-launcher-4242.scope".to_string()]));
         assert_eq!(bound.len(), plain.len() + 2);
+    }
+
+    #[test]
+    fn a_bare_unit_name_is_a_service() {
+        assert_eq!(qualified("universe-capture-start-1"), "universe-capture-start-1.service");
+        assert_eq!(qualified("universe-game-x-1.service"), "universe-game-x-1.service");
+        assert_eq!(qualified("universe-launcher-42.scope"), "universe-launcher-42.scope");
+        assert_eq!(qualified("universe-game-x.y-1"), "universe-game-x.y-1.service");
     }
 }

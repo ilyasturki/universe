@@ -717,8 +717,7 @@ impl Core {
         let note_dir = cfg.journal_root().join(id);
         if entry.state == "pending" {
             // The hook's `finally` does not run under SIGTERM: the pending file is ours to drop.
-            let unit = format!("universe-journal-post-process-{session_id}");
-            let _ = std::process::Command::new("systemctl").args(["--user", "stop", &unit]).stdout(std::process::Stdio::null()).stderr(std::process::Stdio::null()).status();
+            let _ = self.host.units.stop_unit(&format!("universe-journal-post-process-{session_id}")).await;
         }
         for state in ["pending", "failed"] {
             let p = journal_dir.join(format!("{session_id}.{state}.json"));

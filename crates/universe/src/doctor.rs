@@ -23,7 +23,7 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
 
     push("config", true, crate::paths::config_file().to_string_lossy().into(), "core");
     push("data", crate::paths::games_dir().is_dir(), crate::paths::games_dir().to_string_lossy().into(), "core");
-    for bin in ["umu-run", "systemd-run", "systemctl"] {
+    for bin in ["umu-run", "journalctl"] {
         push(bin, which(bin).is_some(), which(bin).unwrap_or_else(|| "missing".into()), "core");
     }
     if config.launch.fps_limit != "none" {
