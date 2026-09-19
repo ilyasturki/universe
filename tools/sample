@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+    cat <<'USAGE'
+usage: tools/sample [install|remove]
+
+  install   (default) write the game, its art and its library entry into the
+            dev profile (UNIVERSE_DATA_HOME's parent); safe to rerun
+  remove    trash the game's tree, its library entry, hours and recordings
+
+The game takes `--delay S` (2) before its window opens and `--length S` (0,
+until quit) after: `just cli set sample-game args='"--length","30"'`.
+Needs mpv and magick on PATH; mpv's path is baked in at install.
+USAGE
+}
+
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+universe="${UNIVERSE_BIN:-$repo/target/debug/universe}"
+: "${UNIVERSE_DATA_HOME:?run through just, which points it at the dev profile}"
+dev="$(dirname "$UNIVERSE_DATA_HOME")"
+lib="$dev/sample"
+id="sample-game"
+game_dir="$UNIVERSE_DATA_HOME/games/$id"
+media="$lib/media"
+fonts="$repo/ui/universe_ui/qml/assets/fonts"
+bold="$lib/Archivo-Bold.ttf"
+medium="$lib/Archivo-Medium.ttf"
+
+install() {
+    for tool in mpv magick; do
+        command -v "$tool" >/dev/null || { echo "sample: $tool not on PATH" >&2; exit 1; }
+    done
+    mkdir -p "$media/screenshots"
+    cp "$fonts/Archivo-Bold.ttf" "$bold"
+    cp "$fonts/Archivo-Medium.ttf" "$medium"
+
+    # The game runs from a systemd unit with the session's PATH, not the dev shell's.
+    mpv="$(command -v mpv)"
+    cat >"$lib/sample-game" <<GAME
+#!/bin/sh
+mpv="$mpv"
+GAME
+    cat >>"$lib/sample-game" <<'GAME'
+delay=2
+length=0
+grab=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --delay)  delay="$2"; shift 2 ;;
+        --length) length="$2"; shift 2 ;;
+        --grab)   grab="$2"; shift 2 ;;
+        *) echo "sample-game: unknown option $1" >&2; exit 2 ;;
+    esac
+done
+
+here=$(dirname "$(readlink -f "$0")")
+
+# Colons inside drawtext expansions carry two escapes: one for the graph
+# parser, one for the option parser.
+caption="Running\\ for\\ %{eif\\\\:t\\\\:d}\\ s"
+duration=""
+if [ "$length" -gt 0 ]; then
+    caption="$caption\\ of\\ $length"
+    duration=":d=$length"
+fi
+graph="gradients=s=1920x1080:c0=0x0b1f33:c1=0x1c4a78:c2=0x0f2d4a:c3=0x2a5d8f:speed=0.015:r=60$duration"
+graph="$graph,drawtext=fontfile=$here/Archivo-Bold.ttf:text=SAMPLE\\ GAME:fontsize=132:fontcolor=white:x=(w-tw)/2:y=(h-th)/2-60"
+graph="$graph,drawtext=fontfile=$here/Archivo-Medium.ttf:text=$caption\\ ·\\ Q\\ or\\ Esc\\ quits:fontsize=40:fontcolor=white@0.7:x=(w-tw)/2:y=(h-th)/2+80"
+
+if [ -n "$grab" ]; then
+    out=$(mktemp -d)
+    "$mpv" --no-config --no-terminal --really-quiet --ao=null \
+        --vo=image --vo-image-format=png --vo-image-outdir="$out" --start=1.5 --frames=1 \
+        "av://lavfi:$graph"
+    mv "$out/00000001.png" "$grab" || exit 1
+    rmdir "$out"
+    exit 0
+fi
+
+sleep "$delay"
+# Vulkan, not mpv's default: MangoHud's layer sees the frames only there.
+exec "$mpv" --no-config --no-terminal --really-quiet --ao=null \
+    --vo=gpu-next --gpu-api=vulkan \
+    --fs --title="Sample Game" --cursor-autohide=always --osc=no --osd-level=0 \
+    "av://lavfi:$graph"
+GAME
+    chmod +x "$lib/sample-game"
+
+    magick -size 600x900 gradient:'#1c4a78-#0b1f33' \
+        -fill '#2a5d8f' -draw 'circle 300,380 300,560' \
+        -fill '#0b1f33' -draw 'circle 300,380 300,500' \
+        -font "$bold" -pointsize 88 -fill white -gravity center -annotate +0+120 'SAMPLE' \
+        -font "$medium" -pointsize 44 -fill 'rgba(255,255,255,0.7)' -annotate +0+200 'GAME' \
+        -depth 8 "$media/boxFront.png"
+
+    # Hero-shaped like SteamGridDB's backgrounds, so the launch poster letterboxes it the same way.
+    magick -size 1920x620 gradient:'#1c4a78-#0b1f33' \
+        -fill '#2a5d8f' -draw 'circle 1440,310 1440,600' \
+        -fill '#0f2d4a' -draw 'circle 1440,310 1440,520' \
+        -depth 8 "$media/background.png"
+
+    magick -size 920x430 gradient:'#1c4a78-#0b1f33' \
+        -fill '#2a5d8f' -draw 'circle 700,215 700,400' \
+        -fill '#0f2d4a' -draw 'circle 700,215 700,340' \
+        -font "$bold" -pointsize 96 -fill white -gravity west -annotate +60-30 'SAMPLE' \
+        -font "$medium" -pointsize 48 -fill 'rgba(255,255,255,0.7)' -annotate +60+60 'GAME' \
+        -depth 8 "$media/banner.png"
+
+    magick -size 960x300 xc:none \
+        -font "$bold" -pointsize 150 -fill white -gravity center -annotate +0-30 'SAMPLE' \
+        -font "$medium" -pointsize 60 -fill 'rgba(255,255,255,0.8)' -annotate +0+95 'GAME' \
+        -trim +repage -bordercolor none -border 20 \
+        -depth 8 "$media/logo.png"
+
+    magick -size 600x600 gradient:'#2a5d8f-#0b1f33' \
+        -fill '#0b1f33' -draw 'circle 300,300 300,470' \
+        -fill '#1c4a78' -draw 'circle 300,300 300,430' \
+        -font "$bold" -pointsize 84 -fill white -gravity center -annotate +0+0 'SG' \
+        -depth 8 "$media/square.png"
+
+    "$lib/sample-game" --grab "$media/screenshots/01.png"
+
+    if [ ! -e "$game_dir/game.toml" ]; then
+        "$universe" add "$lib/sample-game" --runner linux --title "Sample Game"
+        "$universe" set "$id" journal.enabled=false \
+            metadata.developers='["Universe"]' metadata.genres='["Test"]' \
+            metadata.summary='A stand-in for a real game.' \
+            metadata.description='Sleeps like a game loading, then holds a fullscreen Vulkan window until the launcher quits it — or sooner on Q or Escape. Installed by tools/sample; --delay and --length go on its Arguments.'
+    fi
+    # The default art layer, never a pick: the profile's overrides may point outside it.
+    mkdir -p "$game_dir/media"
+    cp -r "$media/." "$game_dir/media/"
+
+    echo "installed $id from $lib"
+}
+
+remove() {
+    # Not `universe rm`: that keeps the entry as removed, and `add` would refuse the id again.
+    for d in "$game_dir" "$lib" "$dev/recordings/$id" "$dev/journal/$id"; do
+        [ -e "$d" ] && trash "$d"
+    done
+    echo "removed $id"
+}
+
+case "${1:-install}" in
+    install) install ;;
+    remove) remove ;;
+    -h|--help) usage ;;
+    *) echo "unknown command: $1" >&2; usage >&2; exit 2 ;;
+esac

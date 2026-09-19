@@ -83,12 +83,9 @@ seed *ids: env
         echo "seeded $id ($(grep -c '"recording":"/' "$dest/sessions.jsonl" 2>/dev/null || echo 0) recordings, $(ls "$dest/journal"/*.json 2>/dev/null | wc -l) entries)"
     done
 
-# A free native game (SuperTux) in the profile, to exercise the launch path where no library exists
-fixture-game: build env
-    #!/usr/bin/env bash
-    set -euo pipefail
-    nix build --out-link "{{ dev }}/supertux" nixpkgs#supertux
-    {{ nix }} target/debug/universe add "{{ dev }}/supertux/bin/supertux2" --runner linux --title SuperTux
+# A stand-in game in the profile (a Vulkan window MangoHud sees), to drive the launch path without a real game: just sample [install|remove]
+sample *args: build env
+    @{{ nix }} tools/sample {{ args }}
 
 # Trash the profile (config, data, recordings, journal) and .venv
 clean:
