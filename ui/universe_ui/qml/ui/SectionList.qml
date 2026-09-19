@@ -5,7 +5,7 @@ import "../sound"
 FocusScope {
     id: list
 
-    // [{ name, icon }]
+    // [{ name, icon, group }]: a `group` label heads the entries that share it.
     property var sections: []
     property var badges: []
     property int current: 0
@@ -14,8 +14,15 @@ FocusScope {
     signal entered()
     signal escapedUp()
 
-    readonly property real entryHeight: Theme.dp(58)
-    readonly property real entrySpacing: Theme.dp(6)
+    // Thirteen entries and four group heads fit the page under the title.
+    readonly property real entryHeight: Theme.dp(46)
+    readonly property real entrySpacing: Theme.dp(3)
+    readonly property real groupHeight: Theme.dp(34)
+
+    function startsGroup(index) {
+        var g = sections[index].group || "";
+        return g !== "" && (index === 0 || (sections[index - 1].group || "") !== g);
+    }
 
     implicitHeight: column.height
 
@@ -71,12 +78,22 @@ FocusScope {
                 readonly property bool focused: active && list.activeFocus
                 readonly property string badge: index < list.badges.length ? String(list.badges[index] || "") : ""
                 readonly property color ink: focused ? Theme.onLight : Theme.text
+                readonly property bool headed: list.startsGroup(index)
 
                 width: parent.width
-                height: list.entryHeight
+                height: list.entryHeight + (headed ? list.groupHeight : 0)
+
+                CapsLabel {
+                    x: Theme.dp(18)
+                    y: Theme.dp(12)
+                    visible: headed
+                    text: (modelData.group || "").toUpperCase()
+                    size: Theme.dp(14)
+                }
 
                 Rectangle {
                     anchors.fill: parent
+                    anchors.topMargin: headed ? list.groupHeight : 0
                     radius: Theme.dp(14)
                     color: focused ? Theme.text : active ? Qt.rgba(1, 1, 1, 0.09) : "transparent"
 
@@ -88,7 +105,8 @@ FocusScope {
                     anchors.left: parent.left
                     anchors.leftMargin: Theme.dp(18)
                     anchors.verticalCenter: parent.verticalCenter
-                    width: Theme.dp(24)
+                    anchors.verticalCenterOffset: headed ? list.groupHeight / 2 : 0
+                    width: Theme.dp(22)
                     height: width
                     kind: modelData.icon
                     tint: focused ? Theme.onLight : active ? Theme.text : Theme.textSecondary
@@ -100,11 +118,12 @@ FocusScope {
                     anchors.right: badgePill.visible ? badgePill.left : parent.right
                     anchors.rightMargin: Theme.dp(16)
                     anchors.verticalCenter: parent.verticalCenter
+                    anchors.verticalCenterOffset: headed ? list.groupHeight / 2 : 0
                     text: modelData.name
                     color: ink
                     font.family: Theme.sans
                     font.weight: active ? Font.DemiBold : Font.Medium
-                    font.pixelSize: Theme.dp(23)
+                    font.pixelSize: Theme.dp(21)
                     elide: Text.ElideRight
                 }
 
@@ -114,6 +133,7 @@ FocusScope {
                     anchors.right: parent.right
                     anchors.rightMargin: Theme.dp(14)
                     anchors.verticalCenter: parent.verticalCenter
+                    anchors.verticalCenterOffset: headed ? list.groupHeight / 2 : 0
                     width: Math.max(height, badgeText.width + Theme.dp(16))
                     height: Theme.dp(26)
                     radius: height / 2

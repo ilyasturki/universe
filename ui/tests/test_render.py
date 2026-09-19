@@ -1,4 +1,4 @@
-from PySide6.QtCore import QObject, QUrl
+from PySide6.QtCore import Q_ARG, QMetaObject, QObject, QUrl
 from PySide6.QtGui import QColor
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuick import QQuickWindow  # noqa: F401  (rootObjects() down-cast, for grabWindow)
@@ -58,7 +58,7 @@ def test_themes_render_and_switch_live(api):
     assert lit_fraction(window.grabWindow(), api.theme.ground) > 0.01
     root = window.property("contentItem").childItems()[0].property("item")
     page = root.property("activePage")
-    assert root.property("tabIndex") == 4 and page is not None and page.property("section") == page.property("themesSection")
+    assert root.property("tabIndex") == 4 and page is not None and page.property("sectionId") == "themes"
     window.close()
     pump(50)
 
@@ -297,7 +297,7 @@ def test_the_install_pages_render_a_running_install_in_both_looks(api, fake):
     root.setProperty("tabIndex", root.property("settingsTab"))
     pump(100)
     page = root.property("activePage")
-    page.setProperty("section", page.property("installSection"))
+    QMetaObject.invokeMethod(page, "land", Q_ARG("QVariant", "install"))
     pump(400)
     content = js(page, "content")
     groups = content["groups"]
@@ -446,7 +446,7 @@ def test_the_settings_artwork_button_asks_then_fetches_and_stops(api, fake):
     root.setProperty("tabIndex", 4)
     pump(100)
     page = root.property("activePage")
-    page.setProperty("section", page.property("artworkSection"))
+    QMetaObject.invokeMethod(page, "land", Q_ARG("QVariant", "artwork"))
     settle(window)
     store = api.screens.artworkOverview
     assert store.missingGames == 1
@@ -545,7 +545,7 @@ def test_reprise_about_shows_the_build(api, fake):
     root.goToTab(4)
     settle(window)
     page = root.property("activePage")
-    page.setProperty("section", page.property("aboutSection"))
+    QMetaObject.invokeMethod(page, "land", Q_ARG("QVariant", "about"))
     pump(100)
     content = page.property("content").toVariant()
     rows = {r["label"]: r["display"] for r in content["rows"]}

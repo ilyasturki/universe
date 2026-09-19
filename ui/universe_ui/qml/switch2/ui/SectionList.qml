@@ -5,6 +5,7 @@ import "../sound"
 FocusScope {
     id: list
 
+    // [{ id, label, detail, group, groupLabel }]: a hairline rules between groups, a `groupLabel` names the group over its first entry.
     property var sections: []
     property int index: 0
     readonly property bool cursorShown: activeFocus
@@ -13,7 +14,20 @@ FocusScope {
     signal escapedRight()
 
     readonly property real rowHeight: Theme.dp(123)
+    readonly property real labelHeight: Theme.dp(44)
     readonly property real room: Theme.dp(Theme.ringRoom)
+
+    function labelled(i) {
+        var s = sections[i];
+        return s !== undefined && s.groupLabel !== undefined && s.groupLabel !== "" && (i === 0 || sections[i - 1].group !== s.group);
+    }
+
+    function yOf(i) {
+        var y = 0;
+        for (var k = 0; k < i; k++)
+            y += rowHeight + (labelled(k) ? labelHeight : 0);
+        return y;
+    }
 
     function step(d) {
         var next = Sound.stepped(index, d, sections.length);
@@ -72,15 +86,27 @@ FocusScope {
         footer: Item { height: list.room }
 
         function scrollToCurrent() {
-            var top = list.index * list.rowHeight, bottom = top + list.rowHeight + list.room * 2;
+            var top = list.yOf(list.index), bottom = top + list.rowHeight + (list.labelled(list.index) ? list.labelHeight : 0) + list.room * 2;
             Theme.reveal(view, top, bottom, height);
         }
 
         Behavior on contentY { Ease {} }
 
         delegate: Item {
+            readonly property bool labelled: list.labelled(index)
+
             width: view.width
-            height: list.rowHeight
+            height: list.rowHeight + (labelled ? list.labelHeight : 0)
+
+            Label {
+                x: list.room + Theme.dp(36)
+                y: Theme.dp(14)
+                visible: labelled
+                text: (modelData.groupLabel || "").toUpperCase()
+                color: Theme.textSecondary
+                font.pixelSize: Theme.dp(Theme.fontTiny)
+                font.letterSpacing: Theme.dp(2)
+            }
 
             Item {
                 id: line
@@ -90,12 +116,14 @@ FocusScope {
                 readonly property bool ruled: index > 0 && modelData.group !== undefined && list.sections[index - 1].group !== modelData.group
 
                 x: list.room
+                y: labelled ? list.labelHeight : 0
                 width: parent.width - list.room * 2
                 height: list.rowHeight
 
                 Hairline {
                     anchors.bottom: undefined
                     anchors.top: parent.top
+                    anchors.topMargin: labelled ? -list.labelHeight : 0
                     anchors.leftMargin: Theme.dp(36)
                     anchors.rightMargin: Theme.dp(36)
                     visible: line.ruled

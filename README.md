@@ -115,6 +115,12 @@ Cursor hiding on GNOME toggles the `hide-cursor@elcste.com` shell extension arou
 
 Settings › Modules and Settings › Sources list each one with its switch — flipped in place, or from its page, which holds its settings (and a source's sign-in); the same on the CLI: `universe module ls · enable capture · settings journal`, `universe source ls · enable gog · set gog platform=linux`.
 
+## Settings
+
+The Settings sidebar is Search, then four groups: Play (Launch, Runners, Controller), Store (Sources, Install, Updates), Extras (Modules, Artwork, Themes), System (Doctor, About, Quit); the Switch 2 look carries the same groups without Install, Artwork and Quit. Every settings page — the global Launch page, a runner's, a module's, a source's, the controller's, a game's — shows its everyday rows and ends with one **Advanced** row: A opens the power user's cards in place (sync modes, scaling and gamescope flags, the upscaler upgrades, environment variables and DLL overrides, wrapper and hook commands, umu ids, the programs, the folders of `[paths]`, the API keys, the desktop profile, the pad's hold length and volume step, a module's config-only keys), collapsed again next time the page opens. The core declares which launch keys are advanced (`universe launch-keys --json`), a module's manifest marks its own (`advanced = true`, and every `scope = "config"` setting).
+
+Settings › Search indexes every one of those rows — each page's, each runner's, module's and source's, each game's — and matches as you type: the label, its description, its current value, a synonym (`vrr` finds Adaptive sync, `hud` MangoHud), a typo away. A hit reads as its path and value (`Runners › Proton › Wayland · On`); A jumps to the page, opens the Advanced row if the setting sits behind it, and lands the cursor on the row. A game-scope key comes as one collapsed line across the library (`Wayland · in 14 games · 3 override it`) that expands to the games; a game's title in the query (`sekiro wayland`) narrows to that game, on its own it lists every setting of the game.
+
 Third-party modules and sources: drop a directory with a `module.toml` under `~/.config/universe/modules/`, or a `source.toml` under `~/.config/universe/sources/` (user ones override shipped ones). The manifests, the hook environment and the source protocol (JSON lines) are frozen in `docs/api.md`.
 
 ## Develop

@@ -20,18 +20,20 @@ FocusScope {
     readonly property var sources: api.screens.sources
     readonly property var listForm: sectionId === "modules" ? modulesForm : sectionId === "sources" ? sourceList : null
 
+    // Search first, then the sections in four named groups.
     readonly property var sections: [
-        { id: "runners", label: "Runners", group: 0 },
-        { id: "launch", label: "Launch", group: 0 },
-        { id: "modules", label: "Modules", group: 0 },
-        { id: "sources", label: "Sources", group: 0 },
-        { id: "updates", label: "Updates", detail: sources.updates.length > 0 ? sources.updates.length + " pending" : "", group: 0 },
-        { id: "controllers", label: "Controllers", group: 1 },
-        { id: "themes", label: "Themes", group: 1 },
-        { id: "doctor", label: "Doctor", group: 2 },
-        { id: "about", label: "About", group: 2 }
+        { id: "search", label: "Search", group: 0, detail: "Every setting, by name, purpose or value" },
+        { id: "launch", label: "Launch", group: 1, groupLabel: "Play" },
+        { id: "runners", label: "Runners", group: 1, groupLabel: "Play" },
+        { id: "controllers", label: "Controllers", group: 1, groupLabel: "Play" },
+        { id: "sources", label: "Sources", group: 2, groupLabel: "Store" },
+        { id: "updates", label: "Updates", detail: sources.updates.length > 0 ? sources.updates.length + " pending" : "", group: 2, groupLabel: "Store" },
+        { id: "modules", label: "Modules", group: 3, groupLabel: "Extras" },
+        { id: "themes", label: "Themes", group: 3, groupLabel: "Extras" },
+        { id: "doctor", label: "Doctor", group: 4, groupLabel: "System" },
+        { id: "about", label: "About", group: 4, groupLabel: "System" }
     ]
-    property int section: 0
+    property int section: 1
     readonly property string sectionId: sections[section].id
     property string zone: "list"
     property var reopen: null
@@ -67,6 +69,38 @@ FocusScope {
         return Math.max(0, sections.map(function(s) { return s.id; }).indexOf(id));
     }
 
+    // A search hit on this page: its section, the row revealed (the Advanced row opened when it sits behind it).
+    function land(target) {
+        var id = target.page === "section" ? target.id : target.page === "controller" ? "controllers" : target.page;
+        if (target.page === "controller" && target.key) {
+            shell.push("pages/ControllersPage.qml", { key: target.key });
+            return;
+        }
+        section = sectionIndex(id);
+        list.index = section;
+        zone = "rows";
+        rows.forceActiveFocus();
+        if (target.page === "launch" && target.key) {
+            var i = launch.reveal(target.key, "");
+            Qt.callLater(function() {
+                var at = Forms.rowOf(content, i);
+                if (at >= 0)
+                    rows.index = at;
+            });
+        } else if (target.page === "themes" && target.id) {
+            Qt.callLater(function() {
+                var at = content.findIndex(function(r) { return r.theme === target.id; });
+                if (at >= 0)
+                    rows.index = at;
+            });
+        }
+    }
+
+    function openSearch() {
+        Sound.play("ok");
+        shell.push("pages/SettingsSearchPage.qml", {});
+    }
+
     // Read from `section`: the derived `sectionId` is still stale inside onSectionChanged.
     function loadSection() {
         var id = sections[section].id;
@@ -84,6 +118,8 @@ FocusScope {
     }
 
     Component.onCompleted: {
+        api.screens.search.sections = sections.map(function(s) { return { id: s.id, label: s.label }; });
+        list.index = section;
         sources.load();
         loadSection();
     }
@@ -99,6 +135,9 @@ FocusScope {
     }
 
     readonly property var content: {
+        if (sectionId === "search")
+            return [{ label: "Search every setting", type: "action", action: "search", display: "", icon: "search",
+                      detail: "Every page, every runner, module and game: by name, by what a setting does, by its value. A game's title narrows to it." }];
         if (sectionId === "runners")
             return Forms.grouped(runners.groups, runners.rows, function(run, i, g) {
                 return { label: run.label, type: "action", action: "runner", runner: run.runner, icon: run.icon, iconSlot: true,
@@ -145,7 +184,17 @@ FocusScope {
     }
 
     function activate(index, row) {
-        if (sectionId === "runners") {
+        if (sectionId === "search") {
+            openSearch();
+        } else if (sectionId === "launch" && row.key === "advanced") {
+            Sound.play("ok");
+            launch.showAdvanced = !launch.showAdvanced;
+            if (launch.showAdvanced)
+                Qt.callLater(function() { rows.index = Forms.firstAfter(content, Forms.rowOf(content, row.form)); });
+        } else if (sectionId === "launch" && row.type === "map") {
+            Sound.play("ok");
+            Forms.editMap(shell, row, function(name, value) { launch.setMapEntry(row.form, name, value); });
+        } else if (sectionId === "runners") {
             Sound.play("ok");
             reopen = { form: runners, field: "runner", id: row.runner };
             shell.push("pages/FormPage.qml", { runner: row.runner });
@@ -203,7 +252,9 @@ FocusScope {
         f();
     }
 
+    // A section opens with its Advanced row closed.
     onSectionChanged: {
+        launch.showAdvanced = false;
         loadSection();
         Qt.callLater(rows.reset);
     }
@@ -251,6 +302,10 @@ FocusScope {
 
         onActivated: function(i) { page.section = i; }
         onEscapedRight: {
+            if (page.sectionId === "search") {
+                page.openSearch();
+                return;
+            }
             page.zone = "rows";
             rows.forceActiveFocus();
         }
