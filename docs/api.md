@@ -675,7 +675,7 @@ user module overrides a system one with the same id. It holds a `module.toml` an
 api = 2
 id = "capture"
 name = "Video capture"
-version = "0.0.2"
+version = "0.0.3"
 description = "Records each session."   # optional, one or two sentences; the module's page shows it under the name
 
 [requires]
@@ -749,7 +749,7 @@ holding a `source.toml` and its executable; its data lives in `$XDG_DATA_HOME/un
 api = 2
 id = "gog"
 name = "GOG"
-version = "0.0.2"
+version = "0.0.3"
 description = "Installs GOG games."   # optional, as a module's
 exe = "bin/source"                # run as: bin/source <verb> [args]
 
