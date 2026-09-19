@@ -425,3 +425,36 @@ def test_the_artwork_page_opens_on_a_slot_and_lists_its_candidates(api, fake):
     window.close()
     pump(50)
 
+
+def test_the_switch2_artwork_page_opens_a_slot_with_what_shows_first(api, fake):
+    from PySide6.QtCore import Q_ARG, QMetaObject
+
+    api.theme.set("switch2")
+    engine, window = render(api, activate=True)
+    root = window.property("contentItem").childItems()[0].property("item")
+    QMetaObject.invokeMethod(root, "push", Q_ARG("QVariant", "pages/ArtworkPage.qml"), Q_ARG("QVariant", {"gameId": "dead-cells"}))
+    settle(window)
+    top = root.property("topPage")
+    form = api.screens.artwork
+    depth = root.property("depth")
+    assert form.gameId == "dead-cells" and [s["slot"] for s in top.property("slots")][:2] == ["box_front", "square"]
+    top.setProperty("index", 1)
+    top.open()
+    settle(window)
+    if not form.candidates:
+        wait_for(form.candidatesChanged, 3000)
+        pump(100)
+    top = root.property("topPage")
+    assert root.property("depth") == depth + 1 and top.property("slot") == "square" and form.candidatesSlot == "square"
+    cells = top.property("cells").toVariant()
+    assert cells[0]["kind"] == "now" and cells[1]["kind"] == "candidate" and len(cells) == 1 + len(form.candidates)
+    top.setProperty("cellIndex", 2)
+    top.activate()
+    wait_for(fake.mediaChanged, 3000)
+    pump(200)
+    cells = top.property("cells").toVariant()
+    assert cells[1]["kind"] == "under" and form.slot("square")["kind"] == "picked", "a pick puts the default under it"
+    assert top.property("cellIndex") == 3, "the ring stays on the candidate that was picked"
+    assert lit_fraction(window.grabWindow(), api.theme.ground) > 0.02
+    window.close()
+    pump(50)

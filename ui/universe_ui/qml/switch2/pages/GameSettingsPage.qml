@@ -44,18 +44,11 @@ FocusScope {
                 r.detail += (r.detail ? " " : "") + "Inherited from the global setting.";
             return r;
         });
-        if (g.title === "Artwork")
-            out.push({ label: "Refresh artwork", type: "action", action: "refresh", display: "",
-                       detail: "Fetch the box, the tile, the background and the logo from SteamGridDB, the description from RAWG." });
         return out;
     }
 
     function activate(index, row) {
-        if (row.action === "refresh") {
-            Sound.play("ok");
-            api.universe.mediaRefresh(args.gameId, false);
-            shell.showToast("Fetching artwork for " + (game ? game.title : args.gameId) + "…");
-        } else if (row.type === "bool") {
+        if (row.type === "bool") {
             form.toggle(row.form);
             Sound.play("select");
         } else {

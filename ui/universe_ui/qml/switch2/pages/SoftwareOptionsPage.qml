@@ -30,7 +30,7 @@ FocusScope {
             { key: "settings", label: "Game Settings", type: "action", page: "pages/GameSettingsPage.qml" },
             { key: "recordings", label: "Recordings", type: "action", page: "pages/AlbumPage.qml" },
             { key: "journal", label: "Journal", type: "action", page: "pages/NewsPage.qml" },
-            { key: "artwork", label: "Refresh Artwork", type: "action" },
+            { key: "artwork", label: "Artwork", type: "action", page: "pages/ArtworkPage.qml" },
             { key: "remove", label: "Remove from Library…", type: "action" }
         ]);
     }
@@ -58,10 +58,6 @@ FocusScope {
         } else if (row.key === "favourite") {
             game.favorite = !game.favorite;
             Sound.play("select");
-        } else if (row.key === "artwork") {
-            Sound.play("ok");
-            api.universe.mediaRefresh(game.id, false);
-            shell.showToast("Refreshing the artwork of " + game.title);
         } else if (row.key === "remove") {
             Sound.play("ok");
             var id = game.id, title = game.title;
