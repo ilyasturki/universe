@@ -6,6 +6,7 @@ import "../ui"
 FocusScope {
     id: page
 
+    objectName: "screenshotsPage"
     focus: true
 
     property var args: ({})
@@ -13,8 +14,12 @@ FocusScope {
     readonly property string landing: args.name || ""
     readonly property string landingSession: args.session || ""
     readonly property var store: api.screens.shots
-    readonly property var rows: store.rows
-    property int index: 0
+    readonly property var rows: grid.ordered
+    readonly property var playing: api.universe.currentSession
+    // The running session's shots come first, under their own heading, while this game is the one playing.
+    readonly property string since: game && playing && playing.session_id !== undefined && playing.id === game.id ? String(playing.started_at || "") : ""
+    property alias index: grid.index
+    readonly property int mine: grid.mine
     readonly property var current: index >= 0 && index < rows.length ? rows[index] : null
     readonly property string currentSession: current ? current.session : ""
     property bool lightbox: false
@@ -29,11 +34,7 @@ FocusScope {
             { glyph: "Start", label: "More", dim: current === null },
             { glyph: "B", label: "Back" } ]
 
-    readonly property int columns: 4
-    readonly property real gap: Theme.dp(24)
     readonly property real sideMargin: Theme.dp(90)
-    readonly property real cellWidth: (width - sideMargin * 2 + gap) / columns
-    readonly property real cellHeight: (cellWidth - gap) * 9 / 16 + gap
 
     onGameChanged: {
         index = 0;
@@ -66,13 +67,8 @@ FocusScope {
     }
 
     function stepRow(d) {
-        var next = index + d * columns;
-        if (next < 0 || next >= rows.length) {
+        if (!grid.stepLine(d))
             Sound.edge();
-            return;
-        }
-        Sound.tick();
-        index = next;
     }
 
     function view() {
@@ -93,7 +89,7 @@ FocusScope {
 
     // The card itself is the copy the menu keeps lit: the cell around it is the grid's transparent ground.
     function cellAnchor() {
-        return grid.currentItem ? grid.currentItem.card : grid;
+        return grid.currentCard();
     }
 
     function cellRect() {
@@ -102,7 +98,7 @@ FocusScope {
     }
 
     function openMenu() {
-        if (!current || !grid.currentItem) {
+        if (!current) {
             Sound.edge();
             return;
         }
@@ -200,7 +196,7 @@ FocusScope {
             id: meta
             anchors.top: title.bottom
             anchors.topMargin: Theme.dp(10)
-            text: "SCREENSHOTS  ·  " + page.rows.length + (page.current ? "  ·  " + page.current.dateText : "")
+            text: "SCREENSHOTS  ·  " + page.rows.length + (page.since !== "" ? "  ·  " + grid.mine + " this session" : "") + (page.current ? "  ·  " + page.current.dateText : "")
             color: Theme.textSecondary
             font.family: Theme.sans
             font.weight: Font.Medium
@@ -218,7 +214,7 @@ FocusScope {
         font.pixelSize: Theme.dp(26)
     }
 
-    GridView {
+    ShotGrid {
         id: grid
 
         anchors.top: header.bottom
@@ -227,38 +223,11 @@ FocusScope {
         anchors.bottomMargin: Theme.dp(Theme.hintBarHeight)
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.leftMargin: page.sideMargin - page.gap / 2
-        anchors.rightMargin: page.sideMargin - page.gap / 2
-        clip: true
-        model: page.rows
-        cellWidth: page.cellWidth
-        cellHeight: page.cellHeight
-        currentIndex: page.index
-        interactive: false
-        highlightFollowsCurrentItem: true
-        preferredHighlightBegin: Theme.dp(40)
-        preferredHighlightEnd: height - Theme.dp(40)
-        highlightRangeMode: GridView.ApplyRange
-        highlightMoveDuration: Theme.durView
-
-        delegate: Item {
-            width: grid.cellWidth
-            height: grid.cellHeight
-
-            readonly property bool current: index === page.index
-            readonly property Item card: cardItem
-
-            ShotCard {
-                id: cardItem
-                anchors.fill: parent
-                anchors.margins: page.gap / 2
-                source: modelData.url
-                caption: modelData.dateText
-                focused: parent.current && page.activeFocus && !page.lightbox
-                dimmed: !parent.current && page.activeFocus && !page.lightbox
-                journaled: modelData.hasJournal
-            }
-        }
+        topPadding: 0
+        sideMargin: page.sideMargin
+        rows: page.store.rows
+        since: page.since
+        active: page.activeFocus && !page.lightbox
     }
 
     Lightbox {

@@ -104,6 +104,38 @@ def test_the_media_tab_and_the_screenshots_page(api, fake):
     pump(50)
 
 
+def test_the_screenshots_page_puts_the_running_sessions_shots_first(api, fake, monkeypatch):
+    from PySide6.QtCore import QObject
+    from universe_ui import fake_core
+
+    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+    engine, window = render(api, activate=True)
+    root = window.property("contentItem").childItems()[0].property("item")
+    game = api.allGames.byId("the-technomancer")
+    root.openSub("pages/ScreenshotsPage.qml", {"game": game})
+    settle(window)
+    page = window.findChild(QObject, "screenshotsPage")
+    assert page is not None, "the screenshots page is up"
+    earlier = page.property("rows").toVariant()
+    assert earlier and page.property("since") == "" and page.property("mine") == 0, "no session: one run, no headings"
+    fake.launch("the-technomancer", "")
+    wait_for(fake.sessionShown, 3000)
+    pump(300)
+    api.home.screenshot()
+    wait_for(api.home.screenshotTaken, 3000)
+    wait_for(api.screens.shots.rowsChanged, 3000)
+    pump(100)
+    assert page.property("since") != "" and page.property("mine") == 1, "the playing game's page splits at the session's start"
+    rows = page.property("rows").toVariant()
+    assert len(rows) == len(earlier) + 1 and rows[0]["name"] not in {r["name"] for r in earlier}, "the new shot leads"
+    api.universe.stop(api.universe.currentSession["session_id"])
+    wait_for(api.universe.sessionEnded, 5000)
+    pump(100)
+    assert page.property("since") == "", "the session over, one run again"
+    window.close()
+    pump(50)
+
+
 def test_the_switch2_album_holds_the_shots_too(api):
     from PySide6.QtCore import Q_ARG, QMetaObject
 

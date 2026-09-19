@@ -42,6 +42,7 @@ class Home(QObject):
         self._flipping = False
         self._keys_on_thaw = []
         self._frame = ""
+        self._landing = ""
         self._taken = 0
         self._capturing = False
         self._captured = None
@@ -103,6 +104,7 @@ class Home(QObject):
             self._keys_on_thaw = []
             self._shown = "launcher"
             self._frame = ""
+            self._landing = ""
             self._captured = None
         self.changed.emit()
 
@@ -200,6 +202,7 @@ class Home(QObject):
             self.closeDock()
         self._client.focusSession()
         self._flipped = False
+        self._landing = ""
         self._captured = None
         if self._paused:
             self._thaw()
@@ -228,10 +231,13 @@ class Home(QObject):
     def _fresh(self):
         return self._captured is not None and (self._captured_still or time.monotonic() - self._captured_at < FRESH_S)
 
+    # `landing` names the page the theme opens on the playing game once it is up: details, journal, recordings, screenshots.
     @Slot()
-    def toLauncher(self):
+    @Slot(str)
+    def toLauncher(self, landing=""):
         if not self._session() or self._flipping:
             return
+        self._landing = str(landing or "")
         if self._open:
             self.closeDock()
         if not self._client.nested or not self._frames():
@@ -266,6 +272,11 @@ class Home(QObject):
         if self._pause_on_home:
             self._set_paused(True)
         self.changed.emit()
+
+    @Slot(result=str)
+    def takeLanding(self):
+        landing, self._landing = self._landing, ""
+        return landing
 
     @Slot()
     def covered(self):

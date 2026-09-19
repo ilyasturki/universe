@@ -26,7 +26,7 @@ FocusScope {
         detail = spec.detail || "";
         yesLabel = spec.yes || "OK";
         noLabel = spec.no || "Cancel";
-        index = 1;
+        index = spec.index !== undefined ? spec.index : 1;
         callback = done || null;
         Sound.panel();
         open = true;

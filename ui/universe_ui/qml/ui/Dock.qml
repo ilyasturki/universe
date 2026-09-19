@@ -26,6 +26,9 @@ FocusScope {
         { id: "resume", icon: "play", label: "Resume", kind: "action" },
         { id: "home", icon: "grid", label: "Home", kind: "action" },
         { id: "game", icon: "gamepad", label: "Game", kind: "group", children: [
+            { id: "details", icon: "info", label: "Details", kind: "action" },
+            { id: "journal", icon: "book", label: "Journal", kind: "action" },
+            { id: "recordings", icon: "film", label: "Recordings", kind: "action" },
             { id: "pause", icon: "snowflake", label: "Pause on HOME", kind: "toggle" },
             { id: "quit", icon: "power", label: "Quit", kind: "action", value: "asks first" } ] },
         "|",
@@ -140,6 +143,12 @@ FocusScope {
             Sound.cancel();
             api.home.toLauncher();
             break;
+        case "details":
+        case "journal":
+        case "recordings":
+            Sound.enter();
+            api.home.toLauncher(item.id);
+            break;
         case "shot":
             Sound.enter();
             hidden = true;
@@ -185,16 +194,26 @@ FocusScope {
             api.home.closeDock();
     }
 
+    function openShots() {
+        if (hidden)
+            return;
+        Sound.enter();
+        opened = false;
+        shots.open = true;
+    }
+
     onOpenChanged: {
         if (open) {
             index = 0;
             opened = false;
             hidden = false;
+            shots.open = false;
             refresh();
             api.home.volume("get", 0);
             Sound.panel();
             forceActiveFocus();
-        }
+        } else
+            shots.open = false;
     }
 
     Connections {
@@ -211,7 +230,7 @@ FocusScope {
             if (!dock.open)
                 return;
             dock.hidden = false;
-            toast.show(path ? "Screenshot saved" : "Screenshot failed");
+            toast.show(path ? "Screenshot saved  ·  ▼ to review" : "Screenshot failed");
         }
     }
 
@@ -503,6 +522,21 @@ FocusScope {
             }
         }
 
+        Text {
+            anchors.top: buttonsRow.bottom
+            anchors.topMargin: Theme.dp(24)
+            anchors.horizontalCenter: buttonsRow.horizontalCenter
+            text: "▼  Screenshots"
+            color: Qt.rgba(0.949, 0.953, 0.961, 0.55)
+            font.family: Theme.sans
+            font.weight: Font.Medium
+            font.pixelSize: Theme.dp(18)
+            font.letterSpacing: Theme.dp(0.5)
+            opacity: dock.opened ? 0.0 : 1.0
+
+            Behavior on opacity { Ease { duration: Theme.durQuick } }
+        }
+
         Rectangle {
             id: pop
 
@@ -635,14 +669,29 @@ FocusScope {
         }
     }
 
+    DockShots {
+        id: shots
+        objectName: "dockShots"
+        width: parent.width
+        height: parent.height
+        z: 2
+        session: dock.session
+        onCloseRequested: {
+            open = false;
+            dock.forceActiveFocus();
+        }
+    }
+
     ConfirmDialog {
         id: confirm
         anchors.fill: parent
+        z: 3
         onClosed: dock.forceActiveFocus()
     }
 
     Toast {
         id: toast
+        z: 5
     }
 
     Keys.onPressed: function(event) {
@@ -663,6 +712,8 @@ FocusScope {
         } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
             if (opened && current.kind === "group")
                 sub = Sound.stepped(sub, event.key === Qt.Key_Up ? -1 : 1, current.children.length);
+            else if (event.key === Qt.Key_Down)
+                openShots();
             else
                 Sound.edge();
         } else if (api.keys.isAccept(event)) {

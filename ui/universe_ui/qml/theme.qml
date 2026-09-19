@@ -706,10 +706,24 @@ FocusScope {
 
     // A game that exits by itself leaves the launcher on screen too: no flip, nothing to zoom.
     function landHome() {
+        var landing = api.home.takeLanding();
         if (root.launching || !api.home.flipped || api.home.frame === "") {
             api.home.covered();
+            if (!root.launching && api.home.flipped && landing !== "") {
+                clearToHome();
+                openLanding(landing);
+            }
             return;
         }
+        clearToHome();
+        var page = root.activePage;
+        var tile = page && page.landOnPlaying ? page.landOnPlaying(flip) : null;
+        // Under a page the frame fades rather than shrinking into a tile nobody sees.
+        flip.cover(landing === "" ? tile : null);
+        openLanding(landing);
+    }
+
+    function clearToHome() {
         subReturn = null;
         subOpen = false;
         if (detailLoader.item)
@@ -718,8 +732,16 @@ FocusScope {
         searchOpen = false;
         goToTab(0);
         focusPage();
-        var page = root.activePage;
-        flip.cover(page && page.landOnPlaying ? page.landOnPlaying(flip) : null);
+    }
+
+    function openLanding(landing) {
+        var game = landing !== "" ? api.allGames.byId(playingId) : null;
+        if (!game)
+            return;
+        if (landing === "details")
+            openDetail(game);
+        else
+            openSub("pages/" + { journal: "JournalPage", recordings: "RecordingsPage", screenshots: "ScreenshotsPage" }[landing] + ".qml", { game: game });
     }
 
     Connections {

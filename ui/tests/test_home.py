@@ -376,8 +376,10 @@ def test_the_dock_renders_over_a_running_game(api, fake, tmp_path, monkeypatch):
     key(overlay, Qt.Key.Key_Return)
     assert dock.property("opened") is True, "Game opens its card"
     assert api.home.pauseOnHome is True
+    for _ in range(3):
+        key(overlay, Qt.Key.Key_Down)
     key(overlay, Qt.Key.Key_Return)
-    assert api.home.pauseOnHome is False, "the first row is Pause on HOME, on by default: A turns it off"
+    assert api.home.pauseOnHome is False, "past Details, Journal and Recordings sits Pause on HOME, on by default: A turns it off"
     key(overlay, Qt.Key.Key_Escape)
     assert dock.property("opened") is False
     key(overlay, Qt.Key.Key_Escape)
@@ -385,6 +387,90 @@ def test_the_dock_renders_over_a_running_game(api, fake, tmp_path, monkeypatch):
     assert api.home.open is False, "B closes the dock"
     if os.environ.get("UNIVERSE_TEST_SHOTS"):
         image.save(str(tmp_path / "dock.png"))
+
+    root = window.property("contentItem").childItems()[0].property("item")
+    api.home.openDock()
+    overlay.requestActivate()
+    pump(300)
+    key(overlay, Qt.Key.Key_Right)
+    key(overlay, Qt.Key.Key_Return)
+    pump(600)
+    assert api.home.shown == "launcher" and api.home.open is False and root.property("detailOpen") is False, "Home from the dock: the launcher, nothing opened"
+    api.home.toGame()
+    pump(400)
+    root.goToTab(2)
+    api.home.openDock()
+    overlay.requestActivate()
+    pump(300)
+    key(overlay, Qt.Key.Key_Right)
+    key(overlay, Qt.Key.Key_Right)
+    key(overlay, Qt.Key.Key_Return)
+    key(overlay, Qt.Key.Key_Return)
+    pump(600)
+    assert api.home.shown == "launcher" and api.home.open is False, "Details in the Game card goes home"
+    assert root.property("tabIndex") == 0 and root.property("detailOpen") is True, "…lands on Home and opens the playing game's details there"
+    assert api.home.takeLanding() == "", "taken once"
+    api.home.toGame()
+    pump(400)
+    stop(api)
+    window.close()
+    overlay.close()
+    pump(50)
+
+
+def test_the_dock_lists_the_sessions_shots_and_trashes_one(api, fake, tmp_path, monkeypatch):
+    from PySide6.QtCore import QObject
+    from universe_ui import fake_core
+
+    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+    engine, window = render(api)
+    overlay = host.create_overlay(engine, window.size())
+    api.home.attachOverlay(overlay)
+    overlay.show()
+    pump(200)
+    fake.launch("the-technomancer", "")
+    wait_for(fake.sessionShown, 3000)
+    pump(300)
+    earlier = len(fake.screenshots("the-technomancer"))
+    assert earlier > 0, "the fixture seeds shots on past sessions"
+    api.home.screenshot()
+    wait_for(api.home.screenshotTaken, 3000)
+    pump(100)
+    api.home.openDock()
+    overlay.requestActivate()
+    pump(300)
+    dock = overlay.property("contentItem").childItems()[0].property("item")
+    panel = overlay.findChild(QObject, "dockShots")
+    assert panel is not None and panel.property("open") is False
+    key(overlay, Qt.Key.Key_Down)
+    pump(500)
+    assert panel.property("open") is True, "▼ from the row raises the screenshots over the game"
+    assert api.screens.shots.gameId == "the-technomancer"
+    assert panel.property("mine") == 1 and panel.property("count") == earlier + 1, "the shot just taken sits under THIS SESSION, the seeded ones under EARLIER"
+    assert dock.property("opened") is False
+    if os.environ.get("UNIVERSE_TEST_SHOTS"):
+        overlay.grabWindow().save(str(tmp_path / "dock-shots.png"))
+    key(overlay, Qt.Key.Key_F)
+    assert panel.property("busy") is True, "Y asks before trashing"
+    if os.environ.get("UNIVERSE_TEST_SHOTS"):
+        overlay.grabWindow().save(str(tmp_path / "dock-shots-confirm.png"))
+    key(overlay, Qt.Key.Key_Escape)
+    assert panel.property("busy") is False and panel.property("count") == earlier + 1, "B keeps it"
+    key(overlay, Qt.Key.Key_F)
+    key(overlay, Qt.Key.Key_Right)
+    key(overlay, Qt.Key.Key_Return)
+    for _ in range(40):
+        pump(50)
+        if panel.property("count") == earlier:
+            break
+    assert panel.property("mine") == 0 and panel.property("count") == earlier, "trashed: the list follows the directory"
+    assert len(fake.screenshots("the-technomancer")) == earlier
+    key(overlay, Qt.Key.Key_Up)
+    pump(500)
+    assert panel.property("open") is False and api.home.open is True, "▲ past the top row lowers the panel onto the dock"
+    key(overlay, Qt.Key.Key_Escape)
+    pump(400)
+    assert api.home.open is False
     stop(api)
     window.close()
     overlay.close()

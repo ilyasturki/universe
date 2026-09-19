@@ -152,8 +152,7 @@ class FakeCore:
             directory = self._game_dir(i) / "screenshots"
             sessions = self._data.get("sessions", {}).get(i, [])
             for p in sorted(directory.glob("*.png"), reverse=True) if directory.is_dir() else []:
-                stem = p.stem
-                taken = f"{stem[:4]}-{stem[4:6]}-{stem[6:8]}T{stem[9:11]}:{stem[11:13]}:{stem[13:15]}+02:00"
+                taken = datetime.strptime(p.stem, "%Y%m%d-%H%M%S").astimezone().isoformat()
                 session = next((s["session"] for s in sessions if s.get("started_at", "") <= taken <= s.get("ended_at", "")), "")
                 out.append({"game": i, "title": self._game(i)["title"], "path": str(p), "taken_at": taken, "session": session})
         out.sort(key=lambda r: os.path.basename(r["path"]), reverse=True)
@@ -531,8 +530,16 @@ class FakeCore:
             raise UniverseError("Invalid", f"volume: up, down, mute, set or get, not '{change}'")
         return {"percent": self.level, "muted": self.muted, "output": "Fake speakers"}
 
+    # A shot during a session lands in the game's screenshots dir, named by the moment, as the capture module's does.
     def screenshot(self):
-        return os.path.join(self._cache, "screenshot.png")
+        current = self.current()
+        if not current:
+            return os.path.join(self._cache, "screenshot.png")
+        shots = self._game(current["id"]).get("media", {}).get("screenshots") or []
+        name = time.strftime("%Y%m%d-%H%M%S") + ".png"
+        dest = str(self._game_dir(current["id"]) / "screenshots" / name)
+        src = shots[int(time.time()) % len(shots)] if shots else os.path.join(self._cache, "screenshot.png")
+        return _place(src, dest) if os.path.exists(src) else src
 
     def sessions(self, ident):
         idents = [self._game(ident)["id"]] if ident else [g["id"] for g in self._data["games"] if not (g.get("removed") or g.get("hidden"))]

@@ -27,7 +27,7 @@ One context property, `api`:
 | `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed` and `--size` turn it off) |
 | `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `frame`, `ground`, `detail`), `current`, `frame`, `set(id)`, `landing` / `takeLanding()`, `fontPath` |
-| `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `open`, `paused`, `pauseOnHome`, `flipped`, `frame`, `volumePercent`, `muted`; `pressed()`, `stopping(title)`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher()`, `covered()`, `stop()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotTaken(path)`), `volume(change, value)`, `launchValue(key)`, `launchChoices(key)`, `setLaunchValue(key, value)`, `screenRefresh()` |
+| `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `open`, `paused`, `pauseOnHome`, `flipped`, `frame`, `volumePercent`, `muted`; `pressed()`, `stopping(title)`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher(landing?)` / `takeLanding()`, `covered()`, `stop()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotTaken(path)`), `volume(change, value)`, `launchValue(key)`, `launchChoices(key)`, `setLaunchValue(key, value)`, `screenRefresh()` |
 
 A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `playTime`,
 `playCount`, `lastPlayed`, `releaseYear`, `developerList`, `publisherList`, `genreList`, `players`,
@@ -173,6 +173,16 @@ The dock is `ui/Dock.qml` in the overlay window: the game's card at the left, a 
 buttons at the right (`row` in `Dock.qml`), a group's settings in a card above its button. ◀ ▶ move
 along the row or change the focused value, ▲ ▼ the rows of a card, A acts, flips or opens, B closes
 the card or the dock, X takes a screenshot with the band faded out so the shell grabs the game alone.
+▼ from the row raises `ui/DockShots.qml` over the whole frame: the playing game's own screenshots
+(`api.screens.shots`, `load(id)` on opening) on a `ui/ShotGrid.qml` — THIS SESSION first (taken
+since the session's `started_at`: a running session is not in `sessions.jsonl` yet, so its shots
+carry no `session`), EARLIER below — A a `Lightbox`, Y "Remove this screenshot?" through the
+dock's `ConfirmDialog` (Keep it focused, Trash the screenshot → `shots.remove`), B or ▲ past the top
+row lowers it onto the dock. A shot taken meanwhile lands through the screenshots watcher. The
+Game card's Details, Journal and Recordings rows call `toLauncher(landing)`: the launcher comes up
+as for Home, and the theme's `landHome` takes the landing (`takeLanding()`, once) and opens the
+detail or the sub page on the playing game over Home, the frame fading rather than shrinking into
+the tile.
 
 The shutter is the launcher's, not the shell's, so it is the same for the dock's camera, a pad
 macro and `universe screenshot`: `api.home` plays `qml/assets/sounds/shutter.wav` and emits
@@ -372,8 +382,9 @@ menu has the same entry) opens `pages/ScreenshotsPage.qml` on `api.screens.shots
 16:9 grid of the player's own shots, newest first, A a `Lightbox` (◀ ▶ step, B closes), Y the
 journal entry covering the shot (`jumpRequested` to the journal page on that session), Start an
 `ActionMenu` — View, Journal entry, Remove screenshot… (Keep it / Trash the screenshot, through
-`shots.remove`). An `args.name` lands the cursor on that file. The detail strip keeps the store's
-promotional shots only (`assets.screenshotList`).
+`shots.remove`). An `args.name` lands the cursor on that file. While this game is the one playing
+the grid splits at the session's start, THIS SESSION over EARLIER, as the dock's panel does. The
+detail strip keeps the store's promotional shots only (`assets.screenshotList`).
 
 ## The Media tab
 
