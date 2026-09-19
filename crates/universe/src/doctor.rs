@@ -82,9 +82,8 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         inputplumber_wanted |= spec.kind == crate::runners::Kind::Emulator && spec.merged_options(config, None).get("inputplumber").and_then(|v| v.as_bool()).unwrap_or(false);
     }
     if inputplumber_wanted {
-        let installed = crate::inputplumber::installed();
-        let reachable = installed && crate::inputplumber::reachable();
-        push("inputplumber", reachable, if reachable { "daemon reachable".into() } else if installed { "daemon not reachable on the system bus (services.inputplumber)".into() } else { "inputplumber not on PATH; emulators run on the raw pads (runners.<id>.inputplumber = false to stop asking)".into() }, "runners");
+        let reachable = crate::inputplumber::reachable().await;
+        push("inputplumber", reachable, if reachable { "daemon reachable".into() } else { "daemon not on the system bus (services.inputplumber); emulators run on the raw pads (runners.<id>.inputplumber = false to stop asking)".into() }, "runners");
     }
     push("key-sgdb", config.api_key("sgdb").is_some(), if config.api_key("sgdb").is_some() { "present".into() } else { format!("missing ({})", config.keys.sgdb_file) }, "media");
     push("key-rawg", config.api_key("rawg").is_some(), if config.api_key("rawg").is_some() { "present".into() } else { format!("missing ({})", config.keys.rawg_file) }, "media");

@@ -355,7 +355,7 @@ impl Pads {
     /// Returns whether the pads were taken, so only then are they given back.
     pub async fn engage(&self) -> bool {
         match self {
-            Pads::Inputplumber => tokio::task::spawn_blocking(crate::inputplumber::engage).await.unwrap_or(false),
+            Pads::Inputplumber => crate::inputplumber::engage().await,
             #[cfg(test)]
             Pads::Memory(m) => {
                 m.record("pads:engage".into());
@@ -366,9 +366,7 @@ impl Pads {
 
     pub async fn release(&self) {
         match self {
-            Pads::Inputplumber => {
-                let _ = tokio::task::spawn_blocking(crate::inputplumber::release).await;
-            }
+            Pads::Inputplumber => crate::inputplumber::release().await,
             #[cfg(test)]
             Pads::Memory(m) => m.record("pads:release".into()),
         }

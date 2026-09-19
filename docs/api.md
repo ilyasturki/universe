@@ -360,12 +360,13 @@ file flag and the game file (`launch.exe`: a ROM, an image, an EBOOT.BIN, a fold
 `launch.args`. `MANGOHUD=1` and `launch.env` apply as for Proton.
 
 Every emulator carries the `inputplumber` option (default true): before the game unit starts, the
-core restarts the InputPlumber system unit, enables `manage-all` and waits for the first composite
-device (7-9 s on a fresh daemon), so the emulator sees one composite pad and the raw nodes are
-hidden; `session-end` gives the pads back (`manage-all` off, then a wait for `/dev/inputplumber/
+core restarts the InputPlumber system unit over the system bus (a refusal is logged and the
+session goes on), sets its `ManageAllDevices` property and waits for the first composite device
+(7-9 s on a fresh daemon), so the emulator sees one composite pad and the raw nodes are hidden;
+`session-end` gives the pads back (`ManageAllDevices` off, then a wait for `/dev/inputplumber/
 by-hidden` to empty). The marker remembers that it was engaged, so a `session-end` run by systemd
-alone releases it. The controller watcher reads the composite device like any pad. Without
-`inputplumber` on PATH the option is skipped and doctor says so.
+alone releases it. The controller watcher reads the composite device like any pad. Without the
+daemon on the system bus the option is skipped and doctor says so.
 
 ## Media
 
