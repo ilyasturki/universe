@@ -10,7 +10,7 @@ log = logging.getLogger("universe.gamepad")
 BTN_A, BTN_B, BTN_X, BTN_Y, BTN_BACK, BTN_GUIDE, BTN_START = 0, 1, 2, 3, 4, 5, 6
 BTN_LEFTSTICK, BTN_RIGHTSTICK, BTN_LEFTSHOULDER, BTN_RIGHTSHOULDER = 7, 8, 9, 10
 BTN_DPAD_UP, BTN_DPAD_DOWN, BTN_DPAD_LEFT, BTN_DPAD_RIGHT = 11, 12, 13, 14
-AXIS_LEFTX, AXIS_LEFTY, AXIS_RIGHTX, AXIS_TRIGGERLEFT, AXIS_TRIGGERRIGHT = 0, 1, 2, 4, 5
+AXIS_LEFTX, AXIS_LEFTY, AXIS_RIGHTX, AXIS_RIGHTY, AXIS_TRIGGERLEFT, AXIS_TRIGGERRIGHT = 0, 1, 2, 3, 4, 5
 
 BUTTON_KEYS = {
     BTN_A: Qt.Key.Key_Return,
@@ -29,6 +29,7 @@ BUTTON_KEYS = {
 AXIS_KEYS = {
     AXIS_LEFTX: {-1: Qt.Key.Key_Left, 1: Qt.Key.Key_Right},
     AXIS_LEFTY: {-1: Qt.Key.Key_Up, 1: Qt.Key.Key_Down},
+    AXIS_RIGHTY: {-1: Qt.Key.Key_BracketLeft, 1: Qt.Key.Key_BracketRight},
     AXIS_TRIGGERLEFT: {1: Qt.Key.Key_PageUp},
     AXIS_TRIGGERRIGHT: {1: Qt.Key.Key_PageDown},
 }
@@ -36,7 +37,7 @@ AXIS_KEYS = {
 STICKS = {AXIS_RIGHTX: "rightX"}
 STICK_DEADZONE = 0.18
 
-REPEATING = {Qt.Key.Key_Up, Qt.Key.Key_Down, Qt.Key.Key_Left, Qt.Key.Key_Right}
+REPEATING = {Qt.Key.Key_Up, Qt.Key.Key_Down, Qt.Key.Key_Left, Qt.Key.Key_Right, Qt.Key.Key_BracketLeft, Qt.Key.Key_BracketRight}
 AXIS_PRESS, AXIS_RELEASE = 0.5, 0.3
 REPEAT_DELAY, REPEAT_INTERVAL = 0.35, 0.09
 
@@ -193,6 +194,7 @@ KEY_NAMES = {
     "Q": Qt.Key.Key_Q, "LB": Qt.Key.Key_Q, "E": Qt.Key.Key_E, "RB": Qt.Key.Key_E,
     "PgUp": Qt.Key.Key_PageUp, "LT": Qt.Key.Key_PageUp, "PgDown": Qt.Key.Key_PageDown, "RT": Qt.Key.Key_PageDown,
     "F1": Qt.Key.Key_F1, "Start": Qt.Key.Key_F1,
+    "BracketLeft": Qt.Key.Key_BracketLeft, "RSUp": Qt.Key.Key_BracketLeft, "BracketRight": Qt.Key.Key_BracketRight, "RSDown": Qt.Key.Key_BracketRight,
 }
 
 

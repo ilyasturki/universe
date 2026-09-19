@@ -28,6 +28,16 @@ QtObject {
         return next;
     }
 
+    function paged(i, d, columns, rows, n) {
+        if (n <= 0)
+            return i;
+        var lastRow = Math.floor((n - 1) / columns);
+        var row = Math.max(0, Math.min(lastRow, Math.floor(i / columns) + d * Math.max(1, rows)));
+        var next = Math.min(n - 1, row * columns + i % columns);
+        play(next === i ? "edge" : "tick");
+        return next;
+    }
+
     function play(name) {
         var now = Date.now();
         if (now - (lastPlayed[name] || 0) < 15)

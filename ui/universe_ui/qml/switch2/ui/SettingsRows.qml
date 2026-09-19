@@ -86,6 +86,26 @@ FocusScope {
         index = s[next];
     }
 
+    function stepScreen(d) {
+        var s = stops();
+        if (s.indexOf(index) < 0) {
+            reset();
+            return;
+        }
+        var centre = yOf(index) + heightOf(index) / 2 + d * view.height, best = index, dist = Infinity;
+        for (var k = 0; k < s.length; k++) {
+            var dd = Math.abs(yOf(s[k]) + heightOf(s[k]) / 2 - centre);
+            if (dd < dist) {
+                best = s[k];
+                dist = dd;
+            }
+        }
+        if (best === index)
+            best = s[d < 0 ? 0 : s.length - 1];
+        Sound.play(best === index ? "edge" : "tick");
+        index = best;
+    }
+
     onModelChanged: {
         if (!currentRow || currentRow.heading)
             reset();
@@ -103,6 +123,12 @@ FocusScope {
     Keys.onRightPressed: Sound.play("edge")
 
     Keys.onPressed: function(event) {
+        var screen = api.keys.isScreenUp(event) ? -1 : api.keys.isScreenDown(event) ? 1 : 0;
+        if (screen) {
+            event.accepted = true;
+            stepScreen(screen);
+            return;
+        }
         if (event.isAutoRepeat)
             return;
         if (api.keys.isAccept(event)) {

@@ -104,6 +104,11 @@ FocusScope {
         index = Sound.stepped(index, d, rows.length);
     }
 
+    function stepScreen(d) {
+        var pitch = list.currentItem ? list.currentItem.height + list.spacing : 0;
+        index = Sound.paged(index, d, 1, pitch > 0 ? Math.floor(list.height / pitch) : 1, rows.length);
+    }
+
     function focusVideo(play) {
         if (!current || !current.url) {
             Sound.edge();
@@ -221,7 +226,8 @@ FocusScope {
 
     Keys.onPressed: function(event) {
         var arrow = event.key === Qt.Key_Left || event.key === Qt.Key_Right;
-        if (event.isAutoRepeat && !(page.videoFocused && arrow))
+        var screen = api.keys.isScreenUp(event) ? -1 : api.keys.isScreenDown(event) ? 1 : 0;
+        if (event.isAutoRepeat && !(page.videoFocused && arrow) && !screen)
             return;
         if (page.journalFocused) {
             event.accepted = true;
@@ -284,6 +290,9 @@ FocusScope {
             } else {
                 Sound.edge();
             }
+        } else if (screen) {
+            event.accepted = true;
+            page.videoFocused ? Sound.edge() : stepScreen(screen);
         }
     }
 

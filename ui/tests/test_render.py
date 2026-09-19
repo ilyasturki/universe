@@ -307,3 +307,62 @@ def test_the_install_pages_render_a_running_install_in_both_looks(api, fake):
     assert sources.job["cancelled"] and next(r for r in sources.rows if r["title"] == "Stardew Valley")["partial"]
     window.close()
     pump(50)
+
+
+def test_the_right_stick_pages_the_grids_in_both_looks(api):
+    from PySide6.QtCore import Q_ARG, QMetaObject, Qt
+    from PySide6.QtTest import QTest
+
+    def title(page):
+        game = page.property("currentGame")
+        return game.property("title") if game is not None else None
+
+    def click(key, times=1):
+        for _ in range(times):
+            QTest.keyClick(window, key)
+        pump(50)
+
+    engine, window = render(api, activate=True)
+    root = window.property("contentItem").childItems()[0].property("item")
+    root.goToTab(1)
+    settle(window)
+    page = root.property("activePage")
+    # Eight games on eight columns: the add tile alone on the second row.
+    click(Qt.Key.Key_BracketLeft)
+    first = title(page)
+    assert first and page.property("onAddTile") is False, "a screenful up lands on the first row"
+    click(Qt.Key.Key_BracketLeft)
+    assert title(page) == first, "the first row is a clamp"
+    click(Qt.Key.Key_Right, 3)
+    click(Qt.Key.Key_BracketRight)
+    assert page.property("onAddTile") is True, "down past the last game's row lands on the last cell"
+    click(Qt.Key.Key_BracketRight, 3)
+    assert page.property("onAddTile") is True
+    click(Qt.Key.Key_BracketLeft)
+    assert title(page) == first, "back up from the last cell: its own column, the first"
+    window.close()
+    pump(50)
+
+    api.theme.set("switch2")
+    engine, window = render(api, activate=True)
+    root = window.property("contentItem").childItems()[0].property("item")
+    QMetaObject.invokeMethod(root, "push", Q_ARG("QVariant", "pages/AlbumPage.qml"), Q_ARG("QVariant", {}))
+    settle(window)
+    top = root.property("topPage")
+    first = top.property("current").toVariant()
+    click(Qt.Key.Key_BracketRight)
+    assert top.property("current").toVariant() != first
+    click(Qt.Key.Key_BracketLeft)
+    assert top.property("current").toVariant() == first
+    warnings = []
+    engine.warnings.connect(lambda ws: warnings.extend(w.toString() for w in ws))
+    for source, args, keys in (("pages/SettingsPage.qml", {"section": "launch"}, (Qt.Key.Key_Right,)),
+                               ("pages/AllSoftwarePage.qml", {}, ())):
+        QMetaObject.invokeMethod(root, "push", Q_ARG("QVariant", source), Q_ARG("QVariant", args))
+        settle(window)
+        for key in keys + (Qt.Key.Key_BracketRight, Qt.Key.Key_BracketRight, Qt.Key.Key_BracketLeft, Qt.Key.Key_Left, Qt.Key.Key_BracketRight):
+            click(key)
+        click(Qt.Key.Key_Escape, 2)
+    assert warnings == []
+    window.close()
+    pump(50)

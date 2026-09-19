@@ -31,6 +31,7 @@ GridView {
     cacheBuffer: cellHeight * 2
 
     readonly property int lastRow: cells > 0 ? Math.floor((cells - 1) / columns) : 0
+    readonly property int visibleRows: cellHeight > 0 ? Math.max(1, Math.floor(height / cellHeight)) : 1
 
     function targetY(index) {
         // A Flickable whose content fits rests at -topMargin, not 0.
@@ -122,6 +123,16 @@ GridView {
             event.accepted = false;
         else
             moveCurrent(cursor + 1);
+    }
+
+    // The right stick: a screenful of rows, staying in the column.
+    Keys.onPressed: function(event) {
+        var d = api.keys.isScreenUp(event) ? -1 : api.keys.isScreenDown(event) ? 1 : 0;
+        if (!d || !selectionActive)
+            return;
+        event.accepted = true;
+        var row = Math.max(0, Math.min(lastRow, Math.floor(cursor / columns) + d * visibleRows));
+        moveCurrent(Math.min(cells - 1, row * columns + cursor % columns));
     }
 
     // Room for the add tile, drawn outside the delegates, when it starts a row.

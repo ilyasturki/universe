@@ -124,6 +124,24 @@ FocusScope {
             Sound.edge();
     }
 
+    function stepScreen(d) {
+        var s = stopOf(index);
+        if (!s)
+            return;
+        var list = layout.stops[s.col];
+        var centre = (s.y0 + s.y1) / 2 + d * view.height, best = s, dist = Infinity;
+        for (var i = 0; i < list.length; i++) {
+            var dd = Math.abs((list[i].y0 + list[i].y1) / 2 - centre);
+            if (dd < dist) {
+                best = list[i];
+                dist = dd;
+            }
+        }
+        if (best === s)
+            best = list[d < 0 ? 0 : list.length - 1];
+        best === s ? Sound.edge() : go(best);
+    }
+
     function cross(d) {
         var s = stopOf(index);
         var col = s ? s.col + d : -1;
@@ -161,6 +179,12 @@ FocusScope {
     Keys.onRightPressed: cross(1)
 
     Keys.onPressed: function(event) {
+        var screen = api.keys.isScreenUp(event) ? -1 : api.keys.isScreenDown(event) ? 1 : 0;
+        if (screen) {
+            event.accepted = true;
+            stepScreen(screen);
+            return;
+        }
         if (event.isAutoRepeat)
             return;
         if (api.keys.isAccept(event)) {

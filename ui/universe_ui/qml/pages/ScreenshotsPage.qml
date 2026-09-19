@@ -61,6 +61,10 @@ FocusScope {
         index = Sound.stepped(index, d, rows.length);
     }
 
+    function stepScreen(d) {
+        index = Sound.paged(index, d, columns, Math.floor(grid.height / cellHeight), rows.length);
+    }
+
     function stepRow(d) {
         var next = index + d * columns;
         if (next < 0 || next >= rows.length) {
@@ -131,7 +135,8 @@ FocusScope {
     Keys.onPressed: function(event) {
         var arrow = event.key === Qt.Key_Left || event.key === Qt.Key_Right;
         var vertical = event.key === Qt.Key_Up || event.key === Qt.Key_Down;
-        if (event.isAutoRepeat && !arrow && !vertical)
+        var screen = api.keys.isScreenUp(event) ? -1 : api.keys.isScreenDown(event) ? 1 : 0;
+        if (event.isAutoRepeat && !arrow && !vertical && !screen)
             return;
         event.accepted = true;
         if (lightbox) {
@@ -155,6 +160,8 @@ FocusScope {
             step(event.key === Qt.Key_Left ? -1 : 1);
         else if (vertical)
             stepRow(event.key === Qt.Key_Up ? -1 : 1);
+        else if (screen)
+            stepScreen(screen);
         else
             event.accepted = false;
     }

@@ -24,6 +24,7 @@ FocusScope {
     width: columns * cellWidth + (columns - 1) * gap
 
     function move(d) { index = Sound.stepped(index, d, count); }
+    function stepScreen(d) { index = Sound.paged(index, d, columns, Math.floor(grid.height / pitchY), count); }
 
     function scrollToCurrent() {
         if (view.height <= 0)
@@ -52,6 +53,12 @@ FocusScope {
     Keys.onDownPressed: Math.floor(index / columns) < lastRow ? move(Math.min(columns, count - 1 - index)) : Sound.play("edge")
 
     Keys.onPressed: function(event) {
+        var screen = api.keys.isScreenUp(event) ? -1 : api.keys.isScreenDown(event) ? 1 : 0;
+        if (screen) {
+            event.accepted = true;
+            stepScreen(screen);
+            return;
+        }
         if (event.isAutoRepeat)
             return;
         if (api.keys.isAccept(event)) {

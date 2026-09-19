@@ -113,6 +113,10 @@ FocusScope {
         index = Sound.stepped(index, d, rows.length);
     }
 
+    function stepScreen(d) {
+        index = Sound.paged(index, d, columns, Math.floor(grid.height / cellHeight), rows.length);
+    }
+
     function stepRow(d) {
         var next = index + d * columns;
         if (next < 0 || next >= rows.length) {
@@ -384,7 +388,8 @@ FocusScope {
         Keys.onPressed: function(event) {
             var arrow = event.key === Qt.Key_Left || event.key === Qt.Key_Right;
             var vertical = event.key === Qt.Key_Up || event.key === Qt.Key_Down;
-            if (event.isAutoRepeat && !arrow && !vertical)
+            var screen = api.keys.isScreenUp(event) ? -1 : api.keys.isScreenDown(event) ? 1 : 0;
+            if (event.isAutoRepeat && !arrow && !vertical && !screen)
                 return;
             event.accepted = true;
             if (page.lightbox) {
@@ -410,6 +415,8 @@ FocusScope {
                 page.step(event.key === Qt.Key_Left ? -1 : 1);
             else if (vertical)
                 page.stepRow(event.key === Qt.Key_Up ? -1 : 1);
+            else if (screen)
+                page.stepScreen(screen);
             else if (api.keys.isPageUp(event) || api.keys.isPageDown(event))
                 ;  // Pegasus turns every trigger axis sample into a fresh press; only the release is single.
             else

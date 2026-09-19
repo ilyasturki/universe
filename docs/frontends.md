@@ -17,7 +17,7 @@ One context property, `api`:
 
 | Member | What it is |
 |---|---|
-| `api.keys` | `is{Accept,Cancel,Details,Filters,PageUp,PageDown,PrevPage,NextPage,Menu}(event)` — the Pegasus key-action contract |
+| `api.keys` | `is{Accept,Cancel,Details,Filters,PageUp,PageDown,PrevPage,NextPage,Menu}(event)` — the Pegasus key-action contract — plus `isScreenUp` / `isScreenDown` (`[` / `]`, the right stick up and down): a screenful in a long list |
 | `api.allGames` | the library model |
 | `api.collections` | collections, one per platform |
 | `api.memory` | `get`/`set`/`has`/`unset`, persisted to `$XDG_STATE_HOME/universe/ui-memory.json` |
@@ -268,7 +268,8 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
 | Start | F1 | context menu of the game on screen, whichever part of the page has focus |
 | Guide | — | HOME, through the watcher (`api.home`), not the mapper |
 | d-pad, left stick | arrows | navigation |
-| right stick | `api.pad.rightX` | analog, past a 0.18 deadzone: scrubs the recording player |
+| right stick up / down | `[` / `]` | a screenful up or down, same column, repeating like the arrows: the library and software grids, the settings rows and cards, the media grids and lists |
+| right stick left / right | `api.pad.rightX` | analog, past a 0.18 deadzone: scrubs the recording player |
 
 `api.pad.muted` (set by `Api` while the controller section's live view is on) drops the presses;
 releases still land, so nothing stays held across it. The hint bar names buttons the Xbox way

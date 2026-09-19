@@ -23,6 +23,14 @@ FocusScope {
         list.activated(index);
     }
 
+    function stepScreen(d) {
+        var next = Sound.paged(index, d, 1, Math.floor(height / rowHeight), sections.length);
+        if (next === index)
+            return;
+        index = next;
+        list.activated(index);
+    }
+
     Keys.onUpPressed: step(-1)
     Keys.onDownPressed: step(1)
     Keys.onRightPressed: {
@@ -32,6 +40,12 @@ FocusScope {
     Keys.onLeftPressed: Sound.play("edge")
 
     Keys.onPressed: function(event) {
+        var screen = api.keys.isScreenUp(event) ? -1 : api.keys.isScreenDown(event) ? 1 : 0;
+        if (screen) {
+            event.accepted = true;
+            stepScreen(screen);
+            return;
+        }
         if (event.isAutoRepeat)
             return;
         if (api.keys.isAccept(event)) {

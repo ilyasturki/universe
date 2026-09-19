@@ -35,6 +35,18 @@ def test_axis_hysteresis():
     assert m.axis(gamepad.AXIS_RIGHTX, 32767) == []
 
 
+def test_right_stick_vertical_pages_and_repeats():
+    clock = Clock()
+    m = Mapper(clock)
+    assert m.axis(gamepad.AXIS_RIGHTY, 30000) == [(Qt.Key.Key_BracketRight, True, False)]
+    assert m.axis(gamepad.AXIS_RIGHTY, 12000) == []
+    clock.now += gamepad.REPEAT_DELAY + 0.01
+    assert m.tick() == [(Qt.Key.Key_BracketRight, True, True)]
+    assert m.axis(gamepad.AXIS_RIGHTY, 0) == [(Qt.Key.Key_BracketRight, False, False)]
+    assert m.axis(gamepad.AXIS_RIGHTY, -30000) == [(Qt.Key.Key_BracketLeft, True, False)]
+    assert m.stick(gamepad.AXIS_RIGHTY, -30000) is None
+
+
 def test_right_stick_is_analog_past_the_deadzone():
     m = Mapper(Clock())
     assert m.stick(gamepad.AXIS_LEFTX, 32767) is None

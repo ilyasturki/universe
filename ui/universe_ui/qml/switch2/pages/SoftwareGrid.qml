@@ -38,6 +38,7 @@ FocusScope {
     implicitWidth: columns * pitch
 
     function go(next) { index = Sound.stepped(index, next - index, cells); }
+    function stepScreen(d) { index = Sound.paged(index, d, columns, Math.floor(grid.height / cellHeight), cells); }
 
     Keys.onRightPressed: index % columns === columns - 1 || index === cells - 1 ? Sound.play("edge") : go(index + 1)
     Keys.onLeftPressed: {
@@ -54,6 +55,12 @@ FocusScope {
     Keys.onUpPressed: index >= columns ? go(index - columns) : Sound.play("edge")
 
     Keys.onPressed: function(event) {
+        var screen = api.keys.isScreenUp(event) ? -1 : api.keys.isScreenDown(event) ? 1 : 0;
+        if (screen) {
+            event.accepted = true;
+            stepScreen(screen);
+            return;
+        }
         if (event.isAutoRepeat)
             return;
         if (api.keys.isAccept(event)) {

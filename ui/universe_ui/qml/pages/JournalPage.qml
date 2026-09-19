@@ -98,6 +98,11 @@ FocusScope {
         index = Sound.stepped(index, d, rows.length);
     }
 
+    function stepScreen(d) {
+        var pitch = list.currentItem ? list.currentItem.height + list.spacing : 0;
+        index = Sound.paged(index, d, 1, pitch > 0 ? Math.floor(list.height / pitch) : 1, rows.length);
+    }
+
     function maxScroll() {
         return Math.max(0, flick.contentHeight - flick.height);
     }
@@ -222,7 +227,8 @@ FocusScope {
 
     Keys.onPressed: function(event) {
         var arrow = event.key === Qt.Key_Left || event.key === Qt.Key_Right;
-        if (event.isAutoRepeat && !(lightbox && arrow) && !(mode === 2 && arrow))
+        var screen = api.keys.isScreenUp(event) ? -1 : api.keys.isScreenDown(event) ? 1 : 0;
+        if (event.isAutoRepeat && !(lightbox && arrow) && !(mode === 2 && arrow) && !screen)
             return;
 
         event.accepted = true;
@@ -274,6 +280,8 @@ FocusScope {
             mode === 2 ? stepShot(1) : mode >= 1 ? Sound.edge() : read();
         } else if (event.key === Qt.Key_Left) {
             mode === 2 ? stepShot(-1) : mode === 1 ? leave() : Sound.edge();
+        } else if (screen) {
+            mode === 0 ? stepScreen(screen) : Sound.edge();
         } else {
             event.accepted = false;
         }

@@ -21,6 +21,8 @@ KEYS = {
     "PrevPage": (Qt.Key.Key_Q,),
     "NextPage": (Qt.Key.Key_E,),
     "Menu": (Qt.Key.Key_F1,),
+    "ScreenUp": (Qt.Key.Key_BracketLeft,),
+    "ScreenDown": (Qt.Key.Key_BracketRight,),
 }
 
 SOURCE_NAMES = {"gog": "GOG", "lutris": "Lutris", "steam": "Steam", "epic": "Epic", "itch": "itch.io"}
@@ -63,6 +65,8 @@ class Keys(QObject):
     isPrevPage = _is("PrevPage")
     isNextPage = _is("NextPage")
     isMenu = _is("Menu")
+    isScreenUp = _is("ScreenUp")
+    isScreenDown = _is("ScreenDown")
 
 
 class Pad(QObject):
