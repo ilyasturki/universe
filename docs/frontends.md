@@ -508,28 +508,39 @@ reads "N games to import" and the same press asks to confirm; `importLutris()` a
 `libraryChanged([])` — a full reload, the import updates games too — and toasts the count and hours. Nothing here touches the core: the
 CLI's `universe add` and `universe migrate` are the same calls.
 
-## The artwork page and section
+## The artwork pages and section
 
-`api.screens.artwork` is one game's artwork page (Reprise: the Artwork entry of a game's menu, or a
-tile of the overview). `load(id)` reads `media_status` into `slots` — one row per slot with `url`
+`api.screens.artwork` is one game's artwork (Reprise: `pages/ArtworkPage.qml`, the Artwork entry of a
+game's menu or a cell of the Settings section; the Switch 2 look: `switch2/pages/ArtworkPage.qml`
+from Software Options, and `ArtworkSlotPage.qml` pushed over it, which shares the screen — only the
+page below unloads it). `load(id)` reads `media_status` into `slots` — one row per slot with `url`
 (what shows), `defaultUrl` and `overrideUrl` (the two layers, see `docs/api.md`), `kind`
-(`picked`, `default`, `missing`) and `kindLabel`, `originLabel` and `defaultOriginLabel`,
+(`picked`, `default`, `missing`), `kindLabel` (the one pill both looks draw: "Your pick", the
+provider that fetched the default, or "Missing"), `originLabel` and `defaultOriginLabel`,
 `hasOverride`, `hasDefault`, `aspect`, `use` (where the themes show the slot) — and `entry`, the
-SteamGridDB entry the candidates come from ("Name (year)"), which heads the candidates so a wrong
-match is seen. `loadCandidates(slot)` fetches `media_candidates` off the UI thread into `candidates`
-(`url` is the provider's, `thumb` what the grid shows, `votes`), `more` and `candidatesBusy`;
-`moreCandidates()` takes the next page. `apply(slot, url)` runs `media_set_url` on a thread and
-emits `mediaChanged` for the game once the pick landed, `removeOverride(slot)` runs `media_unset`;
-both report through `message`. The wrong-match flow is `search(query)` → `hits` (`name`, `year`,
-`verified`, `current`) → `pin(id)`, which writes `metadata.sgdb_id` through `media_pin` and reloads
-the candidates. Local URLs carry the file's mtime as a query (`models.file_url`), so a pick that
-replaces a file at the same path repaints instead of showing the image cache's copy.
+SteamGridDB entry the candidates come from ("Name (year)"), which heads the page so a wrong
+match is seen. Reprise's page has two levels: the five slots as art cards (two rows: box front,
+square, banner; background, logo), then a slot's browser — what shows now, the default under a
+pick, and the candidates as a grid — opened by A, or straight away when the page is opened with
+a `slot` (the Settings section's A). `loadCandidates(slot)` fetches `media_candidates` off the UI
+thread into `candidates` (`url` is the provider's, `thumb` what the grid shows, `votes`), `more`
+and `candidatesBusy`; `moreCandidates()` takes the next page. `apply(slot, url)` runs
+`media_set_url` on a thread, `useFile(slot, path)` `media_set_slot` (the page's menu, through
+`PathSheet` / the shell's `browse`); both emit `mediaChanged` for the game once the pick landed and
+`applied(slot)`. `removeOverride(slot)` runs `media_unset` (X in Reprise, the "Default under it"
+cell or the options menu on the Switch 2); `refresh()` fetches the missing art. All report
+through `message`. The wrong-match flow is `search(query)` → `hits` (`name`, `year`, `verified`,
+`current`) → `pin(id)`, which writes `metadata.sgdb_id` through `media_pin` and reloads the
+candidates; Reprise puts the hits in a sheet (Y), the Switch 2 look runs it through the shell's
+`prompt` and `pick` (`switch2/pages/Artwork.js`). Local URLs carry the file's mtime as a query
+(`models.file_url`), so a pick that replaces a file at the same path repaints instead of showing
+the image cache's copy.
 
 `api.screens.artworkOverview` is the Artwork section of the Settings tab (`ArtworkOverview.qml`, a
-column of its own next to the sidebar): `slot` and `filter` (`all`, `missing`, `picked`, `default`)
-pick what `tiles` holds (`id`, `title`, `url`, `kind`), `counts` says how many games stand in each
-state for the slot, `slotUse` where the slot shows, `refreshAll()` fetches the missing art of every
-game (the section's X, a button top right). `load()` reads
+column of its own next to the sidebar): the library as a matrix, `rows` (`id`, `title`, `slots` —
+the five slot rows above, in slot order — `missing`, `picked`), `columns` (`slot`, `label`,
+`aspect`, `use`, `missing`: how many games lack it) and `totals` (`games`, `missing`, `picked`);
+`refreshAll()` fetches the missing art of every game (the section's X). `load()` reads
 `media_status` for the whole library on a thread; a `mediaChanged` or `libraryChanged` reloads it
 after a short debounce while the section is on screen.
 
