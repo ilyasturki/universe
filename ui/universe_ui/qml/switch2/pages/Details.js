@@ -7,7 +7,7 @@ var SENTENCES = {
     "capture.fps": "Frames per second; auto follows the screen's refresh rate.",
     "capture.microphone": "Mix the microphone into the recording.",
     "capture.min_duration_s": "Sessions shorter than this are not kept.",
-    "journal.enabled": "Write a journal entry after each session of this game.",
+    "journal.enabled": "Write a journal entry after each session of this game, from its recording and screenshots.",
     "journal.language": "The language the entries are written in.",
     "journal.provider": "The model provider that writes the entries.",
     "journal.model": "The model asked for the entry.",

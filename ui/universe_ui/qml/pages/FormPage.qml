@@ -146,7 +146,7 @@ FocusScope {
         anchors.right: parent.right
         anchors.leftMargin: page.sideMargin
         anchors.rightMargin: page.sideMargin
-        height: Theme.dp(88)
+        height: Math.max(Theme.dp(88), head.height)
 
         GameHeader {
             anchors.fill: parent
@@ -171,6 +171,7 @@ FocusScope {
         }
 
         Column {
+            id: head
             anchors.left: parent.left
             anchors.leftMargin: page.hasLogo ? logo.width + Theme.dp(28) : 0
             anchors.right: parent.right
@@ -203,6 +204,18 @@ FocusScope {
                 color: Theme.textMuted
                 font.family: Theme.sans
                 font.pixelSize: Theme.dp(21)
+                elide: Text.ElideRight
+            }
+
+            Text {
+                width: parent.width
+                visible: text !== ""
+                text: page.info ? page.info.description || "" : ""
+                color: Theme.textMuted
+                font.family: Theme.sans
+                font.pixelSize: Theme.dp(21)
+                wrapMode: Text.WordWrap
+                maximumLineCount: 3
                 elide: Text.ElideRight
             }
         }

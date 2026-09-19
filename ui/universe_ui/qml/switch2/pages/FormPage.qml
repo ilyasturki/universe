@@ -118,6 +118,7 @@ FocusScope {
     }
 
     Label {
+        id: metaLine
         x: Theme.dp(120)
         y: header.height + Theme.dp(24)
         width: parent.width - x - Theme.dp(120)
@@ -132,12 +133,26 @@ FocusScope {
         font.pixelSize: Theme.dp(Theme.fontSmall)
     }
 
+    Label {
+        id: description
+        x: Theme.dp(120)
+        y: metaLine.y + (metaLine.visible ? metaLine.height + Theme.dp(8) : 0)
+        width: parent.width - x - Theme.dp(120)
+        visible: text !== ""
+        text: page.info.description || ""
+        color: Theme.textSecondary
+        wrapMode: Text.WordWrap
+        maximumLineCount: 3
+        elide: Text.ElideRight
+        font.pixelSize: Theme.dp(Theme.fontSmall)
+    }
+
     SettingsRows {
         id: rows
 
         shell: page.shell
         x: Theme.dp(120)
-        y: header.height + Theme.dp(84)
+        y: header.height + Theme.dp(84) + (description.visible ? description.height + Theme.dp(8) : 0)
         width: parent.width - x - Theme.dp(120)
         height: parent.height - y - Theme.dp(Theme.hintBarHeight) - Theme.dp(20) - (qrCard.visible ? qrCard.height + Theme.dp(20) : 0)
         model: page.content

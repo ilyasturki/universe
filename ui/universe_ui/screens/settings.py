@@ -505,7 +505,7 @@ class PageForm(RowsForm):
         name = entry.get("name", ident)
         enabled = bool(entry.get("enabled"))
         warning = _state(entry)
-        self._module = {"id": ident, "name": name, "meta": _meta(entry), "warning": warning, "enabled": enabled,
+        self._module = {"id": ident, "name": name, "meta": _meta(entry), "description": str(entry.get("description") or ""), "warning": warning, "enabled": enabled,
                         "source": self.source, "logged_in": bool(entry.get("logged_in")), "user": str(entry.get("user") or "")}
         control = _row(name, "enabled", "Enabled", "bool", enabled, module=ident)
         control["disabled"] = bool(warning) and not enabled

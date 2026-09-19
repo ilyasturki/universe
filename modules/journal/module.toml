@@ -2,6 +2,7 @@ api = 2
 id = "journal"
 name = "Play journal"
 version = "0.0.2"
+description = "After each session, a model writes an entry from the recording, when Video capture is on, and from the screenshots you took. A session with neither gets no entry."
 
 [requires]
 bins = ["ffmpeg", "codex"]

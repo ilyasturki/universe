@@ -110,11 +110,13 @@ def test_module_form(api, fake):
     form = api.screens.module
     form.load("journal")
     assert form.info["name"] == "Play journal" and "missing ffmpeg" in form.info["warning"] and form.info["enabled"] is False
+    assert form.info["description"].startswith("After each session, a model writes an entry")
     assert [r["key"] for r in form.rows] == ["enabled"], "off: the switch alone"
     assert form.rows[0]["value"] is False and form.rows[0]["disabled"] is True
     assert form.groups == [{"title": "", "meta": "", "warning": "", "caps": False, "control": -1, "off": False, "rows": [0]}], "the page header carries the name and the warning"
     form.load("capture")
     assert form.info["meta"] == "v0.1.0" and form.info["warning"] == "" and form.info["source"] is False
+    assert form.info["description"].startswith("Records each session")
     rows = form.rows
     assert rows[0]["key"] == "enabled" and rows[0]["value"] is True and rows[0]["disabled"] is False
     settings = next(g for g in form.groups if g["title"] == "Settings")

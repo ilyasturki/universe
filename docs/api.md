@@ -299,7 +299,7 @@ none of those variables).
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `sources()` | `sources()` | `universe sources`, `universe source ls` | `[{id, name, version, dir, enabled, available, missing: [bin], settings: [Setting], logged_in, user, games_dir, library_cached, library_at}]`; `library_at` is when the store was last listed (RFC 3339, empty before the first); the login probe reaches the network once per process, on the first call |
+| `sources()` | `sources()` | `universe sources`, `universe source ls` | `[{id, name, version, description, dir, enabled, available, missing: [bin], settings: [Setting], logged_in, user, games_dir, library_cached, library_at}]`; `library_at` is when the store was last listed (RFC 3339, empty before the first); the login probe reaches the network once per process, on the first call |
 | `enable_source(id, enabled)` | `enable_source(id, enabled)` | `universe source enable\|disable <id>` | writes `[sources] enabled` in `config.toml` |
 | `source_settings(source)` | `source_settings(source)` | `universe source settings <id>` | the source's settings, defaults under `config.toml [sources.<id>]`; an empty `games_dir` default reads `paths.games_root` |
 | `set_source_setting(source, key, value)` | `set_source_setting(…)` | `universe source set <id> k=v` | validated against `[[settings]]`; writes `config.toml [sources.<id>]` |
@@ -499,7 +499,7 @@ that is not `*.json` are ignored, and `render_journal` only renders `written` en
 | `module_setting_choices(module, key)` | `module_setting_choices(…)` | — | the global setting's choices; a setting with `choices_exec` gets them from the module, live (see below) |
 | `doctor()` | `doctor()` | `universe doctor` | `[{check, ok, detail, module}]`: required binaries of the enabled modules and sources (`module` names the one, or `core`, `runners`, `media`, `controller`), `gsr-kms-server`, Proton, cursor extension, tokens, one `runner-<id>` check per runner a library game uses (its program resolved), `inputplumber` when an emulator wants it; `modules` and `sources` say what `config.toml` enables that is not found |
 
-A module entry is `{id, name, version, dir, enabled, available, missing: [bin],
+A module entry is `{id, name, version, description, dir, enabled, available, missing: [bin],
 hooks: {}, settings: [Setting]}`, and
 `Setting` = `{"key", "type": "bool|string|int|enum|path", "default", "label",
 "scope": "global|game", "choices": [], "dynamic": bool}`. `choices` binds an `enum`; on an `int`
@@ -667,6 +667,7 @@ api = 2
 id = "capture"
 name = "Video capture"
 version = "0.0.2"
+description = "Records each session."   # optional, one or two sentences; the module's page shows it under the name
 
 [requires]
 bins = ["gpu-screen-recorder"]    # a missing binary makes the module "unavailable" and it is never run
@@ -739,6 +740,7 @@ api = 2
 id = "gog"
 name = "GOG"
 version = "0.0.2"
+description = "Installs GOG games."   # optional, as a module's
 exe = "bin/source"                # run as: bin/source <verb> [args]
 
 [requires]

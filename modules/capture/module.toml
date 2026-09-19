@@ -2,6 +2,7 @@ api = 2
 id = "capture"
 name = "Video capture"
 version = "0.0.2"
+description = "Records each session with gpu-screen-recorder; the Play journal draws its frames from the recording."
 
 [requires]
 bins = ["gpu-screen-recorder", "ffprobe", "trash"]

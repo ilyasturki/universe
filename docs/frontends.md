@@ -429,8 +429,8 @@ which list it is), the ones running first, the others in an "Off" card. A opens 
 warning while it is off). `indexOf(id)` finds an entry's row for the cursor to land on again.
 `pages/FormPage.qml` with `{ module }` or `{ source }` (`theme.qml` `openSub`;
 `switch2/pages/FormPage.qml` on the stack) is on `api.screens.module` or `api.screens.source`
-(`PageForm`): `load(id)` builds its head (`info`: name, meta, warning, `enabled`, `source`, and a
-source's `logged_in` and `user`) and cards for the switch (`enabled`, `disabled` while the entry's
+(`PageForm`): `load(id)` builds its head (`info`: name, meta, `description` from the manifest, warning,
+`enabled`, `source`, and a source's `logged_in` and `user`) and cards for the switch (`enabled`, `disabled` while the entry's
 programs are missing) and, once on, its settings — a module's global ones, a source's all — a
 `dynamic` setting's choices fetched off the UI thread. A source's page adds a Sign-in card: `Signed
 in` (an `info` row, the user as its detail), `Get a sign-in link` (`link`: `api.screens.login.begin`,

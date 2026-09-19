@@ -2,6 +2,7 @@ api = 2
 id = "gog"
 name = "GOG"
 version = "0.0.2"
+description = "Installs and updates the games of your GOG account through gogdl."
 exe = "bin/source"
 
 [requires]
