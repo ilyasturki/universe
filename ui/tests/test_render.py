@@ -1,4 +1,4 @@
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import QObject, QUrl
 from PySide6.QtGui import QColor
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuick import QQuickWindow  # noqa: F401  (rootObjects() down-cast, for grabWindow)
@@ -432,6 +432,45 @@ def test_the_artwork_page_opens_on_a_slot_and_lists_its_candidates(api, fake):
     page.openMenu()
     pump(100)
     assert page.property("modal") is True
+    window.close()
+    pump(50)
+
+
+def test_the_settings_artwork_button_asks_then_fetches_and_stops(api, fake):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    fake.core._game("control")["media"].pop("logo")
+    engine, window = render(api, activate=True)
+    root = window.property("contentItem").childItems()[0].property("item")
+    root.setProperty("tabIndex", 4)
+    pump(100)
+    page = root.property("activePage")
+    page.setProperty("section", page.property("artworkSection"))
+    settle(window)
+    store = api.screens.artworkOverview
+    assert store.missingGames == 1
+    QTest.keyClick(window, Qt.Key.Key_Right)
+    QTest.keyClick(window, Qt.Key.Key_Up)
+    pump(50)
+    overview = page.findChild(QObject, "artworkOverview")
+    assert overview is not None and overview.property("onButton") is True
+    assert overview.property("buttonLabel") == "Fetch missing art"
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    pump(100)
+    assert [h["label"] for h in page.property("hints").toVariant()][0] == "Select", "the confirm has the focus"
+    assert store.job is None, "nothing runs before the confirm"
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    while store.job is None or store.job["total"] == 0:
+        wait_for(store.jobChanged)
+    assert overview.property("buttonLabel").startswith("Stop · ")
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    pump(20)
+    assert store.job["cancelled"] and overview.property("buttonDim") is True
+    while store.job["ok"] is None:
+        wait_for(store.jobChanged)
+    pump(50)
+    assert store.job["message"].startswith("Stopped after ") and overview.property("buttonLabel") == "Fetch missing art"
     window.close()
     pump(50)
 

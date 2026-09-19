@@ -6,17 +6,21 @@ import "../ui"
 FocusScope {
     id: view
 
+    objectName: "artworkOverview"
+
     readonly property var store: api.screens.artworkOverview
     readonly property var rows: store.rows
     readonly property var columns: store.columns
 
     signal openRequested(var game, string slot)
+    signal fetchRequested(int games)
     signal escapedLeft()
     signal escapedUp()
     signal message(string text)
 
     property int row: 0
     property int col: 0
+    property bool onButton: false
     readonly property var currentRow: row >= 0 && row < rows.length ? rows[row] : null
     readonly property var currentColumn: col >= 0 && col < columns.length ? columns[col] : null
     readonly property var job: store.job
@@ -27,9 +31,15 @@ FocusScope {
     readonly property real rowHeight: Theme.dp(110)
     readonly property real cellGap: Theme.dp(18)
 
+    readonly property bool stopping: fetching && job.cancelled
+    readonly property string buttonLabel: stopping ? "Stopping…"
+                                        : fetching ? "Stop" + (job.total > 0 ? " · " + (job.done + 1) + "/" + job.total : "")
+                                        : store.missingGames === 0 ? "Nothing missing" : "Fetch missing art"
+    readonly property bool buttonDim: stopping || (!fetching && store.missingGames === 0)
+
     readonly property var hints: [
-        { glyph: "A", label: currentRow && currentColumn ? "Open " + currentColumn.label.toLowerCase() : "Open", dim: currentRow === null },
-        { glyph: "X", label: fetching ? "Fetching" + (job.total > 0 ? " " + job.done + "/" + job.total : "") + "…" : "Fetch missing art", dim: fetching },
+        onButton ? { glyph: "A", label: fetching ? "Stop" : "Fetch", dim: buttonDim }
+                 : { glyph: "A", label: currentRow && currentColumn ? "Open " + currentColumn.label.toLowerCase() : "Open", dim: currentRow === null },
         { glyph: "B", label: "Sections" }
     ]
 
@@ -46,6 +56,15 @@ FocusScope {
     }
 
     function activate() {
+        if (onButton) {
+            if (fetching)
+                store.cancelRefresh() ? Sound.cancel() : Sound.edge();
+            else if (buttonDim)
+                Sound.edge();
+            else
+                view.fetchRequested(store.missingGames);
+            return;
+        }
         var game = currentRow ? api.allGames.byId(currentRow.id) : null;
         if (!game || !currentColumn) {
             Sound.edge();
@@ -74,15 +93,26 @@ FocusScope {
         } else if (api.keys.isCancel(event)) {
             Sound.cancel();
             view.escapedLeft();
-        } else if (api.keys.isDetails(event)) {
-            if (fetching) {
+        } else if (onButton) {
+            if (event.key === Qt.Key_Down && rows.length > 0) {
+                Sound.tick();
+                onButton = false;
+            } else if (event.key === Qt.Key_Up) {
+                view.escapedUp();
+            } else if (event.key === Qt.Key_Left) {
+                view.escapedLeft();
+            } else if (event.key === Qt.Key_Right || event.key === Qt.Key_Down) {
                 Sound.edge();
             } else {
-                Sound.enter();
-                store.refreshAll();
+                event.accepted = false;
             }
         } else if (event.key === Qt.Key_Up) {
-            row === 0 ? view.escapedUp() : move(-1, 0);
+            if (row === 0) {
+                Sound.tick();
+                onButton = true;
+            } else {
+                move(-1, 0);
+            }
         } else if (event.key === Qt.Key_Down) {
             move(1, 0);
         } else if (event.key === Qt.Key_Left) {
@@ -99,24 +129,41 @@ FocusScope {
         function onMessage(text) { view.message(text); }
     }
 
-    Row {
+    Item {
         id: head
 
-        x: view.titleWidth + view.cellGap
-        spacing: view.cellGap
+        width: parent.width
+        height: fetchButton.height
 
-        Repeater {
-            model: view.columns
+        PillButton {
+            id: fetchButton
+            anchors.left: parent.left
+            anchors.verticalCenter: parent.verticalCenter
+            ghost: true
+            icon: ""
+            label: view.buttonLabel
+            focused: view.onButton && view.activeFocus
+            dimmed: view.buttonDim
+        }
 
-            // A narrow column's name may run into the gap after it.
-            Text {
-                width: view.widthOf(modelData) + view.cellGap - Theme.dp(4)
-                text: modelData.label
-                color: Theme.text
-                font.family: Theme.sans
-                font.weight: Font.DemiBold
-                font.pixelSize: Theme.dp(17)
-                elide: Text.ElideRight
+        Row {
+            x: view.titleWidth + view.cellGap
+            anchors.bottom: parent.bottom
+            spacing: view.cellGap
+
+            Repeater {
+                model: view.columns
+
+                // A narrow column's name may run into the gap after it.
+                Text {
+                    width: view.widthOf(modelData) + view.cellGap - Theme.dp(4)
+                    text: modelData.label
+                    color: Theme.text
+                    font.family: Theme.sans
+                    font.weight: Font.DemiBold
+                    font.pixelSize: Theme.dp(17)
+                    elide: Text.ElideRight
+                }
             }
         }
     }
@@ -174,9 +221,9 @@ FocusScope {
                     width: view.titleWidth
                     anchors.verticalCenter: parent.verticalCenter
                     text: game.title
-                    color: onRow && view.activeFocus ? Theme.text : Theme.textSecondary
+                    color: onRow && view.activeFocus && !view.onButton ? Theme.text : Theme.textSecondary
                     font.family: Theme.sans
-                    font.weight: onRow && view.activeFocus ? Font.DemiBold : Font.Medium
+                    font.weight: onRow && view.activeFocus && !view.onButton ? Font.DemiBold : Font.Medium
                     font.pixelSize: Theme.dp(22)
                     elide: Text.ElideRight
                 }
@@ -188,7 +235,7 @@ FocusScope {
                         id: cell
 
                         readonly property var slot: modelData
-                        readonly property bool focused: onRow && index === view.col && view.activeFocus
+                        readonly property bool focused: onRow && index === view.col && view.activeFocus && !view.onButton
 
                         width: view.widthOf(slot)
                         height: view.thumbHeight

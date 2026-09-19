@@ -327,21 +327,35 @@ class ArtworkOverview(AsyncScreen):
         job_id = self._client.mediaRefresh("", False)
         if not job_id:
             return
-        self._job = {"id": job_id, "message": "Fetching the missing art of every game…", "done": 0, "total": 0, "ok": None}
+        self._job = {"id": job_id, "message": "Fetching the missing art of every game…", "done": 0, "total": 0, "ok": None, "cancelled": False}
         self.jobChanged.emit()
 
+    @Slot(result=bool)
+    def cancelRefresh(self):
+        """Stops the library fetch after the game in hand; what was fetched stays."""
+        if not self._job or self._job["ok"] is not None or self._job["cancelled"] or not self._client.cancel(self._job["id"]):
+            return False
+        self._job.update({"cancelled": True, "message": "Stopping…"})
+        self.jobChanged.emit()
+        return True
+
     def _on_progress(self, job_id, done, total, text):
-        if self._job and self._job["id"] == job_id:
+        if self._job and self._job["id"] == job_id and not self._job["cancelled"]:
             self._job.update({"done": int(done), "total": int(total), "message": text or self._job["message"]})
             self.jobChanged.emit()
 
     def _on_job_finished(self, job_id, ok, text):
         if self._job and self._job["id"] == job_id:
-            self._job.update({"ok": bool(ok), "message": text or self._job["message"]})
+            if self._job["cancelled"] and ok:
+                text = f"Stopped after {self._job['done'] + 1} of {self._job['total']} games"
+            else:
+                text = ("Artwork fetched: " if ok else "Artwork fetch failed: ") + text
+            self._job.update({"ok": bool(ok), "message": text})
             self.jobChanged.emit()
-            self.message.emit(("Artwork fetched: " if ok else "Artwork fetch failed: ") + text)
+            self.message.emit(text)
             self._stale()
 
     rows = Property("QVariantList", lambda self: [dict(r, slots=[dict(s) for s in r["slots"]]) for r in self._rows], notify=rowsChanged)
     columns = Property("QVariantList", lambda self: [{"slot": slot, "label": label, "aspect": aspect, "use": use} for slot, label, aspect, use in SLOTS], constant=True)
+    missingGames = Property(int, lambda self: sum(any(s["kind"] == "missing" for s in r["slots"]) for r in self._rows), notify=rowsChanged)
     job = Property("QVariant", lambda self: dict(self._job) if self._job else None, notify=jobChanged)

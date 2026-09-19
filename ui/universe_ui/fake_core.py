@@ -190,6 +190,7 @@ class FakeCore:
         self._session_started = None
         self._closed = False
         self._installing, self._cancel = "", ""
+        self._media_stop = False
         self.library_calls = []
         self.last_splash = ""
         self.game_shown = False
@@ -793,14 +794,23 @@ class FakeCore:
 
     def media_refresh(self, ident, force, progress=None):
         games = [self._game(ident)] if ident else [g for g in self._data["games"] if not g.get("removed")]
-        self._tick(progress, "Refreshing media", 5)
-        for game in games:
+        if not ident:
+            self._media_stop = False
+        for i, game in enumerate(games):
+            if not ident and self._media_stop:
+                break
+            if progress:
+                progress(i, len(games), game.get("title", game["id"]))
+            time.sleep(STEP_S)
             media = game.get("media") or {}
             for path in (media.get(slot) for slot in SLOTS):
                 if path and os.path.exists(path):
                     os.replace(path, path + ".part")
                     os.replace(path + ".part", path)
         return (0, len(games))
+
+    def media_cancel(self):
+        self._media_stop = True
 
     def _effective_media(self, game):
         media = dict(game.get("media") or {})

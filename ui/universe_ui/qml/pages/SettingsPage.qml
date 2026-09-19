@@ -593,6 +593,15 @@ FocusScope {
             target: artwork.item
             ignoreUnknownSignals: true
             function onOpenRequested(game, slot) { page.artworkRequested(game, slot); }
+            function onFetchRequested(games) {
+                dialog.ask({ message: "Fetch the missing art of " + games + (games === 1 ? " game" : " games") + "?",
+                             detail: "From SteamGridDB, into each game's media folder; your picks stay on top. Stop any time from the same button.",
+                             yes: "Fetch", no: "Not now" }, function(yes) {
+                    if (yes)
+                        artwork.item.store.refreshAll();
+                    artwork.item.forceActiveFocus();
+                });
+            }
             function onEscapedLeft() {
                 Sound.panel();
                 side.forceActiveFocus();

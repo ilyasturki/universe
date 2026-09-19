@@ -1,4 +1,4 @@
-from conftest import settle
+from conftest import settle, wait_for
 
 
 def test_slots_carry_both_layers_and_a_pick_sits_over_the_default(api, fake):
@@ -84,3 +84,26 @@ def test_overview_lays_the_library_out_as_games_by_slots(api, fake):
     settle(view)
     row = next(r for r in view.rows if r["id"] == "control")
     assert row["slots"][4]["kind"] == "missing" and row["slots"][4]["kindLabel"] == "Missing"
+    assert view.missingGames == 1
+
+
+def test_the_library_fetch_reports_its_progress_and_stops_after_the_game_in_hand(api, fake):
+    view = api.screens.artworkOverview
+    view.load()
+    settle(view)
+    messages = []
+    view.message.connect(messages.append)
+    view.refreshAll()
+    assert view.job["ok"] is None and view.job["total"] == 0
+    wait_for(view.jobChanged)
+    while view.job["total"] == 0:
+        wait_for(view.jobChanged)
+    total = view.job["total"]
+    assert total >= len(view.rows) and view.job["message"] != "", "progress names the game in hand"
+    assert view.cancelRefresh() and view.job["cancelled"] and view.job["message"] == "Stopping…"
+    assert not view.cancelRefresh(), "a second stop does nothing"
+    while view.job["ok"] is None:
+        wait_for(view.jobChanged)
+    assert view.job["ok"] is True
+    assert messages[-1] == f"Stopped after {view.job['done'] + 1} of {total} games"
+    assert view.job["done"] + 1 < total, "stopped well before the end"

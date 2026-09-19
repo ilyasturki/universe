@@ -80,6 +80,7 @@ pub struct Core {
     nest: std::sync::OnceLock<Option<crate::nest::Nest>>,
     /// A freeze and the thaw behind it run in order: the hooks behind them toggle state.
     pub(crate) freezes: tokio::sync::Mutex<()>,
+    media_stop: std::sync::atomic::AtomicBool,
     pub(crate) host: Host,
 }
 
@@ -101,6 +102,7 @@ impl Core {
             scope: std::sync::OnceLock::new(),
             nest: std::sync::OnceLock::new(),
             freezes: tokio::sync::Mutex::new(()),
+            media_stop: std::sync::atomic::AtomicBool::new(false),
             host,
         }
     }
@@ -1322,13 +1324,20 @@ impl Core {
         Ok(n)
     }
 
-    /// The whole library when `id` is empty; returns (changed, total).
+    /// The whole library when `id` is empty; returns (changed, total). `media_cancel` stops a library run between games.
     pub async fn media_refresh(&self, id: &str, force: bool, mut progress: Option<Progress<'_, '_>>) -> Result<(usize, usize)> {
+        use std::sync::atomic::Ordering;
         let ids: Vec<String> = if id.is_empty() { self.games.read().await.iter().filter(|g| g.game.removed_at.is_empty()).map(|g| g.game.id.clone()).collect() } else { vec![self.resolve_one(id).await?] };
         let cfg = self.config.read().await.clone();
         let total = ids.len();
         let mut changed = 0;
+        if id.is_empty() {
+            self.media_stop.store(false, Ordering::SeqCst);
+        }
         for (i, gid) in ids.iter().enumerate() {
+            if id.is_empty() && self.media_stop.load(Ordering::SeqCst) {
+                break;
+            }
             let Ok(r) = self.get(gid).await else { continue };
             if let Some(p) = progress.as_mut() {
                 p(i as u64, total as u64, &r.game.title);
@@ -1345,6 +1354,10 @@ impl Core {
             }
         }
         Ok((changed, total))
+    }
+
+    pub fn media_cancel(&self) {
+        self.media_stop.store(true, std::sync::atomic::Ordering::SeqCst);
     }
 
     pub async fn media_set_slot(&self, id: &str, slot: &str, path: &str) -> Result<String> {

@@ -360,9 +360,16 @@ class CoreClient(QObject):
 
     @Slot(str, result=bool)
     def cancel(self, job):
-        """SIGTERMs the source behind an install or update job; it finishes as failed with `cancelled` set."""
+        """Stops a job: SIGTERMs the source behind an install or update (it finishes as failed), lets a media
+        fetch end after the game in hand (it finishes as ok); either way `cancelled` is set on it."""
         j = self._jobs.get(job)
-        if not j or j["finished"] or j["kind"] not in ("install", "update") or not j["target"]:
+        if not j or j["finished"]:
+            return False
+        if j["kind"] == "media":
+            j["cancelled"] = True
+            self._guarded(None, self._core.media_cancel)
+            return True
+        if j["kind"] not in ("install", "update") or not j["target"]:
             return False
         j["cancelled"] = True
         return bool(self._guarded(False, self._core.cancel, j["source"], j["target"]))

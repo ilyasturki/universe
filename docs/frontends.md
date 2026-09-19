@@ -101,7 +101,7 @@ What it derives is derived this way, and any frontend needs the equivalent:
 | `sessionShown` | `(session_id, ok)`: the game's window is on screen and has the focus — `wait_session_window` on a host thread, up to 60 s. Inside gamescope `ok` is true once gamescope shows the game's window (a stand-in toplevel carrying the gamescope's pid when no extension lists it); on the desktop, false when nobody can tell: no GNOME, no shell extension, or the session ended first |
 | `sessionEnded` | the current-session marker going empty — the `state/` watch sees `session-end` remove it (debounced 300 ms), a 2 s poll stands behind it, since the game is a systemd unit, not a child. `currentSessionChanged` fires first; the pinned tile and the badge follow that property, and only the toast, the stats refresh and a pending launch follow the signal |
 | `libraryChanged`, `mediaChanged`, `entryWritten`, `recordingFiled` | a `QFileSystemWatcher` on `games/`, `games/<id>/{,journal,journal/attachments,media,screenshots}`, `state/` and the overrides directory with its `<id>/` subdirectories (a pick made from the CLI shows up), debounced 300 ms; `mediaChanged` also follows a pick or its removal made through the client |
-| `progress`, `jobFinished` | the job's own callback — install, update, scan and media refresh run on a host thread |
+| `progress`, `jobFinished` | the job's own callback — install, update, scan and media refresh run on a host thread; `cancel(job)` stops an install or update (SIGTERM, the job fails) or a media refresh (`media_cancel`, it ends ok after the game in hand), `cancelled` set on the job either way |
 | `launched`, `launchFailed`, `error` | the call's result |
 
 A frontend decides who owns the game's lifetime. `adopt_scope()`, called once at startup, moves the
@@ -559,8 +559,11 @@ the image cache's copy.
 `api.screens.artworkOverview` is the Artwork section of the Settings tab (`ArtworkOverview.qml`, a
 column of its own next to the sidebar): the library as a matrix, `rows` (`id`, `title`, `slots` —
 the five slot rows above, in slot order) and `columns` (`slot`, `label`, `aspect`, `use`); a
-missing slot and a pick are marked on the cell, nothing is counted. `refreshAll()` fetches the
-missing art of every game (the section's X, which carries the job's progress while it runs). `load()` reads
+missing slot and a pick are marked on the cell, nothing is counted but `missingGames` (the games
+lacking some). `refreshAll()` fetches the missing art of every game: the pill above the titles
+(Up from the first row), which the section's `fetchRequested(games)` turns into a confirm naming
+the count; while the job runs the pill reads "Stop · 3/12" and A is `cancelRefresh()`, which ends
+it after the game in hand ("Stopped after 5 of 12 games"). `load()` reads
 `media_status` for the whole library on a thread; a `mediaChanged` or `libraryChanged` reloads it
 after a short debounce while the section is on screen.
 

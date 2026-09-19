@@ -249,6 +249,9 @@ impl Core {
             c.media_refresh(&id, force, p.as_deref_mut()).await
         })
     }
+    fn media_cancel(&self) {
+        self.core.media_cancel();
+    }
     fn media_set_slot(&self, py: Python<'_>, id: String, slot: String, path: String) -> PyResult<String> {
         self.run(py, |c| async move { c.media_set_slot(&id, &slot, &path).await })
     }
