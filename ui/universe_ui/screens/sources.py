@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import qrcode
 from PySide6.QtCore import Property, QObject, Signal, Slot
 
-from .media import _size
+from .media import _month, _size
 from .settings import AsyncScreen
 
 
@@ -54,7 +54,8 @@ def _age(iso):
         return f"{s // 3600} h ago"
     if s < 7 * 86400:
         return f"{s // 86400} days ago"
-    return then.astimezone().strftime("%-d %b")
+    then = then.astimezone()
+    return f"{then.day} {_month(then)}"
 
 
 STALE_S = 15 * 60

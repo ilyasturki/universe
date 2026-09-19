@@ -10,11 +10,16 @@ from PySide6.QtCore import Property, QLocale, QObject, QProcess, QTimer, QUrl, S
 from .paths import universe_home
 
 
+def _month(when):
+    return QLocale.c().monthName(when.month, QLocale.FormatType.ShortFormat)
+
+
 def _when(value):
     try:
-        return datetime.fromisoformat(str(value)).strftime("%-d %b %Y · %H:%M")
+        when = datetime.fromisoformat(str(value))
     except (TypeError, ValueError):
         return str(value or "")
+    return f"{when.day} {_month(when)} {when:%Y · %H:%M}"
 
 
 def _duration(seconds):

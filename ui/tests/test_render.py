@@ -294,7 +294,7 @@ def test_the_install_pages_render_a_running_install_in_both_looks(api, fake):
         value = obj.property(name)
         return value.toVariant() if hasattr(value, "toVariant") else value
 
-    root.setProperty("tabIndex", 3)
+    root.setProperty("tabIndex", root.property("settingsTab"))
     pump(100)
     page = root.property("activePage")
     page.setProperty("section", page.property("installSection"))
