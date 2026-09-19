@@ -15,10 +15,14 @@ def stop_unit(unit):
         log(f"systemctl stop {unit} failed: {result.stderr.strip()}")
 
 
+# The hook has timeout_s = 20 in all: the recorder's save, else the unit's stop (TimeoutStopSec=10), then ffprobe.
+STOP_WAIT_S = 8
+
+
 def stop_recorder(session_id, pending_dir):
     """The saved file's path, from the recorder once it has written it; the unit's stop and a glob when the socket is already gone."""
     try:
-        r = gsr_cli(session_id, "stop", timeout=60)
+        r = gsr_cli(session_id, "stop", timeout=STOP_WAIT_S)
         if r.returncode == 0 and r.stdout.strip():
             return r.stdout.strip()
         log(f"gsr-cli stop: {(r.stderr or r.stdout).strip() or 'no path'}")
@@ -32,7 +36,7 @@ def probe_duration(path):
     try:
         result = subprocess.run(
             ["ffprobe", "-i", path, "-show_entries", "format=duration", "-v", "quiet", "-of", "csv=p=0"],
-            capture_output=True, text=True, timeout=60,
+            capture_output=True, text=True, timeout=10,
         )
         return float(result.stdout.strip())
     except (OSError, subprocess.SubprocessError, ValueError):
