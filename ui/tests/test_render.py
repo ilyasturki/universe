@@ -398,3 +398,30 @@ def test_the_right_stick_pages_the_grids_in_both_looks(api):
     assert warnings == []
     window.close()
     pump(50)
+
+def test_the_artwork_page_opens_on_a_slot_and_lists_its_candidates(api, fake):
+    from PySide6.QtCore import Q_ARG, QMetaObject, QObject
+
+    engine, window = render(api, activate=True)
+    root = window.property("contentItem").childItems()[0].property("item")
+    game = api.allGames.byId("the-technomancer")
+    QMetaObject.invokeMethod(root, "openSub", Q_ARG("QVariant", "pages/ArtworkPage.qml"), Q_ARG("QVariant", {"game": game, "slot": "logo"}))
+    settle(window)
+    form = api.screens.artwork
+    assert root.property("subOpen") is True and form.gameId == "the-technomancer"
+    page = root.findChild(QObject, "artworkPage")
+    assert page is not None and page.property("level") == "browser", "opened on a slot, the page went straight to its candidates"
+    if not form.candidates:
+        wait_for(form.candidatesChanged, 3000)
+        pump(100)
+    assert form.candidatesSlot == "logo" and form.candidates
+    assert lit_fraction(window.grabWindow(), api.theme.ground) > 0.05
+    page.closeBrowser()
+    pump(100)
+    assert page.property("level") == "slots" and page.property("index") == 4
+    page.openMenu()
+    pump(100)
+    assert page.property("modal") is True
+    window.close()
+    pump(50)
+

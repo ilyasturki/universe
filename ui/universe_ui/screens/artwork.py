@@ -13,11 +13,13 @@ SLOTS = [
 SLOT_LABELS = {slot: label for slot, label, _, _ in SLOTS}
 SLOT_ASPECTS = {slot: aspect for slot, _, aspect, _ in SLOTS}
 SLOT_USES = {slot: use for slot, _, _, use in SLOTS}
-KIND_LABELS = {"picked": "Picked", "default": "Default", "missing": "Missing"}
 ORIGIN_LABELS = {"picked": "your pick", "sgdb": "SteamGridDB", "steam": "Steam", "pegasus": "Pegasus", "lutris": "Lutris"}
-FILTERS = ["all", "missing", "picked", "default"]
-FILTER_LABELS = {"all": "All", "missing": "Missing", "picked": "Picked", "default": "Default"}
 RELOAD_MS = 300
+
+
+# One label per slot, carrying its state and where the art came from: the pill both looks draw.
+def _kind_label(kind, origin_label):
+    return "Your pick" if kind == "picked" else "Missing" if kind == "missing" else origin_label or "Default"
 
 
 def _slot_row(raw):
@@ -25,12 +27,13 @@ def _slot_row(raw):
     kind = str(raw.get("kind") or "missing")
     origin = str(raw.get("origin") or "")
     default_origin = str(raw.get("default_origin") or "")
+    origin_label = ORIGIN_LABELS.get(origin, origin)
     return {
         "slot": slot, "label": SLOT_LABELS.get(slot, slot), "aspect": SLOT_ASPECTS.get(slot, 1.0), "use": SLOT_USES.get(slot, ""),
         "url": file_url(raw.get("path")).toString(), "defaultUrl": file_url(raw.get("default")).toString(), "overrideUrl": file_url(raw.get("override")).toString(),
-        "origin": origin, "originLabel": ORIGIN_LABELS.get(origin, origin),
+        "origin": origin, "originLabel": origin_label,
         "defaultOriginLabel": ORIGIN_LABELS.get(default_origin, default_origin) or "Default",
-        "kind": kind, "kindLabel": KIND_LABELS.get(kind, kind), "hasOverride": bool(raw.get("override")),
+        "kind": kind, "kindLabel": _kind_label(kind, origin_label), "hasOverride": bool(raw.get("override")),
         "hasDefault": bool(raw.get("default")),
     }
 
@@ -179,6 +182,20 @@ class ArtworkForm(AsyncScreen):
 
         self._run(lambda: self._client.mediaSetUrl(game_id, slot, url), done)
 
+    @Slot(str, str)
+    def useFile(self, slot, path):
+        game_id = self._game_id
+        label = SLOT_LABELS.get(slot, slot)
+        name = path.rstrip("/").rsplit("/", 1)[-1]
+
+        def done(placed, error):
+            if not placed:
+                return
+            self.applied.emit(slot)
+            self.message.emit(f"{label} picked for {self._title}: {name}")
+
+        self._run(lambda: self._client.mediaSetSlot(game_id, slot, path), done)
+
     @Slot(str, result=bool)
     def removeOverride(self, slot):
         label = SLOT_LABELS.get(slot, slot)
@@ -246,16 +263,12 @@ class ArtworkForm(AsyncScreen):
 
 class ArtworkOverview(AsyncScreen):
     rowsChanged = Signal()
-    slotChanged = Signal()
-    filterChanged = Signal()
     jobChanged = Signal()
     message = Signal(str)
 
     def __init__(self, client, parent=None):
         super().__init__(client, parent)
         self._rows = []
-        self._slot = "box_front"
-        self._filter = "all"
         self._loaded = False
         self._job = None
         self._reload = QTimer(self)
@@ -285,8 +298,10 @@ class ArtworkOverview(AsyncScreen):
                 ident = str(g.get("id") or "")
                 if ident in hidden:
                     continue
-                slots = {str(s.get("slot") or ""): _slot_row(s) for s in g.get("slots") or []}
-                rows.append({"id": ident, "title": str(g.get("title") or ident), "slots": slots})
+                by_slot = {str(s.get("slot") or ""): _slot_row(s) for s in g.get("slots") or []}
+                slots = [by_slot.get(slot) or _slot_row({"slot": slot}) for slot, *_ in SLOTS]
+                rows.append({"id": ident, "title": str(g.get("title") or ident), "slots": slots,
+                             "missing": sum(s["kind"] == "missing" for s in slots), "picked": sum(s["kind"] == "picked" for s in slots)})
             return sorted(rows, key=lambda r: r["title"].casefold())
 
         def done(rows, error):
@@ -304,36 +319,15 @@ class ArtworkOverview(AsyncScreen):
         self._loaded = False
         self._reload.stop()
 
-    def setSlot(self, slot):
-        if slot in SLOT_LABELS and slot != self._slot:
-            self._slot = slot
-            self.slotChanged.emit()
-            self.rowsChanged.emit()
-
-    def setFilter(self, name):
-        if name in FILTERS and name != self._filter:
-            self._filter = name
-            self.filterChanged.emit()
-            self.rowsChanged.emit()
-
-    def _tiles(self):
+    def _columns(self):
         out = []
-        for row in self._rows:
-            slot = row["slots"].get(self._slot) or {}
-            kind = slot.get("kind") or "missing"
-            if self._filter != "all" and kind != self._filter:
-                continue
-            out.append({"id": row["id"], "title": row["title"], "url": slot.get("url") or "", "kind": kind,
-                        "kindLabel": KIND_LABELS.get(kind, kind), "originLabel": slot.get("originLabel") or ""})
+        for i, (slot, label, aspect, use) in enumerate(SLOTS):
+            missing = sum(r["slots"][i]["kind"] == "missing" for r in self._rows)
+            out.append({"slot": slot, "label": label, "aspect": aspect, "use": use, "missing": missing})
         return out
 
-    def _counts(self):
-        counts = {name: 0 for name in FILTERS}
-        for row in self._rows:
-            kind = (row["slots"].get(self._slot) or {}).get("kind") or "missing"
-            counts["all"] += 1
-            counts[kind] = counts.get(kind, 0) + 1
-        return counts
+    def _totals(self):
+        return {"games": len(self._rows), "missing": sum(r["missing"] for r in self._rows), "picked": sum(r["picked"] for r in self._rows)}
 
     @Slot()
     def refreshAll(self):
@@ -358,14 +352,7 @@ class ArtworkOverview(AsyncScreen):
             self.message.emit(("Artwork fetched: " if ok else "Artwork fetch failed: ") + text)
             self._stale()
 
-    rows = Property("QVariantList", lambda self: [dict(r) for r in self._rows], notify=rowsChanged)
-    tiles = Property("QVariantList", _tiles, notify=rowsChanged)
-    counts = Property("QVariantMap", _counts, notify=rowsChanged)
-    slot = Property(str, lambda self: self._slot, setSlot, notify=slotChanged)
-    slotLabel = Property(str, lambda self: SLOT_LABELS.get(self._slot, self._slot), notify=slotChanged)
-    aspect = Property(float, lambda self: SLOT_ASPECTS.get(self._slot, 1.0), notify=slotChanged)
-    filter = Property(str, lambda self: self._filter, setFilter, notify=filterChanged)
-    slotUse = Property(str, lambda self: SLOT_USES.get(self._slot, ""), notify=slotChanged)
-    slotNames = Property("QVariantList", lambda self: [{"slot": s, "label": l, "use": u} for s, l, _, u in SLOTS], constant=True)
-    filterNames = Property("QVariantList", lambda self: [{"filter": f, "label": FILTER_LABELS[f]} for f in FILTERS], constant=True)
+    rows = Property("QVariantList", lambda self: [dict(r, slots=[dict(s) for s in r["slots"]]) for r in self._rows], notify=rowsChanged)
+    columns = Property("QVariantList", _columns, notify=rowsChanged)
+    totals = Property("QVariantMap", _totals, notify=rowsChanged)
     job = Property("QVariant", lambda self: dict(self._job) if self._job else None, notify=jobChanged)
