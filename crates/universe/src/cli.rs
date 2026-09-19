@@ -29,7 +29,7 @@ Environment:
 Errors are printed as `universe: <kind>: <message>` on stderr with exit status 1; --json works on every command.";
 
 #[derive(Parser, Debug)]
-#[command(name = "universe", version, about = "Universe: launch, record and remember your games", after_long_help = AFTER_HELP)]
+#[command(name = "universe", version = crate::BUILD, about = "Universe: launch, record and remember your games", after_long_help = AFTER_HELP)]
 pub struct Cli {
     /// Print raw JSON instead of tables
     #[arg(long, global = true)]

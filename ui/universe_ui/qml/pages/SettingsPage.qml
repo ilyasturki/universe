@@ -31,7 +31,7 @@ FocusScope {
         { name: "Runners", icon: "play" }, { name: "Launch", icon: "sliders" }, { name: "Modules", icon: "grid" },
         { name: "Sources", icon: "cloud" }, { name: "Install", icon: "download" }, { name: "Updates", icon: "refresh" },
         { name: "Controller", icon: "gamepad" }, { name: "Themes", icon: "sun" }, { name: "Doctor", icon: "pulse" },
-        { name: "Artwork", icon: "image" }, { name: "Quit", icon: "power" }
+        { name: "Artwork", icon: "image" }, { name: "About", icon: "info" }, { name: "Quit", icon: "power" }
     ]
     readonly property int runnersSection: 0
     readonly property int launchSection: 1
@@ -43,7 +43,8 @@ FocusScope {
     readonly property int themesSection: 7
     readonly property int doctorSection: 8
     readonly property int artworkSection: 9
-    readonly property int quitSection: 10
+    readonly property int aboutSection: 10
+    readonly property int quitSection: 11
     property int section: 0
 
     function land(name) {
@@ -89,7 +90,7 @@ FocusScope {
 
     readonly property string acceptLabel: {
         var row = cards.currentRow;
-        if (!row || row.type === "info")
+        if (!row || row.type === "info" || row.type === "static")
             return "";
         if (row.type === "bool")
             return "Toggle";
@@ -190,6 +191,13 @@ FocusScope {
             groups.push({ title: "Look", rows: [0] });
             return { rows: rows, groups: groups };
         }
+        if (section === aboutSection) {
+            rows.push({ section: "About", key: "version", label: "Universe", type: "static", display: api.universe.version() || "development build", detail: "" });
+            rows.push({ section: "About", key: "look", label: "Look", type: "static", display: api.theme.name, detail: "" });
+            rows.push({ section: "About", key: "library", label: "Library", type: "static", display: api.allGames.count + (api.allGames.count === 1 ? " game" : " games"), detail: "" });
+            groups.push({ title: "Universe", rows: [0, 1, 2] });
+            return { rows: rows, groups: groups };
+        }
         if (section === quitSection) {
             rows.push({ section: "Quit", key: "quit", label: "Quit Universe", type: "action", display: "", detail: "", icon: "power", action: "Quit" });
             groups.push({ title: "Universe", meta: api.universe.currentSession ? "The running game is closed with it" : "", rows: [0] });
@@ -288,6 +296,8 @@ FocusScope {
                 if (theme)
                     Qt.callLater(function() { api.theme.set(theme.id); });
             });
+        } else if (section === aboutSection) {
+            Sound.edge();
         } else if (section === quitSection) {
             Sound.panel();
             menu.confirm("Stay", "power", api.universe.currentSession ? "Quit and close the game" : "Quit Universe", "Quit Universe?", cards, cards.focusRect, function() { Qt.quit(); });

@@ -9,6 +9,8 @@
       pkgs = nixpkgs.legacyPackages.${system};
       lib = pkgs.lib;
       version = (fromTOML (builtins.readFile ./Cargo.toml)).workspace.package.version;
+      # What build.rs puts behind the version: the flake's source has no .git to ask.
+      gitRev = self.shortRev or self.dirtyShortRev or "";
 
       rustSrc = lib.cleanSourceWith {
         src = ./.;
@@ -24,6 +26,7 @@
         cargoLock.lockFile = ./Cargo.lock;
         cargoBuildFlags = [ "-p" "universe" ];
         cargoTestFlags = [ "-p" "universe" ];
+        env.UNIVERSE_GIT_REV = gitRev;
         # chrono ignores TZDIR, so the zone is given as a file
         preCheck = "export TZ=${pkgs.tzdata}/share/zoneinfo/Europe/Paris";
         nativeBuildInputs = [ pkgs.pkg-config pkgs.installShellFiles ];
@@ -43,6 +46,7 @@
         cargoDeps = pkgs.rustPlatform.importCargoLock { lockFile = ./Cargo.lock; };
         nativeBuildInputs = with pkgs.rustPlatform; [ cargoSetupHook maturinBuildHook pkgs.pkg-config ];
         buildAndTestSubdir = "crates/universe-py";
+        env.UNIVERSE_GIT_REV = gitRev;
         pythonImportsCheck = [ "universe_core" ];
       };
 

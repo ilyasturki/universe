@@ -29,6 +29,8 @@ pub mod sources;
 pub mod splash;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+// The version with the short git rev behind it (build.rs), `-dirty` when the tree was.
+pub const BUILD: &str = env!("UNIVERSE_BUILD");
 
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
