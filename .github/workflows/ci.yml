@@ -7,7 +7,9 @@ jobs:
   nix:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: DeterminateSystems/nix-installer-action@v16
+      - uses: actions/checkout@v7
+      - uses: DeterminateSystems/nix-installer-action@v23
+      # The two Rust derivations take ~9 min cold; a push that touches no Rust substitutes them from the cache
+      - uses: DeterminateSystems/magic-nix-cache-action@v15
       - run: nix build .#universe .#universe-ui --no-link -L
       - run: nix flake check -L
