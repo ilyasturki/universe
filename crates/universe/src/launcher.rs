@@ -46,11 +46,12 @@ pub fn parse_fps_limit(s: &str) -> crate::Result<FpsLimit> {
     }
 }
 
-/// `auto` is the refresh the game sees: its gamescope rate when set, else the screen's.
+/// `auto` is the refresh the game sees: its gamescope rate when set, else the screen's; none for an emulator, which paces itself.
 pub fn fps_limit_hz(e: &crate::library::Effective, screen: Option<crate::gamescope::Mode>) -> Option<u32> {
     match parse_fps_limit(&e.fps_limit).unwrap_or(FpsLimit::Auto) {
         FpsLimit::Hz(hz) => Some(hz),
         FpsLimit::None => None,
+        FpsLimit::Auto if e.runner_kind == "emulator" => None,
         FpsLimit::Auto => {
             let gamescope_hz = e.gamescope.then(|| crate::gamescope::parse_refresh(&e.gamescope_fields.refresh).unwrap_or(None)).flatten();
             gamescope_hz.or_else(|| screen.map(|s| s.refresh).filter(|hz| *hz > 0))
@@ -60,6 +61,8 @@ pub fn fps_limit_hz(e: &crate::library::Effective, screen: Option<crate::gamesco
 
 /// MangoHud's own default for `reload_cfg`, pinned in the conf.
 pub const RELOAD_CFG: &str = "Shift_L+F4";
+/// A pre-launch hook's line in `UNIVERSE_ENV_FILE`: flags for the game's gamescope, never the game's environment.
+pub const HOOK_GAMESCOPE_ARGS: &str = "UNIVERSE_GAMESCOPE_ARGS";
 
 fn users_conf_lines() -> String {
     let own = std::fs::read_to_string(crate::paths::xdg("XDG_CONFIG_HOME", ".config").join("MangoHud/MangoHud.conf")).unwrap_or_default();
@@ -178,6 +181,7 @@ pub fn plan(r: &Resolved, config: &Config, extra_env: &BTreeMap<String, String>,
         return Err(crate::Error::NotFound(format!("{}: {} missing", g.id, exe.display())));
     }
     let mut env = extra_env.clone();
+    let hook_gamescope_args = env.remove(HOOK_GAMESCOPE_ARGS).unwrap_or_default();
     env.extend(config.launch.env.clone());
     let file = exe.to_string_lossy().to_string();
     let (program, mut args) = match spec.kind {
@@ -240,7 +244,7 @@ pub fn plan(r: &Resolved, config: &Config, extra_env: &BTreeMap<String, String>,
     let mut mangoapp_conf = None;
     let (program, args) = match &gamescope {
         Some(bin) => {
-            let mut wrap = gamescope_args(&r.effective.gamescope_fields, [&config.launch.gamescope_args, &r.effective.gamescope_args], r.effective.hdr, screen);
+            let mut wrap = gamescope_args(false, &r.effective.gamescope_fields, [&config.launch.gamescope_args, &r.effective.gamescope_args, &hook_gamescope_args], r.effective.hdr, screen);
             // Its mangoapp draws the HUD from Universe's conf; the file alone on the unit loads no layer, MANGOHUD=1 would.
             let path = mangoapp_conf_path();
             mangoapp_conf = Some((path.clone(), mangoapp_conf_text(r.effective.mangohud)));
@@ -281,10 +285,14 @@ pub fn plan(r: &Resolved, config: &Config, extra_env: &BTreeMap<String, String>,
     Ok(Plan { program, args, cwd: g.working_dir(), env, pre_command: g.launch.pre_command.clone(), post_command: g.launch.post_command.clone(), mangohud_conf, mangoapp_conf })
 }
 
-/// `--force-composition`: a buffer scanned out straight records as one flat colour in Mutter's window screencast.
+/// `--force-composition` costs a composite per frame and is needed only under Mutter's window screencast, which records a buffer scanned out straight as one flat colour: a
+/// pre-launch hook asks for it through `UNIVERSE_GAMESCOPE_ARGS`; the launcher's own gamescope, up before any game is known, keeps it.
 /// `--mangoapp` always: the HUD is shown and hidden while the game runs, so its drawer has to be there.
-fn gamescope_args(fields: &crate::gamescope::Fields, extras: [&str; 2], hdr: bool, screen: Option<crate::gamescope::Mode>) -> Vec<String> {
-    let mut args: Vec<String> = vec!["-f".into(), "--force-composition".into()];
+fn gamescope_args(force_composition: bool, fields: &crate::gamescope::Fields, extras: [&str; 3], hdr: bool, screen: Option<crate::gamescope::Mode>) -> Vec<String> {
+    let mut args: Vec<String> = vec!["-f".into()];
+    if force_composition {
+        args.push("--force-composition".into());
+    }
     args.extend(crate::gamescope::args(fields, screen));
     for extra in extras {
         args.extend(shell_words::split(extra).unwrap_or_else(|_| vec![extra.to_string()]).into_iter().filter(|a| !a.is_empty()));
@@ -300,7 +308,7 @@ pub fn host_gamescope(config: &Config, screen: Option<crate::gamescope::Mode>) -
     let bin = crate::runners::on_path(&config.launch.gamescope_bin)?;
     let fields = crate::library::gamescope_fields_of(&crate::game::Game::default(), config);
     let mut args = vec![format!("MANGOHUD_CONFIGFILE={}", mangoapp_conf_path().display()), bin.to_string_lossy().to_string()];
-    args.extend(gamescope_args(&fields, [&config.launch.gamescope_args, ""], config.launch.hdr, screen));
+    args.extend(gamescope_args(true, &fields, [&config.launch.gamescope_args, "", ""], config.launch.hdr, screen));
     Some((env_bin(), args))
 }
 
@@ -480,9 +488,11 @@ mod tests {
         r.effective.proton_path = "/p".into();
         assert!(r.effective.gamescope);
         let screen = Some(crate::gamescope::Mode { width: 3840, height: 2160, refresh: 60 });
-        let p = plan(&r, &cfg, &BTreeMap::new(), screen, Some(Path::new("/run/user/1000/universe/splash-x.bgrx")), false).unwrap();
+        let hook_env = BTreeMap::from([(HOOK_GAMESCOPE_ARGS.to_string(), "--force-composition".to_string())]);
+        let p = plan(&r, &cfg, &hook_env, screen, Some(Path::new("/run/user/1000/universe/splash-x.bgrx")), false).unwrap();
         assert_eq!(p.program, bin.to_string_lossy());
-        let mut want: Vec<String> = ["-f", "--force-composition", "-W", "3840", "-H", "2160", "-w", "3840", "-h", "2160", "-r", "60", "--adaptive-sync", "-r", "120", "--mangoapp", "--"].map(String::from).into();
+        assert!(!p.env.contains_key(HOOK_GAMESCOPE_ARGS), "the hook's flags go to gamescope, not the game");
+        let mut want: Vec<String> = ["-f", "-W", "3840", "-H", "2160", "-w", "3840", "-h", "2160", "-r", "60", "--adaptive-sync", "-r", "120", "--force-composition", "--mangoapp", "--"].map(String::from).into();
         want.extend([crate::paths::self_exe().to_string_lossy().to_string(), "splash".into(), "--image".into(), "/run/user/1000/universe/splash-x.bgrx".into(), "--".into()]);
         if let Some(setpriv) = crate::runners::on_path("setpriv") {
             want.extend([setpriv.to_string_lossy().to_string(), "--ambient-caps=-all".into(), "--inh-caps=-all".into(), "--".into()]);
@@ -499,7 +509,7 @@ mod tests {
         r.effective.gamescope_args = "--expose-wayland".into();
         let p = plan(&r, &cfg, &BTreeMap::new(), None, None, false).unwrap();
         assert_eq!(p.env["PROTON_ENABLE_WAYLAND"], "1");
-        assert_eq!(p.args[2], "--adaptive-sync", "no screen known: gamescope keeps its own size");
+        assert_eq!(p.args[1], "--adaptive-sync", "no screen known: gamescope keeps its own size");
         let splash = p.args.iter().position(|a| a == "splash").unwrap();
         assert_eq!(p.args[splash + 1], "--", "no poster: the keep-alive window stays black");
 
@@ -508,7 +518,7 @@ mod tests {
         let mut r2 = crate::library::resolve(r.game.clone(), &cfg, &[]);
         r2.effective.proton_path = "/p".into();
         let p = plan(&r2, &cfg, &BTreeMap::new(), screen, None, false).unwrap();
-        assert_eq!(p.args[2..14], ["-W", "3840", "-H", "2160", "-w", "1920", "-h", "1080", "-r", "60", "-S", "integer"], "the game's fields over the global ones, the output the screen");
+        assert_eq!(p.args[1..13], ["-W", "3840", "-H", "2160", "-w", "1920", "-h", "1080", "-r", "60", "-S", "integer"], "the game's fields over the global ones, the output the screen");
 
         r.effective.hdr = true;
         let p = plan(&r, &cfg, &BTreeMap::new(), None, None, false).unwrap();
@@ -593,6 +603,10 @@ mod tests {
         assert_eq!(fps_limit_hz(&e, screen), None);
         e.fps_limit = "45".into();
         assert_eq!(fps_limit_hz(&e, None), Some(45));
+        e.runner_kind = "emulator".into();
+        assert_eq!(fps_limit_hz(&e, screen), Some(45), "a rate set is a rate set, emulator or not");
+        e.fps_limit = "auto".into();
+        assert_eq!(fps_limit_hz(&e, screen), None, "an emulator paces itself: auto adds no limiter");
     }
 
     #[test]
@@ -656,7 +670,7 @@ mod tests {
         let p = plan(&r, &cfg, &BTreeMap::new(), screen, None, false).unwrap();
         let (_, text) = p.mangohud_conf.as_ref().expect("on the desktop the layer is the HUD: loaded hidden, shown mid-game");
         assert_eq!((p.program.as_str(), p.env["MANGOHUD"].as_str()), (native.as_str(), "1"), "no limit: no wrapper");
-        assert!(text.contains("no_display\n") && !text.contains("fps_limit="), "{text}");
+        assert!(text.contains("no_display\n") && !text.lines().any(|l| l.starts_with("fps_limit=")), "{text}");
     }
 
     #[test]

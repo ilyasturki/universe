@@ -179,6 +179,15 @@ def test_start_enabled_false_exits_early(tmp_path, fakebin):
     assert not (fakebin["logs"] / "systemd-run.args").exists()
 
 
+def test_pre_asks_gamescope_to_composite_only_for_a_window_recording(tmp_path, fakebin):
+    env_file = tmp_path / "env"
+    for settings, want in (({"source": "window"}, "UNIVERSE_GAMESCOPE_ARGS=--force-composition\n"), ({"source": "screen"}, ""), ({"source": "window", "enabled": False}, "")):
+        env_file.write_text("")
+        result = run("pre", env_for(tmp_path, fakebin, settings, {"UNIVERSE_ENV_FILE": str(env_file)}))
+        assert result.returncode == 0, result.stderr
+        assert env_file.read_text() == want, settings
+
+
 def _seed_pending(tmp_path):
     pending = tmp_path / "data" / "pending"
     pending.mkdir(parents=True)

@@ -108,7 +108,7 @@ hooks write shows up that way, with no other channel.
 | Rust | Python | CLI | Role |
 |---|---|---|---|
 | `launch(id, screen, splash)` | `launch(id, screen, splash="")` | `universe play <name> [--screen DP-1] [--no-wait]` | pre-launch hooks, marker, `systemd-run`, post-launch hooks; returns the `session_id` at once. `screen` is a DRM connector name or `""` for the profile default; `splash` a poster for gamescope's keep-alive window (see Gamescope) or `""`. `Busy` if a session is already running |
-| `stop(session_id)` | `stop(session_id)` | `universe stop` | `systemctl --user stop` on the unit; waits for it, a second SIGTERM after ~3 s |
+| `stop(session_id)` | `stop(session_id)` | `universe stop` | SIGTERM to the game's processes (those under `universe splash`; every process of the unit when there is no gamescope of its own), again every 3 s, up to 10 s for them to exit on their own terms — an emulator saves its caches, Dolphin takes the first as a "quit?" prompt — then `systemctl --user stop` on the unit and waits for it |
 | `session_window()` | `session_window()` | `universe session-window [--json]` | the running game's window as the Universe shell extension lists it (`{id, pid, wm_class, title, focused, width, height, hidden, minimized}`): the largest visible toplevel whose pid is in the unit's cgroup — gamescope's when the game runs inside it. `None` before it maps; `Unavailable` off GNOME |
 | `wait_session_window(session_id, timeout)` | `wait_session_window(session_id, timeout_ms)` | `universe session-window --wait <secs> [--json]` | blocks until that window is up, then `Activate`s it (focus and raise) and returns it; `None` when the session ended first or the timeout ran out (the CLI prints `null`, exit 0); `Unavailable` off GNOME, at once. Polls the extension every 150 ms |
 | `focus_session()` / `focus_pid(pid)` | `focus_session()` / `focus_pid(pid)` | — | `Activate` on the game's window / on the largest window of a process (a frontend's own, once the game is gone). On the launcher's gamescope (see Gamescope) `focus_session` shows the game again and `focus_pid(own pid)` takes the screen back from it |
@@ -182,14 +182,16 @@ queues still fill: an evdev reader replays the last 64 events on thaw (or resync
 `SYN_DROPPED`), a hidraw reader's 64-report buffer fills with the first ~¼ s after the freeze.
 
 A game launched from **outside** gamescope (`universe play` from a terminal) gets a gamescope of its
-own, as follows. Every runner's command runs inside gamescope by default: `gamescope -f --force-composition
+own, as follows. Every runner's command runs inside gamescope by default: `gamescope -f
 -W <screen width> -H <screen height> -w <game width> -h <game height> -r <refresh> [-S scaler] [-F filter]
 [--sharpness N] [--adaptive-sync] [launch.gamescope_args] [the game's
-gamescope_args] [--mangoapp] -- universe splash [--image <poster>] -- <program> <args…>`. One
+gamescope_args] [a pre-launch hook's UNIVERSE_GAMESCOPE_ARGS] [--mangoapp] -- universe splash [--image <poster>] -- <program> <args…>`. One
 window, from gamescope's first frame to the game's last, whatever the game, Proton or umu put up
-first, and the launcher hands over on it. `--force-composition` keeps gamescope drawing its own
-frame instead of scanning the game's buffer out directly: Mutter's window screencast (`capture`'s
-window source) blits a scanned-out buffer as one flat colour.
+first, and the launcher hands over on it. Left to itself gamescope scans the game's buffer out
+directly, no composite of its own per frame; Mutter's window screencast (`capture`'s window source)
+blits such a buffer as one flat colour, so for a window recording the capture module's pre-launch
+hook writes `UNIVERSE_GAMESCOPE_ARGS=--force-composition`. The launcher's own gamescope
+(`host_gamescope`) is up before any game is known and keeps the flag.
 
 gamescope unmaps its own window whenever no client inside it is focused, and a game that closes
 its first window before opening the real one (Dead Cells) would flash the desktop through, so
@@ -256,7 +258,8 @@ and holds the game to it through MangoHud's limiter inside the game process, ove
 gamescope's `--framerate-limit` paces nothing on a nested gamescope (measured: an uncapped
 client stays uncapped, a vsynced one at the refresh, with or without its WSI layer), and its `-r`
 only paces clients that vsync. `auto` is the refresh the game sees: its `gamescope_refresh` when
-set, else the screen's; unknown (no screen read) means no limit. The launcher writes the layer's
+set, else the screen's; unknown (no screen read) means no limit, and so does an emulator runner,
+which paces itself (a second limiter on top of its own jitters against it). The launcher writes the layer's
 `<state>/MangoHud.conf` before each launch and gives the game `MANGOHUD=1
 MANGOHUD_CONFIGFILE=<that>`: on the unit when no gamescope runs there, else through `env` in
 front of the program, after `setpriv`, since gamescope (a Vulkan client itself) would draw the
@@ -716,7 +719,7 @@ label = "Model"
 | `JOURNAL_DIR` | `games/<id>/journal` | all |
 | `SCREENSHOTS_DIR` | `games/<id>/screenshots`; `<state>/screenshots` for a `screenshot` with no session running | all |
 | `MODULE_SETTINGS_JSON` | global settings merged with the game's | all |
-| `UNIVERSE_ENV_FILE` | write `KEY=VALUE` lines here to add them to the game's environment, ahead of `launch.env` | `pre-launch` |
+| `UNIVERSE_ENV_FILE` | write `KEY=VALUE` lines here to add them to the game's environment, ahead of `launch.env`; the one key `UNIVERSE_GAMESCOPE_ARGS` is flags for the game's gamescope instead (see Gamescope) | `pre-launch` |
 | `MODULE_DIR`, `MODULE_DATA_DIR` | the module's directory, `$XDG_DATA_HOME/universe/modules/<id>` | all |
 | `UNIVERSE_BIN`, `UNIVERSE_{DATA,CONFIG,STATE}_HOME`, `UNIVERSE_{MODULES,SOURCES}_PATH`, `PATH` | the CLI to call back (`recording-file`, `journal-add`, `session-window`, `screen-mode`) and the environment that makes it open the same core | all |
 | `UNIVERSE_GAME_JSON`, `UNIVERSE_JOURNAL_ROOT` | the resolved `Game`, serialized; `paths.journal_root` | all |

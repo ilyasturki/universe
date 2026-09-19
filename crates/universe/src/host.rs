@@ -76,12 +76,29 @@ impl Units {
         }
     }
 
+    /// The game first, then the unit: `systemctl stop` SIGTERMs the whole cgroup at once, and gamescope dies before the game, which loses its X server and can save nothing.
     // A second SIGTERM after ~3 s: Dolphin takes the first as a "quit?" prompt and only exits on the second.
     pub async fn stop(&self, unit: &str) -> Result<()> {
         match self {
             Units::Systemd => {
                 // systemd 260 drops the stop job of a frozen unit ("Cannot stop frozen unit") and reports success.
                 let _ = tokio::process::Command::new("systemctl").args(["--user", "thaw", unit]).output().await;
+                if let Some(cg) = self.cgroup(unit).await {
+                    let mut game = game_pids(&cgroup_procs(&cg));
+                    for round in 0..20 {
+                        if game.is_empty() {
+                            break;
+                        }
+                        if round % 6 == 0 {
+                            for pid in &game {
+                                // SAFETY: kill(2) with a pid read from the unit's own cgroup.
+                                unsafe { libc::kill(*pid as libc::pid_t, libc::SIGTERM) };
+                            }
+                        }
+                        tokio::time::sleep(Duration::from_millis(500)).await;
+                        game = game_pids(&cgroup_procs(&cg));
+                    }
+                }
                 let out = tokio::process::Command::new("systemctl").args(["--user", "stop", "--no-block", unit]).output().await?;
                 let err = String::from_utf8_lossy(&out.stderr);
                 if !out.status.success() {
@@ -90,13 +107,6 @@ impl Units {
                     }
                     return Err(Error::Io(format!("systemctl stop {unit}: {}", err.trim())));
                 }
-                for _ in 0..10 {
-                    tokio::time::sleep(Duration::from_millis(300)).await;
-                    if !self.is_active(unit).await {
-                        return Ok(());
-                    }
-                }
-                let _ = tokio::process::Command::new("systemctl").args(["--user", "kill", "--signal=SIGTERM", "--kill-whom=main", unit]).output().await;
                 for _ in 0..20 {
                     tokio::time::sleep(Duration::from_millis(500)).await;
                     if !self.is_active(unit).await {
@@ -227,6 +237,48 @@ fn systemd_run_args(spec: &UnitSpec) -> Vec<String> {
 /// Unit-file quoting for an Exec= line: double quotes, backslash escapes.
 fn unit_quote(parts: &[String]) -> String {
     parts.iter().map(|p| format!("\"{}\"", p.replace('\\', "\\\\").replace('"', "\\\""))).collect::<Vec<_>>().join(" ")
+}
+
+#[derive(Debug, Clone)]
+struct Proc {
+    pid: u32,
+    ppid: u32,
+    argv: Vec<String>,
+}
+
+fn cgroup_procs(cgroup: &str) -> Vec<Proc> {
+    let path = PathBuf::from("/sys/fs/cgroup").join(cgroup.trim_start_matches('/')).join("cgroup.procs");
+    let pids = std::fs::read_to_string(path).unwrap_or_default();
+    pids.lines()
+        .filter_map(|l| l.trim().parse::<u32>().ok())
+        .filter_map(|pid| {
+            let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+            let ppid = stat.rsplit(')').next()?.split_whitespace().nth(1)?.parse().ok()?;
+            let argv = std::fs::read(format!("/proc/{pid}/cmdline")).unwrap_or_default().split(|b| *b == 0).filter(|a| !a.is_empty()).map(|a| String::from_utf8_lossy(a).into_owned()).collect();
+            Some(Proc { pid, ppid, argv })
+        })
+        .collect()
+}
+
+/// The processes under `universe splash` (gamescope's primary child, the game its child); every process when there is no splash.
+fn game_pids(procs: &[Proc]) -> Vec<u32> {
+    let is_splash = |p: &Proc| p.argv.first().and_then(|a| a.rsplit('/').next()) == Some("universe") && p.argv.get(1).map(String::as_str) == Some("splash");
+    let splashes: Vec<u32> = procs.iter().filter(|p| is_splash(p)).map(|p| p.pid).collect();
+    if splashes.is_empty() {
+        return procs.iter().map(|p| p.pid).collect();
+    }
+    let parent = |pid: u32| procs.iter().find(|p| p.pid == pid).map(|p| p.ppid);
+    let under_splash = |mut pid: u32| {
+        for _ in 0..64 {
+            match parent(pid) {
+                Some(pp) if splashes.contains(&pp) => return true,
+                Some(pp) if pp > 1 => pid = pp,
+                _ => return false,
+            }
+        }
+        false
+    };
+    procs.iter().filter(|p| !splashes.contains(&p.pid) && under_splash(p.pid)).map(|p| p.pid).collect()
 }
 
 #[derive(Debug, Default, Clone)]
@@ -384,6 +436,27 @@ impl Memory {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn proc(pid: u32, ppid: u32, argv: &[&str]) -> Proc {
+        Proc { pid, ppid, argv: argv.iter().map(|a| a.to_string()).collect() }
+    }
+
+    #[test]
+    fn game_pids_are_the_splash_subtree_or_everything() {
+        let tree = [
+            proc(10, 1, &["/run/wrappers/bin/gamescope", "-f"]),
+            proc(11, 10, &["Xwayland", ":2"]),
+            proc(12, 10, &["gamescopereaper"]),
+            proc(13, 10, &["mangoapp"]),
+            proc(20, 10, &["/nix/store/x/bin/universe", "splash", "--image", "/p", "--", "eden"]),
+            proc(21, 20, &["/nix/store/y/bin/.eden-wrapped", "-f"]),
+            proc(22, 21, &["wineserver"]),
+        ];
+        assert_eq!(game_pids(&tree), [21, 22]);
+        let bare = [proc(30, 1, &["umu-run", "game.exe"]), proc(31, 30, &["wine", "game.exe"])];
+        assert_eq!(game_pids(&bare), [30, 31]);
+        assert!(game_pids(&[]).is_empty());
+    }
 
     #[test]
     fn unit_log_from_journal_lines() {
