@@ -86,6 +86,8 @@
       modulesDir = "${modulesPkg}/share/universe/modules";
       sourcesDir = "${sourcesPkg}/share/universe/sources";
       qmlImportPath = lib.concatMapStringsSep ":" (p: "${p}/lib/qt-6/qml") (with pkgs.qt6; [ qtdeclarative qt5compat qtmultimedia ]);
+      # Only wrapQtAppsHook sets this for a built app; the check and the dev shell run the host bare
+      qtPluginPath = lib.concatMapStringsSep ":" (p: "${p}/lib/qt-6/plugins") (with pkgs.qt6; [ qtsvg qtmultimedia ]);
 
       uiDesktopItem = pkgs.makeDesktopItem {
         name = "universe-ui";
@@ -145,10 +147,10 @@
         name = "universe-pytest-ui";
         src = ./ui;
         dontWrapQtApps = true;
-        nativeBuildInputs = [ (pkgs.python3.withPackages (ps: [ ps.pyside6 ps.pysdl2 ps.qrcode ps.pytest corePy ])) pkgs.qt6.qt5compat pkgs.qt6.qtmultimedia pkgs.qt6.qtdeclarative pkgs.systemd pkgs.ffmpeg ];
+        nativeBuildInputs = [ (pkgs.python3.withPackages (ps: [ ps.pyside6 ps.pysdl2 ps.qrcode ps.pytest corePy ])) pkgs.qt6.qt5compat pkgs.qt6.qtmultimedia pkgs.qt6.qtdeclarative pkgs.qt6.qtsvg pkgs.systemd pkgs.ffmpeg ];
         buildPhase = ''
           export HOME=$TMPDIR QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 LC_ALL=C.UTF-8 TZ=Europe/Paris TZDIR=${pkgs.tzdata}/share/zoneinfo
-          export QML2_IMPORT_PATH=${qmlImportPath}
+          export QML2_IMPORT_PATH=${qmlImportPath} QT_PLUGIN_PATH=${qtPluginPath}
           python3 -m pytest -q -p no:cacheprovider
         '';
         installPhase = "touch $out";
@@ -182,7 +184,7 @@
           export UNIVERSE_MODULES_PATH="$PWD/modules"
           export UNIVERSE_SOURCES_PATH="$PWD/sources"
           export QML2_IMPORT_PATH="${qmlImportPath}"
-          export QT_PLUGIN_PATH="${pkgs.qt6.qtsvg}/lib/qt-6/plugins:${pkgs.qt6.qtmultimedia}/lib/qt-6/plugins"
+          export QT_PLUGIN_PATH="${qtPluginPath}"
           export LD_LIBRARY_PATH="${lib.makeLibraryPath [ pkgs.pipewire ]}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           export QT_FORCE_STDERR_LOGGING=1
         '';
