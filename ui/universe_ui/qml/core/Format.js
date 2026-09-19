@@ -1,4 +1,5 @@
 .pragma library
+.import QtQuick as QQ
 
 function playTime(seconds) {
     if (!seconds || seconds <= 0)
@@ -38,16 +39,9 @@ function plural(n, one, many) {
     return n + " " + (n === 1 ? one : many);
 }
 
-// The host's `_size`: 1024-based, one decimal past bytes.
+// The host's `_size`, the same Qt call: 1024-based, one decimal past bytes, the C locale's spelling.
 function bytes(n) {
-    var units = ["KB", "MB", "GB", "TB"], v = Math.max(0, n || 0);
-    if (v < 1024)
-        return Math.round(v) + " bytes";
-    for (var i = 0; i < units.length; i++) {
-        v /= 1024;
-        if (v < 1024 || i === units.length - 1)
-            return v.toFixed(1) + " " + units[i];
-    }
+    return Qt.locale("C").formattedDataSize(Math.max(0, n || 0), 1, QQ.Locale.DataSizeTraditionalFormat);
 }
 
 function sessions(count) {
