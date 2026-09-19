@@ -196,7 +196,7 @@ FocusScope {
             id: meta
             anchors.top: title.bottom
             anchors.topMargin: Theme.dp(10)
-            text: "SCREENSHOTS  ·  " + page.rows.length + (page.since !== "" ? "  ·  " + grid.mine + " this session" : "") + (page.current ? "  ·  " + page.current.dateText : "")
+            text: "SCREENSHOTS  ·  " + page.rows.length + (page.current ? "  ·  " + page.current.dateText : "")
             color: Theme.textSecondary
             font.family: Theme.sans
             font.weight: Font.Medium

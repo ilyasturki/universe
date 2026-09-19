@@ -230,7 +230,7 @@ FocusScope {
             if (!dock.open)
                 return;
             dock.hidden = false;
-            toast.show(path ? "Screenshot saved  ·  ▼ to review" : "Screenshot failed");
+            toast.show(path ? "Screenshot saved" : "Screenshot failed");
         }
     }
 
@@ -520,21 +520,6 @@ FocusScope {
                     }
                 }
             }
-        }
-
-        Text {
-            anchors.top: buttonsRow.bottom
-            anchors.topMargin: Theme.dp(24)
-            anchors.horizontalCenter: buttonsRow.horizontalCenter
-            text: "▼  Screenshots"
-            color: Qt.rgba(0.949, 0.953, 0.961, 0.55)
-            font.family: Theme.sans
-            font.weight: Font.Medium
-            font.pixelSize: Theme.dp(18)
-            font.letterSpacing: Theme.dp(0.5)
-            opacity: dock.opened ? 0.0 : 1.0
-
-            Behavior on opacity { Ease { duration: Theme.durQuick } }
         }
 
         Rectangle {

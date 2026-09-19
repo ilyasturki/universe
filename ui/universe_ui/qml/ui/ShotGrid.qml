@@ -41,8 +41,8 @@ Item {
         } else {
             if (split.mine.length === 0)
                 out.push({ group: "THIS SESSION", first: 0, items: [] });
-            chunk(split.mine, "THIS SESSION  ·  " + split.mine.length, 0);
-            chunk(split.earlier, "EARLIER  ·  " + split.earlier.length, split.mine.length);
+            chunk(split.mine, "THIS SESSION", 0);
+            chunk(split.earlier, "EARLIER", split.mine.length);
         }
         return out;
     }
@@ -133,7 +133,7 @@ Item {
                 anchors.left: parent.left
                 anchors.leftMargin: grid.gap / 2
                 anchors.verticalCenter: parent.verticalCenter
-                text: "No screenshots this session yet — X in the dock, or the pad's screenshot button."
+                text: "None yet"
                 color: Theme.textMuted
                 font.family: Theme.sans
                 font.pixelSize: Theme.dp(22)

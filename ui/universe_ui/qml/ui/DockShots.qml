@@ -96,8 +96,7 @@ FocusScope {
         Text {
             id: title
             anchors.left: parent.left
-            anchors.right: clockText.left
-            anchors.rightMargin: Theme.dp(40)
+            anchors.right: parent.right
             text: panel.session ? panel.session.title : ""
             color: Theme.text
             font.family: Theme.sans
@@ -110,23 +109,12 @@ FocusScope {
             id: meta
             anchors.top: title.bottom
             anchors.topMargin: Theme.dp(10)
-            text: "SCREENSHOTS  ·  " + grid.mine + " this session  ·  " + (grid.ordered.length - grid.mine) + " earlier" + (panel.current ? "  ·  " + panel.current.dateText : "")
+            text: "SCREENSHOTS  ·  " + grid.ordered.length + (panel.current ? "  ·  " + panel.current.dateText : "")
             color: Theme.textSecondary
             font.family: Theme.sans
             font.weight: Font.Medium
             font.pixelSize: Theme.dp(20)
             font.letterSpacing: 1.5
-        }
-
-        Text {
-            id: clockText
-            anchors.right: parent.right
-            anchors.verticalCenter: title.verticalCenter
-            text: Theme.clock
-            color: Qt.rgba(0.949, 0.953, 0.961, 0.85)
-            font.family: Theme.sans
-            font.weight: Font.Medium
-            font.pixelSize: Theme.dp(26)
         }
     }
 
