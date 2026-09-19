@@ -188,6 +188,12 @@ FocusScope {
                 readonly property bool keepsMark: hasMark || entry.iconSlot === true
                 // Dim reads as disabled but still opens: a runner whose program was not found.
                 readonly property color ink: disabled || entry.dim === true ? Theme.textDisabled : Theme.text
+                // A search hit: where the row lives, muted, in front of its label.
+                readonly property string path: entry.path !== undefined && entry.path !== null ? String(entry.path) : ""
+
+                function esc(text) {
+                    return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+                }
 
                 x: rows.room
                 y: rows.room + rows.yOf(index)
@@ -303,7 +309,8 @@ FocusScope {
                         height: rows.rowHeight
                         width: control.x - x - Theme.dp(24)
                         verticalAlignment: Text.AlignVCenter
-                        text: row.entry.label || ""
+                        text: row.path !== "" ? "<font color=\"" + Theme.textSecondary + "\">" + row.esc(row.path) + " › </font>" + row.esc(row.entry.label || "") : row.entry.label || ""
+                        textFormat: row.path !== "" ? Text.StyledText : Text.PlainText
                         color: row.ink
                         elide: Text.ElideRight
                     }

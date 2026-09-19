@@ -547,6 +547,7 @@ FocusScope {
                         function onRunnerRequested(runner) { root.openSub("pages/FormPage.qml", { runner: runner }); }
                         function onModuleRequested(module) { root.openSub("pages/FormPage.qml", { module: module }); }
                         function onSourceRequested(source) { root.openSub("pages/FormPage.qml", { source: source }); }
+                        function onFormRequested(args) { root.openSub("pages/FormPage.qml", args); }
                         function onArtworkRequested(game, slot) { root.openSub("pages/ArtworkPage.qml", { game: game, slot: slot }); }
                         function onScreenshotsRequested(game, name) { root.openSub("pages/ScreenshotsPage.qml", { game: game, name: name || "" }); }
                         function onRecordingsRequested(game, session) { root.openSub("pages/RecordingsPage.qml", { game: game, session: session || "" }); }

@@ -25,8 +25,15 @@ Item {
     readonly property real labelInset: hasImage ? thumb.width + Theme.dp(24) : keepsMark ? mark.width + Theme.dp(28) : hasGlyph || hasIcon ? Theme.dp(18) + lead.width + Theme.dp(16) : Theme.dp(18)
     readonly property color onFocus: Qt.rgba(0.063, 0.067, 0.086, 0.7)
     readonly property real valueMax: Math.max(Theme.dp(120), width * 0.6 - (hasImage ? thumb.width : 0))
+    // A search hit: where the row lives, muted, in front of its label; a tag (ADVANCED) next to the value.
+    readonly property string path: entry.path !== undefined && entry.path !== null ? String(entry.path) : ""
+    readonly property string tag: entry.tag !== undefined && entry.tag !== null ? String(entry.tag) : ""
 
     opacity: entry.disabled === true && !focused ? 0.45 : 1.0
+
+    function esc(text) {
+        return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
 
     Rectangle {
         anchors.left: parent.left
@@ -171,7 +178,8 @@ Item {
         anchors.right: control.left
         anchors.rightMargin: Theme.dp(20)
         anchors.verticalCenter: parent.verticalCenter
-        text: row.entry.label || ""
+        text: row.path !== "" ? "<font color=\"" + (row.focused ? "#5c5f69" : "#8a8d96") + "\">" + row.esc(row.path) + " › </font>" + row.esc(row.entry.label || "") : row.entry.label || ""
+        textFormat: row.path !== "" ? Text.StyledText : Text.PlainText
         color: row.focused ? Theme.onLight : Theme.text
         font.family: Theme.sans
         font.weight: row.focused ? Font.DemiBold : Font.Medium
@@ -203,23 +211,22 @@ Item {
             anchors.verticalCenter: parent.verticalCenter
             spacing: Theme.dp(16)
 
-            Loader {
-                visible: active
-                active: row.entry.inherited === true
-                anchors.verticalCenter: parent.verticalCenter
+            Repeater {
+                model: [ row.tag, row.entry.inherited === true ? "INHERITED" : "" ].filter(Boolean)
 
-                sourceComponent: Rectangle {
-                    width: tag.width + Theme.dp(18)
-                    height: tag.height + Theme.dp(8)
+                Rectangle {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: tagText.width + Theme.dp(18)
+                    height: tagText.height + Theme.dp(8)
                     radius: Theme.dp(8)
                     color: "transparent"
                     border.width: 1
                     border.color: row.focused ? Qt.rgba(0.063, 0.067, 0.086, 0.25) : Qt.rgba(1, 1, 1, 0.14)
 
                     CapsLabel {
-                        id: tag
+                        id: tagText
                         anchors.centerIn: parent
-                        text: "INHERITED"
+                        text: modelData
                         size: Theme.dp(15)
                         tracking: 0.08
                         color: row.focused ? Qt.rgba(0.063, 0.067, 0.086, 0.55) : Theme.textFaint

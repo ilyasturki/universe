@@ -70,6 +70,21 @@ the module's 30-min timeout show up); `appeared(session, title)` and
 "Journal: <title>" and "Journal failed: <reason>" toasts, and the tab bar pulses a book next to
 the session badge while the count is not zero.
 
+The settings forms (`api.screens.launch`, `runner`, `module`, `source`, `gameSettings`, `controller`)
+hand QML a flat `rows` list and `groups` that index it; a row's `advanced` puts it in an `advanced`
+group, and the form appends one gate row (`key: "advanced"`, an action) whose group carries
+`wide: true`. `groups` holds the basic groups, the gate, and the advanced groups only while
+`showAdvanced` is set (a page resets it when it opens; `basicGroups` and `advancedGroups` are
+always there, for a look that lays them out itself); `reveal(key, module)` returns a row's index
+and opens the gate when the row sits behind it — what a search hit lands on. A `map` row
+(`launch.env`, `launch.dll_overrides`) carries `entries` and takes `setMapEntry(index, name, value)`,
+an empty value removing the entry. `api.screens.search` is the settings index: the page hands it
+its `sections` (`[{id, label}]`), `load()` rebuilds the index off the UI thread from the same
+row builders the forms use (`build_launch`, `build_runner`, `build_page`, `build_game`), setting
+`query` recomputes `results` at once — rows with `path`, `display`, `detail`, `tag`, `kind`
+(`setting`, `section`, `game`, `gamekey`, `gamerow`) and a `target` (`{page, id, key, module}`)
+the page opens; `expand(index)` unfolds a `gamekey` head into its games.
+
 ## Themes
 
 `main.qml` is a window with one `Loader` whose source is `api.theme.entry`, so a theme is a root

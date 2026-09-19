@@ -254,7 +254,7 @@ class Api(QObject):
         self._theme = ThemeSelector(self._memory, theme, self)
         self._library = Library(client, self)
         self._modes = {}
-        self._screens = Screens(client, self._memory, self.screenMode, self._library.allGames, self._power, self)
+        self._screens = Screens(client, self._memory, self.screenMode, self._library.allGames, self._power, self._theme_list, self)
         controller = self._screens.controller
         controller.testingChanged.connect(lambda: self._pad.setMuted(controller.testing))
         self._home = Home(client, controller, self.screenMode, self, frames=lambda: self._theme.frame)
@@ -290,6 +290,9 @@ class Api(QObject):
     keys = Property(QObject, lambda self: self._keys, constant=True)
     pad = Property(QObject, lambda self: self._pad, constant=True)
     power = Property(QObject, lambda self: self._power, constant=True)
+    def _theme_list(self):
+        return [{**t, "current": t["id"] == self._theme.current} for t in self._theme.themes]
+
     memory = Property(QObject, lambda self: self._memory, constant=True)
     allGames = Property(QObject, lambda self: self._library.allGames, constant=True)
     collections = Property(QObject, lambda self: self._library.collections, constant=True)
