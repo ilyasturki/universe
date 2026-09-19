@@ -2,6 +2,7 @@ use std::collections::BTreeMap;
 use std::path::Path;
 
 use serde::Serialize;
+use yaml_rust2::{Yaml, YamlLoader};
 
 use crate::config::Config;
 use crate::game::Game;
@@ -46,29 +47,35 @@ pub fn read_pga(pga: &Path) -> crate::Result<Vec<PgaGame>> {
     Ok(rows.filter_map(|r| r.ok()).collect())
 }
 
-fn yaml_at<'a>(v: &'a serde_yaml::Value, path: &[&str]) -> Option<&'a serde_yaml::Value> {
-    path.iter().try_fold(v, |cur, p| cur.get(*p))
+/// The first document, `Null` when the file is missing or unreadable.
+fn load_yaml(path: &Path) -> Yaml {
+    std::fs::read_to_string(path).ok().and_then(|s| YamlLoader::load_from_str(&s).ok()).and_then(|mut docs| docs.drain(..).next()).unwrap_or(Yaml::Null)
 }
 
-fn yaml_scalar(v: &serde_yaml::Value) -> Option<String> {
+fn yaml_at<'a>(v: &'a Yaml, path: &[&str]) -> Option<&'a Yaml> {
+    path.iter().try_fold(v, |cur, p| Some(&cur[*p]).filter(|y| !y.is_badvalue()))
+}
+
+fn yaml_scalar(v: &Yaml) -> Option<String> {
     match v {
-        serde_yaml::Value::String(s) => Some(s.clone()),
-        serde_yaml::Value::Number(n) => Some(n.to_string()),
-        serde_yaml::Value::Bool(b) => Some(b.to_string()),
+        Yaml::String(s) => Some(s.clone()),
+        Yaml::Integer(n) => Some(n.to_string()),
+        Yaml::Real(r) => Some(r.clone()),
+        Yaml::Boolean(b) => Some(b.to_string()),
         _ => None,
     }
 }
 
-fn yaml_str(v: &serde_yaml::Value, path: &[&str]) -> Option<String> {
+fn yaml_str(v: &Yaml, path: &[&str]) -> Option<String> {
     yaml_scalar(yaml_at(v, path)?)
 }
 
-fn yaml_bool(v: &serde_yaml::Value, path: &[&str]) -> Option<bool> {
+fn yaml_bool(v: &Yaml, path: &[&str]) -> Option<bool> {
     yaml_at(v, path)?.as_bool()
 }
 
-fn yaml_map(v: &serde_yaml::Value, path: &[&str]) -> BTreeMap<String, String> {
-    let Some(m) = yaml_at(v, path).and_then(|c| c.as_mapping()) else { return BTreeMap::new() };
+fn yaml_map(v: &Yaml, path: &[&str]) -> BTreeMap<String, String> {
+    let Some(m) = yaml_at(v, path).and_then(|c| c.as_hash()) else { return BTreeMap::new() };
     m.iter().filter_map(|(k, v)| Some((k.as_str()?.to_string(), if v.is_null() { String::new() } else { yaml_scalar(v)? }))).collect()
 }
 
@@ -93,7 +100,7 @@ pub fn runner_hints(lutris_dir: &Path) -> Vec<RunnerHint> {
         if spec.kind != crate::runners::Kind::Emulator {
             continue;
         }
-        let yml: serde_yaml::Value = std::fs::read_to_string(&f).ok().and_then(|s| serde_yaml::from_str(&s).ok()).unwrap_or(serde_yaml::Value::Null);
+        let yml = load_yaml(&f);
         let Some(executable) = yaml_str(&yml, &[&lutris_runner, "runner_executable"]) else { continue };
         let (program, args, wrapped) = see_through(Path::new(&executable));
         out.push(RunnerHint { runner: spec.id.into(), lutris_runner, executable, program, args, wrapped });
@@ -253,7 +260,7 @@ pub fn convert(p: &PgaGame, lutris_dir: &Path, runners_dir: &Path, global_env: &
     g.release_year = p.year.max(0) as u32;
     g.source.lutris_slug = p.slug.clone();
     let yml_path = lutris_dir.join("games").join(format!("{}.yml", p.configpath));
-    let yml: serde_yaml::Value = std::fs::read_to_string(&yml_path).ok().and_then(|s| serde_yaml::from_str(&s).ok()).unwrap_or(serde_yaml::Value::Null);
+    let yml = load_yaml(&yml_path);
     let mut lutris_env = global_env.clone();
     lutris_env.extend(yaml_map(&yml, &["system", "env"]));
     let mut parked = toml::Table::new();
@@ -372,7 +379,7 @@ fn promotions(existing: &Game, fresh: &Game) -> Vec<(String, String)> {
 }
 
 fn lutris_global_env(lutris_dir: &Path) -> BTreeMap<String, String> {
-    let yml: serde_yaml::Value = std::fs::read_to_string(lutris_dir.join("system.yml")).ok().and_then(|s| serde_yaml::from_str(&s).ok()).unwrap_or(serde_yaml::Value::Null);
+    let yml = load_yaml(&lutris_dir.join("system.yml"));
     yaml_map(&yml, &["system", "env"])
 }
 

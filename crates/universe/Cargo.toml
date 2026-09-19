@@ -23,7 +23,6 @@ unicode-normalization = "0.1"
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "blocking"] }
-serde_yaml = "0.9"
 comfy-table = "7"
 owo-colors = "4"
 shell-words = "1"
@@ -32,6 +31,7 @@ libc = "0.2"
 evdev = { version = "0.13.2", features = ["tokio"] }
 x11rb = "0.14.0"
 trash = "5"
+yaml-rust2 = "0.13"
 
 [dev-dependencies]
 tempfile = "3"
