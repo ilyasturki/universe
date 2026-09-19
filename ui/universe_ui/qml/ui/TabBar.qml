@@ -53,7 +53,7 @@ FocusScope {
     onWidthChanged: frame.retarget()
     onCurrentIndexChanged: {
         underline.retarget();
-        if (activeFocus && index < searchIndex)
+        if (index < searchIndex)
             index = currentIndex;
     }
     onShowSearchChanged: {
@@ -122,10 +122,11 @@ FocusScope {
         opacity: root.activeFocus ? 1.0 : 0.0
         visible: opacity > 0.01
 
-        Behavior on x { Ease { duration: Theme.durNudge; easing.type: Easing.OutQuint } }
-        Behavior on y { Ease { duration: Theme.durNudge; easing.type: Easing.OutQuint } }
-        Behavior on width { Ease { duration: Theme.durNudge; easing.type: Easing.OutQuint } }
-        Behavior on height { Ease { duration: Theme.durNudge; easing.type: Easing.OutQuint } }
+        // Unseen moves (a tab switched from the page) land at once, or they'd play on the way in.
+        Behavior on x { enabled: frame.visible; Ease { duration: Theme.durNudge; easing.type: Easing.OutQuint } }
+        Behavior on y { enabled: frame.visible; Ease { duration: Theme.durNudge; easing.type: Easing.OutQuint } }
+        Behavior on width { enabled: frame.visible; Ease { duration: Theme.durNudge; easing.type: Easing.OutQuint } }
+        Behavior on height { enabled: frame.visible; Ease { duration: Theme.durNudge; easing.type: Easing.OutQuint } }
         Behavior on opacity { Ease { duration: Theme.durQuick } }
 
         Rectangle {

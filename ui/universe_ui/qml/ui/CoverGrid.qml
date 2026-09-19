@@ -8,9 +8,10 @@ GridView {
     property int columns: 8
     property real gap: Theme.dp(28)
     property bool selectionActive: true
-    // One more cell after the last game: the tile that adds one. It holds the cursor as `addSelected`, never `currentIndex`.
+    // One more cell after the last game: the tile that adds one. It holds the cursor as `addPicked`, never `currentIndex`.
     property bool addTile: false
-    property bool addSelected: false
+    property bool addPicked: false
+    readonly property bool addSelected: addPicked || (addTile && count === 0)
     readonly property real coverWidth: cellWidth - gap
     readonly property Item focusedArtItem: currentItem && !addSelected ? currentItem.artItem : null
     readonly property int cells: count + (addTile ? 1 : 0)
@@ -51,7 +52,8 @@ GridView {
         scroller.stop();
         if (height <= 0 || cellHeight <= 0)
             return;
-        contentY = targetY(cursor);
+        // Not `cursor`: its binding still holds the old index inside onCurrentIndexChanged.
+        contentY = targetY(addSelected ? count : currentIndex);
     }
 
     // Setting currentIndex moves contentY synchronously, past any Behavior: snapshot, restore, animate.
@@ -63,10 +65,10 @@ GridView {
         Sound.tick();
         var from = contentY;
         if (index === count) {
-            addSelected = true;
+            addPicked = true;
             contentY = targetY(index);
         } else {
-            addSelected = false;
+            addPicked = false;
             currentIndex = index;
         }
         var to = contentY;
@@ -88,12 +90,7 @@ GridView {
 
     onCurrentIndexChanged: scrollToCurrent()
     onHeightChanged: scrollToCurrent()
-    onCountChanged: {
-        if (addTile && count === 0)
-            addSelected = true;
-        scrollToCurrent();
-    }
-    onAddTileChanged: if (addTile && count === 0) addSelected = true
+    onCountChanged: scrollToCurrent()
 
     Keys.onDownPressed: function(event) {
         if (!selectionActive)
@@ -142,6 +139,8 @@ GridView {
     }
 
     Item {
+        // A GridView keeps its own children on the view; only contentItem scrolls with the cells.
+        parent: grid.contentItem
         visible: grid.addTile
         x: (grid.count % grid.columns) * grid.cellWidth
         y: Math.floor(grid.count / grid.columns) * grid.cellHeight

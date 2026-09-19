@@ -93,9 +93,9 @@ FocusScope {
     onSortModeChanged: api.memory.set("librarySort", sortMode)
     onCollectionIndexChanged: {
         api.memory.set("libraryCollection", collectionIndex);
-        grid.addSelected = false;
+        grid.addPicked = false;
         grid.currentIndex = 0;
-        grid.contentY = 0;
+        grid.scrollToCurrent();
     }
 
     LibraryGames {
@@ -109,7 +109,7 @@ FocusScope {
         client: api.universe
         model: sorted
         index: grid.addSelected ? -1 : grid.currentIndex
-        onMoved: function(index) { grid.addSelected = false; grid.currentIndex = index; }
+        onMoved: function(index) { grid.addPicked = false; grid.currentIndex = index; }
     }
 
     Item {
@@ -123,7 +123,7 @@ FocusScope {
         anchors.right: parent.right
         anchors.leftMargin: page.sideMargin
         anchors.rightMargin: page.sideMargin
-        height: titleText.height + Theme.dp(14) + metaLine.height
+        height: titleText.height + Theme.dp(14) + metaSlot.height
 
         Text {
             id: titleText
@@ -138,24 +138,30 @@ FocusScope {
             elide: Text.ElideRight
         }
 
-        GameMetaLine {
-            id: metaLine
-            anchors.top: titleText.bottom
-            anchors.topMargin: Theme.dp(14)
-            anchors.left: parent.left
-            game: page.currentGame
-        }
+        Item {
+            id: metaSlot
 
-        Text {
             anchors.top: titleText.bottom
             anchors.topMargin: Theme.dp(14)
             anchors.left: parent.left
-            visible: page.onAddTile
-            text: page.empty ? "Nothing in the library yet: a file on this machine, a store, or your Lutris games."
-                             : "A file on this machine, a store, or your Lutris games."
-            color: Theme.textSecondary
-            font.family: Theme.sans
-            font.pixelSize: Theme.dp(24)
+            // The platform icon's height: the line must not resize the grid as the cursor moves.
+            height: Theme.dp(28)
+
+            GameMetaLine {
+                id: metaLine
+                anchors.verticalCenter: parent.verticalCenter
+                game: page.currentGame
+            }
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                visible: page.onAddTile
+                text: page.empty ? "Nothing in the library yet: a file on this machine, a store, or your Lutris games."
+                                 : "A file on this machine, a store, or your Lutris games."
+                color: Theme.textSecondary
+                font.family: Theme.sans
+                font.pixelSize: Theme.dp(24)
+            }
         }
 
         FocusScope {
