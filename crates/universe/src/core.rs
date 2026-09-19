@@ -19,11 +19,7 @@ const FRAME_WAIT: std::time::Duration = std::time::Duration::from_millis(2000);
 pub type Progress<'a, 'b> = &'a mut (dyn FnMut(u64, u64, &str) + 'b);
 
 fn trash(path: &Path) -> Result<()> {
-    let st = std::process::Command::new("trash").arg(path).status();
-    if !st.map(|s| s.success()).unwrap_or(false) {
-        return Err(Error::Io(format!("trash {} failed", path.display())));
-    }
-    Ok(())
+    trash::delete(path).map_err(|e| Error::Io(format!("trash {}: {e}", path.display())))
 }
 
 fn title_of(path: &Path) -> String {
