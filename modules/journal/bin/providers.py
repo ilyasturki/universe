@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import select
 import subprocess
 from datetime import datetime, timedelta
 
@@ -25,6 +26,72 @@ _MONTHS = {m: i for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun",
 _RESET_RE = re.compile(r"try again at ([A-Za-z]+) (\d{1,2})(?:st|nd|rd|th)?,? (\d{4}),? (\d{1,2}):(\d{2})(?: ?([AP]M))?", re.I)
 
 
+# codex's own account API, one-shot over stdio: the reset instant, where the message only carries a same-day time or "later".
+APP_SERVER_TIMEOUT_S = 15
+
+
+def read_limit_reset(timeout_s=APP_SERVER_TIMEOUT_S):
+    """When the exhausted window resets, from `account/rateLimits/read`; None when codex cannot say."""
+    try:
+        proc = subprocess.Popen(["codex", "app-server", "--listen", "stdio://"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True)
+    except OSError as e:
+        log(f"codex app-server could not start: {e}")
+        return None
+    try:
+        for msg in ({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"clientInfo": {"name": "universe-journal", "title": "Universe", "version": "0.0.2"}}},
+                    {"jsonrpc": "2.0", "method": "initialized", "params": {}},
+                    {"jsonrpc": "2.0", "id": 2, "method": "account/rateLimits/read", "params": {}}):
+            proc.stdin.write(json.dumps(msg) + "\n")
+        proc.stdin.flush()
+        deadline = datetime.now() + timedelta(seconds=timeout_s)
+        while (remaining := (deadline - datetime.now()).total_seconds()) > 0:
+            if not select.select([proc.stdout], [], [], remaining)[0]:
+                break
+            line = proc.stdout.readline()
+            if not line:
+                break
+            try:
+                reply = json.loads(line)
+            except ValueError:
+                continue
+            if isinstance(reply, dict) and reply.get("id") == 2:
+                return limit_reset_from(reply.get("result"))
+        log("codex app-server gave no rate limits in time")
+        return None
+    except (OSError, ValueError) as e:
+        log(f"codex app-server: {e}")
+        return None
+    finally:
+        proc.kill()
+
+
+def limit_reset_from(result):
+    """The latest reset among the windows at 100 %: every one of them has to pass before a request goes through."""
+    limits = (result or {}).get("rateLimits") or {}
+    windows = [w for w in (limits.get("primary"), limits.get("secondary")) if isinstance(w, dict) and w.get("resetsAt")]
+    exhausted = [w for w in windows if (w.get("usedPercent") or 0) >= 100]
+    if not exhausted:
+        return None
+    return datetime.fromtimestamp(max(w["resetsAt"] for w in exhausted))
+
+
+def failure_messages(stdout):
+    """The `turn.failed` and `error` events of `codex exec --json`; anything else on stdout is left alone."""
+    out = []
+    for line in (stdout or "").splitlines():
+        try:
+            ev = json.loads(line)
+        except ValueError:
+            continue
+        if not isinstance(ev, dict):
+            continue
+        if ev.get("type") == "turn.failed":
+            out.append(str((ev.get("error") or {}).get("message") or ""))
+        elif ev.get("type") == "error":
+            out.append(str(ev.get("message") or ""))
+    return [m for m in out if m]
+
+
 # Codex prints the reset in English whatever the locale; strptime %b/%p would not.
 def parse_limit_reset(text):
     m = _RESET_RE.search(text or "")
@@ -44,7 +111,7 @@ def parse_limit_reset(text):
 
 def codex_args(model, images, schema_path, out_path, prompt, cwd):
     args = [
-        "codex", "exec",
+        "codex", "exec", "--json",
         "--skip-git-repo-check",
         "--ignore-user-config",
         "--disable", "browser_use",
@@ -85,10 +152,11 @@ def run_codex(model, brief, images, work_dir, forced_lang=None):
             log(f"codex could not start: {e}")
             return None
         if res.returncode != 0:
-            output = f"{res.stdout or ''}\n{res.stderr or ''}"
+            failures = failure_messages(res.stdout)
+            output = "\n".join(failures) if failures else f"{res.stdout or ''}\n{res.stderr or ''}"
             if LIMIT_RE.search(output):
-                raise QuotaExceeded(parse_limit_reset(output) or datetime.now() + timedelta(hours=LIMIT_FALLBACK_HOURS))
-            log(f"codex attempt {attempt}/{ATTEMPTS} returned exit={res.returncode}: {(res.stderr or '').strip()[-400:]}")
+                raise QuotaExceeded(read_limit_reset() or parse_limit_reset(output) or datetime.now() + timedelta(hours=LIMIT_FALLBACK_HOURS))
+            log(f"codex attempt {attempt}/{ATTEMPTS} returned exit={res.returncode}: {output.strip()[-400:]}")
             continue
         out = read_json(out_path)
         if not out or not out.get("body"):
