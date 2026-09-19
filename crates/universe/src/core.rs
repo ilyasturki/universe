@@ -1113,13 +1113,13 @@ impl Core {
         self.fetch_source_library(&m, refresh).await?;
         let list = self.source_libraries.lock().await.get(source).cloned().unwrap_or_default();
         // What is on the disk right now: an install's size, a stopped download's folder and bytes.
-        let on_disk: BTreeMap<String, serde_json::Map<String, serde_json::Value>> = match self.run_verb(&m, "scan", &[], None).await {
-            Ok(events) => Self::game_events(&events).into_iter().filter_map(|g| g.get("id").and_then(|v| v.as_str()).map(|id| id.to_string()).map(|id| (id, g))).collect(),
-            Err(e) => {
-                tracing::warn!("{source}: scan failed, listing without disk state: {e}");
-                BTreeMap::new()
-            }
-        };
+        let scanned = self.run_verb(&m, "scan", &[], None).await;
+        if let Err(e) = &scanned {
+            tracing::warn!("{source}: scan failed, listing without disk state: {e}");
+        }
+        let on_disk: Option<BTreeMap<String, serde_json::Map<String, serde_json::Value>>> = scanned
+            .ok()
+            .map(|events| Self::game_events(&events).into_iter().filter_map(|g| g.get("id").and_then(|v| v.as_str()).map(|id| id.to_string()).map(|id| (id, g))).collect());
         let games = self.games.read().await;
         let list: Vec<serde_json::Value> = list
             .into_iter()
@@ -1129,8 +1129,16 @@ impl Core {
                     g.insert("installed".into(), serde_json::Value::Bool(local.game.is_installed()));
                     g.insert("game_id".into(), serde_json::Value::String(local.game.id.clone()));
                     g.insert("build".into(), serde_json::Value::String(local.game.source.build_id.clone()));
+                } else if let Some(on_disk) = &on_disk {
+                    // The cache holds the install state at fetch time; a folder gone since is not installed.
+                    let d = on_disk.get(&gid);
+                    let installed = d.and_then(|d| d.get("installed")).and_then(|v| v.as_bool()).unwrap_or(false);
+                    g.insert("installed".into(), serde_json::Value::Bool(installed));
+                    for k in ["dir", "exe", "build"] {
+                        g.insert(k.into(), d.filter(|_| installed).and_then(|d| d.get(k)).cloned().unwrap_or(serde_json::Value::Null));
+                    }
                 }
-                if let Some(d) = on_disk.get(&gid) {
+                if let Some(d) = on_disk.as_ref().and_then(|m| m.get(&gid)) {
                     for k in ["partial_dir", "partial_bytes"] {
                         g.insert(k.into(), d.get(k).cloned().unwrap_or(serde_json::Value::Null));
                     }
@@ -1463,6 +1471,19 @@ scan) echo '{"event":"game","id":"1","title":"One","owned":true,"installed":fals
         assert_eq!(core.sources().await[0]["library_at"].as_str().unwrap() >= at.as_str(), true);
         let saved: Vec<serde_json::Value> = serde_json::from_str(&std::fs::read_to_string(paths::sources_data_dir("fake").join("library.json")).unwrap()).unwrap();
         assert_eq!(saved[0]["disk_size"], 1000, "the file carries them too");
+    }
+
+    #[tokio::test]
+    async fn listing_takes_the_install_state_from_the_disk_not_the_cache() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let _dir = fake_source(
+            r#"library) echo '{"event":"game","id":"1","title":"Gone","owned":true,"installed":true,"dir":"/g/Gone","exe":"gone.exe","build":"7"}'; echo '{"event":"game","id":"2","title":"New","owned":true,"installed":false}' ;;
+scan) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":true,"dir":"/g/New","exe":"new.exe","build":"9","disk_size":500}' ;;"#,
+        );
+        let core = open().await;
+        let list = core.source_library("fake", true).await.unwrap();
+        assert_eq!((list[0]["installed"].as_bool(), list[0]["dir"].as_str(), list[0]["exe"].as_str()), (Some(false), None, None), "removed since the fetch");
+        assert_eq!((list[1]["installed"].as_bool(), list[1]["dir"].as_str(), list[1]["build"].as_str(), list[1]["disk_size"].as_u64()), (Some(true), Some("/g/New"), Some("9"), Some(500)), "installed since the fetch");
     }
 
     #[tokio::test]
