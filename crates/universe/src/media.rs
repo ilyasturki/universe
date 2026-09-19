@@ -89,22 +89,30 @@ struct SyncCache {
     sources: BTreeMap<String, String>,
 }
 
-fn client() -> &'static reqwest::blocking::Client {
-    static CLIENT: std::sync::OnceLock<reqwest::blocking::Client> = std::sync::OnceLock::new();
-    CLIENT.get_or_init(|| reqwest::blocking::Client::builder().timeout(Duration::from_secs(20)).user_agent("universe/0.1").build().expect("client"))
+fn client() -> &'static reqwest::Client {
+    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+    CLIENT.get_or_init(|| reqwest::Client::builder().timeout(Duration::from_secs(20)).user_agent("universe/0.1").build().expect("client"))
 }
 
-fn get_json(url: &str, bearer: Option<&str>) -> crate::Result<serde_json::Value> {
+/// urlencoding's set: everything but unreserved characters.
+const URL_COMPONENT: &percent_encoding::AsciiSet = &percent_encoding::NON_ALPHANUMERIC.remove(b'-').remove(b'_').remove(b'.').remove(b'~');
+
+fn encode(s: &str) -> percent_encoding::PercentEncode<'_> {
+    percent_encoding::utf8_percent_encode(s, URL_COMPONENT)
+}
+
+async fn get_json(url: &str, bearer: Option<&str>) -> crate::Result<serde_json::Value> {
     let mut req = client().get(url);
     if let Some(b) = bearer {
         req = req.bearer_auth(b);
     }
-    let resp = req.send().and_then(|r| r.error_for_status()).map_err(|e| crate::Error::Io(format!("{url}: {e}")))?;
-    resp.json().map_err(|e| crate::Error::Io(format!("{url}: {e}")))
+    let resp = req.send().await.and_then(|r| r.error_for_status()).map_err(|e| crate::Error::Io(format!("{url}: {e}")))?;
+    resp.json().await.map_err(|e| crate::Error::Io(format!("{url}: {e}")))
 }
 
-fn download(url: &str, dest: &Path) -> crate::Result<()> {
-    let bytes = client().get(url).send().and_then(|r| r.error_for_status()).and_then(|r| r.bytes()).map_err(|e| crate::Error::Io(format!("{url}: {e}")))?;
+async fn download(url: &str, dest: &Path) -> crate::Result<()> {
+    let resp = client().get(url).send().await.and_then(|r| r.error_for_status()).map_err(|e| crate::Error::Io(format!("{url}: {e}")))?;
+    let bytes = resp.bytes().await.map_err(|e| crate::Error::Io(format!("{url}: {e}")))?;
     if bytes.is_empty() {
         return Err(crate::Error::Io(format!("{url}: empty image")));
     }
@@ -131,14 +139,14 @@ fn hit(r: &serde_json::Value, current: bool) -> Option<Hit> {
     Some(Hit { provider: "sgdb".into(), id: r["id"].as_u64()?, name: r["name"].as_str().unwrap_or("").to_string(), year: r["release_date"].as_i64().map(epoch_year).unwrap_or(0), verified: r["verified"].as_bool().unwrap_or(false), current })
 }
 
-pub fn sgdb_hits(key: &str, title: &str) -> crate::Result<Vec<Hit>> {
-    let url = format!("{SGDB}/search/autocomplete/{}", urlencoding::encode(title));
-    Ok(get_json(&url, Some(key))?["data"].as_array().into_iter().flatten().filter_map(|r| hit(r, false)).collect())
+pub async fn sgdb_hits(key: &str, title: &str) -> crate::Result<Vec<Hit>> {
+    let url = format!("{SGDB}/search/autocomplete/{}", encode(title));
+    Ok(get_json(&url, Some(key)).await?["data"].as_array().into_iter().flatten().filter_map(|r| hit(r, false)).collect())
 }
 
 /// The hit named like the title wins over autocomplete's first; exact-name twins are told apart by year.
-pub fn sgdb_match(key: &str, title: &str, year: u32) -> crate::Result<Option<Hit>> {
-    let hits = sgdb_hits(key, title)?;
+pub async fn sgdb_match(key: &str, title: &str, year: u32) -> crate::Result<Option<Hit>> {
+    let hits = sgdb_hits(key, title).await?;
     let want = name_key(title);
     let same: Vec<&Hit> = hits.iter().filter(|h| name_key(&h.name) == want).collect();
     let pool: Vec<&Hit> = if same.is_empty() { hits.iter().collect() } else { same };
@@ -153,16 +161,16 @@ pub fn sgdb_match(key: &str, title: &str, year: u32) -> crate::Result<Option<Hit
     Ok(Some((*head).clone()))
 }
 
-fn sgdb_game(key: &str, id: u64) -> Option<Hit> {
-    get_json(&format!("{SGDB}/games/id/{id}"), Some(key)).ok().and_then(|v| hit(&v["data"], true))
+async fn sgdb_game(key: &str, id: u64) -> Option<Hit> {
+    get_json(&format!("{SGDB}/games/id/{id}"), Some(key)).await.ok().and_then(|v| hit(&v["data"], true))
 }
 
-fn sgdb_assets(key: &str, endpoint: &str, game_id: u64, dims: Option<&str>, page: u32) -> crate::Result<(Vec<Candidate>, bool)> {
+async fn sgdb_assets(key: &str, endpoint: &str, game_id: u64, dims: Option<&str>, page: u32) -> crate::Result<(Vec<Candidate>, bool)> {
     let mut url = format!("{SGDB}/{endpoint}/game/{game_id}?types=static,animated&page={page}");
     if let Some(d) = dims {
         url.push_str(&format!("&dimensions={d}"));
     }
-    let v = match get_json(&url, Some(key)) {
+    let v = match get_json(&url, Some(key)).await {
         Ok(v) => v,
         Err(e) if e.to_string().contains("404 Not Found") => return Ok((vec![], false)),
         Err(e) => return Err(e),
@@ -189,15 +197,15 @@ fn sgdb_assets(key: &str, endpoint: &str, game_id: u64, dims: Option<&str>, page
     Ok((rows, more))
 }
 
-fn sgdb_steam_appid(key: &str, game_id: u64) -> Option<u64> {
-    let v = get_json(&format!("{SGDB}/games/id/{game_id}?platformdata=steam"), Some(key)).ok()?;
+async fn sgdb_steam_appid(key: &str, game_id: u64) -> Option<u64> {
+    let v = get_json(&format!("{SGDB}/games/id/{game_id}?platformdata=steam"), Some(key)).await.ok()?;
     let id = &v["data"]["external_platform_data"]["steam"][0]["id"];
     id.as_u64().or_else(|| id.as_str()?.parse().ok())
 }
 
-pub fn rawg_search(key: &str, title: &str, year: u32) -> crate::Result<Option<u64>> {
-    let url = format!("{RAWG}/games?search={}&search_precise=true&page_size=5&key={key}", urlencoding::encode(title));
-    let v = get_json(&url, None)?;
+pub async fn rawg_search(key: &str, title: &str, year: u32) -> crate::Result<Option<u64>> {
+    let url = format!("{RAWG}/games?search={}&search_precise=true&page_size=5&key={key}", encode(title));
+    let v = get_json(&url, None).await?;
     let want = name_key(title);
     let mut loose = None;
     for hit in v["results"].as_array().into_iter().flatten() {
@@ -214,12 +222,12 @@ pub fn rawg_search(key: &str, title: &str, year: u32) -> crate::Result<Option<u6
     Ok(loose)
 }
 
-pub fn rawg_details(key: &str, id: u64) -> crate::Result<serde_json::Value> {
-    get_json(&format!("{RAWG}/games/{id}?key={key}"), None)
+pub async fn rawg_details(key: &str, id: u64) -> crate::Result<serde_json::Value> {
+    get_json(&format!("{RAWG}/games/{id}?key={key}"), None).await
 }
 
-pub fn steam_screenshots(appid: u64) -> crate::Result<Vec<String>> {
-    let v = get_json(&format!("{STEAM_APPDETAILS}?appids={appid}&l=english"), None)?;
+pub async fn steam_screenshots(appid: u64) -> crate::Result<Vec<String>> {
+    let v = get_json(&format!("{STEAM_APPDETAILS}?appids={appid}&l=english"), None).await?;
     let data = &v[appid.to_string()]["data"];
     Ok(data["screenshots"].as_array().into_iter().flatten().filter_map(|s| s["path_full"].as_str().map(|s| s.to_string())).collect())
 }
@@ -278,7 +286,7 @@ fn pinned_sgdb_id(config: &Config, game: &Game) -> u64 {
 }
 
 /// The pin, else the cached or searched match; zero when SteamGridDB has nothing under the title.
-fn resolve_sgdb(config: &Config, game: &Game, cache: &mut SyncCache, key: &str) -> crate::Result<u64> {
+async fn resolve_sgdb(config: &Config, game: &Game, cache: &mut SyncCache, key: &str) -> crate::Result<u64> {
     let pinned = pinned_sgdb_id(config, game);
     let mut found = None;
     let id = if pinned > 0 {
@@ -288,7 +296,7 @@ fn resolve_sgdb(config: &Config, game: &Game, cache: &mut SyncCache, key: &str) 
     } else if cache.sgdb_miss {
         0
     } else {
-        found = sgdb_match(key, &game.title, game.release_year)?;
+        found = sgdb_match(key, &game.title, game.release_year).await?;
         cache.sgdb_miss = found.is_none();
         found.as_ref().map_or(0, |h| h.id)
     };
@@ -301,7 +309,12 @@ fn resolve_sgdb(config: &Config, game: &Game, cache: &mut SyncCache, key: &str) 
     }
     cache.sgdb_id = id;
     cache.sgdb_miss = false;
-    if let Some(h) = found.or_else(|| if cache.sgdb_name.is_empty() { sgdb_game(key, id) } else { None }) {
+    let h = match found {
+        Some(h) => Some(h),
+        None if cache.sgdb_name.is_empty() => sgdb_game(key, id).await,
+        None => None,
+    };
+    if let Some(h) = h {
         cache.sgdb_name = h.name;
         cache.sgdb_year = h.year;
     }
@@ -309,30 +322,30 @@ fn resolve_sgdb(config: &Config, game: &Game, cache: &mut SyncCache, key: &str) 
 }
 
 /// An override over a slot does not stop its default from being fetched; pins in game.toml win.
-pub fn refresh(config: &Config, game: &Game, force: bool) -> crate::Result<bool> {
+pub async fn refresh(config: &Config, game: &Game, force: bool) -> crate::Result<bool> {
     let mut changed = false;
     let mut cache = read_cache_in(&game.media_dir());
     let mut g = Game::load(&game.toml_path())?;
 
     if let Some(key) = &config.api_key("sgdb") {
-        let sgdb_id = resolve_sgdb(config, &g, &mut cache, key)?;
+        let sgdb_id = resolve_sgdb(config, &g, &mut cache, key).await?;
         if sgdb_id > 0 {
             let (have, _) = scan_media_dir(&g.media_dir());
             for (slot, endpoint, dims) in SGDB_PLAN {
                 if !force && have.iter().any(|(s, _)| s == slot) {
                     continue;
                 }
-                let (list, _) = sgdb_assets(key, endpoint, sgdb_id, dims, 0)?;
+                let (list, _) = sgdb_assets(key, endpoint, sgdb_id, dims, 0).await?;
                 if let Some(c) = list.first() {
                     let dest = g.media_dir().join(format!("{slot}.{}", ext_of(&c.url)));
                     clear_slot(&g.media_dir(), slot);
-                    download(&c.url, &dest)?;
+                    download(&c.url, &dest).await?;
                     cache.sources.insert(slot.into(), "sgdb".into());
                     changed = true;
                 }
             }
             if g.metadata.steam_appid == 0 && cache.steam_appid == 0 {
-                cache.steam_appid = sgdb_steam_appid(key, sgdb_id).unwrap_or(0);
+                cache.steam_appid = sgdb_steam_appid(key, sgdb_id).await.unwrap_or(0);
             }
         }
     }
@@ -340,14 +353,14 @@ pub fn refresh(config: &Config, game: &Game, force: bool) -> crate::Result<bool>
     if let Some(key) = &config.api_key("rawg") {
         let mut rawg_id = g.metadata.rawg_id;
         if rawg_id == 0 && !cache.rawg_miss {
-            rawg_id = if cache.rawg_id > 0 { cache.rawg_id } else { rawg_search(key, &g.title, g.release_year)?.unwrap_or(0) };
+            rawg_id = if cache.rawg_id > 0 { cache.rawg_id } else { rawg_search(key, &g.title, g.release_year).await?.unwrap_or(0) };
             if rawg_id == 0 {
                 cache.rawg_miss = true;
             }
         }
         if rawg_id > 0 && (force || g.metadata.description.is_empty() || g.metadata.genres.is_empty()) {
             cache.rawg_id = rawg_id;
-            let d = rawg_details(key, rawg_id)?;
+            let d = rawg_details(key, rawg_id).await?;
             let desc = d["description_raw"].as_str().unwrap_or("");
             let names = |k: &str| -> Vec<String> { d[k].as_array().into_iter().flatten().filter_map(|x| x["name"].as_str().map(|s| s.to_string())).collect() };
             g.metadata.description = desc.into();
@@ -370,10 +383,10 @@ pub fn refresh(config: &Config, game: &Game, force: bool) -> crate::Result<bool>
         let shots_dir = g.media_dir().join("screenshots");
         let have = std::fs::read_dir(&shots_dir).map(|r| r.count()).unwrap_or(0);
         if force || have == 0 {
-            let urls = steam_screenshots(appid).unwrap_or_default();
+            let urls = steam_screenshots(appid).await.unwrap_or_default();
             for (i, u) in urls.iter().take(8).enumerate() {
                 let dest = shots_dir.join(format!("steam-{:02}.{}", i + 1, ext_of(u)));
-                if download(u, &dest).is_ok() {
+                if download(u, &dest).await.is_ok() {
                     cache.sources.insert("screenshots".into(), "steam".into());
                     changed = true;
                 }
@@ -393,21 +406,21 @@ fn sgdb_key(config: &Config) -> crate::Result<String> {
     config.api_key("sgdb").ok_or_else(|| crate::Error::Unavailable("no SteamGridDB key".into()))
 }
 
-pub fn candidates(config: &Config, game: &Game, slot: &str, page: u32) -> crate::Result<CandidatePage> {
+pub async fn candidates(config: &Config, game: &Game, slot: &str, page: u32) -> crate::Result<CandidatePage> {
     let key = sgdb_key(config)?;
     let Some(&(_, endpoint, dims)) = SGDB_PLAN.iter().find(|(s, _, _)| *s == slot) else {
         return Err(crate::Error::Invalid(format!("unknown slot {slot}")));
     };
     let mut cache = read_cache_in(&game.media_dir());
     let before = (cache.sgdb_id, cache.sgdb_name.clone(), cache.sgdb_miss);
-    let id = resolve_sgdb(config, game, &mut cache, &key)?;
+    let id = resolve_sgdb(config, game, &mut cache, &key).await?;
     if before != (cache.sgdb_id, cache.sgdb_name.clone(), cache.sgdb_miss) {
         let _ = write_cache_in(&game.media_dir(), &cache);
     }
     if id == 0 {
         return Ok(CandidatePage { items: vec![], page, more: false, entry: None });
     }
-    let (mut items, more) = sgdb_assets(&key, endpoint, id, dims, page)?;
+    let (mut items, more) = sgdb_assets(&key, endpoint, id, dims, page).await?;
     for c in items.iter_mut() {
         c.slot = slot.into();
     }
@@ -415,12 +428,12 @@ pub fn candidates(config: &Config, game: &Game, slot: &str, page: u32) -> crate:
     Ok(CandidatePage { items, page, more, entry })
 }
 
-pub fn search(config: &Config, game: &Game, query: &str) -> crate::Result<Vec<Hit>> {
+pub async fn search(config: &Config, game: &Game, query: &str) -> crate::Result<Vec<Hit>> {
     let key = sgdb_key(config)?;
     let query = if query.trim().is_empty() { game.title.as_str() } else { query.trim() };
     let pinned = pinned_sgdb_id(config, game);
     let current = if pinned > 0 { pinned } else { read_cache_in(&game.media_dir()).sgdb_id };
-    let mut hits = sgdb_hits(&key, query)?;
+    let mut hits = sgdb_hits(&key, query).await?;
     for h in hits.iter_mut() {
         h.current = h.id == current;
     }
@@ -464,14 +477,14 @@ pub fn set_slot(config: &Config, game: &Game, slot: &str, src: &Path) -> crate::
     place_override(config, game, slot, src, &name)
 }
 
-pub fn set_slot_url(config: &Config, game: &Game, slot: &str, url: &str) -> crate::Result<PathBuf> {
+pub async fn set_slot_url(config: &Config, game: &Game, slot: &str, url: &str) -> crate::Result<PathBuf> {
     check_slot(slot)?;
     if !url.starts_with("http://") && !url.starts_with("https://") {
         return set_slot(config, game, slot, Path::new(url.strip_prefix("file://").unwrap_or(url)));
     }
     let ext = ext_of(url);
     let tmp = std::env::temp_dir().join(format!("universe-{}-{}-{}.{ext}", game.id, slot, std::process::id()));
-    download(url, &tmp)?;
+    download(url, &tmp).await?;
     let name = url.rsplit('/').next().and_then(|n| n.split('?').next()).filter(|n| !n.is_empty()).map(|n| n.to_string()).unwrap_or_else(|| format!("shot.{ext}"));
     let placed = place_override(config, game, slot, &tmp, &name);
     let _ = std::fs::remove_file(&tmp);

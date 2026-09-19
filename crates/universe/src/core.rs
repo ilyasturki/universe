@@ -1335,7 +1335,7 @@ impl Core {
             }
             let cfg = cfg.clone();
             let game = r.game.clone();
-            match blocking(move || crate::media::refresh(&cfg, &game, force)).await {
+            match crate::media::refresh(&cfg, &game, force).await {
                 Ok(true) => {
                     changed += 1;
                     let _ = self.reload_game(gid).await;
@@ -1360,7 +1360,7 @@ impl Core {
         let cfg = self.config.read().await.clone();
         let game = r.game.clone();
         let (slot, url) = (slot.to_string(), url.to_string());
-        let placed = blocking(move || crate::media::set_slot_url(&cfg, &game, &slot, &url)).await?;
+        let placed = crate::media::set_slot_url(&cfg, &game, &slot, &url).await?;
         self.reload_game(id).await?;
         Ok(placed.to_string_lossy().into())
     }
@@ -1378,7 +1378,7 @@ impl Core {
         let cfg = self.config.read().await.clone();
         let game = r.game.clone();
         let slot = slot.to_string();
-        blocking(move || crate::media::candidates(&cfg, &game, &slot, page)).await
+        crate::media::candidates(&cfg, &game, &slot, page).await
     }
 
     pub async fn media_search(&self, id: &str, query: &str) -> Result<Vec<crate::media::Hit>> {
@@ -1386,7 +1386,7 @@ impl Core {
         let cfg = self.config.read().await.clone();
         let game = r.game.clone();
         let query = query.to_string();
-        blocking(move || crate::media::search(&cfg, &game, &query)).await
+        crate::media::search(&cfg, &game, &query).await
     }
 
     pub async fn media_status(&self, id: &str) -> Result<Vec<crate::media::MediaStatus>> {
