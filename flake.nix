@@ -30,6 +30,7 @@
         # chrono ignores TZDIR, so the zone is given as a file
         preCheck = "export TZ=${pkgs.tzdata}/share/zoneinfo/Europe/Paris";
         nativeBuildInputs = [ pkgs.pkg-config pkgs.installShellFiles ];
+        buildInputs = [ pkgs.sqlite ];
         postInstall = ''
           $out/bin/universe __generate gen
           installShellCompletion --fish gen/universe.fish
@@ -45,6 +46,7 @@
         src = rustSrc;
         cargoDeps = pkgs.rustPlatform.importCargoLock { lockFile = ./Cargo.lock; };
         nativeBuildInputs = with pkgs.rustPlatform; [ cargoSetupHook maturinBuildHook pkgs.pkg-config ];
+        buildInputs = [ pkgs.sqlite ];
         buildAndTestSubdir = "crates/universe-py";
         env.UNIVERSE_GIT_REV = gitRev;
         pythonImportsCheck = [ "universe_core" ];
@@ -175,7 +177,7 @@
       };
 
       devShells.${system}.default = pkgs.mkShell {
-        packages = with pkgs; [ cargo rustc clippy rustfmt rust-analyzer pkg-config ruff maturin (python3.withPackages (ps: [ ps.pyside6 ps.pysdl2 ps.qrcode ps.pytest ps.setuptools ])) qt6.qtdeclarative qt6.qt5compat qt6.qtmultimedia qt6.qtsvg SDL2 ] ++ moduleRuntime ++ sourceRuntime;
+        packages = with pkgs; [ cargo rustc clippy rustfmt rust-analyzer pkg-config sqlite ruff maturin (python3.withPackages (ps: [ ps.pyside6 ps.pysdl2 ps.qrcode ps.pytest ps.setuptools ])) qt6.qtdeclarative qt6.qt5compat qt6.qtmultimedia qt6.qtsvg SDL2 ] ++ moduleRuntime ++ sourceRuntime;
         shellHook = ''
           export UNIVERSE_MODULES_PATH="$PWD/modules"
           export UNIVERSE_SOURCES_PATH="$PWD/sources"
