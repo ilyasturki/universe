@@ -194,6 +194,7 @@ class FakeCore:
         self.library_calls = []
         self.last_splash = ""
         self.game_shown = False
+        self.window_misses = 0
         self.frozen = False
         self.hud_shown = False
         self.frames = 0
@@ -566,6 +567,9 @@ class FakeCore:
         time.sleep(min(WINDOW_S, timeout_ms / 1000))
         current = self.current()
         if not current or current["session_id"] != session_id:
+            return None
+        if self.window_misses > 0:
+            self.window_misses -= 1
             return None
         self.game_shown = True
         return self._window()

@@ -141,6 +141,10 @@ FocusScope {
         }
     }
 
-    Keys.onPressed: function(event) { event.accepted = true; }
+    Keys.onPressed: function(event) {
+        event.accepted = true;
+        if (waiting && launchedSession !== "" && !event.isAutoRepeat && api.keys.isCancel(event))
+            handOver();
+    }
     Keys.onReleased: function(event) { event.accepted = true; }
 }

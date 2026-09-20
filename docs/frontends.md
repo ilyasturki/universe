@@ -112,7 +112,7 @@ What it derives is derived this way, and any frontend needs the equivalent:
 | Signal | Derived from |
 |---|---|
 | `sessionStarted` | a successful `launch` |
-| `sessionShown` | `(session_id, ok)`: the game's window is on screen and has the focus — `wait_session_window` on a host thread, up to 60 s. Inside gamescope `ok` is true once gamescope shows the game's window (a stand-in toplevel carrying the gamescope's pid when no extension lists it); on the desktop, false when nobody can tell: no GNOME, no shell extension, or the session ended first |
+| `sessionShown` | `(session_id, ok)`: the game's window is on screen and has the focus — `wait_session_window` on a host thread, waited again for as long as the session lives (a runtime download, a launcher before the game). Inside gamescope `ok` is true once gamescope shows the game's window (a stand-in toplevel carrying the gamescope's pid when no extension lists it); on the desktop, false when nobody can tell: no GNOME, no shell extension, or the session ended first |
 | `sessionEnded` | the current-session marker going empty — the `state/` watch sees `session-end` remove it (debounced 300 ms), a 2 s poll stands behind it, since the game is a systemd unit, not a child. `currentSessionChanged` fires first; the pinned tile and the badge follow that property, and only the toast, the stats refresh and a pending launch follow the signal |
 | `libraryChanged`, `mediaChanged`, `entryWritten`, `recordingFiled` | a `QFileSystemWatcher` on `games/`, `games/<id>/{,journal,journal/attachments,media,screenshots}`, `state/` and the overrides directory with its `<id>/` subdirectories (a pick made from the CLI shows up), debounced 300 ms; `mediaChanged` also follows a pick or its removal made through the client |
 | `progress`, `jobFinished` | the job's own callback — install, update, scan and media refresh run on a host thread; `cancel(job)` stops an install or update (SIGTERM, the job fails) or a media refresh (`media_cancel`, it ends ok after the game in hand), `cancelled` set on the job either way |
@@ -154,7 +154,9 @@ about a second, showing that same grab from its keep-alive window (`docs/api.md`
 the game's own window, so the handover is poster over poster; the launcher's poster fades out under
 it. `sessionShown` with `ok` false (on the desktop: no GNOME,
 no extension) holds 1500 ms instead; a session that ends before its window, or `launchFailed`,
-ends the poster at once (a toast for the failure). Every key is swallowed while it runs.
+ends the poster at once (a toast for the failure). Every key is swallowed while it runs, except
+Cancel once the session is up: it drops the poster and leaves the game starting behind the
+launcher.
 
 From there the launcher is home again, with the game pinned first on the rail (`RecentGames.
 playingId`, played before or not) under a PLAYING mark (PAUSED while frozen), its art the last

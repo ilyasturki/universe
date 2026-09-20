@@ -64,6 +64,15 @@ def test_launch_writes_the_marker_and_the_end_comes_from_the_state_watch(fake):
     assert [e["state"] for e in fake.journal("control")][:1] == ["pending"]
 
 
+def test_the_window_wait_holds_while_the_session_lives(fake):
+    fake.core.window_misses = 2
+    shown, launched = _collect(fake.sessionShown), _collect(fake.launched)
+    fake.launch("control", "DP-1")
+    assert wait_for(fake.launched, 3000) is not None
+    assert wait_for(fake.sessionShown, 5000) == (launched[0][0], True)
+    assert shown == [(launched[0][0], True)] and fake.core.window_misses == 0
+
+
 def test_a_stop_ends_the_session_now(fake):
     fake.launch("control", "")
     assert wait_for(fake.launched, 3000) is not None

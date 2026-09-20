@@ -299,8 +299,15 @@ class CoreClient(QObject):
             log.info("session window: %s", e.message)
             self.sessionShown.emit(session_id, False)
 
-        self._call_async(lambda: self._core.wait_session_window(session_id, 60000),
-                         lambda window: self.sessionShown.emit(session_id, bool(window)), missed)
+        # None is "no window yet" as much as "session gone": the poster holds while the session lives.
+        def wait():
+            while True:
+                window = self._core.wait_session_window(session_id, 60000)
+                current = self._core.current()
+                if window or not current or current.get("session_id") != session_id:
+                    return window
+
+        self._call_async(wait, lambda window: self.sessionShown.emit(session_id, bool(window)), missed)
 
     def _track(self, session_id, ident):
         self.refreshCurrent()

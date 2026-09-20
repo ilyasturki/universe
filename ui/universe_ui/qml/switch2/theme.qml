@@ -406,6 +406,8 @@ FocusScope {
     Keys.onPressed: function(event) {
         if (root.modal) {
             event.accepted = true;
+            if (root.launching && launchScreen.waiting && launchScreen.launchedSession !== "" && !event.isAutoRepeat && api.keys.isCancel(event))
+                launchScreen.done();
             return;
         }
         if (event.isAutoRepeat)
