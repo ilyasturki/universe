@@ -196,6 +196,10 @@ class CoreClient(QObject):
     def importLutris(self, apply):
         return self._guarded({}, self._core.import_lutris, apply)
 
+    @Slot(result="QVariant")
+    def discover(self):
+        return self._guarded({}, self._core.discover)
+
     @Slot(str, str, str, result=str)
     def addGame(self, runner, path, title):
         ident = self._guarded("", self._core.add_game, {"runner": runner, "exe": path, "title": title})

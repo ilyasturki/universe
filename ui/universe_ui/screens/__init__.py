@@ -5,6 +5,7 @@ from .artwork import ArtworkForm, ArtworkOverview
 from .controller import ControllerScreen
 from .launch import LaunchForm
 from .media import JournalList, MediaTimeline, PendingJournals, RecordingsList, ScreenshotsList
+from .onboarding import Onboarding
 from .paths import PathBrowser
 from .runners import RunnerForm, RunnersForm
 from .search import SettingsSearch
@@ -37,6 +38,7 @@ class Screens(QObject):
         self._artworkOverview = ArtworkOverview(client, self)
         self._add = AddGameForm(client, self)
         self._search = SettingsSearch(client, screen_mode, themes, self._controller, self)
+        self._onboarding = Onboarding(client, memory, games, self._login, self._controller, self)
 
     def shutdown(self):
         self._recordings.shutdown()
@@ -66,3 +68,4 @@ class Screens(QObject):
     artworkOverview = Property(QObject, lambda self: self._artworkOverview, constant=True)
     add = Property(QObject, lambda self: self._add, constant=True)
     search = Property(QObject, lambda self: self._search, constant=True)
+    onboarding = Property(QObject, lambda self: self._onboarding, constant=True)

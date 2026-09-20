@@ -360,6 +360,24 @@ fn diff(id: &str, title: &str, lutris_env: &BTreeMap<String, String>, universe_e
 }
 
 /// Hours become one `import-lutris` session covering what recordings do not.
+/// Titles of Lutris's installed games that are not in the library yet: what `import` would add.
+pub fn pending(config: &Config) -> crate::Result<Vec<String>> {
+    let lutris_dir = paths::expand(&config.lutris.config_dir);
+    let pga = paths::expand(&config.lutris.pga_db);
+    if !pga.exists() {
+        return Err(crate::Error::NotFound(format!("{}", pga.display())));
+    }
+    let runners_dir = paths::expand(&config.lutris.runners_dir);
+    let global_env = lutris_global_env(&lutris_dir);
+    Ok(read_pga(&pga)?
+        .iter()
+        .filter(|p| !p.name.trim().is_empty())
+        .map(|p| convert(p, &lutris_dir, &runners_dir, &global_env).game)
+        .filter(|g| !g.toml_path().exists())
+        .map(|g| g.title)
+        .collect())
+}
+
 pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
     let lutris_dir = paths::expand(&config.lutris.config_dir);
     let pga = paths::expand(&config.lutris.pga_db);
@@ -420,7 +438,9 @@ pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
         }
     }
     report.runners = runner_hints(&lutris_dir);
-    if apply {
+    if apply && !Config::writable(&paths::config_file()) {
+        tracing::warn!("config.toml is read-only: Lutris's runner programs are not written to [runners]");
+    } else if apply {
         for h in &report.runners {
             let spec = crate::runners::spec(&h.runner).expect("hints only name shipped runners");
             let located = crate::runners::locate(spec, config);

@@ -543,6 +543,33 @@ reads "N games to import" and the same press asks to confirm; `importLutris()` a
 `libraryChanged([])` — a full reload, the import updates games too — and toasts the count and hours. Nothing here touches the core: the
 CLI's `universe add` and `universe migrate` are the same calls.
 
+## First run
+
+`api.screens.onboarding` is the setup shown once: `needed` is true while `api.memory` has no
+`onboarded` and the library is empty (a library with games sets the flag on the first read, so an
+emptied library never brings it up later), and both looks open it from their root's
+`Component.onCompleted` — Reprise as `pages/OnboardingPage.qml` over the tab (`openSetup()`,
+`openSub` with `{ setup: true }`), the Switch 2 look as `switch2/pages/OnboardingPage.qml` on its
+stack; Settings › About › "First-run setup" opens it again. `load()` runs `discover()` off the UI
+thread and builds `steps` (`{id, title, subtitle}`): `discover`, `stores` (when an enabled,
+available source exists), `import` (when a launcher is importable with games), `preferences` (when
+`settings()` says `config_writable`) and `done`; `step`, `stepId`, `next()`, `back()`, `finish()`
+(sets `onboarded`, emits `finished`; `next()` on the last step finishes). Every step is one
+`rows`/`groups` list in the settings forms' shape, so each look draws it with its settings rows
+and its value editor: `discover` is an `info` row per launcher (`display` the count, or "Not
+installed", "No games", "· not importable yet"; `detail` the titles, or why it cannot be
+imported), `stores` the source's Account row, "Get a sign-in link" (`link`) and "Enter the code"
+(`code`) through the shared `api.screens.login` — `ui/LoginCard.qml` and `switch2/ui/LoginCard.qml`
+are the QR, URL and status card `FormPage` shows too — `import` an action row per importable
+launcher (`via`; `runImport(index)` runs `import_lutris(true)` or, for `heroic-gog`, adds
+`gog_dirs` to the gog source's `scan_dirs` when the config takes writes and starts a `scan("gog")`
+job; the row's `display` follows: "Importing…", "N games added", "Nothing new", the error),
+`preferences` the controller family (`controller.family`, an `enum` over
+`api.screens.controller.families`, written with `setFamily`) and the graphics upgrades that fit
+this GPU (`launch.hdr`, the upscaler upgrades without their `default` choice, `launch.optiscaler`),
+`done` a summary row and, under a read-only config, why the preferences were skipped. X moves on,
+B goes back, or on the first step skips the whole setup.
+
 ## The artwork pages and section
 
 `api.screens.artwork` is one game's artwork (Reprise: `pages/ArtworkPage.qml`, the Artwork entry of a
@@ -593,8 +620,8 @@ after a short debounce while the section is on screen.
 `universe` on `PATH`) and reads its event lines: `device`, `gone`, `button`, `axis`, `unknown`,
 `macro`, `learned`, `learn_timeout`, `error`, `waiting`, `ready`; it writes `suspend`, `resume`,
 `axes`, `reload`, `learn` and `cancel` commands on its stdin. The screen exposes `devices`,
-`current`, `family` (the current pad's, else the last one seen, kept in `api.memory` as
-`controllerFamily`), `connected`, `status` (`off`, `waiting`, `ready`), `passive`, `learning`,
+`current`, `family` (the current pad's, else the last one seen or the one `setFamily(id)` chose, kept in `api.memory` as
+`controllerFamily`, `xbox` until then: the button glyphs of both looks follow it), `families` (`{id, name}`), `connected`, `status` (`off`, `waiting`, `ready`), `passive`, `learning`,
 `testing`, the `rows`/`groups` of one card (a Controller picker row when two pads are connected,
 a "Test the buttons" row while the watcher is `ready`, then a row per button of the family — each
 with its `slot` and `family`, so the row draws the button's glyph, and its `press` and `hold`

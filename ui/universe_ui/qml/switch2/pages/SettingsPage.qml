@@ -179,13 +179,17 @@ FocusScope {
         if (sectionId === "about")
             return [{ label: "Universe", type: "static", display: api.universe.version() || "development build", detail: "" },
                     { label: "Look", type: "static", display: api.theme.name, detail: "" },
-                    { label: "Library", type: "static", display: api.allGames.count + (api.allGames.count === 1 ? " game" : " games"), detail: "" }];
+                    { label: "Library", type: "static", display: api.allGames.count + (api.allGames.count === 1 ? " game" : " games"), detail: "" },
+                    { label: "First-run setup", key: "setup", type: "action", action: "Run again", display: "", detail: "What other launchers hold, your stores, a few choices." }];
         return [];
     }
 
     function activate(index, row) {
         if (sectionId === "search") {
             openSearch();
+        } else if (sectionId === "about" && row.key === "setup") {
+            Sound.play("ok");
+            shell.push("pages/OnboardingPage.qml", {});
         } else if (sectionId === "launch" && row.key === "advanced") {
             Sound.play("ok");
             launch.showAdvanced = !launch.showAdvanced;

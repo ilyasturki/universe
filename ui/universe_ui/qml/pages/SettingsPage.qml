@@ -17,6 +17,7 @@ FocusScope {
     signal moduleRequested(string module)
     signal sourceRequested(string source)
     signal formRequested(var args)
+    signal setupRequested()
     signal artworkRequested(var game, string slot)
     signal message(string text)
 
@@ -233,7 +234,8 @@ FocusScope {
             rows.push({ section: "About", key: "version", label: "Universe", type: "static", display: api.universe.version() || "development build", detail: "" });
             rows.push({ section: "About", key: "look", label: "Look", type: "static", display: api.theme.name, detail: "" });
             rows.push({ section: "About", key: "library", label: "Library", type: "static", display: api.allGames.count + (api.allGames.count === 1 ? " game" : " games"), detail: "" });
-            groups.push({ title: "Universe", rows: [0, 1, 2] });
+            rows.push({ section: "About", key: "setup", label: "First-run setup", type: "action", display: "", detail: "What other launchers hold, your stores, a few choices.", action: "Run again" });
+            groups.push({ title: "Universe", rows: [0, 1, 2, 3] });
             return { rows: rows, groups: groups };
         }
         if (sectionId === "quit") {
@@ -370,7 +372,11 @@ FocusScope {
                     Qt.callLater(function() { api.theme.set(theme.id); });
             });
         } else if (sectionId === "about") {
-            Sound.edge();
+            if (row.key === "setup") {
+                Sound.enter();
+                page.setupRequested();
+            } else
+                Sound.edge();
         } else if (sectionId === "quit") {
             Sound.panel();
             menu.confirm("Stay", "power", api.universe.currentSession ? "Quit and close the game" : "Quit Universe", "Quit Universe?", cards, cards.focusRect, function() { Qt.quit(); });

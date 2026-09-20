@@ -345,6 +345,9 @@ impl Core {
     fn doctor(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| c.doctor())
     }
+    fn discover(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.value_infallible(py, |c| c.discover())
+    }
 
     fn controller_state(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| c.controller_state())

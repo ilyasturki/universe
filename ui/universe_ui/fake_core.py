@@ -1031,6 +1031,15 @@ class FakeCore:
     def doctor(self):
         return copy.deepcopy(self._data.get("doctor", []))
 
+    def discover(self):
+        report = copy.deepcopy(self._data.get("discover") or {"launchers": [], "gog_dirs": []})
+        known = {g["id"] for g in self._data["games"]}
+        for launcher in report["launchers"]:
+            if launcher["id"] == "lutris":
+                pending = [i for i in self._data.get("lutris", {}).get("imported", []) if i not in known]
+                launcher["games"], launcher["titles"] = len(pending), [i.replace("-", " ").title() for i in pending]
+        return report
+
     def settings(self):
         return copy.deepcopy(self._config)
 

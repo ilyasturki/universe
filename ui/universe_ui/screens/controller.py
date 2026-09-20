@@ -170,7 +170,7 @@ class ControllerScreen(AdvancedRows, QObject):
         self._wanted = ""
         self.restart_ms = RESTART_MS
         self._restart_delay = RESTART_MS
-        self._last_family = str(memory.get("controllerFamily") or "dualsense")
+        self._last_family = str(memory.get("controllerFamily") or "xbox")
         power.sourcesChanged.connect(self._rebuild)
         self._rebuild()
 
@@ -563,6 +563,15 @@ class ControllerScreen(AdvancedRows, QObject):
         if self._watcher is not None:
             self._watcher.send({"cmd": "reload"})
 
+    @Slot(str, result=bool)
+    def setFamily(self, family):
+        if family not in self._families():
+            return False
+        self._remember(family)
+        self._rebuild()
+        self.devicesChanged.emit()
+        return True
+
     def setCurrent(self, ident):
         device = self._device(ident)
         if device is None or ident == self._current:
@@ -593,6 +602,9 @@ class ControllerScreen(AdvancedRows, QObject):
     count = Property(int, lambda self: len(self._rows), notify=rowsChanged)
     unboundSlots = Property("QVariantList", _unbound, notify=rowsChanged)
     family = Property(str, _family, notify=devicesChanged)
+    families = Property(
+        "QVariantList", lambda self: [{"id": f["id"], "name": f.get("name") or f["id"]} for f in self._families().values()], notify=stateChanged
+    )
     connected = Property(bool, lambda self: self._device() is not None, notify=devicesChanged)
     status = Property(str, lambda self: self._status, notify=statusChanged)
     passive = Property(bool, lambda self: self._passive, notify=statusChanged)

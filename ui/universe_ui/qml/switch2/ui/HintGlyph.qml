@@ -12,7 +12,7 @@ Item {
     property color ink: Theme.glyphInk
     property bool dim: false
 
-    readonly property string family: api.screens.controller.connected ? api.screens.controller.family : "xbox"
+    readonly property string family: api.screens.controller.family
     readonly property string slot: Names.hintSlot(glyph)
     readonly property bool cross: slot.indexOf("dpad") === 0
 

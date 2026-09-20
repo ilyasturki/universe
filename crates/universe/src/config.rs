@@ -403,6 +403,7 @@ impl Config {
             }
         }
         v["config_file"] = serde_json::Value::String(paths::config_file().to_string_lossy().into());
+        v["config_writable"] = serde_json::Value::Bool(Self::writable(&paths::config_file()));
         v["data_home"] = serde_json::Value::String(paths::data_home().to_string_lossy().into());
         v
     }
@@ -414,8 +415,18 @@ impl Config {
         if let Some(parent) = path.parent() {
             std::fs::create_dir_all(parent)?;
         }
-        std::fs::write(path, doc.to_string())?;
+        std::fs::write(path, doc.to_string()).map_err(|e| match e.kind() {
+            std::io::ErrorKind::PermissionDenied => crate::Error::Invalid(format!(
+                "{} is read-only: home-manager's programs.universe.settings owns it; set it to null to change settings here",
+                path.display()
+            )),
+            _ => e.into(),
+        })?;
         Ok(())
+    }
+
+    pub fn writable(path: &Path) -> bool {
+        std::fs::metadata(path).map(|m| !m.permissions().readonly()).unwrap_or(true)
     }
 }
 

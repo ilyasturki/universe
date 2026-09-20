@@ -321,6 +321,11 @@ impl Core {
         self.reload_game(id).await
     }
 
+    pub async fn discover(&self) -> crate::discover::Report {
+        let config = self.config.read().await.clone();
+        blocking(move || Ok(crate::discover::run(&config))).await.unwrap_or_default()
+    }
+
     pub async fn import_lutris(&self, apply: bool) -> Result<crate::lutris::Report> {
         let config = self.config.read().await.clone();
         let report = crate::lutris::import(&config, apply)?;

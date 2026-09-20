@@ -12,6 +12,8 @@ FocusScope {
         Sound.preload();
         if (api.theme.landing === "themes")
             tabIndex = settingsTab;
+        else if (api.screens.onboarding.needed)
+            openSetup();
     }
 
     readonly property var tabs: [
@@ -82,6 +84,10 @@ FocusScope {
 
     function openAdd() {
         openSub("pages/AddGamePage.qml", { add: true });
+    }
+
+    function openSetup() {
+        openSub("pages/OnboardingPage.qml", { setup: true });
     }
 
     function restoreFocus() {
@@ -199,7 +205,7 @@ FocusScope {
     }
 
     function openSub(source, args) {
-        if (!args.game && !args.runner && !args.module && !args.source && !args.add)
+        if (!args.game && !args.runner && !args.module && !args.source && !args.add && !args.setup)
             return;
         Sound.enter();
         subArgs = args;
@@ -548,6 +554,7 @@ FocusScope {
                         function onModuleRequested(module) { root.openSub("pages/FormPage.qml", { module: module }); }
                         function onSourceRequested(source) { root.openSub("pages/FormPage.qml", { source: source }); }
                         function onFormRequested(args) { root.openSub("pages/FormPage.qml", args); }
+                        function onSetupRequested() { root.openSetup(); }
                         function onArtworkRequested(game, slot) { root.openSub("pages/ArtworkPage.qml", { game: game, slot: slot }); }
                         function onScreenshotsRequested(game, name) { root.openSub("pages/ScreenshotsPage.qml", { game: game, name: name || "" }); }
                         function onRecordingsRequested(game, session) { root.openSub("pages/RecordingsPage.qml", { game: game, session: session || "" }); }

@@ -412,6 +412,16 @@
     }
   ],
   "lutris": {"imported": ["celeste", "hades"], "hours_imported": {"celeste": 12.5, "hades": 30.2}},
+  "discover": {
+    "launchers": [
+      {"id": "lutris", "name": "Lutris", "found": true, "dir": "/home/player/.local/share/lutris/pga.db", "games": 2, "titles": ["Celeste", "Hades"], "importable": true, "via": "lutris", "detail": ""},
+      {"id": "steam", "name": "Steam", "found": true, "dir": "/home/player/.local/share/Steam", "games": 3, "titles": ["Elden Ring", "Portal 2", "Stardew Valley"], "importable": false, "via": "", "detail": "Steam games launch through Steam; a Steam source comes later."},
+      {"id": "heroic-gog", "name": "Heroic · GOG", "found": true, "dir": "/home/player/.config/heroic", "games": 1, "titles": ["Mini Metro"], "importable": true, "via": "gog", "detail": ""},
+      {"id": "heroic-epic", "name": "Heroic · Epic Games", "found": true, "dir": "/home/player/.config/heroic", "games": 1, "titles": ["Hades"], "importable": false, "via": "", "detail": "Epic games launch through Heroic; an Epic source comes later."},
+      {"id": "heroic-amazon", "name": "Heroic · Amazon Games", "found": true, "dir": "/home/player/.config/heroic", "games": 0, "titles": [], "importable": false, "via": "", "detail": "Amazon games launch through Heroic; an Amazon source comes later."}
+    ],
+    "gog_dirs": ["/mnt/games/PC"]
+  },
   "login_url": "https://auth.gog.com/auth?client_id=46755278331571209&redirect_uri=https%3A%2F%2Fembed.gog.com%2Fon_login_success%3Forigin%3Dclient&response_type=code&layout=client2",
   "source_library": {
     "gog": [
@@ -532,6 +542,7 @@
   ],
   "config": {
     "schema": 1,
+    "config_writable": true,
     "paths": {"games_root": "/mnt/games/PC", "prefixes_root": "/mnt/games/prefixes"},
     "desktop": {"hide_cursor": true},
     "proton": {

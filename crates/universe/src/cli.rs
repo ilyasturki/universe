@@ -222,6 +222,8 @@ pub enum Cmd {
         #[arg(long)]
         apply: bool,
     },
+    /// What other launchers (Lutris, Steam, Heroic) hold on this machine and what can be imported
+    Discover,
     /// Check prerequisites of the core, the enabled modules and sources
     Doctor,
     /// Global config
@@ -1133,6 +1135,30 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             println!("{t}");
             if !apply {
                 println!("{}", "run with --apply to write games/*/game.toml".dimmed());
+            }
+        }
+        Cmd::Discover => {
+            let report = core.discover().await;
+            if json {
+                return print_json(&report);
+            }
+            for l in rows(&report.launchers) {
+                let found = l["found"].as_bool().unwrap_or(false);
+                let games = l["games"].as_u64().unwrap_or(0);
+                let titles = l["titles"].as_array().map(|t| t.iter().filter_map(|t| t.as_str()).collect::<Vec<_>>().join(", ")).unwrap_or_default();
+                let state = if !found {
+                    "not installed".dimmed().to_string()
+                } else if games == 0 {
+                    "no games".dimmed().to_string()
+                } else if l["importable"].as_bool().unwrap_or(false) {
+                    format!("{games} to import").green().to_string()
+                } else {
+                    format!("{games} found").yellow().to_string()
+                };
+                println!("{:<22} {:<14} {}", s(&l, "name"), state, if games > 0 { titles } else { s(&l, "detail") });
+            }
+            if !report.gog_dirs.is_empty() {
+                println!("GOG installs under {} — universe source set gog scan_dirs=… then universe scan gog", report.gog_dirs.join(", "));
             }
         }
         Cmd::Doctor => {

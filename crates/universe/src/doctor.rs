@@ -21,7 +21,15 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
     let mut out = Vec::new();
     let mut push = |check: &str, ok: bool, detail: String, module: &str| out.push(Check { check: check.into(), ok, detail, module: module.into() });
 
-    push("config", true, crate::paths::config_file().to_string_lossy().into(), "core");
+    let config_file = crate::paths::config_file();
+    let config_state = if !config_file.exists() {
+        " (absent: defaults)"
+    } else if Config::writable(&config_file) {
+        ""
+    } else {
+        " read-only: home-manager's programs.universe.settings"
+    };
+    push("config", true, format!("{}{config_state}", config_file.display()), "core");
     push("data", crate::paths::games_dir().is_dir(), crate::paths::games_dir().to_string_lossy().into(), "core");
     for bin in ["umu-run", "journalctl"] {
         push(bin, which(bin).is_some(), which(bin).unwrap_or_else(|| "missing".into()), "core");

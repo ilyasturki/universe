@@ -9,7 +9,7 @@ Item {
     property string glyph: "A"
     readonly property bool chord: glyph.indexOf("+") >= 0
     readonly property var names: glyph.split(chord ? "+" : " ")
-    readonly property string family: api.screens.controller.connected ? api.screens.controller.family : "xbox"
+    readonly property string family: api.screens.controller.family
     readonly property real unit: Theme.dp(30)
 
     implicitHeight: unit

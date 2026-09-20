@@ -304,7 +304,7 @@ FocusScope {
         }
     }
 
-    Item {
+    LoginCard {
         id: loginCard
 
         anchors.bottom: hintBar.top
@@ -313,85 +313,7 @@ FocusScope {
         anchors.right: parent.right
         anchors.leftMargin: page.sideMargin
         anchors.rightMargin: page.sideMargin
-        height: Math.max(Theme.dp(74), loginHead.height) + loginBody.height + Theme.dp(8) * 2 + 2
-        visible: page.source !== "" && page.login.source === page.source && (page.login.url !== "" || page.login.status !== "")
-
-        Rectangle {
-            anchors.fill: parent
-            radius: Theme.dp(24)
-            color: Qt.rgba(1, 1, 1, 0.04)
-            border.width: 1
-            border.color: Qt.rgba(1, 1, 1, 0.10)
-        }
-
-        Text {
-            id: loginHead
-            x: Theme.dp(8) + 1 + Theme.dp(18)
-            y: Theme.dp(8) + 1
-            height: Theme.dp(74)
-            verticalAlignment: Text.AlignVCenter
-            text: "Sign-in link"
-            color: Theme.text
-            font.family: Theme.sans
-            font.weight: Font.Bold
-            font.pixelSize: Theme.dp(27)
-        }
-
-        Row {
-            id: loginBody
-
-            x: Theme.dp(8) + 1 + Theme.dp(16)
-            y: loginHead.y + loginHead.height
-            width: parent.width - x * 2
-            height: Math.max(qr.height, loginText.height) + Theme.dp(36)
-            spacing: Theme.dp(28)
-
-            QrCode {
-                id: qr
-                y: Theme.dp(18)
-                width: Theme.dp(300)
-                height: width
-                matrix: page.login.matrix
-                visible: page.login.url !== ""
-            }
-
-            Column {
-                id: loginText
-                y: Theme.dp(18)
-                width: parent.width - (qr.visible ? qr.width + parent.spacing : 0)
-                spacing: Theme.dp(14)
-
-                Text {
-                    width: parent.width
-                    text: "Scan to sign in on your phone"
-                    color: Theme.text
-                    font.family: Theme.sans
-                    font.weight: Font.Medium
-                    font.pixelSize: Theme.dp(22)
-                }
-
-                Text {
-                    width: parent.width
-                    text: page.login.url
-                    color: Theme.textSecondary
-                    font.family: Theme.sans
-                    font.pixelSize: Theme.dp(18)
-                    lineHeight: 1.3
-                    wrapMode: Text.WrapAnywhere
-                    maximumLineCount: 5
-                    elide: Text.ElideRight
-                }
-
-                Text {
-                    width: parent.width
-                    text: page.login.status
-                    color: Theme.textMuted
-                    font.family: Theme.sans
-                    font.pixelSize: Theme.dp(20)
-                    wrapMode: Text.WordWrap
-                }
-            }
-        }
+        source: page.source
     }
 
     HintBar {

@@ -14,6 +14,8 @@ FocusScope {
         Sound.preload();
         if (api.theme.takeLanding() === "themes")
             push("pages/SettingsPage.qml", { section: "themes" });
+        else if (api.screens.onboarding.needed)
+            push("pages/OnboardingPage.qml", {});
     }
 
     Binding {
