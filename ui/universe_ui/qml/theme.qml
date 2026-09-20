@@ -51,6 +51,8 @@ FocusScope {
     property var subArgs: ({})
     property var subReturn: null
     property bool subSwapping: false
+    // The sub page the detail was opened from: closing the detail brings it back.
+    property var detailReturn: null
     // "page" | "chrome" | "search": one owner, so no two focus bindings race.
     property string focusOwner: "page"
 
@@ -178,7 +180,26 @@ FocusScope {
         if (detailLoader.item)
             detailLoader.item.reset();
         detailOpen = false;
+        var back = detailReturn;
+        detailReturn = null;
+        if (back) {
+            showSub(back.source, back.args);
+            return;
+        }
         // Qt clears the loader's focus from C++ without re-evaluating the binding.
+        restoreFocus();
+    }
+
+    function detailFromSub(game, cursor) {
+        if (!game)
+            return;
+        detailReturn = {
+            source: subSource,
+            args: Object.assign({}, subArgs, cursor)
+        };
+        subReturn = null;
+        subOpen = false;
+        openDetail(game);
         restoreFocus();
     }
 
@@ -248,6 +269,10 @@ FocusScope {
         if (!args.game && !args.runner && !args.module && !args.source && !args.add && !args.setup)
             return;
         Sound.enter();
+        showSub(source, args);
+    }
+
+    function showSub(source, args) {
         subArgs = args;
         subSource = source;
         subReturn = null;
@@ -476,6 +501,7 @@ FocusScope {
     // The install folder, the hours and the journal stay on disk; the watcher drops the game from the library.
     function removeGame(game) {
         var title = game.title;
+        detailReturn = null;
         if (detailOpen && detailGame === game)
             closeDetail();
         Sound.enter();
@@ -1003,6 +1029,9 @@ FocusScope {
                     game: game
                 });
             }
+            function onDetailRequested(game, cursor) {
+                root.detailFromSub(game, cursor);
+            }
             function onMessage(text) {
                 toast.show(text);
             }
@@ -1124,6 +1153,7 @@ FocusScope {
 
     function clearToHome() {
         subReturn = null;
+        detailReturn = null;
         subOpen = false;
         if (detailLoader.item)
             detailLoader.item.reset();

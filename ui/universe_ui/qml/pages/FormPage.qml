@@ -29,6 +29,8 @@ FocusScope {
 
     signal closeRequested
     signal settingsRequested(var game)
+    // `cursor` is { key, settingModule }: the args that land the form back on this row.
+    signal detailRequested(var game, var cursor)
     signal message(string text)
 
     readonly property var hints: editor.open ? editor.hints : menu.open ? menu.hints : [
@@ -40,12 +42,26 @@ FocusScope {
         {
             glyph: "dpad",
             label: "Navigate"
-        },
+        }
+    ].concat(game ? [
+        {
+            glyph: "X",
+            label: "Details"
+        }
+    ] : []).concat([
         {
             glyph: "B",
             label: "Back"
         }
-    ]
+    ])
+
+    function openDetail() {
+        var row = cards.currentRow;
+        detailRequested(game, {
+            key: row ? row.key : "",
+            settingModule: row && row.module ? row.module : ""
+        });
+    }
 
     readonly property real sideMargin: Theme.dp(90)
     readonly property bool hasLogo: info !== null && info.icon !== undefined && String(info.icon) !== "" && logo.status === Image.Ready
@@ -343,6 +359,9 @@ FocusScope {
             if (api.keys.isCancel(event)) {
                 event.accepted = true;
                 page.closeRequested();
+            } else if (api.keys.isDetails(event)) {
+                event.accepted = true;
+                page.game ? page.openDetail() : Sound.edge();
             }
         }
     }

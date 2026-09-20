@@ -420,6 +420,9 @@ row's menu, X cancels the running job from either tab.
 The detail page's hero holds Play, the heart and, when the game has any, a Recordings and a
 Journal pill (`recordingsRequested` / `journalRequested`, the shell's `openSub`); the counts
 follow `recordingFiled` and `entryWritten`. Start is the game's menu, with the same pages under Media ›.
+The game settings page opens the detail the other way — X (`detailRequested(game, cursor)`): the
+shell closes the sub page, remembers it as `detailReturn` with the row under the cursor as its
+`key` / `settingModule`, and B from the detail brings the form back on that row.
 
 `pages/RecordingsPage.qml` plays in a pane beside the list; □ (X) toggles it fullscreen — the
 pane fills the page, the hint bar rides the controls' auto-hide, ○ leaves fullscreen first, then
