@@ -88,17 +88,19 @@ FocusScope {
                     top: top,
                     y0: cy,
                     y1: cy + headerHeight(group),
+                    bottom: cy + headerHeight(group) + (group.rows.length ? 0 : pad + 1),
                     wide: wide
                 });
             cy += headerHeight(group);
             for (r = 0; r < group.rows.length; r++) {
-                var first = r === 0 && !(group.control >= 0);
+                var first = r === 0 && !(group.control >= 0), last = r === group.rows.length - 1;
                 stops[c].push({
                     row: group.rows[r],
                     col: c,
                     top: first ? top : cy,
                     y0: cy,
                     y1: cy + rowHeight,
+                    bottom: cy + rowHeight + (last ? pad + 1 : 0),
                     wide: wide
                 });
                 cy += rowHeight;
@@ -419,7 +421,7 @@ FocusScope {
         function scrollToCurrent() {
             var s = cards.stopOf(cards.index);
             if (s && height > 0)
-                Theme.reveal(view, s.top, s.y1, height);
+                Theme.reveal(view, s.top, s.bottom, height);
         }
 
         Behavior on contentY {
