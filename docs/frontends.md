@@ -32,7 +32,7 @@ One context property, `api`:
 A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `playTime`,
 `playCount`, `lastPlayed`, `releaseYear`, `developerList`, `publisherList`, `genreList`, `players`,
 `description`, `summary`, `source`, `platform`, `runner`, `runnerName`, `tags`, `extra`, `raw`,
-`collections`, and `assets` (`boxFront`, `square`, `banner`, `background`, `logo`, `screenshotList`; `tile` is `square` under Pegasus's name), plus
+`collections`, and `assets` (`boxFront`, `square`, `banner`, `background`, `logo`, `screenshotList`), plus
 `launch()`.
 
 `api.screens.recordings` maps the session rows that carry a `recording` (`sessions(id)`, see
@@ -92,8 +92,7 @@ QML file under `qml/` and switching one for another rebuilds the tree in place: 
 the new look opens on its own Settings › Themes (`set(id)` leaves `landing = "themes"`, which the
 theme reads and `takeLanding()` clears). `overlay.qml` is the second window, the one gamescope
 paints over the game; its `Loader` takes `api.theme.overlay` — Reprise's `ui/Dock.qml`, nothing for
-the Switch 2 look, whose HOME goes straight to its HOME menu. The choice lives in `ui-memory.json` (`theme`; the ids
-of the former white and black variants of `switch2` still resolve to it), `--theme ID` overrides it
+the Switch 2 look, whose HOME goes straight to its HOME menu. The choice lives in `ui-memory.json` (`theme`), `--theme ID` overrides it
 for one run, and both looks offer it in Settings › Themes. A theme calls the same `api` and the same `api.screens` objects;
 `api.screens.album` and `api.screens.news` are the recordings and journal lists across every
 visible game (`loadAll()`, over `sessions("")`), which the Switch 2 look shows as its Album and News;

@@ -71,27 +71,6 @@ pub fn list(r: &Resolved) -> Vec<Shot> {
         .collect()
 }
 
-/// Shots older than `screenshots/` sat in `journal/attachments/`; entries name them by basename, which resolves to either place.
-pub fn migrate_dirs(old: &Path, dir: &Path) -> usize {
-    let shots = list_dir(old);
-    if shots.is_empty() || std::fs::create_dir_all(dir).is_err() {
-        return 0;
-    }
-    let mut moved = 0;
-    for src in shots {
-        let Some(name) = src.file_name() else { continue };
-        let dst = dir.join(name);
-        if dst.exists() {
-            continue;
-        }
-        match std::fs::rename(&src, &dst) {
-            Ok(()) => moved += 1,
-            Err(e) => tracing::warn!("{} → {}: {e}", src.display(), dst.display()),
-        }
-    }
-    moved
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -124,22 +103,5 @@ mod tests {
         assert_eq!(session_of(at("2026-03-01T22:01:30+01:00"), &spans), "20260301-210000");
         assert_eq!(session_of(at("2026-03-01T18:05:00+01:00"), &spans), "20260301-180000");
         assert_eq!(session_of(at("2026-03-01T19:00:00+01:00"), &spans), "");
-    }
-
-    #[test]
-    fn migrate_moves_the_shots_and_leaves_the_frames() {
-        let dir = tempfile::tempdir().unwrap();
-        let (att, shots) = (dir.path().join("journal/attachments"), dir.path().join("screenshots"));
-        std::fs::create_dir_all(&att).unwrap();
-        std::fs::create_dir_all(&shots).unwrap();
-        for f in ["20251219-215949.png", "20251223-004111.jpg", "20251219-215949-1.png"] {
-            std::fs::write(att.join(f), b"x").unwrap();
-        }
-        std::fs::write(shots.join("20251223-004111.jpg"), b"kept").unwrap();
-        assert_eq!(migrate_dirs(&att, &shots), 1);
-        assert!(shots.join("20251219-215949.png").is_file());
-        assert_eq!(std::fs::read(shots.join("20251223-004111.jpg")).unwrap(), b"kept");
-        assert!(att.join("20251223-004111.jpg").is_file() && att.join("20251219-215949-1.png").is_file());
-        assert_eq!(migrate_dirs(&att, &shots), 0);
     }
 }

@@ -100,9 +100,6 @@ pub fn read_all(journal_dir: &Path) -> crate::Result<Vec<Entry>> {
             failed_entry(&p, sid).map(|en| failed.push(en))
         } else {
             read_json(&p).and_then(|v| serde_json::from_value::<Entry>(v).map_err(Into::into)).map(|mut en| {
-                if en.session.is_empty() {
-                    en.session = name.trim_end_matches(".json").to_string();
-                }
                 en.state = "written".into();
                 written.push(en)
             })
@@ -156,10 +153,8 @@ pub fn fill_timing(entries: &mut [Entry], sessions: &HashMap<String, Session>) {
     }
 }
 
-pub fn load(journal_dir: &Path, sessions: &[Session]) -> Vec<Entry> {
-    let mut entries = read_all(journal_dir).unwrap_or_default();
-    fill_timing(&mut entries, &sessions_for_note(sessions, journal_dir));
-    entries
+pub fn load(journal_dir: &Path) -> Vec<Entry> {
+    read_all(journal_dir).unwrap_or_default()
 }
 
 pub fn write(journal_dir: &Path, entry: &Entry) -> crate::Result<std::path::PathBuf> {
@@ -170,21 +165,8 @@ pub fn write(journal_dir: &Path, entry: &Entry) -> crate::Result<std::path::Path
     Ok(p)
 }
 
-/// The core's sessions win; the module's migration sidecar (legacy notes) fills the spans it lacks.
-const MIGRATED_SESSIONS: &str = ".migrated-sessions.jsonl";
-
-pub fn sessions_for_note(sessions: &[Session], journal_dir: &Path) -> HashMap<String, Session> {
-    let mut map: HashMap<String, Session> = sessions.iter().map(|s| (s.session.clone(), s.clone())).collect();
-    if let Ok(text) = std::fs::read_to_string(journal_dir.join(MIGRATED_SESSIONS)) {
-        for line in text.lines().filter(|l| !l.trim().is_empty()) {
-            if let Ok(s) = serde_json::from_str::<Session>(line) {
-                if !s.session.is_empty() {
-                    map.entry(s.session.clone()).or_insert(s);
-                }
-            }
-        }
-    }
-    map
+pub fn sessions_by_id(sessions: &[Session]) -> HashMap<String, Session> {
+    sessions.iter().map(|s| (s.session.clone(), s.clone())).collect()
 }
 
 struct Labels {
@@ -298,14 +280,10 @@ fn fmt_duration(total_sec: u64) -> String {
     }
 }
 
-fn is_shot(image: &str) -> bool {
-    crate::screenshots::is_shot_name(image.rsplit('/').next().unwrap_or(image))
-}
-
-/// Older entries name shots as `attachments/<name>`; the basename alone resolves them.
+/// The player's own shots are named bare and live in `screenshots/`; the rest is relative to the journal.
 pub fn image_path(journal_dir: &Path, screenshots_dir: &Path, rel: &str) -> PathBuf {
-    if is_shot(rel) {
-        screenshots_dir.join(rel.rsplit('/').next().unwrap_or(rel))
+    if crate::screenshots::is_shot_name(rel) {
+        screenshots_dir.join(rel)
     } else {
         journal_dir.join(rel)
     }
@@ -428,7 +406,7 @@ fn render_block(entry: &Entry, sessions: &HashMap<String, Session>, entries: &[E
     if let Some(rec) = session.and_then(|s| s.recording.as_deref()) {
         parts.push(format!("**{}{}** [{}]({})", lab.recording, lab.colon, rec.rsplit('/').next().unwrap_or(rec), file_uri(rec)));
     }
-    let (shots, frames): (Vec<&String>, Vec<&String>) = entry.images.iter().partition(|i| is_shot(i));
+    let (shots, frames): (Vec<&String>, Vec<&String>) = entry.images.iter().partition(|i| crate::screenshots::is_shot_name(i));
     if !shots.is_empty() {
         parts.push(shots.iter().map(|i| format!("![]({i})")).collect::<Vec<_>>().join("\n"));
     }
@@ -558,14 +536,14 @@ mod tests {
         (sid.into(), Session { session: sid.into(), game: "sample".into(), started_at: started.into(), ended_at: ended.into(), duration_s: dur, source: "import-journal".into(), recording: rec.map(Into::into), ..Default::default() })
     }
 
-    // The same sample as test_render_then_migrate_round_trip in modules/journal/tests/test_journal.py.
+    // The same sample as sample_entries() in modules/journal/tests/test_journal.py.
     fn sample() -> (Vec<Entry>, HashMap<String, Session>) {
         let entries = vec![
-            entry("20260301-210000", "en", "Into the Dome", "import", &["Zachariah reached the Source after three failed runs.", "- **Main quest:** Cleared the gate.", "- **Side quest:** Talked to Amelia.", "Then the patrol reset."], "Return to the Exchange and talk to Amelia.", &["attachments/20260301-211500.png", "attachments/20260301-210000-1.png", "attachments/frames/frame-20260301-210000-02.jpg"]),
+            entry("20260301-210000", "en", "Into the Dome", "import", &["Zachariah reached the Source after three failed runs.", "- **Main quest:** Cleared the gate.", "- **Side quest:** Talked to Amelia.", "Then the patrol reset."], "Return to the Exchange and talk to Amelia.", &["20260301-211500.png", "attachments/20260301-210000-1.png", "attachments/frames/frame-20260301-210000-02.jpg"]),
             entry("20260215-183000", "fr", "Trois contrats et Port-péril", "import", &["Le duo a enchaîné les sauvetages.", "- **Boss :** Tu as vaincu Corbin Claquebec."], "Tu reprendras dans le Mausolée III.", &["attachments/frames/frame-20260215-183000-01.jpg"]),
             entry("20260110-000500", "en", "", "import", &[], "", &[]),
             entry("20251220-120000", "en", "", "none", &["This session’s recording holds no picture and no screenshot covers it, so there is nothing to summarize."], "", &[]),
-            entry("20251201-230000", "en", "First Glimpse", "import", &["You reached the title screen."], "Press any key.", &["attachments/20251201-230100.png"]),
+            entry("20251201-230000", "en", "First Glimpse", "import", &["You reached the title screen."], "Press any key.", &["20251201-230100.png"]),
         ];
         let sessions = HashMap::from([
             session("20260301-210000", "2026-03-01T21:00:00+01:00", "2026-03-01T22:30:00+01:00", 5400, Some("/mnt/recordings/games/sample/20260301-210000.mkv")),
@@ -583,7 +561,7 @@ game: "Sample: The Game"
 sessions: 5
 first_played: 2025-12-01
 last_played: 2026-03-01
-cover: attachments/20260301-211500.png
+cover: 20260301-211500.png
 ---
 
 # Journal: Sample: The Game
@@ -603,7 +581,7 @@ Then the patrol reset.
 
 **Recording:** [20260301-210000.mkv](file:///mnt/recordings/games/sample/20260301-210000.mkv)
 
-![](attachments/20260301-211500.png)
+![](20260301-211500.png)
 
 *Frames from the recording*
 
@@ -646,7 +624,7 @@ You reached the title screen.
 
 **Next up:** Press any key.
 
-![](attachments/20251201-230100.png)
+![](20251201-230100.png)
 "#;
 
     #[test]
@@ -708,8 +686,7 @@ You reached the title screen.
         write(&journal_dir, &e).unwrap();
         let all = read_all(&journal_dir).unwrap();
         assert_eq!(all, vec![e.clone()]);
-        std::fs::write(journal_dir.join(MIGRATED_SESSIONS), "{\"session\": \"20260910-213045\", \"game\": \"x\", \"started_at\": \"2026-09-10T21:30:45+02:00\", \"ended_at\": \"2026-09-10T22:00:00+02:00\", \"duration_s\": 1755, \"source\": \"import-journal\", \"recording\": null}\n").unwrap();
-        let sessions = sessions_for_note(&[], &journal_dir);
+        let sessions = sessions_by_id(&[Session { session: "20260910-213045".into(), game: "x".into(), started_at: "2026-09-10T21:30:45+02:00".into(), ended_at: "2026-09-10T22:00:00+02:00".into(), duration_s: 1755, ..Default::default() }]);
         let note_dir = dir.path().join("vault").join("x");
         let path = write_note("X", &all, &sessions, &journal_dir, &shots_dir, &note_dir, &Locale::posix()).unwrap();
         assert_eq!(path, note_dir.join("X.md"));
@@ -717,7 +694,8 @@ You reached the title screen.
         assert!(md.contains("## Into the Dome\n*09/10/26 · 21:30–22:00 · 29 min*\n<!-- session: 20260910-213045 -->\n\nA.\n\nB.\n\n**Next up:** Go.\n\n![](20260910-214000.png)\n\n*Frames from the recording*\n\n![](attachments/a.png)\n"), "{md}");
         assert_eq!(std::fs::read(note_dir.join("attachments/a.png")).unwrap(), b"png");
         assert_eq!(std::fs::read(note_dir.join("20260910-214000.png")).unwrap(), b"shot");
-        assert_eq!(image_path(&journal_dir, &shots_dir, "attachments/20260910-214000.png"), shots_dir.join("20260910-214000.png"));
+        assert_eq!(image_path(&journal_dir, &shots_dir, "20260910-214000.png"), shots_dir.join("20260910-214000.png"));
+        assert_eq!(image_path(&journal_dir, &shots_dir, "attachments/a.png"), journal_dir.join("attachments/a.png"));
         let bad = Entry { images: vec!["/etc/passwd".into()], ..e };
         assert!(write(&journal_dir, &bad).is_err());
     }
@@ -741,6 +719,6 @@ You reached the title screen.
         }
         assert_eq!(file_uri("/mnt/rec (1)/é.mkv"), "file:///mnt/rec%20%281%29/%C3%A9.mkv");
         assert_eq!(file_uri("/mnt/#DRIVE/What? A Game/x.mkv"), "file:///mnt/%23DRIVE/What%3F%20A%20Game/x.mkv");
-        assert!(is_shot("attachments/20260301-211500.png") && !is_shot("attachments/20260301-210000-1.png") && !is_shot("attachments/frames/frame-20260301-210000-02.jpg"));
+        assert!(crate::screenshots::is_shot_name("20260301-211500.png") && !crate::screenshots::is_shot_name("attachments/20260301-211500.png") && !crate::screenshots::is_shot_name("attachments/20260301-210000-1.png"));
     }
 }

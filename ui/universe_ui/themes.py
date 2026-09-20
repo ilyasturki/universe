@@ -7,14 +7,11 @@ THEMES = [
      "detail": "The Switch 2 HOME menu."},
 ]
 DEFAULT = "reprise"
-# ui-memory.json written before the black variant went away
-LEGACY_IDS = {"switch2-white": "switch2", "switch2-black": "switch2"}
 MEMORY_KEY = "theme"
 FONT_KEY = "switch2Font"
 
 
 def theme_by_id(ident):
-    ident = LEGACY_IDS.get(ident, ident)
     return next((t for t in THEMES if t["id"] == ident), None)
 
 

@@ -117,10 +117,6 @@ impl Core {
         std::fs::create_dir_all(paths::games_dir())?;
         let core = Core::new(config, host);
         core.reconcile().await?;
-        let moved: usize = core.games.read().await.iter().map(|r| crate::screenshots::migrate_dirs(&r.game.journal_dir().join("attachments"), &r.game.screenshots_dir())).sum();
-        if moved > 0 {
-            tracing::info!("{moved} screenshot(s) moved out of journal/attachments");
-        }
         Ok(core)
     }
 
@@ -694,7 +690,7 @@ impl Core {
         let r = self.get(&id).await?;
         entry.game = id.clone();
         let journal_dir = r.game.journal_dir();
-        crate::journal::fill_timing(std::slice::from_mut(&mut entry), &crate::journal::sessions_for_note(&r.sessions, &journal_dir));
+        crate::journal::fill_timing(std::slice::from_mut(&mut entry), &crate::journal::sessions_by_id(&r.sessions));
         crate::journal::write(&journal_dir, &entry)?;
         self.reload_game(&id).await
     }
@@ -703,7 +699,7 @@ impl Core {
     pub async fn journal(&self, id: &str) -> Result<Vec<crate::journal::Entry>> {
         let r = self.get(id).await?;
         let journal_dir = r.game.journal_dir();
-        let mut entries = crate::journal::load(&journal_dir, &r.sessions);
+        let mut entries = crate::journal::load(&journal_dir);
         for img in entries.iter_mut().flat_map(|e| e.images.iter_mut()) {
             *img = crate::journal::image_path(&journal_dir, &r.game.screenshots_dir(), img).to_string_lossy().into_owned();
         }
@@ -732,7 +728,7 @@ impl Core {
             trash(&written)?;
         }
         // The frames go with the entry; the player's own shots are theirs, not the entry's.
-        for rel in entry.images.iter().filter(|rel| !crate::screenshots::is_shot_name(rel.rsplit('/').next().unwrap_or(rel))) {
+        for rel in entry.images.iter().filter(|rel| !crate::screenshots::is_shot_name(rel)) {
             if rel.starts_with('/') || rel.split('/').any(|seg| seg == "..") {
                 continue;
             }
@@ -766,8 +762,8 @@ impl Core {
         let cfg = self.config.read().await.clone();
         let note_dir = cfg.journal_root().join(id);
         let journal_dir = r.game.journal_dir();
-        let sessions = crate::journal::sessions_for_note(&r.sessions, &journal_dir);
-        let entries = crate::journal::load(&journal_dir, &r.sessions);
+        let sessions = crate::journal::sessions_by_id(&r.sessions);
+        let entries = crate::journal::load(&journal_dir);
         let path = crate::journal::write_note(&r.game.title, &entries, &sessions, &journal_dir, &r.game.screenshots_dir(), &note_dir, &crate::journal::Locale::from_env())?;
         Ok(path.to_string_lossy().into())
     }

@@ -175,10 +175,6 @@ pub struct EnvDiff {
 
 #[derive(Debug, Clone, Serialize, Default)]
 pub struct Report {
-    /// Pre-runner files whose `[launch] backend` became `runner`.
-    pub backend_promoted: Vec<String>,
-    /// Existing games given what a first-class field now holds: a wrapper, an override, a switch.
-    pub options_promoted: Vec<String>,
     pub runners: Vec<RunnerHint>,
     pub imported: Vec<String>,
     pub skipped: Vec<String>,
@@ -339,45 +335,6 @@ pub fn convert(p: &PgaGame, lutris_dir: &Path, runners_dir: &Path, global_env: &
     Imported { game: g, lutris_env, playtime_h: p.playtime_h, lastplayed: p.lastplayed }
 }
 
-/// Never the rest of Lutris's env: a key removed here stays removed.
-fn promotions(existing: &Game, fresh: &Game) -> Vec<(String, String)> {
-    let mut out = Vec::new();
-    let mut from_prefix = crate::game::Launch::default();
-    if let Some(pc) = fresh.extra.get("lutris").and_then(|l| l.get("prefix_command")).and_then(|v| v.as_str()) {
-        split_prefix_command(pc, &mut from_prefix);
-    }
-    if existing.launch.wrapper.is_empty() && !from_prefix.wrapper.is_empty() {
-        out.push(("launch.wrapper".into(), from_prefix.wrapper.clone()));
-    }
-    for (k, v) in &from_prefix.dll_overrides {
-        if !existing.launch.dll_overrides.contains_key(k) {
-            out.push((format!("launch.dll_overrides.{k}"), v.clone()));
-        }
-    }
-    for (k, v) in &from_prefix.env {
-        if !v.is_empty() && !existing.launch.env.contains_key(k) {
-            out.push((format!("launch.env.{k}"), v.clone()));
-        }
-    }
-    let mut ex = existing.launch.clone();
-    lift_toggles(&mut ex);
-    let switches: [(&str, Option<bool>, Option<bool>); 7] = [
-        ("ntsync", ex.ntsync, fresh.launch.ntsync),
-        ("wayland", ex.wayland, fresh.launch.wayland),
-        ("hdr", ex.hdr, fresh.launch.hdr),
-        ("dlss_upgrade", ex.dlss_upgrade, fresh.launch.dlss_upgrade),
-        ("fsr4_upgrade", ex.fsr4_upgrade, fresh.launch.fsr4_upgrade),
-        ("xess_upgrade", ex.xess_upgrade, fresh.launch.xess_upgrade),
-        ("optiscaler", ex.optiscaler, fresh.launch.optiscaler),
-    ];
-    for (name, had, has) in switches {
-        if let (None, Some(v)) = (had, has) {
-            out.push((format!("launch.{name}"), v.to_string()));
-        }
-    }
-    out
-}
-
 fn lutris_global_env(lutris_dir: &Path) -> BTreeMap<String, String> {
     let yml = load_yaml(&lutris_dir.join("system.yml"));
     yaml_map(&yml, &["system", "env"])
@@ -412,7 +369,6 @@ pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
     let runners_dir = paths::expand(&config.lutris.runners_dir);
     let global_env = lutris_global_env(&lutris_dir);
     let mut report = Report { applied: apply, ..Default::default() };
-    report.backend_promoted = crate::game::promote_backend(&paths::games_dir(), apply)?;
     let mut located = std::collections::HashMap::new();
     for p in read_pga(&pga)? {
         if p.name.trim().is_empty() {
@@ -424,17 +380,8 @@ pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
         let game = if existed {
             match Game::load(&toml_path) {
                 Ok(g) => {
-                    let promotions = promotions(&g, &imp.game);
-                    if !promotions.is_empty() {
-                        report.options_promoted.push(g.id.clone());
-                        if apply {
-                            for (k, v) in &promotions {
-                                crate::game::set_key(&toml_path, k, v)?;
-                            }
-                        }
-                    }
                     report.skipped.push(g.id.clone());
-                    Game::load(&toml_path).unwrap_or(g)
+                    g
                 }
                 Err(_) => imp.game.clone(),
             }
@@ -586,21 +533,6 @@ mod tests {
         let sys = game("sys", "game:\n  exe: /g/a.exe\nwine:\n  version: system\n");
         assert_eq!(sys.runner_id(), "wine");
         assert!(sys.launch.runner_exe.is_empty());
-        let mut existing = Game::new("re4");
-        existing.launch.env.insert("LC_ALL".into(), "C".into());
-        existing.launch.env.insert("PROTON_ENABLE_HDR".into(), "1".into());
-        let promo = promotions(&existing, &re4);
-        assert_eq!(promo, vec![("launch.wrapper".to_string(), "gamemoderun taskset -c 0-7".to_string()), ("launch.dll_overrides.amd_ags_x64".to_string(), "n,b".to_string()), ("launch.env.RADV_DEBUG".to_string(), "nodcc".to_string()), ("launch.wayland".to_string(), "false".to_string())], "only the prefix command's parts and the switches; wine.overrides and system.env stay as imported");
-        assert!(promotions(&re4, &re4).is_empty());
-        let toml_path = dir.path().join("game.toml");
-        std::fs::write(&toml_path, toml::to_string_pretty(&existing).unwrap()).unwrap();
-        for (k, v) in &promo {
-            crate::game::set_key(&toml_path, k, v).unwrap();
-        }
-        let promoted = Game::load(&toml_path).unwrap();
-        assert_eq!(promoted.launch.dll_overrides, BTreeMap::from([("amd_ags_x64".to_string(), "n,b".to_string())]));
-        assert_eq!(promoted.launch.wrapper, re4.launch.wrapper);
-        assert_eq!((promoted.launch.wayland, promoted.launch.env["LC_ALL"].as_str(), promoted.launch.env["RADV_DEBUG"].as_str()), (Some(false), "C", "nodcc"));
     }
 
     #[test]

@@ -470,7 +470,7 @@ mod tests {
         assert!(cfg.macros().is_empty());
         let cfg: ControllerConfig = toml::from_str("[[macros]]\nfamily = \"*\"\nbutton = \"start\"\ntrigger = \"hold\"\naction = \"stop\"\n[[macros]]\nfamily = \"*\"\nbutton = \"guide\"\ntrigger = \"hold\"\naction = \"stop\"\n").unwrap();
         assert_eq!(cfg.macros_for("dualsense", "start")[0].action, "stop");
-        assert!(cfg.macros_for("dualsense", "guide").is_empty(), "Guide is HOME, whatever an older config bound on it");
+        assert!(cfg.macros_for("dualsense", "guide").is_empty(), "Guide is HOME, whatever the file binds on it");
         assert!(cfg.macros_for("dualsense-edge", "fn_left").is_empty(), "written macros replace the seeds");
     }
 

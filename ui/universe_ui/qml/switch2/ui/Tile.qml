@@ -13,7 +13,7 @@ Item {
     readonly property bool empty: game === null || game === undefined
 
     readonly property url squareSource: empty ? "" : game.assets.square
-    readonly property url bannerSource: empty ? "" : game.assets.tile
+    readonly property url bannerSource: empty ? "" : game.assets.square
     readonly property url boxSource: empty ? "" : game.assets.boxFront
     // The banner only stands in when it is square (a Pegasus tile); SteamGridDB's is 920×430.
     readonly property bool bannerSquare: banner.status === Image.Ready && banner.implicitWidth > 0

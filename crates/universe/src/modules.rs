@@ -21,9 +21,6 @@ pub struct Manifest {
     pub settings: Vec<Setting>,
 }
 
-/// The manifest api both module.toml and source.toml speak; an older one is left out with a warning.
-pub const API: u32 = 2;
-
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
 pub struct Requires {
@@ -153,10 +150,6 @@ impl Module {
                 out.insert(k.clone(), toml_to_json(v));
             }
         }
-        // An earlier set wrote enabled as ["false"]; a hook would read that list as true.
-        if let Some(b) = out.get("enabled").and_then(|v| v.as_array()).filter(|a| a.len() == 1).and_then(|a| a[0].as_str()).and_then(|s| s.parse::<bool>().ok()) {
-            out.insert("enabled".into(), serde_json::Value::Bool(b));
-        }
         out
     }
 
@@ -206,8 +199,8 @@ pub fn toml_to_json(v: &toml::Value) -> serde_json::Value {
     }
 }
 
-/// A later root wins on the same id; an older api is skipped.
-pub fn read_manifests<M: serde::de::DeserializeOwned>(roots: impl Iterator<Item = PathBuf>, file: &str, id_api: impl Fn(&M) -> (&str, u32)) -> BTreeMap<String, (PathBuf, M)> {
+/// A later root wins on the same id.
+pub fn read_manifests<M: serde::de::DeserializeOwned>(roots: impl Iterator<Item = PathBuf>, file: &str, id: impl Fn(&M) -> &str) -> BTreeMap<String, (PathBuf, M)> {
     let mut found = BTreeMap::new();
     for root in roots {
         let Ok(rd) = std::fs::read_dir(root) else { continue };
@@ -218,10 +211,9 @@ pub fn read_manifests<M: serde::de::DeserializeOwned>(roots: impl Iterator<Item 
                 continue;
             }
             match std::fs::read_to_string(&mp).map_err(crate::Error::from).and_then(|s| toml::from_str::<M>(&s).map_err(Into::into)) {
-                Ok(m) => match id_api(&m) {
-                    ("", _) => tracing::warn!("{}: manifest without id", mp.display()),
-                    (_, api) if api != 0 && api < API => tracing::warn!("{}: api {api} manifest ignored; api {API} keeps modules and sources apart (sources/<id>/source.toml)", mp.display()),
-                    (id, _) => {
+                Ok(m) => match id(&m) {
+                    "" => tracing::warn!("{}: manifest without id", mp.display()),
+                    id => {
                         found.insert(id.to_string(), (dir, m));
                     }
                 },
@@ -239,7 +231,7 @@ pub fn missing_bins(requires: &Requires) -> Vec<String> {
 /// User modules override system modules on the same id.
 pub fn discover(config: &Config) -> Vec<Module> {
     let roots = paths::system_module_dirs().into_iter().rev().chain([paths::user_modules_dir()]);
-    read_manifests::<Manifest>(roots, "module.toml", |m| (&m.id, m.api))
+    read_manifests::<Manifest>(roots, "module.toml", |m| &m.id)
         .into_values()
         .map(|(dir, m)| {
             let missing = missing_bins(&m.requires);
@@ -403,8 +395,6 @@ scope = "config"
         assert_eq!(merged["enabled"], true);
         assert_eq!(merged["cursor"], true);
         assert_eq!(merged["codec"], "hevc");
-        g.modules.insert("capture".into(), toml::from_str("enabled = [\"false\"]").unwrap());
-        assert_eq!(module.merged_settings(&cfg, Some(&g))["enabled"], false);
         assert!(module.validate_setting("codec", "vp9", false).is_err());
         assert!(module.validate_setting("codec", "hevc", true).is_err());
         assert!(module.validate_setting("cursor", "true", true).is_ok());

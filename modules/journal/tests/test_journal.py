@@ -330,7 +330,7 @@ def sample_entries():
          "title": "Into the Dome", "provider": "import",
          "paragraphs": ["Zachariah reached the Source after three failed runs.", "- **Main quest:** Cleared the gate.", "- **Side quest:** Talked to Amelia.", "Then the patrol reset."],
          "next_up": "Return to the Exchange and talk to Amelia.",
-         "images": ["attachments/20260301-211500.png", "attachments/20260301-210000-1.png", "attachments/frames/frame-20260301-210000-02.jpg"]},
+         "images": ["20260301-211500.png", "attachments/20260301-210000-1.png", "attachments/frames/frame-20260301-210000-02.jpg"]},
         {"session": "20260215-183000", "game": "sample", "written_at": "2026-02-15T19:45:00+01:00", "lang": "fr",
          "title": "Trois contrats et Port-péril", "provider": "import",
          "paragraphs": ["Le duo a enchaîné les sauvetages.", "- **Boss :** Tu as vaincu Corbin Claquebec."],
@@ -343,7 +343,7 @@ def sample_entries():
          "next_up": "", "images": []},
         {"session": "20251201-230000", "game": "sample", "written_at": "2025-12-02T00:10:00+01:00", "lang": "en",
          "title": "First Glimpse", "provider": "import", "paragraphs": ["You reached the title screen."],
-         "next_up": "Press any key.", "images": ["attachments/20251201-230100.png"]},
+         "next_up": "Press any key.", "images": ["20251201-230100.png"]},
     ]
 
 
@@ -371,13 +371,13 @@ def test_yaml_and_uri_helpers_match_the_core():
 
 def test_render_note():
     text = note.render_note(sample_entries(), {s["session"]: s for s in sample_sessions()}, "Sample: The Game")
-    assert text.startswith("---\ngame: \"Sample: The Game\"\nsessions: 5\nfirst_played: 2025-12-01\nlast_played: 2026-03-01\ncover: attachments/20260301-211500.png\n---\n\n# Journal: Sample: The Game\n\n")
+    assert text.startswith("---\ngame: \"Sample: The Game\"\nsessions: 5\nfirst_played: 2025-12-01\nlast_played: 2026-03-01\ncover: 20260301-211500.png\n---\n\n# Journal: Sample: The Game\n\n")
     assert "\n## #4 · Into the Dome\n*03/01/26 · 21:00–22:30 · 1 h 30 min*\n" in text
     assert "\n## #3 · Trois contrats et Port-péril\n" in text and "\n**Reprise :** Tu reprendras" in text and "\n**Enregistrement :** [003-" in text
     assert "\n## #2 · 01/10/26 · 00:05–00:07 · 2 min\n<!-- session: 20260110-000500 -->\n\n**Recording:** [002-" in text
     assert "\n## #1 · 12/20/25 · 12:00–12:01 · 1 min\n<!-- session: 20251220-120000 -->\n\n*This session’s recording" in text
     assert "\n## First Glimpse\n*12/01/25 · 23:00–00:10 · 1 h 10 min*\n" in text
-    assert "![](attachments/20260301-211500.png)\n\n*Frames from the recording*\n\n![](attachments/20260301-210000-1.png)\n![](attachments/frames/frame-20260301-210000-02.jpg)\n" in text
+    assert "![](20260301-211500.png)\n\n*Frames from the recording*\n\n![](attachments/20260301-210000-1.png)\n![](attachments/frames/frame-20260301-210000-02.jpg)\n" in text
 
 
 def test_codex_exec_arguments(tmp_path, monkeypatch):

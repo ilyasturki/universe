@@ -6,8 +6,8 @@ from urllib.parse import quote
 
 from _common import COLONS, LABELS, fmt_date, fmt_duration, fmt_time, game_note_name, journal_lang, label_alt, session_span
 
-# Format frozen to game-session-summary.mjs buildEntry; the core's journal.rs mirrors it.
-SHOT_IMAGE_RE = re.compile(r"(?:^|/)\d{8}-\d{6}\.(?:png|jpe?g)$", re.I)
+# The core's journal.rs renders the same note byte for byte; keep the two in step.
+SHOT_IMAGE_RE = re.compile(r"^\d{8}-\d{6}\.(?:png|jpe?g)$", re.I)
 MARKER_RE = re.compile(r"<!-- session: (\d{8}-\d{6}) -->")
 RECORDING_NUM_RE = re.compile(r"^(\d{1,4})-\d{8}-\d{6}")
 DOC_TITLE_RE = re.compile(rf"^#\s*(?:{label_alt('journal')})\s*{COLONS}\s*(.+?)\s*$", re.M)
@@ -149,10 +149,10 @@ def resolve_note_path(note_dir, title):
     return os.path.join(note_dir, notes[0]) if len(notes) == 1 else preferred
 
 
-# A shot is named by basename (older entries: attachments/<name>) and lives in the game's screenshots/.
+# The player's own shots are named bare and live in the game's screenshots/; the rest is relative to the journal.
 def image_path(journal_dir, screenshots_dir, rel):
     if SHOT_IMAGE_RE.search(rel):
-        return os.path.join(screenshots_dir, os.path.basename(rel))
+        return os.path.join(screenshots_dir, rel)
     return os.path.join(journal_dir, rel)
 
 

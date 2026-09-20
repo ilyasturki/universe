@@ -152,12 +152,10 @@ def read_jsonl(path):
 
 def read_sessions(journal_dir):
     sessions = {}
-    paths = [os.path.join(os.path.dirname(os.path.abspath(journal_dir)), "sessions.jsonl"), os.path.join(journal_dir, ".migrated-sessions.jsonl")]
-    for path in paths:
-        for s in read_jsonl(path):
-            sid = s.get("session")
-            if sid and sid not in sessions:
-                sessions[sid] = s
+    for s in read_jsonl(os.path.join(os.path.dirname(os.path.abspath(journal_dir)), "sessions.jsonl")):
+        sid = s.get("session")
+        if sid and sid not in sessions:
+            sessions[sid] = s
     return sessions
 
 

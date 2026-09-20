@@ -426,7 +426,7 @@ class FakeCore:
                         "stats": {"hours": report.get("hours_imported", {}).get(ident, 0)}, "metadata": {}, "media": {"screenshots": []}}
                 self._data["games"].append(game)
                 self._write_game(game)
-        return {"backend_promoted": [], "options_promoted": [], "runners": [], "skipped": [], "updated": [], "media_imported": [],
+        return {"runners": [], "skipped": [], "updated": [], "media_imported": [],
                 "env_diffs": [], **copy.deepcopy(report), "applied": bool(apply)}
 
     def add_game(self, spec):

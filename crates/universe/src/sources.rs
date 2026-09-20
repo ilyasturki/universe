@@ -78,7 +78,7 @@ impl Source {
 /// User sources override system sources on the same id.
 pub fn discover(config: &Config) -> Vec<Source> {
     let roots = paths::system_source_dirs().into_iter().rev().chain([paths::user_sources_dir()]);
-    modules::read_manifests::<Manifest>(roots, "source.toml", |m| (&m.id, m.api))
+    modules::read_manifests::<Manifest>(roots, "source.toml", |m| &m.id)
         .into_values()
         .filter(|(dir, m)| {
             if m.exe.is_empty() {
@@ -191,10 +191,10 @@ choices = ["windows", "linux"]
     }
 
     #[test]
-    fn discover_reads_source_toml_and_skips_old_manifests() {
+    fn discover_reads_source_toml_and_needs_an_exe() {
         let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let dir = tempfile::tempdir().unwrap();
-        for (id, body) in [("gog", "api = 2\nid = \"gog\"\nexe = \"bin/source\"\n"), ("old", "api = 1\nid = \"old\"\nexe = \"bin/source\"\n"), ("noexe", "api = 2\nid = \"noexe\"\n")] {
+        for (id, body) in [("gog", "api = 2\nid = \"gog\"\nexe = \"bin/source\"\n"), ("noexe", "api = 2\nid = \"noexe\"\n")] {
             std::fs::create_dir_all(dir.path().join(id)).unwrap();
             std::fs::write(dir.path().join(id).join("source.toml"), body).unwrap();
         }

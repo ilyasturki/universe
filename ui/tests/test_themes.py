@@ -29,12 +29,3 @@ def test_selector_defaults_and_persists(app, tmp_path):
     selector.fontPath = ""
     assert memory.has("switch2Font") is False
 
-
-def test_legacy_variant_ids_still_select_switch2(app, tmp_path):
-    memory = Memory(str(tmp_path / "memory.json"))
-    memory.set("theme", "switch2-black")
-    assert ThemeSelector(memory).current == "switch2"
-    selector = ThemeSelector(memory)
-    assert selector.set("switch2-white") is True and selector.current == "switch2"
-    assert memory.get("theme") == "switch2"
-

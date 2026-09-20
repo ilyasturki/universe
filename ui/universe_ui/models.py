@@ -104,8 +104,6 @@ class GameAssets(QObject):
     boxFront = Property(QUrl, lambda self: self._urls["box_front"], notify=changed)
     square = Property(QUrl, lambda self: self._urls["square"], notify=changed)
     banner = Property(QUrl, lambda self: self._urls["banner"], notify=changed)
-    # `tile` was the square under Pegasus's name; themes written against it keep working.
-    tile = Property(QUrl, lambda self: self._urls["square"], notify=changed)
     background = Property(QUrl, lambda self: self._urls["background"], notify=changed)
     logo = Property(QUrl, lambda self: self._urls["logo"], notify=changed)
     screenshotList = Property("QVariantList", lambda self: list(self._shots), notify=changed)

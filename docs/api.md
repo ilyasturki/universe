@@ -1,7 +1,6 @@
 # Universe — core API, module and source protocols
 
-`api = 2` (1 had sources as a kind of module; a manifest still saying `api = 1` is left out with a
-warning). The core is a Rust library (`crates/universe`, `universe::core::Core`). **No Universe
+`api = 2`. The core is a Rust library (`crates/universe`, `universe::core::Core`). **No Universe
 process runs in the background.** There are three ways into it, all in-process:
 
 - **the crate** — `Core::open().await`, every method `async`;
@@ -65,7 +64,7 @@ operation; a dash means the surface doesn't expose it.
 | `uninstall(id)` | `uninstall(id)` | `universe uninstall <name>` | trashes `source.dir` and clears `source.dir`, `source.build_id` and `launch.exe`; the game stays in the library, not installed. Refuses a root, a home or the games root |
 | `reload_all()` | `reload()` | `universe rescan` | rereads config and `games/*/game.toml`, runs each source's `scan` |
 | `reload_game(id)` | `reload_game(id)` | — | rereads one game |
-| `import_lutris(apply)` | `import_lutris(apply)` | `universe migrate [--apply]` | a report: imported games, per-game env diff (`{id, lutris_env, universe_env, added, removed, changed}`), imported hours, games whose art was copied from `[lutris] pegasus_library` (`<platform>/media/<slug>/`, once, never over an existing `media/`), `backend_promoted` (files from before runners whose `[launch] backend` became `runner`: `emulator` takes the id parked under `[lutris] runner`, an empty one is `proton`, any other value is taken as a runner id: `wine`, `native` → `linux`), `options_promoted` (games already imported that take what a field now holds — a `wrapper`, a DLL override, a Proton switch — only where the file had nothing) and `runners` (what Lutris's runner configs say: a wrapper script is seen through, the program is written to `[runners.<id>] exe` when it is not on PATH, its extra arguments to `args`). Without `apply` it only reports |
+| `import_lutris(apply)` | `import_lutris(apply)` | `universe migrate [--apply]` | a report: imported games, per-game env diff (`{id, lutris_env, universe_env, added, removed, changed}`), imported hours, games whose art was copied from `[lutris] pegasus_library` (`<platform>/media/<slug>/`, once, never over an existing `media/`) and `runners` (what Lutris's runner configs say: a wrapper script is seen through, the program is written to `[runners.<id>] exe` when it is not on PATH, its extra arguments to `args`). Without `apply` it only reports |
 | `add_game(spec)` | `add_game(spec)` | `universe add <file> --runner <id> [--title T] [--platform P] [--media]` | `{"runner", "exe", "title"?, "platform"?}` → the new id. The title defaults to the file's name cleaned of release tags; the platform to the runner's first. Refuses an id already in the library |
 
 `set` takes dotted keys: the `launch.*` keys of `universe launch-keys` — the one catalogue
@@ -457,10 +456,7 @@ before the start, 120 s after the end), or empty. The hook answers once the pixe
 a cue that follows its return never lands in the shot: the launcher plays the shutter and, inside
 gamescope, paints a flash over the game (see `frontends.md`); the pad's `screenshot` macro reports
 back as a `screenshot` event on the watcher (`{"event": "screenshot", "path": …}`, the path empty
-when it failed). Shots taken before this directory existed sat in `journal/attachments/`: a core
-opening the library moves them once (a name already taken stays), and a journal entry keeps
-naming them as it did — by basename, `attachments/<name>` in older entries — which resolves to
-`screenshots/` either way.
+when it failed). A journal entry names them by basename, which resolves to `screenshots/`.
 
 ## Journal
 
@@ -476,9 +472,8 @@ naming them as it did — by basename, `attachments/<name>` in older entries —
 "title", "provider", "paragraphs": [], "next_up": "", "images": ["relative path"],
 "state": "written"}`. On disk and in `add_entry` the images are relative to `games/<id>/journal/`,
 except the player's own shots, named by basename (`YYYYMMDD-HHMMSS.<ext>`) and read from
-`games/<id>/screenshots/`; `journal(id)` hands them all out absolute. `started_at`, `ended_at` and `duration_s` are the session's span; an entry
-written before the core stamped them gets them at read time from `sessions.jsonl` (or the module's
-migration sidecar), so every listing has one shape. `journal-add` is called by the journal module's
+`games/<id>/screenshots/`; `journal(id)` hands them all out absolute. `started_at`, `ended_at` and `duration_s` are the session's span,
+filled from `sessions.jsonl` by `add_entry` when the entry lacks them. `journal-add` is called by the journal module's
 `post-process` hook, which also passes `started_at`, `ended_at` and `duration_s` so an entry it
 writes itself (core unavailable) is self-contained. While the hook runs the session is
 `journal/<session>.pending.json` (`{"session", "game", "started_at", "provider"}`); the file is
