@@ -445,9 +445,11 @@ the screen), Advanced (scaler, filter, sharpness, the raw gamescope arguments) �
 expert last. Its `label` and `description` (the row's `detail`) come with it, and its `choices` are
 sized by the screen the window is on (`screen_mode`: `auto`, the screen's mode, the standard heights
 below it at its aspect ratio; the rates below its own). `screens/settings.py`'s `launch_row` is the
-presentation over an entry: an `enum` or `int` with choices lists a `default` choice that clears the
+presentation over an entry: an `enum`, `toggle` or `int` with choices lists a `default` choice that clears the
 key (through `choiceValues`), a `proton` entry lists the config's `[proton]` names, `fps_limit`'s
-`auto` displays as `auto · 60`, the rate it stands for. The keys tied to a runner (`proton`, the
+`auto` displays as `auto · 60`, the rate it stands for, and a `toggle` (adaptive sync, the upscaler
+upgrades) on `auto` as `auto · On` or `auto · Off`, what it comes to here (`gpu().auto`, the
+screen's `vrr`). The keys tied to a runner (`proton`, the
 sync modes, Wayland, HDR, the upscaler upgrades) are set on that runner's page instead (below).
 `load()` reads the config again.
 
@@ -455,7 +457,8 @@ The game settings page reads the same catalogue with scope `game`, filtered by t
 (`runners`), and mirrors the cards — Display, Overlay, Advanced — then the runner's own, named
 after it (Proton: the build, Wayland, HDR, the Wine prefix; Sync; Upscaling), then Launch (the
 runner picker, the program, an emulator's options, the wrapper, arguments and working directory);
-a `both` key inherited from the global value until set.
+a `both` key inherited from the global value until set (a `toggle` inherits the global switch, not
+what `effective` resolved it to).
 
 Upscaling's meta names the GPU (`client.gpu()`: `label`, `AMD Radeon RX 7900 GRE · RDNA 3`) and each
 of its rows ends its `detail` with `Works on your GPU.` or `Not for your GPU.` (`fits`), nothing when

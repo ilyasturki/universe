@@ -8,6 +8,8 @@ use crate::Error;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Kind {
     Bool,
+    /// `auto` (detected at launch), `on` or `off`.
+    Toggle,
     Int { max: Option<u32> },
     Str,
     Path,
@@ -95,8 +97,8 @@ pub static LAUNCH_KEYS: &[LaunchKey] = &[
     key!("gamescope", Kind::Bool, "true", "Gamescope", "Display", Both, &[], "Run the game in a window of its own, at the resolution and refresh rate below; a launcher already inside gamescope puts it on that one instead."),
     key!("gamescope_resolution", Kind::Resolution, "auto", "Resolution", "Display", Both, &[], "What the game renders at; auto is the screen's own. A lower one is upscaled to the screen, lighter on the GPU."),
     key!("gamescope_refresh", Kind::Refresh, "auto", "Refresh rate", "Display", Both, &[], "The refresh rate the game sees; auto is the screen's own."),
-    key!("gamescope_adaptive_sync", Kind::Bool, "false", "Adaptive sync", "Display", Both, &[], "Variable refresh rate (FreeSync, G-Sync) when the screen supports it: no tearing, no stutter below the refresh rate."),
-    key!("mangohud", Kind::Bool, "true", "Show MangoHud", "Overlay", Both, &[], "Draw the overlay (frame rate, frame time, GPU and CPU load) over the game from launch; off keeps MangoHud loaded but hidden, the frame rate limit still holds, and the in-game menu or the pad macro shows it mid-game and writes the state back here."),
+    key!("gamescope_adaptive_sync", Kind::Toggle, "auto", "Adaptive sync", "Display", Both, &[], "Variable refresh rate (FreeSync, G-Sync): no tearing, no stutter below the refresh rate. Auto turns it on when the screen supports it."),
+    key!("mangohud", Kind::Bool, "false", "Show MangoHud", "Overlay", Both, &[], "Draw the overlay (frame rate, frame time, GPU and CPU load) over the game from launch. Off keeps MangoHud loaded but hidden, the frame rate limit still holds, and the in-game menu or the pad macro shows it mid-game and writes the state back here."),
     key!("fps_limit", Kind::Fps, "auto", "Frame rate limit", "Overlay", Both, &[], "MangoHud holds the game to this many frames per second, overlay or not; auto is the refresh rate the game sees, and no limit for an emulator, which paces itself."),
     key!("pause_on_home", Kind::Bool, "true", "Pause on HOME", "Overlay", Both, &[], "Freeze the game while the launcher covers it, so the pad drives the menu alone; it runs again on Resume. Off for a game that must keep running (online play)."),
     advanced!("gamescope_scaler", Kind::Enum(&gamescope::SCALERS), "", "Scaler", "Scaling", Both, &[], "How a smaller picture fills the screen: integer keeps pixels whole, fit keeps the aspect, fill and stretch do not."),
@@ -120,9 +122,9 @@ pub static LAUNCH_KEYS: &[LaunchKey] = &[
     advanced!("esync", Kind::Bool, "true", "Esync", "Sync", Both, WINE, "Faster thread synchronisation through eventfd; on for most games, off if one hangs or stutters."),
     advanced!("fsync", Kind::Bool, "true", "Fsync", "Sync", Both, WINE, "Faster still, through the kernel's futex2; takes over from esync when the kernel has it."),
     advanced!("ntsync", Kind::Bool, "true", "NTSync", "Sync", Both, PROTON, "The kernel's NT synchronisation driver, the fastest; needs Linux 6.14 and a Proton built for it, else falls back."),
-    advanced!("dlss_upgrade", Kind::Bool, "false", "DLSS upgrade", "Upscaling", Both, PROTON, "Games with DLSS use the newest DLSS from the NVIDIA driver instead of the one they ship. NVIDIA GeForce RTX only."),
-    advanced!("fsr4_upgrade", Kind::Bool, "false", "FSR 4 upgrade", "Upscaling", Both, PROTON, "Games with FSR 3.1 use FSR 4 instead, sharper and cleaner. Radeon RX 9000 (RDNA 4), or RX 7000 (RDNA 3) at a cost, through Proton's RDNA 3 variant picked for it."),
-    advanced!("xess_upgrade", Kind::Bool, "false", "XeSS upgrade", "Upscaling", Both, PROTON, "Games with XeSS use the newest XeSS instead of the one they ship. Any GPU; best on Intel Arc."),
+    advanced!("dlss_upgrade", Kind::Toggle, "off", "DLSS upgrade", "Upscaling", Both, PROTON, "Games with DLSS use the newest DLSS from the NVIDIA driver instead of the one they ship. NVIDIA GeForce RTX only; auto turns it on there. A swapped DLL can upset a game or an anti-cheat."),
+    advanced!("fsr4_upgrade", Kind::Toggle, "off", "FSR 4 upgrade", "Upscaling", Both, PROTON, "Games with FSR 3.1 use FSR 4 instead, sharper and cleaner. Radeon RX 9000 (RDNA 4), where auto turns it on, or RX 7000 (RDNA 3) at a cost, through Proton's RDNA 3 variant picked for it. A swapped DLL can upset a game or an anti-cheat."),
+    advanced!("xess_upgrade", Kind::Toggle, "off", "XeSS upgrade", "Upscaling", Both, PROTON, "Games with XeSS use the newest XeSS instead of the one they ship. Any GPU; best on Intel Arc, where auto turns it on. A swapped DLL can upset a game or an anti-cheat."),
     advanced!("optiscaler", Kind::Bool, "false", "OptiScaler", "Upscaling", Both, PROTON, "Adds FSR 4 or XeSS to games that only offer DLSS, through OptiScaler. For AMD and Intel; needs a Proton that ships it (CachyOS, GE)."),
     advanced!("gamescope_bin", Kind::Path, "gamescope", "Gamescope program", "Programs", Global, &[], "The gamescope binary: a name on PATH or a path."),
     advanced!("umu_run", Kind::Path, "umu-run", "umu-run program", "Programs", Global, &[], "The umu-run binary: a name on PATH or a path."),
@@ -152,6 +154,7 @@ pub fn validate(scope: Scope, key: &str, value: &str) -> crate::Result<()> {
     }
     match k.kind {
         Kind::Bool if !matches!(value, "true" | "false") => Err(Error::Invalid(format!("{key} must be true or false"))),
+        Kind::Toggle if crate::config::Toggle::parse(value).is_none() => Err(Error::Invalid(format!("{key} must be auto, on or off"))),
         Kind::Int { max } => match value.parse::<u32>() {
             Ok(n) if max.is_none_or(|m| n <= m) => Ok(()),
             _ => Err(Error::Invalid(match max {
@@ -186,6 +189,7 @@ pub struct Row {
 fn kind_name(kind: Kind) -> &'static str {
     match kind {
         Kind::Bool => "bool",
+        Kind::Toggle => "toggle",
         Kind::Int { .. } => "int",
         Kind::Str => "string",
         Kind::Path => "path",
@@ -215,6 +219,7 @@ fn int_steps(max: u32) -> Vec<String> {
 fn choices_of(k: &LaunchKey, screen: Option<Mode>) -> Vec<String> {
     match k.kind {
         Kind::Enum(choices) => choices.iter().map(|s| s.to_string()).collect(),
+        Kind::Toggle => crate::config::Toggle::CHOICES.iter().map(|s| s.to_string()).collect(),
         Kind::Int { max: Some(max) } => int_steps(max),
         Kind::Resolution => gamescope::resolution_choices(screen),
         Kind::Refresh => gamescope::refresh_choices(screen),
@@ -302,6 +307,11 @@ mod tests {
         assert!(validate(Scope::Game, "fps_limit", "sixty").is_err() && validate(Scope::Game, "fps_limit", "0").is_err());
         assert!(validate(Scope::Game, "gamescope_resolution", "1920x1080").is_ok() && validate(Scope::Game, "gamescope_resolution", "1080p").is_err());
         assert!(validate(Scope::Game, "gamescope_adaptive_sync", "yes").is_err());
+        for v in ["auto", "on", "off", "true", "false", ""] {
+            assert!(validate(Scope::Game, "gamescope_adaptive_sync", v).is_ok(), "{v}");
+        }
+        let row = rows(Scope::Global, None).into_iter().find(|r| r.key == "dlss_upgrade").unwrap();
+        assert_eq!((row.kind, row.default.as_str(), row.choices.as_slice()), ("toggle", Some("off"), &["auto".to_string(), "on".into(), "off".into()][..]));
         assert!(validate(Scope::Game, "gamescope_args", "anything -r 120").is_ok());
         assert!(validate(Scope::Game, "arch", "win32").is_ok() && validate(Scope::Game, "arch", "arm64").is_err());
         assert!(validate(Scope::Game, "env.FOO", "bar").is_ok() && validate(Scope::Game, "options.batch", "false").is_ok());
@@ -314,7 +324,7 @@ mod tests {
 
     #[test]
     fn rows_carry_the_screen() {
-        let screen = Some(Mode { width: 2560, height: 1440, refresh: 144 });
+        let screen = Some(Mode { width: 2560, height: 1440, refresh: 144, vrr: false });
         let by_key = |scope, screen| -> std::collections::BTreeMap<&str, Row> { rows(scope, screen).into_iter().map(|r| (r.key, r)).collect() };
         let with = by_key(Scope::Global, screen);
         assert_eq!(with["gamescope_resolution"].choices, ["auto", "2560x1440", "1920x1080", "1280x720"]);

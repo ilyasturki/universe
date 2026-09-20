@@ -55,26 +55,30 @@
   },
   {
     "key": "gamescope_adaptive_sync",
-    "type": "bool",
-    "default": false,
-    "choices": [],
+    "type": "toggle",
+    "default": "auto",
+    "choices": [
+      "auto",
+      "on",
+      "off"
+    ],
     "label": "Adaptive sync",
     "section": "Display",
     "scope": "both",
     "runners": [],
-    "description": "Variable refresh rate (FreeSync, G-Sync) when the screen supports it: no tearing, no stutter below the refresh rate.",
+    "description": "Variable refresh rate (FreeSync, G-Sync): no tearing, no stutter below the refresh rate. Auto turns it on when the screen supports it.",
     "advanced": false
   },
   {
     "key": "mangohud",
     "type": "bool",
-    "default": true,
+    "default": false,
     "choices": [],
     "label": "Show MangoHud",
     "section": "Overlay",
     "scope": "both",
     "runners": [],
-    "description": "Draw the overlay (frame rate, frame time, GPU and CPU load) over the game from launch; off keeps MangoHud loaded but hidden, the frame rate limit still holds, and the in-game menu or the pad macro shows it mid-game and writes the state back here.",
+    "description": "Draw the overlay (frame rate, frame time, GPU and CPU load) over the game from launch. Off keeps MangoHud loaded but hidden, the frame rate limit still holds, and the in-game menu or the pad macro shows it mid-game and writes the state back here.",
     "advanced": false
   },
   {
@@ -418,44 +422,56 @@
   },
   {
     "key": "dlss_upgrade",
-    "type": "bool",
-    "default": false,
-    "choices": [],
+    "type": "toggle",
+    "default": "off",
+    "choices": [
+      "auto",
+      "on",
+      "off"
+    ],
     "label": "DLSS upgrade",
     "section": "Upscaling",
     "scope": "both",
     "runners": [
       "proton"
     ],
-    "description": "Games with DLSS use the newest DLSS from the NVIDIA driver instead of the one they ship. NVIDIA GeForce RTX only.",
+    "description": "Games with DLSS use the newest DLSS from the NVIDIA driver instead of the one they ship. NVIDIA GeForce RTX only; auto turns it on there. A swapped DLL can upset a game or an anti-cheat.",
     "advanced": true
   },
   {
     "key": "fsr4_upgrade",
-    "type": "bool",
-    "default": false,
-    "choices": [],
+    "type": "toggle",
+    "default": "off",
+    "choices": [
+      "auto",
+      "on",
+      "off"
+    ],
     "label": "FSR 4 upgrade",
     "section": "Upscaling",
     "scope": "both",
     "runners": [
       "proton"
     ],
-    "description": "Games with FSR 3.1 use FSR 4 instead, sharper and cleaner. Radeon RX 9000 (RDNA 4), or RX 7000 (RDNA 3) at a cost, through Proton's RDNA 3 variant picked for it.",
+    "description": "Games with FSR 3.1 use FSR 4 instead, sharper and cleaner. Radeon RX 9000 (RDNA 4), where auto turns it on, or RX 7000 (RDNA 3) at a cost, through Proton's RDNA 3 variant picked for it. A swapped DLL can upset a game or an anti-cheat.",
     "advanced": true
   },
   {
     "key": "xess_upgrade",
-    "type": "bool",
-    "default": false,
-    "choices": [],
+    "type": "toggle",
+    "default": "off",
+    "choices": [
+      "auto",
+      "on",
+      "off"
+    ],
     "label": "XeSS upgrade",
     "section": "Upscaling",
     "scope": "both",
     "runners": [
       "proton"
     ],
-    "description": "Games with XeSS use the newest XeSS instead of the one they ship. Any GPU; best on Intel Arc.",
+    "description": "Games with XeSS use the newest XeSS instead of the one they ship. Any GPU; best on Intel Arc, where auto turns it on. A swapped DLL can upset a game or an anti-cheat.",
     "advanced": true
   },
   {

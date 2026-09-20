@@ -73,7 +73,7 @@ a game key left empty takes `[launch]`'s, a value is validated as the key's type
 or global-only key is refused — with the maps `launch.dll_overrides.d3d11`, `launch.env.FOO` and
 `launch.options.<key>` (validated against the runner's options); then `desktop.hide_cursor`, `hidden`,
 `favorite`, `tags`, `sort_title`, `platform`, `metadata.sgdb_id`, and `capture.cursor` as a
-validated shorthand for `modules.capture.cursor`. Values are strings: `true`/`false` for booleans,
+validated shorthand for `modules.capture.cursor`. Values are strings: `true`/`false` for booleans, `auto`/`on`/`off` for a toggle (`true`/`false` read as on/off),
 comma-separated for lists, `""` deletes the key. A runner is written under its shipped id (`yuzu` →
 `eden`).
 
@@ -89,13 +89,15 @@ comma-separated for lists, `""` deletes the key. A runner is written under its s
                "options": {"batch": true, "user_directory": "", "inputplumber": true}, "inputplumber": true,
                "proton": "proton-ge", "proton_path": "…", "esync": true, "fsync": true, "ntsync": true,
                "wayland": true, "hdr": false, "dlss_upgrade": false, "fsr4_upgrade": false, "xess_upgrade": false,
-               "optiscaler": false, "mangohud": true, "gamescope": true, "gamescope_args": "", "gamescope_resolution": "auto", "gamescope_refresh": "auto", "gamescope_scaler": "", "gamescope_filter": "", "gamescope_sharpness": null, "gamescope_adaptive_sync": false, "fps_limit": "auto", "hide_cursor": true, "env": {}},
+               "optiscaler": false, "mangohud": false, "gamescope": true, "gamescope_args": "", "gamescope_resolution": "auto", "gamescope_refresh": "auto", "gamescope_scaler": "", "gamescope_filter": "", "gamescope_sharpness": null, "gamescope_adaptive_sync": "auto", "fps_limit": "auto", "hide_cursor": true, "env": {}},
  "removed": false}
 ```
 
 `effective` is what the launch will use: the game's own keys over the global defaults, the runner
 resolved (`runner_path` empty when its program was not found), the platform the runner implies when
-the game sets none. `media.screenshots` is the store's promotional shots: `screenshots/` under the
+the game sets none. The upscaler upgrades are the bools their `auto` came to on this GPU (see
+`gpu()`); `gamescope_adaptive_sync` stays `auto`, `on` or `off`, since the screen is only known
+at launch. `media.screenshots` is the store's promotional shots: `screenshots/` under the
 overrides, then under `media/`. The player's own are `screenshots(id)` (see Screenshots).
 
 There is no change notification: the files are the truth, so a frontend watches `games/`,
@@ -213,7 +215,9 @@ game in `game.toml`'s `[launch]` (a field left empty takes the global one), are 
 `universe launch-keys` prints each one's values and default. Each is a flag: `gamescope_resolution`
 (what the game renders at, upscaled to the screen when smaller) `-w -h`, `gamescope_refresh` `-r`,
 `gamescope_scaler` `-S`, `gamescope_filter` `-F`, `gamescope_sharpness` (for `fsr` and `nis`)
-`--sharpness`, `gamescope_adaptive_sync` `--adaptive-sync`; a scaler or filter left empty leaves
+`--sharpness`, `gamescope_adaptive_sync` `--adaptive-sync` (`auto`, the default, when the screen
+takes a variable refresh rate: a mode Mutter marks `refresh-rate-mode = variable`, else the
+connector's `vrr_capable` DRM property; `on`/`off` regardless); a scaler or filter left empty leaves
 gamescope its own default.
 
 `gamescope_args` (global, then the game's) comes after these and wins: gamescope takes the last
@@ -278,7 +282,17 @@ Proton reads: `esync`/`fsync`/`ntsync` off are `PROTON_NO_ESYNC`/`_FSYNC`/`_NTSY
 `PROTON_ENABLE_WAYLAND`, `PROTON_ENABLE_HDR`, `PROTON_DLSS_UPGRADE`, `PROTON_FSR4_UPGRADE`,
 `PROTON_XESS_UPGRADE`, `PROTON_USE_OPTISCALER=1`; on an RDNA 3 card (`gpu()`, below) `fsr4_upgrade`
 is `PROTON_FSR4_RDNA3_UPGRADE=1` instead, Proton's variant for it (its own DLL build and
-workarounds; the generic one does nothing there). A switch off removes the same name from
+workarounds; the generic one does nothing there). The three upgrades are `auto`, `on` or `off`
+(a bool reads as on/off), `off` by default as NVIDIA, AMD and Proton ship them — a swapped DLL can
+upset a game or an anti-cheat; `auto` is on where the upgrade is a plain win — DLSS on NVIDIA,
+FSR 4 on RDNA 4, XeSS on Intel — and off elsewhere and when no GPU is known.
+
+`launch.proton` names a build: `proton/<name>` under the data home, then `[proton]`'s path, then a
+path as given, then `<name>` under each Proton directory — Lutris's `runners_dir`, Steam's
+`compatibilitytools.d` (native and Flatpak), Heroic's `tools/proton` (native and Flatpak) — then the
+newest build of the name's family in any of them: `proton-ge` is `GE-Proton10-12` over
+`GE-Proton9-27`, `proton-cachyos` is `proton-cachyos-10.0-…`. `doctor` says which one, or that none
+was found. A switch off removes the same name from
 `[launch.env]`; `launch.env` on the game still wins. `launch.dll_overrides` (`d3d11 = "n,b"`, keys
 without `.dll`) is `WINEDLLOVERRIDES`. `wine` runs `<launch.runner_exe or wine> <exe>` with
 `WINEPREFIX`, `WINEARCH` (`launch.arch`), `WINEESYNC`/`WINEFSYNC` as `1`/`0` and
@@ -426,6 +440,9 @@ so later launches record without a dialog. A cancelled picker records nothing. O
 extension absent or not yet loaded, or when no game window appears in time, the screen is recorded
 and the shell's OSD says so.
 
+`codec` is `auto` by default: the first of `av1_10bit`, `hevc_10bit`, `hevc`, `h264` in the
+`video_codecs` section of `gpu-screen-recorder --info` (what the card encodes), `h264` when it
+lists none of them. `audio` is `output` by default; `output+input` adds the microphone.
 `quality` is a QVBR preset — constant quality up to a bitrate ceiling (`very_high`: 16 Mbps target,
 32 Mbps ceiling, ~7-8 GB/h at 4K on AMD). Two config-scope keys, for `config.toml` or `universe
 module set capture <key>=<value>` — advanced rows on the module's page — replace what the presets choose:
@@ -519,9 +536,9 @@ set when the manifest names a `choices_exec`: `<module dir>/<choices_exec> <key>
 |---|---|---|---|
 | `settings()` | `settings()` | `universe config get` | resolved `config.toml`: absolute paths, defaults applied |
 | `set_setting(key, value)` | `set_setting(key, value)` | `universe config set <key> <value>` | dotted `config.toml` key (`launch.proton`, `paths.recordings_root`, `desktop.profile`); a `launch.*` key is validated against the catalogue, an unknown or game-only one refused |
-| `launch_keys(scope, screen)` | `launch_keys(scope, screen)` | `universe launch-keys [--json]` | the launch keys of `scope` (`game`, `global`, `both`) that have a settings row: `[{key, type, default, choices, label, section, scope, runners, description, advanced}]`, `type` one of bool, int, string, path, list, enum, resolution, refresh, fps, proton, map; `screen` (a `screen_mode`, or none) sizes the resolution, refresh and fps choices; `runners` empty means every runner; `advanced` puts the row behind the page's Advanced row (every card but Display, Overlay and the Proton basics). `runner`, `runner_exe`, `exe` and the `options` map are settable but not listed — the frontends build their rows themselves; the CLI's table prints all of them |
-| `gpu()` | `gpu()` | — | the GPU the games run on: `{vendor (amd, nvidia, intel), name (the vendor's), rdna (1…4 or null), label (`AMD · RDNA 3`), fits: {dlss_upgrade, fsr4_upgrade, xess_upgrade, optiscaler}}`, `fits` whether each upscaler upgrade does anything on it; `null` when sysfs shows no card of a known vendor. Vendor and AMD generation come from `/sys/class/drm` (amdgpu's `ip_discovery` GC major: 10 RDNA 1/2, 11 RDNA 3, 12 RDNA 4); the card with the most VRAM wins (an NVIDIA card, which reports none, beats an iGPU). Probed once per process |
-| `screen_mode(screen)` | `screen_mode(screen)` | `universe screen-mode [<screen>] [--json]` | `{screen, width, height, refresh}`: the connector's current mode as gamescope is told it (see Gamescope), `screen=""` for the profile default; zeros when none can be read |
+| `launch_keys(scope, screen)` | `launch_keys(scope, screen)` | `universe launch-keys [--json]` | the launch keys of `scope` (`game`, `global`, `both`) that have a settings row: `[{key, type, default, choices, label, section, scope, runners, description, advanced}]`, `type` one of bool, toggle (`auto`, `on`, `off`), int, string, path, list, enum, resolution, refresh, fps, proton, map; `screen` (a `screen_mode`, or none) sizes the resolution, refresh and fps choices; `runners` empty means every runner; `advanced` puts the row behind the page's Advanced row (every card but Display, Overlay and the Proton basics). `runner`, `runner_exe`, `exe` and the `options` map are settable but not listed — the frontends build their rows themselves; the CLI's table prints all of them |
+| `gpu()` | `gpu()` | — | the GPU the games run on: `{vendor (amd, nvidia, intel), name (the vendor's), rdna (1…4 or null), label (`AMD · RDNA 3`), fits: {dlss_upgrade, fsr4_upgrade, xess_upgrade, optiscaler}, auto: {the same keys}}`, `fits` whether each upscaler upgrade does anything on it, `auto` what the key's `auto` comes to on it; `null` when sysfs shows no card of a known vendor. Vendor and AMD generation come from `/sys/class/drm` (amdgpu's `ip_discovery` GC major: 10 RDNA 1/2, 11 RDNA 3, 12 RDNA 4); the card with the most VRAM wins (an NVIDIA card, which reports none, beats an iGPU). Probed once per process |
+| `screen_mode(screen)` | `screen_mode(screen)` | `universe screen-mode [<screen>] [--json]` | `{screen, width, height, refresh, vrr}`: the connector's current mode as gamescope is told it (see Gamescope) and whether it takes a variable refresh rate, `screen=""` for the profile default; zeros when none can be read |
 | — | `version()`, `data_home()`, `state_home()` | `universe --version` | `version()` is the build: the semver with the short git rev behind it (`0.0.2 (410391a)`, `-dirty` when the tree was; the flake passes its rev, a checkout asks git) |
 
 ## Controller
@@ -594,17 +611,17 @@ journal_root = "~/Documents/universe/journal"    # $XDG_DOCUMENTS_DIR/universe/j
 overrides = "~/.config/universe/overrides"       # picked art, shown over media/: <id>/{box_front,square,banner,background,logo}.*, <id>/screenshots/
 
 [launch]
-proton = "proton-ge"                 # a name under [proton], or a path
+proton = "proton-ge"                 # a name under [proton], a path, or a family found under Lutris, Steam or Heroic (see Proton and Wine)
 esync = true
 fsync = true
 ntsync = true                        # a sync mode off is PROTON_NO_*=1 (WINEESYNC/WINEFSYNC=0 for wine)
 wayland = true                       # PROTON_ENABLE_WAYLAND=1; dropped inside gamescope unless --expose-wayland
 hdr = false                          # PROTON_ENABLE_HDR=1, and --hdr-enabled on gamescope
-dlss_upgrade = false                 # PROTON_DLSS_UPGRADE, PROTON_FSR4_UPGRADE, PROTON_XESS_UPGRADE, PROTON_USE_OPTISCALER
-fsr4_upgrade = false                 # on RDNA 3 PROTON_FSR4_RDNA3_UPGRADE instead
-xess_upgrade = false
+dlss_upgrade = "off"                # PROTON_DLSS_UPGRADE, PROTON_FSR4_UPGRADE, PROTON_XESS_UPGRADE, PROTON_USE_OPTISCALER
+fsr4_upgrade = "off"                # auto | on | off (or a bool): auto is on where the GPU makes it a plain win; on RDNA 3 PROTON_FSR4_RDNA3_UPGRADE instead
+xess_upgrade = "off"
 optiscaler = false
-mangohud = true                      # the HUD shown at launch; flipped in game by the dock and the mangohud macro, which write it back
+mangohud = false                     # the HUD shown at launch (loaded and hidden when false, the limit still holds); flipped in game by the dock and the mangohud macro, which write it back
 gamescope = true                     # every game inside gamescope: one window, black until the game draws
 gamescope_args = ""                  # after the flags below, and over them; --expose-wayland keeps PROTON_ENABLE_WAYLAND
 gamescope_bin = "gamescope"          # a name on PATH (/run/wrappers/bin included) or a path
@@ -613,7 +630,7 @@ gamescope_refresh = "auto"           # the screen's rate, or Hz (-r)
 gamescope_scaler = ""                # auto | integer | fit | fill | stretch (-S); empty: gamescope's default
 gamescope_filter = ""                # linear | nearest | fsr | nis | pixel (-F)
 # gamescope_sharpness = 2            # 0 (sharpest) to 20, for fsr and nis (--sharpness)
-gamescope_adaptive_sync = false      # --adaptive-sync: variable refresh when the screen has it
+gamescope_adaptive_sync = "auto"    # --adaptive-sync: auto when the screen has variable refresh, or on | off
 fps_limit = "auto"                   # MangoHud's limiter in the game: auto (the refresh the game sees), none, or frames per second
 pause_on_home = true                 # freeze the game while the launcher covers it (HOME); off for a game that must keep running
 
@@ -622,13 +639,15 @@ profile = "auto"                     # auto | gnome | none
 hide_cursor = true
 cursor_extension = "hide-cursor@elcste.com"   # enabled for the session, restored to its prior state after
 
-[proton]                             # name → path
+[proton]                             # name → path; a name with no path here is looked for as a family (GE-Proton10-4 for proton-ge) under Lutris, Steam and Heroic
 proton-ge = "~/.local/share/lutris/runners/wine/proton-ge"
+proton-em = "~/.local/share/lutris/runners/wine/proton-em"
+proton-cachyos = "~/.local/share/lutris/runners/wine/proton-cachyos"
 
 # [runners.<id>]                     # per runner (`universe runner set`): exe (absent: detected), args, gamescope, its options
 
 [modules]
-enabled = ["capture", "journal"]
+enabled = []                         # a module is opt-in: `universe module enable capture`, or Settings › Modules
 
 [modules.capture]                    # the settings rows: `universe module settings capture`
 # ffmpeg_video_opts = "rc_mode=CQP;qp=20"   # config-only: replaces the quality preset
@@ -649,6 +668,8 @@ pegasus_library = "~/.local/share/pegasus-library"   # art fetched by pegasus-sy
 [keys]
 sgdb = ""                            # or sgdb_file, pointing at a file holding the key
 rawg = ""
+sgdb_file = "~/.config/steamgriddb/api_key"
+rawg_file = "~/.config/rawg/api_key"
 
 [controller]
 enabled = true

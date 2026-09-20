@@ -22,6 +22,9 @@ WINDOWS_BUS_NAME = "org.universe.Windows"
 
 AUDIO_ARGS = {"output": ["-a", "default_output"], "none": [], "output+input": ["-a", "default_output", "-a", "default_input"]}
 
+# `codec = auto`: the first the card encodes, best first.
+CODEC_PREFERENCE = ["av1_10bit", "hevc_10bit", "hevc", "h264"]
+
 
 def log(msg):
     print(f"[capture] {msg}", file=sys.stderr, flush=True)
@@ -62,12 +65,41 @@ def resolve_fps(setting, screen):
     return hz
 
 
-def ffmpeg_video_opts(settings):
+def supported_codecs():
+    """The video codecs gpu-screen-recorder can encode here: the `video_codecs` section of its `--info`."""
+    try:
+        r = subprocess.run(["gpu-screen-recorder", "--info"], capture_output=True, text=True, timeout=20)
+    except (OSError, subprocess.SubprocessError) as e:
+        log(f"gpu-screen-recorder --info: {e}")
+        return []
+    section, out = "", []
+    for line in r.stdout.splitlines():
+        line = line.strip()
+        if line.startswith("section="):
+            section = line[len("section="):]
+        elif section == "video_codecs" and line:
+            out.append(line)
+    return out
+
+
+def resolve_codec(settings):
+    codec = str(settings.get("codec") or "auto")
+    if codec != "auto":
+        return codec
+    have = supported_codecs()
+    pick = next((c for c in CODEC_PREFERENCE if c in have), None)
+    if pick is None:
+        log(f"codec auto: gpu-screen-recorder lists none of {', '.join(CODEC_PREFERENCE)}, trying h264")
+        return "h264"
+    return pick
+
+
+def ffmpeg_video_opts(settings, codec):
     raw = settings.get("ffmpeg_video_opts") or ""
     if raw:
         return raw
     q_av1, q_h26x, target, ceiling = QUALITY_PRESETS.get(settings.get("quality"), QUALITY_PRESETS["very_high"])
-    q = q_av1 if str(settings.get("codec", "av1_10bit")).startswith("av1") else q_h26x
+    q = q_av1 if codec.startswith("av1") else q_h26x
     # Merged last, right before avcodec_open2, so rc_mode wins over -bm cbr and b over -q.
     return f"rc_mode=QVBR;global_quality={q};b={target * 1000};maxrate={ceiling * 1000};bufsize={ceiling * 2000}"
 
@@ -117,6 +149,7 @@ def wait_recorder(session_id, timeout_s=5):
 def gsr_args(settings, screen, output_path, token_path=None, session_id=None):
     size = size_limit(settings)
     bitrate = audio_bitrate_kbps(settings)
+    codec = resolve_codec(settings)
     ac = settings.get("audio_codec") or "opus"
     if ac == "flac":
         # gpu-screen-recorder's man page: "FLAC temporarily disabled".
@@ -130,15 +163,15 @@ def gsr_args(settings, screen, output_path, token_path=None, session_id=None):
         "-fm", "vfr",
         "-c", settings.get("container") or "mkv",
         *(["-s", f"{size[0]}x{size[1]}"] if size else []),
-        "-k", settings.get("codec", "av1_10bit"),
+        "-k", codec,
         "-ac", ac,
         *(["-ab", str(bitrate)] if bitrate is not None else []),
         "-tune", "quality",
         # cbr is the base the QVBR override needs: gsr's vbr branch pins qmin = qmax.
         "-bm", "cbr",
         "-q", "20000",
-        *AUDIO_ARGS.get(settings.get("audio"), AUDIO_ARGS["output+input"]),
-        "-ffmpeg-video-opts", ffmpeg_video_opts(settings),
+        *AUDIO_ARGS.get(settings.get("audio"), AUDIO_ARGS["output"]),
+        "-ffmpeg-video-opts", ffmpeg_video_opts(settings, codec),
         *(["-ipc", ipc_socket(session_id)] if session_id else []),
         # The muxer's own first-frame instant, next to the file as <output>.ts
         "-write-first-frame-ts", "yes",

@@ -17,7 +17,8 @@ from .errors import UniverseError
 FIXTURE = Path(__file__).parent / "fixtures" / "library.json"
 LAUNCH_KEYS = Path(__file__).parent / "fixtures" / "launch_keys.json"
 GPU = {"vendor": "amd", "name": "AMD Radeon RX 7900 GRE", "rdna": 3, "label": "AMD Radeon RX 7900 GRE · RDNA 3",
-       "fits": {"dlss_upgrade": False, "fsr4_upgrade": True, "xess_upgrade": True, "optiscaler": True}}
+       "fits": {"dlss_upgrade": False, "fsr4_upgrade": True, "xess_upgrade": True, "optiscaler": True},
+       "auto": {"dlss_upgrade": False, "fsr4_upgrade": False, "xess_upgrade": False, "optiscaler": False}}
 REFRESH_RATES = [240, 165, 144, 120, 100, 90, 75, 60, 50, 48, 40, 30]
 RESOLUTION_HEIGHTS = [2160, 1800, 1440, 1080, 720]
 STEP_S = 0.15
@@ -324,7 +325,11 @@ class FakeCore:
         effective = out["effective"] = {}
         for spec in (k for k in self._launch_keys if k["scope"] == "both"):
             own = launch.get(spec["key"])
-            effective[spec["key"]] = own if own not in (None, "") else self._config["launch"].get(spec["key"], spec["default"])
+            value = own if own not in (None, "") else self._config["launch"].get(spec["key"], spec["default"])
+            if spec["type"] == "toggle" and spec["key"] != "gamescope_adaptive_sync":
+                # An upgrade resolves through the GPU, as the core does; adaptive sync waits for the screen at launch.
+                value = bool((self.gpu() or {}).get("auto", {}).get(spec["key"])) if value == "auto" else value in (True, "on", "true")
+            effective[spec["key"]] = value
         effective["gamescope_args"] = launch.get("gamescope_args") or ""
         effective["hide_cursor"] = out.setdefault("desktop", {}).get("hide_cursor", self._config.get("desktop", {}).get("hide_cursor", True))
         runner = self._runner_of(launch)
@@ -1049,7 +1054,7 @@ class FakeCore:
                 node[parts[-1]] = value
 
     def screen_mode(self, screen):
-        return dict(self._data.get("screen") or {"screen": screen or "DP-1", "width": 2560, "height": 1440, "refresh": 144})
+        return dict(self._data.get("screen") or {"screen": screen or "DP-1", "width": 2560, "height": 1440, "refresh": 144, "vrr": True})
 
     def gpu(self):
         return copy.deepcopy(self._data.get("gpu", GPU))

@@ -893,7 +893,7 @@ impl Core {
     pub async fn screen_mode(&self, screen: &str) -> serde_json::Value {
         let screen = crate::desktop::pick_screen(screen);
         let mode = crate::desktop::screen_mode(&screen).await.unwrap_or_default();
-        serde_json::json!({ "screen": screen, "width": mode.width, "height": mode.height, "refresh": mode.refresh })
+        serde_json::json!({ "screen": screen, "width": mode.width, "height": mode.height, "refresh": mode.refresh, "vrr": mode.vrr })
     }
 
     pub fn launch_keys(&self, scope: &str, screen: Option<crate::gamescope::Mode>) -> Result<Vec<crate::launch_keys::Row>> {

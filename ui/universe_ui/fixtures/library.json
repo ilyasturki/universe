@@ -891,5 +891,5 @@
       ]
     }
   ],
-  "screen": {"screen": "DP-1", "width": 2560, "height": 1440, "refresh": 144}
+  "screen": {"screen": "DP-1", "width": 2560, "height": 1440, "refresh": 144, "vrr": true}
 }

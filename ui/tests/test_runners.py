@@ -68,10 +68,14 @@ def test_runner_form_carries_its_launch_keys(api, fake):
     rows = rows_by_key(form)
     assert rows["launch.proton"]["value"] == "proton-ge" and rows["launch.proton"]["choices"] == ["proton-cachyos", "proton-em", "proton-ge"]
     assert rows["launch.esync"]["value"] is True and rows["launch.esync"]["inherited"] is False
-    assert rows["launch.dlss_upgrade"]["detail"].endswith("NVIDIA GeForce RTX only. Not for your GPU.")
+    assert rows["launch.dlss_upgrade"]["detail"].endswith("an anti-cheat. Not for your GPU.")
     assert rows["launch.fsr4_upgrade"]["detail"].endswith("Works on your GPU.") and rows["launch.optiscaler"]["detail"].endswith("Works on your GPU.")
-    form.toggle(index_of(form, "launch.fsr4_upgrade"))
-    assert fake.config()["launch"]["fsr4_upgrade"] is True and rows_by_key(form)["launch.fsr4_upgrade"]["value"] is True
+    assert (rows["launch.fsr4_upgrade"]["value"], rows["launch.fsr4_upgrade"]["display"]) == ("off", "off"), "a DLL swap is opt-in"
+    assert rows["launch.fsr4_upgrade"]["choices"] == ["default", "auto", "on", "off"]
+    assert form.setValue(index_of(form, "launch.fsr4_upgrade"), "auto") is True
+    assert fake.config()["launch"]["fsr4_upgrade"] == "auto" and rows_by_key(form)["launch.fsr4_upgrade"]["display"] == "auto · Off", "auto says what it comes to on this GPU"
+    assert form.setValue(index_of(form, "launch.fsr4_upgrade"), "on") is True
+    assert fake.config()["launch"]["fsr4_upgrade"] == "on" and rows_by_key(form)["launch.fsr4_upgrade"]["value"] == "on"
     assert form.setValue(index_of(form, "launch.proton"), "proton-em") is True and fake.config()["launch"]["proton"] == "proton-em"
     form.load("wine")
     assert not form.showAdvanced, "another runner opens collapsed"
@@ -82,7 +86,7 @@ def test_runner_form_carries_its_launch_keys(api, fake):
     assert "launch.esync" not in rows_by_key(form)
     fake.core._data["gpu"] = None
     form.load("proton")
-    assert {g["title"]: g["meta"] for g in form.advancedGroups}["Upscaling"] == "" and rows_by_key(form)["launch.dlss_upgrade"]["detail"].endswith("RTX only.")
+    assert {g["title"]: g["meta"] for g in form.advancedGroups}["Upscaling"] == "" and rows_by_key(form)["launch.dlss_upgrade"]["detail"].endswith("an anti-cheat.")
 
 
 def test_runner_form_writes_through(api, fake):

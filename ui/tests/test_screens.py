@@ -206,7 +206,8 @@ def test_launch_form(api, fake):
     assert rows["launch.gamescope_sharpness"]["value"] == "default"
     assert rows["launch.fps_limit"]["value"] == "auto" and rows["launch.fps_limit"]["display"] == "auto · 144", "auto shows the rate it stands for"
     assert rows["launch.fps_limit"]["choices"] == ["auto", "none", "144", "120", "100", "90", "75", "60", "50", "48", "40", "30"]
-    assert rows["launch.gamescope_adaptive_sync"]["value"] is False and rows["launch.gamescope_args"]["value"] == ""
+    assert (rows["launch.gamescope_adaptive_sync"]["value"], rows["launch.gamescope_adaptive_sync"]["display"]) == ("auto", "auto · On"), "the screen has VRR"
+    assert rows["launch.gamescope_args"]["value"] == ""
     assert rows["desktop.hide_cursor"]["value"] is True and "launch.esync" not in rows
 
     index = index_of(form, "launch.gamescope_scaler")
@@ -252,7 +253,7 @@ def test_game_settings_mirrors_the_cards(api, fake):
     assert rows["launch.gamescope_resolution"]["value"] == "auto" and rows["launch.gamescope_resolution"]["inherited"] is True
     assert rows["launch.gamescope_resolution"]["choices"][:2] == ["auto", "2560x1440"]
     assert rows["launch.gamescope_scaler"]["value"] == "default" and rows["launch.gamescope_scaler"]["inherited"] is True
-    assert rows["launch.gamescope_adaptive_sync"]["value"] is False and rows["launch.gamescope_adaptive_sync"]["inherited"] is True
+    assert rows["launch.gamescope_adaptive_sync"]["value"] == "auto" and rows["launch.gamescope_adaptive_sync"]["inherited"] is True
     assert form.setValue(index_of(form, "launch.gamescope_resolution"), "1920x1080") is True
     assert fake.game("the-technomancer")["launch"]["gamescope_resolution"] == "1920x1080"
     rows = rows_by_key(form, "")

@@ -15,9 +15,9 @@ in {
     };
     settings = lib.mkOption {
       type = lib.types.nullOr tomlFormat.type;
-      default = { };
+      default = null;
       example = { paths.recordings_root = "/mnt/recordings/games"; launch.proton = "proton-ge"; modules.enabled = [ "capture" ]; modules.capture.codec = "av1_10bit"; sources.enabled = [ "gog" ]; sources.gog.platform = "linux"; };
-      description = "Contents of config.toml (see docs/api.md): paths, launch defaults, the enabled modules and sources with their [modules.<id>] and [sources.<id>] settings, keys. null leaves config.toml to the user: the core writes it in place (`universe config set`, module or source enable, the UI settings), which a store symlink refuses.";
+      description = "Contents of config.toml (see docs/api.md): paths, launch defaults, the enabled modules and sources with their [modules.<id>] and [sources.<id>] settings, keys. Set, config.toml is a store symlink the core cannot write: `universe config set`, enabling a module or source and the UI's settings pages are refused, so every setting comes from here. null (the default) leaves config.toml to the user and the core writes it in place.";
     };
   };
   config = lib.mkIf cfg.enable {

@@ -192,26 +192,26 @@ pub struct Imported {
     pub lastplayed: i64,
 }
 
-type Switch = fn(&mut crate::game::Launch) -> &mut Option<bool>;
+type Switch = fn(&mut crate::game::Launch, bool);
 
 /// Lutris's `PROTON_*` env entries that Universe holds as switches: the field takes the value, the entry goes.
 const TOGGLE_ENV: &[(&str, bool, Switch)] = &[
-    ("PROTON_NO_ESYNC", false, |l| &mut l.esync),
-    ("PROTON_NO_FSYNC", false, |l| &mut l.fsync),
-    ("PROTON_NO_NTSYNC", false, |l| &mut l.ntsync),
-    ("PROTON_ENABLE_WAYLAND", true, |l| &mut l.wayland),
-    ("PROTON_ENABLE_HDR", true, |l| &mut l.hdr),
-    ("PROTON_DLSS_UPGRADE", true, |l| &mut l.dlss_upgrade),
-    ("PROTON_FSR4_UPGRADE", true, |l| &mut l.fsr4_upgrade),
-    ("PROTON_XESS_UPGRADE", true, |l| &mut l.xess_upgrade),
-    ("PROTON_USE_OPTISCALER", true, |l| &mut l.optiscaler),
+    ("PROTON_NO_ESYNC", false, |l, on| l.esync = Some(on)),
+    ("PROTON_NO_FSYNC", false, |l, on| l.fsync = Some(on)),
+    ("PROTON_NO_NTSYNC", false, |l, on| l.ntsync = Some(on)),
+    ("PROTON_ENABLE_WAYLAND", true, |l, on| l.wayland = Some(on)),
+    ("PROTON_ENABLE_HDR", true, |l, on| l.hdr = Some(on)),
+    ("PROTON_DLSS_UPGRADE", true, |l, on| l.dlss_upgrade = Some(on.into())),
+    ("PROTON_FSR4_UPGRADE", true, |l, on| l.fsr4_upgrade = Some(on.into())),
+    ("PROTON_XESS_UPGRADE", true, |l, on| l.xess_upgrade = Some(on.into())),
+    ("PROTON_USE_OPTISCALER", true, |l, on| l.optiscaler = Some(on)),
 ];
 
 fn lift_toggles(launch: &mut crate::game::Launch) {
-    for (var, when_set, field) in TOGGLE_ENV {
+    for (var, when_set, set) in TOGGLE_ENV {
         let Some(v) = launch.env.remove(*var) else { continue };
         let on = !matches!(v.trim(), "" | "0");
-        *field(launch) = Some(if on { *when_set } else { !*when_set });
+        set(launch, if on { *when_set } else { !*when_set });
     }
 }
 

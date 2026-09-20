@@ -135,6 +135,8 @@ pub fn seeded_macros() -> Vec<Macro> {
         Macro::seeded("8bitdo-pro-3", "paddle_r4", "mangohud"),
         Macro::seeded("8bitdo-pro-3", "paddle_pr", "volume_up"),
         Macro::seeded("8bitdo-pro-3", "paddle_pl", "volume_down"),
+        Macro::seeded("xbox", "share", "screenshot"),
+        Macro::seeded("switch-pro", "capture", "screenshot"),
     ]
 }
 
@@ -465,7 +467,7 @@ mod tests {
     #[test]
     fn macros_default_to_the_seeds_until_written() {
         let cfg: ControllerConfig = toml::from_str("").unwrap();
-        assert_eq!(cfg.macros().len(), 11);
+        assert_eq!(cfg.macros().len(), 13);
         let cfg: ControllerConfig = toml::from_str("macros = []").unwrap();
         assert!(cfg.macros().is_empty());
         let cfg: ControllerConfig = toml::from_str("[[macros]]\nfamily = \"*\"\nbutton = \"start\"\ntrigger = \"hold\"\naction = \"stop\"\n[[macros]]\nfamily = \"*\"\nbutton = \"guide\"\ntrigger = \"hold\"\naction = \"stop\"\n").unwrap();

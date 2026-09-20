@@ -70,18 +70,29 @@ impl Gpu {
         }
     }
 
+    /// What an upgrade left on `auto` turns into: on where it is a plain win — DLSS on NVIDIA, FSR 4 on RDNA 4
+    /// (RDNA 3 pays for it), XeSS on Intel. `None` for a key that is not an upscaler upgrade.
+    pub fn wants(&self, key: &str) -> Option<bool> {
+        match key {
+            "dlss_upgrade" => Some(self.vendor == Vendor::Nvidia),
+            "fsr4_upgrade" => Some(self.rdna == Some(4)),
+            "xess_upgrade" => Some(self.vendor == Vendor::Intel),
+            "optiscaler" => Some(false),
+            _ => None,
+        }
+    }
+
     /// FSR 4 on RDNA 3 goes through Proton's RDNA 3 variant of the upgrade, not the generic one.
     pub fn needs_fsr4_rdna3(&self) -> bool {
         self.rdna == Some(3)
     }
 
     pub fn to_json(&self) -> serde_json::Value {
-        let fits: serde_json::Map<String, serde_json::Value> = ["dlss_upgrade", "fsr4_upgrade", "xess_upgrade", "optiscaler"]
-            .into_iter()
-            .filter_map(|k| self.fits(k).map(|b| (k.to_string(), serde_json::Value::Bool(b))))
-            .collect();
+        let keys = ["dlss_upgrade", "fsr4_upgrade", "xess_upgrade", "optiscaler"];
+        let map = |f: &dyn Fn(&str) -> Option<bool>| serde_json::Value::Object(keys.into_iter().filter_map(|k| f(k).map(|b| (k.to_string(), serde_json::Value::Bool(b)))).collect());
         let mut v = serde_json::to_value(self).unwrap_or_default();
-        v["fits"] = serde_json::Value::Object(fits);
+        v["fits"] = map(&|k| self.fits(k));
+        v["auto"] = map(&|k| self.wants(k));
         v
     }
 }
@@ -179,6 +190,8 @@ mod tests {
         assert_eq!(g.to_json()["fits"], serde_json::json!({ "dlss_upgrade": true, "fsr4_upgrade": false, "xess_upgrade": true, "optiscaler": false }));
         let rdna4 = Gpu::new(Vendor::Amd, Some(4));
         assert!(rdna4.fits("fsr4_upgrade") == Some(true) && !rdna4.needs_fsr4_rdna3() && rdna4.fits("prefix").is_none());
+        assert_eq!(rdna4.to_json()["auto"], serde_json::json!({ "dlss_upgrade": false, "fsr4_upgrade": true, "xess_upgrade": false, "optiscaler": false }));
+        assert_eq!(g.to_json()["auto"]["dlss_upgrade"], serde_json::json!(true), "auto is on where the upgrade is a plain win");
         assert_eq!(rdna_of(10, 1), Some(1));
         assert!(rdna_of(9, 4).is_none());
         assert!(pick(cards(&dir.path().join("nope"))).is_none());

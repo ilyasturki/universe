@@ -378,7 +378,7 @@ mod tests {
         g.launch.wayland = Some(false);
         g.launch.ntsync = Some(false);
         g.launch.hdr = Some(true);
-        g.launch.dlss_upgrade = Some(true);
+        g.launch.dlss_upgrade = Some(crate::config::Toggle::On);
         g.launch.wrapper = "gamemoderun taskset -c '0-7'".into();
         let mut cfg = Config::default();
         cfg.launch.gamescope = false;
@@ -484,10 +484,11 @@ mod tests {
         cfg.launch.gamescope_args = "--adaptive-sync".into();
         cfg.launch.gamescope_bin = bin.to_string_lossy().into();
         cfg.launch.fps_limit = "none".into();
+        cfg.launch.mangohud = true;
         let mut r = crate::library::resolve(g, &cfg, &[]);
         r.effective.proton_path = "/p".into();
         assert!(r.effective.gamescope);
-        let screen = Some(crate::gamescope::Mode { width: 3840, height: 2160, refresh: 60 });
+        let screen = Some(crate::gamescope::Mode { width: 3840, height: 2160, refresh: 60, vrr: false });
         let hook_env = BTreeMap::from([(HOOK_GAMESCOPE_ARGS.to_string(), "--force-composition".to_string())]);
         let p = plan(&r, &cfg, &hook_env, screen, Some(Path::new("/run/user/1000/universe/splash-x.bgrx")), false).unwrap();
         assert_eq!(p.program, bin.to_string_lossy());
@@ -542,7 +543,7 @@ mod tests {
         cfg.launch.fps_limit = "none".into();
         let mut r = crate::library::resolve(g, &cfg, &[]);
         r.effective.proton_path = "/p".into();
-        let screen = Some(crate::gamescope::Mode { width: 3840, height: 2160, refresh: 60 });
+        let screen = Some(crate::gamescope::Mode { width: 3840, height: 2160, refresh: 60, vrr: false });
         let p = plan(&r, &cfg, &BTreeMap::new(), screen, Some(Path::new("/run/user/1000/universe/splash-x.bgrx")), true).unwrap();
         assert_eq!(p.program, "umu-run", "no gamescope, no splash, no setpriv of its own");
         assert_eq!(p.args, vec![exe]);
@@ -572,7 +573,7 @@ mod tests {
         cfg.launch.gamescope_bin = bin.to_string_lossy().into();
         cfg.launch.gamescope_args = "--adaptive-sync".into();
         cfg.launch.gamescope_filter = "fsr".into();
-        let screen = Some(crate::gamescope::Mode { width: 3840, height: 2160, refresh: 60 });
+        let screen = Some(crate::gamescope::Mode { width: 3840, height: 2160, refresh: 60, vrr: false });
         let (program, args) = host_gamescope(&cfg, screen).unwrap();
         assert!(program.ends_with("env"), "{program}");
         let conf = format!("MANGOHUD_CONFIGFILE={}", mangoapp_conf_path().display());
@@ -591,7 +592,7 @@ mod tests {
         assert_eq!(parse_fps_limit("none").unwrap(), FpsLimit::None);
         assert_eq!(parse_fps_limit("40").unwrap(), FpsLimit::Hz(40));
         assert!(parse_fps_limit("0").is_err() && parse_fps_limit("fast").is_err());
-        let screen = Some(crate::gamescope::Mode { width: 3840, height: 2160, refresh: 60 });
+        let screen = Some(crate::gamescope::Mode { width: 3840, height: 2160, refresh: 60, vrr: false });
         let mut e = Effective { gamescope: true, fps_limit: "auto".into(), ..Default::default() };
         assert_eq!(fps_limit_hz(&e, screen), Some(60), "auto is the screen's rate");
         assert_eq!(fps_limit_hz(&e, None), None, "no screen known: nothing to follow");
@@ -619,7 +620,8 @@ mod tests {
         std::fs::write(&bin, b"#!/bin/sh\n").unwrap();
         let mut cfg = Config::default();
         cfg.launch.gamescope_bin = bin.to_string_lossy().into();
-        let screen = Some(crate::gamescope::Mode { width: 3840, height: 2160, refresh: 60 });
+        cfg.launch.mangohud = true;
+        let screen = Some(crate::gamescope::Mode { width: 3840, height: 2160, refresh: 60, vrr: false });
         let mut r = crate::library::resolve(g, &cfg, &[]);
         r.effective.proton_path = "/p".into();
         let p = plan(&r, &cfg, &BTreeMap::new(), screen, None, false).unwrap();

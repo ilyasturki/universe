@@ -86,7 +86,7 @@ def _to_bus(row, value):
     return payload
 
 
-ROW_TYPES = {"resolution": "string", "refresh": "int", "fps": "string", "proton": "enum", "list": "string"}
+ROW_TYPES = {"resolution": "string", "refresh": "int", "fps": "string", "proton": "enum", "list": "string", "toggle": "enum"}
 
 
 def screen_label(mode):
@@ -128,6 +128,13 @@ def gpu_note(spec, gpu):
     return spec["description"] + (" Works on your GPU." if fit else " Not for your GPU.")
 
 
+def toggle_auto(key, gpu, mode):
+    """What a toggle key on `auto` comes to on this machine: the GPU's say for an upgrade, the screen's VRR for adaptive sync; None when unknown."""
+    if key == "gamescope_adaptive_sync":
+        return None if "vrr" not in mode else bool(mode.get("vrr"))
+    return ((gpu or {}).get("auto") or {}).get(key)
+
+
 def global_launch_rows(rows, groups, client, config, mode, takes, gpu=None):
     launch = config.get("launch") or {}
     protons = proton_choices(config)
@@ -139,13 +146,13 @@ def global_launch_rows(rows, groups, client, config, mode, takes, gpu=None):
         if value in (None, "", {}):
             value = spec["default"]
         section = spec["section"]
-        _add(rows, groups, section, launch_row(section, spec, value, protons=protons, auto_hz=hz, gpu=gpu), caps=True, meta=_card_meta(section, mode, gpu or {}))
+        _add(rows, groups, section, launch_row(section, spec, value, protons=protons, auto_hz=hz, gpu=gpu, mode=mode), caps=True, meta=_card_meta(section, mode, gpu or {}))
 
 
-def launch_row(section, spec, value, inherited=False, protons=(), auto_hz=0, gpu=None):
+def launch_row(section, spec, value, inherited=False, protons=(), auto_hz=0, gpu=None, mode=None):
     kind = ROW_TYPES.get(spec["type"], spec["type"])
     choices, values = [str(c) for c in spec["choices"]], None
-    if spec["type"] in ("enum", "int") and choices:
+    if spec["type"] in ("enum", "int", "toggle") and choices:
         choices, values = ["default"] + choices, [""] + choices
     elif spec["type"] == "proton":
         choices = list(protons)
@@ -163,6 +170,13 @@ def launch_row(section, spec, value, inherited=False, protons=(), auto_hz=0, gpu
         row["choiceValues"] = values
     if spec["type"] == "fps" and value == "auto" and auto_hz:
         row["display"] = f"auto · {auto_hz}"
+    if spec["type"] == "toggle":
+        if isinstance(value, bool):
+            value = "on" if value else "off"
+        row["value"] = row["display"] = str(value)
+        auto = toggle_auto(spec["key"], gpu, mode or {})
+        if value == "auto" and auto is not None:
+            row["display"] = "auto · " + ("On" if auto else "Off")
     return row
 
 
@@ -358,12 +372,16 @@ def build_game(client, game_id, screen_mode):
         own = _dig(game, "launch." + spec["key"])
         value, inherited = own, False
         if own in (None, "", {}) and spec["scope"] == "both":
+            # A toggle's effective value is what auto came to; the row inherits the global switch itself.
             value, inherited = effective.get(spec["key"]), True
+            if spec["type"] == "toggle":
+                own_global = _dig(config, "launch." + spec["key"])
+                value = spec["default"] if own_global in (None, "") else own_global
         section = runner_name if spec["section"] == "Proton" else spec["section"]
         if section == "Launch":
             launch.append(launch_row(section, spec, value, inherited, protons, hz))
             continue
-        _add(rows, groups, section, launch_row(section, spec, value, inherited, protons, hz, gpu), caps=True, meta=_card_meta(section, mode, gpu))
+        _add(rows, groups, section, launch_row(section, spec, value, inherited, protons, hz, gpu, mode), caps=True, meta=_card_meta(section, mode, gpu))
     for row in launch:
         _add(rows, groups, "Launch", row, caps=True)
     for section, key, label, kind, advanced in CORE_ROWS:

@@ -96,10 +96,12 @@ async fn mutter_current_mode(screen: &str) -> zbus::Result<Option<crate::gamesco
         if info.0 != screen && info.0.replace("-A-", "-") != wanted {
             continue;
         }
+        // Mutter marks the modes a VRR screen can run variably with `refresh-rate-mode = "variable"`.
+        let vrr = modes.iter().any(|(_, _, _, _, _, _, props)| props.get("refresh-rate-mode").and_then(|v| <&str>::try_from(v).ok()) == Some("variable"));
         for (_, w, h, hz, _, _, props) in modes {
             let current = props.get("is-current").and_then(|v| bool::try_from(v).ok()).unwrap_or(false);
             if current && w > 0 && h > 0 {
-                return Ok(Some(crate::gamescope::Mode { width: w as u32, height: h as u32, refresh: hz.round() as u32 }));
+                return Ok(Some(crate::gamescope::Mode { width: w as u32, height: h as u32, refresh: hz.round() as u32, vrr }));
             }
         }
     }
@@ -131,7 +133,7 @@ fn drm_preferred_mode(screen: &str) -> Option<crate::gamescope::Mode> {
         let modes = std::fs::read_to_string(e.path().join("modes")).ok()?;
         let first = modes.lines().next()?.trim();
         if let Ok(Some((w, h))) = crate::gamescope::parse_resolution(first) {
-            return Some(crate::gamescope::Mode { width: w, height: h, refresh: 60 });
+            return Some(crate::gamescope::Mode { width: w, height: h, refresh: 60, vrr: false });
         }
     }
     None
@@ -144,7 +146,10 @@ fn card_preferred_mode(card: &str, screen: &str) -> Option<crate::gamescope::Mod
     let info = handles.connectors().iter().filter_map(|h| dev.get_connector(*h, false).ok()).find(|c| format!("{}-{}", c.interface().as_str(), c.interface_id()) == screen)?;
     let mode = info.modes().iter().find(|m| m.mode_type().contains(ModeTypeFlags::PREFERRED)).or_else(|| info.modes().first())?;
     let (w, h) = mode.size();
-    Some(crate::gamescope::Mode { width: w.into(), height: h.into(), refresh: mode.vrefresh() })
+    let vrr = dev.get_properties(info.handle()).ok().is_some_and(|props| {
+        props.iter().any(|(id, value)| dev.get_property(*id).is_ok_and(|p| p.name().to_bytes() == b"vrr_capable") && *value != 0)
+    });
+    Some(crate::gamescope::Mode { width: w.into(), height: h.into(), refresh: mode.vrefresh(), vrr })
 }
 
 /// Returns whether the extension was already active.

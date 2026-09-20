@@ -47,7 +47,7 @@ def test_the_index_spans_every_page(api, fake):
 def test_synonyms_descriptions_values_and_typos(api, fake):
     search = indexed(api)
     search.query = "vrr"
-    assert labels(search)[0] == ("Launch › Display", "Adaptive sync", "Off"), "a synonym"
+    assert labels(search)[0] == ("Launch › Display", "Adaptive sync", "auto · On"), "a synonym"
     search.query = "eventfd"
     assert [r["label"] for r in search.results][:2] == ["Esync", "Esync"] and search.results[0]["path"] == "Runners › Proton › Sync", "a word of the description"
     assert search.results[0]["advanced"] is True and search.results[0]["tag"] == "ADVANCED" and search.results[0]["detail"].startswith("Faster thread")

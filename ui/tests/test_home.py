@@ -313,11 +313,14 @@ def test_the_hud_is_the_games_key_and_the_reload_key_waits_for_the_thaw(api, fak
     fake.launch("mirrors-edge", "")
     wait_for(fake.sessionShown, 3000)
     pump(300)
-    assert home.launchValue("mangohud") == "true" and fake.core.hud_shown is True, "on by default, shown at launch"
+    assert home.launchValue("mangohud") == "false" and fake.core.hud_shown is False, "off by default, hidden at launch"
+    home.setLaunchValue("mangohud", "true")
+    pump(50)
+    assert fake.game("mirrors-edge")["launch"]["mangohud"] is True and fake.core.hud_shown is True, "written as the game's own key, shown in the game"
+    assert home.launchValue("mangohud") == "true"
     home.setLaunchValue("mangohud", "false")
     pump(50)
-    assert fake.game("mirrors-edge")["launch"]["mangohud"] is False and fake.core.hud_shown is False, "written as the game's own key, hidden in the game"
-    assert home.launchValue("mangohud") == "false"
+    assert fake.game("mirrors-edge")["launch"]["mangohud"] is False and fake.core.hud_shown is False
     assert not any(c.get("action") == "keys" for c in watcher.commands), "no key typed for the HUD"
 
     home.setPauseOnHome(True)

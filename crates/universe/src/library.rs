@@ -157,6 +157,11 @@ pub fn is_image(p: &Path) -> bool {
     p.extension().and_then(|s| s.to_str()).is_some_and(|e| IMAGE_EXTS.contains(&e.to_ascii_lowercase().as_str()))
 }
 
+/// A game's switch over the global one; `auto` is what the GPU wants (off when none is known).
+fn upgrade(key: &str, own: Option<crate::config::Toggle>, global: crate::config::Toggle) -> bool {
+    own.unwrap_or(global).or(|| crate::gpu::detected().and_then(|g| g.wants(key)).unwrap_or(false))
+}
+
 pub(crate) fn gamescope_fields_of(game: &Game, config: &Config) -> crate::gamescope::Fields {
     let l = &game.launch;
     let d = &config.launch;
@@ -213,9 +218,9 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
         ntsync: game.launch.ntsync.unwrap_or(config.launch.ntsync),
         wayland: game.launch.wayland.unwrap_or(config.launch.wayland),
         hdr: game.launch.hdr.unwrap_or(config.launch.hdr),
-        dlss_upgrade: game.launch.dlss_upgrade.unwrap_or(config.launch.dlss_upgrade),
-        fsr4_upgrade: game.launch.fsr4_upgrade.unwrap_or(config.launch.fsr4_upgrade),
-        xess_upgrade: game.launch.xess_upgrade.unwrap_or(config.launch.xess_upgrade),
+        dlss_upgrade: upgrade("dlss_upgrade", game.launch.dlss_upgrade, config.launch.dlss_upgrade),
+        fsr4_upgrade: upgrade("fsr4_upgrade", game.launch.fsr4_upgrade, config.launch.fsr4_upgrade),
+        xess_upgrade: upgrade("xess_upgrade", game.launch.xess_upgrade, config.launch.xess_upgrade),
         optiscaler: game.launch.optiscaler.unwrap_or(config.launch.optiscaler),
         mangohud: game.launch.mangohud.unwrap_or(config.launch.mangohud),
         pause_on_home: game.launch.pause_on_home.unwrap_or(config.launch.pause_on_home),

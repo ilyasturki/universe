@@ -45,10 +45,10 @@ scope = "game"
 [[settings]]
 key = "codec"
 type = "enum"
-default = "av1_10bit"
-label = "Video codec"
+default = "auto"
+label = "Video codec (auto: the best the GPU encodes)"
 scope = "global"
-choices = ["av1_10bit", "av1", "hevc", "h264"]
+choices = ["auto", "av1_10bit", "av1", "hevc_10bit", "hevc", "h264"]
 
 [[settings]]
 key = "quality"
@@ -87,8 +87,8 @@ advanced = true
 [[settings]]
 key = "audio"
 type = "enum"
-default = "output+input"
-label = "Audio tracks captured"
+default = "output"
+label = "Audio tracks captured (output+input adds the microphone)"
 scope = "global"
 choices = ["output", "output+input", "none"]
 

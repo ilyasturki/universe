@@ -1390,6 +1390,7 @@ fn launch_keys(json: bool) -> anyhow::Result<()> {
     for k in LAUNCH_KEYS {
         let kind = match k.kind {
             Kind::Bool => "bool".to_string(),
+            Kind::Toggle => crate::config::Toggle::CHOICES.join(" | "),
             Kind::Int { max: Some(m) } => format!("0..{m}"),
             Kind::Int { max: None } => "int".into(),
             Kind::Str => "string".into(),

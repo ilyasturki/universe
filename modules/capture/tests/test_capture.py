@@ -66,7 +66,15 @@ case "$3" in
 esac
 exit 0''')
     _write_shim(bindir / "trash", f'printf "%s\\n" "$@" > "{logs}/trash.args"\nrm -f "$1"\nexit 0\n')
-    _write_shim(bindir / "gpu-screen-recorder", f'''printf "%s\\n" "$@" >> "{logs}/gsr.args"
+    _write_shim(bindir / "gpu-screen-recorder", f'''if [ "$1" = "--info" ]; then
+  printf "section=gpu_info\\nvendor|amd\\nsection=video_codecs\\n%s\\nsection=capture_options\\nDP-1|3840x2160\\n" "${{FAKE_CODECS-h264
+hevc
+hevc_10bit
+av1
+av1_10bit}}"
+  exit 0
+fi
+printf "%s\\n" "$@" >> "{logs}/gsr.args"
 for ((i=1; i<=$#; i++)); do
   if [ "${{!i}}" = "-o" ]; then j=$((i+1)); echo fake > "${{!j}}"; [ -n "${{FAKE_FIRST_FRAME_US:-}}" ] && printf "monotonic_microsec realtime_microsec\\n1000 %s\\n" "$FAKE_FIRST_FRAME_US" > "${{!j}}.ts"; fi
 done
@@ -500,6 +508,18 @@ def test_stop_drops_the_timeline_with_a_short_recording(tmp_path, fakebin):
     assert run("stop", env).returncode == 0
     assert _timeline(tmp_path) is None
     assert not (fakebin["logs"] / "universe.args").exists()
+
+
+def test_codec_auto_takes_the_best_the_card_encodes(fakebin, monkeypatch):
+    monkeypatch.setenv("PATH", f"{fakebin['bin']}:{os.environ.get('PATH', '')}")
+    auto = _common.gsr_args({"audio": "none"}, "DP-1", "/o.mkv")
+    assert flag_values(auto, "-k") == ["av1_10bit"] and auto.count(QVBR_OPTS) == 1, "the AV1 quality preset goes with the AV1 codec"
+    monkeypatch.setenv("FAKE_CODECS", "h264\nhevc")
+    older = _common.gsr_args({"codec": "auto", "audio": "none"}, "DP-1", "/o.mkv")
+    assert flag_values(older, "-k") == ["hevc"] and older[older.index("-ffmpeg-video-opts") + 1].startswith("rc_mode=QVBR;global_quality=22;")
+    monkeypatch.setenv("FAKE_CODECS", "vp8")
+    assert flag_values(_common.gsr_args({"audio": "none"}, "DP-1", "/o.mkv"), "-k") == ["h264"], "nothing known: h264, the one every card has"
+    assert flag_values(_common.gsr_args({"codec": "av1", "audio": "none"}, "DP-1", "/o.mkv"), "-k") == ["av1"], "a chosen codec is passed as is"
 
 
 def test_gsr_args_quality_presets_and_overrides():

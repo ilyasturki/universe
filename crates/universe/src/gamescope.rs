@@ -10,13 +10,14 @@ pub const SHARPNESS_MAX: u32 = 20;
 const REFRESH_RATES: [u32; 12] = [240, 165, 144, 120, 100, 90, 75, 60, 50, 48, 40, 30];
 const RESOLUTION_HEIGHTS: [u32; 5] = [2160, 1800, 1440, 1080, 720];
 
-/// A screen's current mode; refresh in Hz, rounded.
+/// A screen's current mode; refresh in Hz, rounded; `vrr` when the screen takes a variable refresh rate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Mode {
     pub width: u32,
     pub height: u32,
     pub refresh: u32,
+    pub vrr: bool,
 }
 
 /// Serialized under the `launch` key names so a frontend reads them as it reads the other effective switches.
@@ -33,7 +34,7 @@ pub struct Fields {
     #[serde(rename = "gamescope_sharpness")]
     pub sharpness: Option<u32>,
     #[serde(rename = "gamescope_adaptive_sync")]
-    pub adaptive_sync: bool,
+    pub adaptive_sync: crate::config::Toggle,
 }
 
 pub fn parse_resolution(s: &str) -> crate::Result<Option<(u32, u32)>> {
@@ -109,7 +110,7 @@ pub fn args(f: &Fields, screen: Option<Mode>) -> Vec<String> {
     if let Some(n) = f.sharpness {
         out.extend(["--sharpness".into(), n.to_string()]);
     }
-    if f.adaptive_sync {
+    if f.adaptive_sync.or(|| screen.is_some_and(|s| s.vrr)) {
         out.push("--adaptive-sync".into());
     }
     out
@@ -135,22 +136,26 @@ mod tests {
 
     #[test]
     fn choices_follow_the_screen() {
-        let screen = Some(Mode { width: 3840, height: 2160, refresh: 60 });
+        let screen = Some(Mode { width: 3840, height: 2160, refresh: 60, vrr: false });
         assert_eq!(resolution_choices(screen), ["auto", "3840x2160", "3200x1800", "2560x1440", "1920x1080", "1280x720"]);
-        assert_eq!(resolution_choices(Some(Mode { width: 3440, height: 1440, refresh: 100 })), ["auto", "3440x1440", "2580x1080", "1720x720"]);
+        assert_eq!(resolution_choices(Some(Mode { width: 3440, height: 1440, refresh: 100, vrr: false })), ["auto", "3440x1440", "2580x1080", "1720x720"]);
         assert_eq!(resolution_choices(None), ["auto", "1920x1080", "1280x720"]);
         assert_eq!(refresh_choices(screen), ["auto", "60", "50", "48", "40", "30"]);
-        assert_eq!(refresh_choices(Some(Mode { width: 1, height: 1, refresh: 72 })), ["auto", "72", "60", "50", "48", "40", "30"]);
+        assert_eq!(refresh_choices(Some(Mode { width: 1, height: 1, refresh: 72, vrr: false })), ["auto", "72", "60", "50", "48", "40", "30"]);
         assert_eq!(refresh_choices(None).len(), 13);
         assert_eq!(fps_limit_choices(screen), ["auto", "none", "60", "50", "48", "40", "30"]);
     }
 
     #[test]
     fn auto_takes_the_screen_and_a_field_wins_over_it() {
-        let screen = Some(Mode { width: 3840, height: 2160, refresh: 60 });
+        let screen = Some(Mode { width: 3840, height: 2160, refresh: 60, vrr: false });
         let auto = Fields { resolution: "auto".into(), refresh: "auto".into(), ..Default::default() };
         assert_eq!(args(&auto, screen), ["-W", "3840", "-H", "2160", "-w", "3840", "-h", "2160", "-r", "60"]);
-        let set = Fields { resolution: "1920x1080".into(), refresh: "120".into(), scaler: "fit".into(), filter: "fsr".into(), sharpness: Some(0), adaptive_sync: true };
+        let vrr = Some(Mode { vrr: true, ..screen.unwrap() });
+        assert_eq!(args(&auto, vrr).last().map(String::as_str), Some("--adaptive-sync"), "auto follows the screen");
+        let off = Fields { adaptive_sync: crate::config::Toggle::Off, ..auto.clone() };
+        assert!(!args(&off, vrr).iter().any(|a| a == "--adaptive-sync"), "off wins over the screen");
+        let set = Fields { resolution: "1920x1080".into(), refresh: "120".into(), scaler: "fit".into(), filter: "fsr".into(), sharpness: Some(0), adaptive_sync: crate::config::Toggle::On };
         assert_eq!(args(&set, screen), ["-W", "3840", "-H", "2160", "-w", "1920", "-h", "1080", "-r", "120", "-S", "fit", "-F", "fsr", "--sharpness", "0", "--adaptive-sync"]);
     }
 
