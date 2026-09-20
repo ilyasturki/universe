@@ -692,7 +692,6 @@ FocusScope {
                 return t.name;
             })
             currentIndex: root.tabIndex < root.barCount ? root.tabIndex : 0
-            showSearch: root.tabs[root.tabIndex].name !== "Settings"
             focus: root.focusOwner === "chrome"
 
             onTabRequested: function (index) {

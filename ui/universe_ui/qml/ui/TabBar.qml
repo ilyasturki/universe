@@ -7,13 +7,12 @@ FocusScope {
 
     property var tabs: []
     property int currentIndex: 0
-    // Runs one past the tabs: the last slot is the search glass, on the pages that have games.
+    // Runs one past the tabs: the last slot is the search glass.
     property int index: 0
-    property bool showSearch: true
 
     readonly property int searchIndex: tabs.length
-    readonly property bool onSearch: showSearch && index === searchIndex
-    readonly property int badgeIndex: showSearch ? searchIndex + 1 : searchIndex
+    readonly property bool onSearch: index === searchIndex
+    readonly property int badgeIndex: searchIndex + 1
     readonly property bool onBadge: badge.active && index === badgeIndex
     readonly property int slots: badgeIndex + (badge.active ? 1 : 0)
     readonly property var currentGame: onBadge ? api.allGames.byId(badge.session.id) : null
@@ -82,10 +81,6 @@ FocusScope {
     onCurrentIndexChanged: {
         underline.retarget();
         if (index < searchIndex)
-            index = currentIndex;
-    }
-    onShowSearchChanged: {
-        if (!showSearch && index >= searchIndex)
             index = currentIndex;
     }
     onSlotsChanged: {
@@ -328,16 +323,8 @@ FocusScope {
             anchors.verticalCenter: parent.verticalCenter
             width: Theme.dp(26)
             height: Theme.dp(26)
-            visible: opacity > 0.01
-            opacity: root.showSearch ? 1.0 : 0.0
             kind: "search"
             tint: root.activeFocus && root.onSearch ? Theme.text : Theme.textTab
-
-            Behavior on opacity {
-                Ease {
-                    duration: Theme.durView
-                }
-            }
         }
 
         SessionBadge {
