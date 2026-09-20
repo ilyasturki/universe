@@ -12,7 +12,7 @@ Rectangle {
     color: "#5fd48a"
 
     SequentialAnimation on opacity {
-        running: dot.running
+        running: dot.running && !Theme.covered
         loops: Animation.Infinite
         NumberAnimation {
             to: 0.3

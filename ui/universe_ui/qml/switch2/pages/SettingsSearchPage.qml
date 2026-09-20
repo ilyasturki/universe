@@ -47,7 +47,8 @@ FocusScope {
         }
     ]
 
-    readonly property var content: search.results.map(function (r) {
+    readonly property var results: search.results
+    readonly property var content: results.map(function (r) {
         var out = Object.assign({}, r);
         // The value on the right, the description under; a game's row keeps its art.
         out.icon = r.image || (r.kind === "section" ? "settings" : "");

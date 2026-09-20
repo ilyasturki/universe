@@ -22,14 +22,25 @@ Rectangle {
         ColorEase {}
     }
 
-    onSessionChanged: {
+    function sync() {
         var started = session && session.started_at ? Date.parse(session.started_at) : NaN;
         elapsed = isNaN(started) ? 0 : Math.max(0, Math.round((Date.now() - started) / 1000));
     }
 
+    onSessionChanged: sync()
+
+    // The count holds while the game is on screen and catches up when the launcher is back.
+    Connections {
+        target: Theme
+        function onCoveredChanged() {
+            if (!Theme.covered)
+                badge.sync();
+        }
+    }
+
     Timer {
         interval: 1000
-        running: badge.active
+        running: badge.active && !Theme.covered
         repeat: true
         onTriggered: badge.elapsed += 1
     }

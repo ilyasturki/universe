@@ -158,7 +158,8 @@ FocusScope {
     readonly property string focusedSlot: rows.cursorShown && rows.currentRow && rows.currentRow.slot ? rows.currentRow.slot : ""
 
     function labelOf(slot) {
-        var hit = controller.rows.filter(function (r) {
+        var bound = controller.rows;
+        var hit = bound.filter(function (r) {
             return r.slot === slot;
         })[0];
         return hit ? hit.label : slot;
@@ -495,9 +496,12 @@ FocusScope {
             model: page.controller.devices
 
             Row {
-                readonly property var battery: api.power.sources.find(function (s) {
-                    return s.inputs.indexOf(modelData.id) >= 0;
-                }) || null
+                readonly property var battery: {
+                    var sources = api.power.sources;
+                    return sources.find(function (s) {
+                        return s.inputs.indexOf(modelData.id) >= 0;
+                    }) || null;
+                }
 
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: Theme.dp(14)

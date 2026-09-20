@@ -46,9 +46,12 @@ FocusScope {
         });
         return out;
     }
-    readonly property var rows: store.rows.filter(function (r) {
-        return (kindKeys[kindIndex] === "" || r.kind === kindKeys[kindIndex]) && (gameFilter === "" || r.gameId === gameFilter);
-    })
+    readonly property var rows: {
+        var all = store.rows;
+        return all.filter(function (r) {
+            return (kindKeys[kindIndex] === "" || r.kind === kindKeys[kindIndex]) && (gameFilter === "" || r.gameId === gameFilter);
+        });
+    }
     property int index: 0
     readonly property var current: index >= 0 && index < rows.length ? rows[index] : null
     readonly property var shotRows: rows.filter(function (r) {
@@ -320,7 +323,7 @@ FocusScope {
             anchors.top: titleText.bottom
             anchors.topMargin: Theme.dp(14)
             anchors.left: parent.left
-            text: page.current ? (page.current.kind === "shot" ? "SCREENSHOT" : page.current.kind === "recording" ? "RECORDING  ·  " + page.current.title : "JOURNAL  ·  " + page.current.title) + "  ·  " + page.current.dateText : page.store.rows.length === 0 ? "Screenshots, recordings and journal entries land here as you play." : ""
+            text: page.current ? (page.current.kind === "shot" ? "SCREENSHOT" : page.current.kind === "recording" ? "RECORDING  ·  " + page.current.title : "JOURNAL  ·  " + page.current.title) + "  ·  " + page.current.dateText : page.store.count === 0 && !page.store.loading ? "Screenshots, recordings and journal entries land here as you play." : ""
             color: Theme.textSecondary
             font.family: Theme.sans
             font.weight: Font.Medium
@@ -424,7 +427,7 @@ FocusScope {
 
     Text {
         anchors.centerIn: parent
-        visible: page.rows.length === 0 && page.store.rows.length > 0
+        visible: page.rows.length === 0 && page.store.count > 0
         text: "Nothing of that kind" + (page.gameFilter !== "" ? " for this game" : "") + "."
         color: Theme.textSecondary
         font.family: Theme.sans
@@ -465,7 +468,8 @@ FocusScope {
                 id: cardItem
                 anchors.fill: parent
                 anchors.margins: page.gap / 2
-                source: modelData.image
+                // `version` is read so the card repaints when its thumbnail lands.
+                source: (api.screens.thumbs.version, modelData.image || api.screens.thumbs.url(modelData.thumb))
                 kind: modelData.kind
                 caption: modelData.gameTitle
                 subcaption: modelData.dateText + (modelData.kind !== "shot" && modelData.title ? "  ·  " + modelData.title : "")
@@ -526,7 +530,7 @@ FocusScope {
         anchors.fill: parent
         z: 4
         images: page.shotRows.map(function (r) {
-            return r.image;
+            return r.url;
         })
         index: Math.max(0, page.shotIndex)
         open: page.lightbox

@@ -320,9 +320,77 @@ class FakeCore:
             for p in sorted(directory.glob("*.png"), reverse=True) if directory.is_dir() else []:
                 taken = datetime.strptime(p.stem, "%Y%m%d-%H%M%S").astimezone().isoformat()
                 session = next((s["session"] for s in sessions if s.get("started_at", "") <= taken <= s.get("ended_at", "")), "")
-                out.append({"game": i, "title": self._game(i)["title"], "path": str(p), "taken_at": taken, "session": session})
+                # The fixture's shots are small: the picture stands as its own thumbnail.
+                out.append(
+                    {"game": i, "title": self._game(i)["title"], "path": str(p), "taken_at": taken, "session": session, "thumb": str(p), "thumb_ready": True}
+                )
         out.sort(key=lambda r: os.path.basename(r["path"]), reverse=True)
         return out
+
+    def media(self, ident):
+        lines = self.sessions(ident)
+        journaled = {(r["game"], r["session"]) for r in lines if r.get("journal")}
+        rows = [
+            {
+                "kind": "shot",
+                "game": shot["game"],
+                "title": shot["title"],
+                "session": shot["session"],
+                "when": shot["taken_at"],
+                "date": shot["taken_at"],
+                "path": shot["path"],
+                "thumb": shot["thumb"],
+                "thumb_ready": True,
+                "has_journal": bool(shot["session"]) and (shot["game"], shot["session"]) in journaled,
+                "heading": "",
+                "duration_s": 0,
+            }
+            for shot in self.screenshots(ident)
+        ]
+        for line in lines:
+            rec = line.get("recording")
+            if not rec:
+                continue
+            rows.append(
+                {
+                    "kind": "recording",
+                    "game": line["game"],
+                    "title": line["title"],
+                    "session": line["session"],
+                    "when": line["ended_at"],
+                    "date": line["ended_at"],
+                    "path": rec["path"],
+                    "thumb": "",
+                    "thumb_ready": False,
+                    "has_journal": line.get("journal") is not None,
+                    "heading": "",
+                    "duration_s": line.get("duration_s") or 0,
+                }
+            )
+        idents = [self._game(ident)["id"]] if ident else [g["id"] for g in self._data["games"] if not (g.get("removed") or g.get("hidden"))]
+        for i in idents:
+            for e in self.journal(i):
+                if (e.get("state") or "written") != "written":
+                    continue
+                images = [str(p) for p in e.get("images") or []]
+                rows.append(
+                    {
+                        "kind": "journal",
+                        "game": i,
+                        "title": self._game(i)["title"],
+                        "session": e.get("session") or "",
+                        "when": e.get("written_at") or e.get("started_at") or "",
+                        "date": e.get("started_at") or e.get("written_at") or "",
+                        "path": images[0] if images else "",
+                        "thumb": images[0] if images else "",
+                        "thumb_ready": bool(images),
+                        "has_journal": True,
+                        "heading": e.get("title") or "Untitled",
+                        "duration_s": e.get("duration_s") or 0,
+                    }
+                )
+        rows.sort(key=lambda r: r["when"], reverse=True)
+        return rows
 
     def remove_screenshot(self, ident, name):
         p = self._game_dir(ident) / "screenshots" / name

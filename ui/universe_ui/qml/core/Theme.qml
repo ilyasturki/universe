@@ -8,6 +8,12 @@ QtObject {
     property real vscale: 1.0
     // The software scenegraph (offscreen tests) drops every ShaderEffect; set by the root.
     property bool software: false
+    // A game is on screen over the launcher, inside gamescope (`api.home.underGame`, set by the root): every loop and clock holds, so nothing repaints behind it.
+    property bool covered: false
+    onCoveredChanged: {
+        if (!covered)
+            clock = Format.clock();
+    }
     function dp(v) {
         return Math.round(v * t.vscale);
     }
@@ -54,7 +60,7 @@ QtObject {
     property string clock: Format.clock()
     readonly property Timer clockTimer: Timer {
         interval: 20000
-        running: true
+        running: !t.covered
         repeat: true
         triggeredOnStart: true
         onTriggered: t.clock = Format.clock()

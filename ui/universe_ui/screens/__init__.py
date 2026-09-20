@@ -7,7 +7,7 @@ from .add import AddGameForm
 from .artwork import ArtworkForm, ArtworkOverview
 from .controller import ControllerScreen
 from .launch import LaunchForm
-from .media import JournalList, MediaTimeline, PendingJournals, RecordingsList, ScreenshotsList
+from .media import JournalList, MediaTimeline, PendingJournals, RecordingsList, ScreenshotsList, Thumbs
 from .onboarding import Onboarding
 from .paths import PathBrowser
 from .runners import RunnerForm, RunnersForm
@@ -28,10 +28,11 @@ class Screens(QObject):
         self._sources = SourcesBrowser(client, games, self)
         self._login = LoginFlow(client, self)
         self._login.finished.connect(lambda ok, text: (self._sourceList.load(), self._source.reload()))
+        self._thumbs = Thumbs(self)
         self._recordings = RecordingsList(client, self)
         self._journal = JournalList(client, self)
-        self._shots = ScreenshotsList(client, self)
-        self._media = MediaTimeline(client, self._recordings, self)
+        self._shots = ScreenshotsList(client, self._thumbs, self)
+        self._media = MediaTimeline(client, self._recordings, self._thumbs, self)
         self._pendingJournals = PendingJournals(client, self)
         self._paths = PathBrowser(client, self)
         self._controller = ControllerScreen(client, memory, power, self)
@@ -44,6 +45,7 @@ class Screens(QObject):
         self._onboarding = Onboarding(client, memory, games, self._login, self._controller, self)
 
     def shutdown(self):
+        self._thumbs.shutdown()
         self._recordings.shutdown()
         self._pendingJournals.shutdown()
         self._controller.shutdown()
@@ -60,6 +62,7 @@ class Screens(QObject):
     journal = Property(QObject, lambda self: self._journal, constant=True)
     shots = Property(QObject, lambda self: self._shots, constant=True)
     media = Property(QObject, lambda self: self._media, constant=True)
+    thumbs = Property(QObject, lambda self: self._thumbs, constant=True)
     pendingJournals = Property(QObject, lambda self: self._pendingJournals, constant=True)
     album = Property(QObject, lambda self: self._recordings, constant=True)
     news = Property(QObject, lambda self: self._journal, constant=True)

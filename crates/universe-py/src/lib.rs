@@ -211,6 +211,9 @@ impl Core {
     fn sessions(&self, py: Python<'_>, id: String) -> PyResult<Py<PyAny>> {
         self.value(py, |c| async move { c.sessions(&id).await })
     }
+    fn media(&self, py: Python<'_>, id: String) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| async move { c.media(&id).await })
+    }
 
     fn sources(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| c.sources())
@@ -384,10 +387,19 @@ impl Core {
     }
 }
 
+/// The launcher's gamescope command for `screen` from the config alone, so a host re-execs before opening the core; `None` on the desktop.
+#[pyfunction]
+fn host_gamescope(py: Python<'_>, screen: String) -> PyResult<Option<Vec<String>>> {
+    let config = universe::config::Config::load().map_err(err)?;
+    let rt = tokio::runtime::Builder::new_current_thread().enable_all().build().map_err(|e| err(e.into()))?;
+    Ok(py.detach(|| rt.block_on(universe::launcher::host_gamescope_for(&config, &screen))).map(|(p, a)| std::iter::once(p).chain(a).collect()))
+}
+
 #[pymodule]
 fn universe_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
     universe::init_tracing();
     m.add_class::<Core>()?;
+    m.add_function(wrap_pyfunction!(host_gamescope, m)?)?;
     m.add("UniverseError", m.py().get_type::<UniverseError>())?;
     Ok(())
 }

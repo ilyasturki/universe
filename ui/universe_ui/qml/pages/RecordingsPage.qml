@@ -21,14 +21,27 @@ FocusScope {
     readonly property var frames: current && store.frameMap[current.session] ? store.frameMap[current.session] : null
 
     readonly property var journal: api.screens.journal
-    readonly property var entry: current && current.hasJournal ? journal.rows.find(function (r) {
-        return r.session === current.session;
-    }) || null : null
+    readonly property var entry: {
+        if (!current || !current.hasJournal)
+            return null;
+        var all = journal.rows;
+        return all.find(function (r) {
+            return r.session === current.session;
+        }) || null;
+    }
     readonly property bool entryPending: entry !== null && entry.state === "pending"
 
     property bool videoFocused: false
     property bool journalFocused: false
     property bool fullscreen: false
+    // The row's cached thumbnail, shown large in the pane once the cursor has rested on it.
+    property string posterSource: ""
+
+    Timer {
+        id: rest
+        interval: 200
+        onTriggered: page.posterSource = page.frames && page.frames.thumbnail ? page.frames.thumbnail : ""
+    }
     readonly property bool playing: player.playbackState === MediaPlayer.PlayingState
     readonly property bool stopped: player.playbackState === MediaPlayer.StoppedState
     readonly property real duration: player.duration > 0 ? player.duration : frames && frames.duration > 0 ? frames.duration * 1000 : current ? current.duration_s * 1000 : 0
@@ -96,6 +109,7 @@ FocusScope {
 
     onGameChanged: {
         player.stop();
+        player.source = "";
         index = 0;
         videoFocused = false;
         journalFocused = false;
@@ -125,11 +139,16 @@ FocusScope {
 
     onCurrentChanged: {
         player.stop();
+        player.source = "";
         scrub.scrubbing = false;
         journalFocused = false;
-        player.source = current ? current.url : "";
-        if (current)
-            store.select(current.session);
+        posterSource = "";
+        rest.restart();
+    }
+
+    onFramesChanged: {
+        if (!rest.running)
+            posterSource = frames && frames.thumbnail ? frames.thumbnail : "";
     }
 
     function step(d) {
@@ -148,6 +167,10 @@ FocusScope {
         }
         Sound.panel();
         videoFocused = true;
+        if (String(player.source) !== current.url) {
+            player.source = current.url;
+            store.select(current.session);
+        }
         if (play && !playing)
             player.play();
         wake();
@@ -479,11 +502,29 @@ FocusScope {
             color: Theme.cardBase
         }
 
+        Image {
+            anchors.fill: parent
+            source: page.posterSource
+            fillMode: Image.PreserveAspectCrop
+            asynchronous: true
+            visible: page.stopped && !mosaic.complete
+            opacity: status === Image.Ready ? 1.0 : 0.0
+
+            Behavior on opacity {
+                Ease {
+                    duration: Theme.durView
+                }
+            }
+        }
+
         Grid {
             id: mosaic
+
+            readonly property bool complete: page.frames !== null && page.frames.complete
+
             anchors.fill: parent
             columns: 4
-            visible: page.stopped
+            visible: page.stopped && complete
             opacity: page.stopped ? 1.0 : 0.0
 
             Behavior on opacity {

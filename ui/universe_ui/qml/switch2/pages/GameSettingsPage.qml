@@ -17,7 +17,8 @@ FocusScope {
     readonly property var game: args && args.gameId ? api.allGames.byId(args.gameId) : null
 
     // The basic cards as sections; the advanced ones together behind one Advanced entry.
-    readonly property var sections: form.basicGroups.map(function (g) {
+    readonly property var basicGroups: form.basicGroups
+    readonly property var sections: basicGroups.map(function (g) {
         return {
             label: g.title,
             detail: g.meta || "",

@@ -16,12 +16,13 @@ FocusScope {
     readonly property var frameMap: store.frameMap
 
     readonly property var rows: {
-        var out = store.rows.map(function (r) {
+        var kept = store.rows, taken = shots.rows;
+        var out = kept.map(function (r) {
             return Object.assign({
                 kind: "recording",
                 when: r.created_at
             }, r);
-        }).concat(shots.rows.map(function (r) {
+        }).concat(taken.map(function (r) {
             return Object.assign({
                 kind: "shot",
                 when: r.taken_at
@@ -318,7 +319,8 @@ FocusScope {
 
                 Image {
                     anchors.fill: parent
-                    source: entry.kind === "shot" ? entry.url : cell.frames ? cell.frames.thumbnail : ""
+                    // `version` is read so the tile repaints when its thumbnail lands.
+                    source: entry.kind === "shot" ? (api.screens.thumbs.version, api.screens.thumbs.url(entry.thumb)) : cell.frames ? cell.frames.thumbnail : ""
                     sourceSize.width: 640
                     fillMode: Image.PreserveAspectCrop
                     asynchronous: true

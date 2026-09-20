@@ -94,10 +94,14 @@ FocusScope {
     Component.onDestruction: form.unload()
     onSlotsChanged: if (index >= slots.length)
         index = Math.max(0, slots.length - 1)
-    onSearchingChanged: if (!searching)
-        hitIndex = Math.max(0, form.hits.findIndex(function (h) {
+    function currentHit() {
+        var hits = form.hits;
+        return hits.findIndex(function (h) {
             return h.current;
-        }))
+        });
+    }
+    onSearchingChanged: if (!searching)
+        hitIndex = Math.max(0, currentHit())
 
     function land() {
         var i = slots.findIndex(function (s) {

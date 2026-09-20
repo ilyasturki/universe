@@ -130,7 +130,8 @@ Item {
                     y: grid.gap / 2
                     width: grid.cellWidth - grid.gap
                     height: grid.cellHeight - grid.gap
-                    source: modelData.url
+                    // `version` is read so the card repaints when its thumbnail lands.
+                    source: (api.screens.thumbs.version, api.screens.thumbs.url(modelData.thumb))
                     caption: modelData.dateText
                     focused: grid.active && flat === grid.index
                     dimmed: grid.active && flat !== grid.index

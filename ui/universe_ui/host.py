@@ -68,8 +68,7 @@ def quit_on_signals(app, on_signal=None):
     return notifier
 
 
-def exec_in_gamescope(client, argv):
-    command = client.hostGamescope("")
+def exec_in_gamescope(command, argv):
     if not command:
         logging.getLogger("universe.host").warning("no gamescope: running on the desktop")
         return
@@ -132,9 +131,18 @@ def run(argv=None):
     from .api import Api
     from .screens.power import FAKE as FAKE_POWER
 
-    client = build_client(args)
+    # Re-exec before the core opens: the library is loaded once, inside gamescope, not once on each side of it.
+    client = build_client(args) if args.fake else None
     if args.fullscreen and not nested:
-        exec_in_gamescope(client, argv)
+        if client is not None:
+            command = client.hostGamescope("")
+        else:
+            import universe_core
+
+            command = universe_core.host_gamescope("")
+        exec_in_gamescope(command, argv)
+    if client is None:
+        client = build_client(args)
     if not args.fake:
         client.adoptScope()
     api = Api(client, fullscreen=args.fullscreen, theme=args.theme, power_root=FAKE_POWER if args.fake else None, parent=app)
@@ -168,6 +176,7 @@ def run(argv=None):
 
         gamepad = GamepadThread(app, pad=api.pad)
         gamepad.stick.connect(api.pad.set, Qt.ConnectionType.QueuedConnection)
+        api.home.changed.connect(lambda: gamepad.setCovered(api.home.underGame))
         gamepad.start()
         if args.fake:
             unbound = [s for s in os.environ.get("UNIVERSE_FAKE_UNBOUND", "").split(",") if s]

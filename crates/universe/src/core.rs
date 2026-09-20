@@ -104,6 +104,7 @@ pub struct Core {
     /// A freeze and the thaw behind it run in order: the hooks behind them toggle state.
     pub(crate) freezes: tokio::sync::Mutex<()>,
     media_stop: std::sync::atomic::AtomicBool,
+    thumbs: crate::thumbs::Maker,
     pub(crate) host: Host,
 }
 
@@ -126,6 +127,7 @@ impl Core {
             nest: std::sync::OnceLock::new(),
             freezes: tokio::sync::Mutex::new(()),
             media_stop: std::sync::atomic::AtomicBool::new(false),
+            thumbs: crate::thumbs::Maker::default(),
             host,
         }
     }
@@ -584,14 +586,7 @@ impl Core {
 
     pub async fn host_gamescope(&self, screen: &str) -> Option<(String, Vec<String>)> {
         let cfg = self.config.read().await.clone();
-        let screen = crate::desktop::pick_screen(screen);
-        let mode = crate::desktop::screen_mode(&screen).await;
-        let command = crate::launcher::host_gamescope(&cfg, mode)?;
-        let _ = std::fs::create_dir_all(paths::state_home());
-        if let Err(e) = std::fs::write(crate::launcher::mangoapp_conf_path(), crate::launcher::mangoapp_conf_text(false)) {
-            tracing::warn!("mangoapp.conf: {e}");
-        }
-        Some(command)
+        crate::launcher::host_gamescope_for(&cfg, screen).await
     }
 
     pub async fn screenshot(&self) -> Result<String> {
@@ -635,7 +630,33 @@ impl Core {
         };
         let mut shots: Vec<crate::screenshots::Shot> = picked.iter().flat_map(|r| crate::screenshots::list(r)).collect();
         shots.sort_by(|a, b| b.path.rsplit('/').next().cmp(&a.path.rsplit('/').next()));
+        for shot in &mut shots {
+            (shot.thumb, shot.thumb_ready) = self.thumbs.thumb(&shot.game, Path::new(&shot.path));
+        }
         Ok(shots)
+    }
+
+    /// Shots, recordings and written journal entries as one list, newest first; an empty `id` spans every visible game. The thumbnails not made yet are queued, newest first.
+    pub async fn media(&self, id: &str) -> Result<Vec<crate::timeline::MediaRow>> {
+        let games = self.games.read().await;
+        let picked: Vec<&Resolved> = if id.is_empty() {
+            games.iter().filter(|g| g.game.removed_at.is_empty() && !g.game.hidden).collect()
+        } else {
+            vec![games.iter().find(|g| g.game.id == id).ok_or_else(|| Error::NotFound(id.into()))?]
+        };
+        let mut rows: Vec<crate::timeline::MediaRow> = Vec::new();
+        for r in picked {
+            let entries = crate::journal::read_all(&r.game.journal_dir()).unwrap_or_default();
+            rows.extend(crate::timeline::rows(r, &entries));
+        }
+        // Sorted before the thumbnails are asked for, so the newest are queued first.
+        rows.sort_by(|a, b| b.when.cmp(&a.when));
+        for row in &mut rows {
+            if row.kind != "recording" && !row.path.is_empty() {
+                (row.thumb, row.thumb_ready) = self.thumbs.thumb(&row.game, Path::new(&row.path));
+            }
+        }
+        Ok(rows)
     }
 
     pub async fn remove_screenshot(&self, id: &str, name: &str) -> Result<()> {

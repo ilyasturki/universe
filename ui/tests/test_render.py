@@ -39,6 +39,32 @@ def render(api, width=1280, height=720, activate=False):
     return engine, window
 
 
+def count_frames(window, ms):
+    frames = []
+    window.frameSwapped.connect(lambda: frames.append(1))
+    pump(ms)
+    window.frameSwapped.disconnect()
+    return len(frames)
+
+
+def test_the_scene_holds_still_behind_the_game(api, fake, monkeypatch):
+    from universe_ui import fake_core
+
+    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+    monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
+    _engine, window = render(api)
+    fake.launch("mirrors-edge", "")
+    wait_for(fake.sessionShown, 3000)
+    pump(1500)
+    assert api.home.shown == "game"
+    covered = count_frames(window, 1500)
+    api.home.toLauncher()
+    pump(1200)
+    assert api.home.shown == "launcher"
+    shown = count_frames(window, 1500)
+    assert covered <= 3 < shown, f"{covered} frames under the game, {shown} with the launcher up: the badge pulses and the hero drifts only when seen"
+
+
 def test_themes_render_and_switch_live(api):
     _engine, window = render(api)
     image = window.grabWindow()

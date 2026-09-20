@@ -12,9 +12,12 @@ FocusScope {
     readonly property string slot: args && args.slot ? args.slot : ""
     readonly property var game: args && args.gameId ? api.allGames.byId(args.gameId) : null
     readonly property var form: api.screens.artwork
-    readonly property var current: form.slots.find(function (s) {
-        return s.slot === page.slot;
-    }) || null
+    readonly property var current: {
+        var slots = form.slots;
+        return slots.find(function (s) {
+            return s.slot === page.slot;
+        }) || null;
+    }
     readonly property real aspect: current ? current.aspect : 1
     readonly property bool picked: current !== null && current.hasOverride
     readonly property bool underShown: picked && current.hasDefault

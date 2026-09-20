@@ -11,9 +11,12 @@ FocusScope {
     property var args: ({})
 
     readonly property var store: api.screens.news
-    readonly property var row: store.rows.filter(function (r) {
-        return r.session === args.session;
-    })[0] || null
+    readonly property var row: {
+        var all = store.rows;
+        return all.filter(function (r) {
+            return r.session === args.session;
+        })[0] || null;
+    }
     readonly property var images: row ? row.images : []
     readonly property var game: row ? api.allGames.byId(row.gameId) : null
 

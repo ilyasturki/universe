@@ -97,6 +97,14 @@ class Mapper:
         del self.held[key]
         return [(key, False, False)]
 
+    # Every held key released, the axes and the sticks forgotten: what the game presses from here is not ours.
+    def release_all(self):
+        out = [(key, False, False) for key in self.held]
+        self.held.clear()
+        self._axis.clear()
+        self._stick.clear()
+        return out
+
     def tick(self):
         now = self._clock()
         out = []
@@ -124,6 +132,7 @@ class GamepadThread(QThread):
     def __init__(self, parent=None, pad=None):
         super().__init__(parent)
         self._running = False
+        self._covered = False
         self._pad = pad
         self.mapper = Mapper()
         self.key.connect(self._post, Qt.ConnectionType.QueuedConnection)
@@ -133,6 +142,10 @@ class GamepadThread(QThread):
         if pressed and self._pad is not None and self._pad.muted:
             return
         post_key(Qt.Key(key), pressed, autorepeat)
+
+    # The game is on screen: its presses are not read, and the loop sleeps between hot-plug checks.
+    def setCovered(self, covered):
+        self._covered = bool(covered)
 
     def stop(self):
         self._running = False
@@ -152,9 +165,10 @@ class GamepadThread(QThread):
             while self._running:
                 while sdl2.SDL_PollEvent(event):
                     self._handle(sdl2, event, controllers)
-                for key, pressed, repeat in self.mapper.tick():
+                ticks = self.mapper.release_all() if self._covered else self.mapper.tick()
+                for key, pressed, repeat in ticks:
                     self.key.emit(key, pressed, repeat)
-                sdl2.SDL_WaitEventTimeout(None, 20 if self.mapper.held else 500)
+                sdl2.SDL_WaitEventTimeout(None, 20 if self.mapper.held and not self._covered else 500)
         finally:
             for c in controllers.values():
                 sdl2.SDL_GameControllerClose(c)
@@ -173,6 +187,8 @@ class GamepadThread(QThread):
             controller = controllers.pop(event.cdevice.which, None)
             if controller:
                 sdl2.SDL_GameControllerClose(controller)
+        elif self._covered:
+            return
         elif t in (sdl2.SDL_CONTROLLERBUTTONDOWN, sdl2.SDL_CONTROLLERBUTTONUP):
             for key, pressed, repeat in self.mapper.button(event.cbutton.button, t == sdl2.SDL_CONTROLLERBUTTONDOWN):
                 self.key.emit(key, pressed, repeat)

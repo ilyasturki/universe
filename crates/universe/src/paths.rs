@@ -27,6 +27,10 @@ pub fn state_home() -> PathBuf {
     universe_home("UNIVERSE_STATE_HOME", "XDG_STATE_HOME", ".local/state")
 }
 
+pub fn cache_home() -> PathBuf {
+    universe_home("UNIVERSE_CACHE_HOME", "XDG_CACHE_HOME", ".cache")
+}
+
 /// xdg-user-dirs: `$XDG_<NAME>_DIR`, else the entry in `~/.config/user-dirs.dirs`, else `~/<fallback>`.
 pub fn user_dir(name: &str, fallback: &str) -> PathBuf {
     let var = format!("XDG_{name}_DIR");

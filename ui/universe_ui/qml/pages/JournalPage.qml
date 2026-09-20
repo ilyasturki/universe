@@ -25,9 +25,14 @@ FocusScope {
     property double now: Date.now()
 
     readonly property var recordings: api.screens.recordings
-    readonly property var recording: current && current.hasRecording ? recordings.rows.find(function (r) {
-        return r.session === current.session;
-    }) || null : null
+    readonly property var recording: {
+        if (!current || !current.hasRecording)
+            return null;
+        var all = recordings.rows;
+        return all.find(function (r) {
+            return r.session === current.session;
+        }) || null;
+    }
 
     // 0 entries, 1 the text, 2 the screenshots, 3 the recording card
     property int mode: 0

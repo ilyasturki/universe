@@ -73,6 +73,12 @@ FocusScope {
         value: root.GraphicsInfo.api === GraphicsInfo.Software
     }
 
+    Binding {
+        target: Theme
+        property: "covered"
+        value: api.home.underGame
+    }
+
     function goToTab(index) {
         tabIndex = (index + tabs.length) % tabs.length;
     }
@@ -708,6 +714,7 @@ FocusScope {
                     width: pageArea.width
                     height: pageArea.height
                     source: modelData.source
+                    asynchronous: true
                     active: isActive || activated
                     focus: isActive && root.focusOwner === "page"
                     opacity: isActive ? 1.0 : 0.0
@@ -873,6 +880,7 @@ FocusScope {
 
         anchors.fill: parent
         active: root.detailOpen || detailLoader.opacity > 0.01
+        asynchronous: true
         source: "pages/DetailPage.qml"
         focus: root.detailOpen && !root.subOpen
         opacity: root.detailOpen && !root.launching && !root.subOpen ? 1.0 : 0.0
@@ -945,6 +953,7 @@ FocusScope {
 
         anchors.fill: parent
         active: root.subOpen || subLoader.opacity > 0.01
+        asynchronous: true
         source: root.subSource
         focus: root.subOpen
         opacity: root.subOpen && !root.launching && !root.subSwapping ? 1.0 : 0.0

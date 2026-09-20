@@ -483,8 +483,9 @@ gpu-screen-recorder `-o` capture of the session's screen. Either way the PNG goe
 |---|---|---|---|
 | `screenshots(id)` | `screenshots(id)` | `universe screenshots [name]` | `[Shot]`, newest first, read from disk on every call; `id = ""` spans every visible game |
 | `remove_screenshot(id, name)` | `remove_screenshot(id, name)` | `universe screenshots <name> --remove <file> [-y]` | trashes `screenshots/<name>` and drops it from the `images` of the journal entry naming it, when one does |
+| `media(id)` | `media(id)` | — | `[MediaRow]`: the shots, the recordings and the written journal entries as one list, newest first by `when`; `id = ""` spans every visible game. One pass, each game's journal read once |
 
-`Shot` = `{"game", "title", "path", "taken_at", "session"}`. A shot the player takes — the dock's
+`Shot` = `{"game", "title", "path", "taken_at", "session", "thumb", "thumb_ready"}`. A shot the player takes — the dock's
 camera, a pad macro, `universe screenshot` — lands in `games/<id>/screenshots/YYYYMMDD-HHMMSS.png`:
 the `screenshot` hook writes wherever `SCREENSHOTS_DIR` points, and with no session running that is
 `<state>/screenshots/`, a shot of the launcher that no listing shows. `taken_at` is the name's
@@ -494,6 +495,20 @@ a cue that follows its return never lands in the shot: the launcher plays the sh
 gamescope, paints a flash over the game (see `frontends.md`); the pad's `screenshot` macro reports
 back as a `screenshot` event on the watcher (`{"event": "screenshot", "path": …}`, the path empty
 when it failed). A journal entry names them by basename, which resolves to `screenshots/`.
+
+`thumb` is the shot's thumbnail, a 960 px wide JPEG under `$XDG_CACHE_HOME/universe/thumbs/` (one flat
+directory, `<game>--<stem>-<mtime>.jpg`, so a file replaced in place gets a fresh one), and
+`thumb_ready` whether it is there: a listing queues the missing ones, newest first, and the core
+makes them in the background, three at a time, without holding the call. A frontend shows the
+picture once the file lands (`frontends.md`, `api.screens.thumbs`). A 4K png decodes in about
+150 ms; a grid that read the originals would spend that per cell.
+
+`MediaRow` = `{"kind", "game", "title", "session", "when", "date", "path", "thumb", "thumb_ready",
+"has_journal", "heading", "duration_s"}`: `kind` is `shot`, `recording` or `journal`; `when` sorts
+the list (the shot's time, the recording's end, the entry's writing) and `date` is what a row shows
+(an entry's is when it was played); `path` the shot, the recording or the entry's first picture;
+`thumb` as a `Shot`'s, empty for a recording (its frames are the frontend's); `has_journal` whether an
+entry, written or on its way, covers the session; `heading` the entry's title.
 
 ## Journal
 

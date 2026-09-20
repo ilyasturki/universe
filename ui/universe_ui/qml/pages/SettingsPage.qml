@@ -320,8 +320,9 @@ FocusScope {
                 detail: ""
             });
             var jobs = [], installed = [], owned = [], all = [], running = 0, paused = 0, onDisk = 0;
-            for (var i = 0; i < sources.rows.length; i++) {
-                var g = sources.rows[i];
+            var listed = sources.rows;
+            for (var i = 0; i < listed.length; i++) {
+                var g = listed[i];
                 rows.push({
                     section: sourceName,
                     key: "game",
@@ -443,7 +444,8 @@ FocusScope {
                     rows: controller.rows,
                     groups: controller.groups
                 };
-            var listening = controller.rows.map(function (r) {
+            var bound = controller.rows;
+            var listening = bound.map(function (r) {
                 return r.slot !== controller.learning ? r : Object.assign({}, r, {
                     display: "Press the button on the pad…",
                     press: null,
@@ -463,9 +465,7 @@ FocusScope {
                 type: "enum",
                 value: api.theme.name,
                 display: api.theme.name,
-                choices: api.theme.themes.map(function (t) {
-                    return t.name;
-                }),
+                choices: themeNames(),
                 detail: ""
             });
             groups.push({
@@ -547,9 +547,19 @@ FocusScope {
         };
     }
 
-    readonly property int checksPassed: modulesForm.doctor.filter(function (d) {
-        return d.value;
-    }).length
+    readonly property int checksPassed: {
+        var checks = modulesForm.doctor;
+        return checks.filter(function (d) {
+            return d.value;
+        }).length;
+    }
+
+    function themeNames() {
+        var looks = api.theme.themes;
+        return looks.map(function (t) {
+            return t.name;
+        });
+    }
 
     function leave() {
         editor.hide();
@@ -678,7 +688,8 @@ FocusScope {
         } else if (sectionId === "themes") {
             Sound.panel();
             editor.edit(row, function (value) {
-                var theme = api.theme.themes.filter(function (t) {
+                var looks = api.theme.themes;
+                var theme = looks.filter(function (t) {
                     return t.name === value;
                 })[0];
                 // The switch rebuilds this tree; let the editor finish closing first.
@@ -858,7 +869,8 @@ FocusScope {
             tester.forceActiveFocus();
             return;
         }
-        var i = controller.rows.findIndex(function (r) {
+        var bound = controller.rows;
+        var i = bound.findIndex(function (r) {
             return r.key === "test";
         });
         if (i >= 0)
@@ -1038,7 +1050,8 @@ FocusScope {
                 page.message(code + " is not one of the pad's buttons yet: learn it from a row");
         }
         function onLearned(family, slot, code) {
-            var r = page.controller.rows.find(function (r) {
+            var bound = page.controller.rows;
+            var r = bound.find(function (r) {
                 return r.slot === slot;
             });
             page.message((r ? r.label : slot) + " is now " + code);

@@ -100,7 +100,7 @@ Item {
         SequentialAnimation {
             running: root.drift && root.zoomEnabled
             // Off-screen it stops ticking; paused rather than stopped keeps the phase.
-            paused: running && !root.visible
+            paused: running && (!root.visible || Theme.covered)
             loops: Animation.Infinite
 
             NumberAnimation {
@@ -123,7 +123,7 @@ Item {
 
         SequentialAnimation {
             running: root.drift
-            paused: running && !root.visible
+            paused: running && (!root.visible || Theme.covered)
             loops: Animation.Infinite
 
             NumberAnimation {
@@ -146,7 +146,7 @@ Item {
 
         SequentialAnimation {
             running: root.drift && root.zoomEnabled
-            paused: running && !root.visible
+            paused: running && (!root.visible || Theme.covered)
             loops: Animation.Infinite
 
             NumberAnimation {

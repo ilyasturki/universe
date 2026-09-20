@@ -48,6 +48,13 @@ FocusScope {
     readonly property string placeholder: search.ready ? "Search every setting" : "Indexing…"
 
     // The section opened: the index is rebuilt; the focus comes with the sidebar's Right or A.
+    function indices(n) {
+        var out = [];
+        for (var i = 0; i < n; i++)
+            out.push(i);
+        return out;
+    }
+
     function open() {
         typing = true;
         search.load();
@@ -197,9 +204,7 @@ FocusScope {
         groups: pane.search.count > 0 ? [
             {
                 title: "",
-                rows: pane.search.results.map(function (r, i) {
-                    return i;
-                })
+                rows: indices(pane.search.results.length)
             }
         ] : []
         dimmed: pane.typing

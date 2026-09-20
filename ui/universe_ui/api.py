@@ -200,7 +200,6 @@ class Library(QObject):
         self.collections = ObjectListModel(parent=self)
         self._collection_lists = {}
         client.libraryChanged.connect(self._on_library_changed)
-        client.sessionEnded.connect(lambda session_id, ident, duration: self.refresh(ident))
         client.mediaChanged.connect(self.refresh)
         self.reload()
 

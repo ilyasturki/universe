@@ -303,7 +303,7 @@ FocusScope {
             tint: Theme.textSecondary
 
             SequentialAnimation on opacity {
-                running: journalMark.visible
+                running: journalMark.visible && !Theme.covered
                 loops: Animation.Infinite
                 NumberAnimation {
                     to: 0.35

@@ -36,6 +36,7 @@ futures-util = { version = "0.3", default-features = false }
 percent-encoding = "2"
 anstream = "1"
 drm = "0.15"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
 
 [dev-dependencies]
 tempfile = "3"

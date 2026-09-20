@@ -39,7 +39,7 @@ lint_python() {
     return $rc
 }
 lint_fmt() { tools/fmt --check python qml js nix; }
-lint_js() { biome lint; }
+lint_js() { biome lint --no-errors-on-unmatched; }
 lint_shell() { shellcheck -S warning tools/fmt tools/lint tools/sample .githooks/* .claude/hooks/*; }
 lint_actions() { actionlint .github/workflows/*.yml; }
 

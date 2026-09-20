@@ -27,7 +27,7 @@ One context property, `api`:
 | `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed` and `--size` turn it off) |
 | `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `frame`, `ground`, `detail`), `current`, `frame`, `set(id)`, `landing` / `takeLanding()`, `fontPath` |
-| `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `open`, `paused`, `pauseOnHome`, `flipped`, `frame`, `volumePercent`, `muted`; `pressed()`, `stopping(title)`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher(landing?)` / `takeLanding()`, `covered()`, `stop()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotTaken(path)`), `volume(change, value)`, `launchValue(key)`, `launchChoices(key)`, `setLaunchValue(key, value)`, `screenRefresh()` |
+| `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `underGame` (the game is on screen over the launcher, inside gamescope), `open`, `paused`, `pauseOnHome`, `flipped`, `frame`, `volumePercent`, `muted`; `pressed()`, `stopping(title)`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher(landing?)` / `takeLanding()`, `covered()`, `stop()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotTaken(path)`), `volume(change, value)`, `launchValue(key)`, `launchChoices(key)`, `setLaunchValue(key, value)`, `screenRefresh()` |
 
 A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `playTime`,
 `playCount`, `lastPlayed`, `releaseYear`, `developerList`, `publisherList`, `genreList`, `players`,
@@ -40,9 +40,13 @@ A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `p
 `dateText`, `created_at`, `hasJournal`, `gameId`, `gameTitle` — and samples 16 frames per recording
 with ffmpeg into `$XDG_CACHE_HOME/universe/frames/<sha1 of the path>/NN.jpg`; the seeks are spread
 over the row's `recording.duration_s` (the media's length the core probed when the file was filed),
-or the session's span for a line filed before the core kept lengths. Two extractions run at a time;
-the picked row's frames go first, the others' thumbnails after. `frameMap[session]` carries
-`thumbnail`, `frames` (`""` until extracted), `complete` and `duration`.
+or the session's span for a line filed before the core kept lengths. Two extractions run at a time,
+through VAAPI (a 4K AV1 frame takes 0.4 s and 180 MB against 1 s, 2.4 s of CPU and 630 MB in
+software; the first frame that fails on the GPU turns the run to software, `hardware`). A row's
+thumbnail is queued when it is listed; `select(session)` puts that recording's 16 frames first and
+drops the frames another session was still waiting for, its thumbnails included in neither. The page
+calls it on A, not as the cursor moves. `frameMap[session]` carries `thumbnail`, `frames` (`""`
+until extracted), `complete` and `duration`, for the listed sessions only, built once per change.
 
 `api.screens.journal` maps a game's entries to rows — `session`, `title`, `state`, `reason`,
 `started_at`, `dateText`, `duration_s`, `durationText`, `paragraphs`, `blocks`, `next_up`,
@@ -57,12 +61,19 @@ the article header; the date is `written_at`, or `started_at` while there is non
 `gameId`, `gameTitle` — newest first, from `screenshots(id)` (`load(id)`) or `screenshots("")`
 (`loadAll()`), reloaded on `libraryChanged` for the game it holds; `remove(gameId, name)` is
 `remove_screenshot`. `api.screens.media` is every visible game's shots, recordings and written
-journal entries as one list (`load()`, `rows`, `count`), newest first by `when` — `kind` is
-`shot`, `recording` or `journal`; `image` the shot, the recording's thumbnail (warmed through
-`api.screens.recordings` so the two share one cache) or the entry's first picture; `title` the
-recording's length or the entry's title; `gameId`, `gameTitle`, `dateText`, `session`, `name`
-(a shot's file name), `path`, `hasJournal`. It follows `libraryChanged`, `recordingFiled`,
-`entryWritten` and the recordings' `framesChanged` while loaded (`unload()` stops that).
+journal entries as one list (`load()`, `rows`, `count`, `loading`), newest first by `when`: the
+core's `media("")` (`api.md`), read and shaped on a worker thread, so `rows` lands after `load()`
+returns and `loading` says so. `kind` is `shot`, `recording` or `journal`; `thumb` the shot's or the
+entry's first picture's thumbnail path (`thumbReady` when the core has made it), `image` a
+recording's cached frame (warmed through `api.screens.recordings` so the two share one cache);
+`url` the shot itself, for the lightbox; `title` the recording's length or the entry's title;
+`gameId`, `gameTitle`, `dateText`, `session`, `name` (a shot's file name), `path`, `hasJournal`.
+It follows `libraryChanged`, `recordingFiled` and `entryWritten` while loaded, one reload per burst
+(`unload()` stops that), and announces `rows` again only when a recording's frame landed.
+`api.screens.thumbs` is the thumbnails on their way: `url(path)` is the file's URL once it is there
+(`""` before), and `version` bumps as they land (a poll while any is missing), so a card binds
+`source: (api.screens.thumbs.version, api.screens.thumbs.url(modelData.thumb))` and repaints in
+place, no list reset. `api.screens.shots` rows carry the same `thumb` and `thumbReady`.
 `api.screens.pendingJournals` is `pending_journals()` as `rows` and `count`, refreshed on
 `entryWritten`, on `sessionEnded` and every 10 s while any is pending (so the elapsed time and
 the module's 30-min timeout show up); `appeared(session, title)` and
@@ -135,8 +146,10 @@ process**: closing the frontend mid-install interrupts it, by design.
 ## Launch and the running view
 
 The launcher is gamescope's base app (`docs/api.md` § Gamescope): fullscreen, `host.py` starts
-`gamescope` around itself (`client.hostGamescope("")`, `os.execv`) unless it is already inside one
-(`GAMESCOPE_WAYLAND_DISPLAY`), forces the `xcb` platform there, and every game lands on that
+`gamescope` around itself (`universe_core.host_gamescope("")`, a free function that reads the
+config alone, then `os.execv`) before it opens the core, so the library is loaded once, inside
+gamescope, and not on each side of the exec; `--fake` goes through its client instead. It skips
+the exec when already inside one (`GAMESCOPE_WAYLAND_DISPLAY`), forces the `xcb` platform there, and every game lands on that
 gamescope, which shows the most recently mapped window — the game's, once it has one. The launcher
 never lowers, raises or hides itself; `api.home` flips which window gamescope shows (`toGame`,
 `toLauncher`: `focus_session` / `focus_pid`), and `Api.screenName()` is `""` inside gamescope, where
@@ -273,6 +286,23 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
   `--keys` scripting cannot drive the host behind a running game, and neither can the gamepad
   (`focusWindow()` is null). That is the wanted behaviour: home is operable once the game has
   handed the focus back (Alt-Tab, or its own exit, after which `focusLauncher()` asks for it).
+- **A list property is re-read for every element when a method is called on it in place.**
+  `store.rows.filter(...)`, `store.rows.indexOf(x)`, or `store.rows[i]` inside a loop over
+  `store.rows.length`, makes the engine fetch and convert the whole property (every dict of every
+  row) once per element: the Media page's 1 400 rows cost 5.8 s of UI thread that way, one second
+  per 250 rows. Bind the property to a local first (`var all = store.rows; all.filter(...)`, or a
+  `property var` of the page) and it is read once. `readonly property var rows: store.rows` is
+  fine; so is a single `store.rows.length` or `store.rows[3]`.
+- **Behind a game the scene holds still.** `Theme.covered` is `api.home.underGame` (bound by the
+  root): the game is on screen over the launcher, which happens inside gamescope alone (on the
+  desktop the launcher is a window of its own, and Alt-Tab must find it live). The hero's drift, the session badge's pulse and second hand, the journal mark's
+  pulse and the clock pause on it and catch up when the launcher is back, so nothing repaints
+  under the game. The host's polls keep their cadence (the HOME flip is as fast as before) but
+  answer off the UI thread, and the pad thread reads no button while covered, so a press meant
+  for the game costs the launcher nothing.
+- **Pages load asynchronously.** The tab, detail and sub-page `Loader`s are `asynchronous`, so
+  `activePage` is null for a frame or two after a switch; every binding on it null-checks, and a
+  `--keys` script presses after a `Wait`.
 - **A view's cursor is a row, not a game.** `RecentGames` pins the playing game first and the
   stats re-sort a game after its session; no view index follows, and a positional `model.get(index)`
   binding does not re-evaluate on a reorder. `GameAnchor` (`import Universe`) does: bind `model` and
@@ -394,7 +424,10 @@ follow `recordingFiled` and `entryWritten`. Start is the game's menu, with the s
 
 `pages/RecordingsPage.qml` plays in a pane beside the list; □ (X) toggles it fullscreen — the
 pane fills the page, the hint bar rides the controls' auto-hide, ○ leaves fullscreen first, then
-the video, then the page. Start on a row is an `ActionMenu` (Play, Journal entry, Remove
+the video, then the page. Moving the cursor touches no file: the pane shows the row's cached
+thumbnail once the cursor has rested 200 ms (the 16-frame mosaic instead when every frame is
+cached), and A hands the file to the player and asks `select` for the frames, so a game with
+ninety 4K recordings scrolls as fast as one with none. Start on a row is an `ActionMenu` (Play, Journal entry, Remove
 recording…); Remove asks in place — Keep it, Trash the recording, or trash it and its journal
 entry when it has one — and calls `api.screens.recordings.remove(gameId, session)`, which goes
 through `remove_recording`, drops the row's cached frames and reloads the list on the signal.
@@ -423,7 +456,9 @@ the store's promotional shots only (`assets.screenshotList`).
 `pages/MediaPage.qml`, the fourth tab, is `api.screens.media` on one four-wide grid of
 `ui/ShotCard.qml` (a 16:9 picture with the kind's glyph in a corner, a book when a journal entry
 covers it, the game and the date below): screenshots, recordings and journal entries of every
-game, newest first. Two chips above it, reached with ▲ from the top row, narrow the list — the
+game, newest first. The pictures are the core's thumbnails, never the 4K originals: a card shows
+its kind's glyph until its thumbnail lands, which the first open after a session fills in over a
+few seconds and every open after that has at once. Two chips above it, reached with ▲ from the top row, narrow the list — the
 kind (All, Screenshots, Recordings, Journal; also cycled by `LT RT`, kept in `ui-memory.json`
 as `mediaKind`) and the game (every game with something on the list). A opens the row: a shot in
 the `Lightbox` (◀ ▶ step between the shots on the list), a recording on the game's recordings

@@ -333,8 +333,9 @@ FocusScope {
                     detail: ""
                 }
             ];
+        var looks = api.theme.themes;
         if (sectionId === "themes")
-            return api.theme.themes.map(function (t) {
+            return looks.map(function (t) {
                 return {
                     label: t.name,
                     type: "radio",

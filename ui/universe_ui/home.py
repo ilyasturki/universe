@@ -52,6 +52,9 @@ class Home(QObject):
         self._captured_at = 0.0
         self._captured_still = False
         self._volume = {}
+        self._polling = False
+        # Bumped whenever `_shown` is set here, so a poll reply from before it is dropped.
+        self._generation = 0
         self._poll = QTimer(self)
         self._poll.setInterval(POLL_MS)
         self._poll.timeout.connect(self._refresh)
@@ -106,7 +109,7 @@ class Home(QObject):
             self._drop()
             self._open = self._closing = self._flipped = self._flipping = self._paused = self._thaw_on_release = self._stopping = False
             self._keys_on_thaw = []
-            self._shown = "launcher"
+            self._set_shown("launcher")
             self._frame = ""
             self._landing = ""
             self._captured = None
@@ -114,14 +117,29 @@ class Home(QObject):
 
     def _on_shown(self, session_id, ok):
         if ok and not self._client.nested and self._session():
-            self._shown = "game"
+            self._set_shown("game")
             self.changed.emit()
 
     def _refresh(self):
-        shown = "game" if self._client.gameShown() else "launcher"
-        if shown != self._shown:
-            self._shown = shown
-            self.changed.emit()
+        if self._polling:
+            return
+        self._polling = True
+        generation = self._generation
+
+        def landed(game_shown):
+            self._polling = False
+            if generation != self._generation or not self._session():
+                return
+            shown = "game" if game_shown else "launcher"
+            if shown != self._shown:
+                self._shown = shown
+                self.changed.emit()
+
+        self._client.gameShownAsync(landed)
+
+    def _set_shown(self, shown):
+        self._generation += 1
+        self._shown = shown
 
     def _on_button(self, ident, slot, pressed):
         if slot == "guide":
@@ -210,7 +228,7 @@ class Home(QObject):
         self._captured = None
         if self._paused:
             self._thaw()
-        self._shown = "game"
+        self._set_shown("game")
         self.changed.emit()
 
     # Asked at the press so the flip need not wait: gamescope takes up to 5 s at 4K.
@@ -264,7 +282,7 @@ class Home(QObject):
             self._frame = QUrl.fromLocalFile(path).toString() + "?" + str(self._taken)
         else:
             self._frame = ""
-        self._shown = "launcher"
+        self._set_shown("launcher")
         self._flipped = True
         self._thaw_on_release = False
         # Armed before `changed`: the theme answers `covered()` once the frame is painted.
@@ -419,6 +437,8 @@ class Home(QObject):
         self._client.volumeAsync(change, int(value), landed)
 
     shown = Property(str, lambda self: self._shown, notify=changed)
+    # The game is on screen over the launcher, which happens inside gamescope alone; on the desktop the launcher is a window of its own.
+    underGame = Property(bool, lambda self: self._shown == "game" and self._client.nested, notify=changed)
     open = Property(bool, lambda self: self._open, notify=changed)
     paused = Property(bool, lambda self: self._paused, notify=changed)
     pauseOnHome = Property(bool, lambda self: self._pause_on_home, notify=changed)

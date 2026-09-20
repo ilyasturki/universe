@@ -1,6 +1,6 @@
 import pytest
 
-from conftest import index_of, rows_by_key, settle, wait_for
+from conftest import index_of, pump, rows_by_key, settle, wait_for
 from universe_ui.screens.media import _size
 
 PENDING = {
@@ -563,13 +563,19 @@ def test_pending_journals_announce_each_session_once(api, fake):
     entries = fake.core._data["journal"]["the-technomancer"]
     entries.insert(0, dict(PENDING))
     fake.entryWritten.emit("20260912-200000", "the-technomancer")
+    for _ in range(3):
+        assert wait_for(pending.changed, 3000) is not None, "the read runs off the UI thread"
+        if pending.count == 1:
+            break
     assert pending.count == 1 and pending.rows[0]["title"] == "The Technomancer"
     fake.entryWritten.emit("", "the-technomancer")
     fake.sessionEnded.emit("20260912-200000", "the-technomancer", 60)
+    pump(300)
     assert seen == [("appeared", "20260912-200000", "The Technomancer")]
 
     entries[0].update(state="written", title="Back to Noctis", paragraphs=["p"], written_at="2026-09-12T20:50:00+02:00")
     fake.entryWritten.emit("20260912-200000", "the-technomancer")
+    assert wait_for(pending.changed, 3000) is not None
     assert pending.count == 0
     assert seen[-1] == ("resolved", "20260912-200000", "the-technomancer", "written", "Back to Noctis")
 
@@ -586,8 +592,10 @@ def test_pending_journals_announce_each_session_once(api, fake):
         },
     )
     fake.sessionEnded.emit("20260913-100000", "the-technomancer", 60)
+    assert wait_for(pending.changed, 3000) is not None
     entries[0].update(state="failed", paragraphs=["codex timed out"])
     fake.entryWritten.emit("20260913-100000", "the-technomancer")
+    assert wait_for(pending.changed, 3000) is not None
     assert seen[-2:] == [("appeared", "20260913-100000", "The Technomancer"), ("resolved", "20260913-100000", "the-technomancer", "failed", "codex timed out")]
 
 
@@ -622,16 +630,74 @@ def test_screenshots_list_per_game_and_across_games(api, fake):
 def test_media_timeline_merges_the_three_kinds(api):
     media = api.screens.media
     media.load()
+    assert media.loading and media.count == 0, "the core's list is read on a worker"
+    assert wait_for(media.rowsChanged, 5000) is not None
+    assert not media.loading
     kinds = {r["kind"] for r in media.rows}
     assert kinds == {"shot", "recording", "journal"}
     whens = [r["when"] for r in media.rows]
     assert whens == sorted(whens, reverse=True), "one timeline, newest first"
     shot = next(r for r in media.rows if r["kind"] == "shot")
-    assert shot["image"].startswith("file://") and shot["name"].endswith(".png") and shot["gameTitle"]
+    assert shot["image"] == "" and shot["thumbReady"] and api.screens.thumbs.url(shot["thumb"]).startswith("file://"), (
+        "a card shows the thumbnail, never the original"
+    )
+    assert shot["url"].startswith("file://") and shot["name"].endswith(".png") and shot["gameTitle"]
     entry = next(r for r in media.rows if r["kind"] == "journal")
     assert entry["title"] and entry["hasJournal"] and entry["session"]
     rec = next(r for r in media.rows if r["kind"] == "recording")
-    assert rec["title"] and rec["session"] and rec["path"]
+    assert rec["title"] and rec["session"] and rec["path"] and rec["thumb"] == ""
+
+
+def test_thumbnails_are_announced_as_they_land(api, tmp_path):
+    thumbs = api.screens.thumbs
+    missing = tmp_path / "shot-1.jpg"
+    thumbs.want([str(missing), ""])
+    assert thumbs.pending == 1 and thumbs.url(str(missing)) == ""
+    version = thumbs.version
+    missing.write_bytes(b"jpg")
+    assert wait_for(thumbs.versionChanged, 3000) is not None
+    assert thumbs.version == version + 1 and thumbs.pending == 0 and thumbs.url(str(missing)).startswith("file://")
+
+
+def test_selecting_a_recording_drops_the_frames_another_was_waiting_for(api, monkeypatch, tmp_path):
+    from universe_ui.screens import media
+
+    monkeypatch.setattr(media, "_cache_dir", lambda: str(tmp_path / "frames"))
+    recordings = api.screens.recordings
+    started = []
+
+    def extract(self, job, frames, hw):
+        started.append(job)
+        self._running[job] = None
+
+    monkeypatch.setattr(media.RecordingsList, "_extract", extract)
+    monkeypatch.setattr(media.RecordingsList, "_stop", lambda self, job, proc: self._running.pop(job, None))
+    recordings.load("the-technomancer")
+    first, second = recordings.rows[0]["session"], recordings.rows[1]["session"]
+    recordings._queue.clear()
+    recordings._running.clear()
+    started.clear()
+    recordings.select(first)
+    assert started == [(first, 0), (first, 1)] and len(recordings._queue) == 14 and all(j[0] == first for j in recordings._queue), (
+        "two at a time, the picked one first"
+    )
+    started.clear()
+    recordings.select(second)
+    recordings.select(first)
+    assert started == [(second, 0), (second, 1), (first, 0), (first, 1)], "the other session's running frames are stopped, the picked one starts at once"
+    others = [j for j in recordings._queue if j[0] != first]
+    assert others == [(second, media.THUMB)], "the other session's frames are dropped, its thumbnail stays"
+    assert media._ffmpeg_args("/r.mkv", 1.5, "/out.jpg", True)[3:9] == [
+        "-hwaccel",
+        "vaapi",
+        "-hwaccel_device",
+        media.VAAPI_DEVICE,
+        "-hwaccel_output_format",
+        "vaapi",
+    ]
+    assert "scale=640:-2" in media._ffmpeg_args("/r.mkv", 1.5, "/out.jpg", False)
+    recordings._running.clear()
+    recordings._queue.clear()
 
 
 def test_journal_paragraphs_become_markdown_blocks():

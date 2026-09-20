@@ -75,6 +75,19 @@ def test_autorepeat_only_for_arrows():
     assert m.tick() == []
 
 
+def test_covering_releases_what_was_held():
+    from PySide6.QtCore import Qt
+
+    from universe_ui.gamepad import AXIS_LEFTX, BTN_A, Mapper
+
+    m = Mapper(Clock())
+    m.button(BTN_A, True)
+    m.axis(AXIS_LEFTX, 32767)
+    assert m.release_all() == [(Qt.Key.Key_Return, False, False), (Qt.Key.Key_Right, False, False)]
+    assert m.held == {} and m.release_all() == []
+    assert m.axis(AXIS_LEFTX, 32767) == [(Qt.Key.Key_Right, True, False)], "the axis is forgotten: the next push presses again"
+
+
 def test_post_key_needs_a_focus_window(app):
     assert gamepad.post_key(Qt.Key.Key_Return, True) is False
 

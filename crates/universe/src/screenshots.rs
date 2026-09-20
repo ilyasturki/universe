@@ -18,6 +18,9 @@ pub struct Shot {
     pub taken_at: String,
     /// The session played at that moment, empty when none
     pub session: String,
+    /// The shot's thumbnail (`thumbs`), made or not; `list` leaves it empty, the core fills it
+    pub thumb: String,
+    pub thumb_ready: bool,
 }
 
 /// `YYYYMMDD-HHMMSS` with an image extension: the shape both the hook and the journal key on.
@@ -66,6 +69,8 @@ pub fn list(r: &Resolved) -> Vec<Shot> {
                 taken_at: t.map(|t| t.to_rfc3339_opts(chrono::SecondsFormat::Secs, true)).unwrap_or_default(),
                 session: t.map(|t| session_of(t, &spans)).unwrap_or_default(),
                 path: p.to_string_lossy().into_owned(),
+                thumb: String::new(),
+                thumb_ready: false,
             }
         })
         .collect()

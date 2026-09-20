@@ -264,6 +264,9 @@ class CoreClient(QObject):
     def gameShown(self):
         return self._guarded(False, self._core.nest_game_shown)
 
+    def gameShownAsync(self, on_reply):
+        self._call_async(self._core.nest_game_shown, lambda shown: on_reply(bool(shown)), on_error=lambda e: on_reply(False))
+
     def overlay(self, window, input, opacity):
         return self._done(self._core.nest_overlay, int(window), bool(input), int(opacity))
 
@@ -311,6 +314,14 @@ class CoreClient(QObject):
     def sessions(self, ident):
         return self._guarded([], self._core.sessions, ident)
 
+    @Slot(str, result="QVariant")
+    def media(self, ident):
+        return self._guarded([], self._core.media, ident)
+
+    # `build(rows)` runs on the worker too: a long list costs the UI thread only the reply.
+    def mediaAsync(self, ident, build, on_reply):
+        self._call_async(lambda: build(self._core.media(ident)), on_reply)
+
     def _wait_window(self, session_id):
         def missed(e):
             log.info("session window: %s", e.message)
@@ -346,18 +357,30 @@ class CoreClient(QObject):
         elif not self._guarded(None, self._core.current):
             self._ended(self._current)
 
+    # `currentSessionChanged` fires at once; the reload and the closed line run on a worker, the toast, the stats and a pending launch follow the reply.
     def _ended(self, marker):
         session_id, ident = marker["session_id"], marker["id"]
         self._poll.stop()
         self.focusLauncher()
-        self._guarded(None, self._core.reload_game, ident)
-        line = next((s for s in self.sessions(ident) if s.get("session") == session_id), {})
         self.refreshCurrent()
-        self.sessionEnded.emit(session_id, ident, int(line.get("duration_s") or 0))
-        QTimer.singleShot(4500, self._notice_skipped_modules)
-        self.libraryChanged.emit([ident])
-        if line.get("recording"):
-            self.recordingFiled.emit(session_id, ident, str(line["recording"].get("path") or ""))
+
+        def closed():
+            self._core.reload_game(ident)
+            return next((s for s in self._core.sessions(ident) if s.get("session") == session_id), {})
+
+        def landed(line):
+            line = line or {}
+            self.sessionEnded.emit(session_id, ident, int(line.get("duration_s") or 0))
+            QTimer.singleShot(4500, self._notice_skipped_modules)
+            self.libraryChanged.emit([ident])
+            if line.get("recording"):
+                self.recordingFiled.emit(session_id, ident, str(line["recording"].get("path") or ""))
+
+        def missed(e):
+            self.error.emit(e.kind, e.message)
+            landed({})
+
+        self._call_async(closed, landed, missed)
 
     @Slot(result="QVariant")
     def sources(self):

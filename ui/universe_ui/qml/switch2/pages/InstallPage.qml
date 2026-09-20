@@ -56,7 +56,10 @@ FocusScope {
         return out.concat(group("Installed", Format.plural(installed.length, "game", "games") + (page.onDisk > 0 ? " · " + Format.bytes(page.onDisk) : ""), installed));
     }
     readonly property var currentLine: rowIndex >= 0 && rowIndex < lines.length && !lines[rowIndex].heading ? lines[rowIndex] : null
-    readonly property real onDisk: sources.rows.reduce(function(sum, r) { return sum + (r.installed ? r.disk_size : 0); }, 0)
+    readonly property real onDisk: {
+        var listed = sources.rows;
+        return listed.reduce(function(sum, r) { return sum + (r.installed ? r.disk_size : 0); }, 0);
+    }
     readonly property string libraryLine: sources.error !== "" ? sourceName + " unreachable · listing from " + (sources.libraryAge || "before")
         : sources.busy ? "Loading…" : (loggedIn ? "Signed in" : "Not signed in") + (sources.libraryAge ? " · refreshed " + sources.libraryAge : "")
 

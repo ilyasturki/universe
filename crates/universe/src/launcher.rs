@@ -348,6 +348,18 @@ fn gamescope_args(
     args
 }
 
+/// The launcher's own gamescope for `screen` (the profile's default when empty), from the config alone: a host re-execs before it opens the library.
+pub async fn host_gamescope_for(config: &Config, screen: &str) -> Option<(String, Vec<String>)> {
+    let screen = crate::desktop::pick_screen(screen);
+    let mode = crate::desktop::screen_mode(&screen).await;
+    let command = host_gamescope(config, mode)?;
+    let _ = std::fs::create_dir_all(crate::paths::state_home());
+    if let Err(e) = std::fs::write(mangoapp_conf_path(), mangoapp_conf_text(false)) {
+        tracing::warn!("mangoapp.conf: {e}");
+    }
+    Some(command)
+}
+
 pub fn host_gamescope(config: &Config, screen: Option<crate::gamescope::Mode>) -> Option<(String, Vec<String>)> {
     let bin = crate::runners::on_path(&config.launch.gamescope_bin)?;
     let fields = crate::library::gamescope_fields_of(&crate::game::Game::default(), config);
