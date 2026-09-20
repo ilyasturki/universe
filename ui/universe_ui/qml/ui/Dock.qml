@@ -83,7 +83,7 @@ FocusScope {
         var v = vals;
         switch (item.id) {
         case "pause": return v.pause ? "On" : "Off";
-        case "hud": return v.hud ? "On" : "Off";
+        case "hud": return v.hud ? "Shown" : "Hidden";
         case "rec": return v.rec ? "On · " + Format.clockTime(dock.elapsed) : "Off";
         case "source": return (v.source === "window" ? "Window" : "Screen") + " · next session";
         case "cursor": return (v.cursor ? "On" : "Off") + " · next session";

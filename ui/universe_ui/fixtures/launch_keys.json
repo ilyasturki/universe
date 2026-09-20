@@ -70,11 +70,11 @@
     "type": "bool",
     "default": true,
     "choices": [],
-    "label": "MangoHud",
+    "label": "Show MangoHud",
     "section": "Overlay",
     "scope": "both",
     "runners": [],
-    "description": "MangoHud's overlay over the game (frame rate, frame time, GPU and CPU load), shown at launch; the in-game menu and the pad macro flip it and write it back here.",
+    "description": "Draw the overlay (frame rate, frame time, GPU and CPU load) over the game from launch; off keeps MangoHud loaded but hidden, the frame rate limit still holds, and the in-game menu or the pad macro shows it mid-game and writes the state back here.",
     "advanced": false
   },
   {

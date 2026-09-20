@@ -56,7 +56,7 @@ def test_synonyms_descriptions_values_and_typos(api, fake):
     search.query = "wyland"
     assert [r["label"] for r in search.results] == ["Wayland", "Wayland"], "a typo"
     search.query = "hud"
-    assert [r["label"] for r in search.results][:2] == ["MangoHud", "MangoHud"]
+    assert [r["label"] for r in search.results][:2] == ["Show MangoHud", "Show MangoHud"]
     search.query = "quit"
     assert search.results[0]["kind"] == "section" and search.results[0]["target"] == {"page": "section", "id": "quit", "key": "", "module": ""}, "a section wins a tie"
     search.query = "hold"
