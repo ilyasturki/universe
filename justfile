@@ -48,6 +48,28 @@ ui *args: build develop env
 ui-fake *args: develop
     @{{ nix }} {{ ui_bin }} --fake {{ args }}
 
+# The UI offscreen and silent: no window, no focus change, no audio. Keys run then it quits; every `Shot:` lands under DIR. just ui-shot DIR [keys…] (UNIVERSE_UI_ARGS="--fake --theme switch2" replaces the default --fake --no-gamepad)
+ui-shot dir *keys: build develop env
+    #!/usr/bin/env -S nix develop --quiet --command bash
+    set -euo pipefail
+    mkdir -p "{{ dir }}"
+    keys="{{ keys }}"
+    script="Wait"
+    gaps=1
+    for k in $keys; do
+        case "$k" in
+            Shot:/*|Shot:) script="$script $k" ;;
+            Shot:*) script="$script Shot:{{ dir }}/${k#Shot:}" ;;
+            Wait:[0-9]*) script="$script $k"; gaps=$((gaps + ${k#Wait:} - 1)) ;;
+            *) script="$script $k" ;;
+        esac
+        gaps=$((gaps + 1))
+    done
+    [[ "$script" == *Shot:* ]] || { script="$script Shot:{{ dir }}/shot.png"; gaps=$((gaps + 1)); }
+    gap=${UNIVERSE_UI_GAP:-120}
+    export QT_QPA_PLATFORM=offscreen PIPEWIRE_REMOTE=/nonexistent
+    "{{ ui_bin }}" ${UNIVERSE_UI_ARGS---fake --no-gamepad} --size 1920x1080 --key-gap "$gap" --keys "$script" --quit-after $((1200 + gap * (gaps + 8)))
+
 # Follow the units of games, hooks and session ends
 logs:
     journalctl --user -f -u 'universe-*'

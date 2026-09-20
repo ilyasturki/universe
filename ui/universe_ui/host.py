@@ -114,6 +114,7 @@ def run(argv=None):
     os.environ.setdefault("QT_FFMPEG_ENCODING_HW_DEVICE_TYPES", "vaapi")
     logging.basicConfig(level=logging.INFO, format="%(name)s: %(message)s")
 
+    import PySide6.QtQuick  # noqa: F401  before rootObjects(): the wrapper is otherwise a bare QWindow, no grabWindow
     from PySide6.QtCore import Qt, QTimer, QUrl
     from PySide6.QtGui import QGuiApplication
     from PySide6.QtQml import QQmlApplicationEngine
