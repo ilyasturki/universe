@@ -22,7 +22,7 @@ fn trash(path: &Path) -> Result<()> {
     trash::delete(path).map_err(|e| Error::Io(format!("trash {}: {e}", path.display())))
 }
 
-fn title_of(path: &Path) -> String {
+pub(crate) fn title_of(path: &Path) -> String {
     let stem = if path.is_dir() { path.file_name() } else { path.file_stem() }.map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
     let mut s = stem.replace('_', " ");
     for (open, close) in [('[', ']'), ('(', ')')] {
@@ -34,7 +34,7 @@ fn title_of(path: &Path) -> String {
         }
     }
     let is_version = |w: &str| {
-        w.len() > 1 && w.starts_with('v') && w[1..].chars().all(|c| c.is_ascii_digit() || c == '.') && w[1..].starts_with(|c: char| c.is_ascii_digit())
+        w.len() > 1 && w.starts_with(['v', 'V']) && w[1..].chars().all(|c| c.is_ascii_digit() || c == '.') && w[1..].starts_with(|c: char| c.is_ascii_digit())
     };
     let words: Vec<&str> = s.split_whitespace().filter(|w| !is_version(w)).collect();
     words.join(" ").trim_end_matches(['-', ' ']).trim().to_string()
@@ -354,6 +354,37 @@ impl Core {
     pub async fn discover(&self) -> crate::discover::Report {
         let config = self.config.read().await.clone();
         blocking(move || Ok(crate::discover::run(&config))).await.unwrap_or_default()
+    }
+
+    /// The games under the emulators' own folders that are not in the library: added when `apply`, their art fetched after.
+    pub async fn import_roms(&self, apply: bool) -> Result<crate::roms::Report> {
+        let config = self.config.read().await.clone();
+        let existing: Vec<PathBuf> = self.games.read().await.iter().map(|g| paths::expand(&g.game.launch.exe)).filter(|p| !p.as_os_str().is_empty()).collect();
+        let mut report = blocking(move || Ok(crate::roms::scan(&config, &existing))).await?;
+        if !apply {
+            return Ok(report);
+        }
+        report.applied = true;
+        let mut added = Vec::new();
+        for f in std::mem::take(&mut report.imported) {
+            match self.add_game(&serde_json::json!({"runner": f.runner, "exe": f.path, "title": f.title})).await {
+                Ok(_) => added.push(f),
+                Err(e) => report.skipped.push(crate::roms::Skipped { path: f.path, reason: e.to_string() }),
+            }
+        }
+        for f in &added {
+            if let Err(e) = self.media_refresh(&f.id, false, None).await {
+                tracing::warn!("{}: media: {e}", f.id);
+            }
+        }
+        report.imported = added;
+        Ok(report)
+    }
+
+    /// `universe rescan`: config and library reread, then the emulators' folders.
+    pub async fn rescan(&self) -> Result<crate::roms::Report> {
+        self.reload_config().await?;
+        self.import_roms(true).await
     }
 
     pub async fn import_lutris(&self, apply: bool) -> Result<crate::lutris::Report> {
@@ -1639,6 +1670,10 @@ scan) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":true
     fn titles_from_files() {
         assert_eq!(title_of(Path::new("/g/F-Zero GX.iso")), "F-Zero GX");
         assert_eq!(title_of(Path::new("/s/SUPER MARIO ODYSSEY v1.0.3 Eur SuperXCi - CLC.xci")), "SUPER MARIO ODYSSEY Eur SuperXCi - CLC");
+        assert_eq!(
+            title_of(Path::new("/s/Super Mario 3D World and Bowsers Fury V1.1.0 Eur SuperXCi - CLC.xci")),
+            "Super Mario 3D World and Bowsers Fury Eur SuperXCi - CLC"
+        );
         assert_eq!(title_of(Path::new("/r/Pokemon - HeartGold Version (USA) [rev 1].nds")), "Pokemon - HeartGold Version");
         assert_eq!(title_of(Path::new("/r/mario_kart_wii.wbfs")), "mario kart wii");
     }

@@ -128,6 +128,12 @@ impl Core {
     fn import_lutris(&self, py: Python<'_>, apply: bool) -> PyResult<Py<PyAny>> {
         self.value(py, |c| c.import_lutris(apply))
     }
+    fn import_roms(&self, py: Python<'_>, apply: bool) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| c.import_roms(apply))
+    }
+    fn rescan(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| c.rescan())
+    }
     /// `{runner, exe, title, platform}`; returns the new id.
     fn add_game(&self, py: Python<'_>, spec: &Bound<'_, PyAny>) -> PyResult<String> {
         let v: serde_json::Value = pythonize::depythonize(spec)?;

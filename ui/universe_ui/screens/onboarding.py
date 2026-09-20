@@ -199,6 +199,8 @@ class Onboarding(RowsForm):
             self._import_lutris(launcher)
         elif launcher["via"] == "gog":
             self._adopt_gog(launcher)
+        elif launcher["via"] == "roms":
+            self._import_roms(launcher)
         else:
             return False
         return True
@@ -217,6 +219,21 @@ class Onboarding(RowsForm):
 
         self._set_state(launcher, "importing")
         self._run(lambda: self._client.core.import_lutris(True), done)
+
+    def _import_roms(self, launcher):
+        def done(report, error):
+            if error:
+                self._set_state(launcher, "failed", error=error)
+                self.message.emit(f"Emulator folder scan failed: {error}")
+                return
+            imported = list(report.get("imported") or [])
+            self._client.libraryChanged.emit([])
+            self._set_state(launcher, "imported", len(imported))
+            if imported:
+                self._summary.append(("Emulator folders", f"{_plural(len(imported), 'game')} added"))
+
+        self._set_state(launcher, "importing")
+        self._run(lambda: self._client.core.import_roms(True), done)
 
     def _adopt_gog(self, launcher):
         current = [d.strip() for d in str(self._client.core.source_settings("gog").get("scan_dirs") or "").split(",") if d.strip()]

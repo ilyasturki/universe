@@ -222,7 +222,7 @@ pub enum Cmd {
         #[arg(long)]
         apply: bool,
     },
-    /// What other launchers (Lutris, Steam, Heroic) hold on this machine and what can be imported
+    /// What other launchers (Lutris, Steam, Heroic) and the emulators' own folders hold on this machine, and what can be imported
     Discover,
     /// Check prerequisites of the core, the enabled modules and sources
     Doctor,
@@ -249,7 +249,7 @@ pub enum Cmd {
         #[command(subcommand)]
         action: ControllerCmd,
     },
-    /// Reload config and rescan the library
+    /// Reload config, reread the library, add the games under the emulators' own folders (universe discover lists them)
     Rescan,
     /// Close a session: run by systemd's ExecStopPost when the game's cgroup empties
     #[command(name = "session-end", hide = true)]
@@ -1251,6 +1251,9 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             if !report.gog_dirs.is_empty() {
                 println!("GOG installs under {} — universe source set gog scan_dirs=… then universe scan gog", report.gog_dirs.join(", "));
             }
+            if report.launchers.iter().any(|l| l.id == "roms" && l.games > 0) {
+                println!("Emulator folders: universe rescan adds them");
+            }
         }
         Cmd::Doctor => {
             let list = core.doctor().await;
@@ -1323,8 +1326,18 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         }
         Cmd::Controller { action } => return controller(core, action, json).await,
         Cmd::Rescan => {
-            core.reload_config().await?;
-            println!("rescanned");
+            let report = core.rescan().await?;
+            if json {
+                return print_json(&serde_json::to_value(&report)?);
+            }
+            let n = report.imported.len();
+            println!("rescanned, {n} game{} from the emulators' folders", if n == 1 { "" } else { "s" });
+            for f in &report.imported {
+                println!("  {} {} {}", f.id, f.runner.dimmed(), f.path.dimmed());
+            }
+            for k in &report.skipped {
+                println!("  {} {}", k.path.dimmed(), k.reason);
+            }
         }
         Cmd::Complete { .. } | Cmd::Generate { .. } | Cmd::Splash { .. } | Cmd::LaunchKeys => unreachable!(),
     }

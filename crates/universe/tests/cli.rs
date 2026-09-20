@@ -15,6 +15,8 @@ fn universe(dir: &tempfile::TempDir, args: &[&str], env: &[(&str, &str)]) -> std
         cmd.env(var, dir.path().join(sub));
     }
     cmd.env_remove("NO_COLOR").env_remove("CLICOLOR_FORCE").env("HOME", dir.path());
+    // The emulators' own configs (discover's folder scan) live under these, not the Universe homes.
+    cmd.env("XDG_CONFIG_HOME", dir.path().join(".config")).env("XDG_DATA_HOME", dir.path().join(".local/share"));
     cmd.envs(env.iter().copied()).args(args).output().unwrap()
 }
 
@@ -47,7 +49,7 @@ fn discover_on_a_bare_home_finds_nothing() {
     let report: serde_json::Value = serde_json::from_slice(&out.stdout).unwrap_or_else(|e| panic!("{e}: {}", String::from_utf8_lossy(&out.stdout)));
     let launchers = report["launchers"].as_array().unwrap();
     let ids: Vec<&str> = launchers.iter().filter_map(|l| l["id"].as_str()).collect();
-    assert_eq!(ids, ["lutris", "steam", "heroic-gog", "heroic-epic", "heroic-amazon"]);
+    assert_eq!(ids, ["lutris", "steam", "heroic-gog", "heroic-epic", "heroic-amazon", "roms"]);
     assert!(launchers.iter().all(|l| l["found"] == false && l["games"] == 0), "{launchers:?}");
     assert_eq!(report["gog_dirs"], serde_json::json!([]));
     let text = String::from_utf8_lossy(&universe(&dir, &["discover"], &[]).stdout).into_owned();

@@ -412,13 +412,19 @@
     }
   ],
   "lutris": {"imported": ["celeste", "hades"], "hours_imported": {"celeste": 12.5, "hades": 30.2}},
+  "roms": {
+    "folders": [{"runner": "dolphin", "dir": "/mnt/games/wii", "recursive": false}, {"runner": "eden", "dir": "/mnt/games/switch", "recursive": false}],
+    "imported": [{"id": "xenoblade-chronicles-3", "title": "Xenoblade Chronicles 3", "runner": "eden", "path": "/mnt/games/switch/Xenoblade Chronicles 3.xci"}],
+    "skipped": [{"path": "/mnt/games/switch/updates/Xenoblade Chronicles 3 [v2].nsp", "reason": "same title as /mnt/games/switch/Xenoblade Chronicles 3.xci"}]
+  },
   "discover": {
     "launchers": [
       {"id": "lutris", "name": "Lutris", "found": true, "dir": "/home/player/.local/share/lutris/pga.db", "games": 2, "titles": ["Celeste", "Hades"], "importable": true, "via": "lutris", "detail": ""},
       {"id": "steam", "name": "Steam", "found": true, "dir": "/home/player/.local/share/Steam", "games": 3, "titles": ["Elden Ring", "Portal 2", "Stardew Valley"], "importable": false, "via": "", "detail": "Steam games launch through Steam; a Steam source comes later."},
       {"id": "heroic-gog", "name": "Heroic · GOG", "found": true, "dir": "/home/player/.config/heroic", "games": 1, "titles": ["Mini Metro"], "importable": true, "via": "gog", "detail": ""},
       {"id": "heroic-epic", "name": "Heroic · Epic Games", "found": true, "dir": "/home/player/.config/heroic", "games": 1, "titles": ["Hades"], "importable": false, "via": "", "detail": "Epic games launch through Heroic; an Epic source comes later."},
-      {"id": "heroic-amazon", "name": "Heroic · Amazon Games", "found": true, "dir": "/home/player/.config/heroic", "games": 0, "titles": [], "importable": false, "via": "", "detail": "Amazon games launch through Heroic; an Amazon source comes later."}
+      {"id": "heroic-amazon", "name": "Heroic · Amazon Games", "found": true, "dir": "/home/player/.config/heroic", "games": 0, "titles": [], "importable": false, "via": "", "detail": "Amazon games launch through Heroic; an Amazon source comes later."},
+      {"id": "roms", "name": "Emulator folders", "found": true, "dir": "/mnt/games/wii, /mnt/games/switch", "games": 1, "titles": ["Xenoblade Chronicles 3"], "importable": true, "via": "roms", "detail": ""}
     ],
     "gog_dirs": ["/mnt/games/PC"]
   },

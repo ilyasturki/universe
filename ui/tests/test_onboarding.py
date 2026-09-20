@@ -56,6 +56,7 @@ def test_steps_and_found_rows(empty_api):
     assert rows["heroic-gog"]["display"] == "1 game" and rows["heroic-gog"]["action"] == "Adopt"
     assert rows["steam"]["display"] == "3 games · not importable yet" and rows["steam"]["type"] == "static"
     assert rows["heroic-epic"]["display"] == "1 game · not importable yet" and rows["heroic-amazon"]["display"] == "No games"
+    assert rows["roms"]["display"] == "1 game" and rows["roms"]["action"] == "Import" and rows["roms"]["via"] == "roms"
     form.next()
     assert form.stepId == "stores" and [r["key"] for r in form.rows] == ["logged_in", "link", "code"]
     assert form.rows[0]["display"] == "Signed in as yasso" and form.groups[0]["title"] == "GOG"
@@ -78,9 +79,15 @@ def test_found_rows_run_the_importers(empty_api, empty):
     pump(50)
     assert rows_by_key(form)["heroic-gog"]["display"] == "Nothing new"
     assert empty.core.source_settings("gog")["scan_dirs"] == "/mnt/games/PC", "the other launcher's folder joined the source's scan_dirs"
+    assert form.runImport(index_of(form, "roms")) is True
+    wait_for(form.busyChanged, 3000)
+    if form.busy:
+        wait_for(form.busyChanged, 3000)
+    assert rows_by_key(form)["roms"]["display"] == "1 game added"
+    assert empty_api.allGames.count == 3 and empty.core.get("xenoblade-chronicles-3")["launch"]["runner"] == "eden"
     while form.stepId != "done":
         form.next()
-    assert (form.rows[0]["label"], form.rows[0]["display"]) == ("Lutris", "2 games added")
+    assert [(r["label"], r["display"]) for r in form.rows] == [("Lutris", "2 games added"), ("Emulator folders", "1 game added")]
 
 
 def test_preferences_write_the_family_and_the_upgrades(empty_api, empty):
@@ -136,7 +143,7 @@ def test_the_wizard_opens_on_first_run_in_both_looks(empty_api, theme):
     if form.busy:
         wait_for(form.busyChanged, 3000)
     settle_window(window)
-    assert opened() and form.stepId == "found" and form.count == 5
+    assert opened() and form.stepId == "found" and form.count == 6
     press(Qt.Key.Key_I)
     assert form.stepId == "stores", "X moves on"
     press(Qt.Key.Key_Escape)

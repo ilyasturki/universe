@@ -38,7 +38,36 @@ pub fn run(config: &Config) -> Report {
     let mut launchers = vec![lutris(config)];
     launchers.push(steam.as_deref().map(steam_launcher).unwrap_or_else(|| Launcher { id: "steam".into(), name: "Steam".into(), ..Default::default() }));
     launchers.extend(heroic_launchers(heroic.as_deref(), &gog_dirs, &config.games_root()));
+    launchers.push(roms_launcher(config, library_files()));
     Report { launchers, gog_dirs: gog_dirs.iter().map(|d| d.to_string_lossy().into()).collect() }
+}
+
+/// Every library game's file, for the folder scan to leave out.
+fn library_files() -> Vec<PathBuf> {
+    let Ok(rd) = std::fs::read_dir(paths::games_dir()) else { return Vec::new() };
+    rd.flatten()
+        .filter_map(|e| crate::game::Game::load(&e.path().join("game.toml")).ok())
+        .filter(|g| !g.launch.exe.is_empty())
+        .map(|g| paths::expand(&g.launch.exe))
+        .collect()
+}
+
+/// The folders the installed emulators list themselves (`roms.rs`): `games` counts the files not in the library yet.
+fn roms_launcher(config: &Config, existing: Vec<PathBuf>) -> Launcher {
+    let report = crate::roms::scan(config, &existing);
+    let mut seen = std::collections::BTreeSet::new();
+    let dirs: Vec<&str> = report.folders.iter().map(|f| f.dir.as_str()).filter(|d| seen.insert(*d)).collect();
+    Launcher {
+        id: "roms".into(),
+        name: "Emulator folders".into(),
+        found: !report.folders.is_empty(),
+        dir: dirs.join(", "),
+        games: report.imported.len(),
+        titles: report.imported.iter().take(TITLES).map(|f| f.title.clone()).collect(),
+        importable: true,
+        via: "roms".into(),
+        detail: if report.folders.is_empty() { "No installed emulator lists a game folder yet.".into() } else { String::new() },
+    }
 }
 
 fn first_dir(candidates: &[PathBuf]) -> Option<PathBuf> {

@@ -593,8 +593,8 @@ runs `discover()` off the UI thread and builds `steps` (`{id, title, subtitle}`)
 emits `finished`; `next()` on the last step finishes). Every step is one `rows`/`groups` list in
 the settings forms' shape, so each look draws it with its settings rows and its value editor:
 `found` is a row per launcher found on the machine — an action row (`via`) where Universe can take
-the games over (`display` the count; `runImport(index)` runs `import_lutris(true)` or, for
-`heroic-gog`, adds `gog_dirs` to the gog source's `scan_dirs` when the config takes writes and
+the games over (`display` the count; `runImport(index)` runs `import_lutris(true)`,
+`import_roms(true)` for the emulators' folders, or, for `heroic-gog`, adds `gog_dirs` to the gog source's `scan_dirs` when the config takes writes and
 starts a `scan("gog")` job; the row's `display` follows: "Importing…", "N games added", "Nothing
 new", the error), a `static` row otherwise ("No games", "N games · not importable yet", "· needs
 gogdl") — `stores` the source's Account row, "Get a sign-in link" (`link`) and "Enter the code"

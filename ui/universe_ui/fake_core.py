@@ -579,6 +579,18 @@ class FakeCore:
                 self._write_game(game)
         return {"runners": [], "skipped": [], "updated": [], "media_imported": [], "env_diffs": [], **copy.deepcopy(report), "applied": bool(apply)}
 
+    def import_roms(self, apply):
+        report = copy.deepcopy(self._data.get("roms") or {"folders": [], "imported": [], "skipped": []})
+        known = {g["id"] for g in self._data["games"]}
+        report["imported"] = [f for f in report["imported"] if f["id"] not in known]
+        if apply:
+            for found in report["imported"]:
+                self.add_game({"runner": found["runner"], "exe": found["path"], "title": found["title"]})
+        return {**report, "applied": bool(apply)}
+
+    def rescan(self):
+        return self.import_roms(True)
+
     def add_game(self, spec):
         runner = self._runner_of({"runner": spec.get("runner", "")})
         runner_spec = self._runner(runner)
@@ -1263,6 +1275,9 @@ class FakeCore:
             if launcher["id"] == "lutris":
                 pending = [i for i in self._data.get("lutris", {}).get("imported", []) if i not in known]
                 launcher["games"], launcher["titles"] = len(pending), [i.replace("-", " ").title() for i in pending]
+            elif launcher["id"] == "roms":
+                pending = self.import_roms(False)["imported"]
+                launcher["games"], launcher["titles"] = len(pending), [f["title"] for f in pending][:6]
         return report
 
     def settings(self):
