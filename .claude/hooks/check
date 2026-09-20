@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Stop: lint the tree and test the suites this session's changes touch; a failure goes back to the session (exit 2).
+# Stop: lint the sections this session's changes touch; a failure goes back to the session (exit 2). Tests stay on `just test` and the pre-push `just verify`.
 set -uo pipefail
 input=$(cat)
 [ "$(printf '%s' "$input" | jq -r '.stop_hook_active // false')" = true ] && exit 0
@@ -10,16 +10,25 @@ base=$(git merge-base HEAD main 2>/dev/null || git rev-parse HEAD)
 changed=$({ git diff --name-only "$base"; git status --porcelain --untracked-files=all | cut -c4-; } | sort -u)
 [ -n "$changed" ] || exit 0
 
-suites=()
-grep -qE '^(crates/|Cargo\.(toml|lock)$|rustfmt\.toml$)' <<<"$changed" && suites+=(rust bindings)
-grep -qE '^(ui/|conftest\.py$|pyproject\.toml$)' <<<"$changed" && suites+=(ui)
-grep -q '^modules/' <<<"$changed" && suites+=(modules)
-grep -q '^sources/' <<<"$changed" && suites+=(sources)
+# The working tree as a tree object (tracked + untracked, gitignore honoured): the same tree passing once is enough
+stamp=$(git rev-parse --git-dir)/claude-check-ok
+tmp_index=$(mktemp -u) log=
+trap 'rm -f "$tmp_index" "$log"' EXIT
+tree=$(GIT_INDEX_FILE=$tmp_index git add -A . 2>/dev/null && GIT_INDEX_FILE=$tmp_index git write-tree)
+[ -n "$tree" ] && [ "$(cat "$stamp" 2>/dev/null)" = "$tree" ] && exit 0
+
+sections=()
+grep -qE '^(crates/|Cargo\.(toml|lock)$|rustfmt\.toml$|clippy\.toml$)' <<<"$changed" && sections+=(rust)
+grep -qE '(\.pyi?$|^(conftest\.py|pyproject\.toml)$|^(modules|sources)/[^/]+/bin/|^tools/)' <<<"$changed" && sections+=(python)
+grep -qE '(\.(pyi?|qml|[mc]?js|ts|json|nix)$|^tools/fmt$)' <<<"$changed" && sections+=(fmt)
+grep -qE '(\.([mc]?js|ts|json)$|^biome\.json$)' <<<"$changed" && sections+=(js)
+grep -qE '^(tools/|\.githooks/|\.claude/hooks/)' <<<"$changed" && sections+=(shell)
+grep -q '^\.github/' <<<"$changed" && sections+=(actions)
 
 log=$(mktemp)
-trap 'rm -f "$log"' EXIT
-if just lint >"$log" 2>&1 && { [ ${#suites[@]} -eq 0 ] || just test "${suites[@]}" >>"$log" 2>&1; }; then
+if [ ${#sections[@]} -eq 0 ] || just lint "${sections[@]}" >"$log" 2>&1; then
+    [ -n "$tree" ] && printf '%s\n' "$tree" >"$stamp"
     exit 0
 fi
-{ echo "checks failed (just lint; just test ${suites[*]:-}):"; tail -n 80 "$log"; } >&2
+{ echo "checks failed (just lint ${sections[*]}):"; tail -n 80 "$log"; } >&2
 exit 2
