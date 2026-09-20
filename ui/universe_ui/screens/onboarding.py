@@ -8,20 +8,15 @@ MEMORY_KEY = "onboarded"
 PREFERENCE_KEYS = ("hdr", "dlss_upgrade", "fsr4_upgrade", "xess_upgrade", "optiscaler")
 FAMILY_DETAIL = "The pad the button hints and the controller art follow until one is plugged in."
 READ_ONLY = "Settings are managed by home-manager on this machine: change them in programs.universe.settings."
-NO_GOG_SOURCE = "The GOG source is not available: gogdl is missing."
+NO_GOG_SOURCE = "needs gogdl"
+NOT_YET = "not importable yet"
 
-STEPS = {
-    "discover": ("What's on this machine", "Games other launchers installed here, and what Universe can take over."),
-    "stores": ("Your stores", "Sign in to list and install the games you own."),
-    "import": ("Bring your games in", "Imported games keep their hours and artwork; nothing is moved."),
-    "preferences": ("A few choices", "Everything else has a default that suits most people."),
-    "done": ("You're set", "Everything here can be changed later under Settings."),
-}
+TITLES = {"found": "What's on this machine", "stores": "Your stores", "preferences": "A few choices", "done": "You're set"}
+SUBTITLES = {"done": "Everything here can be changed later under Settings."}
 
 
 def _step(ident):
-    title, subtitle = STEPS[ident]
-    return {"id": ident, "title": title, "subtitle": subtitle}
+    return {"id": ident, "title": TITLES[ident], "subtitle": SUBTITLES.get(ident, "")}
 
 
 def _plural(n, word):
@@ -55,6 +50,19 @@ def preference_rows(client, controller):
 
 def _static(key, label, display, detail=""):
     return {**_row("", key, label, "static", display, detail=detail), "display": display}
+
+
+def _found_display(launcher):
+    state, n = launcher["state"], launcher["count"]
+    if state == "importing":
+        return "Importing…"
+    if state == "imported":
+        return f"{_plural(n, 'game')} added" if n else "Nothing new"
+    if state == "failed":
+        return launcher["error"] or "Failed"
+    if not launcher["games"]:
+        return "No games"
+    return _plural(launcher["games"], "game") + " · " + launcher["detail"]
 
 
 def _importable(launcher):
@@ -93,7 +101,7 @@ class Onboarding(RowsForm):
 
     @Slot()
     def load(self):
-        self._steps, self._step, self._summary, self._scan_job = [_step("discover")], 0, [], ""
+        self._steps, self._step, self._summary, self._scan_job = [_step("found")], 0, [], ""
         self._launchers, self._gog_dirs, self._sources = [], [], []
         self._set_rows([], [])
         self.stepChanged.emit()
@@ -108,13 +116,12 @@ class Onboarding(RowsForm):
             self._launchers = [{**launcher, "state": "", "count": 0, "error": ""} for launcher in report.get("launchers") or []]
             for launcher in self._launchers:
                 if launcher.get("via") == "gog" and not gog:
-                    launcher["importable"], launcher["detail"] = False, NO_GOG_SOURCE
+                    launcher["importable"] = False
+                launcher["detail"] = "" if launcher["importable"] else NO_GOG_SOURCE if launcher.get("via") == "gog" else NOT_YET
             self._writable = bool((self._client.config() or {}).get("config_writable", True))
-            steps = ["discover"]
+            steps = ["found"]
             if self._sources:
                 steps.append("stores")
-            if any(_importable(launcher) for launcher in self._launchers):
-                steps.append("import")
             if self._writable:
                 steps.append("preferences")
             steps.append("done")
@@ -134,53 +141,30 @@ class Onboarding(RowsForm):
     def _refresh(self):
         step = self._step_id()
         rows, groups = [], []
-        if step == "discover":
-            for launcher in self._launchers:
-                _add(rows, groups, "", _static(launcher["id"], launcher["name"], self._discover_display(launcher), self._discover_detail(launcher)))
+        if step == "found":
+            for launcher in filter(lambda launcher: launcher["found"], self._launchers):
+                if _importable(launcher) and not launcher["state"]:
+                    row = _row("", launcher["id"], launcher["name"], "action", "")
+                    row.update(via=launcher["via"], display=_plural(launcher["games"], "game"), action="Adopt" if launcher["via"] == "gog" else "Import")
+                else:
+                    row = _static(launcher["id"], launcher["name"], _found_display(launcher))
+                _add(rows, groups, "", row)
+            if not rows:
+                _add(rows, groups, "", _static("none", "Other launchers", "None found"))
         elif step == "stores":
             for source in self._sources:
                 name = source.get("name", source["id"])
                 _add(rows, groups, name, {**_static("logged_in", "Account", _source_status(source)[0]), "module": source["id"]}, caps=True)
                 _add(rows, groups, name, {**_row(name, "link", "Get a sign-in link", "action", "", module=source["id"]), "action": "Sign in", "display": ""})
                 _add(rows, groups, name, {**_row(name, "code", "Enter the code", "action", "", module=source["id"]), "action": "Enter", "display": ""})
-        elif step == "import":
-            for launcher in filter(_importable, self._launchers):
-                row = _row("", launcher["id"], launcher["name"], "action", "", detail=", ".join(launcher["titles"]))
-                row.update(
-                    display=self._import_display(launcher),
-                    action=("Adopt" if launcher["via"] == "gog" else "Import") if not launcher["state"] else "",
-                    via=launcher["via"],
-                )
-                _add(rows, groups, "", row)
         elif step == "preferences":
             rows, groups = preference_rows(self._client, self._controller)
         elif step == "done":
-            _add(rows, groups, "", _static("summary", "What happened", " · ".join(self._summary) or "Nothing yet: add games any time from the Library."))
+            for label, display in self._summary or [("Library", "Nothing added yet: games can join any time from the Library")]:
+                _add(rows, groups, "", _static(label, label, display))
             if not self._writable:
                 _add(rows, groups, "", _static("read_only", "Settings", "Managed by home-manager", READ_ONLY))
         self._set_rows(rows, groups)
-
-    def _discover_display(self, launcher):
-        if not launcher["found"]:
-            return "Not installed"
-        if not launcher["games"]:
-            return "No games"
-        return _plural(launcher["games"], "game") + ("" if launcher["importable"] else " · not importable yet")
-
-    def _discover_detail(self, launcher):
-        if launcher["found"] and launcher["games"] and launcher["importable"]:
-            return ", ".join(launcher["titles"]) + (", …" if launcher["games"] > len(launcher["titles"]) else "")
-        return launcher["detail"] if launcher["found"] else ""
-
-    def _import_display(self, launcher):
-        state, n = launcher["state"], launcher["count"]
-        if state == "importing":
-            return "Importing…"
-        if state == "imported":
-            return f"{_plural(n, 'game')} added" if n else "Nothing new"
-        if state == "failed":
-            return launcher["error"] or "Failed"
-        return f"{_plural(launcher['games'], 'game')} to {'adopt' if launcher['via'] == 'gog' else 'import'}"
 
     @Slot()
     def next(self):
@@ -203,7 +187,7 @@ class Onboarding(RowsForm):
 
     def _set_state(self, launcher, state, count=0, error=""):
         launcher.update(state=state, count=count, error=error)
-        if self._step_id() == "import":
+        if self._step_id() == "found":
             self._refresh()
 
     @Slot(int, result=bool)
@@ -229,7 +213,7 @@ class Onboarding(RowsForm):
             self._client.libraryChanged.emit([])
             self._set_state(launcher, "imported", len(imported))
             if imported:
-                self._summary.append(f"{_plural(len(imported), 'game')} from Lutris")
+                self._summary.append(("Lutris", f"{_plural(len(imported), 'game')} added"))
 
         self._set_state(launcher, "importing")
         self._run(lambda: self._client.core.import_lutris(True), done)
@@ -262,7 +246,7 @@ class Onboarding(RowsForm):
         count = int(text.split(" ")[0]) if text[:1].isdigit() else 0
         self._set_state(launcher, "imported", count)
         if count:
-            self._summary.append(f"{_plural(count, 'GOG game')} adopted")
+            self._summary.append(("GOG", f"{_plural(count, 'game')} adopted"))
 
     def _on_login(self, ok, text):
         if not ok:
@@ -270,7 +254,7 @@ class Onboarding(RowsForm):
         self._sources = [s for s in self._client.sources() if s.get("available", True) and s.get("enabled", True)]
         source = next((s for s in self._sources if s["id"] == self._login.source), None)
         if source is not None:
-            self._summary.append(f"signed in to {source.get('name', source['id'])}")
+            self._summary.append((source.get("name", source["id"]), "Signed in"))
         if self._step_id() == "stores":
             self._refresh()
 

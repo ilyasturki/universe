@@ -4,12 +4,13 @@ import "../sound"
 import "../ui"
 import "Forms.js" as Forms
 
-// First-run setup: one row list per step (discover, stores, import, preferences, done), X moves on, B goes back or skips.
+// First-run setup as a dialog over the shell: one row list per step (found, stores, preferences, done), X moves on, B goes back or skips.
 FocusScope {
     id: page
 
     property var shell: null
     property var args: ({})
+    readonly property bool overlay: true
     focus: true
 
     readonly property var form: api.screens.onboarding
@@ -124,51 +125,81 @@ FocusScope {
         }
     }
 
-    PageHeader {
-        id: header
-        anchors.top: parent.top
-        anchors.left: parent.left
-        anchors.right: parent.right
-        icon: "settings"
-        title: page.current.title
-        subtitle: "Set up · " + (page.form.step + 1) + " of " + page.form.steps.length
+    Rectangle {
+        anchors.fill: parent
+        color: Theme.scrim
     }
 
-    Label {
-        id: description
-        x: Theme.dp(120)
-        y: header.height + Theme.dp(24)
-        width: parent.width - x - Theme.dp(120)
-        text: page.form.busy && page.form.count === 0 ? "Looking at this machine…" : page.current.subtitle
-        color: Theme.textSecondary
-        elide: Text.ElideRight
-        font.pixelSize: Theme.dp(Theme.fontSmall)
-    }
+    Rectangle {
+        id: card
 
-    SettingsRows {
-        id: rows
+        readonly property real pad: Theme.dp(56)
+        readonly property real gap: Theme.dp(24)
+        readonly property real room: parent.height - Theme.dp(Theme.hintBarHeight) - Theme.dp(120)
+        readonly property real loginRoom: qrCard.visible ? qrCard.height + gap : 0
 
-        shell: page.shell
-        x: Theme.dp(120)
-        y: header.height + Theme.dp(84)
-        width: parent.width - x - Theme.dp(120)
-        height: parent.height - y - Theme.dp(Theme.hintBarHeight) - Theme.dp(20) - (qrCard.visible ? qrCard.height + Theme.dp(20) : 0)
-        model: page.content
-        focus: true
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: (parent.height - Theme.dp(Theme.hintBarHeight) - height) / 2
+        width: Theme.dp(1200)
+        height: pad * 2 + head.height + gap + rows.height + loginRoom
+        radius: Theme.dp(6)
+        color: Theme.card
 
-        onActivated: function (index, row) {
-            page.activate(index, row);
+        Column {
+            id: head
+
+            x: card.pad
+            y: card.pad
+            width: parent.width - card.pad * 2
+            spacing: Theme.dp(6)
+
+            Label {
+                text: (page.form.step + 1) + " / " + page.form.steps.length
+                color: Theme.textSecondary
+                font.pixelSize: Theme.dp(Theme.fontTiny)
+            }
+
+            Label {
+                width: parent.width
+                text: page.current.title
+                font.pixelSize: Theme.dp(Theme.fontTitle)
+                elide: Text.ElideRight
+            }
+
+            Label {
+                width: parent.width
+                visible: text !== ""
+                text: page.form.busy && page.form.count === 0 ? "Looking at this machine…" : page.current.subtitle
+                color: Theme.textSecondary
+                font.pixelSize: Theme.dp(Theme.fontSmall)
+                elide: Text.ElideRight
+            }
         }
-        onEscapedLeft: Sound.play("edge")
-    }
 
-    LoginCard {
-        id: qrCard
+        SettingsRows {
+            id: rows
 
-        x: rows.x
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: Theme.dp(Theme.hintBarHeight) + Theme.dp(20)
-        width: rows.width
-        source: page.form.stepId === "stores" ? page.source : ""
+            shell: page.shell
+            x: card.pad
+            y: head.y + head.height + card.gap
+            width: parent.width - card.pad * 2
+            height: Math.min(rows.contentHeight + rows.room * 2, card.room - card.pad * 2 - head.height - card.gap - card.loginRoom)
+            model: page.content
+            focus: true
+
+            onActivated: function (index, row) {
+                page.activate(index, row);
+            }
+            onEscapedLeft: Sound.play("edge")
+        }
+
+        LoginCard {
+            id: qrCard
+
+            x: card.pad
+            y: rows.y + rows.height + card.gap
+            width: parent.width - card.pad * 2
+            source: page.form.stepId === "stores" ? page.source : ""
+        }
     }
 }

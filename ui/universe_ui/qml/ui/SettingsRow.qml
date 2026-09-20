@@ -335,6 +335,7 @@ Item {
                 width: Theme.dp(14)
                 height: Theme.dp(22)
                 anchors.verticalCenter: parent.verticalCenter
+                visible: row.entry.type !== "static"
                 readonly property color tint: row.focused ? Theme.onLight : Theme.textMuted
                 onTintChanged: requestPaint()
                 onPaint: {

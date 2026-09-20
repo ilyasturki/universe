@@ -95,6 +95,7 @@ FocusScope {
     ]
 
     readonly property Item topPage: pages.count > 0 && pages.itemAt(pages.count - 1) ? pages.itemAt(pages.count - 1).item : null
+    readonly property bool topOverlay: topPage !== null && topPage.overlay === true
     readonly property var hints: dialog.open ? dialog.hints : sheet.open ? sheet.hints : picker.open ? picker.hints : folder.open ? folder.hints : launching ? [] : !onHome && topPage ? topPage.hints : homeFocus === "bar" ? bottomBar.hints : home.hints
 
     function push(source, args) {
@@ -249,7 +250,7 @@ FocusScope {
         id: homeLayer
 
         anchors.fill: parent
-        opacity: root.onHome && !root.launching ? 1.0 : 0.0
+        opacity: (root.onHome || root.depth === 1 && root.topOverlay) && !root.launching ? 1.0 : 0.0
         visible: opacity > 0.01
 
         Behavior on opacity {
@@ -298,6 +299,7 @@ FocusScope {
             id: pageLoader
 
             readonly property bool isTop: index === root.depth - 1
+            readonly property bool shown: isTop || index === root.depth - 2 && root.topOverlay
 
             anchors.fill: parent
             source: model.source
@@ -313,11 +315,12 @@ FocusScope {
                 anchors.fill: parent
                 z: -1
                 color: Theme.ground
+                visible: !(pageLoader.item && pageLoader.item.overlay === true)
             }
 
             // Bound after creation, so a page fades in instead of appearing at full opacity.
             Component.onCompleted: opacity = Qt.binding(function () {
-                return isTop && !root.launching ? 1.0 : 0.0;
+                return shown && !root.launching ? 1.0 : 0.0;
             })
 
             onLoaded: {

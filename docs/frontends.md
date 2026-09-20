@@ -548,26 +548,27 @@ CLI's `universe add` and `universe migrate` are the same calls.
 `api.screens.onboarding` is the setup shown once: `needed` is true while `api.memory` has no
 `onboarded` and the library is empty (a library with games sets the flag on the first read, so an
 emptied library never brings it up later), and both looks open it from their root's
-`Component.onCompleted` — Reprise as `pages/OnboardingPage.qml` over the tab (`openSetup()`,
-`openSub` with `{ setup: true }`), the Switch 2 look as `switch2/pages/OnboardingPage.qml` on its
-stack; Settings › About › "First-run setup" opens it again. `load()` runs `discover()` off the UI
-thread and builds `steps` (`{id, title, subtitle}`): `discover`, `stores` (when an enabled,
-available source exists), `import` (when a launcher is importable with games), `preferences` (when
-`settings()` says `config_writable`) and `done`; `step`, `stepId`, `next()`, `back()`, `finish()`
-(sets `onboarded`, emits `finished`; `next()` on the last step finishes). Every step is one
-`rows`/`groups` list in the settings forms' shape, so each look draws it with its settings rows
-and its value editor: `discover` is an `info` row per launcher (`display` the count, or "Not
-installed", "No games", "· not importable yet"; `detail` the titles, or why it cannot be
-imported), `stores` the source's Account row, "Get a sign-in link" (`link`) and "Enter the code"
+`Component.onCompleted` as a dialog over what is on screen — Reprise as `pages/OnboardingPage.qml`
+(`openSetup()`, `openSub` with `{ setup: true }`, which keeps the tabs visible under it), the
+Switch 2 look as `switch2/pages/OnboardingPage.qml` on its stack (a page whose `overlay` is true
+leaves the layer under it in view); Settings › About › "First-run setup" opens it again. `load()`
+runs `discover()` off the UI thread and builds `steps` (`{id, title, subtitle}`): `found`, `stores`
+(when an enabled, available source exists), `preferences` (when `settings()` says
+`config_writable`) and `done`; `step`, `stepId`, `next()`, `back()`, `finish()` (sets `onboarded`,
+emits `finished`; `next()` on the last step finishes). Every step is one `rows`/`groups` list in
+the settings forms' shape, so each look draws it with its settings rows and its value editor:
+`found` is a row per launcher found on the machine — an action row (`via`) where Universe can take
+the games over (`display` the count; `runImport(index)` runs `import_lutris(true)` or, for
+`heroic-gog`, adds `gog_dirs` to the gog source's `scan_dirs` when the config takes writes and
+starts a `scan("gog")` job; the row's `display` follows: "Importing…", "N games added", "Nothing
+new", the error), a `static` row otherwise ("No games", "N games · not importable yet", "· needs
+gogdl") — `stores` the source's Account row, "Get a sign-in link" (`link`) and "Enter the code"
 (`code`) through the shared `api.screens.login` — `ui/LoginCard.qml` and `switch2/ui/LoginCard.qml`
-are the QR, URL and status card `FormPage` shows too — `import` an action row per importable
-launcher (`via`; `runImport(index)` runs `import_lutris(true)` or, for `heroic-gog`, adds
-`gog_dirs` to the gog source's `scan_dirs` when the config takes writes and starts a `scan("gog")`
-job; the row's `display` follows: "Importing…", "N games added", "Nothing new", the error),
-`preferences` the controller family (`controller.family`, an `enum` over
-`api.screens.controller.families`, written with `setFamily`) and the graphics upgrades that fit
-this GPU (`launch.hdr`, the upscaler upgrades without their `default` choice, `launch.optiscaler`),
-`done` a summary row and, under a read-only config, why the preferences were skipped. X moves on,
+are the QR, URL and status card `FormPage` shows too — `preferences` the controller family
+(`controller.family`, an `enum` over `api.screens.controller.families`, written with `setFamily`)
+and the graphics upgrades that fit this GPU (`launch.hdr`, the upscaler upgrades without their
+`default` choice, `launch.optiscaler`), `done` a summary row and, under a read-only config, why the
+preferences were skipped. The header is the step count (`1 / 4`) and the step's title; X moves on,
 B goes back, or on the first step skips the whole setup.
 
 ## The artwork pages and section

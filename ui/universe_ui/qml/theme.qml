@@ -822,6 +822,8 @@ FocusScope {
             anchors.bottom: parent.bottom
             anchors.left: parent.left
             anchors.right: parent.right
+            opacity: root.subOpen && root.subArgs.setup ? 0.0 : 1.0
+            visible: opacity > 0.01
             hints: confirm.open ? confirm.hints : root.menuOpen ? gameMenu.hints : root.focusOwner === "chrome" ? tabBar.hints : root.focusOwner === "search" ? (searchLoader.item ? searchLoader.item.hints : []) : !root.activePage ? [] : root.activePage.modal ? root.activePage.hints : root.activePage.hints.concat([
                 {
                     glyph: "LB RB",
@@ -924,11 +926,11 @@ FocusScope {
         }
     }
 
-    // A sub-page jump fades over this, not over the tabs.
+    // A sub-page jump fades over this, not over the tabs; the setup dialog keeps them in view.
     Rectangle {
         anchors.fill: parent
         color: Theme.ground
-        opacity: root.subOpen && !root.launching ? 1.0 : 0.0
+        opacity: root.subOpen && !root.launching && !root.subArgs.setup ? 1.0 : 0.0
         visible: opacity > 0.01
 
         Behavior on opacity {

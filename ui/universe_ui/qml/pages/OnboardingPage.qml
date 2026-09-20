@@ -3,7 +3,7 @@ import "../core"
 import "../sound"
 import "../ui"
 
-// First-run setup: one card list per step (discover, stores, import, preferences, done), X moves on, B goes back or skips.
+// First-run setup as a dialog over the launcher: one card list per step (found, stores, preferences, done), X moves on, B goes back or skips.
 FocusScope {
     id: page
 
@@ -37,8 +37,6 @@ FocusScope {
             label: form.step > 0 ? "Back" : "Skip setup"
         }
     ]
-
-    readonly property real sideMargin: Theme.dp(90)
 
     Component.onCompleted: form.load()
 
@@ -82,13 +80,11 @@ FocusScope {
     }
 
     function retreat() {
-        if (form.step > 0) {
-            Sound.cancel();
+        Sound.cancel();
+        if (form.step > 0)
             form.back();
-        } else {
-            Sound.cancel();
+        else
             form.finish();
-        }
     }
 
     Connections {
@@ -114,51 +110,39 @@ FocusScope {
         }
     }
 
-    Item {
-        id: header
+    Rectangle {
+        anchors.fill: parent
+        color: Qt.rgba(0.02, 0.02, 0.03, 1)
+        opacity: 0.62
+    }
 
-        anchors.top: parent.top
-        anchors.topMargin: Theme.dp(36)
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.leftMargin: page.sideMargin
-        anchors.rightMargin: page.sideMargin
-        height: Theme.dp(88)
+    Rectangle {
+        id: panel
+
+        readonly property real pad: Theme.dp(48)
+        readonly property real gap: Theme.dp(24)
+        readonly property real room: hintBar.y - Theme.dp(96)
+        readonly property real loginRoom: loginCard.visible ? loginCard.height + gap : 0
+
+        anchors.horizontalCenter: parent.horizontalCenter
+        y: (hintBar.y - height) / 2
+        width: Math.min(Theme.dp(1100), parent.width - Theme.dp(180))
+        height: pad * 2 + head.height + gap + cards.height + loginRoom
+        radius: Theme.dp(28)
+        color: "#1b1d24"
+        border.width: 1
+        border.color: Theme.surfaceBorder
 
         Column {
-            anchors.left: parent.left
-            anchors.right: parent.right
-            anchors.verticalCenter: parent.verticalCenter
+            id: head
+
+            x: panel.pad
+            y: panel.pad
+            width: parent.width - panel.pad * 2
             spacing: Theme.dp(4)
 
-            Row {
-                spacing: Theme.dp(14)
-
-                CapsLabel {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "SET UP · " + (page.form.step + 1) + " OF " + page.form.steps.length
-                }
-
-                Row {
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: Theme.dp(6)
-
-                    Repeater {
-                        model: page.form.steps.length
-
-                        Rectangle {
-                            required property int index
-                            width: Theme.dp(index === page.form.step ? 22 : 8)
-                            height: Theme.dp(8)
-                            radius: height / 2
-                            color: index <= page.form.step ? Theme.text : Qt.rgba(1, 1, 1, 0.18)
-
-                            Behavior on width {
-                                Ease {}
-                            }
-                        }
-                    }
-                }
+            CapsLabel {
+                text: (page.form.step + 1) + " / " + page.form.steps.length
             }
 
             Text {
@@ -167,12 +151,13 @@ FocusScope {
                 color: Theme.text
                 font.family: Theme.sans
                 font.weight: Font.Bold
-                font.pixelSize: Theme.dp(42)
+                font.pixelSize: Theme.dp(36)
                 elide: Text.ElideRight
             }
 
             Text {
                 width: parent.width
+                visible: text !== ""
                 text: page.form.busy && page.form.count === 0 ? "Looking at this machine…" : page.current.subtitle
                 color: Theme.textMuted
                 font.family: Theme.sans
@@ -180,55 +165,60 @@ FocusScope {
                 elide: Text.ElideRight
             }
         }
-    }
 
-    SettingsCards {
-        id: cards
+        SettingsCards {
+            id: cards
 
-        anchors.top: header.bottom
-        anchors.topMargin: Theme.dp(40)
-        anchors.bottom: loginCard.visible ? loginCard.top : hintBar.top
-        anchors.bottomMargin: loginCard.visible ? Theme.dp(24) : 0
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.leftMargin: page.sideMargin
-        anchors.rightMargin: page.sideMargin
-        focus: true
-        columns: 1
-        compact: true
-        rows: page.form.rows
-        groups: page.form.groups
-        dimmed: editor.open
+            x: panel.pad
+            y: head.y + head.height + panel.gap
+            width: parent.width - panel.pad * 2
+            height: Math.min(cards.layout.height, panel.room - panel.pad * 2 - head.height - panel.gap - panel.loginRoom)
+            focus: true
+            columns: 1
+            compact: true
+            rows: page.form.rows
+            groups: page.form.groups
+            dimmed: editor.open
 
-        onActivated: function (index, row) {
-            page.activate(index, row);
-        }
-        onEscapedUp: Sound.edge()
-        onEscapedLeft: Sound.edge()
+            onActivated: function (index, row) {
+                page.activate(index, row);
+            }
+            onEscapedUp: Sound.edge()
+            onEscapedLeft: Sound.edge()
 
-        Keys.onPressed: function (event) {
-            if (event.isAutoRepeat)
-                return;
-            if (api.keys.isCancel(event)) {
-                event.accepted = true;
-                page.retreat();
-            } else if (api.keys.isDetails(event)) {
-                event.accepted = true;
-                page.advance();
+            Keys.onPressed: function (event) {
+                if (event.isAutoRepeat)
+                    return;
+                if (api.keys.isCancel(event)) {
+                    event.accepted = true;
+                    page.retreat();
+                } else if (api.keys.isDetails(event)) {
+                    event.accepted = true;
+                    page.advance();
+                }
             }
         }
-    }
 
-    LoginCard {
-        id: loginCard
+        LoginCard {
+            id: loginCard
 
-        anchors.bottom: hintBar.top
-        anchors.bottomMargin: Theme.dp(24)
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.leftMargin: page.sideMargin
-        anchors.rightMargin: page.sideMargin
-        source: page.form.stepId === "stores" ? page.source : ""
+            x: panel.pad
+            y: cards.y + cards.height + panel.gap
+            width: parent.width - panel.pad * 2
+            source: page.form.stepId === "stores" ? page.source : ""
+        }
+
+        ValueEditor {
+            id: editor
+
+            anchors.fill: parent
+            cards: cards
+            overhang: 0
+            floor: panel.height
+            z: 2
+
+            onClosed: cards.forceActiveFocus()
+        }
     }
 
     HintBar {
@@ -237,19 +227,6 @@ FocusScope {
         anchors.left: parent.left
         anchors.right: parent.right
         z: 3
-        sideMargin: page.sideMargin
         hints: page.hints
-    }
-
-    ValueEditor {
-        id: editor
-
-        anchors.fill: parent
-        cards: cards
-        overhang: 0
-        floor: hintBar.y
-        z: 2
-
-        onClosed: cards.forceActiveFocus()
     }
 }
