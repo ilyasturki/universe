@@ -348,10 +348,10 @@ parted by a hairline: play (Play / Continue — Resume and Quit *title* for the 
 (Details, dropped when the detail page is already open on it; the favourite toggle; Media ›, only
 when the game has a screenshot, a recording or a journal entry); manage (Game settings, Artwork,
 Remove from library…). Media › pushes a second list in place — the non-empty pages with their
-counts at the right — and B comes back to the first; Remove asks in place (Keep it / Remove from
+counts at the right — on A or Right, and B or Left comes back to the first; Remove asks in place (Keep it / Remove from
 the library) and goes through `api.universe.remove(id, false)`: the watcher drops the game, the
 detail page closes if it was on it. An item's `gap` draws the hairline above it, `detail` a
-secondary text at the right, `more` a chevron; `push(list, heading, after)` stacks a list over the
+secondary text at the right, `more` a chevron that Right opens; `push(list, heading, after)` stacks a list over the
 one showing, `cancel()` pops before it closes.
 
 ## The hint bar

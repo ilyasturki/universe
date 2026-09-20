@@ -3,7 +3,7 @@ import "../core"
 import "../sound"
 
 // Items: [{ icon, label, action, danger, detail, more, gap }]; the row stays lit above the scrim as a live copy.
-// `detail` sits at the row's right, `more` draws a chevron there, `gap` parts the row from the one above.
+// `detail` sits at the row's right, `more` draws a chevron there and lets Right open it, `gap` parts the row from the one above.
 FocusScope {
     id: menu
 
@@ -323,8 +323,10 @@ FocusScope {
             return;
         if (event.key === Qt.Key_Up || event.key === Qt.Key_Down)
             index = Sound.stepped(index, event.key === Qt.Key_Up ? -1 : 1, items.length);
-        else if (event.key === Qt.Key_Left || event.key === Qt.Key_Right)
-            Sound.edge();
+        else if (event.key === Qt.Key_Right)
+            items[index].more === true ? activate() : Sound.edge();
+        else if (event.key === Qt.Key_Left)
+            stack.length > 0 ? cancel() : Sound.edge();
         else if (api.keys.isAccept(event))
             activate();
         else if (api.keys.isCancel(event))
