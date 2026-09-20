@@ -11,6 +11,10 @@ in {
   };
   config = lib.mkIf cfg.enable {
     programs.gpu-screen-recorder = lib.mkIf cfg.capture.enable { enable = true; package = lib.mkDefault gsrPkg; };
+    assertions = lib.mkIf cfg.capture.enable [{
+      assertion = lib.versionAtLeast config.programs.gpu-screen-recorder.package.version "6.1";
+      message = "programs.universe: the capture module drives gpu-screen-recorder over its ipc socket (gsr-cli), which needs 6.1 or later; ${config.programs.gpu-screen-recorder.package.version} is installed. Pin a newer nixpkgs for programs.gpu-screen-recorder.package or set programs.universe.capture.enable = false.";
+    }];
     hardware.uinput.enable = lib.mkIf cfg.controller.enable true;
     services.inputplumber.enable = lib.mkIf cfg.inputplumber.enable true;
     services.udev.packages = lib.mkIf cfg.controller.enable [ pkgs.game-devices-udev-rules ];

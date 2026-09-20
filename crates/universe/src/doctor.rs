@@ -92,7 +92,8 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
             continue;
         }
         for bin in &m.manifest.requires.bins {
-            push(bin, which(bin).is_some(), which(bin).unwrap_or_else(|| "missing".into()), m.id());
+            let hint = if bin == "gsr-cli" { "missing (ships with gpu-screen-recorder 6.1 or later)" } else { "missing" };
+            push(bin, which(bin).is_some(), which(bin).unwrap_or_else(|| hint.into()), m.id());
         }
         if m.id() == "capture" {
             push("gsr-kms-server", which("gsr-kms-server").is_some(), which("gsr-kms-server").unwrap_or_else(|| "missing (programs.gpu-screen-recorder.enable)".into()), "capture");

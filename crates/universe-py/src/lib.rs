@@ -367,6 +367,7 @@ impl Core {
 
 #[pymodule]
 fn universe_core(m: &Bound<'_, PyModule>) -> PyResult<()> {
+    universe::init_tracing();
     m.add_class::<Core>()?;
     m.add("UniverseError", m.py().get_type::<UniverseError>())?;
     Ok(())
