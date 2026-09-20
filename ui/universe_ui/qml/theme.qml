@@ -246,15 +246,27 @@ FocusScope {
         });
     }
 
+    // A page with a menu of its own (Media) opens that; the others the game's, beside the focused cover.
+    function pageMenu() {
+        var t = root.focusTarget;
+        if (!t || t.modal)
+            return false;
+        if (t.openMenu)
+            t.openMenu();
+        else if (t.currentGame && t.menuAnchor)
+            openMenu(t.currentGame, t.menuAnchor);
+        else
+            return false;
+        return true;
+    }
+
     function homePressed() {
         if (root.launching || launchOverlay.running)
             return;
         if (!sessionRunning) {
             if (root.subOpen || confirm.open || root.menuOpen)
                 return;
-            var t = root.focusTarget;
-            if (t && t.currentGame && t.menuAnchor)
-                openMenu(t.currentGame, t.menuAnchor);
+            pageMenu();
             return;
         }
         if (api.home.shown !== "game")
@@ -1216,12 +1228,7 @@ FocusScope {
             return;
         event.accepted = true;
         if (api.keys.isMenu(event)) {
-            if (root.menuOpen)
-                return;
-            var t = root.focusTarget;
-            if (t && t.currentGame && t.menuAnchor)
-                openMenu(t.currentGame, t.menuAnchor);
-            else
+            if (!root.menuOpen && !pageMenu())
                 Sound.edge();
         } else if (api.keys.isPrevPage(event)) {
             Sound.space();

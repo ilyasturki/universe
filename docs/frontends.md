@@ -343,7 +343,8 @@ outline and letters.
 ## The game menu
 
 Start, A held 450 ms or Guide with no session opens `ui/ActionMenu.qml` beside the game on
-screen (`theme.qml` `openMenu`, fed by `focusTarget.currentGame` and `menuAnchor`), three groups
+screen (`theme.qml` `openMenu`, fed by `focusTarget.currentGame` and `menuAnchor`; a page with an
+`openMenu()` of its own, the Media tab, gets that one instead), three groups
 parted by a hairline: play (Play / Continue — Resume and Quit *title* for the running game); look
 (Details, dropped when the detail page is already open on it; the favourite toggle; Media ›, only
 when the game has a screenshot, a recording or a journal entry); manage (Game settings, Artwork,
