@@ -363,6 +363,7 @@ FocusScope {
             toast.show(message);
             root.pendingLaunch = null;
         }
+        function onNotice(message) { toast.show(message); }
         function onSessionEnded(sessionId, id, duration) {
             var game = api.allGames.byId(id);
             if (game)

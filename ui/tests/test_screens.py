@@ -60,6 +60,12 @@ def test_modules_list(api, fake):
     assert capture["label"] == "Video capture" and capture["value"] is True and capture["display"] == "On" and capture["meta"] == "v0.1.0"
     journal = form.rows[form.indexOf("journal")]
     assert journal["value"] is False and journal["display"] == "Unavailable" and journal["detail"] == "Cannot be enabled: missing ffmpeg"
+    next(m for m in fake.core._data["modules"] if m["id"] == "capture").update(available=False, missing=["gsr-cli"])
+    form.load()
+    capture = form.rows[form.indexOf("capture")]
+    assert capture["value"] is True and capture["display"] == "Unavailable" and capture["detail"] == "On, but its hooks are skipped: missing gsr-cli", "an enabled module with a missing binary does not read as working"
+    next(m for m in fake.core._data["modules"] if m["id"] == "capture").update(available=True, missing=[])
+    form.load()
     form.toggle(form.indexOf("capture"))
     assert form.rows[form.indexOf("capture")]["value"] is False and form.rows[form.indexOf("capture")]["display"] == "Off"
     assert next(m for m in fake.modules() if m["id"] == "capture")["enabled"] is False

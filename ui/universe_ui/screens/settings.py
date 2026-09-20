@@ -478,9 +478,9 @@ class ListForm(RowsForm):
             enabled = bool(entry.get("enabled"))
             warning = _state(entry)
             row = _row(self.section, "module", name, "action", enabled, module=ident)
-            row.update(display="On" if enabled else "Unavailable" if warning else "Off", action="Open", runner="", switch=True,
+            row.update(display="Unavailable" if warning else "On" if enabled else "Off", action="Open", runner="", switch=True,
                        meta=_meta(entry), warning=warning, source=self.source,
-                       detail=warning.replace("unavailable", "Cannot be enabled", 1) if warning and not enabled else _meta(entry))
+                       detail=warning.replace("unavailable", "On, but its hooks are skipped" if enabled else "Cannot be enabled", 1) if warning else _meta(entry))
             (on if enabled else off).append(len(rows))
             rows.append(row)
         groups = [_group("", on)] if on else []

@@ -12,7 +12,7 @@ FocusScope {
 
     signal chromeRequested()
 
-    readonly property var currentGame: anchor.game
+    readonly property var currentGame: anchor ? anchor.game : null
     readonly property bool ownsBackdrop: false
     readonly property real backdropBlur: 30
     readonly property real scrimTop: 0.72
@@ -77,7 +77,7 @@ FocusScope {
 
     Text {
         anchors.centerIn: parent
-        visible: favourites.count === 0
+        visible: !favourites || favourites.count === 0
         text: "No favourites yet — press Y on a game to add one."
         color: Theme.textMuted
         font.family: Theme.sans
@@ -93,7 +93,7 @@ FocusScope {
         anchors.right: parent.right
 
         focus: true
-        visible: favourites.count > 0
+        visible: favourites && favourites.count > 0
         orientation: ListView.Horizontal
         model: favourites
         spacing: Theme.dp(40)
@@ -107,7 +107,7 @@ FocusScope {
         highlightMoveDuration: Theme.durView
 
         leftMargin: Math.max(Theme.dp(80),
-                             (width - (favourites.count * cellWidth + Math.max(0, favourites.count - 1) * spacing)) / 2)
+                             favourites ? (width - (favourites.count * cellWidth + Math.max(0, favourites.count - 1) * spacing)) / 2 : 0)
 
         delegate: Item {
             id: card

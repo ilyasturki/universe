@@ -54,6 +54,7 @@ class CoreClient(QObject):
     sourcesChanged = Signal()
     currentSessionChanged = Signal()
     launched = Signal(str, str)
+    notice = Signal(str)
     launchFailed = Signal(str, str)
     sessionShown = Signal(str, bool)
     error = Signal(str, str)
@@ -71,6 +72,7 @@ class CoreClient(QObject):
         self._job_seq = 0
         self._jobs = {}
         self._closed = False
+        self._skipped_told = False
         self._deliver.connect(lambda fn: None if self._closed else fn())
         self._dirty = set()
         self._debounce = QTimer(self)
@@ -309,6 +311,15 @@ class CoreClient(QObject):
 
         self._call_async(wait, lambda window: self.sessionShown.emit(session_id, bool(window)), missed)
 
+    # Once per run, after the session toast: the core skips the hooks of an enabled module whose binaries are missing and says so only in its log.
+    def _notice_skipped_modules(self):
+        if self._skipped_told:
+            return
+        self._skipped_told = True
+        for m in self.modules():
+            if m.get("enabled") and not m.get("available", True):
+                self.notice.emit(f"{m.get('name', m['id'])} was on but ran nothing: missing {', '.join(m.get('missing') or [])}")
+
     def _track(self, session_id, ident):
         self.refreshCurrent()
         self.sessionStarted.emit(session_id, ident)
@@ -328,6 +339,7 @@ class CoreClient(QObject):
         line = next((s for s in self.sessions(ident) if s.get("session") == session_id), {})
         self.refreshCurrent()
         self.sessionEnded.emit(session_id, ident, int(line.get("duration_s") or 0))
+        QTimer.singleShot(4500, self._notice_skipped_modules)
         self.libraryChanged.emit([ident])
         if line.get("recording"):
             self.recordingFiled.emit(session_id, ident, str(line["recording"].get("path") or ""))

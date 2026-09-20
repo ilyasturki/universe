@@ -35,6 +35,18 @@ def test_settings_merges_game_scope(fake):
     assert fake.game("control")["tags"] == ["a", "b"]
 
 
+def test_a_session_end_tells_once_about_an_enabled_module_the_core_skipped(fake):
+    next(m for m in fake.core._data["modules"] if m["id"] == "capture").update(available=False, missing=["gsr-cli"])
+    notices = _collect(fake.notice)
+    fake.launch("control", "DP-1")
+    assert wait_for(fake.sessionEnded, 6000) is not None
+    assert notices == [], "after the session toast, not over it"
+    assert wait_for(fake.notice, 6000) == ("Video capture was on but ran nothing: missing gsr-cli",)
+    fake.launch("control", "DP-1")
+    assert wait_for(fake.sessionEnded, 6000) is not None
+    assert wait_for(fake.notice, 6000) is None and len(notices) == 1, "said once per run"
+
+
 def test_launch_writes_the_marker_and_the_end_comes_from_the_state_watch(fake):
     core = fake.core
     started, launched, ended = _collect(fake.sessionStarted), _collect(fake.launched), _collect(fake.sessionEnded)

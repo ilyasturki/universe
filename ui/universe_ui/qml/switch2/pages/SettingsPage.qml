@@ -148,7 +148,7 @@ FocusScope {
         if (listForm !== null)
             return Forms.grouped(listForm.groups, listForm.rows, function(m, i) {
                 return { label: m.label, type: "action", action: "module", module: m.module, value: m.value, display: m.display, switch: true, warning: m.warning,
-                         detail: m.warning && !m.value ? m.detail : Details.enabledSentence(m.label, m.source),
+                         detail: m.warning ? m.detail : Details.enabledSentence(m.label, m.source),
                          form: i, dim: m.warning !== "" && m.value !== true };
             });
         if (sectionId === "updates") {

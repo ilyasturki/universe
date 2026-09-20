@@ -55,6 +55,8 @@ class Watcher(QObject):
         self.event.emit({"event": "off", "code": code})
 
     def _read(self):
+        if self._process is None:
+            return
         self._buffer += bytes(self._process.readAllStandardOutput().data())
         while b"\n" in self._buffer:
             line, self._buffer = self._buffer.split(b"\n", 1)

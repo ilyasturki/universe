@@ -12,7 +12,7 @@ FocusScope {
     signal chromeRequested()
     signal addRequested()
 
-    readonly property var currentGame: anchor.game
+    readonly property var currentGame: anchor ? anchor.game : null
     readonly property bool onAddTile: grid.addSelected
     readonly property bool empty: api.allGames.count === 0
     readonly property bool ownsBackdrop: false
@@ -194,7 +194,7 @@ FocusScope {
                 Chip {
                     id: collectionChip
                     label: page.collectionLabel
-                    trailing: sorted.count.toString()
+                    trailing: sorted ? sorted.count.toString() : ""
                     focused: chipBar.activeFocus && chipBar.index === 0
                 }
 

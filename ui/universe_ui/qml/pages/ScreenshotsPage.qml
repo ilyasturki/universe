@@ -51,6 +51,8 @@ FocusScope {
     }
 
     function land() {
+        if (!rows)
+            return;
         var i = rows.findIndex(function(r) { return r.name === landing; });
         if (i < 0 && landingSession !== "")
             i = rows.findIndex(function(r) { return r.session === landingSession; });
