@@ -431,7 +431,14 @@ FocusScope {
 
             onCurrentIndexChanged: slideToCurrent()
             onWidthChanged: slideToCurrent()
-            onCountChanged: slideToCurrent()
+            // A rail that fills while the page is up (the setup dialog, the add page) lands on its first game, as a cold start does.
+            onCountChanged: {
+                if (currentIndex < 0 && count > 0) {
+                    currentIndex = 0;
+                    page.tileSelected = false;
+                }
+                slideToCurrent();
+            }
 
             Keys.onLeftPressed: function (event) {
                 if (page.tileSelected) {
