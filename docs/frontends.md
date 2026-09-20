@@ -608,8 +608,12 @@ are the QR, URL and status card `FormPage` shows too — `preferences` the contr
 (`controller.family`, an `enum` over `api.screens.controller.families`, written with `setFamily`)
 and the graphics upgrades that fit this GPU (`launch.hdr`, the upscaler upgrades without their
 `default` choice, `launch.optiscaler`), `done` a summary row and, under a read-only config, why the
-preferences were skipped. The header is the step count (`1 / 4`) and the step's title; X moves on,
-B goes back, or on the first step skips the whole setup.
+preferences were skipped. The header is the step count (`1 / 4`) and the step's title; under the
+rows sit two buttons, Back (B; "Skip setup" on the first step) and Continue (X; "Finish" on the
+last), reached with Down past the last row, Left/Right between them, A to press one — the B and X
+buttons themselves do the same from anywhere in the dialog, so the hint bar shows A alone. The
+Reprise Home rail lands on its first game when it fills while the page is up (the setup importing
+behind the dialog, the add page), as a cold start does.
 
 ## The artwork pages and section
 

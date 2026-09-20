@@ -1,11 +1,13 @@
 import QtQuick
 import "../core"
+import "PadNames.js" as Names
 
 Rectangle {
     id: root
 
     property string label: "Play"
     property string icon: "play"
+    property string glyph: ""
     property bool ghost: false
     property bool focused: false
     property bool dimmed: false
@@ -46,6 +48,15 @@ Rectangle {
         id: content
         anchors.centerIn: parent
         spacing: Theme.dp(16)
+
+        PadGlyph {
+            visible: root.glyph !== ""
+            anchors.verticalCenter: parent.verticalCenter
+            family: api.screens.controller.family
+            slot: Names.hintSlot(root.glyph)
+            unit: Theme.dp(30)
+            ink: root.ink
+        }
 
         MenuGlyph {
             visible: root.icon !== ""

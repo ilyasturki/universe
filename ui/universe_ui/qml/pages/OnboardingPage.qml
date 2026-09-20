@@ -3,7 +3,7 @@ import "../core"
 import "../sound"
 import "../ui"
 
-// First-run setup as a dialog over the launcher: one card list per step (found, stores, preferences, done), X moves on, B goes back or skips.
+// First-run setup as a dialog over the launcher: one card list per step (found, stores, preferences, done) over a Back / Continue button pair.
 FocusScope {
     id: page
 
@@ -22,19 +22,13 @@ FocusScope {
     signal closeRequested
     signal message(string text)
 
+    readonly property string backLabel: form.step > 0 ? "Back" : "Skip setup"
+    readonly property string nextLabel: last ? "Finish" : "Continue"
     readonly property var hints: editor.open ? editor.hints : [
         {
             glyph: "A",
-            label: selectLabel(cards.currentRow),
-            dim: !cards.currentRow || form.busy || cards.currentRow.type === "info" || cards.currentRow.type === "static"
-        },
-        {
-            glyph: "X",
-            label: last ? "Finish" : "Continue"
-        },
-        {
-            glyph: "B",
-            label: form.step > 0 ? "Back" : "Skip setup"
+            label: nav.activeFocus ? (nav.index === 1 ? nextLabel : backLabel) : selectLabel(cards.currentRow),
+            dim: !nav.activeFocus && (!cards.currentRow || form.busy || cards.currentRow.type === "info" || cards.currentRow.type === "static")
         }
     ]
 
@@ -87,6 +81,18 @@ FocusScope {
             form.finish();
     }
 
+    Keys.onPressed: function (event) {
+        if (event.isAutoRepeat || editor.open)
+            return;
+        if (api.keys.isCancel(event)) {
+            event.accepted = true;
+            retreat();
+        } else if (api.keys.isDetails(event)) {
+            event.accepted = true;
+            advance();
+        }
+    }
+
     Connections {
         target: page.form
         function onMessage(text) {
@@ -98,6 +104,7 @@ FocusScope {
         function onStepChanged() {
             Qt.callLater(function () {
                 cards.reset();
+                nav.index = 1;
                 cards.forceActiveFocus();
             });
         }
@@ -123,11 +130,12 @@ FocusScope {
         readonly property real gap: Theme.dp(24)
         readonly property real room: hintBar.y - Theme.dp(96)
         readonly property real loginRoom: loginCard.visible ? loginCard.height + gap : 0
+        readonly property real navRoom: nav.height + gap
 
         anchors.horizontalCenter: parent.horizontalCenter
         y: (hintBar.y - height) / 2
         width: Math.min(Theme.dp(1100), parent.width - Theme.dp(180))
-        height: pad * 2 + head.height + gap + cards.height + loginRoom
+        height: pad * 2 + head.height + gap + cards.height + loginRoom + navRoom
         radius: Theme.dp(28)
         color: "#1b1d24"
         border.width: 1
@@ -172,7 +180,7 @@ FocusScope {
             x: panel.pad
             y: head.y + head.height + panel.gap
             width: parent.width - panel.pad * 2
-            height: Math.min(cards.layout.height, panel.room - panel.pad * 2 - head.height - panel.gap - panel.loginRoom)
+            height: Math.min(cards.layout.height + cards.captionHeight, panel.room - panel.pad * 2 - head.height - panel.gap - panel.loginRoom - panel.navRoom)
             focus: true
             columns: 1
             compact: true
@@ -185,17 +193,9 @@ FocusScope {
             }
             onEscapedUp: Sound.edge()
             onEscapedLeft: Sound.edge()
-
-            Keys.onPressed: function (event) {
-                if (event.isAutoRepeat)
-                    return;
-                if (api.keys.isCancel(event)) {
-                    event.accepted = true;
-                    page.retreat();
-                } else if (api.keys.isDetails(event)) {
-                    event.accepted = true;
-                    page.advance();
-                }
+            onEscapedDown: {
+                Sound.tick();
+                nav.forceActiveFocus();
             }
         }
 
@@ -206,6 +206,57 @@ FocusScope {
             y: cards.y + cards.height + panel.gap
             width: parent.width - panel.pad * 2
             source: page.form.stepId === "stores" ? page.source : ""
+        }
+
+        FocusScope {
+            id: nav
+
+            property int index: 1
+
+            x: panel.pad
+            y: panel.height - panel.pad - height
+            width: parent.width - panel.pad * 2
+            height: buttons.height
+
+            Row {
+                id: buttons
+
+                anchors.right: parent.right
+                spacing: Theme.dp(24)
+
+                PillButton {
+                    ghost: true
+                    icon: ""
+                    glyph: "B"
+                    label: page.backLabel
+                    focused: nav.activeFocus && nav.index === 0
+                    dimmed: nav.activeFocus && nav.index !== 0
+                }
+
+                PillButton {
+                    icon: ""
+                    glyph: "X"
+                    label: page.nextLabel
+                    focused: nav.activeFocus && nav.index === 1
+                    dimmed: nav.activeFocus && nav.index !== 1
+                }
+            }
+
+            Keys.onLeftPressed: index = Sound.stepped(index, -1, 2)
+            Keys.onRightPressed: index = Sound.stepped(index, 1, 2)
+            Keys.onUpPressed: {
+                Sound.tick();
+                cards.forceActiveFocus();
+            }
+            Keys.onDownPressed: Sound.edge()
+            Keys.onPressed: function (event) {
+                if (event.isAutoRepeat)
+                    return;
+                if (api.keys.isAccept(event)) {
+                    event.accepted = true;
+                    nav.index === 1 ? page.advance() : page.retreat();
+                }
+            }
         }
 
         ValueEditor {

@@ -4,7 +4,7 @@ import "../sound"
 import "../ui"
 import "Forms.js" as Forms
 
-// First-run setup as a dialog over the shell: one row list per step (found, stores, preferences, done), X moves on, B goes back or skips.
+// First-run setup as a dialog over the shell: one row list per step (found, stores, preferences, done) over a Back / Continue button pair.
 FocusScope {
     id: page
 
@@ -22,18 +22,12 @@ FocusScope {
     readonly property bool last: form.step >= form.steps.length - 1
     property string source: ""
 
+    readonly property string backLabel: form.step > 0 ? "Back" : "Skip setup"
+    readonly property string nextLabel: last ? "Finish" : "Continue"
     readonly property var hints: {
         var row = rows.currentRow;
-        var label = !row || row.heading || row.type === "info" || row.type === "static" ? "OK" : row.type === "bool" ? "Toggle" : row.type === "action" ? row.action || "Select" : "Change";
+        var label = nav.activeFocus ? (nav.index === 1 ? nextLabel : backLabel) : !row || row.heading || row.type === "info" || row.type === "static" ? "OK" : row.type === "bool" ? "Toggle" : row.type === "action" ? row.action || "Select" : "Change";
         return [
-            {
-                glyph: "B",
-                label: form.step > 0 ? "Back" : "Skip setup"
-            },
-            {
-                glyph: "X",
-                label: last ? "Finish" : "Continue"
-            },
             {
                 glyph: "A",
                 label: label
@@ -113,6 +107,7 @@ FocusScope {
         function onStepChanged() {
             Qt.callLater(function () {
                 rows.reset();
+                nav.index = 1;
                 rows.forceActiveFocus();
             });
         }
@@ -137,11 +132,12 @@ FocusScope {
         readonly property real gap: Theme.dp(24)
         readonly property real room: parent.height - Theme.dp(Theme.hintBarHeight) - Theme.dp(120)
         readonly property real loginRoom: qrCard.visible ? qrCard.height + gap : 0
+        readonly property real navRoom: nav.height + gap
 
         anchors.horizontalCenter: parent.horizontalCenter
         y: (parent.height - Theme.dp(Theme.hintBarHeight) - height) / 2
         width: Theme.dp(1200)
-        height: pad * 2 + head.height + gap + rows.height + loginRoom
+        height: pad * 2 + head.height + gap + rows.room + rows.height + loginRoom + navRoom
         radius: Theme.dp(6)
         color: Theme.card
 
@@ -181,9 +177,9 @@ FocusScope {
 
             shell: page.shell
             x: card.pad
-            y: head.y + head.height + card.gap
+            y: head.y + head.height + card.gap + rows.room
             width: parent.width - card.pad * 2
-            height: Math.min(rows.contentHeight + rows.room * 2, card.room - card.pad * 2 - head.height - card.gap - card.loginRoom)
+            height: Math.min(rows.contentHeight + rows.room * 2, card.room - card.pad * 2 - head.height - card.gap - rows.room - card.loginRoom - card.navRoom)
             model: page.content
             focus: true
 
@@ -191,6 +187,10 @@ FocusScope {
                 page.activate(index, row);
             }
             onEscapedLeft: Sound.play("edge")
+            onEscapedDown: {
+                Sound.play("tick");
+                nav.forceActiveFocus();
+            }
         }
 
         LoginCard {
@@ -200,6 +200,92 @@ FocusScope {
             y: rows.y + rows.height + card.gap
             width: parent.width - card.pad * 2
             source: page.form.stepId === "stores" ? page.source : ""
+        }
+
+        FocusScope {
+            id: nav
+
+            property int index: 1
+
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: Theme.dp(113)
+
+            Hairline {
+                anchors.bottom: parent.top
+            }
+
+            Repeater {
+                model: [
+                    {
+                        glyph: "B",
+                        label: page.backLabel
+                    },
+                    {
+                        glyph: "X",
+                        label: page.nextLabel
+                    }
+                ]
+
+                Item {
+                    id: button
+
+                    readonly property bool focused: nav.activeFocus && index === nav.index
+
+                    x: index * width
+                    width: nav.width / 2
+                    height: nav.height
+
+                    Rectangle {
+                        anchors.left: parent.left
+                        anchors.top: parent.top
+                        anchors.bottom: parent.bottom
+                        width: 1
+                        visible: index > 0
+                        color: Theme.hairlineSoft
+                    }
+
+                    FocusPill {
+                        anchors.fill: parent
+                        anchors.margins: Theme.dp(Theme.ringRoomTight)
+                        focused: button.focused
+                    }
+
+                    Row {
+                        anchors.centerIn: parent
+                        spacing: Theme.dp(16)
+
+                        HintGlyph {
+                            anchors.verticalCenter: parent.verticalCenter
+                            glyph: modelData.glyph
+                            unit: Theme.dp(36)
+                        }
+
+                        Label {
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: modelData.label
+                            color: Theme.accent
+                        }
+                    }
+                }
+            }
+
+            Keys.onLeftPressed: index = Sound.stepped(index, -1, 2)
+            Keys.onRightPressed: index = Sound.stepped(index, 1, 2)
+            Keys.onUpPressed: {
+                Sound.play("tick");
+                rows.forceActiveFocus();
+            }
+            Keys.onDownPressed: Sound.play("edge")
+            Keys.onPressed: function (event) {
+                if (event.isAutoRepeat || shell.modal)
+                    return;
+                if (api.keys.isAccept(event)) {
+                    event.accepted = true;
+                    nav.index === 1 ? page.advance() : page.retreat();
+                }
+            }
         }
     }
 }
