@@ -121,7 +121,7 @@ def test_read_only_config_skips_preferences(empty_api, empty):
 
 @pytest.mark.parametrize("theme", ["reprise", "switch2"])
 def test_the_wizard_opens_on_first_run_in_both_looks(empty_api, theme):
-    from PySide6.QtCore import Qt
+    from PySide6.QtCore import QObject, Qt
     from PySide6.QtTest import QTest
 
     def opened():
@@ -131,14 +131,16 @@ def test_the_wizard_opens_on_first_run_in_both_looks(empty_api, theme):
             else root.property("depth") == 1 and root.property("topPage").property("last") is False
         )
 
-    def press(key):
-        QTest.keyClick(window, key)
-        pump(150)
+    def press(key, times=1):
+        for _ in range(times):
+            QTest.keyClick(window, key)
+            pump(150)
 
     empty_api.theme.set(theme)
     empty_api.theme.takeLanding()
     _engine, window = render(empty_api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
+    home = root.property("activePage") if theme == "reprise" else root.findChild(QObject, "homePage")
     form = empty_api.screens.onboarding
     if form.busy:
         wait_for(form.busyChanged, 3000)
@@ -148,14 +150,45 @@ def test_the_wizard_opens_on_first_run_in_both_looks(empty_api, theme):
     assert form.stepId == "stores", "X moves on"
     press(Qt.Key.Key_Escape)
     assert form.stepId == "found" and opened(), "B goes back a step, the dialog stays"
+    press(Qt.Key.Key_Down, 6)
+    press(Qt.Key.Key_Return)
+    assert form.stepId == "stores", "Down past the last row reaches the buttons, A on Continue moves on"
+    press(Qt.Key.Key_Down, 3)
+    press(Qt.Key.Key_Left)
+    press(Qt.Key.Key_Return)
+    assert form.stepId == "found", "the Back button goes back"
     press(Qt.Key.Key_Escape)
     settle_window(window)
     assert empty_api.memory.get("onboarded") is True and not opened(), "B on the first step skips the setup"
     if theme == "reprise":
-        root.openSetup()
+        press(Qt.Key.Key_Up)
+        press(Qt.Key.Key_Right)
+        assert home.property("onSetup") is True
     else:
-        root.push("pages/OnboardingPage.qml", {})
+        press(Qt.Key.Key_Right)
+        assert home.property("onSetup") is True
+    press(Qt.Key.Key_Return)
     settle_window(window)
-    assert opened() and form.stepId == "found", "the About row runs it again"
+    assert opened() and form.stepId == "found", "the empty Home's Set up entry runs it again"
+    press(Qt.Key.Key_Return)
+    wait_for(form.busyChanged, 3000)
+    if form.busy:
+        wait_for(form.busyChanged, 3000)
+    settle_window(window)
+    assert empty_api.allGames.count == 2, "A on the Lutris row imports behind the dialog"
+    press(Qt.Key.Key_Escape)
+    settle_window(window)
+    assert not opened()
+    if theme == "reprise":
+        assert home.property("tileSelected") is False and home.property("currentGame").property("id") is not None, (
+            "the rail that filled behind the dialog lands on a game"
+        )
+        press(Qt.Key.Key_Down)
+        press(Qt.Key.Key_Right, 2)
+        assert home.property("tileSelected") is True, "Down leaves the hero pills for the rail, Right past the last game reaches the Library tile"
+        press(Qt.Key.Key_Left)
+        assert home.property("tileSelected") is False and home.property("currentGame") is not None
+    else:
+        assert home.property("onSetup") is False and home.property("index") <= home.property("allIndex")
     window.close()
     pump(50)

@@ -591,7 +591,10 @@ emptied library never brings it up later), and both looks open it from their roo
 `Component.onCompleted` as a dialog over what is on screen — Reprise as `pages/OnboardingPage.qml`
 (`openSetup()`, `openSub` with `{ setup: true }`, which keeps the tabs visible under it), the
 Switch 2 look as `switch2/pages/OnboardingPage.qml` on its stack (a page whose `overlay` is true
-leaves the layer under it in view); Settings › About › "First-run setup" opens it again. `load()`
+leaves the layer under it in view); Settings › About › "First-run setup" opens it again, and so
+does the empty Home's "Set up" — a second pill beside "Add a game" in Reprise's hero band, a second
+disc beside the plus in the Switch 2 HOME row — shown while the library is empty, whatever the
+flag says. `load()`
 runs `discover()` off the UI thread and builds `steps` (`{id, title, subtitle}`): `found`, `stores`
 (when an enabled, available source exists), `preferences` (when `settings()` says
 `config_writable`) and `done`; `step`, `stepId`, `next()`, `back()`, `finish()` (sets `onboarded`,

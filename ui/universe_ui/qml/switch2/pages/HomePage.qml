@@ -14,12 +14,15 @@ FocusScope {
     readonly property bool empty: api.allGames.count === 0
     property int index: 0
     readonly property bool onAll: index === allIndex
+    readonly property bool onSetup: empty && index === allIndex + 1
+    readonly property var discs: empty ? ["plus", "settings"] : ["grid"]
+    readonly property int last: allIndex + discs.length - 1
     readonly property var currentGame: anchor.game
     readonly property var session: api.universe.currentSession
     readonly property string playingId: session && session.id !== undefined ? session.id : ""
 
     readonly property bool onPlaying: currentGame !== null && currentGame.id === playingId
-    readonly property var hints: onAll ? [
+    readonly property var hints: onAll || onSetup ? [
         {
             glyph: "A",
             label: "OK"
@@ -79,10 +82,15 @@ FocusScope {
     }
 
     function step(d) {
-        index = Sound.stepped(index, d, allIndex + 1);
+        index = Sound.stepped(index, d, last + 1);
     }
 
     function activate() {
+        if (onSetup) {
+            Sound.play("ok");
+            shell.push("pages/OnboardingPage.qml", {});
+            return;
+        }
         if (onAll) {
             Sound.play("ok");
             shell.push(empty ? "pages/AddGamePage.qml" : "pages/AllSoftwarePage.qml", {});
@@ -95,8 +103,8 @@ FocusScope {
         onPlaying ? shell.resume() : shell.launch(currentGame);
     }
 
-    onGameCountChanged: {
-        index = Math.min(index, allIndex);
+    onLastChanged: {
+        index = Math.min(index, last);
         Qt.callLater(row.slideToCurrent);
     }
     onIndexChanged: row.slideToCurrent()
@@ -146,8 +154,8 @@ FocusScope {
         x: centre - width / 2
         y: Theme.dp(Theme.tileRowY) - Theme.dp(66)
         width: Math.max(0, Math.min(implicitWidth, page.pitch * 2.5, room))
-        visible: page.activeFocus && (page.currentGame !== null || page.onAll)
-        text: page.onAll ? (page.empty ? "Add a game" : "All Software") : (page.currentGame ? page.currentGame.title : "")
+        visible: page.activeFocus && (page.currentGame !== null || page.onAll || page.onSetup)
+        text: page.onSetup ? "Set up" : page.onAll ? (page.empty ? "Add a game" : "All Software") : (page.currentGame ? page.currentGame.title : "")
         color: Theme.accent
         horizontalAlignment: Text.AlignHCenter
         elide: Text.ElideRight
@@ -218,38 +226,42 @@ FocusScope {
         }
 
         footer: Item {
-            readonly property bool focused: page.activeFocus && page.onAll
-
-            width: page.tile + page.gap
+            width: (page.tile + page.gap) * page.discs.length
             height: row.height
-            z: focused ? 2 : 1
+            z: page.activeFocus && page.index >= page.allIndex ? 2 : 1
 
-            Item {
-                x: page.gap + (page.tile - width) / 2
-                y: Theme.dp(30) + (page.tile - height) / 2
-                width: Theme.dp(236)
-                height: width
+            Repeater {
+                model: page.discs
 
-                Rectangle {
-                    id: disc
-                    anchors.fill: parent
-                    radius: width / 2
-                    color: Theme.slot
-                }
+                Item {
+                    readonly property bool focused: page.activeFocus && page.index === page.allIndex + index
 
-                FocusOutline {
-                    target: disc
-                    cornerRadius: disc.radius
-                    shown: parent.parent.focused
-                }
-
-                Glyph {
-                    anchors.centerIn: parent
-                    width: Theme.dp(96)
+                    x: page.gap + index * page.pitch + (page.tile - width) / 2
+                    y: Theme.dp(30) + (page.tile - height) / 2
+                    width: Theme.dp(236)
                     height: width
-                    kind: page.empty ? "plus" : "grid"
-                    tint: Theme.barGrey
-                    stroke: 1.6
+
+                    Rectangle {
+                        id: disc
+                        anchors.fill: parent
+                        radius: width / 2
+                        color: Theme.slot
+                    }
+
+                    FocusOutline {
+                        target: disc
+                        cornerRadius: disc.radius
+                        shown: parent.focused
+                    }
+
+                    Glyph {
+                        anchors.centerIn: parent
+                        width: Theme.dp(96)
+                        height: width
+                        kind: modelData
+                        tint: Theme.barGrey
+                        stroke: 1.6
+                    }
                 }
             }
         }

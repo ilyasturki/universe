@@ -14,6 +14,7 @@ FocusScope {
     signal libraryRequested
     signal chromeRequested
     signal addRequested
+    signal setupRequested
 
     readonly property int railFloor: 5
     readonly property bool standingIn: (recent ? recent.count : 0) < railFloor
@@ -31,13 +32,14 @@ FocusScope {
 
     property bool tileSelected: false
     readonly property int focusIndex: tileSelected ? railCount : rail.currentIndex
+    readonly property bool onSetup: tileSelected && empty && heroActions.activeFocus && heroActions.index === 1
 
     readonly property var hints: {
         var out = [];
         if (tileSelected) {
             out.push({
                 glyph: "A",
-                label: page.empty ? "Add a game" : "Open library"
+                label: onSetup ? "Set up" : page.empty ? "Add a game" : "Open library"
             });
             out.push({
                 glyph: "X",
@@ -146,7 +148,7 @@ FocusScope {
             toggleFavourite();
         } else if (page.tileSelected && api.keys.isAccept(event)) {
             event.accepted = true;
-            page.empty ? page.addRequested() : page.libraryRequested();
+            page.onSetup ? page.setupRequested() : page.empty ? page.addRequested() : page.libraryRequested();
         } else if (page.tileSelected && api.keys.isDetails(event)) {
             event.accepted = true;
             Sound.edge();
@@ -282,11 +284,11 @@ FocusScope {
 
                 anchors.top: heroMeta.bottom
                 anchors.topMargin: Theme.dp(34)
-                width: buttons.width
+                width: page.tileSelected ? tileButtons.width : buttons.width
                 height: buttons.height
 
                 property int index: 0
-                readonly property int last: page.tileSelected ? 0 : 1
+                readonly property int last: page.tileSelected ? (page.empty ? 1 : 0) : 1
 
                 function step(d) {
                     index = Sound.stepped(index, d, last + 1);
@@ -317,15 +319,30 @@ FocusScope {
                     }
                 }
 
-                PillButton {
-                    icon: page.empty ? "plus" : "library"
-                    label: page.empty ? "Add a game" : "Open library"
-                    focused: heroActions.activeFocus && page.tileSelected
+                Row {
+                    id: tileButtons
+                    spacing: Theme.dp(36)
                     opacity: page.tileSelected ? 1.0 : 0.0
                     visible: opacity > 0.01
 
                     Behavior on opacity {
                         Ease {}
+                    }
+
+                    PillButton {
+                        icon: page.empty ? "plus" : "library"
+                        label: page.empty ? "Add a game" : "Open library"
+                        focused: heroActions.activeFocus && heroActions.index === 0
+                        dimmed: heroActions.activeFocus && heroActions.index !== 0
+                    }
+
+                    PillButton {
+                        ghost: true
+                        icon: ""
+                        label: "Set up"
+                        visible: page.empty
+                        focused: heroActions.activeFocus && heroActions.index === 1
+                        dimmed: heroActions.activeFocus && heroActions.index !== 1
                     }
                 }
 
