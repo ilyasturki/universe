@@ -67,7 +67,7 @@ def test_pad_art_has_a_button_per_slot(engine, fake, family):
 
 def test_every_slot_has_a_glyph(engine, fake):
     for family in FAMILIES:
-        for slot in slots_of(fake, family) + ["dpad"]:
+        for slot in [*slots_of(fake, family), "dpad"]:
             glyph = create(engine, "PadGlyph.qml", family=family, slot=slot)
             spec = glyph.property("spec").toVariant()
             assert spec["shape"], (family, slot)

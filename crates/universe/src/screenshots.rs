@@ -78,7 +78,12 @@ mod tests {
     #[test]
     fn shot_names() {
         assert!(is_shot_name("20251219-215949.png") && is_shot_name("20251223-004111.JPG"));
-        assert!(!is_shot_name("20251219-215949-1.png") && !is_shot_name("frame-20251219-215949.jpg") && !is_shot_name("20251219-215949.txt") && !is_shot_name("20251219-215949"));
+        assert!(
+            !is_shot_name("20251219-215949-1.png")
+                && !is_shot_name("frame-20251219-215949.jpg")
+                && !is_shot_name("20251219-215949.txt")
+                && !is_shot_name("20251219-215949")
+        );
     }
 
     #[test]
@@ -94,8 +99,20 @@ mod tests {
     #[test]
     fn a_shot_finds_its_session_within_the_journals_grace() {
         let sessions = vec![
-            Session { session: "20260301-210000".into(), started_at: "2026-03-01T21:00:00+01:00".into(), ended_at: "2026-03-01T22:00:00+01:00".into(), duration_s: 3600, ..Default::default() },
-            Session { session: "20260301-180000".into(), started_at: "2026-03-01T18:00:00+01:00".into(), ended_at: "".into(), duration_s: 600, ..Default::default() },
+            Session {
+                session: "20260301-210000".into(),
+                started_at: "2026-03-01T21:00:00+01:00".into(),
+                ended_at: "2026-03-01T22:00:00+01:00".into(),
+                duration_s: 3600,
+                ..Default::default()
+            },
+            Session {
+                session: "20260301-180000".into(),
+                started_at: "2026-03-01T18:00:00+01:00".into(),
+                ended_at: "".into(),
+                duration_s: 600,
+                ..Default::default()
+            },
         ];
         let spans = spans(&sessions);
         let at = |s: &str| DateTime::parse_from_rfc3339(s).unwrap().with_timezone(&Local);

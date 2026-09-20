@@ -1,6 +1,8 @@
 import os
 
-from PySide6.QtCore import Property, QObject, Signal, Slot
+from PySide6.QtCore import QObject, Signal, Slot
+
+from ..qt import Property
 
 
 def _expand(path):
@@ -108,11 +110,11 @@ class PathBrowser(QObject):
         if full == home:
             return "~"
         if full.startswith(home + os.sep):
-            return "~" + full[len(home):]
+            return "~" + full[len(home) :]
         return full
 
     path = Property(str, lambda self: self._path, notify=changed)
-    entries = Property("QVariantList", lambda self: list(self._entries), notify=changed)
-    shortcuts = Property("QVariantList", lambda self: list(self._shortcuts), notify=changed)
+    entries = Property(list, lambda self: list(self._entries), notify=changed)
+    shortcuts = Property(list, lambda self: list(self._shortcuts), notify=changed)
     files = Property(bool, lambda self: self._files, notify=changed)
     atRoot = Property(bool, lambda self: os.path.dirname(self._path) == self._path, notify=changed)

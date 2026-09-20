@@ -124,8 +124,11 @@ def test_the_wizard_opens_on_first_run_in_both_looks(empty_api, theme):
     from PySide6.QtTest import QTest
 
     def opened():
-        return root.property("subOpen") is True and root.property("subSource") == "pages/OnboardingPage.qml" if theme == "reprise" \
+        return (
+            root.property("subOpen") is True and root.property("subSource") == "pages/OnboardingPage.qml"
+            if theme == "reprise"
             else root.property("depth") == 1 and root.property("topPage").property("last") is False
+        )
 
     def press(key):
         QTest.keyClick(window, key)

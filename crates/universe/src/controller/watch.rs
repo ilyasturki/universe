@@ -44,7 +44,12 @@ impl Out {
 }
 
 pub fn lock_path() -> PathBuf {
-    std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from).filter(|p| p.is_absolute()).unwrap_or_else(paths::state_home).join("universe").join("controller.lock")
+    std::env::var_os("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .filter(|p| p.is_absolute())
+        .unwrap_or_else(paths::state_home)
+        .join("universe")
+        .join("controller.lock")
 }
 
 async fn take_lock(wait: bool, out: &Out) -> crate::Result<Option<std::fs::File>> {
@@ -111,7 +116,11 @@ fn axis_value(name: &str, value: i32, (min, max): (i32, i32)) -> f64 {
     if span <= 0.0 {
         return 0.0;
     }
-    let v = if name == "lt" || name == "rt" { (f64::from(value) - f64::from(min)) / span } else { (f64::from(value) - (f64::from(min) + f64::from(max)) / 2.0) / (span / 2.0) };
+    let v = if name == "lt" || name == "rt" {
+        (f64::from(value) - f64::from(min)) / span
+    } else {
+        (f64::from(value) - (f64::from(min) + f64::from(max)) / 2.0) / (span / 2.0)
+    };
     v.clamp(-1.0, 1.0)
 }
 
@@ -312,7 +321,8 @@ impl Watcher {
 
     fn scan(&mut self) {
         let Ok(rd) = std::fs::read_dir("/dev/input") else { return };
-        let present: BTreeSet<PathBuf> = rd.flatten().map(|e| e.path()).filter(|p| p.file_name().map(|f| f.to_string_lossy().starts_with("event")).unwrap_or(false)).collect();
+        let present: BTreeSet<PathBuf> =
+            rd.flatten().map(|e| e.path()).filter(|p| p.file_name().map(|f| f.to_string_lossy().starts_with("event")).unwrap_or(false)).collect();
         self.ignored.retain(|p| present.contains(p));
         let gone: Vec<String> = self.pads.values().filter(|p| !present.contains(&p.path) || !readable(&p.path)).map(|p| p.id.clone()).collect();
         for id in gone {
@@ -338,7 +348,22 @@ impl Watcher {
             let c = describe(&dev);
             let bus = bus_name(&dev);
             let (ctx, crx) = mpsc::channel(4);
-            let mut pad = Pad { id: id.clone(), path, name: c.name, family: c.family, bus, keys: c.keys, axes: c.axes, ranges: c.ranges, slots: BTreeMap::new(), by_source: BTreeMap::new(), bindings: BTreeMap::new(), axis_down: BTreeSet::new(), axis_last: BTreeMap::new(), cmd: ctx };
+            let mut pad = Pad {
+                id: id.clone(),
+                path,
+                name: c.name,
+                family: c.family,
+                bus,
+                keys: c.keys,
+                axes: c.axes,
+                ranges: c.ranges,
+                slots: BTreeMap::new(),
+                by_source: BTreeMap::new(),
+                bindings: BTreeMap::new(),
+                axis_down: BTreeSet::new(),
+                axis_last: BTreeMap::new(),
+                cmd: ctx,
+            };
             pad.resolve(&self.cfg);
             pad_task(id.clone(), dev, self.tx.clone(), crx);
             self.out.emit(pad.json());
@@ -396,7 +421,8 @@ impl Watcher {
                 let family = self.pads[&id].family;
                 match super::learn_code(&self.cfg, family, &slot, &source.to_string()) {
                     Ok(from) => {
-                        if !self.out.emit(serde_json::json!({"event": "learned", "family": family.id, "slot": slot, "code": source.to_string(), "from": from})) {
+                        if !self.out.emit(serde_json::json!({"event": "learned", "family": family.id, "slot": slot, "code": source.to_string(), "from": from}))
+                        {
                             return false;
                         }
                         self.reload().await;
@@ -435,7 +461,9 @@ impl Watcher {
 
     fn fire(&mut self, f: Fire) {
         let (id, slot, m) = (f.device, f.slot, f.action);
-        self.out.emit(serde_json::json!({"event": "macro", "id": id, "slot": slot, "trigger": f.trigger, "action": m.action, "keys": m.keys, "command": m.command}));
+        self.out.emit(
+            serde_json::json!({"event": "macro", "id": id, "slot": slot, "trigger": f.trigger, "action": m.action, "keys": m.keys, "command": m.command}),
+        );
         let core = self.core.clone();
         match m.action.as_str() {
             "volume_up" | "volume_down" | "mute" => {
@@ -494,7 +522,11 @@ impl Watcher {
                     let mut cmd = tokio::process::Command::new("sh");
                     cmd.arg("-c").arg(&command).stdin(std::process::Stdio::null());
                     if let Some(c) = core.current().await {
-                        cmd.env("GAME_ID", &c.id).env("GAME_TITLE", &c.title).env("SESSION_ID", &c.session_id).env("SESSION_UNIT", &c.unit).env("SESSION_SCREEN", &c.screen);
+                        cmd.env("GAME_ID", &c.id)
+                            .env("GAME_TITLE", &c.title)
+                            .env("SESSION_ID", &c.session_id)
+                            .env("SESSION_UNIT", &c.unit)
+                            .env("SESSION_SCREEN", &c.screen);
                     }
                     match cmd.status().await {
                         Ok(s) if !s.success() => tracing::warn!("command exited {s}: {command}"),
@@ -540,7 +572,12 @@ impl Watcher {
                 }
             }
             "run" => {
-                let action = super::Macro { action: v["action"].as_str().unwrap_or("").into(), keys: v["keys"].as_str().unwrap_or("").into(), command: v["command"].as_str().unwrap_or("").into(), ..Default::default() };
+                let action = super::Macro {
+                    action: v["action"].as_str().unwrap_or("").into(),
+                    keys: v["keys"].as_str().unwrap_or("").into(),
+                    command: v["command"].as_str().unwrap_or("").into(),
+                    ..Default::default()
+                };
                 self.fire(Fire { device: String::new(), slot: String::new(), trigger: "run", action });
             }
             "quit" => return false,
@@ -558,7 +595,22 @@ pub async fn watch(core: Arc<Core>, opts: WatchOptions) -> crate::Result<()> {
     };
     let cfg = core.config.read().await.controller.clone();
     let (tx, mut rx) = mpsc::channel::<DevEvent>(256);
-    let mut w = Watcher { core, engine: Engine::new(cfg.hold_ms), cfg, out, pads: BTreeMap::new(), ignored: BTreeSet::new(), tx, typist: Arc::new(Mutex::new(Typist { dev: None })), suspended: false, docked: false, axes: false, learning: None, started: Instant::now(), config_mtime: config_mtime() };
+    let mut w = Watcher {
+        core,
+        engine: Engine::new(cfg.hold_ms),
+        cfg,
+        out,
+        pads: BTreeMap::new(),
+        ignored: BTreeSet::new(),
+        tx,
+        typist: Arc::new(Mutex::new(Typist { dev: None })),
+        suspended: false,
+        docked: false,
+        axes: false,
+        learning: None,
+        started: Instant::now(),
+        config_mtime: config_mtime(),
+    };
     if !w.out.emit(serde_json::json!({"event": "ready", "enabled": w.cfg.enabled})) {
         return Ok(());
     }

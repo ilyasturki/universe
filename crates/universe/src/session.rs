@@ -144,7 +144,13 @@ impl Core {
                 return Err(Error::Io(format!("pre-launch {} refused the launch: {}", m.id(), out.stderr.trim())));
             }
         }
-        let extra_env: BTreeMap<String, String> = std::fs::read_to_string(&env_file).unwrap_or_default().lines().filter_map(|l| l.split_once('=')).filter(|(k, _)| !k.trim().is_empty()).map(|(k, v)| (k.trim().to_string(), v.to_string())).collect();
+        let extra_env: BTreeMap<String, String> = std::fs::read_to_string(&env_file)
+            .unwrap_or_default()
+            .lines()
+            .filter_map(|l| l.split_once('='))
+            .filter(|(k, _)| !k.trim().is_empty())
+            .map(|(k, v)| (k.trim().to_string(), v.to_string()))
+            .collect();
         let _ = std::fs::remove_file(&env_file);
 
         let mode = crate::desktop::screen_mode(&screen).await;
@@ -156,7 +162,16 @@ impl Core {
             std::fs::write(path, text)?;
         }
 
-        let current = Current { session_id: session_id.clone(), id: id.into(), title: r.game.title.clone(), unit: unit.clone(), screen: screen.clone(), started_at: started.to_rfc3339(), gamescope_pid, launcher_pid };
+        let current = Current {
+            session_id: session_id.clone(),
+            id: id.into(),
+            title: r.game.title.clone(),
+            unit: unit.clone(),
+            screen: screen.clone(),
+            started_at: started.to_rfc3339(),
+            gamescope_pid,
+            launcher_pid,
+        };
         let mut undo = Vec::new();
         if let Err(e) = self.begin(&r, &plan, &current, base.vars.clone(), &mut undo).await {
             if read_marker().is_some_and(|m| m.current.session_id == session_id) {
@@ -292,7 +307,14 @@ impl Core {
         Ok(())
     }
 
-    async fn file_session(&self, r: &Resolved, session_id: &str, exit: Option<i32>, ended: Option<chrono::DateTime<chrono::Local>>, marker: Option<&Marker>) -> Result<Session> {
+    async fn file_session(
+        &self,
+        r: &Resolved,
+        session_id: &str,
+        exit: Option<i32>,
+        ended: Option<chrono::DateTime<chrono::Local>>,
+        marker: Option<&Marker>,
+    ) -> Result<Session> {
         let unit = marker.map(|m| m.current.unit.clone()).unwrap_or_else(|| format!("{}.service", launcher::unit_name(&r.game.id, session_id)));
         let log = self.host.units.log(&unit).await;
         let started = marker
@@ -385,11 +407,18 @@ mod tests {
 
     fn sandbox() -> Sandbox {
         let dir = tempfile::tempdir().unwrap();
-        for (var, sub) in [("UNIVERSE_DATA_HOME", "data"), ("UNIVERSE_STATE_HOME", "state"), ("UNIVERSE_CONFIG_HOME", "config"), ("UNIVERSE_MODULES_PATH", "modules"), ("UNIVERSE_SOURCES_PATH", "sources")] {
+        for (var, sub) in [
+            ("UNIVERSE_DATA_HOME", "data"),
+            ("UNIVERSE_STATE_HOME", "state"),
+            ("UNIVERSE_CONFIG_HOME", "config"),
+            ("UNIVERSE_MODULES_PATH", "modules"),
+            ("UNIVERSE_SOURCES_PATH", "sources"),
+        ] {
             std::fs::create_dir_all(dir.path().join(sub)).unwrap();
             std::env::set_var(var, dir.path().join(sub));
         }
-        std::fs::write(dir.path().join("config/config.toml"), "[launch]\ngamescope = false\nmangohud = false\nfps_limit = \"none\"\n[modules]\nenabled = []\n").unwrap();
+        std::fs::write(dir.path().join("config/config.toml"), "[launch]\ngamescope = false\nmangohud = false\nfps_limit = \"none\"\n[modules]\nenabled = []\n")
+            .unwrap();
         let emu = dir.path().join("dolphin-emu");
         std::fs::write(&emu, b"#!/bin/sh\n").unwrap();
         let rom = dir.path().join("F-Zero GX.iso");
@@ -470,7 +499,11 @@ mod tests {
         assert!(matches!(core.set_mangohud(None).await, Err(Error::NotFound(_))), "no game, nothing to show");
         core.launch("sample", "", "").await.unwrap();
         let conf = launcher::layer_conf_path();
-        assert!(std::fs::read_to_string(&conf).map(|t| t.contains("no_display\n")).unwrap_or(true), "off by config, hidden: {:?}", std::fs::read_to_string(&conf));
+        assert!(
+            std::fs::read_to_string(&conf).map(|t| t.contains("no_display\n")).unwrap_or(true),
+            "off by config, hidden: {:?}",
+            std::fs::read_to_string(&conf)
+        );
 
         assert!(core.set_mangohud(None).await.unwrap(), "off flips on");
         assert_eq!(core.get("sample").await.unwrap().game.launch.mangohud, Some(true), "written as the game's own key");
@@ -561,7 +594,11 @@ mod tests {
             std::fs::write(&exe, format!("#!/bin/sh\necho {hook} $SESSION_ID $MODULE_SETTINGS_JSON >> {}\n", log.display())).unwrap();
             std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).unwrap();
         }
-        std::fs::write(paths::config_home().join("config.toml"), "[launch]\ngamescope = false\nmangohud = false\nfps_limit = \"none\"\n[modules]\nenabled = [\"probe\"]\n").unwrap();
+        std::fs::write(
+            paths::config_home().join("config.toml"),
+            "[launch]\ngamescope = false\nmangohud = false\nfps_limit = \"none\"\n[modules]\nenabled = [\"probe\"]\n",
+        )
+        .unwrap();
         let (core, memory) = open().await;
         assert!(matches!(core.freeze(true).await, Err(Error::NotFound(_))));
         let sid = core.launch("sample", "", "").await.unwrap();

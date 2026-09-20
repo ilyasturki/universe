@@ -23,36 +23,160 @@ FocusScope {
     focus: true
 
     readonly property var row: [
-        { id: "resume", icon: "play", label: "Resume", kind: "action" },
-        { id: "home", icon: "grid", label: "Home", kind: "action" },
-        { id: "game", icon: "gamepad", label: "Game", kind: "group", children: [
-            { id: "details", icon: "info", label: "Details", kind: "action" },
-            { id: "journal", icon: "book", label: "Journal", kind: "action" },
-            { id: "recordings", icon: "film", label: "Recordings", kind: "action" },
-            { id: "pause", icon: "snowflake", label: "Pause on HOME", kind: "toggle" },
-            { id: "quit", icon: "power", label: "Quit", kind: "action", value: "asks first" } ] },
+        {
+            id: "resume",
+            icon: "play",
+            label: "Resume",
+            kind: "action"
+        },
+        {
+            id: "home",
+            icon: "grid",
+            label: "Home",
+            kind: "action"
+        },
+        {
+            id: "game",
+            icon: "gamepad",
+            label: "Game",
+            kind: "group",
+            children: [
+                {
+                    id: "details",
+                    icon: "info",
+                    label: "Details",
+                    kind: "action"
+                },
+                {
+                    id: "journal",
+                    icon: "book",
+                    label: "Journal",
+                    kind: "action"
+                },
+                {
+                    id: "recordings",
+                    icon: "film",
+                    label: "Recordings",
+                    kind: "action"
+                },
+                {
+                    id: "pause",
+                    icon: "snowflake",
+                    label: "Pause on HOME",
+                    kind: "toggle"
+                },
+                {
+                    id: "quit",
+                    icon: "power",
+                    label: "Quit",
+                    kind: "action",
+                    value: "asks first"
+                }
+            ]
+        },
         "|",
-        { id: "shot", icon: "camera", label: "Screenshot", kind: "action" },
-        { id: "cap", icon: "video", label: "Capture", kind: "group", children: [
-            { id: "rec", icon: "record", label: "Recording", kind: "info" },
-            { id: "source", icon: "screen", label: "Source", kind: "value", options: ["screen", "window"], names: ["Screen", "Window"], later: true },
-            { id: "cursor", icon: "cursor", label: "Cursor", kind: "toggle", later: true } ] },
-        { id: "perf", icon: "pulse", label: "Performance", kind: "group", children: [
-            { id: "hud", key: "mangohud", icon: "pulse", label: "MangoHud", kind: "toggle" },
-            { id: "fps", key: "fps_limit", icon: "gauge", label: "FPS limit", kind: "value", options: [], names: [] },
-            { id: "filter", key: "gamescope_filter", icon: "sliders", label: "Filter", kind: "value", options: ["", "linear", "nearest", "fsr", "nis", "pixel"], names: ["Default", "Linear", "Nearest", "FSR", "NIS", "Pixel"] } ] },
-        { id: "sound", icon: "volume-up", label: "Sound", kind: "group", children: [
-            { id: "vol", icon: "volume-up", label: "Volume", kind: "range" },
-            { id: "mute", icon: "mute", label: "Mute", kind: "toggle" } ] }
+        {
+            id: "shot",
+            icon: "camera",
+            label: "Screenshot",
+            kind: "action"
+        },
+        {
+            id: "cap",
+            icon: "video",
+            label: "Capture",
+            kind: "group",
+            children: [
+                {
+                    id: "rec",
+                    icon: "record",
+                    label: "Recording",
+                    kind: "info"
+                },
+                {
+                    id: "source",
+                    icon: "screen",
+                    label: "Source",
+                    kind: "value",
+                    options: ["screen", "window"],
+                    names: ["Screen", "Window"],
+                    later: true
+                },
+                {
+                    id: "cursor",
+                    icon: "cursor",
+                    label: "Cursor",
+                    kind: "toggle",
+                    later: true
+                }
+            ]
+        },
+        {
+            id: "perf",
+            icon: "pulse",
+            label: "Performance",
+            kind: "group",
+            children: [
+                {
+                    id: "hud",
+                    key: "mangohud",
+                    icon: "pulse",
+                    label: "MangoHud",
+                    kind: "toggle"
+                },
+                {
+                    id: "fps",
+                    key: "fps_limit",
+                    icon: "gauge",
+                    label: "FPS limit",
+                    kind: "value",
+                    options: [],
+                    names: []
+                },
+                {
+                    id: "filter",
+                    key: "gamescope_filter",
+                    icon: "sliders",
+                    label: "Filter",
+                    kind: "value",
+                    options: ["", "linear", "nearest", "fsr", "nis", "pixel"],
+                    names: ["Default", "Linear", "Nearest", "FSR", "NIS", "Pixel"]
+                }
+            ]
+        },
+        {
+            id: "sound",
+            icon: "volume-up",
+            label: "Sound",
+            kind: "group",
+            children: [
+                {
+                    id: "vol",
+                    icon: "volume-up",
+                    label: "Volume",
+                    kind: "range"
+                },
+                {
+                    id: "mute",
+                    icon: "mute",
+                    label: "Mute",
+                    kind: "toggle"
+                }
+            ]
+        }
     ]
-    readonly property var buttons: row.filter(function(b) { return b !== "|"; })
+    readonly property var buttons: row.filter(function (b) {
+        return b !== "|";
+    })
     readonly property var current: buttons[Math.max(0, Math.min(buttons.length - 1, index))]
     readonly property var target: opened && current.kind === "group" ? current.children[sub] : current
 
     // Slot results are not bindings: reread on open, then patched by the change that was just made.
     function refresh() {
         var cap = api.universe.getSettings("capture", session.id) || {};
-        var on = api.universe.modules().some(function(m) { return m.id === "capture" && m.enabled; });
+        var on = api.universe.modules().some(function (m) {
+            return m.id === "capture" && m.enabled;
+        });
         vals = {
             pause: api.home.pauseOnHome,
             rec: on && cap.enabled !== false,
@@ -82,15 +206,24 @@ FocusScope {
     function shows(item) {
         var v = vals;
         switch (item.id) {
-        case "pause": return v.pause ? "On" : "Off";
-        case "hud": return v.hud ? "Shown" : "Hidden";
-        case "rec": return v.rec ? "On · " + Format.clockTime(dock.elapsed) : "Off";
-        case "source": return (v.source === "window" ? "Window" : "Screen") + " · next session";
-        case "cursor": return (v.cursor ? "On" : "Off") + " · next session";
-        case "fps": return v.fps === "auto" ? "Auto · " + (v.hz > 0 ? v.hz : "screen") : v.fps === "none" ? "None" : v.fps;
-        case "filter": return item.names[Math.max(0, item.options.indexOf(v.filter))];
-        case "vol": return v.vol + "%";
-        case "mute": return v.mute ? "On" : "Off";
+        case "pause":
+            return v.pause ? "On" : "Off";
+        case "hud":
+            return v.hud ? "Shown" : "Hidden";
+        case "rec":
+            return v.rec ? "On · " + Format.clockTime(dock.elapsed) : "Off";
+        case "source":
+            return (v.source === "window" ? "Window" : "Screen") + " · next session";
+        case "cursor":
+            return (v.cursor ? "On" : "Off") + " · next session";
+        case "fps":
+            return v.fps === "auto" ? "Auto · " + (v.hz > 0 ? v.hz : "screen") : v.fps === "none" ? "None" : v.fps;
+        case "filter":
+            return item.names[Math.max(0, item.options.indexOf(v.filter))];
+        case "vol":
+            return v.vol + "%";
+        case "mute":
+            return v.mute ? "On" : "Off";
         }
         return item.value || "";
     }
@@ -155,9 +288,15 @@ FocusScope {
             shotTimer.restart();
             break;
         case "quit":
-            confirm.ask({ message: "Quit " + (dock.session ? dock.session.title : "the game") + "?",
-                          detail: "Unsaved progress will be lost.", yes: "Quit", no: "Keep playing" },
-                        function(yes) { if (yes) api.home.stop(); });
+            confirm.ask({
+                message: "Quit " + (dock.session ? dock.session.title : "the game") + "?",
+                detail: "Unsaved progress will be lost.",
+                yes: "Quit",
+                no: "Keep playing"
+            }, function (yes) {
+                if (yes)
+                    api.home.stop();
+            });
             break;
         }
     }
@@ -260,17 +399,32 @@ FocusScope {
 
         Behavior on opacity {
             SequentialAnimation {
-                NumberAnimation { duration: dock.shown ? Theme.durBase : Theme.durDismiss; easing.type: Easing.OutCubic }
-                ScriptAction { script: if (!dock.open) api.home.dockClosed(); }
+                NumberAnimation {
+                    duration: dock.shown ? Theme.durBase : Theme.durDismiss
+                    easing.type: Easing.OutCubic
+                }
+                ScriptAction {
+                    script: if (!dock.open)
+                        api.home.dockClosed()
+                }
             }
         }
 
         Rectangle {
             anchors.fill: parent
             gradient: Gradient {
-                GradientStop { position: 0.60; color: Qt.rgba(0.055, 0.059, 0.075, 0.0) }
-                GradientStop { position: 0.82; color: Qt.rgba(0.055, 0.059, 0.075, 0.86) }
-                GradientStop { position: 1.00; color: Qt.rgba(0.055, 0.059, 0.075, 0.95) }
+                GradientStop {
+                    position: 0.60
+                    color: Qt.rgba(0.055, 0.059, 0.075, 0.0)
+                }
+                GradientStop {
+                    position: 0.82
+                    color: Qt.rgba(0.055, 0.059, 0.075, 0.86)
+                }
+                GradientStop {
+                    position: 1.00
+                    color: Qt.rgba(0.055, 0.059, 0.075, 0.95)
+                }
             }
         }
 
@@ -296,10 +450,18 @@ FocusScope {
                     SequentialAnimation on opacity {
                         running: dock.shown
                         loops: Animation.Infinite
-                        PauseAnimation { duration: 600 }
-                        PropertyAction { value: 0.25 }
-                        PauseAnimation { duration: 600 }
-                        PropertyAction { value: 1.0 }
+                        PauseAnimation {
+                            duration: 600
+                        }
+                        PropertyAction {
+                            value: 0.25
+                        }
+                        PauseAnimation {
+                            duration: 600
+                        }
+                        PropertyAction {
+                            value: 1.0
+                        }
                     }
                 }
 
@@ -397,7 +559,9 @@ FocusScope {
                         radius: width / 2
                         color: dock.paused ? "#f2b84b" : "#7ed957"
 
-                        Behavior on color { ColorEase {} }
+                        Behavior on color {
+                            ColorEase {}
+                        }
                     }
 
                     Text {
@@ -447,8 +611,14 @@ FocusScope {
             anchors.bottom: parent.bottom
             anchors.bottomMargin: Theme.dp(120)
             spacing: Theme.dp(18)
-            transform: Translate { y: dock.shown ? 0 : Theme.dp(16)
-                                   Behavior on y { Ease { duration: dock.shown ? Theme.durBase : Theme.durDismiss } } }
+            transform: Translate {
+                y: dock.shown ? 0 : Theme.dp(16)
+                Behavior on y {
+                    Ease {
+                        duration: dock.shown ? Theme.durBase : Theme.durDismiss
+                    }
+                }
+            }
 
             Repeater {
                 model: dock.row
@@ -457,7 +627,9 @@ FocusScope {
                     id: slot
 
                     readonly property bool separator: modelData === "|"
-                    readonly property int position: dock.row.slice(0, index).filter(function(b) { return b !== "|"; }).length
+                    readonly property int position: dock.row.slice(0, index).filter(function (b) {
+                        return b !== "|";
+                    }).length
                     readonly property bool focused: !separator && position === dock.index
 
                     width: separator ? Theme.dp(17) : Theme.dp(70)
@@ -481,7 +653,9 @@ FocusScope {
                         border.width: 1
                         border.color: slot.focused ? Theme.text : Theme.surfaceBorder
 
-                        Behavior on color { ColorEase {} }
+                        Behavior on color {
+                            ColorEase {}
+                        }
 
                         Rectangle {
                             anchors.fill: parent
@@ -493,7 +667,11 @@ FocusScope {
                             opacity: slot.focused ? 1.0 : 0.0
                             antialiasing: true
 
-                            Behavior on opacity { Ease { duration: Theme.durQuick } }
+                            Behavior on opacity {
+                                Ease {
+                                    duration: Theme.durQuick
+                                }
+                            }
                         }
 
                         MenuGlyph {
@@ -516,7 +694,11 @@ FocusScope {
                         font.pixelSize: Theme.dp(20)
                         opacity: slot.focused && !dock.opened ? 1.0 : 0.0
 
-                        Behavior on opacity { Ease { duration: Theme.durQuick } }
+                        Behavior on opacity {
+                            Ease {
+                                duration: Theme.durQuick
+                            }
+                        }
                     }
                 }
             }
@@ -539,8 +721,12 @@ FocusScope {
             x: Math.min(anchorX, band.width - Theme.dp(Theme.edgeMargin) - width)
             y: buttonsRow.y - Theme.dp(28) - height + (dock.opened ? 0 : Theme.dp(12))
 
-            Behavior on opacity { Ease {} }
-            Behavior on y { Ease {} }
+            Behavior on opacity {
+                Ease {}
+            }
+            Behavior on y {
+                Ease {}
+            }
 
             Column {
                 id: rows
@@ -568,7 +754,9 @@ FocusScope {
                         radius: Theme.dp(16)
                         color: focused ? Theme.text : "transparent"
 
-                        Behavior on color { ColorEase {} }
+                        Behavior on color {
+                            ColorEase {}
+                        }
 
                         MenuGlyph {
                             id: lineGlyph
@@ -623,7 +811,11 @@ FocusScope {
                                     radius: height / 2
                                     color: line.focused ? Theme.onLight : Theme.text
 
-                                    Behavior on width { Ease { duration: Theme.durQuick } }
+                                    Behavior on width {
+                                        Ease {
+                                            duration: Theme.durQuick
+                                        }
+                                    }
                                 }
                             }
 
@@ -679,7 +871,7 @@ FocusScope {
         z: 5
     }
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         if (!dock.open || confirm.open) {
             event.accepted = dock.open;
             return;

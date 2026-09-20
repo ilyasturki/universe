@@ -9,11 +9,13 @@ FocusScope {
     property int index: 0
 
     signal activated(string id)
-    signal escapedRight()
+    signal escapedRight
 
     width: Theme.dp(110)
 
-    function step(d) { index = Sound.stepped(index, d, items.length); }
+    function step(d) {
+        index = Sound.stepped(index, d, items.length);
+    }
 
     Keys.onUpPressed: step(-1)
     Keys.onDownPressed: step(1)
@@ -23,7 +25,7 @@ FocusScope {
         rail.escapedRight();
     }
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         if (event.isAutoRepeat)
             return;
         if (api.keys.isAccept(event)) {

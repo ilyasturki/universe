@@ -9,9 +9,14 @@ FocusScope {
     property int index: 0
 
     signal activated(var item)
-    signal escapedUp()
+    signal escapedUp
 
-    readonly property var hints: [ { glyph: "A", label: "OK" } ]
+    readonly property var hints: [
+        {
+            glyph: "A",
+            label: "OK"
+        }
+    ]
     readonly property real iconSize: Theme.dp(58)
     readonly property real discSize: Theme.dp(96)
     // 123: the Switch's icon pitch; fewer icons shorten the pill, never widen the gap.
@@ -21,7 +26,9 @@ FocusScope {
     width: endPad * 2 + Math.max(0, items.length - 1) * pitch + iconSize
     height: Theme.dp(Theme.barHeight)
 
-    function step(d) { index = Sound.stepped(index, d, items.length); }
+    function step(d) {
+        index = Sound.stepped(index, d, items.length);
+    }
 
     Keys.onLeftPressed: step(-1)
     Keys.onRightPressed: step(1)
@@ -31,7 +38,7 @@ FocusScope {
     }
     Keys.onDownPressed: Sound.play("edge")
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         if (event.isAutoRepeat)
             return;
         if (api.keys.isAccept(event)) {

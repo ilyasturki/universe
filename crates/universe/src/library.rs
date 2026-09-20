@@ -202,7 +202,11 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
         spec.map(|s| located.entry(s.id.into()).or_insert_with(|| crate::runners::locate(s, config).program).clone()).unwrap_or_default()
     };
     let options = spec.map(|s| s.merged_options(config, Some(&game))).unwrap_or_default();
-    let gamescope = game.launch.gamescope.or_else(|| config.runners.get(&runner).and_then(|t| t.get("gamescope")).and_then(|v| v.as_bool())).unwrap_or(config.launch.gamescope);
+    let gamescope = game
+        .launch
+        .gamescope
+        .or_else(|| config.runners.get(&runner).and_then(|t| t.get("gamescope")).and_then(|v| v.as_bool()))
+        .unwrap_or(config.launch.gamescope);
     let effective = Effective {
         runner_name: spec.map(|s| s.name.to_string()).unwrap_or_else(|| runner.clone()),
         runner_kind: spec.map(|s| s.kind.as_str().to_string()).unwrap_or_default(),
@@ -211,7 +215,10 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
         inputplumber: options.get("inputplumber").and_then(|v| v.as_bool()).unwrap_or(false),
         options,
         runner,
-        proton_path: located.entry(format!("proton:{proton}")).or_insert_with(|| config.proton_path(&proton).map(|p| p.to_string_lossy().into()).unwrap_or_default()).clone(),
+        proton_path: located
+            .entry(format!("proton:{proton}"))
+            .or_insert_with(|| config.proton_path(&proton).map(|p| p.to_string_lossy().into()).unwrap_or_default())
+            .clone(),
         proton,
         esync: game.launch.esync.unwrap_or(config.launch.esync),
         fsync: game.launch.fsync.unwrap_or(config.launch.fsync),
@@ -227,7 +234,11 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
         gamescope,
         gamescope_args: game.launch.gamescope_args.clone(),
         gamescope_fields: gamescope_fields_of(&game, config),
-        fps_limit: [&game.launch.fps_limit, &config.launch.fps_limit].into_iter().find(|s| !s.is_empty()).cloned().unwrap_or_else(|| crate::launch_keys::default_of("fps_limit").into()),
+        fps_limit: [&game.launch.fps_limit, &config.launch.fps_limit]
+            .into_iter()
+            .find(|s| !s.is_empty())
+            .cloned()
+            .unwrap_or_else(|| crate::launch_keys::default_of("fps_limit").into()),
         hide_cursor: game.desktop.hide_cursor.unwrap_or(config.desktop.hide_cursor),
         env,
     };
@@ -256,9 +267,7 @@ pub fn sort_default(list: &mut [Resolved]) {
     list.sort_by(|a, b| {
         let ra = (!a.game.removed_at.is_empty(), a.game.hidden);
         let rb = (!b.game.removed_at.is_empty(), b.game.hidden);
-        ra.cmp(&rb)
-            .then_with(|| b.stats.last_played.cmp(&a.stats.last_played))
-            .then_with(|| a.game.title.to_lowercase().cmp(&b.game.title.to_lowercase()))
+        ra.cmp(&rb).then_with(|| b.stats.last_played.cmp(&a.stats.last_played)).then_with(|| a.game.title.to_lowercase().cmp(&b.game.title.to_lowercase()))
     });
 }
 
@@ -286,12 +295,23 @@ pub fn resolve_query<'a>(games: &'a [Resolved], query: &str) -> Vec<&'a Resolved
         return sub;
     }
     let qp = PathBuf::from(q);
-    let by_path: Vec<&Resolved> = games.iter().filter(|g| !g.game.launch.exe.is_empty() && (g.game.exe_path() == qp || g.game.exe_path().starts_with(&qp) || g.game.game_root() == qp)).collect();
+    let by_path: Vec<&Resolved> = games
+        .iter()
+        .filter(|g| !g.game.launch.exe.is_empty() && (g.game.exe_path() == qp || g.game.exe_path().starts_with(&qp) || g.game.game_root() == qp))
+        .collect();
     if !by_path.is_empty() {
         return by_path;
     }
     let words: Vec<&str> = ql.split_whitespace().collect();
-    games.iter().filter(|g| words.iter().all(|w| g.game.title.to_lowercase().split(|c: char| !c.is_alphanumeric()).any(|t| t.starts_with(w)) || g.game.metadata.genres.iter().any(|x| x.to_lowercase().starts_with(w)))).collect()
+    games
+        .iter()
+        .filter(|g| {
+            words.iter().all(|w| {
+                g.game.title.to_lowercase().split(|c: char| !c.is_alphanumeric()).any(|t| t.starts_with(w))
+                    || g.game.metadata.genres.iter().any(|x| x.to_lowercase().starts_with(w))
+            })
+        })
+        .collect()
 }
 
 #[cfg(test)]
@@ -306,7 +326,8 @@ mod tests {
 
     #[test]
     fn four_passes() {
-        let games = vec![r("Dead Cells", "/g/Dead Cells/deadcells.exe"), r("Mini Metro", "/g/Mini Metro/m.exe"), r("Mini Motorways", "/g/Mini Motorways/m.exe")];
+        let games =
+            vec![r("Dead Cells", "/g/Dead Cells/deadcells.exe"), r("Mini Metro", "/g/Mini Metro/m.exe"), r("Mini Motorways", "/g/Mini Motorways/m.exe")];
         assert_eq!(resolve_query(&games, "dead cells").len(), 1);
         assert_eq!(resolve_query(&games, "metro")[0].game.id, "mini-metro");
         assert_eq!(resolve_query(&games, "mini").len(), 2);

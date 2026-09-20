@@ -19,12 +19,15 @@ FocusScope {
     readonly property string currentSession: current ? current.session : ""
     readonly property var images: current ? current.images : []
     readonly property bool currentPending: current !== null && current.state === "pending"
-    readonly property bool anyPending: rows.some(function(r) { return r.state === "pending"; })
+    readonly property bool anyPending: rows.some(function (r) {
+        return r.state === "pending";
+    })
     property double now: Date.now()
 
     readonly property var recordings: api.screens.recordings
-    readonly property var recording: current && current.hasRecording
-        ? recordings.rows.find(function(r) { return r.session === current.session; }) || null : null
+    readonly property var recording: current && current.hasRecording ? recordings.rows.find(function (r) {
+        return r.session === current.session;
+    }) || null : null
 
     // 0 entries, 1 the text, 2 the screenshots, 3 the recording card
     property int mode: 0
@@ -32,27 +35,61 @@ FocusScope {
     property bool lightbox: false
     readonly property bool reading: mode > 0
 
-    signal closeRequested()
+    signal closeRequested
     signal jumpRequested(string source, string session)
 
     readonly property var hints: {
         if (lightbox)
-            return [ { glyph: "dpad", label: "Previous / next" }, { glyph: "B", label: "Close" } ];
+            return [
+                {
+                    glyph: "dpad",
+                    label: "Previous / next"
+                },
+                {
+                    glyph: "B",
+                    label: "Close"
+                }
+            ];
         if (menu.open)
             return menu.hints;
         var out = [];
         if (mode === 3)
-            out.push({ glyph: "A", label: "Watch" });
+            out.push({
+                glyph: "A",
+                label: "Watch"
+            });
         else if (mode === 2)
-            out.push({ glyph: "A", label: "View" });
+            out.push({
+                glyph: "A",
+                label: "View"
+            });
         else if (mode === 1)
-            out.push({ glyph: "A", label: recording ? "Recording" : "Screenshots", dim: !recording && images.length === 0 });
+            out.push({
+                glyph: "A",
+                label: recording ? "Recording" : "Screenshots",
+                dim: !recording && images.length === 0
+            });
         else
-            out.push({ glyph: "A", label: currentPending ? "Being written" : "Read", dim: currentPending });
+            out.push({
+                glyph: "A",
+                label: currentPending ? "Being written" : "Read",
+                dim: currentPending
+            });
         if (mode !== 3)
-            out.push({ glyph: "Y", label: "Recording", dim: !(current && current.hasRecording) });
-        out.push({ glyph: "Start", label: "More", dim: current === null });
-        out.push({ glyph: "B", label: reading ? "Back to entries" : "Back" });
+            out.push({
+                glyph: "Y",
+                label: "Recording",
+                dim: !(current && current.hasRecording)
+            });
+        out.push({
+            glyph: "Start",
+            label: "More",
+            dim: current === null
+        });
+        out.push({
+            glyph: "B",
+            label: reading ? "Back to entries" : "Back"
+        });
         return out;
     }
 
@@ -79,7 +116,9 @@ FocusScope {
     }
 
     function landOnSession() {
-        var i = rows.findIndex(function(r) { return r.session === session; });
+        var i = rows.findIndex(function (r) {
+            return r.session === session;
+        });
         if (i >= 0)
             index = i;
     }
@@ -194,10 +233,23 @@ FocusScope {
         Sound.panel();
         var items = [];
         if (!currentPending)
-            items.push({ icon: "book", label: "Read", action: "read" });
+            items.push({
+                icon: "book",
+                label: "Read",
+                action: "read"
+            });
         if (current.hasRecording)
-            items.push({ icon: "film", label: "Recording", action: "recording" });
-        items.push({ icon: "trash", label: currentPending ? "Cancel the writing…" : "Remove entry…", action: "remove", danger: true });
+            items.push({
+                icon: "film",
+                label: "Recording",
+                action: "recording"
+            });
+        items.push({
+            icon: "trash",
+            label: currentPending ? "Cancel the writing…" : "Remove entry…",
+            action: "remove",
+            danger: true
+        });
         menu.show(items, list, rowRect(), current.title !== "" ? current.title : whenText(current), menuAction);
     }
 
@@ -208,10 +260,26 @@ FocusScope {
             openRecording();
         } else if (action === "remove") {
             Sound.panel();
-            var items = [ { icon: "", label: "Keep it", action: "" },
-                          { icon: "trash", label: currentPending ? "Stop the writing" : "Trash the entry", action: "remove!", danger: true } ];
+            var items = [
+                {
+                    icon: "",
+                    label: "Keep it",
+                    action: ""
+                },
+                {
+                    icon: "trash",
+                    label: currentPending ? "Stop the writing" : "Trash the entry",
+                    action: "remove!",
+                    danger: true
+                }
+            ];
             if (current.hasRecording)
-                items.push({ icon: "trash", label: currentPending ? "Stop it and trash the recording" : "Trash it and its recording", action: "remove-both!", danger: true });
+                items.push({
+                    icon: "trash",
+                    label: currentPending ? "Stop it and trash the recording" : "Trash it and its recording",
+                    action: "remove-both!",
+                    danger: true
+                });
             menu.show(items, list, rowRect(), currentPending ? "Cancel this entry?" : "Remove this entry?", menuAction);
         } else if (action === "remove!" || action === "remove-both!") {
             Sound.enter();
@@ -225,7 +293,7 @@ FocusScope {
             page.forceActiveFocus();
     }
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         var arrow = event.key === Qt.Key_Left || event.key === Qt.Key_Right;
         var screen = api.keys.isScreenUp(event) ? -1 : api.keys.isScreenDown(event) ? 1 : 0;
         if (event.isAutoRepeat && !(lightbox && arrow) && !(mode === 2 && arrow) && !screen)
@@ -337,7 +405,11 @@ FocusScope {
         preferredHighlightEnd: height
         highlightRangeMode: ListView.ApplyRange
 
-        Behavior on opacity { Ease { duration: Theme.durQuick } }
+        Behavior on opacity {
+            Ease {
+                duration: Theme.durQuick
+            }
+        }
 
         delegate: SessionRow {
             id: entry
@@ -349,9 +421,7 @@ FocusScope {
             lit: index === page.index && !page.reading
             muted: pending
             title: pending ? "Writing the entry…" : modelData.title
-            subtitle: pending ? page.elapsedText(modelData.started_at)
-                    : modelData.state === "failed" ? modelData.reason
-                    : page.whenText(modelData)
+            subtitle: pending ? page.elapsedText(modelData.started_at) : modelData.state === "failed" ? modelData.reason : page.whenText(modelData)
             mark: "film"
             showMark: modelData.hasRecording
             leadWidth: pending ? Theme.dp(12) : 0
@@ -384,7 +454,11 @@ FocusScope {
         clip: true
         visible: page.current !== null
 
-        Behavior on contentY { Ease { duration: Theme.durView } }
+        Behavior on contentY {
+            Ease {
+                duration: Theme.durView
+            }
+        }
 
         Column {
             id: article
@@ -411,9 +485,7 @@ FocusScope {
             Text {
                 width: parent.width
                 visible: page.currentPending
-                text: page.current && page.currentPending
-                    ? "The journal module is writing this entry — " + page.elapsedText(page.current.started_at) + " so far. It shows up here when it is done."
-                    : ""
+                text: page.current && page.currentPending ? "The journal module is writing this entry — " + page.elapsedText(page.current.started_at) + " so far. It shows up here when it is done." : ""
                 color: Theme.textMuted
                 font.family: Theme.sans
                 font.pixelSize: Theme.dp(24)
@@ -434,7 +506,11 @@ FocusScope {
                     lineHeight: 1.5
                     wrapMode: Text.WordWrap
 
-                    Behavior on color { ColorEase { duration: Theme.durBase } }
+                    Behavior on color {
+                        ColorEase {
+                            duration: Theme.durBase
+                        }
+                    }
                 }
             }
 
@@ -489,9 +565,18 @@ FocusScope {
         anchors.right: parent.right
         height: hintBar.height + Theme.dp(50)
         gradient: Gradient {
-            GradientStop { position: 0.0; color: Qt.rgba(0.055, 0.059, 0.075, 0.0) }
-            GradientStop { position: 0.45; color: Qt.rgba(0.055, 0.059, 0.075, 0.92) }
-            GradientStop { position: 1.0; color: Theme.ground }
+            GradientStop {
+                position: 0.0
+                color: Qt.rgba(0.055, 0.059, 0.075, 0.0)
+            }
+            GradientStop {
+                position: 0.45
+                color: Qt.rgba(0.055, 0.059, 0.075, 0.92)
+            }
+            GradientStop {
+                position: 1.0
+                color: Theme.ground
+            }
         }
     }
 

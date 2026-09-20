@@ -3,10 +3,12 @@ ranked, fuzzy match over it as the query is typed. A result carries `target`, wh
 
 import logging
 import re
+from collections.abc import Callable
 
-from PySide6.QtCore import Property, QObject, Signal, Slot
+from PySide6.QtCore import QObject, Signal, Slot
 
 from ..models import file_url
+from ..qt import Property
 from .launch import build_launch
 from .runners import build_runner
 from .settings import ADVANCED_KEY, ModuleApi, SourceApi, build_game, build_page
@@ -184,10 +186,12 @@ class Entry:
     )
     made = 0
 
-    def __init__(self, label, path, target, kind="setting", detail="", display="", key="", module="", advanced=False, games=None, image="", icon="", synonyms=()):
+    def __init__(
+        self, label, path, target, kind="setting", detail="", display="", key="", module="", advanced=False, games=None, image="", icon="", synonyms=()
+    ):
         self.label, self.path, self.target, self.kind = str(label), list(path), dict(target), kind
         self.detail, self.display, self.key, self.module, self.advanced = str(detail or ""), str(display or ""), key, module, bool(advanced)
-        self.games, self.image, self.icon = games, image, icon
+        self.games, self.image, self.icon = games if games is not None else [], image, icon
         self.words = normal(label).split()
         short = key.split(".")[-1]
         self.keywords = [normal(s) for s in list(synonyms) + SYNONYMS.get(short, []) + ([short.replace("_", " ")] if short else [])]
@@ -218,9 +222,25 @@ class Entry:
 
     def row(self):
         path = " › ".join(self.path)
-        row = {"label": self.label, "display": self.display, "type": "action", "action": "Open", "path": path, "tag": "ADVANCED" if self.advanced else "",
-               "detail": self.detail, "advanced": self.advanced, "target": self.target, "kind": self.kind,
-               "key": self.key, "module": self.module, "choices": [], "value": "", "inherited": False, "image": self.image, "icon": self.icon}
+        row = {
+            "label": self.label,
+            "display": self.display,
+            "type": "action",
+            "action": "Open",
+            "path": path,
+            "tag": "ADVANCED" if self.advanced else "",
+            "detail": self.detail,
+            "advanced": self.advanced,
+            "target": self.target,
+            "kind": self.kind,
+            "key": self.key,
+            "module": self.module,
+            "choices": [],
+            "value": "",
+            "inherited": False,
+            "image": self.image,
+            "icon": self.icon,
+        }
         return row
 
 
@@ -230,7 +250,7 @@ class SettingsSearch(QObject):
     readyChanged = Signal()
     sectionsChanged = Signal()
 
-    def __init__(self, client, screen_mode=lambda: {}, themes=lambda: [], controller=None, parent=None):
+    def __init__(self, client, screen_mode: Callable[[], dict] = dict, themes: Callable[[], list] = list, controller=None, parent=None):
         super().__init__(parent)
         self._client = client
         self._screen_mode = screen_mode
@@ -288,8 +308,16 @@ class SettingsSearch(QObject):
             ident = str(section.get("id") or "")
             if ident in ("search", ""):
                 continue
-            entries.append(Entry(section.get("label") or ident, ["Settings"], {"page": "section", "id": ident, "key": "", "module": ""}, kind="section",
-                                 icon=str(section.get("icon") or ""), synonyms=SECTION_SYNONYMS.get(ident, [])))
+            entries.append(
+                Entry(
+                    section.get("label") or ident,
+                    ["Settings"],
+                    {"page": "section", "id": ident, "key": "", "module": ""},
+                    kind="section",
+                    icon=str(section.get("icon") or ""),
+                    synonyms=SECTION_SYNONYMS.get(ident, []),
+                )
+            )
 
     def _index_launch(self, entries):
         rows, groups, _ = build_launch(self._client, self._screen_mode)
@@ -300,8 +328,17 @@ class SettingsSearch(QObject):
             info, rows, groups = build_runner(self._client, runner["id"], self._screen_mode)
             if not info:
                 continue
-            entries.append(Entry(info["name"], ["Runners"], {"page": "runner", "id": runner["id"], "key": "", "module": ""}, detail=info.get("meta", ""),
-                                 display="" if not info.get("warning") else info["warning"], image=info.get("icon", ""), synonyms=["runner", "emulator"] if runner.get("kind") == "emulator" else ["runner"]))
+            entries.append(
+                Entry(
+                    info["name"],
+                    ["Runners"],
+                    {"page": "runner", "id": runner["id"], "key": "", "module": ""},
+                    detail=info.get("meta", ""),
+                    display="" if not info.get("warning") else info["warning"],
+                    image=info.get("icon", ""),
+                    synonyms=["runner", "emulator"] if runner.get("kind") == "emulator" else ["runner"],
+                )
+            )
             self._index_rows(entries, rows, groups, ["Runners", info["name"]], {"page": "runner", "id": runner["id"], "module": ""})
 
     def _index_pages(self, entries):
@@ -312,8 +349,16 @@ class SettingsSearch(QObject):
                 if not info:
                     continue
                 page = "source" if api.source else "module"
-                entries.append(Entry(info["name"], [api.kind], {"page": page, "id": entry["id"], "key": "enabled", "module": entry["id"]}, detail=info.get("description", ""),
-                                     display="On" if info["enabled"] else "Off", synonyms=["source", "store"] if api.source else ["module", "hooks"]))
+                entries.append(
+                    Entry(
+                        info["name"],
+                        [api.kind],
+                        {"page": page, "id": entry["id"], "key": "enabled", "module": entry["id"]},
+                        detail=info.get("description", ""),
+                        display="On" if info["enabled"] else "Off",
+                        synonyms=["source", "store"] if api.source else ["module", "hooks"],
+                    )
+                )
                 self._index_rows(entries, rows, groups, [api.kind, info["name"]], {"page": page, "id": entry["id"], "module": entry["id"]}, skip_control=True)
 
     def _index_controller(self, entries, rows):
@@ -323,17 +368,43 @@ class SettingsSearch(QObject):
             key = str(row.get("key") or "")
             if key in SKIPPED_KEYS and "slot" not in row:
                 continue
-            entries.append(Entry(row["label"], ["Controller"], {"page": "controller", "id": "", "key": key, "module": ""}, detail=row.get("detail", ""),
-                                 display=row.get("display", ""), key=key, advanced=bool(row.get("advanced")), synonyms=["macro", "button", "paddle"] if "slot" in row else ()))
+            entries.append(
+                Entry(
+                    row["label"],
+                    ["Controller"],
+                    {"page": "controller", "id": "", "key": key, "module": ""},
+                    detail=row.get("detail", ""),
+                    display=row.get("display", ""),
+                    key=key,
+                    advanced=bool(row.get("advanced")),
+                    synonyms=["macro", "button", "paddle"] if "slot" in row else (),
+                )
+            )
 
     def _index_themes(self, entries):
         themes = list(self._themes() or [])
         current = next((t["name"] for t in themes if t.get("current")), "")
-        entries.append(Entry("Theme", ["Themes"], {"page": "themes", "id": "", "key": "theme", "module": ""}, display=current, key="theme",
-                             detail="The look of the launcher, switched live."))
+        entries.append(
+            Entry(
+                "Theme",
+                ["Themes"],
+                {"page": "themes", "id": "", "key": "theme", "module": ""},
+                display=current,
+                key="theme",
+                detail="The look of the launcher, switched live.",
+            )
+        )
         for theme in themes:
-            entries.append(Entry(theme["name"], ["Themes"], {"page": "themes", "id": theme["id"], "key": "theme", "module": ""}, detail=theme.get("detail", ""),
-                                 display="Current" if theme.get("current") else "", synonyms=["theme", "look", "skin"]))
+            entries.append(
+                Entry(
+                    theme["name"],
+                    ["Themes"],
+                    {"page": "themes", "id": theme["id"], "key": "theme", "module": ""},
+                    detail=theme.get("detail", ""),
+                    display="Current" if theme.get("current") else "",
+                    synonyms=["theme", "look", "skin"],
+                )
+            )
 
     def _index_rows(self, entries, rows, groups, path, target, skip_control=False):
         for group in groups:
@@ -343,8 +414,18 @@ class SettingsSearch(QObject):
                 key = str(row.get("key") or "")
                 if key in SKIPPED_KEYS or row.get("type") in ("info", "static") or (skip_control and key == "enabled"):
                     continue
-                entries.append(Entry(row["label"], crumbs, {**target, "key": key, "module": str(row.get("module") or target.get("module") or "")}, detail=row.get("detail", ""),
-                                     display=row.get("display", ""), key=key, module=str(row.get("module") or ""), advanced=bool(row.get("advanced"))))
+                entries.append(
+                    Entry(
+                        row["label"],
+                        crumbs,
+                        {**target, "key": key, "module": str(row.get("module") or target.get("module") or "")},
+                        detail=row.get("detail", ""),
+                        display=row.get("display", ""),
+                        key=key,
+                        module=str(row.get("module") or ""),
+                        advanced=bool(row.get("advanced")),
+                    )
+                )
 
     def _index_games(self, entries):
         """One entry per game-scope key across the library — `games` lists each game with its value — and one per game."""
@@ -362,7 +443,17 @@ class SettingsSearch(QObject):
             media = game.get("media") or {}
             art = file_url(next((p for p in (media.get("square"), media.get("box_front")) if p), "")).toString()
             games.append({"id": game_id, "title": title, "image": art})
-            entries.append(Entry(title, ["Games"], {"page": "game", "id": game_id, "key": "", "module": ""}, kind="game", image=art, detail="Game settings", synonyms=["game", "settings"]))
+            entries.append(
+                Entry(
+                    title,
+                    ["Games"],
+                    {"page": "game", "id": game_id, "key": "", "module": ""},
+                    kind="game",
+                    image=art,
+                    detail="Game settings",
+                    synonyms=["game", "settings"],
+                )
+            )
             for group in groups:
                 for i in group["rows"]:
                     row = rows[i]
@@ -372,10 +463,27 @@ class SettingsSearch(QObject):
                     ident = (str(row.get("module") or ""), key)
                     entry = keyed.get(ident)
                     if entry is None:
-                        entry = keyed[ident] = Entry(row["label"], ["Games", group["title"]], {"page": "game", "id": "", "key": key, "module": ident[0]}, kind="gamekey",
-                                                     detail=row.get("detail", ""), key=key, module=ident[0], advanced=bool(row.get("advanced")), games=[])
-                    entry.games.append({"id": game_id, "title": title, "image": art, "display": str(row.get("display") or ""), "own": not row.get("inherited", False),
-                                        "value": normal(row.get("display"))})
+                        entry = keyed[ident] = Entry(
+                            row["label"],
+                            ["Games", group["title"]],
+                            {"page": "game", "id": "", "key": key, "module": ident[0]},
+                            kind="gamekey",
+                            detail=row.get("detail", ""),
+                            key=key,
+                            module=ident[0],
+                            advanced=bool(row.get("advanced")),
+                            games=[],
+                        )
+                    entry.games.append(
+                        {
+                            "id": game_id,
+                            "title": title,
+                            "image": art,
+                            "display": str(row.get("display") or ""),
+                            "own": not row.get("inherited", False),
+                            "value": normal(row.get("display")),
+                        }
+                    )
         # A game overrides a key only where a global value exists to override: the launch page's and the runners' keys.
         global_keys = {(e.module, e.key) for e in entries if e.kind == "setting" and e.key}
         for (module, key), entry in keyed.items():
@@ -476,8 +584,12 @@ class SettingsSearch(QObject):
             own = sum(1 for g in games if g["own"] is True)
             head = entry.row()
             expanded = (entry.module, entry.key) in self._expanded
-            head.update(display=f"in {len(games)} game{'' if len(games) == 1 else 's'}" + (f" · {own} override{'' if own == 1 else 's'} it" if own else ""),
-                        action="Collapse" if expanded else "Expand", expanded=expanded, count=len(games))
+            head.update(
+                display=f"in {len(games)} game{'' if len(games) == 1 else 's'}" + (f" · {own} override{'' if own == 1 else 's'} it" if own else ""),
+                action="Collapse" if expanded else "Expand",
+                expanded=expanded,
+                count=len(games),
+            )
             rows.append(head)
             if not expanded:
                 return rows
@@ -493,8 +605,8 @@ class SettingsSearch(QObject):
         return rows
 
     query = Property(str, lambda self: self._query, _set_query, notify=queryChanged)
-    sections = Property("QVariantList", lambda self: list(self._sections), _set_sections, notify=sectionsChanged)
-    results = Property("QVariantList", lambda self: [dict(r) for r in self._results], notify=resultsChanged)
+    sections = Property(list, lambda self: list(self._sections), _set_sections, notify=sectionsChanged)
+    results = Property(list, lambda self: [dict(r) for r in self._results], notify=resultsChanged)
     count = Property(int, lambda self: len(self._results), notify=resultsChanged)
     ready = Property(bool, lambda self: self._ready, notify=readyChanged)
     indexed = Property(int, lambda self: len(self._entries), notify=readyChanged)

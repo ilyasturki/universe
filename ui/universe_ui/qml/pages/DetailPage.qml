@@ -11,7 +11,7 @@ FocusScope {
     property var game: null
 
     signal launchRequested(var game)
-    signal closeRequested()
+    signal closeRequested
     signal menuRequested(var game, Item anchor)
     signal recordingsRequested(var game)
     signal journalRequested(var game)
@@ -21,11 +21,9 @@ FocusScope {
     readonly property int entryCount: game && filed >= 0 ? (api.universe.journal(game.id) || []).length : 0
     readonly property int shotCount: game && filed >= 0 ? (api.universe.screenshots(game.id) || []).length : 0
     property int filed: 0
-    readonly property var pills: [ "play", "favourite" ].concat(shotCount > 0 ? [ "shots" ] : [], recordingCount > 0 ? [ "recordings" ] : [], entryCount > 0 ? [ "journal" ] : [])
+    readonly property var pills: ["play", "favourite"].concat(shotCount > 0 ? ["shots"] : [], recordingCount > 0 ? ["recordings"] : [], entryCount > 0 ? ["journal"] : [])
     readonly property string action: pills[Math.max(0, Math.min(actionIndex, pills.length - 1))] || "play"
-    readonly property string acceptLabel: action === "favourite" ? favouriteLabel
-        : action === "shots" ? "Screenshots" : action === "recordings" ? "Recordings" : action === "journal" ? "Journal"
-        : game && game.playTime > 0 ? "Continue" : "Play"
+    readonly property string acceptLabel: action === "favourite" ? favouriteLabel : action === "shots" ? "Screenshots" : action === "recordings" ? "Recordings" : action === "journal" ? "Journal" : game && game.playTime > 0 ? "Continue" : "Play"
 
     readonly property real scrollY: flick.contentY
 
@@ -36,17 +34,33 @@ FocusScope {
             return [];
         var out = [];
         if (game.developerList.length > 0)
-            out.push({ label: "DEVELOPER", value: game.developerList.join(", ") });
+            out.push({
+                label: "DEVELOPER",
+                value: game.developerList.join(", ")
+            });
         if (game.publisherList.length > 0)
-            out.push({ label: "PUBLISHER", value: game.publisherList.join(", ") });
+            out.push({
+                label: "PUBLISHER",
+                value: game.publisherList.join(", ")
+            });
         if (game.extra["metacritic"] !== undefined)
-            out.push({ label: "METACRITIC", value: String(game.extra["metacritic"][0]) });
-        var hours = function(v) { return (Number(v) >= 10 ? Math.round(Number(v)) : Number(v).toFixed(1)) + " h"; };
-        var hltb = [["hltb-main", "Main"], ["hltb-extra", "Extra"], ["hltb-completionist", "100%"]]
-            .filter(function(k) { return game.extra[k[0]] !== undefined; })
-            .map(function(k) { return k[1] + " " + hours(game.extra[k[0]][0]); });
+            out.push({
+                label: "METACRITIC",
+                value: String(game.extra["metacritic"][0])
+            });
+        var hours = function (v) {
+            return (Number(v) >= 10 ? Math.round(Number(v)) : Number(v).toFixed(1)) + " h";
+        };
+        var hltb = [["hltb-main", "Main"], ["hltb-extra", "Extra"], ["hltb-completionist", "100%"]].filter(function (k) {
+            return game.extra[k[0]] !== undefined;
+        }).map(function (k) {
+            return k[1] + " " + hours(game.extra[k[0]][0]);
+        });
         if (hltb.length > 0)
-            out.push({ label: "HOW LONG TO BEAT", value: hltb.join("  ·  ") });
+            out.push({
+                label: "HOW LONG TO BEAT",
+                value: hltb.join("  ·  ")
+            });
         return out;
     }
 
@@ -63,12 +77,33 @@ FocusScope {
     readonly property bool hasAbout: description !== "" || facts.length > 0
     readonly property bool hasShots: screenshots.length > 0
 
-    readonly property var hints: lightbox
-        ? [ { glyph: "dpad", label: "Previous / next" }, { glyph: "B", label: "Close" } ]
-        : [ { glyph: "A", label: section === 2 ? "View" : section === 1 ? "Play" : acceptLabel },
-            { glyph: "Y", label: favouriteLabel },
-            { glyph: "Start", label: "More" },
-            { glyph: "B", label: "Back" } ]
+    readonly property var hints: lightbox ? [
+        {
+            glyph: "dpad",
+            label: "Previous / next"
+        },
+        {
+            glyph: "B",
+            label: "Close"
+        }
+    ] : [
+        {
+            glyph: "A",
+            label: section === 2 ? "View" : section === 1 ? "Play" : acceptLabel
+        },
+        {
+            glyph: "Y",
+            label: favouriteLabel
+        },
+        {
+            glyph: "Start",
+            label: "More"
+        },
+        {
+            glyph: "B",
+            label: "Back"
+        }
+    ]
 
     readonly property string favouriteLabel: game && game.favorite ? "Remove from favourites" : "Add to favourites"
 
@@ -76,9 +111,16 @@ FocusScope {
 
     Connections {
         target: api.universe
-        function onRecordingFiled(session, id, path) { page.filed++; }
-        function onEntryWritten(session, id) { page.filed++; }
-        function onLibraryChanged(ids) { if (page.game && (ids.length === 0 || ids.indexOf(page.game.id) >= 0)) page.filed++; }
+        function onRecordingFiled(session, id, path) {
+            page.filed++;
+        }
+        function onEntryWritten(session, id) {
+            page.filed++;
+        }
+        function onLibraryChanged(ids) {
+            if (page.game && (ids.length === 0 || ids.indexOf(page.game.id) >= 0))
+                page.filed++;
+        }
     }
 
     function reset() {
@@ -108,8 +150,14 @@ FocusScope {
 
     function stepDown() {
         if (section === 0) {
-            if (hasAbout) { goTo(1); return "section"; }
-            if (hasShots) { goTo(2); return "section"; }
+            if (hasAbout) {
+                goTo(1);
+                return "section";
+            }
+            if (hasShots) {
+                goTo(2);
+                return "section";
+            }
             return "";
         }
         if (section === 1) {
@@ -119,7 +167,10 @@ FocusScope {
                 scrollTo(Math.min(flick.contentY + Theme.dp(320), aboutBottom - flick.height + hintBar.height));
                 return "scroll";
             }
-            if (hasShots) { goTo(2); return "section"; }
+            if (hasShots) {
+                goTo(2);
+                return "section";
+            }
         }
         return "";
     }
@@ -141,9 +192,12 @@ FocusScope {
     }
 
     function stepSound(moved) {
-        if (moved === "section") Sound.panel();
-        else if (moved === "scroll") Sound.tick();
-        else Sound.edge();
+        if (moved === "section")
+            Sound.panel();
+        else if (moved === "scroll")
+            Sound.tick();
+        else
+            Sound.edge();
     }
 
     function toggleFavourite() {
@@ -173,7 +227,11 @@ FocusScope {
         // The default overshoot fixup fights the contentY Behavior.
         boundsBehavior: Flickable.StopAtBounds
 
-        Behavior on contentY { Ease { duration: Theme.durView } }
+        Behavior on contentY {
+            Ease {
+                duration: Theme.durView
+            }
+        }
 
         Item {
             id: content
@@ -223,10 +281,7 @@ FocusScope {
                     }
 
                     Repeater {
-                        model: page.game
-                            ? page.game.genreList.slice(0, 3).concat(
-                                  page.game.players > 1 ? [ page.game.players + " players" ] : [])
-                            : []
+                        model: page.game ? page.game.genreList.slice(0, 3).concat(page.game.players > 1 ? [page.game.players + " players"] : []) : []
 
                         InfoPill {
                             width: chipText.width + Theme.dp(40)
@@ -283,8 +338,16 @@ FocusScope {
                         opacity: actions.active && !focused ? 0.5 : 1.0
                         scale: focused ? 1.04 : 1.0
 
-                        Behavior on opacity { Ease { duration: Theme.durQuick } }
-                        Behavior on scale { Ease { easing.type: Easing.OutQuint } }
+                        Behavior on opacity {
+                            Ease {
+                                duration: Theme.durQuick
+                            }
+                        }
+                        Behavior on scale {
+                            Ease {
+                                easing.type: Easing.OutQuint
+                            }
+                        }
 
                         Loader {
                             anchors.fill: parent
@@ -378,7 +441,11 @@ FocusScope {
                             lineHeight: 1.5
                             wrapMode: Text.WordWrap
 
-                            Behavior on color { ColorEase { duration: Theme.durBase } }
+                            Behavior on color {
+                                ColorEase {
+                                    duration: Theme.durBase
+                                }
+                            }
                         }
                     }
 
@@ -432,9 +499,18 @@ FocusScope {
         anchors.right: parent.right
         height: hintBar.height + Theme.dp(70)
         gradient: Gradient {
-            GradientStop { position: 0.0; color: Qt.rgba(0.055, 0.059, 0.075, 0.0) }
-            GradientStop { position: 0.45; color: Qt.rgba(0.055, 0.059, 0.075, 0.92) }
-            GradientStop { position: 1.0; color: Theme.ground }
+            GradientStop {
+                position: 0.0
+                color: Qt.rgba(0.055, 0.059, 0.075, 0.0)
+            }
+            GradientStop {
+                position: 0.45
+                color: Qt.rgba(0.055, 0.059, 0.075, 0.92)
+            }
+            GradientStop {
+                position: 1.0
+                color: Theme.ground
+            }
         }
     }
 
@@ -455,9 +531,8 @@ FocusScope {
         open: page.lightbox
     }
 
-    Keys.onPressed: function(event) {
-        if (event.isAutoRepeat && !(event.key === Qt.Key_Up || event.key === Qt.Key_Down
-                                    || event.key === Qt.Key_Left || event.key === Qt.Key_Right))
+    Keys.onPressed: function (event) {
+        if (event.isAutoRepeat && !(event.key === Qt.Key_Up || event.key === Qt.Key_Down || event.key === Qt.Key_Left || event.key === Qt.Key_Right))
             return;
 
         event.accepted = true;

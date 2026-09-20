@@ -15,13 +15,24 @@ FocusScope {
 
     readonly property var hints: {
         var row = rows.currentRow;
-        return [ { glyph: "B", label: "Back" }, { glyph: "A", label: !row || row.heading ? "OK" : row.action || "Select" } ];
+        return [
+            {
+                glyph: "B",
+                label: "Back"
+            },
+            {
+                glyph: "A",
+                label: !row || row.heading ? "OK" : row.action || "Select"
+            }
+        ];
     }
 
     Component.onCompleted: form.load()
 
-    readonly property var content: Forms.grouped(form.groups, form.rows, function(src, i) {
-        return Object.assign({}, src, { form: i });
+    readonly property var content: Forms.grouped(form.groups, form.rows, function (src, i) {
+        return Object.assign({}, src, {
+            form: i
+        });
     })
 
     function activate(index, row) {
@@ -29,18 +40,26 @@ FocusScope {
             Sound.play("edge");
         } else if (row.key === "pick_file") {
             Sound.play("ok");
-            shell.browse({ title: "Game file", path: "", files: true }, function(path) {
+            shell.browse({
+                title: "Game file",
+                path: "",
+                files: true
+            }, function (path) {
                 if (path !== null && form.setFile(path))
                     pickRunner();
             });
         } else if (row.key === "store") {
             Sound.play("ok");
             if (!row.available)
-                shell.push("pages/SettingsPage.qml", { section: "modules" });
+                shell.push("pages/SettingsPage.qml", {
+                    section: "modules"
+                });
             else if (row.loggedIn)
                 shell.push("pages/InstallPage.qml", {});
             else
-                shell.push("pages/SettingsPage.qml", { section: "signin" });
+                shell.push("pages/SettingsPage.qml", {
+                    section: "signin"
+                });
         } else if (row.key === "lutris") {
             importLutris();
         }
@@ -54,13 +73,20 @@ FocusScope {
             shell.showToast("No runner set up: add one under System Settings › Runners");
             return;
         }
-        shell.pick({ title: "Runner", choices: choices, index: form.runnerIndex }, function(i) {
+        shell.pick({
+            title: "Runner",
+            choices: choices,
+            index: form.runnerIndex
+        }, function (i) {
             if (i < 0) {
                 form.cancel();
                 return;
             }
             form.pickRunner(i);
-            shell.prompt({ title: "Title of the game", value: form.pendingTitle() }, function(title) {
+            shell.prompt({
+                title: "Title of the game",
+                value: form.pendingTitle()
+            }, function (title) {
                 if (title === null)
                     form.cancel();
                 else
@@ -86,15 +112,21 @@ FocusScope {
             shell.showToast("Nothing new in Lutris");
             return;
         }
-        shell.dialogAsk({ message: "Import " + n + (n === 1 ? " game" : " games") + " from Lutris?",
-                          detail: "Their hours and artwork come along. Games already in the library are left as they are.",
-                          buttons: ["Cancel", "Import"] },
-                        function(k) { if (k === 1) form.importLutris(); });
+        shell.dialogAsk({
+            message: "Import " + n + (n === 1 ? " game" : " games") + " from Lutris?",
+            detail: "Their hours and artwork come along. Games already in the library are left as they are.",
+            buttons: ["Cancel", "Import"]
+        }, function (k) {
+            if (k === 1)
+                form.importLutris();
+        });
     }
 
     Connections {
         target: page.form
-        function onMessage(text) { page.shell.showToast(text); }
+        function onMessage(text) {
+            page.shell.showToast(text);
+        }
         // A preview that just came back answers the press that asked for it.
         function onLutrisChanged() {
             if (page.form.lutris && !page.form.busy && rows.currentRow && rows.currentRow.key === "lutris" && rows.activeFocus)
@@ -133,7 +165,9 @@ FocusScope {
         model: page.content
         focus: true
 
-        onActivated: function(index, row) { page.activate(index, row); }
+        onActivated: function (index, row) {
+            page.activate(index, row);
+        }
         onEscapedLeft: Sound.play("edge")
     }
 }

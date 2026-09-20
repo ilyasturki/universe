@@ -12,7 +12,9 @@ FocusScope {
     readonly property string slot: args && args.slot ? args.slot : ""
     readonly property var game: args && args.gameId ? api.allGames.byId(args.gameId) : null
     readonly property var form: api.screens.artwork
-    readonly property var current: form.slots.find(function(s) { return s.slot === page.slot; }) || null
+    readonly property var current: form.slots.find(function (s) {
+        return s.slot === page.slot;
+    }) || null
     readonly property real aspect: current ? current.aspect : 1
     readonly property bool picked: current !== null && current.hasOverride
     readonly property bool underShown: picked && current.hasDefault
@@ -21,23 +23,54 @@ FocusScope {
     readonly property var cells: {
         if (!current)
             return [];
-        var out = [ { kind: "now", url: current.url, caption: "Currently shown" } ];
+        var out = [
+            {
+                kind: "now",
+                url: current.url,
+                caption: "Currently shown"
+            }
+        ];
         if (underShown)
-            out.push({ kind: "under", url: current.defaultUrl, caption: "Default under it" });
+            out.push({
+                kind: "under",
+                url: current.defaultUrl,
+                caption: "Default under it"
+            });
         for (var i = 0; i < candidates.length; i++)
-            out.push({ kind: "candidate", url: candidates[i].thumb, pick: candidates[i].url, caption: candidates[i].votes > 0 ? "▲ " + candidates[i].votes : "" });
+            out.push({
+                kind: "candidate",
+                url: candidates[i].thumb,
+                pick: candidates[i].url,
+                caption: candidates[i].votes > 0 ? "▲ " + candidates[i].votes : ""
+            });
         if (form.more)
-            out.push({ kind: "more", url: "", caption: form.candidatesBusy ? "…" : "More" });
+            out.push({
+                kind: "more",
+                url: "",
+                caption: form.candidatesBusy ? "…" : "More"
+            });
         return out;
     }
     property alias cellIndex: grid.index
     readonly property var cell: cellIndex < cells.length ? cells[cellIndex] : null
 
-    readonly property var hints: [ { glyph: "Start", label: "Options" }, { glyph: "B", label: "Back" },
-        { glyph: "A", label: cell === null ? "OK" : cell.kind === "now" ? "Shown" : cell.kind === "under" ? "Back to default" : cell.kind === "more" ? "Load more" : "Use this",
-          dim: cell === null || cell.kind === "now" } ]
+    readonly property var hints: [
+        {
+            glyph: "Start",
+            label: "Options"
+        },
+        {
+            glyph: "B",
+            label: "Back"
+        },
+        {
+            glyph: "A",
+            label: cell === null ? "OK" : cell.kind === "now" ? "Shown" : cell.kind === "under" ? "Back to default" : cell.kind === "more" ? "Load more" : "Use this",
+            dim: cell === null || cell.kind === "now"
+        }
+    ]
 
-    signal closeRequested()
+    signal closeRequested
 
     focus: true
 
@@ -79,9 +112,21 @@ FocusScope {
         var label = current.label.toLowerCase();
         var items = [];
         if (picked)
-            items.push({ label: "Back to default", act: "default" });
-        items.push({ label: "Fetch missing art", act: "fetch" }, { label: "Wrong game?", act: "search" }, { label: "Use a file for the " + label + "…", act: "file" });
-        shell.menu(current.label, items, function(act) {
+            items.push({
+                label: "Back to default",
+                act: "default"
+            });
+        items.push({
+            label: "Fetch missing art",
+            act: "fetch"
+        }, {
+            label: "Wrong game?",
+            act: "search"
+        }, {
+            label: "Use a file for the " + label + "…",
+            act: "file"
+        });
+        shell.menu(current.label, items, function (act) {
             if (act === "default")
                 form.removeOverride(page.slot);
             else if (act === "fetch")
@@ -89,7 +134,14 @@ FocusScope {
             else if (act === "search")
                 Artwork.search(shell, form);
             else if (act === "file")
-                shell.browse({ title: "Use a file for the " + label, path: "", files: true }, function(path) { if (path) form.useFile(page.slot, path); });
+                shell.browse({
+                    title: "Use a file for the " + label,
+                    path: "",
+                    files: true
+                }, function (path) {
+                    if (path)
+                        form.useFile(page.slot, path);
+                });
         });
     }
 
@@ -101,9 +153,7 @@ FocusScope {
         icon: "album"
         title: page.current ? page.current.label : ""
         subtitle: "Artwork · " + (page.game ? page.game.title : "")
-        trailing: page.form.candidatesBusy && page.candidates.length === 0 ? "Fetching…"
-            : page.candidates.length === 0 ? ""
-            : page.candidates.length + (page.form.more ? "+" : "") + " on SteamGridDB" + (page.form.entryDiffers ? " as " + page.form.entry : "")
+        trailing: page.form.candidatesBusy && page.candidates.length === 0 ? "Fetching…" : page.candidates.length === 0 ? "" : page.candidates.length + (page.form.more ? "+" : "") + " on SteamGridDB" + (page.form.entryDiffers ? " as " + page.form.entry : "")
     }
 
     CellGrid {

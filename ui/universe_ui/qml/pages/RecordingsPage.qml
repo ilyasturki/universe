@@ -21,8 +21,9 @@ FocusScope {
     readonly property var frames: current && store.frameMap[current.session] ? store.frameMap[current.session] : null
 
     readonly property var journal: api.screens.journal
-    readonly property var entry: current && current.hasJournal
-        ? journal.rows.find(function(r) { return r.session === current.session; }) || null : null
+    readonly property var entry: current && current.hasJournal ? journal.rows.find(function (r) {
+        return r.session === current.session;
+    }) || null : null
     readonly property bool entryPending: entry !== null && entry.state === "pending"
 
     property bool videoFocused: false
@@ -30,14 +31,12 @@ FocusScope {
     property bool fullscreen: false
     readonly property bool playing: player.playbackState === MediaPlayer.PlayingState
     readonly property bool stopped: player.playbackState === MediaPlayer.StoppedState
-    readonly property real duration: player.duration > 0 ? player.duration
-                                   : frames && frames.duration > 0 ? frames.duration * 1000
-                                   : current ? current.duration_s * 1000 : 0
+    readonly property real duration: player.duration > 0 ? player.duration : frames && frames.duration > 0 ? frames.duration * 1000 : current ? current.duration_s * 1000 : 0
 
     readonly property bool scrubbing: scrub.scrubbing
     readonly property real shownPos: scrub.shownPos
 
-    signal closeRequested()
+    signal closeRequested
     signal jumpRequested(string source, string session)
 
     readonly property var hints: {
@@ -45,19 +44,50 @@ FocusScope {
             return menu.hints;
         var out = [];
         if (journalFocused) {
-            out.push({ glyph: "A", label: entryPending ? "Being written" : "Read", dim: entryPending });
-            out.push({ glyph: "B", label: "Back to list" });
+            out.push({
+                glyph: "A",
+                label: entryPending ? "Being written" : "Read",
+                dim: entryPending
+            });
+            out.push({
+                glyph: "B",
+                label: "Back to list"
+            });
             return out;
         }
-        out.push({ glyph: "A", label: videoFocused && playing ? "Pause" : "Play" });
-        out.push({ glyph: "X", label: fullscreen ? "Exit fullscreen" : "Fullscreen", dim: current === null });
-        out.push({ glyph: "Y", label: "Journal entry", dim: !(current && current.hasJournal) });
+        out.push({
+            glyph: "A",
+            label: videoFocused && playing ? "Pause" : "Play"
+        });
+        out.push({
+            glyph: "X",
+            label: fullscreen ? "Exit fullscreen" : "Fullscreen",
+            dim: current === null
+        });
+        out.push({
+            glyph: "Y",
+            label: "Journal entry",
+            dim: !(current && current.hasJournal)
+        });
         if (videoFocused) {
-            out.push({ glyph: "RS", label: "Scrub" });
-            out.push({ glyph: "dpad", label: "Seek 10 s" });
+            out.push({
+                glyph: "RS",
+                label: "Scrub"
+            });
+            out.push({
+                glyph: "dpad",
+                label: "Seek 10 s"
+            });
         }
-        out.push({ glyph: "Start", label: "More", dim: current === null });
-        out.push({ glyph: "B", label: videoFocused && !fullscreen ? "Back to list" : "Back" });
+        out.push({
+            glyph: "Start",
+            label: "More",
+            dim: current === null
+        });
+        out.push({
+            glyph: "B",
+            label: videoFocused && !fullscreen ? "Back to list" : "Back"
+        });
         return out;
     }
 
@@ -86,7 +116,9 @@ FocusScope {
     }
 
     function landOnSession() {
-        var i = rows.findIndex(function(r) { return r.session === session; });
+        var i = rows.findIndex(function (r) {
+            return r.session === session;
+        });
         if (i >= 0)
             index = i;
     }
@@ -157,10 +189,25 @@ FocusScope {
             return;
         }
         Sound.panel();
-        var items = [ { icon: "play", label: "Play", action: "play" } ];
+        var items = [
+            {
+                icon: "play",
+                label: "Play",
+                action: "play"
+            }
+        ];
         if (current.hasJournal)
-            items.push({ icon: "book", label: "Journal entry", action: "journal" });
-        items.push({ icon: "trash", label: "Remove recording…", action: "remove", danger: true });
+            items.push({
+                icon: "book",
+                label: "Journal entry",
+                action: "journal"
+            });
+        items.push({
+            icon: "trash",
+            label: "Remove recording…",
+            action: "remove",
+            danger: true
+        });
         menu.show(items, list, rowRect(), current.dateText, menuAction);
     }
 
@@ -176,10 +223,26 @@ FocusScope {
             openJournal();
         } else if (action === "remove") {
             Sound.panel();
-            var items = [ { icon: "", label: "Keep it", action: "" },
-                          { icon: "trash", label: "Trash the recording", action: "remove!", danger: true } ];
+            var items = [
+                {
+                    icon: "",
+                    label: "Keep it",
+                    action: ""
+                },
+                {
+                    icon: "trash",
+                    label: "Trash the recording",
+                    action: "remove!",
+                    danger: true
+                }
+            ];
             if (current.hasJournal)
-                items.push({ icon: "trash", label: "Trash it and its journal entry", action: "remove-both!", danger: true });
+                items.push({
+                    icon: "trash",
+                    label: "Trash it and its journal entry",
+                    action: "remove-both!",
+                    danger: true
+                });
             menu.show(items, list, rowRect(), "Remove this recording?", menuAction);
         } else if (action === "remove!" || action === "remove-both!") {
             Sound.enter();
@@ -224,7 +287,7 @@ FocusScope {
         onWoke: page.wake()
     }
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         var arrow = event.key === Qt.Key_Left || event.key === Qt.Key_Right;
         var screen = api.keys.isScreenUp(event) ? -1 : api.keys.isScreenDown(event) ? 1 : 0;
         if (event.isAutoRepeat && !(page.videoFocused && arrow) && !screen)
@@ -296,7 +359,7 @@ FocusScope {
         }
     }
 
-    Keys.onReleased: function(event) {
+    Keys.onReleased: function (event) {
         if (!event.isAutoRepeat && (event.key === Qt.Key_Left || event.key === Qt.Key_Right))
             scrub.release();
     }
@@ -351,7 +414,11 @@ FocusScope {
         preferredHighlightEnd: height
         highlightRangeMode: ListView.ApplyRange
 
-        Behavior on opacity { Ease { duration: Theme.durQuick } }
+        Behavior on opacity {
+            Ease {
+                duration: Theme.durQuick
+            }
+        }
 
         delegate: SessionRow {
             readonly property var frames: page.store.frameMap[modelData.session] || null
@@ -384,7 +451,11 @@ FocusScope {
                     asynchronous: true
                     opacity: status === Image.Ready ? 1.0 : 0.0
 
-                    Behavior on opacity { Ease { duration: Theme.durView } }
+                    Behavior on opacity {
+                        Ease {
+                            duration: Theme.durView
+                        }
+                    }
                 }
             }
         }
@@ -415,7 +486,11 @@ FocusScope {
             visible: page.stopped
             opacity: page.stopped ? 1.0 : 0.0
 
-            Behavior on opacity { Ease { duration: Theme.durView } }
+            Behavior on opacity {
+                Ease {
+                    duration: Theme.durView
+                }
+            }
 
             Repeater {
                 model: 16
@@ -431,7 +506,11 @@ FocusScope {
                         asynchronous: true
                         opacity: status === Image.Ready ? 1.0 : 0.0
 
-                        Behavior on opacity { Ease { duration: Theme.durScene } }
+                        Behavior on opacity {
+                            Ease {
+                                duration: Theme.durScene
+                            }
+                        }
                     }
                 }
             }
@@ -447,7 +526,9 @@ FocusScope {
             id: player
             videoOutput: video
             audioOutput: AudioOutput {}
-            onErrorOccurred: function(error, message) { page.wake(); }
+            onErrorOccurred: function (error, message) {
+                page.wake();
+            }
         }
 
         Rectangle {
@@ -455,7 +536,9 @@ FocusScope {
             color: Qt.rgba(0.02, 0.02, 0.03, page.stopped ? 0.42 : 0.30)
             opacity: page.playing ? 0.0 : 1.0
 
-            Behavior on opacity { Ease {} }
+            Behavior on opacity {
+                Ease {}
+            }
         }
 
         Rectangle {
@@ -467,8 +550,14 @@ FocusScope {
             opacity: page.playing ? 0.0 : 1.0
             scale: page.playing ? 0.8 : 1.0
 
-            Behavior on opacity { Ease {} }
-            Behavior on scale { Ease { easing.type: Easing.OutBack } }
+            Behavior on opacity {
+                Ease {}
+            }
+            Behavior on scale {
+                Ease {
+                    easing.type: Easing.OutBack
+                }
+            }
 
             MenuGlyph {
                 anchors.centerIn: parent
@@ -502,7 +591,9 @@ FocusScope {
             visible: !page.stopped || page.scrubbing
             opacity: shown ? 1.0 : 0.0
 
-            Behavior on opacity { Ease {} }
+            Behavior on opacity {
+                Ease {}
+            }
 
             Rectangle {
                 anchors.left: parent.left
@@ -510,8 +601,14 @@ FocusScope {
                 anchors.bottom: parent.bottom
                 height: Theme.dp(170) + (page.fullscreen ? hintBar.height : 0)
                 gradient: Gradient {
-                    GradientStop { position: 0.0; color: Qt.rgba(0.02, 0.02, 0.03, 0.0) }
-                    GradientStop { position: 1.0; color: Qt.rgba(0.02, 0.02, 0.03, 0.85) }
+                    GradientStop {
+                        position: 0.0
+                        color: Qt.rgba(0.02, 0.02, 0.03, 0.0)
+                    }
+                    GradientStop {
+                        position: 1.0
+                        color: Qt.rgba(0.02, 0.02, 0.03, 0.85)
+                    }
                 }
             }
 
@@ -526,7 +623,9 @@ FocusScope {
                 anchors.bottomMargin: page.fullscreen ? hintBar.height + Theme.dp(64) : Theme.dp(64)
                 height: page.scrubbing ? Theme.dp(10) : Theme.dp(6)
 
-                Behavior on height { Ease {} }
+                Behavior on height {
+                    Ease {}
+                }
 
                 Rectangle {
                     anchors.fill: parent
@@ -555,10 +654,16 @@ FocusScope {
                     scale: page.scrubbing ? 1.7 : 1.0
 
                     Behavior on scale {
-                        NumberAnimation { duration: page.scrubbing ? Theme.durBase : Theme.durNudge; easing.type: page.scrubbing ? Easing.OutCubic : Easing.OutBack }
+                        NumberAnimation {
+                            duration: page.scrubbing ? Theme.durBase : Theme.durNudge
+                            easing.type: page.scrubbing ? Easing.OutCubic : Easing.OutBack
+                        }
                     }
                     Behavior on anchors.verticalCenterOffset {
-                        Ease { duration: Theme.durNudge; easing.type: Easing.OutBack }
+                        Ease {
+                            duration: Theme.durNudge
+                            easing.type: Easing.OutBack
+                        }
                     }
 
                     Rectangle {
@@ -570,7 +675,11 @@ FocusScope {
                         opacity: page.scrubbing ? 1.0 : 0.0
                         z: -1
 
-                        Behavior on opacity { NumberAnimation { duration: Theme.durBase } }
+                        Behavior on opacity {
+                            NumberAnimation {
+                                duration: Theme.durBase
+                            }
+                        }
                     }
                 }
 
@@ -590,9 +699,21 @@ FocusScope {
                     scale: page.scrubbing ? 1.0 : 0.9
                     transformOrigin: Item.Bottom
 
-                    Behavior on opacity { Ease {} }
-                    Behavior on scale { Ease { duration: Theme.durNudge; easing.type: Easing.OutBack } }
-                    Behavior on anchors.bottomMargin { Ease { duration: Theme.durNudge; easing.type: Easing.OutBack } }
+                    Behavior on opacity {
+                        Ease {}
+                    }
+                    Behavior on scale {
+                        Ease {
+                            duration: Theme.durNudge
+                            easing.type: Easing.OutBack
+                        }
+                    }
+                    Behavior on anchors.bottomMargin {
+                        Ease {
+                            duration: Theme.durNudge
+                            easing.type: Easing.OutBack
+                        }
+                    }
 
                     Rectangle {
                         anchors.fill: parent
@@ -659,7 +780,11 @@ FocusScope {
             visible: !page.stopped
             opacity: controls.shown ? 0.0 : 1.0
 
-            Behavior on opacity { NumberAnimation { duration: Theme.durBase } }
+            Behavior on opacity {
+                NumberAnimation {
+                    duration: Theme.durBase
+                }
+            }
 
             Rectangle {
                 anchors.left: parent.left
@@ -758,7 +883,11 @@ FocusScope {
                 lineHeight: 1.4
                 wrapMode: Text.WordWrap
 
-                Behavior on color { ColorEase { duration: Theme.durBase } }
+                Behavior on color {
+                    ColorEase {
+                        duration: Theme.durBase
+                    }
+                }
             }
         }
 
@@ -783,7 +912,9 @@ FocusScope {
         z: 4
         opacity: page.fullscreen && !controls.shown ? 0.0 : 1.0
 
-        Behavior on opacity { Ease {} }
+        Behavior on opacity {
+            Ease {}
+        }
     }
 
     ActionMenu {

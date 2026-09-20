@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+import contextlib
 import json
 import os
 import queue
@@ -98,8 +99,7 @@ def gogdl_env():
 
 def gogdl_json(settings, *args):
     try:
-        proc = subprocess.run(gogdl_command(settings, *args), env=gogdl_env(), capture_output=True,
-                              text=True, timeout=GOGDL_JSON_TIMEOUT_S)
+        proc = subprocess.run(gogdl_command(settings, *args), env=gogdl_env(), capture_output=True, text=True, timeout=GOGDL_JSON_TIMEOUT_S, check=False)
     except FileNotFoundError:
         raise SourceError("gogdl is not installed") from None
     except subprocess.TimeoutExpired:
@@ -122,25 +122,32 @@ def kill_group(proc):
     try:
         proc.wait(timeout=KILL_GRACE_S)
     except subprocess.TimeoutExpired:
-        try:
+        with contextlib.suppress(ProcessLookupError):
             os.killpg(proc.pid, signal.SIGKILL)
-        except ProcessLookupError:
-            pass
         proc.wait()
 
 
 def gogdl_stream(settings, *args, timeout):
-    global _child
+    global _child  # noqa: PLW0603
     try:
-        proc = subprocess.Popen(gogdl_command(settings, *args), env=gogdl_env(), stdout=subprocess.PIPE,
-                                stderr=subprocess.STDOUT, text=True, errors="replace", start_new_session=True)
+        proc = subprocess.Popen(
+            gogdl_command(settings, *args),
+            env=gogdl_env(),
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            errors="replace",
+            start_new_session=True,
+        )
     except FileNotFoundError:
         raise SourceError("gogdl is not installed") from None
     _child = proc
+    stdout = proc.stdout
+    assert stdout is not None
     lines = queue.Queue()
 
     def pump():
-        for line in proc.stdout:
+        for line in stdout:
             lines.put(line.rstrip("\n"))
         lines.put(None)
 
@@ -210,11 +217,12 @@ def load_partials():
 
 def partial_of(game_id, partials=None):
     entry = (partials if partials is not None else load_partials()).get(game_id)
-    folder = Path(entry["dir"]) if entry and entry.get("dir") else None
-    if folder is None or not (folder / RESUME_FILE).exists():
+    if not entry or not entry.get("dir"):
         return None
-    return {"dir": str(folder), "bytes": folder_size(folder), "download_size": entry.get("download_size"),
-            "disk_size": entry.get("disk_size")}
+    folder = Path(entry["dir"])
+    if not (folder / RESUME_FILE).exists():
+        return None
+    return {"dir": str(folder), "bytes": folder_size(folder), "download_size": entry.get("download_size"), "disk_size": entry.get("disk_size")}
 
 
 def set_partial(game_id, entry):
@@ -230,10 +238,8 @@ def folder_size(folder):
     total = 0
     for root, _dirs, files in os.walk(folder):
         for name in files:
-            try:
+            with contextlib.suppress(OSError):
                 total += os.lstat(os.path.join(root, name)).st_size
-            except OSError:
-                pass
     return total
 
 
@@ -296,9 +302,8 @@ def fetch_build(settings, game_id):
     items = [b for b in data.get("items") or [] if b.get("branch") is None]
     if not items:
         return None
-    last = sorted(items, key=lambda b: b.get("date_published") or "")[-1]
-    return {"build": str(last.get("build_id")), "version": last.get("version_name") or "?",
-            "date": str(last.get("date_published") or "")[:10]}
+    last = max(reversed(items), key=lambda b: b.get("date_published") or "")
+    return {"build": str(last.get("build_id")), "version": last.get("version_name") or "?", "date": str(last.get("date_published") or "")[:10]}
 
 
 def fetch_builds(settings, game_ids):
@@ -328,9 +333,7 @@ def find_info_files(root):
             continue
         if depth >= SCAN_DEPTH:
             continue
-        for entry in entries:
-            if entry.is_dir(follow_symlinks=False) and not entry.name.startswith("."):
-                stack.append((Path(entry.path), depth + 1))
+        stack.extend((Path(entry.path), depth + 1) for entry in entries if entry.is_dir(follow_symlinks=False) and not entry.name.startswith("."))
 
 
 def read_info(path):
@@ -372,12 +375,19 @@ def scan_installs(settings, roots=None):
                     log(f"{folder}: {game_id} already found elsewhere, skipped")
                     continue
                 seen.add(game_id)
-                dlcs = sorted(str(i["gameId"]) for i in infos
-                              if i is not base and i.get("gameId") and str(i.get("rootGameId")) == game_id)
+                dlcs = sorted(str(i["gameId"]) for i in infos if i is not base and i.get("gameId") and str(i.get("rootGameId")) == game_id)
                 build = base.get("buildId")
-                installs.append({"id": game_id, "title": base.get("name") or game_id, "dir": str(folder),
-                                 "exe": primary_exe(base), "build": str(build) if build else None, "dlcs": dlcs,
-                                 "disk_size": folder_size(folder)})
+                installs.append(
+                    {
+                        "id": game_id,
+                        "title": base.get("name") or game_id,
+                        "dir": str(folder),
+                        "exe": primary_exe(base),
+                        "build": str(build) if build else None,
+                        "dlcs": dlcs,
+                        "disk_size": folder_size(folder),
+                    }
+                )
     return installs
 
 
@@ -394,10 +404,20 @@ def game_event(game_id, title, owned, install=None, product=None, partials=None)
         if partial:
             fields.update(partial_dir=partial["dir"], partial_bytes=partial["bytes"])
             fields.update({k: partial[k] for k in ("download_size", "disk_size") if partial.get(k)})
-    emit("game", id=game_id, title=title, owned=owned, installed=install is not None,
-         dir=install["dir"] if install else None, exe=install["exe"] if install else None,
-         build=install["build"] if install else None, dlcs=install["dlcs"] if install else [],
-         release_year=product_year(product), image=product_image(product), **fields)
+    emit(
+        "game",
+        id=game_id,
+        title=title,
+        owned=owned,
+        installed=install is not None,
+        dir=install["dir"] if install else None,
+        exe=install["exe"] if install else None,
+        build=install["build"] if install else None,
+        dlcs=install["dlcs"] if install else [],
+        release_year=product_year(product),
+        image=product_image(product),
+        **fields,
+    )
 
 
 def owned_status(game_id, index):
@@ -431,7 +451,7 @@ def cmd_status(settings, args):
         return
     try:
         user = fetch(USER_URL, token).get("username") or ""
-    except Exception:
+    except Exception:  # noqa: BLE001
         user = ""
     emit("logged_in", user=user)
     emit("done")
@@ -451,15 +471,13 @@ def cmd_search(settings, args):
     text = " ".join(args).strip()
     if not text:
         raise SourceError("usage: search <text>")
-    query = urllib.parse.urlencode({"query": f"like:{text}", "productType": "in:game", "limit": "20"},
-                                   quote_via=urllib.parse.quote)
+    query = urllib.parse.urlencode({"query": f"like:{text}", "productType": "in:game", "limit": "20"}, quote_via=urllib.parse.quote)
     data = fetch(f"{CATALOG_URL}?{query}")
     index = library_index()
     installs = {i["id"]: i for i in scan_installs(settings)}
     for product in data.get("products") or []:
         game_id = str(product.get("id"))
-        game_event(game_id, product.get("title") or game_id, owned_status(game_id, index),
-                   installs.get(game_id), product)
+        game_event(game_id, product.get("title") or game_id, owned_status(game_id, index), installs.get(game_id), product)
     emit("done")
 
 
@@ -483,8 +501,7 @@ def cmd_install(settings, args):
     if folder:
         title = ((index or {}).get(game_id) or {}).get("title") or folder
         set_partial(game_id, {"dir": os.path.join(games_dir, folder), "title": title, **total})
-    gogdl_stream(settings, "download", game_id, *platform_args(settings), "--path", games_dir,
-                 timeout=settings["install_timeout_s"])
+    gogdl_stream(settings, "download", game_id, *platform_args(settings), "--path", games_dir, timeout=settings["install_timeout_s"])
     install = find_install(settings, game_id, [games_dir])
     if install is None:
         raise SourceError(f"gogdl finished but no goggame-{game_id}.info under {games_dir}")
@@ -507,8 +524,15 @@ def cmd_update(settings, args):
             elif owned_status(install["id"], index) is False:
                 log(f"{install['title']}: {remote['version']} available but not in the library, skipped")
             else:
-                emit("update", id=install["id"], title=install["title"], local_build=install["build"],
-                     remote_build=remote["build"], version=remote["version"], date=remote["date"])
+                emit(
+                    "update",
+                    id=install["id"],
+                    title=install["title"],
+                    local_build=install["build"],
+                    remote_build=remote["build"],
+                    version=remote["version"],
+                    date=remote["date"],
+                )
         emit("done")
         return
     game_id = require_id(args, "update")
@@ -525,12 +549,10 @@ def cmd_update(settings, args):
         emit("done")
         return
     log(f"{install['title']}: {install['build'] or 'unknown'} -> {remote['build']} ({remote['version']})")
-    gogdl_stream(settings, "update", game_id, *platform_args(settings), "--path", install["dir"],
-                 timeout=settings["install_timeout_s"])
+    gogdl_stream(settings, "update", game_id, *platform_args(settings), "--path", install["dir"], timeout=settings["install_timeout_s"])
     after = find_install(settings, game_id, [install["dir"]])
     if after is None or after["build"] != remote["build"]:
-        raise SourceError(f"gogdl finished but {install['title']} is at build "
-                          f"{after['build'] if after else 'unknown'}, expected {remote['build']}")
+        raise SourceError(f"gogdl finished but {install['title']} is at build {after['build'] if after else 'unknown'}, expected {remote['build']}")
     game_event(game_id, after["title"], True, after, (index or {}).get(game_id))
     emit("done")
 
@@ -539,20 +561,26 @@ def cmd_scan(settings, args):
     index = library_index()
     installs = scan_installs(settings)
     for install in installs:
-        game_event(install["id"], install["title"], owned_status(install["id"], index), install,
-                   (index or {}).get(install["id"]))
+        game_event(install["id"], install["title"], owned_status(install["id"], index), install, (index or {}).get(install["id"]))
     partials = load_partials()
     found = {i["id"] for i in installs}
     for game_id, entry in partials.items():
         if game_id not in found and partial_of(game_id, partials):
             product = (index or {}).get(game_id)
-            game_event(game_id, entry.get("title") or (product or {}).get("title") or game_id,
-                       owned_status(game_id, index), None, product, partials)
+            game_event(game_id, entry.get("title") or (product or {}).get("title") or game_id, owned_status(game_id, index), None, product, partials)
     emit("done")
 
 
-VERBS = {"login": cmd_login, "status": cmd_status, "library": cmd_library, "search": cmd_search, "info": cmd_info,
-         "install": cmd_install, "update": cmd_update, "scan": cmd_scan}
+VERBS = {
+    "login": cmd_login,
+    "status": cmd_status,
+    "library": cmd_library,
+    "search": cmd_search,
+    "info": cmd_info,
+    "install": cmd_install,
+    "update": cmd_update,
+    "scan": cmd_scan,
+}
 
 
 def on_signal(signum, frame):

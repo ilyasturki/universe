@@ -57,7 +57,11 @@ Item {
         color: Theme.ground
         opacity: box.width >= flip.width ? 1.0 : 0.0
 
-        Behavior on opacity { Ease { duration: Theme.durView } }
+        Behavior on opacity {
+            Ease {
+                duration: Theme.durView
+            }
+        }
     }
 
     RoundedMask {
@@ -100,28 +104,104 @@ Item {
 
         property bool fades: false
 
-        PauseAnimation { duration: 90 }
-        ParallelAnimation {
-            NumberAnimation { target: box; property: "x"; to: flip.tile.x; duration: Theme.durScene; easing.type: Easing.InOutCubic }
-            NumberAnimation { target: box; property: "y"; to: flip.tile.y; duration: Theme.durScene; easing.type: Easing.InOutCubic }
-            NumberAnimation { target: box; property: "width"; to: flip.tile.width; duration: Theme.durScene; easing.type: Easing.InOutCubic }
-            NumberAnimation { target: box; property: "height"; to: flip.tile.height; duration: Theme.durScene; easing.type: Easing.InOutCubic }
-            NumberAnimation { target: box; property: "radius"; to: Theme.dp(Theme.radiusTile); duration: Theme.durScene; easing.type: Easing.InOutCubic }
-            NumberAnimation { target: box; property: "opacity"; to: shrink.fades ? 0.0 : 1.0; duration: Theme.durScene; easing.type: Easing.InCubic }
+        PauseAnimation {
+            duration: 90
         }
-        ScriptAction { script: flip.covering = false; }
+        ParallelAnimation {
+            NumberAnimation {
+                target: box
+                property: "x"
+                to: flip.tile.x
+                duration: Theme.durScene
+                easing.type: Easing.InOutCubic
+            }
+            NumberAnimation {
+                target: box
+                property: "y"
+                to: flip.tile.y
+                duration: Theme.durScene
+                easing.type: Easing.InOutCubic
+            }
+            NumberAnimation {
+                target: box
+                property: "width"
+                to: flip.tile.width
+                duration: Theme.durScene
+                easing.type: Easing.InOutCubic
+            }
+            NumberAnimation {
+                target: box
+                property: "height"
+                to: flip.tile.height
+                duration: Theme.durScene
+                easing.type: Easing.InOutCubic
+            }
+            NumberAnimation {
+                target: box
+                property: "radius"
+                to: Theme.dp(Theme.radiusTile)
+                duration: Theme.durScene
+                easing.type: Easing.InOutCubic
+            }
+            NumberAnimation {
+                target: box
+                property: "opacity"
+                to: shrink.fades ? 0.0 : 1.0
+                duration: Theme.durScene
+                easing.type: Easing.InCubic
+            }
+        }
+        ScriptAction {
+            script: flip.covering = false
+        }
     }
 
     SequentialAnimation {
         id: grow
 
         ParallelAnimation {
-            NumberAnimation { target: box; property: "x"; to: 0; duration: Theme.durView; easing.type: Easing.InOutCubic }
-            NumberAnimation { target: box; property: "y"; to: 0; duration: Theme.durView; easing.type: Easing.InOutCubic }
-            NumberAnimation { target: box; property: "width"; to: flip.width; duration: Theme.durView; easing.type: Easing.InOutCubic }
-            NumberAnimation { target: box; property: "height"; to: flip.height; duration: Theme.durView; easing.type: Easing.InOutCubic }
-            NumberAnimation { target: box; property: "radius"; to: 0; duration: Theme.durView; easing.type: Easing.InOutCubic }
-            NumberAnimation { target: box; property: "opacity"; to: 1.0; duration: Theme.durQuick; easing.type: Easing.OutCubic }
+            NumberAnimation {
+                target: box
+                property: "x"
+                to: 0
+                duration: Theme.durView
+                easing.type: Easing.InOutCubic
+            }
+            NumberAnimation {
+                target: box
+                property: "y"
+                to: 0
+                duration: Theme.durView
+                easing.type: Easing.InOutCubic
+            }
+            NumberAnimation {
+                target: box
+                property: "width"
+                to: flip.width
+                duration: Theme.durView
+                easing.type: Easing.InOutCubic
+            }
+            NumberAnimation {
+                target: box
+                property: "height"
+                to: flip.height
+                duration: Theme.durView
+                easing.type: Easing.InOutCubic
+            }
+            NumberAnimation {
+                target: box
+                property: "radius"
+                to: 0
+                duration: Theme.durView
+                easing.type: Easing.InOutCubic
+            }
+            NumberAnimation {
+                target: box
+                property: "opacity"
+                to: 1.0
+                duration: Theme.durQuick
+                easing.type: Easing.OutCubic
+            }
         }
         ScriptAction {
             script: {

@@ -43,7 +43,9 @@ Item {
     }
 
     function labelOf(slot) {
-        var r = rows.find(function(r) { return r.slot === slot; });
+        var r = rows.find(function (r) {
+            return r.slot === slot;
+        });
         return r ? r.label : slot;
     }
 
@@ -73,7 +75,11 @@ Item {
             axes: art.axes
             opacity: art.connected ? 1.0 : 0.38
 
-            Behavior on opacity { Ease { duration: Theme.durScene } }
+            Behavior on opacity {
+                Ease {
+                    duration: Theme.durScene
+                }
+            }
         }
     }
 

@@ -10,15 +10,38 @@ FocusScope {
     property bool typing: true
 
     signal openRequested(var target)
-    signal escapedLeft()
-    signal escapedUp()
+    signal escapedLeft
+    signal escapedUp
 
-    readonly property var hints: typing
-        ? [ { glyph: "A", label: "Type" }, { glyph: "X", label: "Backspace" }, { glyph: "B", label: "Sections" } ]
-          .concat(search.count > 0 ? [ { glyph: "dpad", label: "Up to the hits" } ] : [])
-        : [ { glyph: "A", label: results.currentRow && results.currentRow.kind === "gamekey" ? (results.currentRow.expanded ? "Collapse" : "Expand") : "Open",
-              dim: !results.currentRow },
-            { glyph: "B", label: "Type" } ]
+    readonly property var hints: typing ? [
+        {
+            glyph: "A",
+            label: "Type"
+        },
+        {
+            glyph: "X",
+            label: "Backspace"
+        },
+        {
+            glyph: "B",
+            label: "Sections"
+        }
+    ].concat(search.count > 0 ? [
+        {
+            glyph: "dpad",
+            label: "Up to the hits"
+        }
+    ] : []) : [
+        {
+            glyph: "A",
+            label: results.currentRow && results.currentRow.kind === "gamekey" ? (results.currentRow.expanded ? "Collapse" : "Expand") : "Open",
+            dim: !results.currentRow
+        },
+        {
+            glyph: "B",
+            label: "Type"
+        }
+    ]
 
     readonly property real fieldHeight: Theme.dp(64)
     readonly property real keyboardWidth: Math.min(width, Theme.dp(880))
@@ -71,7 +94,9 @@ FocusScope {
 
     Connections {
         target: pane.search
-        function onQueryChanged() { results.index = 0; }
+        function onQueryChanged() {
+            results.index = 0;
+        }
     }
 
     Item {
@@ -169,14 +194,27 @@ FocusScope {
         columns: 1
         compact: true
         rows: pane.search.results
-        groups: pane.search.count > 0 ? [ { title: "", rows: pane.search.results.map(function(r, i) { return i; }) } ] : []
+        groups: pane.search.count > 0 ? [
+            {
+                title: "",
+                rows: pane.search.results.map(function (r, i) {
+                    return i;
+                })
+            }
+        ] : []
         dimmed: pane.typing
         opacity: pane.search.count > 0 ? 1.0 : 0.0
         visible: opacity > 0.01
 
-        Behavior on opacity { Ease { duration: Theme.durQuick } }
+        Behavior on opacity {
+            Ease {
+                duration: Theme.durQuick
+            }
+        }
 
-        onActivated: function(index, row) { pane.activate(index, row); }
+        onActivated: function (index, row) {
+            pane.activate(index, row);
+        }
         onEscapedUp: pane.escapedUp()
         onEscapedDown: pane.toKeyboard()
         onEscapedLeft: {
@@ -184,7 +222,7 @@ FocusScope {
             pane.escapedLeft();
         }
 
-        Keys.onPressed: function(event) {
+        Keys.onPressed: function (event) {
             if (event.isAutoRepeat)
                 return;
             if (api.keys.isCancel(event)) {
@@ -229,7 +267,12 @@ FocusScope {
         y: pane.typing ? parent.height - height : parent.height
         clip: true
 
-        Behavior on y { Ease { duration: Theme.durView; easing.type: Easing.OutQuint } }
+        Behavior on y {
+            Ease {
+                duration: Theme.durView
+                easing.type: Easing.OutQuint
+            }
+        }
 
         Rectangle {
             anchors.fill: parent
@@ -251,7 +294,7 @@ FocusScope {
             keyGap: Theme.dp(9)
             focus: true
 
-            onCharEntered: function(value) {
+            onCharEntered: function (value) {
                 Sound.type();
                 pane.search.query += value;
             }
@@ -269,7 +312,7 @@ FocusScope {
             Keys.onUpPressed: pane.kbMove(-1, 0)
             Keys.onDownPressed: pane.kbMove(1, 0)
 
-            Keys.onPressed: function(event) {
+            Keys.onPressed: function (event) {
                 if (event.isAutoRepeat)
                     return;
                 if (api.keys.isAccept(event)) {

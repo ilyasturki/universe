@@ -15,9 +15,23 @@ FocusScope {
     property int index: 0
     readonly property var current: index >= 0 && index < slots.length ? slots[index] : null
 
-    readonly property var hints: [ { glyph: "Start", label: "Options" }, { glyph: "B", label: "Back" }, { glyph: "A", label: "Open", dim: current === null } ]
+    readonly property var hints: [
+        {
+            glyph: "Start",
+            label: "Options"
+        },
+        {
+            glyph: "B",
+            label: "Back"
+        },
+        {
+            glyph: "A",
+            label: "Open",
+            dim: current === null
+        }
+    ]
 
-    signal closeRequested()
+    signal closeRequested
 
     focus: true
 
@@ -29,11 +43,14 @@ FocusScope {
             form.load(args.gameId);
     }
     Component.onDestruction: form.unload()
-    onSlotsChanged: if (index >= slots.length) index = Math.max(0, slots.length - 1)
+    onSlotsChanged: if (index >= slots.length)
+        index = Math.max(0, slots.length - 1)
 
     Connections {
         target: page.form
-        function onMessage(text) { page.shell.showToast(text); }
+        function onMessage(text) {
+            page.shell.showToast(text);
+        }
     }
 
     function open() {
@@ -42,7 +59,10 @@ FocusScope {
             return;
         }
         Sound.play("ok");
-        shell.push("pages/ArtworkSlotPage.qml", { gameId: args.gameId, slot: current.slot });
+        shell.push("pages/ArtworkSlotPage.qml", {
+            gameId: args.gameId,
+            slot: current.slot
+        });
     }
 
     function options() {
@@ -52,18 +72,38 @@ FocusScope {
         }
         Sound.play("ok");
         var slot = current.slot, label = current.label.toLowerCase();
-        var items = [ { label: "Fetch missing art", act: "fetch" }, { label: "Wrong game?", act: "search" }, { label: "Use a file for the " + label + "…", act: "file" } ];
-        shell.menu(current.label, items, function(act) {
+        var items = [
+            {
+                label: "Fetch missing art",
+                act: "fetch"
+            },
+            {
+                label: "Wrong game?",
+                act: "search"
+            },
+            {
+                label: "Use a file for the " + label + "…",
+                act: "file"
+            }
+        ];
+        shell.menu(current.label, items, function (act) {
             if (act === "fetch")
                 form.refresh();
             else if (act === "search")
                 Artwork.search(shell, form);
             else if (act === "file")
-                shell.browse({ title: "Use a file for the " + label, path: "", files: true }, function(path) { if (path) form.useFile(slot, path); });
+                shell.browse({
+                    title: "Use a file for the " + label,
+                    path: "",
+                    files: true
+                }, function (path) {
+                    if (path)
+                        form.useFile(slot, path);
+                });
         });
     }
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         if (event.isAutoRepeat && (api.keys.isAccept(event) || api.keys.isCancel(event)))
             return;
         if (api.keys.isAccept(event)) {

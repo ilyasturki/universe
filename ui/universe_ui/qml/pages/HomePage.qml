@@ -12,8 +12,8 @@ FocusScope {
 
     signal detailRequested(var game)
     signal tabRequested(int index)
-    signal chromeRequested()
-    signal addRequested()
+    signal chromeRequested
+    signal addRequested
 
     readonly property int railFloor: 5
     readonly property bool standingIn: (recent ? recent.count : 0) < railFloor
@@ -35,23 +35,45 @@ FocusScope {
     readonly property var hints: {
         var out = [];
         if (tileSelected) {
-            out.push({ glyph: "A", label: page.empty ? "Add a game" : "Open library" });
-            out.push({ glyph: "X", label: "Details", dim: true });
-            out.push({ glyph: "Y", label: favouriteLabel, dim: true });
+            out.push({
+                glyph: "A",
+                label: page.empty ? "Add a game" : "Open library"
+            });
+            out.push({
+                glyph: "X",
+                label: "Details",
+                dim: true
+            });
+            out.push({
+                glyph: "Y",
+                label: favouriteLabel,
+                dim: true
+            });
         } else {
-            out.push({ glyph: "A", label: heroActions.activeFocus && heroActions.index === 1 ? "Details" : playLabel });
-            out.push({ glyph: "X", label: "Details" });
-            out.push({ glyph: "Y", label: favouriteLabel });
+            out.push({
+                glyph: "A",
+                label: heroActions.activeFocus && heroActions.index === 1 ? "Details" : playLabel
+            });
+            out.push({
+                glyph: "X",
+                label: "Details"
+            });
+            out.push({
+                glyph: "Y",
+                label: favouriteLabel
+            });
         }
         if (heroActions.activeFocus)
-            out.push({ glyph: "B", label: "Back to games" });
+            out.push({
+                glyph: "B",
+                label: "Back to games"
+            });
         return out;
     }
 
     readonly property var session: api.universe.currentSession
     readonly property string playingId: session && session.id !== undefined ? session.id : ""
-    readonly property string playLabel: currentGame && currentGame.id === playingId ? "Resume"
-                                      : currentGame && currentGame.playTime > 0 ? "Continue" : "Play"
+    readonly property string playLabel: currentGame && currentGame.id === playingId ? "Resume" : currentGame && currentGame.playTime > 0 ? "Continue" : "Play"
     readonly property string favouriteLabel: currentGame && currentGame.favorite ? "Remove from favourites" : "Add to favourites"
 
     readonly property real bandHeight: Theme.dp(Theme.heroBand)
@@ -67,8 +89,10 @@ FocusScope {
     readonly property int librarySeconds: api.allGames.totalPlayTime
     readonly property bool empty: libraryCount === 0
 
-    onRailCountChanged: if (railCount === 0) tileSelected = true
-    Component.onCompleted: if (railCount === 0) tileSelected = true
+    onRailCountChanged: if (railCount === 0)
+        tileSelected = true
+    Component.onCompleted: if (railCount === 0)
+        tileSelected = true
 
     function toggleFavourite() {
         if (!currentGame || tileSelected) {
@@ -114,7 +138,7 @@ FocusScope {
         return Qt.rect(p.x, p.y, cellSize, cellSize);
     }
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         if (event.isAutoRepeat)
             return;
         if (api.keys.isFilters(event)) {
@@ -140,7 +164,10 @@ FocusScope {
         client: api.universe
         model: page.railModel
         index: page.tileSelected ? -1 : rail.currentIndex
-        onMoved: function(index) { page.tileSelected = false; rail.currentIndex = index; }
+        onMoved: function (index) {
+            page.tileSelected = false;
+            rail.currentIndex = index;
+        }
     }
 
     // The library exposes no date added; releaseYear is the closest "what is new".
@@ -193,7 +220,11 @@ FocusScope {
 
             opacity: page.currentGame || page.tileSelected ? 1.0 : 0.0
 
-            Behavior on opacity { Ease { duration: Theme.durScene } }
+            Behavior on opacity {
+                Ease {
+                    duration: Theme.durScene
+                }
+            }
 
             HeroLogo {
                 id: heroLogo
@@ -201,7 +232,9 @@ FocusScope {
                 titleWidth: parent.width
                 opacity: page.tileSelected ? 0.0 : 1.0
 
-                Behavior on opacity { Ease {} }
+                Behavior on opacity {
+                    Ease {}
+                }
             }
 
             Text {
@@ -213,7 +246,9 @@ FocusScope {
                 font.pixelSize: Theme.dp(58)
                 opacity: page.tileSelected ? 1.0 : 0.0
 
-                Behavior on opacity { Ease {} }
+                Behavior on opacity {
+                    Ease {}
+                }
             }
 
             GameMetaLine {
@@ -224,20 +259,22 @@ FocusScope {
                 showYear: false
                 opacity: page.tileSelected ? 0.0 : 1.0
 
-                Behavior on opacity { Ease {} }
+                Behavior on opacity {
+                    Ease {}
+                }
             }
 
             Text {
                 anchors.verticalCenter: heroMeta.verticalCenter
-                text: page.empty ? "Nothing in the library yet: a file on this machine, a store, or your Lutris games."
-                    : Format.plural(page.libraryCount, "game", "games") + " · "
-                      + Format.totalPlayTime(page.librarySeconds) + " played"
+                text: page.empty ? "Nothing in the library yet: a file on this machine, a store, or your Lutris games." : Format.plural(page.libraryCount, "game", "games") + " · " + Format.totalPlayTime(page.librarySeconds) + " played"
                 color: Theme.textSecondary
                 font.family: Theme.sans
                 font.pixelSize: Theme.dp(24)
                 opacity: page.tileSelected ? 1.0 : 0.0
 
-                Behavior on opacity { Ease {} }
+                Behavior on opacity {
+                    Ease {}
+                }
             }
 
             FocusScope {
@@ -261,7 +298,9 @@ FocusScope {
                     opacity: page.tileSelected ? 0.0 : 1.0
                     visible: opacity > 0.01
 
-                    Behavior on opacity { Ease {} }
+                    Behavior on opacity {
+                        Ease {}
+                    }
 
                     PillButton {
                         label: page.playLabel
@@ -285,18 +324,20 @@ FocusScope {
                     opacity: page.tileSelected ? 1.0 : 0.0
                     visible: opacity > 0.01
 
-                    Behavior on opacity { Ease {} }
+                    Behavior on opacity {
+                        Ease {}
+                    }
                 }
 
                 Keys.onLeftPressed: heroActions.step(-1)
                 Keys.onRightPressed: heroActions.step(1)
                 Keys.onUpPressed: page.chromeRequested()
-                Keys.onDownPressed: function(event) {
+                Keys.onDownPressed: function (event) {
                     Sound.panel();
                     rail.forceActiveFocus();
                 }
 
-                Keys.onPressed: function(event) {
+                Keys.onPressed: function (event) {
                     if (api.keys.isAccept(event) && !page.tileSelected && heroActions.index === 1) {
                         event.accepted = true;
                         page.detailRequested(page.currentGame);
@@ -370,7 +411,11 @@ FocusScope {
                     count: page.libraryCount
                     ringOpacity: rail.activeFocus || page.menuOpen ? 1.0 : Theme.ringIdle
 
-                    Behavior on x { Ease { easing.type: Easing.OutQuint } }
+                    Behavior on x {
+                        Ease {
+                            easing.type: Easing.OutQuint
+                        }
+                    }
                 }
             }
 
@@ -388,7 +433,7 @@ FocusScope {
             onWidthChanged: slideToCurrent()
             onCountChanged: slideToCurrent()
 
-            Keys.onLeftPressed: function(event) {
+            Keys.onLeftPressed: function (event) {
                 if (page.tileSelected) {
                     if (rail.count === 0) {
                         Sound.edge();
@@ -401,7 +446,7 @@ FocusScope {
                 event.accepted = false;
                 rail.currentIndex > 0 ? Sound.tick() : Sound.edge();
             }
-            Keys.onRightPressed: function(event) {
+            Keys.onRightPressed: function (event) {
                 if (page.tileSelected) {
                     Sound.edge();
                     return;
@@ -414,13 +459,18 @@ FocusScope {
                 event.accepted = false;
                 Sound.tick();
             }
-            Keys.onUpPressed: function(event) {
+            Keys.onUpPressed: function (event) {
                 Sound.panel();
                 heroActions.forceActiveFocus();
             }
             Keys.onDownPressed: Sound.edge()
 
-            Behavior on contentX { Ease { duration: Theme.durNudge; easing.type: Easing.OutQuint } }
+            Behavior on contentX {
+                Ease {
+                    duration: Theme.durNudge
+                    easing.type: Easing.OutQuint
+                }
+            }
 
             delegate: Item {
                 id: tile
@@ -438,12 +488,10 @@ FocusScope {
                     width: page.cellSize
                     height: page.cellSize
                     anchors.bottom: parent.bottom
-                    x: (parent.width - width) / 2
-                       + (tile.delta === 0 ? 0 : (tile.delta < 0 ? -page.spread : page.spread))
+                    x: (parent.width - width) / 2 + (tile.delta === 0 ? 0 : (tile.delta < 0 ? -page.spread : page.spread))
 
                     game: model
-                    artSource: model.id === page.playingId && api.home.frame !== "" ? api.home.frame
-                             : String(model.assets.square) !== "" ? model.assets.square : model.assets.boxFront
+                    artSource: model.id === page.playingId && api.home.frame !== "" ? api.home.frame : String(model.assets.square) !== "" ? model.assets.square : model.assets.boxFront
                     playing: model.id === page.playingId
                     selected: tile.selected
                     selectedScale: 1.0
@@ -452,7 +500,11 @@ FocusScope {
                     cornerRadius: Theme.dp(Theme.radiusTile)
                     ringOpacity: rail.activeFocus || page.menuOpen ? 1.0 : Theme.ringIdle
 
-                    Behavior on x { Ease { easing.type: Easing.OutQuint } }
+                    Behavior on x {
+                        Ease {
+                            easing.type: Easing.OutQuint
+                        }
+                    }
                 }
             }
         }
@@ -465,8 +517,14 @@ FocusScope {
             width: Theme.dp(90 - 14)
             gradient: Gradient {
                 orientation: Gradient.Horizontal
-                GradientStop { position: 0.0; color: Theme.ground }
-                GradientStop { position: 1.0; color: Qt.rgba(0.055, 0.059, 0.075, 0.0) }
+                GradientStop {
+                    position: 0.0
+                    color: Theme.ground
+                }
+                GradientStop {
+                    position: 1.0
+                    color: Qt.rgba(0.055, 0.059, 0.075, 0.0)
+                }
             }
         }
 
@@ -477,8 +535,14 @@ FocusScope {
             width: Theme.dp(90 - 14)
             gradient: Gradient {
                 orientation: Gradient.Horizontal
-                GradientStop { position: 0.0; color: Qt.rgba(0.055, 0.059, 0.075, 0.0) }
-                GradientStop { position: 1.0; color: Theme.ground }
+                GradientStop {
+                    position: 0.0
+                    color: Qt.rgba(0.055, 0.059, 0.075, 0.0)
+                }
+                GradientStop {
+                    position: 1.0
+                    color: Theme.ground
+                }
             }
         }
     }

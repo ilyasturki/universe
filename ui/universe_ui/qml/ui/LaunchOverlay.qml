@@ -17,7 +17,7 @@ FocusScope {
 
     readonly property string title: game ? game.title : ""
 
-    signal finished()
+    signal finished
     signal failed(var game, string message)
 
     function begin(targetGame) {
@@ -99,14 +99,18 @@ FocusScope {
 
         ParallelAnimation {
             NumberAnimation {
-                target: frame; property: "opacity"
+                target: frame
+                property: "opacity"
                 to: 1.0
-                duration: Theme.durLaunch; easing.type: Easing.InOutQuad
+                duration: Theme.durLaunch
+                easing.type: Easing.InOutQuad
             }
             NumberAnimation {
-                target: frame; property: "artScale"
+                target: frame
+                property: "artScale"
                 to: 1.0
-                duration: Theme.durLaunch; easing.type: Easing.OutCubic
+                duration: Theme.durLaunch
+                easing.type: Easing.OutCubic
             }
         }
 
@@ -118,7 +122,9 @@ FocusScope {
                     var game = overlay.game;
                     var dpr = overlay.Screen.devicePixelRatio;
                     var size = Qt.size(Math.round(frame.width * dpr), Math.round(frame.height * dpr));
-                    if (!frame.grabToImage(function(result) { game.launchWith(result); }, size))
+                    if (!frame.grabToImage(function (result) {
+                        game.launchWith(result);
+                    }, size))
                         game.launch();
                 }
             }
@@ -129,9 +135,11 @@ FocusScope {
         id: exit
 
         NumberAnimation {
-            target: frame; property: "opacity"
+            target: frame
+            property: "opacity"
             to: 0.0
-            duration: Theme.durScene; easing.type: Easing.OutCubic
+            duration: Theme.durScene
+            easing.type: Easing.OutCubic
         }
         ScriptAction {
             script: {
@@ -141,10 +149,12 @@ FocusScope {
         }
     }
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         event.accepted = true;
         if (waiting && launchedSession !== "" && !event.isAutoRepeat && api.keys.isCancel(event))
             handOver();
     }
-    Keys.onReleased: function(event) { event.accepted = true; }
+    Keys.onReleased: function (event) {
+        event.accepted = true;
+    }
 }

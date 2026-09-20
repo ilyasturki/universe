@@ -8,9 +8,7 @@ Rectangle {
     property string label: ""
     property bool onLight: false
 
-    readonly property color tint: kind === "picked" ? "#5fd48a"
-                                : kind === "default" ? "#7fb2ff"
-                                : "#e0655a"
+    readonly property color tint: kind === "picked" ? "#5fd48a" : kind === "default" ? "#7fb2ff" : "#e0655a"
 
     width: body.width + Theme.dp(22)
     height: Theme.dp(28)

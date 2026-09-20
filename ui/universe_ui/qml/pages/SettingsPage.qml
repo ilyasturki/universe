@@ -11,13 +11,13 @@ FocusScope {
 
     focus: true
 
-    signal chromeRequested()
+    signal chromeRequested
     signal settingsRequested(var game)
     signal runnerRequested(string runner)
     signal moduleRequested(string module)
     signal sourceRequested(string source)
     signal formRequested(var args)
-    signal setupRequested()
+    signal setupRequested
     signal artworkRequested(var game, string slot)
     signal message(string text)
 
@@ -32,21 +32,92 @@ FocusScope {
 
     // The sidebar: Search first, then the sections in four groups.
     readonly property var sections: [
-        { id: "search", name: "Search", icon: "search", group: "" },
-        { id: "launch", name: "Launch", icon: "sliders", group: "Play" }, { id: "runners", name: "Runners", icon: "play", group: "Play" },
-        { id: "controller", name: "Controller", icon: "gamepad", group: "Play" },
-        { id: "sources", name: "Sources", icon: "cloud", group: "Store" }, { id: "install", name: "Install", icon: "download", group: "Store" },
-        { id: "updates", name: "Updates", icon: "refresh", group: "Store" },
-        { id: "modules", name: "Modules", icon: "grid", group: "Extras" }, { id: "artwork", name: "Artwork", icon: "image", group: "Extras" },
-        { id: "themes", name: "Themes", icon: "sun", group: "Extras" },
-        { id: "doctor", name: "Doctor", icon: "pulse", group: "System" }, { id: "about", name: "About", icon: "info", group: "System" },
-        { id: "quit", name: "Quit", icon: "power", group: "System" }
+        {
+            id: "search",
+            name: "Search",
+            icon: "search",
+            group: ""
+        },
+        {
+            id: "launch",
+            name: "Launch",
+            icon: "sliders",
+            group: "Play"
+        },
+        {
+            id: "runners",
+            name: "Runners",
+            icon: "play",
+            group: "Play"
+        },
+        {
+            id: "controller",
+            name: "Controller",
+            icon: "gamepad",
+            group: "Play"
+        },
+        {
+            id: "sources",
+            name: "Sources",
+            icon: "cloud",
+            group: "Store"
+        },
+        {
+            id: "install",
+            name: "Install",
+            icon: "download",
+            group: "Store"
+        },
+        {
+            id: "updates",
+            name: "Updates",
+            icon: "refresh",
+            group: "Store"
+        },
+        {
+            id: "modules",
+            name: "Modules",
+            icon: "grid",
+            group: "Extras"
+        },
+        {
+            id: "artwork",
+            name: "Artwork",
+            icon: "image",
+            group: "Extras"
+        },
+        {
+            id: "themes",
+            name: "Themes",
+            icon: "sun",
+            group: "Extras"
+        },
+        {
+            id: "doctor",
+            name: "Doctor",
+            icon: "pulse",
+            group: "System"
+        },
+        {
+            id: "about",
+            name: "About",
+            icon: "info",
+            group: "System"
+        },
+        {
+            id: "quit",
+            name: "Quit",
+            icon: "power",
+            group: "System"
+        }
     ]
     property int section: 1
     readonly property string sectionId: sections[section].id
 
     function sectionIndex(id) {
-        return sections.findIndex(function(s) { return s.id === id; });
+        return sections.findIndex(function (s) {
+            return s.id === id;
+        });
     }
 
     function land(name) {
@@ -70,19 +141,32 @@ FocusScope {
     function open(target) {
         var index = sectionIndex(target.page === "section" ? target.id : target.page);
         if (target.page === "runner")
-            page.formRequested({ runner: target.id, key: target.key });
+            page.formRequested({
+                runner: target.id,
+                key: target.key
+            });
         else if (target.page === "module")
-            page.formRequested({ module: target.id, key: target.key });
+            page.formRequested({
+                module: target.id,
+                key: target.key
+            });
         else if (target.page === "source")
-            page.formRequested({ source: target.id, key: target.key });
+            page.formRequested({
+                source: target.id,
+                key: target.key
+            });
         else if (target.page === "game") {
             var game = api.allGames.byId(target.id);
             if (game)
-                page.formRequested({ game: game, key: target.key, settingModule: target.module });
+                page.formRequested({
+                    game: game,
+                    key: target.key,
+                    settingModule: target.module
+                });
         } else if (index >= 0) {
             section = index;
             var form = target.page === "launch" ? launch : target.page === "controller" ? controller : null;
-            Qt.callLater(function() {
+            Qt.callLater(function () {
                 if (form && target.key) {
                     var i = form.reveal(target.key, "");
                     if (i >= 0)
@@ -110,22 +194,72 @@ FocusScope {
     property string openedModule: ""
     property string openedSource: ""
 
-    readonly property var hints: editor.open ? editor.hints
-        : menu.open ? menu.hints
-        : dialog.open ? dialog.hints
-        : artwork.item && artwork.item.activeFocus ? artwork.item.hints
-        : finder.item && finder.item.activeFocus ? finder.item.hints
-        : testing ? [ { glyph: "B", label: "Hold to finish" }, { glyph: "Start+Select", label: "Finish" } ]
-        : learning ? [ { glyph: "B", label: "Stop learning" } ]
-        : side.activeFocus
-        ? [ { glyph: "A", label: "Open" }, { glyph: "B", label: "Back" }, { glyph: "LT RT", label: "Section" } ]
-        : listForm !== null
-        ? [ { glyph: "A", label: "Open" },
-            { glyph: "Y", label: cards.currentRow && cards.currentRow.value === true ? "Disable" : "Enable", dim: !cards.currentRow || (cards.currentRow.warning !== "" && cards.currentRow.value !== true) },
-            { glyph: "B", label: "Sections" }, { glyph: "LT RT", label: "Section" } ]
-        : [ { glyph: "A", label: acceptLabel !== "" ? acceptLabel : "Select", dim: acceptLabel === "" } ]
-            .concat(canRefresh ? [ { glyph: "X", label: "Refresh" } ] : [])
-            .concat([ { glyph: "B", label: "Sections" }, { glyph: "LT RT", label: "Section" } ])
+    readonly property var hints: editor.open ? editor.hints : menu.open ? menu.hints : dialog.open ? dialog.hints : artwork.item && artwork.item.activeFocus ? artwork.item.hints : finder.item && finder.item.activeFocus ? finder.item.hints : testing ? [
+        {
+            glyph: "B",
+            label: "Hold to finish"
+        },
+        {
+            glyph: "Start+Select",
+            label: "Finish"
+        }
+    ] : learning ? [
+        {
+            glyph: "B",
+            label: "Stop learning"
+        }
+    ] : side.activeFocus ? [
+        {
+            glyph: "A",
+            label: "Open"
+        },
+        {
+            glyph: "B",
+            label: "Back"
+        },
+        {
+            glyph: "LT RT",
+            label: "Section"
+        }
+    ] : listForm !== null ? [
+        {
+            glyph: "A",
+            label: "Open"
+        },
+        {
+            glyph: "Y",
+            label: cards.currentRow && cards.currentRow.value === true ? "Disable" : "Enable",
+            dim: !cards.currentRow || (cards.currentRow.warning !== "" && cards.currentRow.value !== true)
+        },
+        {
+            glyph: "B",
+            label: "Sections"
+        },
+        {
+            glyph: "LT RT",
+            label: "Section"
+        }
+    ] : [
+        {
+            glyph: "A",
+            label: acceptLabel !== "" ? acceptLabel : "Select",
+            dim: acceptLabel === ""
+        }
+    ].concat(canRefresh ? [
+        {
+            glyph: "X",
+            label: "Refresh"
+        }
+    ] : []).concat([
+        {
+            glyph: "B",
+            label: "Sections"
+        },
+        {
+            glyph: "LT RT",
+            label: "Section"
+        }
+    ])
 
     readonly property string acceptLabel: {
         var row = cards.currentRow;
@@ -155,24 +289,59 @@ FocusScope {
     readonly property var content: {
         var rows = [], groups = [];
         if (sectionId === "artwork" || sectionId === "search")
-            return { rows: rows, groups: groups };
+            return {
+                rows: rows,
+                groups: groups
+            };
         if (listForm !== null)
-            return { rows: listForm.rows, groups: listForm.groups };
+            return {
+                rows: listForm.rows,
+                groups: listForm.groups
+            };
         if (sectionId === "launch")
-            return { rows: launch.rows, groups: launch.groups };
+            return {
+                rows: launch.rows,
+                groups: launch.groups
+            };
         if (sectionId === "runners")
-            return { rows: runners.rows, groups: runners.groups };
+            return {
+                rows: runners.rows,
+                groups: runners.groups
+            };
         if (sectionId === "install") {
-            rows.push({ section: sourceName, key: "search", label: "Search " + sourceName, type: "search", icon: "search",
-                        display: sources.query || "", choices: [], detail: "" });
+            rows.push({
+                section: sourceName,
+                key: "search",
+                label: "Search " + sourceName,
+                type: "search",
+                icon: "search",
+                display: sources.query || "",
+                choices: [],
+                detail: ""
+            });
             var jobs = [], installed = [], owned = [], all = [], running = 0, paused = 0, onDisk = 0;
             for (var i = 0; i < sources.rows.length; i++) {
                 var g = sources.rows[i];
-                rows.push({ section: sourceName, key: "game", label: g.title, type: "action",
-                            display: g.partial ? "Paused · " + Format.bytes(g.partial_bytes) + " kept" : g.status,
-                            choices: [], detail: "", row: i, installed: g.installed, busy: g.busy, partial: g.partial,
-                            pending: g.pending, gameId: g.game_id, image: g.image, action: "Options", size: g.sizeText,
-                            accent: g.busy || g.pending, progress: g.partial && g.disk_size > 0 ? g.partial_bytes / g.disk_size : 0 });
+                rows.push({
+                    section: sourceName,
+                    key: "game",
+                    label: g.title,
+                    type: "action",
+                    display: g.partial ? "Paused · " + Format.bytes(g.partial_bytes) + " kept" : g.status,
+                    choices: [],
+                    detail: "",
+                    row: i,
+                    installed: g.installed,
+                    busy: g.busy,
+                    partial: g.partial,
+                    pending: g.pending,
+                    gameId: g.game_id,
+                    image: g.image,
+                    action: "Options",
+                    size: g.sizeText,
+                    accent: g.busy || g.pending,
+                    progress: g.partial && g.disk_size > 0 ? g.partial_bytes / g.disk_size : 0
+                });
                 all.push(rows.length - 1);
                 if (g.busy || g.partial) {
                     jobs.push(rows.length - 1);
@@ -185,68 +354,202 @@ FocusScope {
             var busy = sources.busy ? (all.length > 0 ? " · refreshing…" : "loading…") : "";
             var stale = sources.error !== "" ? sourceName + " could not be reached" + (sources.libraryAge ? " · listing from " + sources.libraryAge : "") : "";
             if (sources.query)
-                groups.push({ title: "Results", meta: Format.plural(all.length, "game", "games") + " · “" + sources.query + "”" + busy, rows: [0].concat(all) });
+                groups.push({
+                    title: "Results",
+                    meta: Format.plural(all.length, "game", "games") + " · “" + sources.query + "”" + busy,
+                    rows: [0].concat(all)
+                });
             else {
                 if (jobs.length > 0)
-                    groups.push({ title: "Installing", meta: [running > 0 ? running + " running" : "", paused > 0 ? paused + " paused" : ""].filter(Boolean).join(" · "), rows: jobs });
+                    groups.push({
+                        title: "Installing",
+                        meta: [running > 0 ? running + " running" : "", paused > 0 ? paused + " paused" : ""].filter(Boolean).join(" · "),
+                        rows: jobs
+                    });
                 var where = currentSource && currentSource.games_dir ? " · " + currentSource.games_dir : "";
                 var sized = onDisk > 0 ? " · " + Format.bytes(onDisk) : "";
-                groups.push({ title: "Installed", meta: (all.length > 0 || !busy ? Format.plural(installed.length, "game", "games") + sized + where : "") + busy, rows: [0].concat(installed) });
-                groups.push({ title: "Owned, not installed", meta: Format.plural(owned.length, "game", "games") + (sources.libraryAge && !stale ? " · refreshed " + sources.libraryAge : ""),
-                              warning: stale, rows: owned });
+                groups.push({
+                    title: "Installed",
+                    meta: (all.length > 0 || !busy ? Format.plural(installed.length, "game", "games") + sized + where : "") + busy,
+                    rows: [0].concat(installed)
+                });
+                groups.push({
+                    title: "Owned, not installed",
+                    meta: Format.plural(owned.length, "game", "games") + (sources.libraryAge && !stale ? " · refreshed " + sources.libraryAge : ""),
+                    warning: stale,
+                    rows: owned
+                });
             }
-            return { rows: rows, groups: groups };
+            return {
+                rows: rows,
+                groups: groups
+            };
         }
         if (sectionId === "updates") {
             var n = sources.updates.length;
             if (n === 0) {
-                rows.push({ section: "Updates", key: "", label: sources.busy ? "Checking…" : "Everything is up to date",
-                            type: "info", value: true, detail: "" });
-                groups.push({ title: "Updates", rows: [0] });
-                return { rows: rows, groups: groups };
+                rows.push({
+                    section: "Updates",
+                    key: "",
+                    label: sources.busy ? "Checking…" : "Everything is up to date",
+                    type: "info",
+                    value: true,
+                    detail: ""
+                });
+                groups.push({
+                    title: "Updates",
+                    rows: [0]
+                });
+                return {
+                    rows: rows,
+                    groups: groups
+                };
             }
-            rows.push({ section: "Updates", key: "all", label: "Update everything", type: "action", display: n + " pending", detail: "" });
+            rows.push({
+                section: "Updates",
+                key: "all",
+                label: "Update everything",
+                type: "action",
+                display: n + " pending",
+                detail: ""
+            });
             for (var j = 0; j < n; j++) {
                 var u = sources.updates[j];
-                rows.push({ section: "Updates", key: "update", label: u.title, type: "action",
-                            display: (u.version ? u.version + " · " : "") + (u.date || ""), detail: "", row: j });
+                rows.push({
+                    section: "Updates",
+                    key: "update",
+                    label: u.title,
+                    type: "action",
+                    display: (u.version ? u.version + " · " : "") + (u.date || ""),
+                    detail: "",
+                    row: j
+                });
             }
-            groups.push({ title: "Pending", meta: Format.plural(n, "update", "updates"),
-                          rows: rows.map(function(r, i) { return i; }) });
-            return { rows: rows, groups: groups };
+            groups.push({
+                title: "Pending",
+                meta: Format.plural(n, "update", "updates"),
+                rows: rows.map(function (r, i) {
+                    return i;
+                })
+            });
+            return {
+                rows: rows,
+                groups: groups
+            };
         }
         if (sectionId === "controller") {
             if (!learning)
-                return { rows: controller.rows, groups: controller.groups };
-            var listening = controller.rows.map(function(r) {
-                return r.slot !== controller.learning ? r
-                     : Object.assign({}, r, { display: "Press the button on the pad…", press: null, hold: null });
+                return {
+                    rows: controller.rows,
+                    groups: controller.groups
+                };
+            var listening = controller.rows.map(function (r) {
+                return r.slot !== controller.learning ? r : Object.assign({}, r, {
+                    display: "Press the button on the pad…",
+                    press: null,
+                    hold: null
+                });
             });
-            return { rows: listening, groups: controller.groups };
+            return {
+                rows: listening,
+                groups: controller.groups
+            };
         }
         if (sectionId === "themes") {
-            rows.push({ section: "Themes", key: "theme", label: "Theme", type: "enum", value: api.theme.name, display: api.theme.name,
-                        choices: api.theme.themes.map(function(t) { return t.name; }), detail: "" });
-            groups.push({ title: "Look", rows: [0] });
-            return { rows: rows, groups: groups };
+            rows.push({
+                section: "Themes",
+                key: "theme",
+                label: "Theme",
+                type: "enum",
+                value: api.theme.name,
+                display: api.theme.name,
+                choices: api.theme.themes.map(function (t) {
+                    return t.name;
+                }),
+                detail: ""
+            });
+            groups.push({
+                title: "Look",
+                rows: [0]
+            });
+            return {
+                rows: rows,
+                groups: groups
+            };
         }
         if (sectionId === "about") {
-            rows.push({ section: "About", key: "version", label: "Universe", type: "static", display: api.universe.version() || "development build", detail: "" });
-            rows.push({ section: "About", key: "look", label: "Look", type: "static", display: api.theme.name, detail: "" });
-            rows.push({ section: "About", key: "library", label: "Library", type: "static", display: api.allGames.count + (api.allGames.count === 1 ? " game" : " games"), detail: "" });
-            rows.push({ section: "About", key: "setup", label: "First-run setup", type: "action", display: "", detail: "What other launchers hold, your stores, a few choices.", action: "Run again" });
-            groups.push({ title: "Universe", rows: [0, 1, 2, 3] });
-            return { rows: rows, groups: groups };
+            rows.push({
+                section: "About",
+                key: "version",
+                label: "Universe",
+                type: "static",
+                display: api.universe.version() || "development build",
+                detail: ""
+            });
+            rows.push({
+                section: "About",
+                key: "look",
+                label: "Look",
+                type: "static",
+                display: api.theme.name,
+                detail: ""
+            });
+            rows.push({
+                section: "About",
+                key: "library",
+                label: "Library",
+                type: "static",
+                display: api.allGames.count + (api.allGames.count === 1 ? " game" : " games"),
+                detail: ""
+            });
+            rows.push({
+                section: "About",
+                key: "setup",
+                label: "First-run setup",
+                type: "action",
+                display: "",
+                detail: "What other launchers hold, your stores, a few choices.",
+                action: "Run again"
+            });
+            groups.push({
+                title: "Universe",
+                rows: [0, 1, 2, 3]
+            });
+            return {
+                rows: rows,
+                groups: groups
+            };
         }
         if (sectionId === "quit") {
-            rows.push({ section: "Quit", key: "quit", label: "Quit Universe", type: "action", display: "", detail: "", icon: "power", action: "Quit" });
-            groups.push({ title: "Universe", meta: api.universe.currentSession ? "The running game is closed with it" : "", rows: [0] });
-            return { rows: rows, groups: groups };
+            rows.push({
+                section: "Quit",
+                key: "quit",
+                label: "Quit Universe",
+                type: "action",
+                display: "",
+                detail: "",
+                icon: "power",
+                action: "Quit"
+            });
+            groups.push({
+                title: "Universe",
+                meta: api.universe.currentSession ? "The running game is closed with it" : "",
+                rows: [0]
+            });
+            return {
+                rows: rows,
+                groups: groups
+            };
         }
-        return { rows: modulesForm.doctor, groups: modulesForm.doctorGroups };
+        return {
+            rows: modulesForm.doctor,
+            groups: modulesForm.doctorGroups
+        };
     }
 
-    readonly property int checksPassed: modulesForm.doctor.filter(function(d) { return d.value; }).length
+    readonly property int checksPassed: modulesForm.doctor.filter(function (d) {
+        return d.value;
+    }).length
 
     function leave() {
         editor.hide();
@@ -294,22 +597,25 @@ FocusScope {
         listForm.toggle(cards.index);
     }
 
-
     function editMap(form, index, row) {
         Sound.panel();
-        menu.show(Maps.items(row), cards, cards.focusRect, row.label, function(action) {
+        menu.show(Maps.items(row), cards, cards.focusRect, row.label, function (action) {
             if (action === "add") {
-                editor.prompt("Name of " + Maps.noun(row), "", function(name) {
+                editor.prompt("Name of " + Maps.noun(row), "", function (name) {
                     name = Maps.cleanName(name);
                     if (name === "")
                         return;
-                    editor.prompt("Value of " + name, "", function(value) { form.setMapEntry(index, name, value); });
+                    editor.prompt("Value of " + name, "", function (value) {
+                        form.setMapEntry(index, name, value);
+                    });
                 });
             } else if (action.indexOf("entry:") === 0) {
                 var name = action.substring(6);
-                menu.show(Maps.entryItems(name), cards, cards.focusRect, name, function(next) {
+                menu.show(Maps.entryItems(name), cards, cards.focusRect, name, function (next) {
                     if (next === "value")
-                        editor.prompt("Value of " + name, Maps.valueOf(row, name), function(value) { form.setMapEntry(index, name, value); });
+                        editor.prompt("Value of " + name, Maps.valueOf(row, name), function (value) {
+                            form.setMapEntry(index, name, value);
+                        });
                     else if (next === "remove") {
                         Sound.cancel();
                         form.setMapEntry(index, name, "");
@@ -345,7 +651,9 @@ FocusScope {
                 editMap(launch, index, row);
             } else {
                 Sound.panel();
-                editor.edit(row, function(value) { launch.setValue(index, value); });
+                editor.edit(row, function (value) {
+                    launch.setValue(index, value);
+                });
             }
         } else if (sectionId === "runners") {
             cards.forceActiveFocus();
@@ -354,9 +662,13 @@ FocusScope {
         } else if (sectionId === "install") {
             Sound.panel();
             if (row.key === "search")
-                editor.prompt("Search " + sourceName, sources.query, function(query) { sources.search(query); });
+                editor.prompt("Search " + sourceName, sources.query, function (query) {
+                    sources.search(query);
+                });
             else
-                menu.show(page.gameActions(row), cards, cards.focusRect, row.label, function(action) { page.gameAction(row, action); });
+                menu.show(page.gameActions(row), cards, cards.focusRect, row.label, function (action) {
+                    page.gameAction(row, action);
+                });
         } else if (sectionId === "updates") {
             Sound.enter();
             if (row.key === "all")
@@ -365,11 +677,15 @@ FocusScope {
                 sources.update(row.row);
         } else if (sectionId === "themes") {
             Sound.panel();
-            editor.edit(row, function(value) {
-                var theme = api.theme.themes.filter(function(t) { return t.name === value; })[0];
+            editor.edit(row, function (value) {
+                var theme = api.theme.themes.filter(function (t) {
+                    return t.name === value;
+                })[0];
                 // The switch rebuilds this tree; let the editor finish closing first.
                 if (theme)
-                    Qt.callLater(function() { api.theme.set(theme.id); });
+                    Qt.callLater(function () {
+                        api.theme.set(theme.id);
+                    });
             });
         } else if (sectionId === "about") {
             if (row.key === "setup") {
@@ -379,17 +695,23 @@ FocusScope {
                 Sound.edge();
         } else if (sectionId === "quit") {
             Sound.panel();
-            menu.confirm("Stay", "power", api.universe.currentSession ? "Quit and close the game" : "Quit Universe", "Quit Universe?", cards, cards.focusRect, function() { Qt.quit(); });
+            menu.confirm("Stay", "power", api.universe.currentSession ? "Quit and close the game" : "Quit Universe", "Quit Universe?", cards, cards.focusRect, function () {
+                Qt.quit();
+            });
         } else if (sectionId === "controller") {
             if (row.key === "test") {
                 if (controller.setTesting(true))
                     Sound.enter();
             } else if (row.type === "enum" || row.type === "int") {
                 Sound.panel();
-                editor.edit(row, function(value) { controller.setValue(index, value); });
+                editor.edit(row, function (value) {
+                    controller.setValue(index, value);
+                });
             } else if (row.type === "action") {
                 Sound.panel();
-                menu.show(page.slotActions(row), cards, cards.focusRect, row.label, function(action) { page.slotAction(row, action); });
+                menu.show(page.slotActions(row), cards, cards.focusRect, row.label, function (action) {
+                    page.slotAction(row, action);
+                });
             } else {
                 Sound.edge();
             }
@@ -399,17 +721,49 @@ FocusScope {
     function slotActions(row) {
         var out = [];
         if (!row.bound)
-            out.push({ icon: "keyboard", label: "Learn the button", action: "learn" });
+            out.push({
+                icon: "keyboard",
+                label: "Learn the button",
+                action: "learn"
+            });
         if (row.home)
-            return row.bound ? [ { icon: "keyboard", label: "Learn the button again", action: "learn" } ] : out;
-        out.push({ icon: "play", label: "On press…", action: "press" });
-        out.push({ icon: "stop", label: "On hold…", action: "hold" });
+            return row.bound ? [
+                {
+                    icon: "keyboard",
+                    label: "Learn the button again",
+                    action: "learn"
+                }
+            ] : out;
+        out.push({
+            icon: "play",
+            label: "On press…",
+            action: "press"
+        });
+        out.push({
+            icon: "stop",
+            label: "On hold…",
+            action: "hold"
+        });
         if (row.press)
-            out.push({ icon: "trash", label: "Clear press", action: "clear-press", danger: true });
+            out.push({
+                icon: "trash",
+                label: "Clear press",
+                action: "clear-press",
+                danger: true
+            });
         if (row.hold)
-            out.push({ icon: "trash", label: "Clear hold", action: "clear-hold", danger: true });
+            out.push({
+                icon: "trash",
+                label: "Clear hold",
+                action: "clear-hold",
+                danger: true
+            });
         if (row.bound)
-            out.push({ icon: "keyboard", label: "Learn the button again", action: "learn" });
+            out.push({
+                icon: "keyboard",
+                label: "Learn the button again",
+                action: "learn"
+            });
         return out;
     }
 
@@ -422,10 +776,22 @@ FocusScope {
                 continue;
             if (p.id === "keys" || p.id === "command")
                 continue;
-            out.push({ icon: Macros.icon(p.id), label: p.label, action: "preset:" + p.id });
+            out.push({
+                icon: Macros.icon(p.id),
+                label: p.label,
+                action: "preset:" + p.id
+            });
         }
-        out.push({ icon: Macros.icon("keys"), label: "Key combo…", action: "keys" });
-        out.push({ icon: Macros.icon("command"), label: "Command…", action: "command" });
+        out.push({
+            icon: Macros.icon("keys"),
+            label: "Key combo…",
+            action: "keys"
+        });
+        out.push({
+            icon: Macros.icon("command"),
+            label: "Command…",
+            action: "command"
+        });
         return out;
     }
 
@@ -437,9 +803,9 @@ FocusScope {
             Sound.panel();
             pendingSlot = row.key;
             pendingTrigger = action;
-            menu.show(page.presetActions(action), cards, cards.focusRect,
-                      row.label + " · " + (action === "press" ? "On press" : "On hold"),
-                      function(next) { page.slotAction(row, next); });
+            menu.show(page.presetActions(action), cards, cards.focusRect, row.label + " · " + (action === "press" ? "On press" : "On hold"), function (next) {
+                page.slotAction(row, next);
+            });
             return;
         } else if (action.indexOf("preset:") === 0) {
             Sound.enter();
@@ -448,7 +814,7 @@ FocusScope {
             Sound.panel();
             var current = pendingTrigger === "hold" ? row.hold : row.press;
             var value = current && current.action === action ? current[action] : "";
-            editor.prompt((action === "keys" ? "Key combo for " : "Command for ") + row.label, value, function(typed) {
+            editor.prompt((action === "keys" ? "Key combo for " : "Command for ") + row.label, value, function (typed) {
                 if (typed !== "")
                     controller.bind(pendingSlot, pendingTrigger, action, action === "keys" ? typed : "", action === "command" ? typed : "");
             });
@@ -492,7 +858,9 @@ FocusScope {
             tester.forceActiveFocus();
             return;
         }
-        var i = controller.rows.findIndex(function(r) { return r.key === "test"; });
+        var i = controller.rows.findIndex(function (r) {
+            return r.key === "test";
+        });
         if (i >= 0)
             cards.index = i;
         cards.forceActiveFocus();
@@ -510,18 +878,47 @@ FocusScope {
     function gameActions(row) {
         var out = [];
         if (row.busy)
-            return [ { icon: "stop", label: "Cancel " + (row.pending ? "update" : "install"), action: "cancel", danger: true } ];
+            return [
+                {
+                    icon: "stop",
+                    label: "Cancel " + (row.pending ? "update" : "install"),
+                    action: "cancel",
+                    danger: true
+                }
+            ];
         if (!row.installed) {
-            out.push({ icon: "download", label: row.partial ? "Resume" : "Install", action: row.partial ? "resume" : "install" });
+            out.push({
+                icon: "download",
+                label: row.partial ? "Resume" : "Install",
+                action: row.partial ? "resume" : "install"
+            });
             return out;
         }
         if (row.pending)
-            out.push({ icon: "refresh", label: "Update", action: "update" });
+            out.push({
+                icon: "refresh",
+                label: "Update",
+                action: "update"
+            });
         if (row.gameId && api.allGames.byId(row.gameId))
-            out.push({ icon: "sliders", label: "Game settings", action: "settings" });
+            out.push({
+                icon: "sliders",
+                label: "Game settings",
+                action: "settings"
+            });
         if (row.gameId) {
-            out.push({ icon: "trash", label: "Uninstall…", action: "uninstall", danger: true });
-            out.push({ icon: "eye-off", label: "Remove from library…", action: "remove", danger: true });
+            out.push({
+                icon: "trash",
+                label: "Uninstall…",
+                action: "uninstall",
+                danger: true
+            });
+            out.push({
+                icon: "eye-off",
+                label: "Remove from library…",
+                action: "remove",
+                danger: true
+            });
         }
         return out;
     }
@@ -535,7 +932,12 @@ FocusScope {
                 parts.push(Format.bytes(g.disk_size) + " on disk");
             var where = currentSource && currentSource.games_dir ? currentSource.games_dir : "";
             var free = sources.freeSpace > 0 ? Format.bytes(sources.freeSpace) + " free" + (where ? " in " + where : "") : where ? "Into " + where : "";
-            dialog.ask({ message: "Install " + row.label + "?", detail: [parts.length > 0 ? parts.join(" · ") : "Size not known yet", free].filter(Boolean).join("\n"), yes: "Install", no: "Not now" }, function(yes) {
+            dialog.ask({
+                message: "Install " + row.label + "?",
+                detail: [parts.length > 0 ? parts.join(" · ") : "Size not known yet", free].filter(Boolean).join("\n"),
+                yes: "Install",
+                no: "Not now"
+            }, function (yes) {
                 if (yes)
                     sources.install(row.row) !== "" ? Sound.enter() : Sound.edge();
                 cards.forceActiveFocus();
@@ -551,14 +953,14 @@ FocusScope {
             return;
         } else if (action === "uninstall") {
             Sound.panel();
-            menu.confirm("Keep it", "trash", "Trash the install folder", "Uninstall " + row.label + "?", cards, cards.focusRect, function() {
+            menu.confirm("Keep it", "trash", "Trash the install folder", "Uninstall " + row.label + "?", cards, cards.focusRect, function () {
                 Sound.enter();
                 sources.uninstall(row.gameId);
             });
             return;
         } else if (action === "remove") {
             Sound.panel();
-            menu.confirm("Keep it", "eye-off", "Remove from the library", "Remove " + row.label + "?", cards, cards.focusRect, function() {
+            menu.confirm("Keep it", "eye-off", "Remove from the library", "Remove " + row.label + "?", cards, cards.focusRect, function () {
                 Sound.enter();
                 sources.remove(row.gameId);
             });
@@ -568,7 +970,13 @@ FocusScope {
     }
 
     Component.onCompleted: {
-        api.screens.search.sections = sections.map(function(s) { return { id: s.id, label: s.name, icon: s.icon }; });
+        api.screens.search.sections = sections.map(function (s) {
+            return {
+                id: s.id,
+                label: s.name,
+                icon: s.icon
+            };
+        });
         modulesForm.load();
         sourceList.load();
         runners.load();
@@ -587,7 +995,7 @@ FocusScope {
         refresh();
         if (sectionId === "search" && finder.item)
             finder.item.open();
-        Qt.callLater(function() {
+        Qt.callLater(function () {
             cards.reset();
             if (mainHad)
                 page.focusMain();
@@ -602,7 +1010,9 @@ FocusScope {
 
     Connections {
         target: page.sources
-        function onMessage(text) { page.message(text); }
+        function onMessage(text) {
+            page.message(text);
+        }
     }
 
     Connections {
@@ -628,10 +1038,14 @@ FocusScope {
                 page.message(code + " is not one of the pad's buttons yet: learn it from a row");
         }
         function onLearned(family, slot, code) {
-            var r = page.controller.rows.find(function(r) { return r.slot === slot; });
+            var r = page.controller.rows.find(function (r) {
+                return r.slot === slot;
+            });
             page.message((r ? r.label : slot) + " is now " + code);
         }
-        function onMessage(text) { page.message(text); }
+        function onMessage(text) {
+            page.message(text);
+        }
     }
 
     Text {
@@ -654,15 +1068,21 @@ FocusScope {
         width: page.sideWidth
         focus: true
         sections: page.sections
-        badges: page.sections.map(function(s, i) {
+        badges: page.sections.map(function (s, i) {
             return i === page.sectionIndex("updates") && page.sources.updates.length > 0 ? page.sources.updates.length.toString() : "";
         })
         current: page.section
         opacity: page.testing ? 0.35 : 1.0
 
-        Behavior on opacity { Ease { duration: Theme.durView } }
+        Behavior on opacity {
+            Ease {
+                duration: Theme.durView
+            }
+        }
 
-        onRequested: function(index) { page.section = index; }
+        onRequested: function (index) {
+            page.section = index;
+        }
         onEntered: page.focusMain()
         onEscapedUp: page.chromeRequested()
     }
@@ -683,9 +1103,15 @@ FocusScope {
         Connections {
             target: finder.item
             ignoreUnknownSignals: true
-            function onOpenRequested(target) { page.open(target); }
-            function onEscapedLeft() { side.forceActiveFocus(); }
-            function onEscapedUp() { page.chromeRequested(); }
+            function onOpenRequested(target) {
+                page.open(target);
+            }
+            function onEscapedLeft() {
+                side.forceActiveFocus();
+            }
+            function onEscapedUp() {
+                page.chromeRequested();
+            }
         }
     }
 
@@ -705,11 +1131,16 @@ FocusScope {
         Connections {
             target: artwork.item
             ignoreUnknownSignals: true
-            function onOpenRequested(game, slot) { page.artworkRequested(game, slot); }
+            function onOpenRequested(game, slot) {
+                page.artworkRequested(game, slot);
+            }
             function onFetchRequested(games) {
-                dialog.ask({ message: "Fetch the missing art of " + games + (games === 1 ? " game" : " games") + "?",
-                             detail: "From SteamGridDB, into each game's media folder; your picks stay on top. Stop any time from the same button.",
-                             yes: "Fetch", no: "Not now" }, function(yes) {
+                dialog.ask({
+                    message: "Fetch the missing art of " + games + (games === 1 ? " game" : " games") + "?",
+                    detail: "From SteamGridDB, into each game's media folder; your picks stay on top. Stop any time from the same button.",
+                    yes: "Fetch",
+                    no: "Not now"
+                }, function (yes) {
                     if (yes)
                         artwork.item.store.refreshAll();
                     artwork.item.forceActiveFocus();
@@ -719,8 +1150,12 @@ FocusScope {
                 Sound.panel();
                 side.forceActiveFocus();
             }
-            function onEscapedUp() { page.chromeRequested(); }
-            function onMessage(text) { page.message(text); }
+            function onEscapedUp() {
+                page.chromeRequested();
+            }
+            function onMessage(text) {
+                page.message(text);
+            }
         }
     }
 
@@ -776,7 +1211,11 @@ FocusScope {
                     radius: height / 2
                     color: Theme.text
 
-                    Behavior on width { Ease { duration: Theme.durQuick } }
+                    Behavior on width {
+                        Ease {
+                            duration: Theme.durQuick
+                        }
+                    }
                 }
             }
         }
@@ -792,8 +1231,16 @@ FocusScope {
                 model: {
                     var passed = page.checksPassed, failed = page.modulesForm.doctor.length - passed;
                     return [
-                        { count: passed, text: Format.plural(passed, "check passes", "checks pass"), color: "#5fd48a" },
-                        { count: failed, text: Format.plural(failed, "needs attention", "need attention"), color: "#e0655a" }
+                        {
+                            count: passed,
+                            text: Format.plural(passed, "check passes", "checks pass"),
+                            color: "#5fd48a"
+                        },
+                        {
+                            count: failed,
+                            text: Format.plural(failed, "needs attention", "need attention"),
+                            color: "#e0655a"
+                        }
                     ];
                 }
 
@@ -837,16 +1284,22 @@ FocusScope {
         opacity: page.testing || page.sectionId === "artwork" || page.sectionId === "search" ? 0.0 : 1.0
         visible: opacity > 0.01
 
-        Behavior on opacity { Ease { duration: Theme.durView } }
+        Behavior on opacity {
+            Ease {
+                duration: Theme.durView
+            }
+        }
 
-        onActivated: function(index, row) { page.activate(index, row); }
+        onActivated: function (index, row) {
+            page.activate(index, row);
+        }
         onEscapedUp: page.chromeRequested()
         onEscapedLeft: {
             Sound.panel();
             side.forceActiveFocus();
         }
 
-        Keys.onPressed: function(event) {
+        Keys.onPressed: function (event) {
             if (event.isAutoRepeat)
                 return;
             if (api.keys.isCancel(event)) {
@@ -874,7 +1327,11 @@ FocusScope {
         visible: opacity > 0.01
         opacity: page.testing ? 1.0 : 0.0
 
-        Behavior on opacity { Ease { duration: Theme.durView } }
+        Behavior on opacity {
+            Ease {
+                duration: Theme.durView
+            }
+        }
 
         sourceComponent: ControllerArt {
             family: page.controller.family
@@ -889,7 +1346,7 @@ FocusScope {
 
         anchors.fill: cards
 
-        Keys.onPressed: function(event) {
+        Keys.onPressed: function (event) {
             event.accepted = true;
             if (event.isAutoRepeat)
                 return;
@@ -898,7 +1355,9 @@ FocusScope {
                 page.controller.setTesting(false);
             }
         }
-        Keys.onReleased: function(event) { event.accepted = true; }
+        Keys.onReleased: function (event) {
+            event.accepted = true;
+        }
     }
 
     ValueEditor {
@@ -937,12 +1396,12 @@ FocusScope {
         }
     }
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         if (api.keys.isPageUp(event) || api.keys.isPageDown(event))
             event.accepted = true;
     }
 
-    Keys.onReleased: function(event) {
+    Keys.onReleased: function (event) {
         if (event.isAutoRepeat || editor.open || menu.open)
             return;
         var d = api.keys.isPageUp(event) ? -1 : api.keys.isPageDown(event) ? 1 : 0;

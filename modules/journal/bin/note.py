@@ -7,10 +7,10 @@ from urllib.parse import quote
 from _common import COLONS, LABELS, fmt_date, fmt_duration, fmt_time, game_note_name, journal_lang, label_alt, session_span
 
 # The core's journal.rs renders the same note byte for byte; keep the two in step.
-SHOT_IMAGE_RE = re.compile(r"^\d{8}-\d{6}\.(?:png|jpe?g)$", re.I)
+SHOT_IMAGE_RE = re.compile(r"^\d{8}-\d{6}\.(?:png|jpe?g)$", re.IGNORECASE)
 MARKER_RE = re.compile(r"<!-- session: (\d{8}-\d{6}) -->")
 RECORDING_NUM_RE = re.compile(r"^(\d{1,4})-\d{8}-\d{6}")
-DOC_TITLE_RE = re.compile(rf"^#\s*(?:{label_alt('journal')})\s*{COLONS}\s*(.+?)\s*$", re.M)
+DOC_TITLE_RE = re.compile(rf"^#\s*(?:{label_alt('journal')})\s*{COLONS}\s*(.+?)\s*$", re.MULTILINE)
 
 
 def file_uri(path):
@@ -103,8 +103,8 @@ def render_block(entry, sessions, entries):
 
 def frontmatter(title, body):
     sids = sorted(MARKER_RE.findall(body))
-    cover = re.search(r"^!\[\]\((.+?)\)", body, re.M)
-    lines = [f"game: {yaml_str(title)}", f"sessions: {len(re.findall(r'^## ', body, re.M))}"]
+    cover = re.search(r"^!\[\]\((.+?)\)", body, re.MULTILINE)
+    lines = [f"game: {yaml_str(title)}", f"sessions: {len(re.findall(r'^## ', body, re.MULTILINE))}"]
     if sids:
         lines.append(f"first_played: {sids[0][:4]}-{sids[0][4:6]}-{sids[0][6:8]}")
         lines.append(f"last_played: {sids[-1][:4]}-{sids[-1][4:6]}-{sids[-1][6:8]}")

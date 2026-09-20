@@ -11,7 +11,7 @@ FocusScope {
     readonly property bool cursorShown: activeFocus
 
     signal activated(int index)
-    signal escapedRight()
+    signal escapedRight
 
     readonly property real rowHeight: Theme.dp(123)
     readonly property real labelHeight: Theme.dp(44)
@@ -53,7 +53,7 @@ FocusScope {
     }
     Keys.onLeftPressed: Sound.play("edge")
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         var screen = api.keys.isScreenUp(event) ? -1 : api.keys.isScreenDown(event) ? 1 : 0;
         if (screen) {
             event.accepted = true;
@@ -82,15 +82,21 @@ FocusScope {
         clip: true
         currentIndex: list.index
         highlightFollowsCurrentItem: false
-        header: Item { height: list.room }
-        footer: Item { height: list.room }
+        header: Item {
+            height: list.room
+        }
+        footer: Item {
+            height: list.room
+        }
 
         function scrollToCurrent() {
             var top = list.yOf(list.index), bottom = top + list.rowHeight + (list.labelled(list.index) ? list.labelHeight : 0) + list.room * 2;
             Theme.reveal(view, top, bottom, height);
         }
 
-        Behavior on contentY { Ease {} }
+        Behavior on contentY {
+            Ease {}
+        }
 
         delegate: Item {
             readonly property bool labelled: list.labelled(index)

@@ -11,7 +11,9 @@ FocusScope {
     property var args: ({})
 
     readonly property var store: api.screens.news
-    readonly property var row: store.rows.filter(function(r) { return r.session === args.session; })[0] || null
+    readonly property var row: store.rows.filter(function (r) {
+        return r.session === args.session;
+    })[0] || null
     readonly property var images: row ? row.images : []
     readonly property var game: row ? api.allGames.byId(row.gameId) : null
 
@@ -19,13 +21,46 @@ FocusScope {
     property int shotIndex: 0
     property bool lightbox: false
 
-    readonly property var hints: lightbox
-        ? [ { glyph: "dpad", label: "Previous / next" }, { glyph: "B", label: "Close" } ]
-        : mode === "shots"
-        ? [ { glyph: "Y", label: "Recording", dim: !(row && row.hasRecording) }, { glyph: "B", label: "Back" }, { glyph: "A", label: "View" } ]
-        : [ { glyph: "Start", label: "Options" }, { glyph: "Y", label: "Recording", dim: !(row && row.hasRecording) }, { glyph: "B", label: "Back" } ]
+    readonly property var hints: lightbox ? [
+        {
+            glyph: "dpad",
+            label: "Previous / next"
+        },
+        {
+            glyph: "B",
+            label: "Close"
+        }
+    ] : mode === "shots" ? [
+        {
+            glyph: "Y",
+            label: "Recording",
+            dim: !(row && row.hasRecording)
+        },
+        {
+            glyph: "B",
+            label: "Back"
+        },
+        {
+            glyph: "A",
+            label: "View"
+        }
+    ] : [
+        {
+            glyph: "Start",
+            label: "Options"
+        },
+        {
+            glyph: "Y",
+            label: "Recording",
+            dim: !(row && row.hasRecording)
+        },
+        {
+            glyph: "B",
+            label: "Back"
+        }
+    ]
 
-    signal closeRequested()
+    signal closeRequested
 
     readonly property real columnX: Theme.dp(253)
     readonly property real columnWidth: Theme.dp(1667 - 253)
@@ -63,9 +98,11 @@ FocusScope {
         flick.contentY = maxScroll();
     }
 
-    function stepShot(d) { shotIndex = Sound.stepped(shotIndex, d, images.length); }
+    function stepShot(d) {
+        shotIndex = Sound.stepped(shotIndex, d, images.length);
+    }
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         var arrow = event.key === Qt.Key_Left || event.key === Qt.Key_Right;
         if (event.isAutoRepeat && !arrow)
             return;
@@ -85,7 +122,10 @@ FocusScope {
             event.accepted = true;
             if (row && row.hasRecording) {
                 Sound.play("ok");
-                shell.push("pages/PlayerPage.qml", { session: row.session, gameId: row.gameId });
+                shell.push("pages/PlayerPage.qml", {
+                    session: row.session,
+                    gameId: row.gameId
+                });
             } else {
                 Sound.play("edge");
             }
@@ -96,7 +136,9 @@ FocusScope {
                 return;
             }
             Sound.play("ok");
-            Removal.entry(shell, api.screens, row, function() { page.closeRequested(); });
+            Removal.entry(shell, api.screens, row, function () {
+                page.closeRequested();
+            });
         } else if (api.keys.isAccept(event)) {
             event.accepted = true;
             if (mode === "shots") {
@@ -161,7 +203,9 @@ FocusScope {
         clip: true
         visible: page.row !== null
 
-        Behavior on contentY { Ease {} }
+        Behavior on contentY {
+            Ease {}
+        }
 
         Column {
             id: article
@@ -290,7 +334,9 @@ FocusScope {
                         contentX = Math.max(-leftMargin, Math.min(target, Math.max(-leftMargin, contentWidth - width + rightMargin)));
                     }
 
-                    Behavior on contentX { Ease {} }
+                    Behavior on contentX {
+                        Ease {}
+                    }
 
                     delegate: Item {
                         width: page.shotWidth
@@ -341,7 +387,11 @@ FocusScope {
         visible: opacity > 0.01
         z: 5
 
-        Behavior on opacity { Ease { duration: Theme.durQuick } }
+        Behavior on opacity {
+            Ease {
+                duration: Theme.durQuick
+            }
+        }
 
         Image {
             anchors.fill: parent

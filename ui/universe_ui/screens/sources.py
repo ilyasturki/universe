@@ -1,10 +1,12 @@
 import shutil
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import qrcode
-from PySide6.QtCore import Property, QObject, Signal, Slot
+import qrcode.constants
+from PySide6.QtCore import QObject, Signal, Slot
 
+from ..qt import QVARIANT, Property
 from .media import _month, _size
 from .settings import AsyncScreen
 
@@ -28,11 +30,20 @@ def _source_row(game, updates, art, job):
         status = "Not owned"
     size = disk if installed or partial else download
     return {
-        "id": str(game.get("id") or ""), "title": str(game.get("title") or ""),
-        "game_id": str(game.get("game_id") or ""), "image": art(game.get("game_id")) or str(game.get("image") or ""),
-        "installed": installed, "pending": pending, "partial": partial, "busy": busy, "status": status,
-        "disk_size": disk, "download_size": download, "partial_bytes": partial_bytes,
-        "size": size, "sizeText": _size(size) if size else "",
+        "id": str(game.get("id") or ""),
+        "title": str(game.get("title") or ""),
+        "game_id": str(game.get("game_id") or ""),
+        "image": art(game.get("game_id")) or str(game.get("image") or ""),
+        "installed": installed,
+        "pending": pending,
+        "partial": partial,
+        "busy": busy,
+        "status": status,
+        "disk_size": disk,
+        "download_size": download,
+        "partial_bytes": partial_bytes,
+        "size": size,
+        "sizeText": _size(size) if size else "",
         "sizeKind": "disk" if installed or partial else ("download" if download else ""),
         "action": "Cancel" if busy else "Update" if pending else "Play from library" if installed else "Resume" if partial else "Install",
     }
@@ -44,8 +55,8 @@ def _age(iso):
     except (TypeError, ValueError):
         return ""
     if then.tzinfo is None:
-        then = then.replace(tzinfo=timezone.utc)
-    s = int((datetime.now(timezone.utc) - then).total_seconds())
+        then = then.replace(tzinfo=UTC)
+    s = int((datetime.now(UTC) - then).total_seconds())
     if s < 90:
         return "just now"
     if s < 3600:
@@ -268,8 +279,17 @@ class SourcesBrowser(AsyncScreen):
     def _begin(self, job_id, row, label):
         if not job_id:
             return ""
-        self._job = {"id": job_id, "game": row["id"], "title": row["title"], "label": label, "message": label,
-                     "done": 0, "total": 0, "ok": None, "cancelled": False}
+        self._job = {
+            "id": job_id,
+            "game": row["id"],
+            "title": row["title"],
+            "label": label,
+            "message": label,
+            "done": 0,
+            "total": 0,
+            "ok": None,
+            "cancelled": False,
+        }
         self.jobChanged.emit()
         self._show(self._shown)
         return job_id
@@ -305,17 +325,17 @@ class SourcesBrowser(AsyncScreen):
         current = self._current_source()
         return str((current or {}).get("library_at") or "")
 
-    sources = Property("QVariantList", lambda self: list(self._sources), notify=sourcesChanged)
+    sources = Property(list, lambda self: list(self._sources), notify=sourcesChanged)
     source = Property(str, lambda self: self._source, notify=sourceChanged)
-    current = Property("QVariant", _current_source, notify=sourceChanged)
+    current = Property(QVARIANT, _current_source, notify=sourceChanged)
     libraryAt = Property(str, _library_at, notify=sourceChanged)
     libraryAge = Property(str, lambda self: _age(self._library_at()), notify=sourceChanged)
     error = Property(str, lambda self: self._error, notify=sourceChanged)
     freeSpace = Property(float, lambda self: float(self._free), notify=sourcesChanged)
-    rows = Property("QVariantList", lambda self: list(self._rows), notify=rowsChanged)
-    updates = Property("QVariantList", lambda self: list(self._updates), notify=updatesChanged)
+    rows = Property(list, lambda self: list(self._rows), notify=rowsChanged)
+    updates = Property(list, lambda self: list(self._updates), notify=updatesChanged)
     query = Property(str, lambda self: self._query, notify=queryChanged)
-    job = Property("QVariant", lambda self: dict(self._job) if self._job else None, notify=jobChanged)
+    job = Property(QVARIANT, lambda self: dict(self._job) if self._job else None, notify=jobChanged)
 
 
 def qr_matrix(text):
@@ -366,7 +386,7 @@ class LoginFlow(QObject):
 
     source = Property(str, lambda self: self._source, notify=changed)
     url = Property(str, lambda self: self._url, notify=changed)
-    matrix = Property("QVariantList", lambda self: [list(r) for r in self._matrix], notify=changed)
+    matrix = Property(list, lambda self: [list(r) for r in self._matrix], notify=changed)
     size = Property(int, lambda self: len(self._matrix), notify=changed)
     status = Property(str, lambda self: self._status, notify=changed)
     busy = Property(bool, lambda self: bool(self._job), notify=changed)

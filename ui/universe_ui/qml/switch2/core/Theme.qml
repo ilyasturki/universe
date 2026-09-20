@@ -8,7 +8,9 @@ QtObject {
 
     property real vscale: 1.0
     readonly property bool software: Base.Theme.software
-    function dp(v) { return Math.round(v * t.vscale) }
+    function dp(v) {
+        return Math.round(v * t.vscale);
+    }
 
     function reveal(flick, top, bottom, height) {
         var target = top < flick.contentY ? top : bottom > flick.contentY + height ? bottom - height : flick.contentY;
@@ -107,11 +109,17 @@ QtObject {
         onTriggered: t.clock = Format.clock()
     }
 
-    readonly property FontLoader fontRegular: FontLoader { source: fontOverride !== "" ? fontOverride : Qt.resolvedUrl("../assets/fonts/BIZUDPGothic-Regular.ttf") }
-    readonly property FontLoader fontBold: FontLoader { source: fontOverride !== "" ? "" : Qt.resolvedUrl("../assets/fonts/BIZUDPGothic-Bold.ttf") }
+    readonly property FontLoader fontRegular: FontLoader {
+        source: fontOverride !== "" ? fontOverride : Qt.resolvedUrl("../assets/fonts/BIZUDPGothic-Regular.ttf")
+    }
+    readonly property FontLoader fontBold: FontLoader {
+        source: fontOverride !== "" ? "" : Qt.resolvedUrl("../assets/fonts/BIZUDPGothic-Bold.ttf")
+    }
     readonly property string fontOverride: api.theme.fontPath !== "" ? "file://" + api.theme.fontPath : ""
     readonly property string sans: fontRegular.status === FontLoader.Ready ? fontRegular.name : "sans-serif"
     // Sawarabi Gothic: narrow, light digits like the Switch's clock; the body font's are wide.
-    readonly property FontLoader fontClockFace: FontLoader { source: Qt.resolvedUrl("../assets/fonts/SawarabiGothic-Regular.ttf") }
+    readonly property FontLoader fontClockFace: FontLoader {
+        source: Qt.resolvedUrl("../assets/fonts/SawarabiGothic-Regular.ttf")
+    }
     readonly property string clockSans: fontClockFace.status === FontLoader.Ready ? fontClockFace.name : sans
 }

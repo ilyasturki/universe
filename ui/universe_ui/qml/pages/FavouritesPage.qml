@@ -10,7 +10,7 @@ FocusScope {
 
     focus: true
 
-    signal chromeRequested()
+    signal chromeRequested
 
     readonly property var currentGame: anchor ? anchor.game : null
     readonly property bool ownsBackdrop: false
@@ -21,9 +21,18 @@ FocusScope {
     readonly property Item menuAnchor: row.currentItem ? row.currentItem.artItem : null
 
     readonly property var hints: [
-        { glyph: "A", label: "Launch" },
-        { glyph: "X", label: "Details" },
-        { glyph: "Y", label: currentGame && !currentGame.favorite ? "Add to favourites" : "Remove from favourites" }
+        {
+            glyph: "A",
+            label: "Launch"
+        },
+        {
+            glyph: "X",
+            label: "Details"
+        },
+        {
+            glyph: "Y",
+            label: currentGame && !currentGame.favorite ? "Add to favourites" : "Remove from favourites"
+        }
     ]
 
     readonly property real cellWidth: Theme.dp(336)
@@ -59,7 +68,9 @@ FocusScope {
         client: api.universe
         model: favourites
         index: row.currentIndex
-        onMoved: function(index) { row.currentIndex = index; }
+        onMoved: function (index) {
+            row.currentIndex = index;
+        }
     }
 
     Text {
@@ -106,8 +117,7 @@ FocusScope {
         preferredHighlightEnd: preferredHighlightBegin + page.cellWidth
         highlightMoveDuration: Theme.durView
 
-        leftMargin: Math.max(Theme.dp(80),
-                             favourites ? (width - (favourites.count * cellWidth + Math.max(0, favourites.count - 1) * spacing)) / 2 : 0)
+        leftMargin: Math.max(Theme.dp(80), favourites ? (width - (favourites.count * cellWidth + Math.max(0, favourites.count - 1) * spacing)) / 2 : 0)
 
         delegate: Item {
             id: card
@@ -142,8 +152,14 @@ FocusScope {
                         opacity: card.hollow ? 1.0 : 0.0
                         visible: opacity > 0.01
 
-                        Behavior on scale { Ease { easing.type: Easing.OutQuint } }
-                        Behavior on opacity { Ease {} }
+                        Behavior on scale {
+                            Ease {
+                                easing.type: Easing.OutQuint
+                            }
+                        }
+                        Behavior on opacity {
+                            Ease {}
+                        }
 
                         Rectangle {
                             anchors.fill: parent
@@ -176,10 +192,7 @@ FocusScope {
 
                 Text {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    text: card.hollow
-                          ? "Removed · Y puts it back"
-                          : Format.playTime(model.playTime)
-                            + (card.selected && model.playCount > 0 ? " · " + Format.sessions(model.playCount) : "")
+                    text: card.hollow ? "Removed · Y puts it back" : Format.playTime(model.playTime) + (card.selected && model.playCount > 0 ? " · " + Format.sessions(model.playCount) : "")
                     color: card.selected ? Theme.textSecondary : Theme.textMuted
                     font.family: Theme.sans
                     font.pixelSize: Theme.dp(21)
@@ -187,18 +200,18 @@ FocusScope {
             }
         }
 
-        Keys.onLeftPressed: function(event) {
+        Keys.onLeftPressed: function (event) {
             event.accepted = false;
             row.currentIndex > 0 ? Sound.tick() : Sound.edge();
         }
-        Keys.onRightPressed: function(event) {
+        Keys.onRightPressed: function (event) {
             event.accepted = false;
             row.currentIndex < row.count - 1 ? Sound.tick() : Sound.edge();
         }
         Keys.onUpPressed: page.chromeRequested()
         Keys.onDownPressed: Sound.edge()
 
-        Keys.onPressed: function(event) {
+        Keys.onPressed: function (event) {
             if (event.isAutoRepeat)
                 return;
             if (api.keys.isFilters(event)) {

@@ -3,9 +3,9 @@ use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use futures_util::StreamExt;
-use zbus::zvariant::{OwnedObjectPath, Value};
 #[cfg(test)]
 use std::sync::Arc;
+use zbus::zvariant::{OwnedObjectPath, Value};
 
 use crate::config::Config;
 use crate::desktop::Profile;
@@ -19,7 +19,11 @@ pub struct Host {
 
 impl Host {
     pub fn live(cfg: &Config) -> Host {
-        Host { units: Units::Systemd(Systemd::default()), shell: Shell::Live { profile: crate::desktop::detect(cfg), extension: cfg.desktop.cursor_extension.clone() }, pads: Pads::Inputplumber }
+        Host {
+            units: Units::Systemd(Systemd::default()),
+            shell: Shell::Live { profile: crate::desktop::detect(cfg), extension: cfg.desktop.cursor_extension.clone() },
+            pads: Pads::Inputplumber,
+        }
     }
 
     #[cfg(test)]
@@ -96,7 +100,13 @@ impl Systemd {
             Err(e) => return Err(Error::Io(format!("GetUnit({unit}): {e}"))),
         };
         let iface = zbus::names::InterfaceName::try_from(iface.to_string()).map_err(|e| Error::Io(format!("{unit}: {e}")))?;
-        let build = || zbus::proxy::Builder::new(manager.connection()).destination(SYSTEMD)?.path(path.clone())?.interface(iface).map(|b| b.cache_properties(zbus::proxy::CacheProperties::No).build());
+        let build = || {
+            zbus::proxy::Builder::new(manager.connection())
+                .destination(SYSTEMD)?
+                .path(path.clone())?
+                .interface(iface)
+                .map(|b| b.cache_properties(zbus::proxy::CacheProperties::No).build())
+        };
         match build() {
             Ok(fut) => fut.await.map(Some).map_err(|e| Error::Io(format!("{unit}: {e}"))),
             Err(e) => Err(Error::Io(format!("{unit}: {e}"))),
@@ -105,7 +115,13 @@ impl Systemd {
 }
 
 async fn manager_proxy(conn: &zbus::Connection) -> zbus::Result<zbus::Proxy<'static>> {
-    zbus::proxy::Builder::new(conn).destination(SYSTEMD)?.path(MANAGER_PATH)?.interface(MANAGER_IFACE)?.cache_properties(zbus::proxy::CacheProperties::No).build().await
+    zbus::proxy::Builder::new(conn)
+        .destination(SYSTEMD)?
+        .path(MANAGER_PATH)?
+        .interface(MANAGER_IFACE)?
+        .cache_properties(zbus::proxy::CacheProperties::No)
+        .build()
+        .await
 }
 
 fn is_dbus_error(e: &zbus::Error, name: &str) -> bool {
@@ -131,7 +147,11 @@ async fn wait_job(jobs: &mut zbus::proxy::SignalStream<'_>, job: &OwnedObjectPat
 
 /// systemctl's rule: a name without a type is a service.
 fn qualified(unit: &str) -> String {
-    if unit.rsplit('.').next().is_some_and(|t| matches!(t, "service" | "scope")) { unit.to_string() } else { format!("{unit}.service") }
+    if unit.rsplit('.').next().is_some_and(|t| matches!(t, "service" | "scope")) {
+        unit.to_string()
+    } else {
+        format!("{unit}.service")
+    }
 }
 
 /// An `Exec*=` command: the program's path, its argv, failure not ignored.
@@ -142,7 +162,8 @@ fn exec_value(argv: Vec<String>) -> Value<'static> {
 
 /// `BindsTo=` plus `After=`: the unit goes down with `bind_to` (the launcher's scope, or a hook's game unit) from the start.
 fn unit_properties(spec: &UnitSpec, program: &Path) -> Vec<(String, Value<'static>)> {
-    let mut props: Vec<(String, Value<'static>)> = vec![("Description".into(), spec.description.clone().into()), ("CollectMode".into(), "inactive-or-failed".into())];
+    let mut props: Vec<(String, Value<'static>)> =
+        vec![("Description".into(), spec.description.clone().into()), ("CollectMode".into(), "inactive-or-failed".into())];
     let mut argv = vec![program.to_string_lossy().into_owned()];
     argv.extend(spec.args.iter().cloned());
     props.push(("ExecStart".into(), exec_value(argv)));
@@ -201,7 +222,9 @@ impl Units {
     pub async fn is_active(&self, unit: &str) -> bool {
         match self {
             Units::Systemd(sd) => match sd.unit_proxy(&qualified(unit), "org.freedesktop.systemd1.Unit").await {
-                Ok(Some(p)) => p.get_property::<String>("ActiveState").await.is_ok_and(|s| matches!(s.as_str(), "active" | "activating" | "deactivating" | "reloading")),
+                Ok(Some(p)) => {
+                    p.get_property::<String>("ActiveState").await.is_ok_and(|s| matches!(s.as_str(), "active" | "activating" | "deactivating" | "reloading"))
+                }
                 _ => false,
             },
             #[cfg(test)]
@@ -360,7 +383,12 @@ fn cgroup_procs(cgroup: &str) -> Vec<Proc> {
         .filter_map(|pid| {
             let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
             let ppid = stat.rsplit(')').next()?.split_whitespace().nth(1)?.parse().ok()?;
-            let argv = std::fs::read(format!("/proc/{pid}/cmdline")).unwrap_or_default().split(|b| *b == 0).filter(|a| !a.is_empty()).map(|a| String::from_utf8_lossy(a).into_owned()).collect();
+            let argv = std::fs::read(format!("/proc/{pid}/cmdline"))
+                .unwrap_or_default()
+                .split(|b| *b == 0)
+                .filter(|a| !a.is_empty())
+                .map(|a| String::from_utf8_lossy(a).into_owned())
+                .collect();
             Some(Proc { pid, ppid, argv })
         })
         .collect()
@@ -399,7 +427,11 @@ pub fn parse_unit_log(json_lines: &str) -> UnitLog {
     for line in json_lines.lines() {
         let Ok(v) = serde_json::from_str::<serde_json::Value>(line) else { continue };
         let Some(msg) = v["MESSAGE"].as_str() else { continue };
-        let ts = v["__REALTIME_TIMESTAMP"].as_str().and_then(|s| s.parse::<i64>().ok()).and_then(chrono::DateTime::from_timestamp_micros).map(|t| t.with_timezone(&chrono::Local));
+        let ts = v["__REALTIME_TIMESTAMP"]
+            .as_str()
+            .and_then(|s| s.parse::<i64>().ok())
+            .and_then(chrono::DateTime::from_timestamp_micros)
+            .map(|t| t.with_timezone(&chrono::Local));
         if msg.starts_with("Started ") && log.started.is_none() {
             log.started = ts;
         } else if msg.contains("Deactivated successfully") || msg.contains("Failed with result") || msg.starts_with("Stopped ") || msg.contains("Consumed ") {
@@ -414,7 +446,10 @@ pub fn parse_unit_log(json_lines: &str) -> UnitLog {
 }
 
 pub enum Shell {
-    Live { profile: Profile, extension: String },
+    Live {
+        profile: Profile,
+        extension: String,
+    },
     #[cfg(test)]
     Memory(Arc<Memory>),
 }
@@ -565,10 +600,14 @@ mod tests {
     #[test]
     fn unit_log_from_journal_lines() {
         let lines = concat!(
-            r#"{"MESSAGE":"Started [systemd-run] umu-run","__REALTIME_TIMESTAMP":"1789147978000000"}"#, "\n",
-            r#"{"MESSAGE":"universe-game-x.service: Main process exited, code=exited, status=3/NOTIMPLEMENTED","__REALTIME_TIMESTAMP":"1789147979000000"}"#, "\n",
-            r#"{"MESSAGE":"universe-game-x.service: Failed with result 'exit-code'.","__REALTIME_TIMESTAMP":"1789147980000000"}"#, "\n",
-            r#"{"MESSAGE":"universe-game-x.service: Consumed 17.224s CPU time over 54.416s wall clock time, 1.6G memory peak.","__REALTIME_TIMESTAMP":"1789147981000000"}"#, "\n",
+            r#"{"MESSAGE":"Started [systemd-run] umu-run","__REALTIME_TIMESTAMP":"1789147978000000"}"#,
+            "\n",
+            r#"{"MESSAGE":"universe-game-x.service: Main process exited, code=exited, status=3/NOTIMPLEMENTED","__REALTIME_TIMESTAMP":"1789147979000000"}"#,
+            "\n",
+            r#"{"MESSAGE":"universe-game-x.service: Failed with result 'exit-code'.","__REALTIME_TIMESTAMP":"1789147980000000"}"#,
+            "\n",
+            r#"{"MESSAGE":"universe-game-x.service: Consumed 17.224s CPU time over 54.416s wall clock time, 1.6G memory peak.","__REALTIME_TIMESTAMP":"1789147981000000"}"#,
+            "\n",
         );
         let log = parse_unit_log(lines);
         assert_eq!(log.exit, Some(3));
@@ -595,8 +634,14 @@ mod tests {
         };
         let plain = unit_properties(&spec, Path::new("/nix/store/u/bin/umu-run"));
         let exec = |v: &Value<'static>| -> Vec<(String, Vec<String>, bool)> { v.try_clone().unwrap().downcast().unwrap() };
-        assert_eq!(exec(prop(&plain, "ExecStart").unwrap()), [("/nix/store/u/bin/umu-run".to_string(), vec!["/nix/store/u/bin/umu-run".to_string(), "/g/x.exe".into(), "-w".into()], false)]);
-        assert_eq!(exec(prop(&plain, "ExecStopPost").unwrap()), [("/usr/bin/universe".to_string(), vec!["/usr/bin/universe".to_string(), "session-end".into(), "x".into(), "20260911-120000".into()], false)]);
+        assert_eq!(
+            exec(prop(&plain, "ExecStart").unwrap()),
+            [("/nix/store/u/bin/umu-run".to_string(), vec!["/nix/store/u/bin/umu-run".to_string(), "/g/x.exe".into(), "-w".into()], false)]
+        );
+        assert_eq!(
+            exec(prop(&plain, "ExecStopPost").unwrap()),
+            [("/usr/bin/universe".to_string(), vec!["/usr/bin/universe".to_string(), "session-end".into(), "x".into(), "20260911-120000".into()], false)]
+        );
         assert_eq!(prop(&plain, "Description").unwrap(), &Value::from("Universe: X"));
         assert_eq!(prop(&plain, "CollectMode").unwrap(), &Value::from("inactive-or-failed"));
         assert_eq!(prop(&plain, "ExitType").unwrap(), &Value::from("cgroup"));
@@ -638,7 +683,8 @@ mod live {
     async fn a_transient_unit_starts_freezes_thaws_and_stops() {
         let units = units();
         let name = format!("universe-test-{}", std::process::id());
-        let spec = UnitSpec { name: name.clone(), description: "Universe live test".into(), program: "sleep".into(), args: vec!["300".into()], ..Default::default() };
+        let spec =
+            UnitSpec { name: name.clone(), description: "Universe live test".into(), program: "sleep".into(), args: vec!["300".into()], ..Default::default() };
         units.start(&spec).await.unwrap();
         assert!(units.is_active(&name).await);
         assert!(units.cgroup(&name).await.is_some_and(|cg| cg.ends_with(&format!("{name}.service"))));

@@ -12,7 +12,9 @@ def js_bytes(app, values):
     engine = QQmlEngine()
     component = QQmlComponent(engine)
     calls = ", ".join(f"Format.bytes({v})" for v in values)
-    component.setData(f'import QtQuick\nimport "{FORMAT_JS.as_uri()}" as Format\nQtObject {{ property var out: [{calls}] }}\n'.encode(), QUrl("file:///format.qml"))
+    component.setData(
+        f'import QtQuick\nimport "{FORMAT_JS.as_uri()}" as Format\nQtObject {{ property var out: [{calls}] }}\n'.encode(), QUrl("file:///format.qml")
+    )
     obj = component.create()
     assert obj is not None, [e.toString() for e in component.errors()]
     return obj.property("out").toVariant()

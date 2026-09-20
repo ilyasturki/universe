@@ -1,7 +1,7 @@
 import logging
 import time
 
-from PySide6.QtCore import QCoreApplication, QEvent, QObject, QThread, QTimer, Qt, Signal, Slot
+from PySide6.QtCore import QCoreApplication, QEvent, QObject, Qt, QThread, QTimer, Signal, Slot
 from PySide6.QtGui import QGuiApplication, QKeyEvent
 
 log = logging.getLogger("universe.gamepad")
@@ -80,10 +80,7 @@ class Mapper:
             return None
         value = max(-1.0, min(1.0, value / 32767.0))
         magnitude = abs(value)
-        if magnitude < STICK_DEADZONE:
-            value = 0.0
-        else:
-            value = (magnitude - STICK_DEADZONE) / (1.0 - STICK_DEADZONE) * (1 if value > 0 else -1)
+        value = 0.0 if magnitude < STICK_DEADZONE else (magnitude - STICK_DEADZONE) / (1.0 - STICK_DEADZONE) * (1 if value > 0 else -1)
         if self._stick.get(name, 0.0) == value:
             return None
         self._stick[name] = value
@@ -188,13 +185,32 @@ class GamepadThread(QThread):
 
 
 KEY_NAMES = {
-    "Left": Qt.Key.Key_Left, "Right": Qt.Key.Key_Right, "Up": Qt.Key.Key_Up, "Down": Qt.Key.Key_Down,
-    "Return": Qt.Key.Key_Return, "A": Qt.Key.Key_Return, "Esc": Qt.Key.Key_Escape, "B": Qt.Key.Key_Escape,
-    "I": Qt.Key.Key_I, "X": Qt.Key.Key_I, "F": Qt.Key.Key_F, "Y": Qt.Key.Key_F,
-    "Q": Qt.Key.Key_Q, "LB": Qt.Key.Key_Q, "E": Qt.Key.Key_E, "RB": Qt.Key.Key_E,
-    "PgUp": Qt.Key.Key_PageUp, "LT": Qt.Key.Key_PageUp, "PgDown": Qt.Key.Key_PageDown, "RT": Qt.Key.Key_PageDown,
-    "F1": Qt.Key.Key_F1, "Start": Qt.Key.Key_F1,
-    "BracketLeft": Qt.Key.Key_BracketLeft, "RSUp": Qt.Key.Key_BracketLeft, "BracketRight": Qt.Key.Key_BracketRight, "RSDown": Qt.Key.Key_BracketRight,
+    "Left": Qt.Key.Key_Left,
+    "Right": Qt.Key.Key_Right,
+    "Up": Qt.Key.Key_Up,
+    "Down": Qt.Key.Key_Down,
+    "Return": Qt.Key.Key_Return,
+    "A": Qt.Key.Key_Return,
+    "Esc": Qt.Key.Key_Escape,
+    "B": Qt.Key.Key_Escape,
+    "I": Qt.Key.Key_I,
+    "X": Qt.Key.Key_I,
+    "F": Qt.Key.Key_F,
+    "Y": Qt.Key.Key_F,
+    "Q": Qt.Key.Key_Q,
+    "LB": Qt.Key.Key_Q,
+    "E": Qt.Key.Key_E,
+    "RB": Qt.Key.Key_E,
+    "PgUp": Qt.Key.Key_PageUp,
+    "LT": Qt.Key.Key_PageUp,
+    "PgDown": Qt.Key.Key_PageDown,
+    "RT": Qt.Key.Key_PageDown,
+    "F1": Qt.Key.Key_F1,
+    "Start": Qt.Key.Key_F1,
+    "BracketLeft": Qt.Key.Key_BracketLeft,
+    "RSUp": Qt.Key.Key_BracketLeft,
+    "BracketRight": Qt.Key.Key_BracketRight,
+    "RSDown": Qt.Key.Key_BracketRight,
 }
 
 

@@ -13,11 +13,17 @@ FocusScope {
     property int index: 0
     property var done: null
 
-    signal dismissed()
+    signal dismissed
 
     readonly property var hints: [
-        { glyph: "A", label: "Select" },
-        { glyph: "B", label: stack.length > 0 ? "Back" : "Close" }
+        {
+            glyph: "A",
+            label: "Select"
+        },
+        {
+            glyph: "B",
+            label: stack.length > 0 ? "Back" : "Close"
+        }
     ]
 
     // The row's rect in the menu's coordinates, taken once at show().
@@ -31,7 +37,9 @@ FocusScope {
     focus: open
     visible: scrim.opacity > 0.01
 
-    Behavior on slide { Ease {} }
+    Behavior on slide {
+        Ease {}
+    }
 
     function show(list, anchor, rect, heading, after) {
         items = list;
@@ -50,7 +58,19 @@ FocusScope {
 
     // Keep or do: `done` runs on the second item; the focus goes back to `anchor` either way.
     function confirm(keep, icon, label, title, anchor, rect, done) {
-        show([ { icon: "", label: keep, action: "" }, { icon: icon, label: label, action: "yes", danger: true } ], anchor, rect, title, function(action) {
+        show([
+            {
+                icon: "",
+                label: keep,
+                action: ""
+            },
+            {
+                icon: icon,
+                label: label,
+                action: "yes",
+                danger: true
+            }
+        ], anchor, rect, title, function (action) {
             if (action === "yes")
                 done();
             anchor.forceActiveFocus();
@@ -62,7 +82,14 @@ FocusScope {
     property var stack: []
 
     function push(list, heading, after) {
-        stack = stack.concat([ { items: items, title: title, done: done, index: index } ]);
+        stack = stack.concat([
+            {
+                items: items,
+                title: title,
+                done: done,
+                index: index
+            }
+        ]);
         items = list;
         title = heading || "";
         done = after || null;
@@ -123,7 +150,9 @@ FocusScope {
         color: Qt.rgba(0.02, 0.02, 0.03, 1)
         opacity: menu.open ? 0.62 : 0.0
 
-        Behavior on opacity { Ease {} }
+        Behavior on opacity {
+            Ease {}
+        }
     }
 
     ShaderEffectSource {
@@ -136,7 +165,9 @@ FocusScope {
         height: menu.row.height + menu.copyMargin * 2
         opacity: menu.open ? 1.0 : 0.0
 
-        Behavior on opacity { Ease {} }
+        Behavior on opacity {
+            Ease {}
+        }
     }
 
     Rectangle {
@@ -148,8 +179,7 @@ FocusScope {
         color: "#1b1d24"
         border.width: 1
         border.color: Theme.surfaceBorder
-        x: (menu.onRight ? menu.row.x + menu.row.width + menu.gap : menu.row.x - menu.gap - width)
-           + (menu.onRight ? -1 : 1) * menu.slide * Theme.dp(16)
+        x: (menu.onRight ? menu.row.x + menu.row.width + menu.gap : menu.row.x - menu.gap - width) + (menu.onRight ? -1 : 1) * menu.slide * Theme.dp(16)
         y: Math.max(Theme.dp(40), Math.min(menu.row.y + menu.row.height / 2 - height / 2, menu.height - height - Theme.dp(40)))
         opacity: 1.0 - menu.slide
         scale: 1.0 - menu.slide * 0.04
@@ -223,7 +253,9 @@ FocusScope {
                         radius: Theme.dp(16)
                         color: focused ? (danger ? "#e0655a" : Theme.text) : "transparent"
 
-                        Behavior on color { ColorEase {} }
+                        Behavior on color {
+                            ColorEase {}
+                        }
 
                         MenuGlyph {
                             id: glyph
@@ -285,7 +317,7 @@ FocusScope {
         }
     }
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         event.accepted = true;
         if (event.isAutoRepeat)
             return;

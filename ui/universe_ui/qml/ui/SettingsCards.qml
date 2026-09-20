@@ -14,15 +14,17 @@ FocusScope {
     property bool dimmed: false
 
     signal activated(int index, var row)
-    signal escapedUp()
-    signal escapedDown()
-    signal escapedLeft()
+    signal escapedUp
+    signal escapedDown
+    signal escapedLeft
 
     readonly property var currentRow: index >= 0 && index < rows.length ? rows[index] : null
     readonly property bool cursorShown: activeFocus || dimmed
     // The focused row's detail, up to two lines under the cards; an info row prints its own inline.
     readonly property string caption: currentRow && currentRow.type !== "info" && currentRow.detail ? currentRow.detail : ""
-    readonly property bool hasCaptions: rows.some(function(r) { return r.type !== "info" && r.detail; })
+    readonly property bool hasCaptions: rows.some(function (r) {
+        return r.type !== "info" && r.detail;
+    })
     readonly property real captionHeight: hasCaptions ? Theme.dp(compact ? 78 : 86) : 0
 
     readonly property real gap: Theme.dp(compact ? 24 : 32)
@@ -36,7 +38,9 @@ FocusScope {
         return Qt.rect(columnX(s.col) + 1 + pad, s.y0 - view.contentY, (s.wide ? width : columnWidth) - 2 - pad * 2, s.y1 - s.y0);
     }
 
-    function columnX(c) { return c * (columnWidth + gap); }
+    function columnX(c) {
+        return c * (columnWidth + gap);
+    }
 
     function headerHeight(g) {
         if (!g.title)
@@ -70,14 +74,33 @@ FocusScope {
                         c = k;
                 top = tops[c];
             }
-            cardsOut.push({ group: i, col: c, y: top, wide: wide });
+            cardsOut.push({
+                group: i,
+                col: c,
+                y: top,
+                wide: wide
+            });
             var cy = top + 1 + pad;
             if (group.control >= 0)
-                stops[c].push({ row: group.control, col: c, top: top, y0: cy, y1: cy + headerHeight(group), wide: wide });
+                stops[c].push({
+                    row: group.control,
+                    col: c,
+                    top: top,
+                    y0: cy,
+                    y1: cy + headerHeight(group),
+                    wide: wide
+                });
             cy += headerHeight(group);
             for (r = 0; r < group.rows.length; r++) {
                 var first = r === 0 && !(group.control >= 0);
-                stops[c].push({ row: group.rows[r], col: c, top: first ? top : cy, y0: cy, y1: cy + rowHeight, wide: wide });
+                stops[c].push({
+                    row: group.rows[r],
+                    col: c,
+                    top: first ? top : cy,
+                    y0: cy,
+                    y1: cy + rowHeight,
+                    wide: wide
+                });
                 cy += rowHeight;
             }
             for (k = 0; k < columns; k++)
@@ -85,7 +108,11 @@ FocusScope {
                     tops[k] = top + cardHeight(group) + gap;
         }
         var height = Math.max.apply(null, tops);
-        return { cards: cardsOut, stops: stops, height: height > 0 ? height - gap : 0 };
+        return {
+            cards: cardsOut,
+            stops: stops,
+            height: height > 0 ? height - gap : 0
+        };
     }
 
     function stopOf(row) {
@@ -123,7 +150,9 @@ FocusScope {
 
     // The Advanced row just opened: the cursor moves onto the first row it revealed.
     function stepInto() {
-        var k = groups.findIndex(function(g) { return g.rows.indexOf(index) >= 0; });
+        var k = groups.findIndex(function (g) {
+            return g.rows.indexOf(index) >= 0;
+        });
         if (k >= 0 && k + 1 < groups.length && groups[k + 1].rows.length > 0)
             index = groups[k + 1].rows[0];
     }
@@ -196,7 +225,7 @@ FocusScope {
     Keys.onLeftPressed: cross(-1)
     Keys.onRightPressed: cross(1)
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         var screen = api.keys.isScreenUp(event) ? -1 : api.keys.isScreenDown(event) ? 1 : 0;
         if (screen) {
             event.accepted = true;
@@ -228,7 +257,11 @@ FocusScope {
         height: cards.cardHeight(group)
         opacity: group.off && !headerFocused ? 0.55 : 1.0
 
-        Behavior on opacity { Ease { duration: Theme.durQuick } }
+        Behavior on opacity {
+            Ease {
+                duration: Theme.durQuick
+            }
+        }
 
         Rectangle {
             anchors.fill: parent
@@ -249,7 +282,9 @@ FocusScope {
             visible: card.headerHeight > 0
             color: card.headerFocused ? Theme.text : "transparent"
 
-            Behavior on color { ColorEase {} }
+            Behavior on color {
+                ColorEase {}
+            }
 
             Image {
                 id: logo
@@ -295,10 +330,7 @@ FocusScope {
                 Text {
                     visible: text !== ""
                     width: parent.width
-                    text: (card.group.meta || "")
-                          + (card.group.warning
-                             ? (card.group.meta ? " · " : "") + "<font color=\"#e0655a\">" + card.group.warning + "</font>"
-                             : "")
+                    text: (card.group.meta || "") + (card.group.warning ? (card.group.meta ? " · " : "") + "<font color=\"#e0655a\">" + card.group.warning + "</font>" : "")
                     textFormat: Text.StyledText
                     color: card.headerFocused ? card.onFocus : Theme.textMuted
                     font.family: Theme.sans
@@ -368,7 +400,11 @@ FocusScope {
         elide: Text.ElideRight
         opacity: cards.cursorShown && text !== "" ? 1.0 : 0.0
 
-        Behavior on opacity { Ease { duration: Theme.durQuick } }
+        Behavior on opacity {
+            Ease {
+                duration: Theme.durQuick
+            }
+        }
     }
 
     Flickable {
@@ -382,7 +418,11 @@ FocusScope {
         clip: true
         opacity: cards.dimmed ? 0.55 : 1.0
 
-        Behavior on opacity { Ease { duration: Theme.durQuick } }
+        Behavior on opacity {
+            Ease {
+                duration: Theme.durQuick
+            }
+        }
 
         function scrollToCurrent() {
             var s = cards.stopOf(cards.index);
@@ -390,7 +430,12 @@ FocusScope {
                 Theme.reveal(view, s.top, s.y1, height);
         }
 
-        Behavior on contentY { Ease { duration: Theme.durView; easing.type: Easing.OutQuint } }
+        Behavior on contentY {
+            Ease {
+                duration: Theme.durView
+                easing.type: Easing.OutQuint
+            }
+        }
 
         Repeater {
             model: cards.layout.cards

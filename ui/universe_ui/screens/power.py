@@ -1,6 +1,8 @@
 import os
 
-from PySide6.QtCore import Property, QObject, QTimer, Signal
+from PySide6.QtCore import QObject, QTimer, Signal
+
+from ..qt import Property
 
 SYSFS = "/sys/class/power_supply"
 FAKE = os.path.join(os.path.dirname(os.path.dirname(__file__)), "fixtures", "power_supply")
@@ -48,13 +50,16 @@ def read_sources(root):
             if percent is None:
                 continue
         kind = "pad" if _read(os.path.join(d, "scope")) == "Device" else "system"
-        out.append({
-            "name": name,
-            "kind": kind,
-            "percent": percent,
-            "charging": _read(os.path.join(d, "status")) in ("Charging", "Full"),
-            "inputs": _read(os.path.join(d, "inputs")).split() or (read_inputs(os.path.join(os.path.dirname(root), "input")).get(os.path.realpath(os.path.join(d, "..", "..")), []) if kind == "pad" else []),
-        })
+        out.append(
+            {
+                "name": name,
+                "kind": kind,
+                "percent": percent,
+                "charging": _read(os.path.join(d, "status")) in ("Charging", "Full"),
+                "inputs": _read(os.path.join(d, "inputs")).split()
+                or (read_inputs(os.path.join(os.path.dirname(root), "input")).get(os.path.realpath(os.path.join(d, "..", "..")), []) if kind == "pad" else []),
+            }
+        )
     out.sort(key=lambda s: (s["kind"] != "system", s["name"]))
     return out
 
@@ -81,5 +86,5 @@ class Power(QObject):
     def forInput(self, event):
         return next((s for s in self._sources if event in s["inputs"]), None)
 
-    sources = Property("QVariantList", lambda self: [dict(s) for s in self._sources], notify=sourcesChanged)
+    sources = Property(list, lambda self: [dict(s) for s in self._sources], notify=sourcesChanged)
     count = Property(int, lambda self: len(self._sources), notify=sourcesChanged)

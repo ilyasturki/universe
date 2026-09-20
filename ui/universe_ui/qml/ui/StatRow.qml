@@ -13,12 +13,24 @@ Row {
                 return [];
             var out = [];
             if (root.game.playTime > 0)
-                out.push({ label: "PLAYTIME", value: Format.playTime(root.game.playTime) });
-            out.push({ label: "LAST PLAYED", value: Format.lastPlayed(root.game.lastPlayed) });
+                out.push({
+                    label: "PLAYTIME",
+                    value: Format.playTime(root.game.playTime)
+                });
+            out.push({
+                label: "LAST PLAYED",
+                value: Format.lastPlayed(root.game.lastPlayed)
+            });
             if (root.game.playCount > 0)
-                out.push({ label: "SESSIONS", value: root.game.playCount.toString() });
+                out.push({
+                    label: "SESSIONS",
+                    value: root.game.playCount.toString()
+                });
             if (root.game.releaseYear > 0)
-                out.push({ label: "RELEASED", value: root.game.releaseYear.toString() });
+                out.push({
+                    label: "RELEASED",
+                    value: root.game.releaseYear.toString()
+                });
             return out;
         }
 

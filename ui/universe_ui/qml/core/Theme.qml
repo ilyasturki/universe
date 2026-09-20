@@ -8,7 +8,9 @@ QtObject {
     property real vscale: 1.0
     // The software scenegraph (offscreen tests) drops every ShaderEffect; set by the root.
     property bool software: false
-    function dp(v) { return Math.round(v * t.vscale) }
+    function dp(v) {
+        return Math.round(v * t.vscale);
+    }
 
     function reveal(flick, top, bottom, height) {
         var target = top < flick.contentY ? top : bottom > flick.contentY + height ? bottom - height : flick.contentY;
@@ -59,10 +61,18 @@ QtObject {
     }
 
     // Loaded for the side effect: the weight faces register under the Archivo family.
-    readonly property FontLoader fontRegular: FontLoader { source: Qt.resolvedUrl("../assets/fonts/Archivo-Regular.ttf") }
-    readonly property FontLoader fontMedium: FontLoader { source: Qt.resolvedUrl("../assets/fonts/Archivo-Medium.ttf") }
-    readonly property FontLoader fontSemiBold: FontLoader { source: Qt.resolvedUrl("../assets/fonts/Archivo-SemiBold.ttf") }
-    readonly property FontLoader fontBold: FontLoader { source: Qt.resolvedUrl("../assets/fonts/Archivo-Bold.ttf") }
+    readonly property FontLoader fontRegular: FontLoader {
+        source: Qt.resolvedUrl("../assets/fonts/Archivo-Regular.ttf")
+    }
+    readonly property FontLoader fontMedium: FontLoader {
+        source: Qt.resolvedUrl("../assets/fonts/Archivo-Medium.ttf")
+    }
+    readonly property FontLoader fontSemiBold: FontLoader {
+        source: Qt.resolvedUrl("../assets/fonts/Archivo-SemiBold.ttf")
+    }
+    readonly property FontLoader fontBold: FontLoader {
+        source: Qt.resolvedUrl("../assets/fonts/Archivo-Bold.ttf")
+    }
 
     readonly property string sans: fontRegular.name
 }

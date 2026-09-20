@@ -11,8 +11,8 @@ FocusScope {
     property int current: 0
 
     signal requested(int index)
-    signal entered()
-    signal escapedUp()
+    signal entered
+    signal escapedUp
 
     // Thirteen entries and four group heads fit the page under the title.
     readonly property real entryHeight: Theme.dp(46)
@@ -32,25 +32,25 @@ FocusScope {
         Sound.tick();
     }
 
-    Keys.onUpPressed: function(event) {
+    Keys.onUpPressed: function (event) {
         if (list.current === 0)
             list.escapedUp();
         else
             list.step(-1);
     }
-    Keys.onDownPressed: function(event) {
+    Keys.onDownPressed: function (event) {
         if (list.current === list.sections.length - 1)
             Sound.edge();
         else
             list.step(1);
     }
     Keys.onLeftPressed: Sound.edge()
-    Keys.onRightPressed: function(event) {
+    Keys.onRightPressed: function (event) {
         Sound.panel();
         list.entered();
     }
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         if (event.isAutoRepeat)
             return;
         if (api.keys.isAccept(event)) {
@@ -97,7 +97,9 @@ FocusScope {
                     radius: Theme.dp(14)
                     color: focused ? Theme.text : active ? Qt.rgba(1, 1, 1, 0.09) : "transparent"
 
-                    Behavior on color { ColorEase {} }
+                    Behavior on color {
+                        ColorEase {}
+                    }
                 }
 
                 MenuGlyph {

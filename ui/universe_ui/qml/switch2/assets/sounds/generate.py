@@ -31,7 +31,7 @@ def mix(*parts):
 
 
 def write(name, samples):
-    peak = max(1e-6, max(abs(s) for s in samples))
+    peak = max(1e-06, *(abs(s) for s in samples))
     k = 0.85 / peak if peak > 0.85 else 1.0
     with wave.open(os.path.join(OUT, name + ".wav"), "wb") as w:
         w.setnchannels(1)
@@ -46,17 +46,22 @@ def at(ms):
 
 SOUNDS = {
     "tick": tone(2600, 38, gain=0.32, attack=0.001, curve=3.0, harmonics=((1, 1.0), (2, 0.25))),
-    "ok": mix((0, tone(880, 90, gain=0.45, curve=2.6, sweep=0.18, harmonics=((1, 1.0), (2, 0.35), (3, 0.12)))),
-              (at(28), tone(1320, 70, gain=0.28, curve=2.8, harmonics=((1, 1.0), (2, 0.2))))),
-    "back": mix((0, tone(660, 95, gain=0.42, curve=2.6, sweep=-0.14, harmonics=((1, 1.0), (2, 0.3)))),
-                (at(30), tone(495, 70, gain=0.26, curve=2.8))),
+    "ok": mix(
+        (0, tone(880, 90, gain=0.45, curve=2.6, sweep=0.18, harmonics=((1, 1.0), (2, 0.35), (3, 0.12)))),
+        (at(28), tone(1320, 70, gain=0.28, curve=2.8, harmonics=((1, 1.0), (2, 0.2)))),
+    ),
+    "back": mix((0, tone(660, 95, gain=0.42, curve=2.6, sweep=-0.14, harmonics=((1, 1.0), (2, 0.3)))), (at(30), tone(495, 70, gain=0.26, curve=2.8))),
     "edge": tone(420, 45, gain=0.22, curve=3.2, harmonics=((1, 1.0), (2, 0.15))),
     "type": tone(1900, 26, gain=0.24, attack=0.001, curve=3.4),
-    "home": mix((0, tone(1046, 110, gain=0.36, curve=2.4, harmonics=((1, 1.0), (2, 0.25)))),
-                (at(95), tone(1568, 150, gain=0.3, curve=2.2, harmonics=((1, 1.0), (2, 0.2))))),
-    "launch": mix((0, tone(784, 180, gain=0.34, curve=2.0, harmonics=((1, 1.0), (2, 0.3)))),
-                  (at(110), tone(1175, 220, gain=0.3, curve=1.9, harmonics=((1, 1.0), (2, 0.25)))),
-                  (at(220), tone(1568, 320, gain=0.28, curve=1.7, harmonics=((1, 1.0), (2, 0.2))))),
+    "home": mix(
+        (0, tone(1046, 110, gain=0.36, curve=2.4, harmonics=((1, 1.0), (2, 0.25)))),
+        (at(95), tone(1568, 150, gain=0.3, curve=2.2, harmonics=((1, 1.0), (2, 0.2)))),
+    ),
+    "launch": mix(
+        (0, tone(784, 180, gain=0.34, curve=2.0, harmonics=((1, 1.0), (2, 0.3)))),
+        (at(110), tone(1175, 220, gain=0.3, curve=1.9, harmonics=((1, 1.0), (2, 0.25)))),
+        (at(220), tone(1568, 320, gain=0.28, curve=1.7, harmonics=((1, 1.0), (2, 0.2)))),
+    ),
     "select": mix((0, tone(1175, 60, gain=0.34, curve=2.8)), (at(40), tone(1568, 80, gain=0.28, curve=2.8))),
     "open": mix((0, tone(740, 80, gain=0.3, curve=2.6)), (at(50), tone(988, 110, gain=0.28, curve=2.4))),
 }

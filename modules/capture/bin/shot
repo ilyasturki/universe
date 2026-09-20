@@ -7,6 +7,8 @@ import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import contextlib
+
 from _common import WINDOWS_BUS_NAME, bus_call_bool, extension_ready, load_settings, log, timeline
 
 TAKE_TIMEOUT_S = 15
@@ -14,7 +16,10 @@ TAKE_TIMEOUT_S = 15
 
 def take_in_shell(path, window, cursor):
     """org.universe.Windows.Screenshot: answers once the pixels are grabbed, the PNG lands a moment later."""
-    ok = bus_call_bool([WINDOWS_BUS_NAME, "/org/universe/Windows", WINDOWS_BUS_NAME, "Screenshot", "sbb", path, "true" if window else "false", "true" if cursor else "false"], timeout=TAKE_TIMEOUT_S)
+    ok = bus_call_bool(
+        [WINDOWS_BUS_NAME, "/org/universe/Windows", WINDOWS_BUS_NAME, "Screenshot", "sbb", path, "true" if window else "false", "true" if cursor else "false"],
+        timeout=TAKE_TIMEOUT_S,
+    )
     return ok, "" if ok else "gnome-shell refused or did not answer"
 
 
@@ -23,16 +28,16 @@ def take(screen, path):
     with tempfile.TemporaryFile(mode="w+") as errf:
         proc = subprocess.Popen(
             ["gpu-screen-recorder", "-w", screen, "-o", path],
-            stdout=subprocess.DEVNULL, stderr=errf, start_new_session=True,
+            stdout=subprocess.DEVNULL,
+            stderr=errf,
+            start_new_session=True,
         )
         try:
             proc.wait(timeout=TAKE_TIMEOUT_S)
         except subprocess.TimeoutExpired:
             log(f"gpu-screen-recorder -o {path} did not exit within {TAKE_TIMEOUT_S}s")
-        try:
+        with contextlib.suppress(ProcessLookupError):
             os.killpg(proc.pid, signal.SIGTERM)
-        except ProcessLookupError:
-            pass
         errf.seek(0)
         stderr = errf.read()
     ok = proc.returncode == 0 and os.path.exists(path) and os.path.getsize(path) > 0

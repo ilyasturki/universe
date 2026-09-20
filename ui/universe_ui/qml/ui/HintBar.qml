@@ -21,7 +21,9 @@ Item {
         spacing: Theme.dp(40)
 
         onHintsChanged: {
-            var g = hints.map(function(h) { return h.glyph; });
+            var g = hints.map(function (h) {
+                return h.glyph;
+            });
             if (g.join() !== glyphs.join())
                 glyphs = g;
         }

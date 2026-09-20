@@ -13,7 +13,9 @@ FocusScope {
     Component.onCompleted: {
         Sound.preload();
         if (api.theme.takeLanding() === "themes")
-            push("pages/SettingsPage.qml", { section: "themes" });
+            push("pages/SettingsPage.qml", {
+                section: "themes"
+            });
         else if (api.screens.onboarding.needed)
             push("pages/OnboardingPage.qml", {});
     }
@@ -42,27 +44,64 @@ FocusScope {
     property var pendingLaunch: null
 
     readonly property var barItems: [
-        { id: "software", icon: "grid", color: Theme.barRed, label: "All Software", source: "pages/AllSoftwarePage.qml" },
-        { id: "news", icon: "news", color: Theme.barGreen, label: "News", source: "pages/NewsPage.qml" },
-        { id: "shop", icon: "shop", color: Theme.barOrange, label: "Install", source: "pages/InstallPage.qml" },
-        { id: "album", icon: "album", color: Theme.barBlue, label: "Album", source: "pages/AlbumPage.qml" },
-        { id: "controllers", icon: "controllers", color: Theme.barGrey, label: "Controllers", source: "pages/ControllersPage.qml" },
-        { id: "settings", icon: "settings", color: Theme.barGrey, label: "System Settings", source: "pages/SettingsPage.qml" },
-        { id: "power", icon: "power", color: Theme.barGrey, label: "Quit" }
+        {
+            id: "software",
+            icon: "grid",
+            color: Theme.barRed,
+            label: "All Software",
+            source: "pages/AllSoftwarePage.qml"
+        },
+        {
+            id: "news",
+            icon: "news",
+            color: Theme.barGreen,
+            label: "News",
+            source: "pages/NewsPage.qml"
+        },
+        {
+            id: "shop",
+            icon: "shop",
+            color: Theme.barOrange,
+            label: "Install",
+            source: "pages/InstallPage.qml"
+        },
+        {
+            id: "album",
+            icon: "album",
+            color: Theme.barBlue,
+            label: "Album",
+            source: "pages/AlbumPage.qml"
+        },
+        {
+            id: "controllers",
+            icon: "controllers",
+            color: Theme.barGrey,
+            label: "Controllers",
+            source: "pages/ControllersPage.qml"
+        },
+        {
+            id: "settings",
+            icon: "settings",
+            color: Theme.barGrey,
+            label: "System Settings",
+            source: "pages/SettingsPage.qml"
+        },
+        {
+            id: "power",
+            icon: "power",
+            color: Theme.barGrey,
+            label: "Quit"
+        }
     ]
 
     readonly property Item topPage: pages.count > 0 && pages.itemAt(pages.count - 1) ? pages.itemAt(pages.count - 1).item : null
-    readonly property var hints: dialog.open ? dialog.hints
-                               : sheet.open ? sheet.hints
-                               : picker.open ? picker.hints
-                               : folder.open ? folder.hints
-                               : launching ? []
-                               : !onHome && topPage ? topPage.hints
-                               : homeFocus === "bar" ? bottomBar.hints
-                               : home.hints
+    readonly property var hints: dialog.open ? dialog.hints : sheet.open ? sheet.hints : picker.open ? picker.hints : folder.open ? folder.hints : launching ? [] : !onHome && topPage ? topPage.hints : homeFocus === "bar" ? bottomBar.hints : home.hints
 
     function push(source, args) {
-        stack.append({ source: source, argsJson: JSON.stringify(args || {}) });
+        stack.append({
+            source: source,
+            argsJson: JSON.stringify(args || {})
+        });
         Qt.callLater(focusTop);
     }
 
@@ -90,23 +129,51 @@ FocusScope {
 
     function openBar(item) {
         if (item.id === "power")
-            dialog.show({ message: "Quit Universe?", detail: api.universe.currentSession ? "The running game is closed with it." : "", buttons: ["Cancel", "Quit"] },
-                        function(i) { if (i === 1) Qt.quit(); else focusTop(); });
+            dialog.show({
+                message: "Quit Universe?",
+                detail: api.universe.currentSession ? "The running game is closed with it." : "",
+                buttons: ["Cancel", "Quit"]
+            }, function (i) {
+                if (i === 1)
+                    Qt.quit();
+                else
+                    focusTop();
+            });
         else
             push(item.source, {});
     }
 
     function after(done) {
-        return function(v) { if (done) done(v); focusTop(); };
+        return function (v) {
+            if (done)
+                done(v);
+            focusTop();
+        };
     }
 
-    function dialogAsk(spec, done) { dialog.show(spec, after(done)); }
-    function prompt(spec, done) { sheet.show(spec, after(done)); }
-    function pick(spec, done) { picker.show(spec, after(done)); }
-    function browse(spec, done) { folder.show(spec, after(done)); }
+    function dialogAsk(spec, done) {
+        dialog.show(spec, after(done));
+    }
+    function prompt(spec, done) {
+        sheet.show(spec, after(done));
+    }
+    function pick(spec, done) {
+        picker.show(spec, after(done));
+    }
+    function browse(spec, done) {
+        folder.show(spec, after(done));
+    }
 
     function menu(title, items, done) {
-        pick({ title: title, choices: items.map(function(i) { return i.label; }) }, function(i) { if (i >= 0) done(items[i].act); });
+        pick({
+            title: title,
+            choices: items.map(function (i) {
+                return i.label;
+            })
+        }, function (i) {
+            if (i >= 0)
+                done(items[i].act);
+        });
     }
 
     function launch(game) {
@@ -118,15 +185,17 @@ FocusScope {
                 return;
             }
             var running = session.title;
-            dialogAsk({ message: "Close " + running + " and start " + game.title + "?",
-                        detail: "Unsaved progress in " + running + " will be lost.",
-                        buttons: ["Cancel", "Close and start"], danger: 1 },
-                      function(i) {
-                          if (i !== 1)
-                              return;
-                          root.pendingLaunch = game;
-                          root.stopSession();
-                      });
+            dialogAsk({
+                message: "Close " + running + " and start " + game.title + "?",
+                detail: "Unsaved progress in " + running + " will be lost.",
+                buttons: ["Cancel", "Close and start"],
+                danger: 1
+            }, function (i) {
+                if (i !== 1)
+                    return;
+                root.pendingLaunch = game;
+                root.stopSession();
+            });
             return;
         }
         Sound.play("launch");
@@ -148,9 +217,15 @@ FocusScope {
             Sound.play("edge");
             return;
         }
-        dialogAsk({ message: "Close the software?", detail: "Unsaved progress in " + session.title + " will be lost.",
-                    buttons: ["Cancel", "Close"], danger: 1 },
-                  function(i) { if (i === 1) root.stopSession(); });
+        dialogAsk({
+            message: "Close the software?",
+            detail: "Unsaved progress in " + session.title + " will be lost.",
+            buttons: ["Cancel", "Close"],
+            danger: 1
+        }, function (i) {
+            if (i === 1)
+                root.stopSession();
+        });
     }
 
     // The unit gets a SIGTERM, a second one after ~3 s: the toast covers the wait.
@@ -161,7 +236,9 @@ FocusScope {
         api.home.stop();
     }
 
-    function showToast(text) { toast.show(text); }
+    function showToast(text) {
+        toast.show(text);
+    }
 
     Rectangle {
         anchors.fill: parent
@@ -175,7 +252,9 @@ FocusScope {
         opacity: root.onHome && !root.launching ? 1.0 : 0.0
         visible: opacity > 0.01
 
-        Behavior on opacity { Ease {} }
+        Behavior on opacity {
+            Ease {}
+        }
 
         TopBar {
             anchors.top: parent.top
@@ -201,7 +280,9 @@ FocusScope {
             y: Theme.dp(Theme.barY)
             items: root.barItems
             focus: root.onHome && root.homeFocus === "bar"
-            onActivated: function(item) { root.openBar(item); }
+            onActivated: function (item) {
+                root.openBar(item);
+            }
             onEscapedUp: {
                 root.homeFocus = "home";
                 home.forceActiveFocus();
@@ -224,7 +305,9 @@ FocusScope {
             visible: opacity > 0.01
             focus: isTop
 
-            Behavior on opacity { Ease {} }
+            Behavior on opacity {
+                Ease {}
+            }
 
             Rectangle {
                 anchors.fill: parent
@@ -233,7 +316,9 @@ FocusScope {
             }
 
             // Bound after creation, so a page fades in instead of appearing at full opacity.
-            Component.onCompleted: opacity = Qt.binding(function() { return isTop && !root.launching ? 1.0 : 0.0; })
+            Component.onCompleted: opacity = Qt.binding(function () {
+                return isTop && !root.launching ? 1.0 : 0.0;
+            })
 
             onLoaded: {
                 item.shell = root;
@@ -272,7 +357,11 @@ FocusScope {
         opacity: shown ? 1.0 : 0.0
         visible: opacity > 0.01
 
-        Behavior on opacity { Ease { duration: Theme.durQuick } }
+        Behavior on opacity {
+            Ease {
+                duration: Theme.durQuick
+            }
+        }
 
         Timer {
             interval: 60000
@@ -349,7 +438,7 @@ FocusScope {
             root.launching = false;
             root.focusTop();
         }
-        onFailed: function(game, message) {
+        onFailed: function (game, message) {
             toast.show("Could not start" + (game ? " " + game.title : "") + (message ? ": " + message : ""));
         }
     }
@@ -365,7 +454,9 @@ FocusScope {
             toast.show(message);
             root.pendingLaunch = null;
         }
-        function onNotice(message) { toast.show(message); }
+        function onNotice(message) {
+            toast.show(message);
+        }
         function onSessionEnded(sessionId, id, duration) {
             var game = api.allGames.byId(id);
             if (game)
@@ -378,7 +469,9 @@ FocusScope {
 
     Connections {
         target: api.screens.controller
-        function onMacroNotice(text) { toast.show(text); }
+        function onMacroNotice(text) {
+            toast.show(text);
+        }
     }
 
     // B held: the way out from anywhere, the bar's own Quit question.
@@ -386,7 +479,9 @@ FocusScope {
         target: api.keys
         function onCancelHeld() {
             if (!root.modal)
-                openBar({ id: "power" });
+                openBar({
+                    id: "power"
+                });
         }
     }
 
@@ -406,7 +501,7 @@ FocusScope {
         }
     }
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         if (root.modal) {
             event.accepted = true;
             if (root.launching && launchScreen.waiting && launchScreen.launchedSession !== "" && !event.isAutoRepeat && api.keys.isCancel(event))

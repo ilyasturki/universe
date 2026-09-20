@@ -46,14 +46,18 @@ def test_sort_title_drops_leading_article(app):
 
 
 def test_game_decodes_variants(app):
-    game = Game({
-        "id": "x", "title": "X", "favorite": True,
-        "stats": {"hours": 1.5, "play_count": "3", "last_played": "2026-09-09T22:41:00+02:00"},
-        "metadata": {"developer": "A, B", "genres": ["Action"], "release_year": "2016",
-                     "extra": {"metacritic": 61}},
-        "media": {"box_front": "/tmp/box.png", "square": "/tmp/sq.png", "screenshots": ["/tmp/a.png", "http://x/b.png"]},
-        "tags": "rpg, sci-fi",
-    }, None)
+    game = Game(
+        {
+            "id": "x",
+            "title": "X",
+            "favorite": True,
+            "stats": {"hours": 1.5, "play_count": "3", "last_played": "2026-09-09T22:41:00+02:00"},
+            "metadata": {"developer": "A, B", "genres": ["Action"], "release_year": "2016", "extra": {"metacritic": 61}},
+            "media": {"box_front": "/tmp/box.png", "square": "/tmp/sq.png", "screenshots": ["/tmp/a.png", "http://x/b.png"]},
+            "tags": "rpg, sci-fi",
+        },
+        None,
+    )
     assert game.playTime == 5400
     assert game.playCount == 3
     assert isinstance(game.lastPlayed, QDateTime) and game.lastPlayed.isValid()
@@ -63,15 +67,24 @@ def test_game_decodes_variants(app):
     assert game.extra == {"metacritic": [61]}
     assert game.tags == ["rpg", "sci-fi"]
     assert game.assets.boxFront.isLocalFile() and game.assets.square.isLocalFile()
-    assert [u.toString(QUrl.FormattingOptions(QUrl.UrlFormattingOption.RemoveQuery)) for u in game.assets.screenshotList] == ["file:///tmp/a.png", "http://x/b.png"]
+    assert [u.toString(QUrl.FormattingOptions(QUrl.UrlFormattingOption.RemoveQuery)) for u in game.assets.screenshotList] == [
+        "file:///tmp/a.png",
+        "http://x/b.png",
+    ]
 
 
 def test_game_decodes_daemon_shapes(app):
-    game = Game({
-        "id": "y", "title": "Y", "platform": "Nintendo Switch", "release_year": 2017,
-        "source": {"kind": "lutris", "lutris_slug": "y", "gog_id": ""},
-        "metadata": {"developers": ["N"], "metacritic": 97, "players": 0, "rawg_id": 0, "sgdb_id": 12, "hltb_main": 50},
-    }, None)
+    game = Game(
+        {
+            "id": "y",
+            "title": "Y",
+            "platform": "Nintendo Switch",
+            "release_year": 2017,
+            "source": {"kind": "lutris", "lutris_slug": "y", "gog_id": ""},
+            "metadata": {"developers": ["N"], "metacritic": 97, "players": 0, "rawg_id": 0, "sgdb_id": 12, "hltb_main": 50},
+        },
+        None,
+    )
     assert game.source == "lutris"
     assert game.platform == "Nintendo Switch"
     assert game.releaseYear == 2017

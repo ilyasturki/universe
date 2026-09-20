@@ -13,7 +13,7 @@ FocusScope {
     readonly property var currentRow: index >= 0 && index < model.length ? model[index] : null
 
     signal activated(int index, var row)
-    signal escapedLeft()
+    signal escapedLeft
 
     readonly property real rowHeight: Theme.dp(113)
     readonly property real headingHeight: Theme.dp(96)
@@ -22,7 +22,11 @@ FocusScope {
     readonly property real room: Theme.dp(Theme.ringRoom)
 
     function stops() {
-        return model.map(function(r, i) { return i; }).filter(function(i) { return !model[i].heading; });
+        return model.map(function (r, i) {
+            return i;
+        }).filter(function (i) {
+            return !model[i].heading;
+        });
     }
 
     function heightOf(i) {
@@ -31,7 +35,9 @@ FocusScope {
     }
 
     function yOf(i) {
-        return model.slice(0, i).reduce(function(y, r, k) { return y + heightOf(k); }, 0);
+        return model.slice(0, i).reduce(function (y, r, k) {
+            return y + heightOf(k);
+        }, 0);
     }
 
     readonly property real contentHeight: yOf(model.length)
@@ -39,30 +45,54 @@ FocusScope {
     function edit(row, apply) {
         var choices = row.choices || [];
         if (row.type === "enum" || ((row.type === "int" || row.type === "string") && choices.length > 0)) {
-            var opts = choices.map(function(c) { return String(c); });
+            var opts = choices.map(function (c) {
+                return String(c);
+            });
             if (row.type !== "enum")
                 opts.push("Type a value…");
             var current = opts.indexOf(String(row.value));
-            shell.pick({ title: row.label, choices: opts, index: current >= 0 ? current : 0 }, function(i) {
+            shell.pick({
+                title: row.label,
+                choices: opts,
+                index: current >= 0 ? current : 0
+            }, function (i) {
                 if (i < 0)
                     return;
                 if (i < choices.length) {
                     Sound.play("select");
                     apply(choices[i]);
                 } else {
-                    shell.prompt({ title: row.label, value: row.value, numeric: row.type === "int" }, function(v) { if (v !== null) apply(v); });
+                    shell.prompt({
+                        title: row.label,
+                        value: row.value,
+                        numeric: row.type === "int"
+                    }, function (v) {
+                        if (v !== null)
+                            apply(v);
+                    });
                 }
             });
             return;
         }
         if (row.type === "path") {
-            shell.browse({ title: row.label, path: row.value, files: /(_path|_file|file|exe)$/.test(String(row.key || "")) }, function(path) {
+            shell.browse({
+                title: row.label,
+                path: row.value,
+                files: /(_path|_file|file|exe)$/.test(String(row.key || ""))
+            }, function (path) {
                 if (path !== null)
                     apply(path);
             });
             return;
         }
-        shell.prompt({ title: row.label, value: row.value, numeric: row.type === "int" }, function(v) { if (v !== null) apply(v); });
+        shell.prompt({
+            title: row.label,
+            value: row.value,
+            numeric: row.type === "int"
+        }, function (v) {
+            if (v !== null)
+                apply(v);
+        });
     }
 
     function reset() {
@@ -122,7 +152,7 @@ FocusScope {
     }
     Keys.onRightPressed: Sound.play("edge")
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         var screen = api.keys.isScreenUp(event) ? -1 : api.keys.isScreenDown(event) ? 1 : 0;
         if (screen) {
             event.accepted = true;
@@ -166,7 +196,9 @@ FocusScope {
             Theme.reveal(view, top, bottom, height);
         }
 
-        Behavior on contentY { Ease {} }
+        Behavior on contentY {
+            Ease {}
+        }
 
         Repeater {
             model: rows.model

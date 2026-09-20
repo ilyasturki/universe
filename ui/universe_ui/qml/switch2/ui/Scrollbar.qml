@@ -20,6 +20,8 @@ Item {
         radius: width / 2
         color: Theme.thumb
 
-        Behavior on y { Ease {} }
+        Behavior on y {
+            Ease {}
+        }
     }
 }

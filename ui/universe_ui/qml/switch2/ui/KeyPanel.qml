@@ -19,10 +19,10 @@ Rectangle {
     property int sideIndex: 1
 
     signal typed(string value)
-    signal backspaced()
-    signal accepted()
+    signal backspaced
+    signal accepted
     // Up from the top row: the owner may move on to what sits above the panel.
-    signal escapedUp()
+    signal escapedUp
 
     readonly property real keyW: Theme.dp(128 * scale)
     readonly property real keyH: Theme.dp(72 * scale)
@@ -43,23 +43,55 @@ Rectangle {
         shift = false;
     }
 
-    function chars(s) { return s.split(""); }
+    function chars(s) {
+        return s.split("");
+    }
 
-    readonly property var rows: numeric
-        ? [ chars("123"), chars("456"), chars("789"), chars("-0.") ]
-        : [ chars("1234567890-"), chars("qwertyuiop/"), chars("asdfghjkl:'"), chars("zxcvbnm,.?!") ]
-    readonly property var bottomRow: numeric ? [] : [ { label: "⇧", action: "shift" }, { label: "ABC", action: "abc" }, { label: "#+=", action: "symbols" }, { label: "Space", action: "space", value: " " } ]
-    readonly property var side: [ { label: "⌫", action: "backspace" }, { label: "OK", action: "ok" } ]
-    readonly property var symbolRows: [ chars("~`!@#$%^&*("), chars(")_+={}[]|\\;"), chars("\"<>/?,.-:'"), chars("¿¡€£¥•…—–") ]
+    readonly property var rows: numeric ? [chars("123"), chars("456"), chars("789"), chars("-0.")] : [chars("1234567890-"), chars("qwertyuiop/"), chars("asdfghjkl:'"), chars("zxcvbnm,.?!")]
+    readonly property var bottomRow: numeric ? [] : [
+        {
+            label: "⇧",
+            action: "shift"
+        },
+        {
+            label: "ABC",
+            action: "abc"
+        },
+        {
+            label: "#+=",
+            action: "symbols"
+        },
+        {
+            label: "Space",
+            action: "space",
+            value: " "
+        }
+    ]
+    readonly property var side: [
+        {
+            label: "⌫",
+            action: "backspace"
+        },
+        {
+            label: "OK",
+            action: "ok"
+        }
+    ]
+    readonly property var symbolRows: [chars("~`!@#$%^&*("), chars(")_+={}[]|\\;"), chars("\"<>/?,.-:'"), chars("¿¡€£¥•…—–")]
     readonly property var shownRows: symbols && !numeric ? symbolRows : rows
 
     function keyAt(r, c) {
         if (r < shownRows.length)
-            return { label: shownRows[r][c], value: shownRows[r][c] };
+            return {
+                label: shownRows[r][c],
+                value: shownRows[r][c]
+            };
         return bottomRow[c];
     }
 
-    function rowLength(r) { return r < shownRows.length ? shownRows[r].length : bottomRow.length; }
+    function rowLength(r) {
+        return r < shownRows.length ? shownRows[r].length : bottomRow.length;
+    }
     readonly property int rowCount: shownRows.length + (bottomRow.length > 0 ? 1 : 0)
 
     function put(ch) {

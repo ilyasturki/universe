@@ -15,7 +15,9 @@ FocusScope {
     readonly property bool bare: true
 
     readonly property var store: api.screens.album
-    readonly property var row: store.rows.filter(function(r) { return r.session === args.session; })[0] || null
+    readonly property var row: store.rows.filter(function (r) {
+        return r.session === args.session;
+    })[0] || null
     readonly property var frames: row ? store.frameMap[row.session] || null : null
     readonly property var game: row ? api.allGames.byId(row.gameId) : null
 
@@ -23,22 +25,36 @@ FocusScope {
     readonly property bool playing: player.playbackState === MediaPlayer.PlayingState
     readonly property bool stopped: player.playbackState === MediaPlayer.StoppedState
     readonly property bool failed: player.error !== MediaPlayer.NoError
-    readonly property real duration: player.duration > 0 ? player.duration
-                                   : frames && frames.duration > 0 ? frames.duration * 1000
-                                   : row ? row.duration_s * 1000 : 0
+    readonly property real duration: player.duration > 0 ? player.duration : frames && frames.duration > 0 ? frames.duration * 1000 : row ? row.duration_s * 1000 : 0
 
     readonly property bool scrubbing: scrub.scrubbing
     readonly property real shownPos: scrub.shownPos
 
     readonly property var hints: [
-        { glyph: "Start", label: footerShown ? "Hide Footer" : "Show Footer" },
-        { glyph: "Y", label: playing ? "Pause" : "Play" },
-        { glyph: "X", label: "Journal entry", dim: !(row && row.hasJournal) },
-        { glyph: "B", label: "Back" },
-        { glyph: "A", label: "Menu" }
+        {
+            glyph: "Start",
+            label: footerShown ? "Hide Footer" : "Show Footer"
+        },
+        {
+            glyph: "Y",
+            label: playing ? "Pause" : "Play"
+        },
+        {
+            glyph: "X",
+            label: "Journal entry",
+            dim: !(row && row.hasJournal)
+        },
+        {
+            glyph: "B",
+            label: "Back"
+        },
+        {
+            glyph: "A",
+            label: "Menu"
+        }
     ]
 
-    signal closeRequested()
+    signal closeRequested
 
     focus: true
 
@@ -73,7 +89,10 @@ FocusScope {
         }
         Sound.play("ok");
         player.pause();
-        shell.push("pages/ArticlePage.qml", { session: row.session, gameId: row.gameId });
+        shell.push("pages/ArticlePage.qml", {
+            session: row.session,
+            gameId: row.gameId
+        });
     }
 
     function wake() {
@@ -88,16 +107,32 @@ FocusScope {
 
     function menu() {
         Sound.play("ok");
-        var items = row && row.hasJournal ? [{ label: "Open journal entry", act: "journal" }] : [];
-        items.push({ label: "Show file name", act: "name" });
-        items.push({ label: "Remove recording…", act: "remove" });
-        shell.menu(row ? row.gameTitle + " · " + row.dateText : "", items, function(act) {
+        var items = row && row.hasJournal ? [
+            {
+                label: "Open journal entry",
+                act: "journal"
+            }
+        ] : [];
+        items.push({
+            label: "Show file name",
+            act: "name"
+        });
+        items.push({
+            label: "Remove recording…",
+            act: "remove"
+        });
+        shell.menu(row ? row.gameTitle + " · " + row.dateText : "", items, function (act) {
             if (act === "journal") {
                 player.pause();
-                shell.push("pages/ArticlePage.qml", { session: row.session, gameId: row.gameId });
+                shell.push("pages/ArticlePage.qml", {
+                    session: row.session,
+                    gameId: row.gameId
+                });
             } else if (act === "remove") {
                 player.pause();
-                Removal.recording(shell, api.screens, row, function() { leave(); });
+                Removal.recording(shell, api.screens, row, function () {
+                    leave();
+                });
             } else {
                 shell.showToast(row ? row.path : "");
             }
@@ -118,7 +153,7 @@ FocusScope {
         onWoke: page.wake()
     }
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         var arrow = event.key === Qt.Key_Left || event.key === Qt.Key_Right;
         if (event.isAutoRepeat && !arrow)
             return;
@@ -151,7 +186,7 @@ FocusScope {
         }
     }
 
-    Keys.onReleased: function(event) {
+    Keys.onReleased: function (event) {
         if (!event.isAutoRepeat && (event.key === Qt.Key_Left || event.key === Qt.Key_Right))
             scrub.release();
     }
@@ -181,7 +216,11 @@ FocusScope {
                     asynchronous: true
                     opacity: status === Image.Ready ? 1.0 : 0.0
 
-                    Behavior on opacity { Ease { duration: Theme.durFade } }
+                    Behavior on opacity {
+                        Ease {
+                            duration: Theme.durFade
+                        }
+                    }
                 }
             }
         }
@@ -197,7 +236,9 @@ FocusScope {
         id: player
         videoOutput: video
         audioOutput: AudioOutput {}
-        onErrorOccurred: function(error, message) { page.wake(); }
+        onErrorOccurred: function (error, message) {
+            page.wake();
+        }
     }
 
     Column {
@@ -253,13 +294,23 @@ FocusScope {
         height: Theme.dp(220)
         opacity: shown ? 1.0 : 0.0
 
-        Behavior on opacity { Ease { duration: Theme.durQuick } }
+        Behavior on opacity {
+            Ease {
+                duration: Theme.durQuick
+            }
+        }
 
         Rectangle {
             anchors.fill: parent
             gradient: Gradient {
-                GradientStop { position: 0.0; color: Qt.rgba(0, 0, 0, 0.0) }
-                GradientStop { position: 1.0; color: Qt.rgba(0, 0, 0, 0.7) }
+                GradientStop {
+                    position: 0.0
+                    color: Qt.rgba(0, 0, 0, 0.0)
+                }
+                GradientStop {
+                    position: 1.0
+                    color: Qt.rgba(0, 0, 0, 0.7)
+                }
             }
         }
 
@@ -296,7 +347,11 @@ FocusScope {
                 color: "#ffffff"
                 scale: page.scrubbing ? 1.3 : 1.0
 
-                Behavior on scale { Ease { duration: Theme.durQuick } }
+                Behavior on scale {
+                    Ease {
+                        duration: Theme.durQuick
+                    }
+                }
             }
 
             Rectangle {
@@ -317,7 +372,11 @@ FocusScope {
                 opacity: page.scrubbing ? 1.0 : 0.0
                 visible: opacity > 0.01
 
-                Behavior on opacity { Ease { duration: Theme.durQuick } }
+                Behavior on opacity {
+                    Ease {
+                        duration: Theme.durQuick
+                    }
+                }
 
                 Image {
                     anchors.fill: parent

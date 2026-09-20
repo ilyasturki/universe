@@ -8,15 +8,30 @@ Item {
     property var game: null
     readonly property var art: {
         if (!game)
-            return { source: "", cropped: false };
+            return {
+                source: "",
+                cropped: false
+            };
         if (String(game.assets.background) !== "")
-            return { source: game.assets.background, cropped: false };
+            return {
+                source: game.assets.background,
+                cropped: false
+            };
         var shots = game.assets.screenshotList;
         if (shots && shots.length > 0)
-            return { source: shots[0], cropped: false };
+            return {
+                source: shots[0],
+                cropped: false
+            };
         if (String(game.assets.banner) !== "")
-            return { source: game.assets.banner, cropped: false };
-        return { source: game.assets.boxFront, cropped: true };
+            return {
+                source: game.assets.banner,
+                cropped: false
+            };
+        return {
+            source: game.assets.boxFront,
+            cropped: true
+        };
     }
 
     // 0 paints the art directly; anything above routes it through one blur pass.
@@ -30,9 +45,7 @@ Item {
 
     // At the shallowest zoom the overscan still has to cover the excursion, or the drift walks an edge into frame.
     readonly property real driftRangeX: Math.min(Theme.dp(48), Math.max(0, (overscan * zoomLow - 1) * width / 2))
-    readonly property real driftRangeY: zoomEnabled
-        ? Math.min(Theme.dp(28), Math.max(0, (overscan * zoomLow - 1) * height / 2))
-        : 0
+    readonly property real driftRangeY: zoomEnabled ? Math.min(Theme.dp(28), Math.max(0, (overscan * zoomLow - 1) * height / 2)) : 0
 
     Rectangle {
         anchors.fill: parent
@@ -91,14 +104,20 @@ Item {
             loops: Animation.Infinite
 
             NumberAnimation {
-                target: motion; property: "scale"
-                from: root.zoomLow; to: root.zoomHigh
-                duration: Theme.durZoom; easing.type: Easing.InOutQuad
+                target: motion
+                property: "scale"
+                from: root.zoomLow
+                to: root.zoomHigh
+                duration: Theme.durZoom
+                easing.type: Easing.InOutQuad
             }
             NumberAnimation {
-                target: motion; property: "scale"
-                from: root.zoomHigh; to: root.zoomLow
-                duration: Theme.durZoom; easing.type: Easing.InOutQuad
+                target: motion
+                property: "scale"
+                from: root.zoomHigh
+                to: root.zoomLow
+                duration: Theme.durZoom
+                easing.type: Easing.InOutQuad
             }
         }
 
@@ -108,14 +127,20 @@ Item {
             loops: Animation.Infinite
 
             NumberAnimation {
-                target: bgTranslate; property: "x"
-                from: -root.driftRangeX; to: root.driftRangeX
-                duration: Theme.durDriftX; easing.type: Easing.InOutQuad
+                target: bgTranslate
+                property: "x"
+                from: -root.driftRangeX
+                to: root.driftRangeX
+                duration: Theme.durDriftX
+                easing.type: Easing.InOutQuad
             }
             NumberAnimation {
-                target: bgTranslate; property: "x"
-                from: root.driftRangeX; to: -root.driftRangeX
-                duration: Theme.durDriftX; easing.type: Easing.InOutQuad
+                target: bgTranslate
+                property: "x"
+                from: root.driftRangeX
+                to: -root.driftRangeX
+                duration: Theme.durDriftX
+                easing.type: Easing.InOutQuad
             }
         }
 
@@ -125,14 +150,20 @@ Item {
             loops: Animation.Infinite
 
             NumberAnimation {
-                target: bgTranslate; property: "y"
-                from: -root.driftRangeY; to: root.driftRangeY
-                duration: Theme.durDriftY; easing.type: Easing.InOutQuad
+                target: bgTranslate
+                property: "y"
+                from: -root.driftRangeY
+                to: root.driftRangeY
+                duration: Theme.durDriftY
+                easing.type: Easing.InOutQuad
             }
             NumberAnimation {
-                target: bgTranslate; property: "y"
-                from: root.driftRangeY; to: -root.driftRangeY
-                duration: Theme.durDriftY; easing.type: Easing.InOutQuad
+                target: bgTranslate
+                property: "y"
+                from: root.driftRangeY
+                to: -root.driftRangeY
+                duration: Theme.durDriftY
+                easing.type: Easing.InOutQuad
             }
         }
     }

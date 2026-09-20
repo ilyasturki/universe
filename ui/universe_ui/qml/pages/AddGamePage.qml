@@ -11,26 +11,42 @@ FocusScope {
     property var args: ({})
     readonly property var form: api.screens.add
 
-    signal closeRequested()
+    signal closeRequested
     signal installRequested(string source, string section)
     signal message(string text)
 
-    readonly property var hints: editor.open ? editor.hints
-        : confirm.open ? confirm.hints
-        : [ { glyph: "A", label: cards.currentRow ? cards.currentRow.action || "Select" : "Select", dim: !cards.currentRow || form.busy },
-            { glyph: "dpad", label: "Navigate" },
-            { glyph: "B", label: "Back" } ]
+    readonly property var hints: editor.open ? editor.hints : confirm.open ? confirm.hints : [
+        {
+            glyph: "A",
+            label: cards.currentRow ? cards.currentRow.action || "Select" : "Select",
+            dim: !cards.currentRow || form.busy
+        },
+        {
+            glyph: "dpad",
+            label: "Navigate"
+        },
+        {
+            glyph: "B",
+            label: "Back"
+        }
+    ]
 
     readonly property real sideMargin: Theme.dp(90)
 
-    onArgsChanged: if (args.add) form.load()
+    onArgsChanged: if (args.add)
+        form.load()
 
     function activate(index, row) {
         if (form.busy) {
             Sound.edge();
         } else if (row.key === "pick_file") {
             Sound.panel();
-            editor.edit({ type: "path", key: "pick_file", label: "Game file", value: "" }, function(path) {
+            editor.edit({
+                type: "path",
+                key: "pick_file",
+                label: "Game file",
+                value: ""
+            }, function (path) {
                 if (form.setFile(path))
                     pickRunner();
             });
@@ -50,9 +66,15 @@ FocusScope {
             Sound.edge();
             return;
         }
-        editor.edit({ type: "enum", key: "runner", label: "Runner", value: choices[form.runnerIndex], choices: choices }, function(name) {
+        editor.edit({
+            type: "enum",
+            key: "runner",
+            label: "Runner",
+            value: choices[form.runnerIndex],
+            choices: choices
+        }, function (name) {
             form.pickRunner(choices.indexOf(name));
-            editor.prompt("Title of the game", form.pendingTitle(), function(title) {
+            editor.prompt("Title of the game", form.pendingTitle(), function (title) {
                 form.addGame(title) !== "" ? Sound.enter() : Sound.edge();
             });
         });
@@ -75,15 +97,21 @@ FocusScope {
             page.message("Nothing new in Lutris");
             return;
         }
-        confirm.ask({ message: "Import " + n + (n === 1 ? " game" : " games") + " from Lutris?",
-                      detail: "Their hours and artwork come along. Games already in the library are left as they are.",
-                      yes: "Import" },
-                    function(yes) { if (yes) form.importLutris(); });
+        confirm.ask({
+            message: "Import " + n + (n === 1 ? " game" : " games") + " from Lutris?",
+            detail: "Their hours and artwork come along. Games already in the library are left as they are.",
+            yes: "Import"
+        }, function (yes) {
+            if (yes)
+                form.importLutris();
+        });
     }
 
     Connections {
         target: page.form
-        function onMessage(text) { page.message(text); }
+        function onMessage(text) {
+            page.message(text);
+        }
         // A preview that just came back answers the press that asked for it.
         function onLutrisChanged() {
             if (page.form.lutris && !page.form.busy && cards.currentRow && cards.currentRow.key === "lutris" && cards.activeFocus)
@@ -150,11 +178,13 @@ FocusScope {
         groups: page.form.groups
         dimmed: editor.open || confirm.open
 
-        onActivated: function(index, row) { page.activate(index, row); }
+        onActivated: function (index, row) {
+            page.activate(index, row);
+        }
         onEscapedUp: Sound.edge()
         onEscapedLeft: Sound.edge()
 
-        Keys.onPressed: function(event) {
+        Keys.onPressed: function (event) {
             if (event.isAutoRepeat)
                 return;
             if (api.keys.isCancel(event)) {

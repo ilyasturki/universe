@@ -10,7 +10,9 @@ pub enum Kind {
     Bool,
     /// `auto` (detected at launch), `on` or `off`.
     Toggle,
-    Int { max: Option<u32> },
+    Int {
+        max: Option<u32>,
+    },
     Str,
     Path,
     List,
@@ -80,13 +82,33 @@ const PROTON: &[&str] = &["proton"];
 
 macro_rules! key {
     ($key:literal, $kind:expr, $default:literal, $label:literal, $section:literal, $scope:ident, $runners:expr, $description:literal) => {
-        LaunchKey { key: $key, kind: $kind, default: $default, label: $label, section: $section, scope: Scope::$scope, runners: $runners, description: $description, advanced: false }
+        LaunchKey {
+            key: $key,
+            kind: $kind,
+            default: $default,
+            label: $label,
+            section: $section,
+            scope: Scope::$scope,
+            runners: $runners,
+            description: $description,
+            advanced: false,
+        }
     };
 }
 
 macro_rules! advanced {
     ($key:literal, $kind:expr, $default:literal, $label:literal, $section:literal, $scope:ident, $runners:expr, $description:literal) => {
-        LaunchKey { key: $key, kind: $kind, default: $default, label: $label, section: $section, scope: Scope::$scope, runners: $runners, description: $description, advanced: true }
+        LaunchKey {
+            key: $key,
+            kind: $kind,
+            default: $default,
+            label: $label,
+            section: $section,
+            scope: Scope::$scope,
+            runners: $runners,
+            description: $description,
+            advanced: true,
+        }
     };
 }
 
@@ -290,8 +312,14 @@ mod tests {
             assert_eq!((in_game, in_global), expected, "{}: scope {:?} does not match the structs", k.key, k.scope);
         }
         let keys: Vec<&str> = rows(Scope::Both, None).iter().map(|r| r.key).collect();
-        assert!(keys.contains(&"env") && !keys.contains(&"options") && !keys.contains(&"runner"), "a rowless key stays out of rows(); a map with a section is a row");
-        assert!(LAUNCH_KEYS.iter().filter(|k| !k.section.is_empty()).all(|k| k.advanced || matches!(k.section, "Display" | "Overlay" | "Proton")), "every card but the first three is advanced");
+        assert!(
+            keys.contains(&"env") && !keys.contains(&"options") && !keys.contains(&"runner"),
+            "a rowless key stays out of rows(); a map with a section is a row"
+        );
+        assert!(
+            LAUNCH_KEYS.iter().filter(|k| !k.section.is_empty()).all(|k| k.advanced || matches!(k.section, "Display" | "Overlay" | "Proton")),
+            "every card but the first three is advanced"
+        );
         assert!(rows(Scope::Game, None).iter().all(|r| r.scope != "global") && rows(Scope::Global, None).iter().all(|r| r.scope != "game"));
     }
 
@@ -303,7 +331,11 @@ mod tests {
         assert!(validate(Scope::Game, "gamescope_filter", "").is_ok());
         assert!(validate(Scope::Global, "gamescope_sharpness", "20").is_ok());
         assert!(validate(Scope::Global, "gamescope_sharpness", "21").is_err());
-        assert!(validate(Scope::Game, "fps_limit", "60").is_ok() && validate(Scope::Game, "fps_limit", "auto").is_ok() && validate(Scope::Game, "fps_limit", "none").is_ok());
+        assert!(
+            validate(Scope::Game, "fps_limit", "60").is_ok()
+                && validate(Scope::Game, "fps_limit", "auto").is_ok()
+                && validate(Scope::Game, "fps_limit", "none").is_ok()
+        );
         assert!(validate(Scope::Game, "fps_limit", "sixty").is_err() && validate(Scope::Game, "fps_limit", "0").is_err());
         assert!(validate(Scope::Game, "gamescope_resolution", "1920x1080").is_ok() && validate(Scope::Game, "gamescope_resolution", "1080p").is_err());
         assert!(validate(Scope::Game, "gamescope_adaptive_sync", "yes").is_err());

@@ -297,15 +297,15 @@ def test_watcher_process_round_trip(api, monkeypatch):
     screen = api.screens.controller
     watcher = Watcher()
     echoed = []
-    watcher.event.connect(lambda line: echoed.append(line) if line.get("event") == "echo" else None)
+    watcher.received.connect(lambda line: echoed.append(line) if line.get("event") == "echo" else None)
     assert screen.start(watcher) is True
     wait_for(screen.devicesChanged, 5000)
     assert screen.connected and screen.family == "xbox" and screen.status == "ready"
     assert rows_by_key(screen)["share"]["display"] == "Unbound"
     screen.suspend()
     screen.learn("share")
-    wait_for(watcher.event, 5000)
-    wait_for(watcher.event, 5000)
+    wait_for(watcher.received, 5000)
+    wait_for(watcher.received, 5000)
     assert [e["command"] for e in echoed] == [{"cmd": "suspend", "dock": False}, {"cmd": "learn", "id": "event9", "slot": "share"}]
     screen.shutdown()
     assert watcher._process is None

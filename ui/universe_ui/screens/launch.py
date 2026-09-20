@@ -1,5 +1,8 @@
-from PySide6.QtCore import Property, Signal, Slot
+from collections.abc import Callable
 
+from PySide6.QtCore import Signal, Slot
+
+from ..qt import Property
 from .settings import HIDE_CURSOR, RowsForm, _add, _dig, _row, global_launch_rows, screen_label
 
 # config.toml keys with no launch key of their own; every one is advanced: (section, key, label, type, choices, detail).
@@ -13,8 +16,22 @@ CONFIG_ROWS = [
     ("API keys", "keys.sgdb_file", "SteamGridDB key file", "path", (), "A file holding the key, read when the key above is empty."),
     ("API keys", "keys.rawg", "RAWG key", "secret", (), "Descriptions and metadata come from RAWG with a key from rawg.io."),
     ("API keys", "keys.rawg_file", "RAWG key file", "path", (), "A file holding the key, read when the key above is empty."),
-    ("Desktop", "desktop.profile", "Desktop", "enum", ("auto", "gnome", "none"), "What the launcher integrates with: auto detects GNOME, none skips the shell extension and cursor hiding."),
-    ("Desktop", "desktop.cursor_extension", "Cursor extension", "string", (), "The GNOME Shell extension toggled to hide the cursor, restored to its prior state after the session."),
+    (
+        "Desktop",
+        "desktop.profile",
+        "Desktop",
+        "enum",
+        ("auto", "gnome", "none"),
+        "What the launcher integrates with: auto detects GNOME, none skips the shell extension and cursor hiding.",
+    ),
+    (
+        "Desktop",
+        "desktop.cursor_extension",
+        "Cursor extension",
+        "string",
+        (),
+        "The GNOME Shell extension toggled to hide the cursor, restored to its prior state after the session.",
+    ),
 ]
 
 CONFIG_DEFAULTS = {"desktop.profile": "auto", "desktop.cursor_extension": "hide-cursor@elcste.com"}
@@ -39,7 +56,13 @@ def build_launch(client, screen_mode):
     rows, groups = [], []
     # A key tied to a runner is set on that runner's page.
     global_launch_rows(rows, groups, client, config, mode, lambda spec: not spec["runners"])
-    _add(rows, groups, "Overlay", _row("Overlay", "desktop.hide_cursor", "Hide the cursor while playing", "bool", bool(_dig(config, "desktop.hide_cursor", True)), detail=HIDE_CURSOR), caps=True)
+    _add(
+        rows,
+        groups,
+        "Overlay",
+        _row("Overlay", "desktop.hide_cursor", "Hide the cursor while playing", "bool", bool(_dig(config, "desktop.hide_cursor", True)), detail=HIDE_CURSOR),
+        caps=True,
+    )
     for section, key, label, kind, choices, detail in CONFIG_ROWS:
         _add(rows, groups, section, config_row(config, section, key, label, kind, choices, detail), caps=True)
     return rows, groups, screen
@@ -48,7 +71,7 @@ def build_launch(client, screen_mode):
 class LaunchForm(RowsForm):
     screenChanged = Signal()
 
-    def __init__(self, client, screen_mode=lambda: {}, parent=None):
+    def __init__(self, client, screen_mode: Callable[[], dict] = dict, parent=None):
         super().__init__(client, parent)
         self._screen_mode = screen_mode
         self._screen = ""

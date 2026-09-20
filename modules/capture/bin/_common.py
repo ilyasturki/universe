@@ -37,7 +37,7 @@ def load_settings():
 def cli_json(args, timeout=20):
     cmd = [os.environ.get("UNIVERSE_BIN") or "universe", *args, "--json"]
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, check=False)
     except (OSError, subprocess.SubprocessError) as e:
         log(f"universe {' '.join(args)}: {e}")
         return None
@@ -68,15 +68,15 @@ def resolve_fps(setting, screen):
 def supported_codecs():
     """The video codecs gpu-screen-recorder can encode here: the `video_codecs` section of its `--info`."""
     try:
-        r = subprocess.run(["gpu-screen-recorder", "--info"], capture_output=True, text=True, timeout=20)
+        r = subprocess.run(["gpu-screen-recorder", "--info"], capture_output=True, text=True, timeout=20, check=False)
     except (OSError, subprocess.SubprocessError) as e:
         log(f"gpu-screen-recorder --info: {e}")
         return []
     section, out = "", []
-    for line in r.stdout.splitlines():
-        line = line.strip()
+    for raw in r.stdout.splitlines():
+        line = raw.strip()
         if line.startswith("section="):
-            section = line[len("section="):]
+            section = line[len("section=") :]
         elif section == "video_codecs" and line:
             out.append(line)
     return out
@@ -129,7 +129,7 @@ def ipc_socket(session_id):
 
 
 def gsr_cli(session_id, *command, timeout=30):
-    return subprocess.run(["gsr-cli", "-ipc", ipc_socket(session_id), *command], capture_output=True, text=True, timeout=timeout)
+    return subprocess.run(["gsr-cli", "-ipc", ipc_socket(session_id), *command], capture_output=True, text=True, timeout=timeout, check=False)
 
 
 def wait_recorder(session_id, timeout_s=5, alive=None):
@@ -158,25 +158,37 @@ def gsr_args(settings, screen, output_path, token_path=None, session_id=None):
     return [
         "gpu-screen-recorder",
         *(["-w", "portal", "-restore-portal-session", "yes", "-portal-session-token-filepath", token_path] if token_path else ["-w", screen]),
-        "-cursor", "yes" if settings.get("cursor") else "no",
-        "-f", str(resolve_fps(settings.get("fps", 60), screen)),
-        "-fm", "vfr",
-        "-c", settings.get("container") or "mkv",
+        "-cursor",
+        "yes" if settings.get("cursor") else "no",
+        "-f",
+        str(resolve_fps(settings.get("fps", 60), screen)),
+        "-fm",
+        "vfr",
+        "-c",
+        settings.get("container") or "mkv",
         *(["-s", f"{size[0]}x{size[1]}"] if size else []),
-        "-k", codec,
-        "-ac", ac,
+        "-k",
+        codec,
+        "-ac",
+        ac,
         *(["-ab", str(bitrate)] if bitrate is not None else []),
-        "-tune", "quality",
+        "-tune",
+        "quality",
         # cbr is the base the QVBR override needs: gsr's vbr branch pins qmin = qmax.
-        "-bm", "cbr",
-        "-q", "20000",
+        "-bm",
+        "cbr",
+        "-q",
+        "20000",
         *AUDIO_ARGS.get(settings.get("audio"), AUDIO_ARGS["output"]),
-        "-ffmpeg-video-opts", ffmpeg_video_opts(settings, codec),
+        "-ffmpeg-video-opts",
+        ffmpeg_video_opts(settings, codec),
         *(["-ipc", ipc_socket(session_id)] if session_id else []),
         # The muxer's own first-frame instant, next to the file as <output>.ts
-        "-write-first-frame-ts", "yes",
+        "-write-first-frame-ts",
+        "yes",
         *gsr_extra_args(settings),
-        "-o", output_path,
+        "-o",
+        output_path,
     ]
 
 
@@ -204,20 +216,20 @@ def extension_ready():
 
 
 def show_osd(label, icon="video-display-symbolic"):
-    try:
+    with contextlib.suppress(OSError, subprocess.SubprocessError):
         subprocess.run(
-            ["busctl", "--user", "call", WINDOWS_BUS_NAME, "/org/universe/Windows", WINDOWS_BUS_NAME,
-             "ShowOSD", "ssd", "--", icon, label, "-1"],
-            capture_output=True, text=True, timeout=5,
+            ["busctl", "--user", "call", WINDOWS_BUS_NAME, "/org/universe/Windows", WINDOWS_BUS_NAME, "ShowOSD", "ssd", "--", icon, label, "-1"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            check=False,
         )
-    except (OSError, subprocess.SubprocessError):
-        pass
 
 
 def bus_call_bool(call, timeout=None):
     """A session-bus call whose reply is one boolean; False on any failure."""
     try:
-        r = subprocess.run(["busctl", "--user", "--json=short", "call", *call], capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(["busctl", "--user", "--json=short", "call", *call], capture_output=True, text=True, timeout=timeout, check=False)
         return r.returncode == 0 and json.loads(r.stdout)["data"] == [True]
     except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError):
         return False
@@ -260,10 +272,8 @@ def timeline(data_dir, session_id, create=False):
 def drop_timeline(data_dir, session_id):
     path = timeline_path(data_dir, session_id)
     for p in (path, path + ".lock"):
-        try:
+        with contextlib.suppress(OSError):
             os.remove(p)
-        except OSError:
-            pass
 
 
 def set_paused(state, session_id, on):
@@ -285,7 +295,7 @@ def set_paused(state, session_id, on):
 
 
 def game_frozen(unit):
-    r = subprocess.run(["systemctl", "--user", "show", "-p", "FreezerState", "--value", unit], capture_output=True, text=True)
+    r = subprocess.run(["systemctl", "--user", "show", "-p", "FreezerState", "--value", unit], capture_output=True, text=True, check=False)
     return r.stdout.strip() in ("frozen", "freezing")
 
 
@@ -344,7 +354,10 @@ def probe_duration(path):
     try:
         result = subprocess.run(
             ["ffprobe", "-i", path, "-show_entries", "format=duration", "-v", "quiet", "-of", "csv=p=0"],
-            capture_output=True, text=True, timeout=10, check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
         )
         return float(result.stdout.strip())
     except (OSError, subprocess.SubprocessError, ValueError):
@@ -356,7 +369,10 @@ def probe_size(path):
     try:
         result = subprocess.run(
             ["ffprobe", "-i", path, "-select_streams", "v:0", "-show_entries", "stream=width,height", "-v", "quiet", "-of", "csv=p=0"],
-            capture_output=True, text=True, timeout=10, check=False,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
         )
         w, h = (int(v) for v in result.stdout.strip().split(",")[:2])
         return (w, h) if w > 0 and h > 0 else None

@@ -8,7 +8,7 @@ FocusScope {
 
     focus: true
 
-    signal chromeRequested()
+    signal chromeRequested
     signal detailRequested(var game)
     signal screenshotsRequested(var game, string name)
     signal recordingsRequested(var game, string session)
@@ -24,8 +24,8 @@ FocusScope {
     readonly property bool modal: picker.open || menu.open || lightbox
     property bool lightbox: false
 
-    readonly property var kinds: [ "All", "Screenshots", "Recordings", "Journal" ]
-    readonly property var kindKeys: [ "", "shot", "recording", "journal" ]
+    readonly property var kinds: ["All", "Screenshots", "Recordings", "Journal"]
+    readonly property var kindKeys: ["", "shot", "recording", "journal"]
     property int kindIndex: 0
     property string gameFilter: ""
 
@@ -35,30 +35,71 @@ FocusScope {
             var r = all[i];
             if (!seen[r.gameId]) {
                 seen[r.gameId] = true;
-                out.push({ id: r.gameId, title: r.gameTitle });
+                out.push({
+                    id: r.gameId,
+                    title: r.gameTitle
+                });
             }
         }
-        out.sort(function(a, b) { return a.title.localeCompare(b.title); });
+        out.sort(function (a, b) {
+            return a.title.localeCompare(b.title);
+        });
         return out;
     }
-    readonly property var rows: store.rows.filter(function(r) {
+    readonly property var rows: store.rows.filter(function (r) {
         return (kindKeys[kindIndex] === "" || r.kind === kindKeys[kindIndex]) && (gameFilter === "" || r.gameId === gameFilter);
     })
     property int index: 0
     readonly property var current: index >= 0 && index < rows.length ? rows[index] : null
-    readonly property var shotRows: rows.filter(function(r) { return r.kind === "shot"; })
+    readonly property var shotRows: rows.filter(function (r) {
+        return r.kind === "shot";
+    })
     readonly property int shotIndex: current ? shotRows.indexOf(current) : -1
 
-    readonly property var hints: picker.open ? picker.hints
-        : menu.open ? menu.hints
-        : lightbox ? [ { glyph: "dpad", label: "Previous / next" }, { glyph: "B", label: "Close" } ]
-        : chipBar.activeFocus
-        ? [ { glyph: "A", label: "Change" }, { glyph: "B", label: "Back to grid" } ]
-        : [ { glyph: "A", label: current ? (current.kind === "shot" ? "View" : current.kind === "recording" ? "Play" : "Read") : "Open", dim: current === null },
-            { glyph: "X", label: "Game details", dim: current === null },
-            { glyph: "Y", label: "Journal entry", dim: !(current && current.hasJournal && current.kind !== "journal") },
-            { glyph: "Start", label: "More", dim: current === null },
-            { glyph: "LT RT", label: "Kind" } ]
+    readonly property var hints: picker.open ? picker.hints : menu.open ? menu.hints : lightbox ? [
+        {
+            glyph: "dpad",
+            label: "Previous / next"
+        },
+        {
+            glyph: "B",
+            label: "Close"
+        }
+    ] : chipBar.activeFocus ? [
+        {
+            glyph: "A",
+            label: "Change"
+        },
+        {
+            glyph: "B",
+            label: "Back to grid"
+        }
+    ] : [
+        {
+            glyph: "A",
+            label: current ? (current.kind === "shot" ? "View" : current.kind === "recording" ? "Play" : "Read") : "Open",
+            dim: current === null
+        },
+        {
+            glyph: "X",
+            label: "Game details",
+            dim: current === null
+        },
+        {
+            glyph: "Y",
+            label: "Journal entry",
+            dim: !(current && current.hasJournal && current.kind !== "journal")
+        },
+        {
+            glyph: "Start",
+            label: "More",
+            dim: current === null
+        },
+        {
+            glyph: "LT RT",
+            label: "Kind"
+        }
+    ]
 
     readonly property int columns: 4
     readonly property real gap: Theme.dp(26)
@@ -97,16 +138,28 @@ FocusScope {
 
     function gameOptions() {
         var all = store.rows;
-        var out = [ { label: "All games", trailing: all.length.toString() } ];
+        var out = [
+            {
+                label: "All games",
+                trailing: all.length.toString()
+            }
+        ];
         for (var i = 0; i < games.length; i++) {
             var id = games[i].id;
-            out.push({ label: games[i].title, trailing: all.filter(function(r) { return r.gameId === id; }).length.toString() });
+            out.push({
+                label: games[i].title,
+                trailing: all.filter(function (r) {
+                    return r.gameId === id;
+                }).length.toString()
+            });
         }
         return out;
     }
 
     function gameFilterIndex() {
-        return games.findIndex(function(g) { return g.id === gameFilter; }) + 1;
+        return games.findIndex(function (g) {
+            return g.id === gameFilter;
+        }) + 1;
     }
 
     function step(d) {
@@ -170,15 +223,37 @@ FocusScope {
             return;
         }
         Sound.panel();
-        var items = [ { icon: current.kind === "recording" ? "play" : current.kind === "journal" ? "book" : "image",
-                        label: current.kind === "shot" ? "View" : current.kind === "recording" ? "Play" : "Read", action: "open" },
-                      { icon: "info", label: "Game details", action: "details" } ];
+        var items = [
+            {
+                icon: current.kind === "recording" ? "play" : current.kind === "journal" ? "book" : "image",
+                label: current.kind === "shot" ? "View" : current.kind === "recording" ? "Play" : "Read",
+                action: "open"
+            },
+            {
+                icon: "info",
+                label: "Game details",
+                action: "details"
+            }
+        ];
         if (current.kind === "shot")
-            items.push({ icon: "camera", label: "All of this game's", action: "shots" });
+            items.push({
+                icon: "camera",
+                label: "All of this game's",
+                action: "shots"
+            });
         if (current.hasJournal && current.kind !== "journal")
-            items.push({ icon: "book", label: "Journal entry", action: "journal" });
+            items.push({
+                icon: "book",
+                label: "Journal entry",
+                action: "journal"
+            });
         if (current.kind === "shot")
-            items.push({ icon: "trash", label: "Remove screenshot…", action: "remove", danger: true });
+            items.push({
+                icon: "trash",
+                label: "Remove screenshot…",
+                action: "remove",
+                danger: true
+            });
         menu.show(items, cellAnchor(), cellRect(), current.gameTitle + "  ·  " + current.dateText, menuAction);
     }
 
@@ -193,9 +268,19 @@ FocusScope {
             openJournal();
         } else if (action === "remove") {
             Sound.panel();
-            menu.show([ { icon: "", label: "Keep it", action: "" },
-                        { icon: "trash", label: "Trash the screenshot", action: "remove!", danger: true } ],
-                      cellAnchor(), cellRect(), "Remove this screenshot?", menuAction);
+            menu.show([
+                {
+                    icon: "",
+                    label: "Keep it",
+                    action: ""
+                },
+                {
+                    icon: "trash",
+                    label: "Trash the screenshot",
+                    action: "remove!",
+                    danger: true
+                }
+            ], cellAnchor(), cellRect(), "Remove this screenshot?", menuAction);
         } else if (action === "remove!") {
             Sound.enter();
             api.screens.shots.remove(current.gameId, current.name);
@@ -235,10 +320,7 @@ FocusScope {
             anchors.top: titleText.bottom
             anchors.topMargin: Theme.dp(14)
             anchors.left: parent.left
-            text: page.current
-                ? (page.current.kind === "shot" ? "SCREENSHOT" : page.current.kind === "recording" ? "RECORDING  ·  " + page.current.title : "JOURNAL  ·  " + page.current.title)
-                  + "  ·  " + page.current.dateText
-                : page.store.rows.length === 0 ? "Screenshots, recordings and journal entries land here as you play." : ""
+            text: page.current ? (page.current.kind === "shot" ? "SCREENSHOT" : page.current.kind === "recording" ? "RECORDING  ·  " + page.current.title : "JOURNAL  ·  " + page.current.title) + "  ·  " + page.current.dateText : page.store.rows.length === 0 ? "Screenshots, recordings and journal entries land here as you play." : ""
             color: Theme.textSecondary
             font.family: Theme.sans
             font.weight: Font.Medium
@@ -266,7 +348,11 @@ FocusScope {
             function openPicker() {
                 Sound.panel();
                 if (index === 0)
-                    picker.show(kindChip, page.kinds.map(function(k) { return { label: k }; }), page.kindIndex);
+                    picker.show(kindChip, page.kinds.map(function (k) {
+                        return {
+                            label: k
+                        };
+                    }), page.kindIndex);
                 else
                     picker.show(gameChip, page.gameOptions(), page.gameFilterIndex());
             }
@@ -284,7 +370,11 @@ FocusScope {
 
                 Chip {
                     id: gameChip
-                    label: page.gameFilter === "" ? "All games" : (page.games.find(function(g) { return g.id === page.gameFilter; }) || { title: "" }).title
+                    label: page.gameFilter === "" ? "All games" : (page.games.find(function (g) {
+                            return g.id === page.gameFilter;
+                        }) || {
+                            title: ""
+                        }).title
                     focused: chipBar.activeFocus && chipBar.index === 1
                 }
             }
@@ -292,7 +382,7 @@ FocusScope {
             ChipPicker {
                 id: picker
 
-                onChosen: function(index) {
+                onChosen: function (index) {
                     picker.hide();
                     chipBar.forceActiveFocus();
                     if (chipBar.index === 0) {
@@ -312,12 +402,12 @@ FocusScope {
             Keys.onLeftPressed: chipBar.step(-1)
             Keys.onRightPressed: chipBar.step(1)
             Keys.onUpPressed: page.chromeRequested()
-            Keys.onDownPressed: function(event) {
+            Keys.onDownPressed: function (event) {
                 Sound.panel();
                 grid.forceActiveFocus();
             }
 
-            Keys.onPressed: function(event) {
+            Keys.onPressed: function (event) {
                 if (event.isAutoRepeat)
                     return;
                 if (api.keys.isAccept(event)) {
@@ -385,7 +475,7 @@ FocusScope {
             }
         }
 
-        Keys.onPressed: function(event) {
+        Keys.onPressed: function (event) {
             var arrow = event.key === Qt.Key_Left || event.key === Qt.Key_Right;
             var vertical = event.key === Qt.Key_Up || event.key === Qt.Key_Down;
             var screen = api.keys.isScreenUp(event) ? -1 : api.keys.isScreenDown(event) ? 1 : 0;
@@ -417,13 +507,11 @@ FocusScope {
                 page.stepRow(event.key === Qt.Key_Up ? -1 : 1);
             else if (screen)
                 page.stepScreen(screen);
-            else if (api.keys.isPageUp(event) || api.keys.isPageDown(event))
-                ;  // Pegasus turns every trigger axis sample into a fresh press; only the release is single.
-            else
+            else if (api.keys.isPageUp(event) || api.keys.isPageDown(event));else
                 event.accepted = false;
         }
 
-        Keys.onReleased: function(event) {
+        Keys.onReleased: function (event) {
             if (event.isAutoRepeat)
                 return;
             var d = api.keys.isPageUp(event) ? -1 : api.keys.isPageDown(event) ? 1 : 0;
@@ -437,7 +525,9 @@ FocusScope {
     Lightbox {
         anchors.fill: parent
         z: 4
-        images: page.shotRows.map(function(r) { return r.image; })
+        images: page.shotRows.map(function (r) {
+            return r.image;
+        })
         index: Math.max(0, page.shotIndex)
         open: page.lightbox
     }

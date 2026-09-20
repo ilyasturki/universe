@@ -17,14 +17,18 @@ FocusScope {
     readonly property real room: Theme.dp(Theme.ringRoom)
     readonly property real pitchY: cellHeight + gap
 
-    signal escapedLeft()
-    signal activated()
-    signal optionsRequested()
+    signal escapedLeft
+    signal activated
+    signal optionsRequested
 
     width: columns * cellWidth + (columns - 1) * gap
 
-    function move(d) { index = Sound.stepped(index, d, count); }
-    function stepScreen(d) { index = Sound.paged(index, d, columns, Math.floor(grid.height / pitchY), count); }
+    function move(d) {
+        index = Sound.stepped(index, d, count);
+    }
+    function stepScreen(d) {
+        index = Sound.paged(index, d, columns, Math.floor(grid.height / pitchY), count);
+    }
 
     function scrollToCurrent() {
         if (view.height <= 0)
@@ -52,7 +56,7 @@ FocusScope {
     Keys.onUpPressed: index >= columns ? move(-columns) : Sound.play("edge")
     Keys.onDownPressed: Math.floor(index / columns) < lastRow ? move(Math.min(columns, count - 1 - index)) : Sound.play("edge")
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         var screen = api.keys.isScreenUp(event) ? -1 : api.keys.isScreenDown(event) ? 1 : 0;
         if (screen) {
             event.accepted = true;
@@ -80,7 +84,9 @@ FocusScope {
         interactive: false
         clip: true
 
-        Behavior on contentY { Ease {} }
+        Behavior on contentY {
+            Ease {}
+        }
 
         Repeater {
             model: grid.model

@@ -16,9 +16,20 @@ FocusScope {
     readonly property var frameMap: store.frameMap
 
     readonly property var rows: {
-        var out = store.rows.map(function(r) { return Object.assign({ kind: "recording", when: r.created_at }, r); })
-            .concat(shots.rows.map(function(r) { return Object.assign({ kind: "shot", when: r.taken_at }, r); }));
-        out.sort(function(a, b) { return a.when < b.when ? 1 : a.when > b.when ? -1 : 0; });
+        var out = store.rows.map(function (r) {
+            return Object.assign({
+                kind: "recording",
+                when: r.created_at
+            }, r);
+        }).concat(shots.rows.map(function (r) {
+            return Object.assign({
+                kind: "shot",
+                when: r.taken_at
+            }, r);
+        }));
+        out.sort(function (a, b) {
+            return a.when < b.when ? 1 : a.when > b.when ? -1 : 0;
+        });
         return out;
     }
 
@@ -29,7 +40,9 @@ FocusScope {
     property bool viewing: false
 
     readonly property var shown: {
-        var out = rows.filter(function(r) { return (filterId === "" || r.gameId === filterId) && (kindFilter === "" || r.kind === kindFilter); });
+        var out = rows.filter(function (r) {
+            return (filterId === "" || r.gameId === filterId) && (kindFilter === "" || r.kind === kindFilter);
+        });
         return oldestFirst ? out.reverse() : out;
     }
     readonly property var current: grid.index < shown.length ? shown[grid.index] : null
@@ -40,14 +53,42 @@ FocusScope {
 
     readonly property var games: Feed.channels(rows)
 
-    readonly property var hints: viewing
-        ? [ { glyph: "dpad", label: "Previous / next" }, { glyph: "B", label: "Close" } ]
-        : zone === "rail"
-        ? [ { glyph: "B", label: "Back" }, { glyph: "A", label: "OK" } ]
-        : [ { glyph: "Start", label: "Options", dim: shown.length === 0 }, { glyph: "B", label: "Back" },
-            { glyph: "A", label: shown.length === 0 ? "OK" : current && current.kind === "shot" ? "View" : "Play", dim: shown.length === 0 } ]
+    readonly property var hints: viewing ? [
+        {
+            glyph: "dpad",
+            label: "Previous / next"
+        },
+        {
+            glyph: "B",
+            label: "Close"
+        }
+    ] : zone === "rail" ? [
+        {
+            glyph: "B",
+            label: "Back"
+        },
+        {
+            glyph: "A",
+            label: "OK"
+        }
+    ] : [
+        {
+            glyph: "Start",
+            label: "Options",
+            dim: shown.length === 0
+        },
+        {
+            glyph: "B",
+            label: "Back"
+        },
+        {
+            glyph: "A",
+            label: shown.length === 0 ? "OK" : current && current.kind === "shot" ? "View" : "Play",
+            dim: shown.length === 0
+        }
+    ]
 
-    signal closeRequested()
+    signal closeRequested
 
     readonly property real thumbWidth: Theme.dp(290)
     readonly property real thumbHeight: Math.round(thumbWidth * 9 / 16)
@@ -82,7 +123,10 @@ FocusScope {
         if (current.kind === "shot")
             viewing = true;
         else
-            shell.push("pages/PlayerPage.qml", { session: current.session, gameId: current.gameId });
+            shell.push("pages/PlayerPage.qml", {
+                session: current.session,
+                gameId: current.gameId
+            });
     }
 
     function stepShot(d) {
@@ -97,7 +141,7 @@ FocusScope {
         grid.index = i;
     }
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         if (!viewing)
             return;
         var arrow = event.key === Qt.Key_Left || event.key === Qt.Key_Right;
@@ -119,42 +163,72 @@ FocusScope {
         }
         Sound.play("ok");
         var row = current;
-        var items = [{ label: row.kind === "shot" ? "View" : "Play", act: "play" }];
+        var items = [
+            {
+                label: row.kind === "shot" ? "View" : "Play",
+                act: "play"
+            }
+        ];
         if (row.hasJournal)
-            items.push({ label: "Open journal entry", act: "journal" });
-        items.push({ label: row.kind === "shot" ? "Remove screenshot…" : "Remove recording…", act: "remove" });
-        shell.menu(row.gameTitle + " · " + row.dateText, items, function(act) {
+            items.push({
+                label: "Open journal entry",
+                act: "journal"
+            });
+        items.push({
+            label: row.kind === "shot" ? "Remove screenshot…" : "Remove recording…",
+            act: "remove"
+        });
+        shell.menu(row.gameTitle + " · " + row.dateText, items, function (act) {
             if (act === "play")
                 play();
             else if (act === "journal")
-                shell.push("pages/ArticlePage.qml", { session: row.session, gameId: row.gameId });
+                shell.push("pages/ArticlePage.qml", {
+                    session: row.session,
+                    gameId: row.gameId
+                });
             else if (row.kind === "shot")
-                Removal.screenshot(shell, api.screens, row, function() {});
+                Removal.screenshot(shell, api.screens, row, function () {});
             else
-                Removal.recording(shell, api.screens, row, function() {});
+                Removal.recording(shell, api.screens, row, function () {});
         });
     }
 
     function railAction(id) {
         if (id === "kind") {
             var kinds = ["", "shot", "recording"];
-            shell.pick({ title: "Show", choices: ["Everything", "Screenshots", "Videos"], index: Math.max(0, kinds.indexOf(kindFilter)) }, function(i) {
+            shell.pick({
+                title: "Show",
+                choices: ["Everything", "Screenshots", "Videos"],
+                index: Math.max(0, kinds.indexOf(kindFilter))
+            }, function (i) {
                 if (i >= 0) {
                     kindFilter = kinds[i];
                     grid.index = 0;
                 }
             });
         } else if (id === "filter") {
-            var ids = [""].concat(games.map(function(g) { return g.id; }));
-            var choices = ["All"].concat(games.map(function(g) { return g.title; }));
-            shell.pick({ title: "Show", choices: choices, index: Math.max(0, ids.indexOf(filterId)) }, function(i) {
+            var ids = [""].concat(games.map(function (g) {
+                return g.id;
+            }));
+            var choices = ["All"].concat(games.map(function (g) {
+                return g.title;
+            }));
+            shell.pick({
+                title: "Show",
+                choices: choices,
+                index: Math.max(0, ids.indexOf(filterId))
+            }, function (i) {
                 if (i >= 0) {
                     filterId = ids[i];
                     grid.index = 0;
                 }
             });
         } else if (id === "sort") {
-            shell.pick({ title: "Sort", choices: ["Newest First", "Oldest First"], index: oldestFirst ? 1 : 0 }, function(i) {
+            shell.pick({
+                title: "Sort",
+                choices: ["Newest First", "Oldest First"],
+                index: oldestFirst ? 1 : 0
+            }, function (i) {
                 if (i >= 0) {
                     oldestFirst = i === 1;
                     grid.index = 0;
@@ -179,8 +253,26 @@ FocusScope {
         y: Theme.dp(185)
         height: parent.height - y - Theme.dp(Theme.hintBarHeight)
         focus: page.zone === "rail" && !page.viewing
-        items: [ { id: "kind", icon: "album", label: "Show" }, { id: "filter", icon: "filter", label: "Filter" }, { id: "sort", icon: "sort", label: "Sort" } ]
-        onActivated: function(id) { page.railAction(id); }
+        items: [
+            {
+                id: "kind",
+                icon: "album",
+                label: "Show"
+            },
+            {
+                id: "filter",
+                icon: "filter",
+                label: "Filter"
+            },
+            {
+                id: "sort",
+                icon: "sort",
+                label: "Sort"
+            }
+        ]
+        onActivated: function (id) {
+            page.railAction(id);
+        }
         onEscapedRight: {
             if (page.shown.length > 0)
                 page.zone = "grid";
@@ -232,7 +324,11 @@ FocusScope {
                     asynchronous: true
                     opacity: status === Image.Ready ? 1.0 : 0.0
 
-                    Behavior on opacity { Ease { duration: Theme.durFade } }
+                    Behavior on opacity {
+                        Ease {
+                            duration: Theme.durFade
+                        }
+                    }
                 }
             }
 
@@ -282,7 +378,11 @@ FocusScope {
         opacity: page.viewing ? 1.0 : 0.0
         visible: opacity > 0.01
 
-        Behavior on opacity { Ease { duration: Theme.durFade } }
+        Behavior on opacity {
+            Ease {
+                duration: Theme.durFade
+            }
+        }
 
         Image {
             anchors.fill: parent

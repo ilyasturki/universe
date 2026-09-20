@@ -12,7 +12,7 @@ BIN_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def stop_unit(unit):
-    result = subprocess.run(["systemctl", "--user", "stop", unit], capture_output=True, text=True)
+    result = subprocess.run(["systemctl", "--user", "stop", unit], capture_output=True, text=True, check=False)
     if result.returncode != 0 and "not loaded" not in result.stderr.lower():
         log(f"systemctl stop {unit} failed: {result.stderr.strip()}")
 
@@ -38,7 +38,17 @@ def stop_recorder(session_id, pending_dir):
 
 def finish_in_unit(session_id, current):
     """A stitch copies every byte of the session: its own unit, waited for as long as the hook can."""
-    cmd = ["systemd-run", "--user", f"--unit=universe-capture-finish-{session_id}", "--collect", "--wait", "--quiet", *unit_env_args(), os.path.join(BIN_DIR, "finish"), *([current] if current else [])]
+    cmd = [
+        "systemd-run",
+        "--user",
+        f"--unit=universe-capture-finish-{session_id}",
+        "--collect",
+        "--wait",
+        "--quiet",
+        *unit_env_args(),
+        os.path.join(BIN_DIR, "finish"),
+        *([current] if current else []),
+    ]
     try:
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=STITCH_WAIT_S, check=False)
     except subprocess.TimeoutExpired:

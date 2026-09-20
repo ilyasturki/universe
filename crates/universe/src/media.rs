@@ -136,7 +136,14 @@ fn epoch_year(epoch: i64) -> u32 {
 }
 
 fn hit(r: &serde_json::Value, current: bool) -> Option<Hit> {
-    Some(Hit { provider: "sgdb".into(), id: r["id"].as_u64()?, name: r["name"].as_str().unwrap_or("").to_string(), year: r["release_date"].as_i64().map(epoch_year).unwrap_or(0), verified: r["verified"].as_bool().unwrap_or(false), current })
+    Some(Hit {
+        provider: "sgdb".into(),
+        id: r["id"].as_u64()?,
+        name: r["name"].as_str().unwrap_or("").to_string(),
+        year: r["release_date"].as_i64().map(epoch_year).unwrap_or(0),
+        verified: r["verified"].as_bool().unwrap_or(false),
+        current,
+    })
 }
 
 pub async fn sgdb_hits(key: &str, title: &str) -> crate::Result<Vec<Hit>> {
@@ -485,7 +492,8 @@ pub async fn set_slot_url(config: &Config, game: &Game, slot: &str, url: &str) -
     let ext = ext_of(url);
     let tmp = std::env::temp_dir().join(format!("universe-{}-{}-{}.{ext}", game.id, slot, std::process::id()));
     download(url, &tmp).await?;
-    let name = url.rsplit('/').next().and_then(|n| n.split('?').next()).filter(|n| !n.is_empty()).map(|n| n.to_string()).unwrap_or_else(|| format!("shot.{ext}"));
+    let name =
+        url.rsplit('/').next().and_then(|n| n.split('?').next()).filter(|n| !n.is_empty()).map(|n| n.to_string()).unwrap_or_else(|| format!("shot.{ext}"));
     let placed = place_override(config, game, slot, &tmp, &name);
     let _ = std::fs::remove_file(&tmp);
     placed
@@ -532,7 +540,15 @@ pub fn status(config: &Config, game: &Game) -> MediaStatus {
             } else {
                 (source.clone(), "default")
             };
-            SlotStatus { slot: slot.to_string(), path: if over.is_empty() { default.clone() } else { over.clone() }, default, override_path: over, origin, default_origin: source, kind: kind.into() }
+            SlotStatus {
+                slot: slot.to_string(),
+                path: if over.is_empty() { default.clone() } else { over.clone() },
+                default,
+                override_path: over,
+                origin,
+                default_origin: source,
+                kind: kind.into(),
+            }
         })
         .collect();
     let pinned = pinned_sgdb_id(config, game);

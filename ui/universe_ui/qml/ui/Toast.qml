@@ -20,7 +20,9 @@ Item {
     opacity: shown ? 1.0 : 0.0
     visible: opacity > 0.01
 
-    Behavior on opacity { Ease {} }
+    Behavior on opacity {
+        Ease {}
+    }
 
     Timer {
         id: hideTimer

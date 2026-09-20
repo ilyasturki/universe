@@ -1,9 +1,11 @@
 import os
 import re
+from collections.abc import Callable
 
-from PySide6.QtCore import Property, Signal, Slot
+from PySide6.QtCore import Signal, Slot
 
 from ..models import file_url
+from ..qt import QVARIANT, Property
 from .settings import RowsForm, _group, _row, _to_bus, global_launch_rows, runner_logo
 
 
@@ -46,9 +48,10 @@ class RunnersForm(RowsForm):
                 continue
             count, hours = usage.get(ident, (0, 0.0))
             usage[ident] = (count + 1, hours + float((game.get("stats") or {}).get("hours") or 0))
-        runners = sorted(self._client.runners(),
-                         key=lambda r: (not _found(r), -usage.get(r["id"], (0, 0.0))[0], -usage.get(r["id"], (0, 0.0))[1],
-                                        r.get("name", r["id"]).lower()))
+        runners = sorted(
+            self._client.runners(),
+            key=lambda r: (not _found(r), -usage.get(r["id"], (0, 0.0))[0], -usage.get(r["id"], (0, 0.0))[1], r.get("name", r["id"]).lower()),
+        )
         rows, found, missing = [], [], []
         for runner in runners:
             ident = runner["id"]
@@ -94,16 +97,27 @@ def build_runner(client, ident, screen_mode):
     config = client.config()
     launch = config.get("launch") or {}
     own = runner.get("gamescope")
-    rows.append(_row(name, "gamescope", "Gamescope", "bool", bool(launch.get("gamescope", True)) if own is None else bool(own), module=ident, inherited=own is None))
+    rows.append(
+        _row(name, "gamescope", "Gamescope", "bool", bool(launch.get("gamescope", True)) if own is None else bool(own), module=ident, inherited=own is None)
+    )
     groups.append(_group("", [len(rows) - 1]))
     kind = runner.get("kind") or ""
     global_launch_rows(rows, groups, client, config, screen_mode(), lambda spec: kind in spec["runners"], client.gpu())
     options = runner.get("options") or []
     if options:
         first = len(rows)
-        for option in options:
-            rows.append(_row(name, option["key"], option.get("label", option["key"]), option.get("type", "string"),
-                             option.get("value", option.get("default")), option.get("choices"), ident))
+        rows.extend(
+            _row(
+                name,
+                option["key"],
+                option.get("label", option["key"]),
+                option.get("type", "string"),
+                option.get("value", option.get("default")),
+                option.get("choices"),
+                ident,
+            )
+            for option in options
+        )
         groups.append(_group("Options", list(range(first, len(rows))), caps=True))
     games = sorted((g for g in client.list() if _runner_of(g) == ident), key=lambda g: str(g.get("title") or "").casefold())
     if games:
@@ -111,10 +125,16 @@ def build_runner(client, ident, screen_mode):
         for game in games:
             media, source = game.get("media") or {}, game.get("source")
             art = next((p for p in (media.get("square"), media.get("box_front")) if p), "")
-            rows.append({**_row(name, "game", str(game.get("title") or game.get("id")), "action", "", module=ident),
-                         "display": _play_time((game.get("stats") or {}).get("hours")), "action": "Options",
-                         "gameId": str(game.get("id")), "image": file_url(art).toString(),
-                         "installed": isinstance(source, dict) and bool(source.get("dir"))})
+            rows.append(
+                {
+                    **_row(name, "game", str(game.get("title") or game.get("id")), "action", "", module=ident),
+                    "display": _play_time((game.get("stats") or {}).get("hours")),
+                    "action": "Options",
+                    "gameId": str(game.get("id")),
+                    "image": file_url(art).toString(),
+                    "installed": isinstance(source, dict) and bool(source.get("dir")),
+                }
+            )
         groups.append(_group("Games", list(range(first, len(rows))), caps=True, meta=f"{len(games)} game{'' if len(games) == 1 else 's'}"))
     rows.append({**_row(name, "add_file", "Add a game…", "action", "", module=ident), "display": "", "action": "Pick a file", "runner": ident})
     groups.append(_group("", [len(rows) - 1]))
@@ -125,7 +145,7 @@ class RunnerForm(RowsForm):
     message = Signal(str)
     runnerChanged = Signal()
 
-    def __init__(self, client, screen_mode=lambda: {}, parent=None):
+    def __init__(self, client, screen_mode: Callable[[], dict] = dict, parent=None):
         super().__init__(client, parent)
         self._screen_mode = screen_mode
         self._runner = {}
@@ -140,7 +160,7 @@ class RunnerForm(RowsForm):
         self._set_rows(rows, groups)
         self.runnerChanged.emit()
 
-    info = Property("QVariant", lambda self: dict(self._runner), notify=runnerChanged)
+    info = Property(QVARIANT, lambda self: dict(self._runner), notify=runnerChanged)
 
     @Slot(int, "QVariant", result=bool)
     def setValue(self, index, value):
@@ -150,7 +170,11 @@ class RunnerForm(RowsForm):
         if row["key"] == "add_file":
             self._pending = {"runner": row["module"], "name": row["section"], "file": str(value or "")}
             return bool(self._pending["file"])
-        ok = self._client.setConfig(row["key"], _to_bus(row, value)) if row["key"].startswith("launch.") else self._client.setRunnerSetting(row["module"], row["key"], _to_bus(row, value))
+        ok = (
+            self._client.setConfig(row["key"], _to_bus(row, value))
+            if row["key"].startswith("launch.")
+            else self._client.setRunnerSetting(row["module"], row["key"], _to_bus(row, value))
+        )
         if ok:
             self.load(self._runner["id"])
         return bool(ok)

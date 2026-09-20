@@ -1,10 +1,26 @@
-from PySide6.QtCore import Property, QObject, Signal, Slot
+from PySide6.QtCore import QObject, Signal, Slot
+
+from .qt import Property
 
 THEMES = [
-    {"id": "reprise", "name": "Reprise", "entry": "theme.qml", "overlay": "ui/Dock.qml", "frame": True, "ground": "#0e0f13",
-     "detail": "Dark, cinematic: the game's art behind everything."},
-    {"id": "switch2", "name": "Switch 2", "entry": "switch2/theme.qml", "overlay": "", "frame": False, "ground": "#ebebeb",
-     "detail": "The Switch 2 HOME menu."},
+    {
+        "id": "reprise",
+        "name": "Reprise",
+        "entry": "theme.qml",
+        "overlay": "ui/Dock.qml",
+        "frame": True,
+        "ground": "#0e0f13",
+        "detail": "Dark, cinematic: the game's art behind everything.",
+    },
+    {
+        "id": "switch2",
+        "name": "Switch 2",
+        "entry": "switch2/theme.qml",
+        "overlay": "",
+        "frame": False,
+        "ground": "#ebebeb",
+        "detail": "The Switch 2 HOME menu.",
+    },
 ]
 DEFAULT = "reprise"
 MEMORY_KEY = "theme"
@@ -55,7 +71,7 @@ class ThemeSelector(QObject):
             self._memory.unset(FONT_KEY)
         self.fontChanged.emit()
 
-    themes = Property("QVariantList", lambda self: [dict(t) for t in THEMES], constant=True)
+    themes = Property(list, lambda self: [dict(t) for t in THEMES], constant=True)
     current = Property(str, lambda self: self._current["id"], notify=changed)
     landing = Property(str, lambda self: self._landing, notify=changed)
     name = Property(str, lambda self: self._current["name"], notify=changed)

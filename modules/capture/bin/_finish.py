@@ -16,7 +16,9 @@ def stitch(files, output):
     stem, ext = os.path.splitext(output)
     tmp = f"{stem}.stitch{ext}"
     try:
-        r = subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0", "-i", listing, "-c", "copy", tmp], capture_output=True, text=True, check=False)
+        r = subprocess.run(
+            ["ffmpeg", "-v", "error", "-y", "-f", "concat", "-safe", "0", "-i", listing, "-c", "copy", tmp], capture_output=True, text=True, check=False
+        )
     except OSError as e:
         r = subprocess.CompletedProcess([], 1, "", str(e))
     finally:
@@ -81,4 +83,3 @@ def finish(session_id, data_dir, current, min_duration_s):
     log(f"filed: {result.stdout.strip()}")
     drop_timeline(data_dir, session_id)
     return 0
-

@@ -10,10 +10,11 @@ Rectangle {
     width: Theme.dp(64)
     height: Theme.dp(34)
     radius: height / 2
-    color: on ? (focused ? Theme.onLight : Theme.text)
-              : (focused ? Qt.rgba(0.063, 0.067, 0.086, 0.25) : Qt.rgba(1, 1, 1, 0.18))
+    color: on ? (focused ? Theme.onLight : Theme.text) : (focused ? Qt.rgba(0.063, 0.067, 0.086, 0.25) : Qt.rgba(1, 1, 1, 0.18))
 
-    Behavior on color { ColorEase {} }
+    Behavior on color {
+        ColorEase {}
+    }
 
     Rectangle {
         width: parent.height - Theme.dp(8)
@@ -23,6 +24,10 @@ Rectangle {
         x: root.on ? parent.width - width - Theme.dp(4) : Theme.dp(4)
         color: root.on ? (root.focused ? Theme.text : Theme.onLight) : Theme.text
 
-        Behavior on x { Ease { duration: Theme.durQuick } }
+        Behavior on x {
+            Ease {
+                duration: Theme.durQuick
+            }
+        }
     }
 }

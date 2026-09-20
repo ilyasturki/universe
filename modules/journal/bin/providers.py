@@ -12,7 +12,7 @@ from prompt import OUTPUT_SCHEMA, system_prompt
 TIMEOUT_S = 900
 ATTEMPTS = 2
 # The quota wall lasts days; transient failures ("Reconnecting") must stay on the retry path.
-LIMIT_RE = re.compile(r"hit your usage limit", re.I)
+LIMIT_RE = re.compile(r"hit your usage limit", re.IGNORECASE)
 LIMIT_FALLBACK_HOURS = 6
 
 
@@ -23,7 +23,7 @@ class QuotaExceeded(Exception):
 
 
 _MONTHS = {m: i for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"], 1)}
-_RESET_RE = re.compile(r"try again at ([A-Za-z]+) (\d{1,2})(?:st|nd|rd|th)?,? (\d{4}),? (\d{1,2}):(\d{2})(?: ?([AP]M))?", re.I)
+_RESET_RE = re.compile(r"try again at ([A-Za-z]+) (\d{1,2})(?:st|nd|rd|th)?,? (\d{4}),? (\d{1,2}):(\d{2})(?: ?([AP]M))?", re.IGNORECASE)
 
 
 # codex's own account API, one-shot over stdio: the reset instant, where the message only carries a same-day time or "later".
@@ -33,14 +33,24 @@ APP_SERVER_TIMEOUT_S = 15
 def read_limit_reset(timeout_s=APP_SERVER_TIMEOUT_S):
     """When the exhausted window resets, from `account/rateLimits/read`; None when codex cannot say."""
     try:
-        proc = subprocess.Popen(["codex", "app-server", "--listen", "stdio://"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0)
+        proc = subprocess.Popen(
+            ["codex", "app-server", "--listen", "stdio://"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0
+        )
     except OSError as e:
         log(f"codex app-server could not start: {e}")
         return None
+    assert proc.stdin is not None and proc.stdout is not None
     try:
-        for msg in ({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"clientInfo": {"name": "universe-journal", "title": "Universe", "version": "0.0.2"}}},
-                    {"jsonrpc": "2.0", "method": "initialized", "params": {}},
-                    {"jsonrpc": "2.0", "id": 2, "method": "account/rateLimits/read", "params": {}}):
+        for msg in (
+            {
+                "jsonrpc": "2.0",
+                "id": 1,
+                "method": "initialize",
+                "params": {"clientInfo": {"name": "universe-journal", "title": "Universe", "version": "0.0.2"}},
+            },
+            {"jsonrpc": "2.0", "method": "initialized", "params": {}},
+            {"jsonrpc": "2.0", "id": 2, "method": "account/rateLimits/read", "params": {}},
+        ):
             proc.stdin.write((json.dumps(msg) + "\n").encode())
         proc.stdin.flush()
         # Unbuffered reads: with a buffered pipe, lines already read ahead would leave select() waiting on an empty fd
@@ -116,21 +126,34 @@ def parse_limit_reset(text):
 
 def codex_args(model, images, schema_path, out_path, prompt, cwd):
     args = [
-        "codex", "exec", "--json",
+        "codex",
+        "exec",
+        "--json",
         "--skip-git-repo-check",
         "--ignore-user-config",
-        "--disable", "browser_use",
-        "--disable", "computer_use",
+        "--disable",
+        "browser_use",
+        "--disable",
+        "computer_use",
         "--ephemeral",
-        "-C", cwd,
-        "-s", "read-only",
-        "-c", "approval_policy=never",
-        "-c", f"model={model}",
-        "-c", "model_reasoning_effort=high",
-        "-c", "model_verbosity=medium",
-        "-c", "project_doc_max_bytes=0",
-        "-c", "tools.web_search=true",
-        "-c", "mcp_servers={}",
+        "-C",
+        cwd,
+        "-s",
+        "read-only",
+        "-c",
+        "approval_policy=never",
+        "-c",
+        f"model={model}",
+        "-c",
+        "model_reasoning_effort=high",
+        "-c",
+        "model_verbosity=medium",
+        "-c",
+        "project_doc_max_bytes=0",
+        "-c",
+        "tools.web_search=true",
+        "-c",
+        "mcp_servers={}",
     ]
     for im in images:
         args += ["-i", im]
@@ -149,7 +172,7 @@ def run_codex(model, brief, images, work_dir, forced_lang=None):
     for attempt in range(1, ATTEMPTS + 1):
         remove(out_path)
         try:
-            res = subprocess.run(args, cwd=work_dir, capture_output=True, text=True, timeout=TIMEOUT_S, stdin=subprocess.DEVNULL)
+            res = subprocess.run(args, cwd=work_dir, capture_output=True, text=True, timeout=TIMEOUT_S, stdin=subprocess.DEVNULL, check=False)
         except subprocess.TimeoutExpired:
             log(f"codex attempt {attempt}/{ATTEMPTS} timed out after {TIMEOUT_S}s")
             continue

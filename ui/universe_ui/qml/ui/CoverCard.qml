@@ -20,7 +20,9 @@ Item {
 
     Behavior on ringOpacity {
         enabled: root.selected
-        Ease { duration: Theme.durQuick }
+        Ease {
+            duration: Theme.durQuick
+        }
     }
 
     Item {
@@ -31,8 +33,16 @@ Item {
         opacity: root.selected ? 1.0 : Theme.idleOpacity
         scale: root.selected ? root.selectedScale : root.idleScale
 
-        Behavior on opacity { Ease { easing.type: Easing.OutQuint } }
-        Behavior on scale { Ease { easing.type: Easing.OutQuint } }
+        Behavior on opacity {
+            Ease {
+                easing.type: Easing.OutQuint
+            }
+        }
+        Behavior on scale {
+            Ease {
+                easing.type: Easing.OutQuint
+            }
+        }
 
         // Behind the artwork: RectangularGlow paints its whole bounds, not just the halo.
         Loader {
@@ -76,8 +86,14 @@ Item {
 
                 sourceComponent: Rectangle {
                     gradient: Gradient {
-                        GradientStop { position: 0.0; color: Qt.lighter(Theme.cardBase, 1.5) }
-                        GradientStop { position: 1.0; color: Theme.cardBase }
+                        GradientStop {
+                            position: 0.0
+                            color: Qt.lighter(Theme.cardBase, 1.5)
+                        }
+                        GradientStop {
+                            position: 1.0
+                            color: Theme.cardBase
+                        }
                     }
 
                     Text {
@@ -164,7 +180,9 @@ Item {
             anchors.fill: parent
             active: root.selected
             opacity: root.ringOpacity
-            sourceComponent: FocusRing { cornerRadius: root.cornerRadius }
+            sourceComponent: FocusRing {
+                cornerRadius: root.cornerRadius
+            }
         }
     }
 }

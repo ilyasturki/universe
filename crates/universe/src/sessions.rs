@@ -52,7 +52,14 @@ impl SessionRow {
     pub fn new(session: &Session, title: &str, entry: Option<&crate::journal::Entry>) -> SessionRow {
         let recording = session.recording.as_deref().filter(|p| !p.is_empty()).map(|p| {
             let md = std::fs::metadata(p).ok();
-            RecordingInfo { path: p.into(), size: md.as_ref().map(|m| m.len()).unwrap_or(0), exists: md.is_some(), duration_s: session.recording_duration_s, started_at: session.recording_started_at.clone(), pauses: session.recording_pauses.clone() }
+            RecordingInfo {
+                path: p.into(),
+                size: md.as_ref().map(|m| m.len()).unwrap_or(0),
+                exists: md.is_some(),
+                duration_s: session.recording_duration_s,
+                started_at: session.recording_started_at.clone(),
+                pauses: session.recording_pauses.clone(),
+            }
         });
         let journal = entry.map(|e| JournalState { state: e.state.clone(), title: e.title.clone(), written_at: e.written_at.clone() });
         SessionRow { session: session.clone(), title: title.into(), recording, journal }
@@ -165,7 +172,14 @@ mod tests {
     fn roundtrip_and_stats() {
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join("sessions.jsonl");
-        let a = Session { session: "20260910-213045".into(), game: "x".into(), started_at: "2026-09-10T21:30:45+02:00".into(), ended_at: "2026-09-10T22:00:45+02:00".into(), duration_s: 1800, ..Default::default() };
+        let a = Session {
+            session: "20260910-213045".into(),
+            game: "x".into(),
+            started_at: "2026-09-10T21:30:45+02:00".into(),
+            ended_at: "2026-09-10T22:00:45+02:00".into(),
+            duration_s: 1800,
+            ..Default::default()
+        };
         let b = Session { session: "import".into(), game: "x".into(), duration_s: 5400, source: "import-lutris".into(), ..Default::default() };
         append(&p, &a).unwrap();
         append(&p, &b).unwrap();
@@ -184,11 +198,20 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let rec = dir.path().join("r.mkv");
         std::fs::write(&rec, b"abc").unwrap();
-        let s = Session { session: "20260910-213045".into(), duration_s: 1800, recording: Some(rec.to_string_lossy().into()), recording_duration_s: 1790, ..Default::default() };
+        let s = Session {
+            session: "20260910-213045".into(),
+            duration_s: 1800,
+            recording: Some(rec.to_string_lossy().into()),
+            recording_duration_s: 1790,
+            ..Default::default()
+        };
         let entry = crate::journal::Entry { session: s.session.clone(), title: "Into the Dome".into(), state: "written".into(), ..Default::default() };
         let v = serde_json::to_value(SessionRow::new(&s, "X", Some(&entry))).unwrap();
         assert_eq!(v["title"], "X");
-        assert_eq!(v["recording"], serde_json::json!({"path": rec.to_string_lossy(), "size": 3, "exists": true, "duration_s": 1790, "started_at": "", "pauses": []}));
+        assert_eq!(
+            v["recording"],
+            serde_json::json!({"path": rec.to_string_lossy(), "size": 3, "exists": true, "duration_s": 1790, "started_at": "", "pauses": []})
+        );
         assert_eq!(v["journal"], serde_json::json!({"state": "written", "title": "Into the Dome", "written_at": ""}));
         assert!(v.get("recording_duration_s").is_none());
         let bare = serde_json::to_value(SessionRow::new(&Session::default(), "", None)).unwrap();

@@ -17,15 +17,39 @@ FocusScope {
     property string filterId: ""
     property string zone: "grid"
 
-    readonly property var articles: rows.filter(function(r) { return filterId === "" || r.gameId === filterId; })
+    readonly property var articles: rows.filter(function (r) {
+        return filterId === "" || r.gameId === filterId;
+    })
     readonly property var channels: Feed.channels(rows)
     readonly property var current: grid.index < articles.length ? articles[grid.index] : null
 
-    readonly property var hints: zone === "rail"
-        ? [ { glyph: "B", label: "Back" }, { glyph: "A", label: "OK" } ]
-        : [ { glyph: "Start", label: "Options", dim: current === null }, { glyph: "B", label: "Back" }, { glyph: "A", label: "Read", dim: current === null } ]
+    readonly property var hints: zone === "rail" ? [
+        {
+            glyph: "B",
+            label: "Back"
+        },
+        {
+            glyph: "A",
+            label: "OK"
+        }
+    ] : [
+        {
+            glyph: "Start",
+            label: "Options",
+            dim: current === null
+        },
+        {
+            glyph: "B",
+            label: "Back"
+        },
+        {
+            glyph: "A",
+            label: "Read",
+            dim: current === null
+        }
+    ]
 
-    signal closeRequested()
+    signal closeRequested
 
     readonly property real cardWidth: Theme.dp(489)
     readonly property real imageHeight: Math.round(cardWidth * 9 / 16)
@@ -49,17 +73,34 @@ FocusScope {
         Sound.play("ok");
         var row = current;
         var pending = row.state === "pending";
-        var items = pending ? [] : [{ label: "Read", act: "read" }];
+        var items = pending ? [] : [
+            {
+                label: "Read",
+                act: "read"
+            }
+        ];
         if (row.hasRecording)
-            items.push({ label: "Watch the recording", act: "recording" });
-        items.push({ label: pending ? "Cancel the writing…" : "Remove entry…", act: "remove" });
-        shell.menu(row.gameTitle + " · " + row.dateText, items, function(act) {
+            items.push({
+                label: "Watch the recording",
+                act: "recording"
+            });
+        items.push({
+            label: pending ? "Cancel the writing…" : "Remove entry…",
+            act: "remove"
+        });
+        shell.menu(row.gameTitle + " · " + row.dateText, items, function (act) {
             if (act === "read")
-                shell.push("pages/ArticlePage.qml", { session: row.session, gameId: row.gameId });
+                shell.push("pages/ArticlePage.qml", {
+                    session: row.session,
+                    gameId: row.gameId
+                });
             else if (act === "recording")
-                shell.push("pages/PlayerPage.qml", { session: row.session, gameId: row.gameId });
+                shell.push("pages/PlayerPage.qml", {
+                    session: row.session,
+                    gameId: row.gameId
+                });
             else
-                Removal.entry(shell, api.screens, row, function() {});
+                Removal.entry(shell, api.screens, row, function () {});
         });
     }
 
@@ -69,14 +110,25 @@ FocusScope {
             return;
         }
         Sound.play("ok");
-        shell.push("pages/ArticlePage.qml", { session: current.session, gameId: current.gameId });
+        shell.push("pages/ArticlePage.qml", {
+            session: current.session,
+            gameId: current.gameId
+        });
     }
 
     function railAction(id) {
         if (id === "filter") {
-            var ids = [""].concat(channels.map(function(c) { return c.id; }));
-            var choices = ["All"].concat(channels.map(function(c) { return c.title; }));
-            shell.pick({ title: "Show", choices: choices, index: Math.max(0, ids.indexOf(filterId)) }, function(i) {
+            var ids = [""].concat(channels.map(function (c) {
+                return c.id;
+            }));
+            var choices = ["All"].concat(channels.map(function (c) {
+                return c.title;
+            }));
+            shell.pick({
+                title: "Show",
+                choices: choices,
+                index: Math.max(0, ids.indexOf(filterId))
+            }, function (i) {
                 if (i >= 0) {
                     filterId = ids[i];
                     grid.index = 0;
@@ -106,8 +158,16 @@ FocusScope {
         y: Theme.dp(260)
         height: parent.height - y - Theme.dp(Theme.hintBarHeight)
         focus: page.zone === "rail"
-        items: [ { id: "filter", icon: "filter", label: "Filter" } ]
-        onActivated: function(id) { page.railAction(id); }
+        items: [
+            {
+                id: "filter",
+                icon: "filter",
+                label: "Filter"
+            }
+        ]
+        onActivated: function (id) {
+            page.railAction(id);
+        }
         onEscapedRight: {
             if (page.articles.length > 0)
                 page.zone = "grid";

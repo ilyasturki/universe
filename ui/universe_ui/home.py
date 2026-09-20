@@ -1,7 +1,10 @@
 import os
 import time
+from collections.abc import Callable
 
-from PySide6.QtCore import Property, QObject, QTimer, QUrl, Signal, Slot
+from PySide6.QtCore import QObject, QTimer, QUrl, Signal, Slot
+
+from .qt import Property
 
 OPAQUE = 0xFFFFFFFF
 POLL_MS = 250
@@ -22,7 +25,7 @@ class Home(QObject):
     screenshotTaken = Signal(str)
     stopping = Signal(str)
 
-    def __init__(self, client, controller, screen_mode=dict, parent=None, frames=lambda: True):
+    def __init__(self, client, controller, screen_mode: Callable[[], dict] = dict, parent=None, frames=lambda: True):
         super().__init__(parent)
         self._client = client
         self._controller = controller
@@ -64,6 +67,7 @@ class Home(QObject):
         self._cue.setInterval(CUE_MS)
         self._cue.timeout.connect(self._cue_done)
         self._shutter = None
+        self._no_shutter = False
         client.currentSessionChanged.connect(self._on_session)
         client.sessionShown.connect(self._on_shown)
         controller.buttonPressed.connect(self._on_button)
@@ -358,15 +362,15 @@ class Home(QObject):
             self._overlay_state(False, 0)
 
     def _play_shutter(self):
-        if self._shutter is None:
+        if self._shutter is None and not self._no_shutter:
             try:
                 from PySide6.QtMultimedia import QSoundEffect
             except ImportError:
-                self._shutter = False
+                self._no_shutter = True
                 return
             self._shutter = QSoundEffect(self)
             self._shutter.setSource(QUrl.fromLocalFile(SHUTTER))
-        if self._shutter:
+        if self._shutter is not None:
             self._shutter.play()
 
     @Slot(str, result=str)

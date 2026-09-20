@@ -6,7 +6,9 @@ QtObject {
 
     property url dir
     property var poolSizes: ({})
-    readonly property Component voice: Component { SoundEffect {} }
+    readonly property Component voice: Component {
+        SoundEffect {}
+    }
     readonly property var voices: ({})
     readonly property var lastPlayed: ({})
 
@@ -17,7 +19,12 @@ QtObject {
         for (var name in poolSizes) {
             var pool = [];
             for (var i = 0; i < poolSizes[name]; i++)
-                pool.push({ fx: voice.createObject(s, { source: dir + name + ".wav" }), at: 0 });
+                pool.push({
+                    fx: voice.createObject(s, {
+                        source: dir + name + ".wav"
+                    }),
+                    at: 0
+                });
             voices[name] = pool;
         }
     }

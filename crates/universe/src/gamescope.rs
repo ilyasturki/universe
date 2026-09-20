@@ -148,15 +148,26 @@ mod tests {
 
     #[test]
     fn auto_takes_the_screen_and_a_field_wins_over_it() {
-        let screen = Some(Mode { width: 3840, height: 2160, refresh: 60, vrr: false });
+        let mode = Mode { width: 3840, height: 2160, refresh: 60, vrr: false };
+        let screen = Some(mode);
         let auto = Fields { resolution: "auto".into(), refresh: "auto".into(), ..Default::default() };
         assert_eq!(args(&auto, screen), ["-W", "3840", "-H", "2160", "-w", "3840", "-h", "2160", "-r", "60"]);
-        let vrr = Some(Mode { vrr: true, ..screen.unwrap() });
+        let vrr = Some(Mode { vrr: true, ..mode });
         assert_eq!(args(&auto, vrr).last().map(String::as_str), Some("--adaptive-sync"), "auto follows the screen");
         let off = Fields { adaptive_sync: crate::config::Toggle::Off, ..auto.clone() };
         assert!(!args(&off, vrr).iter().any(|a| a == "--adaptive-sync"), "off wins over the screen");
-        let set = Fields { resolution: "1920x1080".into(), refresh: "120".into(), scaler: "fit".into(), filter: "fsr".into(), sharpness: Some(0), adaptive_sync: crate::config::Toggle::On };
-        assert_eq!(args(&set, screen), ["-W", "3840", "-H", "2160", "-w", "1920", "-h", "1080", "-r", "120", "-S", "fit", "-F", "fsr", "--sharpness", "0", "--adaptive-sync"]);
+        let set = Fields {
+            resolution: "1920x1080".into(),
+            refresh: "120".into(),
+            scaler: "fit".into(),
+            filter: "fsr".into(),
+            sharpness: Some(0),
+            adaptive_sync: crate::config::Toggle::On,
+        };
+        assert_eq!(
+            args(&set, screen),
+            ["-W", "3840", "-H", "2160", "-w", "1920", "-h", "1080", "-r", "120", "-S", "fit", "-F", "fsr", "--sharpness", "0", "--adaptive-sync"]
+        );
     }
 
     #[test]

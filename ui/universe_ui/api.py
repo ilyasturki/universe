@@ -1,11 +1,13 @@
 import json
 import os
 from pathlib import Path
+from typing import cast
 
-from PySide6.QtCore import Property, QEvent, QObject, QTimer, Qt, Signal, Slot
+from PySide6.QtCore import QEvent, QObject, Qt, QTimer, Signal, Slot
 
 from .home import Home
 from .models import Collection, CollectionGames, Game, GameListModel, ObjectListModel, collection_key
+from .qt import Property
 from .screens import Screens
 from .screens.paths import universe_home
 from .screens.power import SYSFS, Power
@@ -31,20 +33,46 @@ CANCEL_HOLD_MS = 450
 SOURCE_NAMES = {"gog": "GOG", "lutris": "Lutris", "steam": "Steam", "epic": "Epic", "itch": "itch.io"}
 
 PLATFORM_SHORT = {
-    "windows": "windows", "linux": "linux", "mac": "mac", "macos": "mac", "steam": "steam",
-    "nintendo switch": "switch", "nintendo wii": "wii", "nintendo wii u": "wiiu",
-    "nintendo gamecube": "gamecube", "nintendo ds": "nds", "nintendo 3ds": "3ds",
-    "sony playstation 2": "ps2", "sony playstation 3": "ps3", "sony playstation 4": "ps4",
-    "sony playstation 5": "ps5", "sony playstation portable": "psp", "psp": "psp",
-    "sony playstation vita": "vita", "ps vita": "vita", "xbox": "xbox", "microsoft xbox": "xbox",
-    "sony playstation": "ps1", "playstation": "ps1", "nintendo game boy advance": "gba", "nintendo game boy": "gb",
-    "nintendo 64": "n64", "nintendo snes": "snes", "super nintendo": "snes", "sega dreamcast": "dreamcast",
-    "microsoft xbox 360": "xbox360", "xbox 360": "xbox360", "ms-dos": "dos", "dos": "dos", "arcade": "arcade", "scummvm": "scummvm",
+    "windows": "windows",
+    "linux": "linux",
+    "mac": "mac",
+    "macos": "mac",
+    "steam": "steam",
+    "nintendo switch": "switch",
+    "nintendo wii": "wii",
+    "nintendo wii u": "wiiu",
+    "nintendo gamecube": "gamecube",
+    "nintendo ds": "nds",
+    "nintendo 3ds": "3ds",
+    "sony playstation 2": "ps2",
+    "sony playstation 3": "ps3",
+    "sony playstation 4": "ps4",
+    "sony playstation 5": "ps5",
+    "sony playstation portable": "psp",
+    "psp": "psp",
+    "sony playstation vita": "vita",
+    "ps vita": "vita",
+    "xbox": "xbox",
+    "microsoft xbox": "xbox",
+    "sony playstation": "ps1",
+    "playstation": "ps1",
+    "nintendo game boy advance": "gba",
+    "nintendo game boy": "gb",
+    "nintendo 64": "n64",
+    "nintendo snes": "snes",
+    "super nintendo": "snes",
+    "sega dreamcast": "dreamcast",
+    "microsoft xbox 360": "xbox360",
+    "xbox 360": "xbox360",
+    "ms-dos": "dos",
+    "dos": "dos",
+    "arcade": "arcade",
+    "scummvm": "scummvm",
 }
 PLATFORM_NAMES = {"windows": "Windows", "linux": "Linux", "mac": "macOS", "steam": "Steam"}
 
 
-def _collection_names(key):
+def _collection_names(key: str):
     short = PLATFORM_SHORT.get(key.casefold()) or SOURCE_NAMES.get(key, key).casefold().replace(" ", "-")
     name = PLATFORM_NAMES.get(key.casefold()) or SOURCE_NAMES.get(key) or key
     return short, name
@@ -194,7 +222,7 @@ class Library(QObject):
 
     def _rebuild(self):
         visible = [g for g in self._games.values() if not g.hidden]
-        keys = sorted({collection_key(g) for g in visible if collection_key(g)}, key=lambda k: _collection_names(k)[1])
+        keys = sorted({key for g in visible if (key := collection_key(g))}, key=lambda k: _collection_names(k)[1])
         collections = []
         for key in keys:
             entry = self._collection_lists.get(key)
@@ -240,7 +268,8 @@ class Library(QObject):
         self._client.set(ident, key, value)
 
     def launch(self, game, poster=None):
-        self._client.launch(game.id, self.parent().screenName(), poster)
+        api = cast("Api", self.parent())
+        self._client.launch(game.id, api.screenName(), poster)
 
 
 class Api(QObject):
@@ -290,6 +319,7 @@ class Api(QObject):
     keys = Property(QObject, lambda self: self._keys, constant=True)
     pad = Property(QObject, lambda self: self._pad, constant=True)
     power = Property(QObject, lambda self: self._power, constant=True)
+
     def _theme_list(self):
         return [{**t, "current": t["id"] == self._theme.current} for t in self._theme.themes]
 

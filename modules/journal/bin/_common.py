@@ -1,3 +1,4 @@
+import contextlib
 import json
 import locale
 import os
@@ -35,17 +36,16 @@ def write_json(path, data):
 
 
 def remove(path):
-    try:
+    with contextlib.suppress(OSError):
         os.remove(path)
-    except OSError:
-        pass
 
 
 def parse_session_id(s):
     m = SESSION_ID_RE.match(str(s or ""))
     if not m:
         return None
-    return datetime(*(int(x) for x in m.groups()))
+    year, month, day, hour, minute, second = (int(x) for x in m.groups())
+    return datetime(year, month, day, hour, minute, second)
 
 
 def parse_rfc3339(s):
@@ -53,7 +53,7 @@ def parse_rfc3339(s):
     if not s:
         return None
     try:
-        d = datetime.fromisoformat(s.replace("Z", "+00:00"))
+        d = datetime.fromisoformat(s)
     except ValueError:
         return None
     return d.astimezone().replace(tzinfo=None) if d.tzinfo else d
@@ -66,10 +66,8 @@ def rfc3339_local(d):
 
 
 def use_system_locale():
-    try:
+    with contextlib.suppress(locale.Error):
         locale.setlocale(locale.LC_TIME, "")
-    except locale.Error:
-        pass
 
 
 def fmt_date(d):
@@ -130,15 +128,15 @@ def journal_lang(lang):
 
 
 def label_alt(key):
-    return "|".join(re.escape(v) for v in dict.fromkeys(l[key] for l in LABELS.values()))
+    return "|".join(re.escape(v) for v in dict.fromkeys(labels[key] for labels in LABELS.values()))
 
 
 def read_jsonl(path):
     out = []
     try:
         with open(path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
+            for raw in f:
+                line = raw.strip()
                 if not line:
                     continue
                 try:
@@ -178,15 +176,14 @@ OPTIONAL_ENTRY_KEYS = ("started_at", "ended_at", "duration_s")
 
 def validate_entry(entry):
     errors = []
-    for k in ENTRY_KEYS:
-        if k not in entry:
-            errors.append(f"missing {k}")
-    for k in ("session", "game", "written_at", "lang", "title", "provider", "next_up", "started_at", "ended_at"):
-        if k in entry and not isinstance(entry[k], str):
-            errors.append(f"{k} must be a string")
-    for k in ("paragraphs", "images"):
-        if k in entry and (not isinstance(entry[k], list) or not all(isinstance(x, str) for x in entry[k])):
-            errors.append(f"{k} must be a list of strings")
+    errors.extend(f"missing {k}" for k in ENTRY_KEYS if k not in entry)
+    strings = ("session", "game", "written_at", "lang", "title", "provider", "next_up", "started_at", "ended_at")
+    errors.extend(f"{k} must be a string" for k in strings if k in entry and not isinstance(entry[k], str))
+    errors.extend(
+        f"{k} must be a list of strings"
+        for k in ("paragraphs", "images")
+        if k in entry and (not isinstance(entry[k], list) or not all(isinstance(x, str) for x in entry[k]))
+    )
     if "duration_s" in entry and (isinstance(entry["duration_s"], bool) or not isinstance(entry["duration_s"], int)):
         errors.append("duration_s must be an integer")
     if "session" in entry and not SESSION_ID_RE.match(str(entry["session"])):
@@ -220,7 +217,7 @@ def read_entries(journal_dir):
 def add_entry_via_core(sid, entry_json):
     cmd = [os.environ.get("UNIVERSE_BIN") or "universe", "journal-add", sid, entry_json]
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False)
     except FileNotFoundError:
         log(f"{cmd[0]} not found")
         return "unavailable"

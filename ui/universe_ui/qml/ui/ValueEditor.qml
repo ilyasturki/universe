@@ -12,7 +12,7 @@ FocusScope {
     readonly property bool open: picker.open || (sheets.item !== null && sheets.item.open)
     readonly property var hints: sheets.item !== null && sheets.item.open ? sheets.item.hints : picker.open ? picker.hints : []
 
-    signal closed()
+    signal closed
 
     property var done: null
     property var pendingRow: null
@@ -24,9 +24,15 @@ FocusScope {
         pendingRow = row;
         var choices = row.choices || [];
         if (row.type === "enum" || ((row.type === "int" || row.type === "string") && choices.length > 0)) {
-            var opts = choices.map(function(c) { return { label: c }; });
+            var opts = choices.map(function (c) {
+                return {
+                    label: c
+                };
+            });
             if (row.type !== "enum")
-                opts.push({ label: customLabel });
+                opts.push({
+                    label: customLabel
+                });
             var current = choices.indexOf(String(row.value));
             picker.show(cards, opts, current >= 0 ? current : (row.type === "enum" ? 0 : opts.length - 1));
         } else if (row.type === "path") {
@@ -75,11 +81,10 @@ FocusScope {
         id: picker
 
         x: editor.cards ? editor.cards.x + editor.cards.focusRect.x + editor.cards.focusRect.width - Theme.dp(16) - width : 0
-        y: editor.cards ? Math.min(editor.floor - height - Theme.dp(20),
-                                   editor.cards.y + editor.cards.focusRect.y + editor.cards.focusRect.height + Theme.dp(8)) : 0
+        y: editor.cards ? Math.min(editor.floor - height - Theme.dp(20), editor.cards.y + editor.cards.focusRect.y + editor.cards.focusRect.height + Theme.dp(8)) : 0
         z: 3
 
-        onChosen: function(index) {
+        onChosen: function (index) {
             var row = editor.pendingRow || ({});
             var choices = row.choices || [];
             picker.hide();
@@ -118,8 +123,10 @@ FocusScope {
 
                 anchors.fill: parent
 
-                onAccepted: function(path) { editor.finish(path); }
-                onTypeRequested: function(path) {
+                onAccepted: function (path) {
+                    editor.finish(path);
+                }
+                onTypeRequested: function (path) {
                     var row = editor.pendingRow || ({});
                     sheet.show(row.label || "", path, "path");
                 }
@@ -131,7 +138,9 @@ FocusScope {
 
                 anchors.fill: parent
 
-                onAccepted: function(value) { editor.finish(value); }
+                onAccepted: function (value) {
+                    editor.finish(value);
+                }
                 onDismissed: editor.closed()
             }
         }

@@ -92,7 +92,7 @@ GridView {
     onHeightChanged: scrollToCurrent()
     onCountChanged: scrollToCurrent()
 
-    Keys.onDownPressed: function(event) {
+    Keys.onDownPressed: function (event) {
         if (!selectionActive)
             event.accepted = false;
         else if (Math.floor(cursor / columns) < lastRow)
@@ -101,21 +101,21 @@ GridView {
             Sound.edge();
     }
 
-    Keys.onUpPressed: function(event) {
+    Keys.onUpPressed: function (event) {
         if (selectionActive && cursor >= columns)
             moveCurrent(cursor - columns);
         else
             event.accepted = false;
     }
 
-    Keys.onLeftPressed: function(event) {
+    Keys.onLeftPressed: function (event) {
         if (!selectionActive)
             event.accepted = false;
         else
             moveCurrent(cursor - 1);
     }
 
-    Keys.onRightPressed: function(event) {
+    Keys.onRightPressed: function (event) {
         if (!selectionActive)
             event.accepted = false;
         else
@@ -123,7 +123,7 @@ GridView {
     }
 
     // The right stick: a screenful of rows, staying in the column.
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         var d = api.keys.isScreenUp(event) ? -1 : api.keys.isScreenDown(event) ? 1 : 0;
         if (!d || !selectionActive)
             return;

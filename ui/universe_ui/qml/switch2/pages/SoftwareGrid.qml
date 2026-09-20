@@ -21,10 +21,10 @@ FocusScope {
     readonly property var current: atAddTile ? null : listed ? (index >= 0 && index < games.length ? games[index] : null) : anchor.game
     readonly property bool cursorShown: activeFocus
 
-    signal escapedLeft()
+    signal escapedLeft
     signal activated(int index)
     signal optionsRequested(int index)
-    signal addRequested()
+    signal addRequested
 
     readonly property int columns: 6
     readonly property real tile: Theme.dp(237)
@@ -37,8 +37,12 @@ FocusScope {
 
     implicitWidth: columns * pitch
 
-    function go(next) { index = Sound.stepped(index, next - index, cells); }
-    function stepScreen(d) { index = Sound.paged(index, d, columns, Math.floor(grid.height / cellHeight), cells); }
+    function go(next) {
+        index = Sound.stepped(index, next - index, cells);
+    }
+    function stepScreen(d) {
+        index = Sound.paged(index, d, columns, Math.floor(grid.height / cellHeight), cells);
+    }
 
     Keys.onRightPressed: index % columns === columns - 1 || index === cells - 1 ? Sound.play("edge") : go(index + 1)
     Keys.onLeftPressed: {
@@ -54,7 +58,7 @@ FocusScope {
     Keys.onDownPressed: Math.floor(index / columns) < lastRow ? go(Math.min(index + columns, cells - 1)) : Sound.play("edge")
     Keys.onUpPressed: index >= columns ? go(index - columns) : Sound.play("edge")
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         var screen = api.keys.isScreenUp(event) ? -1 : api.keys.isScreenDown(event) ? 1 : 0;
         if (screen) {
             event.accepted = true;
@@ -100,25 +104,32 @@ FocusScope {
         id: anchor
         model: grid.listed ? null : grid.games
         index: grid.atAddTile ? -1 : grid.index
-        onMoved: function(next) { grid.index = next; }
+        onMoved: function (next) {
+            grid.index = next;
+        }
     }
 
     property string heldId: ""
-    onGamesChanged: if (listed) hold(heldId)
+    onGamesChanged: if (listed)
+        hold(heldId)
 
     function hold(id) {
         if (!listed) {
             anchor.hold(id);
             return;
         }
-        var i = games.findIndex(function(g) { return g.id === id; });
+        var i = games.findIndex(function (g) {
+            return g.id === id;
+        });
         if (i >= 0)
             index = i;
     }
 
     Connections {
         target: api.universe
-        function onSessionEnded(sessionId, id, duration) { grid.hold(id); }
+        function onSessionEnded(sessionId, id, duration) {
+            grid.hold(id);
+        }
     }
     onHeightChanged: view.scrollToCurrent()
 
@@ -129,9 +140,7 @@ FocusScope {
         visible: grid.count === 0
         horizontalAlignment: Text.AlignHCenter
         wrapMode: Text.WordWrap
-        text: grid.groups ? "Groups gather your games: your favourites, each platform, each tag you give a game."
-            : grid.addTile && api.allGames.count === 0 ? "Nothing in the library yet. Add a file on this machine, a store's games, or your Lutris library."
-            : "No software matches."
+        text: grid.groups ? "Groups gather your games: your favourites, each platform, each tag you give a game." : grid.addTile && api.allGames.count === 0 ? "Nothing in the library yet. Add a file on this machine, a store's games, or your Lutris library." : "No software matches."
         lineHeight: 1.3
     }
 
@@ -169,7 +178,9 @@ FocusScope {
             contentY = Math.max(-topMargin, Math.min(target, contentHeight - height + bottomMargin));
         }
 
-        Behavior on contentY { Ease {} }
+        Behavior on contentY {
+            Ease {}
+        }
 
         // Room for the add tile, drawn outside the delegates, when it starts a row.
         footer: Item {
@@ -305,8 +316,7 @@ FocusScope {
     Item {
         id: card
 
-        readonly property bool shown: !grid.groups && grid.cursorShown && (grid.current !== null || grid.atAddTile)
-                                      && grid.index + grid.columns >= grid.cells
+        readonly property bool shown: !grid.groups && grid.cursorShown && (grid.current !== null || grid.atAddTile) && grid.index + grid.columns >= grid.cells
         readonly property real cellX: (grid.index % grid.columns) * grid.pitch
         readonly property real cellY: Math.floor(grid.index / grid.columns) * grid.cellHeight - view.contentY - grid.inset
 

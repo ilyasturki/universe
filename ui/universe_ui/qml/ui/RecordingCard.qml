@@ -26,7 +26,11 @@ Column {
         height: card.shotHeight
         opacity: card.dimmed ? 0.6 : 1.0
 
-        Behavior on opacity { Ease { duration: Theme.durQuick } }
+        Behavior on opacity {
+            Ease {
+                duration: Theme.durQuick
+            }
+        }
 
         RoundedMask {
             id: thumb
@@ -36,7 +40,11 @@ Column {
             radius: Theme.dp(10)
             scale: card.focused ? 1.03 : 1.0
 
-            Behavior on scale { Ease { easing.type: Easing.OutQuint } }
+            Behavior on scale {
+                Ease {
+                    easing.type: Easing.OutQuint
+                }
+            }
 
             Rectangle {
                 anchors.fill: parent
@@ -50,7 +58,11 @@ Column {
                 asynchronous: true
                 opacity: status === Image.Ready ? 1.0 : 0.0
 
-                Behavior on opacity { Ease { duration: Theme.durView } }
+                Behavior on opacity {
+                    Ease {
+                        duration: Theme.durView
+                    }
+                }
             }
 
             Rectangle {

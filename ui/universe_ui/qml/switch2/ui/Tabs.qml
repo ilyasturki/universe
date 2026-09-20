@@ -35,7 +35,9 @@ Item {
         anchors.verticalCenterOffset: -Theme.dp(6)
         spacing: Theme.dp(100)
 
-        Bumper { glyph: "LB" }
+        Bumper {
+            glyph: "LB"
+        }
 
         Repeater {
             model: tabs.names
@@ -63,7 +65,9 @@ Item {
             }
         }
 
-        Bumper { glyph: "RB" }
+        Bumper {
+            glyph: "RB"
+        }
     }
 
     Hairline {

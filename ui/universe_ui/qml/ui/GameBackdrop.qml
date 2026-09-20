@@ -23,10 +23,22 @@ Item {
     Rectangle {
         anchors.fill: parent
         gradient: Gradient {
-            GradientStop { position: 0.00; color: Qt.rgba(0.055, 0.059, 0.075, 0.30) }
-            GradientStop { position: 0.45; color: Qt.rgba(0.055, 0.059, 0.075, 0.70) }
-            GradientStop { position: 0.75; color: Qt.rgba(0.055, 0.059, 0.075, 0.94) }
-            GradientStop { position: 1.00; color: Theme.ground }
+            GradientStop {
+                position: 0.00
+                color: Qt.rgba(0.055, 0.059, 0.075, 0.30)
+            }
+            GradientStop {
+                position: 0.45
+                color: Qt.rgba(0.055, 0.059, 0.075, 0.70)
+            }
+            GradientStop {
+                position: 0.75
+                color: Qt.rgba(0.055, 0.059, 0.075, 0.94)
+            }
+            GradientStop {
+                position: 1.00
+                color: Theme.ground
+            }
         }
     }
 }

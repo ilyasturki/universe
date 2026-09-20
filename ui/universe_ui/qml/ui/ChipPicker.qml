@@ -14,11 +14,17 @@ FocusScope {
     property Item anchorItem: null
 
     signal chosen(int index)
-    signal dismissed()
+    signal dismissed
 
     readonly property var hints: [
-        { glyph: "A", label: "Select" },
-        { glyph: "B", label: "Close" }
+        {
+            glyph: "A",
+            label: "Select"
+        },
+        {
+            glyph: "B",
+            label: "Close"
+        }
     ]
 
     readonly property real rowHeight: Theme.dp(52)
@@ -82,7 +88,7 @@ FocusScope {
     Keys.onLeftPressed: Sound.edge()
     Keys.onRightPressed: Sound.edge()
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         if (event.isAutoRepeat)
             return;
         if (api.keys.isAccept(event)) {
@@ -92,8 +98,7 @@ FocusScope {
             event.accepted = true;
             Sound.cancel();
             picker.dismissed();
-        } else if (api.keys.isDetails(event) || api.keys.isFilters(event)
-                   || api.keys.isPageUp(event) || api.keys.isPageDown(event)) {
+        } else if (api.keys.isDetails(event) || api.keys.isFilters(event) || api.keys.isPageUp(event) || api.keys.isPageDown(event)) {
             // The chip bar and the grid below own these; an open list must eat them.
             event.accepted = true;
             Sound.edge();
@@ -105,10 +110,20 @@ FocusScope {
 
         anchors.fill: parent
         opacity: picker.open ? 1.0 : 0.0
-        transform: Translate { y: picker.open ? 0 : -Theme.dp(10)
-                               Behavior on y { Ease { duration: Theme.durQuick } } }
+        transform: Translate {
+            y: picker.open ? 0 : -Theme.dp(10)
+            Behavior on y {
+                Ease {
+                    duration: Theme.durQuick
+                }
+            }
+        }
 
-        Behavior on opacity { Ease { duration: Theme.durQuick } }
+        Behavior on opacity {
+            Ease {
+                duration: Theme.durQuick
+            }
+        }
 
         // RectangularGlow paints its whole bounds, so it sits behind the panel.
         RectangularGlow {
@@ -158,7 +173,9 @@ FocusScope {
                     radius: Theme.dp(14)
                     color: row.focused ? Theme.text : "transparent"
 
-                    Behavior on color { ColorEase {} }
+                    Behavior on color {
+                        ColorEase {}
+                    }
                 }
 
                 Text {

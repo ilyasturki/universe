@@ -29,7 +29,21 @@ pub struct Entry {
 
 impl Default for Entry {
     fn default() -> Self {
-        Entry { session: String::new(), game: String::new(), written_at: String::new(), started_at: String::new(), ended_at: String::new(), duration_s: 0, lang: String::new(), title: String::new(), provider: String::new(), paragraphs: vec![], next_up: String::new(), images: vec![], state: "written".into() }
+        Entry {
+            session: String::new(),
+            game: String::new(),
+            written_at: String::new(),
+            started_at: String::new(),
+            ended_at: String::new(),
+            duration_s: 0,
+            lang: String::new(),
+            title: String::new(),
+            provider: String::new(),
+            paragraphs: vec![],
+            next_up: String::new(),
+            images: vec![],
+            state: "written".into(),
+        }
     }
 }
 
@@ -77,7 +91,14 @@ fn pending_entry(p: &Path, sid: &str) -> crate::Result<Entry> {
 fn failed_entry(p: &Path, sid: &str) -> crate::Result<Entry> {
     let v = read_json(p)?;
     let reason = field(&v, "reason");
-    Ok(Entry { session: sid.into(), game: field(&v, "game"), written_at: field(&v, "written_at"), paragraphs: if reason.is_empty() { vec![] } else { vec![reason] }, state: "failed".into(), ..Entry::default() })
+    Ok(Entry {
+        session: sid.into(),
+        game: field(&v, "game"),
+        written_at: field(&v, "written_at"),
+        paragraphs: if reason.is_empty() { vec![] } else { vec![reason] },
+        state: "failed".into(),
+        ..Entry::default()
+    })
 }
 
 /// A session with a written entry hides its failed one, a failed one its pending one.
@@ -259,9 +280,16 @@ fn parse_rfc3339(s: &str) -> Option<DateTime<Local>> {
 }
 
 fn session_span(session: Option<&Session>, entry: &Entry) -> (DateTime<Local>, DateTime<Local>, u64) {
-    let start = session.and_then(|s| parse_rfc3339(&s.started_at)).or_else(|| parse_rfc3339(&entry.started_at)).or_else(|| crate::sessions::parse_session_id(&entry.session)).unwrap_or_else(Local::now);
+    let start = session
+        .and_then(|s| parse_rfc3339(&s.started_at))
+        .or_else(|| parse_rfc3339(&entry.started_at))
+        .or_else(|| crate::sessions::parse_session_id(&entry.session))
+        .unwrap_or_else(Local::now);
     let duration = session.map(|s| s.duration_s).filter(|d| *d > 0).unwrap_or(entry.duration_s.max(0) as u64);
-    let end = session.and_then(|s| parse_rfc3339(&s.ended_at)).or_else(|| parse_rfc3339(&entry.ended_at)).unwrap_or_else(|| start + chrono::Duration::seconds(duration as i64));
+    let end = session
+        .and_then(|s| parse_rfc3339(&s.ended_at))
+        .or_else(|| parse_rfc3339(&entry.ended_at))
+        .unwrap_or_else(|| start + chrono::Duration::seconds(duration as i64));
     (start, end, duration)
 }
 
@@ -310,8 +338,19 @@ fn yaml_typed(s: &str) -> bool {
     }
     let t = s.strip_prefix(['+', '-']).unwrap_or(s);
     let b: Vec<u8> = t.bytes().collect();
-    let radix = |digits: &[u8], radix: u32| digits.len() > 0 && digits.iter().all(|&c| c == b'_' || (c as char).is_digit(radix));
-    if b.len() > 2 && b[0] == b'0' && matches!(b[1], b'x' | b'o' | b'b') && radix(&b[2..], match b[1] { b'x' => 16, b'o' => 8, _ => 2 }) {
+    let radix = |digits: &[u8], radix: u32| !digits.is_empty() && digits.iter().all(|&c| c == b'_' || (c as char).is_digit(radix));
+    if b.len() > 2
+        && b[0] == b'0'
+        && matches!(b[1], b'x' | b'o' | b'b')
+        && radix(
+            &b[2..],
+            match b[1] {
+                b'x' => 16,
+                b'o' => 8,
+                _ => 2,
+            },
+        )
+    {
         return true;
     }
     let digit_first = b.first().is_some_and(|c| c.is_ascii_digit() || *c == b'.');
@@ -477,7 +516,11 @@ fn resolve_note_path(note_dir: &Path, title: &str) -> PathBuf {
         }
     }
     let notes = if marked.is_empty() { headed } else { marked };
-    if notes.len() == 1 { notes.into_iter().next().unwrap() } else { preferred }
+    if notes.len() == 1 {
+        notes.into_iter().next().unwrap()
+    } else {
+        preferred
+    }
 }
 
 /// Obsidian only follows links inside the vault, so referenced images are copied beside the note.
@@ -502,7 +545,15 @@ fn mirror_images(entries: &[Entry], journal_dir: &Path, screenshots_dir: &Path, 
     Ok(())
 }
 
-pub fn write_note(title: &str, entries: &[Entry], sessions: &HashMap<String, Session>, journal_dir: &Path, screenshots_dir: &Path, note_dir: &Path, loc: &Locale) -> crate::Result<PathBuf> {
+pub fn write_note(
+    title: &str,
+    entries: &[Entry],
+    sessions: &HashMap<String, Session>,
+    journal_dir: &Path,
+    screenshots_dir: &Path,
+    note_dir: &Path,
+    loc: &Locale,
+) -> crate::Result<PathBuf> {
     std::fs::create_dir_all(note_dir)?;
     let path = resolve_note_path(note_dir, title);
     let text = render_note(title, entries, sessions, loc);
@@ -533,23 +584,88 @@ mod tests {
     }
 
     fn session(sid: &str, started: &str, ended: &str, dur: u64, rec: Option<&str>) -> (String, Session) {
-        (sid.into(), Session { session: sid.into(), game: "sample".into(), started_at: started.into(), ended_at: ended.into(), duration_s: dur, source: "import-journal".into(), recording: rec.map(Into::into), ..Default::default() })
+        (
+            sid.into(),
+            Session {
+                session: sid.into(),
+                game: "sample".into(),
+                started_at: started.into(),
+                ended_at: ended.into(),
+                duration_s: dur,
+                source: "import-journal".into(),
+                recording: rec.map(Into::into),
+                ..Default::default()
+            },
+        )
     }
 
     // The same sample as sample_entries() in modules/journal/tests/test_journal.py.
     fn sample() -> (Vec<Entry>, HashMap<String, Session>) {
         let entries = vec![
-            entry("20260301-210000", "en", "Into the Dome", "import", &["Zachariah reached the Source after three failed runs.", "- **Main quest:** Cleared the gate.", "- **Side quest:** Talked to Amelia.", "Then the patrol reset."], "Return to the Exchange and talk to Amelia.", &["20260301-211500.png", "attachments/20260301-210000-1.png", "attachments/frames/frame-20260301-210000-02.jpg"]),
-            entry("20260215-183000", "fr", "Trois contrats et Port-péril", "import", &["Le duo a enchaîné les sauvetages.", "- **Boss :** Tu as vaincu Corbin Claquebec."], "Tu reprendras dans le Mausolée III.", &["attachments/frames/frame-20260215-183000-01.jpg"]),
+            entry(
+                "20260301-210000",
+                "en",
+                "Into the Dome",
+                "import",
+                &[
+                    "Zachariah reached the Source after three failed runs.",
+                    "- **Main quest:** Cleared the gate.",
+                    "- **Side quest:** Talked to Amelia.",
+                    "Then the patrol reset.",
+                ],
+                "Return to the Exchange and talk to Amelia.",
+                &["20260301-211500.png", "attachments/20260301-210000-1.png", "attachments/frames/frame-20260301-210000-02.jpg"],
+            ),
+            entry(
+                "20260215-183000",
+                "fr",
+                "Trois contrats et Port-péril",
+                "import",
+                &["Le duo a enchaîné les sauvetages.", "- **Boss :** Tu as vaincu Corbin Claquebec."],
+                "Tu reprendras dans le Mausolée III.",
+                &["attachments/frames/frame-20260215-183000-01.jpg"],
+            ),
             entry("20260110-000500", "en", "", "import", &[], "", &[]),
-            entry("20251220-120000", "en", "", "none", &["This session’s recording holds no picture and no screenshot covers it, so there is nothing to summarize."], "", &[]),
+            entry(
+                "20251220-120000",
+                "en",
+                "",
+                "none",
+                &["This session’s recording holds no picture and no screenshot covers it, so there is nothing to summarize."],
+                "",
+                &[],
+            ),
             entry("20251201-230000", "en", "First Glimpse", "import", &["You reached the title screen."], "Press any key.", &["20251201-230100.png"]),
         ];
         let sessions = HashMap::from([
-            session("20260301-210000", "2026-03-01T21:00:00+01:00", "2026-03-01T22:30:00+01:00", 5400, Some("/mnt/recordings/games/sample/20260301-210000.mkv")),
-            session("20260215-183000", "2026-02-15T18:30:00+01:00", "2026-02-15T19:45:00+01:00", 4500, Some("/mnt/recordings/games/sample/003-20260215-183000-1h15m.mkv")),
-            session("20260110-000500", "2026-01-10T00:05:00+01:00", "2026-01-10T00:07:00+01:00", 120, Some("/mnt/recordings/games/sample/002-20260110-000500-2m.mkv")),
-            session("20251220-120000", "2025-12-20T12:00:00+01:00", "2025-12-20T12:01:00+01:00", 60, Some("/mnt/recordings/games/sample/001-20251220-120000-1m.mkv")),
+            session(
+                "20260301-210000",
+                "2026-03-01T21:00:00+01:00",
+                "2026-03-01T22:30:00+01:00",
+                5400,
+                Some("/mnt/recordings/games/sample/20260301-210000.mkv"),
+            ),
+            session(
+                "20260215-183000",
+                "2026-02-15T18:30:00+01:00",
+                "2026-02-15T19:45:00+01:00",
+                4500,
+                Some("/mnt/recordings/games/sample/003-20260215-183000-1h15m.mkv"),
+            ),
+            session(
+                "20260110-000500",
+                "2026-01-10T00:05:00+01:00",
+                "2026-01-10T00:07:00+01:00",
+                120,
+                Some("/mnt/recordings/games/sample/002-20260110-000500-2m.mkv"),
+            ),
+            session(
+                "20251220-120000",
+                "2025-12-20T12:00:00+01:00",
+                "2025-12-20T12:01:00+01:00",
+                60,
+                Some("/mnt/recordings/games/sample/001-20251220-120000-1m.mkv"),
+            ),
             session("20251201-230000", "2025-12-01T23:00:00+01:00", "2025-12-02T00:10:00+01:00", 4200, None),
         ]);
         (entries, sessions)
@@ -639,7 +755,14 @@ You reached the title screen.
     #[test]
     fn entry_timing_from_the_session_then_its_own_stamps() {
         let (mut entries, sessions) = sample();
-        entries.push(Entry { session: "20260501-200000".into(), title: "Stamped".into(), started_at: "2026-05-01T20:00:00+02:00".into(), ended_at: "2026-05-01T20:45:00+02:00".into(), duration_s: 2700, ..Entry::default() });
+        entries.push(Entry {
+            session: "20260501-200000".into(),
+            title: "Stamped".into(),
+            started_at: "2026-05-01T20:00:00+02:00".into(),
+            ended_at: "2026-05-01T20:45:00+02:00".into(),
+            duration_s: 2700,
+            ..Entry::default()
+        });
         fill_timing(&mut entries, &sessions);
         assert_eq!(entries[0].started_at, "2026-03-01T21:00:00+01:00");
         assert_eq!(entries[0].ended_at, "2026-03-01T22:30:00+01:00");
@@ -655,10 +778,22 @@ You reached the title screen.
         let journal_dir = dir.path().join("journal");
         std::fs::create_dir_all(&journal_dir).unwrap();
         write(&journal_dir, &Entry { session: "20260910-100000".into(), title: "Written".into(), ..Entry::default() }).unwrap();
-        std::fs::write(journal_dir.join("20260910-110000.pending.json"), r#"{"session":"20260910-110000","game":"x","started_at":"2026-09-10T11:00:00+02:00","provider":"codex"}"#).unwrap();
-        std::fs::write(journal_dir.join("20260910-120000.failed.json"), r#"{"session":"20260910-120000","game":"x","written_at":"2026-09-10T12:30:00+02:00","reason":"codex: rate limited"}"#).unwrap();
+        std::fs::write(
+            journal_dir.join("20260910-110000.pending.json"),
+            r#"{"session":"20260910-110000","game":"x","started_at":"2026-09-10T11:00:00+02:00","provider":"codex"}"#,
+        )
+        .unwrap();
+        std::fs::write(
+            journal_dir.join("20260910-120000.failed.json"),
+            r#"{"session":"20260910-120000","game":"x","written_at":"2026-09-10T12:30:00+02:00","reason":"codex: rate limited"}"#,
+        )
+        .unwrap();
         std::fs::write(journal_dir.join("20260910-120000.pending.json"), r#"{"session":"20260910-120000","game":"x"}"#).unwrap();
-        std::fs::write(journal_dir.join("20260910-130000.pending.json"), r#"{"session":"20260910-130000","game":"x","started_at":"2026-09-10T13:00:00+02:00"}"#).unwrap();
+        std::fs::write(
+            journal_dir.join("20260910-130000.pending.json"),
+            r#"{"session":"20260910-130000","game":"x","started_at":"2026-09-10T13:00:00+02:00"}"#,
+        )
+        .unwrap();
         let stale = std::fs::OpenOptions::new().write(true).open(journal_dir.join("20260910-130000.pending.json")).unwrap();
         stale.set_modified(std::time::SystemTime::now() - Duration::from_secs(31 * 60)).unwrap();
         std::fs::write(journal_dir.join(".game-memory.json"), "{}").unwrap();
@@ -682,11 +817,26 @@ You reached the title screen.
         std::fs::create_dir_all(&shots_dir).unwrap();
         std::fs::write(journal_dir.join("attachments/a.png"), b"png").unwrap();
         std::fs::write(shots_dir.join("20260910-214000.png"), b"shot").unwrap();
-        let e = Entry { session: "20260910-213045".into(), game: "x".into(), title: "Into the Dome".into(), paragraphs: vec!["A.".into(), "B.".into()], next_up: "Go.".into(), images: vec!["20260910-214000.png".into(), "attachments/a.png".into()], ..Default::default() };
+        let e = Entry {
+            session: "20260910-213045".into(),
+            game: "x".into(),
+            title: "Into the Dome".into(),
+            paragraphs: vec!["A.".into(), "B.".into()],
+            next_up: "Go.".into(),
+            images: vec!["20260910-214000.png".into(), "attachments/a.png".into()],
+            ..Default::default()
+        };
         write(&journal_dir, &e).unwrap();
         let all = read_all(&journal_dir).unwrap();
         assert_eq!(all, vec![e.clone()]);
-        let sessions = sessions_by_id(&[Session { session: "20260910-213045".into(), game: "x".into(), started_at: "2026-09-10T21:30:45+02:00".into(), ended_at: "2026-09-10T22:00:00+02:00".into(), duration_s: 1755, ..Default::default() }]);
+        let sessions = sessions_by_id(&[Session {
+            session: "20260910-213045".into(),
+            game: "x".into(),
+            started_at: "2026-09-10T21:30:45+02:00".into(),
+            ended_at: "2026-09-10T22:00:00+02:00".into(),
+            duration_s: 1755,
+            ..Default::default()
+        }]);
         let note_dir = dir.path().join("vault").join("x");
         let path = write_note("X", &all, &sessions, &journal_dir, &shots_dir, &note_dir, &Locale::posix()).unwrap();
         assert_eq!(path, note_dir.join("X.md"));
@@ -719,6 +869,10 @@ You reached the title screen.
         }
         assert_eq!(file_uri("/mnt/rec (1)/é.mkv"), "file:///mnt/rec%20%281%29/%C3%A9.mkv");
         assert_eq!(file_uri("/mnt/#DRIVE/What? A Game/x.mkv"), "file:///mnt/%23DRIVE/What%3F%20A%20Game/x.mkv");
-        assert!(crate::screenshots::is_shot_name("20260301-211500.png") && !crate::screenshots::is_shot_name("attachments/20260301-211500.png") && !crate::screenshots::is_shot_name("attachments/20260301-210000-1.png"));
+        assert!(
+            crate::screenshots::is_shot_name("20260301-211500.png")
+                && !crate::screenshots::is_shot_name("attachments/20260301-211500.png")
+                && !crate::screenshots::is_shot_name("attachments/20260301-210000-1.png")
+        );
     }
 }

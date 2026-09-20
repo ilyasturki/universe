@@ -1,5 +1,6 @@
-from PySide6.QtCore import Property, Signal, Slot
+from PySide6.QtCore import Signal, Slot
 
+from ..qt import Property
 from .add import _source_status
 from .settings import RowsForm, _add, _row, launch_row
 
@@ -282,6 +283,6 @@ class Onboarding(RowsForm):
         self._refresh()
 
     needed = Property(bool, _needed, constant=True)
-    steps = Property("QVariantList", lambda self: [dict(s) for s in self._steps], notify=stepChanged)
+    steps = Property(list, lambda self: [dict(s) for s in self._steps], notify=stepChanged)
     step = Property(int, lambda self: self._step, notify=stepChanged)
     stepId = Property(str, _step_id, notify=stepChanged)

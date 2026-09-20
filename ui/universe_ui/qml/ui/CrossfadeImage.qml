@@ -41,9 +41,14 @@ Item {
         asynchronous: true
         smooth: true
         mipmap: root.mipmap
-        onStatusChanged: if (status === Image.Ready) root.commit()
+        onStatusChanged: if (status === Image.Ready)
+            root.commit()
 
-        Behavior on opacity { Ease { duration: root.duration } }
+        Behavior on opacity {
+            Ease {
+                duration: root.duration
+            }
+        }
     }
 
     Layer {

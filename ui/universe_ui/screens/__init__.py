@@ -1,5 +1,8 @@
-from PySide6.QtCore import Property, QObject
+from collections.abc import Callable
 
+from PySide6.QtCore import QObject
+
+from ..qt import Property
 from .add import AddGameForm
 from .artwork import ArtworkForm, ArtworkOverview
 from .controller import ControllerScreen
@@ -14,7 +17,7 @@ from .sources import LoginFlow, SourcesBrowser
 
 
 class Screens(QObject):
-    def __init__(self, client, memory, screen_mode, games, power, themes=lambda: [], parent=None):
+    def __init__(self, client, memory, screen_mode: Callable[[], dict], games, power, themes: Callable[[], list] = list, parent=None):
         super().__init__(parent)
         self._gameSettings = GameSettingsForm(client, screen_mode, self)
         self._modules = ModulesForm(client, self)

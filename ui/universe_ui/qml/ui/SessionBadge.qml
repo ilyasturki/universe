@@ -18,7 +18,9 @@ Rectangle {
     border.width: 1
     border.color: Theme.surfaceBorder
 
-    Behavior on color { ColorEase {} }
+    Behavior on color {
+        ColorEase {}
+    }
 
     onSessionChanged: {
         var started = session && session.started_at ? Date.parse(session.started_at) : NaN;
@@ -44,8 +46,7 @@ Rectangle {
 
         Text {
             anchors.verticalCenter: parent.verticalCenter
-            text: (badge.session && badge.session.title ? badge.session.title : "")
-                  + " · " + Format.clockTime(badge.elapsed)
+            text: (badge.session && badge.session.title ? badge.session.title : "") + " · " + Format.clockTime(badge.elapsed)
             color: badge.focused ? Theme.onLight : Theme.text
             font.family: Theme.sans
             font.weight: Font.Medium

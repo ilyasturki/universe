@@ -22,18 +22,8 @@ Item {
     readonly property real artWidth: art ? (art.b[2] - art.b[0]) * sheetScale : 0
     readonly property real artHeight: art ? (art.b[3] - art.b[1]) * sheetScale : 0
 
-    readonly property real boxWidth: art ? artWidth
-        : spec.shape === "bumper" ? unit * 1.3
-        : spec.shape === "trigger" ? unit * 0.9
-        : spec.shape === "tab" ? unit * 1.1
-        : spec.shape === "paddle" ? unit * 0.78
-        : spec.shape === "small" ? unit * 0.84
-        : unit
-    readonly property real boxHeight: art ? artHeight
-        : spec.shape === "bumper" ? unit * 0.6
-        : spec.shape === "tab" ? unit * 0.6
-        : spec.shape === "small" ? unit * 0.84
-        : unit
+    readonly property real boxWidth: art ? artWidth : spec.shape === "bumper" ? unit * 1.3 : spec.shape === "trigger" ? unit * 0.9 : spec.shape === "tab" ? unit * 1.1 : spec.shape === "paddle" ? unit * 0.78 : spec.shape === "small" ? unit * 0.84 : unit
+    readonly property real boxHeight: art ? artHeight : spec.shape === "bumper" ? unit * 0.6 : spec.shape === "tab" ? unit * 0.6 : spec.shape === "small" ? unit * 0.84 : unit
     readonly property real textSize: unit * (spec.text.length >= 3 ? 0.33 : spec.text.length === 2 ? 0.4 : 0.48)
 
     onSpecChanged: canvas.requestPaint()
@@ -62,7 +52,9 @@ Item {
             strokeColor: "transparent"
             fillRule: ShapePath.OddEvenFill
 
-            PathSvg { path: root.art ? (root.variant === "f" ? root.art.f : root.art.o) : "" }
+            PathSvg {
+                path: root.art ? (root.variant === "f" ? root.art.f : root.art.o) : ""
+            }
         }
     }
 

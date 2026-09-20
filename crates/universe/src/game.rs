@@ -295,9 +295,13 @@ pub fn set_dotted(doc: &mut toml_edit::DocumentMut, key: &str, value: &str) -> c
     // [runners.<id>] args is a shell-quoted string, not a list; [modules.<id>] enabled is a bool, only modules.enabled and sources.enabled list.
     let is_list = list_keys.contains(&last) && !key.starts_with("runners.") && (last != "enabled" || key == "modules.enabled" || key == "sources.enabled");
     // A rate is a string that may be a number: `auto` or `60`.
-    let is_rate = key.starts_with("launch.") && crate::launch_keys::find(last).is_some_and(|k| matches!(k.kind, crate::launch_keys::Kind::Refresh | crate::launch_keys::Kind::Fps));
+    let is_rate = key.starts_with("launch.")
+        && crate::launch_keys::find(last).is_some_and(|k| matches!(k.kind, crate::launch_keys::Kind::Refresh | crate::launch_keys::Kind::Fps));
     // A string map's entry stays text: `launch.env.MANGOHUD = "1"`, not the integer the struct cannot read; `options` are typed by the runner.
-    let is_text_map = parts.len() == 3 && parts[0] == "launch" && parts[1] != "options" && crate::launch_keys::find(parts[1]).is_some_and(|k| k.kind == crate::launch_keys::Kind::Map);
+    let is_text_map = parts.len() == 3
+        && parts[0] == "launch"
+        && parts[1] != "options"
+        && crate::launch_keys::find(parts[1]).is_some_and(|k| k.kind == crate::launch_keys::Kind::Map);
     let v = if is_list && !value.starts_with('[') {
         parse_value(&format!("[{value}]"))
     } else if is_rate || is_text_map {
@@ -394,7 +398,11 @@ configpath = "the-technomancer-1780794348"
         assert_eq!(g.modules["capture"]["enabled"].as_bool(), Some(false));
         assert_eq!(g.tags, vec!["rpg", "indie"]);
         assert_eq!(g.launch.env["FOO"], "bar");
-        assert_eq!((g.launch.env["MANGOHUD"].as_str(), g.launch.env["DXVK_ASYNC"].as_str(), g.launch.dll_overrides["d3d11"].as_str()), ("1", "true", "n,b"), "a map's entry is text whatever it looks like");
+        assert_eq!(
+            (g.launch.env["MANGOHUD"].as_str(), g.launch.env["DXVK_ASYNC"].as_str(), g.launch.dll_overrides["d3d11"].as_str()),
+            ("1", "true", "n,b"),
+            "a map's entry is text whatever it looks like"
+        );
         assert_eq!(g.launch.mangohud, None);
         assert!(doc.to_string().contains("gog_id = \"1972906591\""));
         set_dotted(&mut doc, "runners.dolphin.args", "--config Dolphin.Display.Fullscreen=True").unwrap();

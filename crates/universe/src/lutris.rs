@@ -27,7 +27,9 @@ pub struct PgaGame {
 
 pub fn read_pga(pga: &Path) -> crate::Result<Vec<PgaGame>> {
     let conn = rusqlite::Connection::open_with_flags(pga, rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY)?;
-    let mut st = conn.prepare("SELECT name, slug, runner, platform, hidden, playtime, lastplayed, service, service_id, configpath, directory, year FROM games WHERE installed = 1")?;
+    let mut st = conn.prepare(
+        "SELECT name, slug, runner, platform, hidden, playtime, lastplayed, service, service_id, configpath, directory, year FROM games WHERE installed = 1",
+    )?;
     let rows = st.query_map([], |r| {
         Ok(PgaGame {
             name: r.get::<_, Option<String>>(0)?.unwrap_or_default(),
@@ -157,7 +159,13 @@ pub fn read_gog_manifest(dir: &Path) -> Option<GogManifest> {
             .and_then(|t| t["path"].as_str())
             .unwrap_or("")
             .to_string();
-        return Some(GogManifest { game_id: gid, root_game_id: root, build_id: v["buildId"].as_str().unwrap_or("").to_string(), name: v["name"].as_str().unwrap_or("").to_string(), primary_exe: exe });
+        return Some(GogManifest {
+            game_id: gid,
+            root_game_id: root,
+            build_id: v["buildId"].as_str().unwrap_or("").to_string(),
+            name: v["name"].as_str().unwrap_or("").to_string(),
+            primary_exe: exe,
+        });
     }
     None
 }
@@ -232,7 +240,9 @@ fn split_prefix_command(cmd: &str, launch: &mut crate::game::Launch) {
     let mut rest = Vec::new();
     for w in words {
         if rest.is_empty() {
-            let assignment = w.split_once('=').filter(|(k, _)| !k.is_empty() && !k.starts_with(|c: char| c.is_ascii_digit()) && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'));
+            let assignment = w
+                .split_once('=')
+                .filter(|(k, _)| !k.is_empty() && !k.starts_with(|c: char| c.is_ascii_digit()) && k.chars().all(|c| c.is_ascii_alphanumeric() || c == '_'));
             if let Some((k, v)) = assignment {
                 if k == "WINEDLLOVERRIDES" {
                     launch.dll_overrides.extend(parse_dll_overrides(v));
@@ -429,8 +439,22 @@ pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
             let covered: u64 = sessions.iter().filter(|s| s.source == "import-recording").map(|s| s.duration_s).sum();
             let total = (imp.playtime_h * 3600.0).round() as u64;
             let remainder = total.saturating_sub(covered);
-            let ended_at = chrono::DateTime::from_timestamp(imp.lastplayed, 0).filter(|_| imp.lastplayed > 0).map(|d| d.with_timezone(&chrono::Local).to_rfc3339()).unwrap_or_default();
-            sessions::append(&game.sessions_path(), &Session { session: "lutris".into(), game: game.id.clone(), started_at: String::new(), ended_at, duration_s: remainder, source: "import-lutris".into(), ..Default::default() })?;
+            let ended_at = chrono::DateTime::from_timestamp(imp.lastplayed, 0)
+                .filter(|_| imp.lastplayed > 0)
+                .map(|d| d.with_timezone(&chrono::Local).to_rfc3339())
+                .unwrap_or_default();
+            sessions::append(
+                &game.sessions_path(),
+                &Session {
+                    session: "lutris".into(),
+                    game: game.id.clone(),
+                    started_at: String::new(),
+                    ended_at,
+                    duration_s: remainder,
+                    source: "import-lutris".into(),
+                    ..Default::default()
+                },
+            )?;
             report.hours_imported.insert(game.id.clone(), (remainder as f64 / 36.0).round() / 100.0);
             if existed {
                 report.updated.push(game.id.clone());
@@ -468,7 +492,9 @@ fn import_pegasus_media(dest: &Path, game: &Game, root: &Path) -> crate::Result<
         slugs.push(game.source.lutris_slug.as_str());
     }
     let Ok(platforms) = std::fs::read_dir(root) else { return Ok(false) };
-    let Some(src) = platforms.flatten().map(|e| e.path().join("media")).flat_map(|m| slugs.iter().map(move |s| m.join(s)).collect::<Vec<_>>()).find(|p| p.is_dir()) else {
+    let Some(src) =
+        platforms.flatten().map(|e| e.path().join("media")).flat_map(|m| slugs.iter().map(move |s| m.join(s)).collect::<Vec<_>>()).find(|p| p.is_dir())
+    else {
         return Ok(false);
     };
     let mut copied = false;
@@ -504,7 +530,18 @@ mod tests {
         let lutris = dir.path().join("lutris");
         std::fs::create_dir_all(lutris.join("games")).unwrap();
         std::fs::write(lutris.join("games/the-technomancer-1.yml"), format!("game:\n  exe: {}/TheTechnomancer.exe\n  prefix: /mnt/games/gog/the-technomancer\nsystem:\n  env:\n    WINE_CPU_TOPOLOGY: 4:0,1,2,3\nwine:\n  version: proton-ge\n  esync: false\n", gdir.display())).unwrap();
-        let p = PgaGame { name: "The Technomancer".into(), slug: "the-technomancer".into(), runner: "wine".into(), platform: "Windows".into(), playtime_h: 0.8, service: "gog".into(), service_id: "1972906591".into(), configpath: "the-technomancer-1".into(), year: 2016, ..Default::default() };
+        let p = PgaGame {
+            name: "The Technomancer".into(),
+            slug: "the-technomancer".into(),
+            runner: "wine".into(),
+            platform: "Windows".into(),
+            playtime_h: 0.8,
+            service: "gog".into(),
+            service_id: "1972906591".into(),
+            configpath: "the-technomancer-1".into(),
+            year: 2016,
+            ..Default::default()
+        };
         let imp = convert(&p, &lutris, &lutris.join("runners/wine"), &BTreeMap::from([("PROTON_ENABLE_WAYLAND".to_string(), "1".to_string())]));
         let g = imp.game;
         assert_eq!(g.id, "the-technomancer");
@@ -517,7 +554,12 @@ mod tests {
         assert_eq!(imp.lutris_env["PROTON_ENABLE_WAYLAND"], "1");
         let text = toml::to_string_pretty(&g).unwrap();
         assert!(text.contains("[lutris]"));
-        let d = diff("x", "X", &imp.lutris_env, &BTreeMap::from([("WINE_CPU_TOPOLOGY".to_string(), "4:0,1,2,3".to_string()), ("NEW".to_string(), "1".to_string())]));
+        let d = diff(
+            "x",
+            "X",
+            &imp.lutris_env,
+            &BTreeMap::from([("WINE_CPU_TOPOLOGY".to_string(), "4:0,1,2,3".to_string()), ("NEW".to_string(), "1".to_string())]),
+        );
         assert_eq!(d.added, vec!["NEW"]);
         assert_eq!(d.removed, vec!["PROTON_ENABLE_WAYLAND"]);
     }
@@ -545,7 +587,10 @@ mod tests {
         assert_eq!(re4.launch.env, BTreeMap::from([("LC_ALL".to_string(), String::new()), ("RADV_DEBUG".to_string(), "nodcc".to_string())]));
         assert_eq!(re4.launch.wayland, Some(false));
         assert_eq!(re4.launch.hdr, Some(true));
-        assert_eq!(re4.extra["lutris"]["prefix_command"].as_str().unwrap(), "WINEDLLOVERRIDES=\"amd_ags_x64.dll=n,b\" RADV_DEBUG=nodcc LC_ALL= gamemoderun taskset -c '0-7'");
+        assert_eq!(
+            re4.extra["lutris"]["prefix_command"].as_str().unwrap(),
+            "WINEDLLOVERRIDES=\"amd_ags_x64.dll=n,b\" RADV_DEBUG=nodcc LC_ALL= gamemoderun taskset -c '0-7'"
+        );
         let ge = game("ge", "game:\n  exe: /g/a.exe\nwine:\n  version: wine-ge-8-26-x86_64\n");
         assert_eq!(ge.runner_id(), "wine");
         assert!(ge.launch.runner_exe.ends_with("wine-ge-8-26-x86_64/bin/wine"));
@@ -578,7 +623,15 @@ mod tests {
     #[test]
     fn convert_emulator_is_parked() {
         let dir = tempfile::tempdir().unwrap();
-        let p = PgaGame { name: "F-Zero GX".into(), slug: "f-zero-gx".into(), runner: "dolphin".into(), platform: "Nintendo GameCube".into(), playtime_h: 4.3, configpath: "none".into(), ..Default::default() };
+        let p = PgaGame {
+            name: "F-Zero GX".into(),
+            slug: "f-zero-gx".into(),
+            runner: "dolphin".into(),
+            platform: "Nintendo GameCube".into(),
+            playtime_h: 4.3,
+            configpath: "none".into(),
+            ..Default::default()
+        };
         let g = convert(&p, dir.path(), dir.path(), &BTreeMap::new()).game;
         assert_eq!(g.launch.runner, "dolphin");
         assert_eq!(g.platform, "Nintendo GameCube");

@@ -3,8 +3,9 @@ import logging
 import os
 import shutil
 
-from PySide6.QtCore import Property, QObject, QProcess, QTimer, Signal, Slot
+from PySide6.QtCore import QObject, QProcess, QTimer, Signal, Slot
 
+from ..qt import QVARIANT, Property
 from .settings import AdvancedRows, _add, _dig, _group, _row
 
 log = logging.getLogger("universe.controller")
@@ -28,7 +29,7 @@ TIMING_DEFAULTS = {"controller.hold_ms": 600, "controller.volume_step": 2}
 
 
 class Watcher(QObject):
-    event = Signal(object)
+    received = Signal(object)
 
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -52,7 +53,7 @@ class Watcher(QObject):
         if self._process is not None:
             self._process.deleteLater()
             self._process = None
-        self.event.emit({"event": "off", "code": code})
+        self.received.emit({"event": "off", "code": code})
 
     def _read(self):
         if self._process is None:
@@ -65,7 +66,7 @@ class Watcher(QObject):
             except ValueError:
                 continue
             if isinstance(payload, dict):
-                self.event.emit(payload)
+                self.received.emit(payload)
 
     def send(self, command):
         if self._process is None or self._process.state() == QProcess.ProcessState.NotRunning:
@@ -86,7 +87,7 @@ class Watcher(QObject):
 
 
 class FakeWatcher(QObject):
-    event = Signal(object)
+    received = Signal(object)
 
     def __init__(self, family="dualsense-edge", unbound=(), parent=None):
         super().__init__(parent)
@@ -119,7 +120,7 @@ class FakeWatcher(QObject):
         return True
 
     def emit(self, line):
-        self.event.emit(dict(line))
+        self.received.emit(dict(line))
 
     def press(self, slot, down=True):
         self.emit({"event": "button", "id": self.ident, "slot": slot, "code": "", "pressed": bool(down)})
@@ -177,7 +178,7 @@ class ControllerScreen(AdvancedRows, QObject):
     def start(self, watcher):
         self.load()
         self._watcher = watcher
-        watcher.event.connect(self._on_event)
+        watcher.received.connect(self._on_event)
         return self._launch()
 
     def _launch(self):
@@ -221,8 +222,13 @@ class ControllerScreen(AdvancedRows, QObject):
     @staticmethod
     def _entry(line):
         ident = str(line.get("id") or "")
-        return {"id": ident, "name": str(line.get("name") or ident), "family": str(line.get("family") or "generic"),
-                "bus": str(line.get("bus") or ""), "slots": dict(line.get("slots") or {})}
+        return {
+            "id": ident,
+            "name": str(line.get("name") or ident),
+            "family": str(line.get("family") or "generic"),
+            "bus": str(line.get("bus") or ""),
+            "slots": dict(line.get("slots") or {}),
+        }
 
     def _families(self):
         return {f["id"]: f for f in self._state.get("families") or [] if f.get("id")}
@@ -429,8 +435,17 @@ class ControllerScreen(AdvancedRows, QObject):
                 hold = None if home else self._macro(device["family"], slot["id"], "hold")
                 display = HOME_TEXT if home and bound else self._display(bound, press, hold)
                 row = _row(name, slot["id"], str(slot.get("label") or slot["id"]), "action", display)
-                row.update(slot=slot["id"], family=device["family"], bound=bound, code=str(binding.get("code") or ""),
-                           extra=bool(slot.get("extra")), press=press, hold=hold, home=home, action="Configure")
+                row.update(
+                    slot=slot["id"],
+                    family=device["family"],
+                    bound=bound,
+                    code=str(binding.get("code") or ""),
+                    extra=bool(slot.get("extra")),
+                    press=press,
+                    hold=hold,
+                    home=home,
+                    action="Configure",
+                )
                 rows.append(row)
             extras = sum(1 for s in slots if s.get("extra"))
             meta = [BUS_NAMES.get(device["bus"], device["bus"])]
@@ -486,8 +501,7 @@ class ControllerScreen(AdvancedRows, QObject):
         if self._presets().get(action, {}).get("hold_only") and trigger != "hold":
             self.message.emit(self._presets()[action].get("label", action) + " only fires on a hold")
             return False
-        payload = {"family": device["family"], "button": slot, "trigger": trigger, "action": action,
-                   "keys": keys or "", "command": command or ""}
+        payload = {"family": device["family"], "button": slot, "trigger": trigger, "action": action, "keys": keys or "", "command": command or ""}
         if not self._client.controllerBind(json.dumps(payload)):
             return False
         self.load()
@@ -592,15 +606,15 @@ class ControllerScreen(AdvancedRows, QObject):
     def _unbound(self):
         return [r["slot"] for r in self._rows if "slot" in r and not r["bound"]]
 
-    devices = Property("QVariantList", lambda self: [dict(d) for d in self._devices], notify=devicesChanged)
+    devices = Property(list, lambda self: [dict(d) for d in self._devices], notify=devicesChanged)
     current = Property(str, lambda self: self._current, setCurrent, notify=currentChanged)
-    state = Property("QVariant", lambda self: dict(self._state), notify=stateChanged)
-    presets = Property("QVariantList", lambda self: list(self._state.get("presets") or []), notify=stateChanged)
-    rows = Property("QVariantList", lambda self: list(self._rows), notify=rowsChanged)
-    groups = Property("QVariantList", AdvancedRows._shown_groups, notify=rowsChanged)
+    state = Property(QVARIANT, lambda self: dict(self._state), notify=stateChanged)
+    presets = Property(list, lambda self: list(self._state.get("presets") or []), notify=stateChanged)
+    rows = Property(list, lambda self: list(self._rows), notify=rowsChanged)
+    groups = Property(list, AdvancedRows._shown_groups, notify=rowsChanged)
     showAdvanced = Property(bool, lambda self: self._show_advanced, AdvancedRows._set_show_advanced, notify=advancedChanged)
     count = Property(int, lambda self: len(self._rows), notify=rowsChanged)
-    unboundSlots = Property("QVariantList", _unbound, notify=rowsChanged)
+    unboundSlots = Property(list, _unbound, notify=rowsChanged)
     family = Property(str, _family, notify=devicesChanged)
     families = Property(
         "QVariantList", lambda self: [{"id": f["id"], "name": f.get("name") or f["id"]} for f in self._families().values()], notify=stateChanged

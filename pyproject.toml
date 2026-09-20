@@ -11,9 +11,10 @@ extend-exclude = ["modules/capture/bin/thaw"]
 [tool.ruff.lint]
 select = [
   "F", "E4", "E7", "E9", "W", "I", "UP", "B", "SIM", "C4", "PIE", "FURB", "PERF", "FLY", "RUF",
-  "PLE", "PLW", "PLC", "DTZ", "ASYNC", "LOG", "G", "T10", "EXE", "YTT", "BLE", "PYI", "TC", "ISC", "PGH", "FA",
+  "PLE", "PLW", "PLC", "ASYNC", "LOG", "G", "T10", "EXE", "YTT", "BLE", "PYI", "TC", "ISC", "PGH", "FA",
 ]
-ignore = ["E731", "PLC0415"]
+# No DTZ: the journal's session ids are naive local time by contract. RUF001-003: the strings carry typographic marks and CJK punctuation on purpose.
+ignore = ["E731", "PLC0415", "RUF001", "RUF002", "RUF003"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["universe_ui", "universe_core"]

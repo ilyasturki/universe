@@ -28,4 +28,3 @@ def test_selector_defaults_and_persists(app, tmp_path):
     assert memory.get("switch2Font") == "/fonts/udsg.ttf" and selector.fontPath == "/fonts/udsg.ttf"
     selector.fontPath = ""
     assert memory.has("switch2Font") is False
-

@@ -35,7 +35,11 @@ pub const BUILD: &str = env!("UNIVERSE_BUILD");
 
 /// Warnings to stderr (`RUST_LOG` overrides); the CLI and the Python binding both call it, a second call is a no-op.
 pub fn init_tracing() {
-    let _ = tracing_subscriber::fmt().with_writer(std::io::stderr).with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "warn".into())).with_target(false).try_init();
+    let _ = tracing_subscriber::fmt()
+        .with_writer(std::io::stderr)
+        .with_env_filter(tracing_subscriber::EnvFilter::try_from_default_env().unwrap_or_else(|_| "warn".into()))
+        .with_target(false)
+        .try_init();
 }
 
 #[derive(Debug, thiserror::Error)]

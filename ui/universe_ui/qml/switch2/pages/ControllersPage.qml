@@ -18,13 +18,36 @@ FocusScope {
     property var axes: ({})
     property string lastSlot: ""
 
-    readonly property var hints: testing
-        ? [ { glyph: "B", label: "Hold to finish" }, { glyph: "Start", label: "" }, { glyph: "Select", label: "Finish" } ]
-        : learning
-        ? [ { glyph: "B", label: "Stop learning" } ]
-        : [ { glyph: "B", label: "Back" }, { glyph: "A", label: "OK" } ]
+    readonly property var hints: testing ? [
+        {
+            glyph: "B",
+            label: "Hold to finish"
+        },
+        {
+            glyph: "Start",
+            label: ""
+        },
+        {
+            glyph: "Select",
+            label: "Finish"
+        }
+    ] : learning ? [
+        {
+            glyph: "B",
+            label: "Stop learning"
+        }
+    ] : [
+        {
+            glyph: "B",
+            label: "Back"
+        },
+        {
+            glyph: "A",
+            label: "OK"
+        }
+    ]
 
-    signal closeRequested()
+    signal closeRequested
 
     focus: true
 
@@ -33,28 +56,85 @@ FocusScope {
         for (var i = 0; i < source.length; i++) {
             var r = source[i];
             if (r.key === "test")
-                out.push({ key: "test", label: r.label, type: "action", display: "", detail: r.display, icon: "gamepad" });
+                out.push({
+                    key: "test",
+                    label: r.label,
+                    type: "action",
+                    display: "",
+                    detail: r.display,
+                    icon: "gamepad"
+                });
             else if (r.key === "device")
-                out.push({ key: "device", label: r.label, type: "enum", display: r.display, choices: r.choices, value: r.value });
+                out.push({
+                    key: "device",
+                    label: r.label,
+                    type: "enum",
+                    display: r.display,
+                    choices: r.choices,
+                    value: r.value
+                });
             else if (r.type === "info")
-                out.push({ key: "", label: r.label, type: "note", display: "", detail: r.detail, disabled: true });
+                out.push({
+                    key: "",
+                    label: r.label,
+                    type: "note",
+                    display: "",
+                    detail: r.detail,
+                    disabled: true
+                });
             else if (r.slot !== undefined)
-                buttons.push({ key: r.slot, label: r.label, type: "action", display: "", detail: r.display, slot: r.slot, family: r.family,
-                               bound: r.bound, press: r.press, hold: r.hold });
+                buttons.push({
+                    key: r.slot,
+                    label: r.label,
+                    type: "action",
+                    display: "",
+                    detail: r.display,
+                    slot: r.slot,
+                    family: r.family,
+                    bound: r.bound,
+                    press: r.press,
+                    hold: r.hold
+                });
         }
         if (buttons.length > 0) {
-            out.push({ heading: true, label: "Buttons", display: "" });
+            out.push({
+                heading: true,
+                label: "Buttons",
+                display: ""
+            });
             out = out.concat(buttons);
         }
         // The Timing card behind the Advanced row.
-        var gate = source.findIndex(function(r) { return r.key === "advanced"; });
+        var gate = source.findIndex(function (r) {
+            return r.key === "advanced";
+        });
         if (gate >= 0) {
-            out.push({ key: "advanced", label: "Advanced", type: "action", display: "", detail: source[gate].detail, form: gate });
+            out.push({
+                key: "advanced",
+                label: "Advanced",
+                type: "action",
+                display: "",
+                detail: source[gate].detail,
+                form: gate
+            });
             if (controller.showAdvanced) {
-                out.push({ heading: true, label: "Timing", display: "" });
-                source.forEach(function(r, i) {
+                out.push({
+                    heading: true,
+                    label: "Timing",
+                    display: ""
+                });
+                source.forEach(function (r, i) {
                     if (r.advanced)
-                        out.push({ key: r.key, label: r.label, type: r.type, display: r.display, detail: r.detail, choices: r.choices, value: r.value, form: i });
+                        out.push({
+                            key: r.key,
+                            label: r.label,
+                            type: r.type,
+                            display: r.display,
+                            detail: r.detail,
+                            choices: r.choices,
+                            value: r.value,
+                            form: i
+                        });
                 });
             }
         }
@@ -66,8 +146,10 @@ FocusScope {
         if (key === "")
             return;
         controller.reveal(key, "");
-        Qt.callLater(function() {
-            var at = entries.findIndex(function(e) { return e.key === key; });
+        Qt.callLater(function () {
+            var at = entries.findIndex(function (e) {
+                return e.key === key;
+            });
             if (at >= 0)
                 rows.index = at;
         });
@@ -76,7 +158,9 @@ FocusScope {
     readonly property string focusedSlot: rows.cursorShown && rows.currentRow && rows.currentRow.slot ? rows.currentRow.slot : ""
 
     function labelOf(slot) {
-        var hit = controller.rows.filter(function(r) { return r.slot === slot; })[0];
+        var hit = controller.rows.filter(function (r) {
+            return r.slot === slot;
+        })[0];
         return hit ? hit.label : slot;
     }
 
@@ -112,9 +196,13 @@ FocusScope {
             Sound.play("ok");
             controller.showAdvanced = !controller.showAdvanced;
             if (controller.showAdvanced)
-                Qt.callLater(function() { rows.index = Math.min(entries.length - 1, index + 2); });
+                Qt.callLater(function () {
+                    rows.index = Math.min(entries.length - 1, index + 2);
+                });
         } else if (String(row.key).indexOf("controller.") === 0) {
-            rows.edit(row, function(value) { controller.setValue(row.form, value); });
+            rows.edit(row, function (value) {
+                controller.setValue(row.form, value);
+            });
         } else if (row.key === "test") {
             if (controller.setTesting(true))
                 Sound.play("ok");
@@ -123,7 +211,11 @@ FocusScope {
         } else if (row.key === "device") {
             Sound.play("ok");
             var choices = row.choices || [];
-            shell.pick({ title: "Controller", choices: choices, index: choices.indexOf(String(row.value)) }, function(i) {
+            shell.pick({
+                title: "Controller",
+                choices: choices,
+                index: choices.indexOf(String(row.value))
+            }, function (i) {
                 if (i >= 0)
                     controller.setValue(index, choices[i]);
             });
@@ -136,16 +228,38 @@ FocusScope {
     }
 
     function slotMenu(row) {
-        var items = row.bound ? [] : [{ label: "Learn the button", act: "learn" }];
+        var items = row.bound ? [] : [
+            {
+                label: "Learn the button",
+                act: "learn"
+            }
+        ];
         if (!row.home)
-            items.push({ label: "On press…", act: "press" }, { label: "On hold…", act: "hold" });
+            items.push({
+                label: "On press…",
+                act: "press"
+            }, {
+                label: "On hold…",
+                act: "hold"
+            });
         if (row.press)
-            items.push({ label: "Clear press", act: "clear-press" });
+            items.push({
+                label: "Clear press",
+                act: "clear-press"
+            });
         if (row.hold)
-            items.push({ label: "Clear hold", act: "clear-hold" });
+            items.push({
+                label: "Clear hold",
+                act: "clear-hold"
+            });
         if (row.bound)
-            items.push({ label: "Learn the button again", act: "learn" });
-        shell.menu(row.label, items, function(act) { slotAction(row, act); });
+            items.push({
+                label: "Learn the button again",
+                act: "learn"
+            });
+        shell.menu(row.label, items, function (act) {
+            slotAction(row, act);
+        });
     }
 
     function slotAction(row, action) {
@@ -163,13 +277,33 @@ FocusScope {
     }
 
     function presetMenu(row, trigger) {
-        var items = controller.presets.filter(function(p) { return !(p.hold_only && trigger !== "hold") && p.id !== "keys" && p.id !== "command"; })
-            .map(function(p) { return { label: p.label, id: "preset:" + p.id }; });
-        items.push({ label: "Key combo…", id: "keys" }, { label: "Command…", id: "command" });
-        var labels = items.map(function(i) { return i.label; }), ids = items.map(function(i) { return i.id; });
+        var items = controller.presets.filter(function (p) {
+            return !(p.hold_only && trigger !== "hold") && p.id !== "keys" && p.id !== "command";
+        }).map(function (p) {
+            return {
+                label: p.label,
+                id: "preset:" + p.id
+            };
+        });
+        items.push({
+            label: "Key combo…",
+            id: "keys"
+        }, {
+            label: "Command…",
+            id: "command"
+        });
+        var labels = items.map(function (i) {
+            return i.label;
+        }), ids = items.map(function (i) {
+            return i.id;
+        });
         var current = trigger === "hold" ? row.hold : row.press;
         var index = current ? ids.indexOf(current.action === "keys" || current.action === "command" ? current.action : "preset:" + current.action) : 0;
-        shell.pick({ title: row.label + " · " + (trigger === "press" ? "On press" : "On hold"), choices: labels, index: Math.max(0, index) }, function(i) {
+        shell.pick({
+            title: row.label + " · " + (trigger === "press" ? "On press" : "On hold"),
+            choices: labels,
+            index: Math.max(0, index)
+        }, function (i) {
             if (i < 0)
                 return;
             var id = ids[i];
@@ -178,7 +312,11 @@ FocusScope {
                 controller.bind(row.slot, trigger, id.substring(7), "", "");
             } else {
                 var value = current && current.action === id ? current[id] : "";
-                shell.prompt({ title: (id === "keys" ? "Key combo for " : "Command for ") + row.label, value: value, max: 200 }, function(text) {
+                shell.prompt({
+                    title: (id === "keys" ? "Key combo for " : "Command for ") + row.label,
+                    value: value,
+                    max: 200
+                }, function (text) {
                     if (text !== null && text !== undefined && text !== "") {
                         Sound.play("select");
                         controller.bind(row.slot, trigger, id, id === "keys" ? text : "", id === "command" ? text : "");
@@ -203,7 +341,9 @@ FocusScope {
             tester.forceActiveFocus();
             return;
         }
-        var i = entries.map(function(e) { return e.key; }).indexOf("test");
+        var i = entries.map(function (e) {
+            return e.key;
+        }).indexOf("test");
         if (i >= 0)
             rows.index = i;
         rows.forceActiveFocus();
@@ -244,15 +384,25 @@ FocusScope {
         function onLearned(family, slot, code) {
             page.shell.showToast(page.labelOf(slot) + " is now " + code);
         }
-        function onMessage(text) { page.shell.showToast(text); }
+        function onMessage(text) {
+            page.shell.showToast(text);
+        }
     }
 
     property real pulse: 0.15
     SequentialAnimation on pulse {
         running: page.learning
         loops: Animation.Infinite
-        NumberAnimation { to: 0.55; duration: 500; easing.type: Easing.InOutSine }
-        NumberAnimation { to: 0.15; duration: 500; easing.type: Easing.InOutSine }
+        NumberAnimation {
+            to: 0.55
+            duration: 500
+            easing.type: Easing.InOutSine
+        }
+        NumberAnimation {
+            to: 0.15
+            duration: 500
+            easing.type: Easing.InOutSine
+        }
     }
 
     PageHeader {
@@ -274,9 +424,15 @@ FocusScope {
         radius: Theme.dp(12)
         color: "#2d2d2d"
 
-        Behavior on x { Ease {} }
-        Behavior on width { Ease {} }
-        Behavior on height { Ease {} }
+        Behavior on x {
+            Ease {}
+        }
+        Behavior on width {
+            Ease {}
+        }
+        Behavior on height {
+            Ease {}
+        }
 
         Base.PadArt {
             anchors.fill: parent
@@ -291,7 +447,11 @@ FocusScope {
             axes: page.axes
             pulse: page.pulse
 
-            Behavior on opacity { Ease { duration: Theme.durFade } }
+            Behavior on opacity {
+                Ease {
+                    duration: Theme.durFade
+                }
+            }
         }
 
         Row {
@@ -335,7 +495,9 @@ FocusScope {
             model: page.controller.devices
 
             Row {
-                readonly property var battery: api.power.sources.find(function(s) { return s.inputs.indexOf(modelData.id) >= 0; }) || null
+                readonly property var battery: api.power.sources.find(function (s) {
+                    return s.inputs.indexOf(modelData.id) >= 0;
+                }) || null
 
                 anchors.horizontalCenter: parent.horizontalCenter
                 spacing: Theme.dp(14)
@@ -350,8 +512,7 @@ FocusScope {
 
                 Label {
                     anchors.verticalCenter: parent.verticalCenter
-                    text: modelData.name + (modelData.bus ? " · " + (modelData.bus === "bluetooth" ? "Bluetooth" : modelData.bus === "usb" ? "USB" : modelData.bus) : "")
-                        + (parent.battery ? " · " + parent.battery.percent + "%" + (parent.battery.charging ? ", charging" : "") : "")
+                    text: modelData.name + (modelData.bus ? " · " + (modelData.bus === "bluetooth" ? "Bluetooth" : modelData.bus === "usb" ? "USB" : modelData.bus) : "") + (parent.battery ? " · " + parent.battery.percent + "%" + (parent.battery.charging ? ", charging" : "") : "")
                 }
             }
         }
@@ -395,12 +556,16 @@ FocusScope {
         opacity: page.testing ? 0.0 : 1.0
         visible: opacity > 0.01
 
-        Behavior on opacity { Ease {} }
+        Behavior on opacity {
+            Ease {}
+        }
 
-        onActivated: function(index, row) { page.activate(index, row); }
+        onActivated: function (index, row) {
+            page.activate(index, row);
+        }
         onEscapedLeft: Sound.play("edge")
 
-        Keys.onPressed: function(event) {
+        Keys.onPressed: function (event) {
             if (event.isAutoRepeat)
                 return;
             if (api.keys.isCancel(event) && page.learning) {
@@ -417,7 +582,7 @@ FocusScope {
         anchors.fill: panel
         focus: page.testing
 
-        Keys.onPressed: function(event) {
+        Keys.onPressed: function (event) {
             event.accepted = true;
             if (event.isAutoRepeat)
                 return;
@@ -426,6 +591,8 @@ FocusScope {
                 page.controller.setTesting(false);
             }
         }
-        Keys.onReleased: function(event) { event.accepted = true; }
+        Keys.onReleased: function (event) {
+            event.accepted = true;
+        }
     }
 }

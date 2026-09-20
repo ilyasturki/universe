@@ -1,3 +1,4 @@
+import contextlib
 import copy
 import ctypes
 import ctypes.util
@@ -9,16 +10,21 @@ import subprocess
 import tempfile
 import threading
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 from .errors import UniverseError
 
 FIXTURE = Path(__file__).parent / "fixtures" / "library.json"
 LAUNCH_KEYS = Path(__file__).parent / "fixtures" / "launch_keys.json"
-GPU = {"vendor": "amd", "name": "AMD Radeon RX 7900 GRE", "rdna": 3, "label": "AMD Radeon RX 7900 GRE · RDNA 3",
-       "fits": {"dlss_upgrade": False, "fsr4_upgrade": True, "xess_upgrade": True, "optiscaler": True},
-       "auto": {"dlss_upgrade": False, "fsr4_upgrade": False, "xess_upgrade": False, "optiscaler": False}}
+GPU = {
+    "vendor": "amd",
+    "name": "AMD Radeon RX 7900 GRE",
+    "rdna": 3,
+    "label": "AMD Radeon RX 7900 GRE · RDNA 3",
+    "fits": {"dlss_upgrade": False, "fsr4_upgrade": True, "xess_upgrade": True, "optiscaler": True},
+    "auto": {"dlss_upgrade": False, "fsr4_upgrade": False, "xess_upgrade": False, "optiscaler": False},
+}
 REFRESH_RATES = [240, 165, 144, 120, 100, 90, 75, 60, 50, 48, 40, 30]
 RESOLUTION_HEIGHTS = [2160, 1800, 1440, 1080, 720]
 STEP_S = 0.15
@@ -44,11 +50,13 @@ class X11Cards:
             self._display = self._open() or 0
         if not self._display:
             return
+        assert self._lib is not None
         # Format 32 takes long-sized elements, not uint32.
         self._lib.XChangeProperty(self._display, window, self._atom(name), self.XA_CARDINAL, 32, 0, ctypes.byref(ctypes.c_ulong(value)), 1)
         self._lib.XFlush(self._display)
 
     def _atom(self, name):
+        assert self._lib is not None
         return self._lib.XInternAtom(self._display, name.encode(), False)
 
     def _open(self):
@@ -62,9 +70,30 @@ class X11Cards:
         lib.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
         lib.XInternAtom.restype = ctypes.c_ulong
         lib.XInternAtom.argtypes = [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int]
-        lib.XChangeProperty.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_int, ctypes.c_int, ctypes.c_void_p, ctypes.c_int]
-        lib.XGetWindowProperty.argtypes = [ctypes.c_void_p, ctypes.c_ulong, ctypes.c_ulong, ctypes.c_long, ctypes.c_long, ctypes.c_int, ctypes.c_ulong,
-                                           ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_int), ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_ulong), ctypes.POINTER(ctypes.c_void_p)]
+        lib.XChangeProperty.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_ulong,
+            ctypes.c_ulong,
+            ctypes.c_ulong,
+            ctypes.c_int,
+            ctypes.c_int,
+            ctypes.c_void_p,
+            ctypes.c_int,
+        ]
+        lib.XGetWindowProperty.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_ulong,
+            ctypes.c_ulong,
+            ctypes.c_long,
+            ctypes.c_long,
+            ctypes.c_int,
+            ctypes.c_ulong,
+            ctypes.POINTER(ctypes.c_ulong),
+            ctypes.POINTER(ctypes.c_int),
+            ctypes.POINTER(ctypes.c_ulong),
+            ctypes.POINTER(ctypes.c_ulong),
+            ctypes.POINTER(ctypes.c_void_p),
+        ]
         lib.XFree.argtypes = [ctypes.c_void_p]
         lib.XFlush.argtypes = [ctypes.c_void_p]
         lib.XCloseDisplay.argtypes = [ctypes.c_void_p]
@@ -72,8 +101,20 @@ class X11Cards:
         if not display:
             return None
         actual_type, fmt, nitems, after, prop = ctypes.c_ulong(), ctypes.c_int(), ctypes.c_ulong(), ctypes.c_ulong(), ctypes.c_void_p()
-        lib.XGetWindowProperty(display, lib.XDefaultRootWindow(display), self._atom("GAMESCOPE_FOCUSED_WINDOW"), 0, 1, False, self.XA_CARDINAL,
-                               ctypes.byref(actual_type), ctypes.byref(fmt), ctypes.byref(nitems), ctypes.byref(after), ctypes.byref(prop))
+        lib.XGetWindowProperty(
+            display,
+            lib.XDefaultRootWindow(display),
+            self._atom("GAMESCOPE_FOCUSED_WINDOW"),
+            0,
+            1,
+            False,
+            self.XA_CARDINAL,
+            ctypes.byref(actual_type),
+            ctypes.byref(fmt),
+            ctypes.byref(nitems),
+            ctypes.byref(after),
+            ctypes.byref(prop),
+        )
         if prop.value:
             lib.XFree(prop)
         if nitems.value:
@@ -103,8 +144,23 @@ def screen_mode(screen):
 
 def _mutter_current_mode(screen):
     try:
-        out = subprocess.run(["busctl", "--user", "--timeout=5", "--json=short", "call", "org.gnome.Mutter.DisplayConfig", "/org/gnome/Mutter/DisplayConfig",
-                              "org.gnome.Mutter.DisplayConfig", "GetCurrentState"], capture_output=True, text=True, timeout=6)
+        out = subprocess.run(
+            [
+                "busctl",
+                "--user",
+                "--timeout=5",
+                "--json=short",
+                "call",
+                "org.gnome.Mutter.DisplayConfig",
+                "/org/gnome/Mutter/DisplayConfig",
+                "org.gnome.Mutter.DisplayConfig",
+                "GetCurrentState",
+            ],
+            capture_output=True,
+            text=True,
+            timeout=6,
+            check=False,
+        )
         monitors = json.loads(out.stdout)["data"][1]
     except (OSError, subprocess.TimeoutExpired, ValueError, LookupError, TypeError):
         return None
@@ -131,7 +187,7 @@ def _drm_preferred_mode(screen):
 
 
 def _now():
-    return datetime.now(timezone.utc).astimezone().replace(microsecond=0).isoformat()
+    return datetime.now(UTC).astimezone().replace(microsecond=0).isoformat()
 
 
 def _epoch(value):
@@ -179,9 +235,12 @@ class FakeCore:
         self._config = dict(self._data.get("config") or {})
         with open(LAUNCH_KEYS) as f:
             self._launch_keys = json.load(f)
-        self._config["launch"] = {**{k["key"]: ({} if k["type"] == "map" else k["default"]) for k in self._launch_keys if k["scope"] != "game"}, **(self._config.get("launch") or {})}
+        self._config["launch"] = {
+            **{k["key"]: ({} if k["type"] == "map" else k["default"]) for k in self._launch_keys if k["scope"] != "game"},
+            **(self._config.get("launch") or {}),
+        }
         self._tmp = tempfile.TemporaryDirectory(prefix="universe-fake-") if root is None else None
-        self._root = Path(root if root is not None else self._tmp.name)
+        self._root = Path(self._tmp.name if self._tmp is not None else str(root))
         self._cache = os.path.join(os.environ.get("XDG_CACHE_HOME") or os.path.expanduser("~/.cache"), "universe", "fake-art")
         self._fake_launch = fake_launch
         self._lock = threading.Lock()
@@ -228,7 +287,9 @@ class FakeCore:
             for slot in SLOTS:
                 if media.get(slot):
                     media[slot] = _place(media[slot], str(self._game_dir(game["id"]) / "media" / f"{slot}.png"))
-            media["screenshots"] = [_place(p, str(self._game_dir(game["id"]) / "media" / f"screenshot{n + 1}.png")) for n, p in enumerate(media.get("screenshots") or [])]
+            media["screenshots"] = [
+                _place(p, str(self._game_dir(game["id"]) / "media" / f"screenshot{n + 1}.png")) for n, p in enumerate(media.get("screenshots") or [])
+            ]
             self._lay_out_shots(game)
         for ident, entries in self._data.get("journal", {}).items():
             for entry in entries:
@@ -275,7 +336,9 @@ class FakeCore:
         for sub in ("media", "journal"):
             (d / sub).mkdir(parents=True, exist_ok=True)
         # A rename, as the core's atomic write: the directory watch sees it, a rewrite in place it would not.
-        (d / "game.toml.tmp").write_text(f'schema = 1\nid = "{game["id"]}"\ntitle = {json.dumps(game.get("title", game["id"]))}\n# {_now()} {json.dumps(game.get("launch") or {})}\n')
+        (d / "game.toml.tmp").write_text(
+            f'schema = 1\nid = "{game["id"]}"\ntitle = {json.dumps(game.get("title", game["id"]))}\n# {_now()} {json.dumps(game.get("launch") or {})}\n'
+        )
         os.replace(d / "game.toml.tmp", d / "game.toml")
 
     def _write_sessions(self, ident):
@@ -336,12 +399,17 @@ class FakeCore:
         spec = self._runner(runner) or {"id": runner, "name": runner, "kind": "", "platforms": [], "path": "", "options": []}
         options = {o["key"]: o.get("value", o.get("default")) for o in spec.get("options") or []}
         options.update(launch.get("options") or {})
-        effective.update({
-            "runner": spec["id"], "runner_name": spec.get("name", runner), "runner_kind": spec.get("kind", ""),
-            "runner_path": launch.get("runner_exe") or spec.get("path") or "",
-            "platform": out.get("platform") or (spec.get("platforms") or [""])[0],
-            "options": options, "inputplumber": bool(options.get("inputplumber")),
-        })
+        effective.update(
+            {
+                "runner": spec["id"],
+                "runner_name": spec.get("name", runner),
+                "runner_kind": spec.get("kind", ""),
+                "runner_path": launch.get("runner_exe") or spec.get("path") or "",
+                "platform": out.get("platform") or (spec.get("platforms") or [""])[0],
+                "options": options,
+                "inputplumber": bool(options.get("inputplumber")),
+            }
+        )
         out.setdefault("platform", effective["platform"])
         modules = out.setdefault("modules", {})
         for module in self._data.get("modules", []):
@@ -381,7 +449,7 @@ class FakeCore:
         node = game
         parts = key.split(".")
         if parts[0] == "capture":
-            parts = ["modules", "capture"] + parts[1:]
+            parts = ["modules", "capture", *parts[1:]]
         for part in parts[:-1]:
             node = node.setdefault(part, {})
         leaf = parts[-1]
@@ -389,7 +457,7 @@ class FakeCore:
             node.pop(leaf, None)
         elif value in ("true", "false"):
             node[leaf] = value == "true"
-        elif leaf in ("tags",):
+        elif leaf == "tags":
             node[leaf] = [v.strip() for v in value.split(",") if v.strip()]
         else:
             node[leaf] = value
@@ -427,13 +495,21 @@ class FakeCore:
             for ident in report.get("imported", []):
                 if any(g["id"] == ident for g in self._data["games"]):
                     continue
-                game = {"id": ident, "title": ident.replace("-", " ").title(), "source": "lutris", "favorite": False, "hidden": False,
-                        "platform": "windows", "launch": {"runner": "proton", "exe": f"/games/{ident}/{ident}.exe"},
-                        "stats": {"hours": report.get("hours_imported", {}).get(ident, 0)}, "metadata": {}, "media": {"screenshots": []}}
+                game = {
+                    "id": ident,
+                    "title": ident.replace("-", " ").title(),
+                    "source": "lutris",
+                    "favorite": False,
+                    "hidden": False,
+                    "platform": "windows",
+                    "launch": {"runner": "proton", "exe": f"/games/{ident}/{ident}.exe"},
+                    "stats": {"hours": report.get("hours_imported", {}).get(ident, 0)},
+                    "metadata": {},
+                    "media": {"screenshots": []},
+                }
                 self._data["games"].append(game)
                 self._write_game(game)
-        return {"runners": [], "skipped": [], "updated": [], "media_imported": [],
-                "env_diffs": [], **copy.deepcopy(report), "applied": bool(apply)}
+        return {"runners": [], "skipped": [], "updated": [], "media_imported": [], "env_diffs": [], **copy.deepcopy(report), "applied": bool(apply)}
 
     def add_game(self, spec):
         runner = self._runner_of({"runner": spec.get("runner", "")})
@@ -448,9 +524,15 @@ class FakeCore:
         if any(g["id"] == ident for g in self._data["games"]):
             raise UniverseError("Invalid", f"{ident} is already in the library")
         game = {
-            "id": ident, "title": title, "source": "manual", "favorite": False, "hidden": False,
+            "id": ident,
+            "title": title,
+            "source": "manual",
+            "favorite": False,
+            "hidden": False,
             "platform": spec.get("platform") or (runner_spec.get("platforms") or [""])[0],
-            "launch": {"runner": runner, "exe": path}, "metadata": {}, "media": {"screenshots": []},
+            "launch": {"runner": runner, "exe": path},
+            "metadata": {},
+            "media": {"screenshots": []},
         }
         self._data["games"].append(game)
         self._write_game(game)
@@ -502,8 +584,12 @@ class FakeCore:
                 raise UniverseError("Busy", f"{running['title']} is running")
             session_id = time.strftime("%Y%m%d-%H%M%S")
             current = {
-                "session_id": session_id, "id": ident, "title": game["title"],
-                "unit": f"universe-game-{ident}-{session_id}.scope", "screen": screen, "started_at": _now(),
+                "session_id": session_id,
+                "id": ident,
+                "title": game["title"],
+                "unit": f"universe-game-{ident}-{session_id}.scope",
+                "screen": screen,
+                "started_at": _now(),
             }
             self._session = current
             self._session_started = time.monotonic()
@@ -530,24 +616,31 @@ class FakeCore:
             if not current or self._closed:
                 return
             self.game_shown = self.frozen = self.hud_shown = False
-            duration = max(1, int(round(time.monotonic() - self._session_started)))
+            duration = max(1, round(time.monotonic() - (self._session_started or time.monotonic())))
             game = self._game(current["id"])
             stats = game.setdefault("stats", {"hours": 0, "play_count": 0, "last_played": None})
             stats["hours"] = float(stats.get("hours") or 0) + duration / 3600
             stats["play_count"] = int(stats.get("play_count") or 0) + 1
             stats["last_played"] = _now()
-            self._data.setdefault("sessions", {}).setdefault(current["id"], []).insert(0, {
-                "session": current["session_id"], "game": current["id"],
-                "started_at": current["started_at"], "ended_at": _now(), "duration_s": duration,
-                "source": "daemon", "unit": current["unit"], "screen": current["screen"],
-                "exit": exit_code, "recording": None,
-            })
+            self._data.setdefault("sessions", {}).setdefault(current["id"], []).insert(
+                0,
+                {
+                    "session": current["session_id"],
+                    "game": current["id"],
+                    "started_at": current["started_at"],
+                    "ended_at": _now(),
+                    "duration_s": duration,
+                    "source": "daemon",
+                    "unit": current["unit"],
+                    "screen": current["screen"],
+                    "exit": exit_code,
+                    "recording": None,
+                },
+            )
             self._write_sessions(current["id"])
             self._pend_journal(current["id"], current["session_id"])
-            try:
+            with contextlib.suppress(OSError):
                 self._marker().unlink()
-            except OSError:
-                pass
 
     def stop(self, session_id):
         if self._process is not None:
@@ -678,7 +771,11 @@ class FakeCore:
             duration = CLIP_S if path.startswith(self._cache) and exists else line.get("recording_duration_s") or 0
             row["recording"] = {"path": path, "size": size, "exists": exists, "duration_s": duration}
         entry = next((e for e in self._data.get("journal", {}).get(ident, []) if e.get("session") == line.get("session")), None)
-        row["journal"] = None if entry is None else {"state": entry.get("state") or "written", "title": entry.get("title") or "", "written_at": entry.get("written_at") or ""}
+        row["journal"] = (
+            None
+            if entry is None
+            else {"state": entry.get("state") or "written", "title": entry.get("title") or "", "written_at": entry.get("written_at") or ""}
+        )
         return row
 
     def _tick(self, progress, message, steps):
@@ -828,9 +925,11 @@ class FakeCore:
 
     def _sgdb_hits(self, game):
         title, base = game.get("title", game["id"]), 5000 + len(game["id"])
-        return [{"provider": "sgdb", "id": base, "name": title, "year": 2016, "verified": True},
-                {"provider": "sgdb", "id": base + 1, "name": f"{title} Remastered", "year": 2021, "verified": False},
-                {"provider": "sgdb", "id": base + 2, "name": f"{title} II", "year": 2019, "verified": True}]
+        return [
+            {"provider": "sgdb", "id": base, "name": title, "year": 2016, "verified": True},
+            {"provider": "sgdb", "id": base + 1, "name": f"{title} Remastered", "year": 2021, "verified": False},
+            {"provider": "sgdb", "id": base + 2, "name": f"{title} II", "year": 2019, "verified": True},
+        ]
 
     def _sgdb_entry(self, game):
         hits = self._sgdb_hits(game)
@@ -844,10 +943,26 @@ class FakeCore:
         for slot in SLOTS:
             default, over = media.get(slot) or "", overrides.get(slot) or ""
             kind = "picked" if over else "default" if default else "missing"
-            slots.append({"slot": slot, "path": over or default, "default": default, "override": over,
-                          "origin": "picked" if over else "sgdb" if default else "", "default_origin": "sgdb" if default else "", "kind": kind})
+            slots.append(
+                {
+                    "slot": slot,
+                    "path": over or default,
+                    "default": default,
+                    "override": over,
+                    "origin": "picked" if over else "sgdb" if default else "",
+                    "default_origin": "sgdb" if default else "",
+                    "kind": kind,
+                }
+            )
         entry = self._sgdb_entry(game)
-        return {"id": game["id"], "title": game.get("title", game["id"]), "sgdb_id": entry["id"], "sgdb_name": entry["name"], "sgdb_year": entry["year"], "slots": slots}
+        return {
+            "id": game["id"],
+            "title": game.get("title", game["id"]),
+            "sgdb_id": entry["id"],
+            "sgdb_name": entry["name"],
+            "sgdb_year": entry["year"],
+            "slots": slots,
+        }
 
     def media_status(self, ident):
         games = [self._game(ident)] if ident else [g for g in self._data["games"] if not g.get("removed")]
@@ -869,10 +984,8 @@ class FakeCore:
         overrides = self._game(ident).setdefault("overrides", {})
         gone = overrides.pop(slot, None)
         if gone:
-            try:
+            with contextlib.suppress(OSError):
                 os.remove(gone)
-            except OSError:
-                pass
         return bool(gone)
 
     def media_candidates(self, ident, slot, page=0):
@@ -929,10 +1042,33 @@ class FakeCore:
         ffmpeg = shutil.which("ffmpeg")
         if ffmpeg:
             subprocess.run(
-                [ffmpeg, "-loglevel", "error", "-y", "-f", "lavfi", "-i", f"testsrc=size=640x360:rate=30:duration={CLIP_S}",
-                 "-f", "lavfi", "-i", f"sine=frequency=440:duration={CLIP_S}", "-c:v", "libx264", "-preset", "ultrafast",
-                 "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest", out],
-                capture_output=True, timeout=30,
+                [
+                    ffmpeg,
+                    "-loglevel",
+                    "error",
+                    "-y",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    f"testsrc=size=640x360:rate=30:duration={CLIP_S}",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    f"sine=frequency=440:duration={CLIP_S}",
+                    "-c:v",
+                    "libx264",
+                    "-preset",
+                    "ultrafast",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-c:a",
+                    "aac",
+                    "-shortest",
+                    out,
+                ],
+                capture_output=True,
+                timeout=30,
+                check=False,
             )
         return out
 
@@ -943,19 +1079,41 @@ class FakeCore:
         out = []
         for e in entries:
             line = sessions.get(e.get("session")) or {}
-            out.append({"state": "written", "started_at": line.get("started_at") or "", "ended_at": line.get("ended_at") or "",
-                        "duration_s": line.get("duration_s") or 0, **e, "images": e.get("images") or shots})
+            out.append(
+                {
+                    "state": "written",
+                    "started_at": line.get("started_at") or "",
+                    "ended_at": line.get("ended_at") or "",
+                    "duration_s": line.get("duration_s") or 0,
+                    **e,
+                    "images": e.get("images") or shots,
+                }
+            )
         return out
 
     def pending_journals(self):
-        return [{"game": game, "title": self._game(game)["title"], "session": e.get("session"), "started_at": e.get("started_at")}
-                for game, entries in self._data.get("journal", {}).items()
-                for e in entries if e.get("state") == "pending"]
+        return [
+            {"game": game, "title": self._game(game)["title"], "session": e.get("session"), "started_at": e.get("started_at")}
+            for game, entries in self._data.get("journal", {}).items()
+            for e in entries
+            if e.get("state") == "pending"
+        ]
 
     def _pend_journal(self, ident, session_id):
         entries = self._data.setdefault("journal", {}).setdefault(ident, [])
-        entry = {"session": session_id, "game": ident, "state": "pending", "started_at": _now(),
-                 "written_at": "", "lang": "en", "title": "", "provider": "fake", "paragraphs": [], "next_up": "", "images": []}
+        entry = {
+            "session": session_id,
+            "game": ident,
+            "state": "pending",
+            "started_at": _now(),
+            "written_at": "",
+            "lang": "en",
+            "title": "",
+            "provider": "fake",
+            "paragraphs": [],
+            "next_up": "",
+            "images": [],
+        }
         entries.insert(0, entry)
         self._write_entry(ident, entry)
 
@@ -963,8 +1121,7 @@ class FakeCore:
             with self._lock:
                 if self._closed or entry not in entries:
                     return
-                entry.update(state="written", written_at=_now(), title="A short session",
-                             paragraphs=["A quick look around, nothing decided yet."])
+                entry.update(state="written", written_at=_now(), title="A short session", paragraphs=["A quick look around, nothing decided yet."])
                 self._write_entry(ident, entry)
 
         self._later(JOURNAL_S, write)
@@ -1111,8 +1268,9 @@ class FakeCore:
             for slot in family.get("slots", []):
                 codes = slot.get("codes") or []
                 slots[slot["id"]] = {"code": codes[0] if codes else None, "bound": bool(codes)}
-            pads.append({"id": pad["id"], "name": family["name"], "family": family["id"], "family_name": family["name"],
-                         "bus": pad.get("bus", "usb"), "slots": slots})
+            pads.append(
+                {"id": pad["id"], "name": family["name"], "family": family["id"], "family_name": family["name"], "bus": pad.get("bus", "usb"), "slots": slots}
+            )
         return pads
 
     def set_controller_macro(self, macro):
@@ -1128,15 +1286,22 @@ class FakeCore:
             raise UniverseError("Invalid", f"{action} fires on a hold only")
         if family != "*" and button not in {s["id"] for s in self._controller_family(family)["slots"]}:
             raise UniverseError("NotFound", f"{family} has no button '{button}'")
-        entry = {"family": family, "button": button, "trigger": trigger, "action": action,
-                 "keys": str(macro.get("keys") or ""), "command": str(macro.get("command") or "")}
+        entry = {
+            "family": family,
+            "button": button,
+            "trigger": trigger,
+            "action": action,
+            "keys": str(macro.get("keys") or ""),
+            "command": str(macro.get("command") or ""),
+        }
         state["macros"] = [m for m in state.get("macros", []) if (m["family"], m["button"], m["trigger"]) != (family, button, trigger)]
         state["macros"].append(entry)
 
     def remove_controller_macro(self, family, button, trigger):
         state = self._controller()
-        state["macros"] = [m for m in state.get("macros", [])
-                           if not (m["family"] == family and m["button"] == button and (not trigger or m["trigger"] == trigger))]
+        state["macros"] = [
+            m for m in state.get("macros", []) if not (m["family"] == family and m["button"] == button and (not trigger or m["trigger"] == trigger))
+        ]
 
     def set_controller_button(self, family, slot, codes):
         for entry in self._controller_family(family)["slots"]:

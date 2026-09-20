@@ -35,23 +35,48 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         push(bin, which(bin).is_some(), which(bin).unwrap_or_else(|| "missing".into()), "core");
     }
     if config.launch.fps_limit != "none" {
-        push("mangohud", which("mangohud").is_some(), which("mangohud").unwrap_or_else(|| "missing: no frame rate limit (launch.fps_limit = \"none\" to stop asking)".into()), "core");
+        push(
+            "mangohud",
+            which("mangohud").is_some(),
+            which("mangohud").unwrap_or_else(|| "missing: no frame rate limit (launch.fps_limit = \"none\" to stop asking)".into()),
+            "core",
+        );
     }
     if config.launch.gamescope {
         let bin = &config.launch.gamescope_bin;
-        push("gamescope", which(bin).is_some(), which(bin).unwrap_or_else(|| format!("{bin} not found: games launch on the desktop (launch.gamescope = false to stop asking)")), "core");
-        push("mangoapp", which("mangoapp").is_some(), which("mangoapp").unwrap_or_else(|| "missing: no HUD inside gamescope (the mangohud package ships it)".into()), "core");
+        push(
+            "gamescope",
+            which(bin).is_some(),
+            which(bin).unwrap_or_else(|| format!("{bin} not found: games launch on the desktop (launch.gamescope = false to stop asking)")),
+            "core",
+        );
+        push(
+            "mangoapp",
+            which("mangoapp").is_some(),
+            which("mangoapp").unwrap_or_else(|| "missing: no HUD inside gamescope (the mangohud package ships it)".into()),
+            "core",
+        );
         let screen = crate::desktop::pick_screen("");
         let mode = crate::desktop::screen_mode(&screen).await;
-        push("screen", mode.is_some(), match mode {
-            Some(m) => format!("{screen} {}×{} @ {} Hz: what gamescope's resolution follows on auto", m.width, m.height, m.refresh),
-            None => "no connected output found: gamescope keeps its own 1280×720 unless launch.gamescope_resolution is set".into(),
-        }, "core");
+        push(
+            "screen",
+            mode.is_some(),
+            match mode {
+                Some(m) => format!("{screen} {}×{} @ {} Hz: what gamescope's resolution follows on auto", m.width, m.height, m.refresh),
+                None => "no connected output found: gamescope keeps its own 1280×720 unless launch.gamescope_resolution is set".into(),
+            },
+            "core",
+        );
     }
     let proton = config.proton_path(&config.launch.proton);
     push("proton", proton.is_some(), proton.map(|p| p.to_string_lossy().into()).unwrap_or_else(|| format!("{} not found", config.launch.proton)), "core");
     let ext_ok = crate::desktop::extension_installed(&config.desktop.cursor_extension);
-    push("cursor-extension", ext_ok || !config.desktop.hide_cursor, format!("{} {}", config.desktop.cursor_extension, if ext_ok { "installed" } else { "missing" }), "core");
+    push(
+        "cursor-extension",
+        ext_ok || !config.desktop.hide_cursor,
+        format!("{} {}", config.desktop.cursor_extension, if ext_ok { "installed" } else { "missing" }),
+        "core",
+    );
     if crate::desktop::detect(config) == crate::desktop::Profile::Gnome {
         let uuid = crate::desktop::UNIVERSE_EXTENSION;
         let (ok, detail) = if !crate::desktop::extension_installed(uuid) {
@@ -86,15 +111,44 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         }
         let located = crate::runners::locate(spec, config);
         let ok = !located.program.is_empty() && std::path::Path::new(&located.program).is_file();
-        push(&format!("runner-{}", spec.id), ok, if ok { format!("{} ({})", located.program, located.source) } else { format!("{} not found: install it or set runners.{}.exe", spec.name, spec.id) }, "runners");
-        inputplumber_wanted |= spec.kind == crate::runners::Kind::Emulator && spec.merged_options(config, None).get("inputplumber").and_then(|v| v.as_bool()).unwrap_or(false);
+        push(
+            &format!("runner-{}", spec.id),
+            ok,
+            if ok {
+                format!("{} ({})", located.program, located.source)
+            } else {
+                format!("{} not found: install it or set runners.{}.exe", spec.name, spec.id)
+            },
+            "runners",
+        );
+        inputplumber_wanted |=
+            spec.kind == crate::runners::Kind::Emulator && spec.merged_options(config, None).get("inputplumber").and_then(|v| v.as_bool()).unwrap_or(false);
     }
     if inputplumber_wanted {
         let reachable = crate::inputplumber::reachable().await;
-        push("inputplumber", reachable, if reachable { "daemon reachable".into() } else { "daemon not on the system bus (services.inputplumber); emulators run on the raw pads (runners.<id>.inputplumber = false to stop asking)".into() }, "runners");
+        push(
+            "inputplumber",
+            reachable,
+            if reachable {
+                "daemon reachable".into()
+            } else {
+                "daemon not on the system bus (services.inputplumber); emulators run on the raw pads (runners.<id>.inputplumber = false to stop asking)".into()
+            },
+            "runners",
+        );
     }
-    push("key-sgdb", config.api_key("sgdb").is_some(), if config.api_key("sgdb").is_some() { "present".into() } else { format!("missing ({})", config.keys.sgdb_file) }, "media");
-    push("key-rawg", config.api_key("rawg").is_some(), if config.api_key("rawg").is_some() { "present".into() } else { format!("missing ({})", config.keys.rawg_file) }, "media");
+    push(
+        "key-sgdb",
+        config.api_key("sgdb").is_some(),
+        if config.api_key("sgdb").is_some() { "present".into() } else { format!("missing ({})", config.keys.sgdb_file) },
+        "media",
+    );
+    push(
+        "key-rawg",
+        config.api_key("rawg").is_some(),
+        if config.api_key("rawg").is_some() { "present".into() } else { format!("missing ({})", config.keys.rawg_file) },
+        "media",
+    );
     for m in modules {
         if !m.enabled {
             continue;
@@ -104,7 +158,12 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
             push(bin, which(bin).is_some(), which(bin).unwrap_or_else(|| hint.into()), m.id());
         }
         if m.id() == "capture" {
-            push("gsr-kms-server", which("gsr-kms-server").is_some(), which("gsr-kms-server").unwrap_or_else(|| "missing (programs.gpu-screen-recorder.enable)".into()), "capture");
+            push(
+                "gsr-kms-server",
+                which("gsr-kms-server").is_some(),
+                which("gsr-kms-server").unwrap_or_else(|| "missing (programs.gpu-screen-recorder.enable)".into()),
+                "capture",
+            );
         }
     }
     for m in sources.iter().filter(|m| m.enabled) {
@@ -119,12 +178,24 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
     }
     if config.controller.enabled {
         let uinput = std::fs::OpenOptions::new().write(true).open("/dev/uinput").is_ok();
-        push("uinput", uinput, if uinput { "/dev/uinput writable".into() } else { "/dev/uinput not writable (key and MangoHud macros): hardware.uinput.enable and the uinput group".into() }, "controller");
+        push(
+            "uinput",
+            uinput,
+            if uinput {
+                "/dev/uinput writable".into()
+            } else {
+                "/dev/uinput not writable (key and MangoHud macros): hardware.uinput.enable and the uinput group".into()
+            },
+            "controller",
+        );
         let pads = crate::controller::watch::enumerate_json(&config.controller);
         let detail = if pads.is_empty() {
             "no pad connected".to_string()
         } else {
-            pads.iter().map(|p| format!("{} ({}, {})", p["name"].as_str().unwrap_or(""), p["family_name"].as_str().unwrap_or(""), p["bus"].as_str().unwrap_or(""))).collect::<Vec<_>>().join("; ")
+            pads.iter()
+                .map(|p| format!("{} ({}, {})", p["name"].as_str().unwrap_or(""), p["family_name"].as_str().unwrap_or(""), p["bus"].as_str().unwrap_or("")))
+                .collect::<Vec<_>>()
+                .join("; ")
         };
         push("pads", true, detail, "controller");
         let mut unbound: Vec<String> = Vec::new();
@@ -136,12 +207,35 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
                 }
             }
         }
-        push("pad-buttons", unbound.is_empty(), if unbound.is_empty() { "every button of every pad answers".into() } else { format!("not seen on this connection, learn them: {}", unbound.join(", ")) }, "controller");
+        push(
+            "pad-buttons",
+            unbound.is_empty(),
+            if unbound.is_empty() {
+                "every button of every pad answers".into()
+            } else {
+                format!("not seen on this connection, learn them: {}", unbound.join(", "))
+            },
+            "controller",
+        );
     }
     let enabled_missing: Vec<&str> = config.modules.enabled.iter().filter(|e| !modules.iter().any(|m| m.id() == e.as_str())).map(|s| s.as_str()).collect();
-    let hint = if enabled_missing.iter().any(|e| sources.iter().any(|s| s.id() == *e)) { " (a source: [sources] enabled in config.toml, `universe source enable`)" } else { "" };
-    push("modules", enabled_missing.is_empty(), if enabled_missing.is_empty() { format!("{} found", modules.len()) } else { format!("enabled but not found: {}{hint}", enabled_missing.join(", ")) }, "core");
+    let hint = if enabled_missing.iter().any(|e| sources.iter().any(|s| s.id() == *e)) {
+        " (a source: [sources] enabled in config.toml, `universe source enable`)"
+    } else {
+        ""
+    };
+    push(
+        "modules",
+        enabled_missing.is_empty(),
+        if enabled_missing.is_empty() { format!("{} found", modules.len()) } else { format!("enabled but not found: {}{hint}", enabled_missing.join(", ")) },
+        "core",
+    );
     let sources_missing: Vec<&str> = config.sources.enabled.iter().filter(|e| !sources.iter().any(|s| s.id() == e.as_str())).map(|s| s.as_str()).collect();
-    push("sources", sources_missing.is_empty(), if sources_missing.is_empty() { format!("{} found", sources.len()) } else { format!("enabled but not found: {}", sources_missing.join(", ")) }, "core");
+    push(
+        "sources",
+        sources_missing.is_empty(),
+        if sources_missing.is_empty() { format!("{} found", sources.len()) } else { format!("enabled but not found: {}", sources_missing.join(", ")) },
+        "core",
+    );
     out
 }

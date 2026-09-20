@@ -19,7 +19,9 @@ Item {
     height: Theme.dp(84)
     visible: y > -height + 1
 
-    Behavior on y { Ease {} }
+    Behavior on y {
+        Ease {}
+    }
 
     Timer {
         id: hideTimer

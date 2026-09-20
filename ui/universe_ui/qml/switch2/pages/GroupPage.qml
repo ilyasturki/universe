@@ -9,7 +9,7 @@ FocusScope {
     property var shell: null
     property var args: ({})
 
-    signal closeRequested()
+    signal closeRequested
 
     readonly property string groupKey: args.group || "favourites"
     readonly property string name: args.name || ""
@@ -17,20 +17,47 @@ FocusScope {
     property int sortMode: 0
     readonly property var sortNames: ["By Recently Played", "By Title", "By Play Time", "By Release"]
 
-    readonly property var hints: zone === "rail" ? [ { glyph: "B", label: "Back" }, { glyph: "A", label: "OK" } ]
-                               : [ { glyph: "Start", label: "Options" }, { glyph: "B", label: "Back" }, { glyph: "A", label: "Start" } ]
+    readonly property var hints: zone === "rail" ? [
+        {
+            glyph: "B",
+            label: "Back"
+        },
+        {
+            glyph: "A",
+            label: "OK"
+        }
+    ] : [
+        {
+            glyph: "Start",
+            label: "Options"
+        },
+        {
+            glyph: "B",
+            label: "Back"
+        },
+        {
+            glyph: "A",
+            label: "Start"
+        }
+    ]
 
     function key(g) {
-        return sortMode === 1 ? g.sortTitle.toLowerCase()
-             : sortMode === 2 ? -g.playTime
-             : sortMode === 3 ? -g.releaseYear
-             : -(g.lastPlayed instanceof Date && !isNaN(g.lastPlayed.getTime()) ? g.lastPlayed.getTime() : 0);
+        return sortMode === 1 ? g.sortTitle.toLowerCase() : sortMode === 2 ? -g.playTime : sortMode === 3 ? -g.releaseYear : -(g.lastPlayed instanceof Date && !isNaN(g.lastPlayed.getTime()) ? g.lastPlayed.getTime() : 0);
     }
 
     readonly property var list: {
-        var keyed = Groups.gamesOf(api.allGames, api.collections, groupKey).map(function(g) { return { k: page.key(g), g: g }; });
-        keyed.sort(function(a, b) { return a.k < b.k ? -1 : a.k > b.k ? 1 : 0; });
-        return keyed.map(function(e) { return e.g; });
+        var keyed = Groups.gamesOf(api.allGames, api.collections, groupKey).map(function (g) {
+            return {
+                k: page.key(g),
+                g: g
+            };
+        });
+        keyed.sort(function (a, b) {
+            return a.k < b.k ? -1 : a.k > b.k ? 1 : 0;
+        });
+        return keyed.map(function (e) {
+            return e.g;
+        });
     }
 
     focus: true
@@ -55,10 +82,19 @@ FocusScope {
         x: Theme.dp(102)
         y: Theme.dp(170)
         height: parent.height - y - Theme.dp(Theme.hintBarHeight)
-        items: [ { id: "sort", icon: "sort" } ]
+        items: [
+            {
+                id: "sort",
+                icon: "sort"
+            }
+        ]
         focus: page.zone === "rail"
-        onActivated: function(id) {
-            page.shell.pick({ title: "Sort", choices: page.sortNames, index: page.sortMode }, function(i) {
+        onActivated: function (id) {
+            page.shell.pick({
+                title: "Sort",
+                choices: page.sortNames,
+                index: page.sortMode
+            }, function (i) {
                 if (i >= 0) {
                     page.sortMode = i;
                     grid.index = 0;
@@ -93,6 +129,8 @@ FocusScope {
             rail.forceActiveFocus();
         }
         onActivated: page.shell.launch(current)
-        onOptionsRequested: page.shell.push("pages/SoftwareOptionsPage.qml", { gameId: current.id })
+        onOptionsRequested: page.shell.push("pages/SoftwareOptionsPage.qml", {
+            gameId: current.id
+        })
     }
 }

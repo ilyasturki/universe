@@ -17,40 +17,83 @@ FocusScope {
     property string zone: "button"
     property int shotIndex: 0
 
-    readonly property var hints: zone === "shots" && screenshots.length > 1
-        ? [ { glyph: "dpad", label: "Screenshots" }, { glyph: "B", label: "Back" } ]
-        : zone === "text"
-        ? [ { glyph: "B", label: "Back" } ]
-        : [ { glyph: "B", label: "Back" }, { glyph: "A", label: "Confirm" } ]
+    readonly property var hints: zone === "shots" && screenshots.length > 1 ? [
+        {
+            glyph: "dpad",
+            label: "Screenshots"
+        },
+        {
+            glyph: "B",
+            label: "Back"
+        }
+    ] : zone === "text" ? [
+        {
+            glyph: "B",
+            label: "Back"
+        }
+    ] : [
+        {
+            glyph: "B",
+            label: "Back"
+        },
+        {
+            glyph: "A",
+            label: "Confirm"
+        }
+    ]
 
     readonly property var facts: {
         if (!game)
             return [];
         var out = [];
         if (game.developerList.length > 0)
-            out.push({ label: "Developer", value: game.developerList.join(", ") });
+            out.push({
+                label: "Developer",
+                value: game.developerList.join(", ")
+            });
         if (game.genreList.length > 0)
-            out.push({ label: "Genre", value: game.genreList.join(", ") });
+            out.push({
+                label: "Genre",
+                value: game.genreList.join(", ")
+            });
         if (game.releaseYear > 0)
-            out.push({ label: "Release", value: String(game.releaseYear) });
+            out.push({
+                label: "Release",
+                value: String(game.releaseYear)
+            });
         if (game.players > 1)
-            out.push({ label: "Players", value: String(game.players) });
+            out.push({
+                label: "Players",
+                value: String(game.players)
+            });
         if (game.extra["metacritic"] !== undefined)
-            out.push({ label: "Metacritic", value: String(game.extra["metacritic"][0]) });
-        var hours = function(v) { return (Number(v) >= 10 ? Math.round(Number(v)) : Number(v).toFixed(1)) + " h"; };
-        var hltb = [["hltb-main", "Main"], ["hltb-extra", "Extra"], ["hltb-completionist", "100%"]]
-            .filter(function(p) { return game.extra[p[0]] !== undefined; })
-            .map(function(p) { return p[1] + " " + hours(game.extra[p[0]][0]); });
+            out.push({
+                label: "Metacritic",
+                value: String(game.extra["metacritic"][0])
+            });
+        var hours = function (v) {
+            return (Number(v) >= 10 ? Math.round(Number(v)) : Number(v).toFixed(1)) + " h";
+        };
+        var hltb = [["hltb-main", "Main"], ["hltb-extra", "Extra"], ["hltb-completionist", "100%"]].filter(function (p) {
+            return game.extra[p[0]] !== undefined;
+        }).map(function (p) {
+            return p[1] + " " + hours(game.extra[p[0]][0]);
+        });
         if (hltb.length > 0)
-            out.push({ label: "How long to beat", value: hltb.join("  ·  ") });
+            out.push({
+                label: "How long to beat",
+                value: hltb.join("  ·  ")
+            });
         return out;
     }
 
-    signal closeRequested()
+    signal closeRequested
 
     focus: true
 
-    function stepShot(d) { shotIndex = Sound.stepped(shotIndex, d, screenshots.length); }
+    function stepShot(d) {
+        shotIndex = Sound.stepped(shotIndex, d, screenshots.length);
+    }
 
     function go(z) {
         Sound.play("tick");
@@ -64,7 +107,7 @@ FocusScope {
         flick.contentY = next;
     }
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         var arrow = event.key === Qt.Key_Left || event.key === Qt.Key_Right;
         if (event.isAutoRepeat && !(zone === "shots" && arrow) && !(zone === "text" && (event.key === Qt.Key_Up || event.key === Qt.Key_Down)))
             return;
@@ -78,24 +121,43 @@ FocusScope {
                 Sound.play("edge");
         } else if (event.key === Qt.Key_Up) {
             event.accepted = true;
-            if (zone === "button") go("shots"); else if (zone === "text") scroll(-1); else Sound.play("edge");
+            if (zone === "button")
+                go("shots");
+            else if (zone === "text")
+                scroll(-1);
+            else
+                Sound.play("edge");
         } else if (event.key === Qt.Key_Down) {
             event.accepted = true;
-            if (zone === "shots") go("button"); else if (zone === "text") scroll(1); else Sound.play("edge");
+            if (zone === "shots")
+                go("button");
+            else if (zone === "text")
+                scroll(1);
+            else
+                Sound.play("edge");
         } else if (event.key === Qt.Key_Right) {
             event.accepted = true;
-            if (zone === "shots" && shotIndex < screenshots.length - 1) stepShot(1); else if (zone !== "text") go("text"); else Sound.play("edge");
+            if (zone === "shots" && shotIndex < screenshots.length - 1)
+                stepShot(1);
+            else if (zone !== "text")
+                go("text");
+            else
+                Sound.play("edge");
         } else if (event.key === Qt.Key_Left) {
             event.accepted = true;
-            if (zone === "shots") stepShot(-1); else if (zone === "text") go("button"); else Sound.play("edge");
+            if (zone === "shots")
+                stepShot(-1);
+            else if (zone === "text")
+                go("button");
+            else
+                Sound.play("edge");
         }
     }
 
     Label {
         x: Theme.dp(108)
         y: Theme.dp(78)
-        text: page.game && page.game.publisherList.length > 0 ? page.game.publisherList.join(", ")
-            : page.game && page.game.developerList.length > 0 ? page.game.developerList.join(", ") : ""
+        text: page.game && page.game.publisherList.length > 0 ? page.game.publisherList.join(", ") : page.game && page.game.developerList.length > 0 ? page.game.developerList.join(", ") : ""
         color: Theme.textSecondary
         font.pixelSize: Theme.dp(Theme.fontSmall)
     }
@@ -240,7 +302,9 @@ FocusScope {
             interactive: false
             clip: true
 
-            Behavior on contentY { Ease {} }
+            Behavior on contentY {
+                Ease {}
+            }
 
             Column {
                 id: article

@@ -21,7 +21,9 @@ Item {
     }
 
     readonly property Component maskEffect: Component {
-        OpacityMask { maskSource: root.mask }
+        OpacityMask {
+            maskSource: root.mask
+        }
     }
 
     readonly property Rectangle mask: Rectangle {

@@ -17,8 +17,8 @@ while [ $# -gt 0 ]; do
     shift
 done
 
-# qmlformat cannot build this file's JS DOM and drops code from its output
-qml_skip="ui/universe_ui/qml/ui/ShotGrid.qml"
+# qmlformat aborts on these two (it cannot build their JS DOM)
+qml_skip=(ui/universe_ui/qml/ui/ShotGrid.qml ui/universe_ui/qml/switch2/pages/InstallPage.qml)
 nix_files=(flake.nix nix/*.nix)
 
 status=0
@@ -45,7 +45,8 @@ python_fmt() { if [ "$check" = 1 ]; then ruff format --check "$@"; else ruff for
 nix_fmt() { if [ "$check" = 1 ]; then nixfmt --check "$@"; else nixfmt "$@"; fi; }
 js_fmt() { if [ "$check" = 1 ]; then biome format "$@"; else biome format --write "$@"; fi; }
 qml_file() {
-    [ "$1" = "$qml_skip" ] && return 0
+    local skip
+    for skip in "${qml_skip[@]}"; do [ "$1" = "$skip" ] && return 0; done
     if [ "$check" = 1 ]; then
         qmlformat "$1" 2>/dev/null | diff -q "$1" - >/dev/null || { echo "qmlformat: would reformat $1"; return 1; }
     else

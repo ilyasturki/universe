@@ -1,4 +1,5 @@
 import argparse
+import contextlib
 import logging
 import os
 import shutil
@@ -6,6 +7,10 @@ import signal
 import socket
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING, cast
+
+if TYPE_CHECKING:
+    from PySide6.QtQuick import QQuickWindow
 
 QML_DIR = Path(__file__).parent / "qml"
 
@@ -17,8 +22,7 @@ def parse_args(argv):
     parser.add_argument("--windowed", action="store_true", help="a window instead of fullscreen (--size implies it)")
     parser.add_argument("--quit-after", type=int, default=0, metavar="MS", help="quit after MS (0 = never)")
     parser.add_argument("--no-gamepad", action="store_true")
-    parser.add_argument("--keys", default="", metavar="LIST",
-                        help="key names to post once loaded, e.g. 'Right Right Return' (Wait idles one gap)")
+    parser.add_argument("--keys", default="", metavar="LIST", help="key names to post once loaded, e.g. 'Right Right Return' (Wait idles one gap)")
     parser.add_argument("--key-gap", type=int, default=120, metavar="MS")
     parser.add_argument("--key-delay", type=int, default=1200, metavar="MS", help="delay before the first key")
     parser.add_argument("--size", metavar="WxH", help="window size, implies --windowed (default 1920x1080)")
@@ -52,13 +56,11 @@ def quit_on_signals(app, on_signal=None):
     writer.setblocking(False)
     signal.set_wakeup_fd(writer.fileno())
     notifier = QSocketNotifier(reader.fileno(), QSocketNotifier.Type.Read, app)
-    notifier.sockets = (reader, writer)
+    notifier.setProperty("sockets", (reader, writer))
 
     def drain():
-        try:
+        with contextlib.suppress(OSError):
             reader.recv(64)
-        except OSError:
-            pass
 
     notifier.activated.connect(drain)
     for sig in (signal.SIGINT, signal.SIGTERM):
@@ -115,9 +117,6 @@ def run(argv=None):
     from PySide6.QtCore import Qt, QTimer, QUrl
     from PySide6.QtGui import QGuiApplication
     from PySide6.QtQml import QQmlApplicationEngine
-    from PySide6.QtQuick import (
-        QQuickWindow,  # noqa: F401  (down-casts rootObjects() so grabWindow exists)
-    )
 
     nested = bool(os.environ.get("GAMESCOPE_WAYLAND_DISPLAY"))
     if nested:
@@ -146,7 +145,7 @@ def run(argv=None):
     if not engine.rootObjects():
         print("universe-ui: main.qml failed to load", file=sys.stderr)
         return 1
-    window = engine.rootObjects()[0]
+    window = cast("QQuickWindow", engine.rootObjects()[0])
     own_cursor(window)
     api.attachWindow(window)
     if not args.fullscreen:

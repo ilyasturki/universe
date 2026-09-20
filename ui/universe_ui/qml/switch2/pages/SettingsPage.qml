@@ -10,7 +10,7 @@ FocusScope {
 
     property var shell: null
     property var args: ({})
-    signal closeRequested()
+    signal closeRequested
     focus: true
 
     readonly property var modulesForm: api.screens.modules
@@ -22,16 +22,67 @@ FocusScope {
 
     // Search first, then the sections in four named groups.
     readonly property var sections: [
-        { id: "search", label: "Search", group: 0, detail: "Every setting, by name, purpose or value" },
-        { id: "launch", label: "Launch", group: 1, groupLabel: "Play" },
-        { id: "runners", label: "Runners", group: 1, groupLabel: "Play" },
-        { id: "controllers", label: "Controllers", group: 1, groupLabel: "Play" },
-        { id: "sources", label: "Sources", group: 2, groupLabel: "Store" },
-        { id: "updates", label: "Updates", detail: sources.updates.length > 0 ? sources.updates.length + " pending" : "", group: 2, groupLabel: "Store" },
-        { id: "modules", label: "Modules", group: 3, groupLabel: "Extras" },
-        { id: "themes", label: "Themes", group: 3, groupLabel: "Extras" },
-        { id: "doctor", label: "Doctor", group: 4, groupLabel: "System" },
-        { id: "about", label: "About", group: 4, groupLabel: "System" }
+        {
+            id: "search",
+            label: "Search",
+            group: 0,
+            detail: "Every setting, by name, purpose or value"
+        },
+        {
+            id: "launch",
+            label: "Launch",
+            group: 1,
+            groupLabel: "Play"
+        },
+        {
+            id: "runners",
+            label: "Runners",
+            group: 1,
+            groupLabel: "Play"
+        },
+        {
+            id: "controllers",
+            label: "Controllers",
+            group: 1,
+            groupLabel: "Play"
+        },
+        {
+            id: "sources",
+            label: "Sources",
+            group: 2,
+            groupLabel: "Store"
+        },
+        {
+            id: "updates",
+            label: "Updates",
+            detail: sources.updates.length > 0 ? sources.updates.length + " pending" : "",
+            group: 2,
+            groupLabel: "Store"
+        },
+        {
+            id: "modules",
+            label: "Modules",
+            group: 3,
+            groupLabel: "Extras"
+        },
+        {
+            id: "themes",
+            label: "Themes",
+            group: 3,
+            groupLabel: "Extras"
+        },
+        {
+            id: "doctor",
+            label: "Doctor",
+            group: 4,
+            groupLabel: "System"
+        },
+        {
+            id: "about",
+            label: "About",
+            group: 4,
+            groupLabel: "System"
+        }
     ]
     property int section: 1
     readonly property string sectionId: sections[section].id
@@ -39,41 +90,71 @@ FocusScope {
     property var reopen: null
 
     readonly property var loaders: ({
-        runners: function() { runners.load(); },
-        launch: function() { launch.load(); },
-        modules: function() { modulesForm.load(); },
-        sources: function() { sourceList.load(); },
-        doctor: function() { modulesForm.loadDoctor(); }
-    })
+            runners: function () {
+                runners.load();
+            },
+            launch: function () {
+                launch.load();
+            },
+            modules: function () {
+                modulesForm.load();
+            },
+            sources: function () {
+                sourceList.load();
+            },
+            doctor: function () {
+                modulesForm.loadDoctor();
+            }
+        })
     readonly property var refreshers: ({
-        updates: function() { sources.refresh(); },
-        doctor: function() { modulesForm.loadDoctor(); }
-    })
+            updates: function () {
+                sources.refresh();
+            },
+            doctor: function () {
+                modulesForm.loadDoctor();
+            }
+        })
     readonly property var loaded: ({})
 
     readonly property var hints: {
         var out = [];
         if (refreshers[sectionId])
-            out.push({ glyph: "Y", label: "Refresh" });
+            out.push({
+                glyph: "Y",
+                label: "Refresh"
+            });
         var row = rows.currentRow;
         if (listForm !== null && zone === "rows" && row && !row.heading)
-            out.push({ glyph: "X", label: row.value === true ? "Disable" : "Enable", dim: row.dim === true });
-        out.push({ glyph: "B", label: "Back" });
-        var label = zone !== "rows" ? "OK" : !row || row.heading || row.type === "info" || row.type === "static" || row.disabled ? "OK"
-                  : row.type === "bool" ? "Toggle" : row.type === "radio" ? "Select" : row.type === "action" ? (listForm !== null ? "Open" : "Select") : "Change";
-        out.push({ glyph: "A", label: label });
+            out.push({
+                glyph: "X",
+                label: row.value === true ? "Disable" : "Enable",
+                dim: row.dim === true
+            });
+        out.push({
+            glyph: "B",
+            label: "Back"
+        });
+        var label = zone !== "rows" ? "OK" : !row || row.heading || row.type === "info" || row.type === "static" || row.disabled ? "OK" : row.type === "bool" ? "Toggle" : row.type === "radio" ? "Select" : row.type === "action" ? (listForm !== null ? "Open" : "Select") : "Change";
+        out.push({
+            glyph: "A",
+            label: label
+        });
         return out;
     }
 
     function sectionIndex(id) {
-        return Math.max(0, sections.map(function(s) { return s.id; }).indexOf(id));
+        return Math.max(0, sections.map(function (s) {
+            return s.id;
+        }).indexOf(id));
     }
 
     // A search hit on this page: its section, the row revealed (the Advanced row opened when it sits behind it).
     function land(target) {
         var id = target.page === "section" ? target.id : target.page === "controller" ? "controllers" : target.page;
         if (target.page === "controller" && target.key) {
-            shell.push("pages/ControllersPage.qml", { key: target.key });
+            shell.push("pages/ControllersPage.qml", {
+                key: target.key
+            });
             return;
         }
         section = sectionIndex(id);
@@ -82,14 +163,16 @@ FocusScope {
         rows.forceActiveFocus();
         if (target.page === "launch" && target.key) {
             var i = launch.reveal(target.key, "");
-            Qt.callLater(function() {
+            Qt.callLater(function () {
                 var at = Forms.rowOf(content, i);
                 if (at >= 0)
                     rows.index = at;
             });
         } else if (target.page === "themes" && target.id) {
-            Qt.callLater(function() {
-                var at = content.findIndex(function(r) { return r.theme === target.id; });
+            Qt.callLater(function () {
+                var at = content.findIndex(function (r) {
+                    return r.theme === target.id;
+                });
                 if (at >= 0)
                     rows.index = at;
             });
@@ -118,7 +201,12 @@ FocusScope {
     }
 
     Component.onCompleted: {
-        api.screens.search.sections = sections.map(function(s) { return { id: s.id, label: s.label }; });
+        api.screens.search.sections = sections.map(function (s) {
+            return {
+                id: s.id,
+                label: s.label
+            };
+        });
         list.index = section;
         sources.load();
         loadSection();
@@ -128,7 +216,9 @@ FocusScope {
         if (!activeFocus || !reopen)
             return;
         reopen.form.load();
-        var i = content.findIndex(function(r) { return r[reopen.field] === reopen.id; });
+        var i = content.findIndex(function (r) {
+            return r[reopen.field] === reopen.id;
+        });
         reopen = null;
         if (i >= 0)
             rows.index = i;
@@ -136,51 +226,169 @@ FocusScope {
 
     readonly property var content: {
         if (sectionId === "search")
-            return [{ label: "Search every setting", type: "action", action: "search", display: "", icon: "search",
-                      detail: "Every page, every runner, module and game: by name, by what a setting does, by its value. A game's title narrows to it." }];
+            return [
+                {
+                    label: "Search every setting",
+                    type: "action",
+                    action: "search",
+                    display: "",
+                    icon: "search",
+                    detail: "Every page, every runner, module and game: by name, by what a setting does, by its value. A game's title narrows to it."
+                }
+            ];
         if (sectionId === "runners")
-            return Forms.grouped(runners.groups, runners.rows, function(run, i, g) {
-                return { label: run.label, type: "action", action: "runner", runner: run.runner, icon: run.icon, iconSlot: true,
-                         display: run.display, detail: "", dim: g.off === true };
+            return Forms.grouped(runners.groups, runners.rows, function (run, i, g) {
+                return {
+                    label: run.label,
+                    type: "action",
+                    action: "runner",
+                    runner: run.runner,
+                    icon: run.icon,
+                    iconSlot: true,
+                    display: run.display,
+                    detail: "",
+                    dim: g.off === true
+                };
             });
         if (sectionId === "launch")
-            return Forms.grouped(launch.groups, launch.rows, function(r, i) { return Object.assign(Details.withDetail(r, ""), { form: i }); });
+            return Forms.grouped(launch.groups, launch.rows, function (r, i) {
+                return Object.assign(Details.withDetail(r, ""), {
+                    form: i
+                });
+            });
         if (listForm !== null)
-            return Forms.grouped(listForm.groups, listForm.rows, function(m, i) {
-                return { label: m.label, type: "action", action: "module", module: m.module, value: m.value, display: m.display, switch: true, warning: m.warning,
-                         detail: m.warning ? m.detail : Details.enabledSentence(m.label, m.source),
-                         form: i, dim: m.warning !== "" && m.value !== true };
+            return Forms.grouped(listForm.groups, listForm.rows, function (m, i) {
+                return {
+                    label: m.label,
+                    type: "action",
+                    action: "module",
+                    module: m.module,
+                    value: m.value,
+                    display: m.display,
+                    switch: true,
+                    warning: m.warning,
+                    detail: m.warning ? m.detail : Details.enabledSentence(m.label, m.source),
+                    form: i,
+                    dim: m.warning !== "" && m.value !== true
+                };
             });
         if (sectionId === "updates") {
             var n = sources.updates.length;
             if (n === 0)
-                return [{ label: sources.busy ? "Checking…" : "Everything is up to date", type: "info", value: true, display: "", detail: "" }];
-            return [{ label: "Update everything", type: "action", display: n + " pending", action: "update-all", detail: "" }].concat(
-                sources.updates.map(function(u, i) {
-                    return { label: u.title, type: "action", display: (u.version ? u.version + " · " : "") + (u.date || ""), action: "update", row: i, detail: "" };
-                }));
+                return [
+                    {
+                        label: sources.busy ? "Checking…" : "Everything is up to date",
+                        type: "info",
+                        value: true,
+                        display: "",
+                        detail: ""
+                    }
+                ];
+            return [
+                {
+                    label: "Update everything",
+                    type: "action",
+                    display: n + " pending",
+                    action: "update-all",
+                    detail: ""
+                }
+            ].concat(sources.updates.map(function (u, i) {
+                return {
+                    label: u.title,
+                    type: "action",
+                    display: (u.version ? u.version + " · " : "") + (u.date || ""),
+                    action: "update",
+                    row: i,
+                    detail: ""
+                };
+            }));
         }
         if (sectionId === "doctor") {
-            var checks = Forms.grouped(modulesForm.doctorGroups, modulesForm.doctor, function(c) {
-                return { label: c.label, type: "info", value: c.value === true, display: c.detail || "", detail: "" };
+            var checks = Forms.grouped(modulesForm.doctorGroups, modulesForm.doctor, function (c) {
+                return {
+                    label: c.label,
+                    type: "info",
+                    value: c.value === true,
+                    display: c.detail || "",
+                    detail: ""
+                };
             });
-            return checks.length > 0 ? checks : [{ label: "No checks yet", type: "info", value: true, display: "", detail: "" }];
+            return checks.length > 0 ? checks : [
+                {
+                    label: "No checks yet",
+                    type: "info",
+                    value: true,
+                    display: "",
+                    detail: ""
+                }
+            ];
         }
         if (sectionId === "controllers")
-            return [{ label: "Controllers", type: "action", action: "controllers", display: "", detail: "" }];
+            return [
+                {
+                    label: "Controllers",
+                    type: "action",
+                    action: "controllers",
+                    display: "",
+                    detail: ""
+                }
+            ];
         if (sectionId === "themes")
-            return api.theme.themes.map(function(t) {
-                return { label: t.name, type: "radio", value: t.id === api.theme.current, swatch: t.ground, action: "theme", theme: t.id, detail: t.detail || "" };
+            return api.theme.themes.map(function (t) {
+                return {
+                    label: t.name,
+                    type: "radio",
+                    value: t.id === api.theme.current,
+                    swatch: t.ground,
+                    action: "theme",
+                    theme: t.id,
+                    detail: t.detail || ""
+                };
             }).concat([
-                { heading: true, label: "Font", display: "" },
-                { label: "Font file", key: "font_file", type: "path", action: "font", value: api.theme.fontPath,
-                  display: api.theme.fontPath ? api.theme.fontPath.split("/").pop() : "Bundled (BIZ UDPGothic)",
-                  detail: "A .ttf you own, such as the Switch's own; applies at once." }]);
+                {
+                    heading: true,
+                    label: "Font",
+                    display: ""
+                },
+                {
+                    label: "Font file",
+                    key: "font_file",
+                    type: "path",
+                    action: "font",
+                    value: api.theme.fontPath,
+                    display: api.theme.fontPath ? api.theme.fontPath.split("/").pop() : "Bundled (BIZ UDPGothic)",
+                    detail: "A .ttf you own, such as the Switch's own; applies at once."
+                }
+            ]);
         if (sectionId === "about")
-            return [{ label: "Universe", type: "static", display: api.universe.version() || "development build", detail: "" },
-                    { label: "Look", type: "static", display: api.theme.name, detail: "" },
-                    { label: "Library", type: "static", display: api.allGames.count + (api.allGames.count === 1 ? " game" : " games"), detail: "" },
-                    { label: "First-run setup", key: "setup", type: "action", action: "Run again", display: "", detail: "What other launchers hold, your stores, a few choices." }];
+            return [
+                {
+                    label: "Universe",
+                    type: "static",
+                    display: api.universe.version() || "development build",
+                    detail: ""
+                },
+                {
+                    label: "Look",
+                    type: "static",
+                    display: api.theme.name,
+                    detail: ""
+                },
+                {
+                    label: "Library",
+                    type: "static",
+                    display: api.allGames.count + (api.allGames.count === 1 ? " game" : " games"),
+                    detail: ""
+                },
+                {
+                    label: "First-run setup",
+                    key: "setup",
+                    type: "action",
+                    action: "Run again",
+                    display: "",
+                    detail: "What other launchers hold, your stores, a few choices."
+                }
+            ];
         return [];
     }
 
@@ -194,29 +402,53 @@ FocusScope {
             Sound.play("ok");
             launch.showAdvanced = !launch.showAdvanced;
             if (launch.showAdvanced)
-                Qt.callLater(function() { rows.index = Forms.firstAfter(content, Forms.rowOf(content, row.form)); });
+                Qt.callLater(function () {
+                    rows.index = Forms.firstAfter(content, Forms.rowOf(content, row.form));
+                });
         } else if (sectionId === "launch" && row.type === "map") {
             Sound.play("ok");
-            Forms.editMap(shell, row, function(name, value) { launch.setMapEntry(row.form, name, value); });
+            Forms.editMap(shell, row, function (name, value) {
+                launch.setMapEntry(row.form, name, value);
+            });
         } else if (sectionId === "runners") {
             Sound.play("ok");
-            reopen = { form: runners, field: "runner", id: row.runner };
-            shell.push("pages/FormPage.qml", { runner: row.runner });
+            reopen = {
+                form: runners,
+                field: "runner",
+                id: row.runner
+            };
+            shell.push("pages/FormPage.qml", {
+                runner: row.runner
+            });
         } else if (sectionId === "launch") {
             if (row.type === "bool") {
                 launch.toggle(row.form);
                 Sound.play("select");
             } else {
-                rows.edit(row, function(value) { launch.setValue(row.form, value); });
+                rows.edit(row, function (value) {
+                    launch.setValue(row.form, value);
+                });
             }
         } else if (sectionId === "modules") {
             Sound.play("ok");
-            reopen = { form: modulesForm, field: "module", id: row.module };
-            shell.push("pages/FormPage.qml", { module: row.module });
+            reopen = {
+                form: modulesForm,
+                field: "module",
+                id: row.module
+            };
+            shell.push("pages/FormPage.qml", {
+                module: row.module
+            });
         } else if (sectionId === "sources") {
             Sound.play("ok");
-            reopen = { form: sourceList, field: "module", id: row.module };
-            shell.push("pages/FormPage.qml", { source: row.module });
+            reopen = {
+                form: sourceList,
+                field: "module",
+                id: row.module
+            };
+            shell.push("pages/FormPage.qml", {
+                source: row.module
+            });
         } else if (sectionId === "updates") {
             Sound.play("ok");
             if (row.action === "update-all")
@@ -230,9 +462,13 @@ FocusScope {
             Sound.play("select");
             var id = row.theme;
             // Reprise replaces this tree: let the press finish first.
-            Qt.callLater(function() { api.theme.set(id); });
+            Qt.callLater(function () {
+                api.theme.set(id);
+            });
         } else if (row.action === "font") {
-            rows.edit(row, function(path) { api.theme.fontPath = path; });
+            rows.edit(row, function (path) {
+                api.theme.fontPath = path;
+            });
         }
     }
 
@@ -265,10 +501,12 @@ FocusScope {
 
     Connections {
         target: page.sources
-        function onMessage(text) { page.shell.showToast(text); }
+        function onMessage(text) {
+            page.shell.showToast(text);
+        }
     }
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         if (event.isAutoRepeat)
             return;
         if (api.keys.isCancel(event) && page.zone === "rows") {
@@ -304,7 +542,9 @@ FocusScope {
         sections: page.sections
         focus: page.zone === "list"
 
-        onActivated: function(i) { page.section = i; }
+        onActivated: function (i) {
+            page.section = i;
+        }
         onEscapedRight: {
             if (page.sectionId === "search") {
                 page.openSearch();
@@ -342,7 +582,9 @@ FocusScope {
         model: page.content
         focus: page.zone === "rows"
 
-        onActivated: function(index, row) { page.activate(index, row); }
+        onActivated: function (index, row) {
+            page.activate(index, row);
+        }
         onEscapedLeft: {
             page.zone = "list";
             list.forceActiveFocus();

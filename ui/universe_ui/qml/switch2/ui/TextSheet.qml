@@ -17,17 +17,33 @@ Modal {
     readonly property alias sideIndex: panel.sideIndex
 
     readonly property var hints: [
-        { glyph: "Y", label: "Space" },
-        { glyph: "X", label: "Cancel" },
-        { glyph: "B", label: "Delete" },
-        { glyph: "Start", label: "OK" },
-        { glyph: "A", label: "Select" }
+        {
+            glyph: "Y",
+            label: "Space"
+        },
+        {
+            glyph: "X",
+            label: "Cancel"
+        },
+        {
+            glyph: "B",
+            label: "Delete"
+        },
+        {
+            glyph: "Start",
+            label: "OK"
+        },
+        {
+            glyph: "A",
+            label: "Select"
+        }
     ]
 
     carded: false
     scrimColor: Theme.ground
     scrimOpacity: 0.96
-    onOpenChanged: if (open) panel.built = true
+    onOpenChanged: if (open)
+        panel.built = true
 
     function show(spec, done) {
         title = spec.title || "";
@@ -57,15 +73,19 @@ Modal {
         text = text.slice(0, -1);
     }
 
-    function press() { panel.press(); }
-    function move(dr, dc) { panel.move(dr, dc); }
+    function press() {
+        panel.press();
+    }
+    function move(dr, dc) {
+        panel.move(dr, dc);
+    }
 
     Keys.onLeftPressed: panel.move(0, -1)
     Keys.onRightPressed: panel.move(0, 1)
     Keys.onUpPressed: panel.move(-1, 0)
     Keys.onDownPressed: panel.move(1, 0)
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         event.accepted = true;
         if (event.isAutoRepeat)
             return;
@@ -149,10 +169,14 @@ Modal {
         anchors.right: parent.right
         y: sheet.open ? parent.height - height : parent.height
 
-        Behavior on y { Ease {} }
+        Behavior on y {
+            Ease {}
+        }
 
         // The panel types blindly; the sheet's own put() holds the line at `max`.
-        onTyped: function(value) { sheet.put(value); }
+        onTyped: function (value) {
+            sheet.put(value);
+        }
         onBackspaced: sheet.backspace()
         onAccepted: sheet.finish(sheet.text)
         onEscapedUp: Sound.play("edge")

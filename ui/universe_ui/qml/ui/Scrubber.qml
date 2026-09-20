@@ -16,7 +16,7 @@ QtObject {
     readonly property real speed: Math.max(60000, duration / 12)
     readonly property real step: 10000
 
-    signal woke()
+    signal woke
 
     function begin() {
         if (!scrubbing) {

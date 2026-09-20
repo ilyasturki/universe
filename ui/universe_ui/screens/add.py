@@ -1,7 +1,8 @@
 import os
 
-from PySide6.QtCore import Property, Signal, Slot
+from PySide6.QtCore import Signal, Slot
 
+from ..qt import QVARIANT, Property
 from .runners import _found, suggested_title
 from .settings import RowsForm, _group, _row
 
@@ -45,21 +46,38 @@ class AddGameForm(RowsForm):
 
     @Slot()
     def load(self):
-        rows = [{**_row("Add a game", "pick_file", "Pick a game file…", "action", ""), "display": "", "action": "Pick a file",
-                 "detail": "A program or a ROM: the runner and the title are proposed from the file."}]
+        rows = [
+            {
+                **_row("Add a game", "pick_file", "Pick a game file…", "action", ""),
+                "display": "",
+                "action": "Pick a file",
+                "detail": "A program or a ROM: the runner and the title are proposed from the file.",
+            }
+        ]
         groups = [_group("", [0])]
         stores = []
         for source in self._client.sources():
             status, action = _source_status(source)
             row = _row("Stores", "store", source.get("name", source["id"]), "action", "", module=source["id"])
-            row.update(display=status, action=action, source=source["id"], loggedIn=bool(source.get("logged_in")),
-                       available=bool(source.get("available", True) and source.get("enabled", True)))
+            row.update(
+                display=status,
+                action=action,
+                source=source["id"],
+                loggedIn=bool(source.get("logged_in")),
+                available=bool(source.get("available", True) and source.get("enabled", True)),
+            )
             stores.append(len(rows))
             rows.append(row)
         if stores:
             groups.append(_group("Stores", stores, caps=True))
-        rows.append({**_row("Lutris", "lutris", "Import from Lutris", "action", ""), "display": self._lutris_display(), "action": "Import",
-                     "detail": "Lutris's games, with their hours and artwork; games already here are kept."})
+        rows.append(
+            {
+                **_row("Lutris", "lutris", "Import from Lutris", "action", ""),
+                "display": self._lutris_display(),
+                "action": "Import",
+                "detail": "Lutris's games, with their hours and artwork; games already here are kept.",
+            }
+        )
         groups.append(_group("Lutris", [len(rows) - 1], caps=True))
         self._set_rows(rows, groups)
 
@@ -136,14 +154,13 @@ class AddGameForm(RowsForm):
             imported = list(report.get("imported") or [])
             hours = round(sum(float(h) for h in (report.get("hours_imported") or {}).values()))
             self._client.libraryChanged.emit([])
-            self.message.emit(f"Imported {len(imported)} game{'' if len(imported) == 1 else 's'} from Lutris"
-                              + (f" · {hours} h of play" if hours else ""))
+            self.message.emit(f"Imported {len(imported)} game{'' if len(imported) == 1 else 's'} from Lutris" + (f" · {hours} h of play" if hours else ""))
 
         self._run(lambda: self._client.core.import_lutris(True), done)
 
     pendingFile = Property(str, lambda self: self._pending["file"] if self._pending else "", notify=pendingChanged)
-    runnerChoices = Property("QVariantList", lambda self: [r.get("name", r["id"]) for r in self._candidates], notify=pendingChanged)
-    runnerIds = Property("QVariantList", lambda self: [r["id"] for r in self._candidates], notify=pendingChanged)
+    runnerChoices = Property(list, lambda self: [r.get("name", r["id"]) for r in self._candidates], notify=pendingChanged)
+    runnerIds = Property(list, lambda self: [r["id"] for r in self._candidates], notify=pendingChanged)
     runnerIndex = Property(int, lambda self: self._runner, notify=pendingChanged)
-    lutris = Property("QVariant", lambda self: dict(self._lutris) if self._lutris else None, notify=lutrisChanged)
+    lutris = Property(QVARIANT, lambda self: dict(self._lutris) if self._lutris else None, notify=lutrisChanged)
     lutrisError = Property(str, lambda self: self._lutris_error, notify=lutrisChanged)

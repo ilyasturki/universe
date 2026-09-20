@@ -12,7 +12,9 @@ Rectangle {
     opacity: open ? 1.0 : 0.0
     visible: opacity > 0.01
 
-    Behavior on opacity { Ease {} }
+    Behavior on opacity {
+        Ease {}
+    }
 
     Item {
         id: stage
@@ -25,7 +27,11 @@ Rectangle {
 
         readonly property real pitch: width + Theme.dp(64)
 
-        Behavior on scale { Ease { duration: Theme.durScene } }
+        Behavior on scale {
+            Ease {
+                duration: Theme.durScene
+            }
+        }
 
         Item {
             id: strip
@@ -37,7 +43,9 @@ Rectangle {
             Behavior on x {
                 // Off while closed: opening lands on the picture, it does not slide to it.
                 enabled: root.open
-                Ease { duration: Theme.durView }
+                Ease {
+                    duration: Theme.durView
+                }
             }
 
             // Three slots keyed by residue: the slot that just left the screen picks up the picture two steps ahead.
@@ -57,7 +65,11 @@ Rectangle {
                     sourceSize.width: 1920
                     opacity: at === root.index ? 1.0 : 0.4
 
-                    Behavior on opacity { Ease { duration: Theme.durView } }
+                    Behavior on opacity {
+                        Ease {
+                            duration: Theme.durView
+                        }
+                    }
                 }
             }
         }

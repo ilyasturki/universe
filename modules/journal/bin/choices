@@ -5,7 +5,7 @@ import subprocess
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import load_settings, log  # noqa: E402
+from _common import load_settings, log
 
 
 def codex_models():
@@ -16,8 +16,13 @@ def codex_models():
         log(f"codex debug models failed: {e}")
         return []
     listed = [m for m in models if isinstance(m, dict) and m.get("slug") and m.get("visibility", "list") == "list"]
-    listed.sort(key=lambda m: (m.get("priority") if isinstance(m.get("priority"), int) else 1 << 30))
+    listed.sort(key=_priority)
     return [m["slug"] for m in listed]
+
+
+def _priority(model):
+    priority = model.get("priority")
+    return priority if isinstance(priority, int) else 1 << 30
 
 
 def main(argv):

@@ -11,7 +11,16 @@ Modal {
     property int index: 0
     property int dangerIndex: -1
 
-    readonly property var hints: [ { glyph: "B", label: "Back" }, { glyph: "A", label: "OK" } ]
+    readonly property var hints: [
+        {
+            glyph: "B",
+            label: "Back"
+        },
+        {
+            glyph: "A",
+            label: "OK"
+        }
+    ]
 
     function show(spec, done) {
         message = spec.message || "";
@@ -25,7 +34,7 @@ Modal {
     card.width: Theme.dp(1072)
     card.height: Math.max(Theme.dp(420), body.height + Theme.dp(120) + buttonRow.height)
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         event.accepted = true;
         if (event.isAutoRepeat)
             return;

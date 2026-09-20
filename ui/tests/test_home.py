@@ -1,10 +1,11 @@
 import os
 from types import SimpleNamespace
 
-from conftest import pump, wait_for
 from PySide6.QtCore import Qt
 from PySide6.QtTest import QTest
 from test_render import lit_fraction, render
+
+from conftest import pump, wait_for
 from universe_ui import host
 
 
@@ -17,7 +18,7 @@ def stop(api):
 def test_a_shot_from_the_pad_or_the_dock_cues_the_same_way(api, fake):
     home = api.home
     taken = []
-    home.screenshotTaken.connect(lambda path: taken.append(path))
+    home.screenshotTaken.connect(taken.append)
     api.screens.controller._on_event({"event": "screenshot", "path": "/tmp/x.png"})
     assert taken == ["/tmp/x.png"], "the watcher's event reaches the theme through api.home"
     api.screens.controller._on_event({"event": "screenshot", "path": ""})
@@ -100,7 +101,9 @@ def test_the_dock_pauses_on_home_and_thaws_on_the_release(api, fake):
     home.openDock()
     pump(50)
     assert home.open and home.paused and fake.core.frozen is True
-    assert api.screens.controller._suspended is True and api.screens.controller._docked is True, "the dock has the pad from the moment it opens; the docked macros still fire"
+    assert api.screens.controller._suspended is True and api.screens.controller._docked is True, (
+        "the dock has the pad from the moment it opens; the docked macros still fire"
+    )
     home.closeDock()
     home.dockClosed()
     pump(50)
@@ -423,6 +426,7 @@ def test_the_dock_renders_over_a_running_game(api, fake, tmp_path, monkeypatch):
 
 def test_the_dock_lists_the_sessions_shots_and_trashes_one(api, fake, tmp_path, monkeypatch):
     from PySide6.QtCore import QObject
+
     from universe_ui import fake_core
 
     monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
@@ -482,14 +486,14 @@ def test_the_dock_lists_the_sessions_shots_and_trashes_one(api, fake, tmp_path, 
 
 def red_fraction(image):
     small = image.scaled(96, 54)
-    red = sum(1 for y in range(small.height()) for x in range(small.width())
-              if small.pixelColor(x, y).red() > 150 and small.pixelColor(x, y).green() < 90)
+    red = sum(1 for y in range(small.height()) for x in range(small.width()) if small.pixelColor(x, y).red() > 150 and small.pixelColor(x, y).green() < 90)
     return red / (small.width() * small.height())
 
 
 def test_home_from_the_game_zooms_the_frame_into_its_tile(api, fake, monkeypatch):
     from PySide6.QtCore import QMetaObject, QObject
     from PySide6.QtGui import QColor, QImage
+
     from universe_ui import fake_core
 
     monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
@@ -497,7 +501,7 @@ def test_home_from_the_game_zooms_the_frame_into_its_tile(api, fake, monkeypatch
     shot = QImage(640, 360, QImage.Format.Format_RGB32)
     shot.fill(QColor("#d02020"))
     assert shot.save(fake.core.nest_frame())
-    engine, window = render(api, activate=True)
+    _engine, window = render(api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
     flip = window.findChild(QObject, "homeFlip")
     fake.launch("mirrors-edge", "")

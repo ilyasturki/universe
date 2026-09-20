@@ -14,8 +14,7 @@ Item {
 
     readonly property url squareSource: empty ? "" : game.assets.square
     readonly property url boxSource: empty ? "" : game.assets.boxFront
-    readonly property string shown: String(squareSource) !== "" && square.status !== Image.Error ? "square"
-                                  : String(boxSource) !== "" && box.status !== Image.Error ? "box" : "none"
+    readonly property string shown: String(squareSource) !== "" && square.status !== Image.Error ? "square" : String(boxSource) !== "" && box.status !== Image.Error ? "box" : "none"
 
     z: focused ? 2 : 1
 

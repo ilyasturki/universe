@@ -44,7 +44,11 @@ impl Toggle {
 
 impl From<bool> for Toggle {
     fn from(on: bool) -> Toggle {
-        if on { Toggle::On } else { Toggle::Off }
+        if on {
+            Toggle::On
+        } else {
+            Toggle::Off
+        }
     }
 }
 
@@ -234,31 +238,19 @@ impl Default for LaunchDefaults {
 
 impl Default for DesktopConfig {
     fn default() -> Self {
-        DesktopConfig {
-            profile: "auto".into(),
-            hide_cursor: true,
-            cursor_extension: "hide-cursor@elcste.com".into(),
-        }
+        DesktopConfig { profile: "auto".into(), hide_cursor: true, cursor_extension: "hide-cursor@elcste.com".into() }
     }
 }
 
 impl Default for SourcesConfig {
     fn default() -> Self {
-        SourcesConfig {
-            enabled: vec!["gog".into()],
-            settings: BTreeMap::new(),
-        }
+        SourcesConfig { enabled: vec!["gog".into()], settings: BTreeMap::new() }
     }
 }
 
 impl Default for Keys {
     fn default() -> Self {
-        Keys {
-            sgdb: String::new(),
-            rawg: String::new(),
-            sgdb_file: "~/.config/steamgriddb/api_key".into(),
-            rawg_file: "~/.config/rawg/api_key".into(),
-        }
+        Keys { sgdb: String::new(), rawg: String::new(), sgdb_file: "~/.config/steamgriddb/api_key".into(), rawg_file: "~/.config/rawg/api_key".into() }
     }
 }
 
@@ -351,17 +343,9 @@ impl Config {
     pub fn proton_path(&self, name: &str) -> Option<PathBuf> {
         let own = paths::expand(name);
         let dirs = self.proton_dirs();
-        let candidates = [
-            Some(paths::data_home().join("proton").join(name)),
-            self.proton.get(name).map(|p| paths::expand(p)),
-            own.is_absolute().then_some(own),
-        ];
-        let p = candidates
-            .into_iter()
-            .flatten()
-            .chain(dirs.iter().map(|d| d.join(name)))
-            .find(|p| p.exists())
-            .or_else(|| newest_of_family(&dirs, name))?;
+        let candidates =
+            [Some(paths::data_home().join("proton").join(name)), self.proton.get(name).map(|p| paths::expand(p)), own.is_absolute().then_some(own)];
+        let p = candidates.into_iter().flatten().chain(dirs.iter().map(|d| d.join(name))).find(|p| p.exists()).or_else(|| newest_of_family(&dirs, name))?;
         Some(std::fs::canonicalize(&p).unwrap_or(p))
     }
 
@@ -387,10 +371,7 @@ impl Config {
         if !inline.is_empty() {
             return Some(inline.clone());
         }
-        std::fs::read_to_string(paths::expand(file))
-            .ok()
-            .map(|s| s.trim().to_string())
-            .filter(|s| !s.is_empty())
+        std::fs::read_to_string(paths::expand(file)).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
     }
 
     pub fn to_json(&self) -> serde_json::Value {
@@ -453,7 +434,11 @@ mod tests {
         let c = Config::default();
         assert!(c.modules.enabled.is_empty(), "a module is opt-in");
         assert!(!c.launch.mangohud, "the HUD stays hidden until shown");
-        assert_eq!((c.launch.dlss_upgrade, c.launch.fsr4_upgrade, c.launch.xess_upgrade), (Toggle::Off, Toggle::Off, Toggle::Off), "a DLL swap is opt-in, as the vendors ship it");
+        assert_eq!(
+            (c.launch.dlss_upgrade, c.launch.fsr4_upgrade, c.launch.xess_upgrade),
+            (Toggle::Off, Toggle::Off, Toggle::Off),
+            "a DLL swap is opt-in, as the vendors ship it"
+        );
         assert_eq!(c.launch.gamescope_adaptive_sync, Toggle::Auto);
     }
 

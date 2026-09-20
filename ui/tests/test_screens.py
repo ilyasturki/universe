@@ -3,8 +3,16 @@ import pytest
 from conftest import index_of, rows_by_key, settle, wait_for
 from universe_ui.screens.media import _size
 
-PENDING = {"session": "20260912-200000", "game": "the-technomancer", "state": "pending",
-           "started_at": "2026-09-12T20:00:00+02:00", "written_at": "", "title": "", "paragraphs": [], "images": []}
+PENDING = {
+    "session": "20260912-200000",
+    "game": "the-technomancer",
+    "state": "pending",
+    "started_at": "2026-09-12T20:00:00+02:00",
+    "written_at": "",
+    "title": "",
+    "paragraphs": [],
+    "images": [],
+}
 
 
 def test_game_settings_form(api, fake):
@@ -21,9 +29,12 @@ def test_game_settings_form(api, fake):
     capture = rows_by_key(form, "capture")
     assert capture["enabled"]["value"] is True and capture["enabled"]["type"] == "bool"
     assert "codec" not in capture, "global settings do not belong to a game"
-    assert [g["title"] for g in form.groups] == ["Display", "Overlay", "Proton", "Launch", "Desktop and library", "Video capture", "Play journal", ""], \
+    assert [g["title"] for g in form.groups] == ["Display", "Overlay", "Proton", "Launch", "Desktop and library", "Video capture", "Play journal", ""], (
         "the launch page's cards, the runner's, the program, the modules, then the Advanced row"
-    assert [g["title"] for g in form.advancedGroups] == ["Scaling", "Environment", "Proton", "Sync", "Upscaling", "Launch", "Artwork"], "the power user's cards, in the same order"
+    )
+    assert [g["title"] for g in form.advancedGroups] == ["Scaling", "Environment", "Proton", "Sync", "Upscaling", "Launch", "Artwork"], (
+        "the power user's cards, in the same order"
+    )
     form.showAdvanced = True
     groups = {g["title"]: g for g in form.groups}
     assert [g["title"] for g in form.groups][7:] == ["", "Scaling", "Environment", "Proton", "Sync", "Upscaling", "Launch", "Artwork"]
@@ -63,7 +74,9 @@ def test_modules_list(api, fake):
     next(m for m in fake.core._data["modules"] if m["id"] == "capture").update(available=False, missing=["gsr-cli"])
     form.load()
     capture = form.rows[form.indexOf("capture")]
-    assert capture["value"] is True and capture["display"] == "Unavailable" and capture["detail"] == "On, but its hooks are skipped: missing gsr-cli", "an enabled module with a missing binary does not read as working"
+    assert capture["value"] is True and capture["display"] == "Unavailable" and capture["detail"] == "On, but its hooks are skipped: missing gsr-cli", (
+        "an enabled module with a missing binary does not read as working"
+    )
     next(m for m in fake.core._data["modules"] if m["id"] == "capture").update(available=True, missing=[])
     form.load()
     form.toggle(form.indexOf("capture"))
@@ -103,7 +116,9 @@ def test_source_form(api, fake):
     groups = {g["title"]: g for g in form.groups}
     assert [rows[i]["key"] for i in groups["Sign-in"]["rows"]] == ["logged_in", "link", "code"]
     assert rows[groups["Sign-in"]["rows"][0]]["type"] == "info" and rows[groups["Sign-in"]["rows"][0]]["detail"] == "yasso"
-    assert [rows[i]["key"] for i in groups["Settings"]["rows"]] == ["games_dir", "platform", "with_dlcs"], "every setting: a source's are all global; the advanced ones behind the gate"
+    assert [rows[i]["key"] for i in groups["Settings"]["rows"]] == ["games_dir", "platform", "with_dlcs"], (
+        "every setting: a source's are all global; the advanced ones behind the gate"
+    )
     assert [rows[i]["key"] for g in form.advancedGroups for i in g["rows"]] == ["scan_dirs", "auth_path", "install_timeout_s"]
     platform = index_of(form, "platform")
     assert rows[platform]["choices"] == ["windows", "linux"]
@@ -133,7 +148,9 @@ def test_module_form(api, fake):
     assert form.info["description"].startswith("After each session, a model writes an entry")
     assert [r["key"] for r in form.rows] == ["enabled"], "off: the switch alone"
     assert form.rows[0]["value"] is False and form.rows[0]["disabled"] is True
-    assert form.groups == [{"title": "", "meta": "", "warning": "", "caps": False, "control": -1, "off": False, "advanced": False, "rows": [0]}], "the page header carries the name and the warning"
+    assert form.groups == [{"title": "", "meta": "", "warning": "", "caps": False, "control": -1, "off": False, "advanced": False, "rows": [0]}], (
+        "the page header carries the name and the warning"
+    )
     form.load("capture")
     assert form.info["meta"] == "v0.1.0" and form.info["warning"] == "" and form.info["source"] is False
     assert form.info["description"].startswith("Records each session")
@@ -141,8 +158,16 @@ def test_module_form(api, fake):
     assert rows[0]["key"] == "enabled" and rows[0]["value"] is True and rows[0]["disabled"] is False
     settings = next(g for g in form.groups if g["title"] == "Settings")
     assert [rows[i]["key"] for i in settings["rows"]] == ["codec", "quality", "fps", "size", "audio"]
-    assert [rows[i]["key"] for g in form.advancedGroups for i in g["rows"]] == ["container", "audio_codec", "audio_bitrate", "min_duration_s", "window_wait_s", "ffmpeg_video_opts", "va_encoder_opts", "gsr_extra_args"], \
-        "the advanced settings, then the config-only ones"
+    assert [rows[i]["key"] for g in form.advancedGroups for i in g["rows"]] == [
+        "container",
+        "audio_codec",
+        "audio_bitrate",
+        "min_duration_s",
+        "window_wait_s",
+        "ffmpeg_video_opts",
+        "va_encoder_opts",
+        "gsr_extra_args",
+    ], "the advanced settings, then the config-only ones"
     assert form.setValue(form.reveal("gsr_extra_args", "capture"), "-cr full") is True and fake.getSettings("capture", "")["gsr_extra_args"] == "-cr full"
     assert form.setValue(index_of(form, "codec"), "av1") is True
     assert fake.getSettings("capture", "")["codec"] == "av1"
@@ -174,14 +199,21 @@ def test_launch_form(api, fake):
     assert form.screen == "DP-1 2560×1440 @ 144 Hz"
     keys = fake.launchKeys("global", fake.screenMode("DP-1"))
     assert {k["scope"] for k in keys} == {"both", "global"} and "prefix" not in [k["key"] for k in keys]
-    expected = [(section, ["launch." + k["key"] for k in keys if k["section"] == section and not k["runners"]]) for section in ("Display", "Overlay", "Scaling", "Environment", "Programs")]
+    expected = [
+        (section, ["launch." + k["key"] for k in keys if k["section"] == section and not k["runners"]])
+        for section in ("Display", "Overlay", "Scaling", "Environment", "Programs")
+    ]
     expected[1][1].append("desktop.hide_cursor")
-    assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups] == expected[:2] + [("", ["advanced"])], "beginner first; a runner's keys sit on its page"
+    assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups] == [*expected[:2], ("", ["advanced"])], (
+        "beginner first; a runner's keys sit on its page"
+    )
     form.showAdvanced = True
-    assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups][3:] == expected[2:] + [
+    assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups][3:] == [
+        *expected[2:],
         ("Folders", ["paths.games_root", "paths.prefixes_root", "paths.recordings_root", "paths.journal_root", "paths.overrides"]),
-        ("API keys", ["keys.sgdb", "keys.sgdb_file", "keys.rawg", "keys.rawg_file"]), ("Desktop", ["desktop.profile", "desktop.cursor_extension"])], \
-        "behind the gate: the scaling flags, the environment, the programs, then config.toml's own sections"
+        ("API keys", ["keys.sgdb", "keys.sgdb_file", "keys.rawg", "keys.rawg_file"]),
+        ("Desktop", ["desktop.profile", "desktop.cursor_extension"]),
+    ], "behind the gate: the scaling flags, the environment, the programs, then config.toml's own sections"
     assert expected[0][1] == ["launch.gamescope", "launch.gamescope_resolution", "launch.gamescope_refresh", "launch.gamescope_adaptive_sync"]
     assert expected[1][1] == ["launch.mangohud", "launch.fps_limit", "launch.pause_on_home", "desktop.hide_cursor"]
     assert expected[2][1] == ["launch.gamescope_scaler", "launch.gamescope_filter", "launch.gamescope_sharpness", "launch.gamescope_args"]
@@ -193,12 +225,16 @@ def test_launch_form(api, fake):
     assert config_rows["desktop.profile"]["value"] == "auto" and config_rows["desktop.profile"]["choices"] == ["auto", "gnome", "none"]
     assert form.setValue(index_of(form, "keys.sgdb"), "abc123") is True and fake.config()["keys"]["sgdb"] == "abc123"
     assert rows_by_key(form)["keys.sgdb"]["display"] == "Set" and rows_by_key(form)["keys.sgdb"]["value"] == "abc123"
-    assert form.setMapEntry(index_of(form, "launch.env"), "MANGOHUD", "1") is True and fake.config()["launch"]["env"] == {"MANGOHUD": "1"}, "a map's entry stays text"
+    assert form.setMapEntry(index_of(form, "launch.env"), "MANGOHUD", "1") is True and fake.config()["launch"]["env"] == {"MANGOHUD": "1"}, (
+        "a map's entry stays text"
+    )
     rows = rows_by_key(form)
     assert rows["launch.gamescope"]["detail"] == next(k["description"] for k in keys if k["key"] == "gamescope")
     assert rows["launch.gamescope"]["value"] is True
     assert rows["launch.gamescope_resolution"]["type"] == "string" and rows["launch.gamescope_resolution"]["value"] == "auto"
-    assert rows["launch.gamescope_resolution"]["choices"] == ["auto", "2560x1440", "1920x1080", "1280x720"], "the screen, then the standard heights at its aspect"
+    assert rows["launch.gamescope_resolution"]["choices"] == ["auto", "2560x1440", "1920x1080", "1280x720"], (
+        "the screen, then the standard heights at its aspect"
+    )
     assert rows["launch.gamescope_refresh"]["choices"] == ["auto", "144", "120", "100", "90", "75", "60", "50", "48", "40", "30"]
     assert rows["launch.gamescope_scaler"]["type"] == "enum" and rows["launch.gamescope_scaler"]["value"] == "default"
     assert rows["launch.gamescope_scaler"]["choices"] == ["default", "auto", "integer", "fit", "fill", "stretch"]
@@ -243,8 +279,18 @@ def test_game_settings_mirrors_the_cards(api, fake):
         cards.setdefault(g["title"], []).extend(form.rows[i]["key"] for i in g["rows"])
     for section in ("Display", "Overlay", "Scaling", "Environment", "Sync", "Upscaling"):
         assert cards[section] == ["launch." + k["key"] for k in catalogue if k["section"] == section], section
-    assert cards["Proton"] == ["launch.proton", "launch.wayland", "launch.hdr", "launch.prefix", "launch.umu_id", "launch.store", "launch.dll_overrides"], "no arch on Proton"
-    assert cards["Launch"] == ["launch.runner", "launch.exe", "launch.wrapper", "launch.args", "launch.working_dir", "launch.pre_command", "launch.post_command"]
+    assert cards["Proton"] == ["launch.proton", "launch.wayland", "launch.hdr", "launch.prefix", "launch.umu_id", "launch.store", "launch.dll_overrides"], (
+        "no arch on Proton"
+    )
+    assert cards["Launch"] == [
+        "launch.runner",
+        "launch.exe",
+        "launch.wrapper",
+        "launch.args",
+        "launch.working_dir",
+        "launch.pre_command",
+        "launch.post_command",
+    ]
     rows = rows_by_key(form, "")
     assert rows["launch.fps_limit"]["value"] == "auto" and rows["launch.fps_limit"]["inherited"] is True and rows["launch.fps_limit"]["display"] == "auto · 144"
     assert rows["launch.esync"]["detail"].startswith("Faster thread synchronisation")
@@ -483,9 +529,19 @@ def test_removing_a_recording_or_an_entry_reloads_both_lists(api, fake):
 def test_journal_rows_carry_state_and_duration(api, fake):
     entries = fake.core._data["journal"]["the-technomancer"]
     entries.insert(0, dict(PENDING))
-    entries.append({"session": "20260905-190000", "game": "the-technomancer", "state": "failed", "duration_s": 2520,
-                    "started_at": "2026-09-05T19:00:00+02:00", "written_at": "2026-09-05T19:50:00+02:00", "title": "",
-                    "paragraphs": ["codex timed out after 30 min"], "images": []})
+    entries.append(
+        {
+            "session": "20260905-190000",
+            "game": "the-technomancer",
+            "state": "failed",
+            "duration_s": 2520,
+            "started_at": "2026-09-05T19:00:00+02:00",
+            "written_at": "2026-09-05T19:50:00+02:00",
+            "title": "",
+            "paragraphs": ["codex timed out after 30 min"],
+            "images": [],
+        }
+    )
     journal = api.screens.journal
     journal.load("the-technomancer")
     rows = journal.rows
@@ -517,13 +573,22 @@ def test_pending_journals_announce_each_session_once(api, fake):
     assert pending.count == 0
     assert seen[-1] == ("resolved", "20260912-200000", "the-technomancer", "written", "Back to Noctis")
 
-    entries.insert(0, {"session": "20260913-100000", "game": "the-technomancer", "state": "pending",
-                       "started_at": "2026-09-13T10:00:00+02:00", "title": "", "paragraphs": [], "images": []})
+    entries.insert(
+        0,
+        {
+            "session": "20260913-100000",
+            "game": "the-technomancer",
+            "state": "pending",
+            "started_at": "2026-09-13T10:00:00+02:00",
+            "title": "",
+            "paragraphs": [],
+            "images": [],
+        },
+    )
     fake.sessionEnded.emit("20260913-100000", "the-technomancer", 60)
     entries[0].update(state="failed", paragraphs=["codex timed out"])
     fake.entryWritten.emit("20260913-100000", "the-technomancer")
-    assert seen[-2:] == [("appeared", "20260913-100000", "The Technomancer"),
-                         ("resolved", "20260913-100000", "the-technomancer", "failed", "codex timed out")]
+    assert seen[-2:] == [("appeared", "20260913-100000", "The Technomancer"), ("resolved", "20260913-100000", "the-technomancer", "failed", "codex timed out")]
 
 
 def test_album_and_news_span_every_game(api):
@@ -573,7 +638,11 @@ def test_journal_paragraphs_become_markdown_blocks():
     from universe_ui.screens.media import markdown_blocks
 
     assert markdown_blocks(["Intro.", "- **A:** one", "- **B:** two", "Outro.", "1. first", "2. second"]) == [
-        "Intro.", "- **A:** one\n- **B:** two", "Outro.", "1. first\n2. second"]
+        "Intro.",
+        "- **A:** one\n- **B:** two",
+        "Outro.",
+        "1. first\n2. second",
+    ]
     assert markdown_blocks([]) == []
 
 

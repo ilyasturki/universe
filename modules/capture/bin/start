@@ -55,16 +55,28 @@ def main():
 
     game_unit = os.environ["SESSION_UNIT"]
     cmd = [
-        "systemd-run", "--user", f"--unit=universe-capture-{session_id}", "--collect",
-        "-p", "CPUWeight=100", "-p", "MemoryHigh=4G",
-        "-p", f"BindsTo={game_unit}", "-p", f"After={game_unit}",
+        "systemd-run",
+        "--user",
+        f"--unit=universe-capture-{session_id}",
+        "--collect",
+        "-p",
+        "CPUWeight=100",
+        "-p",
+        "MemoryHigh=4G",
+        "-p",
+        f"BindsTo={game_unit}",
+        "-p",
+        f"After={game_unit}",
         # systemd's 90s default TimeoutStopSec would blow session-end's timeout_s=20 if gsr hangs.
-        "-p", "TimeoutStopSec=10",
+        "-p",
+        "TimeoutStopSec=10",
         *unit_env_args(),
-        RECORD, "--", *gsr_args(settings, os.environ["SESSION_SCREEN"], output, token, session_id),
+        RECORD,
+        "--",
+        *gsr_args(settings, os.environ["SESSION_SCREEN"], output, token, session_id),
     ]
     log(" ".join(cmd))
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         log(f"systemd-run failed ({result.returncode}): {result.stderr.strip()}")
         return 1

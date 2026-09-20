@@ -22,7 +22,9 @@ FocusScope {
         color: Qt.rgba(0.02, 0.02, 0.03, 1)
         opacity: sheet.open ? 0.72 : 0.0
 
-        Behavior on opacity { Ease {} }
+        Behavior on opacity {
+            Ease {}
+        }
     }
 
     Item {
@@ -33,7 +35,12 @@ FocusScope {
         height: sheet.pad * 2 + heading.height + sheet.contentHeight
         y: sheet.open ? parent.height - height - Theme.dp(Theme.hintBarHeight) : parent.height
 
-        Behavior on y { Ease { duration: Theme.durView; easing.type: Easing.OutQuint } }
+        Behavior on y {
+            Ease {
+                duration: Theme.durView
+                easing.type: Easing.OutQuint
+            }
+        }
 
         Rectangle {
             anchors.fill: parent

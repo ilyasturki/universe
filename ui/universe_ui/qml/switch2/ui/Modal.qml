@@ -38,7 +38,11 @@ FocusScope {
         color: modal.scrimColor
         opacity: modal.open ? modal.scrimOpacity : 0.0
 
-        Behavior on opacity { Ease { duration: Theme.durQuick } }
+        Behavior on opacity {
+            Ease {
+                duration: Theme.durQuick
+            }
+        }
     }
 
     Rectangle {
@@ -51,7 +55,15 @@ FocusScope {
         opacity: modal.open ? 1.0 : 0.0
         scale: modal.open || !modal.carded ? 1.0 : 0.98
 
-        Behavior on opacity { Ease { duration: Theme.durQuick } }
-        Behavior on scale { Ease { duration: Theme.durQuick } }
+        Behavior on opacity {
+            Ease {
+                duration: Theme.durQuick
+            }
+        }
+        Behavior on scale {
+            Ease {
+                duration: Theme.durQuick
+            }
+        }
     }
 }

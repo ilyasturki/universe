@@ -37,8 +37,7 @@ Item {
 
             Image {
                 anchors.fill: parent
-                source: hero.status === Image.Ready ? frame.heroSource
-                                                    : (frame.heroMissing ? frame.boxSource : "")
+                source: hero.status === Image.Ready ? frame.heroSource : (frame.heroMissing ? frame.boxSource : "")
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
                 cache: true
@@ -84,7 +83,9 @@ Item {
 
             layer.enabled: letterboxed && !Theme.software
             layer.smooth: true
-            layer.effect: OpacityMask { maskSource: heroMask }
+            layer.effect: OpacityMask {
+                maskSource: heroMask
+            }
 
             Image {
                 id: hero
@@ -110,10 +111,22 @@ Item {
             anchors.fill: parent
             visible: false
             gradient: Gradient {
-                GradientStop { position: heroMask.edge; color: Qt.rgba(1, 1, 1, 0) }
-                GradientStop { position: heroMask.edge + heroMask.fade; color: "white" }
-                GradientStop { position: 1.0 - heroMask.edge - heroMask.fade; color: "white" }
-                GradientStop { position: 1.0 - heroMask.edge; color: Qt.rgba(1, 1, 1, 0) }
+                GradientStop {
+                    position: heroMask.edge
+                    color: Qt.rgba(1, 1, 1, 0)
+                }
+                GradientStop {
+                    position: heroMask.edge + heroMask.fade
+                    color: "white"
+                }
+                GradientStop {
+                    position: 1.0 - heroMask.edge - heroMask.fade
+                    color: "white"
+                }
+                GradientStop {
+                    position: 1.0 - heroMask.edge
+                    color: Qt.rgba(1, 1, 1, 0)
+                }
             }
         }
 
@@ -140,8 +153,14 @@ Item {
         Rectangle {
             anchors.fill: parent
             gradient: Gradient {
-                GradientStop { position: 0.55; color: Qt.rgba(0.055, 0.059, 0.075, 0.00) }
-                GradientStop { position: 1.00; color: Qt.rgba(0.055, 0.059, 0.075, 0.62) }
+                GradientStop {
+                    position: 0.55
+                    color: Qt.rgba(0.055, 0.059, 0.075, 0.00)
+                }
+                GradientStop {
+                    position: 1.00
+                    color: Qt.rgba(0.055, 0.059, 0.075, 0.62)
+                }
             }
         }
 

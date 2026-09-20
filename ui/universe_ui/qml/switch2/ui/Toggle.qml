@@ -12,7 +12,10 @@ Rectangle {
     color: on ? Theme.accentStrong : Theme.toggleOff
 
     Behavior on color {
-        ColorAnimation { duration: Theme.durQuick; easing.type: Easing.OutCubic }
+        ColorAnimation {
+            duration: Theme.durQuick
+            easing.type: Easing.OutCubic
+        }
     }
 
     Rectangle {
@@ -23,6 +26,10 @@ Rectangle {
         x: root.on ? parent.width - width - Theme.dp(4) : Theme.dp(4)
         color: "#ffffff"
 
-        Behavior on x { Ease { duration: Theme.durQuick } }
+        Behavior on x {
+            Ease {
+                duration: Theme.durQuick
+            }
+        }
     }
 }

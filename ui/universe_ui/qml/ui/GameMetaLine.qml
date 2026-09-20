@@ -30,7 +30,10 @@ Row {
         anchors.verticalCenter: parent.verticalCenter
     }
 
-    Loader { sourceComponent: platform.visible && (yearText.visible || playText.visible || lastText.visible) ? dot : null; anchors.verticalCenter: parent.verticalCenter }
+    Loader {
+        sourceComponent: platform.visible && (yearText.visible || playText.visible || lastText.visible) ? dot : null
+        anchors.verticalCenter: parent.verticalCenter
+    }
 
     Text {
         id: yearText
@@ -42,7 +45,10 @@ Row {
         anchors.verticalCenter: parent.verticalCenter
     }
 
-    Loader { sourceComponent: yearText.visible && (playText.visible || lastText.visible) ? dot : null; anchors.verticalCenter: parent.verticalCenter }
+    Loader {
+        sourceComponent: yearText.visible && (playText.visible || lastText.visible) ? dot : null
+        anchors.verticalCenter: parent.verticalCenter
+    }
 
     Text {
         id: playText
@@ -54,7 +60,10 @@ Row {
         anchors.verticalCenter: parent.verticalCenter
     }
 
-    Loader { sourceComponent: playText.visible && lastText.visible ? dot : null; anchors.verticalCenter: parent.verticalCenter }
+    Loader {
+        sourceComponent: playText.visible && lastText.visible ? dot : null
+        anchors.verticalCenter: parent.verticalCenter
+    }
 
     Text {
         id: lastText

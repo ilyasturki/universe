@@ -135,7 +135,10 @@ mod tests {
     #[test]
     fn focusable_triplets_parse_and_a_short_tail_is_dropped() {
         let cards = [0xa00007, 0xa00007, 2913226, 0x600007, 0, 2913200, 7];
-        assert_eq!(parse_focusable(&cards), [Focusable { window: 0xa00007, app_id: 0xa00007, pid: 2913226 }, Focusable { window: 0x600007, app_id: 0, pid: 2913200 }]);
+        assert_eq!(
+            parse_focusable(&cards),
+            [Focusable { window: 0xa00007, app_id: 0xa00007, pid: 2913226 }, Focusable { window: 0x600007, app_id: 0, pid: 2913200 }]
+        );
         assert!(parse_focusable(&[]).is_empty());
     }
 }

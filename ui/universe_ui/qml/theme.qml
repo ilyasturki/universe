@@ -17,11 +17,26 @@ FocusScope {
     }
 
     readonly property var tabs: [
-        { name: "Home", source: "pages/HomePage.qml" },
-        { name: "Library", source: "pages/LibraryPage.qml" },
-        { name: "Favourites", source: "pages/FavouritesPage.qml" },
-        { name: "Media", source: "pages/MediaPage.qml" },
-        { name: "Settings", source: "pages/SettingsPage.qml" }
+        {
+            name: "Home",
+            source: "pages/HomePage.qml"
+        },
+        {
+            name: "Library",
+            source: "pages/LibraryPage.qml"
+        },
+        {
+            name: "Favourites",
+            source: "pages/FavouritesPage.qml"
+        },
+        {
+            name: "Media",
+            source: "pages/MediaPage.qml"
+        },
+        {
+            name: "Settings",
+            source: "pages/SettingsPage.qml"
+        }
     ]
     readonly property int settingsTab: 4
     property int tabIndex: 0
@@ -39,9 +54,7 @@ FocusScope {
     // Repeater.itemAt() is not a binding source; the active loader publishes itself.
     property var activePage: null
     readonly property var focusTarget: searchOpen && searchLoader.item ? searchLoader.item : activePage
-    readonly property var focusedGame: subOpen ? (subArgs.game || null)
-                                               : detailOpen ? detailGame
-                                               : (activePage ? activePage.currentGame : null)
+    readonly property var focusedGame: subOpen ? (subArgs.game || null) : detailOpen ? detailGame : (activePage ? activePage.currentGame : null)
     readonly property bool menuOpen: gameMenu.open
     readonly property var session: api.universe.currentSession
     readonly property bool sessionRunning: session != null && session.session_id !== undefined
@@ -83,11 +96,15 @@ FocusScope {
     onActivePageChanged: deliverLanding()
 
     function openAdd() {
-        openSub("pages/AddGamePage.qml", { add: true });
+        openSub("pages/AddGamePage.qml", {
+            add: true
+        });
     }
 
     function openSetup() {
-        openSub("pages/OnboardingPage.qml", { setup: true });
+        openSub("pages/OnboardingPage.qml", {
+            setup: true
+        });
     }
 
     function restoreFocus() {
@@ -155,14 +172,17 @@ FocusScope {
                 return;
             }
             var running = session.title;
-            confirm.ask({ message: "Quit " + running + " and start " + game.title + "?",
-                          detail: "Unsaved progress in " + running + " will be lost.", yes: "Quit and start", no: "Keep playing" },
-                        function(yes) {
-                            if (!yes)
-                                return;
-                            root.pendingLaunch = game;
-                            root.stopSession();
-                        });
+            confirm.ask({
+                message: "Quit " + running + " and start " + game.title + "?",
+                detail: "Unsaved progress in " + running + " will be lost.",
+                yes: "Quit and start",
+                no: "Keep playing"
+            }, function (yes) {
+                if (!yes)
+                    return;
+                root.pendingLaunch = game;
+                root.stopSession();
+            });
             return;
         }
         launching = true;
@@ -180,9 +200,10 @@ FocusScope {
             return;
         }
         var page = root.activePage;
-        var rect = root.tabIndex === 0 && !root.detailOpen && !root.subOpen && !root.searchOpen && page && page.playingTileRect
-                 ? page.playingTileRect(flip) : null;
-        flip.fromTile(rect, function() { api.home.toGame(); });
+        var rect = root.tabIndex === 0 && !root.detailOpen && !root.subOpen && !root.searchOpen && page && page.playingTileRect ? page.playingTileRect(flip) : null;
+        flip.fromTile(rect, function () {
+            api.home.toGame();
+        });
     }
 
     function homePressed() {
@@ -219,10 +240,15 @@ FocusScope {
         if (!subOpen || subSwapping || source === subSource)
             return;
         Sound.enter();
-        subReturn = subReturn && subReturn.source === source ? null
-                  : { source: subSource, session: subLoader.item && subLoader.item.currentSession ? subLoader.item.currentSession : "" };
+        subReturn = subReturn && subReturn.source === source ? null : {
+            source: subSource,
+            session: subLoader.item && subLoader.item.currentSession ? subLoader.item.currentSession : ""
+        };
         subSwapping = true;
-        subSwap.target = { source: source, session: session };
+        subSwap.target = {
+            source: source,
+            session: session
+        };
         subSwap.restart();
     }
 
@@ -230,7 +256,10 @@ FocusScope {
         property var target: null
         interval: Theme.durQuick
         onTriggered: {
-            root.subArgs = target.args !== undefined ? target.args : { game: root.subArgs.game, session: target.session };
+            root.subArgs = target.args !== undefined ? target.args : {
+                game: root.subArgs.game,
+                session: target.session
+            };
             root.subSource = target.source;
             root.subSwapping = false;
             root.restoreFocus();
@@ -241,9 +270,15 @@ FocusScope {
         if (!subOpen || subSwapping)
             return;
         Sound.enter();
-        subReturn = { source: subSource, args: subArgs };
+        subReturn = {
+            source: subSource,
+            args: subArgs
+        };
         subSwapping = true;
-        subSwap.target = { source: source, args: args };
+        subSwap.target = {
+            source: source,
+            args: args
+        };
         subSwap.restart();
     }
 
@@ -274,11 +309,26 @@ FocusScope {
         var recordings = (api.universe.recordings(game.id) || []).length;
         var entries = (api.universe.journal(game.id) || []).length;
         if (shots > 0)
-            out.push({ icon: "camera", label: "Screenshots", action: "screenshots", detail: String(shots) });
+            out.push({
+                icon: "camera",
+                label: "Screenshots",
+                action: "screenshots",
+                detail: String(shots)
+            });
         if (recordings > 0)
-            out.push({ icon: "film", label: "Recordings", action: "recordings", detail: String(recordings) });
+            out.push({
+                icon: "film",
+                label: "Recordings",
+                action: "recordings",
+                detail: String(recordings)
+            });
         if (entries > 0)
-            out.push({ icon: "book", label: "Journal", action: "journal", detail: String(entries) });
+            out.push({
+                icon: "book",
+                label: "Journal",
+                action: "journal",
+                detail: String(entries)
+            });
         return out;
     }
 
@@ -287,40 +337,99 @@ FocusScope {
             return;
         Sound.panel();
         var media = mediaItems(game);
-        var play = sessionRunning && game.id === playingId
-            ? [ { icon: "play", label: "Resume", action: "resume" },
-                { icon: "stop", label: "Quit " + session.title, action: "stop" } ]
-            : [ { icon: "play", label: game.playTime > 0 ? "Continue" : "Play", action: "play" } ];
+        var play = sessionRunning && game.id === playingId ? [
+            {
+                icon: "play",
+                label: "Resume",
+                action: "resume"
+            },
+            {
+                icon: "stop",
+                label: "Quit " + session.title,
+                action: "stop"
+            }
+        ] : [
+            {
+                icon: "play",
+                label: game.playTime > 0 ? "Continue" : "Play",
+                action: "play"
+            }
+        ];
         var look = [];
         if (!(detailOpen && detailGame === game))
-            look.push({ icon: "info", label: "Details", action: "details" });
-        look.push({ icon: game.favorite ? "heart" : "heart-outline",
-                    label: game.favorite ? "Remove from favourites" : "Add to favourites", action: "favourite" });
+            look.push({
+                icon: "info",
+                label: "Details",
+                action: "details"
+            });
+        look.push({
+            icon: game.favorite ? "heart" : "heart-outline",
+            label: game.favorite ? "Remove from favourites" : "Add to favourites",
+            action: "favourite"
+        });
         if (media.length > 0)
-            look.push({ icon: "photos", label: "Media", action: "media", more: true });
-        var manage = [ { icon: "sliders", label: "Game settings", action: "settings" },
-                       { icon: "image", label: "Artwork", action: "artwork" },
-                       { icon: "eye-off", label: "Remove from library…", action: "remove", danger: true } ];
+            look.push({
+                icon: "photos",
+                label: "Media",
+                action: "media",
+                more: true
+            });
+        var manage = [
+            {
+                icon: "sliders",
+                label: "Game settings",
+                action: "settings"
+            },
+            {
+                icon: "image",
+                label: "Artwork",
+                action: "artwork"
+            },
+            {
+                icon: "eye-off",
+                label: "Remove from library…",
+                action: "remove",
+                danger: true
+            }
+        ];
         var items = [];
-        [ play, look, manage ].forEach(function(group) {
+        [play, look, manage].forEach(function (group) {
             group[0].gap = items.length > 0;
             items = items.concat(group);
         });
-        var pages = { settings: "FormPage", artwork: "ArtworkPage", screenshots: "ScreenshotsPage", recordings: "RecordingsPage", journal: "JournalPage" };
-        gameMenu.show(items, anchor, Qt.rect(0, 0, anchor.width, anchor.height), "", function(action) {
+        var pages = {
+            settings: "FormPage",
+            artwork: "ArtworkPage",
+            screenshots: "ScreenshotsPage",
+            recordings: "RecordingsPage",
+            journal: "JournalPage"
+        };
+        gameMenu.show(items, anchor, Qt.rect(0, 0, anchor.width, anchor.height), "", function (action) {
             if (action === "media") {
                 Sound.enter();
-                gameMenu.push(media, "Media", function(page) {
+                gameMenu.push(media, "Media", function (page) {
                     root.restoreFocus();
-                    root.openSub("pages/" + pages[page] + ".qml", { game: game });
+                    root.openSub("pages/" + pages[page] + ".qml", {
+                        game: game
+                    });
                 });
                 return;
             }
             if (action === "remove") {
                 Sound.panel();
-                gameMenu.push([ { icon: "", label: "Keep it", action: "" },
-                                { icon: "eye-off", label: "Remove from the library", action: "yes", danger: true } ],
-                              "Remove " + game.title + "?", function(answer) {
+                gameMenu.push([
+                    {
+                        icon: "",
+                        label: "Keep it",
+                        action: ""
+                    },
+                    {
+                        icon: "eye-off",
+                        label: "Remove from the library",
+                        action: "yes",
+                        danger: true
+                    }
+                ], "Remove " + game.title + "?", function (answer) {
                     if (answer === "yes")
                         root.removeGame(game);
                     root.restoreFocus();
@@ -339,7 +448,9 @@ FocusScope {
             else if (action === "resume")
                 root.resumeSession();
             else
-                root.openSub("pages/" + pages[action] + ".qml", { game: game });
+                root.openSub("pages/" + pages[action] + ".qml", {
+                    game: game
+                });
         });
     }
 
@@ -379,17 +490,28 @@ FocusScope {
     readonly property bool pageOwnsBackdrop: activePage ? activePage.ownsBackdrop : false
 
     readonly property bool heroActive: detailOpen || pageOwnsBackdrop
-    readonly property real heroHeight: detailOpen ? Theme.dp(Theme.heroDetail)
-                                                  : Theme.dp(Theme.tabBarHeight + Theme.heroBand)
+    readonly property real heroHeight: detailOpen ? Theme.dp(Theme.heroDetail) : Theme.dp(Theme.tabBarHeight + Theme.heroBand)
     readonly property real detailScroll: detailLoader.item ? detailLoader.item.scrollY : 0
 
     property real scrimTop: activePage ? activePage.scrimTop : 0
     property real scrimMid: activePage ? activePage.scrimMid : 0
     property real scrimBottom: activePage ? activePage.scrimBottom : 0
 
-    Behavior on scrimTop { Ease { duration: Theme.durView } }
-    Behavior on scrimMid { Ease { duration: Theme.durView } }
-    Behavior on scrimBottom { Ease { duration: Theme.durView } }
+    Behavior on scrimTop {
+        Ease {
+            duration: Theme.durView
+        }
+    }
+    Behavior on scrimMid {
+        Ease {
+            duration: Theme.durView
+        }
+    }
+    Behavior on scrimBottom {
+        Ease {
+            duration: Theme.durView
+        }
+    }
 
     component SceneFade: NumberAnimation {
         duration: root.launching ? Theme.durLaunch : Theme.durScene
@@ -408,8 +530,14 @@ FocusScope {
         opacity: (root.launching || root.detailOpen || root.pageOwnsBackdrop) ? 0.0 : 1.0
         visible: opacity > 0.01
 
-        Behavior on blurRadius { Ease { duration: Theme.durView } }
-        Behavior on opacity { SceneFade {} }
+        Behavior on blurRadius {
+            Ease {
+                duration: Theme.durView
+            }
+        }
+        Behavior on opacity {
+            SceneFade {}
+        }
     }
 
     Item {
@@ -424,9 +552,19 @@ FocusScope {
 
         property real detail: root.detailOpen ? 1.0 : 0.0
 
-        Behavior on height { Ease { duration: Theme.durScene } }
-        Behavior on opacity { SceneFade {} }
-        Behavior on detail { Ease { duration: Theme.durScene } }
+        Behavior on height {
+            Ease {
+                duration: Theme.durScene
+            }
+        }
+        Behavior on opacity {
+            SceneFade {}
+        }
+        Behavior on detail {
+            Ease {
+                duration: Theme.durScene
+            }
+        }
 
         BackgroundStage {
             anchors.fill: parent
@@ -440,21 +578,48 @@ FocusScope {
             anchors.fill: parent
             gradient: Gradient {
                 orientation: Gradient.Horizontal
-                GradientStop { position: 0.00; color: Qt.rgba(0.055, 0.059, 0.075, 0.92 - 0.20 * heroFrame.detail) }
-                GradientStop { position: 0.38; color: Qt.rgba(0.055, 0.059, 0.075, 0.66 - 0.30 * heroFrame.detail) }
-                GradientStop { position: 0.74; color: Qt.rgba(0.055, 0.059, 0.075, 0.10) }
-                GradientStop { position: 1.00; color: Qt.rgba(0.055, 0.059, 0.075, 0.00) }
+                GradientStop {
+                    position: 0.00
+                    color: Qt.rgba(0.055, 0.059, 0.075, 0.92 - 0.20 * heroFrame.detail)
+                }
+                GradientStop {
+                    position: 0.38
+                    color: Qt.rgba(0.055, 0.059, 0.075, 0.66 - 0.30 * heroFrame.detail)
+                }
+                GradientStop {
+                    position: 0.74
+                    color: Qt.rgba(0.055, 0.059, 0.075, 0.10)
+                }
+                GradientStop {
+                    position: 1.00
+                    color: Qt.rgba(0.055, 0.059, 0.075, 0.00)
+                }
             }
         }
 
         Rectangle {
             anchors.fill: parent
             gradient: Gradient {
-                GradientStop { position: 0.00; color: Qt.rgba(0.055, 0.059, 0.075, 1.00 - 0.70 * heroFrame.detail) }
-                GradientStop { position: 0.14; color: Qt.rgba(0.055, 0.059, 0.075, 0.62 - 0.50 * heroFrame.detail) }
-                GradientStop { position: 0.36 - 0.06 * heroFrame.detail; color: Qt.rgba(0.055, 0.059, 0.075, 0.00) }
-                GradientStop { position: 0.80; color: Qt.rgba(0.055, 0.059, 0.075, 0.55 + 0.25 * heroFrame.detail) }
-                GradientStop { position: 1.00; color: Theme.ground }
+                GradientStop {
+                    position: 0.00
+                    color: Qt.rgba(0.055, 0.059, 0.075, 1.00 - 0.70 * heroFrame.detail)
+                }
+                GradientStop {
+                    position: 0.14
+                    color: Qt.rgba(0.055, 0.059, 0.075, 0.62 - 0.50 * heroFrame.detail)
+                }
+                GradientStop {
+                    position: 0.36 - 0.06 * heroFrame.detail
+                    color: Qt.rgba(0.055, 0.059, 0.075, 0.00)
+                }
+                GradientStop {
+                    position: 0.80
+                    color: Qt.rgba(0.055, 0.059, 0.075, 0.55 + 0.25 * heroFrame.detail)
+                }
+                GradientStop {
+                    position: 1.00
+                    color: Theme.ground
+                }
             }
         }
 
@@ -467,18 +632,35 @@ FocusScope {
     Item {
         anchors.fill: parent
         opacity: (root.launching || root.detailOpen) ? 0.0 : 1.0
-        transform: Translate { y: root.detailOpen ? -Theme.dp(36) : 0
-                               Behavior on y { Ease { duration: Theme.durScene } } }
+        transform: Translate {
+            y: root.detailOpen ? -Theme.dp(36) : 0
+            Behavior on y {
+                Ease {
+                    duration: Theme.durScene
+                }
+            }
+        }
         visible: opacity > 0.01
 
-        Behavior on opacity { SceneFade {} }
+        Behavior on opacity {
+            SceneFade {}
+        }
 
         Rectangle {
             anchors.fill: parent
             gradient: Gradient {
-                GradientStop { position: 0.00; color: Qt.rgba(0.055, 0.059, 0.075, root.scrimTop) }
-                GradientStop { position: 0.42; color: Qt.rgba(0.055, 0.059, 0.075, root.scrimMid) }
-                GradientStop { position: 1.00; color: Qt.rgba(0.055, 0.059, 0.075, root.scrimBottom) }
+                GradientStop {
+                    position: 0.00
+                    color: Qt.rgba(0.055, 0.059, 0.075, root.scrimTop)
+                }
+                GradientStop {
+                    position: 0.42
+                    color: Qt.rgba(0.055, 0.059, 0.075, root.scrimMid)
+                }
+                GradientStop {
+                    position: 1.00
+                    color: Qt.rgba(0.055, 0.059, 0.075, root.scrimBottom)
+                }
             }
         }
 
@@ -487,15 +669,21 @@ FocusScope {
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
-            tabs: root.tabs.map(function(t) { return t.name; })
+            tabs: root.tabs.map(function (t) {
+                return t.name;
+            })
             currentIndex: root.tabIndex
             showSearch: root.tabs[root.tabIndex].name !== "Settings"
             focus: root.focusOwner === "chrome"
 
-            onTabRequested: function(index) { root.goToTab(index); }
+            onTabRequested: function (index) {
+                root.goToTab(index);
+            }
             onSearchRequested: root.openSearch()
             onResumeRequested: root.resumeSession()
-            onMenuRequested: function(game, anchor) { root.openMenu(game, anchor); }
+            onMenuRequested: function (game, anchor) {
+                root.openMenu(game, anchor);
+            }
             onEntered: root.focusPage()
             onDismissed: root.focusPage()
         }
@@ -526,8 +714,16 @@ FocusScope {
                     visible: opacity > 0.01
                     x: isActive ? 0 : (index > root.tabIndex ? 1 : -1) * Theme.dp(40)
 
-                    Behavior on opacity { Ease { duration: Theme.durView } }
-                    Behavior on x { Ease { duration: Theme.durView } }
+                    Behavior on opacity {
+                        Ease {
+                            duration: Theme.durView
+                        }
+                    }
+                    Behavior on x {
+                        Ease {
+                            duration: Theme.durView
+                        }
+                    }
 
                     function publish() {
                         if (isActive && item)
@@ -542,30 +738,80 @@ FocusScope {
                         activated = true;
                         publish();
                         if ("menuOpen" in item)
-                            item.menuOpen = Qt.binding(function() { return root.menuOpen; });
+                            item.menuOpen = Qt.binding(function () {
+                                return root.menuOpen;
+                            });
                     }
 
                     Connections {
                         target: pageLoader.item
                         ignoreUnknownSignals: true
-                        function onDetailRequested(game) { root.openDetail(game); }
-                        function onSettingsRequested(game) { root.openSub("pages/FormPage.qml", { game: game }); }
-                        function onRunnerRequested(runner) { root.openSub("pages/FormPage.qml", { runner: runner }); }
-                        function onModuleRequested(module) { root.openSub("pages/FormPage.qml", { module: module }); }
-                        function onSourceRequested(source) { root.openSub("pages/FormPage.qml", { source: source }); }
-                        function onFormRequested(args) { root.openSub("pages/FormPage.qml", args); }
-                        function onSetupRequested() { root.openSetup(); }
-                        function onArtworkRequested(game, slot) { root.openSub("pages/ArtworkPage.qml", { game: game, slot: slot }); }
-                        function onScreenshotsRequested(game, name) { root.openSub("pages/ScreenshotsPage.qml", { game: game, name: name || "" }); }
-                        function onRecordingsRequested(game, session) { root.openSub("pages/RecordingsPage.qml", { game: game, session: session || "" }); }
-                        function onJournalRequested(game, session) { root.openSub("pages/JournalPage.qml", { game: game, session: session || "" }); }
+                        function onDetailRequested(game) {
+                            root.openDetail(game);
+                        }
+                        function onSettingsRequested(game) {
+                            root.openSub("pages/FormPage.qml", {
+                                game: game
+                            });
+                        }
+                        function onRunnerRequested(runner) {
+                            root.openSub("pages/FormPage.qml", {
+                                runner: runner
+                            });
+                        }
+                        function onModuleRequested(module) {
+                            root.openSub("pages/FormPage.qml", {
+                                module: module
+                            });
+                        }
+                        function onSourceRequested(source) {
+                            root.openSub("pages/FormPage.qml", {
+                                source: source
+                            });
+                        }
+                        function onFormRequested(args) {
+                            root.openSub("pages/FormPage.qml", args);
+                        }
+                        function onSetupRequested() {
+                            root.openSetup();
+                        }
+                        function onArtworkRequested(game, slot) {
+                            root.openSub("pages/ArtworkPage.qml", {
+                                game: game,
+                                slot: slot
+                            });
+                        }
+                        function onScreenshotsRequested(game, name) {
+                            root.openSub("pages/ScreenshotsPage.qml", {
+                                game: game,
+                                name: name || ""
+                            });
+                        }
+                        function onRecordingsRequested(game, session) {
+                            root.openSub("pages/RecordingsPage.qml", {
+                                game: game,
+                                session: session || ""
+                            });
+                        }
+                        function onJournalRequested(game, session) {
+                            root.openSub("pages/JournalPage.qml", {
+                                game: game,
+                                session: session || ""
+                            });
+                        }
                         function onTabRequested(index) {
                             Sound.enter();
                             root.goToTab(index);
                         }
-                        function onChromeRequested() { root.focusChrome(); }
-                        function onAddRequested() { root.openAdd(); }
-                        function onMessage(text) { toast.show(text); }
+                        function onChromeRequested() {
+                            root.focusChrome();
+                        }
+                        function onAddRequested() {
+                            root.openAdd();
+                        }
+                        function onMessage(text) {
+                            toast.show(text);
+                        }
                     }
                 }
             }
@@ -576,13 +822,12 @@ FocusScope {
             anchors.bottom: parent.bottom
             anchors.left: parent.left
             anchors.right: parent.right
-            hints: confirm.open ? confirm.hints
-                 : root.menuOpen ? gameMenu.hints
-                 : root.focusOwner === "chrome" ? tabBar.hints
-                 : root.focusOwner === "search" ? (searchLoader.item ? searchLoader.item.hints : [])
-                 : !root.activePage ? []
-                 : root.activePage.modal ? root.activePage.hints
-                 : root.activePage.hints.concat([ { glyph: "LB RB", label: "Tabs" } ])
+            hints: confirm.open ? confirm.hints : root.menuOpen ? gameMenu.hints : root.focusOwner === "chrome" ? tabBar.hints : root.focusOwner === "search" ? (searchLoader.item ? searchLoader.item.hints : []) : !root.activePage ? [] : root.activePage.modal ? root.activePage.hints : root.activePage.hints.concat([
+                {
+                    glyph: "LB RB",
+                    label: "Tabs"
+                }
+            ])
         }
     }
 
@@ -599,11 +844,15 @@ FocusScope {
         opacity: (root.detailOpen || root.launching) ? 0.0 : 1.0
         visible: opacity > 0.01
 
-        Behavior on opacity { SceneFade {} }
+        Behavior on opacity {
+            SceneFade {}
+        }
 
         onLoaded: {
             activated = true;
-            item.open = Qt.binding(function() { return root.searchOpen; });
+            item.open = Qt.binding(function () {
+                return root.searchOpen;
+            });
             if (root.focusOwner === "search")
                 item.forceActiveFocus();
         }
@@ -611,7 +860,9 @@ FocusScope {
         Connections {
             target: searchLoader.item
             ignoreUnknownSignals: true
-            function onCloseRequested() { root.closeSearch(); }
+            function onCloseRequested() {
+                root.closeSearch();
+            }
         }
     }
 
@@ -623,26 +874,54 @@ FocusScope {
         source: "pages/DetailPage.qml"
         focus: root.detailOpen && !root.subOpen
         opacity: root.detailOpen && !root.launching && !root.subOpen ? 1.0 : 0.0
-        transform: Translate { y: root.detailOpen ? 0 : Theme.dp(48)
-                               Behavior on y { Ease { duration: Theme.durScene } } }
+        transform: Translate {
+            y: root.detailOpen ? 0 : Theme.dp(48)
+            Behavior on y {
+                Ease {
+                    duration: Theme.durScene
+                }
+            }
+        }
 
         onLoaded: {
-            item.game = Qt.binding(function() { return root.detailGame; });
+            item.game = Qt.binding(function () {
+                return root.detailGame;
+            });
             item.forceActiveFocus();
         }
 
         Connections {
             target: detailLoader.item
             ignoreUnknownSignals: true
-            function onLaunchRequested(game) { root.launchGame(game); }
-            function onCloseRequested() { root.closeDetail(); }
-            function onMenuRequested(game, anchor) { root.openMenu(game, anchor); }
-            function onRecordingsRequested(game) { root.openSub("pages/RecordingsPage.qml", { game: game }); }
-            function onJournalRequested(game) { root.openSub("pages/JournalPage.qml", { game: game }); }
-            function onScreenshotsRequested(game) { root.openSub("pages/ScreenshotsPage.qml", { game: game }); }
+            function onLaunchRequested(game) {
+                root.launchGame(game);
+            }
+            function onCloseRequested() {
+                root.closeDetail();
+            }
+            function onMenuRequested(game, anchor) {
+                root.openMenu(game, anchor);
+            }
+            function onRecordingsRequested(game) {
+                root.openSub("pages/RecordingsPage.qml", {
+                    game: game
+                });
+            }
+            function onJournalRequested(game) {
+                root.openSub("pages/JournalPage.qml", {
+                    game: game
+                });
+            }
+            function onScreenshotsRequested(game) {
+                root.openSub("pages/ScreenshotsPage.qml", {
+                    game: game
+                });
+            }
         }
 
-        Behavior on opacity { SceneFade {} }
+        Behavior on opacity {
+            SceneFade {}
+        }
     }
 
     // A sub-page jump fades over this, not over the tabs.
@@ -652,7 +931,11 @@ FocusScope {
         opacity: root.subOpen && !root.launching ? 1.0 : 0.0
         visible: opacity > 0.01
 
-        Behavior on opacity { Ease { duration: Theme.durScene } }
+        Behavior on opacity {
+            Ease {
+                duration: Theme.durScene
+            }
+        }
     }
 
     Loader {
@@ -664,28 +947,50 @@ FocusScope {
         focus: root.subOpen
         opacity: root.subOpen && !root.launching && !root.subSwapping ? 1.0 : 0.0
         visible: opacity > 0.01
-        transform: Translate { y: root.subOpen ? 0 : Theme.dp(48)
-                               Behavior on y { Ease { duration: Theme.durScene } } }
+        transform: Translate {
+            y: root.subOpen ? 0 : Theme.dp(48)
+            Behavior on y {
+                Ease {
+                    duration: Theme.durScene
+                }
+            }
+        }
 
         onLoaded: {
-            item.args = Qt.binding(function() { return root.subArgs; });
+            item.args = Qt.binding(function () {
+                return root.subArgs;
+            });
             item.forceActiveFocus();
         }
 
         Connections {
             target: subLoader.item
             ignoreUnknownSignals: true
-            function onCloseRequested() { root.closeSub(); }
-            function onJumpRequested(source, session) { root.jumpSub(source, session); }
+            function onCloseRequested() {
+                root.closeSub();
+            }
+            function onJumpRequested(source, session) {
+                root.jumpSub(source, session);
+            }
             function onInstallRequested(source, section) {
                 root.closeSub();
                 root.openSettings(section);
             }
-            function onSettingsRequested(game) { root.pushSub("pages/FormPage.qml", { game: game }); }
-            function onMessage(text) { toast.show(text); }
+            function onSettingsRequested(game) {
+                root.pushSub("pages/FormPage.qml", {
+                    game: game
+                });
+            }
+            function onMessage(text) {
+                toast.show(text);
+            }
         }
 
-        Behavior on opacity { Ease { duration: root.subSwapping ? Theme.durQuick : Theme.durScene } }
+        Behavior on opacity {
+            Ease {
+                duration: root.subSwapping ? Theme.durQuick : Theme.durScene
+            }
+        }
     }
 
     ActionMenu {
@@ -715,7 +1020,9 @@ FocusScope {
                 root.activePage.leave();
             root.restoreFocus();
         }
-        onFailed: function(game, message) { toast.show("Could not launch" + (game ? " " + game.title : "") + (message ? ": " + message : "")); }
+        onFailed: function (game, message) {
+            toast.show("Could not launch" + (game ? " " + game.title : "") + (message ? ": " + message : ""));
+        }
     }
 
     HomeFlip {
@@ -734,7 +1041,9 @@ FocusScope {
             toast.show(message);
             root.pendingLaunch = null;
         }
-        function onNotice(message) { toast.show(message); }
+        function onNotice(message) {
+            toast.show(message);
+        }
         function onSessionEnded(sessionId, id, duration) {
             var game = api.allGames.byId(id);
             if (game)
@@ -748,14 +1057,20 @@ FocusScope {
 
     Connections {
         target: api.screens.controller
-        function onMacroNotice(text) { toast.show(text); }
+        function onMacroNotice(text) {
+            toast.show(text);
+        }
     }
 
     Connections {
         target: api.home
-        function onPressed() { root.homePressed(); }
+        function onPressed() {
+            root.homePressed();
+        }
         // The unit gets a SIGTERM, a second one after ~3 s: the toast covers the wait.
-        function onStopping(title) { toast.show("Quitting " + title + "…"); }
+        function onStopping(title) {
+            toast.show("Quitting " + title + "…");
+        }
         function onChanged() {
             var shown = api.home.shown;
             if (shown === "launcher" && root.lastShown === "game")
@@ -803,7 +1118,13 @@ FocusScope {
         if (landing === "details")
             openDetail(game);
         else
-            openSub("pages/" + { journal: "JournalPage", recordings: "RecordingsPage", screenshots: "ScreenshotsPage" }[landing] + ".qml", { game: game });
+            openSub("pages/" + {
+                journal: "JournalPage",
+                recordings: "RecordingsPage",
+                screenshots: "ScreenshotsPage"
+            }[landing] + ".qml", {
+                game: game
+            });
     }
 
     // B held: the way out of the launcher from anywhere, the same question Settings › Quit asks.
@@ -812,18 +1133,29 @@ FocusScope {
         function onCancelHeld() {
             if (root.launching || launchOverlay.running || confirm.open || root.searchOpen || root.menuOpen || (root.activePage && root.activePage.modal))
                 return;
-            confirm.ask({ message: "Quit Universe?", detail: api.universe.currentSession ? "The running game is closed with it." : "", yes: "Quit", no: "Stay" },
-                        function(yes) { if (yes) Qt.quit(); });
+            confirm.ask({
+                message: "Quit Universe?",
+                detail: api.universe.currentSession ? "The running game is closed with it." : "",
+                yes: "Quit",
+                no: "Stay"
+            }, function (yes) {
+                if (yes)
+                    Qt.quit();
+            });
         }
     }
 
     Connections {
         target: api.screens.pendingJournals
-        function onAppeared(session, title) { toast.show("Journal: writing " + title + "…"); }
-        function onResolved(session, id, state, text) { toast.show(state === "failed" ? "Journal failed: " + text : "Journal: " + text); }
+        function onAppeared(session, title) {
+            toast.show("Journal: writing " + title + "…");
+        }
+        function onResolved(session, id, state, text) {
+            toast.show(state === "failed" ? "Journal failed: " + text : "Journal: " + text);
+        }
     }
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         if (root.launching || root.subOpen || launchOverlay.running || confirm.open) {
             event.accepted = true;
             return;
@@ -859,7 +1191,7 @@ FocusScope {
         }
     }
 
-    Keys.onReleased: function(event) {
+    Keys.onReleased: function (event) {
         // Pegasus repeats a held button as release/press pairs flagged auto-repeat.
         if (event.isAutoRepeat || !api.keys.isAccept(event) || !root.acceptHeld)
             return;

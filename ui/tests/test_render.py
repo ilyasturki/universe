@@ -40,7 +40,7 @@ def render(api, width=1280, height=720, activate=False):
 
 
 def test_themes_render_and_switch_live(api):
-    engine, window = render(api)
+    _engine, window = render(api)
     image = window.grabWindow()
     assert image.width() == 1280 and image.height() == 720
     assert lit_fraction(image, api.theme.ground) > 0.05
@@ -64,11 +64,12 @@ def test_themes_render_and_switch_live(api):
 
 
 def test_the_media_tab_and_the_screenshots_page(api, fake):
-    engine, window = render(api, activate=True)
+    _engine, window = render(api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
     root.goToTab(3)
     settle(window)
     page = root.property("activePage")
+
     def rows():
         return page.property("rows").toVariant()
 
@@ -106,10 +107,11 @@ def test_the_media_tab_and_the_screenshots_page(api, fake):
 
 def test_the_screenshots_page_puts_the_running_sessions_shots_first(api, fake, monkeypatch):
     from PySide6.QtCore import QObject
+
     from universe_ui import fake_core
 
     monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
-    engine, window = render(api, activate=True)
+    _engine, window = render(api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
     game = api.allGames.byId("the-technomancer")
     root.openSub("pages/ScreenshotsPage.qml", {"game": game})
@@ -140,7 +142,7 @@ def test_the_switch2_album_holds_the_shots_too(api):
     from PySide6.QtCore import Q_ARG, QMetaObject
 
     api.theme.set("switch2")
-    engine, window = render(api, activate=True)
+    _engine, window = render(api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
     QMetaObject.invokeMethod(root, "push", Q_ARG("QVariant", "pages/AlbumPage.qml"), Q_ARG("QVariant", {}))
     settle(window)
@@ -167,7 +169,7 @@ def test_a_session_running_at_startup_is_home_with_the_game_pinned(api, fake):
     fake.launch("mirrors-edge", "")
     wait_for(fake.launched, 3000)
     assert fake.currentSession
-    engine, window = render(api, activate=True)
+    _engine, window = render(api, activate=True)
     overlay = window.findChild(QObject, "launchOverlay")
     assert overlay is not None
     assert overlay.property("running") is False
@@ -190,7 +192,7 @@ def test_the_cursor_follows_the_game_through_its_session(api, fake, monkeypatch)
     from universe_ui import fake_core
 
     monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
-    engine, window = render(api, activate=True)
+    _engine, window = render(api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
     home = root.property("activePage")
     overlay = window.findChild(QObject, "launchOverlay")
@@ -219,7 +221,7 @@ def test_the_switch2_home_row_follows_the_game_too(api, fake, monkeypatch):
 
     monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
     api.theme.set("switch2")
-    engine, window = render(api, activate=True)
+    _engine, window = render(api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
     home = root.findChild(QObject, "homePage")
     assert home.property("currentGame").property("id") == "the-technomancer"
@@ -238,7 +240,7 @@ def test_the_switch2_home_row_follows_the_game_too(api, fake, monkeypatch):
 def test_a_launch_holds_the_poster_until_the_window_is_shown(api, fake):
     from PySide6.QtCore import Q_ARG, QMetaObject, QObject
 
-    engine, window = render(api, activate=True)
+    _engine, window = render(api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
     overlay = window.findChild(QObject, "launchOverlay")
     QMetaObject.invokeMethod(root, "launchGame", Q_ARG("QVariant", api.allGames.byId("control")))
@@ -287,7 +289,7 @@ def test_the_install_pages_render_a_running_install_in_both_looks(api, fake):
     from PySide6.QtTest import QTest
 
     sources = api.screens.sources
-    engine, window = render(api, activate=True)
+    _engine, window = render(api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
 
     def js(obj, name):
@@ -320,7 +322,7 @@ def test_the_install_pages_render_a_running_install_in_both_looks(api, fake):
     pump(500)
     install = root.property("topPage")
     assert [c["label"] for c in js(install, "cells") if c.get("heading")] == ["Owned, not installed"]
-    assert [l["label"] for l in js(install, "lines") if l.get("heading")] == ["Installing", "Installed"]
+    assert [line["label"] for line in js(install, "lines") if line.get("heading")] == ["Installing", "Installed"]
     assert [h["glyph"] for h in js(install, "hints")] == ["Y", "B", "A"]
     QTest.keyClick(window, Qt.Key.Key_E)  # RB: Manage
     pump(100)
@@ -388,21 +390,21 @@ def test_the_right_stick_pages_the_grids_in_both_looks(api):
     assert top.property("current").toVariant() == first
     warnings = []
     engine.warnings.connect(lambda ws: warnings.extend(w.toString() for w in ws))
-    for source, args, keys in (("pages/SettingsPage.qml", {"section": "launch"}, (Qt.Key.Key_Right,)),
-                               ("pages/AllSoftwarePage.qml", {}, ())):
+    for source, args, keys in (("pages/SettingsPage.qml", {"section": "launch"}, (Qt.Key.Key_Right,)), ("pages/AllSoftwarePage.qml", {}, ())):
         QMetaObject.invokeMethod(root, "push", Q_ARG("QVariant", source), Q_ARG("QVariant", args))
         settle(window)
-        for key in keys + (Qt.Key.Key_BracketRight, Qt.Key.Key_BracketRight, Qt.Key.Key_BracketLeft, Qt.Key.Key_Left, Qt.Key.Key_BracketRight):
+        for key in (*keys, Qt.Key.Key_BracketRight, Qt.Key.Key_BracketRight, Qt.Key.Key_BracketLeft, Qt.Key.Key_Left, Qt.Key.Key_BracketRight):
             click(key)
         click(Qt.Key.Key_Escape, 2)
     assert warnings == []
     window.close()
     pump(50)
 
+
 def test_the_artwork_page_opens_on_a_slot_and_lists_its_candidates(api, fake):
     from PySide6.QtCore import Q_ARG, QMetaObject, QObject
 
-    engine, window = render(api, activate=True)
+    _engine, window = render(api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
     game = api.allGames.byId("the-technomancer")
     QMetaObject.invokeMethod(root, "openSub", Q_ARG("QVariant", "pages/ArtworkPage.qml"), Q_ARG("QVariant", {"game": game, "slot": "logo"}))
@@ -441,7 +443,7 @@ def test_the_settings_artwork_button_asks_then_fetches_and_stops(api, fake):
     from PySide6.QtTest import QTest
 
     fake.core._game("control")["media"].pop("logo")
-    engine, window = render(api, activate=True)
+    _engine, window = render(api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
     root.setProperty("tabIndex", 4)
     pump(100)
@@ -458,7 +460,7 @@ def test_the_settings_artwork_button_asks_then_fetches_and_stops(api, fake):
     assert overview.property("buttonLabel") == "Fetch missing art"
     QTest.keyClick(window, Qt.Key.Key_Return)
     pump(100)
-    assert [h["label"] for h in page.property("hints").toVariant()][0] == "Select", "the confirm has the focus"
+    assert next(h["label"] for h in page.property("hints").toVariant()) == "Select", "the confirm has the focus"
     assert store.job is None, "nothing runs before the confirm"
     QTest.keyClick(window, Qt.Key.Key_Return)
     while store.job is None or store.job["total"] == 0:
@@ -479,7 +481,7 @@ def test_the_switch2_artwork_page_opens_a_slot_with_what_shows_first(api, fake):
     from PySide6.QtCore import Q_ARG, QMetaObject
 
     api.theme.set("switch2")
-    engine, window = render(api, activate=True)
+    _engine, window = render(api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
     QMetaObject.invokeMethod(root, "push", Q_ARG("QVariant", "pages/ArtworkPage.qml"), Q_ARG("QVariant", {"gameId": "dead-cells"}))
     settle(window)
@@ -519,7 +521,7 @@ def test_b_held_asks_to_quit_in_both_looks(api):
         QTest.keyRelease(window, Qt.Key.Key_Escape)
         pump(50)
 
-    engine, window = render(api, activate=True)
+    _engine, window = render(api, activate=True)
     confirm = window.findChild(QObject, "confirm")
     hold(150)
     assert confirm.property("open") is False, "a tap is a tap"
@@ -540,7 +542,7 @@ def test_b_held_asks_to_quit_in_both_looks(api):
 
 
 def test_reprise_about_shows_the_build(api, fake):
-    engine, window = render(api)
+    _engine, window = render(api)
     root = window.property("contentItem").childItems()[0].property("item")
     root.goToTab(4)
     settle(window)
@@ -567,7 +569,7 @@ def test_the_reprise_game_menu_groups_its_rows_and_hides_the_media_a_game_has_no
     def actions():
         return [i["action"] for i in menu.property("items").toVariant()]
 
-    engine, window = render(api, activate=True)
+    _engine, window = render(api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
     menu = window.findChild(QObject, "gameMenu")
     click(Qt.Key.Key_F1)

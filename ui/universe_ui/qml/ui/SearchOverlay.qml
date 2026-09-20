@@ -12,27 +12,45 @@ FocusScope {
     property string query: ""
     property bool resultsFocused: false
 
-    signal closeRequested()
+    signal closeRequested
 
     readonly property bool typing: !resultsFocused
 
-    readonly property var currentGame: !typing && results.currentIndex >= 0 && matches.count > 0
-                                       ? matches.get(results.currentIndex) : null
+    readonly property var currentGame: !typing && results.currentIndex >= 0 && matches.count > 0 ? matches.get(results.currentIndex) : null
     readonly property Item menuAnchor: typing || !results.currentItem ? null : results.currentItem.artItem
 
-    readonly property var hints: typing
-        ? [ { glyph: "A", label: "Type" },
-            { glyph: "X", label: "Backspace" },
-            { glyph: "B", label: "Close" } ]
-        : [ { glyph: "A", label: "Launch" },
-            { glyph: "X", label: "Details" },
-            { glyph: "B", label: "Close" } ]
+    readonly property var hints: typing ? [
+        {
+            glyph: "A",
+            label: "Type"
+        },
+        {
+            glyph: "X",
+            label: "Backspace"
+        },
+        {
+            glyph: "B",
+            label: "Close"
+        }
+    ] : [
+        {
+            glyph: "A",
+            label: "Launch"
+        },
+        {
+            glyph: "X",
+            label: "Details"
+        },
+        {
+            glyph: "B",
+            label: "Close"
+        }
+    ]
 
     readonly property real sheetInner: Math.min(Theme.dp(880), width - Theme.dp(280))
     readonly property real sheetPad: Theme.dp(28)
     readonly property real fieldHeight: Theme.dp(66)
-    readonly property real cardHeight: Math.max(Theme.dp(150),
-                                                Math.min(Theme.dp(300), resultsArea.height - Theme.dp(96)))
+    readonly property real cardHeight: Math.max(Theme.dp(150), Math.min(Theme.dp(300), resultsArea.height - Theme.dp(96)))
     readonly property real cardWidth: cardHeight / 1.5
 
     function toResults() {
@@ -63,7 +81,8 @@ FocusScope {
         query: overlay.query
     }
 
-    onOpenChanged: if (open) resultsFocused = false
+    onOpenChanged: if (open)
+        resultsFocused = false
 
     onQueryChanged: {
         results.currentIndex = 0;
@@ -78,7 +97,7 @@ FocusScope {
     Keys.onUpPressed: !overlay.typing ? Sound.edge() : keyboard.rowIndex === 0 ? overlay.toResults() : overlay.kbMove(-1, 0)
     Keys.onDownPressed: overlay.typing ? overlay.kbMove(1, 0) : overlay.toKeyboard()
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         if (api.keys.isCancel(event)) {
             event.accepted = true;
             if (!event.isAutoRepeat) {
@@ -104,7 +123,11 @@ FocusScope {
         color: Qt.rgba(0.055, 0.059, 0.075, 0.91)
         opacity: overlay.open ? 1.0 : 0.0
 
-        Behavior on opacity { Ease { duration: Theme.durView } }
+        Behavior on opacity {
+            Ease {
+                duration: Theme.durView
+            }
+        }
     }
 
     Item {
@@ -117,7 +140,11 @@ FocusScope {
         anchors.right: parent.right
         opacity: overlay.open ? 1.0 : 0.0
 
-        Behavior on opacity { Ease { duration: Theme.durView } }
+        Behavior on opacity {
+            Ease {
+                duration: Theme.durView
+            }
+        }
 
         Text {
             anchors.centerIn: parent
@@ -145,9 +172,7 @@ FocusScope {
             preferredHighlightEnd: preferredHighlightBegin + overlay.cardWidth
             highlightMoveDuration: Theme.durView
 
-            leftMargin: Math.max(Theme.dp(80),
-                                 (width - (matches.count * overlay.cardWidth
-                                           + Math.max(0, matches.count - 1) * spacing)) / 2)
+            leftMargin: Math.max(Theme.dp(80), (width - (matches.count * overlay.cardWidth + Math.max(0, matches.count - 1) * spacing)) / 2)
             rightMargin: Theme.dp(80)
 
             delegate: Item {
@@ -200,7 +225,12 @@ FocusScope {
         height: overlay.sheetPad * 2 + overlay.fieldHeight + Theme.dp(22) + keyboard.height
         y: overlay.open ? parent.height - height : parent.height
 
-        Behavior on y { Ease { duration: Theme.durView; easing.type: Easing.OutQuint } }
+        Behavior on y {
+            Ease {
+                duration: Theme.durView
+                easing.type: Easing.OutQuint
+            }
+        }
 
         Rectangle {
             anchors.fill: parent
@@ -304,9 +334,13 @@ FocusScope {
             keyGap: Theme.dp(9)
             opacity: overlay.typing ? 1.0 : 0.55
 
-            Behavior on opacity { Ease { duration: Theme.durQuick } }
+            Behavior on opacity {
+                Ease {
+                    duration: Theme.durQuick
+                }
+            }
 
-            onCharEntered: function(value) {
+            onCharEntered: function (value) {
                 Sound.type();
                 overlay.query += value;
             }

@@ -8,8 +8,8 @@ use crate::game::Game;
 use crate::host::Host;
 use crate::library::{self, Resolved};
 use crate::modules::{self, HookEnv, Module};
-use crate::sources::{self, Source, SourceEvent};
 use crate::paths;
+use crate::sources::{self, Source, SourceEvent};
 use crate::{Error, Result};
 
 // gamescope encodes its screenshot png on one thread: a launcher frame takes ~450 ms at 4K, a busy game's ~4 s.
@@ -33,7 +33,9 @@ fn title_of(path: &Path) -> String {
             s.replace_range(a..=b, " ");
         }
     }
-    let is_version = |w: &str| w.len() > 1 && w.starts_with('v') && w[1..].chars().all(|c| c.is_ascii_digit() || c == '.') && w[1..].starts_with(|c: char| c.is_ascii_digit());
+    let is_version = |w: &str| {
+        w.len() > 1 && w.starts_with('v') && w[1..].chars().all(|c| c.is_ascii_digit() || c == '.') && w[1..].starts_with(|c: char| c.is_ascii_digit())
+    };
     let words: Vec<&str> = s.split_whitespace().filter(|w| !is_version(w)).collect();
     words.join(" ").trim_end_matches(['-', ' ']).trim().to_string()
 }
@@ -42,7 +44,28 @@ fn title_of(path: &Path) -> String {
 pub(crate) fn passthrough_env() -> BTreeMap<String, String> {
     let mut env = BTreeMap::new();
     // The GAMESCOPE_*, STEAM_GAME_DISPLAY_0 and SDL_* names are what gamescope exports to its child: a game started from inside it lands on its display.
-    for k in ["PATH", "HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS", "WAYLAND_DISPLAY", "DISPLAY", "XDG_CURRENT_DESKTOP", "XDG_SESSION_TYPE", "GI_TYPELIB_PATH", "UNIVERSE_DATA_HOME", "UNIVERSE_CONFIG_HOME", "UNIVERSE_STATE_HOME", "UNIVERSE_MODULES_PATH", "UNIVERSE_SOURCES_PATH", "RUST_LOG", "GAMESCOPE_WAYLAND_DISPLAY", "STEAM_GAME_DISPLAY_0", "SDL_VIDEODRIVER", "SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS", "vk_xwayland_wait_ready"] {
+    for k in [
+        "PATH",
+        "HOME",
+        "XDG_RUNTIME_DIR",
+        "DBUS_SESSION_BUS_ADDRESS",
+        "WAYLAND_DISPLAY",
+        "DISPLAY",
+        "XDG_CURRENT_DESKTOP",
+        "XDG_SESSION_TYPE",
+        "GI_TYPELIB_PATH",
+        "UNIVERSE_DATA_HOME",
+        "UNIVERSE_CONFIG_HOME",
+        "UNIVERSE_STATE_HOME",
+        "UNIVERSE_MODULES_PATH",
+        "UNIVERSE_SOURCES_PATH",
+        "RUST_LOG",
+        "GAMESCOPE_WAYLAND_DISPLAY",
+        "STEAM_GAME_DISPLAY_0",
+        "SDL_VIDEODRIVER",
+        "SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS",
+        "vk_xwayland_wait_ready",
+    ] {
         if let Ok(v) = std::env::var(k) {
             env.insert(k.to_string(), v);
         }
@@ -121,7 +144,11 @@ impl Core {
     }
 
     async fn refresh_login(&self, m: &Source) {
-        let user = self.run_verb(m, "status", &[], None).await.ok().and_then(|ev| ev.into_iter().find_map(|e| if let SourceEvent::LoggedIn { user } = e { Some(user) } else { None }));
+        let user = self
+            .run_verb(m, "status", &[], None)
+            .await
+            .ok()
+            .and_then(|ev| ev.into_iter().find_map(|e| if let SourceEvent::LoggedIn { user } = e { Some(user) } else { None }));
         let mut logins = self.source_logins.lock().await;
         match user {
             Some(u) => logins.insert(m.id().to_string(), u),
@@ -280,7 +307,8 @@ impl Core {
         }
         let config = self.config.read().await.clone();
         let home = paths::home();
-        let shared = self.games.read().await.iter().any(|x| x.game.id != id && !x.game.source.dir.is_empty() && paths::expand(&x.game.source.dir).starts_with(&dir));
+        let shared =
+            self.games.read().await.iter().any(|x| x.game.id != id && !x.game.source.dir.is_empty() && paths::expand(&x.game.source.dir).starts_with(&dir));
         if dir.parent().is_none() || dir == home || dir == config.games_root() || home.starts_with(&dir) || shared {
             return Err(Error::Invalid(format!("refusing to trash {}", dir.display())));
         }
@@ -447,7 +475,11 @@ impl Core {
             }
         }
         let windows = crate::desktop::list_windows().await.map_err(Error::Unavailable)?;
-        let w = windows.iter().filter(|w| w.pid == pid as i64 && !w.hidden).max_by_key(|w| w.width * w.height).ok_or_else(|| Error::NotFound(format!("no window of pid {pid}")))?;
+        let w = windows
+            .iter()
+            .filter(|w| w.pid == pid as i64 && !w.hidden)
+            .max_by_key(|w| w.width * w.height)
+            .ok_or_else(|| Error::NotFound(format!("no window of pid {pid}")))?;
         crate::desktop::activate_window(w.id).await.map_err(Error::Unavailable)?;
         Ok(())
     }
@@ -486,7 +518,10 @@ impl Core {
     async fn write_layer_conf(&self, c: &crate::session::Current, r: &Resolved) -> Result<()> {
         let hz = crate::launcher::fps_limit_hz(&r.effective, crate::desktop::screen_mode(&c.screen).await);
         let mangoapp = self.mangoapp_draws(c, r).await;
-        Ok(std::fs::write(crate::launcher::layer_conf_path(), crate::launcher::layer_conf_text((!mangoapp).then_some(c.id.as_str()), hz, mangoapp || !r.effective.mangohud))?)
+        Ok(std::fs::write(
+            crate::launcher::layer_conf_path(),
+            crate::launcher::layer_conf_text((!mangoapp).then_some(c.id.as_str()), hz, mangoapp || !r.effective.mangohud),
+        )?)
     }
 
     pub async fn set_fps_limit(&self) -> Result<String> {
@@ -691,7 +726,8 @@ impl Core {
         if entry.session != session_id {
             return Err(Error::Invalid("entry.session does not match".into()));
         }
-        let id = if entry.game.is_empty() { self.game_of_session(session_id).await } else { Some(entry.game.clone()) }.ok_or_else(|| Error::NotFound(format!("session {session_id}")))?;
+        let id = if entry.game.is_empty() { self.game_of_session(session_id).await } else { Some(entry.game.clone()) }
+            .ok_or_else(|| Error::NotFound(format!("session {session_id}")))?;
         let r = self.get(&id).await?;
         entry.game = id.clone();
         let journal_dir = r.game.journal_dir();
@@ -769,7 +805,15 @@ impl Core {
         let journal_dir = r.game.journal_dir();
         let sessions = crate::journal::sessions_by_id(&r.sessions);
         let entries = crate::journal::load(&journal_dir);
-        let path = crate::journal::write_note(&r.game.title, &entries, &sessions, &journal_dir, &r.game.screenshots_dir(), &note_dir, &crate::journal::Locale::from_env())?;
+        let path = crate::journal::write_note(
+            &r.game.title,
+            &entries,
+            &sessions,
+            &journal_dir,
+            &r.game.screenshots_dir(),
+            &note_dir,
+            &crate::journal::Locale::from_env(),
+        )?;
         Ok(path.to_string_lossy().into())
     }
 
@@ -809,7 +853,11 @@ impl Core {
         if enabled {
             list.push(id.into());
         }
-        if list.is_empty() { "[]".into() } else { list.join(",") }
+        if list.is_empty() {
+            "[]".into()
+        } else {
+            list.join(",")
+        }
     }
 
     pub async fn enable_module(&self, id: &str, enabled: bool) -> Result<()> {
@@ -1013,7 +1061,10 @@ impl Core {
 
     /// When the library was last fetched from the store: the cache file's mtime, RFC 3339; empty without one.
     fn library_at(m: &Source) -> String {
-        std::fs::metadata(m.data_dir().join("library.json")).and_then(|md| md.modified()).map(|t| chrono::DateTime::<chrono::Local>::from(t).to_rfc3339_opts(chrono::SecondsFormat::Secs, true)).unwrap_or_default()
+        std::fs::metadata(m.data_dir().join("library.json"))
+            .and_then(|md| md.modified())
+            .map(|t| chrono::DateTime::<chrono::Local>::from(t).to_rfc3339_opts(chrono::SecondsFormat::Secs, true))
+            .unwrap_or_default()
     }
 
     async fn run_verb(&self, m: &Source, verb: &str, args: &[String], mut progress: Option<Progress<'_, '_>>) -> Result<Vec<SourceEvent>> {
@@ -1056,7 +1107,10 @@ impl Core {
     pub async fn source_login_url(&self, source: &str) -> Result<String> {
         let m = self.source(source).await?;
         let events = self.run_verb(&m, "login", &[], None).await?;
-        events.iter().find_map(|e| if let SourceEvent::LoginUrl { url } = e { Some(url.clone()) } else { None }).ok_or_else(|| Error::Io("no login_url event".into()))
+        events
+            .iter()
+            .find_map(|e| if let SourceEvent::LoginUrl { url } = e { Some(url.clone()) } else { None })
+            .ok_or_else(|| Error::Io("no login_url event".into()))
     }
 
     pub async fn source_login(&self, source: &str, code: &str) -> Result<String> {
@@ -1092,7 +1146,7 @@ impl Core {
             for g in games.iter_mut() {
                 let Some(prev) = old.iter().find(|p| p.get("id") == g.get("id")) else { continue };
                 for k in Self::SIZE_KEYS {
-                    if g.get(k).map_or(true, |v| v.is_null()) {
+                    if g.get(k).is_none_or(|v| v.is_null()) {
                         if let Some(v) = prev.get(k).filter(|v| !v.is_null()) {
                             g.insert(k.into(), v.clone());
                         }
@@ -1114,9 +1168,9 @@ impl Core {
         if let Err(e) = &scanned {
             tracing::warn!("{source}: scan failed, listing without disk state: {e}");
         }
-        let on_disk: Option<BTreeMap<String, serde_json::Map<String, serde_json::Value>>> = scanned
-            .ok()
-            .map(|events| Self::game_events(&events).into_iter().filter_map(|g| g.get("id").and_then(|v| v.as_str()).map(|id| id.to_string()).map(|id| (id, g))).collect());
+        let on_disk: Option<BTreeMap<String, serde_json::Map<String, serde_json::Value>>> = scanned.ok().map(|events| {
+            Self::game_events(&events).into_iter().filter_map(|g| g.get("id").and_then(|v| v.as_str()).map(|id| id.to_string()).map(|id| (id, g))).collect()
+        });
         let games = self.games.read().await;
         let list: Vec<serde_json::Value> = list
             .into_iter()
@@ -1142,7 +1196,7 @@ impl Core {
                     let installed = d.get("installed").and_then(|v| v.as_bool()).unwrap_or(false);
                     for k in Self::SIZE_KEYS {
                         if let Some(v) = d.get(k).filter(|v| !v.is_null()) {
-                            if installed || g.get(k).map_or(true, |v| v.is_null()) {
+                            if installed || g.get(k).is_none_or(|v| v.is_null()) {
                                 g.insert(k.into(), v.clone());
                             }
                         }
@@ -1328,7 +1382,11 @@ impl Core {
     /// The whole library when `id` is empty; returns (changed, total). `media_cancel` stops a library run between games.
     pub async fn media_refresh(&self, id: &str, force: bool, mut progress: Option<Progress<'_, '_>>) -> Result<(usize, usize)> {
         use std::sync::atomic::Ordering;
-        let ids: Vec<String> = if id.is_empty() { self.games.read().await.iter().filter(|g| g.game.removed_at.is_empty()).map(|g| g.game.id.clone()).collect() } else { vec![self.resolve_one(id).await?] };
+        let ids: Vec<String> = if id.is_empty() {
+            self.games.read().await.iter().filter(|g| g.game.removed_at.is_empty()).map(|g| g.game.id.clone()).collect()
+        } else {
+            vec![self.resolve_one(id).await?]
+        };
         let cfg = self.config.read().await.clone();
         let total = ids.len();
         let mut changed = 0;
@@ -1426,6 +1484,7 @@ impl Core {
 
 #[cfg(test)]
 mod tests {
+    #![allow(clippy::await_holding_lock, reason = "ENV_LOCK serialises the tests that set the profile env; each test body runs on its own thread")]
     #[test]
     fn trash_puts_a_file_in_the_xdg_trash() {
         let _env = crate::paths::ENV_LOCK.lock().unwrap();
@@ -1444,7 +1503,13 @@ mod tests {
     /// A `fake` source whose script is a shell case over the verb; every Universe home under one tempdir.
     fn fake_source(script: &str) -> tempfile::TempDir {
         let dir = tempfile::tempdir().unwrap();
-        for (var, sub) in [("UNIVERSE_DATA_HOME", "data"), ("UNIVERSE_STATE_HOME", "state"), ("UNIVERSE_CONFIG_HOME", "config"), ("UNIVERSE_MODULES_PATH", "modules"), ("UNIVERSE_SOURCES_PATH", "sources")] {
+        for (var, sub) in [
+            ("UNIVERSE_DATA_HOME", "data"),
+            ("UNIVERSE_STATE_HOME", "state"),
+            ("UNIVERSE_CONFIG_HOME", "config"),
+            ("UNIVERSE_MODULES_PATH", "modules"),
+            ("UNIVERSE_SOURCES_PATH", "sources"),
+        ] {
             std::fs::create_dir_all(dir.path().join(sub)).unwrap();
             std::env::set_var(var, dir.path().join(sub));
         }
@@ -1480,7 +1545,12 @@ scan) echo '{"event":"game","id":"1","title":"One","owned":true,"installed":fals
         assert_eq!((list[0]["partial_dir"].as_str(), list[0]["partial_bytes"].as_u64()), (Some("/g/One"), Some(300)), "the disk state rides on every listing");
         let at = core.sources().await[0]["library_at"].as_str().unwrap().to_string();
         assert!(!at.is_empty());
-        std::fs::File::options().write(true).open(paths::sources_data_dir("fake").join("library.json")).unwrap().set_modified(std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000)).unwrap();
+        std::fs::File::options()
+            .write(true)
+            .open(paths::sources_data_dir("fake").join("library.json"))
+            .unwrap()
+            .set_modified(std::time::SystemTime::UNIX_EPOCH + std::time::Duration::from_secs(1_700_000_000))
+            .unwrap();
         let at = core.sources().await[0]["library_at"].as_str().unwrap().to_string();
         let info = core.source_info("fake", "1").await.unwrap();
         assert_eq!((info["download_size"].as_u64(), info["disk_size"].as_u64(), info["folder_name"].as_str()), (Some(700), Some(1000), Some("One")));
@@ -1488,9 +1558,14 @@ scan) echo '{"event":"game","id":"1","title":"One","owned":true,"installed":fals
         let list = core.source_library("fake", false).await.unwrap();
         assert_eq!(list[0]["download_size"], 700);
         let list = core.source_library("fake", true).await.unwrap();
-        assert_eq!((list[0]["download_size"].as_u64(), list[0]["disk_size"].as_u64()), (Some(700), Some(1000)), "a listing without sizes keeps the learnt ones");
-        assert_eq!(core.sources().await[0]["library_at"].as_str().unwrap() >= at.as_str(), true);
-        let saved: Vec<serde_json::Value> = serde_json::from_str(&std::fs::read_to_string(paths::sources_data_dir("fake").join("library.json")).unwrap()).unwrap();
+        assert_eq!(
+            (list[0]["download_size"].as_u64(), list[0]["disk_size"].as_u64()),
+            (Some(700), Some(1000)),
+            "a listing without sizes keeps the learnt ones"
+        );
+        assert!(core.sources().await[0]["library_at"].as_str().unwrap() >= at.as_str());
+        let saved: Vec<serde_json::Value> =
+            serde_json::from_str(&std::fs::read_to_string(paths::sources_data_dir("fake").join("library.json")).unwrap()).unwrap();
         assert_eq!(saved[0]["disk_size"], 1000, "the file carries them too");
     }
 
@@ -1504,14 +1579,20 @@ scan) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":true
         let core = open().await;
         let list = core.source_library("fake", true).await.unwrap();
         assert_eq!((list[0]["installed"].as_bool(), list[0]["dir"].as_str(), list[0]["exe"].as_str()), (Some(false), None, None), "removed since the fetch");
-        assert_eq!((list[1]["installed"].as_bool(), list[1]["dir"].as_str(), list[1]["build"].as_str(), list[1]["disk_size"].as_u64()), (Some(true), Some("/g/New"), Some("9"), Some(500)), "installed since the fetch");
+        assert_eq!(
+            (list[1]["installed"].as_bool(), list[1]["dir"].as_str(), list[1]["build"].as_str(), list[1]["disk_size"].as_u64()),
+            (Some(true), Some("/g/New"), Some("9"), Some(500)),
+            "installed since the fetch"
+        );
     }
 
     #[tokio::test]
     async fn cancel_sigterms_the_running_install_and_nothing_else() {
         let _env = crate::paths::ENV_LOCK.lock().unwrap();
         // The downloader child is detached from the pipes and killed on TERM, as the gog source does with gogdl.
-        let _dir = fake_source(r#"install) sleep 30 >/dev/null 2>&1 & dl=$!; trap 'kill $dl; exit 143' TERM; echo '{"event":"progress","done":1,"total":10,"message":"10%"}'; wait $dl; exit 1 ;;"#);
+        let _dir = fake_source(
+            r#"install) sleep 30 >/dev/null 2>&1 & dl=$!; trap 'kill $dl; exit 143' TERM; echo '{"event":"progress","done":1,"total":10,"message":"10%"}'; wait $dl; exit 1 ;;"#,
+        );
         let core = open().await;
         assert!(!core.source_cancel("fake", "1"), "nothing running");
         let started = std::time::Instant::now();
@@ -1526,7 +1607,8 @@ scan) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":true
             tokio::time::sleep(std::time::Duration::from_millis(200)).await;
             assert!(core.source_cancel("fake", "1"));
         };
-        let (result, ()) = tokio::time::timeout(std::time::Duration::from_secs(5), async { tokio::join!(install, cancel) }).await.expect("cancel ends the install");
+        let (result, ()) =
+            tokio::time::timeout(std::time::Duration::from_secs(5), async { tokio::join!(install, cancel) }).await.expect("cancel ends the install");
         assert!(result.unwrap_err().to_string().contains("143"), "the source exits on the TERM");
         assert_eq!(seen, 1, "progress reached the caller before the cancel");
         assert!(core.source_jobs.lock().unwrap().is_empty(), "the registry is cleared on the way out");

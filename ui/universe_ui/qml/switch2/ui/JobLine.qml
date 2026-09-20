@@ -34,7 +34,11 @@ Item {
             radius: height / 2
             color: Theme.accentStrong
 
-            Behavior on width { Ease { duration: Theme.durQuick } }
+            Behavior on width {
+                Ease {
+                    duration: Theme.durQuick
+                }
+            }
         }
     }
 }

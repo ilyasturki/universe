@@ -143,12 +143,17 @@ fn card_preferred_mode(card: &str, screen: &str) -> Option<crate::gamescope::Mod
     use drm::control::{Device as _, ModeTypeFlags};
     let dev = Card(std::fs::OpenOptions::new().read(true).write(true).open(format!("/dev/dri/{card}")).ok()?);
     let handles = dev.resource_handles().ok()?;
-    let info = handles.connectors().iter().filter_map(|h| dev.get_connector(*h, false).ok()).find(|c| format!("{}-{}", c.interface().as_str(), c.interface_id()) == screen)?;
+    let info = handles
+        .connectors()
+        .iter()
+        .filter_map(|h| dev.get_connector(*h, false).ok())
+        .find(|c| format!("{}-{}", c.interface().as_str(), c.interface_id()) == screen)?;
     let mode = info.modes().iter().find(|m| m.mode_type().contains(ModeTypeFlags::PREFERRED)).or_else(|| info.modes().first())?;
     let (w, h) = mode.size();
-    let vrr = dev.get_properties(info.handle()).ok().is_some_and(|props| {
-        props.iter().any(|(id, value)| dev.get_property(*id).is_ok_and(|p| p.name().to_bytes() == b"vrr_capable") && *value != 0)
-    });
+    let vrr = dev
+        .get_properties(info.handle())
+        .ok()
+        .is_some_and(|props| props.iter().any(|(id, value)| dev.get_property(*id).is_ok_and(|p| p.name().to_bytes() == b"vrr_capable") && *value != 0));
     Some(crate::gamescope::Mode { width: w.into(), height: h.into(), refresh: mode.vrefresh(), vrr })
 }
 
@@ -164,7 +169,9 @@ pub async fn cursor_extension_enable(conn: &zbus::Connection, profile: Profile, 
 
 /// `None` when the shell cannot be asked, `Some(None)` when it has not loaded the extension, else the ExtensionState.
 pub async fn extension_state(proxy: &zbus::Proxy<'_>, extension: &str) -> Option<Option<f64>> {
-    shell_call::<HashMap<String, zbus::zvariant::OwnedValue>>(proxy, "GetExtensionInfo", extension).await.map(|info| info.get("state").and_then(|v| f64::try_from(v).ok()))
+    shell_call::<HashMap<String, zbus::zvariant::OwnedValue>>(proxy, "GetExtensionInfo", extension)
+        .await
+        .map(|info| info.get("state").and_then(|v| f64::try_from(v).ok()))
 }
 
 pub fn extension_is_active(state: Option<f64>) -> bool {
@@ -234,13 +241,19 @@ async fn windows_proxy() -> Result<zbus::Proxy<'static>, String> {
 /// The shell's toplevels through the Universe extension; an error off GNOME or before the shell has loaded it.
 pub async fn list_windows() -> Result<Vec<Toplevel>, String> {
     let proxy = windows_proxy().await?;
-    let json: String = tokio::time::timeout(std::time::Duration::from_secs(5), proxy.call("List", &())).await.map_err(|_| "gnome-shell did not answer".to_string())?.map_err(|e| e.to_string())?;
+    let json: String = tokio::time::timeout(std::time::Duration::from_secs(5), proxy.call("List", &()))
+        .await
+        .map_err(|_| "gnome-shell did not answer".to_string())?
+        .map_err(|e| e.to_string())?;
     serde_json::from_str(&json).map_err(|e| e.to_string())
 }
 
 pub async fn activate_window(id: u64) -> Result<bool, String> {
     let proxy = windows_proxy().await?;
-    tokio::time::timeout(std::time::Duration::from_secs(5), proxy.call("Activate", &(id,))).await.map_err(|_| "gnome-shell did not answer".to_string())?.map_err(|e| e.to_string())
+    tokio::time::timeout(std::time::Duration::from_secs(5), proxy.call("Activate", &(id,)))
+        .await
+        .map_err(|_| "gnome-shell did not answer".to_string())?
+        .map_err(|e| e.to_string())
 }
 
 pub fn pid_in_cgroup(pid: i64, cgroup: &str) -> bool {
@@ -258,7 +271,11 @@ pub fn cgroup_matches(proc_cgroup: &str, cgroup: &str) -> bool {
 
 /// The largest visible toplevel whose pid `in_unit` claims: gamescope's when the game runs inside it.
 pub fn pick_window(windows: &[Toplevel], in_unit: impl Fn(i64) -> bool) -> Option<Toplevel> {
-    windows.iter().filter(|w| !w.hidden && !w.minimized && w.width > 0 && w.height > 0 && w.pid > 0 && in_unit(w.pid)).max_by_key(|w| w.width * w.height).cloned()
+    windows
+        .iter()
+        .filter(|w| !w.hidden && !w.minimized && w.width > 0 && w.height > 0 && w.pid > 0 && in_unit(w.pid))
+        .max_by_key(|w| w.width * w.height)
+        .cloned()
 }
 
 pub fn extension_installed(extension: &str) -> bool {
@@ -317,8 +334,14 @@ mod live {
         for name in outputs {
             let mode = super::drm_preferred_mode(&name).unwrap_or_else(|| panic!("{name}: no mode"));
             assert!(mode.width > 0 && mode.height > 0 && mode.refresh > 0, "{name}: {mode:?}");
-            let modes = std::fs::read_to_string(format!("/sys/class/drm/card1-{name}/modes")).or_else(|_| std::fs::read_to_string(format!("/sys/class/drm/card0-{name}/modes"))).unwrap_or_default();
-            assert_eq!(modes.lines().next().map(str::trim), Some(format!("{}x{}", mode.width, mode.height).as_str()), "{name}: the card's preferred mode is sysfs's first");
+            let modes = std::fs::read_to_string(format!("/sys/class/drm/card1-{name}/modes"))
+                .or_else(|_| std::fs::read_to_string(format!("/sys/class/drm/card0-{name}/modes")))
+                .unwrap_or_default();
+            assert_eq!(
+                modes.lines().next().map(str::trim),
+                Some(format!("{}x{}", mode.width, mode.height).as_str()),
+                "{name}: the card's preferred mode is sysfs's first"
+            );
         }
     }
 }

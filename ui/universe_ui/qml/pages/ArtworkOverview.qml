@@ -14,8 +14,8 @@ FocusScope {
 
     signal openRequested(var game, string slot)
     signal fetchRequested(int games)
-    signal escapedLeft()
-    signal escapedUp()
+    signal escapedLeft
+    signal escapedUp
     signal message(string text)
 
     property int row: 0
@@ -32,22 +32,30 @@ FocusScope {
     readonly property real cellGap: Theme.dp(18)
 
     readonly property bool stopping: fetching && job.cancelled
-    readonly property string buttonLabel: stopping ? "Stopping…"
-                                        : fetching ? "Stop" + (job.total > 0 ? " · " + (job.done + 1) + "/" + job.total : "")
-                                        : store.missingGames === 0 ? "Nothing missing" : "Fetch missing art"
+    readonly property string buttonLabel: stopping ? "Stopping…" : fetching ? "Stop" + (job.total > 0 ? " · " + (job.done + 1) + "/" + job.total : "") : store.missingGames === 0 ? "Nothing missing" : "Fetch missing art"
     readonly property bool buttonDim: stopping || (!fetching && store.missingGames === 0)
 
-    readonly property var hints: [
-        onButton ? { glyph: "A", label: fetching ? "Stop" : "Fetch", dim: buttonDim }
-                 : { glyph: "A", label: currentRow && currentColumn ? "Open " + currentColumn.label.toLowerCase() : "Open", dim: currentRow === null },
-        { glyph: "B", label: "Sections" }
+    readonly property var hints: [onButton ? {
+            glyph: "A",
+            label: fetching ? "Stop" : "Fetch",
+            dim: buttonDim
+        } : {
+            glyph: "A",
+            label: currentRow && currentColumn ? "Open " + currentColumn.label.toLowerCase() : "Open",
+            dim: currentRow === null
+        },
+        {
+            glyph: "B",
+            label: "Sections"
+        }
     ]
 
     function load() {
         store.load();
     }
 
-    onRowsChanged: if (row >= rows.length) row = Math.max(0, rows.length - 1)
+    onRowsChanged: if (row >= rows.length)
+        row = Math.max(0, rows.length - 1)
 
     Component.onDestruction: store.unload()
 
@@ -84,7 +92,7 @@ FocusScope {
         col = c;
     }
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         if (event.isAutoRepeat && (api.keys.isAccept(event) || api.keys.isCancel(event)))
             return;
         event.accepted = true;
@@ -126,7 +134,9 @@ FocusScope {
 
     Connections {
         target: view.store
-        function onMessage(text) { view.message(text); }
+        function onMessage(text) {
+            view.message(text);
+        }
     }
 
     Item {
@@ -241,12 +251,18 @@ FocusScope {
                         height: view.thumbHeight
                         scale: focused ? 1.04 : 1.0
 
-                        Behavior on scale { Ease { easing.type: Easing.OutQuint } }
+                        Behavior on scale {
+                            Ease {
+                                easing.type: Easing.OutQuint
+                            }
+                        }
 
                         Loader {
                             anchors.fill: parent
                             active: cell.focused
-                            sourceComponent: FocusRing { cornerRadius: Theme.dp(8) }
+                            sourceComponent: FocusRing {
+                                cornerRadius: Theme.dp(8)
+                            }
                         }
 
                         ArtFrame {

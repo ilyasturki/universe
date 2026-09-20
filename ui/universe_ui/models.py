@@ -1,19 +1,11 @@
+import contextlib
 import os
+from typing import Any
 
-from PySide6.QtCore import (
-    Property,
-    QAbstractListModel,
-    QDateTime,
-    QModelIndex,
-    QObject,
-    QSortFilterProxyModel,
-    Qt,
-    QTimer,
-    QUrl,
-    Signal,
-    Slot,
-)
+from PySide6.QtCore import QAbstractListModel, QDateTime, QModelIndex, QObject, QSortFilterProxyModel, Qt, QTimer, QUrl, Signal, Slot
 from PySide6.QtQml import QmlElement
+
+from .qt import QVARIANT, Property
 
 QML_IMPORT_NAME = "Universe"
 QML_IMPORT_MAJOR_VERSION = 1
@@ -21,14 +13,41 @@ QML_IMPORT_MAJOR_VERSION = 1
 MODEL_DATA_ROLE = Qt.ItemDataRole.UserRole + 1
 
 GAME_ROLES = [
-    "id", "title", "sortTitle", "favorite", "hidden", "playTime", "playCount", "lastPlayed",
-    "releaseYear", "developerList", "publisherList", "genreList", "players", "description",
-    "summary", "source", "platform", "tags", "assets", "collections", "extra",
+    "id",
+    "title",
+    "sortTitle",
+    "favorite",
+    "hidden",
+    "playTime",
+    "playCount",
+    "lastPlayed",
+    "releaseYear",
+    "developerList",
+    "publisherList",
+    "genreList",
+    "players",
+    "description",
+    "summary",
+    "source",
+    "platform",
+    "tags",
+    "assets",
+    "collections",
+    "extra",
 ]
 
 KNOWN_METADATA = {
-    "developers", "developer", "publishers", "publisher", "genres", "genre", "release_year",
-    "players", "description", "summary", "extra",
+    "developers",
+    "developer",
+    "publishers",
+    "publisher",
+    "genres",
+    "genre",
+    "release_year",
+    "players",
+    "description",
+    "summary",
+    "extra",
 }
 
 
@@ -55,10 +74,8 @@ def file_url(path):
         return QUrl(path)
     # The mtime query keys the image cache: a slot replaced in place repaints instead of showing the cached bytes.
     url = QUrl.fromLocalFile(str(path))
-    try:
+    with contextlib.suppress(OSError):
         url.setQuery(f"v={int(os.stat(path).st_mtime_ns // 1_000_000)}")
-    except OSError:
-        pass
     return url
 
 
@@ -106,7 +123,7 @@ class GameAssets(QObject):
     banner = Property(QUrl, lambda self: self._urls["banner"], notify=changed)
     background = Property(QUrl, lambda self: self._urls["background"], notify=changed)
     logo = Property(QUrl, lambda self: self._urls["logo"], notify=changed)
-    screenshotList = Property("QVariantList", lambda self: list(self._shots), notify=changed)
+    screenshotList = Property(list, lambda self: list(self._shots), notify=changed)
 
 
 class Game(QObject):
@@ -129,7 +146,7 @@ class Game(QObject):
         self._sortTitle = str(raw.get("sort_title") or sort_title(self._title))
         self._favorite = bool(raw.get("favorite", False))
         self._hidden = bool(raw.get("hidden", False))
-        self._playTime = int(round(float(stats.get("hours") or 0) * 3600))
+        self._playTime = round(float(stats.get("hours") or 0) * 3600)
         self._playCount = int(stats.get("play_count") or 0)
         self._lastPlayed = _datetime(stats.get("last_played"))
         self._releaseYear = int(meta.get("release_year") or raw.get("release_year") or 0)
@@ -182,11 +199,11 @@ class Game(QObject):
     hidden = Property(bool, lambda self: self._hidden, notify=changed)
     playTime = Property(int, lambda self: self._playTime, notify=changed)
     playCount = Property(int, lambda self: self._playCount, notify=changed)
-    lastPlayed = Property("QVariant", lambda self: self._lastPlayed, notify=changed)
+    lastPlayed = Property(QVARIANT, lambda self: self._lastPlayed, notify=changed)
     releaseYear = Property(int, lambda self: self._releaseYear, notify=changed)
-    developerList = Property("QVariantList", lambda self: list(self._developers), notify=changed)
-    publisherList = Property("QVariantList", lambda self: list(self._publishers), notify=changed)
-    genreList = Property("QVariantList", lambda self: list(self._genres), notify=changed)
+    developerList = Property(list, lambda self: list(self._developers), notify=changed)
+    publisherList = Property(list, lambda self: list(self._publishers), notify=changed)
+    genreList = Property(list, lambda self: list(self._genres), notify=changed)
     players = Property(int, lambda self: self._players, notify=changed)
     description = Property(str, lambda self: self._description, notify=changed)
     summary = Property(str, lambda self: self._summary, notify=changed)
@@ -194,10 +211,10 @@ class Game(QObject):
     platform = Property(str, lambda self: self._platform, notify=changed)
     runner = Property(str, lambda self: self._runner, notify=changed)
     runnerName = Property(str, lambda self: self._runnerName, notify=changed)
-    tags = Property("QVariantList", lambda self: list(self._tags), notify=changed)
+    tags = Property(list, lambda self: list(self._tags), notify=changed)
     assets = Property(QObject, lambda self: self._assets, constant=True)
     collections = Property(QObject, lambda self: self._collections, notify=changed)
-    extra = Property("QVariantMap", lambda self: dict(self._extra), notify=changed)
+    extra = Property(dict, lambda self: dict(self._extra), notify=changed)
 
 
 class ObjectListModel(QAbstractListModel):
@@ -215,7 +232,7 @@ class ObjectListModel(QAbstractListModel):
         self._objects = list(objects)
         self.endResetModel()
 
-    def rowCount(self, parent=QModelIndex()):
+    def rowCount(self, parent=QModelIndex()):  # noqa: B008
         return 0 if parent.isValid() else len(self._objects)
 
     def data(self, index, role=Qt.ItemDataRole.DisplayRole):
@@ -259,10 +276,8 @@ class GameListModel(ObjectListModel):
 
     def setGames(self, games):
         for game in self._objects:
-            try:
+            with contextlib.suppress(RuntimeError, TypeError):
                 game.changed.disconnect(self._on_game_changed)
-            except (RuntimeError, TypeError):
-                pass
         self.setObjects(games)
         for game in self._objects:
             game.changed.connect(self._on_game_changed)
@@ -321,7 +336,7 @@ class GameProxy(QSortFilterProxyModel):
         self.descendingChanged.emit()
         self._resort()
 
-    def sortKey(self, game):
+    def sortKey(self, game) -> tuple[int, Any]:
         value = game.property(self._sort_name)
         if isinstance(value, QDateTime):
             return (1, value.toMSecsSinceEpoch())
@@ -390,7 +405,7 @@ class RecentGames(GameProxy):
         return game.playCount > 0 or game.id == self._playing
 
     def sortKey(self, game):
-        return (2 if game.id == self._playing else 0,) + super().sortKey(game)
+        return (2 if game.id == self._playing else 0, *super().sortKey(game))
 
     playingId = Property(str, lambda self: self._playing, _set_playing, notify=playingIdChanged)
 
@@ -438,7 +453,7 @@ class FavouriteGames(GameProxy):
     def acceptsGame(self, game, source_row):
         return game.favorite or source_row in self._pinned
 
-    pinned = Property("QVariantList", lambda self: list(self._pinned), _set_pinned, notify=pinnedChanged)
+    pinned = Property(list, lambda self: list(self._pinned), _set_pinned, notify=pinnedChanged)
 
 
 @QmlElement
@@ -580,8 +595,8 @@ class GameAnchor(QObject):
 
     def _resolve(self):
         self._settling = False
-        ident = self._game_id if self._model is not None else ""
-        index = next((i for i in range(self._model.rowCount()) if self._model.get(i).id == ident), -1) if ident else -1
+        model, ident = self._model, self._game_id
+        index = next((i for i in range(model.rowCount()) if model.get(i).id == ident), -1) if model is not None and ident else -1
         if index >= 0 and index != self._index:
             self.moved.emit(index)
         self._refresh(adopt=index >= 0)

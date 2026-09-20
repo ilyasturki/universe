@@ -6,11 +6,7 @@ pub fn slug(name: &str) -> String {
         return "unknown".into();
     }
     let lowered = name.to_lowercase();
-    let stripped: String = lowered
-        .nfkd()
-        .filter(|c| !('\u{0300}'..='\u{036f}').contains(c))
-        .filter(|c| *c != '\'' && *c != '\u{2019}')
-        .collect();
+    let stripped: String = lowered.nfkd().filter(|c| !('\u{0300}'..='\u{036f}').contains(c)).filter(|c| *c != '\'' && *c != '\u{2019}').collect();
     let mut out = String::with_capacity(stripped.len());
     let mut last_dash = false;
     for c in stripped.chars() {

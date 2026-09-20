@@ -14,12 +14,21 @@ FocusScope {
     property var callback: null
 
     readonly property var hints: [
-        { glyph: "A", label: "Select" },
-        { glyph: "dpad", label: "Navigate" },
-        { glyph: "B", label: "Cancel" }
+        {
+            glyph: "A",
+            label: "Select"
+        },
+        {
+            glyph: "dpad",
+            label: "Navigate"
+        },
+        {
+            glyph: "B",
+            label: "Cancel"
+        }
     ]
 
-    signal closed()
+    signal closed
 
     function ask(spec, done) {
         message = spec.message || "";
@@ -51,7 +60,9 @@ FocusScope {
         color: Qt.rgba(0.02, 0.02, 0.03, 1)
         opacity: dialog.open ? 0.62 : 0.0
 
-        Behavior on opacity { Ease {} }
+        Behavior on opacity {
+            Ease {}
+        }
     }
 
     Rectangle {
@@ -67,8 +78,12 @@ FocusScope {
         opacity: dialog.open ? 1.0 : 0.0
         scale: dialog.open ? 1.0 : 0.96
 
-        Behavior on opacity { Ease {} }
-        Behavior on scale { Ease {} }
+        Behavior on opacity {
+            Ease {}
+        }
+        Behavior on scale {
+            Ease {}
+        }
 
         Column {
             id: column
@@ -100,7 +115,10 @@ FocusScope {
                 lineHeight: 1.2
             }
 
-            Item { width: 1; height: Theme.dp(14) }
+            Item {
+                width: 1
+                height: Theme.dp(14)
+            }
 
             Row {
                 anchors.horizontalCenter: parent.horizontalCenter
@@ -124,7 +142,7 @@ FocusScope {
         }
     }
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         event.accepted = true;
         if (event.isAutoRepeat)
             return;
@@ -139,5 +157,7 @@ FocusScope {
             choose(false);
         }
     }
-    Keys.onReleased: function(event) { event.accepted = true; }
+    Keys.onReleased: function (event) {
+        event.accepted = true;
+    }
 }

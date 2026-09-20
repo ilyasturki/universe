@@ -3,7 +3,14 @@ use std::process::Command;
 
 fn universe(dir: &tempfile::TempDir, args: &[&str], env: &[(&str, &str)]) -> std::process::Output {
     let mut cmd = Command::new(env!("CARGO_BIN_EXE_universe"));
-    for (var, sub) in [("UNIVERSE_DATA_HOME", "data"), ("UNIVERSE_CONFIG_HOME", "config"), ("UNIVERSE_STATE_HOME", "state"), ("UNIVERSE_CACHE_HOME", "cache"), ("UNIVERSE_MODULES_PATH", "modules"), ("UNIVERSE_SOURCES_PATH", "sources")] {
+    for (var, sub) in [
+        ("UNIVERSE_DATA_HOME", "data"),
+        ("UNIVERSE_CONFIG_HOME", "config"),
+        ("UNIVERSE_STATE_HOME", "state"),
+        ("UNIVERSE_CACHE_HOME", "cache"),
+        ("UNIVERSE_MODULES_PATH", "modules"),
+        ("UNIVERSE_SOURCES_PATH", "sources"),
+    ] {
         std::fs::create_dir_all(dir.path().join(sub)).unwrap();
         cmd.env(var, dir.path().join(sub));
     }

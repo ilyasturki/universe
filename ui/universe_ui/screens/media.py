@@ -5,8 +5,9 @@ import shutil
 from datetime import datetime
 
 import shiboken6
-from PySide6.QtCore import Property, QLocale, QObject, QProcess, QTimer, QUrl, Signal, Slot
+from PySide6.QtCore import QLocale, QObject, QProcess, QTimer, QUrl, Signal, Slot
 
+from ..qt import Property
 from .paths import universe_home
 
 
@@ -103,14 +104,22 @@ class RecordingsList(QObject):
                 continue
             path = str(rec.get("path") or "")
             session = str(line.get("session") or "")
-            rows.append({
-                "session": session, "path": path,
-                "url": QUrl.fromLocalFile(path).toString() if path else "",
-                "size": rec.get("size") or 0, "sizeText": _size(rec.get("size")),
-                "duration_s": line.get("duration_s") or 0, "durationText": _duration(line.get("duration_s")),
-                "dateText": _when(line.get("ended_at")), "hasJournal": line.get("journal") is not None,
-                "created_at": str(line.get("ended_at") or ""), "gameId": str(line.get("game") or ""), "gameTitle": str(line.get("title") or ""),
-            })
+            rows.append(
+                {
+                    "session": session,
+                    "path": path,
+                    "url": QUrl.fromLocalFile(path).toString() if path else "",
+                    "size": rec.get("size") or 0,
+                    "sizeText": _size(rec.get("size")),
+                    "duration_s": line.get("duration_s") or 0,
+                    "durationText": _duration(line.get("duration_s")),
+                    "dateText": _when(line.get("ended_at")),
+                    "hasJournal": line.get("journal") is not None,
+                    "created_at": str(line.get("ended_at") or ""),
+                    "gameId": str(line.get("game") or ""),
+                    "gameTitle": str(line.get("title") or ""),
+                }
+            )
             if path and session and session not in self._frames:
                 self._frames[session] = Frames(path, rec.get("duration_s") or line.get("duration_s"))
         self._rows = rows
@@ -174,8 +183,25 @@ class RecordingsList(QObject):
         proc = QProcess(self)
         self._running[job] = proc
         proc.finished.connect(lambda code, status: self._extracted(job, proc, code))
-        proc.start(ffmpeg, ["-loglevel", "error", "-y", "-ss", f"{frames.seconds(index):.3f}", "-i", frames.path,
-                            "-frames:v", "1", "-vf", f"scale={FRAME_WIDTH}:-2", "-q:v", "4", frames.file(index)])
+        proc.start(
+            ffmpeg,
+            [
+                "-loglevel",
+                "error",
+                "-y",
+                "-ss",
+                f"{frames.seconds(index):.3f}",
+                "-i",
+                frames.path,
+                "-frames:v",
+                "1",
+                "-vf",
+                f"scale={FRAME_WIDTH}:-2",
+                "-q:v",
+                "4",
+                frames.file(index),
+            ],
+        )
 
     def _extracted(self, job, proc, code):
         self._finish(job, proc)
@@ -215,9 +241,9 @@ class RecordingsList(QObject):
             }
         return out
 
-    rows = Property("QVariantList", lambda self: [dict(r) for r in self._rows], notify=rowsChanged)
+    rows = Property(list, lambda self: [dict(r) for r in self._rows], notify=rowsChanged)
     count = Property(int, lambda self: len(self._rows), notify=rowsChanged)
-    frameMap = Property("QVariantMap", _frame_map, notify=framesChanged)
+    frameMap = Property(dict, _frame_map, notify=framesChanged)
     gameId = Property(str, lambda self: self._game_id, notify=gameIdChanged)
 
 
@@ -263,7 +289,7 @@ class ScreenshotsList(QObject):
     def remove(self, game_id, name):
         return bool(self._client.removeScreenshot(game_id, name))
 
-    rows = Property("QVariantList", lambda self: [dict(r) for r in self._rows], notify=rowsChanged)
+    rows = Property(list, lambda self: [dict(r) for r in self._rows], notify=rowsChanged)
     count = Property(int, lambda self: len(self._rows), notify=rowsChanged)
     gameId = Property(str, lambda self: self._game_id, notify=gameIdChanged)
 
@@ -273,11 +299,15 @@ def _shot_row(shot, journaled):
     session = str(shot.get("session") or "")
     ident = str(shot.get("game") or "")
     return {
-        "name": os.path.basename(path), "path": path,
+        "name": os.path.basename(path),
+        "path": path,
         "url": QUrl.fromLocalFile(path).toString() if path else "",
-        "taken_at": str(shot.get("taken_at") or ""), "dateText": _when(shot.get("taken_at")),
-        "session": session, "hasJournal": (ident, session) in journaled,
-        "gameId": ident, "gameTitle": str(shot.get("title") or ""),
+        "taken_at": str(shot.get("taken_at") or ""),
+        "dateText": _when(shot.get("taken_at")),
+        "session": session,
+        "hasJournal": (ident, session) in journaled,
+        "gameId": ident,
+        "gameTitle": str(shot.get("title") or ""),
     }
 
 
@@ -317,20 +347,44 @@ class MediaTimeline(QObject):
                 continue
             path, session, ident = str(rec.get("path") or ""), str(line.get("session") or ""), str(line.get("game") or "")
             self._recordings.warm(session, path, rec.get("duration_s") or line.get("duration_s"))
-            rows.append({"kind": "recording", "key": f"rec:{ident}:{session}", "gameId": ident, "gameTitle": str(line.get("title") or ""),
-                         "when": str(line.get("ended_at") or ""), "dateText": _when(line.get("ended_at")),
-                         "image": "", "path": path, "name": "", "session": session,
-                         "hasJournal": (ident, session) in journaled, "title": _duration(line.get("duration_s"))})
+            rows.append(
+                {
+                    "kind": "recording",
+                    "key": f"rec:{ident}:{session}",
+                    "gameId": ident,
+                    "gameTitle": str(line.get("title") or ""),
+                    "when": str(line.get("ended_at") or ""),
+                    "dateText": _when(line.get("ended_at")),
+                    "image": "",
+                    "path": path,
+                    "name": "",
+                    "session": session,
+                    "hasJournal": (ident, session) in journaled,
+                    "title": _duration(line.get("duration_s")),
+                }
+            )
         for ident, title in titles.items():
             for entry in self._client.journal(ident):
                 if str(entry.get("state") or "written") != "written":
                     continue
                 session = str(entry.get("session") or "")
                 images = [str(i) for i in entry.get("images") or []]
-                rows.append({"kind": "journal", "key": f"journal:{ident}:{session}", "gameId": ident, "gameTitle": title,
-                             "when": str(entry.get("written_at") or entry.get("started_at") or ""), "dateText": _when(entry.get("started_at") or entry.get("written_at")),
-                             "image": QUrl.fromLocalFile(images[0]).toString() if images else "", "path": "", "name": "", "session": session,
-                             "hasJournal": True, "title": str(entry.get("title") or "Untitled")})
+                rows.append(
+                    {
+                        "kind": "journal",
+                        "key": f"journal:{ident}:{session}",
+                        "gameId": ident,
+                        "gameTitle": title,
+                        "when": str(entry.get("written_at") or entry.get("started_at") or ""),
+                        "dateText": _when(entry.get("started_at") or entry.get("written_at")),
+                        "image": QUrl.fromLocalFile(images[0]).toString() if images else "",
+                        "path": "",
+                        "name": "",
+                        "session": session,
+                        "hasJournal": True,
+                        "title": str(entry.get("title") or "Untitled"),
+                    }
+                )
         rows.sort(key=lambda r: r["when"], reverse=True)
         self._rows = rows
         self._thumbnails()
@@ -346,7 +400,7 @@ class MediaTimeline(QObject):
     def unload(self):
         self._loaded = False
 
-    rows = Property("QVariantList", lambda self: [dict(r) for r in self._rows], notify=rowsChanged)
+    rows = Property(list, lambda self: [dict(r) for r in self._rows], notify=rowsChanged)
     count = Property(int, lambda self: len(self._rows), notify=rowsChanged)
 
 
@@ -407,21 +461,27 @@ class JournalList(QObject):
             state = str(entry.get("state") or "written")
             paragraphs = [str(p) for p in entry.get("paragraphs") or []]
             duration = int(entry.get("duration_s") or 0)
-            rows.append({
-                "session": session,
-                "title": str(entry.get("title") or ("" if state == "pending" else "Journal failed" if state == "failed" else "Untitled")),
-                "state": state, "reason": paragraphs[0] if state == "failed" and paragraphs else "",
-                "started_at": str(entry.get("started_at") or ""),
-                "dateText": _when(entry.get("written_at") or entry.get("started_at")),
-                "duration_s": duration, "durationText": _duration(duration) if duration else "",
-                "provider": str(entry.get("provider") or ""),
-                "paragraphs": paragraphs, "blocks": markdown_blocks(paragraphs),
-                "next_up": str(entry.get("next_up") or ""),
-                "images": [QUrl.fromLocalFile(str(p)).toString() for p in entry.get("images") or []],
-                "hasRecording": (game_id, session) in recorded,
-                "written_at": str(entry.get("written_at") or ""),
-                "gameId": game_id, "gameTitle": title,
-            })
+            rows.append(
+                {
+                    "session": session,
+                    "title": str(entry.get("title") or ("" if state == "pending" else "Journal failed" if state == "failed" else "Untitled")),
+                    "state": state,
+                    "reason": paragraphs[0] if state == "failed" and paragraphs else "",
+                    "started_at": str(entry.get("started_at") or ""),
+                    "dateText": _when(entry.get("written_at") or entry.get("started_at")),
+                    "duration_s": duration,
+                    "durationText": _duration(duration) if duration else "",
+                    "provider": str(entry.get("provider") or ""),
+                    "paragraphs": paragraphs,
+                    "blocks": markdown_blocks(paragraphs),
+                    "next_up": str(entry.get("next_up") or ""),
+                    "images": [QUrl.fromLocalFile(str(p)).toString() for p in entry.get("images") or []],
+                    "hasRecording": (game_id, session) in recorded,
+                    "written_at": str(entry.get("written_at") or ""),
+                    "gameId": game_id,
+                    "gameTitle": title,
+                }
+            )
         return rows
 
     @Slot()
@@ -432,7 +492,7 @@ class JournalList(QObject):
     def remove(self, game_id, session):
         return bool(self._client.removeJournalEntry(game_id, session))
 
-    rows = Property("QVariantList", lambda self: [dict(r) for r in self._rows], notify=rowsChanged)
+    rows = Property(list, lambda self: [dict(r) for r in self._rows], notify=rowsChanged)
     count = Property(int, lambda self: len(self._rows), notify=rowsChanged)
     gameId = Property(str, lambda self: self._game_id, notify=gameIdChanged)
 
@@ -459,10 +519,15 @@ class PendingJournals(QObject):
 
     @Slot()
     def refresh(self):
-        rows = []
-        for entry in self._client.pendingJournals():
-            rows.append({"game": str(entry.get("game") or ""), "title": str(entry.get("title") or ""),
-                         "session": str(entry.get("session") or ""), "started_at": str(entry.get("started_at") or "")})
+        rows = [
+            {
+                "game": str(entry.get("game") or ""),
+                "title": str(entry.get("title") or ""),
+                "session": str(entry.get("session") or ""),
+                "started_at": str(entry.get("started_at") or ""),
+            }
+            for entry in self._client.pendingJournals()
+        ]
         before = {r["session"]: r for r in self._rows}
         now = {r["session"]: r for r in rows}
         self._rows = rows
@@ -491,5 +556,5 @@ class PendingJournals(QObject):
     def shutdown(self):
         self._timer.stop()
 
-    rows = Property("QVariantList", lambda self: [dict(r) for r in self._rows], notify=changed)
+    rows = Property(list, lambda self: [dict(r) for r in self._rows], notify=changed)
     count = Property(int, lambda self: len(self._rows), notify=changed)

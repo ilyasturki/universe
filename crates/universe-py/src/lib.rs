@@ -34,19 +34,35 @@ struct Core {
 }
 
 impl Core {
-    fn run<'a, T: Send, F: std::future::Future<Output = universe::Result<T>> + 'a>(&'a self, py: Python<'_>, f: impl FnOnce(&'a universe::core::Core) -> F + Send) -> PyResult<T> {
+    fn run<'a, T: Send, F: std::future::Future<Output = universe::Result<T>> + 'a>(
+        &'a self,
+        py: Python<'_>,
+        f: impl FnOnce(&'a universe::core::Core) -> F + Send,
+    ) -> PyResult<T> {
         py.detach(|| self.rt.block_on(f(&self.core))).map_err(err)
     }
 
-    fn run_infallible<'a, T: Send, F: std::future::Future<Output = T> + 'a>(&'a self, py: Python<'_>, f: impl FnOnce(&'a universe::core::Core) -> F + Send) -> T {
+    fn run_infallible<'a, T: Send, F: std::future::Future<Output = T> + 'a>(
+        &'a self,
+        py: Python<'_>,
+        f: impl FnOnce(&'a universe::core::Core) -> F + Send,
+    ) -> T {
         py.detach(|| self.rt.block_on(f(&self.core)))
     }
 
-    fn value<'a, T: Send + serde::Serialize, F: std::future::Future<Output = universe::Result<T>> + 'a>(&'a self, py: Python<'_>, f: impl FnOnce(&'a universe::core::Core) -> F + Send) -> PyResult<Py<PyAny>> {
+    fn value<'a, T: Send + serde::Serialize, F: std::future::Future<Output = universe::Result<T>> + 'a>(
+        &'a self,
+        py: Python<'_>,
+        f: impl FnOnce(&'a universe::core::Core) -> F + Send,
+    ) -> PyResult<Py<PyAny>> {
         py_of(py, &self.run(py, f)?)
     }
 
-    fn value_infallible<'a, T: Send + serde::Serialize, F: std::future::Future<Output = T> + 'a>(&'a self, py: Python<'_>, f: impl FnOnce(&'a universe::core::Core) -> F + Send) -> PyResult<Py<PyAny>> {
+    fn value_infallible<'a, T: Send + serde::Serialize, F: std::future::Future<Output = T> + 'a>(
+        &'a self,
+        py: Python<'_>,
+        f: impl FnOnce(&'a universe::core::Core) -> F + Send,
+    ) -> PyResult<Py<PyAny>> {
         py_of(py, &self.run_infallible(py, f))
     }
 }

@@ -9,7 +9,7 @@ Item {
     property string launchedSession: ""
     readonly property bool running: sequence.running || waiting || settle.running
 
-    signal finished()
+    signal finished
     signal failed(var game, string message)
 
     function begin(target) {
@@ -101,10 +101,24 @@ Item {
         id: sequence
 
         ParallelAnimation {
-            NumberAnimation { target: frame; property: "opacity"; to: 1.0; duration: Theme.durFade; easing.type: Easing.InOutQuad }
-            NumberAnimation { target: art; property: "scale"; to: 1.0; duration: Theme.durFade; easing.type: Easing.OutCubic }
+            NumberAnimation {
+                target: frame
+                property: "opacity"
+                to: 1.0
+                duration: Theme.durFade
+                easing.type: Easing.InOutQuad
+            }
+            NumberAnimation {
+                target: art
+                property: "scale"
+                to: 1.0
+                duration: Theme.durFade
+                easing.type: Easing.OutCubic
+            }
         }
-        PauseAnimation { duration: 500 }
+        PauseAnimation {
+            duration: 500
+        }
         ScriptAction {
             script: {
                 if (screen.game) {

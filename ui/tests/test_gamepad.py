@@ -100,9 +100,12 @@ def test_key_script_plays_a_fake_pad(app):
 
     watcher = FakeWatcher("xbox")
     lines = []
-    watcher.event.connect(lines.append)
+    watcher.received.connect(lines.append)
     script = gamepad.KeyScript("Press:south Axis:lx=-0.5 Unpress:south", 1, None, watcher=watcher)
     for _ in range(3):
         script._step()
-    assert [(l["event"], l.get("slot") or l.get("axis"), l.get("pressed", l.get("value"))) for l in lines] == [
-        ("button", "south", True), ("axis", "lx", -0.5), ("button", "south", False)]
+    assert [(line["event"], line.get("slot") or line.get("axis"), line.get("pressed", line.get("value"))) for line in lines] == [
+        ("button", "south", True),
+        ("axis", "lx", -0.5),
+        ("button", "south", False),
+    ]

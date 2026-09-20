@@ -72,7 +72,7 @@ def test_extract_frames_from_mkv(tmp_path):
     assert any(f.tail for f in frames) and all(f.tail == (f.off >= tail_start) for f in frames)
     assert all(os.path.getsize(f.file) > 0 and f.kind == "frame" for f in frames)
     for i, a in enumerate(frames):
-        for b in frames[i + 1:]:
+        for b in frames[i + 1 :]:
             assert img.hamming(a.hash, b.hash) >= img.DUP_DISTANCE
 
 
@@ -93,7 +93,9 @@ def test_timeline_skips_the_pauses_both_ways():
         assert (tl.offset(t0 + timedelta(minutes=minutes)), tl.time(off)) == (off, t0 + timedelta(minutes=minutes))
     assert tl.offset(t0 + timedelta(minutes=12)) == 600
     assert tl.time(600) == t0 + timedelta(minutes=15)
-    parsed = img.Timeline.from_env("2026-09-11T12:00:30", '[["2026-09-11T12:10:00", "2026-09-11T12:12:00"]]', t0, lambda s: datetime.fromisoformat(s) if s else None)
+    parsed = img.Timeline.from_env(
+        "2026-09-11T12:00:30", '[["2026-09-11T12:10:00", "2026-09-11T12:12:00"]]', t0, lambda s: datetime.fromisoformat(s) if s else None
+    )
     assert parsed.start == t0 + timedelta(seconds=30) and parsed.offset(t0 + timedelta(minutes=13)) == 12 * 60 + 30 - 120
     fallback = img.Timeline.from_env("", "nope", t0, lambda s: None)
     assert fallback.start == t0 and fallback.pauses == []
@@ -130,10 +132,13 @@ SHOT = "20260911-120130.png"
 def fakebin(tmp_path):
     bindir = tmp_path / "fakebin"
     bindir.mkdir()
-    write_shim(bindir / "universe", f'''printf "%s\\n" "$@" > "{bindir}/universe.args"
+    write_shim(
+        bindir / "universe",
+        f'''printf "%s\\n" "$@" > "{bindir}/universe.args"
 cat "$JOURNAL_DIR"/*.pending.json > "{bindir}/pending-at-add.json" 2>/dev/null
 if [ "${{FAKE_UNIVERSE_EXIT:-0}}" != "0" ]; then echo "${{FAKE_UNIVERSE_STDERR:-universe: io: No such file or directory}}" >&2; exit "${{FAKE_UNIVERSE_EXIT}}"; fi
-exit 0''')
+exit 0''',
+    )
     return bindir
 
 
@@ -141,8 +146,10 @@ def fake_codex(fakebin, stderr, resets_at=None):
     """`exec` fails with `stderr`; `app-server` answers the rate-limit read with `resets_at` (Unix seconds) at 100 %, or nothing."""
     app_server = "exit 1"
     if resets_at is not None:
-        app_server = ('read -r _init; echo \'{"id":1,"result":{}}\'; read -r _initialized; read -r _req\n'
-                      f'echo \'{{"id":2,"result":{{"rateLimits":{{"primary":{{"usedPercent":100,"windowDurationMins":10080,"resetsAt":{resets_at}}},"secondary":null}}}}}}\'\nexit 0')
+        app_server = (
+            'read -r _init; echo \'{"id":1,"result":{}}\'; read -r _initialized; read -r _req\n'
+            f'echo \'{{"id":2,"result":{{"rateLimits":{{"primary":{{"usedPercent":100,"windowDurationMins":10080,"resetsAt":{resets_at}}},"secondary":null}}}}}}\'\nexit 0'
+        )
     write_shim(fakebin / "codex", f'echo "$1" >> "{fakebin}/codex.calls"\nif [ "$1" = app-server ]; then\n{app_server}\nfi\necho "{stderr}" >&2\nexit 1')
 
 
@@ -150,19 +157,27 @@ def run_process(tmp_path, fakebin, settings, extra_env=None, recording=None):
     journal_dir = tmp_path / "games" / "testgame" / "journal"
     journal_dir.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ)
-    env.update({
-        "PATH": f"{fakebin}:{env.get('PATH', '')}",
-        "UNIVERSE_BIN": str(fakebin / "universe"),
-        "GAME_ID": "testgame", "GAME_SLUG": "testgame", "GAME_TITLE": "Test Game: Redux",
-        "SESSION_ID": SID, "SESSION_STARTED_AT": "2026-09-11T12:00:00+02:00",
-        "SESSION_ENDED_AT": "2026-09-11T12:03:20+02:00", "SESSION_DURATION_S": "200",
-        "RECORDING_PATH": str(recording or ""),
-        "JOURNAL_DIR": str(journal_dir), "SCREENSHOTS_DIR": str(tmp_path / "games" / "testgame" / "screenshots"),
-        "MODULE_DATA_DIR": str(tmp_path / "data"), "UNIVERSE_JOURNAL_ROOT": str(tmp_path / "root"),
-        "MODULE_SETTINGS_JSON": json.dumps({"provider": "stub", "max_images": 40, **settings}),
-    })
+    env.update(
+        {
+            "PATH": f"{fakebin}:{env.get('PATH', '')}",
+            "UNIVERSE_BIN": str(fakebin / "universe"),
+            "GAME_ID": "testgame",
+            "GAME_SLUG": "testgame",
+            "GAME_TITLE": "Test Game: Redux",
+            "SESSION_ID": SID,
+            "SESSION_STARTED_AT": "2026-09-11T12:00:00+02:00",
+            "SESSION_ENDED_AT": "2026-09-11T12:03:20+02:00",
+            "SESSION_DURATION_S": "200",
+            "RECORDING_PATH": str(recording or ""),
+            "JOURNAL_DIR": str(journal_dir),
+            "SCREENSHOTS_DIR": str(tmp_path / "games" / "testgame" / "screenshots"),
+            "MODULE_DATA_DIR": str(tmp_path / "data"),
+            "UNIVERSE_JOURNAL_ROOT": str(tmp_path / "root"),
+            "MODULE_SETTINGS_JSON": json.dumps({"provider": "stub", "max_images": 40, **settings}),
+        }
+    )
     env.update(extra_env or {})
-    res = subprocess.run([sys.executable, str(BIN_DIR / "process")], env=env, capture_output=True, text=True)
+    res = subprocess.run([sys.executable, str(BIN_DIR / "process")], env=env, capture_output=True, text=True, check=False)
     return res, journal_dir
 
 
@@ -197,10 +212,20 @@ def test_stub_pipeline_writes_entry_note_and_memory(tmp_path, fakebin):
     shots_dir = tmp_path / "games" / "testgame" / "screenshots"
     for name in ("20260911-120130.png", "20260911-120245.png", "20260911-130000.png"):
         make_png(shots_dir / name)
-    (tmp_path / "games" / "testgame" / "sessions.jsonl").write_text(json.dumps({
-        "session": SID, "game": "testgame", "started_at": "2026-09-11T12:00:00+02:00",
-        "ended_at": "2026-09-11T12:03:20+02:00", "duration_s": 200, "source": "daemon", "recording": str(rec),
-    }) + "\n")
+    (tmp_path / "games" / "testgame" / "sessions.jsonl").write_text(
+        json.dumps(
+            {
+                "session": SID,
+                "game": "testgame",
+                "started_at": "2026-09-11T12:00:00+02:00",
+                "ended_at": "2026-09-11T12:03:20+02:00",
+                "duration_s": 200,
+                "source": "daemon",
+                "recording": str(rec),
+            }
+        )
+        + "\n"
+    )
 
     res, journal_dir = run_process(tmp_path, fakebin, {}, {"FAKE_UNIVERSE_EXIT": "1"}, recording=rec)
     assert res.returncode == 0, res.stderr
@@ -211,7 +236,10 @@ def test_stub_pipeline_writes_entry_note_and_memory(tmp_path, fakebin):
     assert entry["session"] == SID and entry["game"] == "testgame" and entry["provider"] == "stub" and entry["lang"] == "en"
     assert entry["title"] == "Stub session of Test Game: Redux"
     assert entry["paragraphs"][0].startswith("You played Test Game: Redux")
-    assert [p for p in entry["paragraphs"] if p.startswith("- ")] == ["- **Main quest:** Reached the first checkpoint.", "- **Exploration:** Looked at every image, all of them."]
+    assert [p for p in entry["paragraphs"] if p.startswith("- ")] == [
+        "- **Main quest:** Reached the first checkpoint.",
+        "- **Exploration:** Looked at every image, all of them.",
+    ]
     assert entry["next_up"] == "Resume at the first checkpoint and keep going."
     assert entry["written_at"][:10] == datetime.now().strftime("%Y-%m-%d") and entry["written_at"][19] in "+-"
     assert datetime.fromisoformat(entry["started_at"]) == datetime.fromisoformat("2026-09-11T12:00:00+02:00")
@@ -235,7 +263,9 @@ def test_stub_pipeline_writes_entry_note_and_memory(tmp_path, fakebin):
 
     note_path = tmp_path / "root" / "testgame" / "Test Game Redux.md"
     text = note_path.read_text()
-    assert text.startswith('---\ngame: "Test Game: Redux"\nsessions: 1\nfirst_played: 2026-09-11\nlast_played: 2026-09-11\ncover: 20260911-120130.png\n---\n\n# Journal: Test Game: Redux\n\n')
+    assert text.startswith(
+        '---\ngame: "Test Game: Redux"\nsessions: 1\nfirst_played: 2026-09-11\nlast_played: 2026-09-11\ncover: 20260911-120130.png\n---\n\n# Journal: Test Game: Redux\n\n'
+    )
     assert f"## #1 · Stub session of Test Game: Redux\n*09/11/26 · 12:00–12:03 · 3 min*\n<!-- session: {SID} -->\n\n" in text
     assert "\n\n**Next up:** Resume at the first checkpoint and keep going.\n\n**Recording:** [rec.mkv](file://" in text
     assert "\n\n*Frames from the recording*\n\n![](attachments/" in text
@@ -326,30 +356,73 @@ def test_disabled_and_forced_language(tmp_path, fakebin):
 
 def sample_entries():
     return [
-        {"session": "20260301-210000", "game": "sample", "written_at": "2026-03-01T22:30:00+01:00", "lang": "en",
-         "title": "Into the Dome", "provider": "import",
-         "paragraphs": ["Zachariah reached the Source after three failed runs.", "- **Main quest:** Cleared the gate.", "- **Side quest:** Talked to Amelia.", "Then the patrol reset."],
-         "next_up": "Return to the Exchange and talk to Amelia.",
-         "images": ["20260301-211500.png", "attachments/20260301-210000-1.png", "attachments/frames/frame-20260301-210000-02.jpg"]},
-        {"session": "20260215-183000", "game": "sample", "written_at": "2026-02-15T19:45:00+01:00", "lang": "fr",
-         "title": "Trois contrats et Port-péril", "provider": "import",
-         "paragraphs": ["Le duo a enchaîné les sauvetages.", "- **Boss :** Tu as vaincu Corbin Claquebec."],
-         "next_up": "Tu reprendras dans le Mausolée III.", "images": ["attachments/frames/frame-20260215-183000-01.jpg"]},
-        {"session": "20260110-000500", "game": "sample", "written_at": "2026-01-10T00:07:00+01:00", "lang": "en",
-         "title": "", "provider": "import", "paragraphs": [], "next_up": "", "images": []},
-        {"session": "20251220-120000", "game": "sample", "written_at": "2025-12-20T12:01:00+01:00", "lang": "en",
-         "title": "", "provider": "none",
-         "paragraphs": ["This session’s recording holds no picture and no screenshot covers it, so there is nothing to summarize."],
-         "next_up": "", "images": []},
-        {"session": "20251201-230000", "game": "sample", "written_at": "2025-12-02T00:10:00+01:00", "lang": "en",
-         "title": "First Glimpse", "provider": "import", "paragraphs": ["You reached the title screen."],
-         "next_up": "Press any key.", "images": ["20251201-230100.png"]},
+        {
+            "session": "20260301-210000",
+            "game": "sample",
+            "written_at": "2026-03-01T22:30:00+01:00",
+            "lang": "en",
+            "title": "Into the Dome",
+            "provider": "import",
+            "paragraphs": [
+                "Zachariah reached the Source after three failed runs.",
+                "- **Main quest:** Cleared the gate.",
+                "- **Side quest:** Talked to Amelia.",
+                "Then the patrol reset.",
+            ],
+            "next_up": "Return to the Exchange and talk to Amelia.",
+            "images": ["20260301-211500.png", "attachments/20260301-210000-1.png", "attachments/frames/frame-20260301-210000-02.jpg"],
+        },
+        {
+            "session": "20260215-183000",
+            "game": "sample",
+            "written_at": "2026-02-15T19:45:00+01:00",
+            "lang": "fr",
+            "title": "Trois contrats et Port-péril",
+            "provider": "import",
+            "paragraphs": ["Le duo a enchaîné les sauvetages.", "- **Boss :** Tu as vaincu Corbin Claquebec."],
+            "next_up": "Tu reprendras dans le Mausolée III.",
+            "images": ["attachments/frames/frame-20260215-183000-01.jpg"],
+        },
+        {
+            "session": "20260110-000500",
+            "game": "sample",
+            "written_at": "2026-01-10T00:07:00+01:00",
+            "lang": "en",
+            "title": "",
+            "provider": "import",
+            "paragraphs": [],
+            "next_up": "",
+            "images": [],
+        },
+        {
+            "session": "20251220-120000",
+            "game": "sample",
+            "written_at": "2025-12-20T12:01:00+01:00",
+            "lang": "en",
+            "title": "",
+            "provider": "none",
+            "paragraphs": ["This session’s recording holds no picture and no screenshot covers it, so there is nothing to summarize."],
+            "next_up": "",
+            "images": [],
+        },
+        {
+            "session": "20251201-230000",
+            "game": "sample",
+            "written_at": "2025-12-02T00:10:00+01:00",
+            "lang": "en",
+            "title": "First Glimpse",
+            "provider": "import",
+            "paragraphs": ["You reached the title screen."],
+            "next_up": "Press any key.",
+            "images": ["20251201-230100.png"],
+        },
     ]
 
 
 def sample_sessions():
     def s(sid, started, ended, dur, rec):
         return {"session": sid, "game": "sample", "started_at": started, "ended_at": ended, "duration_s": dur, "source": "import-journal", "recording": rec}
+
     return [
         s("20260301-210000", "2026-03-01T21:00:00+01:00", "2026-03-01T22:30:00+01:00", 5400, "/mnt/recordings/games/sample/20260301-210000.mkv"),
         s("20260215-183000", "2026-02-15T18:30:00+01:00", "2026-02-15T19:45:00+01:00", 4500, "/mnt/recordings/games/sample/003-20260215-183000-1h15m.mkv"),
@@ -361,7 +434,26 @@ def sample_sessions():
 
 def test_yaml_and_uri_helpers_match_the_core():
     # The same table as journal.rs's helpers_match_python: the two renderers must agree byte for byte.
-    for typed in ["#DRIVE", "0x1F", "0o17", "0b101", "1_000", ".5", "1e3", "1:30", "2024-05-01", "2024-5-1 10:00", ".inf", ".NaN", "On", "y", "N", "1979", "- x", "Sample: The Game"]:
+    for typed in [
+        "#DRIVE",
+        "0x1F",
+        "0o17",
+        "0b101",
+        "1_000",
+        ".5",
+        "1e3",
+        "1:30",
+        "2024-05-01",
+        "2024-5-1 10:00",
+        ".inf",
+        ".NaN",
+        "On",
+        "y",
+        "N",
+        "1979",
+        "- x",
+        "Sample: The Game",
+    ]:
         assert note.yaml_str(typed) == json.dumps(typed, ensure_ascii=False), typed
     for plain in ["Cuphead", "Cuphead 2", "Half-Life 2", "1979 Revolution", "F.E.A.R.", "v1.0", "2024 Game", "Portal 2", "2001-a-space"]:
         assert note.yaml_str(plain) == plain
@@ -371,20 +463,29 @@ def test_yaml_and_uri_helpers_match_the_core():
 
 def test_render_note():
     text = note.render_note(sample_entries(), {s["session"]: s for s in sample_sessions()}, "Sample: The Game")
-    assert text.startswith("---\ngame: \"Sample: The Game\"\nsessions: 5\nfirst_played: 2025-12-01\nlast_played: 2026-03-01\ncover: 20260301-211500.png\n---\n\n# Journal: Sample: The Game\n\n")
+    assert text.startswith(
+        '---\ngame: "Sample: The Game"\nsessions: 5\nfirst_played: 2025-12-01\nlast_played: 2026-03-01\ncover: 20260301-211500.png\n---\n\n# Journal: Sample: The Game\n\n'
+    )
     assert "\n## #4 · Into the Dome\n*03/01/26 · 21:00–22:30 · 1 h 30 min*\n" in text
     assert "\n## #3 · Trois contrats et Port-péril\n" in text and "\n**Reprise :** Tu reprendras" in text and "\n**Enregistrement :** [003-" in text
     assert "\n## #2 · 01/10/26 · 00:05–00:07 · 2 min\n<!-- session: 20260110-000500 -->\n\n**Recording:** [002-" in text
     assert "\n## #1 · 12/20/25 · 12:00–12:01 · 1 min\n<!-- session: 20251220-120000 -->\n\n*This session’s recording" in text
     assert "\n## First Glimpse\n*12/01/25 · 23:00–00:10 · 1 h 10 min*\n" in text
-    assert "![](20260301-211500.png)\n\n*Frames from the recording*\n\n![](attachments/20260301-210000-1.png)\n![](attachments/frames/frame-20260301-210000-02.jpg)\n" in text
+    assert (
+        "![](20260301-211500.png)\n\n*Frames from the recording*\n\n![](attachments/20260301-210000-1.png)\n![](attachments/frames/frame-20260301-210000-02.jpg)\n"
+        in text
+    )
 
 
 def test_codex_exec_arguments(tmp_path, monkeypatch):
     calls = []
-    answer = {"title": "Into the Dome", "body": "You did things.\n\n- **Boss:** Beat it.", "next": "Go on.",
-              "images": {"gallery": [2, 1], "unusable": []},
-              "memory": {"synopsis": "s", "entities": {"characters": [], "places": [], "bosses": []}, "language": "en", "profile": "narrative"}}
+    answer = {
+        "title": "Into the Dome",
+        "body": "You did things.\n\n- **Boss:** Beat it.",
+        "next": "Go on.",
+        "images": {"gallery": [2, 1], "unusable": []},
+        "memory": {"synopsis": "s", "entities": {"characters": [], "places": [], "bosses": []}, "language": "en", "profile": "narrative"},
+    }
 
     def fake_run(args, **kw):
         calls.append((args, kw))
@@ -398,13 +499,49 @@ def test_codex_exec_arguments(tmp_path, monkeypatch):
     assert out == answer
     args, kw = calls[0]
     schema, outp = str(tmp_path / "schema.json"), str(tmp_path / "entry.json")
-    assert args[:-1] == ["codex", "exec", "--json", "--skip-git-repo-check", "--ignore-user-config", "--disable", "browser_use", "--disable", "computer_use",
-                         "--ephemeral", "-C", str(tmp_path), "-s", "read-only", "-c", "approval_policy=never", "-c", "model=gpt-5.6-sol",
-                         "-c", "model_reasoning_effort=high", "-c", "model_verbosity=medium", "-c", "project_doc_max_bytes=0",
-                         "-c", "tools.web_search=true", "-c", "mcp_servers={}", "-i", "/tmp/a.png", "-i", "/tmp/b.png",
-                         "--output-schema", schema, "-o", outp]
+    assert args[:-1] == [
+        "codex",
+        "exec",
+        "--json",
+        "--skip-git-repo-check",
+        "--ignore-user-config",
+        "--disable",
+        "browser_use",
+        "--disable",
+        "computer_use",
+        "--ephemeral",
+        "-C",
+        str(tmp_path),
+        "-s",
+        "read-only",
+        "-c",
+        "approval_policy=never",
+        "-c",
+        "model=gpt-5.6-sol",
+        "-c",
+        "model_reasoning_effort=high",
+        "-c",
+        "model_verbosity=medium",
+        "-c",
+        "project_doc_max_bytes=0",
+        "-c",
+        "tools.web_search=true",
+        "-c",
+        "mcp_servers={}",
+        "-i",
+        "/tmp/a.png",
+        "-i",
+        "/tmp/b.png",
+        "--output-schema",
+        schema,
+        "-o",
+        outp,
+    ]
     assert args[-1].startswith(pr.SYSTEM_PROMPT + "\n\n---\n\nGame: Test\nSession: 2026-09-11, 12:00 to 12:30 (30 min)\nHistory: 1st session")
-    assert "- image 1: image auto-extracted from the recording, around 12:01\n- image 2: image auto-extracted from the recording, FINAL MOMENTS of the session, around 12:02" in args[-1]
+    assert (
+        "- image 1: image auto-extracted from the recording, around 12:01\n- image 2: image auto-extracted from the recording, FINAL MOMENTS of the session, around 12:02"
+        in args[-1]
+    )
     assert kw["cwd"] == str(tmp_path) and kw["timeout"] == providers.TIMEOUT_S
     assert json.loads(Path(schema).read_text()) == pr.OUTPUT_SCHEMA
 
@@ -434,13 +571,19 @@ def test_codex_quota_wall_and_retry(tmp_path, monkeypatch):
     assert info.value.until == datetime(2026, 9, 27, 15, 40)
 
     def chatty(args, **kw):
-        return subprocess.CompletedProcess(args, 1, '{"type":"turn.failed","error":{"message":"stream disconnected"}}\n', "the tool output said: you hit your usage limit")
+        return subprocess.CompletedProcess(
+            args, 1, '{"type":"turn.failed","error":{"message":"stream disconnected"}}\n', "the tool output said: you hit your usage limit"
+        )
 
     monkeypatch.setattr(providers.subprocess, "run", chatty)
     assert providers.run_codex("m", "brief", [], str(tmp_path)) is None, "a limit mentioned outside the failure event is not the wall"
 
-    assert providers.limit_reset_from({"rateLimits": {"primary": {"usedPercent": 100, "resetsAt": 1700000000}, "secondary": {"usedPercent": 100, "resetsAt": 1700003600}}}) == datetime.fromtimestamp(1700003600)
-    assert providers.limit_reset_from({"rateLimits": {"primary": {"usedPercent": 100, "resetsAt": 1700003600}, "secondary": {"usedPercent": 5, "resetsAt": 1700900000}}}) == datetime.fromtimestamp(1700003600)
+    assert providers.limit_reset_from(
+        {"rateLimits": {"primary": {"usedPercent": 100, "resetsAt": 1700000000}, "secondary": {"usedPercent": 100, "resetsAt": 1700003600}}}
+    ) == datetime.fromtimestamp(1700003600)
+    assert providers.limit_reset_from(
+        {"rateLimits": {"primary": {"usedPercent": 100, "resetsAt": 1700003600}, "secondary": {"usedPercent": 5, "resetsAt": 1700900000}}}
+    ) == datetime.fromtimestamp(1700003600)
     assert providers.limit_reset_from({"rateLimits": {"primary": {"usedPercent": 12, "resetsAt": 1700003600}}}) is None
     assert providers.limit_reset_from(None) is None
 
@@ -456,12 +599,30 @@ def test_codex_quota_wall_and_retry(tmp_path, monkeypatch):
 
 def test_acceptance_of_model_fields():
     assert pr.accept_result({"body": "Je vais vérifier les noms.", "next": "x"}) is None
-    r = pr.accept_result({"title": '"The Dome — Again."', "body": "Voici le résumé de la session :\nTu as fait X — puis Y.\n\n**Reprise :** Continue.", "next": "**Next up:** Go on – now."})
+    r = pr.accept_result(
+        {
+            "title": '"The Dome — Again."',
+            "body": "Voici le résumé de la session :\nTu as fait X — puis Y.\n\n**Reprise :** Continue.",
+            "next": "**Next up:** Go on – now.",
+        }
+    )
     assert r["title"] == "The Dome, Again" and r["body"] == "Tu as fait X, puis Y." and r["next"] == "Go on, now."
     assert pr.paragraphs_from_body("Intro.\nMore.\n\n- a\n* b\n\nOutro.") == ["Intro. More.", "- a", "- b", "Outro."]
-    merged = pr.merge_memory({"synopsis": "A long synopsis about the whole story so far.", "entities": {"characters": ["Zach"], "places": [], "bosses": []}, "language": "en", "profile": "narrative"},
-                             {"synopsis": "Short.", "entities": {"characters": ["zach", "Amelia"], "places": ["Ophir"], "bosses": []}, "language": "french", "profile": "arcade"})
-    assert merged == {"synopsis": "A long synopsis about the whole story so far.", "entities": {"characters": ["Zach", "Amelia"], "places": ["Ophir"], "bosses": []}, "language": "fr", "profile": "narrative"}
+    merged = pr.merge_memory(
+        {
+            "synopsis": "A long synopsis about the whole story so far.",
+            "entities": {"characters": ["Zach"], "places": [], "bosses": []},
+            "language": "en",
+            "profile": "narrative",
+        },
+        {"synopsis": "Short.", "entities": {"characters": ["zach", "Amelia"], "places": ["Ophir"], "bosses": []}, "language": "french", "profile": "arcade"},
+    )
+    assert merged == {
+        "synopsis": "A long synopsis about the whole story so far.",
+        "entities": {"characters": ["Zach", "Amelia"], "places": ["Ophir"], "bosses": []},
+        "language": "fr",
+        "profile": "narrative",
+    }
 
 
 def run_choices(tmp_path, settings, codex_body):
@@ -470,15 +631,17 @@ def run_choices(tmp_path, settings, codex_body):
     write_shim(bindir / "codex", codex_body)
     env = dict(os.environ)
     env.update({"PATH": f"{bindir}:{env.get('PATH', '')}", "MODULE_SETTINGS_JSON": json.dumps(settings)})
-    return subprocess.run([sys.executable, str(BIN_DIR / "choices"), "model"], env=env, capture_output=True, text=True)
+    return subprocess.run([sys.executable, str(BIN_DIR / "choices"), "model"], env=env, capture_output=True, text=True, check=False)
 
 
 def test_choices_lists_the_providers_models(tmp_path):
-    catalog = {"models": [
-        {"slug": "gpt-5.6-sol", "visibility": "list", "priority": 4},
-        {"slug": "gpt-reserve", "visibility": "hide", "priority": 3},
-        {"slug": "gpt-6-astra", "visibility": "list", "priority": 1},
-    ]}
+    catalog = {
+        "models": [
+            {"slug": "gpt-5.6-sol", "visibility": "list", "priority": 4},
+            {"slug": "gpt-reserve", "visibility": "hide", "priority": 3},
+            {"slug": "gpt-6-astra", "visibility": "list", "priority": 1},
+        ]
+    }
     res = run_choices(tmp_path, {"provider": "codex"}, f"[ \"$1 $2\" = 'debug models' ] || exit 2\necho '{json.dumps(catalog)}'\nexit 0")
     assert res.returncode == 0, res.stderr
     assert json.loads(res.stdout) == ["gpt-6-astra", "gpt-5.6-sol"]

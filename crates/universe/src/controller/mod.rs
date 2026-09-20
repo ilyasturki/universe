@@ -241,7 +241,14 @@ const FAMILIES: [Family; 8] = [
         name_hints: &["dualsense edge"],
     },
     Family { id: "dualsense", name: "DualSense", standard: &SONY, extras: &[], ids: &[(0x054c, 0x0ce6)], name_hints: &["dualsense"] },
-    Family { id: "dualshock4", name: "DualShock 4", standard: &SONY_DS4, extras: &[], ids: &[(0x054c, 0x05c4), (0x054c, 0x09cc), (0x054c, 0x0ba0)], name_hints: &["dualshock", "wireless controller"] },
+    Family {
+        id: "dualshock4",
+        name: "DualShock 4",
+        standard: &SONY_DS4,
+        extras: &[],
+        ids: &[(0x054c, 0x05c4), (0x054c, 0x09cc), (0x054c, 0x0ba0)],
+        name_hints: &["dualshock", "wireless controller"],
+    },
     Family {
         id: "xbox-elite",
         name: "Xbox Elite Series 2",
@@ -255,8 +262,22 @@ const FAMILIES: [Family; 8] = [
         ids: &[(0x045e, 0x0b00), (0x045e, 0x0b05), (0x045e, 0x0b22)],
         name_hints: &["elite"],
     },
-    Family { id: "xbox", name: "Xbox", standard: &XBOX, extras: &[extra("share", "Share", &["BTN_TRIGGER_HAPPY1", "KEY_RECORD"])], ids: &[(0x045e, 0)], name_hints: &["xbox", "microsoft", "x-box"] },
-    Family { id: "switch-pro", name: "Switch Pro", standard: &SWITCH, extras: &[extra("capture", "Capture", &["BTN_Z"])], ids: &[(0x057e, 0x2009), (0x057e, 0x2017)], name_hints: &["pro controller", "nintendo"] },
+    Family {
+        id: "xbox",
+        name: "Xbox",
+        standard: &XBOX,
+        extras: &[extra("share", "Share", &["BTN_TRIGGER_HAPPY1", "KEY_RECORD"])],
+        ids: &[(0x045e, 0)],
+        name_hints: &["xbox", "microsoft", "x-box"],
+    },
+    Family {
+        id: "switch-pro",
+        name: "Switch Pro",
+        standard: &SWITCH,
+        extras: &[extra("capture", "Capture", &["BTN_Z"])],
+        ids: &[(0x057e, 0x2009), (0x057e, 0x2017)],
+        name_hints: &["pro controller", "nintendo"],
+    },
     Family {
         id: "8bitdo-pro-3",
         name: "8BitDo Pro 3",
@@ -417,7 +438,11 @@ mod tests {
         assert_eq!(detect_family(0x054c, 0x0ce6, "Sony Interactive Entertainment DualSense Wireless Controller", &[]).id, "dualsense");
         assert_eq!(detect_family(0x045e, 0x0b22, "Xbox Wireless Controller", &[]).id, "xbox-elite");
         assert_eq!(detect_family(0x045e, 0x0b12, "Xbox Wireless Controller", &[0x130]).id, "xbox");
-        assert_eq!(detect_family(0x045e, 0x028e, "Xbox Wireless Controller", &[0x130, 548, 549, 550, 551]).id, "xbox-elite", "xpadneo's identity for an Elite: the grips give it away");
+        assert_eq!(
+            detect_family(0x045e, 0x028e, "Xbox Wireless Controller", &[0x130, 548, 549, 550, 551]).id,
+            "xbox-elite",
+            "xpadneo's identity for an Elite: the grips give it away"
+        );
         assert_eq!(detect_family(0x045e, 0x028e, "Xbox Wireless Controller", &[0x130, 708]).id, "xbox-elite", "xpad over USB");
         assert_eq!(detect_family(0x2dc8, 0x6009, "8BitDo Pro 3", &[]).id, "8bitdo-pro-3");
         assert_eq!(detect_family(0x1234, 0x0001, "Some Pad", &[]).id, "generic");
@@ -489,17 +514,59 @@ mod tests {
 
     #[test]
     fn macro_validation() {
-        assert!(Macro { family: "dualsense-edge".into(), button: "paddle_left".into(), trigger: "press".into(), action: "screenshot".into(), ..Macro::default() }.validate().is_ok());
-        assert!(Macro { family: "*".into(), button: "start".into(), trigger: "press".into(), action: "stop".into(), ..Macro::default() }.validate().is_err(), "stop is hold only");
-        assert!(Macro { family: "*".into(), button: "guide".into(), trigger: "hold".into(), action: "stop".into(), ..Macro::default() }.validate().is_err(), "Guide is HOME");
-        assert!(Macro { family: "*".into(), button: "paddle_left".into(), trigger: "press".into(), action: "mute".into(), ..Macro::default() }.validate().is_err(), "paddles are not standard");
-        assert!(Macro { family: "xbox".into(), button: "share".into(), trigger: "press".into(), action: "keys".into(), keys: "Ctrl+Shift+F12".into(), ..Macro::default() }.validate().is_ok());
-        assert!(Macro { family: "xbox".into(), button: "share".into(), trigger: "press".into(), action: "keys".into(), keys: "Ctrl+Nope".into(), ..Macro::default() }.validate().is_err());
+        assert!(Macro {
+            family: "dualsense-edge".into(),
+            button: "paddle_left".into(),
+            trigger: "press".into(),
+            action: "screenshot".into(),
+            ..Macro::default()
+        }
+        .validate()
+        .is_ok());
+        assert!(
+            Macro { family: "*".into(), button: "start".into(), trigger: "press".into(), action: "stop".into(), ..Macro::default() }.validate().is_err(),
+            "stop is hold only"
+        );
+        assert!(
+            Macro { family: "*".into(), button: "guide".into(), trigger: "hold".into(), action: "stop".into(), ..Macro::default() }.validate().is_err(),
+            "Guide is HOME"
+        );
+        assert!(
+            Macro { family: "*".into(), button: "paddle_left".into(), trigger: "press".into(), action: "mute".into(), ..Macro::default() }.validate().is_err(),
+            "paddles are not standard"
+        );
+        assert!(Macro {
+            family: "xbox".into(),
+            button: "share".into(),
+            trigger: "press".into(),
+            action: "keys".into(),
+            keys: "Ctrl+Shift+F12".into(),
+            ..Macro::default()
+        }
+        .validate()
+        .is_ok());
+        assert!(Macro {
+            family: "xbox".into(),
+            button: "share".into(),
+            trigger: "press".into(),
+            action: "keys".into(),
+            keys: "Ctrl+Nope".into(),
+            ..Macro::default()
+        }
+        .validate()
+        .is_err());
     }
 
     #[test]
     fn macro_toml_round_trip() {
-        let list = vec![Macro { family: "xbox".into(), button: "share".into(), trigger: "hold".into(), action: "command".into(), command: "notify-send hi".into(), ..Macro::default() }];
+        let list = vec![Macro {
+            family: "xbox".into(),
+            button: "share".into(),
+            trigger: "hold".into(),
+            action: "command".into(),
+            command: "notify-send hi".into(),
+            ..Macro::default()
+        }];
         let mut doc = toml_edit::DocumentMut::new();
         controller_table(&mut doc)["macros"] = toml_edit::Item::ArrayOfTables(macros_to_toml(&list));
         let text = doc.to_string();

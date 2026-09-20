@@ -20,15 +20,43 @@ FocusScope {
     readonly property Item menuAnchor: onBadge ? badge : null
 
     signal tabRequested(int index)
-    signal searchRequested()
-    signal resumeRequested()
+    signal searchRequested
+    signal resumeRequested
     signal menuRequested(var game, Item anchor)
-    signal entered()
-    signal dismissed()
+    signal entered
+    signal dismissed
 
-    readonly property var hints: onBadge
-        ? [ { glyph: "A", label: "Resume" }, { glyph: "B", label: "Back" }, { glyph: "≡", label: "Options" }, { glyph: "LB RB", label: "Tabs" } ]
-        : [ { glyph: "A", label: onSearch ? "Search" : "Open" }, { glyph: "B", label: "Back" }, { glyph: "LB RB", label: "Tabs" } ]
+    readonly property var hints: onBadge ? [
+        {
+            glyph: "A",
+            label: "Resume"
+        },
+        {
+            glyph: "B",
+            label: "Back"
+        },
+        {
+            glyph: "≡",
+            label: "Options"
+        },
+        {
+            glyph: "LB RB",
+            label: "Tabs"
+        }
+    ] : [
+        {
+            glyph: "A",
+            label: onSearch ? "Search" : "Open"
+        },
+        {
+            glyph: "B",
+            label: "Back"
+        },
+        {
+            glyph: "LB RB",
+            label: "Tabs"
+        }
+    ]
 
     implicitHeight: Theme.dp(Theme.tabBarHeight)
 
@@ -69,12 +97,12 @@ FocusScope {
     Keys.onLeftPressed: root.step(-1)
     Keys.onRightPressed: root.step(1)
     Keys.onUpPressed: Sound.edge()
-    Keys.onDownPressed: function(event) {
+    Keys.onDownPressed: function (event) {
         Sound.panel();
         root.entered();
     }
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         if (event.isAutoRepeat)
             return;
         if (api.keys.isAccept(event)) {
@@ -123,11 +151,39 @@ FocusScope {
         visible: opacity > 0.01
 
         // Unseen moves (a tab switched from the page) land at once, or they'd play on the way in.
-        Behavior on x { enabled: frame.visible; Ease { duration: Theme.durNudge; easing.type: Easing.OutQuint } }
-        Behavior on y { enabled: frame.visible; Ease { duration: Theme.durNudge; easing.type: Easing.OutQuint } }
-        Behavior on width { enabled: frame.visible; Ease { duration: Theme.durNudge; easing.type: Easing.OutQuint } }
-        Behavior on height { enabled: frame.visible; Ease { duration: Theme.durNudge; easing.type: Easing.OutQuint } }
-        Behavior on opacity { Ease { duration: Theme.durQuick } }
+        Behavior on x {
+            enabled: frame.visible
+            Ease {
+                duration: Theme.durNudge
+                easing.type: Easing.OutQuint
+            }
+        }
+        Behavior on y {
+            enabled: frame.visible
+            Ease {
+                duration: Theme.durNudge
+                easing.type: Easing.OutQuint
+            }
+        }
+        Behavior on width {
+            enabled: frame.visible
+            Ease {
+                duration: Theme.durNudge
+                easing.type: Easing.OutQuint
+            }
+        }
+        Behavior on height {
+            enabled: frame.visible
+            Ease {
+                duration: Theme.durNudge
+                easing.type: Easing.OutQuint
+            }
+        }
+        Behavior on opacity {
+            Ease {
+                duration: Theme.durQuick
+            }
+        }
 
         Rectangle {
             anchors.fill: parent
@@ -154,8 +210,14 @@ FocusScope {
         Repeater {
             id: tabRepeater
             model: root.tabs
-            onCountChanged: { underline.retarget(); frame.retarget(); }
-            onItemAdded: { underline.retarget(); frame.retarget(); }
+            onCountChanged: {
+                underline.retarget();
+                frame.retarget();
+            }
+            onItemAdded: {
+                underline.retarget();
+                frame.retarget();
+            }
 
             Text {
                 readonly property bool active: index === root.currentIndex
@@ -166,7 +228,11 @@ FocusScope {
                 font.weight: active ? Font.DemiBold : Font.Medium
                 font.pixelSize: Theme.dp(25)
 
-                Behavior on color { ColorEase { duration: Theme.durBase } }
+                Behavior on color {
+                    ColorEase {
+                        duration: Theme.durBase
+                    }
+                }
             }
         }
     }
@@ -178,8 +244,7 @@ FocusScope {
         readonly property real baseWidth: Theme.dp(100)
 
         function retarget() {
-            target = (root.currentIndex >= 0 && root.currentIndex < tabRepeater.count)
-                     ? tabRepeater.itemAt(root.currentIndex) : null;
+            target = (root.currentIndex >= 0 && root.currentIndex < tabRepeater.count) ? tabRepeater.itemAt(root.currentIndex) : null;
         }
 
         Component.onCompleted: retarget()
@@ -190,7 +255,11 @@ FocusScope {
         antialiasing: true
         opacity: root.activeFocus && root.index === root.currentIndex ? 0.0 : 1.0
 
-        Behavior on opacity { Ease { duration: Theme.durQuick } }
+        Behavior on opacity {
+            Ease {
+                duration: Theme.durQuick
+            }
+        }
 
         anchors.top: labels.bottom
         anchors.topMargin: Theme.dp(8)
@@ -200,10 +269,20 @@ FocusScope {
             origin.x: 0
             xScale: underline.target ? underline.target.width / underline.baseWidth : 1
 
-            Behavior on xScale { Ease { duration: Theme.durNudge; easing.type: Easing.OutQuint } }
+            Behavior on xScale {
+                Ease {
+                    duration: Theme.durNudge
+                    easing.type: Easing.OutQuint
+                }
+            }
         }
 
-        Behavior on x { Ease { duration: Theme.durNudge; easing.type: Easing.OutQuint } }
+        Behavior on x {
+            Ease {
+                duration: Theme.durNudge
+                easing.type: Easing.OutQuint
+            }
+        }
     }
 
     Row {
@@ -226,8 +305,16 @@ FocusScope {
             SequentialAnimation on opacity {
                 running: journalMark.visible
                 loops: Animation.Infinite
-                NumberAnimation { to: 0.35; duration: 900; easing.type: Easing.InOutQuad }
-                NumberAnimation { to: 1.0; duration: 900; easing.type: Easing.InOutQuad }
+                NumberAnimation {
+                    to: 0.35
+                    duration: 900
+                    easing.type: Easing.InOutQuad
+                }
+                NumberAnimation {
+                    to: 1.0
+                    duration: 900
+                    easing.type: Easing.InOutQuad
+                }
             }
         }
 
@@ -244,7 +331,11 @@ FocusScope {
             kind: "search"
             tint: root.activeFocus && root.onSearch ? Theme.text : Theme.textTab
 
-            Behavior on opacity { Ease { duration: Theme.durView } }
+            Behavior on opacity {
+                Ease {
+                    duration: Theme.durView
+                }
+            }
         }
 
         SessionBadge {

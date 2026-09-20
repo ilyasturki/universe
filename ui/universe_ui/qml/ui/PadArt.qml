@@ -29,7 +29,9 @@ Item {
 
         Connections {
             target: art
-            function onGeoChanged() { body.requestPaint(); }
+            function onGeoChanged() {
+                body.requestPaint();
+            }
         }
 
         onPaint: {
@@ -124,21 +126,38 @@ Item {
         readonly property color onDown: Theme.onLight
 
         property real glow: down ? 1.0 : 0.0
-        Behavior on glow { Ease { duration: button.down ? 30 : Theme.durQuick } }
-        Behavior on leanX { NumberAnimation { duration: 60 } }
-        Behavior on leanY { NumberAnimation { duration: 60 } }
-        Behavior on pull { NumberAnimation { duration: 60 } }
+        Behavior on glow {
+            Ease {
+                duration: button.down ? 30 : Theme.durQuick
+            }
+        }
+        Behavior on leanX {
+            NumberAnimation {
+                duration: 60
+            }
+        }
+        Behavior on leanY {
+            NumberAnimation {
+                duration: 60
+            }
+        }
+        Behavior on pull {
+            NumberAnimation {
+                duration: 60
+            }
+        }
 
         x: art.ox + box.x * art.k - margin
         y: art.oy + box.y * art.k - margin
         width: box.w * art.k + margin * 2
         height: box.h * art.k + margin * 2
 
-        function mix(a, b, t) { return Qt.rgba(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t, a.a + (b.a - a.a) * t); }
+        function mix(a, b, t) {
+            return Qt.rgba(a.r + (b.r - a.r) * t, a.g + (b.g - a.g) * t, a.b + (b.b - a.b) * t, a.a + (b.a - a.a) * t);
+        }
 
         // A trigger's mark goes dark once its pull has filled past the middle, where the mark sits.
-        readonly property color markColor: mix(Qt.rgba(Theme.text.r, Theme.text.g, Theme.text.b, ink), onDown,
-                                               spec.kind === "trigger" ? Math.max(glow, pull >= 0.5 ? 1 : 0) : glow)
+        readonly property color markColor: mix(Qt.rgba(Theme.text.r, Theme.text.g, Theme.text.b, ink), onDown, spec.kind === "trigger" ? Math.max(glow, pull >= 0.5 ? 1 : 0) : glow)
         readonly property real lean: 0.5
 
         readonly property var repaintKey: [glow, lit, learning, missing, learning ? art.pulse : 0, pull, leanX, leanY, art.k, glyph]
@@ -194,7 +213,9 @@ Item {
                 var cx = w / 2, cy = h / 2;
                 if (s.kind === "face") {
                     var r = s.r * k;
-                    paintPath(function() { Draw.circle(ctx, cx, cy, r); });
+                    paintPath(function () {
+                        Draw.circle(ctx, cx, cy, r);
+                    });
                 } else if (s.kind === "stick") {
                     var R = s.r * k;
                     ctx.fillStyle = Qt.rgba(white.r, white.g, white.b, 0.05);
@@ -205,7 +226,9 @@ Item {
                     ctx.stroke();
                     var lean = R * button.lean;
                     var px = cx + button.leanX * lean, py = cy + button.leanY * lean;
-                    paintPath(function() { Draw.circle(ctx, px, py, R * 0.66); });
+                    paintPath(function () {
+                        Draw.circle(ctx, px, py, R * 0.66);
+                    });
                     ctx.beginPath();
                     ctx.arc(px, py, R * 0.42, 0, Math.PI * 2);
                     ctx.strokeStyle = button.mix(Qt.rgba(white.r, white.g, white.b, 0.18), button.onDown, g * 0.6);
@@ -216,7 +239,7 @@ Item {
                     var dx = s.dir === "left" ? -1 : s.dir === "right" ? 1 : 0;
                     var dy = s.dir === "up" ? -1 : s.dir === "down" ? 1 : 0;
                     if (s.split) {
-                        paintPath(function() {
+                        paintPath(function () {
                             var len = l - gap - a * 0.5;
                             var bx = cx + dx * (gap + a * 0.5 + len / 2), by = cy + dy * (gap + a * 0.5 + len / 2);
                             var bw = dx !== 0 ? len : a, bh = dy !== 0 ? len : a;
@@ -242,7 +265,9 @@ Item {
                     ctx.stroke();
                 } else if (s.kind === "trigger") {
                     var tw = s.w * k, th = s.h * k;
-                    var body = function() { Draw.roundRect(ctx, cx - tw / 2, cy - th / 2, tw, th, th * 0.32); };
+                    var body = function () {
+                        Draw.roundRect(ctx, cx - tw / 2, cy - th / 2, tw, th, th * 0.32);
+                    };
                     halo(body);
                     body();
                     ctx.fillStyle = Theme.ground;
@@ -263,7 +288,9 @@ Item {
                     ctx.stroke();
                 } else if (s.kind === "paddle") {
                     var pw = s.w * k, ph = s.h * k;
-                    paintPath(function() { Draw.paddle(ctx, cx, m, pw, ph); });
+                    paintPath(function () {
+                        Draw.paddle(ctx, cx, m, pw, ph);
+                    });
                 } else {
                     var bw2 = s.w * k, bh2 = s.h * k;
                     var rr = s.round ? Math.min(bw2, bh2) / 2 : s.kind === "bumper" ? bh2 * 0.45 : Math.min(bw2, bh2) * 0.3;
@@ -273,7 +300,9 @@ Item {
                         ctx.rotate(s.angle * Math.PI / 180);
                         ctx.translate(-cx, -cy);
                     }
-                    paintPath(function() { Draw.roundRect(ctx, cx - bw2 / 2, cy - bh2 / 2, bw2, bh2, rr); });
+                    paintPath(function () {
+                        Draw.roundRect(ctx, cx - bw2 / 2, cy - bh2 / 2, bw2, bh2, rr);
+                    });
                     ctx.restore();
                 }
 
@@ -302,11 +331,7 @@ Item {
             color: button.markColor
             font.family: Theme.sans
             font.weight: Font.DemiBold
-            font.pixelSize: Math.max(8, Math.round((button.spec.kind === "face" ? button.spec.r * 1.05
-                : button.spec.kind === "stick" ? button.spec.r * 0.42
-                : button.spec.kind === "paddle" ? button.spec.w * 0.42
-                : button.spec.kind === "arm" ? 10
-                : Math.min(button.spec.w, button.spec.h) * (button.glyph.text.length > 1 ? 0.62 : 0.8)) * art.k))
+            font.pixelSize: Math.max(8, Math.round((button.spec.kind === "face" ? button.spec.r * 1.05 : button.spec.kind === "stick" ? button.spec.r * 0.42 : button.spec.kind === "paddle" ? button.spec.w * 0.42 : button.spec.kind === "arm" ? 10 : Math.min(button.spec.w, button.spec.h) * (button.glyph.text.length > 1 ? 0.62 : 0.8)) * art.k))
         }
     }
 

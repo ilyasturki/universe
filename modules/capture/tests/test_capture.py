@@ -38,12 +38,17 @@ def fakebin(tmp_path):
     logs.mkdir()
 
     _write_shim(bindir / "systemd-run", f'printf "%s\\n" "$@" > "{logs}/systemd-run.args"\nexit 0\n')
-    _write_shim(bindir / "systemctl", f'''printf "%s\\n" "$@" >> "{logs}/systemctl.args"
+    _write_shim(
+        bindir / "systemctl",
+        f'''printf "%s\\n" "$@" >> "{logs}/systemctl.args"
 case "$*" in
   *FreezerState*) echo "${{FAKE_FREEZER_STATE:-running}}";;
 esac
-exit "${{FAKE_KILL_EXIT:-0}}"''')
-    _write_shim(bindir / "universe", f'''printf "%s\\n" "$@" >> "{logs}/universe.args"
+exit "${{FAKE_KILL_EXIT:-0}}"''',
+    )
+    _write_shim(
+        bindir / "universe",
+        f'''printf "%s\\n" "$@" >> "{logs}/universe.args"
 if [ "${{FAKE_UNIVERSE_EXIT:-0}}" != "0" ]; then echo "universe: unavailable: no shell" >&2; exit "${{FAKE_UNIVERSE_EXIT}}"; fi
 case "$1" in
   screen-mode) hz="${{FAKE_REFRESH:-}}"; [ -n "$hz" ] || {{ [ "$2" = HDMI-A-1 ] && hz=60 || hz=120; }}
@@ -51,24 +56,33 @@ case "$1" in
   session-window) echo "${{FAKE_WINDOW_JSON:-null}}"; exit 0;;
 esac
 echo "/mnt/recordings/games/fake/session.mkv"
-exit 0''')
+exit 0''',
+    )
     _write_shim(bindir / "ffprobe", 'echo "${FAKE_DURATION:-300}"\nexit 0\n')
-    _write_shim(bindir / "busctl", f'''printf "%s\\n" "$@" >> "{logs}/busctl.args"
+    _write_shim(
+        bindir / "busctl",
+        f'''printf "%s\\n" "$@" >> "{logs}/busctl.args"
 case "$*" in
   *NameHasOwner*) echo "{{\\"type\\":\\"b\\",\\"data\\":[${{FAKE_NAME_OWNED:-false}}]}}"; exit 0;;
   *EnableExtension*) echo "{{\\"type\\":\\"b\\",\\"data\\":[${{FAKE_NAME_OWNED:-false}}]}}"; exit 0;;
   *" Screenshot "*) [ "${{FAKE_SHOT_OK:-true}}" = true ] && echo fake > "$9"; echo "{{\\"type\\":\\"b\\",\\"data\\":[${{FAKE_SHOT_OK:-true}}]}}"; exit 0;;
 esac
-exit 0''')
-    _write_shim(bindir / "gsr-cli", f'''printf "%s\\n" "$@" >> "{logs}/gsr-cli.args"
+exit 0''',
+    )
+    _write_shim(
+        bindir / "gsr-cli",
+        f'''printf "%s\\n" "$@" >> "{logs}/gsr-cli.args"
 case "$3" in
   status) exit "${{FAKE_RECORDER_DOWN:-0}}";;
   set-paused) [ "${{FAKE_PAUSE_EXIT:-0}}" = 0 ] || {{ echo "error: no recording" >&2; exit "$FAKE_PAUSE_EXIT"; }}; exit 0;;
   stop) [ -z "${{FAKE_STOP_PATH:-}}" ] && {{ echo "error: not running" >&2; exit 1; }}; echo "$FAKE_STOP_PATH"; exit 0;;
 esac
-exit 0''')
+exit 0''',
+    )
     _write_shim(bindir / "trash", f'printf "%s\\n" "$@" > "{logs}/trash.args"\nrm -f "$1"\nexit 0\n')
-    _write_shim(bindir / "gpu-screen-recorder", f'''if [ "$1" = "--info" ]; then
+    _write_shim(
+        bindir / "gpu-screen-recorder",
+        f'''if [ "$1" = "--info" ]; then
   printf "section=gpu_info\\nvendor|amd\\nsection=video_codecs\\n%s\\nsection=capture_options\\nDP-1|3840x2160\\n" "${{FAKE_CODECS-h264
 hevc
 hevc_10bit
@@ -80,7 +94,8 @@ printf "%s\\n" "$@" >> "{logs}/gsr.args"
 for ((i=1; i<=$#; i++)); do
   if [ "${{!i}}" = "-o" ]; then j=$((i+1)); echo fake > "${{!j}}"; [ -n "${{FAKE_FIRST_FRAME_US:-}}" ] && printf "monotonic_microsec realtime_microsec\\n1000 %s\\n" "$FAKE_FIRST_FRAME_US" > "${{!j}}.ts"; fi
 done
-exit 0''')
+exit 0''',
+    )
     return {"bin": bindir, "logs": logs}
 
 
@@ -113,7 +128,7 @@ def install_fake_extension(env):
 
 
 def run(script, env):
-    return subprocess.run([str(BIN_DIR / script)], env=env, capture_output=True, text=True, timeout=30)
+    return subprocess.run([str(BIN_DIR / script)], env=env, capture_output=True, text=True, timeout=30, check=False)
 
 
 def flag_values(args, flag):
@@ -125,9 +140,17 @@ def pending_path(tmp_path):
 
 
 def test_start_composes_gsr_command(tmp_path, fakebin):
-    env = env_for(tmp_path, fakebin, {
-        "enabled": True, "cursor": True, "codec": "hevc", "fps": 30, "audio": "output",
-    })
+    env = env_for(
+        tmp_path,
+        fakebin,
+        {
+            "enabled": True,
+            "cursor": True,
+            "codec": "hevc",
+            "fps": 30,
+            "audio": "output",
+        },
+    )
     result = run("start", env)
     assert result.returncode == 0, result.stderr
 
@@ -179,7 +202,7 @@ def test_fps_choices_stop_at_the_screens_refresh_rate(tmp_path, fakebin):
         env = env_for(tmp_path, fakebin, {}, extra=extra)
         if "SESSION_SCREEN" not in extra:
             del env["SESSION_SCREEN"]
-        result = subprocess.run([str(BIN_DIR / "choices"), "fps"], env=env, capture_output=True, text=True, timeout=30)
+        result = subprocess.run([str(BIN_DIR / "choices"), "fps"], env=env, capture_output=True, text=True, timeout=30, check=False)
         assert result.returncode == 0, result.stderr
         return json.loads(result.stdout)
 
@@ -199,7 +222,11 @@ def test_start_enabled_false_exits_early(tmp_path, fakebin):
 
 def test_pre_asks_gamescope_to_composite_only_for_a_window_recording(tmp_path, fakebin):
     env_file = tmp_path / "env"
-    for settings, want in (({"source": "window"}, "UNIVERSE_GAMESCOPE_ARGS=--force-composition\n"), ({"source": "screen"}, ""), ({"source": "window", "enabled": False}, "")):
+    for settings, want in (
+        ({"source": "window"}, "UNIVERSE_GAMESCOPE_ARGS=--force-composition\n"),
+        ({"source": "screen"}, ""),
+        ({"source": "window", "enabled": False}, ""),
+    ):
         env_file.write_text("")
         result = run("pre", env_for(tmp_path, fakebin, settings, {"UNIVERSE_ENV_FILE": str(env_file)}))
         assert result.returncode == 0, result.stderr
@@ -216,8 +243,7 @@ def _seed_pending(tmp_path):
 
 def test_stop_short_recording_is_trashed(tmp_path, fakebin):
     mkv = _seed_pending(tmp_path)
-    env = env_for(tmp_path, fakebin, {"min_duration_s": 240},
-                   extra={"FAKE_DURATION": "5"})
+    env = env_for(tmp_path, fakebin, {"min_duration_s": 240}, extra={"FAKE_DURATION": "5"})
     result = run("stop", env)
     assert result.returncode == 0, result.stderr
     assert (fakebin["logs"] / "trash.args").read_text().splitlines() == [str(mkv)]
@@ -227,8 +253,7 @@ def test_stop_short_recording_is_trashed(tmp_path, fakebin):
 
 def test_stop_long_recording_files_via_cli(tmp_path, fakebin):
     mkv = _seed_pending(tmp_path)
-    env = env_for(tmp_path, fakebin, {"min_duration_s": 240},
-                   extra={"FAKE_DURATION": "999"})
+    env = env_for(tmp_path, fakebin, {"min_duration_s": 240}, extra={"FAKE_DURATION": "999"})
     result = run("stop", env)
     assert result.returncode == 0, result.stderr
 
@@ -239,8 +264,7 @@ def test_stop_long_recording_files_via_cli(tmp_path, fakebin):
 
 def test_stop_cli_failure_leaves_file_and_exits_nonzero(tmp_path, fakebin):
     mkv = _seed_pending(tmp_path)
-    env = env_for(tmp_path, fakebin, {"min_duration_s": 240},
-                   extra={"FAKE_DURATION": "999", "FAKE_UNIVERSE_EXIT": "1"})
+    env = env_for(tmp_path, fakebin, {"min_duration_s": 240}, extra={"FAKE_DURATION": "999", "FAKE_UNIVERSE_EXIT": "1"})
     result = run("stop", env)
     assert result.returncode == 1
     assert "left in pending" in result.stderr
@@ -295,8 +319,12 @@ WINDOW_JSON = '{"id":7,"pid":4242,"wm_class":"gamescope","title":"Dead Cells","f
 
 
 def test_start_window_records_through_the_portal_once_the_window_is_up(tmp_path, fakebin):
-    env = env_for(tmp_path, fakebin, {"source": "window", "window_wait_s": 45},
-                  extra={"FAKE_NAME_OWNED": "true", "FAKE_WINDOW_JSON": WINDOW_JSON, "GAME_ID": "dead-cells"})
+    env = env_for(
+        tmp_path,
+        fakebin,
+        {"source": "window", "window_wait_s": 45},
+        extra={"FAKE_NAME_OWNED": "true", "FAKE_WINDOW_JSON": WINDOW_JSON, "GAME_ID": "dead-cells"},
+    )
     install_fake_extension(env)
     result = run("start", env)
     assert result.returncode == 0, result.stderr
@@ -313,8 +341,7 @@ def test_start_window_records_through_the_portal_once_the_window_is_up(tmp_path,
 
 
 def test_start_window_records_the_screen_when_no_window_shows_up(tmp_path, fakebin):
-    env = env_for(tmp_path, fakebin, {"source": "window", "window_wait_s": 0},
-                  extra={"FAKE_NAME_OWNED": "true", "GAME_ID": "dead-cells"})
+    env = env_for(tmp_path, fakebin, {"source": "window", "window_wait_s": 0}, extra={"FAKE_NAME_OWNED": "true", "GAME_ID": "dead-cells"})
     install_fake_extension(env)
     result = run("start", env)
     assert result.returncode == 0, result.stderr
@@ -325,8 +352,9 @@ def test_start_window_records_the_screen_when_no_window_shows_up(tmp_path, fakeb
 
 
 def test_start_window_records_the_screen_when_the_cli_has_no_shell(tmp_path, fakebin):
-    env = env_for(tmp_path, fakebin, {"source": "window", "window_wait_s": 0},
-                  extra={"FAKE_NAME_OWNED": "true", "FAKE_UNIVERSE_EXIT": "1", "GAME_ID": "dead-cells"})
+    env = env_for(
+        tmp_path, fakebin, {"source": "window", "window_wait_s": 0}, extra={"FAKE_NAME_OWNED": "true", "FAKE_UNIVERSE_EXIT": "1", "GAME_ID": "dead-cells"}
+    )
     install_fake_extension(env)
     result = run("start", env)
     assert result.returncode == 0, result.stderr
@@ -359,8 +387,8 @@ def test_extension_ready_guards(tmp_path, monkeypatch):
 def test_show_osd_passes_a_negative_level_past_busctl(tmp_path, fakebin):
     env = dict(os.environ, PATH=f"{fakebin['bin']}:{os.environ['PATH']}")
     result = subprocess.run(
-        [sys.executable, "-c", "import _common; _common.show_osd('Recording the screen')"],
-        cwd=BIN_DIR, env=env, capture_output=True, text=True)
+        [sys.executable, "-c", "import _common; _common.show_osd('Recording the screen')"], cwd=BIN_DIR, env=env, capture_output=True, text=True, check=False
+    )
     assert result.returncode == 0, result.stderr
     args = (fakebin["logs"] / "busctl.args").read_text().splitlines()
     assert args[args.index("ssd") + 1] == "--"
@@ -484,7 +512,9 @@ def test_stop_takes_started_at_from_the_first_frame(tmp_path, fakebin):
     first_frame = datetime.fromisoformat(before["started_at"]) + timedelta(hours=1)
     mkv = tmp_path / "data" / "pending" / f"{SESSION_ID}.mkv"
     mkv.write_bytes(b"x")
-    (tmp_path / "data" / "pending" / f"{SESSION_ID}.mkv.ts").write_text(f"monotonic_microsec realtime_microsec\n1000 {int(first_frame.timestamp() * 1_000_000)}\n")
+    (tmp_path / "data" / "pending" / f"{SESSION_ID}.mkv.ts").write_text(
+        f"monotonic_microsec realtime_microsec\n1000 {int(first_frame.timestamp() * 1_000_000)}\n"
+    )
     _write_shim(fakebin["bin"] / "universe", f'cp "$5" "{tmp_path}/handed.json"\necho filed\nexit 0')
     assert run("stop", dict(env, FAKE_STOP_PATH=str(mkv))).returncode == 0
     handed = json.loads((tmp_path / "handed.json").read_text())
@@ -524,7 +554,8 @@ def test_codec_auto_takes_the_best_the_card_encodes(fakebin, monkeypatch):
     assert flag_values(_common.gsr_args({"codec": "av1", "audio": "none"}, "DP-1", "/o.mkv"), "-k") == ["av1"], "a chosen codec is passed as is"
 
 
-def test_gsr_args_quality_presets_and_overrides():
+def test_gsr_args_quality_presets_and_overrides(fakebin, monkeypatch):
+    monkeypatch.setenv("PATH", f"{fakebin['bin']}:{os.environ.get('PATH', '')}")
     hevc = _common.gsr_args({"codec": "hevc", "quality": "high", "audio": "none"}, "DP-1", "/o.mkv")
     assert hevc[hevc.index("-ffmpeg-video-opts") + 1] == "rc_mode=QVBR;global_quality=27;b=10000000;maxrate=20000000;bufsize=40000000"
     raw = _common.gsr_args({"quality": "ultra", "ffmpeg_video_opts": "rc_mode=CQP;qp=20", "audio": "none"}, "DP-1", "/o.mkv")
@@ -533,13 +564,16 @@ def test_gsr_args_quality_presets_and_overrides():
 
 
 def test_gsr_args_container_size_audio_and_extra_args():
-    args = _common.gsr_args({"container": "mp4", "size": "2560x1440", "audio": "output", "audio_codec": "aac",
-                             "audio_bitrate": 160, "gsr_extra_args": "-cr full -keyint 2"}, "DP-1", "/o.mp4")
+    args = _common.gsr_args(
+        {"container": "mp4", "size": "2560x1440", "audio": "output", "audio_codec": "aac", "audio_bitrate": 160, "gsr_extra_args": "-cr full -keyint 2"},
+        "DP-1",
+        "/o.mp4",
+    )
     assert flag_values(args, "-c") == ["mp4"]
     assert flag_values(args, "-s") == ["2560x1440"]
     assert flag_values(args, "-ac") == ["aac"]
     assert flag_values(args, "-ab") == ["160"]
-    assert args[args.index("-cr"):] == ["-cr", "full", "-keyint", "2", "-o", "/o.mp4"]
+    assert args[args.index("-cr") :] == ["-cr", "full", "-keyint", "2", "-o", "/o.mp4"]
     plain = _common.gsr_args({"audio": "none"}, "DP-1", "/o.mkv")
     assert "-s" not in plain and "-ab" not in plain and "-a" not in plain and flag_values(plain, "-c") == ["mkv"]
     assert flag_values(plain, "-cursor") == ["no"]
@@ -571,7 +605,14 @@ def test_start_runs_the_recorder_under_record_with_the_hooks_env(tmp_path, fakeb
 
 def test_record_hands_a_portal_recording_to_gsr_as_is(tmp_path, fakebin):
     env = env_for(tmp_path, fakebin, {})
-    result = subprocess.run([str(BIN_DIR / "record"), "--", "gpu-screen-recorder", "-w", "portal", "-o", str(tmp_path / "out.mkv")], env=env, capture_output=True, text=True, timeout=30, check=False)
+    result = subprocess.run(
+        [str(BIN_DIR / "record"), "--", "gpu-screen-recorder", "-w", "portal", "-o", str(tmp_path / "out.mkv")],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
     assert result.returncode == 0, result.stderr
     assert (fakebin["logs"] / "gsr.args").read_text().splitlines() == ["-w", "portal", "-o", str(tmp_path / "out.mkv")]
     assert not (tmp_path / "data").exists(), "no supervision, no timeline"
@@ -591,7 +632,9 @@ finally:
 def livebin(fakebin):
     """A recorder that runs until `gsr-cli stop`, as the real one does, plus the DRM tree the supervisor polls."""
     logs = fakebin["logs"]
-    _write_shim(fakebin["bin"] / "gpu-screen-recorder", f'''printf "%s\\n" "$@" >> "{logs}/gsr.args"
+    _write_shim(
+        fakebin["bin"] / "gpu-screen-recorder",
+        f'''printf "%s\\n" "$@" >> "{logs}/gsr.args"
 out=; for ((i=1; i<=$#; i++)); do [ "${{!i}}" = -o ] && {{ j=$((i+1)); out="${{!j}}"; }}; done
 if [ -e "{logs}/gsr.fail" ]; then echo "monitor not found" >&2; exit 3; fi
 echo fake > "$out"
@@ -600,14 +643,18 @@ echo "$out" > "{logs}/gsr.current"
 trap 'exit 0' TERM
 while [ ! -e "$out.stopflag" ]; do sleep 0.05; done
 rm -f "$out.stopflag"
-exit 0''')
-    _write_shim(fakebin["bin"] / "gsr-cli", f'''printf "%s\\n" "$@" >> "{logs}/gsr-cli.args"
+exit 0''',
+    )
+    _write_shim(
+        fakebin["bin"] / "gsr-cli",
+        f'''printf "%s\\n" "$@" >> "{logs}/gsr-cli.args"
 case "$3" in
   status) [ -e "{logs}/gsr.current" ] || exit 1; exit 0;;
   set-paused) exit 0;;
   stop) [ -e "{logs}/gsr.current" ] || {{ echo "error: not running" >&2; exit 1; }}; out=$(cat "{logs}/gsr.current"); rm -f "{logs}/gsr.current"; touch "$out.stopflag"; echo "$out"; exit 0;;
 esac
-exit 0''')
+exit 0''',
+    )
     _write_shim(fakebin["bin"] / "ffprobe", 'case "$*" in *width*) echo "3840,2160";; *) echo "${FAKE_DURATION:-300}";; esac\nexit 0\n')
     drm = fakebin["bin"].parent / "drm"
     for name in ("card1-DP-1", "card1-HDMI-A-1", "card1", "renderD128"):
@@ -681,7 +728,9 @@ def test_record_follows_the_monitor_that_replaces_the_recorded_one(tmp_path, liv
     assert _wait_for(lambda: part1.exists() and not (livebin["logs"] / "gsr.current").exists())
     assert part1.with_name(part1.name + ".ts").exists(), "the sidecar moves with the part"
     state = _timeline(tmp_path)
-    assert state["parts"] == [str(part1)] and len(state["pauses"]) == 1 and state["pauses"][0][1] is None, "the gap is a pause until the next monitor's first frame"
+    assert state["parts"] == [str(part1)] and len(state["pauses"]) == 1 and state["pauses"][0][1] is None, (
+        "the gap is a pause until the next monitor's first frame"
+    )
     assert len(_gsr_runs(livebin)) == 1, "no monitor yet: nothing to record"
 
     _plug(livebin, HDMI_A_1="connected")
@@ -802,10 +851,13 @@ def test_finish_stitches_the_parts_and_files_one_recording(tmp_path, fakebin):
     first_frame = datetime.now().astimezone().replace(microsecond=0) - timedelta(hours=1)
     part1, current = _seed_parts(tmp_path, int(first_frame.timestamp() * 1_000_000))
     (tmp_path / "data" / "pending" / f"{SESSION_ID}.mkv.ts").write_text("monotonic_microsec realtime_microsec\n1000 1\n")
-    _write_shim(fakebin["bin"] / "ffmpeg", f'''printf "%s\\n" "$@" >> "{fakebin['logs']}/ffmpeg.args"
-for ((i=1; i<=$#; i++)); do [ "${{!i}}" = -i ] && {{ j=$((i+1)); cp "${{!j}}" "{fakebin['logs']}/concat.list"; }}; done
+    _write_shim(
+        fakebin["bin"] / "ffmpeg",
+        f'''printf "%s\\n" "$@" >> "{fakebin["logs"]}/ffmpeg.args"
+for ((i=1; i<=$#; i++)); do [ "${{!i}}" = -i ] && {{ j=$((i+1)); cp "${{!j}}" "{fakebin["logs"]}/concat.list"; }}; done
 echo stitched > "${{@: -1}}"
-exit 0''')
+exit 0''',
+    )
     _write_shim(fakebin["bin"] / "universe", f'cp "$5" "{tmp_path}/handed.json"\necho filed\nexit 0')
     env = env_for(tmp_path, fakebin, {"min_duration_s": 240}, extra={"FAKE_DURATION": "999"})
     result = subprocess.run([str(BIN_DIR / "finish"), str(current)], env=env, capture_output=True, text=True, timeout=30, check=False)
@@ -828,7 +880,13 @@ def test_finish_files_the_longest_part_when_the_stitch_fails(tmp_path, fakebin):
     result = subprocess.run([str(BIN_DIR / "finish"), str(current)], env=env, capture_output=True, text=True, timeout=30, check=False)
     assert result.returncode == 0, result.stderr
     assert "ffmpeg concat failed" in result.stderr
-    assert (fakebin["logs"] / "universe.args").read_text().splitlines() == ["recording-file", SESSION_ID, str(part1), "--timeline", str(tmp_path / "data" / "pending" / f"{SESSION_ID}.timeline.json")]
+    assert (fakebin["logs"] / "universe.args").read_text().splitlines() == [
+        "recording-file",
+        SESSION_ID,
+        str(part1),
+        "--timeline",
+        str(tmp_path / "data" / "pending" / f"{SESSION_ID}.timeline.json"),
+    ]
     assert part1.exists() and current.exists() and not (tmp_path / "data" / "pending" / f"{SESSION_ID}.stitch.mkv").exists()
 
 

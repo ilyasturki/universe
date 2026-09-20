@@ -8,13 +8,28 @@ import traceback
 from datetime import datetime, timedelta
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import images as img  # noqa: E402
-import prompt as pr  # noqa: E402
-import providers  # noqa: E402
-from _common import (add_entry_via_core, fmt_date, fmt_time, journal_lang, load_settings, log, parse_rfc3339,  # noqa: E402
-                     parse_session_id, read_entries, read_json, read_sessions, remove, rfc3339_local, use_system_locale,
-                     validate_entry, write_json)
-from note import write_note  # noqa: E402
+import images as img
+import prompt as pr
+import providers
+from _common import (
+    add_entry_via_core,
+    fmt_date,
+    fmt_time,
+    journal_lang,
+    load_settings,
+    log,
+    parse_rfc3339,
+    parse_session_id,
+    read_entries,
+    read_json,
+    read_sessions,
+    remove,
+    rfc3339_local,
+    use_system_locale,
+    validate_entry,
+    write_json,
+)
+from note import write_note
 
 EX_TEMPFAIL = 75
 LIMIT_FILE = "codex-limit.json"
@@ -178,8 +193,18 @@ def journal_session(settings, sid, start_id, game_id, provider, journal_dir, dat
             raise Failed("codex quota reached", EX_TEMPFAIL)
 
     sessions = read_sessions(journal_dir)
-    sessions.setdefault(sid, {"session": sid, "game": game_id, "started_at": rfc3339_local(start), "ended_at": rfc3339_local(end),
-                              "duration_s": duration_s, "source": "hook-env", "recording": recording or None})
+    sessions.setdefault(
+        sid,
+        {
+            "session": sid,
+            "game": game_id,
+            "started_at": rfc3339_local(start),
+            "ended_at": rfc3339_local(end),
+            "duration_s": duration_s,
+            "source": "hook-env",
+            "recording": recording or None,
+        },
+    )
     entries = read_entries(journal_dir)
     memory = read_json(memory_path(data_dir, game_id))
     memory = memory if isinstance(memory, dict) else None
@@ -210,15 +235,16 @@ def journal_session(settings, sid, start_id, game_id, provider, journal_dir, dat
 
         log(f"asking {provider} for the entry ({len(shots)} screenshot(s) + {len(frames)} frame(s))…")
         try:
-            raw = providers.generate(provider, model=str(settings.get("model") or ""), title=title, brief=brief,
-                                     images=fed, work_dir=work_dir, forced_lang=forced_lang)
+            raw = providers.generate(
+                provider, model=str(settings.get("model") or ""), title=title, brief=brief, images=fed, work_dir=work_dir, forced_lang=forced_lang
+            )
         except providers.QuotaExceeded as e:
             write_json(os.path.join(data_dir, LIMIT_FILE), {"until": rfc3339_local(e.until)})
             log(f"codex usage limit reached; journal paused until {fmt_date(e.until)} {fmt_time(e.until)}")
-            raise Failed("codex quota reached", EX_TEMPFAIL)
+            raise Failed("codex quota reached", EX_TEMPFAIL) from e
         except Exception as e:
             traceback.print_exc()
-            raise Failed(f"provider error: {e}")
+            raise Failed(f"provider error: {e}") from e
         result = pr.accept_result(raw)
         if not result:
             raise Failed("the model produced no usable entry")
@@ -256,7 +282,9 @@ def journal_session(settings, sid, start_id, game_id, provider, journal_dir, dat
     if settings.get("markdown_export", True):
         entries = [e for e in entries if e["session"] != sid] + [entry]
         try:
-            path, changed = write_note(entries, sessions, title, journal_dir, env("SCREENSHOTS_DIR"), os.path.join(os.path.expanduser(os.environ["UNIVERSE_JOURNAL_ROOT"]), game_id))
+            path, changed = write_note(
+                entries, sessions, title, journal_dir, env("SCREENSHOTS_DIR"), os.path.join(os.path.expanduser(os.environ["UNIVERSE_JOURNAL_ROOT"]), game_id)
+            )
             log(f"markdown note {'updated' if changed else 'unchanged'}: {path}")
         except OSError as e:
             log(f"markdown render failed: {e}")

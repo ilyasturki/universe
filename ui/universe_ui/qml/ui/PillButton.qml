@@ -22,8 +22,16 @@ Rectangle {
     opacity: root.dimmed ? 0.5 : 1.0
     scale: root.focused ? 1.04 : 1.0
 
-    Behavior on opacity { Ease { duration: Theme.durQuick } }
-    Behavior on scale { Ease { easing.type: Easing.OutQuint } }
+    Behavior on opacity {
+        Ease {
+            duration: Theme.durQuick
+        }
+    }
+    Behavior on scale {
+        Ease {
+            easing.type: Easing.OutQuint
+        }
+    }
 
     Loader {
         anchors.fill: parent
@@ -41,7 +49,8 @@ Rectangle {
 
         MenuGlyph {
             visible: root.icon !== ""
-            width: Theme.dp(26); height: Theme.dp(26)
+            width: Theme.dp(26)
+            height: Theme.dp(26)
             anchors.verticalCenter: parent.verticalCenter
             kind: root.icon
             tint: root.ink

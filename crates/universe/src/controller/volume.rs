@@ -64,7 +64,14 @@ pub fn apply(change: Change, percent: u8) -> Result<Level, String> {
     let prop = |key: &str| inspect.lines().find_map(|l| l.split_once(&format!("{key} = "))).map(|(_, v)| v.trim().trim_matches('"').to_string());
     let output = prop("device.id")
         .zip(prop("card.profile.device").and_then(|d| d.parse().ok()))
-        .and_then(|(device, profile_device)| Command::new("pw-dump").arg(device).output().ok().filter(|o| o.status.success()).and_then(|o| route_description(&String::from_utf8_lossy(&o.stdout), profile_device)))
+        .and_then(|(device, profile_device)| {
+            Command::new("pw-dump")
+                .arg(device)
+                .output()
+                .ok()
+                .filter(|o| o.status.success())
+                .and_then(|o| route_description(&String::from_utf8_lossy(&o.stdout), profile_device))
+        })
         .or_else(|| prop("node.description"))
         .unwrap_or_default();
     Ok(Level { percent: (level * 100.0).round() as u8, muted: volume.contains("[MUTED]"), output })

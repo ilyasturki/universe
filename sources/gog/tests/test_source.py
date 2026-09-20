@@ -12,7 +12,7 @@ import pytest
 MODULE_DIR = Path(__file__).resolve().parents[1]
 SOURCE = MODULE_DIR / "bin" / "source"
 
-SHIM = r'''#!SHIM_PYTHON
+SHIM = r"""#!SHIM_PYTHON
 import json, os, sys, time
 from pathlib import Path
 
@@ -62,32 +62,45 @@ elif verb in ("download", "update"):
         "playTasks": [{"isPrimary": True, "type": "FileTask", "path": "Mini Metro.exe"}]}))
     (folder / ".gogdl-resume").unlink(missing_ok=True)
     sys.exit(int(os.environ.get("SHIM_EXIT", "0")))
-'''
+"""
 
-LIBRARY_PAGE = {"totalPages": 1, "products": [
-    {"id": 1434554947, "title": "Mini Metro", "image": "//images-2.gog-statics.com/abc",
-     "releaseDate": {"date": "2015-11-06 00:00:00.000000"}},
-    {"id": 1136126792, "title": "Absolute Drift", "image": None, "releaseDate": None},
-]}
+LIBRARY_PAGE = {
+    "totalPages": 1,
+    "products": [
+        {"id": 1434554947, "title": "Mini Metro", "image": "//images-2.gog-statics.com/abc", "releaseDate": {"date": "2015-11-06 00:00:00.000000"}},
+        {"id": 1136126792, "title": "Absolute Drift", "image": None, "releaseDate": None},
+    ],
+}
 
-CATALOG_PAGE = {"products": [
-    {"id": "1434554947", "title": "Mini Metro", "releaseDate": "2015.11.06", "coverVertical": "https://x/mm.jpg"},
-    {"id": "999", "title": "Metro Exodus", "releaseDate": "2019.02.15", "coverVertical": "https://x/me.jpg"},
-]}
+CATALOG_PAGE = {
+    "products": [
+        {"id": "1434554947", "title": "Mini Metro", "releaseDate": "2015.11.06", "coverVertical": "https://x/mm.jpg"},
+        {"id": "999", "title": "Metro Exodus", "releaseDate": "2019.02.15", "coverVertical": "https://x/me.jpg"},
+    ]
+}
 
-BUILDS = {"items": [
-    {"build_id": "B1", "branch": None, "version_name": "1.0", "date_published": "2024-01-01T00:00:00+0000"},
-    {"build_id": "B3", "branch": "beta", "version_name": "1.2b", "date_published": "2025-06-01T00:00:00+0000"},
-    {"build_id": "B2", "branch": None, "version_name": "1.1", "date_published": "2025-03-01T00:00:00+0000"},
-]}
+BUILDS = {
+    "items": [
+        {"build_id": "B1", "branch": None, "version_name": "1.0", "date_published": "2024-01-01T00:00:00+0000"},
+        {"build_id": "B3", "branch": "beta", "version_name": "1.2b", "date_published": "2025-06-01T00:00:00+0000"},
+        {"build_id": "B2", "branch": None, "version_name": "1.1", "date_published": "2025-03-01T00:00:00+0000"},
+    ]
+}
 
 
 def write_info(folder, game_id, root_id, name, build="B1", exe="Game.exe"):
     folder.mkdir(parents=True, exist_ok=True)
-    (folder / f"goggame-{game_id}.info").write_text(json.dumps({
-        "gameId": game_id, "rootGameId": root_id, "name": name, "buildId": build,
-        "playTasks": [{"isPrimary": True, "type": "FileTask", "path": exe},
-                      {"type": "URLTask", "link": "http://gog.com"}]}))
+    (folder / f"goggame-{game_id}.info").write_text(
+        json.dumps(
+            {
+                "gameId": game_id,
+                "rootGameId": root_id,
+                "name": name,
+                "buildId": build,
+                "playTasks": [{"isPrimary": True, "type": "FileTask", "path": exe}, {"type": "URLTask", "link": "http://gog.com"}],
+            }
+        )
+    )
 
 
 @pytest.fixture
@@ -113,9 +126,19 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setenv("PATH", f"{shim_dir}{os.pathsep}{os.environ['PATH']}")
     monkeypatch.setenv("SHIM_LOG", str(log))
     monkeypatch.setenv("SOURCE_DATA_DIR", str(tmp_path / "data"))
-    monkeypatch.setenv("SOURCE_SETTINGS_JSON", json.dumps({
-        "games_dir": str(games), "scan_dirs": f"{scan},{tmp_path / 'missing'}",
-        "auth_path": str(tmp_path / "auth" / "auth.json"), "install_timeout_s": 30, "platform": "windows", "with_dlcs": True}))
+    monkeypatch.setenv(
+        "SOURCE_SETTINGS_JSON",
+        json.dumps(
+            {
+                "games_dir": str(games),
+                "scan_dirs": f"{scan},{tmp_path / 'missing'}",
+                "auth_path": str(tmp_path / "auth" / "auth.json"),
+                "install_timeout_s": 30,
+                "platform": "windows",
+                "with_dlcs": True,
+            }
+        ),
+    )
     return {"tmp": tmp_path, "log": log, "games": games, "scan": scan, "data": tmp_path / "data"}
 
 
@@ -200,17 +223,27 @@ def test_library(src, env, capsys, monkeypatch):
     assert [e["event"] for e in events] == ["game", "game", "done"]
     mini, drift = events[0], events[1]
     info_size = (env["scan"] / "Mini Metro" / "goggame-1434554947.info").stat().st_size
-    assert mini == {"event": "game", "id": "1434554947", "title": "Mini Metro", "owned": True, "installed": True,
-                    "dir": str(env["scan"] / "Mini Metro"), "exe": "Mini Metro.exe", "build": "B1", "dlcs": [],
-                    "release_year": 2015, "image": "https://images-2.gog-statics.com/abc.jpg", "disk_size": info_size}
+    assert mini == {
+        "event": "game",
+        "id": "1434554947",
+        "title": "Mini Metro",
+        "owned": True,
+        "installed": True,
+        "dir": str(env["scan"] / "Mini Metro"),
+        "exe": "Mini Metro.exe",
+        "build": "B1",
+        "dlcs": [],
+        "release_year": 2015,
+        "image": "https://images-2.gog-statics.com/abc.jpg",
+        "disk_size": info_size,
+    }
     assert drift["installed"] is False and drift["dir"] is None and drift["release_year"] is None
     assert "disk_size" not in drift
     assert not (env["data"] / "library.json").exists(), "the core owns the library cache"
 
 
 def test_library_pages(src, env, capsys, monkeypatch):
-    pages = {1: {"totalPages": 2, "products": [{"id": 1, "title": "A"}]},
-             2: {"totalPages": 2, "products": [{"id": 2, "title": "B"}]}}
+    pages = {1: {"totalPages": 2, "products": [{"id": 1, "title": "A"}]}, 2: {"totalPages": 2, "products": [{"id": 2, "title": "B"}]}}
     monkeypatch.setattr(src, "fetch", lambda url, token=None: pages[int(url[-1])])
     code, events, _ = run(src, capsys, "library")
     assert code == 0 and [e["id"] for e in events[:-1]] == ["1", "2"]
@@ -288,7 +321,10 @@ def test_info_skip_dlcs(src, env, capsys, monkeypatch):
 
 
 def test_size_total_falls_back_to_the_first_language(src):
-    assert src.size_total({"*": {"download_size": 1, "disk_size": 2}, "de-DE": {"download_size": 10, "disk_size": 20}}) == {"download_size": 11, "disk_size": 22}
+    assert src.size_total({"*": {"download_size": 1, "disk_size": 2}, "de-DE": {"download_size": 10, "disk_size": 20}}) == {
+        "download_size": 11,
+        "disk_size": 22,
+    }
     assert src.size_total({}) is None and src.size_total(None) is None
 
 
@@ -299,15 +335,23 @@ def test_install(src, env, capsys, monkeypatch):
     assert [e["event"] for e in events] == ["progress", "progress", "game", "done"]
     assert events[0] == {"event": "progress", "done": 0, "total": 1000, "message": "0.00%"}
     assert events[1] == {"event": "progress", "done": 1000, "total": 1000, "message": "100.00%"}
-    assert events[2] == {"event": "game", "id": "1434554947", "title": "Mini Metro", "owned": True,
-                         "installed": True, "dir": str(env["games"] / "Mini Metro"), "exe": "Mini Metro.exe",
-                         "build": "B2", "dlcs": [], "release_year": 2015,
-                         "image": "https://images-2.gog-statics.com/abc.jpg",
-                         "disk_size": (env["games"] / "Mini Metro" / "goggame-1434554947.info").stat().st_size}
+    assert events[2] == {
+        "event": "game",
+        "id": "1434554947",
+        "title": "Mini Metro",
+        "owned": True,
+        "installed": True,
+        "dir": str(env["games"] / "Mini Metro"),
+        "exe": "Mini Metro.exe",
+        "build": "B2",
+        "dlcs": [],
+        "release_year": 2015,
+        "image": "https://images-2.gog-statics.com/abc.jpg",
+        "disk_size": (env["games"] / "Mini Metro" / "goggame-1434554947.info").stat().st_size,
+    }
     info, call = calls(env)
     assert info["args"][2] == "info", "the folder and the sizes come from info before the download"
-    assert call["args"][2:] == ["download", "1434554947", "--platform", "windows", "--with-dlcs",
-                                "--path", str(env["games"])]
+    assert call["args"][2:] == ["download", "1434554947", "--platform", "windows", "--with-dlcs", "--path", str(env["games"])]
     assert call["config"] == str(env["data"] / "gogdl")
     assert json.loads((env["data"] / "partials.json").read_text()) == {}, "a finished install leaves no partial"
 
@@ -315,20 +359,24 @@ def test_install(src, env, capsys, monkeypatch):
 def test_install_stopped_by_sigterm_keeps_a_resumable_partial(src, env, capsys, monkeypatch):
     monkeypatch.setenv("SHIM_MODE", "partial")
     import subprocess
-    proc = subprocess.Popen([sys.executable, str(SOURCE), "install", "1434554947"], stdout=subprocess.PIPE,
-                            stderr=subprocess.PIPE, text=True, env=dict(os.environ))
+
+    proc = subprocess.Popen(
+        [sys.executable, str(SOURCE), "install", "1434554947"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=dict(os.environ)
+    )
     line = proc.stdout.readline()
     assert json.loads(line)["event"] == "progress"
     proc.send_signal(15)
-    out, err = proc.communicate(timeout=10)
+    out, _err = proc.communicate(timeout=10)
     assert proc.returncode == 143 and "game" not in out
     folder = env["games"] / "Mini Metro"
     assert (folder / ".gogdl-resume").exists() and (folder / "part.bin").exists(), "the files stay for the resume"
     assert json.loads((env["data"] / "partials.json").read_text()) == {
-        "1434554947": {"dir": str(folder), "title": "Mini Metro", "download_size": 810, "disk_size": 1220}}
+        "1434554947": {"dir": str(folder), "title": "Mini Metro", "download_size": 810, "disk_size": 1220}
+    }
     assert src.partial_of("1434554947")["bytes"] > 300
     assert src.scan_installs(src.load_settings(), [str(env["games"])]) == [], "not an install yet"
     import shutil
+
     shutil.rmtree(env["scan"] / "Mini Metro")
     code, events, _ = run(src, capsys, "scan")
     stopped = next(e for e in events if e.get("id") == "1434554947" and not e["installed"])
@@ -377,11 +425,10 @@ def test_update_list(src, env, capsys, monkeypatch):
     code, events, err = run(src, capsys, "update")
     assert code == 0
     assert events == [
-        {"event": "update", "id": "1434554947", "title": "Mini Metro", "local_build": "B1", "remote_build": "B2",
-         "version": "1.1", "date": "2025-03-01"},
-        {"event": "update", "id": "4", "title": "Unknown", "local_build": None, "remote_build": "B2",
-         "version": "1.1", "date": "2025-03-01"},
-        {"event": "done"}]
+        {"event": "update", "id": "1434554947", "title": "Mini Metro", "local_build": "B1", "remote_build": "B2", "version": "1.1", "date": "2025-03-01"},
+        {"event": "update", "id": "4", "title": "Unknown", "local_build": None, "remote_build": "B2", "version": "1.1", "date": "2025-03-01"},
+        {"event": "done"},
+    ]
     assert "Unowned" in err and "not in the library" in err
     assert calls(env) == []
 
@@ -409,8 +456,7 @@ def test_update_id(src, env, capsys, monkeypatch):
     assert seen == [("https://content-system.gog.com/products/1434554947/os/windows/builds?generation=2", None)]
     assert [e["event"] for e in events] == ["progress", "progress", "game", "done"]
     assert events[2]["build"] == "B2" and events[2]["dir"] == str(env["scan"] / "Mini Metro")
-    assert calls(env)[0]["args"][2:] == ["update", "1434554947", "--platform", "windows", "--with-dlcs",
-                                         "--path", str(env["scan"] / "Mini Metro")]
+    assert calls(env)[0]["args"][2:] == ["update", "1434554947", "--platform", "windows", "--with-dlcs", "--path", str(env["scan"] / "Mini Metro")]
 
 
 def test_update_id_build_mismatch_after(src, env, capsys, monkeypatch):
@@ -445,9 +491,20 @@ def test_scan(src, env, capsys):
     assert code == 0
     assert [e["event"] for e in events] == ["game", "game", "game", "done"]
     dead = events[0]
-    assert dead == {"event": "game", "id": "1237807960", "title": "Dead Cells", "owned": None, "installed": True,
-                    "dir": str(folder), "exe": "deadcells.exe", "build": "B5", "dlcs": ["1114691340"],
-                    "release_year": None, "image": None, "disk_size": sum(p.stat().st_size for p in folder.iterdir())}
+    assert dead == {
+        "event": "game",
+        "id": "1237807960",
+        "title": "Dead Cells",
+        "owned": None,
+        "installed": True,
+        "dir": str(folder),
+        "exe": "deadcells.exe",
+        "build": "B5",
+        "dlcs": ["1114691340"],
+        "release_year": None,
+        "image": None,
+        "disk_size": sum(p.stat().st_size for p in folder.iterdir()),
+    }
     assert [e["id"] for e in events[:-1]] == ["1237807960", "1434554947", "7"]
     assert "OnlyDlc" in err
     assert calls(env) == []

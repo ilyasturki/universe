@@ -11,18 +11,39 @@ Sheet {
 
     signal accepted(string path)
     signal typeRequested(string path)
-    signal dismissed()
+    signal dismissed
 
     readonly property var browser: api.screens.paths
     readonly property bool files: browser.files
     readonly property var entries: browser.entries
     readonly property int rowCount: entries.length + 1
 
-    readonly property var hints: zone === "chips"
-        ? [ { glyph: "A", label: "Go" } ].concat(commonHints)
-        : [ { glyph: "A", label: index === 0 ? "Up" : (entries[index - 1] && !entries[index - 1].dir ? "Choose" : "Open") } ].concat(commonHints)
-    readonly property var commonHints: (files ? [] : [ { glyph: "X", label: "Use this folder" } ]).concat(
-        [ { glyph: "Y", label: "Type a path" }, { glyph: "B", label: "Cancel" } ])
+    readonly property var hints: zone === "chips" ? [
+        {
+            glyph: "A",
+            label: "Go"
+        }
+    ].concat(commonHints) : [
+        {
+            glyph: "A",
+            label: index === 0 ? "Up" : (entries[index - 1] && !entries[index - 1].dir ? "Choose" : "Open")
+        }
+    ].concat(commonHints)
+    readonly property var commonHints: (files ? [] : [
+            {
+                glyph: "X",
+                label: "Use this folder"
+            }
+        ]).concat([
+        {
+            glyph: "Y",
+            label: "Type a path"
+        },
+        {
+            glyph: "B",
+            label: "Cancel"
+        }
+    ])
 
     readonly property real rowHeight: Theme.dp(58)
     readonly property int visibleRows: 8
@@ -121,7 +142,7 @@ Sheet {
     Keys.onLeftPressed: moveChip(-1)
     Keys.onRightPressed: moveChip(1)
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         event.accepted = true;
         if (event.isAutoRepeat)
             return;
@@ -185,7 +206,11 @@ Sheet {
                 return chips.edge - Math.min(shift, width - view);
             }
 
-            Behavior on x { Ease { duration: Theme.durQuick } }
+            Behavior on x {
+                Ease {
+                    duration: Theme.durQuick
+                }
+            }
 
             Repeater {
                 id: chipRepeater
@@ -234,7 +259,9 @@ Sheet {
                 radius: Theme.dp(14)
                 color: row.focused ? Theme.text : "transparent"
 
-                Behavior on color { ColorEase {} }
+                Behavior on color {
+                    ColorEase {}
+                }
             }
 
             MenuGlyph {

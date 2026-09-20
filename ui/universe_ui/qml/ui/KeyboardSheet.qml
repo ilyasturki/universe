@@ -10,13 +10,25 @@ Sheet {
     property bool numeric: false
 
     signal accepted(string value)
-    signal dismissed()
+    signal dismissed
 
     readonly property var hints: [
-        { glyph: "A", label: "Type" },
-        { glyph: "X", label: "Backspace" },
-        { glyph: "Y", label: "Done" },
-        { glyph: "B", label: "Cancel" }
+        {
+            glyph: "A",
+            label: "Type"
+        },
+        {
+            glyph: "X",
+            label: "Backspace"
+        },
+        {
+            glyph: "Y",
+            label: "Done"
+        },
+        {
+            glyph: "B",
+            label: "Cancel"
+        }
     ]
 
     readonly property real fieldHeight: Theme.dp(66)
@@ -50,7 +62,7 @@ Sheet {
     Keys.onUpPressed: keyboard.move(-1, 0) ? Sound.kbtick() : Sound.edge()
     Keys.onDownPressed: keyboard.move(1, 0) ? Sound.kbtick() : Sound.edge()
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         event.accepted = true;
         if (event.isAutoRepeat)
             return;
@@ -127,7 +139,7 @@ Sheet {
         symbols: sheet.symbols
         numeric: sheet.numeric
 
-        onCharEntered: function(value) {
+        onCharEntered: function (value) {
             Sound.type();
             sheet.text += value;
         }

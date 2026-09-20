@@ -95,7 +95,15 @@ fn show(poster: Option<&Poster>) -> Result<Shown, Box<dyn std::error::Error>> {
     };
     conn.create_window(depth, win, screen.root, 0, 0, width, height, 0, WindowClass::INPUT_OUTPUT, screen.root_visual, &aux)?;
     let atom = |name: &str| -> Result<u32, Box<dyn std::error::Error>> { Ok(conn.intern_atom(false, name.as_bytes())?.reply()?.atom) };
-    let (state, skip_taskbar, skip_pager, hwnd_style, wm_state, net_name, utf8) = (atom("_NET_WM_STATE")?, atom("_NET_WM_STATE_SKIP_TASKBAR")?, atom("_NET_WM_STATE_SKIP_PAGER")?, atom("_WINE_HWND_STYLE")?, atom("WM_STATE")?, atom("_NET_WM_NAME")?, atom("UTF8_STRING")?);
+    let (state, skip_taskbar, skip_pager, hwnd_style, wm_state, net_name, utf8) = (
+        atom("_NET_WM_STATE")?,
+        atom("_NET_WM_STATE_SKIP_TASKBAR")?,
+        atom("_NET_WM_STATE_SKIP_PAGER")?,
+        atom("_WINE_HWND_STYLE")?,
+        atom("WM_STATE")?,
+        atom("_NET_WM_NAME")?,
+        atom("UTF8_STRING")?,
+    );
     conn.change_property32(PropMode::REPLACE, win, state, AtomEnum::ATOM, &[skip_taskbar, skip_pager])?;
     conn.change_property8(PropMode::REPLACE, win, AtomEnum::WM_NAME, AtomEnum::STRING, b"Universe")?;
     conn.change_property8(PropMode::REPLACE, win, net_name, utf8, b"Universe")?;
@@ -113,7 +121,8 @@ fn serve(s: Shown) {
     while let Ok(event) = s.conn.wait_for_event() {
         match event {
             Event::PropertyNotify(e) if e.window == s.win && e.atom == s.wm_state && !styled => {
-                styled = s.conn.change_property32(PropMode::REPLACE, s.win, s.hwnd_style, AtomEnum::CARDINAL, &[WS_DISABLED]).and_then(|_| s.conn.flush()).is_ok();
+                styled =
+                    s.conn.change_property32(PropMode::REPLACE, s.win, s.hwnd_style, AtomEnum::CARDINAL, &[WS_DISABLED]).and_then(|_| s.conn.flush()).is_ok();
             }
             Event::Error(e) => eprintln!("splash: X error {:?} (request {})", e.error_kind, e.major_opcode),
             _ => {}

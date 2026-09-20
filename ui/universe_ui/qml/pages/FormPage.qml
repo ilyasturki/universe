@@ -27,24 +27,32 @@ FocusScope {
         return a.game ? api.screens.gameSettings : a.runner ? api.screens.runner : a.source ? api.screens.source : api.screens.module;
     }
 
-    signal closeRequested()
+    signal closeRequested
     signal settingsRequested(var game)
     signal message(string text)
 
-    readonly property var hints: editor.open ? editor.hints
-        : menu.open ? menu.hints
-        : [ { glyph: "A", label: cards.currentRow && cards.currentRow.type === "bool" ? "Toggle"
-                                : cards.currentRow && cards.currentRow.key === "add_file" ? "Pick a file"
-                                : cards.currentRow && cards.currentRow.type === "action" ? cards.currentRow.action || "Select" : "Change",
-              dim: !cards.currentRow || cards.currentRow.disabled === true || cards.currentRow.type === "info" },
-            { glyph: "dpad", label: "Navigate" },
-            { glyph: "B", label: "Back" } ]
+    readonly property var hints: editor.open ? editor.hints : menu.open ? menu.hints : [
+        {
+            glyph: "A",
+            label: cards.currentRow && cards.currentRow.type === "bool" ? "Toggle" : cards.currentRow && cards.currentRow.key === "add_file" ? "Pick a file" : cards.currentRow && cards.currentRow.type === "action" ? cards.currentRow.action || "Select" : "Change",
+            dim: !cards.currentRow || cards.currentRow.disabled === true || cards.currentRow.type === "info"
+        },
+        {
+            glyph: "dpad",
+            label: "Navigate"
+        },
+        {
+            glyph: "B",
+            label: "Back"
+        }
+    ]
 
     readonly property real sideMargin: Theme.dp(90)
     readonly property bool hasLogo: info !== null && info.icon !== undefined && String(info.icon) !== "" && logo.status === Image.Ready
 
     // A runner's form reloads on every library change; unloaded once its page is gone.
-    Component.onDestruction: if (page.runner !== "") api.screens.runner.load("")
+    Component.onDestruction: if (page.runner !== "")
+        api.screens.runner.load("")
 
     // The derived game/runner/module/source are still stale here: read the args themselves.
     onArgsChanged: {
@@ -54,7 +62,7 @@ FocusScope {
         landModule = args.settingModule || "";
         if (id !== "")
             form.load(id);
-        Qt.callLater(function() {
+        Qt.callLater(function () {
             cards.reset();
             if (page.returnIndex >= 0 && page.runner !== "") {
                 cards.index = page.returnIndex;
@@ -72,24 +80,30 @@ FocusScope {
         if (i < 0)
             return;
         landKey = "";
-        Qt.callLater(function() { cards.index = i; });
+        Qt.callLater(function () {
+            cards.index = i;
+        });
     }
 
     function editMap(index, row) {
         Sound.panel();
-        menu.show(Maps.items(row), cards, cards.focusRect, row.label, function(action) {
+        menu.show(Maps.items(row), cards, cards.focusRect, row.label, function (action) {
             if (action === "add") {
-                editor.prompt("Name of " + Maps.noun(row), "", function(name) {
+                editor.prompt("Name of " + Maps.noun(row), "", function (name) {
                     name = Maps.cleanName(name);
                     if (name === "")
                         return;
-                    editor.prompt("Value of " + name, "", function(value) { form.setMapEntry(index, name, value); });
+                    editor.prompt("Value of " + name, "", function (value) {
+                        form.setMapEntry(index, name, value);
+                    });
                 });
             } else if (action.indexOf("entry:") === 0) {
                 var name = action.substring(6);
-                menu.show(Maps.entryItems(name), cards, cards.focusRect, name, function(next) {
+                menu.show(Maps.entryItems(name), cards, cards.focusRect, name, function (next) {
                     if (next === "value")
-                        editor.prompt("Value of " + name, Maps.valueOf(row, name), function(value) { form.setMapEntry(index, name, value); });
+                        editor.prompt("Value of " + name, Maps.valueOf(row, name), function (value) {
+                            form.setMapEntry(index, name, value);
+                        });
                     else if (next === "remove") {
                         Sound.cancel();
                         form.setMapEntry(index, name, "");
@@ -100,14 +114,27 @@ FocusScope {
         });
     }
 
-
     function gameActions(row) {
         var out = [];
         if (api.allGames.byId(row.gameId))
-            out.push({ icon: "sliders", label: "Game settings", action: "settings" });
+            out.push({
+                icon: "sliders",
+                label: "Game settings",
+                action: "settings"
+            });
         if (row.installed)
-            out.push({ icon: "trash", label: "Uninstall…", action: "uninstall", danger: true });
-        out.push({ icon: "eye-off", label: "Remove from library…", action: "remove", danger: true });
+            out.push({
+                icon: "trash",
+                label: "Uninstall…",
+                action: "uninstall",
+                danger: true
+            });
+        out.push({
+            icon: "eye-off",
+            label: "Remove from library…",
+            action: "remove",
+            danger: true
+        });
         return out;
     }
 
@@ -118,13 +145,13 @@ FocusScope {
             page.settingsRequested(api.allGames.byId(row.gameId));
         } else if (action === "uninstall") {
             Sound.panel();
-            menu.confirm("Keep it", "trash", "Trash the install folder", "Uninstall " + row.label + "?", cards, cards.focusRect, function() {
+            menu.confirm("Keep it", "trash", "Trash the install folder", "Uninstall " + row.label + "?", cards, cards.focusRect, function () {
                 Sound.enter();
                 form.uninstall(row.gameId);
             });
         } else if (action === "remove") {
             Sound.panel();
-            menu.confirm("Keep it", "eye-off", "Remove from the library", "Remove " + row.label + "?", cards, cards.focusRect, function() {
+            menu.confirm("Keep it", "eye-off", "Remove from the library", "Remove " + row.label + "?", cards, cards.focusRect, function () {
                 Sound.enter();
                 form.remove(row.gameId);
             });
@@ -145,7 +172,9 @@ FocusScope {
             editMap(index, row);
         } else if (row.key === "game") {
             Sound.panel();
-            menu.show(gameActions(row), cards, cards.focusRect, row.label, function(action) { page.gameAction(row, action); });
+            menu.show(gameActions(row), cards, cards.focusRect, row.label, function (action) {
+                page.gameAction(row, action);
+            });
         } else if (row.type === "bool") {
             form.toggle(index);
             Sound.favourite(!row.value);
@@ -154,31 +183,46 @@ FocusScope {
             login.begin(source);
         } else if (row.key === "code" && source !== "") {
             Sound.panel();
-            editor.prompt("Code from " + (info ? info.name : source), "", function(code) { login.submit(code); });
+            editor.prompt("Code from " + (info ? info.name : source), "", function (code) {
+                login.submit(code);
+            });
         } else if (row.key === "add_file") {
             Sound.panel();
-            editor.edit({ type: "path", key: "add_file", label: "Game file for " + info.name, value: "" }, function(path) {
+            editor.edit({
+                type: "path",
+                key: "add_file",
+                label: "Game file for " + info.name,
+                value: ""
+            }, function (path) {
                 if (form.setValue(index, path))
-                    editor.prompt("Title of the game", form.pendingTitle(), function(title) {
+                    editor.prompt("Title of the game", form.pendingTitle(), function (title) {
                         form.addGame(title) !== "" ? Sound.enter() : Sound.edge();
                     });
             });
         } else {
             Sound.panel();
-            editor.edit(row, function(value) { form.setValue(index, value); });
+            editor.edit(row, function (value) {
+                form.setValue(index, value);
+            });
         }
     }
 
     Connections {
         target: page.form
         ignoreUnknownSignals: true
-        function onMessage(text) { page.message(text); }
-        function onRowsChanged() { page.landNow(); }
+        function onMessage(text) {
+            page.message(text);
+        }
+        function onRowsChanged() {
+            page.landNow();
+        }
     }
 
     Connections {
         target: page.login
-        function onFinished(ok, text) { page.message(text); }
+        function onFinished(ok, text) {
+            page.message(text);
+        }
     }
 
     GameBackdrop {
@@ -248,10 +292,7 @@ FocusScope {
             Text {
                 width: parent.width
                 visible: text !== ""
-                text: page.info ? (page.info.meta || "")
-                      + (page.info.warning
-                         ? (page.info.meta ? " · " : "") + "<font color=\"#e0655a\">" + page.info.warning + "</font>"
-                         : "") : ""
+                text: page.info ? (page.info.meta || "") + (page.info.warning ? (page.info.meta ? " · " : "") + "<font color=\"#e0655a\">" + page.info.warning + "</font>" : "") : ""
                 textFormat: Text.StyledText
                 color: Theme.textMuted
                 font.family: Theme.sans
@@ -290,11 +331,13 @@ FocusScope {
         groups: page.form.groups
         dimmed: editor.open || menu.open
 
-        onActivated: function(index, row) { page.activate(index, row); }
+        onActivated: function (index, row) {
+            page.activate(index, row);
+        }
         onEscapedUp: Sound.edge()
         onEscapedLeft: Sound.edge()
 
-        Keys.onPressed: function(event) {
+        Keys.onPressed: function (event) {
             if (event.isAutoRepeat)
                 return;
             if (api.keys.isCancel(event)) {

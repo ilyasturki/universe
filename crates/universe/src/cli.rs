@@ -329,9 +329,7 @@ pub enum MediaCmd {
         page: u32,
     },
     /// Search the provider's games by name (the title when empty), to find the id to pin
-    Search {
-        query: Vec<String>,
-    },
+    Search { query: Vec<String> },
     /// Pin the game to a provider id
     Pin {
         #[arg(value_parser = ["sgdb", "rawg", "steam"])]
@@ -512,7 +510,11 @@ fn joined(v: &Value, sep: &str) -> String {
 
 fn hours(v: &Value) -> String {
     let h = v["stats"]["hours"].as_f64().unwrap_or(0.0);
-    if h == 0.0 { String::new() } else { format!("{h:.1}") }
+    if h == 0.0 {
+        String::new()
+    } else {
+        format!("{h:.1}")
+    }
 }
 
 fn local(ts: &str) -> Option<chrono::DateTime<chrono::Local>> {
@@ -543,7 +545,16 @@ fn print_sources(list: &[Value], json: bool) -> anyhow::Result<()> {
     }
     let mut t = table(&["Id", "Name", "Version", "Enabled", "Available", "Missing", "Library (cached)", "Games dir"]);
     for m in list {
-        t.add_row(vec![s(m, "id"), s(m, "name"), s(m, "version"), flag(&m["enabled"]), flag(&m["available"]), joined(&m["missing"], ","), m["library_cached"].to_string(), s(m, "games_dir")]);
+        t.add_row(vec![
+            s(m, "id"),
+            s(m, "name"),
+            s(m, "version"),
+            flag(&m["enabled"]),
+            flag(&m["available"]),
+            joined(&m["missing"], ","),
+            m["library_cached"].to_string(),
+            s(m, "games_dir"),
+        ]);
     }
     println!("{t}");
     Ok(())
@@ -618,7 +629,9 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             core.session_end(&id, &session, exit, None).await?;
         }
         Cmd::RecordingFile { session, path, timeline } => {
-            let timeline = timeline.map(|p| std::fs::read_to_string(&p).map_err(crate::Error::from).and_then(|s| serde_json::from_str(&s).map_err(Into::into))).transpose()?;
+            let timeline = timeline
+                .map(|p| std::fs::read_to_string(&p).map_err(crate::Error::from).and_then(|s| serde_json::from_str(&s).map_err(Into::into)))
+                .transpose()?;
             println!("{}", core.file_recording(&session, &path, timeline.as_ref()).await?)
         }
         Cmd::JournalAdd { session, entry } => core.add_entry(&session, serde_json::from_str(&entry).map_err(crate::Error::from)?).await?,
@@ -660,7 +673,13 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 }
                 let title = if g["favorite"].as_bool() == Some(true) { format!("★ {}", s(&g, "title")) } else { s(&g, "title") };
                 let title = if g["hidden"].as_bool() == Some(true) { Cell::new(title).add_attribute(Attribute::Dim) } else { Cell::new(title) };
-                t.add_row(vec![title, Cell::new(s(&g["effective"], "runner")), Cell::new(s(&g["source"], "kind")), Cell::new(hours(&g)), Cell::new(day(&s(&g["stats"], "last_played"), &loc))]);
+                t.add_row(vec![
+                    title,
+                    Cell::new(s(&g["effective"], "runner")),
+                    Cell::new(s(&g["source"], "kind")),
+                    Cell::new(hours(&g)),
+                    Cell::new(day(&s(&g["stats"], "last_played"), &loc)),
+                ]);
             }
             println!("{t}");
         }
@@ -737,7 +756,13 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
             let mut t = table(&["Session", "Game", "Duration", "Source", "Recording"]);
             for r in recent {
-                t.add_row(vec![s(&r, "session"), s(&r, "title"), fmt_duration(r["duration_s"].as_u64().unwrap_or(0)), s(&r, "source"), if r["recording"].is_null() { String::new() } else { "✓".into() }]);
+                t.add_row(vec![
+                    s(&r, "session"),
+                    s(&r, "title"),
+                    fmt_duration(r["duration_s"].as_u64().unwrap_or(0)),
+                    s(&r, "source"),
+                    if r["recording"].is_null() { String::new() } else { "✓".into() },
+                ]);
             }
             println!("{t}");
         }
@@ -749,7 +774,12 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
             println!("{}  {}", s(&g, "title").bold(), s(&g, "id").dimmed());
             println!("  source     {} {}  build {}", s(&g["source"], "kind"), s(&g["source"], "gog_id"), s(&g["source"], "build_id"));
-            println!("  runner     {} ({}) · {}", s(&g["effective"], "runner"), s(&g["effective"], "runner_name"), if s(&g["effective"], "runner_path").is_empty() { "not found".to_string() } else { s(&g["effective"], "runner_path") });
+            println!(
+                "  runner     {} ({}) · {}",
+                s(&g["effective"], "runner"),
+                s(&g["effective"], "runner_name"),
+                if s(&g["effective"], "runner_path").is_empty() { "not found".to_string() } else { s(&g["effective"], "runner_path") }
+            );
             println!("  platform   {}", s(&g, "platform"));
             println!("  exe        {}", s(&g["launch"], "exe"));
             if s(&g["effective"], "runner_kind") == "emulator" {
@@ -758,9 +788,19 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 println!("  prefix     {}", s(&g["launch"], "prefix"));
                 println!("  proton     {} ({})", s(&g["effective"], "proton"), s(&g["effective"], "proton_path"));
             }
-            println!("  esync/fsync/ntsync/mangohud  {}/{}/{}/{}", g["effective"]["esync"], g["effective"]["fsync"], g["effective"]["ntsync"], g["effective"]["mangohud"]);
-            let on: Vec<&str> = ["wayland", "hdr", "dlss_upgrade", "fsr4_upgrade", "xess_upgrade", "optiscaler"].into_iter().filter(|k| g["effective"][k].as_bool() == Some(true)).collect();
-            println!("  switches   {}{}", if on.is_empty() { "no switches on".to_string() } else { on.join(" ") }, if s(&g["launch"], "wrapper").is_empty() { String::new() } else { format!(" · wrapper {}", s(&g["launch"], "wrapper")) });
+            println!(
+                "  esync/fsync/ntsync/mangohud  {}/{}/{}/{}",
+                g["effective"]["esync"], g["effective"]["fsync"], g["effective"]["ntsync"], g["effective"]["mangohud"]
+            );
+            let on: Vec<&str> = ["wayland", "hdr", "dlss_upgrade", "fsr4_upgrade", "xess_upgrade", "optiscaler"]
+                .into_iter()
+                .filter(|k| g["effective"][k].as_bool() == Some(true))
+                .collect();
+            println!(
+                "  switches   {}{}",
+                if on.is_empty() { "no switches on".to_string() } else { on.join(" ") },
+                if s(&g["launch"], "wrapper").is_empty() { String::new() } else { format!(" · wrapper {}", s(&g["launch"], "wrapper")) }
+            );
             println!("  gamescope  {} {}", g["effective"]["gamescope"], s(&g["effective"], "gamescope_args"));
             println!("  fps limit  {}", s(&g["effective"], "fps_limit"));
             println!("  env        {}", g["effective"]["env"]);
@@ -787,44 +827,42 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             let mut p = progress_printer(json);
             finish(json, core.source_install(&source, &id, Some(&mut p)).await);
         }
-        Cmd::Update { name, yes } => {
-            match name {
-                Some(n) => {
-                    let id = pick(&core, &n).await?;
-                    let g = core.get(&id).await?.to_json();
-                    let gid = s(&g["source"], "gog_id");
-                    if gid.is_empty() {
-                        anyhow::bail!("{id} has no source id");
-                    }
-                    let mut p = progress_printer(json);
-                    finish(json, core.source_update(&s(&g["source"], "kind"), &gid, Some(&mut p)).await.map(|n| format!("{n} updated")));
+        Cmd::Update { name, yes } => match name {
+            Some(n) => {
+                let id = pick(&core, &n).await?;
+                let g = core.get(&id).await?.to_json();
+                let gid = s(&g["source"], "gog_id");
+                if gid.is_empty() {
+                    anyhow::bail!("{id} has no source id");
                 }
-                None => {
-                    let list = core.source_updates().await?;
-                    if json {
-                        return print_json(&list);
-                    }
-                    if list.is_empty() {
-                        println!("everything is current");
-                        return Ok(());
-                    }
-                    let mut t = table(&["Id", "Title", "Local", "Remote", "Version", "Date"]);
+                let mut p = progress_printer(json);
+                finish(json, core.source_update(&s(&g["source"], "kind"), &gid, Some(&mut p)).await.map(|n| format!("{n} updated")));
+            }
+            None => {
+                let list = core.source_updates().await?;
+                if json {
+                    return print_json(&list);
+                }
+                if list.is_empty() {
+                    println!("everything is current");
+                    return Ok(());
+                }
+                let mut t = table(&["Id", "Title", "Local", "Remote", "Version", "Date"]);
+                for u in &list {
+                    t.add_row(vec![s(u, "id"), s(u, "title"), s(u, "local_build"), s(u, "remote_build"), s(u, "version"), day(&s(u, "date"), &loc)]);
+                }
+                println!("{t}");
+                if yes || confirm("download?") {
+                    let mut p = progress_printer(json);
                     for u in &list {
-                        t.add_row(vec![s(u, "id"), s(u, "title"), s(u, "local_build"), s(u, "remote_build"), s(u, "version"), day(&s(u, "date"), &loc)]);
-                    }
-                    println!("{t}");
-                    if yes || confirm("download?") {
-                        let mut p = progress_printer(json);
-                        for u in &list {
-                            match core.source_update(&s(u, "source"), &s(u, "id"), Some(&mut p)).await {
-                                Ok(_) => report(json, true, &s(u, "title")),
-                                Err(e) => report(json, false, &format!("{}: {e}", s(u, "title"))),
-                            }
+                        match core.source_update(&s(u, "source"), &s(u, "id"), Some(&mut p)).await {
+                            Ok(_) => report(json, true, &s(u, "title")),
+                            Err(e) => report(json, false, &format!("{}: {e}", s(u, "title"))),
                         }
                     }
                 }
             }
-        }
+        },
         Cmd::Rm { name, yes, purge } => {
             let id = pick(&core, &name).await?;
             if yes || confirm(&format!("remove {id}{}?", if purge { " and trash its prefix" } else { "" })) {
@@ -854,7 +892,10 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             } else {
                 println!("{} {} · {} · {}", "added".green(), id, g.effective.runner_name, g.effective.platform);
                 if g.effective.runner_path.is_empty() && g.effective.runner_kind != "linux" {
-                    println!("{}", format!("{} was not found: install it or `universe runner set {} exe=…`", g.effective.runner_name, g.effective.runner).yellow());
+                    println!(
+                        "{}",
+                        format!("{} was not found: install it or `universe runner set {} exe=…`", g.effective.runner_name, g.effective.runner).yellow()
+                    );
                 }
             }
         }
@@ -880,7 +921,14 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
             let mut t = table(&["Session", "Started", "Duration", "Source", "Journal", "Recording"]);
             for r in rows(&list) {
-                t.add_row(vec![s(&r, "session"), when(&s(&r, "started_at"), &loc), fmt_duration(r["duration_s"].as_u64().unwrap_or(0)), s(&r, "source"), s(&r["journal"], "state"), s(&r["recording"], "path")]);
+                t.add_row(vec![
+                    s(&r, "session"),
+                    when(&s(&r, "started_at"), &loc),
+                    fmt_duration(r["duration_s"].as_u64().unwrap_or(0)),
+                    s(&r, "source"),
+                    s(&r["journal"], "state"),
+                    s(&r["recording"], "path"),
+                ]);
             }
             println!("{t}");
         }
@@ -965,7 +1013,15 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                             (_, id) => id.to_string(),
                         };
                         for slot in g["slots"].as_array().cloned().unwrap_or_default() {
-                            t.add_row(vec![s(&g, "id"), entry.clone(), s(&slot, "slot"), s(&slot, "kind"), s(&slot, "origin"), s(&slot, "path"), if s(&slot, "override").is_empty() { String::new() } else { s(&slot, "default") }]);
+                            t.add_row(vec![
+                                s(&g, "id"),
+                                entry.clone(),
+                                s(&slot, "slot"),
+                                s(&slot, "kind"),
+                                s(&slot, "origin"),
+                                s(&slot, "path"),
+                                if s(&slot, "override").is_empty() { String::new() } else { s(&slot, "default") },
+                            ]);
                         }
                     }
                     println!("{t}");
@@ -994,7 +1050,13 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     let mut t = table(&["Id", "Name", "Year", "", ""]);
                     for h in rows(&hits) {
                         let year = h["year"].as_u64().filter(|y| *y > 0).map(|y| y.to_string()).unwrap_or_default();
-                        t.add_row(vec![h["id"].to_string(), s(&h, "name"), year, if h["verified"].as_bool().unwrap_or(false) { "verified".into() } else { String::new() }, if h["current"].as_bool().unwrap_or(false) { "current".into() } else { String::new() }]);
+                        t.add_row(vec![
+                            h["id"].to_string(),
+                            s(&h, "name"),
+                            year,
+                            if h["verified"].as_bool().unwrap_or(false) { "verified".into() } else { String::new() },
+                            if h["current"].as_bool().unwrap_or(false) { "current".into() } else { String::new() },
+                        ]);
                     }
                     println!("{t}");
                 }
@@ -1004,66 +1066,76 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 }
             }
         }
-        Cmd::Module { action } => {
-            match action {
-                ModuleCmd::Ls => {
-                    let list = core.modules().await;
-                    if json {
-                        return print_json(&list);
-                    }
-                    let mut t = table(&["Id", "Name", "Version", "Enabled", "Available", "Missing", "Hooks"]);
-                    for m in list {
-                        let hooks: Vec<String> = m["hooks"].as_object().map(|o| o.keys().cloned().collect()).unwrap_or_default();
-                        t.add_row(vec![s(&m, "id"), s(&m, "name"), s(&m, "version"), flag(&m["enabled"]), flag(&m["available"]), joined(&m["missing"], ","), hooks.join(",")]);
-                    }
-                    println!("{t}");
+        Cmd::Module { action } => match action {
+            ModuleCmd::Ls => {
+                let list = core.modules().await;
+                if json {
+                    return print_json(&list);
                 }
-                ModuleCmd::Enable { id } => {
-                    core.enable_module(&id, true).await?;
-                    println!("{id} enabled");
+                let mut t = table(&["Id", "Name", "Version", "Enabled", "Available", "Missing", "Hooks"]);
+                for m in list {
+                    let hooks: Vec<String> = m["hooks"].as_object().map(|o| o.keys().cloned().collect()).unwrap_or_default();
+                    t.add_row(vec![
+                        s(&m, "id"),
+                        s(&m, "name"),
+                        s(&m, "version"),
+                        flag(&m["enabled"]),
+                        flag(&m["available"]),
+                        joined(&m["missing"], ","),
+                        hooks.join(","),
+                    ]);
                 }
-                ModuleCmd::Disable { id } => {
-                    core.enable_module(&id, false).await?;
-                    println!("{id} disabled");
-                }
-                ModuleCmd::Settings { id, game } => {
-                    let gid = match game { Some(g) => pick(&core, &g).await?, None => String::new() };
-                    print_json(&core.module_settings(&id, &gid).await?)?;
-                }
-                ModuleCmd::Set { id, pairs, game } => {
-                    let gid = match game { Some(g) => pick(&core, &g).await?, None => String::new() };
-                    for p in &pairs {
-                        let (k, v) = p.split_once('=').ok_or_else(|| anyhow::anyhow!("expected key=value"))?;
-                        core.set_module_setting(&id, &gid, k, v).await?;
-                        println!("{id}.{k} = {v}{}", if gid.is_empty() { String::new() } else { format!(" ({gid})") });
-                    }
+                println!("{t}");
+            }
+            ModuleCmd::Enable { id } => {
+                core.enable_module(&id, true).await?;
+                println!("{id} enabled");
+            }
+            ModuleCmd::Disable { id } => {
+                core.enable_module(&id, false).await?;
+                println!("{id} disabled");
+            }
+            ModuleCmd::Settings { id, game } => {
+                let gid = match game {
+                    Some(g) => pick(&core, &g).await?,
+                    None => String::new(),
+                };
+                print_json(&core.module_settings(&id, &gid).await?)?;
+            }
+            ModuleCmd::Set { id, pairs, game } => {
+                let gid = match game {
+                    Some(g) => pick(&core, &g).await?,
+                    None => String::new(),
+                };
+                for p in &pairs {
+                    let (k, v) = p.split_once('=').ok_or_else(|| anyhow::anyhow!("expected key=value"))?;
+                    core.set_module_setting(&id, &gid, k, v).await?;
+                    println!("{id}.{k} = {v}{}", if gid.is_empty() { String::new() } else { format!(" ({gid})") });
                 }
             }
-        }
+        },
         Cmd::Sources => print_sources(&core.sources().await, json)?,
-        Cmd::Source { action } => {
-            match action {
-                SourceCmd::Ls => print_sources(&core.sources().await, json)?,
-                SourceCmd::Enable { id } => {
-                    core.enable_source(&id, true).await?;
-                    println!("{id} enabled");
-                }
-                SourceCmd::Disable { id } => {
-                    core.enable_source(&id, false).await?;
-                    println!("{id} disabled");
-                }
-                SourceCmd::Settings { id } => {
-                    print_json(&core.source_settings(&id).await?)?;
-                }
-                SourceCmd::Set { id, pairs } => {
-                    for p in &pairs {
-                        let (k, v) = p.split_once('=').ok_or_else(|| anyhow::anyhow!("expected key=value"))?;
-                        core.set_source_setting(&id, k, v).await?;
-                        println!("{id}.{k} = {v}");
-                    }
+        Cmd::Source { action } => match action {
+            SourceCmd::Ls => print_sources(&core.sources().await, json)?,
+            SourceCmd::Enable { id } => {
+                core.enable_source(&id, true).await?;
+                println!("{id} enabled");
+            }
+            SourceCmd::Disable { id } => {
+                core.enable_source(&id, false).await?;
+                println!("{id} disabled");
+            }
+            SourceCmd::Settings { id } => {
+                print_json(&core.source_settings(&id).await?)?;
+            }
+            SourceCmd::Set { id, pairs } => {
+                for p in &pairs {
+                    let (k, v) = p.split_once('=').ok_or_else(|| anyhow::anyhow!("expected key=value"))?;
+                    core.set_source_setting(&id, k, v).await?;
+                    println!("{id}.{k} = {v}");
                 }
             }
-        }
+        },
         Cmd::Login { source, code } => {
             let code = match code {
                 Some(c) => c,
@@ -1092,7 +1164,13 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     (false, None, _, Some(d)) => format!("{} download", human_size(d)),
                     _ => String::new(),
                 };
-                t.add_row(vec![s(&g, "id"), s(&g, "title"), if partial.is_some() && !installed { "paused".into() } else { flag(&g["installed"]) }, size, if installed { s(&g, "dir") } else { s(&g, "partial_dir") }]);
+                t.add_row(vec![
+                    s(&g, "id"),
+                    s(&g, "title"),
+                    if partial.is_some() && !installed { "paused".into() } else { flag(&g["installed"]) },
+                    size,
+                    if installed { s(&g, "dir") } else { s(&g, "partial_dir") },
+                ]);
             }
             println!("{t}");
         }
@@ -1116,14 +1194,27 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 return print_json(&report);
             }
             let n = |k: &str| report[k].as_array().map(|a| a.len()).unwrap_or(0);
-            println!("{} imported {}, skipped (already present) {}, updated {}, media from pegasus-library {}", if apply { "applied:" } else { "dry run:" }, n("imported"), n("skipped"), n("updated"), n("media_imported"));
+            println!(
+                "{} imported {}, skipped (already present) {}, updated {}, media from pegasus-library {}",
+                if apply { "applied:" } else { "dry run:" },
+                n("imported"),
+                n("skipped"),
+                n("updated"),
+                n("media_imported")
+            );
             if let Some(h) = report["hours_imported"].as_object() {
                 for (k, v) in h {
                     println!("  hours {k}: {v}");
                 }
             }
             for h in report["runners"].as_array().cloned().unwrap_or_default() {
-                println!("  [runners.{}] {} {}{}", s(&h, "runner"), s(&h, "program"), joined(&h["args"], " "), if s(&h, "wrapped") == "true" { " (Lutris wrapper dropped)".dimmed().to_string() } else { String::new() });
+                println!(
+                    "  [runners.{}] {} {}{}",
+                    s(&h, "runner"),
+                    s(&h, "program"),
+                    joined(&h["args"], " "),
+                    if s(&h, "wrapped") == "true" { " (Lutris wrapper dropped)".dimmed().to_string() } else { String::new() }
+                );
             }
             let mut t = table(&["Game", "Added", "Removed", "Changed"]);
             for d in report["env_diffs"].as_array().cloned().unwrap_or_default() {
@@ -1172,7 +1263,13 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 if !ok {
                     bad += 1;
                 }
-                println!("{} {:<18} {:<10} {}", if ok { "✓".green().to_string() } else { "✗".red().to_string() }, s(&c, "check"), s(&c, "module").dimmed(), s(&c, "detail"));
+                println!(
+                    "{} {:<18} {:<10} {}",
+                    if ok { "✓".green().to_string() } else { "✗".red().to_string() },
+                    s(&c, "check"),
+                    s(&c, "module").dimmed(),
+                    s(&c, "detail")
+                );
             }
             if bad > 0 {
                 println!("{bad} problem(s)");
@@ -1180,26 +1277,24 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
             println!("{}", "all good".green());
         }
-        Cmd::Config { action } => {
-            match action {
-                ConfigCmd::Get { key } => {
-                    let mut v = core.settings().await;
-                    if let Some(key) = key {
-                        for part in key.split('.') {
-                            v = v.get(part).cloned().unwrap_or(Value::Null);
-                        }
-                    }
-                    match v {
-                        Value::String(s) => println!("{s}"),
-                        other => print_json(&other)?,
+        Cmd::Config { action } => match action {
+            ConfigCmd::Get { key } => {
+                let mut v = core.settings().await;
+                if let Some(key) = key {
+                    for part in key.split('.') {
+                        v = v.get(part).cloned().unwrap_or(Value::Null);
                     }
                 }
-                ConfigCmd::Set { key, value } => {
-                    core.set_setting(&key, &value).await?;
-                    println!("{key} = {value}");
+                match v {
+                    Value::String(s) => println!("{s}"),
+                    other => print_json(&other)?,
                 }
             }
-        }
+            ConfigCmd::Set { key, value } => {
+                core.set_setting(&key, &value).await?;
+                println!("{key} = {value}");
+            }
+        },
         Cmd::Screenshot => println!("{}", core.screenshot().await?),
         Cmd::Screenshots { name, remove, yes } => {
             let id = match &name {
@@ -1263,9 +1358,20 @@ async fn controller(core: Core, action: ControllerCmd, json: bool) -> anyhow::Re
                     let entry = &d["slots"][&slot];
                     let label = fam.and_then(|f| f.slots().find(|s| s.id == slot)).map(|s| s.label).unwrap_or(&slot);
                     let macros = cfg.macros_for(&family, &slot);
-                    let of = |t: &str| macros.iter().find(|m| m.trigger == t).map(|m| if m.keys.is_empty() && m.command.is_empty() { m.action.clone() } else { format!("{} {}{}", m.action, m.keys, m.command) }).unwrap_or_default();
+                    let of = |t: &str| {
+                        macros
+                            .iter()
+                            .find(|m| m.trigger == t)
+                            .map(|m| if m.keys.is_empty() && m.command.is_empty() { m.action.clone() } else { format!("{} {}{}", m.action, m.keys, m.command) })
+                            .unwrap_or_default()
+                    };
                     let code = if entry["bound"] == true { s(entry, "code") } else { "unbound".to_string() };
-                    t.add_row(vec![Cell::new(label), if entry["bound"] == true { Cell::new(code) } else { Cell::new(code).add_attribute(Attribute::Dim) }, Cell::new(of("press")), Cell::new(of("hold"))]);
+                    t.add_row(vec![
+                        Cell::new(label),
+                        if entry["bound"] == true { Cell::new(code) } else { Cell::new(code).add_attribute(Attribute::Dim) },
+                        Cell::new(of("press")),
+                        Cell::new(of("hold")),
+                    ]);
                 }
                 println!("{t}");
             }
@@ -1319,9 +1425,23 @@ async fn runner(core: Core, action: RunnerCmd, json: bool) -> anyhow::Result<()>
             }
             let mut t = table(&["Id", "Name", "Platforms", "Program", "Found"]);
             for r in list {
-                let program = if s(&r, "path").is_empty() { if s(&r, "kind") == "linux" { "the game itself".to_string() } else { "not found".to_string() } } else { s(&r, "path") };
+                let program = if s(&r, "path").is_empty() {
+                    if s(&r, "kind") == "linux" {
+                        "the game itself".to_string()
+                    } else {
+                        "not found".to_string()
+                    }
+                } else {
+                    s(&r, "path")
+                };
                 let program = if r["available"].as_bool() == Some(true) { Cell::new(program) } else { Cell::new(program).add_attribute(Attribute::Dim) };
-                t.add_row(vec![Cell::new(s(&r, "id")), Cell::new(s(&r, "name")), Cell::new(joined(&r["platforms"], ", ")), program, Cell::new(s(&r, "source"))]);
+                t.add_row(vec![
+                    Cell::new(s(&r, "id")),
+                    Cell::new(s(&r, "name")),
+                    Cell::new(joined(&r["platforms"], ", ")),
+                    program,
+                    Cell::new(s(&r, "source")),
+                ]);
             }
             println!("{t}");
         }
@@ -1443,19 +1563,39 @@ fn launch_keys(json: bool) -> anyhow::Result<()> {
 /// `set`'s candidates: the launch keys unprefixed (a map as `env.`), then the other game keys.
 fn game_keys() -> Vec<String> {
     use crate::launch_keys::{Kind, Scope, LAUNCH_KEYS};
-    let mut keys: Vec<String> = LAUNCH_KEYS.iter().filter(|k| k.scope != Scope::Global).map(|k| if k.kind == Kind::Map { format!("{}.", k.key) } else { format!("{}=", k.key) }).collect();
+    let mut keys: Vec<String> = LAUNCH_KEYS
+        .iter()
+        .filter(|k| k.scope != Scope::Global)
+        .map(|k| if k.kind == Kind::Map { format!("{}.", k.key) } else { format!("{}=", k.key) })
+        .collect();
     keys.extend(["hide_cursor=", "hidden=", "favorite=", "tags=", "sort_title=", "platform=", "metadata.sgdb_id=", "capture.cursor="].map(String::from));
     keys
 }
 
 fn config_keys() -> Vec<String> {
     use crate::launch_keys::{Kind, Scope, LAUNCH_KEYS};
-    let mut keys: Vec<String> = ["paths.games_root", "paths.prefixes_root", "paths.recordings_root", "paths.journal_root", "paths.overrides"].map(String::from).to_vec();
-    keys.extend(LAUNCH_KEYS.iter().filter(|k| k.scope != Scope::Game).map(|k| if k.kind == Kind::Map { format!("launch.{}.", k.key) } else { format!("launch.{}", k.key) }));
+    let mut keys: Vec<String> =
+        ["paths.games_root", "paths.prefixes_root", "paths.recordings_root", "paths.journal_root", "paths.overrides"].map(String::from).to_vec();
+    keys.extend(LAUNCH_KEYS.iter().filter(|k| k.scope != Scope::Game).map(|k| {
+        if k.kind == Kind::Map {
+            format!("launch.{}.", k.key)
+        } else {
+            format!("launch.{}", k.key)
+        }
+    }));
     keys.extend(
         [
-            "runners.", "desktop.profile", "desktop.hide_cursor", "desktop.cursor_extension", "keys.sgdb", "keys.sgdb_file", "keys.rawg", "keys.rawg_file",
-            "controller.enabled", "controller.hold_ms", "controller.volume_step",
+            "runners.",
+            "desktop.profile",
+            "desktop.hide_cursor",
+            "desktop.cursor_extension",
+            "keys.sgdb",
+            "keys.sgdb_file",
+            "keys.rawg",
+            "keys.rawg_file",
+            "controller.enabled",
+            "controller.hold_ms",
+            "controller.volume_step",
         ]
         .map(String::from),
     );
@@ -1572,7 +1712,9 @@ fn generate(dir: &std::path::Path) -> anyhow::Result<()> {
             "FILES" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -F\n")),
             "CONFIG_KEYS" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"{}\"\n", config_keys().join(" "))),
             "SLOTS" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"{}\"\n", MEDIA_SLOTS.join(" "))),
-            "games" | "sources" | "modules" | "families" | "buttons" | "runners" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"(universe __complete {what})\"\n")),
+            "games" | "sources" | "modules" | "families" | "buttons" | "runners" => {
+                fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"(universe __complete {what})\"\n"))
+            }
             "games all" => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"(universe __complete games) all\"\n")),
             literal => fish.push_str(&format!("complete -c universe -n \"{cond}\" -f -a \"{literal}\"\n")),
         }

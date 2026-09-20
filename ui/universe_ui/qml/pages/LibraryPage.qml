@@ -9,8 +9,8 @@ FocusScope {
 
     focus: true
 
-    signal chromeRequested()
-    signal addRequested()
+    signal chromeRequested
+    signal addRequested
 
     readonly property var currentGame: anchor ? anchor.game : null
     readonly property bool onAddTile: grid.addSelected
@@ -24,20 +24,50 @@ FocusScope {
     readonly property bool modal: picker.open
     property bool menuOpen: false
 
-    readonly property var hints: picker.open
-        ? picker.hints
-        : chipBar.activeFocus
-        ? [ { glyph: "A", label: "Change" },
-            { glyph: "B", label: "Back to grid" },
-            { glyph: "LT RT", label: "Collection" } ]
-        : onAddTile
-        ? [ { glyph: "A", label: "Add a game" },
-            { glyph: "Y", label: "Sort" },
-            { glyph: "LT RT", label: "Collection" } ]
-        : [ { glyph: "A", label: "Launch" },
-            { glyph: "X", label: "Details" },
-            { glyph: "Y", label: "Sort" },
-            { glyph: "LT RT", label: "Collection" } ]
+    readonly property var hints: picker.open ? picker.hints : chipBar.activeFocus ? [
+        {
+            glyph: "A",
+            label: "Change"
+        },
+        {
+            glyph: "B",
+            label: "Back to grid"
+        },
+        {
+            glyph: "LT RT",
+            label: "Collection"
+        }
+    ] : onAddTile ? [
+        {
+            glyph: "A",
+            label: "Add a game"
+        },
+        {
+            glyph: "Y",
+            label: "Sort"
+        },
+        {
+            glyph: "LT RT",
+            label: "Collection"
+        }
+    ] : [
+        {
+            glyph: "A",
+            label: "Launch"
+        },
+        {
+            glyph: "X",
+            label: "Details"
+        },
+        {
+            glyph: "Y",
+            label: "Sort"
+        },
+        {
+            glyph: "LT RT",
+            label: "Collection"
+        }
+    ]
 
     function cycleCollection(step) {
         var n = api.collections.count + 1;
@@ -51,16 +81,28 @@ FocusScope {
     }
 
     function collectionOptions() {
-        var out = [ { label: "All collections", trailing: api.allGames.count.toString() } ];
+        var out = [
+            {
+                label: "All collections",
+                trailing: api.allGames.count.toString()
+            }
+        ];
         for (var i = 0; i < api.collections.count; i++) {
             var c = api.collections.get(i);
-            out.push({ label: c.name, trailing: c.games.count.toString() });
+            out.push({
+                label: c.name,
+                trailing: c.games.count.toString()
+            });
         }
         return out;
     }
 
     function sortOptions() {
-        return sortNames.map(function(name) { return { label: name }; });
+        return sortNames.map(function (name) {
+            return {
+                label: name
+            };
+        });
     }
 
     function leave() {
@@ -71,12 +113,8 @@ FocusScope {
     property int sortMode: 0
     property int collectionIndex: 0
 
-    readonly property var activeSource: collectionIndex === 0
-                                        ? api.allGames
-                                        : api.collections.get(collectionIndex - 1).games
-    readonly property string collectionLabel: collectionIndex === 0
-                                              ? "All collections"
-                                              : api.collections.get(collectionIndex - 1).name
+    readonly property var activeSource: collectionIndex === 0 ? api.allGames : api.collections.get(collectionIndex - 1).games
+    readonly property string collectionLabel: collectionIndex === 0 ? "All collections" : api.collections.get(collectionIndex - 1).name
 
     readonly property int columns: 8
     readonly property real gap: Theme.dp(28)
@@ -109,7 +147,10 @@ FocusScope {
         client: api.universe
         model: sorted
         index: grid.addSelected ? -1 : grid.currentIndex
-        onMoved: function(index) { grid.addPicked = false; grid.currentIndex = index; }
+        onMoved: function (index) {
+            grid.addPicked = false;
+            grid.currentIndex = index;
+        }
     }
 
     Item {
@@ -156,8 +197,7 @@ FocusScope {
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 visible: page.onAddTile
-                text: page.empty ? "Nothing in the library yet: a file on this machine, a store, or your Lutris games."
-                                 : "A file on this machine, a store, or your Lutris games."
+                text: page.empty ? "Nothing in the library yet: a file on this machine, a store, or your Lutris games." : "A file on this machine, a store, or your Lutris games."
                 color: Theme.textSecondary
                 font.family: Theme.sans
                 font.pixelSize: Theme.dp(24)
@@ -209,7 +249,7 @@ FocusScope {
             ChipPicker {
                 id: picker
 
-                onChosen: function(index) {
+                onChosen: function (index) {
                     picker.hide();
                     chipBar.forceActiveFocus();
                     if (chipBar.index === 0) {
@@ -229,12 +269,12 @@ FocusScope {
             Keys.onLeftPressed: chipBar.step(-1)
             Keys.onRightPressed: chipBar.step(1)
             Keys.onUpPressed: page.chromeRequested()
-            Keys.onDownPressed: function(event) {
+            Keys.onDownPressed: function (event) {
                 Sound.panel();
                 grid.forceActiveFocus();
             }
 
-            Keys.onPressed: function(event) {
+            Keys.onPressed: function (event) {
                 if (event.isAutoRepeat)
                     return;
                 if (api.keys.isAccept(event)) {
@@ -268,7 +308,7 @@ FocusScope {
         selectionActive: grid.activeFocus || page.menuOpen
         addTile: true
 
-        Keys.onPressed: function(event) {
+        Keys.onPressed: function (event) {
             if (event.isAutoRepeat)
                 return;
             if (grid.addSelected && api.keys.isAccept(event)) {
@@ -286,7 +326,7 @@ FocusScope {
             }
         }
 
-        Keys.onReleased: function(event) {
+        Keys.onReleased: function (event) {
             if (event.isAutoRepeat)
                 return;
             var d = api.keys.isPageUp(event) ? -1 : api.keys.isPageDown(event) ? 1 : 0;
@@ -297,7 +337,7 @@ FocusScope {
         }
     }
 
-    Keys.onUpPressed: function(event) {
+    Keys.onUpPressed: function (event) {
         Sound.panel();
         chipBar.forceActiveFocus();
     }

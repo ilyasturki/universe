@@ -10,16 +10,26 @@ FocusScope {
 
     property var shell: null
     property var args: ({})
-    signal closeRequested()
+    signal closeRequested
     focus: true
 
     readonly property var form: api.screens.gameSettings
     readonly property var game: args && args.gameId ? api.allGames.byId(args.gameId) : null
 
     // The basic cards as sections; the advanced ones together behind one Advanced entry.
-    readonly property var sections: form.basicGroups.map(function(g) {
-        return { label: g.title, detail: g.meta || "", group: g.caps === true ? 0 : 1 };
-    }).concat(form.hasAdvanced ? [{ label: "Advanced", detail: "Settings for power users", group: 2 }] : [])
+    readonly property var sections: form.basicGroups.map(function (g) {
+        return {
+            label: g.title,
+            detail: g.meta || "",
+            group: g.caps === true ? 0 : 1
+        };
+    }).concat(form.hasAdvanced ? [
+        {
+            label: "Advanced",
+            detail: "Settings for power users",
+            group: 2
+        }
+    ] : [])
     readonly property bool onAdvanced: form.hasAdvanced && section === form.basicGroups.length
     property int section: 0
     property string zone: "list"
@@ -28,9 +38,17 @@ FocusScope {
 
     readonly property var hints: {
         var row = rows.currentRow;
-        var label = zone !== "rows" ? "OK" : !row || row.heading || row.disabled ? "OK"
-                  : row.type === "bool" ? "Toggle" : row.type === "action" ? "Select" : "Change";
-        return [ { glyph: "B", label: "Back" }, { glyph: "A", label: label } ];
+        var label = zone !== "rows" ? "OK" : !row || row.heading || row.disabled ? "OK" : row.type === "bool" ? "Toggle" : row.type === "action" ? "Select" : "Change";
+        return [
+            {
+                glyph: "B",
+                label: "Back"
+            },
+            {
+                glyph: "A",
+                label: label
+            }
+        ];
     }
 
     onArgsChanged: {
@@ -50,12 +68,14 @@ FocusScope {
             return;
         landKey = "";
         var basic = form.basicGroups;
-        var k = basic.findIndex(function(g) { return g.rows.indexOf(i) >= 0; });
+        var k = basic.findIndex(function (g) {
+            return g.rows.indexOf(i) >= 0;
+        });
         section = k >= 0 ? k : basic.length;
         list.index = section;
         zone = "rows";
         rows.forceActiveFocus();
-        Qt.callLater(function() {
+        Qt.callLater(function () {
             var at = Forms.rowOf(content, i);
             if (at >= 0)
                 rows.index = at;
@@ -72,7 +92,9 @@ FocusScope {
 
     readonly property var content: {
         if (onAdvanced)
-            return Forms.grouped(form.advancedGroups, form.rows, function(src, i) { return page.row(i); });
+            return Forms.grouped(form.advancedGroups, form.rows, function (src, i) {
+                return page.row(i);
+            });
         var g = form.basicGroups[section];
         return g ? g.rows.map(page.row) : [];
     }
@@ -83,15 +105,19 @@ FocusScope {
             Sound.play("select");
         } else if (row.type === "map") {
             Sound.play("ok");
-            Forms.editMap(shell, row, function(name, value) { form.setMapEntry(row.form, name, value); });
+            Forms.editMap(shell, row, function (name, value) {
+                form.setMapEntry(row.form, name, value);
+            });
         } else {
-            rows.edit(row, function(value) { form.setValue(row.form, value); });
+            rows.edit(row, function (value) {
+                form.setValue(row.form, value);
+            });
         }
     }
 
     onSectionChanged: Qt.callLater(rows.reset)
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         if (event.isAutoRepeat)
             return;
         if (api.keys.isCancel(event) && page.zone === "rows") {
@@ -122,7 +148,9 @@ FocusScope {
         sections: page.sections
         focus: page.zone === "list"
 
-        onActivated: function(i) { page.section = i; }
+        onActivated: function (i) {
+            page.section = i;
+        }
         onEscapedRight: {
             page.zone = "rows";
             rows.forceActiveFocus();
@@ -148,7 +176,9 @@ FocusScope {
         model: page.content
         focus: page.zone === "rows"
 
-        onActivated: function(index, row) { page.activate(index, row); }
+        onActivated: function (index, row) {
+            page.activate(index, row);
+        }
         onEscapedLeft: {
             page.zone = "list";
             list.forceActiveFocus();

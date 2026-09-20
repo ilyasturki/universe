@@ -38,14 +38,26 @@ Item {
     scale: focused ? 1.0 : 0.96
     opacity: dimmed ? Theme.idleOpacity : 1.0
 
-    Behavior on scale { Ease { duration: Theme.durQuick } }
-    Behavior on opacity { Ease { duration: Theme.durQuick } }
+    Behavior on scale {
+        Ease {
+            duration: Theme.durQuick
+        }
+    }
+    Behavior on opacity {
+        Ease {
+            duration: Theme.durQuick
+        }
+    }
 
     FocusRing {
         anchors.fill: frame
         cornerRadius: root.radius
         opacity: root.focused ? 1.0 : 0.0
-        Behavior on opacity { Ease { duration: Theme.durQuick } }
+        Behavior on opacity {
+            Ease {
+                duration: Theme.durQuick
+            }
+        }
     }
 
     RoundedMask {

@@ -89,7 +89,9 @@ impl Gpu {
 
     pub fn to_json(&self) -> serde_json::Value {
         let keys = ["dlss_upgrade", "fsr4_upgrade", "xess_upgrade", "optiscaler"];
-        let map = |f: &dyn Fn(&str) -> Option<bool>| serde_json::Value::Object(keys.into_iter().filter_map(|k| f(k).map(|b| (k.to_string(), serde_json::Value::Bool(b)))).collect());
+        let map = |f: &dyn Fn(&str) -> Option<bool>| {
+            serde_json::Value::Object(keys.into_iter().filter_map(|k| f(k).map(|b| (k.to_string(), serde_json::Value::Bool(b)))).collect())
+        };
         let mut v = serde_json::to_value(self).unwrap_or_default();
         v["fits"] = map(&|k| self.fits(k));
         v["auto"] = map(&|k| self.wants(k));

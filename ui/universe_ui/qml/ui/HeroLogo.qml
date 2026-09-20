@@ -26,7 +26,9 @@ Item {
         duration: Theme.durBase
         opacity: root.titleMode ? 0.0 : 1.0
 
-        Behavior on opacity { Ease {} }
+        Behavior on opacity {
+            Ease {}
+        }
     }
 
     Text {
@@ -42,6 +44,8 @@ Item {
         elide: Text.ElideRight
         opacity: root.titleMode ? 1.0 : 0.0
 
-        Behavior on opacity { Ease {} }
+        Behavior on opacity {
+            Ease {}
+        }
     }
 }

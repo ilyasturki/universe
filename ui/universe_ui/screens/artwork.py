@@ -1,6 +1,7 @@
-from PySide6.QtCore import Property, QTimer, Signal, Slot
+from PySide6.QtCore import QTimer, Signal, Slot
 
 from ..models import file_url
+from ..qt import QVARIANT, Property
 from .settings import AsyncScreen
 
 SLOTS = [
@@ -29,26 +30,41 @@ def _slot_row(raw):
     default_origin = str(raw.get("default_origin") or "")
     origin_label = ORIGIN_LABELS.get(origin, origin)
     return {
-        "slot": slot, "label": SLOT_LABELS.get(slot, slot), "aspect": SLOT_ASPECTS.get(slot, 1.0), "use": SLOT_USES.get(slot, ""),
-        "url": file_url(raw.get("path")).toString(), "defaultUrl": file_url(raw.get("default")).toString(), "overrideUrl": file_url(raw.get("override")).toString(),
-        "origin": origin, "originLabel": origin_label,
+        "slot": slot,
+        "label": SLOT_LABELS.get(slot, slot),
+        "aspect": SLOT_ASPECTS.get(slot, 1.0),
+        "use": SLOT_USES.get(slot, ""),
+        "url": file_url(raw.get("path")).toString(),
+        "defaultUrl": file_url(raw.get("default")).toString(),
+        "overrideUrl": file_url(raw.get("override")).toString(),
+        "origin": origin,
+        "originLabel": origin_label,
         "defaultOriginLabel": ORIGIN_LABELS.get(default_origin, default_origin) or "Default",
-        "kind": kind, "kindLabel": _kind_label(kind, origin_label), "hasOverride": bool(raw.get("override")),
+        "kind": kind,
+        "kindLabel": _kind_label(kind, origin_label),
+        "hasOverride": bool(raw.get("override")),
         "hasDefault": bool(raw.get("default")),
     }
 
 
 def _candidate_row(raw, index):
     return {
-        "index": index, "id": int(raw.get("id") or 0), "url": str(raw.get("url") or ""), "thumb": file_url(raw.get("thumb") or raw.get("url")).toString(),
-        "votes": int(raw.get("score") or 0) // 1000, "slot": str(raw.get("slot") or ""),
+        "index": index,
+        "id": int(raw.get("id") or 0),
+        "url": str(raw.get("url") or ""),
+        "thumb": file_url(raw.get("thumb") or raw.get("url")).toString(),
+        "votes": int(raw.get("score") or 0) // 1000,
+        "slot": str(raw.get("slot") or ""),
     }
 
 
 def _hit_row(raw):
     return {
-        "id": int(raw.get("id") or 0), "name": str(raw.get("name") or ""), "year": int(raw.get("year") or 0),
-        "verified": bool(raw.get("verified")), "current": bool(raw.get("current")),
+        "id": int(raw.get("id") or 0),
+        "name": str(raw.get("name") or ""),
+        "year": int(raw.get("year") or 0),
+        "verified": bool(raw.get("verified")),
+        "current": bool(raw.get("current")),
     }
 
 
@@ -202,7 +218,11 @@ class ArtworkForm(AsyncScreen):
         gone = self._client.mediaUnset(self._game_id, slot)
         if gone:
             row = self.slot(slot)
-            self.message.emit(f"{label}: back to the default" + (f" from {row['originLabel']}" if row.get("originLabel") else "") if row.get("hasDefault") else f"{label}: pick removed, nothing under it")
+            self.message.emit(
+                f"{label}: back to the default" + (f" from {row['originLabel']}" if row.get("originLabel") else "")
+                if row.get("hasDefault")
+                else f"{label}: pick removed, nothing under it"
+            )
         return gone
 
     # The client toasts the core's refusal and answers empty; the page shows the reason instead.
@@ -212,7 +232,7 @@ class ArtworkForm(AsyncScreen):
         self._search_busy = True
         self.hitsChanged.emit()
         failures = []
-        failed = lambda kind, message: failures.append(message)  # noqa: E731
+        failed = lambda kind, message: failures.append(message)
         self._client.error.connect(failed)
 
         def done(hits, error):
@@ -250,14 +270,20 @@ class ArtworkForm(AsyncScreen):
     gameId = Property(str, lambda self: self._game_id, notify=gameIdChanged)
     title = Property(str, lambda self: self._title, notify=slotsChanged)
     sgdbId = Property(int, lambda self: self._sgdb_id, notify=slotsChanged)
-    entry = Property(str, lambda self: (self._sgdb_name + (f" ({self._sgdb_year})" if self._sgdb_year else "")) if self._sgdb_name else (f"entry {self._sgdb_id}" if self._sgdb_id else ""), notify=slotsChanged)
+    entry = Property(
+        str,
+        lambda self: (
+            (self._sgdb_name + (f" ({self._sgdb_year})" if self._sgdb_year else "")) if self._sgdb_name else (f"entry {self._sgdb_id}" if self._sgdb_id else "")
+        ),
+        notify=slotsChanged,
+    )
     entryDiffers = Property(bool, lambda self: bool(self._sgdb_name) and self._sgdb_name.casefold() != self._title.casefold(), notify=slotsChanged)
-    slots = Property("QVariantList", lambda self: [dict(s) for s in self._slots], notify=slotsChanged)
-    candidates = Property("QVariantList", lambda self: [dict(c) for c in self._candidates], notify=candidatesChanged)
+    slots = Property(list, lambda self: [dict(s) for s in self._slots], notify=slotsChanged)
+    candidates = Property(list, lambda self: [dict(c) for c in self._candidates], notify=candidatesChanged)
     candidatesSlot = Property(str, lambda self: self._candidates_slot, notify=candidatesChanged)
     candidatesBusy = Property(bool, lambda self: self._candidates_busy, notify=candidatesChanged)
     more = Property(bool, lambda self: self._more, notify=candidatesChanged)
-    hits = Property("QVariantList", lambda self: [dict(h) for h in self._hits], notify=hitsChanged)
+    hits = Property(list, lambda self: [dict(h) for h in self._hits], notify=hitsChanged)
     searchBusy = Property(bool, lambda self: self._search_busy, notify=hitsChanged)
     searchError = Property(str, lambda self: self._search_error, notify=searchErrorChanged)
 
@@ -355,7 +381,7 @@ class ArtworkOverview(AsyncScreen):
             self.message.emit(text)
             self._stale()
 
-    rows = Property("QVariantList", lambda self: [dict(r, slots=[dict(s) for s in r["slots"]]) for r in self._rows], notify=rowsChanged)
-    columns = Property("QVariantList", lambda self: [{"slot": slot, "label": label, "aspect": aspect, "use": use} for slot, label, aspect, use in SLOTS], constant=True)
+    rows = Property(list, lambda self: [dict(r, slots=[dict(s) for s in r["slots"]]) for r in self._rows], notify=rowsChanged)
+    columns = Property(list, lambda self: [{"slot": slot, "label": label, "aspect": aspect, "use": use} for slot, label, aspect, use in SLOTS], constant=True)
     missingGames = Property(int, lambda self: sum(any(s["kind"] == "missing" for s in r["slots"]) for r in self._rows), notify=rowsChanged)
-    job = Property("QVariant", lambda self: dict(self._job) if self._job else None, notify=jobChanged)
+    job = Property(QVARIANT, lambda self: dict(self._job) if self._job else None, notify=jobChanged)

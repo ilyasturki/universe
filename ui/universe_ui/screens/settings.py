@@ -1,10 +1,16 @@
 # A row's `type` is bool, enum, string, path, int, map, info or action; a group's `rows` and `control` index the flat row list.
 # An `advanced` row sits in an `advanced` group, shown behind the page's Advanced row.
-
 import json
 import os
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
-from PySide6.QtCore import Property, QObject, Signal, Slot
+from PySide6.QtCore import QObject, Signal, Slot
+
+from ..qt import QVARIANT, Property
+
+if TYPE_CHECKING:
+    from ..universe_client import CoreClient
 
 ASSETS = os.path.join(os.path.dirname(os.path.dirname(__file__)), "qml", "assets", "runners")
 LOGOS = {os.path.splitext(f)[0]: f"assets/runners/{f}" for f in sorted(os.listdir(ASSETS))}
@@ -27,9 +33,17 @@ def _display(kind, value):
 
 def _row(section, key, label, kind, value, choices=None, module="", detail="", inherited=False, advanced=False):
     row = {
-        "section": section, "key": key, "label": label, "type": kind, "value": value,
-        "display": _display(kind, value), "choices": list(choices or []), "module": module,
-        "detail": detail, "inherited": inherited, "advanced": advanced,
+        "section": section,
+        "key": key,
+        "label": label,
+        "type": kind,
+        "value": value,
+        "display": _display(kind, value),
+        "choices": list(choices or []),
+        "module": module,
+        "detail": detail,
+        "inherited": inherited,
+        "advanced": advanced,
     }
     if kind == "map":
         row["entries"] = [{"name": k, "value": str(v)} for k, v in (value or {}).items()]
@@ -37,8 +51,7 @@ def _row(section, key, label, kind, value, choices=None, module="", detail="", i
 
 
 def _group(title, rows, meta="", warning="", caps=False, control=-1, off=False, advanced=False):
-    return {"title": title, "meta": meta, "warning": warning, "caps": caps, "control": control,
-            "off": off, "advanced": advanced, "rows": list(rows)}
+    return {"title": title, "meta": meta, "warning": warning, "caps": caps, "control": control, "off": off, "advanced": advanced, "rows": list(rows)}
 
 
 def _add(rows, groups, section, row, **group):
@@ -146,14 +159,21 @@ def global_launch_rows(rows, groups, client, config, mode, takes, gpu=None):
         if value in (None, "", {}):
             value = spec["default"]
         section = spec["section"]
-        _add(rows, groups, section, launch_row(section, spec, value, protons=protons, auto_hz=hz, gpu=gpu, mode=mode), caps=True, meta=_card_meta(section, mode, gpu or {}))
+        _add(
+            rows,
+            groups,
+            section,
+            launch_row(section, spec, value, protons=protons, auto_hz=hz, gpu=gpu, mode=mode),
+            caps=True,
+            meta=_card_meta(section, mode, gpu or {}),
+        )
 
 
 def launch_row(section, spec, value, inherited=False, protons=(), auto_hz=0, gpu=None, mode=None):
     kind = ROW_TYPES.get(spec["type"], spec["type"])
     choices, values = [str(c) for c in spec["choices"]], None
     if spec["type"] in ("enum", "int", "toggle") and choices:
-        choices, values = ["default"] + choices, [""] + choices
+        choices, values = ["default", *choices], ["", *choices]
     elif spec["type"] == "proton":
         choices = list(protons)
     if kind == "bool":
@@ -164,8 +184,17 @@ def launch_row(section, spec, value, inherited=False, protons=(), auto_hz=0, gpu
         value = "default" if value in (None, "") else str(value)
     elif choices and value is not None:
         value = str(value)
-    row = _row(section, "launch." + spec["key"], spec["label"], kind, value, choices, detail=gpu_note(spec, gpu or {}), inherited=inherited,
-               advanced=bool(spec.get("advanced")))
+    row = _row(
+        section,
+        "launch." + spec["key"],
+        spec["label"],
+        kind,
+        value,
+        choices,
+        detail=gpu_note(spec, gpu or {}),
+        inherited=inherited,
+        advanced=bool(spec.get("advanced")),
+    )
     if values:
         row["choiceValues"] = values
     if spec["type"] == "fps" and value == "auto" and auto_hz:
@@ -202,8 +231,11 @@ class AsyncScreen(QObject):
     busy = Property(bool, lambda self: self._busy > 0, notify=busyChanged)
 
 
-class AdvancedRows:
+# A QObject to the type checker only: the host's signals resolve through it, the runtime class stays a plain mixin.
+class AdvancedRows(QObject if TYPE_CHECKING else object):
     # The row list with its Advanced row: the gate at `_gate`, the advanced groups shown behind it while `_show_advanced`.
+    rowsChanged: Signal
+    advancedChanged: Signal
 
     def _init_rows(self):
         self._rows = []
@@ -227,7 +259,7 @@ class AdvancedRows:
         basic = [g for g in self._groups if not g["advanced"]]
         more = [g for g in self._groups if g["advanced"]] if self._show_advanced else []
         # `wide`: the gate spans every column, the advanced cards flow under it.
-        return basic + [{**_group("", [self._gate]), "wide": True}] + more
+        return [*basic, {**_group("", [self._gate]), "wide": True}, *more]
 
     def _set_show_advanced(self, shown):
         shown = bool(shown)
@@ -255,6 +287,8 @@ class AdvancedRows:
 class RowsForm(AdvancedRows, AsyncScreen):
     rowsChanged = Signal()
     advancedChanged = Signal()
+    _write: Callable[[dict, Any], Any]
+    _reload: Callable[[dict], Any]
 
     def __init__(self, client, parent=None):
         super().__init__(client, parent)
@@ -300,10 +334,10 @@ class RowsForm(AdvancedRows, AsyncScreen):
         if row.get("type") == "bool":
             self.setValue(index, not row.get("value"))
 
-    rows = Property("QVariantList", lambda self: list(self._rows), notify=rowsChanged)
-    groups = Property("QVariantList", AdvancedRows._shown_groups, notify=rowsChanged)
-    basicGroups = Property("QVariantList", lambda self: [g for g in self._groups if not g["advanced"]], notify=rowsChanged)
-    advancedGroups = Property("QVariantList", lambda self: [g for g in self._groups if g["advanced"]], notify=rowsChanged)
+    rows = Property(list, lambda self: list(self._rows), notify=rowsChanged)
+    groups = Property(list, AdvancedRows._shown_groups, notify=rowsChanged)
+    basicGroups = Property(list, lambda self: [g for g in self._groups if not g["advanced"]], notify=rowsChanged)
+    advancedGroups = Property(list, lambda self: [g for g in self._groups if g["advanced"]], notify=rowsChanged)
     hasAdvanced = Property(bool, lambda self: self._gate >= 0, notify=rowsChanged)
     showAdvanced = Property(bool, lambda self: self._show_advanced, AdvancedRows._set_show_advanced, notify=advancedChanged)
     count = Property(int, lambda self: len(self._rows), notify=rowsChanged)
@@ -340,8 +374,16 @@ def game_launch_rows(game, effective, runners):
         platforms = list(spec.get("platforms") or [])
         if len(platforms) > 1:
             rows.append(_row("Launch", "platform", "Platform", "enum", game.get("platform") or platforms[0], platforms))
-        rows.append(_row("Launch", "launch.runner_exe", spec["name"] + " program", "path", _dig(game, "launch.runner_exe") or effective.get("runner_path") or "",
-                         inherited=not _dig(game, "launch.runner_exe")))
+        rows.append(
+            _row(
+                "Launch",
+                "launch.runner_exe",
+                spec["name"] + " program",
+                "path",
+                _dig(game, "launch.runner_exe") or effective.get("runner_path") or "",
+                inherited=not _dig(game, "launch.runner_exe"),
+            )
+        )
         options = effective.get("options") or {}
         own = _dig(game, "launch.options") or {}
         for option in spec.get("options") or []:
@@ -349,8 +391,17 @@ def game_launch_rows(game, effective, runners):
             value = options.get(key, option.get("default"))
             if option.get("type") == "bool":
                 value = bool(value)
-            rows.append(_row("Launch", f"launch.options.{key}", option.get("label", key), option.get("type", "string"),
-                             value, option.get("choices"), inherited=key not in own))
+            rows.append(
+                _row(
+                    "Launch",
+                    f"launch.options.{key}",
+                    option.get("label", key),
+                    option.get("type", "string"),
+                    value,
+                    option.get("choices"),
+                    inherited=key not in own,
+                )
+            )
     return rows, spec["name"], kind
 
 
@@ -391,7 +442,13 @@ def build_game(client, game_id, screen_mode):
             value, inherited = effective.get("hide_cursor"), True
         if kind == "bool":
             value = bool(value)
-        _add(rows, groups, section, _row(section, key, label, kind, value, inherited=inherited, detail=HIDE_CURSOR if key == "desktop.hide_cursor" else "", advanced=advanced), caps=True)
+        _add(
+            rows,
+            groups,
+            section,
+            _row(section, key, label, kind, value, inherited=inherited, detail=HIDE_CURSOR if key == "desktop.hide_cursor" else "", advanced=advanced),
+            caps=True,
+        )
     modules = {m["id"]: m for m in client.modules()}
     for module_id, values in client.settings(game_id).items():
         module = modules.get(module_id) or {}
@@ -401,8 +458,22 @@ def build_game(client, game_id, screen_mode):
                 continue
             key = setting["key"]
             value = values.get(key, setting.get("default"))
-            _add(rows, groups, name, _row(name, key, setting.get("label", key), setting.get("type", "string"), value, setting.get("choices"), module_id,
-                                          advanced=bool(setting.get("advanced"))), meta=_meta(module))
+            _add(
+                rows,
+                groups,
+                name,
+                _row(
+                    name,
+                    key,
+                    setting.get("label", key),
+                    setting.get("type", "string"),
+                    value,
+                    setting.get("choices"),
+                    module_id,
+                    advanced=bool(setting.get("advanced")),
+                ),
+                meta=_meta(module),
+            )
     return rows, groups, title
 
 
@@ -410,7 +481,7 @@ class GameSettingsForm(RowsForm):
     gameIdChanged = Signal()
     titleChanged = Signal()
 
-    def __init__(self, client, screen_mode=lambda: {}, parent=None):
+    def __init__(self, client, screen_mode: Callable[[], dict] = dict, parent=None):
         super().__init__(client, parent)
         self._screen_mode = screen_mode
         self._game_id = ""
@@ -448,6 +519,7 @@ def _state(entry):
 class ModuleApi:
     source = False
     kind = "Modules"
+    _client: "CoreClient"
 
     def _entries(self):
         return self._client.modules()
@@ -468,6 +540,7 @@ class ModuleApi:
 class SourceApi:
     source = True
     kind = "Sources"
+    _client: "CoreClient"
 
     def _entries(self):
         return self._client.sources()
@@ -487,6 +560,9 @@ class SourceApi:
 
 class ListForm(RowsForm):
     section = "Modules"
+    source: bool
+    _entries: Callable[[], list]
+    _enable: Callable[[str, bool], Any]
 
     def _show(self, entries):
         rows, on, off = [], [], []
@@ -496,9 +572,16 @@ class ListForm(RowsForm):
             enabled = bool(entry.get("enabled"))
             warning = _state(entry)
             row = _row(self.section, "module", name, "action", enabled, module=ident)
-            row.update(display="Unavailable" if warning else "On" if enabled else "Off", action="Open", runner="", switch=True,
-                       meta=_meta(entry), warning=warning, source=self.source,
-                       detail=warning.replace("unavailable", "On, but its hooks are skipped" if enabled else "Cannot be enabled", 1) if warning else _meta(entry))
+            row.update(
+                display="Unavailable" if warning else "On" if enabled else "Off",
+                action="Open",
+                runner="",
+                switch=True,
+                meta=_meta(entry),
+                warning=warning,
+                source=self.source,
+                detail=warning.replace("unavailable", "On, but its hooks are skipped" if enabled else "Cannot be enabled", 1) if warning else _meta(entry),
+            )
             (on if enabled else off).append(len(rows))
             rows.append(row)
         groups = [_group("", on)] if on else []
@@ -546,8 +629,7 @@ class ModulesForm(ModuleApi, ListForm):
                 group = _group(name, [])
                 groups.append(group)
             group["rows"].append(len(rows))
-            rows.append(_row(name, "", check.get("check", ""), "info", bool(check.get("ok")),
-                             detail=str(check.get("detail") or ""), module=ident))
+            rows.append(_row(name, "", check.get("check", ""), "info", bool(check.get("ok")), detail=str(check.get("detail") or ""), module=ident))
         groups.sort(key=lambda g: g["title"] != "Core")
         for group in groups:
             passed = sum(1 for i in group["rows"] if rows[i]["value"])
@@ -556,8 +638,8 @@ class ModulesForm(ModuleApi, ListForm):
         self._doctor_groups = groups
         self.doctorChanged.emit()
 
-    doctor = Property("QVariantList", lambda self: list(self._doctor), notify=doctorChanged)
-    doctorGroups = Property("QVariantList", lambda self: list(self._doctor_groups), notify=doctorChanged)
+    doctor = Property(list, lambda self: list(self._doctor), notify=doctorChanged)
+    doctorGroups = Property(list, lambda self: list(self._doctor_groups), notify=doctorChanged)
 
 
 class SourcesForm(SourceApi, ListForm):
@@ -574,8 +656,17 @@ class SourcesForm(SourceApi, ListForm):
 
 def page_info(api, entry, ident):
     name = entry.get("name", ident)
-    return {"id": ident, "name": name, "meta": _meta(entry), "description": str(entry.get("description") or ""), "warning": _state(entry),
-            "enabled": bool(entry.get("enabled")), "source": api.source, "logged_in": bool(entry.get("logged_in")), "user": str(entry.get("user") or "")}
+    return {
+        "id": ident,
+        "name": name,
+        "meta": _meta(entry),
+        "description": str(entry.get("description") or ""),
+        "warning": _state(entry),
+        "enabled": bool(entry.get("enabled")),
+        "source": api.source,
+        "logged_in": bool(entry.get("logged_in")),
+        "user": str(entry.get("user") or ""),
+    }
 
 
 def signin_rows(entry, name, rows, groups):
@@ -616,8 +707,16 @@ def build_page(api, ident, entries, choices_of=lambda ident, key, values: None):
         choices = [str(c) for c in setting.get("choices") or []]
         if setting.get("dynamic"):
             choices = choices_of(ident, key, values) or choices
-        row = _row(name, key, setting.get("label", key), setting.get("type", "string"), values.get(key, setting.get("default")), choices, ident,
-                   advanced=bool(setting.get("advanced")) or setting.get("scope") == "config")
+        row = _row(
+            name,
+            key,
+            setting.get("label", key),
+            setting.get("type", "string"),
+            values.get(key, setting.get("default")),
+            choices,
+            ident,
+            advanced=bool(setting.get("advanced")) or setting.get("scope") == "config",
+        )
         _add(rows, groups, "Settings", row, caps=True)
     return info, rows, groups
 
@@ -625,6 +724,10 @@ def build_page(api, ident, entries, choices_of=lambda ident, key, values: None):
 class PageForm(RowsForm):
     # A `dynamic` setting's choices are fetched once per state of the entry's settings.
     moduleChanged = Signal()
+    _entries: Callable[[], list]
+    _enable: Callable[[str, bool], Any]
+    _choices: Callable[[str, str], Any]
+    _set: Callable[[str, str, Any], Any]
 
     def __init__(self, client, parent=None):
         super().__init__(client, parent)
@@ -672,7 +775,7 @@ class PageForm(RowsForm):
         self._module, rows, groups = build_page(self, ident, entries, self._dynamic_choices)
         return rows, groups
 
-    info = Property("QVariant", lambda self: dict(self._module), notify=moduleChanged)
+    info = Property(QVARIANT, lambda self: dict(self._module), notify=moduleChanged)
 
     def _write(self, row, payload):
         if row["key"] == "enabled":

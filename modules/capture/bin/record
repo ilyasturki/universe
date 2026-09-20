@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """The capture unit's main process: gpu-screen-recorder as a child, moved to the monitor that replaces the one it records."""
+
 import os
 import signal
 import sys
@@ -10,7 +11,7 @@ from _record import Recorder
 
 
 def main(argv):
-    gsr = argv[argv.index("--") + 1:] if "--" in argv else argv
+    gsr = argv[argv.index("--") + 1 :] if "--" in argv else argv
     if flag_value(gsr, "-w") == "portal" or not flag_value(gsr, "-o"):
         os.execvp(gsr[0], gsr)
     recorder = Recorder(gsr, os.environ["SESSION_ID"], os.environ["MODULE_DATA_DIR"], os.environ["SESSION_UNIT"])

@@ -22,13 +22,17 @@ Item {
         border.width: 1
         border.color: root.active ? Theme.text : Qt.rgba(1, 1, 1, 0.14)
 
-        Behavior on color { ColorEase {} }
+        Behavior on color {
+            ColorEase {}
+        }
     }
 
     Loader {
         anchors.fill: parent
         active: root.focused
-        sourceComponent: FocusRing { cornerRadius: root.height / 2 }
+        sourceComponent: FocusRing {
+            cornerRadius: root.height / 2
+        }
     }
 
     Row {

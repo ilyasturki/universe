@@ -1,8 +1,8 @@
 {
-  "uuid": "universe@ilyasturki.github.io",
-  "name": "Universe",
-  "description": "Lists the shell's toplevel windows with their pid over the session bus (org.universe.Windows), so Universe's capture module can wait for the game's window before GNOME's picker (shown once per game, then restored from its token); takes its screenshots in-process with the shell's own flash and shutter; shows the shell's OSD for Universe's controller macros.",
-  "shell-version": ["48", "49", "50"],
-  "session-modes": ["user"],
-  "url": "https://github.com/ilyasturki/universe"
+    "uuid": "universe@ilyasturki.github.io",
+    "name": "Universe",
+    "description": "Lists the shell's toplevel windows with their pid over the session bus (org.universe.Windows), so Universe's capture module can wait for the game's window before GNOME's picker (shown once per game, then restored from its token); takes its screenshots in-process with the shell's own flash and shutter; shows the shell's OSD for Universe's controller macros.",
+    "shell-version": ["48", "49", "50"],
+    "session-modes": ["user"],
+    "url": "https://github.com/ilyasturki/universe"
 }

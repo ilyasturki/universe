@@ -5,9 +5,9 @@ Item {
     id: keyboard
 
     signal charEntered(string value)
-    signal backspaced()
-    signal cleared()
-    signal done()
+    signal backspaced
+    signal cleared
+    signal done
 
     property real keyHeight: Theme.dp(58)
     property real keyGap: Theme.dp(10)
@@ -25,7 +25,12 @@ Item {
     implicitHeight: keyHeight * 5 + keyGap * 4
 
     function chars(s) {
-        return s.split("").map(function(c) { return { label: c, value: c }; });
+        return s.split("").map(function (c) {
+            return {
+                label: c,
+                value: c
+            };
+        });
     }
 
     function wide(key) {
@@ -36,34 +41,106 @@ Item {
     readonly property var rows: {
         if (numeric)
             return [
-                { indent: 4, keys: chars("123").map(wide) },
-                { indent: 4, keys: chars("456").map(wide) },
-                { indent: 4, keys: chars("789").map(wide) },
-                { indent: 4, keys: [wide({ label: "-", value: "-" }), wide({ label: "0", value: "0" }),
-                                    wide({ label: "⌫", value: "", action: "backspace" })] },
-                { indent: 6, keys: [{ label: "clear", value: "", action: "clear" }, { label: "done", value: "", action: "done" }] }
+                {
+                    indent: 4,
+                    keys: chars("123").map(wide)
+                },
+                {
+                    indent: 4,
+                    keys: chars("456").map(wide)
+                },
+                {
+                    indent: 4,
+                    keys: chars("789").map(wide)
+                },
+                {
+                    indent: 4,
+                    keys: [wide({
+                            label: "-",
+                            value: "-"
+                        }), wide({
+                            label: "0",
+                            value: "0"
+                        }), wide({
+                            label: "⌫",
+                            value: "",
+                            action: "backspace"
+                        })]
+                },
+                {
+                    indent: 6,
+                    keys: [
+                        {
+                            label: "clear",
+                            value: "",
+                            action: "clear"
+                        },
+                        {
+                            label: "done",
+                            value: "",
+                            action: "done"
+                        }
+                    ]
+                }
             ];
         var bottom = [];
         if (showDone)
-            bottom.push({ label: "⇧", value: "", action: "shift" });
+            bottom.push({
+                label: "⇧",
+                value: "",
+                action: "shift"
+            });
         if (symbols)
             bottom = bottom.concat(chars("-_./:"));
-        bottom.push({ label: "space", value: " ", action: "space" });
-        bottom.push({ label: "clear", value: "", action: "clear" });
+        bottom.push({
+            label: "space",
+            value: " ",
+            action: "space"
+        });
+        bottom.push({
+            label: "clear",
+            value: "",
+            action: "clear"
+        });
         if (showDone)
-            bottom.push({ label: "done", value: "", action: "done" });
+            bottom.push({
+                label: "done",
+                value: "",
+                action: "done"
+            });
         return [
-            { indent: 0, keys: chars("1234567890") },
-            { indent: 0, keys: chars("qwertyuiop") },
-            { indent: 1, keys: chars("asdfghjkl") },
-            { indent: 1, keys: chars("zxcvbnm").concat([{ label: "⌫", value: "", action: "backspace" }]) },
-            { indent: 0, keys: bottom }
+            {
+                indent: 0,
+                keys: chars("1234567890")
+            },
+            {
+                indent: 0,
+                keys: chars("qwertyuiop")
+            },
+            {
+                indent: 1,
+                keys: chars("asdfghjkl")
+            },
+            {
+                indent: 1,
+                keys: chars("zxcvbnm").concat([
+                    {
+                        label: "⌫",
+                        value: "",
+                        action: "backspace"
+                    }
+                ])
+            },
+            {
+                indent: 0,
+                keys: bottom
+            }
         ];
     }
 
     // With the path symbols in, the bottom row only fits with single-width shift, clear and done.
     readonly property real clearWidth: symbols ? keyUnit : keyUnit * 2 + keyGap
-    readonly property real bottomFixed: rows[rows.length - 1].keys.reduce(function(w, k, i) {
+    readonly property real bottomFixed: rows[rows.length - 1].keys.reduce(function (w, k, i) {
         return w + (k.action === "space" ? 0 : keyWidth(k)) + (i > 0 ? keyGap : 0);
     }, 0)
 
@@ -136,8 +213,7 @@ Item {
                     Rectangle {
                         id: key
 
-                        readonly property bool selected: rowNo === keyboard.rowIndex
-                                                         && index === keyboard.colIndex
+                        readonly property bool selected: rowNo === keyboard.rowIndex && index === keyboard.colIndex
                         readonly property bool latched: modelData.action === "shift" && keyboard.shift
 
                         width: keyboard.keyWidth(modelData)
@@ -145,7 +221,9 @@ Item {
                         radius: Theme.dp(12)
                         color: selected ? Theme.text : latched ? Qt.rgba(1, 1, 1, 0.22) : Theme.surface
 
-                        Behavior on color { ColorEase {} }
+                        Behavior on color {
+                            ColorEase {}
+                        }
 
                         Rectangle {
                             anchors.fill: parent

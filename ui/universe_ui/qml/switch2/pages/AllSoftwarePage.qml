@@ -9,7 +9,7 @@ FocusScope {
 
     property var shell: null
 
-    signal closeRequested()
+    signal closeRequested
 
     property int tab: 0
     property string zone: "grid"
@@ -18,8 +18,29 @@ FocusScope {
 
     readonly property var sortNames: ["By Recently Played", "By Title", "By Play Time", "By Release"]
 
-    readonly property var hints: tab === 1 || zone === "rail" || softwareGrid.atAddTile ? [ { glyph: "B", label: "Back" }, { glyph: "A", label: "OK" } ]
-                               : [ { glyph: "Start", label: "Options" }, { glyph: "B", label: "Back" }, { glyph: "A", label: "Start" } ]
+    readonly property var hints: tab === 1 || zone === "rail" || softwareGrid.atAddTile ? [
+        {
+            glyph: "B",
+            label: "Back"
+        },
+        {
+            glyph: "A",
+            label: "OK"
+        }
+    ] : [
+        {
+            glyph: "Start",
+            label: "Options"
+        },
+        {
+            glyph: "B",
+            label: "Back"
+        },
+        {
+            glyph: "A",
+            label: "Start"
+        }
+    ]
 
     readonly property real gridX: Theme.dp(253)
     readonly property real gridY: Theme.dp(190)
@@ -51,14 +72,22 @@ FocusScope {
 
     function railAction(id) {
         if (id === "search") {
-            shell.prompt({ title: "Search", value: query, max: 32 }, function(value) {
+            shell.prompt({
+                title: "Search",
+                value: query,
+                max: 32
+            }, function (value) {
                 if (value !== null) {
                     query = value;
                     softwareGrid.index = 0;
                 }
             });
         } else if (id === "sort") {
-            shell.pick({ title: "Sort", choices: sortNames, index: sortMode }, function(i) {
+            shell.pick({
+                title: "Sort",
+                choices: sortNames,
+                index: sortMode
+            }, function (i) {
                 if (i >= 0) {
                     sortMode = i;
                     softwareGrid.index = 0;
@@ -67,9 +96,10 @@ FocusScope {
         }
     }
 
-    onActiveFocusChanged: if (activeFocus) focusZone()
+    onActiveFocusChanged: if (activeFocus)
+        focusZone()
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         if (event.isAutoRepeat)
             return;
         if (api.keys.isPrevPage(event)) {
@@ -87,7 +117,7 @@ FocusScope {
         anchors.left: parent.left
         anchors.right: parent.right
         names: ["Software", "Groups"]
-        onChanged: function(i) {
+        onChanged: function (i) {
             page.tab = i;
             page.focusZone();
         }
@@ -102,9 +132,20 @@ FocusScope {
             x: Theme.dp(102)
             y: Theme.dp(170)
             height: parent.height - y - Theme.dp(Theme.hintBarHeight)
-            items: [ { id: "search", icon: "search" }, { id: "sort", icon: "sort" } ]
+            items: [
+                {
+                    id: "search",
+                    icon: "search"
+                },
+                {
+                    id: "sort",
+                    icon: "sort"
+                }
+            ]
             focus: page.zone === "rail"
-            onActivated: function(id) { page.railAction(id); }
+            onActivated: function (id) {
+                page.railAction(id);
+            }
             onEscapedRight: {
                 page.zone = "grid";
                 softwareGrid.forceActiveFocus();
@@ -134,7 +175,9 @@ FocusScope {
                 rail.forceActiveFocus();
             }
             onActivated: page.shell.launch(current)
-            onOptionsRequested: page.shell.push("pages/SoftwareOptionsPage.qml", { gameId: current.id })
+            onOptionsRequested: page.shell.push("pages/SoftwareOptionsPage.qml", {
+                gameId: current.id
+            })
             onAddRequested: page.shell.push("pages/AddGamePage.qml", {})
         }
     }
@@ -150,6 +193,9 @@ FocusScope {
         groups: true
         escapesLeft: false
         focus: page.tab === 1
-        onActivated: page.shell.push("pages/GroupPage.qml", { group: current.key, name: current.name })
+        onActivated: page.shell.push("pages/GroupPage.qml", {
+            group: current.key,
+            name: current.name
+        })
     }
 }

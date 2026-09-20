@@ -1,3 +1,4 @@
+import itertools
 import json
 import math
 import os
@@ -10,7 +11,7 @@ from datetime import datetime, timedelta
 
 from _common import log, remove
 
-SHOT_RE = re.compile(r"(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})\.(?:png|jpe?g)$", re.I)
+SHOT_RE = re.compile(r"(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})\.(?:png|jpe?g)$", re.IGNORECASE)
 # Shots taken just before the recorder started or after it stopped still belong to the sitting.
 HEAD_GRACE_S = 90
 TAIL_GRACE_S = 120
@@ -75,7 +76,8 @@ def shot_time(name):
     m = SHOT_RE.search(os.path.basename(str(name)))
     if not m:
         return None
-    return datetime(*(int(x) for x in m.groups()))
+    year, month, day, hour, minute, second = (int(x) for x in m.groups())
+    return datetime(year, month, day, hour, minute, second)
 
 
 def select_screenshots(attachments_dir, start, end):
@@ -107,7 +109,10 @@ def probe_duration(path):
     try:
         out = subprocess.run(
             ["ffprobe", "-v", "error", "-show_entries", "format=duration", "-of", "default=nw=1:nk=1", path],
-            capture_output=True, text=True, timeout=60,
+            capture_output=True,
+            text=True,
+            timeout=60,
+            check=False,
         ).stdout.strip()
         return float(out) if out else None
     except (OSError, ValueError, subprocess.TimeoutExpired):
@@ -118,7 +123,7 @@ def probe_duration(path):
 def dhash(raw):
     bits = 0
     for r in range(8):
-        row = raw[r * 9:(r + 1) * 9]
+        row = raw[r * 9 : (r + 1) * 9]
         for c in range(8):
             bits = (bits << 1) | (1 if row[c] > row[c + 1] else 0)
     return bits
@@ -127,18 +132,42 @@ def dhash(raw):
 def hamming(a, b):
     if a is None or b is None:
         return 64
-    return bin(a ^ b).count("1")
+    return (a ^ b).bit_count()
 
 
 def grab_frame(recording, off, png_path):
     raw_path = png_path + ".raw"
     cmd = [
-        "ffmpeg", "-hide_banner", "-loglevel", "error", "-y", "-ss", f"{off:.3f}", "-i", recording,
-        "-frames:v", "1", "-an", "-update", "1", "-vf", f"scale='min({FRAMES_LONG_EDGE},iw)':-2", png_path,
-        "-frames:v", "1", "-an", "-update", "1", "-vf", "scale=9:8:flags=area,format=gray", "-f", "rawvideo", raw_path,
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-ss",
+        f"{off:.3f}",
+        "-i",
+        recording,
+        "-frames:v",
+        "1",
+        "-an",
+        "-update",
+        "1",
+        "-vf",
+        f"scale='min({FRAMES_LONG_EDGE},iw)':-2",
+        png_path,
+        "-frames:v",
+        "1",
+        "-an",
+        "-update",
+        "1",
+        "-vf",
+        "scale=9:8:flags=area,format=gray",
+        "-f",
+        "rawvideo",
+        raw_path,
     ]
     try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=120, check=False)
         if r.returncode != 0 or not os.path.exists(png_path) or os.path.getsize(png_path) == 0:
             return None
         with open(raw_path, "rb") as f:
@@ -214,7 +243,7 @@ def extract_frames(recording, shots, timeline, need, frames_dir, duration_s):
 
     offsets = sorted(timeline.offset(s.t) for s in shots)
     bounds = [0.0] + [o for o in offsets if 0 < o < tail_start] + [tail_start]
-    gaps = [(a, b) for a, b in zip(bounds, bounds[1:]) if b - a > 2]
+    gaps = [(a, b) for a, b in itertools.pairwise(bounds) if b - a > 2]
     if not gaps and not tail_reserve:
         return []
 
@@ -231,11 +260,9 @@ def extract_frames(recording, shots, timeline, need, frames_dir, duration_s):
     specs = []
     for gi, (a, b) in enumerate(gaps):
         n = alloc[gi] * FRAMES_OVERSAMPLE
-        for i in range(1, n + 1):
-            specs.append((gi, clamp(a + (b - a) * i / (n + 1))))
+        specs.extend((gi, clamp(a + (b - a) * i / (n + 1))) for i in range(1, n + 1))
     tail_n = tail_reserve * FRAMES_OVERSAMPLE
-    for i in range(1, tail_n + 1):
-        specs.append(("tail", clamp(tail_start + (dur - tail_start) * i / tail_n)))
+    specs.extend(("tail", clamp(tail_start + (dur - tail_start) * i / tail_n)) for i in range(1, tail_n + 1))
 
     def work(item):
         idx, (gi, off) = item
@@ -269,6 +296,7 @@ def extract_frames(recording, shots, timeline, need, frames_dir, duration_s):
 def normalize_review(review, count):
     def in_range(n):
         return isinstance(n, int) and not isinstance(n, bool) and 1 <= n <= count
+
     review = review if isinstance(review, dict) else {}
     unusable = {n for n in (review.get("unusable") or []) if in_range(n)}
     order, ranked = [], set()
@@ -293,5 +321,5 @@ def pick_gallery(fed, order, unusable, shots, frames):
     if want > 0 and not any(f.tail for f in picked):
         tail = next((f for f in ranked if f.tail), None)
         if tail:
-            picked = picked[:want - 1] + [tail]
+            picked = [*picked[: want - 1], tail]
     return kept_shots, sorted(picked, key=lambda f: f.t)

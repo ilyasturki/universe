@@ -8,7 +8,11 @@ Row {
     property real size: Theme.dp(22)
     property string fontFamily: Theme.sans
     property int fontWeight: Font.Medium
-    property Component padGlyph: MenuGlyph { anchors.fill: parent; kind: "gamepad"; tint: parent.ink }
+    property Component padGlyph: MenuGlyph {
+        anchors.fill: parent
+        kind: "gamepad"
+        tint: parent.ink
+    }
 
     readonly property int lowPercent: 15
     readonly property color lowTint: "#e0655a"

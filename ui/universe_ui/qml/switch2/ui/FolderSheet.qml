@@ -19,10 +19,22 @@ Modal {
     readonly property var hints: {
         var out = [];
         if (!files)
-            out.push({ glyph: "X", label: "Use this folder" });
-        out.push({ glyph: "Y", label: "Type a path" });
-        out.push({ glyph: "B", label: browser.atRoot ? "Cancel" : "Up" });
-        out.push({ glyph: "A", label: zone === "chips" ? "Go" : index === 0 ? "Up" : (entries[index - 1] && !entries[index - 1].dir ? "Choose" : "Open") });
+            out.push({
+                glyph: "X",
+                label: "Use this folder"
+            });
+        out.push({
+            glyph: "Y",
+            label: "Type a path"
+        });
+        out.push({
+            glyph: "B",
+            label: browser.atRoot ? "Cancel" : "Up"
+        });
+        out.push({
+            glyph: "A",
+            label: zone === "chips" ? "Go" : index === 0 ? "Up" : (entries[index - 1] && !entries[index - 1].dir ? "Choose" : "Open")
+        });
         return out;
     }
 
@@ -71,7 +83,11 @@ Modal {
         var done = callback;
         callback = null;
         open = false;
-        shell.prompt({ title: "Path", value: browser.path, path: true }, done);
+        shell.prompt({
+            title: "Path",
+            value: browser.path,
+            path: true
+        }, done);
     }
 
     Keys.onUpPressed: {
@@ -108,7 +124,7 @@ Modal {
     Keys.onLeftPressed: stepChip(-1)
     Keys.onRightPressed: stepChip(1)
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         event.accepted = true;
         if (event.isAutoRepeat)
             return;
@@ -195,8 +211,12 @@ Modal {
         preferredHighlightBegin: sheet.room
         preferredHighlightEnd: height - sheet.room
         highlightRangeMode: ListView.ApplyRange
-        header: Item { height: sheet.room }
-        footer: Item { height: sheet.room }
+        header: Item {
+            height: sheet.room
+        }
+        footer: Item {
+            height: sheet.room
+        }
 
         delegate: Item {
             width: list.width

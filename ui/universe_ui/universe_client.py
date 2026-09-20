@@ -5,16 +5,27 @@ import tempfile
 import threading
 from pathlib import Path
 
-from PySide6.QtCore import Property, QFileSystemWatcher, QObject, QTimer, Signal, Slot
+from PySide6.QtCore import QFileSystemWatcher, QObject, QTimer, Signal, Slot
 from PySide6.QtGui import QImage
 
 from .errors import UniverseError
+from .qt import QULONGLONG, QVARIANT, Property
 
-try:
-    from universe_core import UniverseError as CoreError
-except ImportError:  # --fake without the extension built
-    class CoreError(Exception):
-        pass
+
+class _NoCoreError(Exception):
+    pass
+
+
+def _core_error() -> type[Exception]:
+    try:
+        from universe_core import UniverseError
+    except ImportError:  # --fake without the extension built
+        return _NoCoreError
+    return UniverseError
+
+
+CoreError = _core_error()
+
 
 log = logging.getLogger("universe.client")
 
@@ -22,7 +33,7 @@ log = logging.getLogger("universe.client")
 # `universe splash`'s format: `<w> <h>\n` then RGB32 rows; the helper deletes the file once shown.
 def write_poster(image, ident):
     try:
-        image = image.convertToFormat(QImage.Format_RGB32)
+        image = image.convertToFormat(QImage.Format.Format_RGB32)
         width, height, stride = image.width(), image.height(), image.bytesPerLine()
         base = Path(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()) / "universe"
         base.mkdir(parents=True, exist_ok=True)
@@ -33,8 +44,7 @@ def write_poster(image, ident):
             if stride == width * 4:
                 f.write(bits)
             else:
-                for y in range(height):
-                    f.write(bits[y * stride:y * stride + width * 4])
+                f.writelines(bits[y * stride : y * stride + width * 4] for y in range(height))
         return str(path)
     except OSError as e:
         log.warning("launch poster: %s", e)
@@ -44,10 +54,10 @@ def write_poster(image, ident):
 class CoreClient(QObject):
     sessionStarted = Signal(str, str)
     sessionEnded = Signal(str, str, int)
-    libraryChanged = Signal("QVariantList")
+    libraryChanged = Signal(list)
     recordingFiled = Signal(str, str, str)
     entryWritten = Signal(str, str)
-    progress = Signal(str, "qulonglong", "qulonglong", str)
+    progress = Signal(str, QULONGLONG, QULONGLONG, str)
     jobFinished = Signal(str, bool, str)
     mediaChanged = Signal(str)
     modulesChanged = Signal()
@@ -109,7 +119,7 @@ class CoreClient(QObject):
         except UniverseError:
             raise
         except CoreError as e:
-            kind, message = (list(e.args) + ["", ""])[:2]
+            kind, message = ([*list(e.args), "", ""])[:2]
             raise UniverseError(kind or "Io", message or kind) from None
 
     def _guarded(self, default, fn, *args):
@@ -145,7 +155,8 @@ class CoreClient(QObject):
                 self._deliver.emit(lambda: on_error(err))
                 return
             if on_reply is not None:
-                self._deliver.emit(lambda: on_reply(value))
+                reply = on_reply
+                self._deliver.emit(lambda: reply(value))
 
         threading.Thread(target=run, daemon=True, name="core-call").start()
 
@@ -162,7 +173,7 @@ class CoreClient(QObject):
             self._current = current
             self.currentSessionChanged.emit()
 
-    currentSession = Property("QVariant", lambda self: self._current, notify=currentSessionChanged)
+    currentSession = Property(QVARIANT, lambda self: self._current, notify=currentSessionChanged)
 
     @Slot(result="QVariant")
     def list(self):
@@ -379,7 +390,7 @@ class CoreClient(QObject):
 
     @Slot(str, str, result=str)
     def update(self, source, game_id):
-        return self._job("update", game_id, lambda progress: "%d updated" % self._core.update(source, game_id, progress), source=source)
+        return self._job("update", game_id, lambda progress: f"{self._core.update(source, game_id, progress)} updated", source=source)
 
     @Slot(str, result=bool)
     def cancel(self, job):
@@ -403,7 +414,7 @@ class CoreClient(QObject):
 
     @Slot(str, result=str)
     def scan(self, source):
-        return self._job("scan", source, lambda progress: "%d game(s)" % self._core.scan(source, progress))
+        return self._job("scan", source, lambda progress: f"{self._core.scan(source, progress)} game(s)")
 
     @Slot(result="QVariant")
     def jobs(self):
@@ -411,7 +422,7 @@ class CoreClient(QObject):
 
     @Slot(str, bool, result=str)
     def mediaRefresh(self, ident, force):
-        return self._job("media", ident, lambda progress: "%d/%d updated" % tuple(self._core.media_refresh(ident, force, progress)))
+        return self._job("media", ident, lambda progress: "{}/{} updated".format(*self._core.media_refresh(ident, force, progress)))
 
     @Slot(str, result="QVariant")
     def mediaStatus(self, ident):
@@ -649,8 +660,18 @@ class CoreClient(QObject):
     def _job(self, kind, target, work, source=""):
         self._job_seq += 1
         job = f"job-{self._job_seq}"
-        self._jobs[job] = {"id": job, "kind": kind, "target": target, "source": source, "done": 0, "total": 0, "message": "",
-                           "finished": False, "ok": False, "cancelled": False}
+        self._jobs[job] = {
+            "id": job,
+            "kind": kind,
+            "target": target,
+            "source": source,
+            "done": 0,
+            "total": 0,
+            "message": "",
+            "finished": False,
+            "ok": False,
+            "cancelled": False,
+        }
 
         def progress(done, total, message):
             self._deliver.emit(lambda: self._job_progress(job, done, total, message))
@@ -660,7 +681,7 @@ class CoreClient(QObject):
                 message, ok = str(self._call(work, progress)), True
             except UniverseError as e:
                 message, ok = e.message, False
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001
                 message, ok = str(e), False
             self._deliver.emit(lambda: self._job_finished(job, ok, message))
 

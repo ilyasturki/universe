@@ -10,7 +10,16 @@ Modal {
     property int index: 0
     property int current: -1
 
-    readonly property var hints: [ { glyph: "B", label: "Back" }, { glyph: "A", label: "OK" } ]
+    readonly property var hints: [
+        {
+            glyph: "B",
+            label: "Back"
+        },
+        {
+            glyph: "A",
+            label: "OK"
+        }
+    ]
     readonly property real rowHeight: Theme.dp(100)
     readonly property real room: Theme.dp(Theme.ringRoom)
 
@@ -26,7 +35,7 @@ Modal {
     card.width: Theme.dp(1000)
     card.height: heading.height + Theme.dp(20) + list.height - picker.room * 2 + Theme.dp(40)
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         event.accepted = true;
         if (event.isAutoRepeat)
             return;
@@ -70,8 +79,12 @@ Modal {
         preferredHighlightBegin: picker.room
         preferredHighlightEnd: height - picker.room
         highlightRangeMode: ListView.ApplyRange
-        header: Item { height: picker.room }
-        footer: Item { height: picker.room }
+        header: Item {
+            height: picker.room
+        }
+        footer: Item {
+            height: picker.room
+        }
 
         delegate: Item {
             width: list.width

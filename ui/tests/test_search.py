@@ -1,8 +1,15 @@
 from conftest import wait_for
 from universe_ui.screens.search import word_score
 
-SECTIONS = [{"id": "search", "label": "Search"}, {"id": "launch", "label": "Launch"}, {"id": "runners", "label": "Runners"}, {"id": "controller", "label": "Controller"},
-            {"id": "modules", "label": "Modules"}, {"id": "themes", "label": "Themes"}, {"id": "quit", "label": "Quit"}]
+SECTIONS = [
+    {"id": "search", "label": "Search"},
+    {"id": "launch", "label": "Launch"},
+    {"id": "runners", "label": "Runners"},
+    {"id": "controller", "label": "Controller"},
+    {"id": "modules", "label": "Modules"},
+    {"id": "themes", "label": "Themes"},
+    {"id": "quit", "label": "Quit"},
+]
 
 
 def indexed(api):
@@ -49,7 +56,9 @@ def test_synonyms_descriptions_values_and_typos(api, fake):
     search.query = "vrr"
     assert labels(search)[0] == ("Launch › Display", "Adaptive sync", "auto · On"), "a synonym"
     search.query = "eventfd"
-    assert [r["label"] for r in search.results][:2] == ["Esync", "Esync"] and search.results[0]["path"] == "Runners › Proton › Sync", "a word of the description"
+    assert [r["label"] for r in search.results][:2] == ["Esync", "Esync"] and search.results[0]["path"] == "Runners › Proton › Sync", (
+        "a word of the description"
+    )
     assert search.results[0]["advanced"] is True and search.results[0]["tag"] == "ADVANCED" and search.results[0]["detail"].startswith("Faster thread")
     search.query = "av1_10bit"
     assert labels(search)[0] == ("Modules › Video capture", "Video codec", "av1_10bit"), "the current value"
@@ -58,13 +67,25 @@ def test_synonyms_descriptions_values_and_typos(api, fake):
     search.query = "hud"
     assert [r["label"] for r in search.results][:2] == ["Show MangoHud", "Show MangoHud"]
     search.query = "quit"
-    assert search.results[0]["kind"] == "section" and search.results[0]["target"] == {"page": "section", "id": "quit", "key": "", "module": ""}, "a section wins a tie"
+    assert search.results[0]["kind"] == "section" and search.results[0]["target"] == {"page": "section", "id": "quit", "key": "", "module": ""}, (
+        "a section wins a tie"
+    )
     search.query = "hold"
-    assert search.results[0]["label"] == "Hold length (ms)" and search.results[0]["target"] == {"page": "controller", "id": "", "key": "controller.hold_ms", "module": ""}
+    assert search.results[0]["label"] == "Hold length (ms)" and search.results[0]["target"] == {
+        "page": "controller",
+        "id": "",
+        "key": "controller.hold_ms",
+        "module": "",
+    }
     search.query = "gsr"
-    assert any(r["target"] == {"page": "module", "id": "capture", "key": "gsr_extra_args", "module": "capture"} and r["advanced"] for r in search.results), "a config-only setting"
+    assert any(r["target"] == {"page": "module", "id": "capture", "key": "gsr_extra_args", "module": "capture"} and r["advanced"] for r in search.results), (
+        "a config-only setting"
+    )
     search.query = "dolphin"
-    assert search.results[0]["target"] == {"page": "runner", "id": "dolphin", "key": "", "module": ""} and search.results[0]["image"] == "assets/runners/dolphin.svg"
+    assert (
+        search.results[0]["target"] == {"page": "runner", "id": "dolphin", "key": "", "module": ""}
+        and search.results[0]["image"] == "assets/runners/dolphin.svg"
+    )
     search.query = "switch 2"
     assert search.results[0]["target"] == {"page": "themes", "id": "switch2", "key": "theme", "module": ""}
     search.query = "zzzz"
@@ -82,7 +103,9 @@ def test_a_game_in_the_query_narrows_to_it(api, fake):
     assert all(r["path"] == "The Technomancer" for r in search.results[1:])
     search.query = "technomancer cursor"
     rows = {r["label"]: r for r in search.results}
-    assert rows["Show the cursor in the recording"]["target"] == {"page": "game", "id": "the-technomancer", "key": "cursor", "module": "capture"}, "a module's game setting"
+    assert rows["Show the cursor in the recording"]["target"] == {"page": "game", "id": "the-technomancer", "key": "cursor", "module": "capture"}, (
+        "a module's game setting"
+    )
     assert rows["Hide the cursor while playing"]["target"]["key"] == "desktop.hide_cursor"
 
 

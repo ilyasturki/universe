@@ -70,12 +70,32 @@ pub fn parse_source(text: &str) -> Option<Source> {
 
 /// X keysym names as MangoHud.conf spells them, plus the plain names people type.
 const ALIASES: [(&str, &str); 26] = [
-    ("shift", "KEY_LEFTSHIFT"), ("shift_l", "KEY_LEFTSHIFT"), ("shift_r", "KEY_RIGHTSHIFT"),
-    ("ctrl", "KEY_LEFTCTRL"), ("control", "KEY_LEFTCTRL"), ("control_l", "KEY_LEFTCTRL"), ("control_r", "KEY_RIGHTCTRL"),
-    ("alt", "KEY_LEFTALT"), ("alt_l", "KEY_LEFTALT"), ("alt_r", "KEY_RIGHTALT"),
-    ("super", "KEY_LEFTMETA"), ("super_l", "KEY_LEFTMETA"), ("super_r", "KEY_RIGHTMETA"), ("meta", "KEY_LEFTMETA"), ("win", "KEY_LEFTMETA"),
-    ("return", "KEY_ENTER"), ("enter", "KEY_ENTER"), ("escape", "KEY_ESC"), ("esc", "KEY_ESC"), ("space", "KEY_SPACE"), ("tab", "KEY_TAB"),
-    ("print", "KEY_SYSRQ"), ("printscreen", "KEY_SYSRQ"), ("delete", "KEY_DELETE"), ("backspace", "KEY_BACKSPACE"), ("pause", "KEY_PAUSE"),
+    ("shift", "KEY_LEFTSHIFT"),
+    ("shift_l", "KEY_LEFTSHIFT"),
+    ("shift_r", "KEY_RIGHTSHIFT"),
+    ("ctrl", "KEY_LEFTCTRL"),
+    ("control", "KEY_LEFTCTRL"),
+    ("control_l", "KEY_LEFTCTRL"),
+    ("control_r", "KEY_RIGHTCTRL"),
+    ("alt", "KEY_LEFTALT"),
+    ("alt_l", "KEY_LEFTALT"),
+    ("alt_r", "KEY_RIGHTALT"),
+    ("super", "KEY_LEFTMETA"),
+    ("super_l", "KEY_LEFTMETA"),
+    ("super_r", "KEY_RIGHTMETA"),
+    ("meta", "KEY_LEFTMETA"),
+    ("win", "KEY_LEFTMETA"),
+    ("return", "KEY_ENTER"),
+    ("enter", "KEY_ENTER"),
+    ("escape", "KEY_ESC"),
+    ("esc", "KEY_ESC"),
+    ("space", "KEY_SPACE"),
+    ("tab", "KEY_TAB"),
+    ("print", "KEY_SYSRQ"),
+    ("printscreen", "KEY_SYSRQ"),
+    ("delete", "KEY_DELETE"),
+    ("backspace", "KEY_BACKSPACE"),
+    ("pause", "KEY_PAUSE"),
 ];
 
 fn key_of_name(name: &str) -> Option<u16> {
@@ -86,7 +106,9 @@ fn key_of_name(name: &str) -> Option<u16> {
     if let Some((_, k)) = ALIASES.iter().find(|(a, _)| *a == lower) {
         return parse_key(k);
     }
-    parse_key(name).or_else(|| parse_key(&format!("KEY_{}", lower.to_uppercase()))).or_else(|| lower.strip_prefix("xf86audio").and_then(|rest| parse_key(&format!("KEY_{}", audio_key(rest)?))))
+    parse_key(name)
+        .or_else(|| parse_key(&format!("KEY_{}", lower.to_uppercase())))
+        .or_else(|| lower.strip_prefix("xf86audio").and_then(|rest| parse_key(&format!("KEY_{}", audio_key(rest)?))))
 }
 
 fn audio_key(rest: &str) -> Option<&'static str> {

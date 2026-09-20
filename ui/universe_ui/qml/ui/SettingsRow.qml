@@ -13,8 +13,13 @@ Item {
     readonly property bool info: entry.type === "info"
     readonly property bool hasSwitch: entry.switch === true
     // A button with no code on this connection says "Unbound" instead: its macros cannot fire.
-    readonly property var macros: entry.bound === false ? []
-        : [ entry.press && { tag: "PRESS", macro: entry.press }, entry.hold && { tag: "HOLD", macro: entry.hold } ].filter(Boolean)
+    readonly property var macros: entry.bound === false ? [] : [entry.press && {
+            tag: "PRESS",
+            macro: entry.press
+        }, entry.hold && {
+            tag: "HOLD",
+            macro: entry.hold
+        }].filter(Boolean)
     readonly property bool hasImage: entry.image != null && String(entry.image) !== ""
     readonly property bool hasGlyph: entry.slot !== undefined && String(entry.slot) !== "" && entry.family !== undefined
     // An icon naming a file (a runner's logo) is drawn whole in a square; a bare name is a menu glyph.
@@ -51,7 +56,9 @@ Item {
         radius: Theme.dp(14)
         color: row.focused ? Theme.text : "transparent"
 
-        Behavior on color { ColorEase {} }
+        Behavior on color {
+            ColorEase {}
+        }
     }
 
     // How much of a download is on the disk, as a hairline along the row's foot.
@@ -88,8 +95,7 @@ Item {
         active: row.hasImage
 
         sourceComponent: RoundedMask {
-            readonly property bool square: art.status === Image.Ready && art.implicitHeight > 0
-                                           && Math.abs(art.implicitWidth / art.implicitHeight - 1) < 0.08
+            readonly property bool square: art.status === Image.Ready && art.implicitHeight > 0 && Math.abs(art.implicitWidth / art.implicitHeight - 1) < 0.08
 
             radius: Theme.dp(6)
 
@@ -212,7 +218,7 @@ Item {
             spacing: Theme.dp(16)
 
             Repeater {
-                model: [ row.tag, row.entry.inherited === true ? "INHERITED" : "" ].filter(Boolean)
+                model: [row.tag, row.entry.inherited === true ? "INHERITED" : ""].filter(Boolean)
 
                 Rectangle {
                     anchors.verticalCenter: parent.verticalCenter
@@ -243,7 +249,9 @@ Item {
                 font.family: Theme.sans
                 font.weight: Font.Medium
                 font.pixelSize: Theme.dp(21)
-                font.features: { "tnum": 1 }
+                font.features: {
+                    "tnum": 1
+                }
             }
 
             Text {

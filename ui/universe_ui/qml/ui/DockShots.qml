@@ -15,12 +15,33 @@ FocusScope {
     readonly property int count: grid.ordered.length
     readonly property int mine: grid.mine
     readonly property bool busy: confirm.open
-    readonly property var hints: lightbox ? [ { glyph: "dpad", label: "Previous / next" }, { glyph: "B", label: "Close" } ]
-        : [ { glyph: "A", label: "View", dim: current === null },
-            { glyph: "Y", label: "Remove", dim: current === null },
-            { glyph: "B", label: "Dock" } ]
+    readonly property var hints: lightbox ? [
+        {
+            glyph: "dpad",
+            label: "Previous / next"
+        },
+        {
+            glyph: "B",
+            label: "Close"
+        }
+    ] : [
+        {
+            glyph: "A",
+            label: "View",
+            dim: current === null
+        },
+        {
+            glyph: "Y",
+            label: "Remove",
+            dim: current === null
+        },
+        {
+            glyph: "B",
+            label: "Dock"
+        }
+    ]
 
-    signal closeRequested()
+    signal closeRequested
 
     function load() {
         if (session && session.id)
@@ -42,9 +63,16 @@ FocusScope {
             return;
         }
         var row = current;
-        confirm.ask({ message: "Remove this screenshot?", detail: row.dateText + ". The picture goes to the trash" + (row.hasJournal ? "; its journal entry keeps the rest." : "."),
-                      yes: "Trash the screenshot", no: "Keep it", index: 0 },
-                    function(yes) { if (yes) store.remove(row.gameId, row.name); });
+        confirm.ask({
+            message: "Remove this screenshot?",
+            detail: row.dateText + ". The picture goes to the trash" + (row.hasJournal ? "; its journal entry keeps the rest." : "."),
+            yes: "Trash the screenshot",
+            no: "Keep it",
+            index: 0
+        }, function (yes) {
+            if (yes)
+                store.remove(row.gameId, row.name);
+        });
     }
 
     function close() {
@@ -62,7 +90,8 @@ FocusScope {
         }
     }
 
-    onSessionChanged: if (open) load()
+    onSessionChanged: if (open)
+        load()
 
     Connections {
         target: panel.store
@@ -75,7 +104,11 @@ FocusScope {
     y: open ? 0 : height
     visible: y < height
 
-    Behavior on y { Ease { duration: Theme.durScene } }
+    Behavior on y {
+        Ease {
+            duration: Theme.durScene
+        }
+    }
 
     Rectangle {
         anchors.fill: parent
@@ -123,7 +156,9 @@ FocusScope {
     Lightbox {
         anchors.fill: parent
         z: 4
-        images: grid.ordered.map(function(r) { return r.url; })
+        images: grid.ordered.map(function (r) {
+            return r.url;
+        })
         index: grid.index
         open: panel.lightbox
     }
@@ -144,7 +179,7 @@ FocusScope {
         onClosed: panel.forceActiveFocus()
     }
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         if (!panel.open || confirm.open) {
             event.accepted = panel.open;
             return;

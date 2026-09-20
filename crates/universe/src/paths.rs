@@ -1,10 +1,7 @@
 use std::path::{Path, PathBuf};
 
 pub fn xdg(var: &str, fallback: &str) -> PathBuf {
-    std::env::var_os(var)
-        .map(PathBuf::from)
-        .filter(|p| p.is_absolute())
-        .unwrap_or_else(|| home().join(fallback))
+    std::env::var_os(var).map(PathBuf::from).filter(|p| p.is_absolute()).unwrap_or_else(|| home().join(fallback))
 }
 
 #[cfg(test)]

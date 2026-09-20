@@ -14,13 +14,40 @@ FocusScope {
     readonly property var search: api.screens.search
     property bool typing: true
 
-    readonly property var hints: typing
-        ? [ { glyph: "Y", label: "Space" }, { glyph: "X", label: "Clear" }, { glyph: "B", label: "Delete" }, { glyph: "A", label: "Type" } ]
-          .concat(search.count > 0 ? [ { glyph: "Start", label: "Hits" } ] : [])
-        : [ { glyph: "B", label: "Type" },
-            { glyph: "A", label: rows.currentRow && rows.currentRow.kind === "gamekey" ? (rows.currentRow.expanded ? "Collapse" : "Expand") : "Open" } ]
+    readonly property var hints: typing ? [
+        {
+            glyph: "Y",
+            label: "Space"
+        },
+        {
+            glyph: "X",
+            label: "Clear"
+        },
+        {
+            glyph: "B",
+            label: "Delete"
+        },
+        {
+            glyph: "A",
+            label: "Type"
+        }
+    ].concat(search.count > 0 ? [
+        {
+            glyph: "Start",
+            label: "Hits"
+        }
+    ] : []) : [
+        {
+            glyph: "B",
+            label: "Type"
+        },
+        {
+            glyph: "A",
+            label: rows.currentRow && rows.currentRow.kind === "gamekey" ? (rows.currentRow.expanded ? "Collapse" : "Expand") : "Open"
+        }
+    ]
 
-    readonly property var content: search.results.map(function(r) {
+    readonly property var content: search.results.map(function (r) {
         var out = Object.assign({}, r);
         // The value on the right, the description under; a game's row keeps its art.
         out.icon = r.image || (r.kind === "section" ? "settings" : "");
@@ -59,20 +86,35 @@ FocusScope {
     // The hit's page: a runner's, a module's, a source's or a game's over this one; a section of the settings page under it.
     function open(target) {
         if (target.page === "runner")
-            shell.push("pages/FormPage.qml", { runner: target.id, key: target.key });
+            shell.push("pages/FormPage.qml", {
+                runner: target.id,
+                key: target.key
+            });
         else if (target.page === "module")
-            shell.push("pages/FormPage.qml", { module: target.id, key: target.key });
+            shell.push("pages/FormPage.qml", {
+                module: target.id,
+                key: target.key
+            });
         else if (target.page === "source")
-            shell.push("pages/FormPage.qml", { source: target.id, key: target.key });
+            shell.push("pages/FormPage.qml", {
+                source: target.id,
+                key: target.key
+            });
         else if (target.page === "game")
-            shell.push("pages/GameSettingsPage.qml", { gameId: target.id, key: target.key, settingModule: target.module });
+            shell.push("pages/GameSettingsPage.qml", {
+                gameId: target.id,
+                key: target.key,
+                settingModule: target.module
+            });
         else if (target.page === "controller" && target.key)
-            shell.push("pages/ControllersPage.qml", { key: target.key });
+            shell.push("pages/ControllersPage.qml", {
+                key: target.key
+            });
         else {
             // This page goes with the pop: the shell is held, not read from it, when the settings page lands.
             var held = shell;
             held.pop();
-            Qt.callLater(function() {
+            Qt.callLater(function () {
                 if (held.topPage && held.topPage.land)
                     held.topPage.land(target);
             });
@@ -95,7 +137,9 @@ FocusScope {
 
     Connections {
         target: page.search
-        function onQueryChanged() { rows.index = 0; }
+        function onQueryChanged() {
+            rows.index = 0;
+        }
     }
 
     PageHeader {
@@ -175,8 +219,7 @@ FocusScope {
         y: field.y + field.height + Theme.dp(40)
         width: parent.width - x * 2
         visible: page.search.query.trim() === "" || page.search.count === 0
-        text: page.search.query.trim() === "" ? "Every page, every runner, module and game: by name, by what a setting does, by its value. A game's title narrows to it."
-                                        : "Nothing matches that."
+        text: page.search.query.trim() === "" ? "Every page, every runner, module and game: by name, by what a setting does, by its value. A game's title narrows to it." : "Nothing matches that."
         color: Theme.textSecondary
         wrapMode: Text.WordWrap
         font.pixelSize: Theme.dp(Theme.fontSmall)
@@ -194,12 +237,16 @@ FocusScope {
         visible: page.search.count > 0
         opacity: page.typing ? 0.6 : 1.0
 
-        Behavior on opacity { Ease {} }
+        Behavior on opacity {
+            Ease {}
+        }
 
-        onActivated: function(index, row) { page.activate(index, row); }
+        onActivated: function (index, row) {
+            page.activate(index, row);
+        }
         onEscapedLeft: Sound.play("edge")
 
-        Keys.onPressed: function(event) {
+        Keys.onPressed: function (event) {
             if (event.isAutoRepeat)
                 return;
             if (api.keys.isCancel(event)) {
@@ -219,9 +266,13 @@ FocusScope {
         y: page.typing ? parent.height - Theme.dp(Theme.hintBarHeight) - height : parent.height
         focus: true
 
-        Behavior on y { Ease {} }
+        Behavior on y {
+            Ease {}
+        }
 
-        onTyped: function(value) { page.search.query += value; }
+        onTyped: function (value) {
+            page.search.query += value;
+        }
         onBackspaced: page.search.query = page.search.query.slice(0, -1)
         onAccepted: page.toRows()
         onEscapedUp: page.toRows()
@@ -231,7 +282,7 @@ FocusScope {
         Keys.onUpPressed: panel.move(-1, 0)
         Keys.onDownPressed: panel.move(1, 0)
 
-        Keys.onPressed: function(event) {
+        Keys.onPressed: function (event) {
             if (event.isAutoRepeat)
                 return;
             event.accepted = true;

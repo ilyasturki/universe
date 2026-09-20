@@ -32,7 +32,11 @@ impl Source {
         &self.manifest.id
     }
     pub fn name(&self) -> &str {
-        if self.manifest.name.is_empty() { &self.manifest.id } else { &self.manifest.name }
+        if self.manifest.name.is_empty() {
+            &self.manifest.id
+        } else {
+            &self.manifest.name
+        }
     }
     pub fn data_dir(&self) -> PathBuf {
         paths::sources_data_dir(self.id())
@@ -97,11 +101,29 @@ pub fn discover(config: &Config) -> Vec<Source> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "snake_case")]
 pub enum SourceEvent {
-    LoginUrl { url: String },
-    LoggedIn { #[serde(default)] user: String },
+    LoginUrl {
+        url: String,
+    },
+    LoggedIn {
+        #[serde(default)]
+        user: String,
+    },
     Game(serde_json::Map<String, serde_json::Value>),
-    Progress { #[serde(default)] done: u64, #[serde(default)] total: u64, #[serde(default)] message: String },
-    Info { data: serde_json::Value, #[serde(default)] download_size: Option<u64>, #[serde(default)] disk_size: Option<u64> },
+    Progress {
+        #[serde(default)]
+        done: u64,
+        #[serde(default)]
+        total: u64,
+        #[serde(default)]
+        message: String,
+    },
+    Info {
+        data: serde_json::Value,
+        #[serde(default)]
+        download_size: Option<u64>,
+        #[serde(default)]
+        disk_size: Option<u64>,
+    },
     Update(serde_json::Map<String, serde_json::Value>),
     Done,
     #[serde(other)]
@@ -109,13 +131,26 @@ pub enum SourceEvent {
 }
 
 /// `spawned` gets the process id as soon as there is one, so a `cancel` can SIGTERM it.
-pub async fn run<F>(source: &Source, settings: &serde_json::Map<String, serde_json::Value>, verb: &str, args: &[String], spawned: impl FnOnce(u32), mut on_event: F) -> crate::Result<()>
+pub async fn run<F>(
+    source: &Source,
+    settings: &serde_json::Map<String, serde_json::Value>,
+    verb: &str,
+    args: &[String],
+    spawned: impl FnOnce(u32),
+    mut on_event: F,
+) -> crate::Result<()>
 where
     F: FnMut(SourceEvent),
 {
     use tokio::io::AsyncBufReadExt;
     let exe = source.dir.join(&source.manifest.exe);
-    let mut child = modules::command(&exe, &source.dir, &source.data_dir(), "SOURCE")?.arg(verb).args(args).env("SOURCE_SETTINGS_JSON", serde_json::Value::Object(settings.clone()).to_string()).env("UNIVERSE_BIN", paths::self_exe()).spawn().map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
+    let mut child = modules::command(&exe, &source.dir, &source.data_dir(), "SOURCE")?
+        .arg(verb)
+        .args(args)
+        .env("SOURCE_SETTINGS_JSON", serde_json::Value::Object(settings.clone()).to_string())
+        .env("UNIVERSE_BIN", paths::self_exe())
+        .spawn()
+        .map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
     if let Some(pid) = child.id() {
         spawned(pid);
     }
@@ -159,7 +194,8 @@ mod tests {
 
     #[test]
     fn manifest_settings_and_validation() {
-        let m: Manifest = toml::from_str(r#"
+        let m: Manifest = toml::from_str(
+            r#"
 api = 2
 id = "gog"
 name = "GOG"
@@ -175,7 +211,9 @@ key = "platform"
 type = "enum"
 default = "windows"
 choices = ["windows", "linux"]
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         let source = Source { available: false, missing: vec!["x".into()], enabled: true, dir: PathBuf::from("/s"), manifest: m };
         let cfg: Config = toml::from_str("[paths]\ngames_root = \"/mnt/games\"\n[sources.gog]\nplatform = \"linux\"").unwrap();
         let merged = source.merged_settings(&cfg);

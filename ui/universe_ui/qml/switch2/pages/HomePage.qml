@@ -19,16 +19,41 @@ FocusScope {
     readonly property string playingId: session && session.id !== undefined ? session.id : ""
 
     readonly property bool onPlaying: currentGame !== null && currentGame.id === playingId
-    readonly property var hints: onAll ? [ { glyph: "A", label: "OK" } ]
-        : onPlaying ? [ { glyph: "Start", label: "Options" }, { glyph: "X", label: "Close" }, { glyph: "A", label: "Resume" } ]
-        : [ { glyph: "Start", label: "Options" }, { glyph: "A", label: "Start" } ]
+    readonly property var hints: onAll ? [
+        {
+            glyph: "A",
+            label: "OK"
+        }
+    ] : onPlaying ? [
+        {
+            glyph: "Start",
+            label: "Options"
+        },
+        {
+            glyph: "X",
+            label: "Close"
+        },
+        {
+            glyph: "A",
+            label: "Resume"
+        }
+    ] : [
+        {
+            glyph: "Start",
+            label: "Options"
+        },
+        {
+            glyph: "A",
+            label: "Start"
+        }
+    ]
 
     readonly property real tile: Theme.dp(Theme.tileSize)
     readonly property real gap: Theme.dp(Theme.tileGap)
     readonly property real pitch: tile + gap
     readonly property real rowX: Theme.dp(Theme.tileRowX)
 
-    signal escapedDown()
+    signal escapedDown
 
     RecentGames {
         id: played
@@ -48,10 +73,14 @@ FocusScope {
         client: api.universe
         model: recent
         index: page.onAll ? -1 : page.index
-        onMoved: function(next) { page.index = next; }
+        onMoved: function (next) {
+            page.index = next;
+        }
     }
 
-    function step(d) { index = Sound.stepped(index, d, allIndex + 1); }
+    function step(d) {
+        index = Sound.stepped(index, d, allIndex + 1);
+    }
 
     function activate() {
         if (onAll) {
@@ -80,7 +109,7 @@ FocusScope {
     }
     Keys.onUpPressed: Sound.play("edge")
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         if (event.isAutoRepeat)
             return;
         if (api.keys.isAccept(event)) {
@@ -90,7 +119,9 @@ FocusScope {
             event.accepted = true;
             if (currentGame) {
                 Sound.play("ok");
-                shell.push("pages/SoftwareOptionsPage.qml", { gameId: currentGame.id });
+                shell.push("pages/SoftwareOptionsPage.qml", {
+                    gameId: currentGame.id
+                });
             } else {
                 Sound.play("edge");
             }
@@ -150,7 +181,11 @@ FocusScope {
             contentX = Math.max(-leftMargin, Math.min(target, Math.max(-leftMargin, contentWidth - width + rightMargin)));
         }
 
-        Behavior on contentX { Ease { duration: Theme.durFocus } }
+        Behavior on contentX {
+            Ease {
+                duration: Theme.durFocus
+            }
+        }
 
         delegate: Item {
             id: cell

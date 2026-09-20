@@ -75,7 +75,20 @@ pub fn import_existing(game: &Game, recordings_root: &Path) -> crate::Result<usi
         }
         let duration_s = if dur_from_name > 0 { dur_from_name } else { probe_duration(&p).unwrap_or(0) };
         let (started_at, ended_at) = session_times(&sid, duration_s);
-        sessions::append(&game.sessions_path(), &Session { session: sid, game: game.id.clone(), started_at, ended_at, duration_s, source: "import-recording".into(), recording: Some(ps), recording_duration_s: duration_s, ..Default::default() })?;
+        sessions::append(
+            &game.sessions_path(),
+            &Session {
+                session: sid,
+                game: game.id.clone(),
+                started_at,
+                ended_at,
+                duration_s,
+                source: "import-recording".into(),
+                recording: Some(ps),
+                recording_duration_s: duration_s,
+                ..Default::default()
+            },
+        )?;
         added += 1;
     }
     Ok(added)
@@ -104,7 +117,22 @@ pub fn file(game: &Game, session_id: &str, src: &Path, recordings_root: &Path, t
     })?;
     if !found {
         let (started_at, ended_at) = session_times(session_id, duration_s);
-        sessions::append(&game.sessions_path(), &Session { session: session_id.into(), game: game.id.clone(), started_at, ended_at, duration_s, source: "import-recording".into(), recording: Some(ds), recording_duration_s: duration_s, recording_started_at: timeline.started_at, recording_pauses: timeline.pauses, ..Default::default() })?;
+        sessions::append(
+            &game.sessions_path(),
+            &Session {
+                session: session_id.into(),
+                game: game.id.clone(),
+                started_at,
+                ended_at,
+                duration_s,
+                source: "import-recording".into(),
+                recording: Some(ds),
+                recording_duration_s: duration_s,
+                recording_started_at: timeline.started_at,
+                recording_pauses: timeline.pauses,
+                ..Default::default()
+            },
+        )?;
     }
     Ok(dest)
 }
@@ -135,7 +163,8 @@ mod tests {
         assert_eq!(import_existing(&g, rec.path()).unwrap(), 0);
         let pending = data.path().join("p.mkv");
         std::fs::write(&pending, b"y").unwrap();
-        let timeline = Timeline { started_at: "2026-09-11T12:00:05+02:00".into(), pauses: vec![("2026-09-11T12:10:00+02:00".into(), "2026-09-11T12:12:00+02:00".into())] };
+        let timeline =
+            Timeline { started_at: "2026-09-11T12:00:05+02:00".into(), pauses: vec![("2026-09-11T12:10:00+02:00".into(), "2026-09-11T12:12:00+02:00".into())] };
         let dest = file(&g, "20260911-120000", &pending, rec.path(), Some(&timeline)).unwrap();
         assert!(dest.ends_with("dead-cells/20260911-120000.mkv"));
         let all = sessions::read(&g.sessions_path()).unwrap();

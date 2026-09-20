@@ -39,7 +39,11 @@ Item {
         size: Theme.dp(Theme.fontSmall)
         fontFamily: Theme.sans
         fontWeight: Font.Normal
-        padGlyph: Glyph { anchors.fill: parent; kind: "controllers"; tint: parent.ink }
+        padGlyph: Glyph {
+            anchors.fill: parent
+            kind: "controllers"
+            tint: parent.ink
+        }
     }
 
     Label {

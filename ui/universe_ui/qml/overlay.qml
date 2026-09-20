@@ -25,8 +25,19 @@ Window {
 
         SequentialAnimation {
             id: flashAnim
-            NumberAnimation { target: flash; property: "opacity"; to: 0.85; duration: 40 }
-            NumberAnimation { target: flash; property: "opacity"; to: 0.0; duration: 320; easing.type: Easing.OutQuad }
+            NumberAnimation {
+                target: flash
+                property: "opacity"
+                to: 0.85
+                duration: 40
+            }
+            NumberAnimation {
+                target: flash
+                property: "opacity"
+                to: 0.0
+                duration: 320
+                easing.type: Easing.OutQuad
+            }
         }
 
         Connections {

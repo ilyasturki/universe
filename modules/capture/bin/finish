@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Files the session's recording: the parts a monitor switch left, stitched into one, then the usual checks and `universe recording-file`."""
+
 import os
 import sys
 

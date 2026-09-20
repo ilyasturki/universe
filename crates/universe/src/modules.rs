@@ -74,7 +74,16 @@ pub struct Setting {
 }
 impl Default for Setting {
     fn default() -> Self {
-        Setting { key: String::new(), kind: "string".into(), default: toml::Value::String(String::new()), label: String::new(), scope: "global".into(), choices: vec![], choices_exec: String::new(), advanced: false }
+        Setting {
+            key: String::new(),
+            kind: "string".into(),
+            default: toml::Value::String(String::new()),
+            label: String::new(),
+            scope: "global".into(),
+            choices: vec![],
+            choices_exec: String::new(),
+            advanced: false,
+        }
     }
 }
 
@@ -108,12 +117,8 @@ impl Module {
 
     pub fn to_json(&self) -> serde_json::Value {
         let m = &self.manifest;
-        let hooks: BTreeMap<String, String> = m
-            .hooks
-            .iter()
-            .filter(|(k, _)| HOOKS.contains(&k.as_str()))
-            .map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string()))
-            .collect();
+        let hooks: BTreeMap<String, String> =
+            m.hooks.iter().filter(|(k, _)| HOOKS.contains(&k.as_str())).map(|(k, v)| (k.clone(), v.as_str().unwrap_or("").to_string())).collect();
         serde_json::json!({
             "id": m.id,
             "name": if m.name.is_empty() { m.id.clone() } else { m.name.clone() },
@@ -200,7 +205,11 @@ pub fn toml_to_json(v: &toml::Value) -> serde_json::Value {
 }
 
 /// A later root wins on the same id.
-pub fn read_manifests<M: serde::de::DeserializeOwned>(roots: impl Iterator<Item = PathBuf>, file: &str, id: impl Fn(&M) -> &str) -> BTreeMap<String, (PathBuf, M)> {
+pub fn read_manifests<M: serde::de::DeserializeOwned>(
+    roots: impl Iterator<Item = PathBuf>,
+    file: &str,
+    id: impl Fn(&M) -> &str,
+) -> BTreeMap<String, (PathBuf, M)> {
     let mut found = BTreeMap::new();
     for root in roots {
         let Ok(rd) = std::fs::read_dir(root) else { continue };
@@ -262,7 +271,13 @@ pub struct HookOutcome {
 pub(crate) fn command(exe: &Path, dir: &Path, data_dir: &Path, prefix: &str) -> crate::Result<tokio::process::Command> {
     std::fs::create_dir_all(data_dir)?;
     let mut cmd = tokio::process::Command::new(exe);
-    cmd.env(format!("{prefix}_DIR"), dir).env(format!("{prefix}_DATA_DIR"), data_dir).current_dir(dir).stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).kill_on_drop(true);
+    cmd.env(format!("{prefix}_DIR"), dir)
+        .env(format!("{prefix}_DATA_DIR"), data_dir)
+        .current_dir(dir)
+        .stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .kill_on_drop(true);
     Ok(cmd)
 }
 
@@ -274,11 +289,18 @@ pub async fn run_blocking(module: &Module, hook: &str, env: &HookEnv) -> crate::
     let Some(exe) = module.hook(hook) else {
         return Ok(HookOutcome { status: 0, stdout: String::new(), stderr: String::new() });
     };
-    let child = module_cmd(module, &exe)?.envs(env.vars.iter().map(|(k, v)| (k.as_str(), v.as_str()))).spawn().map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
+    let child = module_cmd(module, &exe)?
+        .envs(env.vars.iter().map(|(k, v)| (k.as_str(), v.as_str())))
+        .spawn()
+        .map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
     let timeout = module.timeout();
     match tokio::time::timeout(timeout, child.wait_with_output()).await {
         Ok(Ok(out)) => {
-            let o = HookOutcome { status: out.status.code().unwrap_or(-1), stdout: String::from_utf8_lossy(&out.stdout).into(), stderr: String::from_utf8_lossy(&out.stderr).into() };
+            let o = HookOutcome {
+                status: out.status.code().unwrap_or(-1),
+                stdout: String::from_utf8_lossy(&out.stdout).into(),
+                stderr: String::from_utf8_lossy(&out.stderr).into(),
+            };
             if o.status != 0 {
                 tracing::warn!("hook {}:{hook} exited {}: {}", module.id(), o.status, o.stderr.trim());
             }
@@ -290,7 +312,14 @@ pub async fn run_blocking(module: &Module, hook: &str, env: &HookEnv) -> crate::
 }
 
 /// A transient unit under the manifest limits, bound to the game's unit when `bind_to` names it; returns its name.
-pub async fn run_async(units: &crate::host::Units, module: &Module, hook: &str, env: &HookEnv, session_id: &str, bind_to: Option<&str>) -> crate::Result<Option<String>> {
+pub async fn run_async(
+    units: &crate::host::Units,
+    module: &Module,
+    hook: &str,
+    env: &HookEnv,
+    session_id: &str,
+    bind_to: Option<&str>,
+) -> crate::Result<Option<String>> {
     let Some(exe) = module.hook(hook) else { return Ok(None) };
     std::fs::create_dir_all(module.data_dir())?;
     let mut unit_env: BTreeMap<String, String> = env.vars.iter().cloned().collect();
@@ -304,7 +333,10 @@ pub async fn run_async(units: &crate::host::Units, module: &Module, hook: &str, 
         env: unit_env,
         unset_env: vec![],
         cwd: Some(module.dir.clone()),
-        properties: vec![("CPUWeight".into(), crate::host::Prop::U64(module.manifest.limits.cpu_weight.into())), ("MemoryHigh".into(), crate::host::Prop::U64(parse_bytes(&module.manifest.limits.memory_high)?))],
+        properties: vec![
+            ("CPUWeight".into(), crate::host::Prop::U64(module.manifest.limits.cpu_weight.into())),
+            ("MemoryHigh".into(), crate::host::Prop::U64(parse_bytes(&module.manifest.limits.memory_high)?)),
+        ],
         bind_to: bind_to.map(String::from),
         stop_post: vec![],
     };
@@ -317,13 +349,26 @@ pub async fn setting_choices(module: &Module, settings: &serde_json::Map<String,
     run_choices(&module.manifest.settings, &module.dir, &module.data_dir(), "MODULE", module.id(), settings, key).await
 }
 
-pub(crate) async fn run_choices(list: &[Setting], dir: &Path, data_dir: &Path, prefix: &str, id: &str, settings: &serde_json::Map<String, serde_json::Value>, key: &str) -> crate::Result<Vec<String>> {
+pub(crate) async fn run_choices(
+    list: &[Setting],
+    dir: &Path,
+    data_dir: &Path,
+    prefix: &str,
+    id: &str,
+    settings: &serde_json::Map<String, serde_json::Value>,
+    key: &str,
+) -> crate::Result<Vec<String>> {
     let s = list.iter().find(|s| s.key == key).ok_or_else(|| crate::Error::Invalid(format!("{id}: unknown setting {key}")))?;
     if s.choices_exec.is_empty() {
         return Ok(s.choices.clone());
     }
     let exe = dir.join(&s.choices_exec);
-    let child = command(&exe, dir, data_dir, prefix)?.arg(key).env(format!("{prefix}_SETTINGS_JSON"), serde_json::Value::Object(settings.clone()).to_string()).env("UNIVERSE_BIN", paths::self_exe()).spawn().map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
+    let child = command(&exe, dir, data_dir, prefix)?
+        .arg(key)
+        .env(format!("{prefix}_SETTINGS_JSON"), serde_json::Value::Object(settings.clone()).to_string())
+        .env("UNIVERSE_BIN", paths::self_exe())
+        .spawn()
+        .map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
     let out = tokio::time::timeout(Duration::from_secs(20), child.wait_with_output())
         .await
         .map_err(|_| crate::Error::Io(format!("{id} {key}: choices timed out")))??;
@@ -351,7 +396,8 @@ mod tests {
 
     #[test]
     fn manifest_and_settings_merge() {
-        let m: Manifest = toml::from_str(r#"
+        let m: Manifest = toml::from_str(
+            r#"
 api = 2
 id = "capture"
 name = "Capture"
@@ -386,7 +432,9 @@ key = "gsr_extra_args"
 type = "string"
 default = ""
 scope = "config"
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         let module = Module { available: false, missing: vec!["x".into()], enabled: true, dir: PathBuf::from("/m"), manifest: m };
         let cfg: Config = toml::from_str("[modules.capture]\ncodec = \"hevc\"\ngsr_extra_args = \"-cr full\"").unwrap();
         let mut g = crate::game::Game::new("X");
@@ -410,7 +458,11 @@ scope = "config"
         assert_eq!(j["settings"][0]["key"], "enabled");
         assert_eq!(j["settings"][3]["dynamic"], false);
         assert_eq!(j["settings"][4]["dynamic"], true);
-        assert_eq!((j["settings"][2]["advanced"].as_bool(), j["settings"][5]["advanced"].as_bool()), (Some(false), Some(true)), "a config-scope setting is advanced");
+        assert_eq!(
+            (j["settings"][2]["advanced"].as_bool(), j["settings"][5]["advanced"].as_bool()),
+            (Some(false), Some(true)),
+            "a config-scope setting is advanced"
+        );
     }
 
     #[tokio::test]
@@ -421,14 +473,19 @@ scope = "config"
         std::env::set_var("UNIVERSE_DATA_HOME", dir.path().join("data"));
         std::fs::create_dir_all(dir.path().join("bin")).unwrap();
         let exe = dir.path().join("bin/choices");
-        std::fs::write(&exe, r##"#!/bin/sh
+        std::fs::write(
+            &exe,
+            r##"#!/bin/sh
 [ "$1" = model ] || exit 2
 provider=$(printf '%s' "$MODULE_SETTINGS_JSON" | sed 's/.*"provider":"\([a-z]*\)".*/\1/')
 printf '["provider:%s"]\n' "$provider"
-"##).unwrap();
+"##,
+        )
+        .unwrap();
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).unwrap();
-        let m: Manifest = toml::from_str(r#"
+        let m: Manifest = toml::from_str(
+            r#"
 id = "journal"
 [[settings]]
 key = "provider"
@@ -440,7 +497,9 @@ key = "model"
 type = "string"
 default = "m"
 choices_exec = "bin/choices"
-"#).unwrap();
+"#,
+        )
+        .unwrap();
         let module = Module { available: true, missing: vec![], enabled: true, dir: dir.path().to_path_buf(), manifest: m };
         let cfg: Config = toml::from_str("").unwrap();
         let settings = module.merged_settings(&cfg, None);

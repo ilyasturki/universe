@@ -24,15 +24,39 @@ FocusScope {
     readonly property string currentSession: current ? current.session : ""
     property bool lightbox: false
 
-    signal closeRequested()
+    signal closeRequested
     signal jumpRequested(string source, string session)
 
-    readonly property var hints: menu.open ? menu.hints
-        : lightbox ? [ { glyph: "dpad", label: "Previous / next" }, { glyph: "B", label: "Close" } ]
-        : [ { glyph: "A", label: "View", dim: current === null },
-            { glyph: "Y", label: "Journal entry", dim: !(current && current.hasJournal) },
-            { glyph: "Start", label: "More", dim: current === null },
-            { glyph: "B", label: "Back" } ]
+    readonly property var hints: menu.open ? menu.hints : lightbox ? [
+        {
+            glyph: "dpad",
+            label: "Previous / next"
+        },
+        {
+            glyph: "B",
+            label: "Close"
+        }
+    ] : [
+        {
+            glyph: "A",
+            label: "View",
+            dim: current === null
+        },
+        {
+            glyph: "Y",
+            label: "Journal entry",
+            dim: !(current && current.hasJournal)
+        },
+        {
+            glyph: "Start",
+            label: "More",
+            dim: current === null
+        },
+        {
+            glyph: "B",
+            label: "Back"
+        }
+    ]
 
     readonly property real sideMargin: Theme.dp(90)
 
@@ -53,9 +77,13 @@ FocusScope {
     function land() {
         if (!rows)
             return;
-        var i = rows.findIndex(function(r) { return r.name === landing; });
+        var i = rows.findIndex(function (r) {
+            return r.name === landing;
+        });
         if (i < 0 && landingSession !== "")
-            i = rows.findIndex(function(r) { return r.session === landingSession; });
+            i = rows.findIndex(function (r) {
+                return r.session === landingSession;
+            });
         if (i >= 0)
             index = i;
     }
@@ -105,10 +133,25 @@ FocusScope {
             return;
         }
         Sound.panel();
-        var items = [ { icon: "image", label: "View", action: "view" } ];
+        var items = [
+            {
+                icon: "image",
+                label: "View",
+                action: "view"
+            }
+        ];
         if (current.hasJournal)
-            items.push({ icon: "book", label: "Journal entry", action: "journal" });
-        items.push({ icon: "trash", label: "Remove screenshot…", action: "remove", danger: true });
+            items.push({
+                icon: "book",
+                label: "Journal entry",
+                action: "journal"
+            });
+        items.push({
+            icon: "trash",
+            label: "Remove screenshot…",
+            action: "remove",
+            danger: true
+        });
         menu.show(items, cellAnchor(), cellRect(), current.dateText, menuAction);
     }
 
@@ -119,9 +162,19 @@ FocusScope {
             openJournal();
         } else if (action === "remove") {
             Sound.panel();
-            menu.show([ { icon: "", label: "Keep it", action: "" },
-                        { icon: "trash", label: "Trash the screenshot", action: "remove!", danger: true } ],
-                      cellAnchor(), cellRect(), "Remove this screenshot?", menuAction);
+            menu.show([
+                {
+                    icon: "",
+                    label: "Keep it",
+                    action: ""
+                },
+                {
+                    icon: "trash",
+                    label: "Trash the screenshot",
+                    action: "remove!",
+                    danger: true
+                }
+            ], cellAnchor(), cellRect(), "Remove this screenshot?", menuAction);
         } else if (action === "remove!") {
             Sound.enter();
             store.remove(current.gameId, current.name);
@@ -130,7 +183,7 @@ FocusScope {
             page.forceActiveFocus();
     }
 
-    Keys.onPressed: function(event) {
+    Keys.onPressed: function (event) {
         var arrow = event.key === Qt.Key_Left || event.key === Qt.Key_Right;
         var vertical = event.key === Qt.Key_Up || event.key === Qt.Key_Down;
         var screen = api.keys.isScreenUp(event) ? -1 : api.keys.isScreenDown(event) ? 1 : 0;
@@ -223,7 +276,9 @@ FocusScope {
     Lightbox {
         anchors.fill: parent
         z: 4
-        images: page.rows.map(function(r) { return r.url; })
+        images: page.rows.map(function (r) {
+            return r.url;
+        })
         index: page.index
         open: page.lightbox
     }
