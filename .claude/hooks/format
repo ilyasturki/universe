@@ -1,0 +1,15 @@
+#!/usr/bin/env bash
+# PostToolUse on Edit|Write: format the file just touched; a formatter error goes back to the session (exit 2).
+set -uo pipefail
+path=$(jq -r '.tool_input.file_path // empty')
+[ -n "$path" ] && [ -f "$path" ] || exit 0
+root=$(git -C "$(dirname "$path")" rev-parse --show-toplevel 2>/dev/null) || exit 0
+case "$path" in "$root"/*) ;; *) exit 0 ;; esac
+rel=${path#"$root"/}
+cd "$root" || exit 0
+git check-ignore -q "$rel" && exit 0
+if out=$(just fmt --files "$rel" 2>&1); then
+    exit 0
+fi
+printf 'format hook (%s):\n%s\n' "$rel" "$out" >&2
+exit 2

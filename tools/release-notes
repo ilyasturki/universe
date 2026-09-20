@@ -1,0 +1,73 @@
+#!/usr/bin/env python3
+"""tools/release-notes [TAG]: Markdown notes for TAG (default: the newest) from the conventional commits since the previous tag."""
+
+import re
+import subprocess
+import sys
+from collections import defaultdict
+
+SECTIONS = [
+    ("Breaking changes", ["!"]),
+    ("Features", ["feat"]),
+    ("Fixes", ["fix"]),
+    ("Performance", ["perf"]),
+    ("Refactoring", ["refactor"]),
+    ("Documentation", ["docs"]),
+    ("Build and CI", ["build", "ci"]),
+    ("Tests", ["test"]),
+    ("Chores", ["chore", "style"]),
+]
+SUBJECT = re.compile(r"^(?P<type>[a-z]+)(\((?P<scope>[^)]+)\))?(?P<bang>!)?: (?P<subject>.+)$")
+
+
+def git(*args: str) -> str:
+    return subprocess.run(["git", *args], check=True, capture_output=True, text=True).stdout
+
+
+def previous_tag(tag: str) -> str | None:
+    return next((t for t in git("tag", "--sort=-v:refname", "--merged", tag).split() if t != tag), None)
+
+
+def compare_url(prev: str, tag: str) -> str | None:
+    try:
+        remote = git("remote", "get-url", "origin").strip()
+    except subprocess.CalledProcessError:
+        return None
+    m = re.match(r"^(?:https://github\.com/|git@github\.com:)(?P<repo>[^/]+/[^/]+?)(?:\.git)?$", remote)
+    return f"https://github.com/{m['repo']}/compare/{prev}...{tag}" if m else None
+
+
+def notes(tag: str) -> str:
+    prev = previous_tag(tag)
+    span = f"{prev}..{tag}" if prev else tag
+    groups: dict[str, list[str]] = defaultdict(list)
+    for line in git("log", "--format=%s", "--no-merges", span).splitlines():
+        m = SUBJECT.match(line)
+        if not m:
+            groups["other"].append(line)
+            continue
+        if m["type"] == "chore" and m["scope"] == "release":
+            continue
+        key = "!" if m["bang"] else m["type"]
+        groups[key].append(f"**{m['scope']}:** {m['subject']}" if m["scope"] else m["subject"])
+    out: list[str] = []
+    for title, kinds in SECTIONS:
+        items = [item for kind in kinds for item in groups.pop(kind, [])]
+        if items:
+            out += [f"## {title}", *[f"- {item}" for item in items], ""]
+    rest = [item for items in groups.values() for item in items]
+    if rest:
+        out += ["## Other", *[f"- {item}" for item in rest], ""]
+    if prev:
+        url = compare_url(prev, tag)
+        out.append(f"Full changelog: [{prev}...{tag}]({url})" if url else f"Full changelog: {prev}...{tag}")
+    return "\n".join(out).rstrip() + "\n"
+
+
+def main() -> None:
+    tag = sys.argv[1] if len(sys.argv) > 1 else git("describe", "--tags", "--abbrev=0").strip()
+    sys.stdout.write(notes(tag))
+
+
+if __name__ == "__main__":
+    main()

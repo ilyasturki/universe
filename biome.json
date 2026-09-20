@@ -1,0 +1,11 @@
+{
+    "$schema": "https://biomejs.dev/schemas/2.5.11/schema.json",
+    "vcs": { "enabled": false },
+    "files": { "includes": ["modules/capture/extension/**"] },
+    "formatter": { "indentStyle": "space", "indentWidth": 4, "lineWidth": 160 },
+    "javascript": {
+        "formatter": { "quoteStyle": "single" },
+        "globals": ["global", "log", "logError"]
+    },
+    "linter": { "enabled": true, "rules": { "preset": "recommended" } }
+}

@@ -1,0 +1,95 @@
+#!/usr/bin/env bash
+# tools/fmt [--check] [rust|python|qml|js|nix]...   whole trees, all of them by default
+# tools/fmt [--check] --files FILE...               only those, by extension or shebang
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+check=0
+langs=()
+files=()
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --check) check=1 ;;
+        --files) shift; [ $# -gt 0 ] || exit 0; files=("$@"); break ;;
+        rust|python|qml|js|nix) langs+=("$1") ;;
+        *) echo "fmt: unknown argument '$1'" >&2; exit 2 ;;
+    esac
+    shift
+done
+
+# qmlformat cannot build this file's JS DOM and drops code from its output
+qml_skip="ui/universe_ui/qml/ui/ShotGrid.qml"
+nix_files=(flake.nix nix/*.nix)
+
+status=0
+fail() { status=1; }
+
+rust_all() { if [ "$check" = 1 ]; then cargo fmt --check; else cargo fmt; fi; }
+# Through stdin: given a path, rustfmt follows every `mod` the file declares and formats those files too
+rust_file() {
+    if [ "$check" = 1 ]; then
+        rustfmt --edition 2021 --config-path rustfmt.toml < "$1" | diff -q "$1" - >/dev/null || { echo "rustfmt: would reformat $1"; return 1; }
+        return 0
+    fi
+    local tmp
+    tmp=$(mktemp)
+    if rustfmt --edition 2021 --config-path rustfmt.toml < "$1" > "$tmp"; then
+        cat "$tmp" > "$1"
+    else
+        rm -f "$tmp"
+        return 1
+    fi
+    rm -f "$tmp"
+}
+python_fmt() { if [ "$check" = 1 ]; then ruff format --check "$@"; else ruff format "$@"; fi; }
+nix_fmt() { if [ "$check" = 1 ]; then nixfmt --check "$@"; else nixfmt "$@"; fi; }
+js_fmt() { if [ "$check" = 1 ]; then biome format "$@"; else biome format --write "$@"; fi; }
+qml_file() {
+    [ "$1" = "$qml_skip" ] && return 0
+    if [ "$check" = 1 ]; then
+        qmlformat "$1" 2>/dev/null | diff -q "$1" - >/dev/null || { echo "qmlformat: would reformat $1"; return 1; }
+    else
+        qmlformat -i "$1"
+    fi
+}
+qml_all() {
+    local f rc=0
+    while IFS= read -r f; do qml_file "$f" || rc=1; done < <(find ui/universe_ui/qml -name '*.qml' | sort)
+    return $rc
+}
+
+is_python() {
+    case "${1##*/}" in
+        *.py|*.pyi) return 0 ;;
+        *.*) return 1 ;;
+    esac
+    head -c 64 "$1" 2>/dev/null | head -n 1 | grep -q '^#!.*python'
+}
+
+if [ ${#files[@]} -gt 0 ]; then
+    py=()
+    for f in "${files[@]}"; do
+        case "$f" in
+            *.rs) rust_file "$f" || fail ;;
+            *.qml) qml_file "$f" || fail ;;
+            *.nix) nix_fmt "$f" || fail ;;
+            modules/capture/extension/*.js|modules/capture/extension/*.json) js_fmt "$f" || fail ;;
+            *.js) echo "fmt: $f is QML-side JavaScript (.pragma/.import), no formatter covers it" >&2 ;;
+            *) is_python "$f" && py+=("$f") ;;
+        esac
+    done
+    [ ${#py[@]} -eq 0 ] || python_fmt "${py[@]}" || fail
+    exit $status
+fi
+
+[ ${#langs[@]} -gt 0 ] || langs=(rust python qml js nix)
+for lang in "${langs[@]}"; do
+    case "$lang" in
+        rust) rust_all || fail ;;
+        python) python_fmt || fail ;;
+        qml) qml_all || fail ;;
+        js) js_fmt || fail ;;
+        nix) nix_fmt "${nix_files[@]}" || fail ;;
+    esac
+done
+exit $status

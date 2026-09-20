@@ -12,11 +12,39 @@
       # What build.rs puts behind the version: the flake's source has no .git to ask.
       gitRev = self.shortRev or self.dirtyShortRev or "";
 
+      relOf = path: lib.removePrefix (toString ./. + "/") (toString path);
+      junk = [ "__pycache__" ".pytest_cache" ".ruff_cache" ];
+
+      # Kept out of rustSrc: an edit here leaves core and corePy cached
+      pyOnly = [ "crates/universe-py/tests" "crates/universe-py/typings" ];
+      under = dir: rel: rel == dir || lib.hasPrefix "${dir}/" rel;
+
       rustSrc = lib.cleanSourceWith {
         src = ./.;
         filter = path: type:
-          let rel = lib.removePrefix (toString ./. + "/") (toString path);
-          in lib.hasPrefix "crates" rel || rel == "Cargo.toml" || rel == "Cargo.lock";
+          let rel = relOf path;
+          in !(lib.elem (baseNameOf path) junk) && !(lib.any (d: under d rel) pyOnly)
+             && (lib.hasPrefix "crates" rel || lib.elem rel [ "Cargo.toml" "Cargo.lock" "rustfmt.toml" ]);
+      };
+
+      # The trees a Python check needs plus the root pytest configuration, so one tree's change leaves the others cached
+      pySrc = dirs: lib.cleanSourceWith {
+        src = ./.;
+        filter = path: type:
+          let
+            rel = relOf path;
+            within = dir: under dir rel || lib.hasPrefix "${rel}/" dir;
+          in lib.cleanSourceFilter path type && !(lib.elem (baseNameOf path) junk)
+             && (lib.elem rel [ "pyproject.toml" "conftest.py" ] || lib.any within dirs);
+      };
+
+      lintSrc = lib.cleanSourceWith {
+        src = ./.;
+        filter = path: type:
+          let rel = relOf path;
+          in lib.cleanSourceFilter path type
+             && !(lib.elem (baseNameOf path) (junk ++ [ "target" ".venv" ]))
+             && !(lib.hasPrefix ".dev" rel) && rel != ".claude/worktrees";
       };
 
       core = pkgs.rustPlatform.buildRustPackage {
@@ -85,9 +113,18 @@
       runtimePath = lib.makeBinPath (moduleRuntime ++ sourceRuntime ++ [ pkgs.umu-launcher pkgs.systemd ]);
       modulesDir = "${modulesPkg}/share/universe/modules";
       sourcesDir = "${sourcesPkg}/share/universe/sources";
+      qtRuntime = with pkgs.qt6; [ qtdeclarative qt5compat qtmultimedia qtsvg qtimageformats ];
       qmlImportPath = lib.concatMapStringsSep ":" (p: "${p}/lib/qt-6/qml") (with pkgs.qt6; [ qtdeclarative qt5compat qtmultimedia ]);
       # Only wrapQtAppsHook sets this for a built app; the check and the dev shell run the host bare. qtimageformats: webp, which SteamGridDB serves
       qtPluginPath = lib.concatMapStringsSep ":" (p: "${p}/lib/qt-6/plugins") (with pkgs.qt6; [ qtsvg qtimageformats qtmultimedia ]);
+      # What the dev shell and the checks share; conftest.py sets the rest (TZ, locale, the offscreen platform)
+      checkEnv = {
+        QML2_IMPORT_PATH = qmlImportPath;
+        QT_PLUGIN_PATH = qtPluginPath;
+        TZDIR = "${pkgs.tzdata}/share/zoneinfo";
+      };
+      uiPy = ps: [ ps.pyside6 ps.pysdl2 ps.qrcode ];
+      pyEnv = extra: pkgs.python3.withPackages (ps: [ ps.pytest ] ++ extra ps);
 
       uiDesktopItem = pkgs.makeDesktopItem {
         name = "universe-ui";
@@ -107,7 +144,7 @@
         pyproject = true;
         src = ./ui;
         build-system = [ pkgs.python3Packages.setuptools ];
-        dependencies = with pkgs.python3Packages; [ pyside6 pysdl2 qrcode corePy ];
+        dependencies = uiPy pkgs.python3Packages ++ [ corePy ];
         nativeBuildInputs = [ pkgs.qt6.wrapQtAppsHook pkgs.copyDesktopItems pkgs.installShellFiles pkgs.scdoc ];
         postInstall = ''
           scdoc < universe-ui.1.scd > universe-ui.1
@@ -143,31 +180,50 @@
         meta.mainProgram = "universe";
       };
 
-      pytestUi = pkgs.stdenvNoCC.mkDerivation {
-        name = "universe-pytest-ui";
-        src = ./ui;
+      pytestOf = { name, dirs, tests ? dirs, py ? (ps: [ ]), runtime ? [ ] }: pkgs.stdenvNoCC.mkDerivation {
+        inherit name;
+        src = pySrc dirs;
+        env = checkEnv;
         dontWrapQtApps = true;
-        nativeBuildInputs = [ (pkgs.python3.withPackages (ps: [ ps.pyside6 ps.pysdl2 ps.qrcode ps.pytest corePy ])) pkgs.qt6.qt5compat pkgs.qt6.qtmultimedia pkgs.qt6.qtdeclarative pkgs.qt6.qtsvg pkgs.qt6.qtimageformats pkgs.systemd pkgs.ffmpeg ];
-        buildPhase = ''
-          export HOME=$TMPDIR QT_QPA_PLATFORM=offscreen QT_FORCE_STDERR_LOGGING=1 LC_ALL=C.UTF-8 TZ=Europe/Paris TZDIR=${pkgs.tzdata}/share/zoneinfo
-          export QML2_IMPORT_PATH=${qmlImportPath} QT_PLUGIN_PATH=${qtPluginPath}
-          python3 -m pytest -q -p no:cacheprovider
-        '';
-        installPhase = "touch $out";
-      };
-
-      pytestOf = name: src: runtime: pkgs.stdenvNoCC.mkDerivation {
-        inherit name src;
-        nativeBuildInputs = [ (pkgs.python3.withPackages (ps: [ ps.pytest ])) ] ++ runtime;
+        nativeBuildInputs = [ (pyEnv py) ] ++ runtime;
         postPatch = "patchShebangs .";
         buildPhase = ''
-          export HOME=$TMPDIR LC_ALL=C.UTF-8 TZ=Europe/Paris TZDIR=${pkgs.tzdata}/share/zoneinfo
-          python3 -m pytest -q -p no:cacheprovider
+          export HOME=$TMPDIR
+          python3 -m pytest -q -p no:cacheprovider ${lib.escapeShellArgs tests}
         '';
         installPhase = "touch $out";
       };
-      pytestModules = pytestOf "universe-pytest-modules" ./modules moduleRuntime;
-      pytestSources = pytestOf "universe-pytest-sources" ./sources sourceRuntime;
+      pytestUi = pytestOf { name = "universe-pytest-ui"; dirs = [ "ui" ]; py = ps: uiPy ps ++ [ corePy ]; runtime = qtRuntime ++ [ pkgs.systemd pkgs.ffmpeg ]; };
+      pytestModules = pytestOf { name = "universe-pytest-modules"; dirs = [ "modules" ]; runtime = moduleRuntime; };
+      pytestSources = pytestOf { name = "universe-pytest-sources"; dirs = [ "sources" ]; runtime = sourceRuntime; };
+      pytestCorePy = pytestOf { name = "universe-pytest-core-py"; dirs = [ "crates/universe-py/tests" "crates/universe-py/typings" ]; tests = [ "crates/universe-py/tests" ]; py = ps: [ corePy ]; };
+
+      # The package's vendored tree, linted instead of built: a lint failure leaves `nix build .#universe` alone
+      rustLint = core.overrideAttrs (prev: {
+        pname = "universe-rust-lint";
+        nativeBuildInputs = prev.nativeBuildInputs ++ [ pkgs.clippy pkgs.rustfmt pkgs.python3 ];
+        # The two lines are `tools/lint rust`
+        buildPhase = ''
+          cargo fmt --check
+          cargo clippy --workspace --all-targets --frozen -- -D warnings
+        '';
+        doCheck = false;
+        installPhase = "touch $out";
+        postInstall = "";
+      });
+
+      lint = pkgs.stdenvNoCC.mkDerivation {
+        name = "universe-lint";
+        src = lintSrc;
+        dontWrapQtApps = true;
+        nativeBuildInputs = [ (pyEnv uiPy) pkgs.ruff pkgs.pyright pkgs.biome pkgs.nixfmt pkgs.actionlint pkgs.shellcheck pkgs.qt6.qtdeclarative ];
+        postPatch = "patchShebangs tools";
+        buildPhase = ''
+          export HOME=$TMPDIR
+          tools/lint tree
+        '';
+        installPhase = "touch $out";
+      };
     in {
       packages.${system} = {
         inherit core universe universe-shell-extension;
@@ -179,12 +235,11 @@
       };
 
       devShells.${system}.default = pkgs.mkShell {
-        packages = with pkgs; [ cargo rustc clippy rustfmt rust-analyzer pkg-config sqlite ruff maturin (python3.withPackages (ps: [ ps.pyside6 ps.pysdl2 ps.qrcode ps.pytest ps.setuptools ])) qt6.qtdeclarative qt6.qt5compat qt6.qtmultimedia qt6.qtsvg qt6.qtimageformats SDL2 ] ++ moduleRuntime ++ sourceRuntime;
+        packages = with pkgs; [ cargo rustc clippy rustfmt rust-analyzer pkg-config sqlite ruff pyright biome nixfmt actionlint shellcheck maturin (pyEnv (ps: uiPy ps ++ [ ps.setuptools ])) SDL2 ] ++ qtRuntime ++ moduleRuntime ++ sourceRuntime;
+        env = checkEnv;
         shellHook = ''
           export UNIVERSE_MODULES_PATH="$PWD/modules"
           export UNIVERSE_SOURCES_PATH="$PWD/sources"
-          export QML2_IMPORT_PATH="${qmlImportPath}"
-          export QT_PLUGIN_PATH="${qtPluginPath}"
           export LD_LIBRARY_PATH="${lib.makeLibraryPath [ pkgs.pipewire ]}''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           export QT_FORCE_STDERR_LOGGING=1
         '';
@@ -192,9 +247,12 @@
 
       checks.${system} = {
         core = core;
+        lint = lint;
+        rust-lint = rustLint;
         pytest-ui = pytestUi;
         pytest-modules = pytestModules;
         pytest-sources = pytestSources;
+        pytest-core-py = pytestCorePy;
       };
 
       nixosModules.default = import ./nix/nixos.nix { gsrPkg = pkgs.gpu-screen-recorder; };

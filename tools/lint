@@ -1,0 +1,52 @@
+#!/usr/bin/env bash
+# tools/lint [rust|python|fmt|js|shell|actions]...   every section by default; `tree` is everything but rust
+# Runs every requested section and reports them all, then fails if any did.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+sections=()
+for arg in "$@"; do
+    case "$arg" in
+        rust|python|fmt|js|shell|actions) sections+=("$arg") ;;
+        tree) sections+=(python fmt js shell actions) ;;
+        *) echo "lint: unknown section '$arg'" >&2; exit 2 ;;
+    esac
+done
+[ ${#sections[@]} -gt 0 ] || sections=(rust python fmt js shell actions)
+
+failed=()
+run() {
+    local name=$1; shift
+    echo "── $name"
+    if ! "$@"; then failed+=("$name"); fi
+}
+
+# Extensionless Python (shebang) that pyright's include cannot reach on its own
+python_scripts() { grep -ls '^#!.*python' modules/*/bin/* sources/*/bin/* tools/* 2>/dev/null | grep -v '/thaw$' || true; }
+
+lint_rust() {
+    local rc=0
+    cargo fmt --check || rc=1
+    cargo clippy --workspace --all-targets -- -D warnings || rc=1
+    return $rc
+}
+lint_python() {
+    local rc=0
+    ruff check || rc=1
+    pyright || rc=1
+    mapfile -t scripts < <(python_scripts)
+    [ ${#scripts[@]} -eq 0 ] || pyright "${scripts[@]}" || rc=1
+    return $rc
+}
+lint_fmt() { tools/fmt --check python qml js nix; }
+lint_js() { biome lint; }
+lint_shell() { shellcheck -S warning tools/fmt tools/lint tools/sample .githooks/* .claude/hooks/*; }
+lint_actions() { actionlint .github/workflows/*.yml; }
+
+for s in "${sections[@]}"; do run "$s" "lint_$s"; done
+
+if [ ${#failed[@]} -gt 0 ]; then
+    echo "lint: failed: ${failed[*]}" >&2
+    exit 1
+fi
+echo "lint: ok"

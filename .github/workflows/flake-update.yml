@@ -1,0 +1,25 @@
+name: flake-update
+on:
+  schedule:
+    - cron: "0 6 * * 1"
+  workflow_dispatch:
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: DeterminateSystems/nix-installer-action@v23
+      - uses: DeterminateSystems/magic-nix-cache-action@v15
+      - run: nix flake update
+      # A pull request opened with the workflow token starts no ci run, so the checks run here first
+      - run: nix build .#universe .#universe-ui --no-link -L
+      - run: nix flake check -L
+      - uses: peter-evans/create-pull-request@v8
+        with:
+          branch: flake-update
+          commit-message: "build(nix): update flake.lock"
+          title: "build(nix): update flake.lock"
+          body: "Weekly `nix flake update`. The packages and `nix flake check` passed in the run that opened this."

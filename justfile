@@ -15,8 +15,9 @@ nix := "nix develop --quiet --command"
 python := VIRTUAL_ENV / "bin/python"
 ui_bin := VIRTUAL_ENV / "bin/universe-ui"
 
-# First run: build, create .dev/ with a ready config.toml, run doctor
+# First run: build, create .dev/ with a ready config.toml, wire the git hooks, run doctor
 setup: build env
+    @git config core.hooksPath .githooks
     @{{ nix }} target/debug/universe doctor
 
 # Build the CLI (debug)
@@ -51,10 +52,33 @@ ui-fake *args: develop
 logs:
     journalctl --user -f -u 'universe-*'
 
-test: build develop env
-    @{{ nix }} cargo test
-    @{{ nix }} {{ python }} -m pytest -q ui
-    @{{ nix }} python3 -m pytest -q modules sources
+# Every suite, or the ones named: rust, python, or one of python's ui, modules, sources, bindings
+test *suites: build develop env
+    #!/usr/bin/env -S nix develop --quiet --command bash
+    set -euo pipefail
+    cd "{{ justfile_directory() }}"
+    suites="{{ suites }}"
+    [ -n "$suites" ] || suites="rust python"
+    for suite in $suites; do
+        case "$suite" in
+            rust) cargo test ;;
+            python) "{{ python }}" -m pytest -q ;;
+            bindings) "{{ python }}" -m pytest -q crates/universe-py/tests ;;
+            ui|modules|sources) "{{ python }}" -m pytest -q "$suite" ;;
+            *) echo "test: unknown suite '$suite' (rust, python, ui, modules, sources, bindings)" >&2; exit 2 ;;
+        esac
+    done
+
+# Format every tree (rust python qml js nix), the ones named, or `--files a.rs b.py`; `--check` only reports
+fmt *args:
+    @{{ nix }} tools/fmt {{ args }}
+
+# Every linter (rust python fmt js shell actions) or the sections named; what CI runs
+lint *args:
+    @{{ nix }} tools/lint {{ args }}
+
+# Every local gate, lint then every suite: what the pre-push hook runs (`just check` is the sandboxed version)
+verify: lint test
 
 # Against this machine: transient units on the user systemd, a scope around the test process, the InputPlumber daemon (pads hidden ~10 s), the DRM cards
 test-live: build

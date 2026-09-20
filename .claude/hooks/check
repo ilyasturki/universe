@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Stop: lint the tree and test the suites this session's changes touch; a failure goes back to the session (exit 2).
+set -uo pipefail
+input=$(cat)
+[ "$(printf '%s' "$input" | jq -r '.stop_hook_active // false')" = true ] && exit 0
+root=$(git rev-parse --show-toplevel 2>/dev/null) || exit 0
+cd "$root" || exit 0
+
+base=$(git merge-base HEAD main 2>/dev/null || git rev-parse HEAD)
+changed=$({ git diff --name-only "$base"; git status --porcelain --untracked-files=all | cut -c4-; } | sort -u)
+[ -n "$changed" ] || exit 0
+
+suites=()
+grep -qE '^(crates/|Cargo\.(toml|lock)$|rustfmt\.toml$)' <<<"$changed" && suites+=(rust bindings)
+grep -qE '^(ui/|conftest\.py$|pyproject\.toml$)' <<<"$changed" && suites+=(ui)
+grep -q '^modules/' <<<"$changed" && suites+=(modules)
+grep -q '^sources/' <<<"$changed" && suites+=(sources)
+
+log=$(mktemp)
+trap 'rm -f "$log"' EXIT
+if just lint >"$log" 2>&1 && { [ ${#suites[@]} -eq 0 ] || just test "${suites[@]}" >>"$log" 2>&1; }; then
+    exit 0
+fi
+{ echo "checks failed (just lint; just test ${suites[*]:-}):"; tail -n 80 "$log"; } >&2
+exit 2
