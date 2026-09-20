@@ -440,6 +440,25 @@ so later launches record without a dialog. A cancelled picker records nothing. O
 extension absent or not yet loaded, or when no game window appears in time, the screen is recorded
 and the shell's OSD says so.
 
+A screen recording **follows a monitor switch**. gpu-screen-recorder's KMS capture is pinned to one
+connector, so the capture unit runs `bin/record` over it: it polls `/sys/class/drm/*/status` once a
+second and, when the recorded connector leaves `connected` or the recorder exits, asks the recorder
+to stop, moves the file aside as `pending/<session>.part<n>.mkv` (its `.ts` sidecar with it, the
+list under `parts` in the timeline), opens a pause, waits for a connected connector — the same one
+back, else the first, as `pick_screen` — and starts the recorder again on it, capped at the first
+part's size (`-s`: a limit, a smaller monitor still gives a smaller part, which the stitch logs); a
+monitor that has just come up has no CRTC for a few seconds, so an exit right after the restart is
+retried. The pause closes at the new recorder's
+first frame, a frozen game gets `set-paused true` on it at once, the OSD names the new screen and
+the `screenshot` hook's gpu-screen-recorder fallback follows it (`screen` in the timeline). At
+session end `stop` marks the timeline `stopping` first — the recorder's own exit is then no switch
+— and, with parts to join, runs `bin/finish` in a unit of its own (`ffmpeg -f concat -c copy` into
+one `<session>.mkv`, then the usual checks and `recording-file`) and waits for it as long as the
+hook can; a stitch longer than that goes on alone, filed once done, and the journal's
+`post-process` runs without the recording. When ffmpeg cannot join the parts the longest one is
+filed and the others stay in `pending/`. A window (portal) recording follows its window on its own:
+`record` runs gpu-screen-recorder plain.
+
 `codec` is `auto` by default: the first of `av1_10bit`, `hevc_10bit`, `hevc`, `h264` in the
 `video_codecs` section of `gpu-screen-recorder --info` (what the card encodes), `h264` when it
 lists none of them. `audio` is `output` by default; `output+input` adds the microphone.

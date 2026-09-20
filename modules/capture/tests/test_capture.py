@@ -5,6 +5,8 @@ import shutil
 import stat
 import subprocess
 import sys
+import threading
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -553,3 +555,312 @@ def test_size_limit_and_audio_bitrate_parse():
         assert _common.audio_bitrate_kbps({"audio_bitrate": raw}) is None
     assert _common.gsr_extra_args({"gsr_extra_args": "-x 'a b'"}) == ["-x", "a b"]
     assert _common.gsr_extra_args({"gsr_extra_args": "-x 'unterminated"}) == []
+
+
+def test_start_runs_the_recorder_under_record_with_the_hooks_env(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {}, extra={"GAME_ID": "sample"})
+    assert run("start", env).returncode == 0
+    args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
+    record = args.index(str(BIN_DIR / "record"))
+    assert args[record + 1] == "--" and args[record + 2] == "gpu-screen-recorder"
+    setenv = {a.split("=", 2)[1]: a.split("=", 2)[2] for a in args[:record] if a.startswith("--setenv=")}
+    assert setenv["SESSION_ID"] == SESSION_ID and setenv["MODULE_DATA_DIR"] == env["MODULE_DATA_DIR"] and setenv["GAME_ID"] == "sample"
+    assert setenv["PATH"] == env["PATH"], "gsr-cli and ffprobe are on the hook's PATH, not the manager's"
+    assert "TERM" not in setenv
+
+
+def test_record_hands_a_portal_recording_to_gsr_as_is(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {})
+    result = subprocess.run([str(BIN_DIR / "record"), "--", "gpu-screen-recorder", "-w", "portal", "-o", str(tmp_path / "out.mkv")], env=env, capture_output=True, text=True, timeout=30, check=False)
+    assert result.returncode == 0, result.stderr
+    assert (fakebin["logs"] / "gsr.args").read_text().splitlines() == ["-w", "portal", "-o", str(tmp_path / "out.mkv")]
+    assert not (tmp_path / "data").exists(), "no supervision, no timeline"
+
+
+# _record imports `_common` by that name: this module's, registered only while it loads, so other modules' tests keep theirs.
+sys.modules["_common"] = _common
+try:
+    _spec_record = importlib.util.spec_from_file_location("capture_record", BIN_DIR / "_record.py")
+    _record = importlib.util.module_from_spec(_spec_record)
+    _spec_record.loader.exec_module(_record)
+finally:
+    del sys.modules["_common"]
+
+
+@pytest.fixture
+def livebin(fakebin):
+    """A recorder that runs until `gsr-cli stop`, as the real one does, plus the DRM tree the supervisor polls."""
+    logs = fakebin["logs"]
+    _write_shim(fakebin["bin"] / "gpu-screen-recorder", f'''printf "%s\\n" "$@" >> "{logs}/gsr.args"
+out=; for ((i=1; i<=$#; i++)); do [ "${{!i}}" = -o ] && {{ j=$((i+1)); out="${{!j}}"; }}; done
+if [ -e "{logs}/gsr.fail" ]; then echo "monitor not found" >&2; exit 3; fi
+echo fake > "$out"
+printf "monotonic_microsec realtime_microsec\\n1000 %s\\n" "$(( $(date +%s) * 1000000 ))" > "$out.ts"
+echo "$out" > "{logs}/gsr.current"
+trap 'exit 0' TERM
+while [ ! -e "$out.stopflag" ]; do sleep 0.05; done
+rm -f "$out.stopflag"
+exit 0''')
+    _write_shim(fakebin["bin"] / "gsr-cli", f'''printf "%s\\n" "$@" >> "{logs}/gsr-cli.args"
+case "$3" in
+  status) [ -e "{logs}/gsr.current" ] || exit 1; exit 0;;
+  set-paused) exit 0;;
+  stop) [ -e "{logs}/gsr.current" ] || {{ echo "error: not running" >&2; exit 1; }}; out=$(cat "{logs}/gsr.current"); rm -f "{logs}/gsr.current"; touch "$out.stopflag"; echo "$out"; exit 0;;
+esac
+exit 0''')
+    _write_shim(fakebin["bin"] / "ffprobe", 'case "$*" in *width*) echo "3840,2160";; *) echo "${FAKE_DURATION:-300}";; esac\nexit 0\n')
+    drm = fakebin["bin"].parent / "drm"
+    for name in ("card1-DP-1", "card1-HDMI-A-1", "card1", "renderD128"):
+        (drm / name).mkdir(parents=True)
+    (drm / "card1-DP-1" / "status").write_text("connected\n")
+    (drm / "card1-HDMI-A-1" / "status").write_text("disconnected\n")
+    return {**fakebin, "drm": drm}
+
+
+def _plug(livebin, **status):
+    for name, s in status.items():
+        (livebin["drm"] / f"card1-{name.replace('_', '-')}" / "status").write_text(f"{s}\n")
+
+
+def _wait_for(pred, timeout_s=10):
+    deadline = time.monotonic() + timeout_s
+    while time.monotonic() < deadline:
+        if pred():
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def _apply_env(monkeypatch, env):
+    """The supervisor runs in-process here: its children read the real environment."""
+    for k, v in env.items():
+        monkeypatch.setenv(k, v)
+
+
+def _recorder(tmp_path, livebin, env, extra_args=()):
+    output = pending_path(tmp_path)
+    Path(output).parent.mkdir(parents=True, exist_ok=True)
+    argv = ["gpu-screen-recorder", "-w", "DP-1", "-f", "60", *extra_args, "-o", output]
+    rec = _record.Recorder(argv, SESSION_ID, env["MODULE_DATA_DIR"], GAME_UNIT, drm_dir=str(livebin["drm"]))
+    rec.poll_s = 0.05
+    done = []
+    thread = threading.Thread(target=lambda: done.append(rec.run()), daemon=True)
+    return thread, done
+
+
+def _gsr_runs(livebin):
+    text = (livebin["logs"] / "gsr.args").read_text() if (livebin["logs"] / "gsr.args").exists() else ""
+    runs, cur = [], []
+    for line in text.splitlines():
+        cur.append(line)
+        if len(cur) >= 2 and cur[-2] == "-o":
+            runs.append(cur)
+            cur = []
+    return runs
+
+
+def _end_session(env, thread):
+    with _common.timeline(env["MODULE_DATA_DIR"], SESSION_ID) as state:
+        state["stopping"] = True
+    stop = subprocess.run(["gsr-cli", "-ipc", "x", "stop"], env=env, capture_output=True, text=True, check=False)
+    thread.join(timeout=10)
+    return stop.stdout.strip()
+
+
+def test_record_follows_the_monitor_that_replaces_the_recorded_one(tmp_path, livebin, monkeypatch):
+    env = env_for(tmp_path, livebin, {})
+    _apply_env(monkeypatch, env)
+    thread, done = _recorder(tmp_path, livebin, env)
+    thread.start()
+    assert _wait_for((livebin["logs"] / "gsr.current").exists)
+    with _common.timeline(env["MODULE_DATA_DIR"], SESSION_ID, create=True):
+        pass
+
+    _plug(livebin, DP_1="disconnected")
+    part1 = tmp_path / "data" / "pending" / f"{SESSION_ID}.part1.mkv"
+    assert _wait_for(lambda: part1.exists() and not (livebin["logs"] / "gsr.current").exists())
+    assert part1.with_name(part1.name + ".ts").exists(), "the sidecar moves with the part"
+    state = _timeline(tmp_path)
+    assert state["parts"] == [str(part1)] and len(state["pauses"]) == 1 and state["pauses"][0][1] is None, "the gap is a pause until the next monitor's first frame"
+    assert len(_gsr_runs(livebin)) == 1, "no monitor yet: nothing to record"
+
+    _plug(livebin, HDMI_A_1="connected")
+    assert _wait_for(lambda: len(_gsr_runs(livebin)) == 2 and _timeline(tmp_path)["pauses"][0][1] is not None)
+    second = _gsr_runs(livebin)[1]
+    assert flag_values(second, "-w") == ["HDMI-A-1"] and flag_values(second, "-s") == ["3840x2160"] and flag_values(second, "-f") == ["60"]
+    assert flag_values(second, "-o") == [pending_path(tmp_path)]
+    state = _timeline(tmp_path)
+    assert state["screen"] == "HDMI-A-1" and not state["paused"]
+    assert (livebin["logs"] / "busctl.args").read_text().count("Recording HDMI-A-1") == 1
+
+    assert _end_session(env, thread) == pending_path(tmp_path)
+    assert done == [0] and len(_gsr_runs(livebin)) == 2, "the session's own stop is not a switch"
+
+
+def test_record_retries_while_the_new_monitor_settles(tmp_path, livebin, monkeypatch):
+    env = env_for(tmp_path, livebin, {})
+    _apply_env(monkeypatch, env)
+    monkeypatch.setattr(_record, "RESTART_WAIT_S", 0.05)
+    thread, done = _recorder(tmp_path, livebin, env)
+    thread.start()
+    assert _wait_for((livebin["logs"] / "gsr.current").exists)
+    with _common.timeline(env["MODULE_DATA_DIR"], SESSION_ID, create=True):
+        pass
+
+    (livebin["logs"] / "gsr.fail").touch()
+    _plug(livebin, DP_1="disconnected", HDMI_A_1="connected")
+    assert _wait_for(lambda: len(_gsr_runs(livebin)) >= 3)
+    (livebin["logs"] / "gsr.fail").unlink()
+    assert _wait_for(lambda: (livebin["logs"] / "gsr.current").exists() and _timeline(tmp_path)["pauses"][0][1] is not None)
+    assert not (tmp_path / "data" / "pending" / f"{SESSION_ID}.part2.mkv").exists(), "a failed attempt leaves no part"
+    assert all(flag_values(r, "-w") == ["HDMI-A-1"] for r in _gsr_runs(livebin)[1:])
+
+    _end_session(env, thread)
+    assert done == [0]
+
+
+def test_record_gives_up_when_the_new_monitor_never_takes(tmp_path, livebin, monkeypatch):
+    env = env_for(tmp_path, livebin, {})
+    _apply_env(monkeypatch, env)
+    monkeypatch.setattr(_record, "RESTART_WAIT_S", 0.01)
+    monkeypatch.setattr(_record, "RESTART_TRIES", 2)
+    thread, done = _recorder(tmp_path, livebin, env)
+    thread.start()
+    assert _wait_for((livebin["logs"] / "gsr.current").exists)
+    with _common.timeline(env["MODULE_DATA_DIR"], SESSION_ID, create=True):
+        pass
+    (livebin["logs"] / "gsr.fail").touch()
+    _plug(livebin, DP_1="disconnected", HDMI_A_1="connected")
+    thread.join(timeout=10)
+    assert done == [3], "the recorder's own exit code, as when it dies on a live monitor"
+    assert len(_gsr_runs(livebin)) == 4
+    state = _timeline(tmp_path)
+    assert state["parts"] == [str(tmp_path / "data" / "pending" / f"{SESSION_ID}.part1.mkv")] and state["pauses"][0][1] is None
+
+
+def test_record_exits_with_a_recorder_that_dies_on_a_live_monitor(tmp_path, livebin, monkeypatch):
+    env = env_for(tmp_path, livebin, {})
+    _apply_env(monkeypatch, env)
+    thread, done = _recorder(tmp_path, livebin, env)
+    thread.start()
+    assert _wait_for((livebin["logs"] / "gsr.current").exists)
+    with _common.timeline(env["MODULE_DATA_DIR"], SESSION_ID, create=True):
+        pass
+    Path(pending_path(tmp_path) + ".stopflag").touch()
+    thread.join(timeout=10)
+    assert done == [0] and len(_gsr_runs(livebin)) == 1
+    assert "parts" not in _timeline(tmp_path)
+
+
+def test_record_pauses_a_restarted_recorder_while_the_game_is_frozen(tmp_path, livebin, monkeypatch):
+    env = env_for(tmp_path, livebin, {}, extra={"FAKE_FREEZER_STATE": "frozen"})
+    _apply_env(monkeypatch, env)
+    thread, done = _recorder(tmp_path, livebin, env)
+    thread.start()
+    assert _wait_for((livebin["logs"] / "gsr.current").exists)
+    with _common.timeline(env["MODULE_DATA_DIR"], SESSION_ID, create=True) as state:
+        state["paused"] = True
+        state["pauses"].append([_common.now_rfc3339(), None])
+    _plug(livebin, DP_1="disconnected", HDMI_A_1="connected")
+    assert _wait_for(lambda: len(_gsr_runs(livebin)) == 2 and _timeline(tmp_path).get("screen") == "HDMI-A-1")
+    state = _timeline(tmp_path)
+    assert state["paused"] and len(state["pauses"]) == 1 and state["pauses"][0][1] is None, "the freeze's pause runs on"
+    assert _pauses(livebin) == ["true"], "the new recorder is told to pause, whatever the timeline already says"
+    _end_session(env, thread)
+    assert done == [0]
+
+
+def _seed_parts(tmp_path, first_frame_us=None):
+    pending = tmp_path / "data" / "pending"
+    pending.mkdir(parents=True, exist_ok=True)
+    part1 = pending / f"{SESSION_ID}.part1.mkv"
+    part1.write_bytes(b"part one")
+    if first_frame_us:
+        (pending / f"{SESSION_ID}.part1.mkv.ts").write_text(f"monotonic_microsec realtime_microsec\n1000 {first_frame_us}\n")
+    current = pending / f"{SESSION_ID}.mkv"
+    current.write_bytes(b"part two")
+    with _common.timeline(str(tmp_path / "data"), SESSION_ID, create=True) as state:
+        state["parts"] = [str(part1)]
+    return part1, current
+
+
+def test_stop_hands_a_recording_in_parts_to_a_finish_unit(tmp_path, fakebin):
+    part1, current = _seed_parts(tmp_path)
+    env = env_for(tmp_path, fakebin, {"min_duration_s": 240}, extra={"FAKE_STOP_PATH": str(current)})
+    result = run("stop", env)
+    assert result.returncode == 0, result.stderr
+    args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
+    assert args[:5] == ["--user", f"--unit=universe-capture-finish-{SESSION_ID}", "--collect", "--wait", "--quiet"]
+    assert f"--setenv=PATH={env['PATH']}" in args and f"--setenv=MODULE_SETTINGS_JSON={env['MODULE_SETTINGS_JSON']}" in args
+    assert args[-2:] == [str(BIN_DIR / "finish"), str(current)]
+    assert _timeline(tmp_path)["stopping"] is True
+    assert not (fakebin["logs"] / "universe.args").exists(), "the unit files it"
+    assert part1.exists() and current.exists()
+
+
+def test_finish_stitches_the_parts_and_files_one_recording(tmp_path, fakebin):
+    first_frame = datetime.now().astimezone().replace(microsecond=0) - timedelta(hours=1)
+    part1, current = _seed_parts(tmp_path, int(first_frame.timestamp() * 1_000_000))
+    (tmp_path / "data" / "pending" / f"{SESSION_ID}.mkv.ts").write_text("monotonic_microsec realtime_microsec\n1000 1\n")
+    _write_shim(fakebin["bin"] / "ffmpeg", f'''printf "%s\\n" "$@" >> "{fakebin['logs']}/ffmpeg.args"
+for ((i=1; i<=$#; i++)); do [ "${{!i}}" = -i ] && {{ j=$((i+1)); cp "${{!j}}" "{fakebin['logs']}/concat.list"; }}; done
+echo stitched > "${{@: -1}}"
+exit 0''')
+    _write_shim(fakebin["bin"] / "universe", f'cp "$5" "{tmp_path}/handed.json"\necho filed\nexit 0')
+    env = env_for(tmp_path, fakebin, {"min_duration_s": 240}, extra={"FAKE_DURATION": "999"})
+    result = subprocess.run([str(BIN_DIR / "finish"), str(current)], env=env, capture_output=True, text=True, timeout=30, check=False)
+    assert result.returncode == 0, result.stderr
+    ff = (fakebin["logs"] / "ffmpeg.args").read_text().splitlines()
+    assert ff[:8] == ["-v", "error", "-y", "-f", "concat", "-safe", "0", "-i"] and ff[-3:] == ["-c", "copy", str(current.with_name(f"{SESSION_ID}.stitch.mkv"))]
+    assert (fakebin["logs"] / "concat.list").read_text() == f"file '{part1}'\nfile '{current}'\n"
+    assert current.read_text() == "stitched\n" and not part1.exists()
+    assert not list((tmp_path / "data" / "pending").glob("*.ts")) and not list((tmp_path / "data" / "pending").glob("*.parts"))
+    handed = json.loads((tmp_path / "handed.json").read_text())
+    assert datetime.fromisoformat(handed["started_at"]) == first_frame, "the recording starts with its first part"
+    assert "filed" in result.stderr
+
+
+def test_finish_files_the_longest_part_when_the_stitch_fails(tmp_path, fakebin):
+    part1, current = _seed_parts(tmp_path)
+    _write_shim(fakebin["bin"] / "ffmpeg", 'echo "concat: broken" >&2\nexit 1\n')
+    _write_shim(fakebin["bin"] / "ffprobe", f'case "$*" in *"{part1}"*) echo 900;; *) echo 300;; esac\nexit 0\n')
+    env = env_for(tmp_path, fakebin, {"min_duration_s": 240})
+    result = subprocess.run([str(BIN_DIR / "finish"), str(current)], env=env, capture_output=True, text=True, timeout=30, check=False)
+    assert result.returncode == 0, result.stderr
+    assert "ffmpeg concat failed" in result.stderr
+    assert (fakebin["logs"] / "universe.args").read_text().splitlines() == ["recording-file", SESSION_ID, str(part1), "--timeline", str(tmp_path / "data" / "pending" / f"{SESSION_ID}.timeline.json")]
+    assert part1.exists() and current.exists() and not (tmp_path / "data" / "pending" / f"{SESSION_ID}.stitch.mkv").exists()
+
+
+def test_finish_files_the_part_left_when_the_session_ended_between_monitors(tmp_path, fakebin):
+    part1, current = _seed_parts(tmp_path)
+    current.unlink()
+    env = env_for(tmp_path, fakebin, {"min_duration_s": 240}, extra={"FAKE_DURATION": "999"})
+    result = subprocess.run([str(BIN_DIR / "finish")], env=env, capture_output=True, text=True, timeout=30, check=False)
+    assert result.returncode == 0, result.stderr
+    assert (fakebin["logs"] / "universe.args").read_text().splitlines()[:3] == ["recording-file", SESSION_ID, str(part1)]
+
+
+def test_shot_falls_back_to_the_screen_the_recorder_moved_to(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {}, extra={"FAKE_SHOT_OK": "false", "FAKE_NAME_OWNED": "true"})
+    install_fake_extension(env)
+    with _common.timeline(env["MODULE_DATA_DIR"], SESSION_ID, create=True) as state:
+        state["screen"] = "HDMI-A-1"
+    result = run("shot", env)
+    assert result.returncode == 0, result.stderr
+    assert flag_values((fakebin["logs"] / "gsr.args").read_text().splitlines(), "-w") == ["HDMI-A-1"]
+
+
+def test_connected_outputs_and_argv_edits(tmp_path):
+    drm = tmp_path / "drm"
+    for name, status in (("card1-DP-1", "connected"), ("card1-HDMI-A-1", "disconnected"), ("card0-DP-3", "connected")):
+        (drm / name).mkdir(parents=True)
+        (drm / name / "status").write_text(status + "\n")
+    (drm / "card1").mkdir()
+    assert _common.connected_outputs(str(drm)) == ["DP-1", "DP-3"]
+    assert _common.connected_outputs(str(tmp_path / "nope")) == []
+    argv = ["gpu-screen-recorder", "-w", "DP-1", "-o", "out.mkv"]
+    assert _common.with_flag(argv, "-w", "HDMI-A-1") == ["gpu-screen-recorder", "-w", "HDMI-A-1", "-o", "out.mkv"]
+    assert _common.with_flag(argv, "-s", "1920x1080") == ["gpu-screen-recorder", "-w", "DP-1", "-s", "1920x1080", "-o", "out.mkv"]
+    assert _common.flag_value(argv, "-o") == "out.mkv" and _common.flag_value(argv, "-s") is None
+    assert _common.part_path("/p/20260911-120000.mkv", 2) == "/p/20260911-120000.part2.mkv"

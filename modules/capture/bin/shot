@@ -7,7 +7,7 @@ import tempfile
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from _common import WINDOWS_BUS_NAME, bus_call_bool, extension_ready, load_settings, log  # noqa: E402
+from _common import WINDOWS_BUS_NAME, bus_call_bool, extension_ready, load_settings, log, timeline
 
 TAKE_TIMEOUT_S = 15
 
@@ -39,6 +39,15 @@ def take(screen, path):
     return ok, stderr
 
 
+def session_screen():
+    """The connector the recorder moved to, else the session's."""
+    if os.environ.get("SESSION_ID"):
+        with timeline(os.environ["MODULE_DATA_DIR"], os.environ["SESSION_ID"]) as state:
+            if state is not None and state.get("screen"):
+                return state["screen"]
+    return os.environ["SESSION_SCREEN"]
+
+
 def main():
     settings = load_settings()
     directory = os.environ["SCREENSHOTS_DIR"]
@@ -52,7 +61,7 @@ def main():
             return 0
         log(f"shell screenshot {path} failed: {stderr.strip()}")
 
-    ok, stderr = take(os.environ["SESSION_SCREEN"], path)
+    ok, stderr = take(session_screen(), path)
     if not ok:
         log(f"gpu-screen-recorder -o {path} failed: {stderr.strip()}")
         return 1

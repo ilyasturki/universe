@@ -132,8 +132,8 @@ def gsr_cli(session_id, *command, timeout=30):
     return subprocess.run(["gsr-cli", "-ipc", ipc_socket(session_id), *command], capture_output=True, text=True, timeout=timeout)
 
 
-def wait_recorder(session_id, timeout_s=5):
-    """The socket comes up with the recorder, a moment after its unit."""
+def wait_recorder(session_id, timeout_s=5, alive=None):
+    """The socket comes up with the recorder, a moment after its unit; `alive` false cuts the wait short."""
     deadline = time.monotonic() + timeout_s
     while True:
         try:
@@ -141,7 +141,7 @@ def wait_recorder(session_id, timeout_s=5):
                 return True
         except (OSError, subprocess.SubprocessError):
             pass
-        if time.monotonic() > deadline:
+        if time.monotonic() > deadline or (alive is not None and not alive()):
             return False
         time.sleep(0.25)
 
@@ -287,3 +287,93 @@ def set_paused(state, session_id, on):
 def game_frozen(unit):
     r = subprocess.run(["systemctl", "--user", "show", "-p", "FreezerState", "--value", unit], capture_output=True, text=True)
     return r.stdout.strip() in ("frozen", "freezing")
+
+
+DRM_DIR = "/sys/class/drm"
+
+# The env a transient unit gets from the hook: systemd-run starts from the manager's environment, not the caller's.
+UNIT_ENV_PREFIXES = ("PATH", "HOME", "XDG_", "DBUS_", "UNIVERSE_", "MODULE_", "SESSION_", "GAME_")
+
+
+def connected_outputs(drm_dir=None):
+    """Connected connectors, sorted, named as desktop.rs names them: `card1-DP-1` is `DP-1`."""
+    try:
+        entries = os.listdir(drm_dir or DRM_DIR)
+    except OSError:
+        return []
+    names = []
+    for entry in entries:
+        if "-" not in entry:
+            continue
+        try:
+            with open(os.path.join(drm_dir or DRM_DIR, entry, "status")) as f:
+                status = f.read().strip()
+        except OSError:
+            continue
+        if status == "connected":
+            names.append(entry.split("-", 1)[1])
+    return sorted(names)
+
+
+def unit_env_args():
+    return [f"--setenv={k}={v}" for k, v in os.environ.items() if k.startswith(UNIT_ENV_PREFIXES)]
+
+
+def flag_value(argv, flag):
+    return next((argv[i + 1] for i, a in enumerate(argv[:-1]) if a == flag), None)
+
+
+def with_flag(argv, flag, value):
+    """argv with `flag value` set, a new pair ahead of `-o`; gpu-screen-recorder reads its pairs in any order."""
+    out = list(argv)
+    for i, a in enumerate(out[:-1]):
+        if a == flag:
+            out[i + 1] = value
+            return out
+    at = out.index("-o") if "-o" in out else len(out)
+    return [*out[:at], flag, value, *out[at:]]
+
+
+def part_path(output, n):
+    """`<session>.part<n>.<ext>` beside `output`."""
+    stem, ext = os.path.splitext(output)
+    return f"{stem}.part{n}{ext}"
+
+
+def probe_duration(path):
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-i", path, "-show_entries", "format=duration", "-v", "quiet", "-of", "csv=p=0"],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+        return float(result.stdout.strip())
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+
+
+def probe_size(path):
+    """`(width, height)` of the first video stream; None when ffprobe cannot read it."""
+    try:
+        result = subprocess.run(
+            ["ffprobe", "-i", path, "-select_streams", "v:0", "-show_entries", "stream=width,height", "-v", "quiet", "-of", "csv=p=0"],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+        w, h = (int(v) for v in result.stdout.strip().split(",")[:2])
+        return (w, h) if w > 0 and h > 0 else None
+    except (OSError, subprocess.SubprocessError, ValueError):
+        return None
+
+
+def first_frame_at(path):
+    """`-write-first-frame-ts`: `<monotonic_us> <realtime_us>` on the second line of <path>.ts; None without it."""
+    try:
+        with open(path + ".ts") as f:
+            realtime_us = int(f.read().splitlines()[1].split()[1])
+        return datetime.fromtimestamp(realtime_us / 1_000_000).astimezone().isoformat(timespec="seconds")
+    except (OSError, ValueError, IndexError):
+        return None
+
+
+def remove_sidecar(path):
+    with contextlib.suppress(OSError):
+        os.remove(path + ".ts")

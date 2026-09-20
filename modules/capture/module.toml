@@ -5,7 +5,7 @@ version = "0.0.3"
 description = "Records each session with gpu-screen-recorder; the Play journal draws its frames from the recording."
 
 [requires]
-bins = ["gpu-screen-recorder", "gsr-cli", "ffprobe", "trash"]
+bins = ["gpu-screen-recorder", "gsr-cli", "ffmpeg", "ffprobe", "trash"]
 
 [hooks]
 pre-launch  = "bin/pre"
