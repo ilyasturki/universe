@@ -267,8 +267,6 @@ FocusScope {
             return "";
         if (row.type === "bool")
             return "Toggle";
-        if (row.type === "search")
-            return "Search";
         if (row.type === "action")
             return row.action !== undefined ? row.action : "Select";
         return "Change";
@@ -281,6 +279,7 @@ FocusScope {
     readonly property real sideWidth: Theme.dp(300)
     readonly property real mainRoom: width - sideMargin * 2 - sideWidth - Theme.dp(56)
     readonly property real mainWidth: Math.min(mainRoom, Theme.dp(1280))
+    readonly property real mainTop: titleText.y
     readonly property real mainX: sideMargin + sideWidth + Theme.dp(56) + (mainRoom - mainWidth) / 2
 
     readonly property var currentSource: sources.current
@@ -309,17 +308,7 @@ FocusScope {
                 groups: runners.groups
             };
         if (sectionId === "install") {
-            rows.push({
-                section: sourceName,
-                key: "search",
-                label: "Search " + sourceName,
-                type: "search",
-                icon: "search",
-                display: sources.query || "",
-                choices: [],
-                detail: ""
-            });
-            var jobs = [], installed = [], owned = [], all = [], running = 0, paused = 0, onDisk = 0;
+            var jobs = [], installed = [], owned = [], running = 0, paused = 0, onDisk = 0;
             var listed = sources.rows;
             for (var i = 0; i < listed.length; i++) {
                 var g = listed[i];
@@ -343,7 +332,6 @@ FocusScope {
                     accent: g.busy || g.pending,
                     progress: g.partial && g.disk_size > 0 ? g.partial_bytes / g.disk_size : 0
                 });
-                all.push(rows.length - 1);
                 if (g.busy || g.partial) {
                     jobs.push(rows.length - 1);
                     g.busy ? running++ : paused++;
@@ -352,35 +340,27 @@ FocusScope {
                 if (g.installed)
                     onDisk += g.disk_size;
             }
-            var busy = sources.busy ? (all.length > 0 ? " · refreshing…" : "loading…") : "";
+            var busy = sources.busy ? (listed.length > 0 ? " · refreshing…" : "loading…") : "";
             var stale = sources.error !== "" ? sourceName + " could not be reached" + (sources.libraryAge ? " · listing from " + sources.libraryAge : "") : "";
-            if (sources.query)
+            if (jobs.length > 0)
                 groups.push({
-                    title: "Results",
-                    meta: Format.plural(all.length, "game", "games") + " · “" + sources.query + "”" + busy,
-                    rows: [0].concat(all)
+                    title: "Installing",
+                    meta: [running > 0 ? running + " running" : "", paused > 0 ? paused + " paused" : ""].filter(Boolean).join(" · "),
+                    rows: jobs
                 });
-            else {
-                if (jobs.length > 0)
-                    groups.push({
-                        title: "Installing",
-                        meta: [running > 0 ? running + " running" : "", paused > 0 ? paused + " paused" : ""].filter(Boolean).join(" · "),
-                        rows: jobs
-                    });
-                var where = currentSource && currentSource.games_dir ? " · " + currentSource.games_dir : "";
-                var sized = onDisk > 0 ? " · " + Format.bytes(onDisk) : "";
-                groups.push({
-                    title: "Installed",
-                    meta: (all.length > 0 || !busy ? Format.plural(installed.length, "game", "games") + sized + where : "") + busy,
-                    rows: [0].concat(installed)
-                });
-                groups.push({
-                    title: "Owned, not installed",
-                    meta: Format.plural(owned.length, "game", "games") + (sources.libraryAge && !stale ? " · refreshed " + sources.libraryAge : ""),
-                    warning: stale,
-                    rows: owned
-                });
-            }
+            var where = currentSource && currentSource.games_dir ? " · " + currentSource.games_dir : "";
+            var sized = onDisk > 0 ? " · " + Format.bytes(onDisk) : "";
+            groups.push({
+                title: "Installed",
+                meta: (listed.length > 0 || !busy ? Format.plural(installed.length, "game", "games") + sized + where : "") + busy,
+                rows: installed
+            });
+            groups.push({
+                title: "Owned, not installed",
+                meta: Format.plural(owned.length, "game", "games") + (sources.libraryAge && !stale ? " · refreshed " + sources.libraryAge : ""),
+                warning: stale,
+                rows: owned
+            });
             return {
                 rows: rows,
                 groups: groups
@@ -671,14 +651,9 @@ FocusScope {
             page.runnerRequested(row.runner);
         } else if (sectionId === "install") {
             Sound.panel();
-            if (row.key === "search")
-                editor.prompt("Search " + sourceName, sources.query, function (query) {
-                    sources.search(query);
-                });
-            else
-                menu.show(page.gameActions(row), cards, cards.focusRect, row.label, function (action) {
-                    page.gameAction(row, action);
-                });
+            menu.show(page.gameActions(row), cards, cards.focusRect, row.label, function (action) {
+                page.gameAction(row, action);
+            });
         } else if (sectionId === "updates") {
             Sound.enter();
             if (row.key === "all")
@@ -1104,7 +1079,7 @@ FocusScope {
         id: finder
 
         x: page.mainX
-        y: side.y
+        y: page.mainTop
         width: page.mainWidth
         height: page.height - y
         active: page.sectionId === "search"
@@ -1132,7 +1107,7 @@ FocusScope {
         id: artwork
 
         x: page.mainX
-        y: side.y
+        y: page.mainTop
         width: page.mainWidth
         height: page.height - y
         active: page.sectionId === "artwork"
@@ -1176,7 +1151,7 @@ FocusScope {
         id: above
 
         x: page.mainX
-        y: side.y
+        y: page.mainTop
         width: page.mainWidth
         spacing: Theme.dp(32)
 
@@ -1404,7 +1379,7 @@ FocusScope {
         target: cards
         function onIndexChanged() {
             var row = cards.currentRow;
-            if (page.sectionId === "install" && row && row.key === "game")
+            if (page.sectionId === "install" && row)
                 page.sources.peek(row.row);
         }
     }

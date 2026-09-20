@@ -91,12 +91,10 @@ Item {
         anchors.leftMargin: Theme.dp(10)
         anchors.verticalCenter: parent.verticalCenter
         height: parent.height - Theme.dp(12)
-        width: Math.round(height * (item && item.square ? 1 : 2 / 3))
+        width: height
         active: row.hasImage
 
         sourceComponent: RoundedMask {
-            readonly property bool square: art.status === Image.Ready && art.implicitHeight > 0 && Math.abs(art.implicitWidth / art.implicitHeight - 1) < 0.08
-
             radius: Theme.dp(6)
 
             Rectangle {

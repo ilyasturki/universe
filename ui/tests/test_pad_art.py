@@ -103,22 +103,21 @@ def test_live_view_names_a_pulled_trigger(engine, fake):
     assert art.property("lastSlot") == ""
 
 
-def test_cards_land_past_the_search_row_and_leave_left(engine, fake):
+def test_cards_land_on_the_first_row_and_leave_left(engine, fake):
     rows = [
-        {"type": "search", "label": "Search GOG", "display": ""},
         {"type": "action", "label": "A game", "display": "Installed"},
         {"type": "action", "label": "Another", "display": "Owned"},
     ]
-    groups = [{"title": "Installed", "rows": [0, 1]}, {"title": "Owned", "rows": [2]}]
+    groups = [{"title": "Installed", "rows": [0]}, {"title": "Owned", "rows": [1]}]
     cards = create(engine, "SettingsCards.qml", rows=rows, groups=groups, columns=1, width=1200, height=800)
     pump(50)
     call(engine, cards, "reset()")
-    assert cards.property("index") == 1, "the search field is reached by going up, not landed on"
+    assert cards.property("index") == 0
     layout = cards.property("layout").toVariant()
     assert {c["col"] for c in layout["cards"]} == {0}, "one column: every card in it"
     left = []
     cards.escapedLeft.connect(lambda: left.append(True))
     call(engine, cards, "cross(-1)")
     assert left == [True]
-    call(engine, cards, "step(-1)")
-    assert cards.property("index") == 0
+    call(engine, cards, "step(1)")
+    assert cards.property("index") == 1

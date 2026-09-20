@@ -375,14 +375,13 @@ Updates, Controller, Themes, Doctor, Artwork, About, Quit) beside one column of 
 `Quit Universe`, which says when the running game closes with it), then `Qt.quit()` — the host
 stops the session and shuts the core down after the loop. Up and Down in the sidebar switch the section as they go, Right or A
 enter the cards, Left or B come back, L2/R2 cycle the section from anywhere, and □ refreshes the
-sections that fetch (Install, Updates, Doctor). A source's search is the first row of its
-first card, reached by going up: the cursor lands on the first game (`SettingsCards.reset` skips
-`type: "search"` rows). The tab bar's search glass shows only on the tabs that list games
-(`TabBar.showSearch`), so Settings has none. A row's `icon` names a `MenuGlyph` kind; a pad
+sections that fetch (Install, Updates, Doctor). The cards start level with the page title, not
+the sidebar. The tab bar's search glass shows only on the tabs that list games
+(`TabBar.showSearch`), so Settings has none; the store's catalogue search is Switch 2's alone. A row's `icon` names a `MenuGlyph` kind; a pad
 button's row prints its `press` and `hold` macros as chips (`PRESS`/`HOLD`, the action's glyph
 from `ui/Macros.js`, the macro's `label`). A source's game row shows the library's art when the
-game is in it — the `square` slot, else the cover — and the thumbnail takes the
-art's shape, square or 2:3; the home rail's tiles pick their art the same way.
+game is in it — the `square` slot, else the cover — cropped to a square thumbnail; the home
+rail's tiles pick their art the same way.
 
 ## The Install page
 

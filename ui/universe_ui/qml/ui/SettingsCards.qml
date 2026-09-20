@@ -123,19 +123,11 @@ FocusScope {
         return null;
     }
 
-    // The first row that is not a search field; the field is reached by going up from it.
     function firstStop() {
-        var fallback = null;
         for (var c = 0; c < layout.stops.length; c++)
-            for (var i = 0; i < layout.stops[c].length; i++) {
-                var s = layout.stops[c][i];
-                if (!fallback)
-                    fallback = s;
-                var row = rows[s.row];
-                if (!row || row.type !== "search")
-                    return s;
-            }
-        return fallback;
+            if (layout.stops[c].length > 0)
+                return layout.stops[c][0];
+        return null;
     }
 
     function reset() {
