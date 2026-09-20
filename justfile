@@ -142,7 +142,7 @@ seed *ids: env
 sample *args: build env
     @{{ nix }} tools/sample {{ args }}
 
-# The app as a new user meets it: a blank profile, no config.toml, ~/Games ~/Videos ~/Documents under it. just fresh ui [flags] | cli doctor | sample install. FRESH=<name> is another such profile; FRESH=hm gets a home-manager install's read-only `schema = 1` config.toml.
+# The app as a new user meets it: a profile wiped on every run, no config.toml, ~/Games ~/Videos ~/Documents under it. just fresh ui [flags] | cli doctor | sample install. FRESH=<name> is another such profile; FRESH=hm gets a home-manager install's read-only `schema = 1` config.toml.
 fresh cmd *args: build develop
     #!/usr/bin/env bash
     set -euo pipefail
@@ -153,8 +153,9 @@ fresh cmd *args: build develop
         sample) bin="{{ justfile_directory() }}/tools/sample" ;;
         *) echo "fresh: ui | cli | sample" >&2; exit 1 ;;
     esac
+    rm -rf "$root"
     mkdir -p "$root"/{data,config,state,cache}
-    if [ "${FRESH:-}" = hm ] && [ ! -e "$root/config/config.toml" ]; then
+    if [ "${FRESH:-}" = hm ]; then
         printf 'schema = 1\n' > "$root/config/config.toml"
         chmod a-w "$root/config/config.toml"
     fi
