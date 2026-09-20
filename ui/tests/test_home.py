@@ -124,6 +124,35 @@ def test_the_dock_pauses_on_home_and_thaws_on_the_release(api, fake):
     assert not home.open and home.shown == "launcher"
 
 
+def test_the_dock_over_the_game_takes_the_pad_back(api, fake, monkeypatch):
+    from universe_ui import fake_core
+
+    class Overlay:
+        def winId(self):
+            return 7
+
+        def show(self):
+            pass
+
+    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+    monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
+    home = api.home
+    assert home.attachOverlay(Overlay()) is True
+    assert not home.padCovered, "the launcher alone reads the pad"
+    fake.launch("mirrors-edge", "")
+    wait_for(fake.sessionShown, 3000)
+    pump(400)
+    assert home.shown == "game" and home.padCovered, "the game on screen has the pad"
+    home.openDock()
+    pump(50)
+    assert home.open and not home.padCovered, "the dock over the game is driven by the pad"
+    home.closeDock()
+    assert home.padCovered, "closing: the presses are the game's again"
+    home.dockClosed()
+    stop(api)
+    assert not home.padCovered
+
+
 def test_a_guide_hold_from_the_game_goes_home(api, fake, monkeypatch):
     from universe_ui import fake_core
 

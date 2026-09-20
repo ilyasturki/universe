@@ -439,6 +439,8 @@ class Home(QObject):
     shown = Property(str, lambda self: self._shown, notify=changed)
     # The game is on screen over the launcher, which happens inside gamescope alone; on the desktop the launcher is a window of its own.
     underGame = Property(bool, lambda self: self._shown == "game" and self._client.nested, notify=changed)
+    # The game on screen has the pad to itself; the dock over it takes the presses back.
+    padCovered = Property(bool, lambda self: self._shown == "game" and self._client.nested and not self._open, notify=changed)
     open = Property(bool, lambda self: self._open, notify=changed)
     paused = Property(bool, lambda self: self._paused, notify=changed)
     pauseOnHome = Property(bool, lambda self: self._pause_on_home, notify=changed)

@@ -176,7 +176,7 @@ def run(argv=None):
 
         gamepad = GamepadThread(app, pad=api.pad)
         gamepad.stick.connect(api.pad.set, Qt.ConnectionType.QueuedConnection)
-        api.home.changed.connect(lambda: gamepad.setCovered(api.home.underGame))
+        api.home.changed.connect(lambda: gamepad.setCovered(api.home.padCovered))
         gamepad.start()
         if args.fake:
             unbound = [s for s in os.environ.get("UNIVERSE_FAKE_UNBOUND", "").split(",") if s]
