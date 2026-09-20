@@ -17,6 +17,21 @@ fn which(bin: &str) -> Option<String> {
     crate::runners::on_path(bin).map(|p| p.to_string_lossy().into())
 }
 
+/// Eden's `[UI] confirmStop`: 0 (its default) asks before closing, so a stop from Universe shows a question instead of quitting; 2 never asks.
+fn eden_quits_on_stop() -> (bool, String) {
+    let ini = crate::roms::qt_config(&crate::paths::xdg("XDG_CONFIG_HOME", ".config"), crate::roms::EDEN_CONFIGS);
+    let value = ini.as_deref().and_then(|p| crate::roms::ini_value(p, "UI", "confirmStop")).unwrap_or_else(|| "0".into());
+    let file = ini.map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|| "~/.config/eden/qt-config.ini".into());
+    if value == "2" {
+        (true, format!("quits on stop without asking ({file})"))
+    } else {
+        (
+            false,
+            format!("asks before closing: a stop from Universe shows the question and kills it 10 s later; set Configure › General › Confirm before stopping emulation to Never Ask ([UI] confirmStop=2 in {file})"),
+        )
+    }
+}
+
 pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell: Option<&zbus::Connection>, game_runners: &[String]) -> Vec<Check> {
     let mut out = Vec::new();
     let mut push = |check: &str, ok: bool, detail: String, module: &str| out.push(Check { check: check.into(), ok, detail, module: module.into() });
@@ -123,6 +138,10 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         );
         inputplumber_wanted |=
             spec.kind == crate::runners::Kind::Emulator && spec.merged_options(config, None).get("inputplumber").and_then(|v| v.as_bool()).unwrap_or(false);
+        if spec.id == "eden" && ok {
+            let (quits, detail) = eden_quits_on_stop();
+            push("runner-eden-stop", quits, detail, "runners");
+        }
     }
     if inputplumber_wanted {
         let reachable = crate::inputplumber::reachable().await;

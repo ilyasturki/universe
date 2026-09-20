@@ -367,7 +367,11 @@ impl Core {
         if !session_id.is_empty() && c.session_id != session_id {
             return Err(Error::NotFound(session_id.into()));
         }
-        self.host.units.stop(&c.unit).await
+        let term_twice = match self.get(&c.id).await {
+            Ok(r) => crate::runners::spec(&r.game.runner_id()).is_none_or(|s| s.term_twice),
+            Err(_) => true,
+        };
+        self.host.units.stop(&c.unit, term_twice).await
     }
 
     pub async fn freeze(&self, on: bool) -> Result<()> {

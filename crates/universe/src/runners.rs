@@ -58,6 +58,8 @@ pub struct RunnerSpec {
     pub options: &'static [OptionSpec],
     pub via_proton: bool,
     pub file_required: bool,
+    /// A second SIGTERM 3 s after the first: Dolphin takes the first as a quit prompt. Eden's handler resets to the default on the first, so a second one kills it mid-shutdown.
+    pub term_twice: bool,
 }
 
 pub const RUNNERS: &[RunnerSpec] = &[
@@ -74,6 +76,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         options: &[],
         via_proton: false,
         file_required: true,
+        term_twice: true,
     },
     RunnerSpec {
         id: "wine",
@@ -88,6 +91,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         options: &[],
         via_proton: false,
         file_required: true,
+        term_twice: true,
     },
     RunnerSpec {
         id: "linux",
@@ -102,6 +106,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         options: &[],
         via_proton: false,
         file_required: true,
+        term_twice: true,
     },
     RunnerSpec {
         id: "dolphin",
@@ -116,6 +121,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         options: &[bool_opt("batch", true, "Batch mode (quit with the game)", "--batch", ""), path_opt("user_directory", "User directory", "-u"), INPUTPLUMBER],
         via_proton: false,
         file_required: true,
+        term_twice: true,
     },
     RunnerSpec {
         id: "eden",
@@ -130,6 +136,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         options: &[bool_opt("fullscreen", true, "Fullscreen", "-f", ""), INPUTPLUMBER],
         via_proton: false,
         file_required: true,
+        term_twice: false,
     },
     RunnerSpec {
         id: "ryujinx",
@@ -144,6 +151,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         options: &[bool_opt("fullscreen", true, "Fullscreen", "--fullscreen", ""), INPUTPLUMBER],
         via_proton: false,
         file_required: true,
+        term_twice: true,
     },
     RunnerSpec {
         id: "rpcs3",
@@ -158,6 +166,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         options: &[bool_opt("nogui", true, "No GUI (quit with the game)", "--no-gui", ""), INPUTPLUMBER],
         via_proton: false,
         file_required: true,
+        term_twice: true,
     },
     RunnerSpec {
         id: "pcsx2",
@@ -177,6 +186,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         ],
         via_proton: false,
         file_required: true,
+        term_twice: true,
     },
     RunnerSpec {
         id: "duckstation",
@@ -195,6 +205,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         ],
         via_proton: false,
         file_required: true,
+        term_twice: true,
     },
     RunnerSpec {
         id: "cemu",
@@ -209,6 +220,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         options: &[bool_opt("fullscreen", true, "Fullscreen", "-f", ""), path_opt("mlc", "MLC folder", "-m"), INPUTPLUMBER],
         via_proton: false,
         file_required: true,
+        term_twice: true,
     },
     RunnerSpec {
         id: "azahar",
@@ -223,6 +235,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         options: &[bool_opt("fullscreen", true, "Fullscreen", "-f", ""), INPUTPLUMBER],
         via_proton: false,
         file_required: true,
+        term_twice: true,
     },
     RunnerSpec {
         id: "melonds",
@@ -237,6 +250,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         options: &[bool_opt("fullscreen", true, "Fullscreen", "--fullscreen", ""), INPUTPLUMBER],
         via_proton: false,
         file_required: true,
+        term_twice: true,
     },
     RunnerSpec {
         id: "mgba",
@@ -251,6 +265,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         options: &[bool_opt("fullscreen", true, "Fullscreen", "-f", ""), INPUTPLUMBER],
         via_proton: false,
         file_required: true,
+        term_twice: true,
     },
     RunnerSpec {
         id: "ppsspp",
@@ -269,6 +284,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         ],
         via_proton: false,
         file_required: true,
+        term_twice: true,
     },
     RunnerSpec {
         id: "xemu",
@@ -283,6 +299,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         options: &[bool_opt("fullscreen", true, "Fullscreen", "-full-screen", ""), INPUTPLUMBER],
         via_proton: false,
         file_required: true,
+        term_twice: true,
     },
     RunnerSpec {
         id: "xenia",
@@ -297,6 +314,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         options: &[bool_opt("fullscreen", true, "Fullscreen", "--fullscreen", ""), INPUTPLUMBER],
         via_proton: true,
         file_required: true,
+        term_twice: true,
     },
     RunnerSpec {
         id: "shadps4",
@@ -311,6 +329,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         options: &[bool_opt("fullscreen", true, "Fullscreen", "-f true", "-f false"), INPUTPLUMBER],
         via_proton: false,
         file_required: true,
+        term_twice: true,
     },
     RunnerSpec {
         id: "vita3k",
@@ -325,6 +344,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         options: &[bool_opt("fullscreen", true, "Fullscreen", "-F", ""), INPUTPLUMBER],
         via_proton: false,
         file_required: false, // -r takes a title id, not a path
+        term_twice: true,
     },
     RunnerSpec {
         id: "mupen64plus",
@@ -343,6 +363,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         ],
         via_proton: false,
         file_required: true,
+        term_twice: true,
     },
     RunnerSpec {
         id: "snes9x",
@@ -357,6 +378,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         options: &[INPUTPLUMBER],
         via_proton: false,
         file_required: true,
+        term_twice: true,
     },
     RunnerSpec {
         id: "flycast",
@@ -371,6 +393,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         options: &[bool_opt("fullscreen", true, "Fullscreen", "-config window:fullscreen=yes", "-config window:fullscreen=no"), INPUTPLUMBER],
         via_proton: false,
         file_required: true,
+        term_twice: true,
     },
     RunnerSpec {
         id: "scummvm",
@@ -385,6 +408,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         options: &[bool_opt("fullscreen", true, "Fullscreen", "-f", ""), bool_opt("subtitles", false, "Subtitles", "-n", ""), INPUTPLUMBER],
         via_proton: false,
         file_required: true,
+        term_twice: true,
     },
     RunnerSpec {
         id: "dosbox",
@@ -399,6 +423,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         options: &[bool_opt("fullscreen", true, "Fullscreen", "-fullscreen", ""), bool_opt("exit", true, "Quit with the program", "-exit", ""), INPUTPLUMBER],
         via_proton: false,
         file_required: true,
+        term_twice: true,
     },
     RunnerSpec {
         id: "mame",
@@ -417,6 +442,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         ],
         via_proton: false,
         file_required: true,
+        term_twice: true,
     },
 ];
 

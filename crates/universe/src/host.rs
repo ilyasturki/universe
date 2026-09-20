@@ -233,8 +233,8 @@ impl Units {
     }
 
     /// The game first, then the unit: a stop job SIGTERMs the whole cgroup at once, and gamescope dies before the game, which loses its X server and can save nothing.
-    // A second SIGTERM after ~3 s: Dolphin takes the first as a "quit?" prompt and only exits on the second.
-    pub async fn stop(&self, unit: &str) -> Result<()> {
+    /// `term_twice`: SIGTERM again every ~3 s (Dolphin takes the first as a "quit?" prompt); off, the first is the only one until the stop job.
+    pub async fn stop(&self, unit: &str, term_twice: bool) -> Result<()> {
         match self {
             Units::Systemd(sd) => {
                 // systemd 260 drops the stop job of a frozen unit ("Cannot stop frozen unit") and reports success.
@@ -245,7 +245,7 @@ impl Units {
                         if game.is_empty() {
                             break;
                         }
-                        if round % 6 == 0 {
+                        if round == 0 || (term_twice && round % 6 == 0) {
                             for pid in game.iter().filter_map(|p| rustix::process::Pid::from_raw(*p as i32)) {
                                 let _ = rustix::process::kill_process(pid, rustix::process::Signal::TERM);
                             }
@@ -694,7 +694,7 @@ mod live {
         assert_eq!(freezer_state(&units, &format!("{name}.service")).await, "running");
         // A frozen unit stops all the same
         units.freeze(&name, true).await.unwrap();
-        units.stop(&name).await.unwrap();
+        units.stop(&name, true).await.unwrap();
         assert!(!units.is_active(&name).await);
         assert!(units.cgroup(&name).await.is_none(), "collected once inactive");
         assert!(units.stop_unit(&name).await.is_ok(), "stopping an unloaded unit is fine");
