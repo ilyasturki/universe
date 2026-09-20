@@ -14,6 +14,8 @@ Item {
         var shots = game.assets.screenshotList;
         if (shots && shots.length > 0)
             return { source: shots[0], cropped: false };
+        if (String(game.assets.banner) !== "")
+            return { source: game.assets.banner, cropped: false };
         return { source: game.assets.boxFront, cropped: true };
     }
 

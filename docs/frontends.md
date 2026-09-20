@@ -351,7 +351,7 @@ first card, reached by going up: the cursor lands on the first game (`SettingsCa
 (`TabBar.showSearch`), so Settings has none. A row's `icon` names a `MenuGlyph` kind; a pad
 button's row prints its `press` and `hold` macros as chips (`PRESS`/`HOLD`, the action's glyph
 from `ui/Macros.js`, the macro's `label`). A source's game row shows the library's art when the
-game is in it — the `square` slot, else the banner, else the cover — and the thumbnail takes the
+game is in it — the `square` slot, else the cover — and the thumbnail takes the
 art's shape, square or 2:3; the home rail's tiles pick their art the same way.
 
 ## The Install page

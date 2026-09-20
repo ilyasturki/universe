@@ -12,6 +12,7 @@ FocusScope {
     readonly property var game: args && args.gameId ? api.allGames.byId(args.gameId) : null
 
     readonly property var screenshots: game && game.assets.screenshotList ? game.assets.screenshotList : []
+    readonly property url fallbackArt: !game ? "" : String(game.assets.banner) !== "" ? game.assets.banner : game.assets.boxFront
     readonly property string description: game ? (game.description || game.summary || "") : ""
     property string zone: "button"
     property int shotIndex: 0
@@ -157,7 +158,7 @@ FocusScope {
 
             Image {
                 anchors.fill: parent
-                source: page.screenshots.length === 0 && page.game ? page.game.assets.boxFront : ""
+                source: page.screenshots.length === 0 ? page.fallbackArt : ""
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
                 mipmap: true
@@ -167,7 +168,7 @@ FocusScope {
 
             Label {
                 anchors.centerIn: parent
-                visible: page.screenshots.length === 0 && (!page.game || String(page.game.assets.boxFront) === "")
+                visible: page.screenshots.length === 0 && String(page.fallbackArt) === ""
                 text: "No screenshots"
                 color: "#8a8a8a"
             }

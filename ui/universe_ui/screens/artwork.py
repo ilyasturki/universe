@@ -6,7 +6,7 @@ from .settings import AsyncScreen
 SLOTS = [
     ("box_front", "Box front", 600 / 900, "Details, launch, settings"),
     ("square", "Square", 1.0, "Home rail, Switch 2 tiles"),
-    ("banner", "Banner", 920 / 430, "Wide; no view yet"),
+    ("banner", "Banner", 920 / 430, "News cards, info pane; backdrops without a background"),
     ("background", "Background", 16 / 9, "Behind the home and details"),
     ("logo", "Logo", 3.0, "Over the background, launch"),
 ]

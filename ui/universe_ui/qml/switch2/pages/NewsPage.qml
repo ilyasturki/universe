@@ -143,8 +143,8 @@ FocusScope {
         delegate: Item {
             id: card
 
-            readonly property string picture: entry.images && entry.images.length > 0 ? entry.images[0] : ""
             readonly property var game: api.allGames.byId(entry.gameId)
+            readonly property string picture: entry.images && entry.images.length > 0 ? entry.images[0] : game ? String(game.assets.banner) : ""
 
             Rectangle {
                 id: body

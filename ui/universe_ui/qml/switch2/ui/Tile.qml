@@ -13,13 +13,8 @@ Item {
     readonly property bool empty: game === null || game === undefined
 
     readonly property url squareSource: empty ? "" : game.assets.square
-    readonly property url bannerSource: empty ? "" : game.assets.square
     readonly property url boxSource: empty ? "" : game.assets.boxFront
-    // The banner only stands in when it is square (a Pegasus tile); SteamGridDB's is 920×430.
-    readonly property bool bannerSquare: banner.status === Image.Ready && banner.implicitWidth > 0
-                                         && Math.abs(banner.implicitWidth / banner.implicitHeight - 1) < 0.08
     readonly property string shown: String(squareSource) !== "" && square.status !== Image.Error ? "square"
-                                  : bannerSquare ? "banner"
                                   : String(boxSource) !== "" && box.status !== Image.Error ? "box" : "none"
 
     z: focused ? 2 : 1
@@ -50,22 +45,10 @@ Item {
         }
 
         Image {
-            id: banner
-            anchors.fill: parent
-            source: String(tile.squareSource) === "" || square.status === Image.Error ? tile.bannerSource : ""
-            fillMode: Image.PreserveAspectCrop
-            asynchronous: true
-            cache: true
-            mipmap: true
-            sourceSize.width: 512
-            visible: tile.shown === "banner"
-        }
-
-        Image {
             id: box
             anchors.fill: parent
             // Not derived from `shown`: that reads box.status back (binding loop).
-            source: (String(tile.squareSource) === "" || square.status === Image.Error) && !tile.bannerSquare ? tile.boxSource : ""
+            source: String(tile.squareSource) === "" || square.status === Image.Error ? tile.boxSource : ""
             fillMode: Image.PreserveAspectCrop
             asynchronous: true
             cache: true

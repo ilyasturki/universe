@@ -6,7 +6,7 @@ Item {
     id: frame
 
     property var game: null
-    readonly property url heroSource: game ? game.assets.background : ""
+    readonly property url heroSource: !game ? "" : String(game.assets.background) !== "" ? game.assets.background : game.assets.banner
     readonly property url boxSource: game ? game.assets.boxFront : ""
     readonly property url logoSource: game ? game.assets.logo : ""
 
