@@ -91,6 +91,26 @@ seed *ids: env
 sample *args: build env
     @{{ nix }} tools/sample {{ args }}
 
+# The app as a new user meets it: a blank profile, no config.toml, ~/Games ~/Videos ~/Documents under it. just fresh ui [flags] | cli doctor | sample install. FRESH=<name> is another such profile; FRESH=hm gets a home-manager install's read-only `schema = 1` config.toml.
+fresh cmd *args: build develop
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root="{{ justfile_directory() }}/.dev-fresh${FRESH:+-$FRESH}"
+    case "{{ cmd }}" in
+        ui) bin="{{ ui_bin }}" ;;
+        cli) bin="{{ UNIVERSE_BIN }}" ;;
+        sample) bin="{{ justfile_directory() }}/tools/sample" ;;
+        *) echo "fresh: ui | cli | sample" >&2; exit 1 ;;
+    esac
+    mkdir -p "$root"/{data,config,state,cache}
+    if [ "${FRESH:-}" = hm ] && [ ! -e "$root/config/config.toml" ]; then
+        printf 'schema = 1\n' > "$root/config/config.toml"
+        chmod a-w "$root/config/config.toml"
+    fi
+    export UNIVERSE_DATA_HOME="$root/data" UNIVERSE_CONFIG_HOME="$root/config" UNIVERSE_STATE_HOME="$root/state" UNIVERSE_CACHE_HOME="$root/cache"
+    export XDG_GAMES_DIR="$root/home/Games" XDG_VIDEOS_DIR="$root/home/Videos" XDG_DOCUMENTS_DIR="$root/home/Documents"
+    exec {{ nix }} "$bin" {{ args }}
+
 # Trash the profile (config, data, recordings, journal) and .venv
 clean:
     trash "{{ dev }}" "{{ VIRTUAL_ENV }}"
