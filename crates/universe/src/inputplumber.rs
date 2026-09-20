@@ -86,6 +86,37 @@ pub async fn release() {
     }
 }
 
+/// A game that reads the raw pads (Proton, Wine, native — not the emulator composite) must find them
+/// its own: a session that engaged InputPlumber and did not hand them back leaves the raw hidraw
+/// mode 000, so the game polls a hidden node and sees no controller. Cheap when nothing is held.
+pub async fn ensure_free() {
+    let Ok(conn) = zbus::Connection::system().await else { return };
+    if version(&conn).await.is_none() {
+        return; // no daemon: the pads are the kernel's own
+    }
+    if !hidden_present() && !composite_present(&conn).await {
+        return; // nothing held, the common path
+    }
+    if let Ok(m) = manager(&conn).await {
+        if let Err(e) = m.set_property("ManageAllDevices", false).await {
+            tracing::warn!("inputplumber: ManageAllDevices off refused: {e}");
+        }
+    }
+    if wait_for(20, Duration::from_millis(250), async || !hidden_present()).await {
+        return;
+    }
+    // Still hidden: a prior session died before udev restored the nodes, so toggling the property
+    // does nothing. A clean daemon restart re-runs its teardown and hands the raw pads back.
+    tracing::warn!("inputplumber: pads still hidden; restarting the daemon to recover them");
+    if let Err(e) = restart_daemon(&conn).await {
+        tracing::warn!("inputplumber: recovery restart refused: {e}");
+        return;
+    }
+    if !wait_for(20, Duration::from_millis(250), async || version(&conn).await.is_some() && !hidden_present()).await {
+        tracing::warn!("inputplumber: pads still hidden after the recovery restart; power-cycle the pad");
+    }
+}
+
 /// Restarts the InputPlumber daemon and hides the pads for the ~10 s the cycle takes: `just test-live`.
 #[cfg(test)]
 mod live {

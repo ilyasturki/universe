@@ -513,6 +513,15 @@ impl Pads {
             Pads::Memory(m) => m.record("pads:release".into()),
         }
     }
+
+    /// Hand the raw pads back before a game that reads them directly, in case a prior session left them held.
+    pub async fn ensure_free(&self) {
+        match self {
+            Pads::Inputplumber => crate::inputplumber::ensure_free().await,
+            #[cfg(test)]
+            Pads::Memory(m) => m.record("pads:ensure_free".into()),
+        }
+    }
 }
 
 #[cfg(test)]

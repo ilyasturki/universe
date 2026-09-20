@@ -200,8 +200,12 @@ impl Core {
             undo.push(Undo::PostCommand { command: plan.post_command.clone(), cwd: plan.cwd.to_string_lossy().to_string(), env: plan.env.clone() });
         }
         launcher::run_shell(&plan.pre_command, &plan.env, &plan.cwd).await?;
-        if r.effective.inputplumber && self.host.pads.engage().await {
-            undo.push(Undo::Pads);
+        if r.effective.inputplumber {
+            if self.host.pads.engage().await {
+                undo.push(Undo::Pads);
+            }
+        } else {
+            self.host.pads.ensure_free().await;
         }
         if r.effective.hide_cursor {
             let was_active = self.host.shell.cursor_enable().await;
@@ -493,6 +497,27 @@ mod tests {
 
         core.session_end("sample", &sid, None, None).await.unwrap();
         assert_eq!(sessions::read(&core.get("sample").await.unwrap().game.sessions_path()).unwrap().len(), 1, "idempotent");
+    }
+
+    #[tokio::test]
+    async fn a_game_that_reads_the_raw_pads_frees_inputplumber_rather_than_engaging() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let _sb = sandbox();
+        // Opting the emulator out of the composite is the same path a Proton or native game takes.
+        let mut g = Game::load(&Game::new("Sample").toml_path()).unwrap();
+        g.launch.options.insert("inputplumber".into(), toml::Value::Boolean(false));
+        g.save().unwrap();
+        let (core, memory) = open().await;
+        let sid = core.launch("sample", "", "").await.unwrap();
+        let unit = format!("universe-game-sample-{sid}.service");
+        let calls = memory.calls();
+        assert!(calls.contains(&"pads:ensure_free".to_string()), "the raw pads are freed before launch: {calls:?}");
+        assert!(!calls.contains(&"pads:engage".to_string()), "no composite is taken: {calls:?}");
+        assert!(!undo_steps(&read_marker().unwrap()).contains(&"pads"), "nothing engaged, so nothing to hand back");
+
+        memory.finish(&unit, 0);
+        core.session_end("sample", &sid, None, None).await.unwrap();
+        assert!(!memory.calls().contains(&"pads:release".to_string()), "release only undoes an engage");
     }
 
     #[tokio::test]
