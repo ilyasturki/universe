@@ -16,14 +16,11 @@ FocusScope {
             openSetup();
     }
 
+    // The bar shows the first barCount; the Library sits past them, opened from Home and lit as Home.
     readonly property var tabs: [
         {
             name: "Home",
             source: "pages/HomePage.qml"
-        },
-        {
-            name: "Library",
-            source: "pages/LibraryPage.qml"
         },
         {
             name: "Favourites",
@@ -36,9 +33,15 @@ FocusScope {
         {
             name: "Settings",
             source: "pages/SettingsPage.qml"
+        },
+        {
+            name: "Library",
+            source: "pages/LibraryPage.qml"
         }
     ]
-    readonly property int settingsTab: 4
+    readonly property int barCount: 4
+    readonly property int settingsTab: 3
+    readonly property int libraryTab: 4
     property int tabIndex: 0
     property bool detailOpen: false
     property var detailGame: null
@@ -80,7 +83,17 @@ FocusScope {
     }
 
     function goToTab(index) {
-        tabIndex = (index + tabs.length) % tabs.length;
+        tabIndex = index;
+    }
+
+    function stepTab(step) {
+        var from = tabIndex < barCount ? tabIndex : 0;
+        goToTab((from + step + barCount) % barCount);
+    }
+
+    function openLibrary() {
+        Sound.enter();
+        goToTab(libraryTab);
     }
 
     property string settingsLanding: ""
@@ -675,10 +688,10 @@ FocusScope {
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
-            tabs: root.tabs.map(function (t) {
+            tabs: root.tabs.slice(0, root.barCount).map(function (t) {
                 return t.name;
             })
-            currentIndex: root.tabIndex
+            currentIndex: root.tabIndex < root.barCount ? root.tabIndex : 0
             showSearch: root.tabs[root.tabIndex].name !== "Settings"
             focus: root.focusOwner === "chrome"
 
@@ -806,9 +819,8 @@ FocusScope {
                                 session: session || ""
                             });
                         }
-                        function onTabRequested(index) {
-                            Sound.enter();
-                            root.goToTab(index);
+                        function onLibraryRequested() {
+                            root.openLibrary();
                         }
                         function onChromeRequested() {
                             root.focusChrome();
@@ -1184,10 +1196,10 @@ FocusScope {
                 Sound.edge();
         } else if (api.keys.isPrevPage(event)) {
             Sound.space();
-            goToTab(root.tabIndex - 1);
+            stepTab(-1);
         } else if (api.keys.isNextPage(event)) {
             Sound.space();
-            goToTab(root.tabIndex + 1);
+            stepTab(1);
         } else if (api.keys.isAccept(event)) {
             root.acceptHeld = true;
             holdTimer.restart();

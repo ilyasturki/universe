@@ -113,6 +113,8 @@ FocusScope {
                 root.searchRequested();
             else {
                 Sound.panel();
+                // The lit tab may stand for a page past the bar (the Library): A lands on the tab itself.
+                root.tabRequested(root.index);
                 root.entered();
             }
         } else if (api.keys.isMenu(event) && root.onBadge) {

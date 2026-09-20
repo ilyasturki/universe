@@ -555,7 +555,9 @@ after the last game (a "+" tile, the cursor on it as `addSelected` / `atAddTile`
 index; `currentGame` is null there and A emits `addRequested`). With nothing in the library, Home
 and the Library are the prompt: Reprise's hero band reads "Add your first game" and its rail
 tile (`ui/LibraryTile.qml` `kind: "add"`) adds one instead of opening the Library; the Switch 2
-HOME row's disc does the same and All Software says so under its tile.
+HOME row's disc does the same and All Software says so under its tile. Reprise's Library is no tab
+of its own: `theme.qml` keeps it past the four the bar shows (`libraryTab`), Home's rail tile opens it
+(`libraryRequested`), the bar lights Home while it is up, LB / RB step over it and B returns to Home.
 
 Both open `api.screens.add` — Reprise as `pages/AddGamePage.qml` over the tab (`openSub` with
 `{ add: true }`), the Switch 2 look as `switch2/pages/AddGamePage.qml` on its stack. `load()`

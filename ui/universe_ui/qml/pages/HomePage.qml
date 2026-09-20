@@ -11,7 +11,7 @@ FocusScope {
     focus: true
 
     signal detailRequested(var game)
-    signal tabRequested(int index)
+    signal libraryRequested
     signal chromeRequested
     signal addRequested
 
@@ -146,7 +146,7 @@ FocusScope {
             toggleFavourite();
         } else if (page.tileSelected && api.keys.isAccept(event)) {
             event.accepted = true;
-            page.empty ? page.addRequested() : page.tabRequested(1);
+            page.empty ? page.addRequested() : page.libraryRequested();
         } else if (page.tileSelected && api.keys.isDetails(event)) {
             event.accepted = true;
             Sound.edge();

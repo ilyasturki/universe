@@ -84,7 +84,7 @@ def test_themes_render_and_switch_live(api):
     assert lit_fraction(window.grabWindow(), api.theme.ground) > 0.01
     root = window.property("contentItem").childItems()[0].property("item")
     page = root.property("activePage")
-    assert root.property("tabIndex") == 4 and page is not None and page.property("sectionId") == "themes"
+    assert root.property("tabIndex") == root.property("settingsTab") and page is not None and page.property("sectionId") == "themes"
     window.close()
     pump(50)
 
@@ -92,7 +92,7 @@ def test_themes_render_and_switch_live(api):
 def test_the_media_tab_and_the_screenshots_page(api, fake):
     _engine, window = render(api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
-    root.goToTab(3)
+    root.goToTab(2)
     settle(window)
     page = root.property("activePage")
 
@@ -103,7 +103,7 @@ def test_the_media_tab_and_the_screenshots_page(api, fake):
         value = page.property("current")
         return value.toVariant() if hasattr(value, "toVariant") else value
 
-    assert root.property("tabIndex") == 3 and page is not None and rows() and current()["kind"] in ("shot", "recording", "journal")
+    assert root.property("tabIndex") == 2 and page is not None and rows() and current()["kind"] in ("shot", "recording", "journal")
     before = lit_fraction(window.grabWindow(), api.theme.ground)
     assert before > 0.05
     page.setProperty("kindIndex", 1)
@@ -384,7 +384,7 @@ def test_the_right_stick_pages_the_grids_in_both_looks(api):
 
     engine, window = render(api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
-    root.goToTab(1)
+    root.goToTab(root.property("libraryTab"))
     settle(window)
     page = root.property("activePage")
     # Eight games on eight columns: the add tile alone on the second row.
@@ -471,7 +471,7 @@ def test_the_settings_artwork_button_asks_then_fetches_and_stops(api, fake):
     fake.core._game("control")["media"].pop("logo")
     _engine, window = render(api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
-    root.setProperty("tabIndex", 4)
+    root.setProperty("tabIndex", root.property("settingsTab"))
     pump(100)
     page = root.property("activePage")
     QMetaObject.invokeMethod(page, "land", Q_ARG("QVariant", "artwork"))
@@ -570,7 +570,7 @@ def test_b_held_asks_to_quit_in_both_looks(api):
 def test_reprise_about_shows_the_build(api, fake):
     _engine, window = render(api)
     root = window.property("contentItem").childItems()[0].property("item")
-    root.goToTab(4)
+    root.goToTab(root.property("settingsTab"))
     settle(window)
     page = root.property("activePage")
     QMetaObject.invokeMethod(page, "land", Q_ARG("QVariant", "about"))
