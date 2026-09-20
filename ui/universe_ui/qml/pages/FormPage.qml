@@ -351,6 +351,7 @@ FocusScope {
             page.activate(index, row);
         }
         onEscapedUp: Sound.edge()
+        onEscapedDown: Sound.edge()
         onEscapedLeft: Sound.edge()
 
         Keys.onPressed: function (event) {

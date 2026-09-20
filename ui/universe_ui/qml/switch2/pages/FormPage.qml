@@ -247,6 +247,7 @@ FocusScope {
             page.activate(index, row);
         }
         onEscapedLeft: Sound.play("edge")
+        onEscapedDown: Sound.play("edge")
     }
 
     LoginCard {

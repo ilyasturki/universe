@@ -1282,6 +1282,7 @@ FocusScope {
             page.activate(index, row);
         }
         onEscapedUp: page.chromeRequested()
+        onEscapedDown: Sound.edge()
         onEscapedLeft: {
             Sound.panel();
             side.forceActiveFocus();

@@ -586,6 +586,7 @@ FocusScope {
         onActivated: function (index, row) {
             page.activate(index, row);
         }
+        onEscapedDown: Sound.play("edge")
         onEscapedLeft: {
             page.zone = "list";
             list.forceActiveFocus();

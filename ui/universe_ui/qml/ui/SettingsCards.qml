@@ -212,8 +212,6 @@ FocusScope {
     onIndexChanged: view.scrollToCurrent()
     onHeightChanged: view.scrollToCurrent()
 
-    onEscapedDown: Sound.edge()
-
     Keys.onUpPressed: step(-1)
     Keys.onDownPressed: step(1)
     Keys.onLeftPressed: cross(-1)

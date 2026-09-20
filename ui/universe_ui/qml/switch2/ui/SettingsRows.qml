@@ -14,6 +14,7 @@ FocusScope {
 
     signal activated(int index, var row)
     signal escapedLeft
+    signal escapedDown
 
     readonly property real rowHeight: Theme.dp(113)
     readonly property real headingHeight: Theme.dp(96)
@@ -108,7 +109,11 @@ FocusScope {
             return;
         }
         var next = pos + d;
-        if (next < 0 || next >= s.length) {
+        if (next >= s.length) {
+            rows.escapedDown();
+            return;
+        }
+        if (next < 0) {
             Sound.play("edge");
             return;
         }
