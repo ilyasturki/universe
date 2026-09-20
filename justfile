@@ -24,7 +24,7 @@ setup: build env
 build:
     @{{ nix }} cargo build
 
-# .venv on the dev shell's Python: the core extension via maturin, universe_ui editable
+# .venv on the dev shell's Python: the core extension via maturin, universe_ui editable; a no-op while nothing it builds from is newer than the last install
 develop:
     #!/usr/bin/env -S nix develop --quiet --command bash
     set -euo pipefail
@@ -33,8 +33,13 @@ develop:
         rm -rf "$VIRTUAL_ENV"
         python3 -m venv --system-site-packages "$VIRTUAL_ENV"
     fi
+    stamp="$VIRTUAL_ENV/.develop-stamp"
+    if [ -e "$stamp" ] && [ -z "$(find crates Cargo.toml Cargo.lock ui/pyproject.toml flake.lock -name __pycache__ -prune -o -newer "$stamp" -print -quit)" ]; then
+        exit 0
+    fi
     env -u RUST_LOG maturin develop --quiet -m crates/universe-py/Cargo.toml
     "$VIRTUAL_ENV/bin/pip" install --quiet --no-index --no-build-isolation --no-deps -e ui
+    touch "$stamp"
 
 # The CLI against .dev/: just cli migrate --apply, just cli scan gog, just cli play <game>…
 cli *args: build env
