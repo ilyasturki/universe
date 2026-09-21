@@ -27,7 +27,7 @@ One context property, `api`:
 | `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written, a game's sessions and their logs) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed` and `--size` turn it off) |
 | `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `frame`, `ground`, `detail`), `current`, `frame`, `set(id)`, `landing` / `takeLanding()`, `fontPath` |
-| `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `underGame` (the game is on screen over the launcher, inside gamescope), `open`, `paused`, `pauseOnHome`, `flipped`, `frame`, `volumePercent`, `muted`; `pressed()`, `stopping(title)`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher(landing?)` / `takeLanding()`, `covered()`, `stop()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotTaken(path)`), `volume(change, value)`, `launchValue(key)`, `launchChoices(key)`, `setLaunchValue(key, value)`, `screenRefresh()` |
+| `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `underGame` (the game is on screen over the launcher, inside gamescope), `open`, `loading` (a session this client launched has no window up yet), `paused`, `pauseOnHome`, `flipped`, `frame`, `volumePercent`, `muted`; `pressed()`, `stopping(title)`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher(landing?)` / `takeLanding()`, `covered()`, `stop()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotTaken(path)`), `volume(change, value)`, `launchValue(key)`, `launchChoices(key)`, `setLaunchValue(key, value)`, `screenRefresh()` |
 
 A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `playTime`,
 `playCount`, `lastPlayed`, `releaseYear`, `developerList`, `publisherList`, `genreList`, `players`,
@@ -197,7 +197,13 @@ it. `sessionShown` with `ok` false (on the desktop: no GNOME,
 no extension) holds 1500 ms instead; a session that ends before its window, or `launchFailed`,
 ends the poster at once (a toast for the failure). Every key is swallowed while it runs, except
 Cancel once the session is up: it drops the poster and leaves the game starting behind the
-launcher.
+launcher. HOME once the session is up raises the dock over the poster, reduced to Home and Quit
+(`api.home.loading`: the host sets it on `sessionStarted` and clears it on `sessionShown` or when
+gamescope shows the game's window); nothing freezes while it loads, whatever `pause_on_home` says.
+Home from it is Cancel — the host lands home without a frame (`toLauncher` takes none from a game
+that has painted nothing) and the theme drops the poster on `flipped` — and where there is no
+overlay window (the desktop) HOME itself is that. A dock still up when the window shows grows into
+the full one in place, the cursor back on Resume, and freezes the game then if `pause_on_home` asks.
 
 From there the launcher is home again, with the game pinned first on the rail (`RecentGames.
 playingId`, played before or not) under a PLAYING mark (PAUSED while frozen), its art the last
@@ -289,7 +295,12 @@ MangoHud row is a toggle of `launch.mangohud` (`setLaunchValue("mangohud", …)`
 `set_mangohud`): the core writes the key and tells the HUD itself, no key typed, so it lands
 frozen or not and the row shows the state it wrote. The FPS limit row rewrites the layer's conf
 and types its `reload_cfg` combo through the watcher — held back while the game is paused and
-typed once the thaw has landed (`freeze(False)`'s reply), one press however many changes.
+typed once the thaw has landed (`freeze(False)`'s reply), one press however many changes. The
+Filter and Sharpness rows write `launch.gamescope_filter` / `launch.gamescope_sharpness` on the
+game and hand both to the launcher's gamescope (`nest_filter`); Default on Sharpness removes the
+card, so gamescope's own default (2) is back. Those are the keys that reach a running game: the
+rest of the launch form — the runner, Proton, the resolution, the Launch section — is baked into
+the process or the gamescope it started in, so the dock does not offer them.
 
 ## Qt and QML notes
 

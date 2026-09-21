@@ -245,8 +245,16 @@ FocusScope {
     }
 
     function homePressed() {
-        if (root.launching || launchOverlay.running)
+        if (root.launching || launchOverlay.running) {
+            // The poster holds while the game loads: HOME raises the reduced dock over it, and where there is no overlay window the host lands home, which drops the poster.
+            if (!launchOverlay.waiting || launchOverlay.launchedSession === "" || !sessionRunning)
+                return;
+            if (api.home.open)
+                api.home.closeDock();
+            else
+                api.home.openDock();
             return;
+        }
         if (!sessionRunning) {
             if (root.subOpen || confirm.open || root.menuOpen)
                 return;
@@ -1153,9 +1161,12 @@ FocusScope {
             toast.show("Quitting " + title + "…");
         }
         function onChanged() {
+            // Home from the dock over a loading game flips nothing: the launcher is already on screen under the poster, so the poster goes.
             var shown = api.home.shown;
             if (shown === "launcher" && root.lastShown === "game")
                 root.landHome();
+            else if (root.launching && launchOverlay.waiting && api.home.flipped)
+                launchOverlay.handOver();
             root.lastShown = shown;
         }
     }

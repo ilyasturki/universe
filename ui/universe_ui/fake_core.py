@@ -281,6 +281,7 @@ class FakeCore:
         self.frozen = False
         self.hud_shown = False
         self.frames = 0
+        self.filter = None
         self.level, self.muted = 62, False
         self._cards = X11Cards()
         self._config.setdefault("paths", {})["overrides"] = str(self._root / "overrides")
@@ -838,7 +839,7 @@ class FakeCore:
         return on
 
     def nest_filter(self, filter, sharpness=None):
-        pass
+        self.filter = (filter, sharpness)
 
     def volume(self, change, value=0):
         step = int((self._config.get("controller") or {}).get("volume_step") or 2)

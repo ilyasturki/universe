@@ -372,6 +372,122 @@ def test_the_hud_is_the_games_key_and_the_reload_key_waits_for_the_thaw(api, fak
     stop(api)
 
 
+def test_the_dock_over_a_loading_game_is_home_and_quit_and_grows_once_the_window_is_up(api, fake, monkeypatch):
+    from universe_ui import fake_core
+
+    class Overlay:
+        def winId(self):
+            return 7
+
+        def show(self):
+            pass
+
+    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+    monkeypatch.setattr(fake_core, "WINDOW_S", 1.2)
+    monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
+    home = api.home
+    home.attachOverlay(Overlay())
+    assert not home.loading
+    fake.launch("mirrors-edge", "")
+    wait_for(fake.launched, 3000)
+    pump(50)
+    assert home.loading and home.shown == "launcher", "launched, no window yet: the poster holds"
+    home.openDock()
+    pump(50)
+    assert home.open and not home.paused and fake.core.frozen is False, "the dock over the poster freezes nothing: the game is still starting"
+    home.setPauseOnHome(True)
+    assert fake.core.frozen is False
+    wait_for(fake.sessionShown, 3000)
+    pump(300)
+    assert not home.loading and home.open, "the window is up: the dock stays, grown to the full one"
+    assert home.paused and fake.core.frozen is True, "…and the game freezes under it, as pause on HOME asks"
+    home.closeDock()
+    home.dockClosed()
+    pump(100)
+    assert not home.paused and fake.core.frozen is False
+    stop(api)
+    assert not home.loading
+
+
+def test_home_from_the_dock_over_a_loading_game_takes_no_frame_and_freezes_nothing(api, fake, monkeypatch):
+    from universe_ui import fake_core
+
+    class Overlay:
+        def winId(self):
+            return 7
+
+        def show(self):
+            pass
+
+    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+    monkeypatch.setattr(fake_core, "WINDOW_S", 1.2)
+    monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
+    home = api.home
+    home.attachOverlay(Overlay())
+    fake.launch("mirrors-edge", "")
+    wait_for(fake.launched, 3000)
+    pump(50)
+    home.openDock()
+    pump(50)
+    home.toLauncher()
+    pump(100)
+    assert not home.open and home.flipped and home.frame == "" and fake.core.frames == 0, "nothing painted yet: no frame asked, the theme drops its poster"
+    assert fake.core.frozen is False
+    wait_for(fake.sessionShown, 3000)
+    pump(300)
+    assert not home.loading and not home.flipped, "the game mapped over the launcher on its own"
+    stop(api)
+
+
+def test_quit_from_the_dock_over_a_loading_game_stops_it_through_the_launcher(api, fake, monkeypatch):
+    from universe_ui import fake_core
+
+    class Overlay:
+        def winId(self):
+            return 7
+
+        def show(self):
+            pass
+
+    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+    monkeypatch.setattr(fake_core, "WINDOW_S", 2.0)
+    monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
+    home = api.home
+    home.attachOverlay(Overlay())
+    quitting = []
+    home.stopping.connect(quitting.append)
+    fake.launch("mirrors-edge", "")
+    wait_for(fake.launched, 3000)
+    pump(50)
+    home.openDock()
+    pump(50)
+    home.stop()
+    pump(100)
+    assert quitting == ["Mirror's Edge"] and not home.open and home.flipped and fake.core.frames == 0 and fake.core.frozen is False, (
+        "the launcher comes up, no frame, nothing frozen"
+    )
+    assert wait_for(fake.sessionEnded, 5000) is not None, "the unit was stopped"
+    pump(100)
+    assert not home.loading and not home.flipped and home.shown == "launcher"
+
+
+def test_sharpness_reaches_gamescope_with_the_games_filter(api, fake, monkeypatch):
+    monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
+    home = api.home
+    fake.launch("mirrors-edge", "")
+    wait_for(fake.sessionShown, 3000)
+    pump(300)
+    assert home.launchValue("gamescope_sharpness") == "" and home.launchChoices("gamescope_sharpness") == ["0", "2", "5", "10", "15", "20"]
+    home.setLaunchValue("gamescope_filter", "fsr")
+    assert fake.core.filter == ("fsr", None), "no sharpness set: the card goes, gamescope's default holds"
+    home.setLaunchValue("gamescope_sharpness", "5")
+    assert str(fake.game("mirrors-edge")["launch"]["gamescope_sharpness"]) == "5", "written as the game's own key"
+    assert fake.core.filter == ("fsr", 5) and home.launchValue("gamescope_sharpness") == "5", "applied with the filter the game has"
+    home.setLaunchValue("gamescope_sharpness", "")
+    assert fake.core.filter == ("fsr", None)
+    stop(api)
+
+
 def covered_fraction(image):
     small = image.scaled(96, 54)
     covered = sum(1 for y in range(small.height()) for x in range(small.width()) if small.pixelColor(x, y).alpha() > 10)
@@ -446,6 +562,67 @@ def test_the_dock_renders_over_a_running_game(api, fake, tmp_path, monkeypatch):
     assert root.property("tabIndex") == 0 and root.property("detailOpen") is True, "…lands on Home and opens the playing game's details there"
     assert api.home.takeLanding() == "", "taken once"
     api.home.toGame()
+    pump(400)
+    stop(api)
+    window.close()
+    overlay.close()
+    pump(50)
+
+
+def test_home_over_the_poster_raises_home_and_quit_and_home_drops_the_poster(api, fake, tmp_path, monkeypatch):
+    from PySide6.QtCore import Q_ARG, QMetaObject, QObject
+
+    from universe_ui import fake_core
+
+    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+    monkeypatch.setattr(fake_core, "WINDOW_S", 2.0)
+    monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
+    engine, window = render(api, activate=True)
+    overlay = host.create_overlay(engine, window.size())
+    api.home.attachOverlay(overlay)
+    overlay.show()
+    pump(200)
+    root = window.property("contentItem").childItems()[0].property("item")
+    poster = window.findChild(QObject, "launchOverlay")
+    dock = overlay.property("contentItem").childItems()[0].property("item")
+    QMetaObject.invokeMethod(root, "launchGame", Q_ARG("QVariant", api.allGames.byId("control")))
+    api.home.pressed.emit()
+    assert api.home.open is False, "HOME before the session exists is swallowed with the other keys"
+    wait_for(fake.sessionStarted, 3000)
+    pump(100)
+    assert poster.property("waiting") is True and api.home.loading is True
+    api.home.pressed.emit()
+    overlay.requestActivate()
+    pump(300)
+    assert api.home.open is True and dock.property("loading") is True
+    assert [b["id"] for b in dock.property("buttons").toVariant()] == ["home", "quit"], "over the poster: Home and Quit alone"
+    assert api.home.paused is False and fake.core.frozen is False
+    image = overlay.grabWindow()
+    assert 0.3 < covered_fraction(image) < 0.6 and lit_fraction(image, "#000000") > 0.01, "drawn like the full one"
+    if os.environ.get("UNIVERSE_TEST_SHOTS"):
+        image.save(str(tmp_path / "dock-loading.png"))
+    key(overlay, Qt.Key.Key_Down)
+    assert dock.findChild(QObject, "dockShots").property("open") is False, "no shots while loading"
+    api.home.pressed.emit()
+    pump(400)
+    assert api.home.open is False, "a second press closes it, the poster still holds"
+    assert poster.property("waiting") is True
+    api.home.pressed.emit()
+    overlay.requestActivate()
+    pump(300)
+    key(overlay, Qt.Key.Key_Return)
+    pump(600)
+    assert api.home.open is False and poster.property("waiting") is False and fake.core.frames == 0, "Home: the poster goes, no frame was asked for"
+    assert fake.core.frozen is False and root.property("playingId") == "control"
+    wait_for(fake.sessionShown, 4000)
+    pump(300)
+    assert api.home.loading is False and api.home.shown == "game"
+    api.home.openDock()
+    overlay.requestActivate()
+    pump(300)
+    assert [b["id"] for b in dock.property("buttons").toVariant()][:3] == ["resume", "home", "game"], "the full dock once the game is up"
+    assert dock.property("index") == 0
+    key(overlay, Qt.Key.Key_Escape)
     pump(400)
     stop(api)
     window.close()

@@ -43,6 +43,8 @@ class Home(QObject):
         self._thaw_on_release = False
         self._stopping = False
         self._flipping = False
+        # A session this client launched whose window is not up yet: the theme's poster holds, the dock is reduced and nothing freezes.
+        self._loading = False
         self._keys_on_thaw = []
         self._frame = ""
         self._landing = ""
@@ -72,6 +74,7 @@ class Home(QObject):
         self._shutter = None
         self._no_shutter = False
         client.currentSessionChanged.connect(self._on_session)
+        client.sessionStarted.connect(self._on_started)
         client.sessionShown.connect(self._on_shown)
         controller.buttonPressed.connect(self._on_button)
         controller.screenshotTaken.connect(self._shot_taken)
@@ -107,7 +110,7 @@ class Home(QObject):
             self._poll.stop()
             self._swap.stop()
             self._drop()
-            self._open = self._closing = self._flipped = self._flipping = self._paused = self._thaw_on_release = self._stopping = False
+            self._open = self._closing = self._flipped = self._flipping = self._paused = self._thaw_on_release = self._stopping = self._loading = False
             self._keys_on_thaw = []
             self._set_shown("launcher")
             self._frame = ""
@@ -115,10 +118,27 @@ class Home(QObject):
             self._captured = None
         self.changed.emit()
 
-    def _on_shown(self, session_id, ok):
-        if ok and not self._client.nested and self._session():
-            self._set_shown("game")
+    def _on_started(self, session_id, ident):
+        if self._session():
+            self._loading = True
             self.changed.emit()
+
+    def _on_shown(self, session_id, ok):
+        if not self._session():
+            return
+        if ok and not self._client.nested:
+            self._set_shown("game")
+        self._loaded()
+        self.changed.emit()
+
+    # The game is on screen: the launcher no longer covers it, and a dock still up over it freezes it now.
+    def _loaded(self):
+        if not self._loading:
+            return
+        self._loading = False
+        self._flipped = False
+        if self._open and self._pause_on_home:
+            self._set_paused(True)
 
     def _refresh(self):
         if self._polling:
@@ -131,8 +151,11 @@ class Home(QObject):
             if generation != self._generation or not self._session():
                 return
             shown = "game" if game_shown else "launcher"
-            if shown != self._shown:
-                self._shown = shown
+            changed = shown != self._shown or (game_shown and self._loading)
+            self._shown = shown
+            if game_shown:
+                self._loaded()
+            if changed:
                 self.changed.emit()
 
         self._client.gameShownAsync(landed)
@@ -175,7 +198,7 @@ class Home(QObject):
         self._open, self._closing = True, False
         self._overlay_state(True, OPAQUE)
         self._suspend()
-        if self._pause_on_home:
+        if self._pause_on_home and not self._loading:
             self._set_paused(True)
         self.changed.emit()
 
@@ -262,7 +285,8 @@ class Home(QObject):
         self._landing = str(landing or "")
         if self._open:
             self.closeDock()
-        if not self._client.nested or not self._frames():
+        # A loading game has painted nothing to bridge with.
+        if not self._client.nested or not self._frames() or self._loading:
             self._flip("")
             return
         self._flipping = True
@@ -291,7 +315,7 @@ class Home(QObject):
             self._swap.start(COVER_MS)
         else:
             self._show_launcher()
-        if self._pause_on_home:
+        if self._pause_on_home and not self._loading:
             self._set_paused(True)
         self.changed.emit()
 
@@ -358,7 +382,7 @@ class Home(QObject):
             return
         self._pause_on_home = bool(on)
         self._client.set(str(session.get("id") or ""), "launch.pause_on_home", "true" if on else "false")
-        if self._open or self._flipped:
+        if (self._open or self._flipped) and not self._loading:
             self._set_paused(bool(on))
         self.changed.emit()
 
@@ -417,9 +441,11 @@ class Home(QObject):
         self._client.set(str(session.get("id") or ""), "launch." + key, value)
         if key == "fps_limit":
             self._client.setFpsLimit(lambda combo: combo and self._type(combo))
-        elif key == "gamescope_filter" and self._client.nested:
-            sharpness = (self._game().get("effective") or {}).get("gamescope_sharpness")
-            self._client.nestFilter(value, None if sharpness in (None, "") else int(sharpness))
+        elif key in ("gamescope_filter", "gamescope_sharpness") and self._client.nested:
+            effective = self._game().get("effective") or {}
+            filter = value if key == "gamescope_filter" else str(effective.get("gamescope_filter") or "")
+            sharpness = value if key == "gamescope_sharpness" else effective.get("gamescope_sharpness")
+            self._client.nestFilter(filter, None if sharpness in (None, "") else int(sharpness))
         self.changed.emit()
 
     @Slot(result=int)
@@ -442,6 +468,8 @@ class Home(QObject):
     # The game on screen has the pad to itself; the dock over it takes the presses back.
     padCovered = Property(bool, lambda self: self._shown == "game" and self._client.nested and not self._open, notify=changed)
     open = Property(bool, lambda self: self._open, notify=changed)
+    # The session this client launched has no window up yet: the poster holds, the dock over it is reduced to Home and Quit.
+    loading = Property(bool, lambda self: self._loading, notify=changed)
     paused = Property(bool, lambda self: self._paused, notify=changed)
     pauseOnHome = Property(bool, lambda self: self._pause_on_home, notify=changed)
     flipped = Property(bool, lambda self: self._flipped, notify=changed)

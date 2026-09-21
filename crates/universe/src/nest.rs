@@ -61,6 +61,12 @@ impl Nest {
         self.conn.flush().map_err(x)
     }
 
+    fn delete_card(&self, window: u32, name: &str) -> Result<()> {
+        let atom = self.atom(name)?;
+        self.conn.delete_property(window, atom).map_err(x)?;
+        self.conn.flush().map_err(x)
+    }
+
     pub fn windows(&self) -> Result<Vec<Focusable>> {
         Ok(parse_focusable(&self.cards(self.root, "GAMESCOPE_FOCUSABLE_WINDOWS")?))
     }
@@ -117,10 +123,11 @@ impl Nest {
             other => return Err(Error::Invalid(format!("unknown filter {other}"))),
         };
         self.set_card(self.root, "GAMESCOPE_SCALING_FILTER", mode)?;
-        if let Some(s) = sharpness {
-            self.set_card(self.root, "GAMESCOPE_FSR_SHARPNESS", s.min(crate::gamescope::SHARPNESS_MAX))?;
+        match sharpness {
+            Some(s) => self.set_card(self.root, "GAMESCOPE_FSR_SHARPNESS", s.min(crate::gamescope::SHARPNESS_MAX)),
+            // gamescope reads its default (2) back on the delete notify.
+            None => self.delete_card(self.root, "GAMESCOPE_FSR_SHARPNESS"),
         }
-        Ok(())
     }
 }
 

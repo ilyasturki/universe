@@ -11,6 +11,7 @@ FocusScope {
     readonly property var game: sessionRunning ? api.allGames.byId(session.id) : null
     readonly property bool open: api.home.open
     readonly property bool paused: api.home.paused
+    readonly property bool loading: api.home.loading
     readonly property bool shown: open && !hidden
 
     property bool hidden: false
@@ -22,19 +23,29 @@ FocusScope {
 
     focus: true
 
-    readonly property var row: [
+    readonly property var home: ({
+            id: "home",
+            icon: "grid",
+            label: "Home",
+            kind: "action"
+        })
+    readonly property var quit: ({
+            id: "quit",
+            icon: "power",
+            label: "Quit",
+            kind: "action",
+            value: "asks first"
+        })
+    // Over the poster of a game still loading there is nothing to resume, shoot or tune: Home and Quit alone.
+    readonly property var row: loading ? [home, quit] : full
+    readonly property var full: [
         {
             id: "resume",
             icon: "play",
             label: "Resume",
             kind: "action"
         },
-        {
-            id: "home",
-            icon: "grid",
-            label: "Home",
-            kind: "action"
-        },
+        home,
         {
             id: "game",
             icon: "gamepad",
@@ -65,14 +76,7 @@ FocusScope {
                     label: "Pause on HOME",
                     kind: "toggle"
                 },
-                {
-                    id: "quit",
-                    icon: "power",
-                    label: "Quit",
-                    kind: "action",
-                    value: "asks first"
-                }
-            ]
+                quit]
         },
         "|",
         {
@@ -141,6 +145,15 @@ FocusScope {
                     kind: "value",
                     options: ["", "linear", "nearest", "fsr", "nis", "pixel"],
                     names: ["Default", "Linear", "Nearest", "FSR", "NIS", "Pixel"]
+                },
+                {
+                    id: "sharp",
+                    key: "gamescope_sharpness",
+                    icon: "sun",
+                    label: "Sharpness",
+                    kind: "value",
+                    options: ["", "0", "2", "5", "10", "15", "20"],
+                    names: ["Default", "0 · sharpest", "2", "5", "10", "15", "20 · softest"]
                 }
             ]
         },
@@ -187,6 +200,7 @@ FocusScope {
             fpsOptions: api.home.launchChoices("fps_limit"),
             hz: api.home.screenRefresh(),
             filter: api.home.launchValue("gamescope_filter"),
+            sharp: api.home.launchValue("gamescope_sharpness"),
             vol: api.home.volumePercent,
             mute: api.home.muted
         };
@@ -219,7 +233,8 @@ FocusScope {
         case "fps":
             return v.fps === "auto" ? "Auto · " + (v.hz > 0 ? v.hz : "screen") : v.fps === "none" ? "None" : v.fps;
         case "filter":
-            return item.names[Math.max(0, item.options.indexOf(v.filter))];
+        case "sharp":
+            return item.names[Math.max(0, item.options.indexOf(v[item.id]))];
         case "vol":
             return v.vol + "%";
         case "mute":
@@ -334,7 +349,7 @@ FocusScope {
     }
 
     function openShots() {
-        if (hidden)
+        if (hidden || loading)
             return;
         Sound.enter();
         opened = false;
@@ -353,6 +368,12 @@ FocusScope {
             forceActiveFocus();
         } else
             shots.open = false;
+    }
+
+    // The row shrinks or grows in place: the cursor goes back to its first button (Resume, once the game is up).
+    onLoadingChanged: {
+        index = 0;
+        opened = false;
     }
 
     Connections {
@@ -566,7 +587,7 @@ FocusScope {
                         width: Theme.dp(10)
                         height: width
                         radius: width / 2
-                        color: dock.paused ? "#f2b84b" : "#7ed957"
+                        color: dock.loading ? Qt.rgba(0.949, 0.953, 0.961, 0.5) : dock.paused ? "#f2b84b" : "#7ed957"
 
                         Behavior on color {
                             ColorEase {}
@@ -575,7 +596,7 @@ FocusScope {
 
                     Text {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: dock.paused ? "PAUSED" : "PLAYING"
+                        text: dock.loading ? "LOADING" : dock.paused ? "PAUSED" : "PLAYING"
                         color: Qt.rgba(0.949, 0.953, 0.961, 0.72)
                         font.family: Theme.sans
                         font.weight: Font.DemiBold
@@ -927,8 +948,11 @@ FocusScope {
         } else if (api.keys.isCancel(event)) {
             back();
         } else if (api.keys.isDetails(event)) {
-            if (!hidden)
-                act(buttons[3]);
+            var shot = buttons.filter(function (b) {
+                return b.id === "shot";
+            })[0];
+            if (shot && !hidden)
+                act(shot);
         } else
             event.accepted = false;
     }
