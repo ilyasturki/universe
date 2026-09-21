@@ -14,11 +14,21 @@ Item {
     property var pressed: ({})
     property var axes: ({})
     property real pulse: 0.15
+    // The stick and trigger numbers, shown beside them (at rest too, so nothing jumps).
+    property bool readouts: false
 
     readonly property var geo: Geometry.of(family)
+    readonly property var bodyBox: Geometry.bounds(geo.body)
     readonly property real k: Math.max(0.01, Math.min(width / geo.view[0], height / geo.view[1]))
     readonly property real ox: (width - geo.view[0] * k) / 2
     readonly property real oy: (height - geo.view[1] * k) / 2
+
+    function outline(ctx, k) {
+        ctx.path = art.geo.body;
+        ctx.lineWidth = 2 / k;
+        ctx.strokeStyle = Qt.rgba(1, 1, 1, 0.30);
+        ctx.stroke();
+    }
 
     Canvas {
         id: body
@@ -44,32 +54,35 @@ Item {
             ctx.scale(k, k);
             ctx.lineJoin = "round";
             ctx.lineCap = "round";
-            var top = 90, bottom = 680;
+            var box = art.bodyBox, top = box[1], bottom = box[3];
             var shade = ctx.createLinearGradient(0, top, 0, bottom);
-            shade.addColorStop(0, Qt.rgba(1, 1, 1, 0.115));
-            shade.addColorStop(0.55, Qt.rgba(1, 1, 1, 0.075));
-            shade.addColorStop(1, Qt.rgba(1, 1, 1, 0.045));
+            shade.addColorStop(0, Qt.rgba(1, 1, 1, 0.20));
+            shade.addColorStop(0.5, Qt.rgba(1, 1, 1, 0.13));
+            shade.addColorStop(1, Qt.rgba(1, 1, 1, 0.08));
             ctx.path = art.geo.body;
             ctx.fillStyle = shade;
             ctx.fill();
-            ctx.lineWidth = 2.2 / k;
-            ctx.strokeStyle = Qt.rgba(1, 1, 1, 0.26);
-            ctx.stroke();
             ctx.save();
             ctx.path = art.geo.body;
             ctx.clip();
-            var rim = ctx.createLinearGradient(0, top, 0, top + 70);
-            rim.addColorStop(0, Qt.rgba(1, 1, 1, 0.10));
-            rim.addColorStop(1, Qt.rgba(1, 1, 1, 0.0));
-            ctx.fillStyle = rim;
-            ctx.fillRect(0, top, 1000, 70);
+            var glow = ctx.createRadialGradient(500, top + (bottom - top) * 0.12, 0, 500, top + (bottom - top) * 0.12, 1000 * 0.55);
+            glow.addColorStop(0, Qt.rgba(1, 1, 1, 0.10));
+            glow.addColorStop(1, Qt.rgba(1, 1, 1, 0));
+            ctx.fillStyle = glow;
+            ctx.fillRect(0, top, 1000, bottom - top);
+            var grip = ctx.createLinearGradient(0, top, 0, bottom);
+            grip.addColorStop(0.5, Qt.rgba(0, 0, 0, 0));
+            grip.addColorStop(1, Qt.rgba(0, 0, 0, 0.34));
+            ctx.fillStyle = grip;
+            ctx.fillRect(0, top, 1000, bottom - top);
             ctx.restore();
+            art.outline(ctx, k);
             var details = art.geo.details;
             for (var i = 0; i < details.length; i++) {
                 var d = details[i];
                 ctx.beginPath();
-                if (d.kind === "panel") {
-                    Draw.roundRect(ctx, d.x - d.w / 2, d.y - d.h / 2, d.w, d.h, d.r);
+                if (d.kind === "shape") {
+                    ctx.path = d.path;
                     ctx.fillStyle = Qt.rgba(1, 1, 1, d.alpha !== undefined ? d.alpha : 0.05);
                     ctx.fill();
                     ctx.lineWidth = 1.6 / k;
@@ -79,8 +92,8 @@ Item {
                     ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
                     ctx.fillStyle = Qt.rgba(1, 1, 1, d.alpha !== undefined ? d.alpha : 0.035);
                     ctx.fill();
-                    ctx.lineWidth = 1.4 / k;
-                    ctx.strokeStyle = Qt.rgba(1, 1, 1, 0.14);
+                    ctx.lineWidth = (d.ring ? 1.6 : 1.4) / k;
+                    ctx.strokeStyle = Qt.rgba(1, 1, 1, d.ring ? 0.3 : 0.14);
                     ctx.stroke();
                 } else if (d.kind === "cross") {
                     Draw.cross(ctx, d.x, d.y, d.l, d.a);
@@ -89,19 +102,40 @@ Item {
                     ctx.lineWidth = 1.6 / k;
                     ctx.strokeStyle = Qt.rgba(1, 1, 1, 0.36);
                     ctx.stroke();
-                } else if (d.kind === "dot") {
-                    ctx.arc(d.x, d.y, d.r, 0, Math.PI * 2);
-                    ctx.fillStyle = Qt.rgba(1, 1, 1, 0.08);
-                    ctx.fill();
-                    ctx.lineWidth = 1.4 / k;
-                    ctx.strokeStyle = Qt.rgba(1, 1, 1, 0.22);
-                    ctx.stroke();
+                } else if (d.kind === "dots") {
+                    ctx.fillStyle = Qt.rgba(1, 1, 1, 0.3);
+                    for (var r = 0; r < d.rows; r++)
+                        for (var c = 0; c < d.cols; c++) {
+                            ctx.beginPath();
+                            ctx.arc(d.x + (c - (d.cols - 1) / 2) * d.gap, d.y + (r - (d.rows - 1) / 2) * d.gap, d.r, 0, Math.PI * 2);
+                            ctx.fill();
+                        }
                 } else if (d.kind === "line") {
+                    if (d.glow) {
+                        ctx.save();
+                        ctx.shadowColor = Qt.rgba(1, 1, 1, 0.5);
+                        ctx.shadowBlur = 8 * k;
+                        ctx.path = d.path;
+                        ctx.lineWidth = 6 / k;
+                        ctx.strokeStyle = Qt.rgba(1, 1, 1, 0.12);
+                        ctx.stroke();
+                        ctx.restore();
+                    }
                     ctx.path = d.path;
                     ctx.lineWidth = (d.width || 2) / k;
                     ctx.strokeStyle = Qt.rgba(1, 1, 1, d.alpha !== undefined ? d.alpha : 0.2);
                     ctx.stroke();
                 }
+            }
+            var buttons = art.geo.buttons;
+            for (var j = 0; j < buttons.length; j++) {
+                var s = buttons[j];
+                if (s.kind !== "stick")
+                    continue;
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.r + 16, 0, Math.PI * 2);
+                ctx.fillStyle = Qt.rgba(0, 0, 0, 0.22);
+                ctx.fill();
             }
         }
     }
@@ -124,6 +158,7 @@ Item {
         readonly property real margin: Theme.dp(10)
         readonly property real ink: 0.9
         readonly property color onDown: Theme.onLight
+        readonly property bool leftSide: spec.side === "l" || spec.x < 500
 
         property real glow: down ? 1.0 : 0.0
         Behavior on glow {
@@ -158,7 +193,7 @@ Item {
 
         // A trigger's mark goes dark once its pull has filled past the middle, where the mark sits.
         readonly property color markColor: mix(Qt.rgba(Theme.text.r, Theme.text.g, Theme.text.b, ink), onDown, spec.kind === "trigger" ? Math.max(glow, pull >= 0.5 ? 1 : 0) : glow)
-        readonly property real lean: 0.5
+        readonly property real lean: 0.45
 
         readonly property var repaintKey: [glow, lit, learning, missing, learning ? art.pulse : 0, pull, leanX, leanY, art.k, glyph]
         onRepaintKeyChanged: canvas.requestPaint()
@@ -175,7 +210,7 @@ Item {
                 var white = Theme.text;
                 var t = s.kind === "paddle" && s.ghost ? 0.10 : 0.14;
                 var fillA = button.missing ? 0.05 : button.learning ? art.pulse : button.lit ? 0.26 : t;
-                var strokeA = button.lit || button.learning ? 0.95 : s.ghost ? 0.5 : 0.36;
+                var strokeA = button.lit || button.learning ? 0.95 : s.ghost ? 0.5 : 0.40;
                 var fill = button.mix(Qt.rgba(white.r, white.g, white.b, fillA), white, g);
                 var stroke = button.mix(Qt.rgba(white.r, white.g, white.b, strokeA), white, g);
                 var line = Math.max(1, Theme.dp(1.6));
@@ -209,6 +244,12 @@ Item {
                     ctx.stroke();
                 }
 
+                // Into sheet coordinates, for the shapes given as paths on the sheet.
+                function sheet() {
+                    ctx.translate(m - button.box.x * k, m - button.box.y * k);
+                    ctx.scale(k, k);
+                }
+
                 var w = width, h = height;
                 var cx = w / 2, cy = h / 2;
                 if (s.kind === "face") {
@@ -218,22 +259,10 @@ Item {
                     });
                 } else if (s.kind === "stick") {
                     var R = s.r * k;
-                    ctx.fillStyle = Qt.rgba(white.r, white.g, white.b, 0.05);
-                    ctx.strokeStyle = Qt.rgba(white.r, white.g, white.b, button.lit ? 0.5 : 0.22);
-                    ctx.lineWidth = line;
-                    Draw.circle(ctx, cx, cy, R);
-                    ctx.fill();
-                    ctx.stroke();
-                    var lean = R * button.lean;
-                    var px = cx + button.leanX * lean, py = cy + button.leanY * lean;
+                    var px = cx + button.leanX * R * button.lean, py = cy + button.leanY * R * button.lean;
                     paintPath(function () {
-                        Draw.circle(ctx, px, py, R * 0.66);
+                        Draw.circle(ctx, px, py, R);
                     });
-                    ctx.beginPath();
-                    ctx.arc(px, py, R * 0.42, 0, Math.PI * 2);
-                    ctx.strokeStyle = button.mix(Qt.rgba(white.r, white.g, white.b, 0.18), button.onDown, g * 0.6);
-                    ctx.lineWidth = line;
-                    ctx.stroke();
                 } else if (s.kind === "arm") {
                     var l = s.l * k, a = s.a * k, gap = s.split ? a * 0.28 : 0;
                     var dx = s.dir === "left" ? -1 : s.dir === "right" ? 1 : 0;
@@ -264,28 +293,63 @@ Item {
                     ctx.lineWidth = Math.max(1, Theme.dp(1.8));
                     ctx.stroke();
                 } else if (s.kind === "trigger") {
-                    var tw = s.w * k, th = s.h * k;
-                    var body = function () {
-                        Draw.roundRect(ctx, cx - tw / 2, cy - th / 2, tw, th, th * 0.32);
+                    ctx.save();
+                    sheet();
+                    var shape = function () {
+                        ctx.path = s.path;
                     };
-                    halo(body);
-                    body();
+                    if (button.lit) {
+                        ctx.save();
+                        ctx.lineWidth = Theme.dp(8) / k;
+                        ctx.strokeStyle = Qt.rgba(1, 1, 1, 0.12);
+                        shape();
+                        ctx.stroke();
+                        ctx.restore();
+                    }
+                    shape();
                     ctx.fillStyle = Theme.ground;
                     ctx.fill();
                     ctx.fillStyle = Qt.rgba(white.r, white.g, white.b, fillA);
                     ctx.fill();
                     if (button.pull > 0.005) {
                         ctx.save();
-                        body();
+                        shape();
                         ctx.clip();
+                        var th = s.b[3] - s.b[1];
                         ctx.fillStyle = Qt.rgba(white.r, white.g, white.b, 0.92);
-                        ctx.fillRect(cx - tw / 2, cy + th / 2 - th * button.pull, tw, th * button.pull);
+                        ctx.fillRect(s.b[0], s.b[3] - th * button.pull, s.b[2] - s.b[0], th * button.pull + 2);
                         ctx.restore();
                     }
-                    body();
-                    ctx.lineWidth = button.lit || g > 0.5 ? Theme.dp(2.5) : line;
+                    shape();
+                    ctx.lineWidth = (button.lit || g > 0.5 ? Theme.dp(2.5) : line) / k;
                     ctx.strokeStyle = stroke;
                     ctx.stroke();
+                    ctx.restore();
+                } else if (s.kind === "bumper") {
+                    ctx.save();
+                    sheet();
+                    // A raised band along the shoulder, cut by the silhouette, the body's own outline over it.
+                    if (button.lit) {
+                        ctx.save();
+                        ctx.lineWidth = Theme.dp(8) / k;
+                        ctx.strokeStyle = Qt.rgba(1, 1, 1, 0.12);
+                        ctx.path = s.path;
+                        ctx.stroke();
+                        ctx.restore();
+                    }
+                    ctx.save();
+                    ctx.path = art.geo.body;
+                    ctx.clip();
+                    ctx.path = s.path;
+                    ctx.fillStyle = button.mix(Qt.rgba(white.r, white.g, white.b, button.missing ? 0.05 : button.learning ? art.pulse : button.lit ? 0.26 : 0.12), white, g);
+                    ctx.fill();
+                    ctx.lineWidth = (button.lit || g > 0.5 ? Theme.dp(2.5) : line) / k;
+                    ctx.strokeStyle = stroke;
+                    ctx.stroke();
+                    ctx.restore();
+                    ctx.setLineDash([]);
+                    art.outline(ctx, k);
+                    ctx.restore();
                 } else if (s.kind === "paddle") {
                     var pw = s.w * k, ph = s.h * k;
                     paintPath(function () {
@@ -293,7 +357,7 @@ Item {
                     });
                 } else {
                     var bw2 = s.w * k, bh2 = s.h * k;
-                    var rr = s.round ? Math.min(bw2, bh2) / 2 : s.kind === "bumper" ? bh2 * 0.45 : Math.min(bw2, bh2) * 0.3;
+                    var rr = s.round ? Math.min(bw2, bh2) / 2 : Math.min(bw2, bh2) * 0.3;
                     ctx.save();
                     if (s.angle) {
                         ctx.translate(cx, cy);
@@ -325,13 +389,44 @@ Item {
         Text {
             anchors.centerIn: parent
             anchors.horizontalCenterOffset: button.spec.kind === "stick" ? button.leanX * button.spec.r * art.k * button.lean : 0
-            anchors.verticalCenterOffset: button.spec.kind === "stick" ? button.leanY * button.spec.r * art.k * button.lean : 0
+            anchors.verticalCenterOffset: button.spec.kind === "stick" ? button.leanY * button.spec.r * art.k * button.lean : button.spec.kind === "trigger" ? (15 - button.box.h / 2) * art.k : 0
             visible: button.glyph.symbol === "" && button.glyph.text !== "" && button.spec.kind !== "arm"
             text: button.glyph.text
             color: button.markColor
             font.family: Theme.sans
             font.weight: Font.DemiBold
-            font.pixelSize: Math.max(8, Math.round((button.spec.kind === "face" ? button.spec.r * 1.05 : button.spec.kind === "stick" ? button.spec.r * 0.42 : button.spec.kind === "paddle" ? button.spec.w * 0.42 : button.spec.kind === "arm" ? 10 : Math.min(button.spec.w, button.spec.h) * (button.glyph.text.length > 1 ? 0.62 : 0.8)) * art.k))
+            font.pixelSize: Math.max(8, Math.round((button.spec.kind === "face" ? button.spec.r * 1.05 : button.spec.kind === "stick" ? button.spec.r * 0.42 : button.spec.kind === "paddle" ? button.spec.w * 0.42 : button.spec.kind === "trigger" ? 18 : button.spec.kind === "bumper" ? 16 : button.spec.kind === "arm" ? 10 : Math.min(button.spec.w, button.spec.h) * (button.glyph.text.length > 1 ? 0.62 : 0.8)) * art.k))
+        }
+
+        // The numbers beside a stick or a trigger, outside its box on the side away from the pad's middle.
+        Column {
+            readonly property real gap: 24 * art.k - button.margin
+
+            visible: art.readouts && (button.spec.kind === "stick" || button.spec.kind === "trigger")
+            anchors.left: button.leftSide ? undefined : parent.right
+            anchors.right: button.leftSide ? parent.left : undefined
+            anchors.leftMargin: gap
+            anchors.rightMargin: gap
+            anchors.verticalCenter: parent.verticalCenter
+            anchors.verticalCenterOffset: button.spec.kind === "trigger" ? (15 - button.box.h / 2) * art.k : 0
+            spacing: 0
+
+            Repeater {
+                model: button.spec.kind === "stick" ? ["x " + (button.leanX >= 0 ? "+" : "−") + Math.round(Math.abs(button.leanX) * 100) + " %", "y " + (button.leanY >= 0 ? "+" : "−") + Math.round(Math.abs(button.leanY) * 100) + " %"] : [Math.round(button.pull * 100) + " %"]
+
+                Text {
+                    anchors.left: button.leftSide ? undefined : parent.left
+                    anchors.right: button.leftSide ? parent.right : undefined
+                    text: modelData
+                    color: Theme.text
+                    font.family: Theme.sans
+                    font.weight: Font.DemiBold
+                    font.pixelSize: Math.max(8, Math.round(22 * art.k))
+                    font.features: {
+                        "tnum": 1
+                    }
+                }
+            }
         }
     }
 

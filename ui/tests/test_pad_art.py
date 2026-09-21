@@ -94,13 +94,28 @@ def test_live_view_names_a_pulled_trigger(engine, fake):
     pad = descendant(art, "geo")
     before = pad.height()
     call(engine, art, "axis('rt', 0.4)")
-    assert art.property("lastSlot") == "rt" and abs(art.property("lastPull") - 0.4) < 1e-6
+    assert art.property("lastSlot") == "", "a trigger logs once it passes half"
+    call(engine, art, "axis('rt', 0.6)")
+    assert art.property("lastSlot") == "rt" and abs(art.property("lastPull") - 0.6) < 1e-6
+    call(engine, art, "axis('rt', 0.9)")
     call(engine, art, "press('south', true)")
-    assert art.property("lastSlot") == "south" and art.property("lastPull") == 0
+    call(engine, art, "press('south', false)")
+    call(engine, art, "axis('ly', -0.4)")
+    call(engine, art, "axis('lx', 0.7)")
+    call(engine, art, "axis('lx', 0)")
+    call(engine, art, "axis('ly', 0)")
+    call(engine, art, "axis('ly', 0.6)")
+    call(engine, art, "axis('lx', -0.6)")
+    entries = art.property("entries").toVariant()
+    assert [e["slot"] for e in entries] == ["ls", "ls", "south", "rt"], "newest first; a release and a held axis log nothing new"
+    assert entries[0]["label"].endswith("down-left") and entries[1]["label"].endswith("up-right"), "an entry follows its push's peak"
+    assert entries[3]["label"].endswith("90 %")
+    assert entries[3]["dt"] is None and all(e["dt"] is not None for e in entries[:3])
+    assert art.property("lastSlot") == "ls" and art.property("lastPull") == 0
     pump(50)
-    assert pad.height() == before, "the caption's room is reserved: a press does not resize the pad"
+    assert pad.height() == before, "the history column has its own room: a press does not resize the pad"
     call(engine, art, "clear()")
-    assert art.property("lastSlot") == ""
+    assert art.property("lastSlot") == "" and art.property("entries").toVariant() == []
 
 
 def test_cards_land_on_the_first_row_and_leave_left(engine, fake):

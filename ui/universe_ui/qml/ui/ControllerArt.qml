@@ -1,8 +1,9 @@
 import QtQuick
 import "../core"
+import "PadHistory.js" as History
 
 Item {
-    id: art
+    id: live
 
     property string family: "dualsense"
     property bool connected: false
@@ -10,10 +11,14 @@ Item {
     property var unbound: []
     property var pressed: ({})
     property var axes: ({})
-    property string lastSlot: ""
+    // Newest first: { slot, label, dt }.
+    property var entries: []
+    property var log: History.fresh()
 
     readonly property real pad: Theme.dp(8)
     readonly property real inset: Theme.dp(20)
+    readonly property real columnWidth: Theme.dp(360)
+    readonly property string lastSlot: entries.length > 0 ? entries[0].slot : ""
     readonly property bool lastIsTrigger: lastSlot === "lt" || lastSlot === "rt"
     readonly property real lastPull: lastIsTrigger ? (axes[lastSlot] || 0) : 0
 
@@ -24,22 +29,25 @@ Item {
         else
             delete next[slot];
         pressed = next;
-        if (down)
-            lastSlot = slot;
+        var logged = History.press(log, slot, down, labelOf(slot), Date.now());
+        if (logged)
+            entries = logged;
     }
 
     function axis(name, value) {
         var next = Object.assign({}, axes);
         next[name] = value;
         axes = next;
-        if ((name === "lt" || name === "rt") && value > 0.02)
-            lastSlot = name;
+        var logged = History.axis(log, name, value, labelOf, Date.now());
+        if (logged)
+            entries = logged;
     }
 
     function clear() {
         pressed = ({});
         axes = ({});
-        lastSlot = "";
+        log = History.fresh();
+        entries = [];
     }
 
     function labelOf(slot) {
@@ -62,18 +70,19 @@ Item {
     Item {
         id: frame
 
-        x: art.inset
-        y: art.pad + 1 + Theme.dp(6)
-        width: parent.width - art.inset * 2
-        height: Math.max(0, art.height - y - caption.height - Theme.dp(24))
+        x: live.inset
+        y: live.pad + 1 + Theme.dp(6)
+        width: Math.max(0, column.x - live.inset * 2)
+        height: Math.max(0, live.height - y - Theme.dp(16))
 
         PadArt {
             anchors.fill: parent
-            family: art.family
-            unbound: art.connected ? art.unbound : []
-            pressed: art.pressed
-            axes: art.axes
-            opacity: art.connected ? 1.0 : 0.38
+            family: live.family
+            unbound: live.connected ? live.unbound : []
+            pressed: live.pressed
+            axes: live.axes
+            readouts: true
+            opacity: live.connected ? 1.0 : 0.38
 
             Behavior on opacity {
                 Ease {
@@ -81,63 +90,103 @@ Item {
                 }
             }
         }
+
+        Text {
+            anchors.centerIn: parent
+            anchors.verticalCenterOffset: parent.height * 0.42
+            visible: live.entries.length === 0
+            text: !live.connected ? "Connect a controller" : "Press anything on the pad"
+            color: live.connected ? Theme.textSecondary : Theme.text
+            font.family: Theme.sans
+            font.weight: Font.Medium
+            font.pixelSize: Theme.dp(24)
+        }
     }
 
-    Column {
-        id: caption
+    Rectangle {
+        id: column
 
-        anchors.top: frame.bottom
-        anchors.topMargin: Theme.dp(4)
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.leftMargin: art.inset
-        anchors.rightMargin: art.inset
-        spacing: Theme.dp(10)
+        x: parent.width - width - live.inset
+        y: live.inset
+        width: live.columnWidth
+        height: parent.height - live.inset * 2
+        radius: Theme.dp(18)
+        color: Qt.rgba(1, 1, 1, 0.04)
+        border.width: 1
+        border.color: Qt.rgba(1, 1, 1, 0.10)
 
-        Item {
-            width: parent.width
-            height: Theme.dp(40)
+        Text {
+            id: heading
+            x: Theme.dp(30)
+            y: Theme.dp(22)
+            text: "HISTORY"
+            color: Theme.textTab
+            font.family: Theme.sans
+            font.weight: Font.DemiBold
+            font.pixelSize: Theme.dp(13)
+            font.letterSpacing: Theme.dp(1.5)
+        }
 
-            Row {
-                anchors.centerIn: parent
-                visible: art.lastSlot !== ""
-                spacing: Theme.dp(14)
+        Column {
+            anchors.top: heading.bottom
+            anchors.topMargin: Theme.dp(12)
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.leftMargin: Theme.dp(16)
+            anchors.rightMargin: Theme.dp(16)
+            spacing: Theme.dp(4)
 
-                PadGlyph {
-                    anchors.verticalCenter: parent.verticalCenter
-                    family: art.family
-                    slot: art.lastSlot
-                    unit: Theme.dp(34)
+            Repeater {
+                model: live.entries
+
+                Rectangle {
+                    readonly property bool newest: index === 0
+                    readonly property var entry: modelData || ({})
+                    readonly property color ink: newest ? Theme.text : Theme.textSecondary
+                    // A gap under 30 ms is not a human's second press: the pad double-fired.
+                    readonly property bool doubled: entry.dt !== null && entry.dt !== undefined && entry.dt < 30
+
+                    width: parent.width
+                    height: Theme.dp(48)
+                    radius: Theme.dp(12)
+                    color: newest ? Qt.rgba(1, 1, 1, 0.06) : "transparent"
+
+                    PadGlyph {
+                        id: glyph
+                        x: Theme.dp(14)
+                        anchors.verticalCenter: parent.verticalCenter
+                        family: live.family
+                        slot: entry.slot || ""
+                        unit: Theme.dp(30)
+                        ink: parent.ink
+                    }
+
+                    Text {
+                        anchors.left: glyph.right
+                        anchors.leftMargin: Theme.dp(14)
+                        anchors.right: gap.left
+                        anchors.rightMargin: Theme.dp(10)
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: entry.label || ""
+                        color: parent.ink
+                        elide: Text.ElideRight
+                        font.family: Theme.sans
+                        font.weight: Font.Medium
+                        font.pixelSize: Theme.dp(20)
+                    }
+
+                    Text {
+                        id: gap
+                        anchors.right: parent.right
+                        anchors.rightMargin: Theme.dp(14)
+                        anchors.verticalCenter: parent.verticalCenter
+                        text: entry.dt === null || entry.dt === undefined ? "" : "+" + entry.dt + " ms"
+                        color: parent.doubled ? "#ff8a65" : Theme.textTab
+                        font.family: Theme.sans
+                        font.weight: Font.DemiBold
+                        font.pixelSize: Theme.dp(16)
+                    }
                 }
-
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: art.labelOf(art.lastSlot)
-                    color: Theme.text
-                    font.family: Theme.sans
-                    font.weight: Font.DemiBold
-                    font.pixelSize: Theme.dp(26)
-                }
-
-                Text {
-                    anchors.verticalCenter: parent.verticalCenter
-                    visible: art.lastIsTrigger
-                    text: "· " + Math.round(art.lastPull * 100) + " %"
-                    color: Theme.textSecondary
-                    font.family: Theme.sans
-                    font.weight: Font.Medium
-                    font.pixelSize: Theme.dp(26)
-                }
-            }
-
-            Text {
-                anchors.centerIn: parent
-                visible: art.lastSlot === ""
-                text: !art.connected ? "Connect a controller" : "Press anything on the pad"
-                color: art.connected ? Theme.textSecondary : Theme.text
-                font.family: Theme.sans
-                font.weight: Font.Medium
-                font.pixelSize: Theme.dp(24)
             }
         }
     }

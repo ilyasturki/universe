@@ -3,6 +3,7 @@ import "../core"
 import "../sound"
 import "../ui"
 import "../../ui" as Base
+import "../../ui/PadHistory.js" as History
 
 FocusScope {
     id: page
@@ -16,7 +17,9 @@ FocusScope {
     readonly property bool learning: controller.learning !== ""
     property var pressed: ({})
     property var axes: ({})
-    property string lastSlot: ""
+    // Newest first: { slot, label, dt }.
+    property var inputs: []
+    property var log: History.fresh()
 
     readonly property var hints: testing ? [
         {
@@ -175,20 +178,25 @@ FocusScope {
 
     function press(slot, down) {
         pressed = toggled(pressed, slot, down);
-        if (down)
-            lastSlot = slot;
+        var logged = History.press(log, slot, down, labelOf(slot), Date.now());
+        if (logged)
+            inputs = logged;
     }
 
     function axis(name, value) {
         var next = Object.assign({}, axes);
         next[name] = value;
         axes = next;
+        var logged = History.axis(log, name, value, labelOf, Date.now());
+        if (logged)
+            inputs = logged;
     }
 
     function clearArt() {
         pressed = ({});
         axes = ({});
-        lastSlot = "";
+        log = History.fresh();
+        inputs = [];
         holdOut.stop();
     }
 
@@ -438,7 +446,7 @@ FocusScope {
         Base.PadArt {
             anchors.fill: parent
             anchors.margins: Theme.dp(40)
-            anchors.bottomMargin: page.testing && page.lastSlot !== "" ? Theme.dp(110) : Theme.dp(40)
+            anchors.rightMargin: page.testing ? history.width + Theme.dp(60) : Theme.dp(40)
             opacity: page.controller.connected ? 1.0 : 0.38
             family: page.controller.family
             focusedSlot: page.focusedSlot
@@ -447,6 +455,7 @@ FocusScope {
             pressed: page.pressed
             axes: page.axes
             pulse: page.pulse
+            readouts: page.testing
 
             Behavior on opacity {
                 Ease {
@@ -455,25 +464,91 @@ FocusScope {
             }
         }
 
-        Row {
-            anchors.bottom: parent.bottom
-            anchors.bottomMargin: Theme.dp(34)
-            anchors.horizontalCenter: parent.horizontalCenter
-            visible: page.testing && page.lastSlot !== ""
-            spacing: Theme.dp(18)
+        Rectangle {
+            id: history
 
-            Base.PadGlyph {
-                anchors.verticalCenter: parent.verticalCenter
-                family: page.controller.family
-                slot: page.lastSlot
-                unit: Theme.dp(48)
-                ink: "#f2f2f2"
+            anchors.top: parent.top
+            anchors.bottom: parent.bottom
+            anchors.right: parent.right
+            anchors.margins: Theme.dp(24)
+            width: Theme.dp(440)
+            radius: Theme.dp(10)
+            color: "#242424"
+            visible: page.testing
+
+            Label {
+                id: historyTitle
+                x: Theme.dp(24)
+                y: Theme.dp(20)
+                text: "History"
+                color: "#9a9a9a"
+                font.pixelSize: Theme.dp(Theme.fontSmall)
             }
 
             Label {
-                anchors.verticalCenter: parent.verticalCenter
-                text: page.labelOf(page.lastSlot)
-                color: "#f2f2f2"
+                anchors.centerIn: parent
+                visible: page.inputs.length === 0
+                text: page.controller.connected ? "Press anything on the pad" : "Connect a controller"
+                color: "#9a9a9a"
+                font.pixelSize: Theme.dp(Theme.fontSmall)
+            }
+
+            Column {
+                anchors.top: historyTitle.bottom
+                anchors.topMargin: Theme.dp(12)
+                anchors.left: parent.left
+                anchors.right: parent.right
+                anchors.margins: Theme.dp(12)
+                spacing: Theme.dp(2)
+
+                Repeater {
+                    model: page.inputs
+
+                    Rectangle {
+                        readonly property bool newest: index === 0
+                        readonly property var entry: modelData || ({})
+                        readonly property color ink: newest ? "#f2f2f2" : "#b0b0b0"
+                        // A gap under 30 ms is not a human's second press: the pad double-fired.
+                        readonly property bool doubled: entry.dt !== null && entry.dt !== undefined && entry.dt < 30
+
+                        width: parent.width
+                        height: Theme.dp(50)
+                        radius: Theme.dp(8)
+                        color: newest ? "#333333" : "transparent"
+
+                        Base.PadGlyph {
+                            id: glyph
+                            x: Theme.dp(12)
+                            anchors.verticalCenter: parent.verticalCenter
+                            family: page.controller.family
+                            slot: entry.slot || ""
+                            unit: Theme.dp(32)
+                            ink: parent.ink
+                        }
+
+                        Label {
+                            anchors.left: glyph.right
+                            anchors.leftMargin: Theme.dp(12)
+                            anchors.right: gap.left
+                            anchors.rightMargin: Theme.dp(8)
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: entry.label || ""
+                            color: parent.ink
+                            elide: Text.ElideRight
+                            font.pixelSize: Theme.dp(Theme.fontSmall)
+                        }
+
+                        Label {
+                            id: gap
+                            anchors.right: parent.right
+                            anchors.rightMargin: Theme.dp(12)
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: entry.dt === null || entry.dt === undefined ? "" : "+" + entry.dt + " ms"
+                            color: parent.doubled ? Theme.barOrange : "#8a8a8a"
+                            font.pixelSize: Theme.dp(Theme.fontSmall)
+                        }
+                    }
+                }
             }
         }
     }
