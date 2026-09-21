@@ -668,7 +668,7 @@ its HID report, since the kernel keeps no supply for it — else null), `gone {i
 0..1, a hundredth's resolution, on change); in — `{"cmd":"suspend", "dock"?}` (report, do not fire; with `dock` true the presets marked docked — volume, mute, MangoHud — still do),
 `resume`, `axes {on}` (stream the sticks and triggers: the page's test mode), `reload` (config
 changed), `learn {id, slot}` or `learn {id, axis}` (a role `lx ly rx ry lt rt`, taken from the first
-axis thrown past 40 %: `ABS_Z`, or `ABS_Z-` when it went the other way), `cancel`, `rumble {id}`, `run {action, keys, command}` (fire an action as a
+axis to leave rest past 40 %: `ABS_Z`, or `ABS_Z-` when it went the other way; one already held stays quiet), `cancel`, `rumble {id}`, `run {action, keys, command}` (fire an action as a
 macro would — `mangohud`, `keys` with a combo, `screenshot`…: the launcher's home menu types
 through the watcher, the process that owns the key typist, and only once the game is thawed), `quit`. Stdin's end stops a `--json` watcher. A
 watcher also reloads by itself when `config.toml`'s mtime moves (checked on the 2 s scan), so a

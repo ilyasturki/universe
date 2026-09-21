@@ -105,6 +105,7 @@ struct Pad {
     by_source: BTreeMap<Source, String>,
     bindings: BTreeMap<String, Binding>,
     axis_down: BTreeSet<(u16, bool)>,
+    thrown: BTreeSet<u16>,
     axis_last: BTreeMap<&'static str, i32>,
     battery: Option<(u8, bool)>,
     cmd: mpsc::Sender<PadCmd>,
@@ -198,6 +199,22 @@ impl Pad {
         let trigger_like = min >= 0 && self.roles.get(&code).is_some_and(|(r, _)| matches!(*r, "lt" | "rt"));
         let v = axis_value(if trigger_like { "lt" } else { "lx" }, value, (min, max));
         (v.abs() > LEARN_THROW).then(|| format!("{:?}{}", evdev::AbsoluteAxisCode(code), if v < 0.0 { "-" } else { "" }))
+    }
+
+    /// The throw an axis learn takes: the moment it leaves rest, not every report of a stick still held from the last step.
+    fn axis_newly_thrown(&mut self, code: u16, value: i32) -> Option<String> {
+        let thrown = self.axis_thrown(code, value);
+        if thrown.is_none() {
+            self.thrown.remove(&code);
+            return None;
+        }
+        thrown.filter(|_| self.thrown.insert(code))
+    }
+
+    /// An axis nobody owns is read only while a trigger is learned, so its press state may be stale; a bound one's is live and stays.
+    fn forget_stale_axes(&mut self) {
+        let owned: BTreeSet<u16> = self.by_source.keys().filter_map(|s| if let Source::Axis { code, .. } = s { Some(*code) } else { None }).collect();
+        self.axis_down.retain(|(code, _)| (16..=17).contains(code) || owned.contains(code));
     }
 
     fn json(&self) -> serde_json::Value {
@@ -300,6 +317,7 @@ fn pad_of(id: String, path: PathBuf, bus: String, c: Caps, cfg: &ControllerConfi
         by_source: BTreeMap::new(),
         bindings: BTreeMap::new(),
         axis_down: BTreeSet::new(),
+        thrown: BTreeSet::new(),
         axis_last: BTreeMap::new(),
         battery: None,
         cmd,
@@ -510,8 +528,9 @@ impl Watcher {
             }
             EventSummary::AbsoluteAxis(_, axis, value) => {
                 let code = axis.0;
+                let thrown = pad.axis_newly_thrown(code, value);
                 if let Some((_, Learn::Axis(role), _)) = self.learning.clone().filter(|(lid, _, _)| *lid == id) {
-                    if let Some(thrown) = pad.axis_thrown(code, value) {
+                    if let Some(thrown) = thrown {
                         let family = pad.family;
                         self.learning = None;
                         return self.learnt(family, Learn::Axis(role), &thrown).await;
@@ -702,7 +721,7 @@ impl Watcher {
                     );
                 }
                 for p in self.pads.values_mut() {
-                    p.axis_down.clear();
+                    p.forget_stale_axes();
                 }
                 self.learning = Some((id, if axis.is_empty() { Learn::Slot(slot) } else { Learn::Axis(axis) }, Instant::now()));
             }
@@ -869,6 +888,47 @@ mod tests {
         assert_eq!(axis_value("lt", 0, (0, 1023)), 0.0);
         assert_eq!(axis_value("rt", 1023, (0, 1023)), 1.0);
         assert_eq!(axis_value("lt", 5, (0, 0)), 0.0, "an empty range is at rest");
+    }
+
+    fn xbox_pad() -> Pad {
+        let (cmd, _rx) = mpsc::channel(1);
+        let caps = Caps {
+            name: "Xbox Wireless Controller".into(),
+            family: detect_family(0x045e, 0x0b12, "Xbox Wireless Controller", &[0x130]),
+            vendor: 0x045e,
+            product: 0x0b12,
+            keys: vec![0x130, 0x131],
+            axes: vec![0, 1, 2, 3, 4, 5, 16, 17],
+            ranges: [(0, (-32768, 32767)), (1, (-32768, 32767)), (2, (0, 1023)), (3, (-32768, 32767)), (4, (-32768, 32767)), (5, (0, 1023))].into(),
+        };
+        pad_of("pad".into(), PathBuf::new(), "usb".into(), caps, &ControllerConfig::default(), cmd)
+    }
+
+    // The walk moves to the next step while the stick is still where the last one asked: only leaving rest answers.
+    #[test]
+    fn an_axis_learn_answers_once_per_throw() {
+        let mut pad = xbox_pad();
+        assert_eq!(pad.axis_newly_thrown(0, 30000).as_deref(), Some("ABS_X"));
+        assert_eq!(pad.axis_newly_thrown(0, 31000), None, "a stick still held is not a new answer");
+        assert_eq!(pad.axis_newly_thrown(0, 12000), None, "nor is it on the way back past the threshold");
+        assert_eq!(pad.axis_newly_thrown(0, 0), None);
+        assert_eq!(pad.axis_newly_thrown(0, -30000).as_deref(), Some("ABS_X-"), "thrown again, it answers again");
+        assert_eq!(pad.axis_newly_thrown(2, 900).as_deref(), Some("ABS_Z"), "a trigger by its pull");
+        assert_eq!(pad.axis_newly_thrown(2, 700), None);
+    }
+
+    // A trigger the pad owns keeps its pressed state across a learn: the pull that answered `lt` does not answer `rt` on its way down.
+    #[test]
+    fn a_learn_forgets_only_the_axes_nobody_owns() {
+        let mut pad = xbox_pad();
+        assert_eq!(pad.axis(2, 900), vec![(Source::Axis { code: 2, positive: true }, true)]);
+        assert_eq!(pad.axis(5, 900), vec![(Source::Axis { code: 5, positive: true }, true)]);
+        assert_eq!(pad.axis(16, -1), vec![(Source::Axis { code: 16, positive: false }, true)]);
+        pad.by_source.remove(&Source::Axis { code: 5, positive: true });
+        pad.forget_stale_axes();
+        assert_eq!(pad.axis(2, 800), vec![], "L2 still pulled is still pulled");
+        assert_eq!(pad.axis(16, -1), vec![], "so is the hat");
+        assert_eq!(pad.axis(5, 800), vec![(Source::Axis { code: 5, positive: true }, true)], "an unowned axis starts over");
     }
 
     // A Pro 3 report over Bluetooth, at rest, as captured: report 4, byte 14 = 0x50.

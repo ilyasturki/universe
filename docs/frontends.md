@@ -763,8 +763,8 @@ after a short debounce while the section is on screen.
 `universe controller watch --json --wait` as a child for its lifetime (`$UNIVERSE_BIN`, else
 `universe` on `PATH`) and reads its event lines: `device`, `gone`, `button`, `axis`, `battery`, `unknown`,
 `macro`, `learned`, `learn_timeout`, `error`, `waiting`, `ready`; it writes `suspend`, `resume`,
-`axes`, `reload`, `learn` (a `slot`, or an `axis` role `lx ly rx ry` learned from a stick thrown
-past 40 %, `ABS_X-` when thrown the other way) and `cancel` commands on its stdin. A `device` line
+`axes`, `reload`, `learn` (a `slot`, or an `axis` role `lx ly rx ry` learned from the first stick to leave
+rest past 40 %, `ABS_X-` when thrown the other way; one already held stays quiet) and `cancel` commands on its stdin. A `device` line
 names the pad (`vendor`, `product`), its `slots` (each `code` and `bound`), its `axes` (role → evdev
 axis, by the pad's shape — a pad with RX/RY reads Z/RZ as triggers, one without as its right stick —
 or as `[controller.axes.<family>]` learned it), `sdl` and `sdl_axes` (the same slots and roles as
