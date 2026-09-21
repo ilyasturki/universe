@@ -735,6 +735,52 @@ def test_the_game_settings_page_adds_a_variable_from_one_sheet(api, fake):
     pump(50)
 
 
+def test_a_path_row_is_typed_first_under_a_keyboard(api, fake):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    from universe_ui import gamepad
+
+    def click(key, times=1):
+        for _ in range(times):
+            QTest.keyClick(window, key)
+        pump(80)
+
+    def labels():
+        return [h["label"] for h in page.property("hints").toVariant()]
+
+    engine, window = render(api, activate=True)
+    warnings = []
+    engine.warnings.connect(lambda ws: warnings.extend(w.toString() for w in ws))
+    root = window.property("contentItem").childItems()[0].property("item")
+    game = api.allGames.byId("the-technomancer")
+    root.openSub("pages/GameSettingsPage.qml", {"game": game, "key": "launch.exe"})
+    settle(window)
+    pump(300)
+    page = window.findChild(QObject, "gameSettingsPage")
+    assert page.property("row")["key"] == "launch.exe" and page.property("row")["type"] == "path"
+    gamepad.post_key(Qt.Key.Key_Return, True, window=window)
+    gamepad.post_key(Qt.Key.Key_Return, False, window=window)
+    pump(150)
+    assert api.keys.mode == "pad" and labels() == ["Up", "Type a path", "Cancel"], "under a pad the folders come first"
+    click(Qt.Key.Key_Escape)
+    click(Qt.Key.Key_Return)
+    assert api.keys.mode == "keyboard" and labels() == ["Done", "Browse", "Cancel"], "under a keyboard the path is typed first"
+    click("2")
+    click(Qt.Key.Key_Return)
+    pump(200)
+    assert fake.game("the-technomancer")["launch"]["exe"] == "/mnt/games/PC/The Technomancer/TheTechnomancer.exe2", "the field held the value"
+    click(Qt.Key.Key_Return)
+    click(Qt.Key.Key_F1)
+    assert labels() == ["Up", "Type a path", "Cancel"] and api.screens.paths.files is True, "F1: the folders, for a file"
+    click(Qt.Key.Key_F)
+    assert labels() == ["Done", "Browse", "Cancel"], "Y: back to typing"
+    click(Qt.Key.Key_Escape)
+    assert labels()[0] == "Change" and warnings == []
+    window.close()
+    pump(50)
+
+
 def test_the_switch2_forms_share_the_sidebar_and_y(api, fake):
     from PySide6.QtCore import Q_ARG, QMetaObject, Qt
     from PySide6.QtTest import QTest

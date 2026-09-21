@@ -113,6 +113,13 @@ FocusScope {
         }
     }
 
+    readonly property string fileTitle: current ? "Use a file for the " + current.label.toLowerCase() : ""
+
+    function typePath(path) {
+        page.typing = "path";
+        keyboard.show("Path of the file", path, "path");
+    }
+
     function openBrowser(quiet) {
         if (!current)
             return;
@@ -235,7 +242,10 @@ FocusScope {
                 form.refresh();
                 page.forceActiveFocus();
             } else if (action === "file") {
-                paths.show("Use a file for the " + current.label.toLowerCase(), "", true);
+                if (api.keys.mode === "pad")
+                    paths.show(page.fileTitle, "", true);
+                else
+                    typePath("");
             } else {
                 page.forceActiveFocus();
             }
@@ -861,8 +871,7 @@ FocusScope {
             page.forceActiveFocus();
         }
         onTypeRequested: function (path) {
-            page.typing = "path";
-            keyboard.show("Path of the file", path, "path");
+            page.typePath(path);
         }
         onDismissed: page.forceActiveFocus()
     }
@@ -889,6 +898,9 @@ FocusScope {
             } else {
                 page.searchFor(value);
             }
+        }
+        onBrowseRequested: function (path) {
+            paths.show(page.fileTitle, path, true);
         }
         onDismissed: page.forceActiveFocus()
     }

@@ -14,38 +14,43 @@ Sheet {
     property int typing: 0
     readonly property bool pair: labels.length === 2
     readonly property string doneLabel: !pair ? "Done" : typing === 0 ? "Next" : "Save"
+    // A path: the folders are one hop away, Start or the field's button.
+    readonly property bool browsable: symbols && !pair
 
     signal accepted(string value)
     signal acceptedPair(string first, string second)
+    signal browseRequested(string path)
     signal dismissed
 
-    readonly property var hints: api.keys.mode === "keyboard" ? [
+    readonly property var hints: (api.keys.mode === "keyboard" ? [
+            {
+                glyph: "A",
+                label: doneLabel
+            }
+        ] : [
+            {
+                glyph: "A",
+                label: "Type"
+            },
+            {
+                glyph: "X",
+                label: "Backspace"
+            },
+            {
+                glyph: "Y",
+                label: doneLabel
+            }
+        ]).concat(browsable ? [
         {
-            glyph: "A",
-            label: doneLabel
-        },
+            glyph: "Start",
+            label: "Browse"
+        }
+    ] : []).concat([
         {
             glyph: "B",
             label: "Cancel"
         }
-    ] : [
-        {
-            glyph: "A",
-            label: "Type"
-        },
-        {
-            glyph: "X",
-            label: "Backspace"
-        },
-        {
-            glyph: "Y",
-            label: doneLabel
-        },
-        {
-            glyph: "B",
-            label: "Cancel"
-        }
-    ]
+    ])
 
     readonly property real fieldHeight: Theme.dp(66)
     readonly property real fieldGap: Theme.dp(14)
@@ -111,6 +116,13 @@ Sheet {
         dismissed();
     }
 
+    function browse() {
+        Sound.panel();
+        open = false;
+        focus = false;
+        browseRequested(text);
+    }
+
     Keys.onLeftPressed: keyboard.move(0, -1) ? Sound.kbtick() : Sound.edge()
     Keys.onRightPressed: keyboard.move(0, 1) ? Sound.kbtick() : Sound.edge()
     Keys.onUpPressed: keyboard.move(-1, 0) ? Sound.kbtick() : Sound.edge()
@@ -136,6 +148,8 @@ Sheet {
             text = text.slice(0, -1);
         } else if (api.keys.isFilters(event)) {
             finish();
+        } else if (api.keys.isMenu(event) && browsable) {
+            browse();
         }
     }
 
@@ -180,7 +194,7 @@ Sheet {
             id: valueText
             anchors.left: parent.left
             anchors.leftMargin: Theme.dp(26) + (box.name !== "" ? nameText.width + Theme.dp(22) : 0)
-            anchors.right: parent.right
+            anchors.right: browseButton.visible ? browseButton.left : parent.right
             anchors.rightMargin: Theme.dp(26)
             anchors.verticalCenter: parent.verticalCenter
             text: box.shown
@@ -199,6 +213,51 @@ Sheet {
             height: Theme.dp(30)
             color: Theme.text
             visible: sheet.open && box.active && caret.on
+        }
+
+        Rectangle {
+            id: browseButton
+
+            anchors.right: parent.right
+            anchors.rightMargin: Theme.dp(10)
+            anchors.verticalCenter: parent.verticalCenter
+            visible: sheet.browsable
+            width: browseBody.width + Theme.dp(36)
+            height: Theme.dp(46)
+            radius: height / 2
+            color: Qt.rgba(1, 1, 1, 0.08)
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.14)
+
+            Pointer {
+                accept: false
+                direct: true
+                radius: parent.radius
+                onPicked: sheet.browse()
+            }
+
+            Row {
+                id: browseBody
+                anchors.centerIn: parent
+                spacing: Theme.dp(10)
+
+                MenuGlyph {
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Theme.dp(22)
+                    height: width
+                    kind: "folder"
+                    tint: Theme.textSecondary
+                }
+
+                Text {
+                    anchors.verticalCenter: parent.verticalCenter
+                    text: "Browse…"
+                    color: Theme.textSecondary
+                    font.family: Theme.sans
+                    font.weight: Font.Medium
+                    font.pixelSize: Theme.dp(19)
+                }
+            }
         }
     }
 

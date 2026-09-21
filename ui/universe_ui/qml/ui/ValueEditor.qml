@@ -38,7 +38,11 @@ FocusScope {
             var current = choices.indexOf(String(row.value));
             picker.show(cards, opts, current >= 0 ? current : (row.type === "enum" ? 0 : opts.length - 1));
         } else if (row.type === "path") {
-            sheetsOf().paths.show(row.label, row.value, isFile(row));
+            // A pad walks the folders; a keyboard or a mouse types the path, the folders one hop away.
+            if (api.keys.mode === "pad")
+                sheetsOf().paths.show(row.label, row.value, isFile(row));
+            else
+                sheetsOf().sheet.show(row.label, row.value, "path");
         } else {
             sheetsOf().sheet.show(row.label, row.value, row.type === "int" ? "number" : "text");
         }
@@ -152,6 +156,10 @@ FocusScope {
                 }
                 onAcceptedPair: function (first, second) {
                     editor.finish(first, second);
+                }
+                onBrowseRequested: function (path) {
+                    var row = editor.pendingRow || ({});
+                    paths.show(row.label || "", path, editor.isFile(row));
                 }
                 onDismissed: editor.closed()
             }
