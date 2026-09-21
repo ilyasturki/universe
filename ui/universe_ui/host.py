@@ -111,6 +111,8 @@ def run(argv=None):
     # Probing VDPAU makes libvdpau try its nvidia fallback and complain on stderr when no driver is installed.
     os.environ.setdefault("QT_FFMPEG_DECODING_HW_DEVICE_TYPES", "vaapi")
     os.environ.setdefault("QT_FFMPEG_ENCODING_HW_DEVICE_TYPES", "vaapi")
+    # Qt Multimedia 6.11's PipeWire backend can destroy a main-thread QSocketNotifier from its loop thread, which wedges the event loop for good.
+    os.environ.setdefault("QT_AUDIO_BACKEND", "pulseaudio")
     logging.basicConfig(level=logging.INFO, format="%(name)s: %(message)s")
 
     import PySide6.QtQuick  # noqa: F401  before rootObjects(): the wrapper is otherwise a bare QWindow, no grabWindow
