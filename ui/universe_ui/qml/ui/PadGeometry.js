@@ -117,21 +117,16 @@ function sonyButtons(kind) {
         b.push({ slot: "paddle_left", kind: "paddle", x: 150, y: 500, w: 54, h: 96, ghost: true });
         b.push({ slot: "paddle_right", kind: "paddle", x: 850, y: 500, w: 54, h: 96, ghost: true });
     }
-    if (kind === "8bitdo-pro-3") {
-        b.push({ slot: "star", kind: "small", x: 500, y: 432, w: 26, h: 26, round: true });
-        b.push({ slot: "paddle_l4", kind: "tab", x: 150, y: 168, w: 40, h: 26 });
-        b.push({ slot: "paddle_r4", kind: "tab", x: 850, y: 168, w: 40, h: 26 });
-        b.push({ slot: "paddle_pl", kind: "paddle", x: 150, y: 500, w: 54, h: 96, ghost: true });
-        b.push({ slot: "paddle_pr", kind: "paddle", x: 850, y: 500, w: 54, h: 96, ghost: true });
-    }
     return b;
 }
 
-function sonyDetails(kind) {
-    return DETAILS.dualsense.filter(function (d) {
-        return kind !== "8bitdo-pro-3" || d.kind === "dish";
-    });
-}
+// The Pro 3's second bumpers, inboard of L1/R1 along the generic body's top edge.
+var PRO3_BUMPERS = [
+    { slot: "paddle_l4", kind: "bumper", side: "l", b: [361, 108, 441, 133],
+      path: "M 368 111 L 434 108 L 438 109 L 441 113 L 441 123 L 438 128 L 434 130 L 368 133 L 364 132 L 361 128 L 361 116 L 364 112 Z" },
+    { slot: "paddle_r4", kind: "bumper", side: "r", b: [559, 108, 639, 133],
+      path: "M 632 111 L 566 108 L 562 109 L 559 113 L 559 123 L 562 128 L 566 130 L 632 133 L 636 132 L 639 128 L 639 116 L 636 112 Z" }
+];
 
 function xboxButtons(kind) {
     var body = kind === "xbox" || kind === "xbox-elite" ? "xbox" : "generic";
@@ -146,15 +141,23 @@ function xboxButtons(kind) {
     }
     if (kind === "switch-pro")
         b.push({ slot: "capture", kind: "small", x: 430, y: 318, w: 28, h: 28 });
+    if (kind === "8bitdo-pro-3") {
+        b = b.concat(PRO3_BUMPERS);
+        b.push({ slot: "star", kind: "small", x: 500, y: 300, w: 26, h: 26, round: true });
+        b.push({ slot: "paddle_pl", kind: "paddle", x: 150, y: 500, w: 54, h: 96, ghost: true });
+        b.push({ slot: "paddle_pr", kind: "paddle", x: 850, y: 500, w: 54, h: 96, ghost: true });
+    }
     return b;
 }
 
-var SONY_KINDS = { "dualsense-edge": true, "dualsense": true, "dualshock4": true, "8bitdo-pro-3": true };
+var SONY_KINDS = { "dualsense-edge": true, "dualsense": true, "dualshock4": true };
+var DRAWN_KINDS = { "xbox-elite": true, "xbox": true, "switch-pro": true, "8bitdo-pro-3": true };
 
+// A family without a body of its own is drawn on the generic one.
 function of(family) {
     if (SONY_KINDS[family])
-        return { view: VIEW, body: BODIES.dualsense, details: sonyDetails(family), buttons: sonyButtons(family) };
-    var kind = family === "xbox-elite" || family === "xbox" || family === "switch-pro" ? family : "generic";
+        return { view: VIEW, body: BODIES.dualsense, details: DETAILS.dualsense, buttons: sonyButtons(family) };
+    var kind = DRAWN_KINDS[family] ? family : "generic";
     var body = kind === "xbox" || kind === "xbox-elite" ? "xbox" : "generic";
     return { view: VIEW, body: BODIES[body], details: DETAILS[body], buttons: xboxButtons(kind) };
 }

@@ -204,6 +204,10 @@ class CoreClient(QObject):
     def rescan(self):
         self._guarded(None, self._core.reload)
 
+    # config.toml and the modules, not the library.
+    def reloadSettings(self):
+        self._guarded(None, self._core.reload_settings)
+
     @Slot(bool, result="QVariant")
     def importLutris(self, apply):
         return self._guarded({}, self._core.import_lutris, apply)

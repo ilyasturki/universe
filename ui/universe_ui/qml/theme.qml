@@ -97,6 +97,7 @@ FocusScope {
     }
 
     property string settingsLanding: ""
+    property bool walkOnLanding: false
 
     function openSettings(section) {
         settingsLanding = section;
@@ -110,6 +111,10 @@ FocusScope {
         var section = settingsLanding;
         settingsLanding = "";
         activePage.land(section);
+        if (walkOnLanding) {
+            walkOnLanding = false;
+            api.screens.controller.startWalk();
+        }
     }
 
     // A tab clicked opens and enters in one go, before its page has loaded: the focus lands once it is there.
@@ -1148,6 +1153,24 @@ FocusScope {
         target: api.screens.controller
         function onMacroNotice(text) {
             toast.show(text);
+        }
+        // A pad of a family never set up: the walk through its buttons, offered once.
+        function onWalkOffered(family, name) {
+            if (confirm.open || launching || menuOpen)
+                return;
+            confirm.ask({
+                message: "Set up the buttons of " + name + "?",
+                detail: "Universe already knows this controller. Pressing each button in turn makes sure every one is where it should be. You can also do it later, from Settings › Controller.",
+                yes: "Set up",
+                no: "Not now"
+            }, function (yes) {
+                if (!yes) {
+                    api.screens.controller.declineWalk(family);
+                    return;
+                }
+                root.walkOnLanding = true;
+                root.openSettings("controller");
+            });
         }
     }
 

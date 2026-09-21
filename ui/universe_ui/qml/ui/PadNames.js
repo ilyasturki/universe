@@ -34,7 +34,7 @@ function style(family) { return STYLE[family] || "xbox"; }
 function shape(slot) {
     if (slot.indexOf("dpad") === 0)
         return "dpad";
-    if (slot === "lb" || slot === "rb")
+    if (slot === "lb" || slot === "rb" || slot === "paddle_l4" || slot === "paddle_r4")
         return "bumper";
     if (slot === "lt" || slot === "rt")
         return "trigger";
@@ -42,7 +42,7 @@ function shape(slot) {
         return "stick";
     if (slot === "select" || slot === "start" || slot === "share" || slot === "capture" || slot === "mute" || slot === "star")
         return "small";
-    if (slot.indexOf("fn_") === 0 || slot === "paddle_l4" || slot === "paddle_r4")
+    if (slot.indexOf("fn_") === 0)
         return "tab";
     if (slot.indexOf("paddle_") === 0)
         return "paddle";

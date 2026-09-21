@@ -484,6 +484,27 @@ FocusScope {
         function onMacroNotice(text) {
             toast.show(text);
         }
+        // A pad of a family never set up: the walk through its buttons, offered once.
+        function onWalkOffered(family, name) {
+            if (root.modal || root.launching)
+                return;
+            dialogAsk({
+                message: "Set up the buttons of " + name + "?",
+                detail: "Universe already knows this controller. Pressing each button in turn makes sure every one is where it should be. You can also do it later, from Controllers.",
+                buttons: ["Not now", "Set up"]
+            }, function (i) {
+                if (i !== 1) {
+                    api.screens.controller.declineWalk(family);
+                    return;
+                }
+                if (root.topPage && root.topPage.startWalk)
+                    root.topPage.startWalk();
+                else
+                    root.push("pages/ControllersPage.qml", {
+                        walk: true
+                    });
+            });
+        }
     }
 
     // B held: the way out from anywhere, the bar's own Quit question.

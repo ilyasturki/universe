@@ -11,9 +11,30 @@ Item {
     property var unbound: []
     property var pressed: ({})
     property var axes: ({})
+    property string learningSlot: ""
+    // The walk's step, { prompt, index, count, seconds }, or null outside one.
+    property var step: null
     // Newest first: { slot, label, dt }.
     property var entries: []
     property var log: History.fresh()
+
+    signal stopRequested
+
+    property real pulse: 0.15
+    SequentialAnimation on pulse {
+        running: live.learningSlot !== ""
+        loops: Animation.Infinite
+        NumberAnimation {
+            to: 0.55
+            duration: 500
+            easing.type: Easing.InOutSine
+        }
+        NumberAnimation {
+            to: 0.15
+            duration: 500
+            easing.type: Easing.InOutSine
+        }
+    }
 
     readonly property real pad: Theme.dp(8)
     readonly property real inset: Theme.dp(20)
@@ -79,9 +100,11 @@ Item {
             anchors.fill: parent
             family: live.family
             unbound: live.connected ? live.unbound : []
+            learningSlot: live.learningSlot
+            pulse: live.pulse
             pressed: live.pressed
             axes: live.axes
-            readouts: true
+            readouts: live.step === null
             opacity: live.connected ? 1.0 : 0.38
 
             Behavior on opacity {
@@ -94,12 +117,55 @@ Item {
         Text {
             anchors.centerIn: parent
             anchors.verticalCenterOffset: parent.height * 0.42
-            visible: live.entries.length === 0
+            visible: live.entries.length === 0 && live.step === null
             text: !live.connected ? "Connect a controller" : "Press anything on the pad"
             color: live.connected ? Theme.textSecondary : Theme.text
             font.family: Theme.sans
             font.weight: Font.Medium
             font.pixelSize: Theme.dp(24)
+        }
+
+        Column {
+            anchors.horizontalCenter: parent.horizontalCenter
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: Theme.dp(8)
+            spacing: Theme.dp(6)
+            visible: live.step !== null
+
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: live.step ? live.step.prompt : ""
+                color: Theme.text
+                font.family: Theme.sans
+                font.weight: Font.DemiBold
+                font.pixelSize: Theme.dp(30)
+            }
+
+            Row {
+                anchors.horizontalCenter: parent.horizontalCenter
+                spacing: Theme.dp(6)
+
+                Text {
+                    text: live.step ? "Step " + live.step.index + " of " + live.step.count + " · skipped in " + live.step.seconds + " s · " : ""
+                    color: Theme.textSecondary
+                    font.family: Theme.sans
+                    font.pixelSize: Theme.dp(18)
+                }
+
+                Text {
+                    text: "Stop (Esc)"
+                    color: Theme.text
+                    font.family: Theme.sans
+                    font.weight: Font.Medium
+                    font.pixelSize: Theme.dp(18)
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: live.stopRequested()
+                    }
+                }
+            }
         }
     }
 

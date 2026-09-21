@@ -45,3 +45,24 @@ def test_power_polls_and_notifies(app, tmp_path):
     power.refresh()
     assert len(changes) == 1 and changes[0][0]["percent"] == 79
     assert power.forInput("event1") is None
+
+
+def test_a_reported_charge_joins_the_sources_until_forgotten(app, tmp_path):
+    root = tmp_path / "power_supply"
+    supply(root, "BAT0", type="Battery", capacity="80", status="Discharging")
+    listed = supply(root, "ps-controller-battery", type="Battery", scope="Device", capacity="60", status="Charging")
+    (listed / "inputs").write_text("event30\n")
+    power = Power(str(root))
+    power.report("event31", "8BitDo Pro 3", {"percent": 80, "charging": False})
+    assert [(s["name"], s["kind"], s["percent"], s["inputs"]) for s in power.sources] == [
+        ("BAT0", "system", 80, []),
+        ("ps-controller-battery", "pad", 60, ["event30"]),
+        ("8BitDo Pro 3", "pad", 80, ["event31"]),
+    ]
+    assert power.forInput("event31")["charging"] is False
+    power.report("event30", "Wireless Controller", {"percent": 10, "charging": False})
+    assert power.forInput("event30")["percent"] == 60, "the kernel's reading wins over the watcher's"
+    power.refresh()
+    assert power.count == 3, "a poll keeps what was reported"
+    power.report("event31", "8BitDo Pro 3", None)
+    assert power.count == 2

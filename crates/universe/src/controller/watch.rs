@@ -5,6 +5,7 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use evdev::{Device, EventSummary, EventType, InputEvent, KeyCode};
+use tokio::io::unix::AsyncFd;
 use tokio::io::AsyncBufReadExt;
 use tokio::sync::{mpsc, Mutex};
 
@@ -84,6 +85,7 @@ enum Learn {
 
 enum DevEvent {
     Input(String, InputEvent),
+    Battery(String, u8, bool),
     Gone(String),
 }
 
@@ -104,7 +106,49 @@ struct Pad {
     bindings: BTreeMap<String, Binding>,
     axis_down: BTreeSet<(u16, bool)>,
     axis_last: BTreeMap<&'static str, i32>,
+    battery: Option<(u8, bool)>,
     cmd: mpsc::Sender<PadCmd>,
+}
+
+const EIGHTBITDO: u16 = 0x2dc8;
+
+/// An 8BitDo's charge, from its own HID report (the kernel keeps no power supply for it): byte 14 is the percent under a charging bit.
+fn battery_of(vendor: u16, report: &[u8]) -> Option<(u8, bool)> {
+    if vendor != EIGHTBITDO || report.len() < 15 || !matches!(report[0], 1 | 3 | 4) {
+        return None;
+    }
+    let level = (report[14] & 0x7f).min(100);
+    Some((level, report[14] & 0x80 != 0 || level == 100))
+}
+
+/// The hidraw node of the HID device an evdev node hangs off, opened for reading without blocking; none for a pad without one or one out of reach.
+fn hidraw_of(path: &Path, vendor: u16) -> Option<AsyncFd<std::fs::File>> {
+    if vendor != EIGHTBITDO {
+        return None;
+    }
+    let sysfs = Path::new("/sys/class/input").join(path.file_name()?).join("device/device/hidraw");
+    let node = std::fs::read_dir(sysfs).ok()?.flatten().next()?.file_name();
+    let fd = rustix::fs::open(Path::new("/dev").join(node), rustix::fs::OFlags::RDONLY | rustix::fs::OFlags::NONBLOCK, rustix::fs::Mode::empty()).ok()?;
+    AsyncFd::new(std::fs::File::from(fd)).ok()
+}
+
+async fn next_report(hid: &mut Option<AsyncFd<std::fs::File>>) -> Vec<u8> {
+    loop {
+        let Some(fd) = hid.as_mut() else {
+            std::future::pending::<()>().await;
+            unreachable!()
+        };
+        let Ok(mut guard) = fd.readable_mut().await else {
+            *hid = None;
+            continue;
+        };
+        let mut buf = [0u8; 64];
+        match guard.try_io(|inner| rustix::io::read(inner.get_ref(), &mut buf).map_err(std::io::Error::from)) {
+            Ok(Ok(n)) => return buf[..n].to_vec(),
+            Ok(Err(_)) => *hid = None,
+            Err(_) => {}
+        }
+    }
 }
 
 fn axis_value(name: &str, value: i32, (min, max): (i32, i32)) -> f64 {
@@ -176,6 +220,7 @@ impl Pad {
         serde_json::json!({
             "event": "device", "id": self.id, "name": self.name, "family": self.family.id, "family_name": self.family.name, "bus": self.bus,
             "vendor": self.vendor, "product": self.product, "slots": slots_json(&self.slots), "axes": axes, "sdl": sdl, "sdl_axes": sdl_axes,
+            "battery": self.battery.map(|(percent, charging)| serde_json::json!({"percent": percent, "charging": charging})),
         })
     }
 
@@ -256,6 +301,7 @@ fn pad_of(id: String, path: PathBuf, bus: String, c: Caps, cfg: &ControllerConfi
         bindings: BTreeMap::new(),
         axis_down: BTreeSet::new(),
         axis_last: BTreeMap::new(),
+        battery: None,
         cmd,
     };
     pad.resolve(cfg);
@@ -287,8 +333,9 @@ pub fn enumerate_json(cfg: &ControllerConfig) -> Vec<serde_json::Value> {
     out
 }
 
-fn pad_task(id: String, dev: Device, tx: mpsc::Sender<DevEvent>, mut cmds: mpsc::Receiver<PadCmd>) {
+fn pad_task(id: String, dev: Device, mut hid: Option<AsyncFd<std::fs::File>>, tx: mpsc::Sender<DevEvent>, mut cmds: mpsc::Receiver<PadCmd>) {
     tokio::spawn(async move {
+        let vendor = dev.input_id().vendor();
         let mut stream = match dev.into_event_stream() {
             Ok(s) => s,
             Err(_) => {
@@ -296,12 +343,19 @@ fn pad_task(id: String, dev: Device, tx: mpsc::Sender<DevEvent>, mut cmds: mpsc:
                 return;
             }
         };
+        let mut battery = None;
         loop {
             tokio::select! {
                 ev = stream.next_event() => match ev {
                     Ok(ev) => { if tx.send(DevEvent::Input(id.clone(), ev)).await.is_err() { return; } }
                     Err(_) => { let _ = tx.send(DevEvent::Gone(id)).await; return; }
                 },
+                report = next_report(&mut hid) => {
+                    if let Some((percent, charging)) = battery_of(vendor, &report).filter(|read| Some(*read) != battery) {
+                        battery = Some((percent, charging));
+                        if tx.send(DevEvent::Battery(id.clone(), percent, charging)).await.is_err() { return; }
+                    }
+                }
                 cmd = cmds.recv() => match cmd {
                     Some(PadCmd::Rumble) => {
                         let data = evdev::FFEffectData {
@@ -410,11 +464,18 @@ impl Watcher {
             let id = path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
             let bus = bus_name(&dev);
             let (ctx, crx) = mpsc::channel(4);
+            let hid = hidraw_of(&path, dev.input_id().vendor());
             let pad = pad_of(id.clone(), path, bus, describe(&dev), &self.cfg, ctx);
-            pad_task(id.clone(), dev, self.tx.clone(), crx);
+            pad_task(id.clone(), dev, hid, self.tx.clone(), crx);
             self.out.emit(pad.json());
             self.pads.insert(id, pad);
         }
+    }
+
+    fn battery(&mut self, id: &str, percent: u8, charging: bool) -> bool {
+        let Some(pad) = self.pads.get_mut(id) else { return true };
+        pad.battery = Some((percent, charging));
+        self.out.emit(serde_json::json!({"event": "battery", "id": id, "percent": percent, "charging": charging}))
     }
 
     fn drop_pad(&mut self, id: &str) {
@@ -717,6 +778,7 @@ pub async fn watch(core: Arc<Core>, opts: WatchOptions) -> crate::Result<()> {
         let alive = tokio::select! {
             ev = rx.recv() => match ev {
                 Some(DevEvent::Input(id, ev)) => w.input(id, ev).await,
+                Some(DevEvent::Battery(id, percent, charging)) => w.battery(&id, percent, charging),
                 Some(DevEvent::Gone(id)) => { w.drop_pad(&id); true }
                 None => false,
             },
@@ -767,7 +829,7 @@ pub async fn learn_once(cfg: &ControllerConfig, family: &Family, slot: &str) -> 
             continue;
         }
         let (ctx, crx) = mpsc::channel(1);
-        pad_task(path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default(), dev, tx.clone(), crx);
+        pad_task(path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default(), dev, None, tx.clone(), crx);
         senders.push(ctx);
     }
     if senders.is_empty() {
@@ -788,7 +850,7 @@ pub async fn learn_once(cfg: &ControllerConfig, family: &Family, slot: &str) -> 
                     let from = super::learn_code(cfg, family, slot, &code)?;
                     return Ok((code, from));
                 }
-                Some(DevEvent::Gone(_)) | None => continue,
+                Some(DevEvent::Battery(..) | DevEvent::Gone(_)) | None => continue,
             },
             _ = &mut deadline => return Err(crate::Error::Io("no button pressed within 30 s".into())),
         }
@@ -807,5 +869,20 @@ mod tests {
         assert_eq!(axis_value("lt", 0, (0, 1023)), 0.0);
         assert_eq!(axis_value("rt", 1023, (0, 1023)), 1.0);
         assert_eq!(axis_value("lt", 5, (0, 0)), 0.0, "an empty range is at rest");
+    }
+
+    // A Pro 3 report over Bluetooth, at rest, as captured: report 4, byte 14 = 0x50.
+    #[test]
+    fn an_8bitdo_report_carries_its_charge() {
+        let mut report = vec![0x04, 0x0f, 0x80, 0x7f, 0x7f, 0x80, 0, 0, 0, 0, 0, 0, 0x09, 0x60, 0x50, 0xb8];
+        assert_eq!(battery_of(EIGHTBITDO, &report), Some((80, false)));
+        report[14] = 0x80 | 45;
+        assert_eq!(battery_of(EIGHTBITDO, &report), Some((45, true)), "the top bit is the charger");
+        report[14] = 100;
+        assert_eq!(battery_of(EIGHTBITDO, &report), Some((100, true)), "full on the cable reads as charging, as sysfs's Full does");
+        assert_eq!(battery_of(0x054c, &report), None, "another maker's report means something else");
+        report[0] = 0x06;
+        assert_eq!(battery_of(EIGHTBITDO, &report), None, "only the state reports");
+        assert_eq!(battery_of(EIGHTBITDO, &[0x04, 0x0f]), None);
     }
 }

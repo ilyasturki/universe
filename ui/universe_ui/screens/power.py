@@ -71,6 +71,8 @@ class Power(QObject):
         super().__init__(parent)
         self._root = root
         self._sources = []
+        self._read = []
+        self._reported = {}
         self._timer = QTimer(self)
         self._timer.setInterval(POLL_MS)
         self._timer.timeout.connect(self.refresh)
@@ -78,7 +80,20 @@ class Power(QObject):
         self._timer.start()
 
     def refresh(self):
-        sources = read_sources(self._root)
+        self._read = read_sources(self._root)
+        self._merge()
+
+    # A charge the controller watcher read off a pad the kernel keeps no supply for, keyed by its event node; `None` forgets it.
+    def report(self, event, name, battery):
+        if battery is None:
+            self._reported.pop(event, None)
+        else:
+            self._reported[event] = {"name": name, "kind": "pad", "percent": int(battery["percent"]), "charging": bool(battery["charging"]), "inputs": [event]}
+        self._merge()
+
+    def _merge(self):
+        listed = {event for s in self._read for event in s["inputs"]}
+        sources = self._read + [dict(r) for event, r in self._reported.items() if event not in listed]
         if sources != self._sources:
             self._sources = sources
             self.sourcesChanged.emit()

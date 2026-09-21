@@ -21,6 +21,30 @@ PASSIVE_DETAIL = "Live presses and learning resume when it ends"
 RESTART_MS = 2000
 RESTART_MAX_MS = 30000
 
+# The walk through a pad's buttons: each in turn, then the sticks' four throws; a step nobody answers within WALK_STEP_MS is skipped.
+WALK_STEP_MS = 8000
+WALK_ORDER = (
+    "south",
+    "east",
+    "west",
+    "north",
+    "lb",
+    "rb",
+    "lt",
+    "rt",
+    "select",
+    "start",
+    "guide",
+    "ls",
+    "rs",
+    "dpad_up",
+    "dpad_down",
+    "dpad_left",
+    "dpad_right",
+)
+WALK_AXES = (("lx", "ls", "left stick right"), ("ly", "ls", "left stick down"), ("rx", "rs", "right stick right"), ("ry", "rs", "right stick down"))
+WALK_VERBS = {"lt": "Pull", "rt": "Pull", "ls": "Click", "rs": "Click"}
+
 # [controller] keys behind the page's Advanced row: (key, label, choices, detail).
 TIMING_ROWS = [
     ("controller.hold_ms", "Hold length (ms)", ("400", "600", "800", "1000"), "A press this long is a hold; a macro on hold fires then."),
@@ -154,6 +178,8 @@ class ControllerScreen(AdvancedRows, QObject):
     screenshotTaken = Signal(str)
     message = Signal(str)
     mapping = Signal(int, int, str)
+    walkChanged = Signal()
+    walkOffered = Signal(str, str)
 
     def __init__(self, client, memory, power, parent=None):
         super().__init__(parent)
@@ -175,6 +201,12 @@ class ControllerScreen(AdvancedRows, QObject):
         self.restart_ms = RESTART_MS
         self._restart_delay = RESTART_MS
         self._last_family = str(memory.get("controllerFamily") or "xbox")
+        self._walk = None
+        self._walk_seconds = 0
+        self._offered = set()
+        self._walk_timer = QTimer(self)
+        self._walk_timer.setInterval(1000)
+        self._walk_timer.timeout.connect(self._walk_tick)
         power.sourcesChanged.connect(self._rebuild)
         self._rebuild()
 
@@ -238,6 +270,7 @@ class ControllerScreen(AdvancedRows, QObject):
             "axes": dict(line.get("axes") or {}),
             "sdl": dict(line.get("sdl") or {}),
             "sdl_axes": dict(line.get("sdl_axes") or {}),
+            "battery": dict(line["battery"]) if isinstance(line.get("battery"), dict) else None,
         }
 
     # The SDL mapper reads the pad as the watcher does, lettered buttons by their letters.
@@ -279,6 +312,11 @@ class ControllerScreen(AdvancedRows, QObject):
             self._upsert(line)
         elif kind == "gone":
             self._remove(ident)
+        elif kind == "battery":
+            device = self._device(ident)
+            if device is not None:
+                device["battery"] = {"percent": int(line.get("percent") or 0), "charging": bool(line.get("charging"))}
+                self._power.report(ident, device["name"], device["battery"])
         elif kind == "button":
             self.buttonPressed.emit(ident, str(line.get("slot") or ""), bool(line.get("pressed")))
         elif kind == "axis":
@@ -294,10 +332,13 @@ class ControllerScreen(AdvancedRows, QObject):
         elif kind == "learned":
             self._learned(line)
         elif kind == "learn_timeout":
-            if self._stop_learning():
+            if self._walk is not None:
+                self._walk_skip()
+            elif self._stop_learning():
                 self.message.emit("No button pressed: learning stopped")
         elif kind == "error":
             self._stop_learning()
+            self._stop_walk()
             self.message.emit(str(line.get("message") or "Controller error"))
         elif kind in ("waiting", "ready", "off"):
             self._status = kind
@@ -313,6 +354,7 @@ class ControllerScreen(AdvancedRows, QObject):
             else:
                 self._passive = False
                 self._stop_learning()
+                self._stop_walk()
                 self._stop_testing()
                 self._clear_devices()
             self._rebuild()
@@ -346,6 +388,8 @@ class ControllerScreen(AdvancedRows, QObject):
         return True
 
     def _clear_devices(self):
+        for device in self._devices:
+            self._power.report(device["id"], device["name"], None)
         self._devices = []
         self._current = ""
         self.currentChanged.emit()
@@ -355,6 +399,7 @@ class ControllerScreen(AdvancedRows, QObject):
         ident = str(line.get("id") or "")
         entry = self._entry(line)
         self._map(entry)
+        self._power.report(ident, entry["name"], entry["battery"])
         for i, d in enumerate(self._devices):
             if d["id"] == ident:
                 self._devices[i] = entry
@@ -369,12 +414,27 @@ class ControllerScreen(AdvancedRows, QObject):
             self._remember(entry["family"])
         self._rebuild()
         self.devicesChanged.emit()
+        self._offer(entry)
+
+    # A family seen for the first time, with nothing learned for it yet, gets the walk offered once: accepted or declined, it is remembered.
+    def _offer(self, entry):
+        family = entry["family"]
+        if family in self._offered or self._status != "ready" or self._passive or self._walk is not None or family not in self._families():
+            return
+        self._offered.add(family)
+        if family in (self._memory.get("controllerWalks") or {}) or _dig(self._client.config(), f"controller.buttons.{family}") not in (None, ""):
+            return
+        self.walkOffered.emit(family, entry["name"])
 
     def _remove(self, ident):
         gone = self._device(ident)
         if gone is None:
             return
         self._devices = [d for d in self._devices if d["id"] != ident]
+        self._power.report(ident, gone["name"], None)
+        if self._walk is not None and self._walk["id"] == ident:
+            self._stop_walk()
+            self.message.emit("Controller gone: setup stopped")
         if self._current == ident:
             self._wanted = gone["name"] if self._devices else ""
             self._current = self._devices[0]["id"] if self._devices else ""
@@ -390,18 +450,113 @@ class ControllerScreen(AdvancedRows, QObject):
 
     def _learned(self, line):
         family, slot, code = str(line.get("family") or ""), str(line.get("slot") or ""), str(line.get("code") or "")
+        axis = str(line.get("axis") or "")
         previous = line.get("from")
         for device in self._devices:
             if device["family"] != family:
+                continue
+            if axis:
+                device["axes"][axis] = code
                 continue
             device["slots"][slot] = {"code": code, "bound": True}
             if previous and previous != slot:
                 device["slots"][previous] = {"code": None, "bound": False}
         self._stop_learning()
         # The watcher wrote config.toml from its own process; this one's core rereads it first.
-        self._client.rescan()
+        self._client.reloadSettings()
         self.load()
-        self.learned.emit(family, slot, code)
+        if self._walk is not None:
+            self._walk_learned(self._walk, slot, axis, previous)
+        elif not axis:
+            self.learned.emit(family, slot, code)
+
+    # The walk: one learn per step, the answer or the timeout moving it on; the tally goes out as a message at the end.
+    def _walk_steps(self, device):
+        family = self._families().get(device["family"]) or {}
+        specs = {s["id"]: s for s in family.get("slots") or [] if s.get("id")}
+        order = [s for s in WALK_ORDER if s in specs] + [s["id"] for s in family.get("slots") or [] if s.get("extra")]
+        steps = []
+        for slot in order:
+            label = str(specs[slot].get("label") or slot)
+            steps.append({"slot": slot, "axis": "", "art": slot, "label": label, "prompt": f"{WALK_VERBS.get(slot, 'Press')} {label}"})
+        for role, stick, throw in WALK_AXES:
+            if role in device["axes"]:
+                steps.append({"slot": "", "axis": role, "art": stick, "label": throw, "prompt": f"Push the {throw}"})
+        return steps
+
+    def _send(self, command):
+        if self._watcher is not None:
+            self._watcher.send(command)
+
+    def _walk_send(self, walk):
+        step = walk["steps"][walk["index"]]
+        self._learning = step["art"]
+        self._walk_seconds = WALK_STEP_MS // 1000
+        target = {"axis": step["axis"]} if step["axis"] else {"slot": step["slot"]}
+        self._send({"cmd": "learn", "id": walk["id"], **target})
+        self._walk_timer.start()
+        self.statusChanged.emit()
+        self.walkChanged.emit()
+
+    def _walk_tick(self):
+        if self._walk is None:
+            return
+        self._walk_seconds -= 1
+        if self._walk_seconds <= 0:
+            self._send({"cmd": "cancel"})
+            self._walk_skip()
+        else:
+            self.walkChanged.emit()
+
+    def _walk_skip(self):
+        walk = self._walk
+        if walk is None:
+            return
+        step = walk["steps"][walk["index"]]
+        walk["missed"].append(step["label"])
+        self._walk_advance(walk)
+
+    def _walk_learned(self, walk, slot, axis, previous):
+        step = walk["steps"][walk["index"]]
+        if (slot, axis) != (step["slot"], step["axis"]):
+            return
+        found = walk["found"]
+        if previous and previous in found:
+            label = next((s["label"] for s in walk["steps"] if s["slot"] == previous), previous)
+            self.message.emit(f"That button was {label}: it is {step['label']} now")
+            found.remove(previous)
+            walk["missed"].append(label)
+        found.append(slot or axis)
+        self._walk_advance(walk)
+
+    def _walk_advance(self, walk):
+        self._walk_timer.stop()
+        walk["index"] += 1
+        if walk["index"] < len(walk["steps"]):
+            self._walk_send(walk)
+            return
+        self._stop_walk()
+        self._remember_walk(walk["family"], "done")
+        missed = walk["missed"]
+        tally = f"{len(walk['found'])} set up"
+        if missed:
+            tally += f", {len(missed)} skipped: " + ", ".join(missed)
+        self.message.emit(f"{walk['name']}: {tally}")
+
+    def _remember_walk(self, family, outcome):
+        walks = dict(self._memory.get("controllerWalks") or {})
+        walks[family] = outcome
+        self._memory.set("controllerWalks", walks)
+
+    def _stop_walk(self):
+        if self._walk is None:
+            return False
+        self._walk_timer.stop()
+        self._walk = None
+        self._walk_seconds = 0
+        self._stop_learning()
+        self.walkChanged.emit()
+        return True
 
     def _label(self, macro):
         action = str(macro.get("action") or "")
@@ -446,6 +601,9 @@ class ControllerScreen(AdvancedRows, QObject):
                 rows.append(_row(name, "device", "Controller", "enum", device["name"], choices=names))
             if self._status == "ready" and not self._passive:
                 row = _row(name, "test", "Test the buttons", "action", "")
+                row.update(display="", family=device["family"], icon="gamepad", action="Start")
+                rows.append(row)
+                row = _row(name, "walk", "Set up the buttons", "action", "Press each one in turn")
                 row.update(display="", family=device["family"], icon="gamepad", action="Start")
                 rows.append(row)
             for slot in slots:
@@ -555,8 +713,56 @@ class ControllerScreen(AdvancedRows, QObject):
 
     @Slot()
     def cancelLearn(self):
-        if self._stop_learning() and self._watcher is not None:
+        if self._walk is not None:
+            self.cancelWalk()
+        elif self._stop_learning() and self._watcher is not None:
             self._watcher.send({"cmd": "cancel"})
+
+    @Slot(result=bool)
+    def startWalk(self):
+        device = self._device()
+        if device is None or self._watcher is None:
+            self.message.emit("No controller connected")
+            return False
+        if self._passive or self._status != "ready":
+            self.message.emit(PASSIVE_DETAIL if self._passive else "Controller macros are not running")
+            return False
+        steps = self._walk_steps(device)
+        if not steps:
+            self.message.emit("Nothing to set up on this controller")
+            return False
+        self._stop_testing()
+        self.cancelLearn()
+        self._offered.add(device["family"])
+        self._walk = {"id": device["id"], "family": device["family"], "name": device["name"], "steps": steps, "index": 0, "found": [], "missed": []}
+        self._walk_send(self._walk)
+        return True
+
+    @Slot()
+    def cancelWalk(self):
+        if self._walk is None:
+            return
+        self._send({"cmd": "cancel"})
+        self._stop_walk()
+        self.message.emit("Setup stopped")
+
+    @Slot()
+    def skipStep(self):
+        if self._walk is None:
+            return
+        self._send({"cmd": "cancel"})
+        self._walk_skip()
+
+    @Slot(str)
+    def declineWalk(self, family):
+        self._remember_walk(family, "declined")
+
+    def _walk_step(self):
+        if self._walk is None:
+            return {}
+        step = dict(self._walk["steps"][self._walk["index"]])
+        step.update(index=self._walk["index"] + 1, count=len(self._walk["steps"]), seconds=self._walk_seconds)
+        return step
 
     @Slot(bool, result=bool)
     def setTesting(self, on):
@@ -584,6 +790,7 @@ class ControllerScreen(AdvancedRows, QObject):
     def resume(self):
         self._suspended = False
         self.cancelLearn()
+        self._stop_walk()
         self._stop_testing()
         if self._watcher is not None:
             self._watcher.send({"cmd": "resume"})
@@ -615,6 +822,7 @@ class ControllerScreen(AdvancedRows, QObject):
         self._wanted = ""
         self._remember(device["family"])
         self.cancelLearn()
+        self._stop_walk()
         self._stop_testing()
         self._rebuild()
         self.currentChanged.emit()
@@ -645,3 +853,5 @@ class ControllerScreen(AdvancedRows, QObject):
     passive = Property(bool, lambda self: self._passive, notify=statusChanged)
     learning = Property(str, lambda self: self._learning, notify=statusChanged)
     testing = Property(bool, lambda self: self._testing, notify=testingChanged)
+    walking = Property(bool, lambda self: self._walk is not None, notify=walkChanged)
+    walkStep = Property(QVARIANT, _walk_step, notify=walkChanged)

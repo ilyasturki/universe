@@ -122,6 +122,9 @@ impl Core {
     fn reload(&self, py: Python<'_>) -> PyResult<()> {
         self.run(py, |c| c.reload_config())
     }
+    fn reload_settings(&self, py: Python<'_>) -> PyResult<()> {
+        self.run(py, |c| c.reload_settings())
+    }
     fn reload_game(&self, py: Python<'_>, id: String) -> PyResult<()> {
         self.run(py, |c| async move { c.reload_game(&id).await })
     }

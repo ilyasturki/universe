@@ -27,7 +27,7 @@ FocusScope {
     readonly property real scrimMid: 0.94
     readonly property real scrimBottom: 0.98
     readonly property Item menuAnchor: null
-    readonly property bool modal: editor.open || menu.open || dialog.open || testing || learning
+    readonly property bool modal: editor.open || menu.open || dialog.open || testing || learning || walking
 
     // The sidebar: Search first, then the sections in four groups.
     readonly property var sections: [
@@ -187,6 +187,9 @@ FocusScope {
     readonly property bool controllerOpen: sectionId === "controller" && activeFocus
     readonly property bool learning: sectionId === "controller" && controller.learning !== ""
     readonly property bool testing: sectionId === "controller" && controller.testing
+    readonly property bool walking: sectionId === "controller" && controller.walking
+    // The art fills the section while the buttons are tested or walked through.
+    readonly property bool artShown: testing || walking
     property string pendingSlot: ""
     property string pendingTrigger: ""
     property string openedRunner: ""
@@ -202,7 +205,7 @@ FocusScope {
             glyph: "Start+Select",
             label: "Finish"
         }
-    ] : learning ? [
+    ] : walking ? [] : learning ? [
         {
             glyph: "B",
             label: "Stop learning"
@@ -686,6 +689,11 @@ FocusScope {
             if (row.key === "test") {
                 if (controller.setTesting(true))
                     Sound.enter();
+            } else if (row.key === "walk") {
+                if (controller.startWalk())
+                    Sound.enter();
+                else
+                    Sound.edge();
             } else if (row.type === "enum" || row.type === "int") {
                 Sound.panel();
                 editor.edit(row, function (value) {
@@ -834,17 +842,20 @@ FocusScope {
             controller.resume();
     }
 
-    onTestingChanged: {
+    onTestingChanged: artToggled("test")
+    onWalkingChanged: artToggled("walk")
+
+    function artToggled(key) {
         if (art.item)
             art.item.clear();
         holdOut.stop();
-        if (testing) {
-            tester.forceActiveFocus();
+        if (artShown) {
+            Qt.callLater(tester.forceActiveFocus);
             return;
         }
         var bound = controller.rows;
         var i = bound.findIndex(function (r) {
-            return r.key === "test";
+            return r.key === key;
         });
         if (i >= 0)
             cards.index = i;
@@ -1058,7 +1069,7 @@ FocusScope {
             return i === page.sectionIndex("updates") && page.sources.updates.length > 0 ? page.sources.updates.length.toString() : "";
         })
         current: page.section
-        opacity: page.testing ? 0.35 : 1.0
+        opacity: page.artShown ? 0.35 : 1.0
 
         Behavior on opacity {
             Ease {
@@ -1268,7 +1279,7 @@ FocusScope {
         rows: page.content.rows
         groups: page.content.groups
         dimmed: editor.open
-        opacity: page.testing || page.sectionId === "artwork" || page.sectionId === "search" ? 0.0 : 1.0
+        opacity: page.artShown || page.sectionId === "artwork" || page.sectionId === "search" ? 0.0 : 1.0
         visible: opacity > 0.01
 
         Behavior on opacity {
@@ -1314,9 +1325,9 @@ FocusScope {
         y: cards.y
         width: page.mainWidth
         height: cards.height
-        active: page.testing || opacity > 0.01
+        active: page.artShown || opacity > 0.01
         visible: opacity > 0.01
-        opacity: page.testing ? 1.0 : 0.0
+        opacity: page.artShown ? 1.0 : 0.0
 
         Behavior on opacity {
             Ease {
@@ -1329,6 +1340,12 @@ FocusScope {
             connected: page.controller.connected
             rows: page.controller.rows
             unbound: page.controller.unboundSlots
+            learningSlot: page.walking ? page.controller.learning : ""
+            step: page.walking ? page.controller.walkStep : null
+            onStopRequested: {
+                Sound.cancel();
+                page.controller.cancelWalk();
+            }
         }
     }
 
@@ -1343,7 +1360,10 @@ FocusScope {
                 return;
             if (api.keys.isCancel(event)) {
                 Sound.cancel();
-                page.controller.setTesting(false);
+                if (page.walking)
+                    page.controller.cancelWalk();
+                else
+                    page.controller.setTesting(false);
             }
         }
         Keys.onReleased: function (event) {

@@ -578,6 +578,9 @@ class FakeCore:
     def reload(self):
         return None
 
+    def reload_settings(self):
+        return None
+
     def reload_game(self, ident):
         return None
 

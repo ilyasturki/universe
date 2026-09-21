@@ -655,13 +655,20 @@ slot with no code present is reported unbound.
 game, SDL or Proton reads the same node untouched), rescans every 2 s (hotplug, and pads
 InputPlumber hides by chmod 000 are dropped while hidden), and with `--json` speaks one object per
 line: out — `{"event":"ready"}`, `{"event":"device","id":"event30","name","family","family_name",
-"bus","slots":{"<slot>":{"code","bound"}}}`, `gone {id}`, `button {id, slot, code, pressed}`,
+"bus","vendor","product","slots":{"<slot>":{"code","bound"}},"axes":{"<role>":"ABS_Z"},"sdl":{"<slot>":"b3"},"sdl_axes":{"<role>":"a2"},"battery"}`
+(`axes` names the evdev axis behind `lx ly rx ry lt rt`, by the pad's shape — Z/RZ are triggers next
+to RX/RY, the right stick without them — or as `[controller.axes.<family>]` learned it, `-` on one
+thrown backwards; `sdl`/`sdl_axes` number the same as SDL's Linux joystick does, `~` on a backwards
+axis; `battery {percent, charging}` when the watcher reads it itself — an 8BitDo's, from byte 14 of
+its HID report, since the kernel keeps no supply for it — else null), `gone {id}`, `button {id, slot, code, pressed}`,
+`battery {id, percent, charging}` (on change),
 `unknown {id, code}` (a key no slot owns), `macro {id, slot, trigger, action, keys, command}`,
-`hud {shown, title}` (after a `mangohud` fire: `shown` null when no game runs), `learned {family, slot, code, from}`, `learn_timeout`, `waiting` / `busy` (the lock), `error
+`hud {shown, title}` (after a `mangohud` fire: `shown` null when no game runs), `learned {family, slot, code, from}` or `learned {family, axis, code}`, `learn_timeout`, `waiting` / `busy` (the lock), `error
 {message}`, and while `axes` is on, `axis {id, axis, value}` (`lx ly rx ry` as -1..1, `lt rt` as
 0..1, a hundredth's resolution, on change); in — `{"cmd":"suspend", "dock"?}` (report, do not fire; with `dock` true the presets marked docked — volume, mute, MangoHud — still do),
 `resume`, `axes {on}` (stream the sticks and triggers: the page's test mode), `reload` (config
-changed), `learn {id, slot}`, `cancel`, `rumble {id}`, `run {action, keys, command}` (fire an action as a
+changed), `learn {id, slot}` or `learn {id, axis}` (a role `lx ly rx ry lt rt`, taken from the first
+axis thrown past 40 %: `ABS_Z`, or `ABS_Z-` when it went the other way), `cancel`, `rumble {id}`, `run {action, keys, command}` (fire an action as a
 macro would — `mangohud`, `keys` with a combo, `screenshot`…: the launcher's home menu types
 through the watcher, the process that owns the key typist, and only once the game is thawed), `quit`. Stdin's end stops a `--json` watcher. A
 watcher also reloads by itself when `config.toml`'s mtime moves (checked on the 2 s scan), so a
@@ -751,6 +758,8 @@ hold_ms = 600                        # a press this long is a hold
 volume_step = 2                      # percent of the normal volume per press, 1–100 ("precise" = 2, "normal" = 6 still read)
 # [controller.buttons.xbox-elite]    # learned codes: a slot's list replaces its seeds, [] leaves it unbound
 # paddle_p1 = ["BTN_GRIPR", "BTN_TRIGGER_HAPPY5"]
+# [controller.axes.8bitdo-pro-3]     # learned axes: a role's evdev axis, `-` when the pad reads it backwards
+# rx = "ABS_Z"
 # [[controller.macros]]              # {family, button, trigger, action} (`universe controller bind`); absent: the seeded workflow, `macros = []` none at all
 ```
 

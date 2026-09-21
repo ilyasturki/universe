@@ -23,7 +23,7 @@ One context property, `api`:
 | `api.memory` | `get`/`set`/`has`/`unset`, persisted to `$XDG_STATE_HOME/universe/ui-memory.json` |
 | `api.universe` | the client: every core call, plus the signals below. `adoptScope()` and `pendingJournals()` wrap `adopt_scope` and `pending_journals`; their failures get a log line, not a toast. `recordings(id)` is the client's own: `sessions(id)` kept to the rows with a `recording` |
 | `api.pad` | `rightX`: the right stick as a value, 0 without a controller |
-| `api.power` | the batteries the kernel lists under `/sys/class/power_supply`: `sources` (`kind` `system` or `pad`, `percent`, `charging`, `inputs` — the pad's evdev nodes), `count`; polled every 10 s. Both looks draw them next to every clock (`ui/PowerBadge.qml`), the controller pages next to the pad they belong to; `--fake` reads `fixtures/power_supply` |
+| `api.power` | the batteries the kernel lists under `/sys/class/power_supply`: `sources` (`kind` `system` or `pad`, `percent`, `charging`, `inputs` — the pad's evdev nodes), `count`; polled every 10 s, plus what the controller watcher reads off a pad the kernel keeps no supply for (an 8BitDo's HID report), reported through `report(event, name, battery)` and dropped with the pad. Both looks draw them next to every clock (`ui/PowerBadge.qml`), the controller pages next to the pad they belong to; `--fake` reads `fixtures/power_supply` |
 | `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written, a game's sessions and their logs) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed` and `--size` turn it off) |
 | `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `frame`, `ground`, `detail`), `current`, `frame`, `set(id)`, `landing` / `takeLanding()`, `fontPath` |
@@ -761,18 +761,40 @@ after a short debounce while the section is on screen.
 
 `api.screens.controller` is the Controller section of the Settings tab. The host starts
 `universe controller watch --json --wait` as a child for its lifetime (`$UNIVERSE_BIN`, else
-`universe` on `PATH`) and reads its event lines: `device`, `gone`, `button`, `axis`, `unknown`,
+`universe` on `PATH`) and reads its event lines: `device`, `gone`, `button`, `axis`, `battery`, `unknown`,
 `macro`, `learned`, `learn_timeout`, `error`, `waiting`, `ready`; it writes `suspend`, `resume`,
-`axes`, `reload`, `learn` and `cancel` commands on its stdin. The screen exposes `devices`,
+`axes`, `reload`, `learn` (a `slot`, or an `axis` role `lx ly rx ry` learned from a stick thrown
+past 40 %, `ABS_X-` when thrown the other way) and `cancel` commands on its stdin. A `device` line
+names the pad (`vendor`, `product`), its `slots` (each `code` and `bound`), its `axes` (role → evdev
+axis, by the pad's shape — a pad with RX/RY reads Z/RZ as triggers, one without as its right stick —
+or as `[controller.axes.<family>]` learned it), `sdl` and `sdl_axes` (the same slots and roles as
+SDL numbers the joystick: `b3`, `h0.1`, `a5`, `~` on a backwards axis) and its `battery` when it
+reads one itself. The screen hands `sdl`/`sdl_axes` to the SDL mapper (`GamepadThread.setMapping`,
+`gamepad.mapping_fields`): SDL runs without hidapi, on evdev like the watcher, and a lettered face
+button maps to its letter — the A on the right of a Nintendo-style pad confirms — the rest by
+position. The hint glyphs follow the same rule (`PadNames.hintSlot`). The screen exposes `devices`,
 `current`, `family` (the current pad's, else the last one seen or the one `setFamily(id)` chose, kept in `api.memory` as
 `controllerFamily`, `xbox` until then: the button glyphs of both looks follow it), `families` (`{id, name}`), `connected`, `status` (`off`, `waiting`, `ready`), `passive`, `learning`,
 `testing`, the `rows`/`groups` of one card (a Controller picker row when two pads are connected,
-a "Test the buttons" row while the watcher is `ready`, then a row per button of the family — each
+a "Test the buttons" and a "Set up the buttons" row while the watcher is `ready`, then a row per button of the family — each
 with its `slot` and `family`, so the row draws the button's glyph, and its `press` and `hold`
 macros, each carrying its `label` — the extras (back buttons, Fn) first, then the standard
-buttons) and `bind`, `unbind`, `learn`, `cancelLearn`, `setTesting`,
-`suspend`, `resume`. Macros and families come from the core's `controller_state`; a write goes
+buttons) and `bind`, `unbind`, `learn`, `cancelLearn`, `setTesting`, `startWalk`, `cancelWalk`,
+`skipStep`, `declineWalk`, `suspend`, `resume`. Macros and families come from the core's `controller_state`; a write goes
 through `set_controller_macro`/`remove_controller_macro` and is followed by a `reload` to the watcher.
+
+The walk (`startWalk`, from the "Set up the buttons" row) learns the pad's buttons one after the
+other — the standard slots, the family's extras, then the four stick throws — one `learn` per step,
+each answered by the watcher's `learned` or skipped after `WALK_STEP_MS` (8 s, counted down in
+`walkStep.seconds`; `learn_timeout` skips too). `walking` is true throughout and `walkStep` is
+`{slot, axis, art, label, prompt, index, count, seconds}`; `learning` names the slot (or the stick)
+the art pulses. The mapper is muted like the live view's, so a press learns and navigates nothing;
+Escape (`cancelWalk`, also what `cancelLearn` does while walking) stops it, as does leaving the section, losing the
+pad or the watcher. A press that was another step's button earlier in the walk moves it and says so.
+At the end a message tallies what was set up and what was skipped, and `api.memory` keeps the
+family under `controllerWalks` (`done` or `declined`). A pad of a family neither walked nor given
+learned buttons in `[controller.buttons]` is offered the walk once per session through `walkOffered(family, name)`:
+both shells ask, and "Not now" is `declineWalk`.
 
 While another watcher holds the pads (a game launched from the CLI is running) the child reports
 `waiting`: the screen turns passive, lists the pads from `controller_pads` under an info row
@@ -798,12 +820,14 @@ body (an SVG path) and buttons on a 1000 × 700 sheet, one canvas draws the body
 (a component of `PadArt`) sits on every button — white on a press, a stick leaning with its axes, a trigger filling from the
 bottom with its pull (a press past the half only brightens its outline, so the gauge reads all the
 way down; dashed when the slot has no code on this connection — `PadArt` also takes
-`focusedSlot` and `learningSlot`, which the live view leaves empty). While a button is being
+`focusedSlot` and `learningSlot`, which the live view leaves empty and the walk fills; `ControllerArt`
+takes the walk's `step` and shows its prompt and countdown under the pad, with a Stop). While a button is being
 learned, its row says so in place of its chips. The caption under the pad keeps its height from
 the start, so the first press does
-not resize the pad, and spells both ways out with the pad's own glyphs. Two bodies serve the
-families: Sony's (DualSense Edge, DualSense, DualShock 4, 8BitDo Pro 3) and Xbox's (Elite, Xbox,
-Switch Pro, generic), each family adding its own extras.
+not resize the pad, and spells both ways out with the pad's own glyphs. Three bodies serve the
+families: Sony's (DualSense Edge, DualSense, DualShock 4), Xbox's (Elite, Xbox) and the generic one
+(Switch Pro, 8BitDo Pro 3 — its L4/R4 as second bumpers inboard of L1/R1, PL/PR as back paddles —
+and any family without a body of its own), each family adding its own extras.
 
 With `--fake` a `FakeWatcher` stands in: one DualSense Edge with every button bound, or the pad
 named by `UNIVERSE_FAKE_PAD` (a family id, or `none` for the empty state), with the slots listed in

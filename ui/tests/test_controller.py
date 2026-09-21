@@ -46,8 +46,11 @@ def test_rows_follow_the_watcher_and_the_macros(api, fake):
     assert rows["south"]["display"] == "—" and rows["south"]["label"] == "Cross"
     assert rows["paddle_left"]["extra"] is True and rows["paddle_left"]["bound"] is True
     assert rows["paddle_left"]["label"] == "Left back button (LB)" and rows["paddle_left"]["family"] == "dualsense-edge"
-    assert [r["key"] for r in screen.rows][:3] == ["test", "fn_left", "fn_right"], "the live view, then the extras: they are what the page is for"
+    assert [r["key"] for r in screen.rows][:4] == ["test", "walk", "fn_left", "fn_right"], (
+        "the live view, the walk, then the extras: they are what the page is for"
+    )
     assert rows["test"]["type"] == "action" and rows["test"]["action"] == "Start" and "slot" not in rows["test"]
+    assert rows["walk"]["label"] == "Set up the buttons" and "slot" not in rows["walk"]
     assert pad_rows(screen)[-1]["key"] == "dpad_right"
     group = screen.groups[0]
     assert group["title"] == "DualSense Edge" and group["meta"] == "Bluetooth · 85% · 4 extra buttons"
@@ -82,6 +85,82 @@ def test_the_watchers_reading_reaches_the_sdl_mapper(started):
     assert screen.devices[1]["axes"] == {"lx": "ABS_X", "lt": "ABS_BRAKE"}
     watcher.emit(watcher.device("event32", family="xbox"))
     assert len(mappings) == 1, "a line without SDL numbers (a fake, an old core) maps nothing"
+
+
+def test_a_pads_own_charge_reading_shows_as_its_battery(started, api):
+    screen, watcher = started
+    line = watcher.device("event31", family="8bitdo-pro-3")
+    line["battery"] = {"percent": 80, "charging": False}
+    watcher.emit(line)
+    assert api.power.forInput("event31") == {"name": "8BitDo Pro 3", "kind": "pad", "percent": 80, "charging": False, "inputs": ["event31"]}
+    screen.setCurrent("event31")
+    assert "80%" in screen.groups[0]["meta"]
+    watcher.emit({"event": "battery", "id": "event31", "percent": 79, "charging": True})
+    assert screen.devices[1]["battery"] == {"percent": 79, "charging": True}
+    assert "79%, charging" in screen.groups[0]["meta"]
+    watcher.emit({"event": "gone", "id": "event31"})
+    assert api.power.forInput("event31") is None
+
+
+def test_the_walk_learns_each_button_then_the_sticks(api, fake):
+    screen = api.screens.controller
+    offers, messages = [], []
+    screen.walkOffered.connect(lambda family, name: offers.append((family, name)))
+    screen.message.connect(messages.append)
+    watcher = FakeWatcher("8bitdo-pro-3")
+    screen.start(watcher)
+    assert offers == [("8bitdo-pro-3", "8BitDo Pro 3")], "a family never set up is offered the walk once it connects"
+    watcher.emit(watcher.device())
+    assert len(offers) == 1, "once"
+    screen.declineWalk("8bitdo-pro-3")
+    assert api.memory.get("controllerWalks") == {"8bitdo-pro-3": "declined"}
+
+    line = watcher.device()
+    line["axes"] = {"lx": "ABS_X", "ly": "ABS_Y", "rx": "ABS_Z", "ry": "ABS_RZ", "lt": "ABS_BRAKE", "rt": "ABS_GAS"}
+    watcher.emit(line)
+    assert screen.startWalk() is True
+    assert screen.walking and screen.learning == "south"
+    step = screen.walkStep
+    assert (step["slot"], step["label"], step["prompt"], step["index"], step["seconds"]) == ("south", "B", "Press B", 1, 8)
+    assert step["count"] == 17 + 5 + 4, "the standard slots, the Pro 3's extras, the four throws"
+    assert watcher.commands[-1] == {"cmd": "learn", "id": "event30", "slot": "south"}
+    learned = []
+    screen.learned.connect(lambda family, slot, code: learned.append(slot))
+    watcher.emit({"event": "learned", "family": "8bitdo-pro-3", "slot": "south", "code": "BTN_EAST", "from": None})
+    assert screen.walkStep["slot"] == "east" and watcher.commands[-1]["slot"] == "east" and learned == [], "a step answered moves on quietly"
+    watcher.emit({"event": "learned", "family": "8bitdo-pro-3", "slot": "north", "code": "BTN_NORTH", "from": None})
+    assert screen.walkStep["slot"] == "east", "a stale answer is not this step's"
+    watcher.emit({"event": "learned", "family": "8bitdo-pro-3", "slot": "east", "code": "BTN_EAST", "from": "south"})
+    assert messages[-1] == "That button was B: it is A now" and screen.walkStep["slot"] == "west"
+    screen.skipStep()
+    assert watcher.commands[-2] == {"cmd": "cancel"} and screen.walkStep["slot"] == "north"
+    for _ in range(5):
+        screen._walk_tick()
+    assert screen.walkStep["seconds"] == 3 and screen.walkStep["slot"] == "north"
+    for _ in range(3):
+        screen._walk_tick()
+    assert screen.walkStep["slot"] == "lb", "eight seconds unanswered skip the step"
+    assert screen.walkStep["prompt"] == "Press L1" and screen.walkStep["index"] == 5
+    watcher.emit({"event": "learn_timeout"})
+    assert screen.walkStep["slot"] == "rb" and messages[-1] != "No button pressed: learning stopped"
+    while screen.walkStep["slot"]:
+        watcher.emit({"event": "learned", "family": "8bitdo-pro-3", "slot": screen.walkStep["slot"], "code": "BTN_X", "from": None})
+    assert (screen.walkStep["axis"], screen.walkStep["prompt"], screen.learning) == ("lx", "Push the left stick right", "ls")
+    assert watcher.commands[-1] == {"cmd": "learn", "id": "event30", "axis": "lx"}
+    watcher.emit({"event": "learned", "family": "8bitdo-pro-3", "axis": "lx", "code": "ABS_X-"})
+    assert screen.devices[0]["axes"]["lx"] == "ABS_X-" and screen.walkStep["axis"] == "ly"
+    for axis in ("ly", "rx", "ry"):
+        watcher.emit({"event": "learned", "family": "8bitdo-pro-3", "axis": axis, "code": "ABS_Y"})
+    assert not screen.walking and screen.learning == "" and screen.walkStep == {}
+    assert messages[-1] == "8BitDo Pro 3: 22 set up, 4 skipped: B, Y, X, L1"
+    assert api.memory.get("controllerWalks") == {"8bitdo-pro-3": "done"}
+
+    assert screen.startWalk() is True
+    screen.cancelWalk()
+    assert not screen.walking and watcher.commands[-1] == {"cmd": "cancel"} and messages[-1] == "Setup stopped"
+    assert screen.startWalk() is True
+    watcher.emit({"event": "gone", "id": "event30"})
+    assert not screen.walking and messages[-1] == "Controller gone: setup stopped"
 
 
 def test_bind_unbind_and_learn(started, fake):

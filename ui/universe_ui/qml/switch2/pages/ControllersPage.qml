@@ -14,7 +14,9 @@ FocusScope {
     readonly property var controller: api.screens.controller
 
     readonly property bool testing: controller.testing
+    readonly property bool walking: controller.walking
     readonly property bool learning: controller.learning !== ""
+    readonly property var step: controller.walkStep
     property var pressed: ({})
     property var axes: ({})
     // Newest first: { slot, label, dt }.
@@ -34,7 +36,7 @@ FocusScope {
             glyph: "Select",
             label: "Finish"
         }
-    ] : learning ? [
+    ] : walking ? [] : learning ? [
         {
             glyph: "B",
             label: "Stop learning"
@@ -52,15 +54,22 @@ FocusScope {
 
     signal closeRequested
 
+    function startWalk() {
+        if (controller.startWalk())
+            Sound.play("ok");
+        else
+            Sound.play("edge");
+    }
+
     focus: true
 
     readonly property var entries: {
         var out = [], source = controller.rows, buttons = [];
         for (var i = 0; i < source.length; i++) {
             var r = source[i];
-            if (r.key === "test")
+            if (r.key === "test" || r.key === "walk")
                 out.push({
-                    key: "test",
+                    key: r.key,
                     label: r.label,
                     type: "action",
                     display: "",
@@ -145,6 +154,11 @@ FocusScope {
     }
 
     function landNow() {
+        if (args && args.walk) {
+            args = {};
+            Qt.callLater(startWalk);
+            return;
+        }
         var key = args && args.key ? args.key : "";
         if (key === "")
             return;
@@ -217,6 +231,8 @@ FocusScope {
                 Sound.play("ok");
             else
                 Sound.play("edge");
+        } else if (row.key === "walk") {
+            startWalk();
         } else if (row.key === "device") {
             Sound.play("ok");
             var choices = row.choices || [];
@@ -598,9 +614,25 @@ FocusScope {
 
         Label {
             anchors.horizontalCenter: parent.horizontalCenter
-            visible: page.controller.connected && page.learning
+            visible: page.controller.connected && page.learning && !page.walking
             text: "Press the button on the controller"
             color: Theme.accent
+            font.pixelSize: Theme.dp(Theme.fontSmall)
+        }
+
+        Label {
+            anchors.horizontalCenter: parent.horizontalCenter
+            visible: page.walking
+            text: page.walking ? page.step.prompt : ""
+            color: Theme.accent
+            font.pixelSize: Theme.dp(Theme.fontBody)
+        }
+
+        Label {
+            anchors.horizontalCenter: parent.horizontalCenter
+            visible: page.walking
+            text: page.walking ? "Step " + page.step.index + " of " + page.step.count + " · skipped in " + page.step.seconds + " s · Esc stops" : ""
+            color: Theme.textSecondary
             font.pixelSize: Theme.dp(Theme.fontSmall)
         }
 
@@ -648,7 +680,11 @@ FocusScope {
         Keys.onPressed: function (event) {
             if (event.isAutoRepeat)
                 return;
-            if (api.keys.isCancel(event) && page.learning) {
+            if (api.keys.isCancel(event) && page.walking) {
+                event.accepted = true;
+                Sound.play("back");
+                page.controller.cancelWalk();
+            } else if (api.keys.isCancel(event) && page.learning) {
                 event.accepted = true;
                 Sound.play("back");
                 page.controller.cancelLearn();
