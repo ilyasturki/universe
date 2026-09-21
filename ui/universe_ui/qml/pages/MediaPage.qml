@@ -482,16 +482,18 @@ FocusScope {
                 }
             }
 
-            ShotCard {
+            MediaCard {
                 id: cardItem
                 anchors.fill: parent
                 anchors.margins: page.gap / 2
                 // `version` is read so the card repaints when its thumbnail lands.
                 source: (api.screens.thumbs.version, modelData.image || api.screens.thumbs.url(modelData.thumb))
                 kind: modelData.kind
+                heading: modelData.kind === "journal" ? modelData.title : ""
+                excerpt: modelData.excerpt
+                durationText: modelData.durationText
                 caption: modelData.gameTitle
-                subcaption: modelData.dateText + (modelData.kind !== "shot" && modelData.title ? "  ·  " + modelData.title : "")
-                journaled: modelData.hasJournal
+                subcaption: modelData.dateText
                 focused: parent.current && grid.activeFocus && !page.lightbox
                 dimmed: !parent.current && grid.activeFocus && !page.lightbox
             }

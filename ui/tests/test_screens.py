@@ -679,8 +679,10 @@ def test_media_timeline_merges_the_three_kinds(api):
     assert shot["url"].startswith("file://") and shot["name"].endswith(".png") and shot["gameTitle"]
     entry = next(r for r in media.rows if r["kind"] == "journal")
     assert entry["title"] and entry["hasJournal"] and entry["session"]
+    assert entry["excerpt"].startswith("Zachariah goes down") and entry["durationText"] == "1 h 10", "a journal card shows its words and the session's length"
     rec = next(r for r in media.rows if r["kind"] == "recording")
     assert rec["title"] and rec["session"] and rec["path"] and rec["thumb"] == ""
+    assert rec["durationText"] == rec["title"] and shot["durationText"] == "" and shot["excerpt"] == ""
 
 
 def test_thumbnails_are_announced_as_they_land(api, tmp_path):

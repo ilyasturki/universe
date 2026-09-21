@@ -7,33 +7,12 @@ Item {
     property string source: ""
     property string caption: ""
     property string subcaption: ""
-    // "shot" | "recording" | "journal": the glyph in the corner; "" for none
-    property string kind: ""
     property bool journaled: false
     property bool focused: false
     property bool dimmed: false
 
     readonly property real captionHeight: caption === "" ? 0 : Theme.dp(subcaption === "" ? 34 : 58)
     readonly property real radius: Theme.dp(14)
-    readonly property string glyph: kind === "recording" ? "film" : kind === "journal" ? "book" : "camera"
-
-    component Badge: Rectangle {
-        property alias glyph: badgeGlyph.kind
-        anchors.top: parent.top
-        anchors.margins: Theme.dp(10)
-        width: Theme.dp(34)
-        height: width
-        radius: width / 2
-        color: Qt.rgba(0, 0, 0, 0.55)
-
-        MenuGlyph {
-            id: badgeGlyph
-            anchors.centerIn: parent
-            width: Theme.dp(20)
-            height: Theme.dp(20)
-            tint: "#f2f3f5"
-        }
-    }
 
     scale: focused ? 1.0 : 0.96
     opacity: dimmed ? Theme.idleOpacity : 1.0
@@ -71,13 +50,13 @@ Item {
 
         Rectangle {
             anchors.fill: parent
-            color: Theme.surface
+            color: root.source === "" ? Theme.surface : Theme.cardBase
         }
 
         Image {
             anchors.fill: parent
             source: root.source
-            fillMode: Image.PreserveAspectCrop
+            fillMode: Image.PreserveAspectFit
             asynchronous: true
             sourceSize.width: 960
         }
@@ -86,21 +65,28 @@ Item {
             anchors.centerIn: parent
             width: Theme.dp(44)
             height: Theme.dp(44)
-            visible: root.source === "" && root.kind !== ""
-            kind: root.glyph
+            visible: root.source === ""
+            kind: "camera"
             tint: Theme.textFaint
         }
 
-        Badge {
-            anchors.left: parent.left
-            visible: root.kind !== "" && root.source !== ""
-            glyph: root.glyph
-        }
-
-        Badge {
+        Rectangle {
+            anchors.top: parent.top
             anchors.right: parent.right
-            visible: root.journaled && root.kind !== "journal"
-            glyph: "book"
+            anchors.margins: Theme.dp(10)
+            width: Theme.dp(34)
+            height: width
+            radius: width / 2
+            color: Qt.rgba(0, 0, 0, 0.55)
+            visible: root.journaled
+
+            MenuGlyph {
+                anchors.centerIn: parent
+                width: Theme.dp(20)
+                height: Theme.dp(20)
+                kind: "book"
+                tint: "#f2f3f5"
+            }
         }
     }
 

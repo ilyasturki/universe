@@ -541,11 +541,12 @@ picture once the file lands (`frontends.md`, `api.screens.thumbs`). A 4K png dec
 150 ms; a grid that read the originals would spend that per cell.
 
 `MediaRow` = `{"kind", "game", "title", "session", "when", "date", "path", "thumb", "thumb_ready",
-"has_journal", "heading", "duration_s"}`: `kind` is `shot`, `recording` or `journal`; `when` sorts
-the list (the shot's time, the recording's end, the entry's writing) and `date` is what a row shows
-(an entry's is when it was played); `path` the shot, the recording or the entry's first picture;
+"has_journal", "heading", "excerpt", "duration_s"}`: `kind` is `shot`, `recording` or `journal`; `when`
+sorts the list (the shot's time, the recording's end, the entry's writing) and `date` is what a row
+shows (an entry's is when it was played); `path` the shot, the recording or the entry's first picture;
 `thumb` as a `Shot`'s, empty for a recording (its frames are the frontend's); `has_journal` whether an
-entry, written or on its way, covers the session; `heading` the entry's title.
+entry, written or on its way, covers the session; `heading` the entry's title and `excerpt` its first
+prose paragraph as plain text (emphasis dropped, links reduced to their text), for a card.
 
 ## Journal
 

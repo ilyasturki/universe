@@ -28,6 +28,8 @@ pub struct MediaRow {
     pub has_journal: bool,
     /// The entry's title
     pub heading: String,
+    /// The entry's first prose paragraph as plain text, for a card; empty for a shot or a recording
+    pub excerpt: String,
     /// The recording's or the entry's session length
     pub duration_s: u64,
 }
@@ -49,6 +51,7 @@ pub fn rows(r: &Resolved, entries: &[Entry]) -> Vec<MediaRow> {
             thumb: String::new(),
             thumb_ready: false,
             heading: String::new(),
+            excerpt: String::new(),
             duration_s: 0,
         });
     }
@@ -66,6 +69,7 @@ pub fn rows(r: &Resolved, entries: &[Entry]) -> Vec<MediaRow> {
             thumb_ready: false,
             has_journal: journaled.contains(s.session.as_str()),
             heading: String::new(),
+            excerpt: String::new(),
             duration_s: s.duration_s,
         });
     }
@@ -87,10 +91,45 @@ pub fn rows(r: &Resolved, entries: &[Entry]) -> Vec<MediaRow> {
             thumb_ready: false,
             has_journal: true,
             heading: if e.title.is_empty() { "Untitled".into() } else { e.title.clone() },
+            excerpt: excerpt(&e.paragraphs),
             duration_s: e.duration_s.max(0) as u64,
         });
     }
     out
+}
+
+/// The first paragraph that is prose (no list item, picture or heading), its emphasis dropped and its links reduced to their text.
+fn excerpt(paragraphs: &[String]) -> String {
+    let Some(mut rest) = paragraphs.iter().map(|p| p.trim()).find(|p| !p.is_empty() && !is_block(p)) else { return String::new() };
+    let mut out = String::with_capacity(rest.len());
+    while let Some(i) = rest.find('[') {
+        out.push_str(&rest[..i]);
+        let link = rest[i + 1..].split_once("](").and_then(|(text, tail)| tail.split_once(')').map(|(_, after)| (text, after)));
+        match link {
+            Some((text, after)) => {
+                out.push_str(text);
+                rest = after;
+            }
+            None => {
+                out.push('[');
+                rest = &rest[i + 1..];
+            }
+        }
+    }
+    out.push_str(rest);
+    out.replace(['*', '`'], "").split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+/// A list item (`- `, `* `, `+ `, `1. `, `1) `), a picture or a heading: markdown that is not prose.
+fn is_block(p: &str) -> bool {
+    if p.starts_with("![") || p.starts_with('#') {
+        return true;
+    }
+    if let Some(rest) = p.strip_prefix(['-', '*', '+']) {
+        return rest.starts_with(' ');
+    }
+    let digits = p.trim_start_matches(|c: char| c.is_ascii_digit());
+    digits.len() < p.len() && (digits.starts_with(". ") || digits.starts_with(") "))
 }
 
 #[cfg(test)]
@@ -135,6 +174,7 @@ mod tests {
                 started_at: "2025-01-01T10:00:00+00:00".into(),
                 written_at: "2025-01-01T11:30:00+00:00".into(),
                 duration_s: 3600,
+                paragraphs: vec!["- **Side quest:** none.".into(), "Down the *sewers*, three heals lost.".into()],
                 ..Default::default()
             },
             Entry { session: "20250102-100000".into(), state: "pending".into(), ..Default::default() },
@@ -147,5 +187,23 @@ mod tests {
             (rows[1].heading.as_str(), rows[1].when.as_str(), rows[1].date.as_str()),
             ("A night out", "2025-01-01T11:30:00+00:00", "2025-01-01T10:00:00+00:00")
         );
+        assert_eq!(rows[1].excerpt, "Down the sewers, three heals lost.");
+    }
+
+    #[test]
+    fn the_excerpt_is_the_first_prose_paragraph_as_plain_text() {
+        let paragraphs = [
+            "- **Main quest:** Cleared the gate.",
+            "1. Then the town.",
+            "![](shot.png)",
+            "## Later",
+            "",
+            "Met *Amelia* at the [market](file:///m).  Two `heals`\nleft.",
+        ]
+        .map(String::from);
+        assert_eq!(excerpt(&paragraphs), "Met Amelia at the market. Two heals left.");
+        assert_eq!(excerpt(&["*Emphasis* opens this one.".to_string()]), "Emphasis opens this one.", "emphasis is not a list item");
+        assert_eq!(excerpt(&["[broken".to_string()]), "[broken");
+        assert_eq!(excerpt(&[]), "");
     }
 }

@@ -511,11 +511,15 @@ the store's promotional shots only (`assets.screenshotList`).
 ## The Media tab
 
 `pages/MediaPage.qml`, the fourth tab, is `api.screens.media` on one four-wide grid of
-`ui/ShotCard.qml` (a 16:9 picture with the kind's glyph in a corner, a book when a journal entry
-covers it, the game and the date below): screenshots, recordings and journal entries of every
-game, newest first. The pictures are the core's thumbnails, never the 4K originals: a card shows
-its kind's glyph until its thumbnail lands, which the first open after a session fills in over a
-few seconds and every open after that has at once. Two chips above it, reached with ▲ from the top row, narrow the list — the
+`ui/MediaCard.qml`, a 16:9 cell shaped by its kind so the three read apart at a glance: a
+screenshot is the picture alone, a recording its frame under a play disc with the length in a
+pill, a journal entry its words (a JOURNAL caps label, the heading, the entry's `excerpt`, the
+session's length) with no picture; the game and the date sit below every card. Screenshots,
+recordings and journal entries of every game, newest first. The pictures are the core's
+thumbnails, never the 4K originals, fitted whole (a capture off 16:9 gets bars, never a cut, as in
+every other screenshot frame): a shot's card shows a camera until its thumbnail lands, which the
+first open after a session fills in over a few seconds and every open after that has at once.
+Two chips above it, reached with ▲ from the top row, narrow the list — the
 kind (All, Screenshots, Recordings, Journal; also cycled by `LT RT`, kept in `ui-memory.json`
 as `mediaKind`) and the game (every game with something on the list). A opens the row: a shot in
 the `Lightbox` (◀ ▶ step between the shots on the list), a recording on the game's recordings

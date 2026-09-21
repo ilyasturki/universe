@@ -426,6 +426,8 @@ def _media_row(r):
         "image": "",
         "hasJournal": bool(r.get("has_journal")),
         "title": _duration(duration) if kind == "recording" else str(r.get("heading") or "") if kind == "journal" else "",
+        "excerpt": str(r.get("excerpt") or "") if kind == "journal" else "",
+        "durationText": _duration(duration) if kind != "shot" and duration else "",
     }
 
 

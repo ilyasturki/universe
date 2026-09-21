@@ -210,6 +210,15 @@ def _epoch(value):
         return 0
 
 
+# The core's: the first prose paragraph, emphasis dropped.
+_BLOCK = re.compile(r"^(?:[-*+]\s|\d+[.)]\s|!\[|#)")
+
+
+def _excerpt(paragraphs):
+    prose = next((p.strip() for p in paragraphs if p.strip() and not _BLOCK.match(p.strip())), "")
+    return " ".join(prose.replace("*", "").replace("`", "").split())
+
+
 def _place(src, dest):
     os.makedirs(os.path.dirname(dest), exist_ok=True)
     if os.path.exists(dest):
@@ -357,6 +366,7 @@ class FakeCore:
                 "thumb_ready": True,
                 "has_journal": bool(shot["session"]) and (shot["game"], shot["session"]) in journaled,
                 "heading": "",
+                "excerpt": "",
                 "duration_s": 0,
             }
             for shot in self.screenshots(ident)
@@ -378,6 +388,7 @@ class FakeCore:
                     "thumb_ready": False,
                     "has_journal": line.get("journal") is not None,
                     "heading": "",
+                    "excerpt": "",
                     "duration_s": line.get("duration_s") or 0,
                 }
             )
@@ -400,6 +411,7 @@ class FakeCore:
                         "thumb_ready": bool(images),
                         "has_journal": True,
                         "heading": e.get("title") or "Untitled",
+                        "excerpt": _excerpt(e.get("paragraphs") or []),
                         "duration_s": e.get("duration_s") or 0,
                     }
                 )

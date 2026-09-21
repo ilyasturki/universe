@@ -16,7 +16,8 @@ Item {
     property real topPadding: Theme.dp(40)
 
     readonly property real cellWidth: (width - sideMargin * 2 + gap) / columns
-    readonly property real cellHeight: (cellWidth - gap) * 9 / 16 + gap
+    // The card's 16:9 picture plus its date line: a cell short of the caption would crop the picture by it.
+    readonly property real cellHeight: (cellWidth - gap) * 9 / 16 + Theme.dp(34) + gap
     readonly property real sectionHeight: Theme.dp(40)
 
     readonly property var split: {

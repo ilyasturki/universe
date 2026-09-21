@@ -94,7 +94,7 @@ Column {
                     anchors.fill: parent
                     source: modelData
                     sourceSize.width: 720
-                    fillMode: Image.PreserveAspectCrop
+                    fillMode: Image.PreserveAspectFit
                     asynchronous: true
                 }
             }

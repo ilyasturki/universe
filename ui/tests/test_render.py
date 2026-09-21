@@ -1,4 +1,4 @@
-from PySide6.QtCore import Q_ARG, QMetaObject, QObject, QUrl
+from PySide6.QtCore import Q_ARG, Q_RETURN_ARG, QMetaObject, QObject, Qt, QUrl
 from PySide6.QtGui import QColor
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuick import QQuickWindow  # noqa: F401  (rootObjects() down-cast, for grabWindow)
@@ -146,6 +146,10 @@ def test_the_screenshots_page_puts_the_running_sessions_shots_first(api, fake, m
     assert page is not None, "the screenshots page is up"
     earlier = page.property("rows").toVariant()
     assert earlier and page.property("since") == "" and page.property("mine") == 0, "no session: one run, no headings"
+    grid = next(c for c in page.findChildren(QObject) if c.property("cellHeight") is not None)
+    card = QMetaObject.invokeMethod(grid, "currentCard", Qt.DirectConnection, Q_RETURN_ARG("QVariant"))
+    picture = card.property("height") - card.property("captionHeight")
+    assert abs(picture - card.property("width") * 9 / 16) < 1, "the cell makes room for the date line: the picture stays 16:9, whole"
     fake.launch("the-technomancer", "")
     wait_for(fake.sessionShown, 3000)
     pump(300)
