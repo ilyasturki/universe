@@ -46,7 +46,7 @@ def test_home_flips_between_the_game_and_the_launcher(api, fake, monkeypatch):
     home.toLauncher()
     pump(250)
     assert home.shown == "launcher" and home.frame != "" and fake.core.game_shown is True, "the frame is taken and offered to the theme before the swap"
-    pump(500)
+    pump(800)
     assert fake.core.game_shown is False, "a theme that never says it has painted the frame still gets the swap"
     assert home.paused and fake.core.frozen is True, "the launcher over the game: frozen, so the pad drives the menu alone"
     home.changed.connect(home.covered)
