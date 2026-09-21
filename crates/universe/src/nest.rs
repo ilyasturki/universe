@@ -20,7 +20,7 @@ pub struct Focusable {
 }
 
 pub fn parse_focusable(cards: &[u32]) -> Vec<Focusable> {
-    cards.chunks_exact(3).map(|c| Focusable { window: c[0], app_id: c[1], pid: c[2] }).collect()
+    cards.as_chunks::<3>().0.iter().map(|&[window, app_id, pid]| Focusable { window, app_id, pid }).collect()
 }
 
 pub fn inside() -> bool {

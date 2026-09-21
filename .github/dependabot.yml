@@ -4,10 +4,12 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    assignees: [ilyasturki]
   - package-ecosystem: cargo
     directory: /
     schedule:
       interval: monthly
+    assignees: [ilyasturki]
     groups:
       cargo:
         patterns: ["*"]
