@@ -12,13 +12,16 @@ Item {
     property bool focused: false
     property bool active: false
 
-    signal hovered
+    signal picked
 
     implicitHeight: Theme.dp(45)
     implicitWidth: body.width + Theme.dp(48)
 
     Pointer {
-        onHovered: root.hovered()
+        current: root.focused
+        direct: true
+        radius: height / 2
+        onPicked: root.picked()
     }
 
     Rectangle {

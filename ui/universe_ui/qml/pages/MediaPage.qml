@@ -374,7 +374,7 @@ FocusScope {
                     label: page.kinds[page.kindIndex]
                     trailing: page.rows.length.toString()
                     focused: chipBar.activeFocus && chipBar.index === 0
-                    onHovered: chipBar.pointTo(0)
+                    onPicked: chipBar.pointTo(0)
                 }
 
                 Chip {
@@ -385,7 +385,7 @@ FocusScope {
                             title: ""
                         }).title
                     focused: chipBar.activeFocus && chipBar.index === 1
-                    onHovered: chipBar.pointTo(1)
+                    onPicked: chipBar.pointTo(1)
                 }
             }
 
@@ -444,6 +444,8 @@ FocusScope {
     GridView {
         id: grid
 
+        Wheel {}
+
         anchors.top: header.bottom
         anchors.topMargin: Theme.dp(34)
         anchors.bottom: parent.bottom
@@ -472,7 +474,9 @@ FocusScope {
             readonly property Item card: cardItem
 
             Pointer {
-                onHovered: {
+                current: parent.current && grid.activeFocus
+                radius: Theme.dp(12)
+                onPicked: {
                     page.index = index;
                     grid.forceActiveFocus();
                 }

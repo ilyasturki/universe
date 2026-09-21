@@ -140,7 +140,7 @@ FocusScope {
                     label: dialog.noLabel
                     focused: dialog.index === 0
                     dimmed: dialog.index !== 0
-                    onHovered: dialog.index = 0
+                    onPicked: dialog.index = 0
                 }
 
                 PillButton {
@@ -148,7 +148,7 @@ FocusScope {
                     label: dialog.yesLabel
                     focused: dialog.index === 1
                     dimmed: dialog.index !== 1
-                    onHovered: dialog.index = 1
+                    onPicked: dialog.index = 1
                 }
             }
         }

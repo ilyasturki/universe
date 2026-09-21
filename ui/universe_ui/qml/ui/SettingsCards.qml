@@ -314,7 +314,9 @@ FocusScope {
 
             Pointer {
                 enabled: card.hasControl
-                onHovered: cards.pointTo(card.group.control)
+                direct: true
+                radius: Theme.dp(14)
+                onPicked: cards.pointTo(card.group.control)
             }
 
             Image {
@@ -432,7 +434,9 @@ FocusScope {
                         separator: index > 0 && !parent.divided && !focused && !parent.prevFocused
 
                         Pointer {
-                            onHovered: cards.pointTo(modelData)
+                            direct: true
+                            radius: Theme.dp(14)
+                            onPicked: cards.pointTo(modelData)
                         }
                     }
                 }
@@ -503,6 +507,10 @@ FocusScope {
                 duration: Theme.durView
                 easing.type: Easing.OutQuint
             }
+        }
+
+        Wheel {
+            smooth: false
         }
 
         Repeater {

@@ -241,7 +241,7 @@ FocusScope {
                     label: page.collectionLabel
                     trailing: sorted ? sorted.count.toString() : ""
                     focused: chipBar.activeFocus && chipBar.index === 0
-                    onHovered: chipBar.pointTo(0)
+                    onPicked: chipBar.pointTo(0)
                 }
 
                 Chip {
@@ -249,7 +249,7 @@ FocusScope {
                     label: page.sortNames[page.sortMode]
                     showSortIcon: true
                     focused: chipBar.activeFocus && chipBar.index === 1
-                    onHovered: chipBar.pointTo(1)
+                    onPicked: chipBar.pointTo(1)
                 }
             }
 

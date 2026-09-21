@@ -241,6 +241,10 @@ FocusScope {
             }
         }
 
+        Wheel {
+            slide: page.scrollTo
+        }
+
         Item {
             id: content
 
@@ -330,7 +334,7 @@ FocusScope {
                         label: page.game && page.game.playTime > 0 ? "Continue" : "Play"
                         focused: actions.active && page.action === "play"
                         dimmed: actions.active && page.action !== "play"
-                        onHovered: page.pointToAction("play")
+                        onPicked: page.pointToAction("play")
                     }
 
                     Rectangle {
@@ -376,7 +380,9 @@ FocusScope {
                         }
 
                         Pointer {
-                            onHovered: page.pointToAction("favourite")
+                            direct: true
+                            radius: heart.radius
+                            onPicked: page.pointToAction("favourite")
                         }
                     }
 
@@ -387,7 +393,7 @@ FocusScope {
                         ghost: true
                         focused: actions.active && page.action === "shots"
                         dimmed: actions.active && page.action !== "shots"
-                        onHovered: page.pointToAction("shots")
+                        onPicked: page.pointToAction("shots")
                     }
 
                     PillButton {
@@ -397,7 +403,7 @@ FocusScope {
                         ghost: true
                         focused: actions.active && page.action === "recordings"
                         dimmed: actions.active && page.action !== "recordings"
-                        onHovered: page.pointToAction("recordings")
+                        onPicked: page.pointToAction("recordings")
                     }
 
                     PillButton {
@@ -407,7 +413,7 @@ FocusScope {
                         ghost: true
                         focused: actions.active && page.action === "journal"
                         dimmed: actions.active && page.action !== "journal"
-                        onHovered: page.pointToAction("journal")
+                        onPicked: page.pointToAction("journal")
                     }
 
                     PillButton {
@@ -417,7 +423,7 @@ FocusScope {
                         ghost: true
                         focused: actions.active && page.action === "sessions"
                         dimmed: actions.active && page.action !== "sessions"
-                        onHovered: page.pointToAction("sessions")
+                        onPicked: page.pointToAction("sessions")
                     }
                 }
             }
@@ -448,7 +454,8 @@ FocusScope {
 
                     Pointer {
                         accept: false
-                        onHovered: page.section = 1
+                        wash: 0
+                        onPicked: page.section = 1
                     }
 
                     Column {

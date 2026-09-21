@@ -1,54 +1,70 @@
 import QtQuick
 import "../core"
+import "../sound"
 
-// The mouse over its parent. `hovered` fires once per entry under a moving mouse — a row sliding under a still cursor is not one —
-// and a left click holds A as long as the button is, so a long click opens the game menu as a held A does.
+// The mouse over its parent. Hovering only brightens it; a left click picks it — `picked` moves the ring there, with the pad's
+// tick — and a click on the item that already holds the ring (`current`), or on a `direct` one such as a button, holds A as
+// long as the button is, so a long click opens the game menu as a held A does.
 Item {
     id: root
 
     property bool accept: true
+    property bool current: false
+    property bool direct: false
+    property real radius: 0
+    property real wash: 0.07
 
-    signal hovered
+    readonly property bool hovering: enabled && hover.hovered && api.keys.mode === "mouse"
+
+    signal picked
 
     anchors.fill: parent
+    z: 1
 
-    property bool landed: false
+    Rectangle {
+        anchors.fill: parent
+        radius: root.radius
+        color: "white"
+        opacity: root.hovering ? root.wash : 0
 
-    function land() {
-        if (!enabled || !hover.hovered) {
-            landed = false;
-            return;
+        Behavior on opacity {
+            Ease {
+                duration: Theme.durQuick
+            }
         }
-        if (landed || api.keys.mode !== "mouse")
-            return;
-        landed = true;
-        Theme.pointed(parent);
-        hovered();
     }
 
     HoverHandler {
         id: hover
         enabled: root.enabled
-        onHoveredChanged: root.land()
-    }
-
-    Connections {
-        target: api.keys
-        function onMotionChanged() {
-            root.land();
-        }
     }
 
     TapHandler {
+        id: tap
+
+        property bool holding: false
+
         enabled: root.enabled
         acceptedButtons: Qt.LeftButton
         gesturePolicy: TapHandler.ReleaseWithinBounds
         onPressedChanged: {
-            if (pressed)
-                root.land();
-            if (!root.accept)
-                return;
-            pressed ? api.keys.hold("Accept") : api.keys.release("Accept");
+            if (pressed) {
+                // Read before the pick: the binding flips as soon as the ring moves.
+                var held = root.current;
+                Theme.pointed(root.parent);
+                if (!held) {
+                    if (!root.direct)
+                        Sound.tick();
+                    root.picked();
+                }
+                if (root.accept && (held || root.direct)) {
+                    holding = true;
+                    api.keys.hold("Accept");
+                }
+            } else if (holding) {
+                holding = false;
+                api.keys.release("Accept");
+            }
         }
     }
 }

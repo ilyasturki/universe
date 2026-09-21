@@ -8,7 +8,7 @@ Column {
     property bool focused: false
     property bool dimmed: false
 
-    signal hovered
+    signal picked
 
     readonly property var frames: recording && api.screens.recordings.frameMap[recording.session] || null
     readonly property real shotWidth: Theme.dp(336)
@@ -34,10 +34,6 @@ Column {
             }
         }
 
-        Pointer {
-            onHovered: card.hovered()
-        }
-
         RoundedMask {
             id: thumb
 
@@ -45,6 +41,12 @@ Column {
             height: card.shotHeight
             radius: Theme.dp(10)
             scale: card.focused ? 1.03 : 1.0
+
+            Pointer {
+                current: card.focused
+                radius: thumb.radius
+                onPicked: card.picked()
+            }
 
             Behavior on scale {
                 Ease {

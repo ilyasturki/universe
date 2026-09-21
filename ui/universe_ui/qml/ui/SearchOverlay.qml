@@ -176,15 +176,16 @@ FocusScope {
             font.pixelSize: Theme.dp(26)
         }
 
-        Wheel {
-            horizontal: true
-        }
-
         ListView {
             id: results
 
             anchors.fill: parent
             visible: matches.count > 0
+
+            Wheel {
+                horizontal: true
+                step: overlay.cardWidth + results.spacing
+            }
 
             model: matches
             orientation: ListView.Horizontal
@@ -209,10 +210,6 @@ FocusScope {
                 width: overlay.cardWidth
                 height: results.height
 
-                Pointer {
-                    onHovered: overlay.pointToResult(index)
-                }
-
                 Column {
                     anchors.horizontalCenter: parent.horizontalCenter
                     anchors.verticalCenter: parent.verticalCenter
@@ -228,6 +225,12 @@ FocusScope {
                         idleScale: 0.94
                         cornerRadius: Theme.dp(14)
                         ringOpacity: overlay.typing ? Theme.ringIdle : 1.0
+
+                        Pointer {
+                            current: card.selected
+                            radius: art.cornerRadius
+                            onPicked: overlay.pointToResult(index)
+                        }
                     }
 
                     Text {

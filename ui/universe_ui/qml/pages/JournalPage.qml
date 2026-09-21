@@ -395,6 +395,10 @@ FocusScope {
     ListView {
         id: list
 
+        Wheel {
+            step: Theme.dp(96) + list.spacing
+        }
+
         anchors.top: header.bottom
         anchors.topMargin: Theme.dp(32)
         anchors.bottom: hintBar.top
@@ -435,7 +439,9 @@ FocusScope {
             gap: Theme.dp(16)
 
             Pointer {
-                onHovered: {
+                current: lit
+                radius: Theme.dp(14)
+                onPicked: {
                     page.mode = 0;
                     page.index = index;
                 }
@@ -474,11 +480,16 @@ FocusScope {
             }
         }
 
-        // The mouse over the article reads it: the wheel scrolls the text. Its cards below take the mode of their own.
+        // A click on the article reads it; the wheel scrolls the text. Its cards below take the mode of their own.
         Pointer {
             accept: false
-            onHovered: if (page.current && !page.currentPending && page.mode !== 1)
+            wash: 0
+            onPicked: if (page.current && !page.currentPending && page.mode !== 1)
                 page.mode = 1
+        }
+
+        Wheel {
+            smooth: false
         }
 
         Column {
@@ -565,7 +576,7 @@ FocusScope {
                 recording: page.recording
                 focused: page.mode === 3
                 dimmed: page.mode === 2 && !page.lightbox
-                onHovered: page.mode = 3
+                onPicked: page.mode = 3
             }
 
             ScreenshotStrip {

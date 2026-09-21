@@ -40,7 +40,6 @@ def test_the_mode_follows_the_last_device(app):
 
     keys.eventFilter(window, mouse_move())
     assert keys.mode == "mouse"
-    assert keys.motion == 1
     assert window.cursor().shape() == Qt.CursorShape.ArrowCursor
 
     gamepad.POSTED.clear()

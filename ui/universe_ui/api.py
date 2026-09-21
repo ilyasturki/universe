@@ -118,7 +118,6 @@ def _is(name):
 class Keys(QObject):
     cancelHeld = Signal()
     modeChanged = Signal()
-    motionChanged = Signal()
 
     # Watches the window's own key events, so the hold counts whatever page has the focus and however it takes B.
     def __init__(self, parent=None):
@@ -128,7 +127,6 @@ class Keys(QObject):
         self._hold.setInterval(CANCEL_HOLD_MS)
         self._hold.timeout.connect(self.cancelHeld)
         self._mode = "pad"
-        self._motion = 0
         self._windows = []
 
     def watch(self, window):
@@ -193,18 +191,12 @@ class Keys(QObject):
                     self._hold.start()
                 else:
                     self._hold.stop()
-        elif kind == QEvent.Type.MouseMove:
-            self._motion += 1
-            self._set_mode("mouse")
-            self.motionChanged.emit()
-        elif kind in (QEvent.Type.MouseButtonPress, QEvent.Type.Wheel):
+        elif kind in (QEvent.Type.MouseMove, QEvent.Type.MouseButtonPress, QEvent.Type.Wheel):
             self._set_mode("mouse")
         return False
 
     # "pad" | "keyboard" | "mouse": whatever was used last. The hints read it; a hover counts only under a mouse.
     mode = Property(str, lambda self: self._mode, notify=modeChanged)
-    # Bumps on each real mouse move: a list sliding under a still cursor is not one.
-    motion = Property(int, lambda self: self._motion, notify=motionChanged)
     # Pad glyph → key label ("A" → "Enter"), for the hints under a keyboard.
     labels = Property("QVariantMap", lambda self: {glyph: key_label(KEYS[action][0]) for glyph, action in GLYPH_ACTIONS.items()}, constant=True)
 

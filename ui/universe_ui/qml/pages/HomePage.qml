@@ -324,7 +324,7 @@ FocusScope {
                         label: page.playLabel
                         focused: heroActions.activeFocus && heroActions.index === 0
                         dimmed: heroActions.activeFocus && heroActions.index !== 0
-                        onHovered: page.pointToAction(0)
+                        onPicked: page.pointToAction(0)
                     }
 
                     PillButton {
@@ -333,7 +333,7 @@ FocusScope {
                         label: "Details"
                         focused: heroActions.activeFocus && heroActions.index === 1
                         dimmed: heroActions.activeFocus && heroActions.index !== 1
-                        onHovered: page.pointToAction(1)
+                        onPicked: page.pointToAction(1)
                     }
                 }
 
@@ -352,7 +352,7 @@ FocusScope {
                         label: page.empty ? "Add a game" : "Open library"
                         focused: heroActions.activeFocus && heroActions.index === 0
                         dimmed: heroActions.activeFocus && heroActions.index !== 0
-                        onHovered: page.pointToAction(0)
+                        onPicked: page.pointToAction(0)
                     }
 
                     PillButton {
@@ -362,7 +362,7 @@ FocusScope {
                         visible: page.empty
                         focused: heroActions.activeFocus && heroActions.index === 1
                         dimmed: heroActions.activeFocus && heroActions.index !== 1
-                        onHovered: page.pointToAction(1)
+                        onPicked: page.pointToAction(1)
                     }
                 }
 
@@ -455,13 +455,17 @@ FocusScope {
                     }
 
                     Pointer {
-                        onHovered: page.pointToTile(page.railCount)
+                        current: page.tileSelected && rail.activeFocus
+                        radius: Theme.dp(Theme.radiusCover)
+                        onPicked: page.pointToTile(page.railCount)
                     }
                 }
             }
 
             Wheel {
                 horizontal: true
+                smooth: false
+                step: rail.pitch
             }
 
             function slideToCurrent() {
@@ -547,12 +551,15 @@ FocusScope {
                 width: page.slotSize
                 height: page.cellSize
 
-                Pointer {
-                    onHovered: page.pointToTile(index)
-                }
-
+                // Inside the art, not the slot: a cover is wider than its slot and slides past it.
                 CoverCard {
                     id: tileArt
+
+                    Pointer {
+                        current: tile.selected && rail.activeFocus
+                        radius: tileArt.cornerRadius
+                        onPicked: page.pointToTile(index)
+                    }
 
                     width: page.cellSize
                     height: page.cellSize

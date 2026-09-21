@@ -12,7 +12,7 @@ Rectangle {
     property bool focused: false
     property bool dimmed: false
 
-    signal hovered
+    signal picked
 
     readonly property color ink: root.ghost ? Theme.text : Theme.onLight
 
@@ -38,7 +38,10 @@ Rectangle {
     }
 
     Pointer {
-        onHovered: root.hovered()
+        current: root.focused
+        direct: true
+        radius: root.radius
+        onPicked: root.picked()
     }
 
     Loader {

@@ -402,7 +402,7 @@ FocusScope {
             acceptedButtons: Qt.LeftButton | Qt.RightButton
             onTapped: dock.back()
         }
-        Wheel {
+        WheelKeys {
             horizontal: true
         }
 
@@ -668,7 +668,9 @@ FocusScope {
 
                         Pointer {
                             enabled: !slot.separator
-                            onHovered: {
+                            direct: true
+                            radius: width / 2
+                            onPicked: {
                                 if (dock.index !== slot.position)
                                     dock.opened = false;
                                 dock.index = slot.position;
@@ -780,7 +782,9 @@ FocusScope {
                         }
 
                         Pointer {
-                            onHovered: dock.sub = index
+                            direct: true
+                            radius: Theme.dp(16)
+                            onPicked: dock.sub = index
                         }
 
                         MenuGlyph {

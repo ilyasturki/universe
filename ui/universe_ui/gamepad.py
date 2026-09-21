@@ -256,11 +256,11 @@ def post_mouse(window, kind, x, y, button=Qt.MouseButton.NoButton):
     QCoreApplication.postEvent(window, QMouseEvent(kind, pos, pos, window.mapToGlobal(pos.toPoint()), button, held, Qt.KeyboardModifier.NoModifier))
 
 
-def post_wheel(window, x, y, steps):
+def post_wheel(window, x, y, steps, sideways=False):
     from PySide6.QtCore import QPoint, QPointF
 
     pos = QPointF(x, y)
-    delta = QPoint(0, steps * 120)
+    delta = QPoint(-steps * 120, 0) if sideways else QPoint(0, steps * 120)
     QCoreApplication.postEvent(
         window,
         QWheelEvent(
@@ -278,7 +278,7 @@ def post_wheel(window, x, y, steps):
 
 # `--keys`, one name per gap: `Wait`, `Wait:N`, `Hold:A`/`Release:A`, `Stick:rightX=0.6`, `Shot:path.png`, `Guide`; with a fake watcher `Press:slot`/`Unpress:slot`, `Axis:lx=0.6`;
 # the mouse: `Mouse:x,y` moves it, `Click:x,y` / `RightClick:x,y` press and release there, `MouseDown:x,y` / `MouseUp:x,y` one or the other,
-# `Wheel:x,y,N` rolls N notches (up positive); `Type:text` types it from the keyboard (`_` a space).
+# `Wheel:x,y,N` rolls N notches (up positive), `HWheel:x,y,N` sideways (right positive); `Type:text` types it from the keyboard (`_` a space).
 class KeyScript(QObject):
     def __init__(self, script, gap_ms, window, pad=None, watcher=None, home=None, parent=None):
         super().__init__(parent)
@@ -317,11 +317,11 @@ class KeyScript(QObject):
             if self._watcher is not None:
                 self._watcher.press(bare, phase == "Press")
             return
-        if phase in ("Mouse", "Click", "RightClick", "MouseDown", "MouseUp", "Wheel"):
+        if phase in ("Mouse", "Click", "RightClick", "MouseDown", "MouseUp", "Wheel", "HWheel"):
             parts = [float(v) for v in bare.split(",")]
             x, y = parts[0] * self._window.width() / 1920, parts[1] * self._window.height() / 1080
-            if phase == "Wheel":
-                post_wheel(self._window, x, y, int(parts[2]) if len(parts) > 2 else 1)
+            if phase in ("Wheel", "HWheel"):
+                post_wheel(self._window, x, y, int(parts[2]) if len(parts) > 2 else 1, phase == "HWheel")
                 return
             post_mouse(self._window, QEvent.Type.MouseMove, x, y)
             button = Qt.MouseButton.RightButton if phase == "RightClick" else Qt.MouseButton.LeftButton

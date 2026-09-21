@@ -225,7 +225,7 @@ Sheet {
                     label: modelData.label
                     active: modelData.path === sheet.browser.path
                     focused: sheet.zone === "chips" && index === sheet.chipIndex
-                    onHovered: {
+                    onPicked: {
                         sheet.zone = "chips";
                         sheet.chipIndex = index;
                     }
@@ -236,6 +236,10 @@ Sheet {
 
     ListView {
         id: list
+
+        Wheel {
+            step: sheet.rowHeight
+        }
 
         anchors.top: chips.bottom
         anchors.topMargin: Theme.dp(12)
@@ -274,7 +278,9 @@ Sheet {
             }
 
             Pointer {
-                onHovered: {
+                current: row.focused
+                radius: Theme.dp(14)
+                onPicked: {
                     sheet.zone = "list";
                     sheet.index = index;
                 }

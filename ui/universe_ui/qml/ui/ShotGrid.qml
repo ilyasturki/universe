@@ -78,6 +78,10 @@ Item {
     ListView {
         id: list
 
+        Wheel {
+            step: grid.cellHeight
+        }
+
         anchors.fill: parent
         anchors.leftMargin: grid.sideMargin - grid.gap / 2
         anchors.rightMargin: grid.sideMargin - grid.gap / 2
@@ -138,7 +142,9 @@ Item {
                     journaled: modelData.hasJournal
 
                     Pointer {
-                        onHovered: grid.index = flat
+                        current: grid.active && flat === grid.index
+                        radius: Theme.dp(12)
+                        onPicked: grid.index = flat
                     }
                 }
             }

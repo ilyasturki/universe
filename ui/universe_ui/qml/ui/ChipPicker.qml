@@ -167,6 +167,10 @@ FocusScope {
         ListView {
             id: list
 
+            Wheel {
+                step: picker.rowHeight
+            }
+
             x: picker.pad
             y: picker.pad
             width: parent.width - picker.pad * 2
@@ -202,7 +206,9 @@ FocusScope {
                 }
 
                 Pointer {
-                    onHovered: picker.index = index
+                    direct: true
+                    radius: Theme.dp(14)
+                    onPicked: picker.index = index
                 }
 
                 Image {

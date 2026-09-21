@@ -238,7 +238,7 @@ FocusScope {
                     label: page.backLabel
                     focused: nav.activeFocus && nav.index === 0
                     dimmed: nav.activeFocus && nav.index !== 0
-                    onHovered: nav.pointTo(0)
+                    onPicked: nav.pointTo(0)
                 }
 
                 PillButton {
@@ -247,7 +247,7 @@ FocusScope {
                     label: page.nextLabel
                     focused: nav.activeFocus && nav.index === 1
                     dimmed: nav.activeFocus && nav.index !== 1
-                    onHovered: nav.pointTo(1)
+                    onPicked: nav.pointTo(1)
                 }
             }
 

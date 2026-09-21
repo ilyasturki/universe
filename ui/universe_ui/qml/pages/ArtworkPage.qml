@@ -343,7 +343,9 @@ FocusScope {
 
             Pointer {
                 enabled: !page.browsing
-                onHovered: page.index = card.slotIndex
+                current: card.focused
+                radius: Theme.dp(12)
+                onPicked: page.index = card.slotIndex
             }
 
             ArtFrame {
@@ -560,6 +562,8 @@ FocusScope {
         GridView {
             id: grid
 
+            Wheel {}
+
             anchors.top: candHead.bottom
             anchors.topMargin: Theme.dp(14)
             anchors.left: parent.left
@@ -598,7 +602,9 @@ FocusScope {
                     }
 
                     Pointer {
-                        onHovered: page.candIndex = index
+                        current: focused
+                        radius: Theme.dp(12)
+                        onPicked: page.candIndex = index
                     }
 
                     Loader {
@@ -747,6 +753,10 @@ FocusScope {
 
         ListView {
             id: hitsList
+
+            Wheel {
+                step: Theme.dp(96)
+            }
             anchors.top: note.bottom
             anchors.topMargin: Theme.dp(18)
             anchors.horizontalCenter: parent.horizontalCenter
@@ -769,7 +779,9 @@ FocusScope {
                 height: Theme.dp(96)
 
                 Pointer {
-                    onHovered: page.hitIndex = index
+                    current: lit
+                    radius: Theme.dp(14)
+                    onPicked: page.hitIndex = index
                 }
 
                 Rectangle {

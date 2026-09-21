@@ -111,7 +111,9 @@ FocusScope {
                     }
 
                     Pointer {
-                        onHovered: {
+                        current: focused
+                        radius: Theme.dp(14)
+                        onPicked: {
                             list.forceActiveFocus();
                             if (!active)
                                 list.requested(index);

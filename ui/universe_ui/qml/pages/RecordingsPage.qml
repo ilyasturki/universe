@@ -426,6 +426,10 @@ FocusScope {
     ListView {
         id: list
 
+        Wheel {
+            step: Theme.dp(120) + list.spacing
+        }
+
         anchors.top: header.bottom
         anchors.topMargin: Theme.dp(32)
         anchors.bottom: hintBar.top
@@ -463,7 +467,9 @@ FocusScope {
             leadWidth: (height - Theme.dp(20)) * 16 / 9
 
             Pointer {
-                onHovered: {
+                current: entry.lit
+                radius: Theme.dp(14)
+                onPicked: {
                     page.videoFocused = false;
                     page.journalFocused = false;
                     page.index = index;
@@ -516,9 +522,11 @@ FocusScope {
             color: Theme.cardBase
         }
 
-        // The mouse over the player takes it as Right does; a click is A, play or pause.
+        // A click on the player takes it as Right does; another is A, play or pause.
         Pointer {
-            onHovered: page.focusVideo(false, true)
+            current: page.videoFocused
+            radius: parent.radius
+            onPicked: page.focusVideo(false, true)
         }
 
         Image {
@@ -917,7 +925,9 @@ FocusScope {
         height: journalText.height
 
         Pointer {
-            onHovered: {
+            current: page.journalFocused
+            wash: 0
+            onPicked: {
                 page.videoFocused = false;
                 page.journalFocused = true;
             }

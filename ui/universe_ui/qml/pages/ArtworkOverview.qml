@@ -154,7 +154,7 @@ FocusScope {
             label: view.buttonLabel
             focused: view.onButton && view.activeFocus
             dimmed: view.buttonDim
-            onHovered: {
+            onPicked: {
                 view.onButton = true;
                 view.forceActiveFocus();
             }
@@ -204,6 +204,10 @@ FocusScope {
 
     ListView {
         id: list
+
+        Wheel {
+            step: view.rowHeight
+        }
 
         anchors.top: rule.bottom
         anchors.topMargin: Theme.dp(6)
@@ -271,7 +275,9 @@ FocusScope {
                         }
 
                         Pointer {
-                            onHovered: {
+                            current: cell.focused
+                            radius: Theme.dp(8)
+                            onPicked: {
                                 view.onButton = false;
                                 view.row = rowNo;
                                 view.col = index;

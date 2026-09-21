@@ -1130,9 +1130,7 @@ FocusScope {
         }
     }
 
-    // Under everything: the wheel steps the focused list, a right click is B. A strip that scrolls sideways puts its own Wheel over this one.
-    Wheel {}
-
+    // Under everything, a right click is B.
     TapHandler {
         acceptedButtons: Qt.RightButton
         onTapped: api.keys.press("Cancel")

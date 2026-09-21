@@ -173,6 +173,10 @@ FocusScope {
     ListView {
         id: list
 
+        Wheel {
+            step: Theme.dp(96) + list.spacing
+        }
+
         anchors.top: header.bottom
         anchors.topMargin: Theme.dp(32)
         anchors.bottom: hintBar.top
@@ -210,7 +214,9 @@ FocusScope {
             gap: Theme.dp(16)
 
             Pointer {
-                onHovered: {
+                current: entry.lit
+                radius: Theme.dp(14)
+                onPicked: {
                     page.mode = 0;
                     page.index = index;
                 }
@@ -254,10 +260,11 @@ FocusScope {
             ColorEase {}
         }
 
-        // The mouse over the log reads it: the wheel scrolls the lines.
+        // A click on the log reads it; the wheel scrolls the lines.
         Pointer {
             accept: false
-            onHovered: page.mode = 1
+            wash: 0
+            onPicked: page.mode = 1
         }
 
         Text {
@@ -284,6 +291,10 @@ FocusScope {
                 Ease {
                     duration: Theme.durView
                 }
+            }
+
+            Wheel {
+                smooth: false
             }
 
             Column {

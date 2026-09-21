@@ -268,7 +268,9 @@ FocusScope {
                         }
 
                         Pointer {
-                            onHovered: menu.index = index
+                            direct: true
+                            radius: Theme.dp(16)
+                            onPicked: menu.index = index
                         }
 
                         MenuGlyph {

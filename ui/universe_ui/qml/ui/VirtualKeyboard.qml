@@ -252,7 +252,9 @@ Item {
                         }
 
                         Pointer {
-                            onHovered: {
+                            direct: true
+                            radius: key.radius
+                            onPicked: {
                                 keyboard.rowIndex = rowNo;
                                 keyboard.colIndex = index;
                                 keyboard.pointed();

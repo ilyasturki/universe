@@ -129,10 +129,6 @@ FocusScope {
             width: page.cellWidth
             height: row.height
 
-            Pointer {
-                onHovered: row.currentIndex = index
-            }
-
             Column {
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.verticalCenter: parent.verticalCenter
@@ -148,6 +144,12 @@ FocusScope {
                     idleScale: page.idleScale
                     cornerRadius: Theme.dp(14)
                     showHeart: false
+
+                    Pointer {
+                        current: card.selected && row.activeFocus
+                        radius: art.cornerRadius
+                        onPicked: row.currentIndex = index
+                    }
 
                     Item {
                         anchors.fill: parent
@@ -229,6 +231,7 @@ FocusScope {
 
         Wheel {
             horizontal: true
+            step: page.cellWidth + row.spacing
         }
     }
 }

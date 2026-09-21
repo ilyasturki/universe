@@ -241,7 +241,9 @@ FocusScope {
 
                 Pointer {
                     anchors.margins: -Theme.dp(12)
-                    onHovered: root.pointTo(index)
+                    direct: true
+                    radius: height / 2
+                    onPicked: root.pointTo(index)
                 }
             }
         }
@@ -341,7 +343,9 @@ FocusScope {
 
             Pointer {
                 anchors.margins: -Theme.dp(12)
-                onHovered: root.pointTo(root.searchIndex)
+                direct: true
+                radius: height / 2
+                onPicked: root.pointTo(root.searchIndex)
             }
         }
 
@@ -354,7 +358,9 @@ FocusScope {
 
             Pointer {
                 enabled: badge.active
-                onHovered: root.pointTo(root.badgeIndex)
+                direct: true
+                radius: height / 2
+                onPicked: root.pointTo(root.badgeIndex)
             }
         }
 

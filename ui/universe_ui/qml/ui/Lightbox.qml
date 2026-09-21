@@ -21,7 +21,7 @@ Rectangle {
     TapHandler {
         onTapped: api.keys.press("Cancel")
     }
-    Wheel {
+    WheelKeys {
         horizontal: true
     }
 

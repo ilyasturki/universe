@@ -56,7 +56,7 @@ GridView {
         contentY = targetY(addSelected ? count : currentIndex);
     }
 
-    // Setting currentIndex moves contentY synchronously, past any Behavior: snapshot, restore, animate. The mouse moves it in silence.
+    // Setting currentIndex moves contentY synchronously, past any Behavior: snapshot, restore, animate. A click's tick is the Pointer's.
     function moveCurrent(index, silent) {
         if (index < 0 || index >= cells || index === cursor) {
             if (!silent)
@@ -141,8 +141,17 @@ GridView {
         moveCurrent(Math.min(cells - 1, row * columns + cursor % columns));
     }
 
-    // The mouse on a cell: the ring lands there, and the page's focus comes along.
+    // A click on a cell: the ring lands there, and the page's focus comes along.
     signal pointed(int index)
+
+    // The wheel scrolls a row, eased as a key's move is, the ring staying.
+    Wheel {
+        slide: function (y) {
+            scroller.from = grid.contentY;
+            scroller.to = y;
+            scroller.start();
+        }
+    }
 
     // Room for the add tile, drawn outside the delegates, when it starts a row.
     footer: Item {
@@ -169,7 +178,9 @@ GridView {
             ringOpacity: grid.selectionActive ? 1.0 : Theme.ringIdle
 
             Pointer {
-                onHovered: {
+                current: grid.addSelected && grid.selectionActive
+                radius: Theme.dp(Theme.radiusCover)
+                onPicked: {
                     grid.moveCurrent(grid.count, true);
                     grid.pointed(grid.count);
                 }
@@ -196,7 +207,9 @@ GridView {
             ringOpacity: grid.selectionActive ? 1.0 : Theme.ringIdle
 
             Pointer {
-                onHovered: {
+                current: cell.selected && grid.selectionActive
+                radius: cover.cornerRadius
+                onPicked: {
                     grid.moveCurrent(index, true);
                     grid.pointed(index);
                 }

@@ -47,17 +47,17 @@ Column {
 
         Wheel {
             horizontal: true
+            nested: true
+            step: strip.shotWidth + list.spacing
         }
 
         delegate: Item {
+            id: shot
+
             width: strip.shotWidth
             height: list.height
 
             readonly property bool current: index === strip.index && strip.focused
-
-            Pointer {
-                onHovered: strip.pointed(index)
-            }
 
             RoundedMask {
                 id: shotCard
@@ -65,6 +65,12 @@ Column {
                 height: strip.shotHeight
                 anchors.verticalCenter: parent.verticalCenter
                 radius: Theme.dp(10)
+
+                Pointer {
+                    current: shot.current
+                    radius: shotCard.radius
+                    onPicked: strip.pointed(index)
+                }
                 opacity: strip.focused && !current ? 0.6 : 1.0
                 scale: current ? 1.03 : 1.0
 
