@@ -86,7 +86,7 @@ def test_runner_form_carries_its_launch_keys(api, fake):
     assert rows["launch.dlss_upgrade"]["detail"].endswith("an anti-cheat. Not for your GPU.")
     assert rows["launch.fsr4_upgrade"]["detail"].endswith("Works on your GPU.") and rows["launch.optiscaler"]["detail"].endswith("Works on your GPU.")
     assert (rows["launch.fsr4_upgrade"]["value"], rows["launch.fsr4_upgrade"]["display"]) == ("off", "off"), "a DLL swap is opt-in"
-    assert rows["launch.fsr4_upgrade"]["choices"] == ["default", "auto", "on", "off"]
+    assert rows["launch.fsr4_upgrade"]["choices"] == ["Default · off", "auto", "on", "off"]
     assert form.setValue(index_of(form, "launch.fsr4_upgrade"), "auto") is True
     assert fake.config()["launch"]["fsr4_upgrade"] == "auto" and rows_by_key(form)["launch.fsr4_upgrade"]["display"] == "auto · Off", (
         "auto says what it comes to on this GPU"
@@ -208,11 +208,10 @@ def test_game_settings_launch_group_by_runner(api, fake):
     ]
     form.showAdvanced = True
     assert [c for c in cards(form) if c[0] in ("Proton", "Sync", "Upscaling")] == [
-        ("Proton", ["launch.proton", "launch.wayland", "launch.hdr"]),
-        ("Proton", ["launch.prefix", "launch.umu_id", "launch.store", "launch.dll_overrides"]),
+        ("Proton", ["launch.proton", "launch.wayland", "launch.hdr", "launch.prefix", "launch.umu_id", "launch.store", "launch.dll_overrides"]),
         ("Sync", ["launch.esync", "launch.fsync", "launch.ntsync"]),
         ("Upscaling", ["launch.dlss_upgrade", "launch.fsr4_upgrade", "launch.xess_upgrade", "launch.optiscaler"]),
-    ], "the Proton card's advanced half is a second card behind the gate"
+    ], "the Proton card's advanced half folds into it behind the gate"
     rows = rows_by_key(form)
     assert rows["launch.runner"]["value"] == "Proton" and rows["launch.exe"]["label"] == "Program"
     assert rows["launch.wayland"]["value"] is True and rows["launch.wayland"]["inherited"] is True

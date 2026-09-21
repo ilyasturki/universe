@@ -16,22 +16,25 @@ FocusScope {
     readonly property var form: api.screens.gameSettings
     readonly property var game: args && args.gameId ? api.allGames.byId(args.gameId) : null
 
-    // The basic cards as sections; the advanced ones together behind one Advanced entry.
-    readonly property var basicGroups: form.basicGroups
-    readonly property var sections: basicGroups.map(function (g) {
+    // The form's cards as sections: the basic ones, the Advanced gate, then (once it is open) the advanced-only ones;
+    // a basic section's own advanced rows come under an Advanced heading of their own.
+    readonly property var groups: form.groups
+    readonly property var sections: groups.map(function (g, i) {
+        if (!g.title)
+            return {
+                label: "Advanced",
+                detail: form.showAdvanced ? "Shown in every section" : "Settings for power users",
+                group: 2
+            };
         return {
             label: g.title,
             detail: g.meta || "",
-            group: g.caps === true ? 0 : 1
+            group: form.hasAdvanced && i > gate ? 3 : g.caps === true ? 0 : 1
         };
-    }).concat(form.hasAdvanced ? [
-        {
-            label: "Advanced",
-            detail: "Settings for power users",
-            group: 2
-        }
-    ] : [])
-    readonly property bool onAdvanced: form.hasAdvanced && section === form.basicGroups.length
+    })
+    readonly property int gate: groups.findIndex(function (g) {
+        return !g.title;
+    })
     property int section: 0
     property string zone: "list"
     property string landKey: ""
@@ -68,11 +71,10 @@ FocusScope {
         if (i < 0)
             return;
         landKey = "";
-        var basic = form.basicGroups;
-        var k = basic.findIndex(function (g) {
+        var k = form.groups.findIndex(function (g) {
             return g.rows.indexOf(i) >= 0;
         });
-        section = k >= 0 ? k : basic.length;
+        section = k >= 0 ? k : 0;
         list.index = section;
         zone = "rows";
         rows.forceActiveFocus();
@@ -83,25 +85,34 @@ FocusScope {
         });
     }
 
+    // An inherited value names where it comes from ahead of its detail, where the eye lands first: `Global · …`, `Default · …`.
     function row(i) {
         var src = form.rows[i], r = Details.withDetail(src, src.module);
         r.form = i;
-        if (src.inherited === true)
-            r.detail += (r.detail ? " " : "") + "Inherited from the global setting.";
+        if (src.key === "advanced")
+            r.display = form.showAdvanced ? "Shown" : "Hidden";
+        var from = src.origin === "global" ? "Global" : src.origin === "default" ? "Default" : "";
+        if (from)
+            r.detail = from + (r.detail ? " · " + r.detail : "");
         return r;
     }
 
     readonly property var content: {
-        if (onAdvanced)
-            return Forms.grouped(form.advancedGroups, form.rows, function (src, i) {
-                return page.row(i);
-            });
-        var g = form.basicGroups[section];
-        return g ? g.rows.map(page.row) : [];
+        var g = groups[section];
+        if (!g)
+            return [];
+        return Forms.grouped([Object.assign({}, g, {
+                title: ""
+            })], form.rows, function (src, i) {
+            return page.row(i);
+        });
     }
 
     function activate(index, row) {
-        if (row.type === "bool") {
+        if (row.key === "advanced") {
+            Sound.play("select");
+            form.showAdvanced = !form.showAdvanced;
+        } else if (row.type === "bool") {
             form.toggle(row.form);
             Sound.play("select");
         } else if (row.type === "map") {

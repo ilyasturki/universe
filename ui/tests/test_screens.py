@@ -37,7 +37,16 @@ def test_game_settings_form(api, fake):
     )
     form.showAdvanced = True
     groups = {g["title"]: g for g in form.groups}
-    assert [g["title"] for g in form.groups][7:] == ["", "Scaling", "Environment", "Proton", "Sync", "Upscaling", "Logs", "Launch", "Artwork"]
+    assert [g["title"] for g in form.groups][7:] == ["", "Scaling", "Environment", "Sync", "Upscaling", "Logs", "Artwork"], (
+        "advanced cards with a basic card of the same title fold into it, the rest follow the Advanced row"
+    )
+    assert groups["Proton"]["divider"] == 3 and [form.rows[i]["key"] for i in groups["Proton"]["rows"][3:]] == [
+        "launch.prefix",
+        "launch.umu_id",
+        "launch.store",
+        "launch.dll_overrides",
+    ]
+    assert groups["Launch"]["divider"] == 2 and groups["Display"]["divider"] == -1
     assert groups["Launch"]["caps"] is True and groups["Video capture"]["caps"] is False
     assert groups["Display"]["meta"] == "DP-1 2560×1440 @ 144 Hz" and groups["Upscaling"]["meta"] == "AMD Radeon RX 7900 GRE · RDNA 3"
     assert groups["Video capture"]["meta"] == "v0.1.0"
@@ -49,6 +58,19 @@ def test_game_settings_form(api, fake):
     env = rows_by_key(form, "")["launch.env"]
     assert env["entries"] == [{"name": "DXVK_HUD", "value": "fps"}] and env["display"] == "DXVK_HUD=fps" and env["inherited"] is False
     assert form.setMapEntry(index_of(form, "launch.env"), "DXVK_HUD", "") is True and fake.game("the-technomancer")["launch"].get("env", {}) == {}
+    fake.core.set_setting("launch.gamescope_args", "--expose-wayland")
+    form.load("the-technomancer")
+    rows = rows_by_key(form, "")
+    assert rows["launch.gamescope_args"]["display"] == "--expose-wayland" and rows["launch.gamescope_args"]["origin"] == "global", (
+        "the global's arguments show where the game sets none"
+    )
+    assert rows["launch.working_dir"]["display"] == "/mnt/games/PC/The Technomancer" and rows["launch.working_dir"]["origin"] == "default", (
+        "an empty working directory shows the program's folder the launch falls back to"
+    )
+    assert rows["launch.prefix"]["origin"] == "game" and rows["launch.proton"]["origin"] == "game" and rows["launch.gamescope"]["origin"] == "default"
+    assert rows["launch.runner"]["icons"][:2] == ["assets/runners/proton.svg", "assets/runners/wine.svg"] and rows["launch.runner"]["origin"] == ""
+    assert rows_by_key(form, "capture")["enabled"]["origin"] == "game" and rows_by_key(form, "journal")["language"]["origin"] == "game"
+    fake.core.set_setting("launch.gamescope_args", "")
     form.load("mini-metro")
     assert not form.showAdvanced, "another game opens collapsed"
     form.load("the-technomancer")
@@ -148,9 +170,9 @@ def test_module_form(api, fake):
     assert form.info["description"].startswith("After each session, a model writes an entry")
     assert [r["key"] for r in form.rows] == ["enabled"], "off: the switch alone"
     assert form.rows[0]["value"] is False and form.rows[0]["disabled"] is True
-    assert form.groups == [{"title": "", "meta": "", "warning": "", "caps": False, "control": -1, "off": False, "advanced": False, "rows": [0]}], (
-        "the page header carries the name and the warning"
-    )
+    assert form.groups == [
+        {"title": "", "meta": "", "warning": "", "caps": False, "control": -1, "off": False, "advanced": False, "rows": [0], "divider": -1}
+    ], "the page header carries the name and the warning"
     form.load("capture")
     assert form.info["meta"] == "v0.1.0" and form.info["warning"] == "" and form.info["source"] is False
     assert form.info["description"].startswith("Records each session")
@@ -236,11 +258,16 @@ def test_launch_form(api, fake):
         "the screen, then the standard heights at its aspect"
     )
     assert rows["launch.gamescope_refresh"]["choices"] == ["auto", "144", "120", "100", "90", "75", "60", "50", "48", "40", "30"]
-    assert rows["launch.gamescope_scaler"]["type"] == "enum" and rows["launch.gamescope_scaler"]["value"] == "default"
-    assert rows["launch.gamescope_scaler"]["choices"] == ["default", "auto", "integer", "fit", "fill", "stretch"]
+    assert rows["launch.gamescope_scaler"]["type"] == "enum" and rows["launch.gamescope_scaler"]["value"] == "Default · auto", (
+        "the picker opens on the clearing choice"
+    )
+    assert rows["launch.gamescope_scaler"]["display"] == "default · auto", "an unset scaling key shows what gamescope does"
+    assert rows["launch.gamescope_scaler"]["choices"] == ["Default · auto", "auto", "integer", "fit", "fill", "stretch"]
     assert rows["launch.gamescope_scaler"]["choiceValues"] == ["", "auto", "integer", "fit", "fill", "stretch"]
-    assert rows["launch.gamescope_sharpness"]["value"] == "default"
+    assert rows["launch.gamescope_sharpness"]["value"] == "Default · 2" and rows["launch.gamescope_sharpness"]["display"] == "default · 2"
+    assert rows["launch.gamescope_adaptive_sync"]["choices"][0] == "Default · auto", "the clearing choice names the built-in"
     assert rows["launch.fps_limit"]["value"] == "auto" and rows["launch.fps_limit"]["display"] == "auto · 144", "auto shows the rate it stands for"
+    assert rows["launch.gamescope_resolution"]["display"] == "auto · 2560×1440" and rows["launch.gamescope_refresh"]["display"] == "auto · 144"
     assert rows["launch.fps_limit"]["choices"] == ["auto", "none", "144", "120", "100", "90", "75", "60", "50", "48", "40", "30"]
     assert (rows["launch.gamescope_adaptive_sync"]["value"], rows["launch.gamescope_adaptive_sync"]["display"]) == ("auto", "auto · On"), "the screen has VRR"
     assert rows["launch.gamescope_args"]["value"] == ""
@@ -249,7 +276,7 @@ def test_launch_form(api, fake):
     index = index_of(form, "launch.gamescope_scaler")
     assert form.setValue(index, "integer") is True
     assert fake.config()["launch"]["gamescope_scaler"] == "integer"
-    assert form.setValue(index, "default") is True
+    assert form.setValue(index, "Default · auto") is True
     assert "gamescope_scaler" not in fake.config()["launch"], "the sentinel clears the key"
     assert form.setValue(index_of(form, "launch.gamescope_sharpness"), "7") is True, "a typed value passes through"
     assert fake.config()["launch"]["gamescope_sharpness"] == 7
@@ -304,8 +331,10 @@ def test_game_settings_mirrors_the_cards(api, fake):
     assert rows["launch.gamescope"]["detail"].startswith("Run the game in a window"), "no GPU note outside Upscaling"
     assert rows["launch.gamescope_resolution"]["value"] == "auto" and rows["launch.gamescope_resolution"]["inherited"] is True
     assert rows["launch.gamescope_resolution"]["choices"][:2] == ["auto", "2560x1440"]
-    assert rows["launch.gamescope_scaler"]["value"] == "default" and rows["launch.gamescope_scaler"]["inherited"] is True
-    assert rows["launch.gamescope_adaptive_sync"]["value"] == "auto" and rows["launch.gamescope_adaptive_sync"]["inherited"] is True
+    assert rows["launch.gamescope_scaler"]["value"] == "Global · auto" and rows["launch.gamescope_scaler"]["inherited"] is True
+    assert rows["launch.gamescope_scaler"]["display"] == "default · auto" and rows["launch.gamescope_scaler"]["origin"] == "default"
+    assert rows["launch.gamescope_adaptive_sync"]["value"] == "Global · auto" and rows["launch.gamescope_adaptive_sync"]["display"] == "auto · On"
+    assert rows["launch.gamescope_adaptive_sync"]["inherited"] is True and rows["launch.gamescope_adaptive_sync"]["origin"] == "default"
     assert form.setValue(index_of(form, "launch.gamescope_resolution"), "1920x1080") is True
     assert fake.game("the-technomancer")["launch"]["gamescope_resolution"] == "1920x1080"
     rows = rows_by_key(form, "")

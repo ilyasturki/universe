@@ -33,6 +33,10 @@ Item {
     // A search hit: where the row lives, muted, in front of its label; a tag (ADVANCED) next to the value.
     readonly property string path: entry.path !== undefined && entry.path !== null ? String(entry.path) : ""
     readonly property string tag: entry.tag !== undefined && entry.tag !== null ? String(entry.tag) : ""
+    // A value set on this game where the row could have taken the global's is tagged and an inherited one reads plain;
+    // a row inherited with no `origin` (a runner's found program) keeps the plain chip.
+    readonly property string origin: entry.origin !== undefined && entry.origin !== null ? String(entry.origin) : ""
+    readonly property var tags: [tag, origin === "game" ? "THIS GAME" : origin === "" && entry.inherited === true ? "INHERITED" : ""].filter(Boolean)
 
     opacity: entry.disabled === true && !focused ? 0.45 : 1.0
 
@@ -191,6 +195,27 @@ Item {
         elide: Text.ElideRight
     }
 
+    component TagChip: Rectangle {
+        property string text: ""
+
+        anchors.verticalCenter: parent.verticalCenter
+        width: tagText.width + Theme.dp(18)
+        height: tagText.height + Theme.dp(8)
+        radius: Theme.dp(8)
+        color: "transparent"
+        border.width: 1
+        border.color: row.focused ? Qt.rgba(0.063, 0.067, 0.086, 0.25) : Qt.rgba(1, 1, 1, 0.14)
+
+        CapsLabel {
+            id: tagText
+            anchors.centerIn: parent
+            text: parent.text
+            size: Theme.dp(15)
+            tracking: 0.08
+            color: row.focused ? Qt.rgba(0.063, 0.067, 0.086, 0.55) : Theme.textFaint
+        }
+    }
+
     Item {
         id: control
 
@@ -198,15 +223,28 @@ Item {
         anchors.rightMargin: Theme.dp(16)
         anchors.verticalCenter: parent.verticalCenter
         // The shown variant alone: childrenRect would count the hidden ones too.
-        width: toggle.visible ? toggle.width : valueRow.visible ? valueRow.width : infoRow.width
+        width: boolRow.visible ? boolRow.width : valueRow.visible ? valueRow.width : infoRow.width
         height: parent.height
 
-        SettingsToggle {
-            id: toggle
+        Row {
+            id: boolRow
             visible: row.entry.type === "bool"
             anchors.verticalCenter: parent.verticalCenter
-            on: row.entry.value === true
-            focused: row.focused
+            spacing: Theme.dp(16)
+
+            Repeater {
+                model: row.tags
+
+                TagChip {
+                    text: modelData
+                }
+            }
+
+            SettingsToggle {
+                anchors.verticalCenter: parent.verticalCenter
+                on: row.entry.value === true
+                focused: row.focused
+            }
         }
 
         Row {
@@ -216,25 +254,10 @@ Item {
             spacing: Theme.dp(16)
 
             Repeater {
-                model: [row.tag, row.entry.inherited === true ? "INHERITED" : ""].filter(Boolean)
+                model: row.tags
 
-                Rectangle {
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: tagText.width + Theme.dp(18)
-                    height: tagText.height + Theme.dp(8)
-                    radius: Theme.dp(8)
-                    color: "transparent"
-                    border.width: 1
-                    border.color: row.focused ? Qt.rgba(0.063, 0.067, 0.086, 0.25) : Qt.rgba(1, 1, 1, 0.14)
-
-                    CapsLabel {
-                        id: tagText
-                        anchors.centerIn: parent
-                        text: modelData
-                        size: Theme.dp(15)
-                        tracking: 0.08
-                        color: row.focused ? Qt.rgba(0.063, 0.067, 0.086, 0.55) : Theme.textFaint
-                    }
+                TagChip {
+                    text: modelData
                 }
             }
 

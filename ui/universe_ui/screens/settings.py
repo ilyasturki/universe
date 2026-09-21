@@ -1,5 +1,8 @@
 # A row's `type` is bool, enum, string, path, int, map, info or action; a group's `rows` and `control` index the flat row list.
-# An `advanced` row sits in an `advanced` group, shown behind the page's Advanced row.
+# An `advanced` row sits in an `advanced` group, shown behind the page's Advanced row: folded into the basic group of the same
+# title after its `divider`, or as a group of its own after the Advanced row.
+# `origin` is where a value comes from when the row can inherit: "game" (set on the game), "global" (config.toml sets it),
+# "default" (neither does); empty when the row has no such story. `inherited` is true for the last two.
 import json
 import os
 from collections.abc import Callable
@@ -31,7 +34,7 @@ def _display(kind, value):
     return str(value)
 
 
-def _row(section, key, label, kind, value, choices=None, module="", detail="", inherited=False, advanced=False):
+def _row(section, key, label, kind, value, choices=None, module="", detail="", inherited=False, advanced=False, origin=""):
     row = {
         "section": section,
         "key": key,
@@ -42,8 +45,9 @@ def _row(section, key, label, kind, value, choices=None, module="", detail="", i
         "choices": list(choices or []),
         "module": module,
         "detail": detail,
-        "inherited": inherited,
+        "inherited": inherited or origin in ("global", "default"),
         "advanced": advanced,
+        "origin": origin,
     }
     if kind == "map":
         row["entries"] = [{"name": k, "value": str(v)} for k, v in (value or {}).items()]
@@ -51,7 +55,25 @@ def _row(section, key, label, kind, value, choices=None, module="", detail="", i
 
 
 def _group(title, rows, meta="", warning="", caps=False, control=-1, off=False, advanced=False):
-    return {"title": title, "meta": meta, "warning": warning, "caps": caps, "control": control, "off": off, "advanced": advanced, "rows": list(rows)}
+    return {
+        "title": title,
+        "meta": meta,
+        "warning": warning,
+        "caps": caps,
+        "control": control,
+        "off": off,
+        "advanced": advanced,
+        "rows": list(rows),
+        "divider": -1,
+    }
+
+
+def _is_set(value):
+    return value is not None and value != "" and value != {}
+
+
+def origin_of(own, global_value):
+    return "game" if _is_set(own) else "global" if _is_set(global_value) else "default"
 
 
 def _add(rows, groups, section, row, **group):
@@ -169,11 +191,38 @@ def global_launch_rows(rows, groups, client, config, mode, takes, gpu=None):
         )
 
 
-def launch_row(section, spec, value, inherited=False, protons=(), auto_hz=0, gpu=None, mode=None):
+# What gamescope does when a scaling key is left unset.
+GAMESCOPE_DEFAULTS = {"gamescope_scaler": "auto", "gamescope_filter": "linear", "gamescope_sharpness": "2"}
+
+
+def auto_display(spec, value, auto_hz, mode, gpu):
+    """The value with what it comes to on this machine after a dot: `auto · 144`; None when nothing is known."""
+    key = spec["key"]
+    if value == "auto":
+        if spec["type"] == "fps" and auto_hz:
+            return f"auto · {auto_hz}"
+        if key == "gamescope_refresh" and int(mode.get("refresh") or 0):
+            return f"auto · {int(mode['refresh'])}"
+        if key == "gamescope_resolution" and int(mode.get("width") or 0):
+            return f"auto · {int(mode['width'])}×{int(mode['height'])}"
+        if spec["type"] == "toggle":
+            auto = toggle_auto(key, gpu, mode)
+            return None if auto is None else "auto · " + ("On" if auto else "Off")
+    if value == "default" and key in GAMESCOPE_DEFAULTS:
+        return f"default · {GAMESCOPE_DEFAULTS[key]}"
+    return None
+
+
+def launch_row(section, spec, value, protons=(), auto_hz=0, gpu=None, mode=None, origin="", global_label=""):
+    """One launch key's row. On a game's page `origin` says where `value` came from and `global_label` what the global
+    comes to: the choice that clears the game's own value reads `Global · <that>`, on the global page `Default · <built-in>`."""
     kind = ROW_TYPES.get(spec["type"], spec["type"])
+    mode = mode or {}
     choices, values = [str(c) for c in spec["choices"]], None
     if spec["type"] in ("enum", "int", "toggle") and choices:
-        choices, values = ["default", *choices], ["", *choices]
+        builtin = spec["default"] or GAMESCOPE_DEFAULTS.get(spec["key"], "")
+        clear = ("Global" + (f" · {global_label}" if global_label else "")) if origin else ("Default" + (f" · {builtin}" if builtin else ""))
+        choices, values = [clear, *choices], ["", *choices]
     elif spec["type"] == "proton":
         choices = list(protons)
     if kind == "bool":
@@ -192,20 +241,21 @@ def launch_row(section, spec, value, inherited=False, protons=(), auto_hz=0, gpu
         value,
         choices,
         detail=gpu_note(spec, gpu or {}),
-        inherited=inherited,
         advanced=bool(spec.get("advanced")),
+        origin=origin,
     )
     if values:
         row["choiceValues"] = values
-    if spec["type"] == "fps" and value == "auto" and auto_hz:
-        row["display"] = f"auto · {auto_hz}"
     if spec["type"] == "toggle":
         if isinstance(value, bool):
             value = "on" if value else "off"
         row["value"] = row["display"] = str(value)
-        auto = toggle_auto(spec["key"], gpu, mode or {})
-        if value == "auto" and auto is not None:
-            row["display"] = "auto · " + ("On" if auto else "Off")
+    shown = auto_display(spec, value, auto_hz, mode, gpu)
+    if shown is not None:
+        row["display"] = shown
+    # A value this page does not set itself: the picker opens on the clearing choice, the row still shows what applies.
+    if values and (origin in ("global", "default") or value == "default"):
+        row["value"] = choices[0]
     return row
 
 
@@ -256,9 +306,16 @@ class AdvancedRows(QObject if TYPE_CHECKING else object):
     def _shown_groups(self):
         if self._gate < 0:
             return list(self._groups)
-        basic = [g for g in self._groups if not g["advanced"]]
-        more = [g for g in self._groups if g["advanced"]] if self._show_advanced else []
-        # `wide`: the gate spans every column, the advanced cards flow under it.
+        basic = [dict(g) for g in self._groups if not g["advanced"]]
+        more = []
+        for group in (g for g in self._groups if g["advanced"]) if self._show_advanced else ():
+            home = next((b for b in basic if b["title"] and b["title"] == group["title"]), None)
+            if home is None:
+                more.append(group)
+                continue
+            home["divider"] = len(home["rows"])
+            home["rows"] = [*home["rows"], *group["rows"]]
+        # `wide`: the gate spans every column, the advanced-only cards flow under it.
         return [*basic, {**_group("", [self._gate]), "wide": True}, *more]
 
     def _set_show_advanced(self, shown):
@@ -359,7 +416,7 @@ def _runner_spec(runners, runner_id):
     return next((r for r in runners if r["id"] == runner_id), None) or {"id": runner_id, "name": runner_id, "kind": "", "platforms": [], "options": []}
 
 
-def game_launch_rows(game, effective, runners):
+def game_launch_rows(game, effective, runners, config_set):
     runner_id = str(effective.get("runner") or "proton")
     spec = _runner_spec(runners, runner_id)
     kind = spec.get("kind") or ""
@@ -368,12 +425,14 @@ def game_launch_rows(game, effective, runners):
     picker = _row("Launch", "launch.runner", "Runner", "enum", spec["name"], names)
     picker["choiceValues"] = [r["id"] for r in runners] or [runner_id]
     picker["icon"] = runner_logo(runner_id)
+    picker["icons"] = [runner_logo(v) for v in picker["choiceValues"]]
     rows.append(picker)
     rows.append(_row("Launch", "launch.exe", "File" if kind == "emulator" else "Program", "path", _dig(game, "launch.exe") or ""))
     if kind == "emulator":
         platforms = list(spec.get("platforms") or [])
         if len(platforms) > 1:
             rows.append(_row("Launch", "platform", "Platform", "enum", game.get("platform") or platforms[0], platforms))
+        runner_set = (config_set.get("runners") or {}).get(runner_id) or {}
         rows.append(
             _row(
                 "Launch",
@@ -381,7 +440,7 @@ def game_launch_rows(game, effective, runners):
                 spec["name"] + " program",
                 "path",
                 _dig(game, "launch.runner_exe") or effective.get("runner_path") or "",
-                inherited=not _dig(game, "launch.runner_exe"),
+                origin=origin_of(_dig(game, "launch.runner_exe"), runner_set.get("exe")) if effective.get("runner_path") else "",
             )
         )
         options = effective.get("options") or {}
@@ -399,19 +458,24 @@ def game_launch_rows(game, effective, runners):
                     option.get("type", "string"),
                     value,
                     option.get("choices"),
-                    inherited=key not in own,
+                    origin="game" if key in own else "global" if key in runner_set else "default",
                 )
             )
     return rows, spec["name"], kind
+
+
+# A game-scope key whose empty value the launch fills in itself: the row shows what `effective` says as its default.
+COMPUTED = ("working_dir", "prefix")
 
 
 def build_game(client, game_id, screen_mode):
     """A game's settings rows: the launch cards, the runner's, the program, the library flags, then each module's game settings."""
     game = client.game(game_id)
     config = client.config()
+    config_set = config.get("set") or {}
     title = str(game.get("title") or game_id)
     effective = game.get("effective") or {}
-    launch, runner_name, runner_kind = game_launch_rows(game, effective, client.runners())
+    launch, runner_name, runner_kind = game_launch_rows(game, effective, client.runners(), config_set)
     rows, groups = [], []
     mode = screen_mode()
     protons = proton_choices(config)
@@ -420,39 +484,57 @@ def build_game(client, game_id, screen_mode):
     for spec in client.launchKeys("game", mode):
         if spec["runners"] and runner_kind not in spec["runners"]:
             continue
-        own = _dig(game, "launch." + spec["key"])
-        value, inherited = own, False
-        if own in (None, "", {}) and spec["scope"] == "both":
-            # A toggle's effective value is what auto came to; the row inherits the global switch itself.
-            value, inherited = effective.get(spec["key"]), True
+        key = spec["key"]
+        own = _dig(game, "launch." + key)
+        value, origin, global_label = own, "", ""
+        if spec["scope"] == "both":
+            own_global = _dig(config_set, "launch." + key)
+            origin = origin_of(own, own_global)
+            # The global's own value, else the built-in: what clearing the game's comes to.
+            global_value = own_global if _is_set(own_global) else spec["default"]
             if spec["type"] == "toggle":
-                own_global = _dig(config, "launch." + spec["key"])
-                value = spec["default"] if own_global in (None, "") else own_global
+                global_label = "on" if global_value is True else "off" if global_value is False else str(global_value)
+            elif spec["type"] in ("enum", "int"):
+                global_label = str(global_value) if _is_set(global_value) else GAMESCOPE_DEFAULTS.get(key, "default")
+            if origin != "game":
+                # A toggle's effective value is what auto came to: the row inherits the global switch itself.
+                # The global's gamescope arguments are not merged into `effective`: they come from the config.
+                value = global_value if spec["type"] == "toggle" else _dig(config, "launch." + key) if key == "gamescope_args" else effective.get(key)
+        elif key in COMPUTED:
+            origin = origin_of(own, None)
+            if origin != "game":
+                value = effective.get(key) or ""
         section = runner_name if spec["section"] == "Proton" else spec["section"]
+        row = launch_row(section, spec, value, protons=protons, auto_hz=hz, gpu=gpu, mode=mode, origin=origin, global_label=global_label)
         if section == "Launch":
-            launch.append(launch_row(section, spec, value, inherited, protons, hz))
+            launch.append(row)
             continue
-        _add(rows, groups, section, launch_row(section, spec, value, inherited, protons, hz, gpu, mode), caps=True, meta=_card_meta(section, mode, gpu))
+        _add(rows, groups, section, row, caps=True, meta=_card_meta(section, mode, gpu))
     for row in launch:
         _add(rows, groups, "Launch", row, caps=True)
     for section, key, label, kind, advanced in CORE_ROWS:
         value = _dig(game, key)
-        inherited = False
-        if key == "desktop.hide_cursor" and value is None:
-            value, inherited = effective.get("hide_cursor"), True
+        origin = ""
+        if key == "desktop.hide_cursor":
+            origin = origin_of(value, _dig(config_set, key))
+            if origin != "game":
+                value = effective.get("hide_cursor")
         if kind == "bool":
             value = bool(value)
         _add(
             rows,
             groups,
             section,
-            _row(section, key, label, kind, value, inherited=inherited, detail=HIDE_CURSOR if key == "desktop.hide_cursor" else "", advanced=advanced),
+            _row(section, key, label, kind, value, origin=origin, detail=HIDE_CURSOR if key == "desktop.hide_cursor" else "", advanced=advanced),
             caps=True,
         )
     modules = {m["id"]: m for m in client.modules()}
+    own_modules = game.get("modules") or {}
+    set_modules = config_set.get("modules") or {}
     for module_id, values in client.settings(game_id).items():
         module = modules.get(module_id) or {}
         name = module.get("name", module_id)
+        own, global_set = own_modules.get(module_id) or {}, set_modules.get(module_id) or {}
         for setting in module.get("settings") or []:
             if setting.get("scope") != "game":
                 continue
@@ -471,6 +553,7 @@ def build_game(client, game_id, screen_mode):
                     setting.get("choices"),
                     module_id,
                     advanced=bool(setting.get("advanced")),
+                    origin="game" if key in own else "global" if key in global_set else "default",
                 ),
                 meta=_meta(module),
             )

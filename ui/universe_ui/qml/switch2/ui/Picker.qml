@@ -7,8 +7,13 @@ Modal {
 
     property string title: ""
     property var choices: []
+    // One file per choice (a runner's logo), drawn before its label; empty entries draw nothing.
+    property var icons: []
     property int index: 0
     property int current: -1
+    readonly property bool hasIcons: icons.some(function (i) {
+        return i !== undefined && i !== "";
+    })
 
     readonly property var hints: [
         {
@@ -26,6 +31,7 @@ Modal {
     function show(spec, done) {
         title = spec.title || "";
         choices = spec.choices || [];
+        icons = spec.icons || [];
         current = spec.index !== undefined ? spec.index : -1;
         index = Math.max(0, current);
         present(done);
@@ -107,10 +113,25 @@ Modal {
                     visible: !parent.focused && index < picker.choices.length - 1
                 }
 
-                Label {
+                Image {
+                    id: mark
                     x: Theme.dp(30)
                     anchors.verticalCenter: parent.verticalCenter
-                    width: parent.width - Theme.dp(120)
+                    width: picker.hasIcons ? Theme.dp(48) : 0
+                    height: Theme.dp(48)
+                    source: picker.icons[index] ? Qt.resolvedUrl("../../" + picker.icons[index]) : ""
+                    asynchronous: true
+                    fillMode: Image.PreserveAspectFit
+                    sourceSize.height: 128
+                    smooth: true
+                    mipmap: true
+                    visible: picker.hasIcons
+                }
+
+                Label {
+                    x: Theme.dp(30) + (picker.hasIcons ? mark.width + Theme.dp(22) : 0)
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: parent.width - Theme.dp(120) - (x - Theme.dp(30))
                     text: modelData
                     color: parent.chosen ? Theme.accent : Theme.text
                     elide: Text.ElideRight

@@ -105,7 +105,7 @@ fn env_bin() -> String {
     crate::runners::on_path("env").map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|| "env".into())
 }
 
-fn prefix_of(g: &crate::game::Game, config: &Config) -> PathBuf {
+pub(crate) fn prefix_of(g: &crate::game::Game, config: &Config) -> PathBuf {
     if g.launch.prefix.is_empty() {
         config.prefixes_root().join(&g.id)
     } else {
@@ -514,6 +514,7 @@ mod tests {
         let mut cfg = Config::default();
         cfg.launch.gamescope = false;
         let r = crate::library::resolve(g, &cfg, &[]);
+        assert_eq!(r.effective.prefix, dir.path().join("pfx").to_string_lossy(), "the game's own prefix");
         let p = plan(&r, &cfg, &BTreeMap::new(), None, None, false).unwrap();
         assert!(p.program.ends_with("wine"));
         assert_eq!(p.env["WINEARCH"], "win64");
@@ -521,6 +522,17 @@ mod tests {
         assert_eq!(p.env["WINEFSYNC"], "1");
         assert_eq!(p.env["WINEDLLOVERRIDES"], "amd_ags_x64=n,b");
         assert!(!p.env.contains_key("PROTONPATH") && !p.env.contains_key("PROTON_ENABLE_WAYLAND"));
+    }
+
+    #[test]
+    fn effective_prefix_is_the_one_the_launch_makes() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut g = game(dir.path(), "Game.exe", "proton");
+        g.launch.prefix.clear();
+        let cfg = Config::default();
+        let r = crate::library::resolve(g, &cfg, &[]);
+        assert_eq!(r.effective.prefix, cfg.prefixes_root().join(&r.game.id).to_string_lossy());
+        assert_eq!(r.effective.prefix, prefix_of(&r.game, &cfg).to_string_lossy());
     }
 
     #[test]
@@ -543,6 +555,8 @@ mod tests {
         assert_eq!(r.effective.runner_path, emu.to_string_lossy());
         assert_eq!(r.effective.platform, "Nintendo GameCube");
         assert!(r.effective.inputplumber);
+        assert_eq!(r.effective.working_dir, dir.path().to_string_lossy(), "an empty working directory is the program's folder");
+        assert!(r.effective.prefix.is_empty(), "no prefix outside Proton and Wine");
         let p = plan(&r, &cfg, &BTreeMap::new(), None, None, false).unwrap();
         assert_eq!(p.program, emu.to_string_lossy());
         assert_eq!(p.args, vec!["--config", "Dolphin.Display.Fullscreen=True", "--batch", "-e", &rom, "--extra"]);

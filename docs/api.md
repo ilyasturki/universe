@@ -86,19 +86,22 @@ comma-separated for lists, `""` deletes the key. A runner is written under its s
 {"stats": {"hours": 12.5, "play_count": 7, "last_played": "RFC3339 or null"},
  "media": {"box_front": "path|null", "square": null, "banner": null, "background": null, "logo": null,
            "screenshots": ["path"]},
- "modules": {"capture": {"enabled": true, "cursor": false}},
  "effective": {"runner": "dolphin", "runner_name": "Dolphin", "runner_kind": "emulator",
                "runner_path": "/…/bin/dolphin-emu", "platform": "Nintendo GameCube",
                "options": {"batch": true, "user_directory": "", "inputplumber": true}, "inputplumber": true,
                "proton": "proton-ge", "proton_path": "…", "esync": true, "fsync": true, "ntsync": true,
                "wayland": true, "hdr": false, "dlss_upgrade": false, "fsr4_upgrade": false, "xess_upgrade": false,
-               "optiscaler": false, "mangohud": false, "gamescope": true, "gamescope_args": "", "gamescope_resolution": "auto", "gamescope_refresh": "auto", "gamescope_scaler": "", "gamescope_filter": "", "gamescope_sharpness": null, "gamescope_adaptive_sync": "auto", "fps_limit": "auto", "hide_cursor": true, "env": {}},
+               "optiscaler": false, "mangohud": false, "gamescope": true, "gamescope_args": "", "gamescope_resolution": "auto", "gamescope_refresh": "auto", "gamescope_scaler": "", "gamescope_filter": "", "gamescope_sharpness": null, "gamescope_adaptive_sync": "auto", "fps_limit": "auto", "hide_cursor": true, "env": {},
+               "working_dir": "/…/games/melee", "prefix": "", "modules": {"capture": {"enabled": true, "cursor": false}}},
  "removed": false}
 ```
 
 `effective` is what the launch will use: the game's own keys over the global defaults, the runner
 resolved (`runner_path` empty when its program was not found), the platform the runner implies when
-the game sets none. The upscaler upgrades are the bools their `auto` came to on this GPU (see
+the game sets none, `working_dir` and `prefix` as the launch would make them (the program's folder;
+`<prefixes_root>/<id>` for a Proton or Wine game, empty otherwise), and each active module's settings
+for this game under `modules` — its defaults, then `config.toml`'s, then the game's own. The game's
+own `modules` table stays what `game.toml` holds, like `launch`. The upscaler upgrades are the bools their `auto` came to on this GPU (see
 `gpu()`); `gamescope_adaptive_sync` stays `auto`, `on` or `off`, since the screen is only known
 at launch. `media.screenshots` is the store's promotional shots: `screenshots/` under the
 overrides, then under `media/`. The player's own are `screenshots(id)` (see Screenshots).
@@ -603,7 +606,7 @@ set when the manifest names a `choices_exec`: `<module dir>/<choices_exec> <key>
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `settings()` | `settings()` | `universe config get` | resolved `config.toml`: absolute paths, defaults applied, `config_file` and `data_home`, `config_writable` (false when the file exists and cannot be written: a home-manager install with `settings` set — every write is refused with a message naming it) |
+| `settings()` | `settings()` | `universe config get` | resolved `config.toml`: absolute paths, defaults applied, `config_file` and `data_home`, `config_writable` (false when the file exists and cannot be written: a home-manager install with `settings` set — every write is refused with a message naming it), and `set`: the file's own keys as written, so a frontend can tell a chosen value from a default |
 | `set_setting(key, value)` | `set_setting(key, value)` | `universe config set <key> <value>` | dotted `config.toml` key (`launch.proton`, `paths.recordings_root`, `desktop.profile`); a `launch.*` key is validated against the catalogue, an unknown or game-only one refused |
 | `launch_keys(scope, screen)` | `launch_keys(scope, screen)` | `universe launch-keys [--json]` | the launch keys of `scope` (`game`, `global`, `both`) that have a settings row: `[{key, type, default, choices, label, section, scope, runners, description, advanced}]`, `type` one of bool, toggle (`auto`, `on`, `off`), int, string, path, list, enum, resolution, refresh, fps, proton, map; `screen` (a `screen_mode`, or none) sizes the resolution, refresh and fps choices; `runners` empty means every runner; `advanced` puts the row behind the page's Advanced row (every card but Display, Overlay and the Proton basics). `runner`, `runner_exe`, `exe` and the `options` map are settable but not listed — the frontends build their rows themselves; the CLI's table prints all of them |
 | `gpu()` | `gpu()` | — | the GPU the games run on: `{vendor (amd, nvidia, intel), name (the vendor's), rdna (1…4 or null), label (`AMD · RDNA 3`), fits: {dlss_upgrade, fsr4_upgrade, xess_upgrade, optiscaler}, auto: {the same keys}}`, `fits` whether each upscaler upgrade does anything on it, `auto` what the key's `auto` comes to on it; `null` when sysfs shows no card of a known vendor. Vendor and AMD generation come from `/sys/class/drm` (amdgpu's `ip_discovery` GC major: 10 RDNA 1/2, 11 RDNA 3, 12 RDNA 4); the card with the most VRAM wins (an NVIDIA card, which reports none, beats an iGPU). Probed once per process |

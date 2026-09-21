@@ -833,7 +833,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             println!("  env        {}", g["effective"]["env"]);
             println!("  hours      {}  plays {}  last {}", hours(&g), g["stats"]["play_count"], when(&s(&g["stats"], "last_played"), &loc));
             println!("  media      {}", g["media"]);
-            println!("  modules    {}", g["modules"]);
+            println!("  modules    {}", g["effective"]["modules"]);
             println!("  journal    {} entries · recordings {}", g["journal_count"], g["recording_count"]);
         }
         Cmd::Search { query, source } => {

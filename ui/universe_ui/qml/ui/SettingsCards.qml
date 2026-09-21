@@ -2,7 +2,8 @@ import QtQuick
 import "../core"
 import "../sound"
 
-// groups: { title, meta, warning, caps, control, off, rows, icon, wide }; `rows` and `control` index the flat list; a `wide` card spans the columns.
+// groups: { title, meta, warning, caps, control, off, rows, icon, wide, divider }; `rows` and `control` index the flat list;
+// a `wide` card spans the columns; the rows from `divider` on are the card's advanced ones, ruled off under a label.
 FocusScope {
     id: cards
 
@@ -20,16 +21,21 @@ FocusScope {
 
     readonly property var currentRow: index >= 0 && index < rows.length ? rows[index] : null
     readonly property bool cursorShown: activeFocus || dimmed
-    // The focused row's detail, up to two lines under the cards; an info row prints its own inline.
-    readonly property string caption: currentRow && currentRow.type !== "info" && currentRow.detail ? currentRow.detail : ""
+    // The focused row's detail, up to two lines under the cards, then where an inheritable value comes from; an info row prints its own inline.
+    readonly property string caption: currentRow && currentRow.type !== "info" ? [currentRow.detail || "", originNote(currentRow)].filter(Boolean).join(" ") : ""
     readonly property bool hasCaptions: rows.some(function (r) {
-        return r.type !== "info" && r.detail;
+        return r.type !== "info" && (r.detail || originNote(r));
     })
+
+    function originNote(r) {
+        return r.origin === "global" ? "From the global settings." : r.origin === "default" ? "The default: neither this game nor the global settings set it." : "";
+    }
     readonly property real captionHeight: hasCaptions ? Theme.dp(compact ? 78 : 86) : 0
 
     readonly property real gap: Theme.dp(compact ? 24 : 32)
     readonly property real pad: Theme.dp(compact ? 6 : 8)
     readonly property real rowHeight: Theme.dp(compact ? 60 : 66)
+    readonly property real dividerHeight: Theme.dp(compact ? 34 : 38)
     readonly property real columnWidth: (width - gap * (columns - 1)) / columns
     readonly property rect focusRect: {
         var s = stopOf(index);
@@ -50,8 +56,12 @@ FocusScope {
         return Theme.dp(compact ? 56 : 66);
     }
 
+    function hasDivider(g) {
+        return g.divider !== undefined && g.divider >= 0 && g.divider < g.rows.length;
+    }
+
     function cardHeight(g) {
-        return pad * 2 + headerHeight(g) + g.rows.length * rowHeight + 2;
+        return pad * 2 + headerHeight(g) + g.rows.length * rowHeight + (hasDivider(g) ? dividerHeight : 0) + 2;
     }
 
     // Each card joins the shortest column; a stop's `top` is the card's top for its first stop, so the header comes into view with it.
@@ -94,6 +104,8 @@ FocusScope {
             cy += headerHeight(group);
             for (r = 0; r < group.rows.length; r++) {
                 var first = r === 0 && !(group.control >= 0), last = r === group.rows.length - 1;
+                if (hasDivider(group) && r === group.divider)
+                    cy += dividerHeight;
                 stops[c].push({
                     row: group.rows[r],
                     col: c,
@@ -142,13 +154,19 @@ FocusScope {
         Sound.tick();
     }
 
-    // The Advanced row just opened: the cursor moves onto the first row it revealed.
+    // The Advanced row just opened: the cursor moves onto the first row it revealed, the first card of its own after it,
+    // else the first row folded into a card above.
     function stepInto() {
         var k = groups.findIndex(function (g) {
             return g.rows.indexOf(index) >= 0;
         });
-        if (k >= 0 && k + 1 < groups.length && groups[k + 1].rows.length > 0)
+        if (k >= 0 && k + 1 < groups.length && groups[k + 1].rows.length > 0) {
             index = groups[k + 1].rows[0];
+            return;
+        }
+        var folded = groups.find(hasDivider);
+        if (folded)
+            index = folded.rows[folded.divider];
     }
 
     function step(d) {
@@ -350,15 +368,48 @@ FocusScope {
             Repeater {
                 model: card.group.rows
 
-                SettingsRow {
+                Item {
+                    readonly property bool divided: cards.hasDivider(card.group) && index === card.group.divider
                     readonly property bool prevFocused: index > 0 && card.group.rows[index - 1] === cards.index && cards.cursorShown
 
                     width: parent.width
-                    height: cards.rowHeight
-                    entry: cards.rows[modelData] || ({})
-                    focused: modelData === cards.index && cards.cursorShown
-                    compact: cards.compact
-                    separator: index > 0 && !focused && !prevFocused
+                    height: cards.rowHeight + (divided ? cards.dividerHeight : 0)
+
+                    Item {
+                        visible: parent.divided
+                        width: parent.width
+                        height: cards.dividerHeight
+
+                        CapsLabel {
+                            id: divLabel
+                            anchors.left: parent.left
+                            anchors.leftMargin: Theme.dp(18)
+                            anchors.verticalCenter: parent.verticalCenter
+                            text: "ADVANCED"
+                            size: Theme.dp(cards.compact ? 14 : 15)
+                            color: Theme.textFaint
+                        }
+
+                        Rectangle {
+                            anchors.left: divLabel.right
+                            anchors.right: parent.right
+                            anchors.leftMargin: Theme.dp(14)
+                            anchors.rightMargin: Theme.dp(16)
+                            anchors.verticalCenter: parent.verticalCenter
+                            height: 1
+                            color: Qt.rgba(1, 1, 1, 0.10)
+                        }
+                    }
+
+                    SettingsRow {
+                        anchors.bottom: parent.bottom
+                        width: parent.width
+                        height: cards.rowHeight
+                        entry: cards.rows[modelData] || ({})
+                        focused: modelData === cards.index && cards.cursorShown
+                        compact: cards.compact
+                        separator: index > 0 && !parent.divided && !focused && !parent.prevFocused
+                    }
                 }
             }
         }

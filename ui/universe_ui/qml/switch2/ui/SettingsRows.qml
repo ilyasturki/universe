@@ -55,6 +55,7 @@ FocusScope {
             shell.pick({
                 title: row.label,
                 choices: opts,
+                icons: row.icons || [],
                 index: current >= 0 ? current : 0
             }, function (i) {
                 if (i < 0)
@@ -227,6 +228,8 @@ FocusScope {
                 readonly property color ink: disabled || entry.dim === true ? Theme.textDisabled : Theme.text
                 // A search hit: where the row lives, muted, in front of its label.
                 readonly property string path: entry.path !== undefined && entry.path !== null ? String(entry.path) : ""
+                // A value set on this game where the row could have taken the global's; an inherited value reads plain, in grey.
+                readonly property bool own: entry.origin === "game"
 
                 function esc(text) {
                     return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -344,12 +347,24 @@ FocusScope {
                         id: label
                         x: rows.inset + (lead.visible ? lead.width + Theme.dp(8) : 0) + (swatch.visible ? swatch.width + Theme.dp(30) : 0)
                         height: rows.rowHeight
-                        width: control.x - x - Theme.dp(24)
+                        width: (row.own ? ownTag.x : control.x) - x - Theme.dp(24)
                         verticalAlignment: Text.AlignVCenter
                         text: row.path !== "" ? "<font color=\"" + Theme.textSecondary + "\">" + row.esc(row.path) + " › </font>" + row.esc(row.entry.label || "") : row.entry.label || ""
                         textFormat: row.path !== "" ? Text.StyledText : Text.PlainText
                         color: row.ink
                         elide: Text.ElideRight
+                    }
+
+                    Label {
+                        id: ownTag
+                        anchors.right: control.left
+                        anchors.rightMargin: Theme.dp(22)
+                        anchors.verticalCenter: control.verticalCenter
+                        visible: row.own
+                        text: "THIS GAME"
+                        color: Theme.textSecondary
+                        font.pixelSize: Theme.dp(Theme.fontTiny)
+                        font.letterSpacing: Theme.dp(2)
                     }
 
                     Item {

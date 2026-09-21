@@ -95,10 +95,16 @@ the session badge while the count is not zero.
 The settings forms (`api.screens.launch`, `runner`, `module`, `source`, `gameSettings`, `controller`)
 hand QML a flat `rows` list and `groups` that index it; a row's `advanced` puts it in an `advanced`
 group, and the form appends one gate row (`key: "advanced"`, an action) whose group carries
-`wide: true`. `groups` holds the basic groups, the gate, and the advanced groups only while
-`showAdvanced` is set (a page resets it when it opens; `basicGroups` and `advancedGroups` are
+`wide: true`. `groups` holds the basic groups, the gate, and — only while `showAdvanced` is set
+(a page resets it when it opens) — the advanced rows: an advanced group titled like a basic one
+folds into it, its rows after the group's `divider` (an index into `rows`, −1 when nothing is
+folded), the rest follow the gate as groups of their own (`basicGroups` and `advancedGroups` are
 always there, for a look that lays them out itself); `reveal(key, module)` returns a row's index
-and opens the gate when the row sits behind it — what a search hit lands on. A `map` row
+and opens the gate when the row sits behind it — what a search hit lands on. A row that can
+inherit carries `origin`: `game` (set on the game — the looks tag it THIS GAME), `global`
+(`config.toml` sets it, told by `settings()["set"]`) or `default` (nothing does); `inherited` is
+true for the last two, and a row inherited with no `origin` (a runner's found program) is only
+that. A `map` row
 (`launch.env`, `launch.dll_overrides`) carries `entries` and takes `setMapEntry(index, name, value)`,
 an empty value removing the entry. `api.screens.search` is the settings index: the page hands it
 its `sections` (`[{id, label}]`), `load()` rebuilds the index off the UI thread from the same

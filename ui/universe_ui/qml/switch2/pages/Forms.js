@@ -1,11 +1,14 @@
 .pragma library
 
+// A group's rows from `divider` on are its advanced ones, under a heading of their own.
 function grouped(groups, rows, make) {
     var out = [];
     groups.forEach(function(g) {
         if (g.title)
             out.push({ heading: true, label: g.title, display: g.meta || "" });
-        g.rows.forEach(function(i) {
+        g.rows.forEach(function(i, k) {
+            if (g.divider !== undefined && g.divider >= 0 && k === g.divider)
+                out.push({ heading: true, label: "Advanced", display: "" });
             var r = make(rows[i], i, g);
             // The Advanced row's glyph, in this look's set.
             if (r.key === "advanced")
@@ -43,10 +46,14 @@ function editMap(shell, row, apply) {
     });
 }
 
-// The first row after `index` that is not a heading: where the cursor goes once the Advanced row opens.
+// The first row after `index` that is not a heading, else the first row folded under an Advanced heading above:
+// where the cursor goes once the Advanced row opens.
 function firstAfter(model, index) {
     for (var i = index + 1; i < model.length; i++)
         if (!model[i].heading)
+            return i;
+    for (i = 1; i < model.length; i++)
+        if (model[i - 1].heading && model[i - 1].label === "Advanced" && !model[i].heading)
             return i;
     return index;
 }

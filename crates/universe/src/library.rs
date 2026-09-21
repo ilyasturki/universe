@@ -19,7 +19,6 @@ pub struct Resolved {
     pub media: Vec<(String, String)>,
     pub screenshots: Vec<String>,
     pub journal_count: usize,
-    pub modules: BTreeMap<String, serde_json::Map<String, serde_json::Value>>,
     pub effective: Effective,
 }
 
@@ -53,6 +52,11 @@ pub struct Effective {
     pub fps_limit: String,
     pub hide_cursor: bool,
     pub env: BTreeMap<String, String>,
+    /// The folder the program starts in and the Wine prefix, the game's own or the ones the launch would make.
+    pub working_dir: String,
+    pub prefix: String,
+    /// Each active module's settings for this game: its defaults, then the config's, then the game's own.
+    pub modules: BTreeMap<String, serde_json::Map<String, serde_json::Value>>,
 }
 
 impl Resolved {
@@ -66,7 +70,6 @@ impl Resolved {
         }
         media.insert("screenshots".into(), serde_json::json!(self.screenshots));
         v["media"] = serde_json::Value::Object(media);
-        v["modules"] = serde_json::to_value(&self.modules).unwrap();
         v["effective"] = serde_json::to_value(&self.effective).unwrap();
         v["installed"] = serde_json::Value::Bool(self.game.is_installed());
         v["platform"] = serde_json::Value::String(self.effective.platform.clone());
@@ -243,8 +246,15 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
             .unwrap_or_else(|| crate::launch_keys::default_of("fps_limit").into()),
         hide_cursor: game.desktop.hide_cursor.unwrap_or(config.desktop.hide_cursor),
         env,
+        working_dir: game.working_dir().to_string_lossy().into(),
+        prefix: if spec.is_some_and(|s| matches!(s.kind, crate::runners::Kind::Proton | crate::runners::Kind::Wine)) {
+            crate::launcher::prefix_of(&game, config).to_string_lossy().into()
+        } else {
+            String::new()
+        },
+        modules: mods,
     };
-    Resolved { game, stats, sessions, media, screenshots, journal_count, modules: mods, effective }
+    Resolved { game, stats, sessions, media, screenshots, journal_count, effective }
 }
 
 pub fn load_all(config: &Config, modules: &[crate::modules::Module]) -> Vec<Resolved> {

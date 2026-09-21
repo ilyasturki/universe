@@ -244,6 +244,8 @@ class FakeCore:
         with open(fixture) as f:
             self._data = json.load(f)
         self._config = dict(self._data.get("config") or {})
+        # What the "file" sets itself, apart from the defaults filled below: `settings()["set"]`.
+        self._set = copy.deepcopy(self._config)
         with open(LAUNCH_KEYS) as f:
             self._launch_keys = json.load(f)
         self._config["launch"] = {
@@ -491,12 +493,11 @@ class FakeCore:
             }
         )
         out.setdefault("platform", effective["platform"])
-        modules = out.setdefault("modules", {})
-        for module in self._data.get("modules", []):
-            merged = modules.setdefault(module["id"], {})
-            for setting in module.get("settings", []):
-                if setting.get("scope") == "game":
-                    merged.setdefault(setting["key"], setting.get("default"))
+        exe = str(launch.get("exe") or "")
+        effective["working_dir"] = launch.get("working_dir") or (os.path.dirname(exe) if exe else "")
+        prefixes = str(self._config.get("paths", {}).get("prefixes_root") or "~/.local/share/universe/prefixes")
+        effective["prefix"] = (launch.get("prefix") or os.path.join(prefixes, game["id"])) if spec.get("kind") in ("proton", "wine") else ""
+        effective["modules"] = {m["id"]: self.module_settings(m["id"], game["id"]) for m in self._data.get("modules", []) if m.get("enabled")}
         return out
 
     def _runner_of(self, launch):
@@ -1335,10 +1336,15 @@ class FakeCore:
         return report
 
     def settings(self):
-        return copy.deepcopy(self._config)
+        return {**copy.deepcopy(self._config), "set": copy.deepcopy(self._set)}
 
     def set_setting(self, key, value):
-        node = self._config
+        for root in (self._config, self._set):
+            self._write_setting(root, key, value)
+
+    @staticmethod
+    def _write_setting(root, key, value):
+        node = root
         parts = key.split(".")
         for part in parts[:-1]:
             if not isinstance(node.get(part), dict):

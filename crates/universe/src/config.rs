@@ -387,6 +387,12 @@ impl Config {
         }
         v["config_file"] = serde_json::Value::String(paths::config_file().to_string_lossy().into());
         v["config_writable"] = serde_json::Value::Bool(Self::writable(&paths::config_file()));
+        // The keys the file sets itself, as written: what a frontend tells a chosen value from a default by.
+        v["set"] = std::fs::read_to_string(paths::config_file())
+            .ok()
+            .and_then(|s| s.parse::<toml::Table>().ok())
+            .map(|t| crate::modules::toml_to_json(&toml::Value::Table(t)))
+            .unwrap_or_else(|| serde_json::json!({}));
         v["data_home"] = serde_json::Value::String(paths::data_home().to_string_lossy().into());
         v
     }

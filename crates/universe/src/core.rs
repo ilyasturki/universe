@@ -1619,6 +1619,18 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn settings_carry_the_keys_the_file_sets() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let _dir = fake_source("library) ;;");
+        let core = open().await;
+        let s = core.settings().await;
+        assert_eq!(s["launch"]["esync"], serde_json::json!(true), "the resolved view fills the defaults in");
+        assert_eq!(s["set"], serde_json::json!({"modules": {"enabled": []}, "sources": {"enabled": ["fake"]}}), "`set` is the file alone");
+        core.set_setting("launch.esync", "false").await.unwrap();
+        assert_eq!(core.settings().await["set"]["launch"]["esync"], serde_json::json!(false));
+    }
+
+    #[tokio::test]
     async fn sizes_learnt_by_info_survive_a_refresh_and_leave_library_at_alone() {
         let _env = crate::paths::ENV_LOCK.lock().unwrap();
         let _dir = fake_source(

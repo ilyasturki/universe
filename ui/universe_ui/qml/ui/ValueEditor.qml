@@ -24,9 +24,11 @@ FocusScope {
         pendingRow = row;
         var choices = row.choices || [];
         if (row.type === "enum" || ((row.type === "int" || row.type === "string") && choices.length > 0)) {
-            var opts = choices.map(function (c) {
+            // A choice's icon (a runner's logo) rides along when the row lists them.
+            var opts = choices.map(function (c, i) {
                 return {
-                    label: c
+                    label: c,
+                    icon: row.icons && row.icons[i] ? row.icons[i] : ""
                 };
             });
             if (row.type !== "enum")

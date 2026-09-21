@@ -6,7 +6,7 @@ import "../sound"
 FocusScope {
     id: picker
 
-    // [{ label: "All collections", trailing: "47" }, ...]
+    // [{ label: "All collections", trailing: "47", icon: "assets/runners/proton.svg" }, ...]: an icon is a file drawn before the label.
     property var options: []
     property int activeIndex: 0
     property int index: 0
@@ -30,6 +30,10 @@ FocusScope {
     readonly property real rowHeight: Theme.dp(52)
     readonly property real pad: Theme.dp(10)
     readonly property real inset: Theme.dp(20)
+    readonly property real iconSize: Theme.dp(30)
+    readonly property bool hasIcons: options.some(function (o) {
+        return o.icon !== undefined && o.icon !== "";
+    })
     readonly property real maxHeight: Theme.dp(430)
 
     property real panelWidth: Theme.dp(320)
@@ -60,7 +64,7 @@ FocusScope {
             }
             w = Math.max(w, row);
         }
-        return Math.max(Theme.dp(300), Math.ceil(w) + inset * 2 + pad * 2);
+        return Math.max(Theme.dp(300), Math.ceil(w) + inset * 2 + pad * 2 + (hasIcons ? iconSize + Theme.dp(14) : 0));
     }
 
     function show(anchor, opts, active) {
@@ -178,9 +182,25 @@ FocusScope {
                     }
                 }
 
-                Text {
+                Image {
+                    id: icon
                     anchors.left: parent.left
                     anchors.leftMargin: picker.inset
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: picker.hasIcons ? picker.iconSize : 0
+                    height: picker.iconSize
+                    source: modelData.icon ? Qt.resolvedUrl("../" + modelData.icon) : ""
+                    asynchronous: true
+                    fillMode: Image.PreserveAspectFit
+                    sourceSize.height: 128
+                    smooth: true
+                    mipmap: true
+                    visible: picker.hasIcons
+                }
+
+                Text {
+                    anchors.left: icon.right
+                    anchors.leftMargin: picker.hasIcons ? Theme.dp(14) : 0
                     anchors.right: trailing.left
                     anchors.rightMargin: Theme.dp(20)
                     anchors.verticalCenter: parent.verticalCenter
