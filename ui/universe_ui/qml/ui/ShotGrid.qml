@@ -78,9 +78,7 @@ Item {
     ListView {
         id: list
 
-        Wheel {
-            step: grid.cellHeight
-        }
+        Wheel {}
 
         anchors.fill: parent
         anchors.leftMargin: grid.sideMargin - grid.gap / 2

@@ -503,6 +503,7 @@ FocusScope {
         }
 
         Behavior on contentY {
+            id: slideEase
             Ease {
                 duration: Theme.durView
                 easing.type: Easing.OutQuint
@@ -510,7 +511,7 @@ FocusScope {
         }
 
         Wheel {
-            smooth: false
+            ease: slideEase
         }
 
         Repeater {

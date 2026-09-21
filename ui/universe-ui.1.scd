@@ -73,8 +73,8 @@ keys once a keyboard or the mouse was used last.
 
 Hovering brightens what is under the cursor; a left click moves the focus there, and a click on
 the focused item — or one click on a button, a menu row, a tab — is accept, held as long as the
-button is: a long click opens the game's menu. A right click is back. The wheel scrolls the view
-under it, the focus staying; over a strip that runs sideways, its x or Shift+wheel does, and the
+button is: a long click opens the game's menu. A right click is back. The wheel and a touchpad scroll
+the view under them, the focus staying; over a strip that runs sideways, its x or Shift+wheel does, and the
 plain wheel too when nothing behind it scrolls. The cursor shows while the mouse is in use.
 
 # ENVIRONMENT

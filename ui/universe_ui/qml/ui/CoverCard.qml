@@ -15,6 +15,13 @@ Item {
     property bool playing: false
     property int focusOrigin: Item.Center
     property real ringOpacity: 1.0
+    // Under the mouse: hovering lifts the idle dimming, a click on a card that is not `current` is `picked`, on one that is, A.
+    property bool pointable: false
+    property bool current: false
+
+    signal picked
+
+    readonly property bool hovered: pointer.item !== null && pointer.item.hovering
 
     readonly property bool artMissing: String(artSource) === "" || cover.status === Image.Error
 
@@ -30,7 +37,19 @@ Item {
 
         anchors.fill: parent
         transformOrigin: root.focusOrigin
-        opacity: root.selected ? 1.0 : Theme.idleOpacity
+
+        // Inside the scaled body, so the mouse hits the art as drawn.
+        Loader {
+            id: pointer
+            anchors.fill: parent
+            active: root.pointable
+            sourceComponent: Pointer {
+                current: root.current
+                wash: 0
+                onPicked: root.picked()
+            }
+        }
+        opacity: root.selected || root.hovered ? 1.0 : Theme.idleOpacity
         scale: root.selected ? root.selectedScale : root.idleScale
 
         Behavior on opacity {

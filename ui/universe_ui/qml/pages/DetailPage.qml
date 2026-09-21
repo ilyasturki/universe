@@ -236,13 +236,14 @@ FocusScope {
         boundsBehavior: Flickable.StopAtBounds
 
         Behavior on contentY {
+            id: pageEase
             Ease {
                 duration: Theme.durView
             }
         }
 
         Wheel {
-            slide: page.scrollTo
+            ease: pageEase
         }
 
         Item {

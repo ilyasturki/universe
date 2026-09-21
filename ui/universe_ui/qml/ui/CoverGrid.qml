@@ -50,6 +50,7 @@ GridView {
 
     function scrollToCurrent() {
         scroller.stop();
+        wheel.halt();
         if (height <= 0 || cellHeight <= 0)
             return;
         // Not `cursor`: its binding still holds the old index inside onCurrentIndexChanged.
@@ -144,13 +145,8 @@ GridView {
     // A click on a cell: the ring lands there, and the page's focus comes along.
     signal pointed(int index)
 
-    // The wheel scrolls a row, eased as a key's move is, the ring staying.
     Wheel {
-        slide: function (y) {
-            scroller.from = grid.contentY;
-            scroller.to = y;
-            scroller.start();
-        }
+        id: wheel
     }
 
     // Room for the add tile, drawn outside the delegates, when it starts a row.
@@ -176,14 +172,11 @@ GridView {
             cornerRadius: Theme.dp(Theme.radiusCover)
             selected: grid.addSelected
             ringOpacity: grid.selectionActive ? 1.0 : Theme.ringIdle
-
-            Pointer {
-                current: grid.addSelected && grid.selectionActive
-                radius: Theme.dp(Theme.radiusCover)
-                onPicked: {
-                    grid.moveCurrent(grid.count, true);
-                    grid.pointed(grid.count);
-                }
+            pointable: true
+            current: grid.addSelected && grid.selectionActive
+            onPicked: {
+                grid.moveCurrent(grid.count, true);
+                grid.pointed(grid.count);
             }
         }
     }
@@ -205,14 +198,11 @@ GridView {
             game: model
             selected: cell.selected
             ringOpacity: grid.selectionActive ? 1.0 : Theme.ringIdle
-
-            Pointer {
-                current: cell.selected && grid.selectionActive
-                radius: cover.cornerRadius
-                onPicked: {
-                    grid.moveCurrent(index, true);
-                    grid.pointed(index);
-                }
+            pointable: true
+            current: cell.selected && grid.selectionActive
+            onPicked: {
+                grid.moveCurrent(index, true);
+                grid.pointed(index);
             }
         }
     }

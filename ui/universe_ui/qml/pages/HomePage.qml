@@ -447,25 +447,22 @@ FocusScope {
                     idleScale: page.idleScale
                     count: page.libraryCount
                     ringOpacity: rail.activeFocus || page.menuOpen ? 1.0 : Theme.ringIdle
+                    pointable: true
+                    current: page.tileSelected && rail.activeFocus
+                    onPicked: page.pointToTile(page.railCount)
 
                     Behavior on x {
                         Ease {
                             easing.type: Easing.OutQuint
                         }
                     }
-
-                    Pointer {
-                        current: page.tileSelected && rail.activeFocus
-                        radius: Theme.dp(Theme.radiusCover)
-                        onPicked: page.pointToTile(page.railCount)
-                    }
                 }
             }
 
             Wheel {
                 horizontal: true
-                smooth: false
                 step: rail.pitch
+                ease: railEase
             }
 
             function slideToCurrent() {
@@ -535,6 +532,7 @@ FocusScope {
             }
 
             Behavior on contentX {
+                id: railEase
                 Ease {
                     duration: Theme.durNudge
                     easing.type: Easing.OutQuint
@@ -551,15 +549,12 @@ FocusScope {
                 width: page.slotSize
                 height: page.cellSize
 
-                // Inside the art, not the slot: a cover is wider than its slot and slides past it.
                 CoverCard {
                     id: tileArt
 
-                    Pointer {
-                        current: tile.selected && rail.activeFocus
-                        radius: tileArt.cornerRadius
-                        onPicked: page.pointToTile(index)
-                    }
+                    pointable: true
+                    current: tile.selected && rail.activeFocus
+                    onPicked: page.pointToTile(index)
 
                     width: page.cellSize
                     height: page.cellSize

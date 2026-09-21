@@ -475,6 +475,7 @@ FocusScope {
         visible: page.current !== null
 
         Behavior on contentY {
+            id: articleEase
             Ease {
                 duration: Theme.durView
             }
@@ -489,7 +490,7 @@ FocusScope {
         }
 
         Wheel {
-            smooth: false
+            ease: articleEase
         }
 
         Column {

@@ -144,12 +144,9 @@ FocusScope {
                     idleScale: page.idleScale
                     cornerRadius: Theme.dp(14)
                     showHeart: false
-
-                    Pointer {
-                        current: card.selected && row.activeFocus
-                        radius: art.cornerRadius
-                        onPicked: row.currentIndex = index
-                    }
+                    pointable: true
+                    current: card.selected && row.activeFocus
+                    onPicked: row.currentIndex = index
 
                     Item {
                         anchors.fill: parent

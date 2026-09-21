@@ -288,13 +288,14 @@ FocusScope {
             visible: page.log.length > 0 && !page.store.logLoading
 
             Behavior on contentY {
+                id: logEase
                 Ease {
                     duration: Theme.durView
                 }
             }
 
             Wheel {
-                smooth: false
+                ease: logEase
             }
 
             Column {

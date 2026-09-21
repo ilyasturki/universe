@@ -225,12 +225,9 @@ FocusScope {
                         idleScale: 0.94
                         cornerRadius: Theme.dp(14)
                         ringOpacity: overlay.typing ? Theme.ringIdle : 1.0
-
-                        Pointer {
-                            current: card.selected
-                            radius: art.cornerRadius
-                            onPicked: overlay.pointToResult(index)
-                        }
+                        pointable: true
+                        current: card.selected
+                        onPicked: overlay.pointToResult(index)
                     }
 
                     Text {

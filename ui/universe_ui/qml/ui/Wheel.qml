@@ -1,9 +1,10 @@
 import QtQuick
 import "../core"
 
-// The wheel scrolls its parent view a `step` per notch, the ring staying where it is. A vertical view takes the wheel's y;
-// a `horizontal` one takes x, Shift+y and — unless `nested` in a page that scrolls, which then keeps it — plain y too.
-// Views that ease their own contentX/Y set `smooth: false`, or pass the move through `slide(value)`.
+// The wheel scrolls its parent view, the ring staying where it is. A notch adds a `step` to where the view is heading and
+// the view eases after it every frame, so notches in a row run into one motion; a touchpad's pixels move it as they come.
+// A vertical view takes the wheel's y; a `horizontal` one takes x, Shift+y and — unless `nested` in a page that scrolls,
+// which then keeps it — plain y too. A view with a Behavior on its contentX/Y hands it over as `ease`, held off while rolling.
 Item {
     id: wheel
 
@@ -11,12 +12,10 @@ Item {
     property Flickable view: parent instanceof Flickable ? parent : parent.parent
     property bool horizontal: false
     property bool nested: false
-    property real step: view && view.cellHeight !== undefined ? (horizontal ? view.cellWidth : view.cellHeight) : Theme.dp(160)
-    property bool smooth: true
-    property var slide: null
+    property real step: Theme.dp(120)
+    property var ease: null
 
     property real goal: 0
-    property real stamp: 0
 
     anchors.fill: parent
 
@@ -33,27 +32,47 @@ Item {
         return horizontal ? view.contentX : view.contentY;
     }
 
-    function roll(delta) {
-        if (!view || delta === 0)
+    function put(value) {
+        if (horizontal)
+            view.contentX = value;
+        else
+            view.contentY = value;
+    }
+
+    function clamp(value) {
+        return Math.max(low(), Math.min(high(), value));
+    }
+
+    // The keys moved the view: whatever the wheel was heading for is off.
+    function halt() {
+        if (!mover.running)
             return;
-        // A goal set within one ease is still in flight; an older one may have been moved by the keys since.
-        var now = Date.now();
-        if (now - stamp > Theme.durView)
-            goal = at();
-        stamp = now;
-        goal = Math.max(low(), Math.min(high(), goal - delta / 120 * step));
         mover.stop();
-        if (slide) {
-            slide(goal);
-        } else if (smooth) {
-            mover.from = at();
-            mover.to = goal;
-            mover.start();
-        } else if (horizontal) {
-            view.contentX = goal;
-        } else {
-            view.contentY = goal;
+        if (ease)
+            ease.enabled = true;
+    }
+
+    function roll(angle, pixels) {
+        if (!view)
+            return;
+        if (pixels !== 0) {
+            halt();
+            if (ease)
+                ease.enabled = false;
+            put(clamp(at() - pixels));
+            if (ease)
+                ease.enabled = true;
+            return;
         }
+        if (angle === 0)
+            return;
+        if (!mover.running) {
+            goal = at();
+            if (ease)
+                ease.enabled = false;
+        }
+        goal = clamp(goal - angle / 120 * step);
+        mover.start();
     }
 
     // A handler takes one orientation: two of them, the y one leaving a nested strip's page what it does not take.
@@ -64,7 +83,7 @@ Item {
         onWheel: function (event) {
             var shifted = event.modifiers & Qt.ShiftModifier;
             if (wheel.horizontal ? (shifted || !wheel.nested) : !shifted)
-                wheel.roll(event.angleDelta.y);
+                wheel.roll(event.angleDelta.y, event.pixelDelta.y);
         }
     }
 
@@ -73,15 +92,24 @@ Item {
         orientation: Qt.Horizontal
         enabled: wheel.horizontal
         onWheel: function (event) {
-            wheel.roll(event.angleDelta.x);
+            wheel.roll(event.angleDelta.x, event.pixelDelta.x);
         }
     }
 
-    NumberAnimation {
+    // Closes a fixed share of what is left each frame: quick off the mark, settling without a stop-start between notches.
+    FrameAnimation {
         id: mover
-        target: wheel.view
-        property: wheel.horizontal ? "contentX" : "contentY"
-        duration: Theme.durView
-        easing.type: Easing.OutQuint
+
+        readonly property real tau: 0.09
+
+        onTriggered: {
+            var left = wheel.goal - wheel.at();
+            if (Math.abs(left) < 0.5) {
+                wheel.put(wheel.goal);
+                wheel.halt();
+                return;
+            }
+            wheel.put(wheel.at() + left * (1 - Math.exp(-frameTime / tau)));
+        }
     }
 }
