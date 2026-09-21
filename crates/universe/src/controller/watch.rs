@@ -77,10 +77,53 @@ enum PadCmd {
     Close,
 }
 
-#[derive(Clone, PartialEq, Eq)]
+#[derive(Clone)]
 enum Learn {
     Slot(String),
-    Axis(String),
+    Axis(AxisLearn),
+}
+
+/// A stick or trigger held past `LEARN_THROW` this long is meant; the swing back of a stick just let go is over well before.
+const AXIS_HOLD: Duration = Duration::from_millis(150);
+
+/// An axis role being learned: the axes thrown right now with when each left rest, the most thrown of those held long enough
+/// answering. `except` names the axes the caller has already placed (the walk's other stick), which do not answer.
+#[derive(Clone, Debug)]
+struct AxisLearn {
+    role: String,
+    except: BTreeSet<u16>,
+    held: BTreeMap<u16, (Instant, String, f64)>,
+}
+
+impl AxisLearn {
+    fn observe(&mut self, code: u16, thrown: Option<(String, f64)>, now: Instant) {
+        if self.except.contains(&code) {
+            return;
+        }
+        match thrown {
+            Some((name, v)) => {
+                let since = self.held.get(&code).map(|h| h.0).unwrap_or(now);
+                self.held.insert(code, (since, name, v));
+            }
+            None => {
+                self.held.remove(&code);
+            }
+        }
+    }
+
+    /// When the earliest held axis has been held long enough.
+    fn due(&self) -> Option<Instant> {
+        self.held.values().map(|(since, _, _)| *since + AXIS_HOLD).min()
+    }
+
+    /// The axis to take at `now`: the furthest thrown of those held long enough.
+    fn settled(&self, now: Instant) -> Option<String> {
+        self.held
+            .values()
+            .filter(|(since, _, _)| now.duration_since(*since) >= AXIS_HOLD)
+            .max_by(|a, b| a.2.abs().total_cmp(&b.2.abs()))
+            .map(|(_, name, _)| name.clone())
+    }
 }
 
 enum DevEvent {
@@ -190,25 +233,38 @@ impl Pad {
         (self.axis_last.insert(name, q) != Some(q)).then(|| serde_json::json!({"event": "axis", "id": self.id, "axis": name, "value": f64::from(q) / 100.0}))
     }
 
-    /// An axis thrown past `LEARN_THROW` off its rest, as a learn names it: `ABS_Z` thrown the way asked, `ABS_Z-` the other way.
-    fn axis_thrown(&self, code: u16, value: i32) -> Option<String> {
+    /// An axis thrown past `LEARN_THROW` off its rest, as a learn names it (`ABS_Z` thrown the way asked, `ABS_Z-` the other way)
+    /// and how far.
+    fn axis_thrown(&self, code: u16, value: i32) -> Option<(String, f64)> {
         if (16..=23).contains(&code) {
             return None;
         }
         let (min, max) = self.ranges.get(&code).copied().unwrap_or((-1, 1));
         let trigger_like = min >= 0 && self.roles.get(&code).is_some_and(|(r, _)| matches!(*r, "lt" | "rt"));
         let v = axis_value(if trigger_like { "lt" } else { "lx" }, value, (min, max));
-        (v.abs() > LEARN_THROW).then(|| format!("{:?}{}", evdev::AbsoluteAxisCode(code), if v < 0.0 { "-" } else { "" }))
+        (v.abs() > LEARN_THROW).then(|| (format!("{:?}{}", evdev::AbsoluteAxisCode(code), if v < 0.0 { "-" } else { "" }), v))
     }
 
-    /// The throw an axis learn takes: the moment it leaves rest, not every report of a stick still held from the last step.
+    /// The throw a trigger learn takes: the moment it leaves rest, not every report of a pull still on from the last step.
     fn axis_newly_thrown(&mut self, code: u16, value: i32) -> Option<String> {
-        let thrown = self.axis_thrown(code, value);
-        if thrown.is_none() {
+        let Some((name, _)) = self.axis_thrown(code, value) else {
             self.thrown.remove(&code);
             return None;
+        };
+        self.thrown.insert(code).then_some(name)
+    }
+
+    /// Whether a press of `source` is what a learn of `slot` asked for: any button, any axis but a trigger's, which answers its own
+    /// slot only. A DualSense clicks L2 as the pull starts and crosses the threshold reports later; bound to R2 by an earlier mistake,
+    /// the pull would take R2 again.
+    fn answers(&self, source: Source, slot: &str) -> bool {
+        match source {
+            Source::Key(_) => true,
+            Source::Axis { code, .. } => match self.roles.get(&code) {
+                Some((role, _)) if matches!(*role, "lt" | "rt") => *role == slot,
+                _ => true,
+            },
         }
-        thrown.filter(|_| self.thrown.insert(code))
     }
 
     /// An axis nobody owns is read only while a trigger is learned, so its press state may be stale; a bound one's is live and stays.
@@ -528,19 +584,31 @@ impl Watcher {
             }
             EventSummary::AbsoluteAxis(_, axis, value) => {
                 let code = axis.0;
+                let level = pad.axis_thrown(code, value);
                 let thrown = pad.axis_newly_thrown(code, value);
-                if let Some((_, Learn::Axis(role), _)) = self.learning.clone().filter(|(lid, _, _)| *lid == id) {
-                    if let Some(thrown) = thrown {
+                if let Some((lid, Learn::Axis(learn), _)) = &mut self.learning {
+                    if *lid == id {
+                        learn.observe(code, level, Instant::now());
+                        if !self.settle_axis_learn().await {
+                            return false;
+                        }
+                    }
+                }
+                let Some(pad) = self.pads.get_mut(&id) else { return true };
+                // A trigger being learned takes its axis leaving rest: a pull answers before the click at the end of it.
+                if let (Some((lid, Learn::Slot(slot), _)), Some(thrown)) = (self.learning.clone(), thrown) {
+                    let positive = !thrown.ends_with('-');
+                    let source = Source::Axis { code, positive };
+                    let trigger = pad.roles.get(&code).is_some_and(|(r, _)| matches!(*r, "lt" | "rt"));
+                    if lid == id && trigger && pad.answers(source, &slot) {
                         let family = pad.family;
                         self.learning = None;
-                        return self.learnt(family, Learn::Axis(role), &thrown).await;
+                        pad.axis_down.insert((code, positive));
+                        return self.learnt(family, Learn::Slot(slot), &source.to_string()).await;
                     }
                 }
                 let sample = if self.axes { pad.axis_sample(code, value) } else { None };
-                // A trigger being learned listens to its own axis too: a pull answers before the click at the end of it.
-                let trigger_learn = matches!(&self.learning, Some((lid, Learn::Slot(s), _)) if *lid == id && matches!(s.as_str(), "lt" | "rt"))
-                    && pad.roles.get(&code).is_some_and(|(r, _)| matches!(*r, "lt" | "rt"));
-                let owned = (16..=17).contains(&code) || trigger_learn || pad.by_source.keys().any(|s| matches!(s, Source::Axis { code: c, .. } if *c == code));
+                let owned = (16..=17).contains(&code) || pad.by_source.keys().any(|s| matches!(s, Source::Axis { code: c, .. } if *c == code));
                 (if owned { pad.axis(code, value) } else { vec![] }, sample)
             }
             _ => return true,
@@ -551,11 +619,12 @@ impl Watcher {
             }
         }
         for (source, down) in transitions {
-            let learnable = down && matches!(source, Source::Key(_) | Source::Axis { .. });
-            if let Some((_, Learn::Slot(slot), _)) = self.learning.clone().filter(|(lid, _, _)| *lid == id && learnable) {
-                self.learning = None;
-                let family = self.pads[&id].family;
-                return self.learnt(family, Learn::Slot(slot), &source.to_string()).await;
+            if let Some((lid, Learn::Slot(slot), _)) = self.learning.clone() {
+                if lid == id && down && self.pads[&id].answers(source, &slot) {
+                    self.learning = None;
+                    let family = self.pads[&id].family;
+                    return self.learnt(family, Learn::Slot(slot), &source.to_string()).await;
+                }
             }
             let pad = self.pads.get(&id).unwrap();
             let Some(slot) = pad.by_source.get(&source).cloned() else {
@@ -583,12 +652,28 @@ impl Watcher {
         true
     }
 
+    fn axis_learn_due(&self) -> Option<Instant> {
+        match &self.learning {
+            Some((_, Learn::Axis(learn), _)) => learn.due(),
+            _ => None,
+        }
+    }
+
+    /// An axis learn whose answer has been held long enough is taken.
+    async fn settle_axis_learn(&mut self) -> bool {
+        let Some((id, Learn::Axis(learn), _)) = &self.learning else { return true };
+        let Some(code) = learn.settled(Instant::now()) else { return true };
+        let Some(family) = self.pads.get(id).map(|p| p.family) else { return true };
+        let Some((_, learn, _)) = self.learning.take() else { return true };
+        self.learnt(family, learn, &code).await
+    }
+
     /// What a learn found, written for the family, told, and taken up by every pad of it.
     async fn learnt(&mut self, family: &'static Family, target: Learn, code: &str) -> bool {
         let written = match &target {
             Learn::Slot(slot) => super::learn_code(&self.cfg, family, slot, code)
                 .map(|from| serde_json::json!({"event": "learned", "family": family.id, "slot": slot, "code": code, "from": from})),
-            Learn::Axis(role) => {
+            Learn::Axis(AxisLearn { role, .. }) => {
                 super::learn_axis(family, role, code).map(|()| serde_json::json!({"event": "learned", "family": family.id, "axis": role, "code": code}))
             }
         };
@@ -723,7 +808,17 @@ impl Watcher {
                 for p in self.pads.values_mut() {
                     p.forget_stale_axes();
                 }
-                self.learning = Some((id, if axis.is_empty() { Learn::Slot(slot) } else { Learn::Axis(axis) }, Instant::now()));
+                let except = v["except"]
+                    .as_array()
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|c| keys::parse_source(c.as_str()?))
+                            .filter_map(|s| if let Source::Axis { code, .. } = s { Some(code) } else { None })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                let learn = if axis.is_empty() { Learn::Slot(slot) } else { Learn::Axis(AxisLearn { role: axis, except, held: BTreeMap::new() }) };
+                self.learning = Some((id, learn, Instant::now()));
             }
             "cancel" => self.learning = None,
             "rumble" => {
@@ -780,7 +875,9 @@ pub async fn watch(core: Arc<Core>, opts: WatchOptions) -> crate::Result<()> {
     let mut stdin_open = true;
     let mut scan = tokio::time::interval(SCAN_EVERY);
     loop {
-        let deadline = w.engine.deadline().map(|d| Duration::from_millis(d.saturating_sub(w.now())));
+        let engine_due = w.engine.deadline().map(|d| Duration::from_millis(d.saturating_sub(w.now())));
+        let axis_due = w.axis_learn_due().map(|at| at.saturating_duration_since(Instant::now()));
+        let deadline = [engine_due, axis_due].into_iter().flatten().min();
         let tick = async {
             match deadline {
                 Some(d) => tokio::time::sleep(d).await,
@@ -824,7 +921,7 @@ pub async fn watch(core: Arc<Core>, opts: WatchOptions) -> crate::Result<()> {
                 for f in w.engine.tick(now) {
                     w.fire(f);
                 }
-                true
+                w.settle_axis_learn().await
             }
         };
         if !alive {
@@ -915,6 +1012,37 @@ mod tests {
         assert_eq!(pad.axis_newly_thrown(0, -30000).as_deref(), Some("ABS_X-"), "thrown again, it answers again");
         assert_eq!(pad.axis_newly_thrown(2, 900).as_deref(), Some("ABS_Z"), "a trigger by its pull");
         assert_eq!(pad.axis_newly_thrown(2, 700), None);
+    }
+
+    // A push held is the answer; a stick swinging back through the threshold, or one the walk has already placed, is not.
+    #[test]
+    fn an_axis_learn_takes_the_throw_held_longest_and_furthest() {
+        let pad = xbox_pad();
+        let t0 = Instant::now();
+        let mut learn = AxisLearn { role: "rx".into(), except: [0, 1].into(), held: BTreeMap::new() };
+        learn.observe(1, pad.axis_thrown(1, -30000), t0);
+        assert_eq!(learn.due(), None, "the left stick's swing back is not this stick's");
+        learn.observe(3, pad.axis_thrown(3, 20000), t0);
+        learn.observe(4, pad.axis_thrown(4, 25000), t0 + Duration::from_millis(20));
+        assert_eq!(learn.due(), Some(t0 + AXIS_HOLD));
+        assert_eq!(learn.settled(t0 + Duration::from_millis(100)), None, "not yet");
+        learn.observe(4, pad.axis_thrown(4, 0), t0 + Duration::from_millis(60));
+        learn.observe(3, pad.axis_thrown(3, 31000), t0 + Duration::from_millis(120));
+        assert_eq!(learn.settled(t0 + AXIS_HOLD).as_deref(), Some("ABS_RX"), "held since t0, the way it is thrown now");
+        learn.observe(3, pad.axis_thrown(3, -31000), t0 + Duration::from_millis(140));
+        assert_eq!(learn.settled(t0 + AXIS_HOLD).as_deref(), Some("ABS_RX-"));
+    }
+
+    // L2's pull, however it is wired at the time, is an answer for L2 and nothing else; a button or a hat answers whatever is asked.
+    #[test]
+    fn a_trigger_axis_answers_its_own_slot_only() {
+        let pad = xbox_pad();
+        let (l2, r2) = (Source::Axis { code: 2, positive: true }, Source::Axis { code: 5, positive: true });
+        assert!(pad.answers(l2, "lt") && pad.answers(r2, "rt"));
+        assert!(!pad.answers(l2, "rt") && !pad.answers(r2, "lt") && !pad.answers(l2, "guide"));
+        assert!(pad.answers(Source::Key(0x130), "rt"), "the click at the end of a pull answers as any button does");
+        assert!(pad.answers(Source::Axis { code: 16, positive: false }, "dpad_left"));
+        assert!(pad.answers(Source::Axis { code: 0, positive: true }, "dpad_right"), "a stick may stand in for a button");
     }
 
     // A trigger the pad owns keeps its pressed state across a learn: the pull that answered `lt` does not answer `rt` on its way down.

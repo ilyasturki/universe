@@ -631,7 +631,7 @@ FocusScope {
         Label {
             anchors.horizontalCenter: parent.horizontalCenter
             visible: page.walking
-            text: page.walking ? "Step " + page.step.index + " of " + page.step.count + " · skipped in " + page.step.seconds + " s · Esc stops" : ""
+            text: page.walking ? "Step " + page.step.index + " of " + page.step.count + " · skipped in " + page.step.seconds + " s · " + (page.step.back ? "← back · " : "") + "Esc stops" : ""
             color: Theme.textSecondary
             font.pixelSize: Theme.dp(Theme.fontSmall)
         }
@@ -684,6 +684,9 @@ FocusScope {
                 event.accepted = true;
                 Sound.play("back");
                 page.controller.cancelWalk();
+            } else if (event.key === Qt.Key_Left && page.walking) {
+                event.accepted = true;
+                Sound.play(page.controller.backStep() ? "tick" : "edge");
             } else if (api.keys.isCancel(event) && page.learning) {
                 event.accepted = true;
                 Sound.play("back");

@@ -190,6 +190,7 @@ class GamepadThread(QThread):
         self._running = False
         self._covered = False
         self._pad = pad
+        self._swallowed = set()
         self.mapper = Mapper()
         self._mappings = {}
         self._pending = []
@@ -227,9 +228,14 @@ class GamepadThread(QThread):
         else:
             log.info("mapping: %s", line)
 
+    # Muted, a press is dropped with its release: a release on its own steps a section or answers a dialog.
     @Slot(int, bool, bool)
     def _post(self, key, pressed, autorepeat):
         if pressed and self._pad is not None and self._pad.muted:
+            self._swallowed.add(key)
+            return
+        if not pressed and key in self._swallowed:
+            self._swallowed.discard(key)
             return
         post_key(Qt.Key(key), pressed, autorepeat)
 

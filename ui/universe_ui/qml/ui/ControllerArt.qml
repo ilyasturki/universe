@@ -19,6 +19,7 @@ Item {
     property var log: History.fresh()
 
     signal stopRequested
+    signal backRequested
 
     property real pulse: 0.15
     SequentialAnimation on pulse {
@@ -150,6 +151,21 @@ Item {
                     color: Theme.textSecondary
                     font.family: Theme.sans
                     font.pixelSize: Theme.dp(18)
+                }
+
+                Text {
+                    visible: live.step !== null && live.step.back
+                    text: "Back (←) · "
+                    color: Theme.text
+                    font.family: Theme.sans
+                    font.weight: Font.Medium
+                    font.pixelSize: Theme.dp(18)
+
+                    MouseArea {
+                        anchors.fill: parent
+                        cursorShape: Qt.PointingHandCursor
+                        onClicked: live.backRequested()
+                    }
                 }
 
                 Text {

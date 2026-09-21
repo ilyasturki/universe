@@ -117,7 +117,8 @@ def test_post_key_needs_a_focus_window(app):
     assert gamepad.post_key(Qt.Key.Key_Return, True) is False
 
 
-def test_a_muted_pad_posts_releases_only(app, monkeypatch):
+# A press from before the mute still gets its release; a press dropped by it drops its release too, or a section would step on it.
+def test_a_muted_pad_drops_a_press_with_its_release(app, monkeypatch):
     from universe_ui.api import Pad
 
     posted = []
@@ -126,11 +127,13 @@ def test_a_muted_pad_posts_releases_only(app, monkeypatch):
     thread = gamepad.GamepadThread(pad=pad)
     thread._post(int(Qt.Key.Key_Return), True, False)
     pad.muted = True
-    thread._post(int(Qt.Key.Key_Escape), True, False)
+    thread._post(int(Qt.Key.Key_PageUp), True, False)
     thread._post(int(Qt.Key.Key_Return), False, False)
     pad.muted = False
-    thread._post(int(Qt.Key.Key_Escape), True, False)
-    assert posted == [(Qt.Key.Key_Return, True), (Qt.Key.Key_Return, False), (Qt.Key.Key_Escape, True)]
+    thread._post(int(Qt.Key.Key_PageUp), False, False)
+    thread._post(int(Qt.Key.Key_PageUp), True, False)
+    thread._post(int(Qt.Key.Key_PageUp), False, False)
+    assert posted == [(Qt.Key.Key_Return, True), (Qt.Key.Key_Return, False), (Qt.Key.Key_PageUp, True), (Qt.Key.Key_PageUp, False)]
 
 
 def test_key_script_plays_a_fake_pad(app):

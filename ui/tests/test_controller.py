@@ -102,6 +102,40 @@ def test_a_pads_own_charge_reading_shows_as_its_battery(started, api):
     assert api.power.forInput("event31") is None
 
 
+# A wrong press is taken back with ←: the code goes to the slot it came from, the step is asked again.
+def test_a_walk_step_can_be_taken_back(api, fake):
+    screen = api.screens.controller
+    messages = []
+    screen.message.connect(messages.append)
+    watcher = FakeWatcher("8bitdo-pro-3")
+    screen.start(watcher)
+    watcher.emit(watcher.device())
+    assert screen.startWalk() and not screen.backStep(), "nothing to go back to on the first step"
+    family = "8bitdo-pro-3"
+
+    def codes(slot):
+        return next(s["codes"] for s in screen._families()[family]["slots"] if s["id"] == slot)
+
+    watcher.emit({"event": "learned", "family": family, "slot": "south", "code": "BTN_SOUTH", "from": None})
+    # Circle asked, X pressed: the core moved BTN_WEST from west to east.
+    fake._core.set_controller_button(family, "east", ["BTN_WEST", "BTN_EAST"])
+    fake._core.set_controller_button(family, "west", [])
+    watcher.emit({"event": "learned", "family": family, "slot": "east", "code": "BTN_WEST", "from": "west"})
+    assert screen.walkStep["slot"] == "west" and screen.walkStep["back"]
+    assert screen.backStep() and screen.walkStep["slot"] == "east"
+    assert watcher.commands[-3:] == [{"cmd": "cancel"}, {"cmd": "reload"}, {"cmd": "learn", "id": "event30", "slot": "east"}]
+    assert (codes("east"), codes("west")) == (["BTN_EAST"], ["BTN_WEST"]), "the wrong press is given back"
+    watcher.emit({"event": "learned", "family": family, "slot": "east", "code": "BTN_EAST", "from": None})
+    watcher.emit({"event": "learned", "family": family, "slot": "west", "code": "BTN_SOUTH", "from": "south"})
+    assert messages[-1] == "That button was B: it is Y now"
+    assert screen.backStep() and screen.walkStep["slot"] == "west"
+    assert sorted(screen._walk["found"]) == ["east", "south"] and screen._walk["missed"] == [], "the step it stole from is whole again"
+    for _ in range(9):
+        screen._walk_tick()
+    assert screen.walkStep["slot"] == "north"
+    assert screen.backStep() and screen.walkStep["slot"] == "west" and screen._walk["missed"] == [], "a skip is taken back too"
+
+
 def test_the_walk_learns_each_button_then_the_sticks(api, fake):
     screen = api.screens.controller
     offers, messages = [], []
@@ -145,10 +179,11 @@ def test_the_walk_learns_each_button_then_the_sticks(api, fake):
     assert screen.walkStep["slot"] == "rb" and messages[-1] != "No button pressed: learning stopped"
     while screen.walkStep["slot"]:
         watcher.emit({"event": "learned", "family": "8bitdo-pro-3", "slot": screen.walkStep["slot"], "code": "BTN_X", "from": None})
-    assert (screen.walkStep["axis"], screen.walkStep["prompt"], screen.learning) == ("lx", "Push the left stick right", "ls")
-    assert watcher.commands[-1] == {"cmd": "learn", "id": "event30", "axis": "lx"}
+    assert (screen.walkStep["axis"], screen.walkStep["prompt"], screen.learning) == ("lx", "Hold the left stick right", "ls")
+    assert watcher.commands[-1] == {"cmd": "learn", "id": "event30", "axis": "lx", "except": []}
     watcher.emit({"event": "learned", "family": "8bitdo-pro-3", "axis": "lx", "code": "ABS_X-"})
     assert screen.devices[0]["axes"]["lx"] == "ABS_X-" and screen.walkStep["axis"] == "ly"
+    assert watcher.commands[-1]["except"] == ["ABS_X"], "the stick just placed does not answer for the other one"
     for axis in ("ly", "rx", "ry"):
         watcher.emit({"event": "learned", "family": "8bitdo-pro-3", "axis": axis, "code": "ABS_Y"})
     assert not screen.walking and screen.learning == "" and screen.walkStep == {}

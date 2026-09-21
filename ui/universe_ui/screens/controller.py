@@ -466,7 +466,7 @@ class ControllerScreen(AdvancedRows, QObject):
         self._client.reloadSettings()
         self.load()
         if self._walk is not None:
-            self._walk_learned(self._walk, slot, axis, previous)
+            self._walk_learned(self._walk, slot, axis, previous, code)
         elif not axis:
             self.learned.emit(family, slot, code)
 
@@ -481,7 +481,7 @@ class ControllerScreen(AdvancedRows, QObject):
             steps.append({"slot": slot, "axis": "", "art": slot, "label": label, "prompt": f"{WALK_VERBS.get(slot, 'Press')} {label}"})
         for role, stick, throw in WALK_AXES:
             if role in device["axes"]:
-                steps.append({"slot": "", "axis": role, "art": stick, "label": throw, "prompt": f"Push the {throw}"})
+                steps.append({"slot": "", "axis": role, "art": stick, "label": throw, "prompt": f"Hold the {throw}"})
         return steps
 
     def _send(self, command):
@@ -492,7 +492,8 @@ class ControllerScreen(AdvancedRows, QObject):
         step = walk["steps"][walk["index"]]
         self._learning = step["art"]
         self._walk_seconds = WALK_STEP_MS // 1000
-        target = {"axis": step["axis"]} if step["axis"] else {"slot": step["slot"]}
+        # The axes this walk has placed do not answer the next: the stick just let go swings back through the threshold.
+        target = {"axis": step["axis"], "except": walk["axes"]} if step["axis"] else {"slot": step["slot"]}
         self._send({"cmd": "learn", "id": walk["id"], **target})
         self._walk_timer.start()
         self.statusChanged.emit()
@@ -514,20 +515,49 @@ class ControllerScreen(AdvancedRows, QObject):
             return
         step = walk["steps"][walk["index"]]
         walk["missed"].append(step["label"])
+        walk["history"].append({"missed": step["label"]})
         self._walk_advance(walk)
 
-    def _walk_learned(self, walk, slot, axis, previous):
+    def _walk_learned(self, walk, slot, axis, previous, code):
         step = walk["steps"][walk["index"]]
         if (slot, axis) != (step["slot"], step["axis"]):
             return
+        if axis:
+            walk["axes"].append(code.rstrip("-"))
         found = walk["found"]
+        stolen = None
         if previous and previous in found:
-            label = next((s["label"] for s in walk["steps"] if s["slot"] == previous), previous)
-            self.message.emit(f"That button was {label}: it is {step['label']} now")
+            stolen = next((s["label"] for s in walk["steps"] if s["slot"] == previous), previous)
+            self.message.emit(f"That button was {stolen}: it is {step['label']} now")
             found.remove(previous)
-            walk["missed"].append(label)
+            walk["missed"].append(stolen)
         found.append(slot or axis)
+        walk["history"].append({"slot": slot, "axis": axis, "code": code, "from": previous, "stolen": stolen})
         self._walk_advance(walk)
+
+    # Back one step: what the step took is given back — the code to the slot it came from, or unbound — and the step asked again.
+    # An axis is not undone: the next answer replaces it.
+    def _walk_undo(self, walk, record):
+        if "missed" in record:
+            walk["missed"].remove(record["missed"])
+            return
+        walk["found"].remove(record["slot"] or record["axis"])
+        if record["axis"]:
+            walk["axes"].pop()
+            return
+        if record["stolen"]:
+            walk["missed"].remove(record["stolen"])
+            walk["found"].append(record["from"])
+        family, code = walk["family"], record["code"]
+        self._client.controllerSetButton(family, record["slot"], [c for c in self._codes(family, record["slot"]) if c != code])
+        if record["from"]:
+            self._client.controllerSetButton(family, record["from"], [code] + [c for c in self._codes(family, record["from"]) if c != code])
+        self.load()
+        self.reload()
+
+    def _codes(self, family, slot):
+        spec = next((s for s in (self._families().get(family) or {}).get("slots") or [] if s.get("id") == slot), {})
+        return [str(c) for c in spec.get("codes") or []]
 
     def _walk_advance(self, walk):
         self._walk_timer.stop()
@@ -734,7 +764,17 @@ class ControllerScreen(AdvancedRows, QObject):
         self._stop_testing()
         self.cancelLearn()
         self._offered.add(device["family"])
-        self._walk = {"id": device["id"], "family": device["family"], "name": device["name"], "steps": steps, "index": 0, "found": [], "missed": []}
+        self._walk = {
+            "id": device["id"],
+            "family": device["family"],
+            "name": device["name"],
+            "steps": steps,
+            "index": 0,
+            "found": [],
+            "missed": [],
+            "axes": [],
+            "history": [],
+        }
         self._walk_send(self._walk)
         return True
 
@@ -753,6 +793,18 @@ class ControllerScreen(AdvancedRows, QObject):
         self._send({"cmd": "cancel"})
         self._walk_skip()
 
+    @Slot(result=bool)
+    def backStep(self):
+        walk = self._walk
+        if walk is None or walk["index"] == 0:
+            return False
+        self._send({"cmd": "cancel"})
+        self._walk_timer.stop()
+        walk["index"] -= 1
+        self._walk_undo(walk, walk["history"].pop())
+        self._walk_send(walk)
+        return True
+
     @Slot(str)
     def declineWalk(self, family):
         self._remember_walk(family, "declined")
@@ -761,7 +813,7 @@ class ControllerScreen(AdvancedRows, QObject):
         if self._walk is None:
             return {}
         step = dict(self._walk["steps"][self._walk["index"]])
-        step.update(index=self._walk["index"] + 1, count=len(self._walk["steps"]), seconds=self._walk_seconds)
+        step.update(index=self._walk["index"] + 1, count=len(self._walk["steps"]), seconds=self._walk_seconds, back=self._walk["index"] > 0)
         return step
 
     @Slot(bool, result=bool)

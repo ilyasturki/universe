@@ -128,7 +128,9 @@ FocusScope {
     }
 
     function focusMain() {
-        if (sectionId === "artwork" && artwork.item)
+        if (artShown)
+            tester.forceActiveFocus();
+        else if (sectionId === "artwork" && artwork.item)
             artwork.item.forceActiveFocus();
         else if (sectionId === "search" && finder.item)
             finder.item.forceActiveFocus();
@@ -845,11 +847,12 @@ FocusScope {
     onTestingChanged: artToggled("test")
     onWalkingChanged: artToggled("walk")
 
+    // `artShown` is a binding on the property that just changed: read here it lags one step behind, so the parts are read instead.
     function artToggled(key) {
         if (art.item)
             art.item.clear();
         holdOut.stop();
-        if (artShown) {
+        if (testing || walking) {
             Qt.callLater(tester.forceActiveFocus);
             return;
         }
@@ -1346,6 +1349,7 @@ FocusScope {
                 Sound.cancel();
                 page.controller.cancelWalk();
             }
+            onBackRequested: page.controller.backStep() ? Sound.tick() : Sound.edge()
         }
     }
 
@@ -1364,6 +1368,8 @@ FocusScope {
                     page.controller.cancelWalk();
                 else
                     page.controller.setTesting(false);
+            } else if (event.key === Qt.Key_Left && page.walking) {
+                page.controller.backStep() ? Sound.tick() : Sound.edge();
             }
         }
         Keys.onReleased: function (event) {
@@ -1413,7 +1419,7 @@ FocusScope {
     }
 
     Keys.onReleased: function (event) {
-        if (event.isAutoRepeat || editor.open || menu.open)
+        if (event.isAutoRepeat || editor.open || menu.open || artShown)
             return;
         var d = api.keys.isPageUp(event) ? -1 : api.keys.isPageDown(event) ? 1 : 0;
         if (!d)

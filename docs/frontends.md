@@ -763,8 +763,8 @@ after a short debounce while the section is on screen.
 `universe controller watch --json --wait` as a child for its lifetime (`$UNIVERSE_BIN`, else
 `universe` on `PATH`) and reads its event lines: `device`, `gone`, `button`, `axis`, `battery`, `unknown`,
 `macro`, `learned`, `learn_timeout`, `error`, `waiting`, `ready`; it writes `suspend`, `resume`,
-`axes`, `reload`, `learn` (a `slot`, or an `axis` role `lx ly rx ry` learned from the first stick to leave
-rest past 40 %, `ABS_X-` when thrown the other way; one already held stays quiet) and `cancel` commands on its stdin. A `device` line
+`axes`, `reload`, `learn` (a `slot`, or an `axis` role `lx ly rx ry` learned from the stick held
+past 40 % for 150 ms, `ABS_X-` when thrown the other way; `except` lists axes that do not answer, the walk's other stick) and `cancel` commands on its stdin. A `device` line
 names the pad (`vendor`, `product`), its `slots` (each `code` and `bound`), its `axes` (role → evdev
 axis, by the pad's shape — a pad with RX/RY reads Z/RZ as triggers, one without as its right stick —
 or as `[controller.axes.<family>]` learned it), `sdl` and `sdl_axes` (the same slots and roles as
@@ -791,6 +791,9 @@ each answered by the watcher's `learned` or skipped after `WALK_STEP_MS` (8 s, c
 the art pulses. The mapper is muted like the live view's, so a press learns and navigates nothing;
 Escape (`cancelWalk`, also what `cancelLearn` does while walking) stops it, as does leaving the section, losing the
 pad or the watcher. A press that was another step's button earlier in the walk moves it and says so.
+Left (`backStep`, false on the first step; `walkStep.back` says when it is offered) takes the last step
+back: a code goes to the slot it came from (through `controllerSetButton`) or off the slot it was
+given to, a skip is unmarked, an axis is left for the next answer, and the step is asked again.
 At the end a message tallies what was set up and what was skipped, and `api.memory` keeps the
 family under `controllerWalks` (`done` or `declined`). A pad of a family neither walked nor given
 learned buttons in `[controller.buttons]` is offered the walk once per session through `walkOffered(family, name)`:
@@ -821,7 +824,7 @@ body (an SVG path) and buttons on a 1000 × 700 sheet, one canvas draws the body
 bottom with its pull (a press past the half only brightens its outline, so the gauge reads all the
 way down; dashed when the slot has no code on this connection — `PadArt` also takes
 `focusedSlot` and `learningSlot`, which the live view leaves empty and the walk fills; `ControllerArt`
-takes the walk's `step` and shows its prompt and countdown under the pad, with a Stop). While a button is being
+takes the walk's `step` and shows its prompt and countdown under the pad, with a Back and a Stop). While a button is being
 learned, its row says so in place of its chips. The caption under the pad keeps its height from
 the start, so the first press does
 not resize the pad, and spells both ways out with the pad's own glyphs. Three bodies serve the
