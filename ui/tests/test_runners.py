@@ -182,7 +182,7 @@ def test_game_settings_launch_group_by_runner(api, fake):
         "launch.post_command",
     ]
     rows = rows_by_key(form)
-    assert rows["launch.runner"]["value"] == "Eden" and rows["launch.runner"]["icon"] == "assets/runners/eden.svg"
+    assert rows["launch.runner"]["value"] == "Eden" and rows["launch.runner"]["valueIcon"] == "assets/runners/eden.svg"
     assert rows["launch.runner"]["choices"][:4] == ["Proton", "Wine", "Linux", "Dolphin"]
     assert rows["launch.runner"]["choiceValues"][:4] == ["proton", "wine", "linux", "dolphin"]
     assert rows["launch.exe"]["label"] == "File" and rows["launch.exe"]["value"].endswith("Mini Metro.nsp")

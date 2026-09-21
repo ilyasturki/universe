@@ -94,17 +94,23 @@ the session badge while the count is not zero.
 
 The settings forms (`api.screens.launch`, `runner`, `module`, `source`, `gameSettings`, `controller`)
 hand QML a flat `rows` list and `groups` that index it; a row's `advanced` puts it in an `advanced`
-group, and the form appends one gate row (`key: "advanced"`, an action) whose group carries
-`wide: true`. `groups` holds the basic groups, the gate, and — only while `showAdvanced` is set
-(a page resets it when it opens) — the advanced rows: an advanced group titled like a basic one
-folds into it, its rows after the group's `divider` (an index into `rows`, −1 when nothing is
-folded), the rest follow the gate as groups of their own (`basicGroups` and `advancedGroups` are
-always there, for a look that lays them out itself); `reveal(key, module)` returns a row's index
-and opens the gate when the row sits behind it — what a search hit lands on. A row that can
-inherit carries `origin`: `game` (set on the game — the looks tag it THIS GAME), `global`
+group, and every form but `gameSettings` appends one gate row (`key: "advanced"`, an action) whose
+group carries `wide: true`. `groups` holds the basic groups, the gate, and — only while
+`showAdvanced` is set (a page resets it when it opens) — the advanced rows: an advanced group
+titled like a basic one folds into it, its rows after the group's `divider` (an index into `rows`,
+−1 when nothing is folded), the rest follow the gate as groups of their own (`basicGroups` and
+`advancedGroups` are always there, for a look that lays them out itself); `hasAdvanced` says
+whether there are any, and `reveal(key, module)` returns a row's index and sets `showAdvanced`
+when the row sits behind it — what a search hit lands on. The game form has no gate: its pages
+flip `showAdvanced` from a button (Y), and the advanced-only groups follow the basic ones. A row
+that can inherit carries `origin`: `game` (set on the game — the looks tag it THIS GAME), `global`
 (`config.toml` sets it, told by `settings()["set"]`) or `default` (nothing does); `inherited` is
 true for the last two, and a row inherited with no `origin` (a runner's found program) is only
-that. A `map` row
+that. On the game form, X is `reset(index)` on a `game` row — an empty write, the key leaves the
+game's file — and `override(index)` on an inherited one, which writes what the row shows (`pin`
+when the row's `value` is a picker's clearing choice, a `map`'s entries one by one) on the game.
+A runner picker's `valueIcon` is the picked runner's logo, drawn by the value; `icons` are the
+choices'. A `map` row
 (`launch.env`, `launch.dll_overrides`) carries `entries` and takes `setMapEntry(index, name, value)`,
 an empty value removing the entry. `api.screens.search` is the settings index: the page hands it
 its `sections` (`[{id, label}]`), `load()` rebuilds the index off the UI thread from the same
@@ -426,7 +432,7 @@ dialogs, the sheets, the lightbox, the search overlay) carries a bare `HoverHand
 
 `pages/SettingsPage.qml` is a sidebar (`ui/SectionList.qml`: Runners, Launch, Modules, Sources, Install,
 Updates, Controller, Themes, Doctor, Artwork, About, Quit) beside one column of `ui/SettingsCards.qml`
-(`columns: 1`; the game settings page keeps two). About is three `static` rows (the build — `api.universe.version()`, the version with the short git rev behind it — the look, the library's count), nothing to select. Quit is one row, confirmed in place (`Stay` /
+(`columns: 1`). About is three `static` rows (the build — `api.universe.version()`, the version with the short git rev behind it — the look, the library's count), nothing to select. Quit is one row, confirmed in place (`Stay` /
 `Quit Universe`, which says when the running game closes with it), then `Qt.quit()` — the host
 stops the session and shuts the core down after the loop. Up and Down in the sidebar switch the section as they go, Right or A
 enter the cards, Left or B come back, L2/R2 cycle the section from anywhere, and □ refreshes the
@@ -475,9 +481,6 @@ row's menu, X cancels the running job from either tab.
 The detail page's hero holds Play, the heart and, when the game has any, a Recordings and a
 Journal pill (`recordingsRequested` / `journalRequested`, the shell's `openSub`); the counts
 follow `recordingFiled` and `entryWritten`. Start is the game's menu, with the same pages under Media ›.
-The game settings page opens the detail the other way — X (`detailRequested(game, cursor)`): the
-shell closes the sub page, remembers it as `detailReturn` with the row under the cursor as its
-`key` / `settingModule`, and B from the detail brings the form back on that row.
 
 `pages/RecordingsPage.qml` plays in a pane beside the list; □ (X) toggles it fullscreen — the
 pane fills the page, the hint bar rides the controls' auto-hide, ○ leaves fullscreen first, then
@@ -549,12 +552,16 @@ screen's `vrr`). The keys tied to a runner (`proton`, the
 sync modes, Wayland, HDR, the upscaler upgrades) are set on that runner's page instead (below).
 `load()` reads the config again.
 
-The game settings page reads the same catalogue with scope `game`, filtered by the runner's kind
-(`runners`), and mirrors the cards — Display, Overlay, Advanced — then the runner's own, named
-after it (Proton: the build, Wayland, HDR, the Wine prefix; Sync; Upscaling), then Launch (the
-runner picker, the program, an emulator's options, the wrapper, arguments and working directory);
-a `both` key inherited from the global value until set (a `toggle` inherits the global switch, not
-what `effective` resolved it to).
+The game settings page (`pages/GameSettingsPage.qml`, `switch2/pages/GameSettingsPage.qml`: a
+sidebar of the form's cards — the game's own, then the modules', then under an Advanced head the
+power user's while Y has them shown — beside the picked card's rows; LT / RT step the cards in
+Reprise, B goes back to the sidebar, then closes) reads the same catalogue with scope `game`,
+filtered by the runner's kind (`runners`), and mirrors the cards — Display, Overlay, Scaling — then
+the runner's own, named after it (Proton: the build, Wayland, HDR, the Wine prefix; Sync;
+Upscaling), then Launch (the runner picker, the program, an emulator's options, the wrapper,
+arguments and working directory); a `both` key inherited from the global value until set (a
+`toggle` inherits the global switch, not what `effective` resolved it to). X on a row resets its
+own value or pins the inherited one (`reset` / `override` above).
 
 Upscaling's meta names the GPU (`client.gpu()`: `label`, `AMD Radeon RX 7900 GRE · RDNA 3`) and each
 of its rows ends its `detail` with `Works on your GPU.` or `Not for your GPU.` (`fits`), nothing when

@@ -1073,6 +1073,7 @@ FocusScope {
         }
         onEntered: page.focusMain()
         onEscapedUp: page.chromeRequested()
+        onCancelled: page.chromeRequested()
     }
 
     Loader {

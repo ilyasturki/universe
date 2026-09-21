@@ -27,6 +27,8 @@ Item {
     readonly property bool hasMark: !hasImage && iconIsFile && mark.status === Image.Ready
     readonly property bool keepsMark: hasMark || entry.iconSlot === true
     readonly property bool hasIcon: !hasGlyph && !iconIsFile && entry.icon !== undefined && String(entry.icon) !== ""
+    // A logo for the value (the runner picked), drawn just before it.
+    readonly property bool hasValueMark: entry.valueIcon != null && String(entry.valueIcon) !== "" && valueMark.status === Image.Ready
     readonly property real labelInset: hasImage ? thumb.width + Theme.dp(24) : keepsMark ? mark.width + Theme.dp(28) : hasGlyph || hasIcon ? Theme.dp(18) + lead.width + Theme.dp(16) : Theme.dp(18)
     readonly property color onFocus: Qt.rgba(0.063, 0.067, 0.086, 0.7)
     readonly property real valueMax: Math.max(Theme.dp(120), width * 0.6 - (hasImage ? thumb.width : 0))
@@ -273,6 +275,20 @@ Item {
                 font.features: {
                     "tnum": 1
                 }
+            }
+
+            Image {
+                id: valueMark
+                anchors.verticalCenter: parent.verticalCenter
+                height: Theme.dp(row.compact ? 28 : 30)
+                width: height
+                source: row.entry.valueIcon != null && String(row.entry.valueIcon) !== "" ? Qt.resolvedUrl("../" + row.entry.valueIcon) : ""
+                asynchronous: true
+                fillMode: Image.PreserveAspectFit
+                sourceSize.height: 128
+                smooth: true
+                mipmap: true
+                visible: row.hasValueMark
             }
 
             Text {

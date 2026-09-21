@@ -1,8 +1,10 @@
 # A row's `type` is bool, enum, string, path, int, map, info or action; a group's `rows` and `control` index the flat row list.
-# An `advanced` row sits in an `advanced` group, shown behind the page's Advanced row: folded into the basic group of the same
-# title after its `divider`, or as a group of its own after the Advanced row.
+# An `advanced` row sits in an `advanced` group, shown while the form's `showAdvanced` is set: folded into the basic group of
+# the same title after its `divider`, or as a group of its own after the basic ones. A gated form (every one but a game's)
+# appends an Advanced action row that opens them; a game's page flips `showAdvanced` from a button.
 # `origin` is where a value comes from when the row can inherit: "game" (set on the game), "global" (config.toml sets it),
-# "default" (neither does); empty when the row has no such story. `inherited` is true for the last two.
+# "default" (neither does); empty when the row has no such story. `inherited` is true for the last two, and such a row
+# carries `pin`, what overriding writes on the game, when that is not its `value` (a picker's clearing choice).
 import json
 import os
 from collections.abc import Callable
@@ -256,6 +258,7 @@ def launch_row(section, spec, value, protons=(), auto_hz=0, gpu=None, mode=None,
     # A value this page does not set itself: the picker opens on the clearing choice, the row still shows what applies.
     if values and (origin in ("global", "default") or value == "default"):
         row["value"] = choices[0]
+        row["pin"] = (GAMESCOPE_DEFAULTS.get(spec["key"]) or str(spec["default"] or "")) if value == "default" else value
     return row
 
 
@@ -283,20 +286,23 @@ class AsyncScreen(QObject):
 
 # A QObject to the type checker only: the host's signals resolve through it, the runtime class stays a plain mixin.
 class AdvancedRows(QObject if TYPE_CHECKING else object):
-    # The row list with its Advanced row: the gate at `_gate`, the advanced groups shown behind it while `_show_advanced`.
+    # The row list and its advanced groups, shown while `_show_advanced`; a gated form opens them from an Advanced row at `_gate`.
     rowsChanged: Signal
     advancedChanged: Signal
+    gated = True
 
     def _init_rows(self):
         self._rows = []
         self._groups = []
         self._gate = -1
+        self._has_advanced = False
         self._show_advanced = False
 
     def _set_rows(self, rows, groups):
         rows, groups = list(rows), list(groups)
         self._gate = -1
-        if any(g.get("advanced") for g in groups):
+        self._has_advanced = any(g.get("advanced") for g in groups)
+        if self._has_advanced and self.gated:
             self._gate = len(rows)
             rows.append(advanced_row(self._show_advanced))
         self._rows = rows
@@ -304,7 +310,7 @@ class AdvancedRows(QObject if TYPE_CHECKING else object):
         self.rowsChanged.emit()
 
     def _shown_groups(self):
-        if self._gate < 0:
+        if not self._has_advanced:
             return list(self._groups)
         basic = [dict(g) for g in self._groups if not g["advanced"]]
         more = []
@@ -315,6 +321,8 @@ class AdvancedRows(QObject if TYPE_CHECKING else object):
                 continue
             home["divider"] = len(home["rows"])
             home["rows"] = [*home["rows"], *group["rows"]]
+        if self._gate < 0:
+            return [*basic, *more]
         # `wide`: the gate spans every column, the advanced-only cards flow under it.
         return [*basic, {**_group("", [self._gate]), "wide": True}, *more]
 
@@ -395,7 +403,7 @@ class RowsForm(AdvancedRows, AsyncScreen):
     groups = Property(list, AdvancedRows._shown_groups, notify=rowsChanged)
     basicGroups = Property(list, lambda self: [g for g in self._groups if not g["advanced"]], notify=rowsChanged)
     advancedGroups = Property(list, lambda self: [g for g in self._groups if g["advanced"]], notify=rowsChanged)
-    hasAdvanced = Property(bool, lambda self: self._gate >= 0, notify=rowsChanged)
+    hasAdvanced = Property(bool, lambda self: self._has_advanced, notify=rowsChanged)
     showAdvanced = Property(bool, lambda self: self._show_advanced, AdvancedRows._set_show_advanced, notify=advancedChanged)
     count = Property(int, lambda self: len(self._rows), notify=rowsChanged)
 
@@ -424,7 +432,7 @@ def game_launch_rows(game, effective, runners, config_set):
     names = [r["name"] for r in runners] or [spec["name"]]
     picker = _row("Launch", "launch.runner", "Runner", "enum", spec["name"], names)
     picker["choiceValues"] = [r["id"] for r in runners] or [runner_id]
-    picker["icon"] = runner_logo(runner_id)
+    picker["valueIcon"] = runner_logo(runner_id)
     picker["icons"] = [runner_logo(v) for v in picker["choiceValues"]]
     rows.append(picker)
     rows.append(_row("Launch", "launch.exe", "File" if kind == "emulator" else "Program", "path", _dig(game, "launch.exe") or ""))
@@ -563,6 +571,7 @@ def build_game(client, game_id, screen_mode):
 class GameSettingsForm(RowsForm):
     gameIdChanged = Signal()
     titleChanged = Signal()
+    gated = False
 
     def __init__(self, client, screen_mode: Callable[[], dict] = dict, parent=None):
         super().__init__(client, parent)
@@ -587,6 +596,33 @@ class GameSettingsForm(RowsForm):
 
     def _reload(self, row):
         self.load(self._game_id)
+
+    # The game's own value goes: the row takes the global's or the default again.
+    @Slot(int, result=bool)
+    def reset(self, index):
+        row = self.row(index)
+        if row.get("origin") != "game":
+            return False
+        ok = self._write(row, "")
+        if ok:
+            self._reload(row)
+        return bool(ok)
+
+    # What the row inherits, written on the game so a global change leaves it alone; a map's entries one by one.
+    @Slot(int, result=bool)
+    def override(self, index):
+        row = self.row(index)
+        if row.get("origin") not in ("global", "default"):
+            return False
+        if row.get("type") == "map":
+            entries = row.get("entries") or []
+            ok = bool(entries) and all(self._write({**row, "key": row["key"] + "." + e["name"], "type": "string"}, e["value"]) for e in entries)
+        else:
+            payload = _to_bus(row, row["pin"] if "pin" in row else row.get("value"))
+            ok = payload != "" and self._write(row, payload)
+        if ok:
+            self._reload(row)
+        return bool(ok)
 
     gameId = Property(str, lambda self: self._game_id, notify=gameIdChanged)
     title = Property(str, lambda self: self._title, notify=titleChanged)

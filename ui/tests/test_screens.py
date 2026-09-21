@@ -29,16 +29,17 @@ def test_game_settings_form(api, fake):
     capture = rows_by_key(form, "capture")
     assert capture["enabled"]["value"] is True and capture["enabled"]["type"] == "bool"
     assert "codec" not in capture, "global settings do not belong to a game"
-    assert [g["title"] for g in form.groups] == ["Display", "Overlay", "Proton", "Launch", "Desktop and library", "Video capture", "Play journal", ""], (
-        "the launch page's cards, the runner's, the program, the modules, then the Advanced row"
+    assert [g["title"] for g in form.groups] == ["Display", "Overlay", "Proton", "Launch", "Desktop and library", "Video capture", "Play journal"], (
+        "the launch page's cards, the runner's, the program, the modules; no Advanced row, a game's page flips it from a button"
     )
+    assert form.hasAdvanced is True and "advanced" not in [r["key"] for r in form.rows]
     assert [g["title"] for g in form.advancedGroups] == ["Scaling", "Environment", "Proton", "Sync", "Upscaling", "Logs", "Launch", "Artwork"], (
         "the power user's cards, in the same order"
     )
     form.showAdvanced = True
     groups = {g["title"]: g for g in form.groups}
-    assert [g["title"] for g in form.groups][7:] == ["", "Scaling", "Environment", "Sync", "Upscaling", "Logs", "Artwork"], (
-        "advanced cards with a basic card of the same title fold into it, the rest follow the Advanced row"
+    assert [g["title"] for g in form.groups][7:] == ["Scaling", "Environment", "Sync", "Upscaling", "Logs", "Artwork"], (
+        "advanced cards with a basic card of the same title fold into it, the rest follow the basic ones"
     )
     assert groups["Proton"]["divider"] == 3 and [form.rows[i]["key"] for i in groups["Proton"]["rows"][3:]] == [
         "launch.prefix",
@@ -74,6 +75,9 @@ def test_game_settings_form(api, fake):
     form.load("mini-metro")
     assert not form.showAdvanced, "another game opens collapsed"
     form.load("the-technomancer")
+    assert rows_by_key(form, "")["launch.runner"]["valueIcon"] == "assets/runners/proton.svg" and "icon" not in rows_by_key(form, "")["launch.runner"], (
+        "the runner's logo sits by its value, not its label"
+    )
 
     index = next(i for i, r in enumerate(form.rows) if r["module"] == "capture" and r["key"] == "enabled")
     form.toggle(index)
@@ -294,6 +298,35 @@ def test_launch_form(api, fake):
     assert rows_by_key(form)["launch.fps_limit"]["display"] == "auto · 30", "auto follows the gamescope rate the game sees"
     form.toggle(index_of(form, "launch.gamescope"))
     assert rows_by_key(form)["launch.fps_limit"]["display"] == "auto · 144", "on the desktop the gamescope rate means nothing"
+
+
+def test_game_settings_reset_and_override(api, fake):
+    form = api.screens.gameSettings
+    form.load("the-technomancer")
+    rows = rows_by_key(form, "")
+    assert rows["launch.proton"]["origin"] == "game" and form.reset(index_of(form, "launch.proton")) is True
+    assert "proton" not in fake.game("the-technomancer")["launch"] and rows_by_key(form, "")["launch.proton"]["origin"] == "default", (
+        "reset drops the game's own value: the row inherits again"
+    )
+    assert form.reset(index_of(form, "launch.proton")) is False, "nothing of the game's to drop"
+    assert form.override(index_of(form, "launch.proton")) is True and fake.game("the-technomancer")["launch"]["proton"] == "proton-ge"
+    assert rows_by_key(form, "")["launch.proton"]["origin"] == "game"
+    vrr = index_of(form, "launch.gamescope_adaptive_sync")
+    assert form.rows[vrr]["value"] == "Global · auto" and form.rows[vrr]["pin"] == "auto"
+    assert form.override(vrr) is True and fake.game("the-technomancer")["launch"]["gamescope_adaptive_sync"] == "auto", (
+        "the value pinned, not the picker's clearing label"
+    )
+    assert form.override(index_of(form, "launch.fps_limit")) is True and fake.game("the-technomancer")["launch"]["fps_limit"] == "auto"
+    scaler = index_of(form, "launch.gamescope_scaler")
+    assert form.override(scaler) is True and fake.game("the-technomancer")["launch"]["gamescope_scaler"] == "auto", "gamescope's own default, pinned"
+    assert form.override(index_of(form, "launch.gamescope")) is True and fake.game("the-technomancer")["launch"]["gamescope"] is True
+    assert form.reset(index_of(form, "launch.gamescope")) is True and "gamescope" not in fake.game("the-technomancer")["launch"]
+    assert form.override(index_of(form, "launch.runner")) is False, "the runner has no global to inherit"
+    assert form.override(index_of(form, "launch.env")) is False, "an empty map pins nothing"
+    capture = next(i for i, r in enumerate(form.rows) if r["module"] == "capture" and r["key"] == "enabled")
+    assert form.rows[capture]["origin"] == "game" and form.reset(capture) is True
+    assert "enabled" not in fake.game("the-technomancer")["modules"]["capture"] and form.rows[capture]["origin"] != "game"
+    assert form.override(capture) is True and form.rows[capture]["origin"] == "game"
 
 
 def test_game_settings_mirrors_the_cards(api, fake):

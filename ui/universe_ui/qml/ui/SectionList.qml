@@ -12,7 +12,9 @@ FocusScope {
 
     signal requested(int index)
     signal entered
+    // Up on the first entry; `cancelled` is B, which a page under the tabs treats the same.
     signal escapedUp
+    signal cancelled
 
     // Thirteen entries and four group heads fit the page under the title.
     readonly property real entryHeight: Theme.dp(46)
@@ -69,7 +71,7 @@ FocusScope {
         } else if (api.keys.isCancel(event)) {
             event.accepted = true;
             Sound.cancel();
-            list.escapedUp();
+            list.cancelled();
         }
     }
 

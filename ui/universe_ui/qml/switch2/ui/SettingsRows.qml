@@ -224,6 +224,8 @@ FocusScope {
                 readonly property bool hasMark: iconIsFile && mark.status === Image.Ready
                 readonly property bool hasIcon: !hasGlyph && !iconIsFile && entry.icon !== undefined && String(entry.icon) !== ""
                 readonly property bool keepsMark: hasMark || entry.iconSlot === true
+                // A logo for the value (the runner picked), drawn just before it.
+                readonly property bool hasValueMark: entry.valueIcon !== undefined && entry.valueIcon !== null && String(entry.valueIcon) !== "" && valueMark.status === Image.Ready
                 // Dim reads as disabled but still opens: a runner whose program was not found.
                 readonly property color ink: disabled || entry.dim === true ? Theme.textDisabled : Theme.text
                 // A search hit: where the row lives, muted, in front of its label.
@@ -371,7 +373,21 @@ FocusScope {
                         id: control
                         x: parent.width - width - rows.inset
                         height: rows.rowHeight
-                        width: toggle.visible ? toggle.width : radio.visible ? radio.width : valueText.visible ? valueText.width : check.visible ? check.width : 0
+                        width: toggle.visible ? toggle.width : radio.visible ? radio.width : valueText.visible ? valueText.width + (row.hasValueMark ? valueMark.width + Theme.dp(16) : 0) : check.visible ? check.width : 0
+
+                        Image {
+                            id: valueMark
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: Theme.dp(44)
+                            height: width
+                            source: row.entry.valueIcon !== undefined && row.entry.valueIcon !== null && String(row.entry.valueIcon) !== "" ? Qt.resolvedUrl("../../" + row.entry.valueIcon) : ""
+                            asynchronous: true
+                            fillMode: Image.PreserveAspectFit
+                            sourceSize.height: 128
+                            smooth: true
+                            mipmap: true
+                            visible: row.hasValueMark && valueText.visible
+                        }
 
                         Toggle {
                             id: toggle
@@ -405,6 +421,7 @@ FocusScope {
                         Label {
                             id: valueText
                             visible: row.entry.type !== "bool" && row.entry.type !== "radio" && !row.info && !toggle.visible
+                            anchors.right: parent.right
                             anchors.verticalCenter: parent.verticalCenter
                             text: row.entry.display || ""
                             color: row.disabled ? Theme.textDisabled : row.entry.inherited === true || row.entry.type === "static" ? Theme.textSecondary : Theme.accent

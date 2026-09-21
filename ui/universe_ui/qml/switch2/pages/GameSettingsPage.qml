@@ -16,24 +16,16 @@ FocusScope {
     readonly property var form: api.screens.gameSettings
     readonly property var game: args && args.gameId ? api.allGames.byId(args.gameId) : null
 
-    // The form's cards as sections: the basic ones, the Advanced gate, then (once it is open) the advanced-only ones;
+    // The form's cards as sections: the game's own, the modules', then — while Advanced is on (Y) — the power user's;
     // a basic section's own advanced rows come under an Advanced heading of their own.
     readonly property var groups: form.groups
-    readonly property var sections: groups.map(function (g, i) {
-        if (!g.title)
-            return {
-                label: "Advanced",
-                detail: form.showAdvanced ? "Shown in every section" : "Settings for power users",
-                group: 2
-            };
+    readonly property var sections: groups.map(function (g) {
         return {
             label: g.title,
             detail: g.meta || "",
-            group: form.hasAdvanced && i > gate ? 3 : g.caps === true ? 0 : 1
+            group: g.advanced ? 2 : g.caps === true ? 0 : 1,
+            groupLabel: g.advanced ? "Advanced" : ""
         };
-    })
-    readonly property int gate: groups.findIndex(function (g) {
-        return !g.title;
     })
     property int section: 0
     property string zone: "list"
@@ -43,7 +35,18 @@ FocusScope {
     readonly property var hints: {
         var row = rows.currentRow;
         var label = zone !== "rows" ? "OK" : !row || row.heading || row.disabled ? "OK" : row.type === "bool" ? "Toggle" : row.type === "action" ? "Select" : "Change";
-        return [
+        var out = [
+            {
+                glyph: "Y",
+                label: form.showAdvanced ? "Hide advanced" : "Show advanced"
+            }
+        ];
+        if (zone === "rows" && row && row.origin)
+            out.push({
+                glyph: "X",
+                label: row.origin === "game" ? "Reset" : "Override"
+            });
+        return out.concat([
             {
                 glyph: "B",
                 label: "Back"
@@ -52,7 +55,13 @@ FocusScope {
                 glyph: "A",
                 label: label
             }
-        ];
+        ]);
+    }
+
+    // Advanced turned off while on one of its sections: the last one that stays.
+    onGroupsChanged: if (section >= groups.length) {
+        section = Math.max(0, groups.length - 1);
+        list.index = section;
     }
 
     onArgsChanged: {
@@ -89,8 +98,6 @@ FocusScope {
     function row(i) {
         var src = form.rows[i], r = Details.withDetail(src, src.module);
         r.form = i;
-        if (src.key === "advanced")
-            r.display = form.showAdvanced ? "Shown" : "Hidden";
         var from = src.origin === "global" ? "Global" : src.origin === "default" ? "Default" : "";
         if (from)
             r.detail = from + (r.detail ? " · " + r.detail : "");
@@ -108,11 +115,19 @@ FocusScope {
         });
     }
 
+    // X: a value of the game's own goes back to the global's or the default; an inherited one is written on the game.
+    function resetOrOverride() {
+        var row = rows.currentRow;
+        if (zone !== "rows" || !row || !row.origin) {
+            Sound.play("edge");
+            return;
+        }
+        var ok = row.origin === "game" ? form.reset(row.form) : form.override(row.form);
+        Sound.play(ok ? "select" : "edge");
+    }
+
     function activate(index, row) {
-        if (row.key === "advanced") {
-            Sound.play("select");
-            form.showAdvanced = !form.showAdvanced;
-        } else if (row.type === "bool") {
+        if (row.type === "bool") {
             form.toggle(row.form);
             Sound.play("select");
         } else if (row.type === "map") {
@@ -137,6 +152,13 @@ FocusScope {
             Sound.play("back");
             page.zone = "list";
             list.forceActiveFocus();
+        } else if (api.keys.isFilters(event)) {
+            event.accepted = true;
+            Sound.play("select");
+            form.showAdvanced = !form.showAdvanced;
+        } else if (api.keys.isDetails(event)) {
+            event.accepted = true;
+            page.resetOrOverride();
         }
     }
 

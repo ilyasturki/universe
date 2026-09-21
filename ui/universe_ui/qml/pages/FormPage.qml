@@ -9,28 +9,25 @@ FocusScope {
 
     focus: true
 
-    // { game } | { runner } | { module } | { source }: one game's, one runner's, one module's or one source's settings;
+    // { runner } | { module } | { source }: one runner's, one module's or one source's settings (a game's is GameSettingsPage);
     // `key` (and a module setting's `settingModule`) lands the cursor on that row, the Advanced row opened if it sits behind it.
     property var args: ({})
-    readonly property var game: args.game || null
     readonly property string runner: args.runner || ""
     readonly property string module: args.module || ""
     readonly property string source: args.source || ""
     readonly property var form: formOf(args)
-    readonly property var info: game || form.info === undefined ? null : form.info
+    readonly property var info: form.info === undefined ? null : form.info
     readonly property var login: api.screens.login
     property int returnIndex: -1
     property string landKey: ""
     property string landModule: ""
 
     function formOf(a) {
-        return a.game ? api.screens.gameSettings : a.runner ? api.screens.runner : a.source ? api.screens.source : api.screens.module;
+        return a.runner ? api.screens.runner : a.source ? api.screens.source : api.screens.module;
     }
 
     signal closeRequested
     signal settingsRequested(var game)
-    // `cursor` is { key, settingModule }: the args that land the form back on this row.
-    signal detailRequested(var game, var cursor)
     signal message(string text)
 
     readonly property var hints: editor.open ? editor.hints : menu.open ? menu.hints : [
@@ -43,25 +40,12 @@ FocusScope {
             glyph: "dpad",
             label: "Navigate"
         }
-    ].concat(game ? [
-        {
-            glyph: "X",
-            label: "Details"
-        }
-    ] : []).concat([
+    ].concat([
         {
             glyph: "B",
             label: "Back"
         }
     ])
-
-    function openDetail() {
-        var row = cards.currentRow;
-        detailRequested(game, {
-            key: row ? row.key : "",
-            settingModule: row && row.module ? row.module : ""
-        });
-    }
 
     readonly property real sideMargin: Theme.dp(90)
     readonly property bool hasLogo: info !== null && info.icon !== undefined && String(info.icon) !== "" && logo.status === Image.Ready
@@ -70,9 +54,9 @@ FocusScope {
     Component.onDestruction: if (page.runner !== "")
         api.screens.runner.load("")
 
-    // The derived game/runner/module/source are still stale here: read the args themselves.
+    // The derived runner/module/source are still stale here: read the args themselves.
     onArgsChanged: {
-        var id = args.game ? args.game.id : args.runner || args.module || args.source || "";
+        var id = args.runner || args.module || args.source || "";
         var form = formOf(args);
         landKey = args.key || "";
         landModule = args.settingModule || "";
@@ -241,14 +225,6 @@ FocusScope {
         }
     }
 
-    GameBackdrop {
-        anchors.top: parent.top
-        anchors.left: parent.left
-        anchors.right: parent.right
-        visible: page.game !== null
-        game: page.game
-    }
-
     Item {
         id: header
 
@@ -259,13 +235,6 @@ FocusScope {
         anchors.leftMargin: page.sideMargin
         anchors.rightMargin: page.sideMargin
         height: Math.max(Theme.dp(88), head.height)
-
-        GameHeader {
-            anchors.fill: parent
-            visible: page.game !== null
-            game: page.game
-            label: "GAME SETTINGS"
-        }
 
         Image {
             id: logo
@@ -289,7 +258,6 @@ FocusScope {
             anchors.right: parent.right
             anchors.verticalCenter: parent.verticalCenter
             spacing: Theme.dp(4)
-            visible: page.game === null
 
             CapsLabel {
                 text: page.runner !== "" ? "RUNNER" : page.source !== "" ? "SOURCE" : "MODULE"
@@ -334,7 +302,7 @@ FocusScope {
         id: cards
 
         anchors.top: header.bottom
-        anchors.topMargin: Theme.dp(page.game ? 32 : 40)
+        anchors.topMargin: Theme.dp(40)
         anchors.bottom: loginCard.visible ? loginCard.top : hintBar.top
         anchors.bottomMargin: loginCard.visible ? Theme.dp(24) : 0
         anchors.left: parent.left
@@ -360,9 +328,6 @@ FocusScope {
             if (api.keys.isCancel(event)) {
                 event.accepted = true;
                 page.closeRequested();
-            } else if (api.keys.isDetails(event)) {
-                event.accepted = true;
-                page.game ? page.openDetail() : Sound.edge();
             }
         }
     }

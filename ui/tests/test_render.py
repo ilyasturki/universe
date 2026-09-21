@@ -635,3 +635,51 @@ def test_the_reprise_game_menu_groups_its_rows_and_hides_the_media_a_game_has_no
     assert api.allGames.byId("mini-metro") is None
     window.close()
     pump(50)
+
+
+def test_the_game_settings_page_lands_a_search_hit_behind_advanced(api, fake):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    def click(key, times=1):
+        for _ in range(times):
+            QTest.keyClick(window, key)
+        pump(80)
+
+    _engine, window = render(api, activate=True)
+    root = window.property("contentItem").childItems()[0].property("item")
+    game = api.allGames.byId("the-technomancer")
+    root.openSub("pages/GameSettingsPage.qml", {"game": game, "key": "launch.ntsync"})
+    settle(window)
+    pump(300)
+    page = window.findChild(QObject, "gameSettingsPage")
+    form = api.screens.gameSettings
+    assert page is not None and form.showAdvanced is True, "an advanced row: Advanced comes on"
+    groups = form.groups
+    assert groups[page.property("section")]["title"] == "Sync" and page.property("row")["key"] == "launch.ntsync", "the hit's card, the cursor on it"
+    assert [s["name"] for s in page.property("sections").toVariant()][:7] == [
+        "Display",
+        "Overlay",
+        "Proton",
+        "Launch",
+        "Desktop and library",
+        "Video capture",
+        "Play journal",
+    ]
+    assert [h["label"] for h in page.property("hints").toVariant()] == ["Toggle", "Override", "Hide advanced", "Sections", "Section"]
+    click(Qt.Key.Key_I)
+    assert fake.game("the-technomancer")["launch"]["ntsync"] is True and page.property("row")["origin"] == "game", "X pins the inherited value"
+    assert [h["label"] for h in page.property("hints").toVariant()][1] == "Reset"
+    click(Qt.Key.Key_I)
+    assert "ntsync" not in fake.game("the-technomancer")["launch"], "X again drops it"
+    click(Qt.Key.Key_F)
+    assert form.showAdvanced is False and groups[page.property("section")]["title"] != "Sync", "Y: the advanced cards go, the cursor lands on a card that stays"
+    assert form.groups[page.property("section")]["title"] == "Play journal"
+    click(Qt.Key.Key_Escape)
+    assert [h["label"] for h in page.property("hints").toVariant()] == ["Open", "Show advanced", "Back", "Section"], "B: the sidebar"
+    click(Qt.Key.Key_PageUp)
+    assert form.groups[page.property("section")]["title"] == "Video capture", "LT steps the card"
+    click(Qt.Key.Key_Escape)
+    assert root.property("subOpen") is False, "B from the sidebar closes the page"
+    window.close()
+    pump(50)

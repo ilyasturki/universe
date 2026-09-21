@@ -51,8 +51,6 @@ FocusScope {
     property var subArgs: ({})
     property var subReturn: null
     property bool subSwapping: false
-    // The sub page the detail was opened from: closing the detail brings it back.
-    property var detailReturn: null
     // "page" | "chrome" | "search": one owner, so no two focus bindings race.
     property string focusOwner: "page"
 
@@ -185,26 +183,7 @@ FocusScope {
         if (detailLoader.item)
             detailLoader.item.reset();
         detailOpen = false;
-        var back = detailReturn;
-        detailReturn = null;
-        if (back) {
-            showSub(back.source, back.args);
-            return;
-        }
         // Qt clears the loader's focus from C++ without re-evaluating the binding.
-        restoreFocus();
-    }
-
-    function detailFromSub(game, cursor) {
-        if (!game)
-            return;
-        detailReturn = {
-            source: subSource,
-            args: Object.assign({}, subArgs, cursor)
-        };
-        subReturn = null;
-        subOpen = false;
-        openDetail(game);
         restoreFocus();
     }
 
@@ -464,7 +443,7 @@ FocusScope {
             items = items.concat(group);
         });
         var pages = {
-            settings: "FormPage",
+            settings: "GameSettingsPage",
             artwork: "ArtworkPage",
             screenshots: "ScreenshotsPage",
             recordings: "RecordingsPage",
@@ -524,7 +503,6 @@ FocusScope {
     // The install folder, the hours and the journal stay on disk; the watcher drops the game from the library.
     function removeGame(game) {
         var title = game.title;
-        detailReturn = null;
         if (detailOpen && detailGame === game)
             closeDetail();
         Sound.enter();
@@ -819,7 +797,7 @@ FocusScope {
                             root.openDetail(game);
                         }
                         function onSettingsRequested(game) {
-                            root.openSub("pages/FormPage.qml", {
+                            root.openSub("pages/GameSettingsPage.qml", {
                                 game: game
                             });
                         }
@@ -839,7 +817,7 @@ FocusScope {
                             });
                         }
                         function onFormRequested(args) {
-                            root.openSub("pages/FormPage.qml", args);
+                            root.openSub(args.game ? "pages/GameSettingsPage.qml" : "pages/FormPage.qml", args);
                         }
                         function onSetupRequested() {
                             root.openSetup();
@@ -1054,12 +1032,9 @@ FocusScope {
                 root.openSettings(section);
             }
             function onSettingsRequested(game) {
-                root.pushSub("pages/FormPage.qml", {
+                root.pushSub("pages/GameSettingsPage.qml", {
                     game: game
                 });
-            }
-            function onDetailRequested(game, cursor) {
-                root.detailFromSub(game, cursor);
             }
             function onMessage(text) {
                 toast.show(text);
@@ -1208,7 +1183,6 @@ FocusScope {
 
     function clearToHome() {
         subReturn = null;
-        detailReturn = null;
         subOpen = false;
         if (detailLoader.item)
             detailLoader.item.reset();

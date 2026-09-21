@@ -1324,13 +1324,16 @@ class FakeCore:
     def set_module_setting(self, module_id, game_id, key, value):
         module = self._module(module_id)
         schema = {s["key"]: s for s in module.get("settings", [])}
-        value = _coerce(schema, module_id, key, value)
-        if game_id:
-            game = self._game(game_id)
-            game.setdefault("modules", {}).setdefault(module_id, {})[key] = value
-            self._write_game(game)
+        if key not in schema:
+            raise UniverseError("Invalid", f"{module_id} has no setting '{key}'")
+        owner = self._game(game_id) if game_id else self._config
+        table = owner.setdefault("modules", {}).setdefault(module_id, {})
+        if value == "":
+            table.pop(key, None)
         else:
-            self._config.setdefault("modules", {}).setdefault(module_id, {})[key] = value
+            table[key] = _coerce(schema, module_id, key, value)
+        if game_id:
+            self._write_game(owner)
 
     def doctor(self):
         return copy.deepcopy(self._data.get("doctor", []))
