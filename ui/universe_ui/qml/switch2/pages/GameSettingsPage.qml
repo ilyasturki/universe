@@ -16,15 +16,14 @@ FocusScope {
     readonly property var form: api.screens.gameSettings
     readonly property var game: args && args.gameId ? api.allGames.byId(args.gameId) : null
 
-    // The form's cards as sections: the game's own, the modules', then — while Advanced is on (Y) — the power user's;
-    // a basic section's own advanced rows come under an Advanced heading of their own.
+    // The form's cards as sections: the game's own, then the modules'; Advanced (Y) only adds rows inside them,
+    // each folded card under a heading of its own.
     readonly property var groups: form.groups
     readonly property var sections: groups.map(function (g) {
         return {
             label: g.title,
             detail: g.meta || "",
-            group: g.advanced ? 2 : g.caps === true ? 0 : 1,
-            groupLabel: g.advanced ? "Advanced" : ""
+            group: g.caps === true ? 0 : 1
         };
     })
     property int section: 0
@@ -35,16 +34,17 @@ FocusScope {
     readonly property var hints: {
         var row = rows.currentRow;
         var label = zone !== "rows" ? "OK" : !row || row.heading || row.disabled ? "OK" : row.type === "bool" ? "Toggle" : row.type === "action" ? "Select" : "Change";
-        var out = [
-            {
+        var out = [];
+        if (form.hasAdvanced)
+            out.push({
                 glyph: "Y",
                 label: form.showAdvanced ? "Hide advanced" : "Show advanced"
-            }
-        ];
-        if (zone === "rows" && row && row.origin)
+            });
+        if (zone === "rows" && row && !row.heading)
             out.push({
                 glyph: "X",
-                label: row.origin === "game" ? "Reset" : "Override"
+                label: row.entry ? "Remove" : "Reset",
+                dim: !form.resettable(row)
             });
         return out.concat([
             {
@@ -56,12 +56,6 @@ FocusScope {
                 label: label
             }
         ]);
-    }
-
-    // Advanced turned off while on one of its sections: the last one that stays.
-    onGroupsChanged: if (section >= groups.length) {
-        section = Math.max(0, groups.length - 1);
-        list.index = section;
     }
 
     onArgsChanged: {
@@ -94,13 +88,9 @@ FocusScope {
         });
     }
 
-    // An inherited value names where it comes from ahead of its detail, where the eye lands first: `Global · …`, `Default · …`.
     function row(i) {
         var src = form.rows[i], r = Details.withDetail(src, src.module);
         r.form = i;
-        var from = src.origin === "global" ? "Global" : src.origin === "default" ? "Default" : "";
-        if (from)
-            r.detail = from + (r.detail ? " · " + r.detail : "");
         return r;
     }
 
@@ -115,24 +105,23 @@ FocusScope {
         });
     }
 
-    // X: a value of the game's own goes back to the global's or the default; an inherited one is written on the game.
-    function resetOrOverride() {
+    // X: a value of the game's own goes back to the global's or the default; a variable the game set goes out of its map.
+    function resetRow() {
         var row = rows.currentRow;
-        if (zone !== "rows" || !row || !row.origin) {
+        if (zone !== "rows" || !row || row.heading || !form.resettable(row)) {
             Sound.play("edge");
             return;
         }
-        var ok = row.origin === "game" ? form.reset(row.form) : form.override(row.form);
-        Sound.play(ok ? "select" : "edge");
+        Sound.play(form.reset(row.form) ? "select" : "edge");
     }
 
     function activate(index, row) {
         if (row.type === "bool") {
             form.toggle(row.form);
             Sound.play("select");
-        } else if (row.type === "map") {
+        } else if (row.map === true) {
             Sound.play("ok");
-            Forms.editMap(shell, row, function (name, value) {
+            Forms.addEntry(shell, row, function (name, value) {
                 form.setMapEntry(row.form, name, value);
             });
         } else {
@@ -152,13 +141,13 @@ FocusScope {
             Sound.play("back");
             page.zone = "list";
             list.forceActiveFocus();
-        } else if (api.keys.isFilters(event)) {
+        } else if (api.keys.isFilters(event) && form.hasAdvanced) {
             event.accepted = true;
             Sound.play("select");
             form.showAdvanced = !form.showAdvanced;
         } else if (api.keys.isDetails(event)) {
             event.accepted = true;
-            page.resetOrOverride();
+            page.resetRow();
         }
     }
 

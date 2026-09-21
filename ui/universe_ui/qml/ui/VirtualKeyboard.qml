@@ -14,6 +14,7 @@ Item {
     property real keyHeight: Theme.dp(58)
     property real keyGap: Theme.dp(10)
     property bool showDone: false
+    property string doneLabel: "done"
     property bool symbols: false
     property bool shift: false
     property bool numeric: false
@@ -78,7 +79,7 @@ Item {
                             action: "clear"
                         },
                         {
-                            label: "done",
+                            label: doneLabel,
                             value: "",
                             action: "done"
                         }
@@ -106,7 +107,7 @@ Item {
         });
         if (showDone)
             bottom.push({
-                label: "done",
+                label: doneLabel,
                 value: "",
                 action: "done"
             });

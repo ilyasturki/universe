@@ -413,7 +413,7 @@ class SettingsSearch(QObject):
             for i in group["rows"]:
                 row = rows[i]
                 key = str(row.get("key") or "")
-                if key in SKIPPED_KEYS or row.get("type") in ("info", "static") or (skip_control and key == "enabled"):
+                if key in SKIPPED_KEYS or row.get("map") or row.get("type") in ("info", "static") or (skip_control and key == "enabled"):
                     continue
                 entries.append(
                     Entry(
@@ -459,7 +459,7 @@ class SettingsSearch(QObject):
                 for i in group["rows"]:
                     row = rows[i]
                     key = str(row.get("key") or "")
-                    if key in SKIPPED_KEYS or row.get("type") in ("info", "static"):
+                    if key in SKIPPED_KEYS or row.get("map") or row.get("entry") or row.get("type") in ("info", "static"):
                         continue
                     ident = (str(row.get("module") or ""), key)
                     entry = keyed.get(ident)

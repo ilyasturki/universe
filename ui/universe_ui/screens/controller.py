@@ -137,6 +137,7 @@ class FakeWatcher(QObject):
 
 
 class ControllerScreen(AdvancedRows, QObject):
+    gated = True
     devicesChanged = Signal()
     currentChanged = Signal()
     stateChanged = Signal()

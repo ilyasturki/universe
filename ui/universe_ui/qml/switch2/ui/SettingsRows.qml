@@ -230,8 +230,8 @@ FocusScope {
                 readonly property color ink: disabled || entry.dim === true ? Theme.textDisabled : Theme.text
                 // A search hit: where the row lives, muted, in front of its label.
                 readonly property string path: entry.path !== undefined && entry.path !== null ? String(entry.path) : ""
-                // A value set on this game where the row could have taken the global's; an inherited value reads plain, in grey.
-                readonly property bool own: entry.origin === "game"
+                // Where an inheritable value comes from: set on this game or runner, the global settings, or the default.
+                readonly property string originTag: entry.origin === "game" ? "THIS GAME" : entry.origin === "runner" ? "THIS RUNNER" : entry.origin === "global" ? "GLOBAL" : entry.origin === "default" ? "DEFAULT" : ""
 
                 function esc(text) {
                     return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -362,8 +362,8 @@ FocusScope {
                         anchors.right: control.left
                         anchors.rightMargin: Theme.dp(22)
                         anchors.verticalCenter: control.verticalCenter
-                        visible: row.own
-                        text: "THIS GAME"
+                        visible: row.originTag !== ""
+                        text: row.originTag
                         color: Theme.textSecondary
                         font.pixelSize: Theme.dp(Theme.fontTiny)
                         font.letterSpacing: Theme.dp(2)

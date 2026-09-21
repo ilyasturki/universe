@@ -73,7 +73,7 @@ pub struct LaunchKey {
     /// Empty: every runner; else the runner kinds the key applies to.
     pub runners: &'static [&'static str],
     pub description: &'static str,
-    /// Shown behind the settings pages' Advanced row.
+    /// Shown behind the settings pages' Advanced toggle.
     pub advanced: bool,
 }
 

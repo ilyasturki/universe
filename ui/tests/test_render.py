@@ -653,33 +653,133 @@ def test_the_game_settings_page_lands_a_search_hit_behind_advanced(api, fake):
     settle(window)
     pump(300)
     page = window.findChild(QObject, "gameSettingsPage")
+    body = page.findChild(QObject, "cardSections")
     form = api.screens.gameSettings
     assert page is not None and form.showAdvanced is True, "an advanced row: Advanced comes on"
-    groups = form.groups
-    assert groups[page.property("section")]["title"] == "Sync" and page.property("row")["key"] == "launch.ntsync", "the hit's card, the cursor on it"
-    assert [s["name"] for s in page.property("sections").toVariant()][:7] == [
-        "Display",
-        "Overlay",
-        "Proton",
-        "Launch",
-        "Desktop and library",
-        "Video capture",
-        "Play journal",
-    ]
-    assert [h["label"] for h in page.property("hints").toVariant()] == ["Toggle", "Override", "Hide advanced", "Sections", "Section"]
+    sections = [s["name"] for s in page.property("sections").toVariant()]
+    assert sections == ["Display", "Overlay", "Proton", "Launch", "Desktop and library", "Video capture", "Play journal"], "no advanced card of its own"
+    assert sections[body.property("section")] == "Proton" and page.property("row")["key"] == "launch.ntsync", (
+        "the hit sits in the Proton card, the cursor on it"
+    )
+    assert [h["label"] for h in page.property("hints").toVariant()] == ["Toggle", "Reset", "Hide advanced", "Sections", "Section"]
+    assert page.property("canReset") is False, "nothing of the game's to drop: X reads dim"
+    click(Qt.Key.Key_Return)
+    assert fake.game("the-technomancer")["launch"]["ntsync"] is False and page.property("row")["origin"] == "game", (
+        "changing the value is what sets it on the game"
+    )
+    assert page.property("canReset") is True
     click(Qt.Key.Key_I)
-    assert fake.game("the-technomancer")["launch"]["ntsync"] is True and page.property("row")["origin"] == "game", "X pins the inherited value"
-    assert [h["label"] for h in page.property("hints").toVariant()][1] == "Reset"
-    click(Qt.Key.Key_I)
-    assert "ntsync" not in fake.game("the-technomancer")["launch"], "X again drops it"
+    assert "ntsync" not in fake.game("the-technomancer")["launch"] and page.property("row")["origin"] == "default", "X drops it"
     click(Qt.Key.Key_F)
-    assert form.showAdvanced is False and groups[page.property("section")]["title"] != "Sync", "Y: the advanced cards go, the cursor lands on a card that stays"
-    assert form.groups[page.property("section")]["title"] == "Play journal"
+    assert form.showAdvanced is False and sections == [s["name"] for s in page.property("sections").toVariant()], "Y: the rows go, the sidebar stays"
+    assert form.groups[body.property("section")]["title"] == "Proton" and page.property("row")["key"] == "launch.proton", (
+        "the cursor lands on the card's first row"
+    )
     click(Qt.Key.Key_Escape)
     assert [h["label"] for h in page.property("hints").toVariant()] == ["Open", "Show advanced", "Back", "Section"], "B: the sidebar"
     click(Qt.Key.Key_PageUp)
-    assert form.groups[page.property("section")]["title"] == "Video capture", "LT steps the card"
+    assert form.groups[body.property("section")]["title"] == "Overlay", "LT steps the card"
     click(Qt.Key.Key_Escape)
     assert root.property("subOpen") is False, "B from the sidebar closes the page"
+    root.openSub("pages/GameSettingsPage.qml", {"game": game})
+    settle(window)
+    pump(300)
+    assert form.showAdvanced is False, "reopened, Advanced starts hidden"
+    window.close()
+    pump(50)
+
+
+def test_the_game_settings_page_adds_a_variable_from_one_sheet(api, fake):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    def click(key, times=1):
+        for _ in range(times):
+            QTest.keyClick(window, key)
+        pump(80)
+
+    def type_text(text):
+        for ch in text:
+            QTest.keyClick(window, ch)
+        pump(80)
+
+    _engine, window = render(api, activate=True)
+    root = window.property("contentItem").childItems()[0].property("item")
+    game = api.allGames.byId("the-technomancer")
+    root.openSub("pages/GameSettingsPage.qml", {"game": game, "key": "launch.env"})
+    settle(window)
+    pump(300)
+    page = window.findChild(QObject, "gameSettingsPage")
+    body = page.findChild(QObject, "cardSections")
+    form = api.screens.gameSettings
+    row = page.property("row")
+    assert form.groups[body.property("section")]["title"] == "Launch" and row["map"] is True and row["label"] == "Add a variable…", (
+        "the environment folds into Launch; the hit lands on the row that adds a variable"
+    )
+    assert [h["label"] for h in page.property("hints").toVariant()][:2] == ["Add", "Reset"]
+    click(Qt.Key.Key_Return)
+    assert [h["label"] for h in page.property("hints").toVariant()] == ["Next", "Cancel"], "one sheet, two fields: the name first"
+    type_text("DXVK_HUD")
+    click(Qt.Key.Key_Return)
+    assert [h["label"] for h in page.property("hints").toVariant()] == ["Save", "Cancel"], "then the value"
+    type_text("fps")
+    click(Qt.Key.Key_Return)
+    pump(200)
+    assert fake.game("the-technomancer")["launch"]["env"] == {"DXVK_HUD": "fps"}
+    row = page.property("row")
+    assert row["key"] == "launch.env.DXVK_HUD" and row["origin"] == "game", "the new variable is a row of its own, the cursor on it"
+    assert [h["label"] for h in page.property("hints").toVariant()][:2] == ["Change", "Remove"]
+    click(Qt.Key.Key_I)
+    assert fake.game("the-technomancer")["launch"].get("env", {}) == {}, "X removes it"
+    window.close()
+    pump(50)
+
+
+def test_the_switch2_forms_share_the_sidebar_and_y(api, fake):
+    from PySide6.QtCore import Q_ARG, QMetaObject, Qt
+    from PySide6.QtTest import QTest
+
+    def click(key, times=1):
+        for _ in range(times):
+            QTest.keyClick(window, key)
+        pump(80)
+
+    def push(source, args):
+        QMetaObject.invokeMethod(root, "push", Q_ARG("QVariant", source), Q_ARG("QVariant", args))
+        settle(window)
+        pump(300)
+        return root.property("topPage")
+
+    def labels(page):
+        return [h["label"] for h in page.property("hints").toVariant()]
+
+    api.theme.set("switch2")
+    engine, window = render(api, activate=True)
+    warnings = []
+    engine.warnings.connect(lambda ws: warnings.extend(w.toString() for w in ws))
+    root = window.property("contentItem").childItems()[0].property("item")
+    form = api.screens.runner
+    page = push("pages/FormPage.qml", {"runner": "proton"})
+    sections = [s["label"] for s in page.property("sections").toVariant()]
+    assert sections == ["Runner", "Proton", "Games"] and form.showAdvanced is False
+    click(Qt.Key.Key_F)
+    assert form.showAdvanced is True and [s["label"] for s in page.property("sections").toVariant()] == sections, "Y: the sidebar stays"
+    click(Qt.Key.Key_Right)
+    click(Qt.Key.Key_Down, 2)
+    row = page.property("currentRow").toVariant()
+    assert row["key"] == "gamescope" and row["origin"] == "global" and labels(page) == ["Hide advanced", "Reset", "Back", "Toggle"]
+    click(Qt.Key.Key_Return)
+    assert form.rows[row["form"]]["origin"] == "runner", "toggling the inherited switch sets it on the runner"
+    click(Qt.Key.Key_I)
+    assert form.rows[row["form"]]["origin"] == "global", "X clears it back"
+    click(Qt.Key.Key_Escape, 2)
+    page = push("pages/FormPage.qml", {"source": "gog"})
+    pump(500)
+    assert [s["label"] for s in page.property("sections").toVariant()] == ["Settings", "Sign-in"] and labels(page) == ["Show advanced", "Back", "OK"]
+    click(Qt.Key.Key_Escape)
+    page = push("pages/SettingsPage.qml", {"section": "launch"})
+    click(Qt.Key.Key_F)
+    assert api.screens.launch.showAdvanced is True, "Y opens the Launch section's advanced rows"
+    assert warnings == []
     window.close()
     pump(50)

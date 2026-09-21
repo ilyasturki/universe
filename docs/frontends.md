@@ -94,25 +94,30 @@ the session badge while the count is not zero.
 
 The settings forms (`api.screens.launch`, `runner`, `module`, `source`, `gameSettings`, `controller`)
 hand QML a flat `rows` list and `groups` that index it; a row's `advanced` puts it in an `advanced`
-group, and every form but `gameSettings` appends one gate row (`key: "advanced"`, an action) whose
-group carries `wide: true`. `groups` holds the basic groups, the gate, and — only while
-`showAdvanced` is set (a page resets it when it opens) — the advanced rows: an advanced group
-titled like a basic one folds into it, its rows after the group's `divider` (an index into `rows`,
-−1 when nothing is folded), the rest follow the gate as groups of their own (`basicGroups` and
-`advancedGroups` are always there, for a look that lays them out itself); `hasAdvanced` says
-whether there are any, and `reveal(key, module)` returns a row's index and sets `showAdvanced`
-when the row sits behind it — what a search hit lands on. The game form has no gate: its pages
-flip `showAdvanced` from a button (Y), and the advanced-only groups follow the basic ones. A row
-that can inherit carries `origin`: `game` (set on the game — the looks tag it THIS GAME), `global`
-(`config.toml` sets it, told by `settings()["set"]`) or `default` (nothing does); `inherited` is
-true for the last two, and a row inherited with no `origin` (a runner's found program) is only
-that. On the game form, X is `reset(index)` on a `game` row — an empty write, the key leaves the
-game's file — and `override(index)` on an inherited one, which writes what the row shows (`pin`
-when the row's `value` is a picker's clearing choice, a `map`'s entries one by one) on the game.
-A runner picker's `valueIcon` is the picked runner's logo, drawn by the value; `icons` are the
-choices'. A `map` row
-(`launch.env`, `launch.dll_overrides`) carries `entries` and takes `setMapEntry(index, name, value)`,
-an empty value removing the entry. `api.screens.search` is the settings index: the page hands it
+group. `groups` holds the basic groups and — only while `showAdvanced` is set (`load` clears it:
+a page opens with Advanced hidden, however it was left) — the advanced rows: an advanced group
+titled like a basic one, or naming one as its `home` (`HOMES`: Scaling in Display, Environment in
+Launch, Sync / Upscaling / Logs in the runner's card, Artwork in Desktop and library), folds into it
+after the group's `divider` (an index into `rows`, −1 when nothing is folded), the card's own
+advanced rows first, then each homed card under a rule of its own (`dividers`: `[{at, label}]`,
+"Advanced", "Advanced · Scaling", "Sync"…); a group with no such card follows the basic ones as a
+group of its own (`basicGroups` and `advancedGroups` are always there, for a look that lays them
+out itself). `hasAdvanced` says whether there are any, the pages flip `showAdvanced` from Y, and
+`reveal(key, module)` returns a row's index and sets `showAdvanced` when the row sits behind it —
+what a search hit lands on. The controller screen alone keeps a gate row (`key: "advanced"`, an
+action, its group `wide: true`). A row that can inherit carries `origin`: `game` (set on the game),
+`runner` (set on the runner), `global` (`config.toml` sets it, told by `settings()["set"]`) or
+`default` (nothing does) — the looks chip it THIS GAME, THIS RUNNER, GLOBAL, DEFAULT, the value
+shown bare; `inherited` is true for the last two, and a row inherited with no `origin` (a runner's
+found program) is only that, chipped INHERITED. A value is overridden by changing it; X is
+`reset(index)` where `resettable(row)` says so — a `game` or `runner` row, whose own value goes
+(an empty write, the key leaves the file) so the row inherits again, or a map's entry, which goes
+out of the map. A runner picker's `valueIcon` is the picked runner's logo, drawn by the value;
+`icons` are the choices'. A map key (`launch.env`, `launch.dll_overrides`) is one `string` row per
+entry (`launch.env.FOO`, `entry` naming the map, on a game's page `origin` per entry: the game's
+own or the global's), then an `action` row with `map: true`, `fields` (`["Variable", "Value"]`) and
+`action: "Add"`; `setMapEntry(index, name, value)` from either writes one entry, the name cleaned
+to one key, an empty value removing it. `api.screens.search` is the settings index: the page hands it
 its `sections` (`[{id, label}]`), `load()` rebuilds the index off the UI thread from the same
 row builders the forms use (`build_launch`, `build_runner`, `build_page`, `build_game`), setting
 `query` recomputes `results` at once — rows with `path`, `display`, `detail`, `tag`, `kind`
@@ -540,8 +545,10 @@ key written through `set_setting`. The rows are the core's launch-key catalogue
 runner (`runners` empty): each entry's `section` is the card — Display (the gamescope switch,
 resolution, refresh rate, adaptive sync; the card's meta is the screen, `screen`: `DP-1 3840×2160 @
 60 Hz`), Overlay (MangoHud, the frame rate limit, pause on HOME, then `desktop.hide_cursor` added by
-the screen), Advanced (scaler, filter, sharpness, the raw gamescope arguments) — beginner first,
-expert last. Its `label` and `description` (the row's `detail`) come with it, and its `choices` are
+the screen), then behind Y Scaling (scaler, filter, sharpness, the raw gamescope arguments),
+folded into Display, and Environment (one row per variable, then Add a variable…, X removing one),
+Programs, Folders, API keys and Desktop as cards of their own — beginner first, expert last. Its
+`label` and `description` (the row's `detail`) come with it, and its `choices` are
 sized by the screen the window is on (`screen_mode`: `auto`, the screen's mode, the standard heights
 below it at its aspect ratio; the rates below its own). `screens/settings.py`'s `launch_row` is the
 presentation over an entry: an `enum`, `toggle` or `int` with choices lists a `default` choice that clears the
@@ -553,15 +560,20 @@ sync modes, Wayland, HDR, the upscaler upgrades) are set on that runner's page i
 `load()` reads the config again.
 
 The game settings page (`pages/GameSettingsPage.qml`, `switch2/pages/GameSettingsPage.qml`: a
-sidebar of the form's cards — the game's own, then the modules', then under an Advanced head the
-power user's while Y has them shown — beside the picked card's rows; LT / RT step the cards in
-Reprise, B goes back to the sidebar, then closes) reads the same catalogue with scope `game`,
-filtered by the runner's kind (`runners`), and mirrors the cards — Display, Overlay, Scaling — then
-the runner's own, named after it (Proton: the build, Wayland, HDR, the Wine prefix; Sync;
-Upscaling), then Launch (the runner picker, the program, an emulator's options, the wrapper,
-arguments and working directory); a `both` key inherited from the global value until set (a
-`toggle` inherits the global switch, not what `effective` resolved it to). X on a row resets its
-own value or pins the inherited one (`reset` / `override` above).
+sidebar of the form's cards — the game's own, then the modules' — beside the picked card's rows,
+Y showing the power user's rows inside them under their rules (the sidebar never moves with it);
+Reprise's sidebar and rows are `ui/CardSections.qml`, shared with the form page, LT / RT stepping
+the cards, B going back to the sidebar, then closing) reads the same catalogue with scope `game`,
+filtered by the runner's kind (`runners`), and mirrors the cards — Display (with Scaling folded in),
+Overlay — then the runner's own, named after it (Proton: the build, Wayland, HDR; folded in, the
+Wine prefix, the DLL overrides, Sync, Upscaling, Logs), then Launch (the runner picker, the program,
+an emulator's options; folded in, the wrapper, arguments, working directory, the environment), then
+Desktop and library (with Artwork folded in); a `both` key inherited from the global value until set
+(a `toggle` inherits the global switch, not what `effective` resolved it to). X on a row resets the
+game's own value or removes a variable (`reset` above); an inherited value is overridden by
+changing it. Adding a variable is one sheet with two fields (`ValueEditor.promptPair`,
+`KeyboardSheet.showPair`; Switch 2 `shell.promptPair`, `TextSheet.showPair`): Done on the name
+moves to the value, Done on the value saves.
 
 Upscaling's meta names the GPU (`client.gpu()`: `label`, `AMD Radeon RX 7900 GRE · RDNA 3`) and each
 of its rows ends its `detail` with `Works on your GPU.` or `Not for your GPU.` (`fits`), nothing when
@@ -577,11 +589,13 @@ which list it is), the ones running first, the others in an "Off" card. A opens 
 △ (Y in Reprise, X in the Switch 2 look) toggles it in the list (`toggle(index)`, refused with a
 warning while it is off). `indexOf(id)` finds an entry's row for the cursor to land on again.
 `pages/FormPage.qml` with `{ module }` or `{ source }` (`theme.qml` `openSub`;
-`switch2/pages/FormPage.qml` on the stack) is on `api.screens.module` or `api.screens.source`
-(`PageForm`): `load(id)` builds its head (`info`: name, meta, `description` from the manifest, warning,
-`enabled`, `source`, and a source's `logged_in` and `user`) and cards for the switch (`enabled`, `disabled` while the entry's
-programs are missing) and, once on, its settings — a module's global ones, a source's all — a
-`dynamic` setting's choices fetched off the UI thread. A source's page adds a Sign-in card: `Signed
+`switch2/pages/FormPage.qml` on the stack; both lay the form out as the game settings page does, a
+sidebar of its cards beside the picked one, Y for the advanced rows) is on `api.screens.module` or
+`api.screens.source` (`PageForm`): `load(id)` builds its head (`info`: name, meta, `description`
+from the manifest, warning, `enabled`, `source`, and a source's `logged_in` and `user`) and a
+Settings card headed by the switch (`enabled`, `disabled` while the entry's programs are missing)
+and, once on, its settings — a module's global ones, a source's all — a `dynamic` setting's
+choices fetched off the UI thread. A source's page adds a Sign-in card: `Signed
 in` (an `info` row, the user as its detail), `Get a sign-in link` (`link`: `api.screens.login.begin`,
 the QR code and the URL then show under the cards) and `Enter the code` (`code`: a prompt into
 `login.submit`); `login.finished` reloads both source screens. Listing the sources probes their
@@ -598,13 +612,15 @@ by name; the runners whose program was not found come last, in a dimmed "Not fou
 `indexOf(id)` finds a runner's row. A runner's row opens `pages/FormPage.qml` with `{ runner }` over the
 tab (`theme.qml` `openSub`, the same loader as the game's sub pages), on `api.screens.runner`:
 `load(id)` builds its head (`info`: name, platforms and where its program was found, a warning)
-and cards for the program (`exe`, a path; the detected one shown as the value, inherited, its
-origin as the detail) and arguments, the gamescope switch, then — for Proton and Wine — the launch
-keys tied to its kind (`launchKeys("global")` filtered by `runners`, cards Proton, Sync, Upscaling as
-on the game page, the global `[launch]` values written through `set_setting`), each option by
-its type, a Games card — one `game` row per library game running through it (`gameId`, its
-square or box art as `image`, its hours as the display, `installed` when it has an install folder),
-by title — and an "Add a game…" action. `setValue(index, value)` writes through `set_runner_setting`
+and a Runner card for the program (`exe`, a path; the detected one shown as the value, inherited,
+where it was found as the detail; `origin: "runner"` once set here, X clearing it back), arguments
+and the gamescope switch (`origin` `global` or `runner`, X likewise), then — for Proton and Wine —
+the launch keys tied to its kind (`launchKeys("global")` filtered by `runners`: the Proton card,
+with Sync, Upscaling and Logs folded in behind Y, or into the Runner card on plain Wine; the global
+`[launch]` values written through `set_setting`), each option by its type in an Options card, and a
+Games card — one `game` row per library game running through it (`gameId`, its square or box art as
+`image`, its hours as the display, `installed` when it has an install folder), by title — ending in
+an "Add a game…" action. `setValue(index, value)` writes through `set_runner_setting`
 (a `launch.*` row through `set_setting`); on the add row it keeps the picked file and `pendingTitle()` proposes a title from it, which
 `addGame(title)` sends to `add_game`. A game row opens the Install page's options: Game settings
 (Reprise: `settingsRequested(game)`, which `theme.qml` `pushSub`s over the runner page, B coming

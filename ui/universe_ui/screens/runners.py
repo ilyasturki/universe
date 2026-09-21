@@ -6,7 +6,7 @@ from PySide6.QtCore import Signal, Slot
 
 from ..models import file_url
 from ..qt import QVARIANT, Property
-from .settings import RowsForm, _group, _row, _to_bus, global_launch_rows, runner_logo
+from .settings import HOMES, RowsForm, _group, _row, _to_bus, global_launch_rows, runner_logo
 
 
 def suggested_title(path):
@@ -71,7 +71,8 @@ class RunnersForm(RowsForm):
 
 
 def build_runner(client, ident, screen_mode):
-    """A runner's page: its program, gamescope, the global launch keys of its kind (the switches behind the gate), its options, its games."""
+    """A runner's page: its program and gamescope, the global launch keys of its kind (the advanced ones folded into the Proton card,
+    else the runner's), its options, its games."""
     runner = next((r for r in client.runners() if r["id"] == ident), None)
     if runner is None:
         return {}, [], []
@@ -90,19 +91,30 @@ def build_runner(client, ident, screen_mode):
     rows, groups = [], []
     if runner.get("kind") != "linux":
         own = runner.get("exe") or ""
-        origin = {"path": "Found on PATH", "lutris": "Found in Lutris's runners"}.get(source, "Found") if found and not own else ""
-        rows.append(_row(name, "exe", "Program", "path", own or found, module=ident, detail=origin, inherited=not own and bool(found)))
+        where = {"path": "Found on PATH", "lutris": "Found in Lutris's runners"}.get(source, "Found") if found and not own else ""
+        rows.append(
+            _row(name, "exe", "Program", "path", own or found, module=ident, detail=where, inherited=not own and bool(found), origin="runner" if own else "")
+        )
         rows.append(_row(name, "args", "Arguments", "string", runner.get("args") or "", module=ident))
-        groups.append(_group("", list(range(len(rows)))))
     config = client.config()
     launch = config.get("launch") or {}
     own = runner.get("gamescope")
     rows.append(
-        _row(name, "gamescope", "Gamescope", "bool", bool(launch.get("gamescope", True)) if own is None else bool(own), module=ident, inherited=own is None)
+        _row(
+            name,
+            "gamescope",
+            "Gamescope",
+            "bool",
+            bool(launch.get("gamescope", True)) if own is None else bool(own),
+            module=ident,
+            origin="global" if own is None else "runner",
+        )
     )
-    groups.append(_group("", [len(rows) - 1]))
+    groups.append(_group("Runner", list(range(len(rows))), caps=True))
     kind = runner.get("kind") or ""
-    global_launch_rows(rows, groups, client, config, screen_mode(), lambda spec: kind in spec["runners"], client.gpu())
+    home = "Proton" if kind == "proton" else "Runner"
+    homes = {**HOMES, "Sync": home, "Upscaling": home, "Logs": home}
+    global_launch_rows(rows, groups, client, config, screen_mode(), lambda spec: kind in spec["runners"], client.gpu(), homes)
     options = runner.get("options") or []
     if options:
         first = len(rows)
@@ -120,24 +132,22 @@ def build_runner(client, ident, screen_mode):
         )
         groups.append(_group("Options", list(range(first, len(rows))), caps=True))
     games = sorted((g for g in client.list() if _runner_of(g) == ident), key=lambda g: str(g.get("title") or "").casefold())
-    if games:
-        first = len(rows)
-        for game in games:
-            media, source = game.get("media") or {}, game.get("source")
-            art = next((p for p in (media.get("square"), media.get("box_front")) if p), "")
-            rows.append(
-                {
-                    **_row(name, "game", str(game.get("title") or game.get("id")), "action", "", module=ident),
-                    "display": _play_time((game.get("stats") or {}).get("hours")),
-                    "action": "Options",
-                    "gameId": str(game.get("id")),
-                    "image": file_url(art).toString(),
-                    "installed": isinstance(source, dict) and bool(source.get("dir")),
-                }
-            )
-        groups.append(_group("Games", list(range(first, len(rows))), caps=True, meta=f"{len(games)} game{'' if len(games) == 1 else 's'}"))
+    first = len(rows)
+    for game in games:
+        media, source = game.get("media") or {}, game.get("source")
+        art = next((p for p in (media.get("square"), media.get("box_front")) if p), "")
+        rows.append(
+            {
+                **_row(name, "game", str(game.get("title") or game.get("id")), "action", "", module=ident),
+                "display": _play_time((game.get("stats") or {}).get("hours")),
+                "action": "Options",
+                "gameId": str(game.get("id")),
+                "image": file_url(art).toString(),
+                "installed": isinstance(source, dict) and bool(source.get("dir")),
+            }
+        )
     rows.append({**_row(name, "add_file", "Add a game…", "action", "", module=ident), "display": "", "action": "Pick a file", "runner": ident})
-    groups.append(_group("", [len(rows) - 1]))
+    groups.append(_group("Games", list(range(first, len(rows))), caps=True, meta=f"{len(games)} game{'' if len(games) == 1 else 's'}" if games else ""))
     return info, rows, groups
 
 
@@ -150,13 +160,16 @@ class RunnerForm(RowsForm):
         self._screen_mode = screen_mode
         self._runner = {}
         self._pending = None
-        client.libraryChanged.connect(lambda ids: self.load(self._runner["id"]) if self._runner else None)
+        client.libraryChanged.connect(lambda ids: self._refresh() if self._runner else None)
 
     @Slot(str)
     def load(self, ident):
-        if ident != self._runner.get("id"):
-            self._set_show_advanced(False)
-        self._runner, rows, groups = build_runner(self._client, ident, self._screen_mode)
+        self._set_show_advanced(False)
+        self._runner = {"id": ident}
+        self._refresh()
+
+    def _refresh(self):
+        self._runner, rows, groups = build_runner(self._client, self._runner["id"], self._screen_mode)
         self._set_rows(rows, groups)
         self.runnerChanged.emit()
 
@@ -170,14 +183,18 @@ class RunnerForm(RowsForm):
         if row["key"] == "add_file":
             self._pending = {"runner": row["module"], "name": row["section"], "file": str(value or "")}
             return bool(self._pending["file"])
-        ok = (
-            self._client.setConfig(row["key"], _to_bus(row, value))
-            if row["key"].startswith("launch.")
-            else self._client.setRunnerSetting(row["module"], row["key"], _to_bus(row, value))
-        )
+        ok = self._write(row, _to_bus(row, value))
         if ok:
-            self.load(self._runner["id"])
+            self._refresh()
         return bool(ok)
+
+    def _write(self, row, payload):
+        if row["key"].startswith("launch."):
+            return self._client.setConfig(row["key"], payload)
+        return self._client.setRunnerSetting(row["module"], row["key"], payload)
+
+    def _reload(self, row):
+        self._refresh()
 
     def _title(self, game_id):
         return next((r["label"] for r in self._rows if r.get("gameId") == game_id), game_id)

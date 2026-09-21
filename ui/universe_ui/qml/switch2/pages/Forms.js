@@ -1,14 +1,23 @@
 .pragma library
 
-// A group's rows from `divider` on are its advanced ones, under a heading of their own.
+// A group's rows from `divider` on are its advanced ones, each folded card under a heading of its own (`dividers`).
+function ruleAt(g, k) {
+    if (g.dividers !== undefined && g.dividers.length > 0) {
+        var d = g.dividers.filter(function(d) { return d.at === k; })[0];
+        return d ? d.label : "";
+    }
+    return g.divider !== undefined && g.divider >= 0 && k === g.divider ? "Advanced" : "";
+}
+
 function grouped(groups, rows, make) {
     var out = [];
     groups.forEach(function(g) {
         if (g.title)
             out.push({ heading: true, label: g.title, display: g.meta || "" });
         g.rows.forEach(function(i, k) {
-            if (g.divider !== undefined && g.divider >= 0 && k === g.divider)
-                out.push({ heading: true, label: "Advanced", display: "" });
+            var rule = ruleAt(g, k);
+            if (rule !== "")
+                out.push({ heading: true, label: rule, display: "" });
             var r = make(rows[i], i, g);
             // The Advanced row's glyph, in this look's set.
             if (r.key === "advanced")
@@ -19,30 +28,11 @@ function grouped(groups, rows, make) {
     return out;
 }
 
-// A map row (launch.env, launch.dll_overrides): the menu lists its entries; "Add" asks a name then a value; an entry changes or goes.
-function editMap(shell, row, apply) {
-    var entries = row.entries || [];
-    var noun = row.key === "launch.dll_overrides" ? "an override" : "a variable";
-    var items = entries.map(function(e) { return { label: e.name + " = " + e.value, act: "entry:" + e.name }; });
-    items.push({ label: "Add " + noun + "…", act: "add" });
-    shell.menu(row.label, items, function(act) {
-        if (act === "add") {
-            shell.prompt({ title: "Name of " + noun, value: "", max: 64 }, function(name) {
-                name = String(name || "").trim().replace(/[^A-Za-z0-9_\-]/g, "");
-                if (name === "")
-                    return;
-                shell.prompt({ title: "Value of " + name, value: "" }, function(value) { if (value !== null) apply(name, value); });
-            });
-            return;
-        }
-        var name = act.substring(6);
-        var current = entries.filter(function(e) { return e.name === name; })[0];
-        shell.menu(name, [ { label: "Change the value", act: "value" }, { label: "Remove " + name, act: "remove" } ], function(next) {
-            if (next === "value")
-                shell.prompt({ title: "Value of " + name, value: current ? current.value : "" }, function(value) { if (value !== null) apply(name, value); });
-            else if (next === "remove")
-                apply(name, "");
-        });
+// A map's add row: one sheet asks the name and the value together.
+function addEntry(shell, row, apply) {
+    shell.promptPair({ title: row.label.replace(/…$/, ""), labels: row.fields }, function(name, value) {
+        if (name !== null)
+            apply(name, value);
     });
 }
 

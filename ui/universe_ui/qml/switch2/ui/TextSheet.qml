@@ -8,6 +8,11 @@ Modal {
     property string title: ""
     property string text: ""
     property int max: 64
+    // Two fields (`labels` names them) over one panel: `text` is the one at `typing`, `values` keeps both.
+    property var labels: []
+    property var values: ["", ""]
+    property int typing: 0
+    readonly property bool pair: labels.length === 2
     readonly property alias numeric: panel.numeric
     readonly property alias symbols: panel.symbols
     readonly property alias shift: panel.shift
@@ -31,7 +36,7 @@ Modal {
         },
         {
             glyph: "Start",
-            label: "OK"
+            label: !pair ? "OK" : typing === 0 ? "Next" : "Save"
         },
         {
             glyph: "A",
@@ -46,6 +51,7 @@ Modal {
         panel.built = true
 
     function show(spec, done) {
+        labels = [];
         title = spec.title || "";
         text = spec.value === undefined || spec.value === null ? "" : String(spec.value);
         max = spec.max || 64;
@@ -53,6 +59,47 @@ Modal {
         panel.symbols = spec.path === true;
         panel.reset();
         present(done);
+    }
+
+    // { title, labels: [a, b], first, second }: OK on the first field moves to the second, on the second gives `done([first, second])`.
+    function showPair(spec, done) {
+        labels = spec.labels;
+        values = [String(spec.first || ""), String(spec.second || "")];
+        typing = 0;
+        title = spec.title || "";
+        text = values[0];
+        max = spec.max || 64;
+        panel.numeric = false;
+        panel.symbols = false;
+        panel.reset();
+        present(done);
+    }
+
+    function switchField(k) {
+        var kept = values.slice();
+        kept[typing] = text;
+        values = kept;
+        typing = k;
+        text = values[k];
+    }
+
+    // The first of a pair names the entry: it cannot be left empty.
+    function accept() {
+        if (pair && typing === 0) {
+            if (text === "")
+                Sound.play("edge");
+            else {
+                Sound.play("ok");
+                switchField(1);
+            }
+            return;
+        }
+        Sound.play("ok");
+        if (pair) {
+            switchField(1);
+            finish([values[0], values[1]]);
+        } else
+            finish(text);
     }
 
     function cancel() {
@@ -87,6 +134,11 @@ Modal {
 
     Keys.onPressed: function (event) {
         event.accepted = true;
+        if (pair && (event.key === Qt.Key_Tab || event.key === Qt.Key_Backtab)) {
+            Sound.play("type");
+            switchField(1 - typing);
+            return;
+        }
         if (event.isAutoRepeat)
             return;
         if (api.keys.isAccept(event))
@@ -99,10 +151,8 @@ Modal {
         else if (api.keys.isFilters(event)) {
             Sound.play("type");
             put(" ");
-        } else if (api.keys.isMenu(event)) {
-            Sound.play("ok");
-            finish(text);
-        }
+        } else if (api.keys.isMenu(event))
+            accept();
     }
 
     Item {
@@ -118,12 +168,25 @@ Modal {
             text: sheet.title
         }
 
+        // The pair's second field takes the line the count sat on; the count moves under it.
+        Label {
+            id: firstName
+            x: Theme.dp(8)
+            y: Theme.dp(150)
+            visible: sheet.pair
+            text: sheet.pair ? sheet.labels[0] : ""
+            color: sheet.typing === 0 ? Theme.textSecondary : Theme.textDisabled
+            font.pixelSize: Theme.dp(Theme.fontTiny)
+            font.letterSpacing: Theme.dp(2)
+        }
+
         Label {
             id: valueText
             x: Theme.dp(8)
-            y: Theme.dp(190)
+            y: sheet.pair ? Theme.dp(90) : Theme.dp(190)
             width: parent.width - Theme.dp(140)
-            text: sheet.text
+            text: sheet.pair ? (sheet.typing === 0 ? sheet.text : sheet.values[0]) : sheet.text
+            color: !sheet.pair || sheet.typing === 0 ? Theme.text : Theme.textSecondary
             elide: Text.ElideLeft
             font.pixelSize: Theme.dp(42)
         }
@@ -134,19 +197,59 @@ Modal {
             width: Theme.dp(3)
             height: Theme.dp(50)
             color: Theme.accent
-            visible: caret.on
+            visible: caret.on && (!sheet.pair || sheet.typing === 0)
         }
 
         Rectangle {
             y: valueText.y + Theme.dp(62)
             width: parent.width
             height: Theme.dp(3)
-            color: Theme.text
+            color: !sheet.pair || sheet.typing === 0 ? Theme.text : Theme.hairline
+        }
+
+        Label {
+            id: secondName
+            x: Theme.dp(8)
+            y: Theme.dp(270)
+            visible: sheet.pair
+            text: sheet.pair ? sheet.labels[1] : ""
+            color: sheet.typing === 1 ? Theme.textSecondary : Theme.textDisabled
+            font.pixelSize: Theme.dp(Theme.fontTiny)
+            font.letterSpacing: Theme.dp(2)
+        }
+
+        Label {
+            id: secondText
+            x: Theme.dp(8)
+            y: Theme.dp(210)
+            width: parent.width - Theme.dp(140)
+            visible: sheet.pair
+            text: sheet.typing === 1 ? sheet.text : sheet.values[1]
+            color: sheet.typing === 1 ? Theme.text : Theme.textSecondary
+            elide: Text.ElideLeft
+            font.pixelSize: Theme.dp(42)
+        }
+
+        Rectangle {
+            x: secondText.x + Math.min(secondText.implicitWidth, secondText.width) + Theme.dp(4)
+            y: secondText.y + Theme.dp(2)
+            width: Theme.dp(3)
+            height: Theme.dp(50)
+            color: Theme.accent
+            visible: caret.on && sheet.pair && sheet.typing === 1
+        }
+
+        Rectangle {
+            y: secondText.y + Theme.dp(62)
+            width: parent.width
+            height: Theme.dp(3)
+            visible: sheet.pair
+            color: sheet.typing === 1 ? Theme.text : Theme.hairline
         }
 
         Label {
             anchors.right: parent.right
-            y: valueText.y + Theme.dp(74)
+            y: (sheet.pair ? secondText.y : valueText.y) + Theme.dp(74)
             text: sheet.text.length + "/" + sheet.max
             color: Theme.textSecondary
             font.pixelSize: Theme.dp(Theme.fontSmall)
@@ -178,7 +281,7 @@ Modal {
             sheet.put(value);
         }
         onBackspaced: sheet.backspace()
-        onAccepted: sheet.finish(sheet.text)
+        onAccepted: sheet.accept()
         onEscapedUp: Sound.play("edge")
     }
 }

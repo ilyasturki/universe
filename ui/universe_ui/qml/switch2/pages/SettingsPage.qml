@@ -123,12 +123,22 @@ FocusScope {
                 glyph: "Y",
                 label: "Refresh"
             });
+        if (sectionId === "launch" && launch.hasAdvanced)
+            out.push({
+                glyph: "Y",
+                label: launch.showAdvanced ? "Hide advanced" : "Show advanced"
+            });
         var row = rows.currentRow;
         if (listForm !== null && zone === "rows" && row && !row.heading)
             out.push({
                 glyph: "X",
                 label: row.value === true ? "Disable" : "Enable",
                 dim: row.dim === true
+            });
+        else if (sectionId === "launch" && zone === "rows" && row && row.entry)
+            out.push({
+                glyph: "X",
+                label: "Remove"
             });
         out.push({
             glyph: "B",
@@ -399,16 +409,9 @@ FocusScope {
         } else if (sectionId === "about" && row.key === "setup") {
             Sound.play("ok");
             shell.push("pages/OnboardingPage.qml", {});
-        } else if (sectionId === "launch" && row.key === "advanced") {
+        } else if (sectionId === "launch" && row.map === true) {
             Sound.play("ok");
-            launch.showAdvanced = !launch.showAdvanced;
-            if (launch.showAdvanced)
-                Qt.callLater(function () {
-                    rows.index = Forms.firstAfter(content, Forms.rowOf(content, row.form));
-                });
-        } else if (sectionId === "launch" && row.type === "map") {
-            Sound.play("ok");
-            Forms.editMap(shell, row, function (name, value) {
+            Forms.addEntry(shell, row, function (name, value) {
                 launch.setMapEntry(row.form, name, value);
             });
         } else if (sectionId === "runners") {
@@ -485,12 +488,24 @@ FocusScope {
 
     function refreshNow() {
         var f = refreshers[sectionId];
-        if (!f) {
+        if (f) {
+            Sound.play("ok");
+            f();
+        } else if (sectionId === "launch" && launch.hasAdvanced) {
+            Sound.play("select");
+            launch.showAdvanced = !launch.showAdvanced;
+        } else
+            Sound.play("edge");
+    }
+
+    // X on the Launch section: a variable's row goes out of its map.
+    function removeEntry() {
+        var row = rows.currentRow;
+        if (sectionId !== "launch" || zone !== "rows" || !row || !row.entry || !launch.resettable(row)) {
             Sound.play("edge");
             return;
         }
-        Sound.play("ok");
-        f();
+        Sound.play(launch.reset(row.form) ? "select" : "edge");
     }
 
     // A section opens with its Advanced row closed.
@@ -521,6 +536,9 @@ FocusScope {
         } else if (api.keys.isDetails(event) && page.listForm !== null) {
             event.accepted = true;
             page.toggleModule();
+        } else if (api.keys.isDetails(event) && page.sectionId === "launch") {
+            event.accepted = true;
+            page.removeEntry();
         }
     }
 

@@ -158,6 +158,12 @@ FocusScope {
     function prompt(spec, done) {
         sheet.show(spec, after(done));
     }
+    // `done(first, second)`, or `done(null)` when cancelled.
+    function promptPair(spec, done) {
+        sheet.showPair(spec, after(function (v) {
+            done(v === null ? null : v[0], v === null ? "" : v[1]);
+        }));
+    }
     function pick(spec, done) {
         picker.show(spec, after(done));
     }

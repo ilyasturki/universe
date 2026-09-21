@@ -2,8 +2,9 @@ import QtQuick
 import "../core"
 import "../sound"
 
-// groups: { title, meta, warning, caps, control, off, rows, icon, wide, divider }; `rows` and `control` index the flat list;
-// a `wide` card spans the columns; the rows from `divider` on are the card's advanced ones, ruled off under a label.
+// groups: { title, meta, warning, caps, control, off, rows, icon, wide, divider, dividers }; `rows` and `control` index the flat
+// list; a `wide` card spans the columns; the rows from `divider` on are the card's advanced ones, each folded card ruled off
+// under its label ([{ at, label }]).
 FocusScope {
     id: cards
 
@@ -21,15 +22,11 @@ FocusScope {
 
     readonly property var currentRow: index >= 0 && index < rows.length ? rows[index] : null
     readonly property bool cursorShown: activeFocus || dimmed
-    // The focused row's detail, up to two lines under the cards, then where an inheritable value comes from; an info row prints its own inline.
-    readonly property string caption: currentRow && currentRow.type !== "info" ? [currentRow.detail || "", originNote(currentRow)].filter(Boolean).join(" ") : ""
+    // The focused row's detail, up to two lines under the cards; an info row prints its own inline.
+    readonly property string caption: currentRow && currentRow.type !== "info" ? currentRow.detail || "" : ""
     readonly property bool hasCaptions: rows.some(function (r) {
-        return r.type !== "info" && (r.detail || originNote(r));
+        return r.type !== "info" && r.detail;
     })
-
-    function originNote(r) {
-        return r.origin === "global" ? "From the global settings." : r.origin === "default" ? "The default: neither this game nor the global settings set it." : "";
-    }
     readonly property real captionHeight: hasCaptions ? Theme.dp(compact ? 78 : 86) : 0
 
     readonly property real gap: Theme.dp(compact ? 24 : 32)
@@ -60,8 +57,27 @@ FocusScope {
         return g.divider !== undefined && g.divider >= 0 && g.divider < g.rows.length;
     }
 
+    // The rule over the card's r-th row, "" for none: the labelled ones, else the one plain Advanced rule at `divider`.
+    function ruleAt(g, r) {
+        if (g.dividers !== undefined && g.dividers.length > 0) {
+            var d = g.dividers.find(function (d) {
+                return d.at === r;
+            });
+            return d ? d.label : "";
+        }
+        return hasDivider(g) && r === g.divider ? "Advanced" : "";
+    }
+
+    function ruleCount(g) {
+        if (g.dividers !== undefined && g.dividers.length > 0)
+            return g.dividers.filter(function (d) {
+                return d.at < g.rows.length;
+            }).length;
+        return hasDivider(g) ? 1 : 0;
+    }
+
     function cardHeight(g) {
-        return pad * 2 + headerHeight(g) + g.rows.length * rowHeight + (hasDivider(g) ? dividerHeight : 0) + 2;
+        return pad * 2 + headerHeight(g) + g.rows.length * rowHeight + ruleCount(g) * dividerHeight + 2;
     }
 
     // Each card joins the shortest column; a stop's `top` is the card's top for its first stop, so the header comes into view with it.
@@ -104,7 +120,7 @@ FocusScope {
             cy += headerHeight(group);
             for (r = 0; r < group.rows.length; r++) {
                 var first = r === 0 && !(group.control >= 0), last = r === group.rows.length - 1;
-                if (hasDivider(group) && r === group.divider)
+                if (ruleAt(group, r) !== "")
                     cy += dividerHeight;
                 stops[c].push({
                     row: group.rows[r],
@@ -392,7 +408,10 @@ FocusScope {
                 model: card.group.rows
 
                 Item {
-                    readonly property bool divided: cards.hasDivider(card.group) && index === card.group.divider
+                    id: slot
+
+                    readonly property string rule: cards.ruleAt(card.group, index)
+                    readonly property bool divided: rule !== ""
                     readonly property bool prevFocused: index > 0 && card.group.rows[index - 1] === cards.index && cards.cursorShown
 
                     width: parent.width
@@ -408,7 +427,7 @@ FocusScope {
                             anchors.left: parent.left
                             anchors.leftMargin: Theme.dp(18)
                             anchors.verticalCenter: parent.verticalCenter
-                            text: "ADVANCED"
+                            text: slot.rule.toUpperCase()
                             size: Theme.dp(cards.compact ? 14 : 15)
                             color: Theme.textFaint
                         }

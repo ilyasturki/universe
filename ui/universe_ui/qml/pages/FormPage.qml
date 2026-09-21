@@ -2,7 +2,6 @@ import QtQuick
 import "../core"
 import "../sound"
 import "../ui"
-import "../ui/Maps.js" as Maps
 
 FocusScope {
     id: page
@@ -10,7 +9,7 @@ FocusScope {
     focus: true
 
     // { runner } | { module } | { source }: one runner's, one module's or one source's settings (a game's is GameSettingsPage);
-    // `key` (and a module setting's `settingModule`) lands the cursor on that row, the Advanced row opened if it sits behind it.
+    // `key` (and a module setting's `settingModule`) lands the cursor on that row, Advanced turned on if it sits behind it.
     property var args: ({})
     readonly property string runner: args.runner || ""
     readonly property string module: args.module || ""
@@ -30,20 +29,53 @@ FocusScope {
     signal settingsRequested(var game)
     signal message(string text)
 
+    // One sidebar entry per card; Advanced only adds rows inside them.
+    readonly property var groups: form.groups
+    readonly property var sections: groups.map(function (g) {
+        return {
+            name: g.title,
+            icon: page.icons[g.title] || "sliders",
+            group: ""
+        };
+    })
+    readonly property var icons: ({
+            "Runner": "play",
+            "Options": "sliders",
+            "Games": "library",
+            "Settings": "sliders",
+            "Sign-in": "user"
+        })
+
+    readonly property var row: body.currentRow
+    readonly property bool inRows: body.inRows
+    readonly property string rowAction: row && row.entry ? "Remove" : "Reset"
+    readonly property bool canReset: inRows && row !== null && form.resettable(row)
+
     readonly property var hints: editor.open ? editor.hints : menu.open ? menu.hints : [
         {
             glyph: "A",
-            label: cards.currentRow && cards.currentRow.type === "bool" ? "Toggle" : cards.currentRow && cards.currentRow.key === "add_file" ? "Pick a file" : cards.currentRow && cards.currentRow.type === "action" ? cards.currentRow.action || "Select" : "Change",
-            dim: !cards.currentRow || cards.currentRow.disabled === true || cards.currentRow.type === "info"
-        },
-        {
-            glyph: "dpad",
-            label: "Navigate"
+            label: !inRows ? "Open" : row && row.type === "bool" ? "Toggle" : row && row.key === "add_file" ? "Pick a file" : row && row.type === "action" ? row.action || "Select" : "Change",
+            dim: inRows && (!row || row.disabled === true || row.type === "info")
         }
-    ].concat([
+    ].concat(inRows && page.runner !== "" ? [
+        {
+            glyph: "X",
+            label: rowAction,
+            dim: !canReset
+        }
+    ] : []).concat(form.hasAdvanced ? [
+        {
+            glyph: "Y",
+            label: form.showAdvanced ? "Hide advanced" : "Show advanced"
+        }
+    ] : []).concat([
         {
             glyph: "B",
-            label: "Back"
+            label: inRows ? "Sections" : "Back"
+        },
+        {
+            glyph: "LT RT",
+            label: "Section"
         }
     ])
 
@@ -54,64 +86,51 @@ FocusScope {
     Component.onDestruction: if (page.runner !== "")
         api.screens.runner.load("")
 
-    // The derived runner/module/source are still stale here: read the args themselves.
+    // The derived runner/module/source are still stale here: read the args themselves. The cursor settles once the page is
+    // laid out: a search hit lands, the row a game's settings were opened from comes back, anything else starts on the sidebar.
     onArgsChanged: {
         var id = args.runner || args.module || args.source || "";
         var form = formOf(args);
         landKey = args.key || "";
         landModule = args.settingModule || "";
+        body.section = 0;
+        body.zone = "side";
         if (id !== "")
             form.load(id);
-        Qt.callLater(function () {
-            cards.reset();
-            if (page.returnIndex >= 0 && page.runner !== "") {
-                cards.index = page.returnIndex;
-                page.returnIndex = -1;
-            }
-            page.landNow();
-        });
+        Qt.callLater(page.settle);
     }
 
-    // A source's rows come back from a thread: land once they are there.
+    function settle() {
+        if (page.returnIndex >= 0 && page.runner !== "") {
+            body.landOn(page.returnIndex);
+            page.returnIndex = -1;
+        } else if (!landNow())
+            body.reset();
+    }
+
+    // A search hit: the card holding the row, the cursor on it; a source's rows come back from a thread, so it lands once they are there.
     function landNow() {
         if (landKey === "")
-            return;
+            return false;
         var i = form.reveal(landKey, landModule);
         if (i < 0)
-            return;
+            return false;
         landKey = "";
-        Qt.callLater(function () {
-            cards.index = i;
-        });
+        body.landOn(i);
+        return true;
     }
 
-    function editMap(index, row) {
+    function toggleAdvanced() {
         Sound.panel();
-        menu.show(Maps.items(row), cards, cards.focusRect, row.label, function (action) {
-            if (action === "add") {
-                editor.prompt("Name of " + Maps.noun(row), "", function (name) {
-                    name = Maps.cleanName(name);
-                    if (name === "")
-                        return;
-                    editor.prompt("Value of " + name, "", function (value) {
-                        form.setMapEntry(index, name, value);
-                    });
-                });
-            } else if (action.indexOf("entry:") === 0) {
-                var name = action.substring(6);
-                menu.show(Maps.entryItems(name), cards, cards.focusRect, name, function (next) {
-                    if (next === "value")
-                        editor.prompt("Value of " + name, Maps.valueOf(row, name), function (value) {
-                            form.setMapEntry(index, name, value);
-                        });
-                    else if (next === "remove") {
-                        Sound.cancel();
-                        form.setMapEntry(index, name, "");
-                    }
-                    cards.forceActiveFocus();
-                });
-            }
-        });
+        form.showAdvanced = !form.showAdvanced;
+    }
+
+    function resetRow() {
+        if (!canReset) {
+            Sound.edge();
+            return;
+        }
+        form.reset(body.cards.index) ? Sound.enter() : Sound.edge();
     }
 
     function gameActions(row) {
@@ -139,6 +158,7 @@ FocusScope {
     }
 
     function gameAction(row, action) {
+        var cards = body.cards;
         if (action === "settings") {
             cards.forceActiveFocus();
             page.returnIndex = cards.index;
@@ -161,15 +181,14 @@ FocusScope {
     }
 
     function activate(index, row) {
+        var cards = body.cards;
         if (row.disabled === true || row.type === "info") {
             Sound.edge();
-        } else if (row.key === "advanced") {
+        } else if (row.map === true) {
             Sound.panel();
-            form.showAdvanced = !form.showAdvanced;
-            if (form.showAdvanced)
-                Qt.callLater(cards.stepInto);
-        } else if (row.type === "map") {
-            editMap(index, row);
+            editor.promptPair(row.label.replace(/…$/, ""), row.fields, "", "", function (name, value) {
+                form.setMapEntry(index, name, value) ? Sound.enter() : Sound.edge();
+            });
         } else if (row.key === "game") {
             Sound.panel();
             menu.show(gameActions(row), cards, cards.focusRect, row.label, function (action) {
@@ -298,38 +317,23 @@ FocusScope {
         }
     }
 
-    SettingsCards {
-        id: cards
+    CardSections {
+        id: body
 
-        anchors.top: header.bottom
-        anchors.topMargin: Theme.dp(40)
-        anchors.bottom: loginCard.visible ? loginCard.top : hintBar.top
-        anchors.bottomMargin: loginCard.visible ? Theme.dp(24) : 0
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.leftMargin: page.sideMargin
-        anchors.rightMargin: page.sideMargin
+        anchors.fill: parent
         focus: true
-        compact: true
+        columnsTop: header.y + header.height + Theme.dp(32)
+        floor: loginCard.visible ? loginCard.y - Theme.dp(24) : hintBar.y
+        sideMargin: page.sideMargin
         rows: page.form.rows
-        groups: page.form.groups
+        groups: page.groups
+        sections: page.sections
         dimmed: editor.open || menu.open
 
         onActivated: function (index, row) {
             page.activate(index, row);
         }
-        onEscapedUp: Sound.edge()
-        onEscapedDown: Sound.edge()
-        onEscapedLeft: Sound.edge()
-
-        Keys.onPressed: function (event) {
-            if (event.isAutoRepeat)
-                return;
-            if (api.keys.isCancel(event)) {
-                event.accepted = true;
-                page.closeRequested();
-            }
-        }
+        onCancelled: page.closeRequested()
     }
 
     LoginCard {
@@ -337,10 +341,8 @@ FocusScope {
 
         anchors.bottom: hintBar.top
         anchors.bottomMargin: Theme.dp(24)
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.leftMargin: page.sideMargin
-        anchors.rightMargin: page.sideMargin
+        x: body.mainX
+        width: body.mainWidth
         source: page.source
     }
 
@@ -358,12 +360,12 @@ FocusScope {
         id: editor
 
         anchors.fill: parent
-        cards: cards
+        cards: body.cards
         overhang: 0
         floor: hintBar.y
         z: 2
 
-        onClosed: cards.forceActiveFocus()
+        onClosed: body.cards.forceActiveFocus()
     }
 
     ActionMenu {
@@ -372,6 +374,18 @@ FocusScope {
         anchors.fill: parent
         z: 4
 
-        onDismissed: cards.forceActiveFocus()
+        onDismissed: body.cards.forceActiveFocus()
+    }
+
+    Keys.onPressed: function (event) {
+        if (event.isAutoRepeat || editor.open || menu.open)
+            return;
+        if (api.keys.isFilters(event) && form.hasAdvanced) {
+            event.accepted = true;
+            page.toggleAdvanced();
+        } else if (api.keys.isDetails(event) && page.runner !== "") {
+            event.accepted = true;
+            page.resetRow();
+        }
     }
 }

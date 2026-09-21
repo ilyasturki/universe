@@ -50,6 +50,13 @@ FocusScope {
         sheetsOf().sheet.show(label, value, "text");
     }
 
+    // Two texts at once (a variable and its value): `after(first, second)`.
+    function promptPair(label, names, first, second, after) {
+        done = after;
+        pendingRow = null;
+        sheetsOf().sheet.showPair(label, names, first, second);
+    }
+
     function sheetsOf() {
         sheets.active = true;
         return sheets.item;
@@ -63,12 +70,12 @@ FocusScope {
         return base.indexOf(".") > 0;
     }
 
-    function finish(value) {
+    function finish(value, second) {
         var after = done;
         done = null;
         closed();
         if (after)
-            after(value);
+            after(value, second);
     }
 
     function hide() {
@@ -142,6 +149,9 @@ FocusScope {
 
                 onAccepted: function (value) {
                     editor.finish(value);
+                }
+                onAcceptedPair: function (first, second) {
+                    editor.finish(first, second);
                 }
                 onDismissed: editor.closed()
             }

@@ -659,6 +659,9 @@ class FakeCore:
         if key == "args":
             spec["args"] = value
             return
+        if key == "gamescope":
+            spec["gamescope"] = None if value == "" else value == "true"
+            return
         option = next((o for o in spec.get("options", []) if o["key"] == key), None)
         if option is None:
             raise UniverseError("Invalid", f"{spec['id']}: unknown option {key}")

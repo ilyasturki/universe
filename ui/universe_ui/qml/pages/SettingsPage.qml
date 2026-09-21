@@ -4,7 +4,6 @@ import "../core/Format.js" as Format
 import "../sound"
 import "../ui"
 import "../ui/Macros.js" as Macros
-import "../ui/Maps.js" as Maps
 
 FocusScope {
     id: page
@@ -250,6 +249,16 @@ FocusScope {
             glyph: "X",
             label: "Refresh"
         }
+    ] : canRemove ? [
+        {
+            glyph: "X",
+            label: "Remove"
+        }
+    ] : []).concat(sectionId === "launch" && launch.hasAdvanced ? [
+        {
+            glyph: "Y",
+            label: launch.showAdvanced ? "Hide advanced" : "Show advanced"
+        }
     ] : []).concat([
         {
             glyph: "B",
@@ -260,6 +269,9 @@ FocusScope {
             label: "Section"
         }
     ])
+
+    // X on the Launch section: a variable's row goes out of its map.
+    readonly property bool canRemove: sectionId === "launch" && cards.currentRow !== null && cards.currentRow.entry !== undefined && launch.resettable(cards.currentRow)
 
     readonly property string acceptLabel: {
         var row = cards.currentRow;
@@ -566,6 +578,10 @@ FocusScope {
     }
 
     function refreshNow() {
+        if (canRemove) {
+            launch.reset(cards.index) ? Sound.enter() : Sound.edge();
+            return;
+        }
         if (!canRefresh) {
             Sound.edge();
             return;
@@ -575,6 +591,15 @@ FocusScope {
             sources.refresh();
         else
             refresh();
+    }
+
+    function toggleAdvanced() {
+        if (sectionId !== "launch" || !launch.hasAdvanced) {
+            Sound.edge();
+            return;
+        }
+        Sound.panel();
+        launch.showAdvanced = !launch.showAdvanced;
     }
 
     function toggleModule() {
@@ -587,41 +612,11 @@ FocusScope {
         listForm.toggle(cards.index);
     }
 
-    function editMap(form, index, row) {
-        Sound.panel();
-        menu.show(Maps.items(row), cards, cards.focusRect, row.label, function (action) {
-            if (action === "add") {
-                editor.prompt("Name of " + Maps.noun(row), "", function (name) {
-                    name = Maps.cleanName(name);
-                    if (name === "")
-                        return;
-                    editor.prompt("Value of " + name, "", function (value) {
-                        form.setMapEntry(index, name, value);
-                    });
-                });
-            } else if (action.indexOf("entry:") === 0) {
-                var name = action.substring(6);
-                menu.show(Maps.entryItems(name), cards, cards.focusRect, name, function (next) {
-                    if (next === "value")
-                        editor.prompt("Value of " + name, Maps.valueOf(row, name), function (value) {
-                            form.setMapEntry(index, name, value);
-                        });
-                    else if (next === "remove") {
-                        Sound.cancel();
-                        form.setMapEntry(index, name, "");
-                    }
-                    cards.forceActiveFocus();
-                });
-            }
-        });
-    }
-
     function activate(index, row) {
-        if (row.key === "advanced" && (sectionId === "launch" || sectionId === "controller")) {
+        if (row.key === "advanced" && sectionId === "controller") {
             Sound.panel();
-            var gate = sectionId === "launch" ? launch : controller;
-            gate.showAdvanced = !gate.showAdvanced;
-            if (gate.showAdvanced)
+            controller.showAdvanced = !controller.showAdvanced;
+            if (controller.showAdvanced)
                 Qt.callLater(cards.stepInto);
             return;
         }
@@ -637,8 +632,11 @@ FocusScope {
             if (row.type === "bool") {
                 launch.toggle(index);
                 Sound.favourite(!row.value);
-            } else if (row.type === "map") {
-                editMap(launch, index, row);
+            } else if (row.map === true) {
+                Sound.panel();
+                editor.promptPair(row.label.replace(/…$/, ""), row.fields, "", "", function (name, value) {
+                    launch.setMapEntry(index, name, value) ? Sound.enter() : Sound.edge();
+                });
             } else {
                 Sound.panel();
                 editor.edit(row, function (value) {
@@ -1302,6 +1300,9 @@ FocusScope {
             } else if (api.keys.isFilters(event) && page.listForm !== null) {
                 event.accepted = true;
                 page.toggleModule();
+            } else if (api.keys.isFilters(event) && page.sectionId === "launch") {
+                event.accepted = true;
+                page.toggleAdvanced();
             }
         }
     }

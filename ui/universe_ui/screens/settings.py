@@ -1,12 +1,15 @@
-# A row's `type` is bool, enum, string, path, int, map, info or action; a group's `rows` and `control` index the flat row list.
-# An `advanced` row sits in an `advanced` group, shown while the form's `showAdvanced` is set: folded into the basic group of
-# the same title after its `divider`, or as a group of its own after the basic ones. A gated form (every one but a game's)
-# appends an Advanced action row that opens them; a game's page flips `showAdvanced` from a button.
-# `origin` is where a value comes from when the row can inherit: "game" (set on the game), "global" (config.toml sets it),
-# "default" (neither does); empty when the row has no such story. `inherited` is true for the last two, and such a row
-# carries `pin`, what overriding writes on the game, when that is not its `value` (a picker's clearing choice).
+# A row's `type` is bool, enum, string, path, int, info or action; a group's `rows` and `control` index the flat row list.
+# An `advanced` row sits in an `advanced` group, shown while the form's `showAdvanced` is set (`load` clears it): folded into
+# the basic group titled like it or like its `home` — its rows after the group's `divider`, each folded group ruled off by
+# one of `dividers` — or, with no such group, as a group of its own after the basic ones. A gated form (the controller's)
+# appends an Advanced action row that opens them; the other pages flip `showAdvanced` from a button.
+# `origin` is where a value comes from when the row can inherit: "game" (set on the game), "runner" (set on the runner),
+# "global" (config.toml sets it), "default" (neither does); empty when the row has no such story. `inherited` is true for
+# the last two. A map key (launch.env) is one row per entry, `entry` naming the map, then an `action` row with `map` set
+# that adds one; an entry's empty value removes it.
 import json
 import os
+import re
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
@@ -37,7 +40,7 @@ def _display(kind, value):
 
 
 def _row(section, key, label, kind, value, choices=None, module="", detail="", inherited=False, advanced=False, origin=""):
-    row = {
+    return {
         "section": section,
         "key": key,
         "label": label,
@@ -51,9 +54,6 @@ def _row(section, key, label, kind, value, choices=None, module="", detail="", i
         "advanced": advanced,
         "origin": origin,
     }
-    if kind == "map":
-        row["entries"] = [{"name": k, "value": str(v)} for k, v in (value or {}).items()]
-    return row
 
 
 def _group(title, rows, meta="", warning="", caps=False, control=-1, off=False, advanced=False):
@@ -65,8 +65,10 @@ def _group(title, rows, meta="", warning="", caps=False, control=-1, off=False, 
         "control": control,
         "off": off,
         "advanced": advanced,
+        "home": "",
         "rows": list(rows),
         "divider": -1,
+        "dividers": [],
     }
 
 
@@ -78,11 +80,12 @@ def origin_of(own, global_value):
     return "game" if _is_set(own) else "global" if _is_set(global_value) else "default"
 
 
-def _add(rows, groups, section, row, **group):
+def _add(rows, groups, section, row, home="", **group):
     advanced = bool(row.get("advanced"))
     target = next((g for g in groups if g["title"] == section and g["advanced"] == advanced), None)
     if target is None:
         target = _group(section, [], advanced=advanced, **group)
+        target["home"] = home if advanced else ""
         groups.append(target)
     target["rows"].append(len(rows))
     rows.append(row)
@@ -172,7 +175,31 @@ def toggle_auto(key, gpu, mode):
     return ((gpu or {}).get("auto") or {}).get(key)
 
 
-def global_launch_rows(rows, groups, client, config, mode, takes, gpu=None):
+# The basic card an advanced card folds into when the page has it; the runner's card stands in for Proton.
+HOMES = {"Scaling": "Display", "Environment": "Launch", "Sync": "Proton", "Upscaling": "Proton", "Logs": "Proton", "Artwork": "Desktop and library"}
+
+MAP_NOUNS = {"env": "a variable", "dll_overrides": "an override"}
+MAP_FIELDS = {"env": ["Variable", "Value"], "dll_overrides": ["DLL", "Override"]}
+
+
+def map_rows(section, spec, entries, own=None):
+    """A map key's rows: one per entry of `entries`, then the row that adds one. On a game's page `own` is what the game sets;
+    the other entries are the global's."""
+    key = "launch." + spec["key"]
+    advanced = bool(spec.get("advanced"))
+    rows = []
+    for name, value in (entries or {}).items():
+        origin = "" if own is None else "game" if name in own else "global"
+        row = _row(section, f"{key}.{name}", name, "string", str(value), detail=spec["description"], advanced=advanced, origin=origin)
+        row["entry"] = key
+        rows.append(row)
+    add = _row(section, key, "Add " + MAP_NOUNS.get(spec["key"], "an entry") + "…", "action", "", detail=spec["description"], advanced=advanced)
+    add.update(display="", action="Add", icon="plus", map=True, fields=MAP_FIELDS.get(spec["key"], ["Name", "Value"]))
+    rows.append(add)
+    return rows
+
+
+def global_launch_rows(rows, groups, client, config, mode, takes, gpu=None, homes=HOMES):
     launch = config.get("launch") or {}
     protons = proton_choices(config)
     hz = auto_rate(mode, launch.get("gamescope", True), launch.get("gamescope_refresh"))
@@ -183,22 +210,21 @@ def global_launch_rows(rows, groups, client, config, mode, takes, gpu=None):
         if value in (None, "", {}):
             value = spec["default"]
         section = spec["section"]
-        _add(
-            rows,
-            groups,
-            section,
-            launch_row(section, spec, value, protons=protons, auto_hz=hz, gpu=gpu, mode=mode),
-            caps=True,
-            meta=_card_meta(section, mode, gpu or {}),
-        )
+        card = {"caps": True, "meta": _card_meta(section, mode, gpu or {}), "home": homes.get(section, "")}
+        if spec["type"] == "map":
+            for row in map_rows(section, spec, launch.get(spec["key"])):
+                _add(rows, groups, section, row, **card)
+            continue
+        _add(rows, groups, section, launch_row(section, spec, value, protons=protons, auto_hz=hz, gpu=gpu, mode=mode), **card)
 
 
 # What gamescope does when a scaling key is left unset.
 GAMESCOPE_DEFAULTS = {"gamescope_scaler": "auto", "gamescope_filter": "linear", "gamescope_sharpness": "2"}
 
 
-def auto_display(spec, value, auto_hz, mode, gpu):
-    """The value with what it comes to on this machine after a dot: `auto · 144`; None when nothing is known."""
+def auto_display(spec, value, auto_hz, mode, gpu, origin=""):
+    """The value with what it comes to on this machine after a dot: `auto · 144`; None when nothing is known. A scaling key
+    left unset reads `default · linear` on the global page; on a game's, whose rows tag their origin, the bare built-in."""
     key = spec["key"]
     if value == "auto":
         if spec["type"] == "fps" and auto_hz:
@@ -211,7 +237,7 @@ def auto_display(spec, value, auto_hz, mode, gpu):
             auto = toggle_auto(key, gpu, mode)
             return None if auto is None else "auto · " + ("On" if auto else "Off")
     if value == "default" and key in GAMESCOPE_DEFAULTS:
-        return f"default · {GAMESCOPE_DEFAULTS[key]}"
+        return GAMESCOPE_DEFAULTS[key] if origin else f"default · {GAMESCOPE_DEFAULTS[key]}"
     return None
 
 
@@ -252,13 +278,12 @@ def launch_row(section, spec, value, protons=(), auto_hz=0, gpu=None, mode=None,
         if isinstance(value, bool):
             value = "on" if value else "off"
         row["value"] = row["display"] = str(value)
-    shown = auto_display(spec, value, auto_hz, mode, gpu)
+    shown = auto_display(spec, value, auto_hz, mode, gpu, origin)
     if shown is not None:
         row["display"] = shown
     # A value this page does not set itself: the picker opens on the clearing choice, the row still shows what applies.
     if values and (origin in ("global", "default") or value == "default"):
         row["value"] = choices[0]
-        row["pin"] = (GAMESCOPE_DEFAULTS.get(spec["key"]) or str(spec["default"] or "")) if value == "default" else value
     return row
 
 
@@ -289,7 +314,7 @@ class AdvancedRows(QObject if TYPE_CHECKING else object):
     # The row list and its advanced groups, shown while `_show_advanced`; a gated form opens them from an Advanced row at `_gate`.
     rowsChanged: Signal
     advancedChanged: Signal
-    gated = True
+    gated = False
 
     def _init_rows(self):
         self._rows = []
@@ -313,13 +338,18 @@ class AdvancedRows(QObject if TYPE_CHECKING else object):
         if not self._has_advanced:
             return list(self._groups)
         basic = [dict(g) for g in self._groups if not g["advanced"]]
-        more = []
-        for group in (g for g in self._groups if g["advanced"]) if self._show_advanced else ():
-            home = next((b for b in basic if b["title"] and b["title"] == group["title"]), None)
-            if home is None:
-                more.append(group)
-                continue
-            home["divider"] = len(home["rows"])
+        advanced = [g for g in self._groups if g["advanced"]] if self._show_advanced else []
+        homes = [next((b for b in basic if b["title"] and b["title"] == (g["home"] or g["title"])), None) for g in advanced]
+        more = [g for g, home in zip(advanced, homes, strict=True) if home is None]
+        folded = [(g, home) for g, home in zip(advanced, homes, strict=True) if home is not None]
+        # A card's own advanced rows come first, the cards homed in it after them, each under a rule of its own.
+        for group, home in sorted(folded, key=lambda pair: bool(pair[0]["home"])):
+            at, label = len(home["rows"]), group["title"] if group["home"] else ""
+            if home["divider"] < 0:
+                home["divider"] = at
+                home["dividers"] = [{"at": at, "label": "Advanced" + (f" · {label}" if label else "")}]
+            else:
+                home["dividers"] = [*home["dividers"], {"at": at, "label": label}]
             home["rows"] = [*home["rows"], *group["rows"]]
         if self._gate < 0:
             return [*basic, *more]
@@ -381,17 +411,37 @@ class RowsForm(AdvancedRows, AsyncScreen):
             self._reload(row)
         return bool(ok)
 
-    # One entry of a map row: `launch.env.FOO`; an empty value removes it.
+    # One entry of a map, from its add row or one of its entries: `launch.env.FOO`; an empty value removes it.
+    # A name is one key of the map: letters, digits, underscores and dashes (a dot would nest a table).
     @Slot(int, str, str, result=bool)
     def setMapEntry(self, index, name, value):
         row = self.row(index)
-        name = str(name or "").strip()
-        if not row or row.get("type") != "map" or not name:
+        name = re.sub(r"[^A-Za-z0-9_\-]", "", str(name or ""))
+        key = row.get("entry") or (row["key"] if row.get("map") else "")
+        if not key or not name:
             return False
-        ok = self._write({**row, "key": row["key"] + "." + name, "type": "string"}, str(value or ""))
+        ok = self._write({**row, "key": key + "." + name, "type": "string"}, str(value or ""))
         if ok:
             self._reload(row)
         return bool(ok)
+
+    # The row's own value goes: a game's back to the global's or the default, a runner's back to what was found, a map's
+    # entry out of the map.
+    @Slot(int, result=bool)
+    def reset(self, index):
+        row = self.row(index)
+        if not self.resettable(row):
+            return False
+        ok = self._write(row, "")
+        if ok:
+            self._reload(row)
+        return bool(ok)
+
+    # A look that rebuilds its rows as JS objects hands one over as a QJSValue.
+    @Slot("QVariant", result=bool)
+    def resettable(self, row):
+        row = (row.toVariant() if hasattr(row, "toVariant") else row) or {}
+        return row.get("origin") in ("game", "runner") or (bool(row.get("entry")) and row.get("origin") != "global")
 
     @Slot(int)
     def toggle(self, index):
@@ -494,6 +544,16 @@ def build_game(client, game_id, screen_mode):
             continue
         key = spec["key"]
         own = _dig(game, "launch." + key)
+        section = runner_name if spec["section"] == "Proton" else spec["section"]
+        card = {"caps": True, "meta": _card_meta(section, mode, gpu), "home": HOMES.get(section, "")}
+        if card["home"] == "Proton":
+            card["home"] = runner_name
+        if spec["type"] == "map":
+            own = dict(own) if isinstance(own, dict) else {}
+            merged = {**(_dig(config, "launch." + key) or {}), **own} if spec["scope"] == "both" else own
+            for row in map_rows(section, spec, merged, own):
+                _add(rows, groups, section, row, **card)
+            continue
         value, origin, global_label = own, "", ""
         if spec["scope"] == "both":
             own_global = _dig(config_set, "launch." + key)
@@ -512,12 +572,11 @@ def build_game(client, game_id, screen_mode):
             origin = origin_of(own, None)
             if origin != "game":
                 value = effective.get(key) or ""
-        section = runner_name if spec["section"] == "Proton" else spec["section"]
         row = launch_row(section, spec, value, protons=protons, auto_hz=hz, gpu=gpu, mode=mode, origin=origin, global_label=global_label)
         if section == "Launch":
             launch.append(row)
             continue
-        _add(rows, groups, section, row, caps=True, meta=_card_meta(section, mode, gpu))
+        _add(rows, groups, section, row, **card)
     for row in launch:
         _add(rows, groups, "Launch", row, caps=True)
     for section, key, label, kind, advanced in CORE_ROWS:
@@ -535,6 +594,7 @@ def build_game(client, game_id, screen_mode):
             section,
             _row(section, key, label, kind, value, origin=origin, detail=HIDE_CURSOR if key == "desktop.hide_cursor" else "", advanced=advanced),
             caps=True,
+            home=HOMES.get(section, ""),
         )
     modules = {m["id"]: m for m in client.modules()}
     own_modules = game.get("modules") or {}
@@ -571,7 +631,6 @@ def build_game(client, game_id, screen_mode):
 class GameSettingsForm(RowsForm):
     gameIdChanged = Signal()
     titleChanged = Signal()
-    gated = False
 
     def __init__(self, client, screen_mode: Callable[[], dict] = dict, parent=None):
         super().__init__(client, parent)
@@ -581,11 +640,13 @@ class GameSettingsForm(RowsForm):
 
     @Slot(str)
     def load(self, game_id):
-        if game_id != self._game_id:
-            self._set_show_advanced(False)
+        self._set_show_advanced(False)
         self._game_id = game_id
         self.gameIdChanged.emit()
-        rows, groups, self._title = build_game(self._client, game_id, self._screen_mode)
+        self._refresh()
+
+    def _refresh(self):
+        rows, groups, self._title = build_game(self._client, self._game_id, self._screen_mode)
         self.titleChanged.emit()
         self._set_rows(rows, groups)
 
@@ -595,34 +656,7 @@ class GameSettingsForm(RowsForm):
         return self._client.set(self._game_id, row["key"], payload)
 
     def _reload(self, row):
-        self.load(self._game_id)
-
-    # The game's own value goes: the row takes the global's or the default again.
-    @Slot(int, result=bool)
-    def reset(self, index):
-        row = self.row(index)
-        if row.get("origin") != "game":
-            return False
-        ok = self._write(row, "")
-        if ok:
-            self._reload(row)
-        return bool(ok)
-
-    # What the row inherits, written on the game so a global change leaves it alone; a map's entries one by one.
-    @Slot(int, result=bool)
-    def override(self, index):
-        row = self.row(index)
-        if row.get("origin") not in ("global", "default"):
-            return False
-        if row.get("type") == "map":
-            entries = row.get("entries") or []
-            ok = bool(entries) and all(self._write({**row, "key": row["key"] + "." + e["name"], "type": "string"}, e["value"]) for e in entries)
-        else:
-            payload = _to_bus(row, row["pin"] if "pin" in row else row.get("value"))
-            ok = payload != "" and self._write(row, payload)
-        if ok:
-            self._reload(row)
-        return bool(ok)
+        self._refresh()
 
     gameId = Property(str, lambda self: self._game_id, notify=gameIdChanged)
     title = Property(str, lambda self: self._title, notify=titleChanged)
@@ -813,11 +847,9 @@ def build_page(api, ident, entries, choices_of=lambda ident, key, values: None):
     control = _row(name, "enabled", "Enabled", "bool", enabled, module=ident)
     control["disabled"] = bool(info["warning"]) and not enabled
     rows = [control]
-    groups = [_group("", [0])]
+    groups = [_group("Settings", [0], caps=True)]
     if not enabled:
         return info, rows, groups
-    if api.source:
-        signin_rows(entry, name, rows, groups)
     values = api._settings(ident)
     for setting in entry.get("settings") or []:
         if setting.get("scope") not in ("global", "config"):
@@ -837,6 +869,8 @@ def build_page(api, ident, entries, choices_of=lambda ident, key, values: None):
             advanced=bool(setting.get("advanced")) or setting.get("scope") == "config",
         )
         _add(rows, groups, "Settings", row, caps=True)
+    if api.source:
+        signin_rows(entry, name, rows, groups)
     return info, rows, groups
 
 
@@ -877,18 +911,17 @@ class PageForm(RowsForm):
     @Slot()
     def reload(self):
         if self._ident:
-            self.load(self._ident)
+            self._refresh()
 
     @Slot(str)
     def load(self, ident):
-        self._open(ident)
-        self._set_rows(*self._build(ident, self._entries()))
-        self.moduleChanged.emit()
-
-    def _open(self, ident):
-        if ident != self._ident:
-            self._set_show_advanced(False)
+        self._set_show_advanced(False)
         self._ident = ident
+        self._refresh()
+
+    def _refresh(self):
+        self._set_rows(*self._build(self._ident, self._entries()))
+        self.moduleChanged.emit()
 
     def _build(self, ident, entries):
         self._module, rows, groups = build_page(self, ident, entries, self._dynamic_choices)
@@ -903,7 +936,7 @@ class PageForm(RowsForm):
         return self._set(row["module"], row["key"], payload)
 
     def _reload(self, row):
-        self.load(row["module"])
+        self._refresh()
 
 
 class ModuleForm(ModuleApi, PageForm):
@@ -917,9 +950,8 @@ class SourceForm(SourceApi, PageForm):
         super().__init__(client, parent)
         client.sourcesChanged.connect(self.reload)
 
-    @Slot(str)
-    def load(self, ident):
-        self._open(ident)
+    def _refresh(self):
+        ident = self._ident
 
         def done(entries):
             if self._ident == ident:
