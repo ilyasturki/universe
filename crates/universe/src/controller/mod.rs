@@ -73,13 +73,15 @@ pub struct ControllerConfig {
     pub volume_step: u8,
     /// family → slot → learned codes, first present on the pad wins
     pub buttons: BTreeMap<String, BTreeMap<String, Vec<String>>>,
+    /// family → stick or trigger (`lx ly rx ry lt rt`) → the axis learned for it, `ABS_Z-` when it runs backwards
+    pub axes: BTreeMap<String, BTreeMap<String, String>>,
     /// absent: the seeded workflow; `macros = []` is none at all
     pub macros: Option<Vec<Macro>>,
 }
 
 impl Default for ControllerConfig {
     fn default() -> Self {
-        ControllerConfig { enabled: true, hold_ms: 600, volume_step: 2, buttons: BTreeMap::new(), macros: None }
+        ControllerConfig { enabled: true, hold_ms: 600, volume_step: 2, buttons: BTreeMap::new(), axes: BTreeMap::new(), macros: None }
     }
 }
 
@@ -179,17 +181,21 @@ const fn extra(id: &'static str, label: &'static str, codes: &'static [&'static 
     Slot { id, label, codes, extra: true }
 }
 
+// An Android-style pad (a D-input 8BitDo) has BRAKE and GAS for triggers and Z/RZ for its right stick, so BRAKE/GAS come before Z/RZ.
 macro_rules! standard {
     ($south:literal, $east:literal, $north:literal, $west:literal, $lb:literal, $rb:literal, $lt:literal, $rt:literal, $select:literal, $start:literal, $guide:literal, $ls:literal, $rs:literal) => {
+        standard!($south, $east, $north, $west, $lb, $rb, $lt, $rt, $select, $start, $guide, $ls, $rs; &["BTN_SOUTH"], &["BTN_EAST"])
+    };
+    ($south:literal, $east:literal, $north:literal, $west:literal, $lb:literal, $rb:literal, $lt:literal, $rt:literal, $select:literal, $start:literal, $guide:literal, $ls:literal, $rs:literal; $south_codes:expr, $east_codes:expr) => {
         [
-            slot("south", $south, &["BTN_SOUTH"]),
-            slot("east", $east, &["BTN_EAST"]),
+            slot("south", $south, $south_codes),
+            slot("east", $east, $east_codes),
             slot("north", $north, &["BTN_NORTH"]),
             slot("west", $west, &["BTN_WEST"]),
             slot("lb", $lb, &["BTN_TL"]),
             slot("rb", $rb, &["BTN_TR"]),
-            slot("lt", $lt, &["BTN_TL2", "ABS_Z+", "ABS_BRAKE+"]),
-            slot("rt", $rt, &["BTN_TR2", "ABS_RZ+", "ABS_GAS+"]),
+            slot("lt", $lt, &["BTN_TL2", "ABS_BRAKE+", "ABS_Z+"]),
+            slot("rt", $rt, &["BTN_TR2", "ABS_GAS+", "ABS_RZ+"]),
             slot("select", $select, &["BTN_SELECT"]),
             slot("start", $start, &["BTN_START"]),
             slot("guide", $guide, &["BTN_MODE"]),
@@ -208,7 +214,8 @@ const SONY: [Slot; 17] = standard!("Cross", "Circle", "Triangle", "Square", "L1"
 const SONY_DS4: [Slot; 17] = standard!("Cross", "Circle", "Triangle", "Square", "L1", "R1", "L2", "R2", "Share", "Options", "PS", "L3", "R3");
 const XBOX: [Slot; 17] = standard!("A", "B", "Y", "X", "LB", "RB", "LT", "RT", "View", "Menu", "Xbox", "LS", "RS");
 const SWITCH: [Slot; 17] = standard!("B", "A", "X", "Y", "L", "R", "ZL", "ZR", "Minus", "Plus", "Home", "LS", "RS");
-const EIGHTBITDO: [Slot; 17] = standard!("B", "A", "X", "Y", "L1", "R1", "L2", "R2", "Select", "Start", "Home", "L3", "R3");
+// In D-input mode the Pro 3 reports its lettered buttons by their letters, Xbox-fashion: the A on the right is BTN_SOUTH, the B at the bottom BTN_EAST.
+const EIGHTBITDO: [Slot; 17] = standard!("B", "A", "X", "Y", "L1", "R1", "L2", "R2", "Select", "Start", "Home", "L3", "R3"; &["BTN_EAST"], &["BTN_SOUTH"]);
 
 pub struct Family {
     pub id: &'static str,
@@ -283,10 +290,11 @@ const FAMILIES: [Family; 8] = [
         name: "8BitDo Pro 3",
         standard: &EIGHTBITDO,
         extras: &[
-            extra("paddle_l4", "L4", &[]),
-            extra("paddle_r4", "R4", &[]),
-            extra("paddle_pl", "PL", &[]),
-            extra("paddle_pr", "PR", &[]),
+            extra("paddle_l4", "L4", &["BTN_TRIGGER_HAPPY1"]),
+            extra("paddle_r4", "R4", &["BTN_TRIGGER_HAPPY2"]),
+            extra("paddle_pl", "PL", &["BTN_Z"]),
+            extra("paddle_pr", "PR", &["BTN_C"]),
+            // Handled on the pad in D-input mode: it reaches evdev in no mode seen yet.
             extra("star", "Star", &[]),
         ],
         ids: &[(0x2dc8, 0x6009)],
@@ -331,6 +339,72 @@ pub fn resolve_slots(config: &ControllerConfig, family: &Family, keys: &[u16], a
         out.insert(s.id.to_string(), found);
     }
     out
+}
+
+pub const AXIS_ROLES: [&str; 6] = ["lx", "ly", "rx", "ry", "lt", "rt"];
+
+/// What each absolute axis of a pad stands for (role, runs backwards): what was learned for the family, else read off the
+/// pad's shape — a right stick on RX/RY leaves Z/RZ to the triggers (xpad, hid-playstation); without one, Z/RZ are the
+/// right stick and BRAKE/GAS the triggers (Android-style HID, a D-input 8BitDo).
+pub fn axis_roles(config: &ControllerConfig, family: &Family, axes: &[u16]) -> BTreeMap<u16, (&'static str, bool)> {
+    let mut out = BTreeMap::new();
+    let has = |c: u16| axes.contains(&c);
+    let stick_right = has(3) || has(4);
+    let guess: [(u16, &'static str); 8] = [
+        (0, "lx"),
+        (1, "ly"),
+        (3, "rx"),
+        (4, "ry"),
+        (2, if stick_right { "lt" } else { "rx" }),
+        (5, if stick_right { "rt" } else { "ry" }),
+        (10, "lt"),
+        (9, "rt"),
+    ];
+    for (code, role) in guess {
+        if has(code) && !out.values().any(|(r, _)| *r == role) {
+            out.insert(code, (role, false));
+        }
+    }
+    if let Some(learned) = config.axes.get(family.id) {
+        for role in AXIS_ROLES {
+            let Some(text) = learned.get(role) else { continue };
+            let Some(keys::Source::Axis { code, positive }) = keys::parse_source(text) else { continue };
+            if !has(code) {
+                continue;
+            }
+            out.retain(|_, (r, _)| *r != role);
+            out.insert(code, (role, !positive));
+        }
+    }
+    out
+}
+
+/// A slot's source as SDL numbers a Linux joystick: buttons from BTN_JOYSTICK up then the rest, axes in code order without the hats.
+pub fn sdl_element(source: &keys::Source, keys: &[u16], axes: &[u16]) -> String {
+    match *source {
+        keys::Source::Key(code) => {
+            let mut order: Vec<u16> = keys.to_vec();
+            order.sort_by_key(|k| if *k >= 0x120 { (0, *k) } else { (1, *k) });
+            order.iter().position(|k| *k == code).map(|i| format!("b{i}")).unwrap_or_default()
+        }
+        keys::Source::Axis { code: code @ 16..=23, positive } => {
+            let hat = (code - 16) / 2;
+            let bit = match (code % 2, positive) {
+                (0, false) => 8,
+                (0, true) => 2,
+                (_, false) => 1,
+                _ => 4,
+            };
+            format!("h{hat}.{bit}")
+        }
+        keys::Source::Axis { code, positive } => sdl_axis(code, axes).map(|a| format!("{}{a}", if positive { "+" } else { "-" })).unwrap_or_default(),
+    }
+}
+
+pub fn sdl_axis(code: u16, axes: &[u16]) -> Option<String> {
+    let mut order: Vec<u16> = axes.iter().copied().filter(|a| !(16..=23).contains(a)).collect();
+    order.sort_unstable();
+    order.iter().position(|a| *a == code).map(|i| format!("a{i}"))
 }
 
 pub fn state_json(config: &ControllerConfig) -> serde_json::Value {
@@ -401,6 +475,21 @@ pub fn write_button(family: &str, slot: &str, codes: Option<&[String]>) -> crate
     crate::config::Config::set_key(&paths::config_file(), &format!("controller.buttons.{family}.{slot}"), &value)
 }
 
+/// `None` forgets the learned axis; the pad's shape decides again.
+pub fn write_axis(family: &str, role: &str, code: Option<&str>) -> crate::Result<()> {
+    crate::config::Config::set_key(&paths::config_file(), &format!("controller.axes.{family}.{role}"), code.unwrap_or_default())
+}
+
+pub fn learn_axis(family: &Family, role: &str, code: &str) -> crate::Result<()> {
+    if !AXIS_ROLES.contains(&role) {
+        return Err(crate::Error::Invalid(format!("'{role}' is not a stick or trigger")));
+    }
+    if !matches!(keys::parse_source(code), Some(keys::Source::Axis { code: 0..=15, .. })) {
+        return Err(crate::Error::Invalid(format!("'{code}' is not an axis")));
+    }
+    write_axis(family.id, role, Some(code))
+}
+
 pub fn upsert_macro(list: &mut Vec<Macro>, m: Macro) {
     list.retain(|x| (&x.family, &x.button, &x.trigger) != (&m.family, &m.button, &m.trigger));
     list.push(m);
@@ -447,6 +536,67 @@ mod tests {
         assert_eq!(detect_family(0x2dc8, 0x6009, "8BitDo Pro 3", &[]).id, "8bitdo-pro-3");
         assert_eq!(detect_family(0x1234, 0x0001, "Some Pad", &[]).id, "generic");
         assert_eq!(detect_family(0x054c, 0x0df2, "DualSense Edge Wireless Controller", &[]).slots().filter(|s| s.extra).count(), 4);
+    }
+
+    // The Pro 3 over Bluetooth in D-input mode, as captured: keys 0x130..0x13f and eight TRIGGER_HAPPY, axes X Y Z RZ GAS BRAKE and a hat.
+    fn pro3_caps() -> (Vec<u16>, Vec<u16>) {
+        ((0x130..=0x13f).chain(0x2c0..=0x2c7).collect(), vec![0, 1, 2, 5, 9, 10, 16, 17])
+    }
+
+    #[test]
+    fn a_d_input_8bitdo_reports_its_letters_and_its_paddles() {
+        let cfg = ControllerConfig::default();
+        let pro3 = family_by_id("8bitdo-pro-3").unwrap();
+        let (keys, axes) = pro3_caps();
+        let s = resolve_slots(&cfg, pro3, &keys, &axes);
+        assert_eq!(s["east"].unwrap().to_string(), "BTN_SOUTH", "the A on the right reports as BTN_SOUTH");
+        assert_eq!(s["south"].unwrap().to_string(), "BTN_EAST");
+        assert_eq!(s["north"].unwrap().to_string(), "BTN_NORTH");
+        assert_eq!(s["lt"].unwrap().to_string(), "BTN_TL2");
+        assert_eq!(s["paddle_l4"].unwrap().to_string(), "BTN_TRIGGER_HAPPY1");
+        assert_eq!(s["paddle_pr"].unwrap().to_string(), "BTN_C");
+        assert!(s["star"].is_none());
+        let roles = axis_roles(&cfg, pro3, &axes);
+        assert_eq!(roles[&2], ("rx", false), "Z is the right stick without RX/RY");
+        assert_eq!(roles[&5], ("ry", false));
+        assert_eq!(roles[&10], ("lt", false));
+        assert_eq!(roles[&9], ("rt", false));
+        assert!(!roles.contains_key(&16), "hats are buttons");
+
+        let xpad = axis_roles(&cfg, family_by_id("xbox").unwrap(), &[0, 1, 2, 3, 4, 5, 16, 17]);
+        assert_eq!((xpad[&2], xpad[&3], xpad[&5]), (("lt", false), ("rx", false), ("rt", false)));
+        let xpadneo = axis_roles(&cfg, family_by_id("xbox").unwrap(), &[0, 1, 3, 4, 9, 10, 16, 17]);
+        assert_eq!((xpadneo[&10], xpadneo[&9]), (("lt", false), ("rt", false)));
+        let nintendo = axis_roles(&cfg, family_by_id("switch-pro").unwrap(), &[0, 1, 3, 4, 16, 17]);
+        assert_eq!(nintendo.len(), 4, "digital triggers have no axis");
+
+        let mut cfg = ControllerConfig::default();
+        cfg.axes.insert(
+            "8bitdo-pro-3".into(),
+            [("rx".to_string(), "ABS_RZ-".to_string()), ("ry".to_string(), "ABS_Z".to_string()), ("lt".to_string(), "ABS_RX".to_string())].into(),
+        );
+        let learned = axis_roles(&cfg, pro3, &axes);
+        assert_eq!((learned[&5], learned[&2]), (("rx", true), ("ry", false)), "a learned axis replaces the guess, backwards when thrown the other way");
+        assert_eq!(learned[&10], ("lt", false), "an axis the pad lacks leaves the guess");
+    }
+
+    #[test]
+    fn sdl_numbers_the_pad_as_its_linux_joystick_does() {
+        let (keys, axes) = pro3_caps();
+        let el = |src: &str| sdl_element(&keys::parse_source(src).unwrap(), &keys, &axes);
+        assert_eq!(el("BTN_SOUTH"), "b0");
+        assert_eq!(el("BTN_THUMBR"), "b14");
+        assert_eq!(el("BTN_TRIGGER_HAPPY1"), "b16");
+        assert_eq!(el("ABS_HAT0Y-"), "h0.1");
+        assert_eq!(el("ABS_HAT0X+"), "h0.2");
+        assert_eq!(el("ABS_HAT0Y+"), "h0.4");
+        assert_eq!(el("ABS_HAT0X-"), "h0.8");
+        assert_eq!(el("ABS_GAS+"), "+a4");
+        assert_eq!(el("ABS_BRAKE+"), "+a5");
+        assert_eq!(sdl_axis(5, &axes).as_deref(), Some("a3"));
+        assert_eq!(el("BTN_GRIPL"), "", "a code the pad lacks has no number");
+        let misc: Vec<u16> = [0x100, 0x130, 0x131].to_vec();
+        assert_eq!(sdl_element(&keys::Source::Key(0x100), &misc, &[]), "b2", "BTN_MISC comes after the joystick range");
     }
 
     #[test]

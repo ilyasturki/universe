@@ -169,6 +169,7 @@ def run(argv=None):
 
         gamepad = GamepadThread(app, pad=api.pad)
         gamepad.stick.connect(api.pad.set, Qt.ConnectionType.QueuedConnection)
+        api.screens.controller.mapping.connect(gamepad.setMapping)
         api.home.changed.connect(lambda: gamepad.setCovered(api.home.padCovered))
         gamepad.start()
         if args.fake:

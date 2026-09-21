@@ -1,4 +1,5 @@
 import logging
+import threading
 import time
 
 from PySide6.QtCore import QCoreApplication, QEvent, QObject, Qt, QThread, QTimer, Signal, Slot
@@ -35,6 +36,46 @@ AXIS_KEYS = {
 }
 
 STICKS = {AXIS_RIGHTX: "rightX"}
+
+# SDL's name for each slot of the watcher's device line; the extras have none the launcher reads.
+SDL_SLOTS = {
+    "lb": "leftshoulder",
+    "rb": "rightshoulder",
+    "lt": "lefttrigger",
+    "rt": "righttrigger",
+    "select": "back",
+    "start": "start",
+    "guide": "guide",
+    "ls": "leftstick",
+    "rs": "rightstick",
+    "dpad_up": "dpup",
+    "dpad_down": "dpdown",
+    "dpad_left": "dpleft",
+    "dpad_right": "dpright",
+}
+SDL_AXES = {"lx": "leftx", "ly": "lefty", "rx": "rightx", "ry": "righty", "lt": "lefttrigger", "rt": "righttrigger"}
+FACE_POSITIONS = {"south": "a", "east": "b", "west": "x", "north": "y"}
+
+
+# The SDL mapping fields for a pad the watcher described: `sdl` names each bound slot and `axes` each stick or trigger as SDL numbers the joystick,
+# `labels` a slot's printed name. A lettered button goes to its letter, so the A of a Nintendo-style pad confirms wherever it sits; the rest go by
+# position, and a trigger by its pull when it has one.
+def mapping_fields(sdl, axes, labels):
+    fields = {}
+    lettered = {labels.get(slot): slot for slot in FACE_POSITIONS if labels.get(slot) in ("A", "B", "X", "Y")}
+    for slot, name in FACE_POSITIONS.items():
+        source = lettered.get(name.upper(), slot) if lettered else slot
+        if sdl.get(source):
+            fields[name] = sdl[source]
+    for slot, name in SDL_SLOTS.items():
+        if sdl.get(slot):
+            fields[name] = sdl[slot]
+    for role, name in SDL_AXES.items():
+        if axes.get(role):
+            fields[name] = axes[role]
+    return ",".join(f"{name}:{element}" for name, element in fields.items())
+
+
 STICK_DEADZONE = 0.18
 
 REPEATING = {Qt.Key.Key_Up, Qt.Key.Key_Down, Qt.Key.Key_Left, Qt.Key.Key_Right, Qt.Key.Key_BracketLeft, Qt.Key.Key_BracketRight}
@@ -150,7 +191,41 @@ class GamepadThread(QThread):
         self._covered = False
         self._pad = pad
         self.mapper = Mapper()
+        self._mappings = {}
+        self._pending = []
+        self._lock = threading.Lock()
         self.key.connect(self._post, Qt.ConnectionType.QueuedConnection)
+
+    # A mapping from the watcher's reading of the pad, applied by the loop: SDL's tables are edited from its own thread.
+    @Slot(int, int, str)
+    def setMapping(self, vendor, product, fields):
+        if not fields:
+            return
+        with self._lock:
+            self._mappings[(int(vendor), int(product))] = fields
+            self._pending.append((int(vendor), int(product)))
+
+    def _apply_mappings(self, sdl2, controllers):
+        with self._lock:
+            pending, self._pending = self._pending, []
+        for vendor, product in pending:
+            fields = self._mappings.get((vendor, product))
+            for controller in controllers.values():
+                joystick = sdl2.SDL_GameControllerGetJoystick(controller)
+                if (sdl2.SDL_JoystickGetVendor(joystick), sdl2.SDL_JoystickGetProduct(joystick)) == (vendor, product):
+                    self._add_mapping(sdl2, sdl2.SDL_JoystickGetGUID(joystick), sdl2.SDL_JoystickName(joystick), fields)
+
+    def _add_mapping(self, sdl2, guid, name, fields):
+        import ctypes
+
+        buf = ctypes.create_string_buffer(64)
+        sdl2.SDL_JoystickGetGUIDString(guid, buf, 64)
+        name = (name or b"pad").decode(errors="replace").replace(",", " ")
+        line = f"{buf.value.decode()},{name},{fields},"
+        if sdl2.SDL_GameControllerAddMapping(line.encode()) < 0:
+            log.warning("mapping refused: %s", sdl2.SDL_GetError())
+        else:
+            log.info("mapping: %s", line)
 
     @Slot(int, bool, bool)
     def _post(self, key, pressed, autorepeat):
@@ -170,6 +245,8 @@ class GamepadThread(QThread):
         import sdl2
 
         sdl2.SDL_SetHint(sdl2.SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, b"1")
+        # The pads are read through evdev, as the watcher reads them: its mapping then names the same buttons.
+        sdl2.SDL_SetHint(sdl2.SDL_HINT_JOYSTICK_HIDAPI, b"0")
         if sdl2.SDL_Init(sdl2.SDL_INIT_GAMECONTROLLER | sdl2.SDL_INIT_JOYSTICK) != 0:
             log.warning("no gamepad support: %s", sdl2.SDL_GetError())
             return
@@ -180,6 +257,8 @@ class GamepadThread(QThread):
             while self._running:
                 while sdl2.SDL_PollEvent(event):
                     self._handle(sdl2, event, controllers)
+                if self._pending:
+                    self._apply_mappings(sdl2, controllers)
                 ticks = self.mapper.release_all() if self._covered else self.mapper.tick()
                 for key, pressed, repeat in ticks:
                     self.key.emit(key, pressed, repeat)
@@ -193,6 +272,9 @@ class GamepadThread(QThread):
         t = event.type
         if t == sdl2.SDL_CONTROLLERDEVICEADDED:
             index = event.cdevice.which
+            fields = self._mappings.get((sdl2.SDL_JoystickGetDeviceVendor(index), sdl2.SDL_JoystickGetDeviceProduct(index)))
+            if fields:
+                self._add_mapping(sdl2, sdl2.SDL_JoystickGetDeviceGUID(index), sdl2.SDL_JoystickNameForIndex(index), fields)
             controller = sdl2.SDL_GameControllerOpen(index)
             if controller:
                 joystick = sdl2.SDL_GameControllerGetJoystick(controller)

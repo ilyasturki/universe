@@ -69,6 +69,21 @@ def test_rows_follow_the_watcher_and_the_macros(api, fake):
     assert axes == [("event30", "lx", -0.5)], "only the six named axes reach the page"
 
 
+def test_the_watchers_reading_reaches_the_sdl_mapper(started):
+    screen, watcher = started
+    mappings = []
+    screen.mapping.connect(lambda vendor, product, fields: mappings.append((vendor, product, fields)))
+    line = watcher.device("event31", family="8bitdo-pro-3")
+    line.update(
+        vendor=0x2DC8, product=0x6009, sdl={"south": "b1", "east": "b0", "lt": "b8"}, sdl_axes={"lx": "a0", "lt": "a5"}, axes={"lx": "ABS_X", "lt": "ABS_BRAKE"}
+    )
+    watcher.emit(line)
+    assert mappings == [(0x2DC8, 0x6009, "a:b0,b:b1,lefttrigger:a5,leftx:a0")], "the A of a Nintendo-style pad is SDL's A, a trigger its pull"
+    assert screen.devices[1]["axes"] == {"lx": "ABS_X", "lt": "ABS_BRAKE"}
+    watcher.emit(watcher.device("event32", family="xbox"))
+    assert len(mappings) == 1, "a line without SDL numbers (a fake, an old core) maps nothing"
+
+
 def test_bind_unbind_and_learn(started, fake):
     screen, watcher = started
 

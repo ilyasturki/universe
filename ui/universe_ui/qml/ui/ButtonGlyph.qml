@@ -38,7 +38,7 @@ Item {
                     anchors.verticalCenter: parent.verticalCenter
                     visible: !cap.visible
                     family: root.family
-                    slot: Names.hintSlot(modelData)
+                    slot: Names.hintSlot(modelData, root.family)
                     unit: root.unit
                 }
 

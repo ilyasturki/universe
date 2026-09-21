@@ -10,7 +10,7 @@ use tokio::sync::{mpsc, Mutex};
 
 use super::engine::{Binding, Engine, Fire};
 use super::keys::{self, Source};
-use super::{detect_family, resolve_slots, ControllerConfig, Family};
+use super::{axis_roles, detect_family, resolve_slots, sdl_axis, sdl_element, ControllerConfig, Family};
 use crate::core::Core;
 use crate::paths;
 
@@ -76,6 +76,12 @@ enum PadCmd {
     Close,
 }
 
+#[derive(Clone, PartialEq, Eq)]
+enum Learn {
+    Slot(String),
+    Axis(String),
+}
+
 enum DevEvent {
     Input(String, InputEvent),
     Gone(String),
@@ -87,28 +93,18 @@ struct Pad {
     name: String,
     family: &'static Family,
     bus: String,
+    vendor: u16,
+    product: u16,
     keys: Vec<u16>,
     axes: Vec<u16>,
     ranges: BTreeMap<u16, (i32, i32)>,
+    roles: BTreeMap<u16, (&'static str, bool)>,
     slots: BTreeMap<String, Option<Source>>,
     by_source: BTreeMap<Source, String>,
     bindings: BTreeMap<String, Binding>,
     axis_down: BTreeSet<(u16, bool)>,
     axis_last: BTreeMap<&'static str, i32>,
     cmd: mpsc::Sender<PadCmd>,
-}
-
-/// The stick or trigger an absolute axis stands for, as the page names them; hats are buttons.
-fn axis_name(code: u16) -> Option<&'static str> {
-    match code {
-        0 => Some("lx"),
-        1 => Some("ly"),
-        3 => Some("rx"),
-        4 => Some("ry"),
-        2 | 10 => Some("lt"),
-        5 | 9 => Some("rt"),
-        _ => None,
-    }
 }
 
 fn axis_value(name: &str, value: i32, (min, max): (i32, i32)) -> f64 {
@@ -124,22 +120,63 @@ fn axis_value(name: &str, value: i32, (min, max): (i32, i32)) -> f64 {
     v.clamp(-1.0, 1.0)
 }
 
+/// A stick past 40% of its throw from rest, a trigger past 40% of its pull: what a learn takes as meant.
+const LEARN_THROW: f64 = 0.4;
+
 impl Pad {
     fn resolve(&mut self, cfg: &ControllerConfig) {
         self.slots = resolve_slots(cfg, self.family, &self.keys, &self.axes);
+        self.roles = axis_roles(cfg, self.family, &self.axes);
         self.by_source = self.slots.iter().filter_map(|(s, src)| src.map(|src| (src, s.clone()))).collect();
         self.bindings = self.slots.keys().map(|s| (s.clone(), Binding::of(&cfg.macros_for(self.family.id, s)))).collect();
     }
 
-    fn axis_sample(&mut self, code: u16, value: i32) -> Option<serde_json::Value> {
-        let name = axis_name(code)?;
+    /// The axis as the page reads it: -1..1 for a stick, 0..1 for a trigger, a backwards axis turned round.
+    fn axis_read(&self, code: u16, value: i32) -> Option<(&'static str, f64)> {
+        let (name, backwards) = *self.roles.get(&code)?;
         let range = self.ranges.get(&code).copied().unwrap_or((-1, 1));
-        let q = (axis_value(name, value, range) * 100.0).round() as i32;
+        let v = axis_value(name, value, range);
+        Some((name, if backwards && !matches!(name, "lt" | "rt") { -v } else { v }))
+    }
+
+    fn axis_sample(&mut self, code: u16, value: i32) -> Option<serde_json::Value> {
+        let (name, v) = self.axis_read(code, value)?;
+        let q = (v * 100.0).round() as i32;
         (self.axis_last.insert(name, q) != Some(q)).then(|| serde_json::json!({"event": "axis", "id": self.id, "axis": name, "value": f64::from(q) / 100.0}))
     }
 
+    /// An axis thrown past `LEARN_THROW` off its rest, as a learn names it: `ABS_Z` thrown the way asked, `ABS_Z-` the other way.
+    fn axis_thrown(&self, code: u16, value: i32) -> Option<String> {
+        if (16..=23).contains(&code) {
+            return None;
+        }
+        let (min, max) = self.ranges.get(&code).copied().unwrap_or((-1, 1));
+        let trigger_like = min >= 0 && self.roles.get(&code).is_some_and(|(r, _)| matches!(*r, "lt" | "rt"));
+        let v = axis_value(if trigger_like { "lt" } else { "lx" }, value, (min, max));
+        (v.abs() > LEARN_THROW).then(|| format!("{:?}{}", evdev::AbsoluteAxisCode(code), if v < 0.0 { "-" } else { "" }))
+    }
+
     fn json(&self) -> serde_json::Value {
-        serde_json::json!({"event": "device", "id": self.id, "name": self.name, "family": self.family.id, "family_name": self.family.name, "bus": self.bus, "slots": slots_json(&self.slots)})
+        let axes: serde_json::Map<String, serde_json::Value> = self
+            .roles
+            .iter()
+            .map(|(code, (role, backwards))| {
+                ((*role).to_string(), serde_json::json!(format!("{:?}{}", evdev::AbsoluteAxisCode(*code), if *backwards { "-" } else { "" })))
+            })
+            .collect();
+        let sdl: serde_json::Map<String, serde_json::Value> =
+            self.slots.iter().filter_map(|(s, src)| src.map(|src| (s.clone(), serde_json::json!(sdl_element(&src, &self.keys, &self.axes))))).collect();
+        let sdl_axes: serde_json::Map<String, serde_json::Value> = self
+            .roles
+            .iter()
+            .filter_map(|(code, (role, backwards))| {
+                sdl_axis(*code, &self.axes).map(|a| ((*role).to_string(), serde_json::json!(format!("{a}{}", if *backwards { "~" } else { "" }))))
+            })
+            .collect();
+        serde_json::json!({
+            "event": "device", "id": self.id, "name": self.name, "family": self.family.id, "family_name": self.family.name, "bus": self.bus,
+            "vendor": self.vendor, "product": self.product, "slots": slots_json(&self.slots), "axes": axes, "sdl": sdl, "sdl_axes": sdl_axes,
+        })
     }
 
     fn axis(&mut self, code: u16, value: i32) -> Vec<(Source, bool)> {
@@ -184,6 +221,8 @@ fn bus_name(dev: &Device) -> String {
 struct Caps {
     name: String,
     family: &'static Family,
+    vendor: u16,
+    product: u16,
     keys: Vec<u16>,
     axes: Vec<u16>,
     ranges: BTreeMap<u16, (i32, i32)>,
@@ -196,7 +235,31 @@ fn describe(dev: &Device) -> Caps {
     let family = detect_family(id.vendor(), id.product(), &name, &keys);
     let axes: Vec<u16> = dev.supported_absolute_axes().map(|a| a.iter().map(|c| c.0).collect()).unwrap_or_default();
     let ranges = dev.get_absinfo().map(|it| it.map(|(c, i)| (c.0, (i.minimum(), i.maximum()))).collect()).unwrap_or_default();
-    Caps { name, family, keys, axes, ranges }
+    Caps { name, family, vendor: id.vendor(), product: id.product(), keys, axes, ranges }
+}
+
+fn pad_of(id: String, path: PathBuf, bus: String, c: Caps, cfg: &ControllerConfig, cmd: mpsc::Sender<PadCmd>) -> Pad {
+    let mut pad = Pad {
+        id,
+        path,
+        name: c.name,
+        family: c.family,
+        bus,
+        vendor: c.vendor,
+        product: c.product,
+        keys: c.keys,
+        axes: c.axes,
+        ranges: c.ranges,
+        roles: BTreeMap::new(),
+        slots: BTreeMap::new(),
+        by_source: BTreeMap::new(),
+        bindings: BTreeMap::new(),
+        axis_down: BTreeSet::new(),
+        axis_last: BTreeMap::new(),
+        cmd,
+    };
+    pad.resolve(cfg);
+    pad
 }
 
 fn slots_json(slots: &BTreeMap<String, Option<Source>>) -> serde_json::Map<String, serde_json::Value> {
@@ -213,12 +276,12 @@ pub fn enumerate_json(cfg: &ControllerConfig) -> Vec<serde_json::Value> {
         if !is_pad(&dev) {
             continue;
         }
-        let c = describe(&dev);
-        let slots = resolve_slots(cfg, c.family, &c.keys, &c.axes);
-        out.push(serde_json::json!({
-            "id": path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default(), "path": path, "name": c.name, "family": c.family.id, "family_name": c.family.name, "bus": bus_name(&dev),
-            "slots": slots_json(&slots),
-        }));
+        let bus = bus_name(&dev);
+        let id = path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
+        let (ctx, _) = mpsc::channel(1);
+        let mut v = pad_of(id, path.clone(), bus, describe(&dev), cfg, ctx).json();
+        v["path"] = serde_json::json!(path);
+        out.push(v);
     }
     out.sort_by(|a, b| a["id"].as_str().cmp(&b["id"].as_str()));
     out
@@ -305,7 +368,7 @@ struct Watcher {
     // Under the dock: the docked presets still fire.
     docked: bool,
     axes: bool,
-    learning: Option<(String, String, Instant)>,
+    learning: Option<(String, Learn, Instant)>,
     started: Instant,
     config_mtime: Option<std::time::SystemTime>,
 }
@@ -345,26 +408,9 @@ impl Watcher {
                 continue;
             }
             let id = path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
-            let c = describe(&dev);
             let bus = bus_name(&dev);
             let (ctx, crx) = mpsc::channel(4);
-            let mut pad = Pad {
-                id: id.clone(),
-                path,
-                name: c.name,
-                family: c.family,
-                bus,
-                keys: c.keys,
-                axes: c.axes,
-                ranges: c.ranges,
-                slots: BTreeMap::new(),
-                by_source: BTreeMap::new(),
-                bindings: BTreeMap::new(),
-                axis_down: BTreeSet::new(),
-                axis_last: BTreeMap::new(),
-                cmd: ctx,
-            };
-            pad.resolve(&self.cfg);
+            let pad = pad_of(id.clone(), path, bus, describe(&dev), &self.cfg, ctx);
             pad_task(id.clone(), dev, self.tx.clone(), crx);
             self.out.emit(pad.json());
             self.pads.insert(id, pad);
@@ -403,8 +449,18 @@ impl Watcher {
             }
             EventSummary::AbsoluteAxis(_, axis, value) => {
                 let code = axis.0;
+                if let Some((_, Learn::Axis(role), _)) = self.learning.clone().filter(|(lid, _, _)| *lid == id) {
+                    if let Some(thrown) = pad.axis_thrown(code, value) {
+                        let family = pad.family;
+                        self.learning = None;
+                        return self.learnt(family, Learn::Axis(role), &thrown).await;
+                    }
+                }
                 let sample = if self.axes { pad.axis_sample(code, value) } else { None };
-                let owned = (16..=17).contains(&code) || pad.by_source.keys().any(|s| matches!(s, Source::Axis { code: c, .. } if *c == code));
+                // A trigger being learned listens to its own axis too: a pull answers before the click at the end of it.
+                let trigger_learn = matches!(&self.learning, Some((lid, Learn::Slot(s), _)) if *lid == id && matches!(s.as_str(), "lt" | "rt"))
+                    && pad.roles.get(&code).is_some_and(|(r, _)| matches!(*r, "lt" | "rt"));
+                let owned = (16..=17).contains(&code) || trigger_learn || pad.by_source.keys().any(|s| matches!(s, Source::Axis { code: c, .. } if *c == code));
                 (if owned { pad.axis(code, value) } else { vec![] }, sample)
             }
             _ => return true,
@@ -415,23 +471,11 @@ impl Watcher {
             }
         }
         for (source, down) in transitions {
-            let learnable = down && matches!(source, Source::Key(_) | Source::Axis { code: 16..=17, .. });
-            if let Some((_, slot, _)) = self.learning.clone().filter(|(lid, _, _)| *lid == id && learnable) {
+            let learnable = down && matches!(source, Source::Key(_) | Source::Axis { .. });
+            if let Some((_, Learn::Slot(slot), _)) = self.learning.clone().filter(|(lid, _, _)| *lid == id && learnable) {
                 self.learning = None;
                 let family = self.pads[&id].family;
-                match super::learn_code(&self.cfg, family, &slot, &source.to_string()) {
-                    Ok(from) => {
-                        if !self.out.emit(serde_json::json!({"event": "learned", "family": family.id, "slot": slot, "code": source.to_string(), "from": from}))
-                        {
-                            return false;
-                        }
-                        self.reload().await;
-                    }
-                    Err(e) => {
-                        self.out.emit(serde_json::json!({"event": "error", "message": e.to_string()}));
-                    }
-                }
-                return true;
+                return self.learnt(family, Learn::Slot(slot), &source.to_string()).await;
             }
             let pad = self.pads.get(&id).unwrap();
             let Some(slot) = pad.by_source.get(&source).cloned() else {
@@ -454,6 +498,29 @@ impl Watcher {
             let fires = if down { self.engine.press(&id, &slot, binding, now) } else { self.engine.release(&id, &slot, now) };
             for f in fires {
                 self.fire(f);
+            }
+        }
+        true
+    }
+
+    /// What a learn found, written for the family, told, and taken up by every pad of it.
+    async fn learnt(&mut self, family: &'static Family, target: Learn, code: &str) -> bool {
+        let written = match &target {
+            Learn::Slot(slot) => super::learn_code(&self.cfg, family, slot, code)
+                .map(|from| serde_json::json!({"event": "learned", "family": family.id, "slot": slot, "code": code, "from": from})),
+            Learn::Axis(role) => {
+                super::learn_axis(family, role, code).map(|()| serde_json::json!({"event": "learned", "family": family.id, "axis": role, "code": code}))
+            }
+        };
+        match written {
+            Ok(line) => {
+                if !self.out.emit(line) {
+                    return false;
+                }
+                self.reload().await;
+            }
+            Err(e) => {
+                self.out.emit(serde_json::json!({"event": "error", "message": e.to_string()}));
             }
         }
         true
@@ -560,10 +627,23 @@ impl Watcher {
             "learn" => {
                 let id = v["id"].as_str().unwrap_or("").to_string();
                 let slot = v["slot"].as_str().unwrap_or("").to_string();
-                if !self.pads.get(&id).is_some_and(|p| p.family.slots().any(|s| s.id == slot)) {
-                    return self.out.emit(serde_json::json!({"event": "error", "message": format!("cannot learn {slot} on {id}")}));
+                let axis = v["axis"].as_str().unwrap_or("").to_string();
+                let known = self.pads.get(&id).is_some_and(|p| {
+                    if axis.is_empty() {
+                        p.family.slots().any(|s| s.id == slot)
+                    } else {
+                        super::AXIS_ROLES.contains(&axis.as_str())
+                    }
+                });
+                if !known {
+                    return self.out.emit(
+                        serde_json::json!({"event": "error", "message": format!("cannot learn {} on {id}", if axis.is_empty() { &slot } else { &axis })}),
+                    );
                 }
-                self.learning = Some((id, slot, Instant::now()));
+                for p in self.pads.values_mut() {
+                    p.axis_down.clear();
+                }
+                self.learning = Some((id, if axis.is_empty() { Learn::Slot(slot) } else { Learn::Axis(axis) }, Instant::now()));
             }
             "cancel" => self.learning = None,
             "rumble" => {
@@ -721,9 +801,6 @@ mod tests {
 
     #[test]
     fn axes_normalize_by_their_range() {
-        assert_eq!(axis_name(0), Some("lx"));
-        assert_eq!(axis_name(9), Some("rt"));
-        assert_eq!(axis_name(16), None, "hats are buttons");
         assert_eq!(axis_value("lx", 255, (0, 255)), 1.0);
         assert!((axis_value("ly", 128, (0, 255)) - 0.0039).abs() < 0.001, "a DualSense stick rests a hair off centre");
         assert_eq!(axis_value("rx", -32768, (-32768, 32767)), -1.0);

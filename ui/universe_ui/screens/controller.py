@@ -5,6 +5,7 @@ import shutil
 
 from PySide6.QtCore import QObject, QProcess, QTimer, Signal, Slot
 
+from ..gamepad import mapping_fields
 from ..qt import QVARIANT, Property
 from .settings import AdvancedRows, _add, _dig, _group, _row
 
@@ -152,6 +153,7 @@ class ControllerScreen(AdvancedRows, QObject):
     macroNotice = Signal(str)
     screenshotTaken = Signal(str)
     message = Signal(str)
+    mapping = Signal(int, int, str)
 
     def __init__(self, client, memory, power, parent=None):
         super().__init__(parent)
@@ -213,6 +215,8 @@ class ControllerScreen(AdvancedRows, QObject):
 
     def _enumerate(self):
         self._devices = [self._entry(p) for p in self._client.controllerPads() if p.get("id")]
+        for device in self._devices:
+            self._map(device)
         if self._device() is None:
             self._current = self._devices[0]["id"] if self._devices else ""
             if self._devices:
@@ -228,8 +232,23 @@ class ControllerScreen(AdvancedRows, QObject):
             "name": str(line.get("name") or ident),
             "family": str(line.get("family") or "generic"),
             "bus": str(line.get("bus") or ""),
+            "vendor": int(line.get("vendor") or 0),
+            "product": int(line.get("product") or 0),
             "slots": dict(line.get("slots") or {}),
+            "axes": dict(line.get("axes") or {}),
+            "sdl": dict(line.get("sdl") or {}),
+            "sdl_axes": dict(line.get("sdl_axes") or {}),
         }
+
+    # The SDL mapper reads the pad as the watcher does, lettered buttons by their letters.
+    def _map(self, entry):
+        if not entry["vendor"] or not entry["sdl"]:
+            return
+        family = self._families().get(entry["family"]) or {}
+        labels = {s["id"]: str(s.get("label") or "") for s in family.get("slots") or [] if s.get("id")}
+        fields = mapping_fields(entry["sdl"], entry["sdl_axes"], labels)
+        if fields:
+            self.mapping.emit(entry["vendor"], entry["product"], fields)
 
     def _families(self):
         return {f["id"]: f for f in self._state.get("families") or [] if f.get("id")}
@@ -335,6 +354,7 @@ class ControllerScreen(AdvancedRows, QObject):
     def _upsert(self, line):
         ident = str(line.get("id") or "")
         entry = self._entry(line)
+        self._map(entry)
         for i, d in enumerate(self._devices):
             if d["id"] == ident:
                 self._devices[i] = entry

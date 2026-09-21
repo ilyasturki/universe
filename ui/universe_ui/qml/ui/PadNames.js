@@ -65,5 +65,13 @@ var HINT_SLOTS = {
     A: "south", B: "east", X: "west", Y: "north", LB: "lb", RB: "rb", LT: "lt", RT: "rt",
     LS: "ls", RS: "rs", Start: "start", Select: "select", dpad: "dpad"
 };
+var FACE_SLOTS = ["south", "east", "north", "west"];
 
-function hintSlot(name) { return HINT_SLOTS[name] || name; }
+// A lettered hint lands on the button that carries the letter — the A on the right of a Nintendo-style pad — else on the position an Xbox pad has it.
+function hintSlot(name, family) {
+    var face = FACE[style(family || "xbox")];
+    for (var i = 0; i < FACE_SLOTS.length; i++)
+        if (face[FACE_SLOTS[i]][0] === name)
+            return FACE_SLOTS[i];
+    return HINT_SLOTS[name] || name;
+}

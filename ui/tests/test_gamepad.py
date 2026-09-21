@@ -75,6 +75,31 @@ def test_autorepeat_only_for_arrows():
     assert m.tick() == []
 
 
+# The Pro 3 in D-input mode, as the watcher lines it: its A on the right is BTN_SOUTH, b0 to SDL.
+PRO3_SDL = {
+    "south": "b1", "east": "b0", "north": "b3", "west": "b4", "lb": "b6", "rb": "b7", "lt": "b8", "rt": "b9",
+    "select": "b10", "start": "b11", "guide": "b12", "ls": "b13", "rs": "b14",
+    "dpad_up": "h0.1", "dpad_down": "h0.4", "dpad_left": "h0.8", "dpad_right": "h0.2",
+    "paddle_l4": "b16", "paddle_r4": "b17", "paddle_pl": "b5", "paddle_pr": "b2",
+}  # fmt: skip
+PRO3_AXES = {"lx": "a0", "ly": "a1", "rx": "a2", "ry": "a3", "lt": "a5", "rt": "a4"}
+PRO3_LABELS = {"south": "B", "east": "A", "north": "X", "west": "Y", "lb": "L1", "rb": "R1", "lt": "L2", "rt": "R2", "guide": "Home"}
+
+
+def test_mapping_fields_follow_the_letters_and_the_positions():
+    fields = dict(f.split(":") for f in gamepad.mapping_fields(PRO3_SDL, PRO3_AXES, PRO3_LABELS).split(","))
+    assert (fields["a"], fields["b"], fields["x"], fields["y"]) == ("b0", "b1", "b3", "b4"), "the printed A confirms wherever it sits"
+    assert (fields["lefttrigger"], fields["righttrigger"]) == ("a5", "a4"), "a trigger's pull is read before its click"
+    assert (fields["rightx"], fields["righty"], fields["dpup"], fields["dpleft"], fields["back"], fields["guide"]) == ("a2", "a3", "h0.1", "h0.8", "b10", "b12")
+    assert "paddle1" not in fields and "b16" not in fields.values(), "the launcher reads no extra"
+    sony = {"south": "Cross", "east": "Circle", "north": "Triangle", "west": "Square"}
+    positional = dict(f.split(":") for f in gamepad.mapping_fields(PRO3_SDL, PRO3_AXES, sony).split(","))
+    assert (positional["a"], positional["b"], positional["x"], positional["y"]) == ("b1", "b0", "b4", "b3")
+    digital = {"south": "b0", "east": "b1", "lt": "b8"}
+    assert gamepad.mapping_fields(digital, {"lx": "a0"}, {}) == "a:b0,b:b1,lefttrigger:b8,leftx:a0"
+    assert gamepad.mapping_fields({}, {}, {}) == ""
+
+
 def test_covering_releases_what_was_held():
     from PySide6.QtCore import Qt
 

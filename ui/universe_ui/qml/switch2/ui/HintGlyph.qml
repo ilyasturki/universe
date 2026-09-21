@@ -13,7 +13,7 @@ Item {
     property bool dim: false
 
     readonly property string family: api.screens.controller.family
-    readonly property string slot: Names.hintSlot(glyph)
+    readonly property string slot: Names.hintSlot(glyph, family)
     readonly property bool cross: slot.indexOf("dpad") === 0
 
     implicitWidth: Math.max(unit, back.implicitWidth)

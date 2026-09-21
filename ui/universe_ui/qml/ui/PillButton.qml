@@ -62,7 +62,7 @@ Rectangle {
             visible: root.glyph !== ""
             anchors.verticalCenter: parent.verticalCenter
             family: api.screens.controller.family
-            slot: Names.hintSlot(root.glyph)
+            slot: Names.hintSlot(root.glyph, api.screens.controller.family)
             unit: Theme.dp(30)
             ink: root.ink
         }
