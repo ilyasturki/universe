@@ -36,6 +36,7 @@ Item {
         anchors.rightMargin: Theme.dp(34)
         anchors.verticalCenter: clockLabel.verticalCenter
         tint: Theme.text
+        currentTint: Theme.okGreen
         size: Theme.dp(Theme.fontSmall)
         fontFamily: Theme.sans
         fontWeight: Font.Normal

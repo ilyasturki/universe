@@ -1,10 +1,12 @@
 use std::collections::{BTreeMap, BTreeSet};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::pin::Pin;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use evdev::{Device, EventSummary, EventType, InputEvent, KeyCode};
+use futures_util::{Stream, StreamExt};
 use tokio::io::unix::AsyncFd;
 use tokio::io::AsyncBufReadExt;
 use tokio::sync::{mpsc, Mutex};
@@ -174,6 +176,41 @@ fn hidraw_of(path: &Path, vendor: u16) -> Option<AsyncFd<std::fs::File>> {
     let node = std::fs::read_dir(sysfs).ok()?.flatten().next()?.file_name();
     let fd = rustix::fs::open(Path::new("/dev").join(node), rustix::fs::OFlags::RDONLY | rustix::fs::OFlags::NONBLOCK, rustix::fs::Mode::empty()).ok()?;
     AsyncFd::new(std::fs::File::from(fd)).ok()
+}
+
+const BLUEZ_BATTERY: &str = "org.bluez.Battery1";
+
+fn percent_of(v: Option<&zbus::zvariant::Value<'_>>) -> Option<u8> {
+    v.and_then(|v| u8::try_from(v).ok()).map(|p| p.min(100))
+}
+
+/// A Bluetooth pad's charge as BlueZ reads it off the pad's GATT Battery Service, which a pad in BLE mode (an Xbox's) carries
+/// instead of the HID battery report the kernel would keep a supply for: the percent now, then each change, the service
+/// turning up after the pad included. None for a pad BlueZ does not list.
+async fn bluez_battery(address: &str) -> Option<Pin<Box<dyn Stream<Item = u8> + Send>>> {
+    let conn = zbus::Connection::system().await.ok()?;
+    let manager = zbus::fdo::ObjectManagerProxy::builder(&conn).destination("org.bluez").ok()?.path("/").ok()?.build().await.ok()?;
+    let (path, ifaces) = manager.get_managed_objects().await.ok()?.into_iter().find(|(_, ifaces)| {
+        ifaces
+            .get("org.bluez.Device1")
+            .and_then(|d| d.get("Address"))
+            .and_then(|v| <&str>::try_from(&**v).ok())
+            .is_some_and(|a| a.eq_ignore_ascii_case(address))
+    })?;
+    let now = ifaces.get(BLUEZ_BATTERY).and_then(|b| percent_of(b.get("Percentage").map(|v| &**v)));
+    let props = zbus::fdo::PropertiesProxy::builder(&conn).destination("org.bluez").ok()?.path(path.clone()).ok()?.build().await.ok()?;
+    let changed = props.receive_properties_changed().await.ok()?.filter_map(|s| async move {
+        let args = s.args().ok()?;
+        (args.interface_name == BLUEZ_BATTERY).then(|| percent_of(args.changed_properties.get("Percentage"))).flatten()
+    });
+    let added = manager.receive_interfaces_added().await.ok()?.filter_map(move |s| {
+        let path = path.clone();
+        async move {
+            let args = s.args().ok()?;
+            (args.object_path == *path).then(|| percent_of(args.interfaces_and_properties.get(BLUEZ_BATTERY)?.get("Percentage"))).flatten()
+        }
+    });
+    Some(Box::pin(futures_util::stream::iter(now).chain(futures_util::stream::select(changed, added))))
 }
 
 async fn next_report(hid: &mut Option<AsyncFd<std::fs::File>>) -> Vec<u8> {
@@ -407,7 +444,14 @@ pub fn enumerate_json(cfg: &ControllerConfig) -> Vec<serde_json::Value> {
     out
 }
 
-fn pad_task(id: String, dev: Device, mut hid: Option<AsyncFd<std::fs::File>>, tx: mpsc::Sender<DevEvent>, mut cmds: mpsc::Receiver<PadCmd>) {
+fn pad_task(
+    id: String,
+    dev: Device,
+    mut hid: Option<AsyncFd<std::fs::File>>,
+    address: Option<String>,
+    tx: mpsc::Sender<DevEvent>,
+    mut cmds: mpsc::Receiver<PadCmd>,
+) {
     tokio::spawn(async move {
         let vendor = dev.input_id().vendor();
         let mut stream = match dev.into_event_stream() {
@@ -417,19 +461,21 @@ fn pad_task(id: String, dev: Device, mut hid: Option<AsyncFd<std::fs::File>>, tx
                 return;
             }
         };
+        let mut bluez = match address {
+            Some(a) => bluez_battery(&a).await,
+            None => None,
+        }
+        .unwrap_or_else(|| Box::pin(futures_util::stream::pending()));
         let mut battery = None;
         loop {
-            tokio::select! {
+            let read = tokio::select! {
                 ev = stream.next_event() => match ev {
-                    Ok(ev) => { if tx.send(DevEvent::Input(id.clone(), ev)).await.is_err() { return; } }
+                    Ok(ev) => { if tx.send(DevEvent::Input(id.clone(), ev)).await.is_err() { return; } continue; }
                     Err(_) => { let _ = tx.send(DevEvent::Gone(id)).await; return; }
                 },
-                report = next_report(&mut hid) => {
-                    if let Some((percent, charging)) = battery_of(vendor, &report).filter(|read| Some(*read) != battery) {
-                        battery = Some((percent, charging));
-                        if tx.send(DevEvent::Battery(id.clone(), percent, charging)).await.is_err() { return; }
-                    }
-                }
+                report = next_report(&mut hid) => battery_of(vendor, &report),
+                // BlueZ tells no charging state: a pad on the cable reads as draining.
+                percent = bluez.next() => match percent { Some(p) => Some((p, false)), None => { bluez = Box::pin(futures_util::stream::pending()); None } },
                 cmd = cmds.recv() => match cmd {
                     Some(PadCmd::Rumble) => {
                         let data = evdev::FFEffectData {
@@ -442,9 +488,16 @@ fn pad_task(id: String, dev: Device, mut hid: Option<AsyncFd<std::fs::File>>, tx
                             let _ = effect.play(1);
                             tokio::time::sleep(Duration::from_millis(250)).await;
                         }
+                        continue;
                     }
                     Some(PadCmd::Close) | None => return,
                 },
+            };
+            if let Some((percent, charging)) = read.filter(|read| Some(*read) != battery) {
+                battery = Some((percent, charging));
+                if tx.send(DevEvent::Battery(id.clone(), percent, charging)).await.is_err() {
+                    return;
+                }
             }
         }
     });
@@ -539,8 +592,10 @@ impl Watcher {
             let bus = bus_name(&dev);
             let (ctx, crx) = mpsc::channel(4);
             let hid = hidraw_of(&path, dev.input_id().vendor());
+            // A pad read off hidraw (an 8BitDo's) tells its charging state, which BlueZ cannot: it is not asked twice.
+            let address = (bus == "bluetooth" && hid.is_none()).then(|| dev.unique_name().map(str::to_string)).flatten();
             let pad = pad_of(id.clone(), path, bus, describe(&dev), &self.cfg, ctx);
-            pad_task(id.clone(), dev, hid, self.tx.clone(), crx);
+            pad_task(id.clone(), dev, hid, address, self.tx.clone(), crx);
             self.out.emit(pad.json());
             self.pads.insert(id, pad);
         }
@@ -945,7 +1000,7 @@ pub async fn learn_once(cfg: &ControllerConfig, family: &Family, slot: &str) -> 
             continue;
         }
         let (ctx, crx) = mpsc::channel(1);
-        pad_task(path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default(), dev, None, tx.clone(), crx);
+        pad_task(path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default(), dev, None, None, tx.clone(), crx);
         senders.push(ctx);
     }
     if senders.is_empty() {
@@ -1072,5 +1127,41 @@ mod tests {
         report[0] = 0x06;
         assert_eq!(battery_of(EIGHTBITDO, &report), None, "only the state reports");
         assert_eq!(battery_of(EIGHTBITDO, &[0x04, 0x0f]), None);
+    }
+
+    #[test]
+    fn a_bluez_percentage_is_a_byte_capped_at_full() {
+        use zbus::zvariant::Value;
+        assert_eq!(percent_of(Some(&Value::U8(45))), Some(45));
+        assert_eq!(percent_of(Some(&Value::U8(120))), Some(100));
+        assert_eq!(percent_of(Some(&Value::from("45"))), None);
+        assert_eq!(percent_of(None), None);
+    }
+
+    // Every connected Bluetooth device BlueZ lists: one with a Battery1 yields its percent first, one without yields nothing yet.
+    #[tokio::test]
+    #[ignore]
+    async fn live_bluez_reads_a_pads_battery_service() {
+        let Ok(conn) = zbus::Connection::system().await else {
+            eprintln!("no system bus; skipped");
+            return;
+        };
+        let manager = zbus::fdo::ObjectManagerProxy::builder(&conn).destination("org.bluez").unwrap().path("/").unwrap().build().await.unwrap();
+        let mut seen = 0;
+        for (_, ifaces) in manager.get_managed_objects().await.unwrap() {
+            let Some(device) = ifaces.get("org.bluez.Device1") else { continue };
+            if !device.get("Connected").and_then(|v| bool::try_from(&**v).ok()).unwrap_or(false) {
+                continue;
+            }
+            let address = <&str>::try_from(&**device.get("Address").unwrap()).unwrap();
+            let expected = ifaces.get(BLUEZ_BATTERY).and_then(|b| percent_of(b.get("Percentage").map(|v| &**v)));
+            let mut stream = bluez_battery(address).await.unwrap_or_else(|| panic!("{address}: listed by BlueZ"));
+            let first = tokio::time::timeout(Duration::from_millis(200), stream.next()).await.ok();
+            eprintln!("{address}: {first:?}");
+            assert_eq!(first.flatten(), expected, "{address}");
+            seen += 1;
+        }
+        assert_eq!(bluez_battery("00:00:00:00:00:00").await.map(|_| ()), None, "a device BlueZ does not know");
+        eprintln!("{seen} connected device(s)");
     }
 }

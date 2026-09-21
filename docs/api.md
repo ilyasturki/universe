@@ -659,9 +659,11 @@ line: out — `{"event":"ready"}`, `{"event":"device","id":"event30","name","fam
 (`axes` names the evdev axis behind `lx ly rx ry lt rt`, by the pad's shape — Z/RZ are triggers next
 to RX/RY, the right stick without them — or as `[controller.axes.<family>]` learned it, `-` on one
 thrown backwards; `sdl`/`sdl_axes` number the same as SDL's Linux joystick does, `~` on a backwards
-axis; `battery {percent, charging}` when the watcher reads it itself — an 8BitDo's, from byte 14 of
-its HID report, since the kernel keeps no supply for it — else null), `gone {id}`, `button {id, slot, code, pressed}`,
-`battery {id, percent, charging}` (on change),
+axis; `battery {percent, charging}` when the watcher reads it itself, since the kernel keeps no
+supply for the pad — an 8BitDo's from byte 14 of its HID report, a Bluetooth pad's from the GATT
+Battery Service BlueZ reads (`org.bluez.Battery1`, an Xbox pad in BLE mode: no charging state, so
+`charging` false) — else null), `gone {id}`, `button {id, slot, code, pressed}`,
+`battery {id, percent, charging}` (on change, and when BlueZ's service turns up after the pad),
 `unknown {id, code}` (a key no slot owns), `macro {id, slot, trigger, action, keys, command}`,
 `hud {shown, title}` (after a `mangohud` fire: `shown` null when no game runs), `learned {family, slot, code, from}` or `learned {family, axis, code}`, `learn_timeout`, `waiting` / `busy` (the lock), `error
 {message}`, and while `axes` is on, `axis {id, axis, value}` (`lx ly rx ry` as -1..1, `lt rt` as

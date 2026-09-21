@@ -829,3 +829,27 @@ def test_the_switch2_forms_share_the_sidebar_and_y(api, fake):
     assert warnings == []
     window.close()
     pump(50)
+
+
+# The fixture's pad supply hangs off event30: the fake pad's node, so its glyph goes green while that pad is current.
+def test_the_badge_tints_the_current_pad(api):
+    from PySide6.QtGui import QColor
+
+    from universe_ui.screens.controller import FakeWatcher
+
+    _engine, window = render(api)
+    controller = api.screens.controller
+    controller.restart_ms = 0
+    watcher = FakeWatcher("dualsense-edge")
+    controller.start(watcher)
+    pump(50)
+    badge = next(c for c in window.findChildren(QObject) if c.property("currentTint") is not None)
+    sources = {c.property("current"): c for c in badge.childItems() if c.property("low") is not None}
+    assert set(sources) == {True, False}, "the laptop and the pad"
+    assert sources[True].property("ink") == badge.property("currentTint") and sources[False].property("ink") == badge.property("tint")
+    watcher.emit({"event": "gone", "id": "event30"})
+    pump(50)
+    pad = sources[True]
+    assert pad.property("current") is False and pad.property("ink") == QColor(badge.property("tint")), "no pad current, no green"
+    window.close()
+    pump(50)

@@ -16,6 +16,7 @@ Row {
 
     readonly property int lowPercent: 15
     readonly property color lowTint: "#e0655a"
+    property color currentTint: "#3cbc3c"
 
     spacing: Theme.dp(22)
     visible: api.power.count > 0
@@ -27,7 +28,8 @@ Row {
             id: source
 
             readonly property bool low: modelData.percent <= badge.lowPercent && !modelData.charging
-            readonly property color ink: low ? badge.lowTint : badge.tint
+            readonly property bool current: modelData.kind === "pad" && modelData.inputs.indexOf(api.screens.controller.current) >= 0
+            readonly property color ink: low ? badge.lowTint : current ? badge.currentTint : badge.tint
 
             anchors.verticalCenter: parent.verticalCenter
             spacing: Theme.dp(7)
