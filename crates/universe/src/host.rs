@@ -112,6 +112,11 @@ impl Systemd {
             Err(e) => Err(Error::Io(format!("{unit}: {e}"))),
         }
     }
+
+    async fn active_state(&self, unit: &str) -> Option<String> {
+        let proxy = self.unit_proxy(&qualified(unit), "org.freedesktop.systemd1.Unit").await.ok().flatten()?;
+        proxy.get_property::<String>("ActiveState").await.ok()
+    }
 }
 
 async fn manager_proxy(conn: &zbus::Connection) -> zbus::Result<zbus::Proxy<'static>> {
@@ -221,12 +226,16 @@ impl Units {
     /// `deactivating` counts: `ExecStopPost` is still running the session's end.
     pub async fn is_active(&self, unit: &str) -> bool {
         match self {
-            Units::Systemd(sd) => match sd.unit_proxy(&qualified(unit), "org.freedesktop.systemd1.Unit").await {
-                Ok(Some(p)) => {
-                    p.get_property::<String>("ActiveState").await.is_ok_and(|s| matches!(s.as_str(), "active" | "activating" | "deactivating" | "reloading"))
-                }
-                _ => false,
-            },
+            Units::Systemd(sd) => sd.active_state(unit).await.is_some_and(|s| matches!(s.as_str(), "active" | "activating" | "deactivating" | "reloading")),
+            #[cfg(test)]
+            Units::Memory(m) => m.units.lock().unwrap().get(unit).map(|u| u.active).unwrap_or(false),
+        }
+    }
+
+    /// The game's own processes are still up: not yet `deactivating`.
+    pub async fn is_running(&self, unit: &str) -> bool {
+        match self {
+            Units::Systemd(sd) => sd.active_state(unit).await.is_some_and(|s| matches!(s.as_str(), "active" | "activating" | "reloading")),
             #[cfg(test)]
             Units::Memory(m) => m.units.lock().unwrap().get(unit).map(|u| u.active).unwrap_or(false),
         }
@@ -242,7 +251,8 @@ impl Units {
                 if let Some(cg) = self.cgroup(unit).await {
                     let mut game = game_pids(&cgroup_procs(&cg));
                     for round in 0..20 {
-                        if game.is_empty() {
+                        // Deactivating: the cgroup holds ExecStopPost now, not the game.
+                        if game.is_empty() || !self.is_running(unit).await {
                             break;
                         }
                         if round == 0 || (term_twice && round % 6 == 0) {
