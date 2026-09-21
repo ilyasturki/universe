@@ -348,6 +348,11 @@ FocusScope {
                 Sound.tick();
             }
 
+            function pointTo(i) {
+                index = i;
+                chipBar.forceActiveFocus();
+            }
+
             function openPicker() {
                 Sound.panel();
                 if (index === 0)
@@ -369,6 +374,7 @@ FocusScope {
                     label: page.kinds[page.kindIndex]
                     trailing: page.rows.length.toString()
                     focused: chipBar.activeFocus && chipBar.index === 0
+                    onHovered: chipBar.pointTo(0)
                 }
 
                 Chip {
@@ -379,6 +385,7 @@ FocusScope {
                             title: ""
                         }).title
                     focused: chipBar.activeFocus && chipBar.index === 1
+                    onHovered: chipBar.pointTo(1)
                 }
             }
 
@@ -464,6 +471,13 @@ FocusScope {
             readonly property bool current: index === page.index
             readonly property Item card: cardItem
 
+            Pointer {
+                onHovered: {
+                    page.index = index;
+                    grid.forceActiveFocus();
+                }
+            }
+
             ShotCard {
                 id: cardItem
                 anchors.fill: parent
@@ -511,6 +525,8 @@ FocusScope {
                 page.stepRow(event.key === Qt.Key_Up ? -1 : 1);
             else if (screen)
                 page.stepScreen(screen);
+            else if (api.keys.isFirst(event) || api.keys.isLast(event))
+                page.index = Sound.stepped(page.index, api.keys.isFirst(event) ? -page.rows.length : page.rows.length, page.rows.length);
             else if (api.keys.isPageUp(event) || api.keys.isPageDown(event));else
                 event.accepted = false;
         }

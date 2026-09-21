@@ -82,14 +82,6 @@ def exec_in_gamescope(command, argv):
     os.execv(command[0], [*command, "--", *launcher, *argv])
 
 
-def own_cursor(window):
-    """gamescope's default cursor is GNOME's X cursor at scale 1, twice the size on a 2× screen; Qt's arrow is the logical size."""
-    from PySide6.QtCore import Qt
-    from PySide6.QtGui import QCursor
-
-    window.setCursor(QCursor(Qt.CursorShape.ArrowCursor))
-
-
 def create_overlay(engine, size):
     from PySide6.QtCore import QUrl
 
@@ -98,7 +90,6 @@ def create_overlay(engine, size):
     window = engine.rootObjects()[before] if len(engine.rootObjects()) > before else None
     if window is not None:
         window.setGeometry(0, 0, size.width(), size.height())
-        own_cursor(window)
     return window
 
 
@@ -157,7 +148,6 @@ def run(argv=None):
         print("universe-ui: main.qml failed to load", file=sys.stderr)
         return 1
     window = cast("QQuickWindow", engine.rootObjects()[0])
-    own_cursor(window)
     api.attachWindow(window)
     if not args.fullscreen:
         try:
@@ -169,6 +159,7 @@ def run(argv=None):
     if client.nested:
         overlay = create_overlay(engine, window.screen().size())
         if overlay is not None:
+            api.keys.watch(overlay)
             api.home.attachOverlay(overlay)
 
     gamepad = watcher = None

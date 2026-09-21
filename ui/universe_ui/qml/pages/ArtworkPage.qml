@@ -341,6 +341,11 @@ FocusScope {
                 }
             }
 
+            Pointer {
+                enabled: !page.browsing
+                onHovered: page.index = card.slotIndex
+            }
+
             ArtFrame {
                 anchors.fill: parent
                 row: card.modelData
@@ -592,6 +597,10 @@ FocusScope {
                         }
                     }
 
+                    Pointer {
+                        onHovered: page.candIndex = index
+                    }
+
                     Loader {
                         anchors.fill: parent
                         active: focused
@@ -758,6 +767,10 @@ FocusScope {
 
                 width: hitsList.width
                 height: Theme.dp(96)
+
+                Pointer {
+                    onHovered: page.hitIndex = index
+                }
 
                 Rectangle {
                     anchors.fill: parent

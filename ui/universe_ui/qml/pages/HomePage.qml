@@ -140,6 +140,22 @@ FocusScope {
         return Qt.rect(p.x, p.y, cellSize, cellSize);
     }
 
+    // The mouse lands the ring without the pad's tick: on a game, on the tile past them, or on a hero pill.
+    function pointToTile(index) {
+        rail.forceActiveFocus();
+        if (index >= railCount) {
+            tileSelected = true;
+            return;
+        }
+        tileSelected = false;
+        rail.currentIndex = index;
+    }
+
+    function pointToAction(index) {
+        heroActions.index = index;
+        heroActions.forceActiveFocus();
+    }
+
     Keys.onPressed: function (event) {
         if (event.isAutoRepeat)
             return;
@@ -308,6 +324,7 @@ FocusScope {
                         label: page.playLabel
                         focused: heroActions.activeFocus && heroActions.index === 0
                         dimmed: heroActions.activeFocus && heroActions.index !== 0
+                        onHovered: page.pointToAction(0)
                     }
 
                     PillButton {
@@ -316,6 +333,7 @@ FocusScope {
                         label: "Details"
                         focused: heroActions.activeFocus && heroActions.index === 1
                         dimmed: heroActions.activeFocus && heroActions.index !== 1
+                        onHovered: page.pointToAction(1)
                     }
                 }
 
@@ -334,6 +352,7 @@ FocusScope {
                         label: page.empty ? "Add a game" : "Open library"
                         focused: heroActions.activeFocus && heroActions.index === 0
                         dimmed: heroActions.activeFocus && heroActions.index !== 0
+                        onHovered: page.pointToAction(0)
                     }
 
                     PillButton {
@@ -343,6 +362,7 @@ FocusScope {
                         visible: page.empty
                         focused: heroActions.activeFocus && heroActions.index === 1
                         dimmed: heroActions.activeFocus && heroActions.index !== 1
+                        onHovered: page.pointToAction(1)
                     }
                 }
 
@@ -433,7 +453,15 @@ FocusScope {
                             easing.type: Easing.OutQuint
                         }
                     }
+
+                    Pointer {
+                        onHovered: page.pointToTile(page.railCount)
+                    }
                 }
+            }
+
+            Wheel {
+                horizontal: true
             }
 
             function slideToCurrent() {
@@ -488,6 +516,19 @@ FocusScope {
                 heroActions.forceActiveFocus();
             }
             Keys.onDownPressed: Sound.edge()
+            Keys.onPressed: function (event) {
+                if (!api.keys.isFirst(event) && !api.keys.isLast(event))
+                    return;
+                event.accepted = true;
+                var at = page.tileSelected ? rail.count : rail.currentIndex;
+                var to = api.keys.isFirst(event) ? 0 : rail.count;
+                if (at === to || rail.count === 0) {
+                    Sound.edge();
+                    return;
+                }
+                Sound.tick();
+                page.pointToTile(to);
+            }
 
             Behavior on contentX {
                 Ease {
@@ -505,6 +546,10 @@ FocusScope {
 
                 width: page.slotSize
                 height: page.cellSize
+
+                Pointer {
+                    onHovered: page.pointToTile(index)
+                }
 
                 CoverCard {
                     id: tileArt

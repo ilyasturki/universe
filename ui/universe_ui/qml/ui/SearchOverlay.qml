@@ -19,20 +19,29 @@ FocusScope {
     readonly property var currentGame: !typing && results.currentIndex >= 0 && matches.count > 0 ? matches.get(results.currentIndex) : null
     readonly property Item menuAnchor: typing || !results.currentItem ? null : results.currentItem.artItem
 
-    readonly property var hints: typing ? [
-        {
-            glyph: "A",
-            label: "Type"
-        },
-        {
-            glyph: "X",
-            label: "Backspace"
-        },
-        {
-            glyph: "B",
-            label: "Close"
-        }
-    ] : [
+    readonly property var hints: typing ? (api.keys.mode === "keyboard" ? [
+            {
+                glyph: "A",
+                label: "To the games"
+            },
+            {
+                glyph: "B",
+                label: "Close"
+            }
+        ] : [
+            {
+                glyph: "A",
+                label: "Type"
+            },
+            {
+                glyph: "X",
+                label: "Backspace"
+            },
+            {
+                glyph: "B",
+                label: "Close"
+            }
+        ]) : [
         {
             glyph: "A",
             label: "Launch"
@@ -97,8 +106,16 @@ FocusScope {
     Keys.onUpPressed: !overlay.typing ? Sound.edge() : keyboard.rowIndex === 0 ? overlay.toResults() : overlay.kbMove(-1, 0)
     Keys.onDownPressed: overlay.typing ? overlay.kbMove(1, 0) : overlay.toKeyboard()
 
+    // The mouse on a card or a key: the focus goes to that half of the overlay, without the pad's panel sound.
+    function pointToResult(index) {
+        resultsFocused = true;
+        results.currentIndex = index;
+    }
+
     Keys.onPressed: function (event) {
-        if (api.keys.isCancel(event)) {
+        if (overlay.typing && keyboard.typed(event)) {
+            event.accepted = true;
+        } else if (api.keys.isCancel(event)) {
             event.accepted = true;
             if (!event.isAutoRepeat) {
                 Sound.cancel();
@@ -128,6 +145,10 @@ FocusScope {
                 duration: Theme.durView
             }
         }
+
+        // Keeps the mouse off the page beneath.
+        HoverHandler {}
+        TapHandler {}
     }
 
     Item {
@@ -153,6 +174,10 @@ FocusScope {
             color: Theme.textMuted
             font.family: Theme.sans
             font.pixelSize: Theme.dp(26)
+        }
+
+        Wheel {
+            horizontal: true
         }
 
         ListView {
@@ -183,6 +208,10 @@ FocusScope {
 
                 width: overlay.cardWidth
                 height: results.height
+
+                Pointer {
+                    onHovered: overlay.pointToResult(index)
+                }
 
                 Column {
                     anchors.horizontalCenter: parent.horizontalCenter
@@ -352,6 +381,8 @@ FocusScope {
                 Sound.backspace();
                 overlay.query = "";
             }
+            onDone: overlay.toResults()
+            onPointed: overlay.resultsFocused = false
         }
     }
 }

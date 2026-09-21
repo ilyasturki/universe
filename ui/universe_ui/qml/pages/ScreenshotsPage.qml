@@ -213,6 +213,8 @@ FocusScope {
             stepRow(event.key === Qt.Key_Up ? -1 : 1);
         else if (screen)
             stepScreen(screen);
+        else if (api.keys.isFirst(event) || api.keys.isLast(event))
+            index = Sound.stepped(index, api.keys.isFirst(event) ? -rows.length : rows.length, rows.length);
         else
             event.accepted = false;
     }

@@ -160,12 +160,15 @@ FocusScope {
         index = Sound.paged(index, d, 1, pitch > 0 ? Math.floor(list.height / pitch) : 1, rows.length);
     }
 
-    function focusVideo(play) {
+    function focusVideo(play, silent) {
         if (!current || !current.url) {
-            Sound.edge();
+            if (!silent)
+                Sound.edge();
             return;
         }
-        Sound.panel();
+        if (!silent)
+            Sound.panel();
+        journalFocused = false;
         videoFocused = true;
         if (String(player.source) !== current.url) {
             player.source = current.url;
@@ -379,6 +382,9 @@ FocusScope {
         } else if (screen) {
             event.accepted = true;
             page.videoFocused ? Sound.edge() : stepScreen(screen);
+        } else if (api.keys.isFirst(event) || api.keys.isLast(event)) {
+            event.accepted = true;
+            page.videoFocused ? Sound.edge() : (index = Sound.stepped(index, api.keys.isFirst(event) ? -rows.length : rows.length, rows.length));
         }
     }
 
@@ -456,6 +462,14 @@ FocusScope {
             leadMargin: Theme.dp(10)
             leadWidth: (height - Theme.dp(20)) * 16 / 9
 
+            Pointer {
+                onHovered: {
+                    page.videoFocused = false;
+                    page.journalFocused = false;
+                    page.index = index;
+                }
+            }
+
             RoundedMask {
                 anchors.fill: parent
                 anchors.topMargin: Theme.dp(10)
@@ -500,6 +514,11 @@ FocusScope {
         Rectangle {
             anchors.fill: parent
             color: Theme.cardBase
+        }
+
+        // The mouse over the player takes it as Right does; a click is A, play or pause.
+        Pointer {
+            onHovered: page.focusVideo(false, true)
         }
 
         Image {
@@ -666,6 +685,24 @@ FocusScope {
 
                 Behavior on height {
                     Ease {}
+                }
+
+                // A click on the bar seeks there; the strip is taller than the bar so it can be hit.
+                Item {
+                    anchors.left: parent.left
+                    anchors.right: parent.right
+                    anchors.verticalCenter: parent.verticalCenter
+                    height: Theme.dp(40)
+
+                    HoverHandler {
+                        onHoveredChanged: if (hovered)
+                            page.wake()
+                    }
+                    TapHandler {
+                        onTapped: function (point) {
+                            scrub.seekTo(point.position.x / parent.width * page.duration);
+                        }
+                    }
                 }
 
                 Rectangle {
@@ -877,6 +914,14 @@ FocusScope {
         anchors.left: pane.left
         anchors.right: pane.right
         visible: page.entry !== null && !page.fullscreen
+        height: journalText.height
+
+        Pointer {
+            onHovered: {
+                page.videoFocused = false;
+                page.journalFocused = true;
+            }
+        }
 
         Column {
             id: journalText

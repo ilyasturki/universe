@@ -8,6 +8,8 @@ Column {
     property bool focused: false
     property bool dimmed: false
 
+    signal hovered
+
     readonly property var frames: recording && api.screens.recordings.frameMap[recording.session] || null
     readonly property real shotWidth: Theme.dp(336)
     readonly property real shotHeight: Theme.dp(189)
@@ -30,6 +32,10 @@ Column {
             Ease {
                 duration: Theme.durQuick
             }
+        }
+
+        Pointer {
+            onHovered: card.hovered()
         }
 
         RoundedMask {

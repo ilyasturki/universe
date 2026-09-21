@@ -16,6 +16,15 @@ Rectangle {
         Ease {}
     }
 
+    // Keeps the mouse off the page beneath; a click is B, the wheel steps the pictures.
+    HoverHandler {}
+    TapHandler {
+        onTapped: api.keys.press("Cancel")
+    }
+    Wheel {
+        horizontal: true
+    }
+
     Item {
         id: stage
 

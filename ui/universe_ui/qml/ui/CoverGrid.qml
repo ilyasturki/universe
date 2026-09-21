@@ -56,13 +56,15 @@ GridView {
         contentY = targetY(addSelected ? count : currentIndex);
     }
 
-    // Setting currentIndex moves contentY synchronously, past any Behavior: snapshot, restore, animate.
-    function moveCurrent(index) {
+    // Setting currentIndex moves contentY synchronously, past any Behavior: snapshot, restore, animate. The mouse moves it in silence.
+    function moveCurrent(index, silent) {
         if (index < 0 || index >= cells || index === cursor) {
-            Sound.edge();
+            if (!silent)
+                Sound.edge();
             return;
         }
-        Sound.tick();
+        if (!silent)
+            Sound.tick();
         var from = contentY;
         if (index === count) {
             addPicked = true;
@@ -122,15 +124,25 @@ GridView {
             moveCurrent(cursor + 1);
     }
 
-    // The right stick: a screenful of rows, staying in the column.
+    // The right stick: a screenful of rows, staying in the column; Home and End the first and last cell.
     Keys.onPressed: function (event) {
+        if (!selectionActive)
+            return;
+        if (api.keys.isFirst(event) || api.keys.isLast(event)) {
+            event.accepted = true;
+            moveCurrent(api.keys.isFirst(event) ? 0 : cells - 1);
+            return;
+        }
         var d = api.keys.isScreenUp(event) ? -1 : api.keys.isScreenDown(event) ? 1 : 0;
-        if (!d || !selectionActive)
+        if (!d)
             return;
         event.accepted = true;
         var row = Math.max(0, Math.min(lastRow, Math.floor(cursor / columns) + d * visibleRows));
         moveCurrent(Math.min(cells - 1, row * columns + cursor % columns));
     }
+
+    // The mouse on a cell: the ring lands there, and the page's focus comes along.
+    signal pointed(int index)
 
     // Room for the add tile, drawn outside the delegates, when it starts a row.
     footer: Item {
@@ -155,6 +167,13 @@ GridView {
             cornerRadius: Theme.dp(Theme.radiusCover)
             selected: grid.addSelected
             ringOpacity: grid.selectionActive ? 1.0 : Theme.ringIdle
+
+            Pointer {
+                onHovered: {
+                    grid.moveCurrent(grid.count, true);
+                    grid.pointed(grid.count);
+                }
+            }
         }
     }
 
@@ -175,6 +194,13 @@ GridView {
             game: model
             selected: cell.selected
             ringOpacity: grid.selectionActive ? 1.0 : Theme.ringIdle
+
+            Pointer {
+                onHovered: {
+                    grid.moveCurrent(index, true);
+                    grid.pointed(index);
+                }
+            }
         }
     }
 }

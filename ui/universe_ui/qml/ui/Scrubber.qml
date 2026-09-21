@@ -34,6 +34,17 @@ QtObject {
         woke();
     }
 
+    // A click on the bar: straight to that point.
+    function seekTo(ms) {
+        if (duration <= 0)
+            return;
+        commitTimer.stop();
+        begin();
+        scrubPos = Math.max(0, Math.min(duration, ms));
+        woke();
+        commitSeek();
+    }
+
     function commitSeek() {
         if (!scrubbing)
             return;

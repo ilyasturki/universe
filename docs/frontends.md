@@ -17,7 +17,7 @@ One context property, `api`:
 
 | Member | What it is |
 |---|---|
-| `api.keys` | `is{Accept,Cancel,Details,Filters,PageUp,PageDown,PrevPage,NextPage,Menu}(event)` — the Pegasus key-action contract — plus `isScreenUp` / `isScreenDown` (`[` / `]`, the right stick up and down): a screenful in a long list; `cancelHeld()` fires when B is held 450 ms on the window, whatever has the focus (an event filter, so the press still lands): both looks ask "Quit Universe?" on it; `dropHold()` from a question B just closed keeps the hold from asking again |
+| `api.keys` | `is{Accept,Cancel,Details,Filters,PageUp,PageDown,PrevPage,NextPage,Menu}(event)` — the Pegasus key-action contract (Backspace is a Cancel too) — plus `isScreenUp` / `isScreenDown` (`[` / `]`, the right stick up and down): a screenful in a long list, and `isFirst` / `isLast` (Home / End): the ends of one; `cancelHeld()` fires when B (Escape, not Backspace) is held 450 ms on the window, whatever has the focus (an event filter, so the press still lands): both looks ask "Quit Universe?" on it; `dropHold()` from a question B just closed keeps the hold from asking again. `mode` is the last device used, `pad`, `keyboard` or `mouse` (the pad's presses are told from the keyboard's by `gamepad.POSTED`, which every posted key goes through; the cursor is shown under a mouse only), `motion` bumps on each real mouse move, `labels` maps a pad glyph to its key (`A` → `Enter`), and `press` / `hold` / `release(action)` post an action's key as the pad would, for a click or the wheel |
 | `api.allGames` | the library model |
 | `api.collections` | collections, one per platform |
 | `api.memory` | `get`/`set`/`has`/`unset`, persisted to `$XDG_STATE_HOME/universe/ui-memory.json` |
@@ -385,6 +385,31 @@ right now (no journal entry for this recording, no refresh in this section) is k
 dimmed (`dim: true`), never dropped; hints for what the pad makes obvious — moving with the d-pad
 — are not written, only a d-pad with a specific meaning is (`Seek 10 s`, `Previous / next`).
 
+Under a keyboard or a mouse (`api.keys.mode` not `pad`) `ui/ButtonGlyph.qml` draws a key cap
+with the key's name (`api.keys.labels`) in place of the pad button, the d-pad as arrows; a chord
+(`Start+Select`) and a stick stay the pad's, they have no key.
+
+## The mouse
+
+Reprise takes a mouse on top of the pad without a second path: hovering lands the focus ring
+where the pad would have moved it, a click holds A as long as the button is (so a long click
+opens the game menu as a held A does), a right click is B, and the wheel is Up / Down — or Left /
+Right over a strip that scrolls sideways (the Home rail, the favourites, a screenshot strip). The
+keys go through `api.keys.press`, so a page handles a click exactly as it handles the pad, and
+nothing hovers with a sound: the pad's tick and edge are for the pad.
+
+`ui/Pointer.qml` is the one piece: dropped into an item, it fills it, and `hovered` fires once
+per entry — only under a moving mouse (`api.keys.motion`), so a list sliding under a still cursor
+after a pad press does not pull the ring back — with the page's own move as the handler (`page.index
+= index`, a `forceActiveFocus()` on the scope that owns it). `accept: false` makes it a hover with
+no click (the article of a journal entry, so the wheel reads it). Every landing also raises
+`Theme.pointed(item)`: `theme.qml` hands the focus between the tab bar and the page by it, and an
+open `ChipPicker` closes when the mouse lands outside it. `ui/Wheel.qml` is the wheel as keys,
+one at the root and a `horizontal` one over each sideways strip. Qt stops a hover at the first
+handler it finds under the cursor, so a modal layer's scrim (the menus, the dialogs, the sheets,
+the lightbox, the search overlay) carries a bare `HoverHandler` and a `TapHandler` — B on the scrim,
+nothing on the panel — and the page beneath never sees the mouse.
+
 ## The Settings tab
 
 `pages/SettingsPage.qml` is a sidebar (`ui/SectionList.qml`: Runners, Launch, Modules, Sources, Install,
@@ -732,4 +757,4 @@ named by `UNIVERSE_FAKE_PAD` (a family id, or `none` for the empty state), with 
 
 ## Running and testing the shipped host
 
-`man universe-ui` lists the options, `KeyScript` in `universe_ui/gamepad.py` the `--keys` names, `just --list` the dev recipes.
+`man universe-ui` lists the options, `KeyScript` in `universe_ui/gamepad.py` the `--keys` names (the mouse among them: `Mouse:x,y`, `Click:x,y`, `Wheel:x,y,N`, at 1080p, and `Type:text` from the keyboard), `just --list` the dev recipes.

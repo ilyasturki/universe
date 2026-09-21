@@ -129,6 +129,10 @@ FocusScope {
             width: page.cellWidth
             height: row.height
 
+            Pointer {
+                onHovered: row.currentIndex = index
+            }
+
             Column {
                 anchors.horizontalCenter: parent.horizontalCenter
                 anchors.verticalCenter: parent.verticalCenter
@@ -217,7 +221,14 @@ FocusScope {
             if (api.keys.isFilters(event)) {
                 event.accepted = true;
                 page.toggleFavourite();
+            } else if (api.keys.isFirst(event) || api.keys.isLast(event)) {
+                event.accepted = true;
+                row.currentIndex = Sound.stepped(row.currentIndex, api.keys.isFirst(event) ? -row.count : row.count, row.count);
             }
+        }
+
+        Wheel {
+            horizontal: true
         }
     }
 }

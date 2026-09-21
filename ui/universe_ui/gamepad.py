@@ -2,7 +2,7 @@ import logging
 import time
 
 from PySide6.QtCore import QCoreApplication, QEvent, QObject, Qt, QThread, QTimer, Signal, Slot
-from PySide6.QtGui import QGuiApplication, QKeyEvent
+from PySide6.QtGui import QGuiApplication, QKeyEvent, QMouseEvent, QWheelEvent
 
 log = logging.getLogger("universe.gamepad")
 
@@ -115,13 +115,28 @@ class Mapper:
         return out
 
 
-def post_key(key, pressed, autorepeat=False, window=None):
+# The keys posted here, keyed by (key, pressed), each with who posted it: the window's filter tells them from the keyboard's own.
+POSTED = {}
+
+
+def post_key(key, pressed, autorepeat=False, window=None, source="pad"):
     window = window or QGuiApplication.focusWindow()
     if window is None:
         return False
     kind = QEvent.Type.KeyPress if pressed else QEvent.Type.KeyRelease
+    POSTED.setdefault((int(key), pressed), []).append(source)
     QCoreApplication.postEvent(window, QKeyEvent(kind, key, Qt.KeyboardModifier.NoModifier, "", autorepeat))
     return True
+
+
+def posted_source(key, pressed):
+    sources = POSTED.get((int(key), pressed))
+    if not sources:
+        return None
+    source = sources.pop(0)
+    if not sources:
+        del POSTED[(int(key), pressed)]
+    return source
 
 
 class GamepadThread(QThread):
@@ -223,6 +238,9 @@ KEY_NAMES = {
     "RT": Qt.Key.Key_PageDown,
     "F1": Qt.Key.Key_F1,
     "Start": Qt.Key.Key_F1,
+    "Backspace": Qt.Key.Key_Backspace,
+    "Home": Qt.Key.Key_Home,
+    "End": Qt.Key.Key_End,
     "BracketLeft": Qt.Key.Key_BracketLeft,
     "RSUp": Qt.Key.Key_BracketLeft,
     "BracketRight": Qt.Key.Key_BracketRight,
@@ -230,7 +248,37 @@ KEY_NAMES = {
 }
 
 
-# `--keys`, one name per gap: `Wait`, `Wait:N`, `Hold:A`/`Release:A`, `Stick:rightX=0.6`, `Shot:path.png`, `Guide`; with a fake watcher `Press:slot`/`Unpress:slot`, `Axis:lx=0.6`.
+def post_mouse(window, kind, x, y, button=Qt.MouseButton.NoButton):
+    from PySide6.QtCore import QPointF
+
+    pos = QPointF(x, y)
+    held = button if kind == QEvent.Type.MouseButtonPress else Qt.MouseButton.NoButton
+    QCoreApplication.postEvent(window, QMouseEvent(kind, pos, pos, window.mapToGlobal(pos.toPoint()), button, held, Qt.KeyboardModifier.NoModifier))
+
+
+def post_wheel(window, x, y, steps):
+    from PySide6.QtCore import QPoint, QPointF
+
+    pos = QPointF(x, y)
+    delta = QPoint(0, steps * 120)
+    QCoreApplication.postEvent(
+        window,
+        QWheelEvent(
+            pos,
+            window.mapToGlobal(pos.toPoint()),
+            QPoint(),
+            delta,
+            Qt.MouseButton.NoButton,
+            Qt.KeyboardModifier.NoModifier,
+            Qt.ScrollPhase.NoScrollPhase,
+            False,
+        ),
+    )
+
+
+# `--keys`, one name per gap: `Wait`, `Wait:N`, `Hold:A`/`Release:A`, `Stick:rightX=0.6`, `Shot:path.png`, `Guide`; with a fake watcher `Press:slot`/`Unpress:slot`, `Axis:lx=0.6`;
+# the mouse: `Mouse:x,y` moves it, `Click:x,y` / `RightClick:x,y` press and release there, `MouseDown:x,y` / `MouseUp:x,y` one or the other,
+# `Wheel:x,y,N` rolls N notches (up positive); `Type:text` types it from the keyboard (`_` a space).
 class KeyScript(QObject):
     def __init__(self, script, gap_ms, window, pad=None, watcher=None, home=None, parent=None):
         super().__init__(parent)
@@ -269,6 +317,26 @@ class KeyScript(QObject):
             if self._watcher is not None:
                 self._watcher.press(bare, phase == "Press")
             return
+        if phase in ("Mouse", "Click", "RightClick", "MouseDown", "MouseUp", "Wheel"):
+            parts = [float(v) for v in bare.split(",")]
+            x, y = parts[0] * self._window.width() / 1920, parts[1] * self._window.height() / 1080
+            if phase == "Wheel":
+                post_wheel(self._window, x, y, int(parts[2]) if len(parts) > 2 else 1)
+                return
+            post_mouse(self._window, QEvent.Type.MouseMove, x, y)
+            button = Qt.MouseButton.RightButton if phase == "RightClick" else Qt.MouseButton.LeftButton
+            if phase in ("Click", "RightClick", "MouseDown"):
+                post_mouse(self._window, QEvent.Type.MouseButtonPress, x, y, button)
+            if phase in ("Click", "RightClick", "MouseUp"):
+                post_mouse(self._window, QEvent.Type.MouseButtonRelease, x, y, button)
+            return
+        if phase == "Type":
+            window = QGuiApplication.focusWindow() or self._window
+            for ch in bare.replace("_", " "):
+                key = Qt.Key(ord(ch.upper())) if ch.isalnum() or ch == " " else Qt.Key.Key_unknown
+                for kind in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease):
+                    QCoreApplication.postEvent(window, QKeyEvent(kind, key, Qt.KeyboardModifier.NoModifier, ch))
+            return
         if phase == "Axis":
             axis, _, value = bare.partition("=")
             if self._watcher is not None:
@@ -289,6 +357,6 @@ class KeyScript(QObject):
             return
         window = QGuiApplication.focusWindow() or self._window
         if phase in ("click", "Hold"):
-            post_key(key, True, window=window)
+            post_key(key, True, window=window, source="script")
         if phase in ("click", "Release"):
-            post_key(key, False, window=window)
+            post_key(key, False, window=window, source="script")

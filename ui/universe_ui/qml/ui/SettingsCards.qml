@@ -154,6 +154,15 @@ FocusScope {
         Sound.tick();
     }
 
+    // The mouse on a row: the cursor lands there in silence, and the focus comes to the cards.
+    signal pointed
+
+    function pointTo(row) {
+        index = row;
+        forceActiveFocus();
+        pointed();
+    }
+
     // The Advanced row just opened: the cursor moves onto the first row it revealed, the first card of its own after it,
     // else the first row folded into a card above.
     function stepInto() {
@@ -242,6 +251,13 @@ FocusScope {
             stepScreen(screen);
             return;
         }
+        if (api.keys.isFirst(event) || api.keys.isLast(event)) {
+            event.accepted = true;
+            var s = stopOf(index), list = s ? layout.stops[s.col] : [];
+            var end = list.length ? list[api.keys.isFirst(event) ? 0 : list.length - 1] : null;
+            !end || end === s ? Sound.edge() : go(end);
+            return;
+        }
         if (event.isAutoRepeat)
             return;
         if (api.keys.isAccept(event)) {
@@ -294,6 +310,11 @@ FocusScope {
 
             Behavior on color {
                 ColorEase {}
+            }
+
+            Pointer {
+                enabled: card.hasControl
+                onHovered: cards.pointTo(card.group.control)
             }
 
             Image {
@@ -409,6 +430,10 @@ FocusScope {
                         focused: modelData === cards.index && cards.cursorShown
                         compact: cards.compact
                         separator: index > 0 && !parent.divided && !focused && !parent.prevFocused
+
+                        Pointer {
+                            onHovered: cards.pointTo(modelData)
+                        }
                     }
                 }
             }

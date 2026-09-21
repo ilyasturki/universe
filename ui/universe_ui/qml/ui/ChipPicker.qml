@@ -87,6 +87,19 @@ FocusScope {
         index = Sound.stepped(index, d, options.length);
     }
 
+    // The mouse landing anywhere else closes the list, as B would.
+    Connections {
+        target: Theme
+        function onPointed(item) {
+            if (!picker.open)
+                return;
+            for (var i = item; i; i = i.parent)
+                if (i === picker)
+                    return;
+            picker.dismissed();
+        }
+    }
+
     Keys.onUpPressed: picker.step(-1)
     Keys.onDownPressed: picker.step(1)
     Keys.onLeftPressed: Sound.edge()
@@ -98,6 +111,9 @@ FocusScope {
         if (api.keys.isAccept(event)) {
             event.accepted = true;
             picker.chosen(picker.index);
+        } else if (api.keys.isFirst(event) || api.keys.isLast(event)) {
+            event.accepted = true;
+            picker.step(api.keys.isFirst(event) ? -options.length : options.length);
         } else if (api.keys.isCancel(event)) {
             event.accepted = true;
             Sound.cancel();
@@ -143,6 +159,9 @@ FocusScope {
             color: "#121318"
             border.width: 1
             border.color: Theme.surfaceBorder
+
+            HoverHandler {}
+            TapHandler {}
         }
 
         ListView {
@@ -180,6 +199,10 @@ FocusScope {
                     Behavior on color {
                         ColorEase {}
                     }
+                }
+
+                Pointer {
+                    onHovered: picker.index = index
                 }
 
                 Image {

@@ -12,8 +12,14 @@ Item {
     property bool focused: false
     property bool active: false
 
+    signal hovered
+
     implicitHeight: Theme.dp(45)
     implicitWidth: body.width + Theme.dp(48)
+
+    Pointer {
+        onHovered: root.hovered()
+    }
 
     Rectangle {
         anchors.fill: parent

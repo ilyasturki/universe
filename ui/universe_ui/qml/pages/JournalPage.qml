@@ -355,6 +355,8 @@ FocusScope {
             mode === 2 ? stepShot(-1) : mode === 1 ? leave() : Sound.edge();
         } else if (screen) {
             mode === 0 ? stepScreen(screen) : Sound.edge();
+        } else if (api.keys.isFirst(event) || api.keys.isLast(event)) {
+            mode === 0 ? (index = Sound.stepped(index, api.keys.isFirst(event) ? -rows.length : rows.length, rows.length)) : Sound.edge();
         } else {
             event.accepted = false;
         }
@@ -432,6 +434,13 @@ FocusScope {
             leadWidth: pending ? Theme.dp(12) : 0
             gap: Theme.dp(16)
 
+            Pointer {
+                onHovered: {
+                    page.mode = 0;
+                    page.index = index;
+                }
+            }
+
             PulseDot {
                 anchors.verticalCenter: parent.verticalCenter
                 width: Theme.dp(12)
@@ -463,6 +472,13 @@ FocusScope {
             Ease {
                 duration: Theme.durView
             }
+        }
+
+        // The mouse over the article reads it: the wheel scrolls the text. Its cards below take the mode of their own.
+        Pointer {
+            accept: false
+            onHovered: if (page.current && !page.currentPending && page.mode !== 1)
+                page.mode = 1
         }
 
         Column {
@@ -549,6 +565,7 @@ FocusScope {
                 recording: page.recording
                 focused: page.mode === 3
                 dimmed: page.mode === 2 && !page.lightbox
+                onHovered: page.mode = 3
             }
 
             ScreenshotStrip {
@@ -559,6 +576,10 @@ FocusScope {
                 index: page.shotIndex
                 focused: page.mode === 2 && !page.lightbox
                 sideMargin: page.sideMargin
+                onPointed: function (i) {
+                    page.mode = 2;
+                    page.shotIndex = i;
+                }
             }
         }
     }

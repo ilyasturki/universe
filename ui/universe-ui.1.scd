@@ -51,7 +51,7 @@ Pegasus's default bindings; the gamepad posts the same keys.
 
 |[ Return
 :< accept
-|  Escape
+|  Escape, Backspace
 :  back
 |  I
 :  details
@@ -61,8 +61,19 @@ Pegasus's default bindings; the gamepad posts the same keys.
 :  previous / next page
 |  PageUp / PageDown
 :  scroll
+|  Home / End
+:  first / last item
 |  F1
 :  menu
+
+In a text sheet the keyboard types, Backspace deletes and Return finishes. The hints name the
+keys once a keyboard or the mouse was used last.
+
+# MOUSE
+
+Hovering moves the focus, a left click is accept (held as long as the button is: a long click
+opens the game's menu), a right click is back, the wheel steps the list under it. The cursor
+shows while the mouse is in use.
 
 # ENVIRONMENT
 

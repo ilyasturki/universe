@@ -57,6 +57,15 @@ FocusScope {
             event.accepted = true;
             Sound.panel();
             list.entered();
+        } else if (api.keys.isFirst(event) || api.keys.isLast(event)) {
+            event.accepted = true;
+            var to = api.keys.isFirst(event) ? 0 : list.sections.length - 1;
+            if (to === list.current) {
+                Sound.edge();
+            } else {
+                list.requested(to);
+                Sound.tick();
+            }
         } else if (api.keys.isCancel(event)) {
             event.accepted = true;
             Sound.cancel();
@@ -99,6 +108,14 @@ FocusScope {
 
                     Behavior on color {
                         ColorEase {}
+                    }
+
+                    Pointer {
+                        onHovered: {
+                            list.forceActiveFocus();
+                            if (!active)
+                                list.requested(index);
+                        }
                     }
                 }
 

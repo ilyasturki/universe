@@ -219,6 +219,11 @@ FocusScope {
                 Sound.tick();
             }
 
+            function pointTo(i) {
+                index = i;
+                chipBar.forceActiveFocus();
+            }
+
             function openPicker() {
                 Sound.panel();
                 if (index === 0)
@@ -236,6 +241,7 @@ FocusScope {
                     label: page.collectionLabel
                     trailing: sorted ? sorted.count.toString() : ""
                     focused: chipBar.activeFocus && chipBar.index === 0
+                    onHovered: chipBar.pointTo(0)
                 }
 
                 Chip {
@@ -243,6 +249,7 @@ FocusScope {
                     label: page.sortNames[page.sortMode]
                     showSortIcon: true
                     focused: chipBar.activeFocus && chipBar.index === 1
+                    onHovered: chipBar.pointTo(1)
                 }
             }
 
@@ -307,6 +314,8 @@ FocusScope {
         cellWidth: page.cellWidth
         selectionActive: grid.activeFocus || page.menuOpen
         addTile: true
+
+        onPointed: grid.forceActiveFocus()
 
         Keys.onPressed: function (event) {
             if (event.isAutoRepeat)

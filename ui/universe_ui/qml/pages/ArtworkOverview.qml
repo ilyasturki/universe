@@ -154,6 +154,10 @@ FocusScope {
             label: view.buttonLabel
             focused: view.onButton && view.activeFocus
             dimmed: view.buttonDim
+            onHovered: {
+                view.onButton = true;
+                view.forceActiveFocus();
+            }
         }
 
         Row {
@@ -219,6 +223,7 @@ FocusScope {
         delegate: Item {
             readonly property var game: modelData
             readonly property bool onRow: index === view.row
+            readonly property int rowNo: index
 
             width: list.width
             height: view.rowHeight
@@ -262,6 +267,15 @@ FocusScope {
                             active: cell.focused
                             sourceComponent: FocusRing {
                                 cornerRadius: Theme.dp(8)
+                            }
+                        }
+
+                        Pointer {
+                            onHovered: {
+                                view.onButton = false;
+                                view.row = rowNo;
+                                view.col = index;
+                                view.forceActiveFocus();
                             }
                         }
 

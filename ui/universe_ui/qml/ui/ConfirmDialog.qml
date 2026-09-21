@@ -63,6 +63,12 @@ FocusScope {
         Behavior on opacity {
             Ease {}
         }
+
+        // Keeps the mouse off the page beneath; a click outside the panel is B.
+        HoverHandler {}
+        TapHandler {
+            onTapped: api.keys.press("Cancel")
+        }
     }
 
     Rectangle {
@@ -84,6 +90,10 @@ FocusScope {
         Behavior on scale {
             Ease {}
         }
+
+        // The panel's own padding is neither a row nor the scrim.
+        HoverHandler {}
+        TapHandler {}
 
         Column {
             id: column
@@ -130,6 +140,7 @@ FocusScope {
                     label: dialog.noLabel
                     focused: dialog.index === 0
                     dimmed: dialog.index !== 0
+                    onHovered: dialog.index = 0
                 }
 
                 PillButton {
@@ -137,6 +148,7 @@ FocusScope {
                     label: dialog.yesLabel
                     focused: dialog.index === 1
                     dimmed: dialog.index !== 1
+                    onHovered: dialog.index = 1
                 }
             }
         }

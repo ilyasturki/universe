@@ -9,6 +9,8 @@ Column {
     property bool focused: false
     property real sideMargin: 0
 
+    signal pointed(int index)
+
     readonly property real shotWidth: Theme.dp(336)
     readonly property real shotHeight: Theme.dp(189)
     // Room for the focus ring's halo inside the clip on every side.
@@ -43,11 +45,19 @@ Column {
         preferredHighlightEnd: preferredHighlightBegin + strip.shotWidth
         highlightMoveDuration: Theme.durNudge
 
+        Wheel {
+            horizontal: true
+        }
+
         delegate: Item {
             width: strip.shotWidth
             height: list.height
 
             readonly property bool current: index === strip.index && strip.focused
+
+            Pointer {
+                onHovered: strip.pointed(index)
+            }
 
             RoundedMask {
                 id: shotCard

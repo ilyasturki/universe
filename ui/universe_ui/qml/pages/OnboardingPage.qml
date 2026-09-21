@@ -121,6 +121,10 @@ FocusScope {
         anchors.fill: parent
         color: Qt.rgba(0.02, 0.02, 0.03, 1)
         opacity: 0.62
+
+        // Keeps the mouse off the tabs beneath.
+        HoverHandler {}
+        TapHandler {}
     }
 
     Rectangle {
@@ -140,6 +144,9 @@ FocusScope {
         color: "#1b1d24"
         border.width: 1
         border.color: Theme.surfaceBorder
+
+        HoverHandler {}
+        TapHandler {}
 
         Column {
             id: head
@@ -231,6 +238,7 @@ FocusScope {
                     label: page.backLabel
                     focused: nav.activeFocus && nav.index === 0
                     dimmed: nav.activeFocus && nav.index !== 0
+                    onHovered: nav.pointTo(0)
                 }
 
                 PillButton {
@@ -239,7 +247,13 @@ FocusScope {
                     label: page.nextLabel
                     focused: nav.activeFocus && nav.index === 1
                     dimmed: nav.activeFocus && nav.index !== 1
+                    onHovered: nav.pointTo(1)
                 }
+            }
+
+            function pointTo(i) {
+                index = i;
+                forceActiveFocus();
             }
 
             Keys.onLeftPressed: index = Sound.stepped(index, -1, 2)

@@ -132,6 +132,9 @@ FocusScope {
             reading ? scroll(event.key === Qt.Key_Up ? -1 : 1) : step(event.key === Qt.Key_Up ? -1 : 1);
         } else if (screen) {
             reading ? scroll(screen * 3) : step(screen * 5);
+        } else if (api.keys.isFirst(event) || api.keys.isLast(event)) {
+            var far = api.keys.isFirst(event) ? -1 : 1;
+            reading ? scroll(far * 1000000) : step(far * rows.length);
         } else {
             event.accepted = false;
         }
@@ -206,6 +209,13 @@ FocusScope {
             leadWidth: modelData.live || modelData.bad ? Theme.dp(12) : 0
             gap: Theme.dp(16)
 
+            Pointer {
+                onHovered: {
+                    page.mode = 0;
+                    page.index = index;
+                }
+            }
+
             PulseDot {
                 anchors.verticalCenter: parent.verticalCenter
                 width: Theme.dp(12)
@@ -242,6 +252,12 @@ FocusScope {
 
         Behavior on border.color {
             ColorEase {}
+        }
+
+        // The mouse over the log reads it: the wheel scrolls the lines.
+        Pointer {
+            accept: false
+            onHovered: page.mode = 1
         }
 
         Text {

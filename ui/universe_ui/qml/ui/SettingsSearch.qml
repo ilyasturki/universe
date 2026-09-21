@@ -13,20 +13,29 @@ FocusScope {
     signal escapedLeft
     signal escapedUp
 
-    readonly property var hints: typing ? [
-        {
-            glyph: "A",
-            label: "Type"
-        },
-        {
-            glyph: "X",
-            label: "Backspace"
-        },
-        {
-            glyph: "B",
-            label: "Sections"
-        }
-    ].concat(search.count > 0 ? [
+    readonly property var hints: typing ? (api.keys.mode === "keyboard" ? [
+            {
+                glyph: "A",
+                label: "To the hits"
+            },
+            {
+                glyph: "B",
+                label: "Sections"
+            }
+        ] : [
+            {
+                glyph: "A",
+                label: "Type"
+            },
+            {
+                glyph: "X",
+                label: "Backspace"
+            },
+            {
+                glyph: "B",
+                label: "Sections"
+            }
+        ]).concat(search.count > 0 && api.keys.mode !== "keyboard" ? [
         {
             glyph: "dpad",
             label: "Up to the hits"
@@ -220,6 +229,7 @@ FocusScope {
         onActivated: function (index, row) {
             pane.activate(index, row);
         }
+        onPointed: pane.typing = false
         onEscapedUp: pane.escapedUp()
         onEscapedDown: pane.toKeyboard()
         onEscapedLeft: {
@@ -317,7 +327,17 @@ FocusScope {
             Keys.onUpPressed: pane.kbMove(-1, 0)
             Keys.onDownPressed: pane.kbMove(1, 0)
 
+            onDone: pane.toResults()
+            onPointed: {
+                pane.typing = true;
+                keyboard.forceActiveFocus();
+            }
+
             Keys.onPressed: function (event) {
+                if (keyboard.typed(event)) {
+                    event.accepted = true;
+                    return;
+                }
                 if (event.isAutoRepeat)
                     return;
                 if (api.keys.isAccept(event)) {

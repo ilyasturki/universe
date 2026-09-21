@@ -18,6 +18,9 @@ QtObject {
         return Math.round(v * t.vscale);
     }
 
+    // A Pointer landed on `item`: the root tells the bar from the page by it.
+    signal pointed(Item item)
+
     function reveal(flick, top, bottom, height) {
         var target = top < flick.contentY ? top : bottom > flick.contentY + height ? bottom - height : flick.contentY;
         flick.contentY = Math.max(0, Math.min(target, Math.max(0, flick.contentHeight - height)));

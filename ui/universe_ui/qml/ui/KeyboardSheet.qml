@@ -12,7 +12,16 @@ Sheet {
     signal accepted(string value)
     signal dismissed
 
-    readonly property var hints: [
+    readonly property var hints: api.keys.mode === "keyboard" ? [
+        {
+            glyph: "A",
+            label: "Done"
+        },
+        {
+            glyph: "B",
+            label: "Cancel"
+        }
+    ] : [
         {
             glyph: "A",
             label: "Type"
@@ -64,6 +73,8 @@ Sheet {
 
     Keys.onPressed: function (event) {
         event.accepted = true;
+        if (keyboard.typed(event))
+            return;
         if (event.isAutoRepeat)
             return;
         if (api.keys.isAccept(event)) {

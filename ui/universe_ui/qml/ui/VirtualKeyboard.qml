@@ -8,6 +8,8 @@ Item {
     signal backspaced
     signal cleared
     signal done
+    // The mouse landed on a key (it is the selected one by then).
+    signal pointed
 
     property real keyHeight: Theme.dp(58)
     property real keyGap: Theme.dp(10)
@@ -161,6 +163,30 @@ Item {
         colIndex = 0;
     }
 
+    // A physical keystroke, as the key on the sheet it stands for: typed, backspaced, done on Enter under a keyboard, Home and End
+    // the ends of the row. False when it is none.
+    function typed(event) {
+        if (event.key === Qt.Key_Backspace) {
+            backspaced();
+            return true;
+        }
+        if (api.keys.isFirst(event) || api.keys.isLast(event)) {
+            colIndex = api.keys.isFirst(event) ? 0 : rows[rowIndex].keys.length - 1;
+            return true;
+        }
+        if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && api.keys.mode === "keyboard") {
+            done();
+            return true;
+        }
+        var ch = event.text;
+        if (ch.length !== 1 || ch < " " || ch.charCodeAt(0) === 127 || (event.modifiers & (Qt.ControlModifier | Qt.AltModifier)))
+            return false;
+        if (numeric && "0123456789-".indexOf(ch) < 0)
+            return false;
+        charEntered(ch);
+        return true;
+    }
+
     function press() {
         var key = rows[rowIndex].keys[colIndex];
         if (!key)
@@ -223,6 +249,14 @@ Item {
 
                         Behavior on color {
                             ColorEase {}
+                        }
+
+                        Pointer {
+                            onHovered: {
+                                keyboard.rowIndex = rowNo;
+                                keyboard.colIndex = index;
+                                keyboard.pointed();
+                            }
                         }
 
                         Rectangle {

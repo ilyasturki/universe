@@ -12,6 +12,8 @@ Rectangle {
     property bool focused: false
     property bool dimmed: false
 
+    signal hovered
+
     readonly property color ink: root.ghost ? Theme.text : Theme.onLight
 
     height: Theme.dp(78)
@@ -33,6 +35,10 @@ Rectangle {
         Ease {
             easing.type: Easing.OutQuint
         }
+    }
+
+    Pointer {
+        onHovered: root.hovered()
     }
 
     Loader {

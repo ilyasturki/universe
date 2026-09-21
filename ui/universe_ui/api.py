@@ -15,7 +15,7 @@ from .themes import ThemeSelector
 
 KEYS = {
     "Accept": (Qt.Key.Key_Return, Qt.Key.Key_Enter),
-    "Cancel": (Qt.Key.Key_Escape,),
+    "Cancel": (Qt.Key.Key_Escape, Qt.Key.Key_Backspace),
     "Details": (Qt.Key.Key_I,),
     "Filters": (Qt.Key.Key_F,),
     "PageUp": (Qt.Key.Key_PageUp,),
@@ -25,10 +25,39 @@ KEYS = {
     "Menu": (Qt.Key.Key_F1,),
     "ScreenUp": (Qt.Key.Key_BracketLeft,),
     "ScreenDown": (Qt.Key.Key_BracketRight,),
+    "First": (Qt.Key.Key_Home,),
+    "Last": (Qt.Key.Key_End,),
+    "Up": (Qt.Key.Key_Up,),
+    "Down": (Qt.Key.Key_Down,),
+    "Left": (Qt.Key.Key_Left,),
+    "Right": (Qt.Key.Key_Right,),
 }
+
+# The pad button each action sits on, as the hints name it; under a keyboard the hint shows the action's first key instead.
+GLYPH_ACTIONS = {
+    "A": "Accept",
+    "B": "Cancel",
+    "X": "Details",
+    "Y": "Filters",
+    "LB": "PrevPage",
+    "RB": "NextPage",
+    "LT": "PageUp",
+    "RT": "PageDown",
+    "Start": "Menu",
+}
+KEY_LABELS = {Qt.Key.Key_Return: "Enter", Qt.Key.Key_Escape: "Esc", Qt.Key.Key_PageUp: "PgUp", Qt.Key.Key_PageDown: "PgDn"}
+
+
+def key_label(key):
+    from PySide6.QtGui import QKeySequence
+
+    return KEY_LABELS.get(key) or QKeySequence(key).toString()
+
 
 # B held this long asks to quit the launcher: the A-hold that opens a game's menu.
 CANCEL_HOLD_MS = 450
+# Escape only: Backspace held in a text sheet is deleting, not leaving.
+HOLD_KEYS = (Qt.Key.Key_Escape,)
 
 SOURCE_NAMES = {"gog": "GOG", "lutris": "Lutris", "steam": "Steam", "epic": "Epic", "itch": "itch.io"}
 
@@ -88,6 +117,8 @@ def _is(name):
 
 class Keys(QObject):
     cancelHeld = Signal()
+    modeChanged = Signal()
+    motionChanged = Signal()
 
     # Watches the window's own key events, so the hold counts whatever page has the focus and however it takes B.
     def __init__(self, parent=None):
@@ -96,23 +127,86 @@ class Keys(QObject):
         self._hold.setSingleShot(True)
         self._hold.setInterval(CANCEL_HOLD_MS)
         self._hold.timeout.connect(self.cancelHeld)
+        self._mode = "pad"
+        self._motion = 0
+        self._windows = []
 
     def watch(self, window):
+        self._windows.append(window)
         window.installEventFilter(self)
+        self._cursor(window)
 
     # A question B just closed: holding on does not ask again.
     @Slot()
     def dropHold(self):
         self._hold.stop()
 
+    # A click's A or B, the wheel's step: the same key the pad posts, so a page needs no second path.
+    @Slot(str)
+    def press(self, action):
+        self.hold(action)
+        self.release(action)
+
+    @Slot(str)
+    def hold(self, action):
+        from .gamepad import post_key
+
+        post_key(KEYS[action][0], True, window=self._focus_window(), source="pointer")
+
+    @Slot(str)
+    def release(self, action):
+        from .gamepad import post_key
+
+        post_key(KEYS[action][0], False, window=self._focus_window(), source="pointer")
+
+    def _focus_window(self):
+        from PySide6.QtGui import QGuiApplication
+
+        return QGuiApplication.focusWindow() or (self._windows[0] if self._windows else None)
+
+    def _set_mode(self, mode):
+        if mode == self._mode:
+            return
+        self._mode = mode
+        for window in self._windows:
+            self._cursor(window)
+        self.modeChanged.emit()
+
+    # gamescope's default cursor is GNOME's X cursor at scale 1, twice the size on a 2× screen; Qt's arrow is the logical size.
+    def _cursor(self, window):
+        from PySide6.QtGui import QCursor
+
+        window.setCursor(QCursor(Qt.CursorShape.ArrowCursor if self._mode == "mouse" else Qt.CursorShape.BlankCursor))
+
     def eventFilter(self, obj, event):
+        from .gamepad import posted_source
+
         kind = event.type()
-        if kind in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease) and not event.isAutoRepeat() and event.key() in KEYS["Cancel"]:
-            if kind == QEvent.Type.KeyPress:
-                self._hold.start()
-            else:
-                self._hold.stop()
+        if kind in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease):
+            source = posted_source(event.key(), kind == QEvent.Type.KeyPress)
+            if source == "pad":
+                self._set_mode("pad")
+            elif source is None:
+                self._set_mode("keyboard")
+            if not event.isAutoRepeat() and event.key() in HOLD_KEYS:
+                if kind == QEvent.Type.KeyPress:
+                    self._hold.start()
+                else:
+                    self._hold.stop()
+        elif kind == QEvent.Type.MouseMove:
+            self._motion += 1
+            self._set_mode("mouse")
+            self.motionChanged.emit()
+        elif kind in (QEvent.Type.MouseButtonPress, QEvent.Type.Wheel):
+            self._set_mode("mouse")
         return False
+
+    # "pad" | "keyboard" | "mouse": whatever was used last. The hints read it; a hover counts only under a mouse.
+    mode = Property(str, lambda self: self._mode, notify=modeChanged)
+    # Bumps on each real mouse move: a list sliding under a still cursor is not one.
+    motion = Property(int, lambda self: self._motion, notify=motionChanged)
+    # Pad glyph → key label ("A" → "Enter"), for the hints under a keyboard.
+    labels = Property("QVariantMap", lambda self: {glyph: key_label(KEYS[action][0]) for glyph, action in GLYPH_ACTIONS.items()}, constant=True)
 
     isAccept = _is("Accept")
     isCancel = _is("Cancel")
@@ -125,6 +219,8 @@ class Keys(QObject):
     isMenu = _is("Menu")
     isScreenUp = _is("ScreenUp")
     isScreenDown = _is("ScreenDown")
+    isFirst = _is("First")
+    isLast = _is("Last")
 
 
 class Pad(QObject):

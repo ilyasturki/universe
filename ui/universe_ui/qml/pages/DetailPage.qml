@@ -211,6 +211,12 @@ FocusScope {
         shotIndex = Sound.stepped(shotIndex, step, screenshots.length);
     }
 
+    // The mouse lands a section without the scroll or the sound a step brings.
+    function pointToAction(name) {
+        section = 0;
+        actionIndex = Math.max(0, pills.indexOf(name));
+    }
+
     component InfoPill: Rectangle {
         height: Theme.dp(41)
         radius: height / 2
@@ -324,6 +330,7 @@ FocusScope {
                         label: page.game && page.game.playTime > 0 ? "Continue" : "Play"
                         focused: actions.active && page.action === "play"
                         dimmed: actions.active && page.action !== "play"
+                        onHovered: page.pointToAction("play")
                     }
 
                     Rectangle {
@@ -367,6 +374,10 @@ FocusScope {
                             kind: page.game && page.game.favorite ? "heart" : "heart-outline"
                             tint: "#f2f3f5"
                         }
+
+                        Pointer {
+                            onHovered: page.pointToAction("favourite")
+                        }
                     }
 
                     PillButton {
@@ -376,6 +387,7 @@ FocusScope {
                         ghost: true
                         focused: actions.active && page.action === "shots"
                         dimmed: actions.active && page.action !== "shots"
+                        onHovered: page.pointToAction("shots")
                     }
 
                     PillButton {
@@ -385,6 +397,7 @@ FocusScope {
                         ghost: true
                         focused: actions.active && page.action === "recordings"
                         dimmed: actions.active && page.action !== "recordings"
+                        onHovered: page.pointToAction("recordings")
                     }
 
                     PillButton {
@@ -394,6 +407,7 @@ FocusScope {
                         ghost: true
                         focused: actions.active && page.action === "journal"
                         dimmed: actions.active && page.action !== "journal"
+                        onHovered: page.pointToAction("journal")
                     }
 
                     PillButton {
@@ -403,6 +417,7 @@ FocusScope {
                         ghost: true
                         focused: actions.active && page.action === "sessions"
                         dimmed: actions.active && page.action !== "sessions"
+                        onHovered: page.pointToAction("sessions")
                     }
                 }
             }
@@ -430,6 +445,11 @@ FocusScope {
                     visible: page.hasAbout
 
                     readonly property bool focused: page.section === 1 && !page.lightbox
+
+                    Pointer {
+                        accept: false
+                        onHovered: page.section = 1
+                    }
 
                     Column {
                         id: aboutText
@@ -499,6 +519,10 @@ FocusScope {
                     index: page.shotIndex
                     focused: page.section === 2 && !page.lightbox
                     sideMargin: page.sideMargin
+                    onPointed: function (i) {
+                        page.section = 2;
+                        page.shotIndex = i;
+                    }
                 }
             }
         }

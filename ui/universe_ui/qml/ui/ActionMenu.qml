@@ -153,6 +153,12 @@ FocusScope {
         Behavior on opacity {
             Ease {}
         }
+
+        // Keeps the mouse off the page beneath; a click outside the panel is B.
+        HoverHandler {}
+        TapHandler {
+            onTapped: api.keys.press("Cancel")
+        }
     }
 
     ShaderEffectSource {
@@ -184,6 +190,10 @@ FocusScope {
         opacity: 1.0 - menu.slide
         scale: 1.0 - menu.slide * 0.04
         transformOrigin: menu.onRight ? Item.Left : Item.Right
+
+        // The panel's own padding is neither a row nor the scrim.
+        HoverHandler {}
+        TapHandler {}
 
         Text {
             id: heading
@@ -257,6 +267,10 @@ FocusScope {
                             ColorEase {}
                         }
 
+                        Pointer {
+                            onHovered: menu.index = index
+                        }
+
                         MenuGlyph {
                             id: glyph
 
@@ -323,6 +337,8 @@ FocusScope {
             return;
         if (event.key === Qt.Key_Up || event.key === Qt.Key_Down)
             index = Sound.stepped(index, event.key === Qt.Key_Up ? -1 : 1, items.length);
+        else if (api.keys.isFirst(event) || api.keys.isLast(event))
+            index = Sound.stepped(index, api.keys.isFirst(event) ? -items.length : items.length, items.length);
         else if (event.key === Qt.Key_Right)
             items[index].more === true ? activate() : Sound.edge();
         else if (event.key === Qt.Key_Left)

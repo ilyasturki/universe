@@ -397,6 +397,15 @@ FocusScope {
         opacity: dock.shown ? 1.0 : 0.0
         visible: opacity > 0.001
 
+        // A click on the game behind the dock, or a right click anywhere, is B. The wheel steps the open list's value.
+        TapHandler {
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            onTapped: dock.back()
+        }
+        Wheel {
+            horizontal: true
+        }
+
         Behavior on opacity {
             SequentialAnimation {
                 NumberAnimation {
@@ -657,6 +666,15 @@ FocusScope {
                             ColorEase {}
                         }
 
+                        Pointer {
+                            enabled: !slot.separator
+                            onHovered: {
+                                if (dock.index !== slot.position)
+                                    dock.opened = false;
+                                dock.index = slot.position;
+                            }
+                        }
+
                         Rectangle {
                             anchors.fill: parent
                             anchors.margins: -Theme.dp(9.7)
@@ -728,6 +746,9 @@ FocusScope {
                 Ease {}
             }
 
+            HoverHandler {}
+            TapHandler {}
+
             Column {
                 id: rows
 
@@ -756,6 +777,10 @@ FocusScope {
 
                         Behavior on color {
                             ColorEase {}
+                        }
+
+                        Pointer {
+                            onHovered: dock.sub = index
                         }
 
                         MenuGlyph {

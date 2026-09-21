@@ -113,6 +113,10 @@ FocusScope {
     Rectangle {
         anchors.fill: parent
         color: Theme.ground
+
+        // Keeps the mouse off the dock beneath.
+        HoverHandler {}
+        TapHandler {}
     }
 
     Item {

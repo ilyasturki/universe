@@ -24,6 +24,14 @@ FocusScope {
     signal menuRequested(var game, Item anchor)
     signal entered
     signal dismissed
+    // The mouse is on a slot: the frame lands there, no page switch until a click.
+    signal pointed
+
+    function pointTo(slot) {
+        index = slot;
+        pointed();
+        forceActiveFocus();
+    }
 
     readonly property var hints: onBadge ? [
         {
@@ -230,6 +238,11 @@ FocusScope {
                         duration: Theme.durBase
                     }
                 }
+
+                Pointer {
+                    anchors.margins: -Theme.dp(12)
+                    onHovered: root.pointTo(index)
+                }
             }
         }
     }
@@ -325,6 +338,11 @@ FocusScope {
             height: Theme.dp(26)
             kind: "search"
             tint: root.activeFocus && root.onSearch ? Theme.text : Theme.textTab
+
+            Pointer {
+                anchors.margins: -Theme.dp(12)
+                onHovered: root.pointTo(root.searchIndex)
+            }
         }
 
         SessionBadge {
@@ -333,6 +351,11 @@ FocusScope {
             focused: root.activeFocus && root.onBadge
             onActiveChanged: frame.retarget()
             onWidthChanged: frame.retarget()
+
+            Pointer {
+                enabled: badge.active
+                onHovered: root.pointTo(root.badgeIndex)
+            }
         }
 
         PowerBadge {

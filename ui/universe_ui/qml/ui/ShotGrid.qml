@@ -136,6 +136,10 @@ Item {
                     focused: grid.active && flat === grid.index
                     dimmed: grid.active && flat !== grid.index
                     journaled: modelData.hasJournal
+
+                    Pointer {
+                        onHovered: grid.index = flat
+                    }
                 }
             }
         }

@@ -114,7 +114,12 @@ FocusScope {
         activePage.land(section);
     }
 
-    onActivePageChanged: deliverLanding()
+    // A tab clicked opens and enters in one go, before its page has loaded: the focus lands once it is there.
+    onActivePageChanged: {
+        deliverLanding();
+        if (activePage && focusOwner === "page" && !detailOpen && !subOpen && !menuOpen && !confirm.open && !launching)
+            activePage.forceActiveFocus();
+    }
 
     function openAdd() {
         openSub("pages/AddGamePage.qml", {
@@ -748,6 +753,7 @@ FocusScope {
             }
             onEntered: root.focusPage()
             onDismissed: root.focusPage()
+            onPointed: root.focusOwner = "chrome"
         }
 
         Item {
@@ -1107,6 +1113,29 @@ FocusScope {
 
     Toast {
         id: toast
+    }
+
+    // The mouse back on a tab page takes the focus from the bar, without the pad's panel sound; the bar takes it through `pointed`.
+    // A landing anywhere else (a detail, a sub page, the dock in its own window) is not the page's.
+    Connections {
+        target: Theme
+        function onPointed(item) {
+            if (root.focusOwner !== "chrome")
+                return;
+            for (var i = item; i; i = i.parent)
+                if (i === pageArea) {
+                    root.focusPage();
+                    return;
+                }
+        }
+    }
+
+    // Under everything: the wheel steps the focused list, a right click is B. A strip that scrolls sideways puts its own Wheel over this one.
+    Wheel {}
+
+    TapHandler {
+        acceptedButtons: Qt.RightButton
+        onTapped: api.keys.press("Cancel")
     }
 
     Connections {

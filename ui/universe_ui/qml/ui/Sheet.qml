@@ -25,6 +25,12 @@ FocusScope {
         Behavior on opacity {
             Ease {}
         }
+
+        // Keeps the mouse off the page beneath; a click outside the panel is B.
+        HoverHandler {}
+        TapHandler {
+            onTapped: api.keys.press("Cancel")
+        }
     }
 
     Item {
@@ -49,6 +55,9 @@ FocusScope {
             color: Qt.rgba(0.071, 0.075, 0.094, 1.0)
             border.width: 1
             border.color: Theme.surfaceBorder
+
+            HoverHandler {}
+            TapHandler {}
         }
 
         Text {

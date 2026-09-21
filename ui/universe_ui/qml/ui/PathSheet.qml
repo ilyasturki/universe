@@ -144,6 +144,11 @@ Sheet {
 
     Keys.onPressed: function (event) {
         event.accepted = true;
+        if (api.keys.isFirst(event) || api.keys.isLast(event)) {
+            zone = "list";
+            index = Sound.stepped(index, api.keys.isFirst(event) ? -rowCount : rowCount, rowCount);
+            return;
+        }
         if (event.isAutoRepeat)
             return;
         if (api.keys.isAccept(event)) {
@@ -220,6 +225,10 @@ Sheet {
                     label: modelData.label
                     active: modelData.path === sheet.browser.path
                     focused: sheet.zone === "chips" && index === sheet.chipIndex
+                    onHovered: {
+                        sheet.zone = "chips";
+                        sheet.chipIndex = index;
+                    }
                 }
             }
         }
@@ -261,6 +270,13 @@ Sheet {
 
                 Behavior on color {
                     ColorEase {}
+                }
+            }
+
+            Pointer {
+                onHovered: {
+                    sheet.zone = "list";
+                    sheet.index = index;
                 }
             }
 
