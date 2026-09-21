@@ -7,6 +7,7 @@ name=$(printf '%s' "$input" | jq -r .name)
 cwd=$(printf '%s' "$input" | jq -r .cwd)
 main=$(dirname "$(git -C "$cwd" rev-parse --path-format=absolute --git-common-dir)")
 dir="$main/.claude/worktrees/$name"
+[ -e "$dir/.git" ] && { echo "$dir" >&3; exit 0; }
 git -C "$main" worktree add -b "worktree-$name" "$dir" HEAD
 
 blob() {
