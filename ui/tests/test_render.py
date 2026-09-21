@@ -601,9 +601,9 @@ def test_the_reprise_game_menu_groups_its_rows_and_hides_the_media_a_game_has_no
     click(Qt.Key.Key_F1)
     assert menu.property("open") is True and root.property("activePage").property("currentGame").id == "the-technomancer"
     items = menu.property("items").toVariant()
-    assert [i["action"] for i in items] == ["play", "details", "favourite", "media", "settings", "artwork", "remove"]
-    assert [i.get("gap", False) for i in items] == [False, True, False, False, True, False, False], "three groups"
-    assert items[3]["more"] is True and items[6]["danger"] is True
+    assert [i["action"] for i in items] == ["play", "details", "favourite", "media", "settings", "sessions", "artwork", "remove"]
+    assert [i.get("gap", False) for i in items] == [False, True, False, False, True, False, False, False], "three groups"
+    assert items[3]["more"] is True and items[7]["danger"] is True
     click(Qt.Key.Key_Down, 3)
     click(Qt.Key.Key_Return)
     assert menu.property("open") is True and menu.property("title") == "Media" and len(menu.property("stack").toVariant()) == 1
@@ -619,8 +619,8 @@ def test_the_reprise_game_menu_groups_its_rows_and_hides_the_media_a_game_has_no
     game = api.allGames.byId("mini-metro")
     QMetaObject.invokeMethod(root, "openMenu", Q_ARG("QVariant", game), Q_ARG("QVariant", page.property("menuAnchor")))
     pump(100)
-    assert actions() == ["play", "details", "favourite", "settings", "artwork", "remove"], "nothing to browse: no Media row"
-    click(Qt.Key.Key_Down, 5)
+    assert actions() == ["play", "details", "favourite", "settings", "sessions", "artwork", "remove"], "nothing to browse: no Media row"
+    click(Qt.Key.Key_Down, 6)
     click(Qt.Key.Key_Return)
     assert menu.property("open") is True and menu.property("title") == "Remove Mini Metro?"
     click(Qt.Key.Key_Down)

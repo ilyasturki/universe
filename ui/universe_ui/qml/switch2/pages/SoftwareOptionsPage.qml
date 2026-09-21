@@ -81,6 +81,12 @@ FocusScope {
                 page: "pages/NewsPage.qml"
             },
             {
+                key: "log",
+                label: "Play Log",
+                type: "action",
+                page: "pages/PlayLogPage.qml"
+            },
+            {
                 key: "artwork",
                 label: "Artwork",
                 type: "action",

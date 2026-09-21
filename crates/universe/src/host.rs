@@ -328,6 +328,29 @@ impl Units {
         }
     }
 
+    /// What the unit's processes wrote, oldest first: the last `tail` lines, every line for 0; empty once the journal has let the unit go.
+    pub async fn journal(&self, unit: &str, tail: usize) -> Vec<JournalLine> {
+        match self {
+            Units::Systemd(_) => {
+                let n = tail.to_string();
+                let mut args = vec!["--user", "-u", unit, "-o", "json", "--no-pager", "-q", "--output-fields=MESSAGE,SYSLOG_IDENTIFIER,PRIORITY"];
+                if tail > 0 {
+                    args.extend(["-n", &n]);
+                }
+                match tokio::process::Command::new("journalctl").args(&args).output().await {
+                    Ok(o) => parse_journal(&String::from_utf8_lossy(&o.stdout)),
+                    Err(_) => vec![],
+                }
+            }
+            #[cfg(test)]
+            Units::Memory(m) => {
+                let lines = m.units.lock().unwrap().get(unit).map(|u| u.lines.clone()).unwrap_or_default();
+                let skip = if tail > 0 { lines.len().saturating_sub(tail) } else { 0 };
+                lines[skip..].to_vec()
+            }
+        }
+    }
+
     /// The cgroup path the manager reports for a unit, `None` while it is not loaded.
     pub async fn cgroup(&self, unit: &str) -> Option<String> {
         match self {
@@ -423,6 +446,57 @@ fn game_pids(procs: &[Proc]) -> Vec<u32> {
         false
     };
     procs.iter().filter(|p| !splashes.contains(&p.pid) && under_splash(p.pid)).map(|p| p.pid).collect()
+}
+
+/// One journal entry: `source` is the writing process's identifier (`gamescope`, `umu-run`, `systemd`), `priority` syslog's (3 error, 4 warning, 6 info).
+#[derive(Debug, Clone, PartialEq, serde::Serialize)]
+pub struct JournalLine {
+    pub time: String,
+    pub source: String,
+    pub priority: u8,
+    pub message: String,
+}
+
+pub fn parse_journal(json_lines: &str) -> Vec<JournalLine> {
+    json_lines
+        .lines()
+        .filter_map(|line| {
+            let v = serde_json::from_str::<serde_json::Value>(line).ok()?;
+            // journald hands a non-UTF-8 message over as a byte array
+            let message = v["MESSAGE"].as_str()?;
+            let time = v["__REALTIME_TIMESTAMP"]
+                .as_str()
+                .and_then(|s| s.parse::<i64>().ok())
+                .and_then(chrono::DateTime::from_timestamp_micros)
+                .map(|t| t.with_timezone(&chrono::Local).to_rfc3339())
+                .unwrap_or_default();
+            Some(JournalLine {
+                time,
+                source: v["SYSLOG_IDENTIFIER"].as_str().unwrap_or("").into(),
+                priority: v["PRIORITY"].as_str().and_then(|p| p.parse().ok()).unwrap_or(6),
+                message: strip_sgr(message),
+            })
+        })
+        .collect()
+}
+
+/// gamescope and Proton colour their output and the journal keeps the escape codes.
+pub fn strip_sgr(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut chars = s.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\x1b' && chars.peek() == Some(&'[') {
+            chars.next();
+            for d in chars.by_ref() {
+                if d.is_ascii_alphabetic() {
+                    break;
+                }
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
 }
 
 #[derive(Debug, Default, Clone)]
@@ -547,6 +621,7 @@ struct UnitState {
     spec: UnitSpec,
     active: bool,
     log: UnitLog,
+    lines: Vec<JournalLine>,
 }
 
 #[cfg(test)]
@@ -561,7 +636,7 @@ impl Memory {
             return Err(Error::Io(format!("systemd-run {}: refused", spec.name)));
         }
         let log = UnitLog { started: Some(chrono::Local::now()), ..Default::default() };
-        self.units.lock().unwrap().insert(spec.name.clone(), UnitState { spec: spec.clone(), active: true, log });
+        self.units.lock().unwrap().insert(spec.name.clone(), UnitState { spec: spec.clone(), active: true, log, lines: vec![] });
         Ok(())
     }
 
@@ -574,6 +649,13 @@ impl Memory {
             u.active = false;
             u.log.ended = Some(chrono::Local::now());
             u.log.exit = Some(exit);
+        }
+    }
+
+    /// A line a process of the unit wrote, as the journal would hold it.
+    pub fn write_line(&self, unit: &str, source: &str, message: &str) {
+        if let Some(u) = self.units.lock().unwrap().get_mut(unit) {
+            u.lines.push(JournalLine { time: chrono::Local::now().to_rfc3339(), source: source.into(), priority: 6, message: message.into() });
         }
     }
 
@@ -597,6 +679,25 @@ mod tests {
 
     fn proc(pid: u32, ppid: u32, argv: &[&str]) -> Proc {
         Proc { pid, ppid, argv: argv.iter().map(|a| a.to_string()).collect() }
+    }
+
+    #[test]
+    fn journal_lines_lose_their_colours_and_bytes() {
+        let json = concat!(
+            r#"{"__REALTIME_TIMESTAMP":"1758400758000000","MESSAGE":"[gamescope] [\u001b[0;34mInfo\u001b[0m] up","SYSLOG_IDENTIFIER":"gamescope","PRIORITY":"6"}"#,
+            "\n",
+            r#"{"__REALTIME_TIMESTAMP":"1758400759000000","MESSAGE":[104,105],"SYSLOG_IDENTIFIER":"wine"}"#,
+            "\n",
+            r#"{"__REALTIME_TIMESTAMP":"1758400760000000","MESSAGE":"Failed with result 'signal'.","SYSLOG_IDENTIFIER":"systemd","PRIORITY":"4"}"#,
+            "\nnot json\n",
+        );
+        let lines = parse_journal(json);
+        assert_eq!(lines.len(), 2);
+        assert_eq!((lines[0].source.as_str(), lines[0].priority, lines[0].message.as_str()), ("gamescope", 6, "[gamescope] [Info] up"));
+        assert!(lines[0].time.starts_with("2025-09-2"), "{}", lines[0].time);
+        assert_eq!((lines[1].source.as_str(), lines[1].priority), ("systemd", 4));
+        assert_eq!(strip_sgr("plain"), "plain");
+        assert_eq!(strip_sgr("\x1b[1;31mred\x1b[0m and \x1b[K"), "red and ");
     }
 
     #[test]

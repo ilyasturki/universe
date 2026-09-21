@@ -27,6 +27,7 @@ SYNONYMS = {
     "gamescope_sharpness": ["sharpen", "fsr", "nis"],
     "gamescope_args": ["flags", "command line", "extra arguments"],
     "env": ["environment", "variables", "export", "env vars"],
+    "debug_log": ["logs", "proton log", "wine log", "dxvk", "crash", "debugging", "troubleshoot"],
     "wrapper": ["gamemode", "gamemoderun", "taskset", "prime-run", "mangohud"],
     "args": ["arguments", "parameters", "command line", "flags"],
     "working_dir": ["cwd", "folder", "directory"],

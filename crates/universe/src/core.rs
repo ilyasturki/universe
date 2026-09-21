@@ -338,10 +338,16 @@ impl Core {
                 }
             }
         }
-        if purge && !r.game.launch.prefix.is_empty() {
-            let prefix = paths::expand(&r.game.launch.prefix);
-            if prefix.is_dir() && trash(&prefix).is_err() {
-                tracing::warn!("trash {} failed; left in place", prefix.display());
+        if purge {
+            let logs = paths::game_logs_dir(id);
+            if logs.is_dir() && trash(&logs).is_err() {
+                tracing::warn!("trash {} failed; left in place", logs.display());
+            }
+            if !r.game.launch.prefix.is_empty() {
+                let prefix = paths::expand(&r.game.launch.prefix);
+                if prefix.is_dir() && trash(&prefix).is_err() {
+                    tracing::warn!("trash {} failed; left in place", prefix.display());
+                }
             }
         }
         crate::game::set_key(&r.game.toml_path(), "hidden", "true")?;
@@ -738,6 +744,36 @@ impl Core {
         }
         rows.sort_by(|a, b| b.session.ended_at.cmp(&a.session.ended_at));
         Ok(rows)
+    }
+
+    /// The unit's journal for one session of `id`, oldest first, the launched command line as its first line; `session_id` `""` is the running
+    /// session, else the newest played. The last `tail` lines, every line for 0; empty once the journal has let the unit go, and for an import.
+    pub async fn session_log(&self, id: &str, session_id: &str, tail: usize) -> Result<Vec<crate::host::JournalLine>> {
+        let r = self.get(id).await?;
+        let marker = crate::session::read_marker().filter(|m| m.current.id == id && (session_id.is_empty() || m.current.session_id == session_id));
+        let (session, unit, command, started_at) = match marker {
+            Some(m) => (m.current.session_id.clone(), m.current.unit.clone(), m.command.clone(), m.current.started_at.clone()),
+            None => {
+                let s = if session_id.is_empty() {
+                    r.sessions.iter().filter(|s| s.source == "universe").max_by(|a, b| a.ended_at.cmp(&b.ended_at))
+                } else {
+                    r.sessions.iter().find(|s| s.session == session_id)
+                };
+                let s = s.ok_or_else(|| {
+                    Error::NotFound(if session_id.is_empty() { format!("{id}: never played") } else { format!("session {session_id} of {id}") })
+                })?;
+                (s.session.clone(), s.unit.clone(), s.command.clone(), s.started_at.clone())
+            }
+        };
+        if unit.is_empty() {
+            return Ok(vec![]);
+        }
+        let mut lines = self.host.units.journal(&unit, tail).await;
+        if !command.is_empty() {
+            let head = crate::host::JournalLine { time: started_at, source: "universe".into(), priority: 6, message: format!("launch {session}: {command}") };
+            lines.insert(0, head);
+        }
+        Ok(lines)
     }
 
     async fn game_of_session(&self, session_id: &str) -> Option<String> {

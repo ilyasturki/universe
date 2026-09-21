@@ -217,6 +217,10 @@ impl Core {
     fn sessions(&self, py: Python<'_>, id: String) -> PyResult<Py<PyAny>> {
         self.value(py, |c| async move { c.sessions(&id).await })
     }
+    #[pyo3(signature = (id, session_id = String::new(), tail = 0))]
+    fn session_log(&self, py: Python<'_>, id: String, session_id: String, tail: usize) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| async move { c.session_log(&id, &session_id, tail).await })
+    }
     fn media(&self, py: Python<'_>, id: String) -> PyResult<Py<PyAny>> {
         self.value(py, |c| async move { c.media(&id).await })
     }

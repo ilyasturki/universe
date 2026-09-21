@@ -623,7 +623,7 @@ class PendingJournals(QObject):
         self._timer.setInterval(POLL_MS)
         self._timer.timeout.connect(self.refresh)
         client.entryWritten.connect(lambda session, ident: self.refresh())
-        client.sessionEnded.connect(lambda session, ident, duration: self.refresh())
+        client.sessionEnded.connect(lambda *args: self.refresh())
         self.refresh()
 
     # The read runs off the UI thread; a refresh asked meanwhile runs once the reply is in.

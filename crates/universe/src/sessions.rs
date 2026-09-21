@@ -14,6 +14,12 @@ pub struct Session {
     pub unit: String,
     pub screen: String,
     pub exit: i32,
+    /// `stop` asked for the end: a signal exit is a quit, not a crash. Absent on a line written before the key existed.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub stopped: Option<bool>,
+    /// The launched command line, for the log's first line.
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub command: String,
     pub recording: Option<String>,
     /// The recording's media length; 0 when never probed
     pub recording_duration_s: u64,
@@ -46,6 +52,20 @@ pub struct SessionRow {
     pub title: String,
     pub recording: Option<RecordingInfo>,
     pub journal: Option<JournalState>,
+    /// Proton's and DXVK's own files, when the launch turned them on.
+    pub debug_log: Option<String>,
+}
+
+/// How a session ended, from the line's `exit` and `stopped`: `quit` (0), `stopped` (asked), `crashed` (a code), `killed` (a signal nobody asked
+/// for), `ended` (a signal on a line too old to say).
+pub fn end_of(session: &Session) -> &'static str {
+    match (session.exit, session.stopped) {
+        (0, _) => "quit",
+        (_, Some(true)) => "stopped",
+        (-1, Some(false)) => "killed",
+        (-1, None) => "ended",
+        _ => "crashed",
+    }
 }
 
 impl SessionRow {
@@ -62,7 +82,8 @@ impl SessionRow {
             }
         });
         let journal = entry.map(|e| JournalState { state: e.state.clone(), title: e.title.clone(), written_at: e.written_at.clone() });
-        SessionRow { session: session.clone(), title: title.into(), recording, journal }
+        let debug_log = Some(crate::paths::session_log_dir(&session.game, &session.session)).filter(|d| d.is_dir()).map(|d| d.to_string_lossy().into_owned());
+        SessionRow { session: session.clone(), title: title.into(), recording, journal, debug_log }
     }
 }
 
@@ -72,10 +93,12 @@ impl Serialize for SessionRow {
         use serde::ser::Error;
         let mut v = serde_json::to_value(&self.session).map_err(S::Error::custom)?;
         let m = v.as_object_mut().ok_or_else(|| S::Error::custom("session is not an object"))?;
-        for k in ["recording_duration_s", "recording_started_at", "recording_pauses"] {
+        for k in ["recording_duration_s", "recording_started_at", "recording_pauses", "command"] {
             m.remove(k);
         }
         m.insert("title".into(), self.title.clone().into());
+        m.insert("end".into(), end_of(&self.session).into());
+        m.insert("debug_log".into(), serde_json::to_value(&self.debug_log).map_err(S::Error::custom)?);
         m.insert("recording".into(), serde_json::to_value(&self.recording).map_err(S::Error::custom)?);
         m.insert("journal".into(), serde_json::to_value(&self.journal).map_err(S::Error::custom)?);
         v.serialize(s)
@@ -167,6 +190,22 @@ pub fn stats(sessions: &[Session]) -> Stats {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_end_reads_exit_and_stopped_and_the_line_keeps_its_shape() {
+        let s = Session { exit: 0, ..Default::default() };
+        assert_eq!(end_of(&s), "quit");
+        assert_eq!(end_of(&Session { exit: 0, stopped: Some(true), ..Default::default() }), "quit");
+        assert_eq!(end_of(&Session { exit: -1, stopped: Some(true), ..Default::default() }), "stopped");
+        assert_eq!(end_of(&Session { exit: 6, stopped: Some(true), ..Default::default() }), "stopped");
+        assert_eq!(end_of(&Session { exit: -1, stopped: Some(false), ..Default::default() }), "killed");
+        assert_eq!(end_of(&Session { exit: -1, ..Default::default() }), "ended");
+        assert_eq!(end_of(&Session { exit: 6, ..Default::default() }), "crashed");
+        let line = serde_json::to_value(&s).unwrap();
+        assert!(line.get("stopped").is_none() && line.get("command").is_none(), "{line}");
+        let old: Session = serde_json::from_str(r#"{"session":"20260910-213045","game":"g","exit":-1}"#).unwrap();
+        assert!(old.stopped.is_none() && old.command.is_empty());
+    }
 
     #[test]
     fn roundtrip_and_stats() {

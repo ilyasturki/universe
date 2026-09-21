@@ -545,7 +545,7 @@ class GameAnchor(QObject):
             client.sessionEnded.connect(self._session_ended)
         self.clientChanged.emit()
 
-    def _session_ended(self, session_id, ident, duration):
+    def _session_ended(self, session_id, ident, duration, end=""):
         self.hold(ident)
 
     def _set_model(self, model):

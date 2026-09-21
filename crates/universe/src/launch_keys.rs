@@ -148,6 +148,7 @@ pub static LAUNCH_KEYS: &[LaunchKey] = &[
     advanced!("fsr4_upgrade", Kind::Toggle, "off", "FSR 4 upgrade", "Upscaling", Both, PROTON, "Games with FSR 3.1 use FSR 4 instead, sharper and cleaner. Radeon RX 9000 (RDNA 4), where auto turns it on, or RX 7000 (RDNA 3) at a cost, through Proton's RDNA 3 variant picked for it. A swapped DLL can upset a game or an anti-cheat."),
     advanced!("xess_upgrade", Kind::Toggle, "off", "XeSS upgrade", "Upscaling", Both, PROTON, "Games with XeSS use the newest XeSS instead of the one they ship. Any GPU; best on Intel Arc, where auto turns it on. A swapped DLL can upset a game or an anti-cheat."),
     advanced!("optiscaler", Kind::Bool, "false", "OptiScaler", "Upscaling", Both, PROTON, "Adds FSR 4 or XeSS to games that only offer DLSS, through OptiScaler. For AMD and Intel; needs a Proton that ships it (CachyOS, GE)."),
+    advanced!("debug_log", Kind::Bool, "false", "Debug log", "Logs", Both, WINE, "Proton, Wine and DXVK write their full logs for each session, kept with the game's own under Sessions. Large; on for a game that misbehaves."),
     advanced!("gamescope_bin", Kind::Path, "gamescope", "Gamescope program", "Programs", Global, &[], "The gamescope binary: a name on PATH or a path."),
     advanced!("umu_run", Kind::Path, "umu-run", "umu-run program", "Programs", Global, &[], "The umu-run binary: a name on PATH or a path."),
     key!("options", Kind::Map, "", "Runner options", "", Game, &[], "The runner's options, validated against `universe runner options <id>`."),

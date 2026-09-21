@@ -53,7 +53,8 @@ def write_poster(image, ident):
 
 class CoreClient(QObject):
     sessionStarted = Signal(str, str)
-    sessionEnded = Signal(str, str, int)
+    # (session, game, duration_s, end): `end` as the session row's (quit, stopped, crashed, killed)
+    sessionEnded = Signal(str, str, int, str)
     libraryChanged = Signal(list)
     recordingFiled = Signal(str, str, str)
     entryWritten = Signal(str, str)
@@ -314,6 +315,10 @@ class CoreClient(QObject):
     def sessions(self, ident):
         return self._guarded([], self._core.sessions, ident)
 
+    # The unit's journal on the worker: the read shells out to journalctl.
+    def sessionLogAsync(self, ident, session, tail, on_reply, on_error=None):
+        self._call_async(lambda: self._core.session_log(ident, session, tail), on_reply, on_error)
+
     @Slot(str, result="QVariant")
     def media(self, ident):
         return self._guarded([], self._core.media, ident)
@@ -370,7 +375,7 @@ class CoreClient(QObject):
 
         def landed(line):
             line = line or {}
-            self.sessionEnded.emit(session_id, ident, int(line.get("duration_s") or 0))
+            self.sessionEnded.emit(session_id, ident, int(line.get("duration_s") or 0), str(line.get("end") or ""))
             QTimer.singleShot(4500, self._notice_skipped_modules)
             self.libraryChanged.emit([ident])
             if line.get("recording"):

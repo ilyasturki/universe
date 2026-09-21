@@ -32,12 +32,12 @@ def test_game_settings_form(api, fake):
     assert [g["title"] for g in form.groups] == ["Display", "Overlay", "Proton", "Launch", "Desktop and library", "Video capture", "Play journal", ""], (
         "the launch page's cards, the runner's, the program, the modules, then the Advanced row"
     )
-    assert [g["title"] for g in form.advancedGroups] == ["Scaling", "Environment", "Proton", "Sync", "Upscaling", "Launch", "Artwork"], (
+    assert [g["title"] for g in form.advancedGroups] == ["Scaling", "Environment", "Proton", "Sync", "Upscaling", "Logs", "Launch", "Artwork"], (
         "the power user's cards, in the same order"
     )
     form.showAdvanced = True
     groups = {g["title"]: g for g in form.groups}
-    assert [g["title"] for g in form.groups][7:] == ["", "Scaling", "Environment", "Proton", "Sync", "Upscaling", "Launch", "Artwork"]
+    assert [g["title"] for g in form.groups][7:] == ["", "Scaling", "Environment", "Proton", "Sync", "Upscaling", "Logs", "Launch", "Artwork"]
     assert groups["Launch"]["caps"] is True and groups["Video capture"]["caps"] is False
     assert groups["Display"]["meta"] == "DP-1 2560×1440 @ 144 Hz" and groups["Upscaling"]["meta"] == "AMD Radeon RX 7900 GRE · RDNA 3"
     assert groups["Video capture"]["meta"] == "v0.1.0"
@@ -279,9 +279,15 @@ def test_game_settings_mirrors_the_cards(api, fake):
         cards.setdefault(g["title"], []).extend(form.rows[i]["key"] for i in g["rows"])
     for section in ("Display", "Overlay", "Scaling", "Environment", "Sync", "Upscaling"):
         assert cards[section] == ["launch." + k["key"] for k in catalogue if k["section"] == section], section
-    assert cards["Proton"] == ["launch.proton", "launch.wayland", "launch.hdr", "launch.prefix", "launch.umu_id", "launch.store", "launch.dll_overrides"], (
-        "no arch on Proton"
-    )
+    assert cards["Proton"] == [
+        "launch.proton",
+        "launch.wayland",
+        "launch.hdr",
+        "launch.prefix",
+        "launch.umu_id",
+        "launch.store",
+        "launch.dll_overrides",
+    ], "no arch on Proton"
     assert cards["Launch"] == [
         "launch.runner",
         "launch.exe",
@@ -569,7 +575,7 @@ def test_pending_journals_announce_each_session_once(api, fake):
             break
     assert pending.count == 1 and pending.rows[0]["title"] == "The Technomancer"
     fake.entryWritten.emit("", "the-technomancer")
-    fake.sessionEnded.emit("20260912-200000", "the-technomancer", 60)
+    fake.sessionEnded.emit("20260912-200000", "the-technomancer", 60, "quit")
     pump(300)
     assert seen == [("appeared", "20260912-200000", "The Technomancer")]
 
@@ -591,7 +597,7 @@ def test_pending_journals_announce_each_session_once(api, fake):
             "images": [],
         },
     )
-    fake.sessionEnded.emit("20260913-100000", "the-technomancer", 60)
+    fake.sessionEnded.emit("20260913-100000", "the-technomancer", 60, "quit")
     assert wait_for(pending.changed, 3000) is not None
     entries[0].update(state="failed", paragraphs=["codex timed out"])
     fake.entryWritten.emit("20260913-100000", "the-technomancer")
@@ -737,3 +743,40 @@ def test_recording_frames_are_sampled_from_the_file(api):
     again.load("the-technomancer")
     assert again.frameMap[session]["complete"]
     again.shutdown()
+
+
+def test_the_sessions_store_lists_played_sessions_and_reads_one_log(api, fake):
+    store = api.screens.sessions
+    store.load("the-technomancer")
+    rows = store.rows
+    assert [r["session"] for r in rows] == ["20260909-213045", "20260907-224100", "20260905-190000"], "the Lutris import has no unit, so no log"
+    assert [r["end"] for r in rows] == ["quit", "quit", "crashed"]
+    assert rows[2]["endText"] == "Crashed (exit 6)" and rows[2]["bad"] and not rows[0]["bad"]
+    assert rows[0]["hasRecording"] and not rows[2]["hasRecording"]
+
+    store.openLog("20260907-224100")
+    assert store.logLoading
+    assert wait_for(store.logChanged, 3000) is not None
+    log = store.log
+    assert store.logSession == "20260907-224100" and not store.logLoading
+    assert log[0]["source"] == "universe" and log[0]["message"].startswith("launch 20260907-224100: gamescope")
+    assert any(r["error"] and r["source"] == "wine" for r in log)
+    assert all(r["time"] == "22:41:00" for r in log)
+
+    store.openLog("20260905-190000")
+    assert wait_for(store.logChanged, 3000) is not None
+    assert store.log[0]["message"].startswith("launch 20260905-190000")
+
+    store.openLog("19700101-000000")
+    assert wait_for(store.logChanged, 3000) is not None
+    assert store.log == [] and "19700101-000000" in store.logError
+
+    fake.launch("the-technomancer", "")
+    assert wait_for(fake.launched, 3000) is not None
+    assert store.rows[0]["live"] and store.rows[0]["session"] == "" and store.rows[0]["endText"] == "Playing now"
+    store.openLog("")
+    assert wait_for(store.logChanged, 3000) is not None
+    assert store.log[0]["message"].startswith("launch " + fake.currentSession["session_id"])
+    assert wait_for(fake.sessionEnded, 6000) is not None
+    pump(200)
+    assert not store.rows[0]["live"] and store.rows[0]["end"] == "quit"

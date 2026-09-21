@@ -24,7 +24,7 @@ One context property, `api`:
 | `api.universe` | the client: every core call, plus the signals below. `adoptScope()` and `pendingJournals()` wrap `adopt_scope` and `pending_journals`; their failures get a log line, not a toast. `recordings(id)` is the client's own: `sessions(id)` kept to the rows with a `recording` |
 | `api.pad` | `rightX`: the right stick as a value, 0 without a controller |
 | `api.power` | the batteries the kernel lists under `/sys/class/power_supply`: `sources` (`kind` `system` or `pad`, `percent`, `charging`, `inputs` — the pad's evdev nodes), `count`; polled every 10 s. Both looks draw them next to every clock (`ui/PowerBadge.qml`), the controller pages next to the pad they belong to; `--fake` reads `fixtures/power_supply` |
-| `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written) |
+| `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written, a game's sessions and their logs) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed` and `--size` turn it off) |
 | `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `frame`, `ground`, `detail`), `current`, `frame`, `set(id)`, `landing` / `takeLanding()`, `fontPath` |
 | `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `underGame` (the game is on screen over the launcher, inside gamescope), `open`, `paused`, `pauseOnHome`, `flipped`, `frame`, `volumePercent`, `muted`; `pressed()`, `stopping(title)`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher(landing?)` / `takeLanding()`, `covered()`, `stop()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotTaken(path)`), `volume(change, value)`, `launchValue(key)`, `launchChoices(key)`, `setLaunchValue(key, value)`, `screenRefresh()` |
@@ -56,6 +56,17 @@ module is still writing: no title, no paragraphs; the row pulses with the time s
 and cannot be opened) or `failed` (`reason` is the module's message, its one paragraph).
 `durationText` is the session's length — `42 min`, `1 h 05` — next to the date in the row and in
 the article header; the date is `written_at`, or `started_at` while there is none.
+`api.screens.sessions` maps a game's played sessions (the rows with a `unit`; imports are left out)
+to rows — `session`, `started_at`, `dateText`, `durationText`, `end`, `endText` (`Quit`, `Stopped`,
+`Crashed (exit 6)`, `Killed`), `bad` (crashed or killed), `exit`, `hasRecording`, `hasJournal`,
+`debugLog`, `live` — newest first, from `sessions(id)` (`load(id)`), reloaded on `libraryChanged`
+and `currentSessionChanged`; the running session leads as a `live` row with an empty `session`.
+`openLog(session)` reads that session's last 400 journal lines off the UI thread (`session_log`)
+into `log` (`time` as a clock, `source`, `message`, `error`, `warning`) with `logSession`,
+`logLoading` and `logError` beside it; `closeLog()` drops it. Reprise's `pages/SessionsPage.qml`
+(the Sessions pill of the details page, More → Sessions and logs) lists the rows on the left and the
+highlighted one's log on the right, A scrolling the log; Switch 2's `pages/PlayLogPage.qml`
+(Software Options → Play Log) lists them and A pushes `pages/SessionLogPage.qml`.
 `api.screens.shots` maps the player's own screenshots to rows — `name`, `path`, `url`,
 `taken_at`, `dateText`, `session`, `hasJournal` (a written or pending entry covers the session),
 `gameId`, `gameTitle` — newest first, from `screenshots(id)` (`load(id)`) or `screenshots("")`
@@ -124,7 +135,7 @@ What it derives is derived this way, and any frontend needs the equivalent:
 |---|---|
 | `sessionStarted` | a successful `launch` |
 | `sessionShown` | `(session_id, ok)`: the game's window is on screen and has the focus — `wait_session_window` on a host thread, waited again for as long as the session lives (a runtime download, a launcher before the game). Inside gamescope `ok` is true once gamescope shows the game's window (a stand-in toplevel carrying the gamescope's pid when no extension lists it); on the desktop, false when nobody can tell: no GNOME, no shell extension, or the session ended first |
-| `sessionEnded` | the current-session marker going empty — the `state/` watch sees `session-end` remove it (debounced 300 ms), a 2 s poll stands behind it, since the game is a systemd unit, not a child. `currentSessionChanged` fires first; the pinned tile and the badge follow that property, and only the toast, the stats refresh and a pending launch follow the signal |
+| `sessionEnded` | `(session_id, id, duration_s, end)`, `end` the session row's (`quit`, `stopped`, `crashed`, `killed`): the current-session marker going empty — the `state/` watch sees `session-end` remove it (debounced 300 ms), a 2 s poll stands behind it, since the game is a systemd unit, not a child. `currentSessionChanged` fires first; the pinned tile and the badge follow that property, and only the toast, the stats refresh and a pending launch follow the signal |
 | `libraryChanged`, `mediaChanged`, `entryWritten`, `recordingFiled` | a `QFileSystemWatcher` on `games/`, `games/<id>/{,journal,journal/attachments,media,screenshots}`, `state/` and the overrides directory with its `<id>/` subdirectories (a pick made from the CLI shows up), debounced 300 ms; `mediaChanged` also follows a pick or its removal made through the client |
 | `progress`, `jobFinished` | the job's own callback — install, update, scan and media refresh run on a host thread; `cancel(job)` stops an install or update (SIGTERM, the job fails) or a media refresh (`media_cancel`, it ends ok after the game in hand), `cancelled` set on the job either way |
 | `launched`, `launchFailed`, `error` | the call's result |

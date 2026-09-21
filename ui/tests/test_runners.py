@@ -75,6 +75,7 @@ def test_runner_form_carries_its_launch_keys(api, fake):
     assert cards(form)[6:] == [
         ("Sync", ["launch.esync", "launch.fsync", "launch.ntsync"]),
         ("Upscaling", ["launch.dlss_upgrade", "launch.fsr4_upgrade", "launch.xess_upgrade", "launch.optiscaler"]),
+        ("Logs", ["launch.debug_log"]),
     ], "the switches sit behind the gate"
     assert all(form.rows[i]["advanced"] for g in form.advancedGroups for i in g["rows"]) and all(g["advanced"] for g in form.advancedGroups)
     groups = {g["title"]: g for g in form.groups}
@@ -97,7 +98,7 @@ def test_runner_form_carries_its_launch_keys(api, fake):
     assert not form.showAdvanced, "another runner opens collapsed"
     assert form.reveal("launch.fsync", "") == index_of(form, "launch.fsync") and form.showAdvanced, "revealing an advanced row opens the gate"
     assert cards(form)[4] == ("Sync", ["launch.esync", "launch.fsync"]), "no NTSync, no Proton build on plain Wine"
-    assert [g["title"] for g in form.groups] == ["", "", "", "", "Sync"]
+    assert [g["title"] for g in form.groups] == ["", "", "", "", "Sync", "Logs"]
     form.load("dolphin")
     assert "launch.esync" not in rows_by_key(form)
     fake.core._data["gpu"] = None

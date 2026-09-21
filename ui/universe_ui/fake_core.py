@@ -186,6 +186,17 @@ def _drm_preferred_mode(screen):
     return None
 
 
+def _end_of(line):
+    exit_code, stopped = int(line.get("exit") or 0), line.get("stopped")
+    if exit_code == 0:
+        return "quit"
+    if stopped:
+        return "stopped"
+    if exit_code < 0:
+        return "killed" if stopped is False else "ended"
+    return "crashed"
+
+
 def _now():
     return datetime.now(UTC).astimezone().replace(microsecond=0).isoformat()
 
@@ -248,6 +259,7 @@ class FakeCore:
         self._process = None
         self._session = None
         self._session_started = None
+        self._stopped = False
         self._closed = False
         self._installing, self._cancel = "", ""
         self._media_stop = False
@@ -673,6 +685,7 @@ class FakeCore:
             }
             self._session = current
             self._session_started = time.monotonic()
+            self._stopped = False
             self.hud_shown = bool(self._resolved(game)["effective"].get("mangohud"))
             self._marker().write_text(json.dumps({**current, "hook_env": [], "undo": []}))
         if self._fake_launch and shutil.which("sleep"):
@@ -714,6 +727,8 @@ class FakeCore:
                     "unit": current["unit"],
                     "screen": current["screen"],
                     "exit": exit_code,
+                    "stopped": self._stopped,
+                    "command": f"gamescope -f -- universe splash -- {game.get('launch', {}).get('exe') or current['id']}",
                     "recording": None,
                 },
             )
@@ -723,6 +738,7 @@ class FakeCore:
                 self._marker().unlink()
 
     def stop(self, session_id):
+        self._stopped = True
         if self._process is not None:
             self._process.kill()
         elif self._session:
@@ -839,10 +855,48 @@ class FakeCore:
         rows.sort(key=lambda r: r["ended_at"], reverse=True)
         return rows
 
+    # A few lines shaped like a Proton game's journal; a session nobody played is NotFound, as the core says.
+    def session_log(self, ident, session_id="", tail=0):
+        game = self._game(ident)
+        lines = self._data.get("sessions", {}).get(game["id"], [])
+        current = self._session if self._session and self._session["id"] == game["id"] else None
+        line = None
+        if session_id:
+            line = next((row for row in lines if row["session"] == session_id), None)
+            if line is None and not (current and current["session_id"] == session_id):
+                raise UniverseError("NotFound", f"session {session_id} of {game['id']}")
+        elif current is None:
+            if not lines:
+                raise UniverseError("NotFound", f"{game['id']}: never played")
+            line = lines[0]
+        picked = line if line is not None else {"session": (current or {}).get("session_id", ""), "started_at": (current or {}).get("started_at", "")}
+        start = picked["started_at"]
+        exe = game.get("launch", {}).get("exe") or game["id"]
+        out = [
+            ("universe", 6, f"launch {picked['session']}: gamescope -f -W 3840 -H 2160 -- universe splash -- umu-run {exe}"),
+            ("gamescope", 6, "[gamescope] [Info]  console: gamescope version 3.16.23"),
+            ("gamescope", 6, "[gamescope] [Info]  vulkan: selecting physical device 'AMD Radeon RX 9070 XT'"),
+            ("umu-run", 6, "umu: ProtonPath: GE-Proton10-4"),
+            ("pressure-vessel-wrap", 4, "W: Unable to find a session bus for the container"),
+            ("gamescope", 6, "[gamescope] [Info]  xwm: got the primary child window 0x2000004"),
+            ("mangohud", 6, "[MANGOHUD] [info] [config.cpp:171] parsing config: /home/user/.local/state/universe/MangoHud.conf"),
+            ("wine", 3, f"wine: Unhandled page fault on read access to 0000000000000000 at address 00007FF6D2A1B3C4 in {os.path.basename(str(exe))}"),
+            ("gamescope", 6, "[gamescope] [Info]  launch: Primary child shut down!"),
+        ]
+        if line is not None:
+            out.append(("systemd", 6, f"{line['unit']}: Deactivated successfully."))
+        else:
+            out = out[:-2]
+        rows = [{"time": start, "source": s, "priority": p, "message": m} for s, p, m in out]
+        return rows[-tail:] if tail and len(rows) > tail else rows
+
     def _session_row(self, ident, line):
         row = copy.deepcopy(line)
         row.pop("recording_duration_s", None)
+        row.pop("command", None)
         row["title"] = self._game(ident)["title"]
+        row["end"] = _end_of(line)
+        row["debug_log"] = None
         row["recording"] = None
         if line.get("recording"):
             path = line["recording"] if os.path.isfile(line["recording"]) else self._fake_clip(ident, line["session"])

@@ -49,6 +49,18 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
     for bin in ["umu-run", "journalctl"] {
         push(bin, which(bin).is_some(), which(bin).unwrap_or_else(|| "missing".into()), "core");
     }
+    // journald keeps the games' output across reboots only with /var/log/journal on disk (Storage=persistent, or auto with the directory made).
+    let persistent = std::path::Path::new("/var/log/journal").is_dir();
+    push(
+        "journal-persistent",
+        persistent,
+        if persistent {
+            "/var/log/journal: the games' logs survive a reboot".into()
+        } else {
+            "no /var/log/journal: a reboot drops the games' logs (journald Storage=persistent)".into()
+        },
+        "core",
+    );
     if config.launch.fps_limit != "none" {
         push(
             "mangohud",

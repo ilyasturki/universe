@@ -21,6 +21,7 @@ Files:
   ~/.config/universe/modules/<id>/, ~/.config/universe/sources/<id>/ — user modules and sources, overriding the shipped ones
   ~/.local/share/universe/modules/<id>/, ~/.local/share/universe/sources/<id>/ — their data: caches, logins
   ~/.local/state/universe/current-session.json — the running session
+  ~/.local/state/universe/logs/<id>/<session>/ — Proton's and DXVK's logs of a launch with debug_log on; the game's own output is the journal's (`universe logs`)
   $XDG_RUNTIME_DIR/universe/controller.lock — held by the one controller watcher (the launcher's, or a session's)
 
 Environment:
@@ -147,6 +148,19 @@ pub enum Cmd {
     Sessions {
         /// Game: exact id, then whole word, substring or path
         name: String,
+    },
+    /// What a session's processes wrote: the unit's journal, the launched command line first
+    Logs {
+        /// Game: exact id, then whole word, substring or path
+        name: String,
+        /// A session id (`universe sessions`); default the running one, else the last played
+        session: Option<String>,
+        /// The last N lines; 0 prints them all
+        #[arg(short = 'n', long, default_value_t = 200)]
+        lines: usize,
+        /// Keep printing as the game writes (the running session)
+        #[arg(short, long)]
+        follow: bool,
     },
     /// Journal entries of a game
     Journal {
@@ -530,6 +544,14 @@ fn day(ts: &str, loc: &Locale) -> String {
     local(ts).map(|t| loc.date(&t)).unwrap_or_else(|| ts.get(0..10).unwrap_or("").to_string())
 }
 
+/// The row's `end`, the exit code behind a crash.
+fn fmt_end(r: &Value) -> String {
+    match s(r, "end").as_str() {
+        "crashed" => format!("crashed ({})", r["exit"].as_i64().unwrap_or(-1)),
+        other => other.to_string(),
+    }
+}
+
 fn when(ts: &str, loc: &Locale) -> String {
     local(ts).map(|t| loc.datetime(&t)).unwrap_or_else(|| ts.to_string())
 }
@@ -727,13 +749,17 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             for _ in 0..30 {
                 if let Some(s) = sessions::read(&path).unwrap_or_default().into_iter().find(|s| s.session == sid) {
                     if !json {
-                        println!("{} after {}", "ended".yellow(), fmt_duration(s.duration_s));
+                        let end = match sessions::end_of(&s) {
+                            "crashed" => format!("crashed ({})", s.exit).red().to_string(),
+                            other => other.yellow().to_string(),
+                        };
+                        println!("{end} after {}", fmt_duration(s.duration_s));
                     }
                     return Ok(());
                 }
                 tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             }
-            anyhow::bail!("session {sid} ended but was not closed; check `journalctl --user -u {unit}`");
+            anyhow::bail!("session {sid} ended but was not closed; see `universe logs {id} {sid}` or `journalctl --user -u {unit}`");
         }
         Cmd::Stop => {
             core.stop("").await?;
@@ -754,12 +780,13 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             for p in pending {
                 println!("{} writing {}… (session {})", "journal:".yellow(), s(&p, "title"), s(&p, "session"));
             }
-            let mut t = table(&["Session", "Game", "Duration", "Source", "Recording"]);
+            let mut t = table(&["Session", "Game", "Duration", "End", "Source", "Recording"]);
             for r in recent {
                 t.add_row(vec![
                     s(&r, "session"),
                     s(&r, "title"),
                     fmt_duration(r["duration_s"].as_u64().unwrap_or(0)),
+                    fmt_end(&r),
                     s(&r, "source"),
                     if r["recording"].is_null() { String::new() } else { "✓".into() },
                 ]);
@@ -919,18 +946,51 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             if json {
                 return print_json(&list);
             }
-            let mut t = table(&["Session", "Started", "Duration", "Source", "Journal", "Recording"]);
+            let mut t = table(&["Session", "Started", "Duration", "End", "Source", "Journal", "Recording"]);
             for r in rows(&list) {
                 t.add_row(vec![
                     s(&r, "session"),
                     when(&s(&r, "started_at"), &loc),
                     fmt_duration(r["duration_s"].as_u64().unwrap_or(0)),
+                    fmt_end(&r),
                     s(&r, "source"),
                     s(&r["journal"], "state"),
                     s(&r["recording"], "path"),
                 ]);
             }
             println!("{t}");
+        }
+        Cmd::Logs { name, session, lines, follow } => {
+            let id = pick(&core, &name).await?;
+            let session = session.unwrap_or_default();
+            let log = core.session_log(&id, &session, lines).await?;
+            if json {
+                return print_json(&log);
+            }
+            for l in &log {
+                let clock = local(&l.time).map(|t| t.format("%H:%M:%S").to_string()).unwrap_or_default();
+                let source = format!("{}:", l.source);
+                let source = if l.priority <= 3 { source.red().to_string() } else { source.cyan().to_string() };
+                println!("{} {source} {}", clock.dimmed(), l.message);
+            }
+            if follow {
+                let Some(c) = core.current().await.filter(|c| c.id == id && (session.is_empty() || c.session_id == session)) else {
+                    anyhow::bail!("{id} is not running; --follow needs the running session");
+                };
+                let mut child = tokio::process::Command::new("journalctl").args(["--user", "-u", &c.unit, "-f", "-n", "0", "-o", "short", "-q"]).spawn()?;
+                let unit = c.unit.clone();
+                loop {
+                    tokio::select! {
+                        _ = child.wait() => break,
+                        _ = tokio::time::sleep(std::time::Duration::from_secs(1)) => {
+                            if !core.host.units.is_active(&unit).await {
+                                child.start_kill()?;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
         }
         Cmd::Journal { name, render, open, remove, yes } => {
             let id = pick(&core, &name).await?;

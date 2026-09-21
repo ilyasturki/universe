@@ -67,7 +67,7 @@ def test_launch_writes_the_marker_and_the_end_comes_from_the_state_watch(fake):
 
     # The fake ends the session after 2 s: the session line lands, then the marker goes.
     assert wait_for(fake.sessionEnded, 6000) is not None
-    assert ended == [(launched[0][0], "control", ended[0][2])] and ended[0][2] >= 1
+    assert ended == [(launched[0][0], "control", ended[0][2], "quit")] and ended[0][2] >= 1
     assert fake.currentSession is None and len(current) == 2
     assert not (core._root / "state" / "current-session.json").exists()
     line = json.loads((core._root / "data" / "games" / "control" / "sessions.jsonl").read_text().splitlines()[-1])
@@ -90,7 +90,7 @@ def test_a_stop_ends_the_session_now(fake):
     assert wait_for(fake.launched, 3000) is not None
     fake.stop("")
     args = wait_for(fake.sessionEnded, 3000)
-    assert args is not None and args[1] == "control"
+    assert args is not None and args[1] == "control" and args[3] == "stopped", "a stop is not a crash"
     assert fake.currentSession is None
 
 

@@ -141,6 +141,28 @@ pub fn proton_toggles(e: &crate::library::Effective, rdna3: bool) -> BTreeMap<St
     env
 }
 
+/// `launch.debug_log`: Proton's log (`steam-<GAMEID>.log`) and DXVK's (`<exe>_d3d11.log`…) into `dir`; Wine's and umu's own go to stderr, the journal. Nothing for a Linux program or an emulator.
+pub fn debug_env(kind: crate::runners::Kind, dir: &Path) -> BTreeMap<String, String> {
+    use crate::runners::Kind;
+    let dir = dir.to_string_lossy().into_owned();
+    let mut env = BTreeMap::new();
+    match kind {
+        Kind::Proton => {
+            env.insert("PROTON_LOG".into(), "1".into());
+            env.insert("PROTON_LOG_DIR".into(), dir.clone());
+            env.insert("UMU_LOG".into(), "debug".into());
+        }
+        Kind::Wine => {
+            env.insert("WINEDEBUG".into(), "+timestamp,+pid,+tid,+seh,+debugstr,+loaddll,+mscoree".into());
+            env.insert("DXVK_LOG_LEVEL".into(), "info".into());
+            env.insert("VKD3D_DEBUG".into(), "warn".into());
+        }
+        Kind::Linux | Kind::Emulator => return env,
+    }
+    env.insert("DXVK_LOG_PATH".into(), dir);
+    env
+}
+
 fn proton_env(g: &crate::game::Game, r: &Resolved, config: &Config, env: &mut BTreeMap<String, String>) -> crate::Result<()> {
     let prefix = prefix_of(g, config);
     std::fs::create_dir_all(&prefix)?;
@@ -386,6 +408,19 @@ mod tests {
     use super::*;
     use crate::game::Game;
     use crate::library::Effective;
+
+    #[test]
+    fn debug_env_sends_proton_and_dxvk_to_the_dir_and_leaves_native_games_alone() {
+        let dir = Path::new("/tmp/logs/g/s");
+        let proton = debug_env(crate::runners::Kind::Proton, dir);
+        assert_eq!(
+            (proton["PROTON_LOG"].as_str(), proton["PROTON_LOG_DIR"].as_str(), proton["DXVK_LOG_PATH"].as_str(), proton["UMU_LOG"].as_str()),
+            ("1", "/tmp/logs/g/s", "/tmp/logs/g/s", "debug")
+        );
+        let wine = debug_env(crate::runners::Kind::Wine, dir);
+        assert!(wine["WINEDEBUG"].contains("+seh") && wine["DXVK_LOG_PATH"] == "/tmp/logs/g/s" && !wine.contains_key("PROTON_LOG"));
+        assert!(debug_env(crate::runners::Kind::Linux, dir).is_empty() && debug_env(crate::runners::Kind::Emulator, dir).is_empty());
+    }
 
     fn game(dir: &Path, file: &str, runner: &str) -> Game {
         let exe = dir.join(file);

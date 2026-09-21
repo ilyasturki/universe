@@ -71,6 +71,15 @@ pub fn current_session_file() -> PathBuf {
     state_home().join("current-session.json")
 }
 
+/// Where a launch with `debug_log` on sends Proton's and DXVK's files.
+pub fn game_logs_dir(id: &str) -> PathBuf {
+    state_home().join("logs").join(id)
+}
+
+pub fn session_log_dir(id: &str, session_id: &str) -> PathBuf {
+    game_logs_dir(id).join(session_id)
+}
+
 /// The CLI for hooks and ExecStopPost: $UNIVERSE_BIN, else argv[0] (makeWrapper's `exec -a "$0"` keeps the wrapper path where current_exe() would not).
 pub fn self_exe() -> PathBuf {
     if let Some(p) = std::env::var_os("UNIVERSE_BIN").filter(|p| !p.is_empty()) {

@@ -36,6 +36,11 @@ pub struct Marker {
     pub hook_env: Vec<(String, String)>,
     #[serde(default)]
     pub undo: Vec<Undo>,
+    #[serde(default)]
+    pub command: String,
+    /// Set by `stop`: the end that follows was asked for.
+    #[serde(default)]
+    pub stopped: bool,
 }
 
 /// What `launch` began, in begin order; undone in reverse.
@@ -71,6 +76,17 @@ fn write_marker(m: &Marker) -> Result<()> {
 
 fn remove_marker() {
     let _ = std::fs::remove_file(paths::current_session_file());
+}
+
+/// A change to the running session's marker, in place: a temp file renamed over it, so `session-end` never reads half a marker.
+fn update_marker(f: impl FnOnce(&mut Marker)) -> Result<()> {
+    let Some(mut m) = read_marker() else { return Ok(()) };
+    f(&mut m);
+    let p = paths::current_session_file();
+    let tmp = p.with_extension("json.tmp");
+    std::fs::write(&tmp, serde_json::to_string(&m)?)?;
+    std::fs::rename(&tmp, &p)?;
+    Ok(())
 }
 
 impl Core {
@@ -157,9 +173,19 @@ impl Core {
         let splash = (!splash.is_empty()).then(|| std::path::PathBuf::from(splash));
         let gamescope_pid = self.nest().map_or(0, |n| n.pid);
         let launcher_pid = if gamescope_pid != 0 { std::process::id() } else { 0 };
-        let plan = launcher::plan(&r, &cfg, &extra_env, mode, splash.as_deref(), gamescope_pid != 0)?;
+        let mut plan = launcher::plan(&r, &cfg, &extra_env, mode, splash.as_deref(), gamescope_pid != 0)?;
         for (path, text) in plan.mangohud_conf.iter().chain(&plan.mangoapp_conf) {
             std::fs::write(path, text)?;
+        }
+        if r.effective.debug_log {
+            if let Some(spec) = crate::runners::spec(&r.effective.runner) {
+                let dir = paths::session_log_dir(id, &session_id);
+                std::fs::create_dir_all(&dir)?;
+                let kind = if spec.via_proton { crate::runners::Kind::Proton } else { spec.kind };
+                for (k, v) in launcher::debug_env(kind, &dir) {
+                    plan.env.entry(k).or_insert(v);
+                }
+            }
         }
 
         let current = Current {
@@ -215,11 +241,16 @@ impl Core {
             self.apply_mangoapp(r.effective.mangohud, true)?;
             undo.push(Undo::Hud);
         }
-        write_marker(&Marker { current: current.clone(), hook_env, undo: undo.clone() })?;
+        write_marker(&Marker { current: current.clone(), hook_env, undo: undo.clone(), command: plan.command_line(), stopped: false })?;
         tracing::info!("launch {}: {}", r.game.id, plan.command_line());
         let budget: u64 = 60 + self.hook_modules(r, "session-end").await.iter().map(|m| m.timeout().as_secs()).sum::<u64>();
         let mut env = passthrough_env();
         env.extend(plan.env.clone());
+        let log_dir = paths::session_log_dir(&current.id, &current.session_id);
+        if log_dir.is_dir() {
+            let vars: String = env.iter().map(|(k, v)| format!("{k}={v}\n")).collect();
+            std::fs::write(log_dir.join("launch.txt"), format!("{}\n\n{vars}", plan.command_line()))?;
+        }
         // gamescope strips WAYLAND_DISPLAY from its child, but a --user unit inherits the manager's, and Qt connects there before DISPLAY.
         let unset_env = if env.contains_key("WAYLAND_DISPLAY") { vec![] } else { vec!["WAYLAND_DISPLAY".to_string()] };
         let spec = UnitSpec {
@@ -337,6 +368,8 @@ impl Core {
             unit,
             screen: marker.map(|m| m.current.screen.clone()).unwrap_or_default(),
             exit: exit.or(log.exit).unwrap_or(-1),
+            stopped: Some(marker.is_some_and(|m| m.stopped)),
+            command: marker.map(|m| m.command.clone()).unwrap_or_default(),
             ..Default::default()
         };
         sessions::append(&r.game.sessions_path(), &session)?;
@@ -375,6 +408,7 @@ impl Core {
             Ok(r) => crate::runners::spec(&r.game.runner_id()).is_none_or(|s| s.term_twice),
             Err(_) => true,
         };
+        update_marker(|m| m.stopped = true)?;
         self.host.units.stop(&c.unit, term_twice).await
     }
 
@@ -594,6 +628,77 @@ mod tests {
         assert_eq!(memory.calls().iter().filter(|c| c.starts_with("unit:adopt_scope")).count(), 1);
         let sid = core.launch("sample", "", "").await.unwrap();
         assert_eq!(memory.spec(&format!("universe-game-sample-{sid}.service")).unwrap().bind_to.as_deref(), Some(name.as_str()));
+    }
+
+    #[tokio::test]
+    async fn a_stop_files_a_stopped_end_and_the_log_opens_on_the_command_line() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let _sb = sandbox();
+        let (core, memory) = open().await;
+        let sid = core.launch("sample", "", "").await.unwrap();
+        let unit = format!("universe-game-sample-{sid}.service");
+        let command = read_marker().unwrap().command;
+        assert!(command.contains("dolphin-emu") && command.contains("F-Zero"), "{command}");
+        memory.write_line(&unit, "dolphin-emu", "booting");
+        let live = core.session_log("sample", "", 0).await.unwrap();
+        assert_eq!(live.iter().map(|l| l.message.as_str()).collect::<Vec<_>>(), [format!("launch {sid}: {command}").as_str(), "booting"]);
+        assert_eq!(live[0].source, "universe");
+        assert_eq!(core.session_log("sample", "", 1).await.unwrap().len(), 2, "the tail keeps the command line");
+
+        core.stop("").await.unwrap();
+        core.session_end("sample", &sid, None, None).await.unwrap();
+        let row = &core.sessions("sample").await.unwrap()[0];
+        assert!(row.session.stopped == Some(true) && row.session.exit == 143, "{:?}", row.session);
+        assert_eq!(sessions::end_of(&row.session), "stopped");
+        assert_eq!(row.session.command, command);
+        let json = serde_json::to_value(row).unwrap();
+        assert_eq!((json["end"].as_str(), json["debug_log"].is_null(), json.get("command")), (Some("stopped"), true, None));
+        let after = core.session_log("sample", &sid, 0).await.unwrap();
+        assert_eq!(after[0].message, format!("launch {sid}: {command}"));
+        assert!(matches!(core.session_log("sample", "19700101-000000", 0).await, Err(Error::NotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn an_unasked_signal_is_a_kill_and_a_code_a_crash() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let _sb = sandbox();
+        let (core, memory) = open().await;
+        let sid = core.launch("sample", "", "").await.unwrap();
+        memory.finish(&format!("universe-game-sample-{sid}.service"), 11);
+        core.session_end("sample", &sid, Some(11), None).await.unwrap();
+        assert_eq!(sessions::end_of(&core.sessions("sample").await.unwrap()[0].session), "crashed");
+    }
+
+    #[tokio::test]
+    async fn a_signal_nobody_asked_for_is_a_kill() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let _sb = sandbox();
+        let (core, memory) = open().await;
+        let sid = core.launch("sample", "", "").await.unwrap();
+        memory.finish(&format!("universe-game-sample-{sid}.service"), -1);
+        core.session_end("sample", &sid, None, None).await.unwrap();
+        let rows = core.sessions("sample").await.unwrap();
+        assert_eq!((rows[0].session.exit, sessions::end_of(&rows[0].session)), (-1, "killed"));
+    }
+
+    #[tokio::test]
+    async fn debug_log_makes_the_session_dir_and_a_launch_file() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let _sb = sandbox();
+        let mut g = Game::load(&Game::new("Sample").toml_path()).unwrap();
+        g.launch.debug_log = Some(true);
+        g.save().unwrap();
+        let (core, memory) = open().await;
+        let sid = core.launch("sample", "", "").await.unwrap();
+        let dir = paths::session_log_dir("sample", &sid);
+        let launch = std::fs::read_to_string(dir.join("launch.txt")).unwrap();
+        assert!(launch.starts_with(&read_marker().unwrap().command), "{launch}");
+        assert!(launch.contains("\nUNIVERSE_BIN="), "the env follows");
+        assert!(!launch.contains("PROTON_LOG"), "an emulator gets no Proton log");
+        memory.finish(&format!("universe-game-sample-{sid}.service"), 0);
+        core.session_end("sample", &sid, None, None).await.unwrap();
+        let json = serde_json::to_value(core.sessions("sample").await.unwrap()).unwrap();
+        assert_eq!(json[0]["debug_log"].as_str(), Some(dir.to_string_lossy().as_ref()));
     }
 
     #[tokio::test]

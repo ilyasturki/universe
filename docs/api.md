@@ -126,6 +126,7 @@ hooks write shows up that way, with no other channel.
 | `screenshot()` | `screenshot()` | `universe screenshot` | runs the `screenshot` hook of whichever module declares one; returns the PNG path (see Screenshots) |
 | `current()` | `current()` | `universe status` | `{session_id, id, title, unit, screen, started_at, gamescope_pid, launcher_pid}` (`gamescope_pid` is the launcher's gamescope the game was started into and `launcher_pid` that launcher, both `0` for a gamescope of the game's own), or `None`. The CLI wraps it: `status --json` prints `{"current": … or null, "recent": [the 10 newest session rows across the library], "pending_journals": [see Journal]}` |
 | `sessions(id)` | `sessions(id)` | `universe sessions <name>` | `[SessionRow]`, newest first (by `ended_at`); `id = ""` spans every visible game (not removed, not hidden) |
+| `session_log(id, session_id, tail)` | `session_log(id, session_id="", tail=0)` | `universe logs <name> [session] [-n N] [-f]` | what a session's processes wrote (see Logs): `[{time, source, priority, message}]`, oldest first, the last `tail` lines (0: all). `session_id` `""` is the running session, else the newest played; `NotFound` for a session that never was, `[]` once the journal has let the unit go, and for an import |
 | `session_end(id, session_id, exit, ended)` | — | `universe session-end <id> <session>` | closes the session, idempotent. Run by systemd's `ExecStopPost`, or by reconciliation |
 
 One `sessions.jsonl` line:
@@ -134,7 +135,8 @@ One `sessions.jsonl` line:
 {"session":"20260910-213045","game":"the-technomancer","started_at":"RFC3339",
  "ended_at":"RFC3339","duration_s":1234,"source":"universe",
  "unit":"universe-game-the-technomancer-20260910-213045.service","screen":"DP-1",
- "exit":0,"recording":"path or null","recording_duration_s":1230,
+ "exit":0,"stopped":false,"command":"gamescope -f … -- universe splash -- umu-run …",
+ "recording":"path or null","recording_duration_s":1230,
  "recording_started_at":"RFC3339 or empty","recording_pauses":[["RFC3339","RFC3339"]]}
 ```
 
@@ -147,18 +149,48 @@ wall-clock moment maps onto the file at `moment − started_at − the pauses be
 listing joins onto it, in the line's place:
 
 ```json
-{"session":…, "game":…, "title":"The Technomancer", …,
+{"session":…, "game":…, "title":"The Technomancer", …, "end":"quit",
  "recording":{"path":"…/20260910-213045.mkv","size":2147483648,"exists":true,"duration_s":1230,
               "started_at":"RFC3339 or empty","pauses":[["RFC3339","RFC3339"]]} or null,
- "journal":{"state":"written","title":"Into the Dome","written_at":"RFC3339"} or null}
+ "journal":{"state":"written","title":"Into the Dome","written_at":"RFC3339"} or null,
+ "debug_log":"path or null"}
 ```
 
 `recording` stands for the file (`duration_s`, `started_at` and `pauses` are the line's
 `recording_*` keys); `journal` is the entry's state, `title` and `written_at` (see Journal),
-`null` when the session has none.
+`null` when the session has none; `command` stays on the line (the log's first line, see Logs).
 
 `source ∈ universe, import-recording, import-lutris`. `exit` is the main process's exit code, `-1`
-when it was killed by a signal (a `stop`).
+when it was killed by a signal; `stopped` says whether `stop` asked for that end. The row's `end`
+reads both: `quit` (0), `stopped` (asked), `crashed` (a code), `killed` (a signal nobody asked
+for: the launcher's scope went, the OOM killer), `ended` (a signal on a line older than `stopped`).
+The CLI tables and both looks say so; the end-of-session toast names a crash or a kill. What
+`exit` sees is the unit's main process — gamescope or umu-run — so a game that dies inside a
+wrapper that exits 0 files as `quit`: the log tells.
+
+### Logs
+
+A game's output is the systemd user journal's: the transient unit writes nothing else, so every
+process under it — gamescope, umu-run, pressure-vessel, Wine, the emulator, MangoHud, and
+`session-end` with its hooks as `ExecStopPost` — lands under `_SYSTEMD_USER_UNIT=<unit>`, and
+stays as long as journald keeps it (`doctor`'s `journal-persistent` wants `/var/log/journal` on
+disk, else a reboot drops it). `session_log` reads it back (`journalctl --user -u <unit> -o json`,
+colours stripped, non-UTF-8 lines dropped) with the launched command line as a first line from the
+session's `command`, which survives the journal. `universe logs <name>` prints the newest session's
+(or the running one's), `universe logs <name> <session>` an older one's, `-f` follows the running
+one, `--json` the rows; `universe sessions` and `status` carry the `End` column, and a failed
+`universe play` points at `logs`. In the UI a game's Sessions (Reprise: the Sessions pill on its
+details, or More → Sessions and logs; Switch 2: Software Options → Play Log) lists every session
+with its end and opens the log's last 400 lines, the running session first.
+
+`launch.debug_log` (global or per game, Proton and Wine only, off by default) adds the runners'
+own verbose logs for the session: `PROTON_LOG=1` with `PROTON_LOG_DIR` (Proton's
+`steam-<GAMEID>.log`, its `WINEDEBUG` set), `UMU_LOG=debug`, `DXVK_LOG_PATH` (`<exe>_d3d11.log`,
+`_dxgi.log`…), and for plain Wine `WINEDEBUG=+timestamp,+pid,+tid,+seh,+debugstr,+loaddll,+mscoree`,
+`DXVK_LOG_LEVEL=info`, `VKD3D_DEBUG=warn`. The files land in
+`$XDG_STATE_HOME/universe/logs/<id>/<session>/` beside a `launch.txt` (the command line, then the
+unit's environment); the row's `debug_log` is that directory when it exists, and `remove --purge`
+trashes `logs/<id>/`. A key of `[launch.env]` with the same name wins over the switch.
 
 ### Gamescope
 
@@ -658,6 +690,7 @@ dlss_upgrade = "off"                # PROTON_DLSS_UPGRADE, PROTON_FSR4_UPGRADE, 
 fsr4_upgrade = "off"                # auto | on | off (or a bool): auto is on where the GPU makes it a plain win; on RDNA 3 PROTON_FSR4_RDNA3_UPGRADE instead
 xess_upgrade = "off"
 optiscaler = false
+debug_log = false                    # Proton, Wine and DXVK verbose logs into <state>/logs/<id>/<session>/ (see Logs)
 mangohud = false                     # the HUD shown at launch (loaded and hidden when false, the limit still holds); flipped in game by the dock and the mangohud macro, which write it back
 gamescope = true                     # every game inside gamescope: one window, black until the game draws
 gamescope_args = ""                  # after the flags below, and over them; --expose-wayland keeps PROTON_ENABLE_WAYLAND

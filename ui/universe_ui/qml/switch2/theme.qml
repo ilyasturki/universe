@@ -460,10 +460,13 @@ FocusScope {
         function onNotice(message) {
             toast.show(message);
         }
-        function onSessionEnded(sessionId, id, duration) {
+        function onSessionEnded(sessionId, id, duration, end) {
             var game = api.allGames.byId(id);
-            if (game)
-                toast.show(game.title + " · " + Math.max(1, Math.round(duration / 60)) + " min");
+            var minutes = Math.max(1, Math.round(duration / 60)) + " min";
+            if (game && (end === "crashed" || end === "killed"))
+                toast.show(game.title + (end === "crashed" ? " crashed after " : " was killed after ") + minutes + ". See its Play Log.");
+            else if (game)
+                toast.show(game.title + " · " + minutes);
             if (root.pendingLaunch)
                 root.launch(root.pendingLaunch);
             root.pendingLaunch = null;

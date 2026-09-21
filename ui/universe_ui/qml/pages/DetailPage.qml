@@ -16,14 +16,16 @@ FocusScope {
     signal recordingsRequested(var game)
     signal journalRequested(var game)
     signal screenshotsRequested(var game)
+    signal sessionsRequested(var game)
 
     readonly property int recordingCount: game && filed >= 0 ? (api.universe.recordings(game.id) || []).length : 0
     readonly property int entryCount: game && filed >= 0 ? (api.universe.journal(game.id) || []).length : 0
     readonly property int shotCount: game && filed >= 0 ? (api.universe.screenshots(game.id) || []).length : 0
     property int filed: 0
-    readonly property var pills: ["play", "favourite"].concat(shotCount > 0 ? ["shots"] : [], recordingCount > 0 ? ["recordings"] : [], entryCount > 0 ? ["journal"] : [])
+    readonly property bool played: game !== null && game.playCount > 0
+    readonly property var pills: ["play", "favourite"].concat(shotCount > 0 ? ["shots"] : [], recordingCount > 0 ? ["recordings"] : [], entryCount > 0 ? ["journal"] : [], played ? ["sessions"] : [])
     readonly property string action: pills[Math.max(0, Math.min(actionIndex, pills.length - 1))] || "play"
-    readonly property string acceptLabel: action === "favourite" ? favouriteLabel : action === "shots" ? "Screenshots" : action === "recordings" ? "Recordings" : action === "journal" ? "Journal" : game && game.playTime > 0 ? "Continue" : "Play"
+    readonly property string acceptLabel: action === "favourite" ? favouriteLabel : action === "shots" ? "Screenshots" : action === "recordings" ? "Recordings" : action === "journal" ? "Journal" : action === "sessions" ? "Sessions" : game && game.playTime > 0 ? "Continue" : "Play"
 
     readonly property real scrollY: flick.contentY
 
@@ -393,6 +395,15 @@ FocusScope {
                         focused: actions.active && page.action === "journal"
                         dimmed: actions.active && page.action !== "journal"
                     }
+
+                    PillButton {
+                        visible: page.played
+                        label: "Sessions"
+                        icon: "terminal"
+                        ghost: true
+                        focused: actions.active && page.action === "sessions"
+                        dimmed: actions.active && page.action !== "sessions"
+                    }
                 }
             }
 
@@ -558,6 +569,8 @@ FocusScope {
                 page.recordingsRequested(page.game);
             } else if (page.section === 0 && page.action === "journal") {
                 page.journalRequested(page.game);
+            } else if (page.section === 0 && page.action === "sessions") {
+                page.sessionsRequested(page.game);
             } else {
                 page.launchRequested(page.game);
             }

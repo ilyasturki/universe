@@ -437,6 +437,11 @@ FocusScope {
                 action: "settings"
             },
             {
+                icon: "terminal",
+                label: "Sessions and logs",
+                action: "sessions"
+            },
+            {
                 icon: "image",
                 label: "Artwork",
                 action: "artwork"
@@ -458,7 +463,8 @@ FocusScope {
             artwork: "ArtworkPage",
             screenshots: "ScreenshotsPage",
             recordings: "RecordingsPage",
-            journal: "JournalPage"
+            journal: "JournalPage",
+            sessions: "SessionsPage"
         };
         gameMenu.show(items, anchor, Qt.rect(0, 0, anchor.width, anchor.height), "", function (action) {
             if (action === "media") {
@@ -976,6 +982,11 @@ FocusScope {
                     game: game
                 });
             }
+            function onSessionsRequested(game) {
+                root.openSub("pages/SessionsPage.qml", {
+                    game: game
+                });
+            }
         }
 
         Behavior on opacity {
@@ -1107,10 +1118,15 @@ FocusScope {
         function onNotice(message) {
             toast.show(message);
         }
-        function onSessionEnded(sessionId, id, duration) {
+        function onSessionEnded(sessionId, id, duration, end) {
             var game = api.allGames.byId(id);
-            if (game)
-                toast.show(game.title + " · " + Math.max(1, Math.round(duration / 60)) + " min");
+            var minutes = Math.max(1, Math.round(duration / 60)) + " min";
+            if (game && end === "crashed")
+                toast.show(game.title + " crashed after " + minutes + " — its log is under Sessions and logs");
+            else if (game && end === "killed")
+                toast.show(game.title + " was killed after " + minutes + " — its log is under Sessions and logs");
+            else if (game)
+                toast.show(game.title + " · " + minutes);
             var next = root.pendingLaunch;
             root.pendingLaunch = null;
             if (next)
@@ -1185,7 +1201,8 @@ FocusScope {
             openSub("pages/" + {
                 journal: "JournalPage",
                 recordings: "RecordingsPage",
-                screenshots: "ScreenshotsPage"
+                screenshots: "ScreenshotsPage",
+                sessions: "SessionsPage"
             }[landing] + ".qml", {
                 game: game
             });

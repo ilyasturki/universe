@@ -12,6 +12,7 @@ from .onboarding import Onboarding
 from .paths import PathBrowser
 from .runners import RunnerForm, RunnersForm
 from .search import SettingsSearch
+from .sessions import SessionsList
 from .settings import GameSettingsForm, ModuleForm, ModulesForm, SourceForm, SourcesForm
 from .sources import LoginFlow, SourcesBrowser
 
@@ -34,6 +35,7 @@ class Screens(QObject):
         self._shots = ScreenshotsList(client, self._thumbs, self)
         self._media = MediaTimeline(client, self._recordings, self._thumbs, self)
         self._pendingJournals = PendingJournals(client, self)
+        self._sessions = SessionsList(client, self)
         self._paths = PathBrowser(client, self)
         self._controller = ControllerScreen(client, memory, power, self)
         self._runners = RunnersForm(client, self)
@@ -64,6 +66,7 @@ class Screens(QObject):
     media = Property(QObject, lambda self: self._media, constant=True)
     thumbs = Property(QObject, lambda self: self._thumbs, constant=True)
     pendingJournals = Property(QObject, lambda self: self._pendingJournals, constant=True)
+    sessions = Property(QObject, lambda self: self._sessions, constant=True)
     album = Property(QObject, lambda self: self._recordings, constant=True)
     news = Property(QObject, lambda self: self._journal, constant=True)
     paths = Property(QObject, lambda self: self._paths, constant=True)

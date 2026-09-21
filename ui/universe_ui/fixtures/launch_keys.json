@@ -489,6 +489,21 @@
     "advanced": true
   },
   {
+    "key": "debug_log",
+    "type": "bool",
+    "default": false,
+    "choices": [],
+    "label": "Debug log",
+    "section": "Logs",
+    "scope": "both",
+    "runners": [
+      "proton",
+      "wine"
+    ],
+    "description": "Proton, Wine and DXVK write their full logs for each session, kept with the game's own under Sessions. Large; on for a game that misbehaves.",
+    "advanced": true
+  },
+  {
     "key": "gamescope_bin",
     "type": "path",
     "default": "gamescope",

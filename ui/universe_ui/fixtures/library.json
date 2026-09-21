@@ -177,6 +177,19 @@
         "recording": "/mnt/recordings/games/the-technomancer/20260907-224100.mkv"
       },
       {
+        "session": "20260905-190000",
+        "game": "the-technomancer",
+        "started_at": "2026-09-05T19:00:00+02:00",
+        "ended_at": "2026-09-05T19:03:40+02:00",
+        "duration_s": 220,
+        "source": "daemon",
+        "unit": "universe-game-the-technomancer-20260905-190000.scope",
+        "screen": "DP-1",
+        "exit": 6,
+        "stopped": false,
+        "recording": null
+      },
+      {
         "session": "20260901-200000",
         "game": "the-technomancer",
         "started_at": "2026-09-01T20:00:00+02:00",

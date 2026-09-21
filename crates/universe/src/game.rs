@@ -59,6 +59,7 @@ pub struct Launch {
     pub fsr4_upgrade: Option<crate::config::Toggle>,
     pub xess_upgrade: Option<crate::config::Toggle>,
     pub optiscaler: Option<bool>,
+    pub debug_log: Option<bool>,
     pub dll_overrides: BTreeMap<String, String>,
     pub env: BTreeMap<String, String>,
     /// Runs the program: `gamemoderun`, `taskset -c 0-7`…, innermost, after gamescope.
@@ -151,6 +152,7 @@ impl Default for Launch {
             fsr4_upgrade: None,
             xess_upgrade: None,
             optiscaler: None,
+            debug_log: None,
             dll_overrides: BTreeMap::new(),
             env: BTreeMap::new(),
             wrapper: String::new(),
