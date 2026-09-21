@@ -230,8 +230,8 @@ FocusScope {
                 readonly property color ink: disabled || entry.dim === true ? Theme.textDisabled : Theme.text
                 // A search hit: where the row lives, muted, in front of its label.
                 readonly property string path: entry.path !== undefined && entry.path !== null ? String(entry.path) : ""
-                // Where an inheritable value comes from: set on this game or runner, the global settings, or the default.
-                readonly property string originTag: entry.origin === "game" ? "THIS GAME" : entry.origin === "runner" ? "THIS RUNNER" : entry.origin === "global" ? "GLOBAL" : entry.origin === "default" ? "DEFAULT" : ""
+                // Where an inheritable value comes from when something sets it: this game or runner, or the global settings; the default reads plain.
+                readonly property string originTag: entry.origin === "game" ? "THIS GAME" : entry.origin === "runner" ? "THIS RUNNER" : entry.origin === "global" ? "GLOBAL" : ""
 
                 function esc(text) {
                     return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");

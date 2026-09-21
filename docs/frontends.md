@@ -107,9 +107,9 @@ out itself). `hasAdvanced` says whether there are any, the pages flip `showAdvan
 what a search hit lands on. The controller screen alone keeps a gate row (`key: "advanced"`, an
 action, its group `wide: true`). A row that can inherit carries `origin`: `game` (set on the game),
 `runner` (set on the runner), `global` (`config.toml` sets it, told by `settings()["set"]`) or
-`default` (nothing does) — the looks chip it THIS GAME, THIS RUNNER, GLOBAL, DEFAULT, the value
-shown bare; `inherited` is true for the last two, and a row inherited with no `origin` (a runner's
-found program) is only that, chipped INHERITED. A value is overridden by changing it; X is
+`default` (nothing does) — the looks chip the first three THIS GAME, THIS RUNNER, GLOBAL, the value
+shown bare, and a default, most rows, reads plain; `inherited` is true for the last two, and a row
+inherited with no `origin` (a runner's found program) is only that, chipped INHERITED. A value is overridden by changing it; X is
 `reset(index)` where `resettable(row)` says so — a `game` or `runner` row, whose own value goes
 (an empty write, the key leaves the file) so the row inherits again, or a map's entry, which goes
 out of the map. A runner picker's `valueIcon` is the picked runner's logo, drawn by the value;

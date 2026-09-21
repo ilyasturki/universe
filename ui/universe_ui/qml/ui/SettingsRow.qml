@@ -35,10 +35,10 @@ Item {
     // A search hit: where the row lives, muted, in front of its label; a tag (ADVANCED) next to the value.
     readonly property string path: entry.path !== undefined && entry.path !== null ? String(entry.path) : ""
     readonly property string tag: entry.tag !== undefined && entry.tag !== null ? String(entry.tag) : ""
-    // Where an inheritable value comes from: set on this game or runner, the global settings, or the default; a row
-    // inherited with no `origin` (a runner's found program) keeps the plain chip.
+    // Where an inheritable value comes from when something sets it: this game or runner, or the global settings; the
+    // default, most rows, reads plain. A row inherited with no `origin` (a runner's found program) keeps the plain chip.
     readonly property string origin: entry.origin !== undefined && entry.origin !== null ? String(entry.origin) : ""
-    readonly property var tags: [tag, origin === "game" ? "THIS GAME" : origin === "runner" ? "THIS RUNNER" : origin === "global" ? "GLOBAL" : origin === "default" ? "DEFAULT" : entry.inherited === true ? "INHERITED" : ""].filter(Boolean)
+    readonly property var tags: [tag, origin === "game" ? "THIS GAME" : origin === "runner" ? "THIS RUNNER" : origin === "global" ? "GLOBAL" : origin === "" && entry.inherited === true ? "INHERITED" : ""].filter(Boolean)
 
     opacity: entry.disabled === true && !focused ? 0.45 : 1.0
 
