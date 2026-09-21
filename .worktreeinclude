@@ -1,5 +1,0 @@
-# .dev/config stays out (config.toml holds main-checkout paths, `just env` regenerates it); so does .venv (`just develop`)
-.dev/cache/
-.dev/data/
-.dev/journal/
-.dev/state/

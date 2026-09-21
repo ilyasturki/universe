@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# WorktreeRemove: the counterpart of worktree-create. A no-op once Claude's own git removal has already run.
+set -euo pipefail
+p=$(jq -r .worktree_path)
+[ -d "$p" ] || exit 0
+main=$(dirname "$(git -C "$p" rev-parse --path-format=absolute --git-common-dir)")
+git -C "$main" worktree remove --force "$p"
+git -C "$main" branch -D "worktree-$(basename "$p")" 2>/dev/null || true

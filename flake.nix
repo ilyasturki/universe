@@ -401,6 +401,7 @@
             clippy
             rustfmt
             rust-analyzer
+            sccache
             pkg-config
             sqlite
             ruff
@@ -424,6 +425,7 @@
             lib.makeLibraryPath [ pkgs.pipewire ]
           }''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           export QT_FORCE_STDERR_LOGGING=1
+          export RUSTC_WRAPPER=sccache
         '';
       };
 

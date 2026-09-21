@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# WorktreeCreate: `git worktree add` under the main checkout, then the .dev profile. Journals, media and screenshots are hardlinked (every writer renames into place); the files written in place — sessions.jsonl, media/.sync.json, cache/index.db*, state/ — are copied. .dev/config stays out: config.toml holds checkout paths, `just env` regenerates it. .venv stays out: `just develop`.
+set -euo pipefail
+exec 3>&1 1>&2
+input=$(cat)
+name=$(printf '%s' "$input" | jq -r .name)
+cwd=$(printf '%s' "$input" | jq -r .cwd)
+main=$(dirname "$(git -C "$cwd" rev-parse --path-format=absolute --git-common-dir)")
+dir="$main/.claude/worktrees/$name"
+git -C "$main" worktree add -b "worktree-$name" "$dir" HEAD
+
+blob() {
+    case "$1" in
+        journal/*/.*|data/games/*/journal/.*|data/games/*/media/.*|data/games/*/screenshots/.*) return 1 ;;
+        journal/*|data/games/*/journal/*|data/games/*/media/*|data/games/*/screenshots/*) return 0 ;;
+    esac
+    return 1
+}
+[ -d "$main/.dev" ] || { echo "$dir" >&3; exit 0; }
+cd "$main/.dev"
+for top in data journal state cache; do [ -d "$top" ] || continue; find "$top" -type f; done | while IFS= read -r f; do
+    mkdir -p "$dir/.dev/$(dirname "$f")"
+    if blob "$f"; then ln "$f" "$dir/.dev/$f"; else cp -p "$f" "$dir/.dev/$f"; fi
+done
+echo "$dir" >&3
