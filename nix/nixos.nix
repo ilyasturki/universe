@@ -49,6 +49,12 @@ in
     programs.gamescope = lib.mkIf cfg.gamescope.enable {
       enable = true;
       capSysNice = lib.mkDefault true;
+      # gamescope passes -1 to vkAllocateMemory when no host memory type is both cached and coherent (ANV on Meteor Lake): the patch settles for coherent.
+      package = lib.mkDefault (
+        pkgs.gamescope.overrideAttrs (o: {
+          patches = (o.patches or [ ]) ++ [ ./gamescope-mappable-fallback.patch ];
+        })
+      );
     };
   };
 }
