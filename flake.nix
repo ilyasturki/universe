@@ -226,6 +226,8 @@
         terminal = false;
         categories = [ "Game" ];
         startupNotify = true;
+        # fullscreen runs inside gamescope, whose toplevel hardcodes app_id "gamescope"
+        startupWMClass = "gamescope";
       };
 
       ui = pkgs.python3Packages.buildPythonApplication {
