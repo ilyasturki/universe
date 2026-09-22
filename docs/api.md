@@ -105,6 +105,10 @@ own `modules` table stays what `game.toml` holds, like `launch`. The upscaler up
 `gpu()`); `gamescope_adaptive_sync` stays `auto`, `on` or `off`, since the screen is only known
 at launch. `media.screenshots` is the store's promotional shots: `screenshots/` under the
 overrides, then under `media/`. The player's own are `screenshots(id)` (see Screenshots).
+`added_at` (RFC 3339, in `game.toml`) is when a store install or `add_game` brought the game in — a
+frontend's "recently added"; a Lutris import, a ROM import or a source scan leaves it empty, since
+those games were already there. A store install of a game `remove`d earlier clears `removed_at` and `hidden` and
+re-stamps it; what was parked under `.archive/` stays parked.
 
 There is no change notification: the files are the truth, so a frontend watches `games/`,
 `games/<id>/{,journal,journal/attachments,media,screenshots}`, `state/` and the overrides directory and rereads. Everything the CLI, `session-end` and the

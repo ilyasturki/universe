@@ -16,6 +16,8 @@ pub struct Game {
     pub hidden: bool,
     pub favorite: bool,
     pub tags: Vec<String>,
+    /// Set by a store install or an add; empty for an import or a scan, which enter the library unnoticed.
+    pub added_at: String,
     pub removed_at: String,
     pub source: Source,
     pub launch: Launch,
@@ -115,6 +117,7 @@ impl Default for Game {
             hidden: false,
             favorite: false,
             tags: vec![],
+            added_at: String::new(),
             removed_at: String::new(),
             source: Source::default(),
             launch: Launch::default(),
@@ -179,6 +182,13 @@ impl Default for Launch {
 impl Game {
     pub fn new(title: &str) -> Game {
         Game { id: crate::slug::slug(title), title: title.to_string(), ..Default::default() }
+    }
+
+    /// The game is new to the library as of now: HOME lists it first until something is played after it.
+    pub fn mark_added(&mut self) {
+        self.added_at = chrono::Local::now().to_rfc3339();
+        self.removed_at.clear();
+        self.hidden = false;
     }
 
     pub fn dir(&self) -> PathBuf {

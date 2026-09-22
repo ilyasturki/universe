@@ -244,7 +244,12 @@ impl Core {
         self.reload_game(id).await
     }
 
+    /// One file picked by hand: it lands as new. A ROM import (`import_roms`) finds what was there all along.
     pub async fn add_game(&self, v: &serde_json::Value) -> Result<String> {
+        self.add_game_with(v, true).await
+    }
+
+    async fn add_game_with(&self, v: &serde_json::Value, stamp: bool) -> Result<String> {
         let field = |k: &str| v.get(k).and_then(|x| x.as_str()).unwrap_or("").trim().to_string();
         let spec = crate::runners::spec(&field("runner")).ok_or_else(|| Error::Invalid(format!("unknown runner '{}'", field("runner"))))?;
         let exe = field("exe");
@@ -261,6 +266,9 @@ impl Core {
             return Err(Error::Invalid("a title is needed".into()));
         }
         let mut g = Game::new(&title);
+        if stamp {
+            g.mark_added();
+        }
         if g.id.is_empty() {
             return Err(Error::Invalid(format!("'{title}' makes no id")));
         }
@@ -373,7 +381,7 @@ impl Core {
         report.applied = true;
         let mut added = Vec::new();
         for f in std::mem::take(&mut report.imported) {
-            match self.add_game(&serde_json::json!({"runner": f.runner, "exe": f.path, "title": f.title})).await {
+            match self.add_game_with(&serde_json::json!({"runner": f.runner, "exe": f.path, "title": f.title}), false).await {
                 Ok(_) => added.push(f),
                 Err(e) => report.skipped.push(crate::roms::Skipped { path: f.path, reason: e.to_string() }),
             }
@@ -1342,7 +1350,7 @@ impl Core {
     }
 
     /// Creates the game when owned and installed, updates its source fields otherwise.
-    async fn apply_source_game(&self, source: &str, g: &serde_json::Map<String, serde_json::Value>, create: bool) -> Result<Option<String>> {
+    async fn apply_source_game(&self, source: &str, g: &serde_json::Map<String, serde_json::Value>, create: bool, stamp: bool) -> Result<Option<String>> {
         let field = |k: &str| g.get(k).and_then(|v| v.as_str()).unwrap_or("").to_string();
         let (sid, title, dir, exe, build) = (field("id"), field("title"), field("dir"), field("exe"), field("build"));
         let owned = g.get("owned").and_then(|v| v.as_bool());
@@ -1355,10 +1363,11 @@ impl Core {
             let games = self.games.read().await;
             games.iter().find(|x| x.game.source.gog_id == sid).or_else(|| games.iter().find(|x| x.game.id == crate::slug::slug(&title))).map(|x| x.game.clone())
         };
+        let arriving = create && installed && owned == Some(true);
         let mut game = match existing {
             Some(g) => g,
             None => {
-                if !(create && installed && owned == Some(true)) {
+                if !arriving {
                     return Ok(None);
                 }
                 let mut ng = Game::new(&title);
@@ -1366,6 +1375,10 @@ impl Core {
                 ng
             }
         };
+        // A scan finds what was there all along; only an install lands a game as new (or back from the archive).
+        if stamp && arriving && (game.added_at.is_empty() || !game.removed_at.is_empty()) {
+            game.mark_added();
+        }
         if !dir.is_empty() {
             game.source.dir = dir.clone();
         }
@@ -1410,7 +1423,7 @@ impl Core {
             }
             let events = self.run_verb(&m, "scan", &[], progress.as_deref_mut()).await?;
             for g in Self::game_events(&events) {
-                if let Ok(Some(_)) = self.apply_source_game(&sid, &g, true).await {
+                if let Ok(Some(_)) = self.apply_source_game(&sid, &g, true, false).await {
                     found += 1;
                 }
             }
@@ -1425,7 +1438,7 @@ impl Core {
         for mut g in Self::game_events(&events) {
             g.entry("owned".to_string()).or_insert(serde_json::Value::Bool(true));
             g.entry("installed".to_string()).or_insert(serde_json::Value::Bool(true));
-            if let Ok(Some(i)) = self.apply_source_game(source, &g, true).await {
+            if let Ok(Some(i)) = self.apply_source_game(source, &g, true, true).await {
                 id = i;
             }
         }
@@ -1460,7 +1473,7 @@ impl Core {
         for t in targets {
             let events = self.run_verb(&m, "update", std::slice::from_ref(&t), progress.as_deref_mut()).await.map_err(|e| Error::Io(format!("{t}: {e}")))?;
             for g in Self::game_events(&events) {
-                let _ = self.apply_source_game(source, &g, false).await;
+                let _ = self.apply_source_game(source, &g, false, false).await;
             }
             n += 1;
         }
@@ -1712,6 +1725,33 @@ scan) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":true
         assert!(result.unwrap_err().to_string().contains("143"), "the source exits on the TERM");
         assert_eq!(seen, 1, "progress reached the caller before the cancel");
         assert!(core.source_jobs.lock().unwrap().is_empty(), "the registry is cleared on the way out");
+    }
+
+    #[tokio::test]
+    async fn an_install_stamps_the_arrival_a_scan_does_not_and_a_removed_game_comes_back() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let _dir = fake_source(
+            r#"scan) echo '{"event":"game","id":"1","title":"Old","owned":true,"installed":true,"dir":"/g/Old","exe":"old.exe"}' ;;
+install) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":true,"dir":"/g/New","exe":"new.exe"}' ;;"#,
+        );
+        let core = open().await;
+        assert_eq!(core.source_scan("fake", None).await.unwrap(), 1);
+        let old = core.get("old").await.unwrap().to_json();
+        assert_eq!(old["added_at"], "", "a scan finds what was there all along");
+        let id = core.source_install("fake", "2", None).await.unwrap();
+        assert_eq!(id, "new");
+        let new = core.get("new").await.unwrap().to_json();
+        let first = new["added_at"].as_str().unwrap().to_string();
+        assert!(!first.is_empty(), "an install lands the game as new");
+        core.source_install("fake", "2", None).await.unwrap();
+        assert_eq!(core.get("new").await.unwrap().to_json()["added_at"], first, "an update keeps the arrival");
+        core.remove("new", false).await.unwrap();
+        assert!(core.list().await.iter().all(|g| g["id"] != "new"));
+        core.source_install("fake", "2", None).await.unwrap();
+        let back = core.get("new").await.unwrap().to_json();
+        assert!(core.list().await.iter().any(|g| g["id"] == "new"), "back from the archive");
+        assert_eq!((back["removed"].as_bool(), back["hidden"].as_bool()), (Some(false), Some(false)));
+        assert!(back["added_at"].as_str().unwrap() >= first.as_str(), "re-stamped");
     }
 
     #[test]
