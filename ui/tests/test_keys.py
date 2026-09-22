@@ -55,6 +55,19 @@ def test_the_mode_follows_the_last_device(app):
     assert not gamepad.POSTED
 
 
+def test_a_key_without_a_keysym_is_not_the_keyboard(app):
+    keys = Keys()
+    window = QWindow()
+    keys.watch(window)
+    gamepad.POSTED.clear()
+    for key in (Qt.Key(0), Qt.Key.Key_unknown):
+        keys.eventFilter(window, key_event(key))
+        keys.eventFilter(window, key_event(key, pressed=False))
+        assert keys.mode == "pad", "InputPlumber's keyboard sends KEY_UNKNOWN for every pad button: it is not typing"
+    keys.eventFilter(window, key_event(Qt.Key.Key_I, text="i"))
+    assert keys.mode == "keyboard"
+
+
 def test_backspace_cancels_but_holding_it_does_not_ask_to_quit(app):
     keys = Keys()
     window = QWindow()

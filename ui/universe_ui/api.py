@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from pathlib import Path
 from typing import cast
@@ -46,6 +47,22 @@ GLYPH_ACTIONS = {
     "Start": "Menu",
 }
 KEY_LABELS = {Qt.Key.Key_Return: "Enter", Qt.Key.Key_Escape: "Esc", Qt.Key.Key_PageUp: "PgUp", Qt.Key.Key_PageDown: "PgDn"}
+
+
+def describe_event(event):
+    if event is None:
+        return "?"
+    parts = [str(event.type()).rsplit(".", 1)[-1], "spontaneous" if event.spontaneous() else "posted"]
+    if hasattr(event, "nativeScanCode"):
+        parts.append(
+            f"key={int(event.key())} text={event.text()!r} scan={event.nativeScanCode()} vkey={event.nativeVirtualKey()} repeat={event.isAutoRepeat()}"
+        )
+    if hasattr(event, "globalPosition"):
+        parts.append(f"pos={event.position().toPoint().toTuple()} global={event.globalPosition().toPoint().toTuple()}")
+    if hasattr(event, "device") and event.device() is not None:
+        dev = event.device()
+        parts.append(f"device={dev.name()!r} type={str(dev.type()).rsplit('.', 1)[-1]} seat={dev.seatName()!r}")
+    return " ".join(parts)
 
 
 def key_label(key):
@@ -162,9 +179,11 @@ class Keys(QObject):
 
         return QGuiApplication.focusWindow() or (self._windows[0] if self._windows else None)
 
-    def _set_mode(self, mode):
+    def _set_mode(self, mode, event=None):
         if mode == self._mode:
             return
+        if os.environ.get("UNIVERSE_UI_INPUT_LOG"):
+            logging.getLogger("universe.keys").info("mode %s -> %s on %s", self._mode, mode, describe_event(event))
         self._mode = mode
         for window in self._windows:
             self._cursor(window)
@@ -183,16 +202,17 @@ class Keys(QObject):
         if kind in (QEvent.Type.KeyPress, QEvent.Type.KeyRelease):
             source = posted_source(event.key(), kind == QEvent.Type.KeyPress)
             if source == "pad":
-                self._set_mode("pad")
-            elif source is None:
-                self._set_mode("keyboard")
+                self._set_mode("pad", event)
+            # A key with no keysym is not typing: InputPlumber's keyboard target sends KEY_UNKNOWN for every pad button.
+            elif source is None and event.key() not in (0, Qt.Key.Key_unknown):
+                self._set_mode("keyboard", event)
             if not event.isAutoRepeat() and event.key() in HOLD_KEYS:
                 if kind == QEvent.Type.KeyPress:
                     self._hold.start()
                 else:
                     self._hold.stop()
         elif kind in (QEvent.Type.MouseMove, QEvent.Type.MouseButtonPress, QEvent.Type.Wheel):
-            self._set_mode("mouse")
+            self._set_mode("mouse", event)
         return False
 
     # "pad" | "keyboard" | "mouse": whatever was used last. The hints read it; a hover counts only under a mouse.

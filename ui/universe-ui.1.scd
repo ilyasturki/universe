@@ -88,6 +88,9 @@ plain wheel too when nothing behind it scrolls. The cursor shows while the mouse
 *UNIVERSE_CONFIG_HOME*, *UNIVERSE_DATA_HOME*, *UNIVERSE_STATE_HOME*
 	Replace the XDG directories, as for *universe*(1).
 
+*UNIVERSE_UI_INPUT_LOG*
+	Set, logs every switch between pad, keyboard and mouse with the event that caused it: for a hint bar that flips on its own.
+
 # SEE ALSO
 
 *universe*(1)
