@@ -10,6 +10,7 @@ FocusScope {
     id: page
 
     property var shell: null
+    property var args: ({})
     signal closeRequested()
     focus: true
 
@@ -120,6 +121,10 @@ FocusScope {
 
     Component.onCompleted: sources.load()
 
+    // Opened onto Manage from HOME's arriving tile.
+    onArgsChanged: if (args.tab)
+        tabs.index = page.tab = args.tab
+
     function firstGame() {
         return cells.map(function(c) { return !c.heading; }).indexOf(true);
     }
@@ -227,12 +232,13 @@ FocusScope {
             return;
         }
         var items = [];
+        var inLibrary = g.installed && g.game_id && !!api.allGames.byId(g.game_id);
         if (g.partial)
             items.push({ label: "Resume", act: "resume" });
         else if (g.pending)
             items.push({ label: "Update", act: "update" });
-        if (g.installed && g.game_id && api.allGames.byId(g.game_id))
-            items.push({ label: "Game Settings", act: "settings" });
+        if (inLibrary)
+            items.push({ label: "Start", act: "start" }, { label: "Software Information", act: "info" }, { label: "Game Settings", act: "settings" });
         if (g.installed && g.game_id)
             items.push({ label: "Uninstall…", act: "uninstall" }, { label: "Remove from library…", act: "remove" });
         if (items.length === 0) {
@@ -243,6 +249,11 @@ FocusScope {
         shell.menu(title, items, function(a) {
             if (a === "resume" || a === "update") {
                 Sound.play(sources.install(row) !== "" ? "ok" : "edge");
+            } else if (a === "start") {
+                shell.launch(api.allGames.byId(gameId));
+            } else if (a === "info") {
+                Sound.play("ok");
+                shell.push("pages/SoftwareInfoPage.qml", { gameId: gameId });
             } else if (a === "settings") {
                 Sound.play("ok");
                 shell.push("pages/GameSettingsPage.qml", { gameId: gameId });

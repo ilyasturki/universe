@@ -7,6 +7,8 @@ Item {
 
     property var game: null
     property bool focused: false
+    // A download's icon, faded until it is playable.
+    property bool dimmed: false
     property real cornerRadius: Math.round(Theme.dp(Theme.radiusTile) * Math.min(width, height) / Theme.dp(Theme.tileSize))
     property bool outlineShown: true
 
@@ -54,6 +56,13 @@ Item {
             mipmap: true
             sourceSize.height: 512
             visible: tile.shown === "box"
+        }
+
+        Rectangle {
+            anchors.fill: parent
+            color: Theme.ground
+            opacity: tile.dimmed ? 0.55 : 0
+            visible: opacity > 0
         }
 
         Label {

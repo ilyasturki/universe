@@ -9,7 +9,7 @@ FocusScope {
 
     property var shell: null
 
-    readonly property int gameCount: recent.count
+    readonly property int gameCount: shown.count
     readonly property int allIndex: gameCount
     readonly property bool empty: api.allGames.count === 0
     property int index: 0
@@ -22,10 +22,16 @@ FocusScope {
     readonly property string playingId: session && session.id !== undefined ? session.id : ""
 
     readonly property bool onPlaying: currentGame !== null && currentGame.id === playingId
+    readonly property bool onArriving: currentGame !== null && currentGame.installing
     readonly property var hints: onAll || onSetup ? [
         {
             glyph: "A",
             label: "OK"
+        }
+    ] : onArriving ? [
+        {
+            glyph: "A",
+            label: "Manage"
         }
     ] : onPlaying ? [
         {
@@ -71,10 +77,17 @@ FocusScope {
         limit: 12
     }
 
+    // An install under way sits first, as the console shows a download; its tile is the game's once it lands.
+    HeadedGames {
+        id: shown
+        source: recent
+        head: api.screens.sources.arriving
+    }
+
     GameAnchor {
         id: anchor
         client: api.universe
-        model: recent
+        model: shown
         index: page.onAll ? -1 : page.index
         onMoved: function (next) {
             page.index = next;
@@ -98,6 +111,13 @@ FocusScope {
         }
         if (!currentGame) {
             Sound.play("edge");
+            return;
+        }
+        if (onArriving) {
+            Sound.play("ok");
+            shell.push("pages/InstallPage.qml", {
+                tab: 1
+            });
             return;
         }
         onPlaying ? shell.resume() : shell.launch(currentGame);
@@ -125,7 +145,7 @@ FocusScope {
             activate();
         } else if (api.keys.isMenu(event)) {
             event.accepted = true;
-            if (currentGame) {
+            if (currentGame && !onArriving) {
                 Sound.play("ok");
                 shell.push("pages/SoftwareOptionsPage.qml", {
                     gameId: currentGame.id
@@ -168,7 +188,7 @@ FocusScope {
         width: parent.width
         height: page.tile + Theme.dp(60)
         orientation: ListView.Horizontal
-        model: recent
+        model: shown
         spacing: page.gap
         leftMargin: page.rowX
         rightMargin: page.rowX
@@ -212,14 +232,15 @@ FocusScope {
                 height: page.tile
                 game: modelData
                 focused: cell.focused
+                dimmed: modelData.installing
             }
 
             Label {
-                visible: modelData.id === page.playingId
+                visible: modelData.id === page.playingId || modelData.installing
                 anchors.top: art.bottom
                 anchors.topMargin: Theme.dp(Theme.ringRoom + 4)
                 anchors.horizontalCenter: art.horizontalCenter
-                text: "Playing"
+                text: modelData.installing ? (modelData.progress >= 0 ? "Installing · " + Math.round(modelData.progress * 100) + "%" : "Installing…") : "Playing"
                 color: Theme.accent
                 font.pixelSize: Theme.dp(Theme.fontSmall)
             }

@@ -13,6 +13,8 @@ Item {
     property real idleScale: 1.0
     property bool showHeart: true
     property bool playing: false
+    property bool arriving: false
+    property real progress: -1
     property int focusOrigin: Item.Center
     property real ringOpacity: 1.0
     property real ringGap: Theme.dp(Theme.ringGap)
@@ -98,6 +100,7 @@ Item {
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true
                 mipmap: true
+                opacity: root.arriving ? 0.45 : 1.0
             }
 
             Loader {
@@ -134,7 +137,7 @@ Item {
         }
 
         Loader {
-            active: root.playing
+            active: root.playing || root.arriving
             anchors.left: parent.left
             anchors.bottom: parent.bottom
             anchors.margins: Theme.dp(12)
@@ -153,12 +156,12 @@ Item {
                     PulseDot {
                         anchors.verticalCenter: parent.verticalCenter
                         width: Theme.dp(8)
-                        running: root.playing
+                        running: root.playing || root.arriving
                     }
 
                     CapsLabel {
                         anchors.verticalCenter: parent.verticalCenter
-                        text: api.home.paused ? "PAUSED" : "PLAYING"
+                        text: root.arriving ? (root.progress >= 0 ? "INSTALLING · " + Math.round(root.progress * 100) + "%" : "INSTALLING") : api.home.paused ? "PAUSED" : "PLAYING"
                         color: Theme.text
                         size: Theme.dp(13)
                     }

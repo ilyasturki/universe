@@ -18,7 +18,7 @@ FocusScope {
 
     readonly property int railFloor: 5
     readonly property bool standingIn: (recent ? recent.count : 0) < railFloor
-    readonly property var railModel: standingIn ? newest : recent
+    readonly property var railModel: shown
     readonly property int railCount: railModel ? railModel.count : 0
 
     readonly property var currentGame: anchor.game
@@ -58,11 +58,13 @@ FocusScope {
             });
             out.push({
                 glyph: "X",
-                label: "Details"
+                label: "Details",
+                dim: arriving
             });
             out.push({
                 glyph: "Y",
-                label: favouriteLabel
+                label: favouriteLabel,
+                dim: arriving
             });
         }
         if (heroActions.activeFocus)
@@ -75,7 +77,8 @@ FocusScope {
 
     readonly property var session: api.universe.currentSession
     readonly property string playingId: session && session.id !== undefined ? session.id : ""
-    readonly property string playLabel: currentGame && currentGame.id === playingId ? "Resume" : currentGame && currentGame.playTime > 0 ? "Continue" : "Play"
+    readonly property bool arriving: currentGame !== null && currentGame.installing
+    readonly property string playLabel: arriving ? "Manage install" : currentGame && currentGame.id === playingId ? "Resume" : currentGame && currentGame.playTime > 0 ? "Continue" : "Play"
     readonly property string favouriteLabel: currentGame && currentGame.favorite ? "Remove from favourites" : "Add to favourites"
 
     readonly property real bandHeight: Theme.dp(Theme.heroBand)
@@ -97,7 +100,7 @@ FocusScope {
         tileSelected = true
 
     function toggleFavourite() {
-        if (!currentGame || tileSelected) {
+        if (!currentGame || tileSelected || arriving) {
             Sound.edge();
             return;
         }
@@ -195,7 +198,7 @@ FocusScope {
         }
     }
 
-    // The library exposes no date added; releaseYear is the closest "what is new".
+    // A library that predates `added_at` has nothing recent to show; releaseYear is the closest "what is new".
     SortedGames {
         id: byRelease
         sourceModel: page.standingIn ? api.allGames : null
@@ -208,6 +211,13 @@ FocusScope {
         id: newest
         sourceModel: byRelease
         limit: 12
+    }
+
+    // A store install under way sits first; its tile is the game's once it lands.
+    HeadedGames {
+        id: shown
+        source: page.standingIn ? newest : recent
+        head: api.screens.sources.arriving
     }
 
     Repeater {
@@ -571,6 +581,8 @@ FocusScope {
                     game: model
                     artSource: model.id === page.playingId && api.home.frame !== "" ? api.home.frame : String(model.assets.square) !== "" ? model.assets.square : model.assets.boxFront
                     playing: model.id === page.playingId
+                    arriving: model.installing
+                    progress: model.progress
                     selected: tile.selected
                     selectedScale: 1.0
                     idleScale: page.idleScale

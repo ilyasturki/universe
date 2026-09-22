@@ -178,6 +178,10 @@ FocusScope {
     function openDetail(game) {
         if (!game)
             return;
+        if (game.installing) {
+            Sound.edge();
+            return;
+        }
         Sound.enter();
         detailGame = game;
         detailOpen = true;
@@ -195,6 +199,11 @@ FocusScope {
     function launchGame(game) {
         if (!game || launchOverlay.running || confirm.open)
             return;
+        if (game.installing) {
+            Sound.enter();
+            openSettings("install");
+            return;
+        }
         if (sessionRunning) {
             if (game.id === playingId) {
                 resumeSession();
@@ -388,6 +397,10 @@ FocusScope {
     function openMenu(game, anchor) {
         if (!game || !anchor)
             return;
+        if (game.installing) {
+            Sound.edge();
+            return;
+        }
         Sound.panel();
         var media = mediaItems(game);
         var play = sessionRunning && game.id === playingId ? [
@@ -808,6 +821,9 @@ FocusScope {
                         ignoreUnknownSignals: true
                         function onDetailRequested(game) {
                             root.openDetail(game);
+                        }
+                        function onLaunchRequested(game) {
+                            root.launchGame(game);
                         }
                         function onSettingsRequested(game) {
                             root.openSub("pages/GameSettingsPage.qml", {

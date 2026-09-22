@@ -12,6 +12,8 @@ FocusScope {
 
     signal chromeRequested
     signal settingsRequested(var game)
+    signal launchRequested(var game)
+    signal detailRequested(var game)
     signal runnerRequested(string runner)
     signal moduleRequested(string module)
     signal sourceRequested(string source)
@@ -901,6 +903,14 @@ FocusScope {
             });
         if (row.gameId && api.allGames.byId(row.gameId))
             out.push({
+                icon: "play",
+                label: "Play",
+                action: "play"
+            }, {
+                icon: "info",
+                label: "Details",
+                action: "details"
+            }, {
                 icon: "sliders",
                 label: "Game settings",
                 action: "settings"
@@ -946,6 +956,14 @@ FocusScope {
             sources.install(row.row) !== "" ? Sound.enter() : Sound.edge();
         } else if (action === "cancel") {
             sources.cancel() ? Sound.cancel() : Sound.edge();
+        } else if (action === "play") {
+            cards.forceActiveFocus();
+            page.launchRequested(api.allGames.byId(row.gameId));
+            return;
+        } else if (action === "details") {
+            cards.forceActiveFocus();
+            page.detailRequested(api.allGames.byId(row.gameId));
+            return;
         } else if (action === "settings") {
             cards.forceActiveFocus();
             page.settingsRequested(api.allGames.byId(row.gameId));
