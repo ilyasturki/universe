@@ -2,7 +2,19 @@ import contextlib
 import os
 from typing import Any
 
-from PySide6.QtCore import QAbstractListModel, QDateTime, QModelIndex, QObject, QSortFilterProxyModel, Qt, QTimer, QUrl, Signal, Slot
+from PySide6.QtCore import (
+    QAbstractListModel,
+    QDateTime,
+    QModelIndex,
+    QObject,
+    QPersistentModelIndex,
+    QSortFilterProxyModel,
+    Qt,
+    QTimer,
+    QUrl,
+    Signal,
+    Slot,
+)
 from PySide6.QtQml import QmlElement
 
 from .qt import QVARIANT, Property
@@ -21,6 +33,8 @@ GAME_ROLES = [
     "playTime",
     "playCount",
     "lastPlayed",
+    "addedAt",
+    "recentAt",
     "releaseYear",
     "developerList",
     "publisherList",
@@ -34,6 +48,8 @@ GAME_ROLES = [
     "assets",
     "collections",
     "extra",
+    "installing",
+    "progress",
 ]
 
 KNOWN_METADATA = {
@@ -129,12 +145,15 @@ class GameAssets(QObject):
 class Game(QObject):
     changed = Signal()
     favoriteChanged = Signal()
+    progressChanged = Signal()
 
     def __init__(self, data, library, parent=None):
         super().__init__(parent)
         self._library = library
         self._assets = GameAssets(self)
         self._collections = None
+        self._installing = False
+        self._progress = -1.0
         self.update(data)
 
     def update(self, data):
@@ -149,6 +168,7 @@ class Game(QObject):
         self._playTime = round(float(stats.get("hours") or 0) * 3600)
         self._playCount = int(stats.get("play_count") or 0)
         self._lastPlayed = _datetime(stats.get("last_played"))
+        self._addedAt = _datetime(raw.get("added_at"))
         self._releaseYear = int(meta.get("release_year") or raw.get("release_year") or 0)
         self._developers = _as_list(meta.get("developers") or meta.get("developer"))
         self._publishers = _as_list(meta.get("publishers") or meta.get("publisher"))
@@ -200,6 +220,14 @@ class Game(QObject):
     playTime = Property(int, lambda self: self._playTime, notify=changed)
     playCount = Property(int, lambda self: self._playCount, notify=changed)
     lastPlayed = Property(QVARIANT, lambda self: self._lastPlayed, notify=changed)
+    addedAt = Property(QVARIANT, lambda self: self._addedAt, notify=changed)
+
+    def _recent_at(self):
+        stamps = [d for d in (self._lastPlayed, self._addedAt) if d is not None]
+        return max(stamps) if stamps else None
+
+    # The later of the last session and the arrival: what HOME orders by.
+    recentAt = Property(QVARIANT, _recent_at, notify=changed)
     releaseYear = Property(int, lambda self: self._releaseYear, notify=changed)
     developerList = Property(list, lambda self: list(self._developers), notify=changed)
     publisherList = Property(list, lambda self: list(self._publishers), notify=changed)
@@ -215,6 +243,25 @@ class Game(QObject):
     assets = Property(QObject, lambda self: self._assets, constant=True)
     collections = Property(QObject, lambda self: self._collections, notify=changed)
     extra = Property(dict, lambda self: dict(self._extra), notify=changed)
+    # A store install under way (an `ArrivingGame`); -1 while the size is not known. A subclass cannot redefine a Property, so both live here.
+    installing = Property(bool, lambda self: self._installing, constant=True)
+    progress = Property(float, lambda self: self._progress, notify=progressChanged)
+
+
+class ArrivingGame(Game):
+    """A store install under way, shown on HOME before its library entry exists."""
+
+    def __init__(self, source_id, title, image, parent=None):
+        super().__init__({"id": f"arriving:{source_id}", "title": title, "media": {"square": image}}, None, parent)
+        self._installing = True
+        self._collections = ObjectListModel([], self)
+
+    def setProgress(self, done, total):
+        value = float(done) / float(total) if total > 0 else -1.0
+        if value == self._progress:
+            return
+        self._progress = value
+        self.progressChanged.emit()
 
 
 class ObjectListModel(QAbstractListModel):
@@ -389,7 +436,7 @@ class RecentGames(GameProxy):
 
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._sort_name = "lastPlayed"
+        self._sort_name = "recentAt"
         self._descending = True
         self._playing = ""
 
@@ -402,7 +449,7 @@ class RecentGames(GameProxy):
         self.invalidate()
 
     def acceptsGame(self, game, source_row):
-        return game.playCount > 0 or game.id == self._playing
+        return game.playCount > 0 or game.addedAt is not None or game.id == self._playing
 
     def sortKey(self, game):
         return (2 if game.id == self._playing else 0, *super().sortKey(game))
@@ -516,6 +563,188 @@ class CollectionGames(GameProxy):
 
     def acceptsGame(self, game, source_row):
         return collection_key(game) == self._key
+
+
+@QmlElement
+class HeadedGames(QAbstractListModel):
+    """`source`'s rows with `head` (an arriving install) as the first one while there is one."""
+
+    countChanged = Signal()
+    sourceChanged = Signal()
+    headChanged = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._source = None
+        self._head = None
+        self._roles = {MODEL_DATA_ROLE: b"modelData", **{MODEL_DATA_ROLE + 1 + i: r.encode() for i, r in enumerate(GAME_ROLES)}}
+        self._kept = []
+        self._open = False
+        self._deferred = None
+        for signal in (self.rowsInserted, self.rowsRemoved, self.modelReset, self.layoutChanged):
+            signal.connect(self.countChanged)
+
+    @property
+    def _offset(self):
+        return 1 if self._head is not None else 0
+
+    # A binding may pick another source from inside the current one's change (its count moved): the swap waits for the change to close.
+    def _set_source(self, model):
+        if model is self._source:
+            return
+        if self._open:
+            self._deferred = model
+            return
+        self.beginResetModel()
+        if self._source is not None:
+            for signal, slot in self._forwarded(self._source):
+                signal.disconnect(slot)
+        self._source = model
+        if model is not None:
+            for signal, slot in self._forwarded(model):
+                signal.connect(slot)
+        self.endResetModel()
+        self.sourceChanged.emit()
+
+    def _begin(self):
+        self._open = True
+
+    def _end(self):
+        self._open = False
+        if self._deferred is not None:
+            deferred, self._deferred = self._deferred, None
+            self._set_source(deferred)
+
+    def _forwarded(self, model):
+        return (
+            (model.rowsAboutToBeInserted, self._rows_about_to_be_inserted),
+            (model.rowsInserted, self._rows_inserted),
+            (model.rowsAboutToBeRemoved, self._rows_about_to_be_removed),
+            (model.rowsRemoved, self._rows_removed),
+            (model.rowsAboutToBeMoved, self._rows_about_to_be_moved),
+            (model.rowsMoved, self._rows_moved),
+            (model.dataChanged, self._data_changed),
+            (model.modelAboutToBeReset, self._about_to_reset),
+            (model.modelReset, self._reset),
+            (model.layoutAboutToBeChanged, self._layout_about_to_change),
+            (model.layoutChanged, self._layout_changed),
+        )
+
+    def _rows_about_to_be_inserted(self, parent, first, last):
+        self._begin()
+        self.beginInsertRows(QModelIndex(), first + self._offset, last + self._offset)
+
+    def _rows_inserted(self, parent, first, last):
+        self.endInsertRows()
+        self._end()
+
+    def _rows_about_to_be_removed(self, parent, first, last):
+        self._begin()
+        self.beginRemoveRows(QModelIndex(), first + self._offset, last + self._offset)
+
+    def _rows_removed(self, parent, first, last):
+        self.endRemoveRows()
+        self._end()
+
+    def _rows_about_to_be_moved(self, parent, first, last, destination, row):
+        self._begin()
+        o = self._offset
+        self.beginMoveRows(QModelIndex(), first + o, last + o, QModelIndex(), row + o)
+
+    def _rows_moved(self, parent, first, last, destination, row):
+        self.endMoveRows()
+        self._end()
+
+    def _data_changed(self, top_left, bottom_right, roles):
+        o = self._offset
+        self.dataChanged.emit(self.index(top_left.row() + o, 0), self.index(bottom_right.row() + o, 0), roles)
+
+    def _about_to_reset(self):
+        self._begin()
+        self.beginResetModel()
+
+    def _reset(self):
+        self.endResetModel()
+        self._end()
+
+    # A source reorder: the view's persistent rows follow the games they pointed at.
+    def _layout_about_to_change(self, parents=None, hint=None):
+        self._begin()
+        self.layoutAboutToBeChanged.emit()
+        o = self._offset
+        source = self._source
+        if source is None:
+            return
+        self._kept = [(i, QPersistentModelIndex(source.index(i.row() - o, 0)) if i.row() >= o else None) for i in self.persistentIndexList()]
+
+    def _layout_changed(self, parents=None, hint=None):
+        o = self._offset
+        old, new = [], []
+        for index, source in self._kept:
+            old.append(index)
+            new.append(self.index(source.row() + o, 0) if source is not None and source.isValid() else (index if source is None else QModelIndex()))
+        self._kept = []
+        self.changePersistentIndexList(old, new)
+        self.layoutChanged.emit()
+        self._end()
+
+    def _set_head(self, game):
+        if game is self._head:
+            return
+        if self._head is not None:
+            with contextlib.suppress(RuntimeError, TypeError):
+                self._head.progressChanged.disconnect(self._head_changed)
+        if game is not None and self._head is not None:
+            self._head = game
+            self._head_changed()
+        elif game is not None:
+            self.beginInsertRows(QModelIndex(), 0, 0)
+            self._head = game
+            self.endInsertRows()
+        else:
+            self.beginRemoveRows(QModelIndex(), 0, 0)
+            self._head = None
+            self.endRemoveRows()
+        if game is not None:
+            game.progressChanged.connect(self._head_changed)
+        self.headChanged.emit()
+
+    def _head_changed(self):
+        self.dataChanged.emit(self.index(0, 0), self.index(0, 0), [])
+
+    def rowCount(self, parent=QModelIndex()):  # noqa: B008
+        if parent.isValid():
+            return 0
+        return self._offset + (self._source.rowCount() if self._source is not None else 0)
+
+    def _object_at(self, row):
+        if row < 0:
+            return None
+        if row < self._offset:
+            return self._head
+        if self._source is None or row - self._offset >= self._source.rowCount():
+            return None
+        return self._source.data(self._source.index(row - self._offset, 0), MODEL_DATA_ROLE)
+
+    def data(self, index, role=Qt.ItemDataRole.DisplayRole):
+        obj = self._object_at(index.row()) if index.isValid() else None
+        if obj is None:
+            return None
+        if role == MODEL_DATA_ROLE:
+            return obj
+        name = self._roles.get(role)
+        return obj.property(name.decode()) if name else None
+
+    def roleNames(self):
+        return dict(self._roles)
+
+    @Slot(int, result=QObject)
+    def get(self, row):
+        return self._object_at(row)
+
+    count = Property(int, lambda self: self.rowCount(), notify=countChanged)
+    source = Property(QObject, lambda self: self._source, _set_source, notify=sourceChanged)
+    head = Property(QObject, lambda self: self._head, _set_head, notify=headChanged)
 
 
 @QmlElement

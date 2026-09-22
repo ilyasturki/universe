@@ -316,7 +316,13 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
   `FavouriteGames`, `SearchGames` and `LibraryGames` are exported to QML as `import Universe`;
   `CollectionGames` is instantiated Python-side, one per collection. `get(i)` returns the `Game`;
   `sourceRow(i)` stands in for `mapToSource(i)`, whose C++ name is virtual and breaks sorting if
-  shadowed.
+  shadowed. `RecentGames` admits a game played or added (`added_at`) and orders by the later of the
+  two (`recentAt`). `HeadedGames` (a list model, not a proxy) puts `head` — `api.screens.sources.
+  arriving`, the `ArrivingGame` of a store install under way, `installing` true and `progress` 0–1 —
+  before `source`'s rows; the arrival stays through the job's end until the library reload brings
+  the real game, so the first tile turns into it in place.
+- **A subclass cannot redefine a `Property`.** PySide keeps the base class's meta property; the
+  override never reaches QML. `Game.installing` and `progress` live on `Game` for that reason.
 - **QML import paths.** The host sets none: `QML2_IMPORT_PATH` comes from the flake — the dev
   shell's hook (every `just` recipe), `wrapQtAppsHook` for the package, the pytest check — and so
   does `QT_PLUGIN_PATH` for the first two; a plugin must link the *same* qtbase as PySide6, or it is

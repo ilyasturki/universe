@@ -108,15 +108,15 @@ def test_library_excludes_hidden_and_groups_by_source(api):
 def test_recent_games(api):
     recent = RecentGames()
     recent.setSourceModel(api.allGames)
-    assert recent.count == 6
-    assert titles(recent)[:3] == ["The Technomancer", "Mini Metro", "Dead Cells"]
-    assert "Mirror's Edge" not in titles(recent)
+    assert recent.count == 7
+    assert titles(recent)[:3] == ["The Technomancer", "Batman: Arkham Origins", "Mini Metro"], "a game just added sits among the played by its arrival"
+    assert "Mirror's Edge" not in titles(recent), "never played, no date added"
     recent.playingId = api.allGames.byId("mirrors-edge").id
-    assert titles(recent)[:2] == ["Mirror's Edge", "The Technomancer"] and recent.count == 7
+    assert titles(recent)[:2] == ["Mirror's Edge", "The Technomancer"] and recent.count == 8
     recent.playingId = "dead-cells"
-    assert titles(recent)[:2] == ["Dead Cells", "The Technomancer"] and recent.count == 6
+    assert titles(recent)[:2] == ["Dead Cells", "The Technomancer"] and recent.count == 7
     recent.playingId = ""
-    assert titles(recent)[:3] == ["The Technomancer", "Mini Metro", "Dead Cells"]
+    assert titles(recent)[:3] == ["The Technomancer", "Batman: Arkham Origins", "Mini Metro"]
 
 
 def test_anchor_follows_the_game_across_a_reorder(api):
@@ -131,27 +131,27 @@ def test_anchor_follows_the_game_across_a_reorder(api):
         anchor.index = index
 
     anchor.moved.connect(follow)
-    anchor.index = 2
+    anchor.index = 3
     assert anchor.game.id == "dead-cells"
     recent.playingId = "mirrors-edge"
     assert anchor.game.id == "dead-cells"
     pump(10)
-    assert moves == [3] and anchor.game.id == "dead-cells"
+    assert moves == [4] and anchor.game.id == "dead-cells"
     recent.playingId = ""
     pump(10)
-    assert moves == [3, 2]
+    assert moves == [4, 3]
     anchor.hold("mini-metro")
-    assert moves == [3, 2, 1] and anchor.game.id == "mini-metro"
+    assert moves == [4, 3, 2] and anchor.game.id == "mini-metro"
     anchor.hold("mirrors-edge")
-    assert moves == [3, 2, 1] and anchor.game.id == "mini-metro", "not in the rows yet: held until it shows up"
+    assert moves == [4, 3, 2] and anchor.game.id == "mini-metro", "not in the rows yet: held until it shows up"
     recent.playingId = "mirrors-edge"
     pump(10)
-    assert moves == [3, 2, 1, 0] and anchor.game.id == "mirrors-edge"
+    assert moves == [4, 3, 2, 0] and anchor.game.id == "mirrors-edge"
     anchor.hold("no-such-game")
-    anchor.index = 2
+    anchor.index = 3
     recent.playingId = ""
     pump(10)
-    assert moves == [3, 2, 1, 0, 1] and anchor.game.id == "mini-metro", "the cursor's move re-holds"
+    assert moves == [4, 3, 2, 0, 2] and anchor.game.id == "mini-metro", "the cursor's move re-holds"
     library = LibraryGames()
     library.setSourceModel(api.allGames)
     anchor.model = library
@@ -159,7 +159,7 @@ def test_anchor_follows_the_game_across_a_reorder(api):
     assert anchor.game.id == "the-technomancer"
     library.setSourceModel(api.collections.get(0).games)
     pump(10)
-    assert moves == [3, 2, 1, 0, 1] and anchor.game is library.get(0), "a reset is another list: the row stands"
+    assert moves == [4, 3, 2, 0, 2, 1] and anchor.game is library.get(0), "a reset is another list: the row stands"
 
 
 def test_sorted_and_limited(api):

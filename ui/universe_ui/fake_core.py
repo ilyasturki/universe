@@ -201,6 +201,10 @@ def _now():
     return datetime.now(UTC).astimezone().replace(microsecond=0).isoformat()
 
 
+def _slug(title):
+    return re.sub(r"[^a-z0-9]+", "-", title.casefold()).strip("-")
+
+
 def _epoch(value):
     if not value:
         return 0
@@ -629,7 +633,7 @@ class FakeCore:
         if not path:
             raise UniverseError("Invalid", "a game file is needed")
         title = str(spec.get("title") or "").strip() or os.path.splitext(os.path.basename(path))[0]
-        ident = re.sub(r"[^a-z0-9]+", "-", title.casefold()).strip("-")
+        ident = _slug(title)
         if any(g["id"] == ident for g in self._data["games"]):
             raise UniverseError("Invalid", f"{ident} is already in the library")
         game = {
@@ -639,6 +643,7 @@ class FakeCore:
             "favorite": False,
             "hidden": False,
             "platform": spec.get("platform") or (runner_spec.get("platforms") or [""])[0],
+            "added_at": _now(),
             "launch": {"runner": runner, "exe": path},
             "metadata": {},
             "media": {"screenshots": []},
@@ -1037,7 +1042,30 @@ class FakeCore:
             game.update({"installed": True, "dir": f"/mnt/games/PC/{game['title']}", "disk_size": total})
             game.pop("partial_dir", None)
             game.pop("partial_bytes", None)
+            game["game_id"] = self._land(source, game)
         return f"Installing {game_id}: done"
+
+    # The core's apply_source_game: the install creates the library game, or brings an archived one back.
+    def _land(self, source, entry):
+        ident = str(entry.get("game_id") or _slug(entry["title"]))
+        game = next((g for g in self._data["games"] if g["id"] == ident), None)
+        if game is None:
+            game = {
+                "id": ident,
+                "title": entry["title"],
+                "source": {"kind": source, "gog_id": entry["id"], "dir": entry["dir"]},
+                "favorite": False,
+                "hidden": False,
+                "platform": "PC",
+                "launch": {"runner": "proton", "exe": f"{entry['dir']}/{ident}.exe"},
+                "metadata": {},
+                "media": {"screenshots": []},
+            }
+            self._data["games"].append(game)
+        if not game.get("added_at") or game.get("removed"):
+            game.update({"added_at": _now(), "removed": False, "hidden": False})
+        self._write_game(game)
+        return ident
 
     def update(self, source, game_id, progress=None):
         self._tick(progress, "Updating" + (f" {game_id}" if game_id else " everything"), 12)

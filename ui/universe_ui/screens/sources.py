@@ -6,6 +6,7 @@ import qrcode
 import qrcode.constants
 from PySide6.QtCore import QObject, Signal, Slot
 
+from ..models import ArrivingGame
 from ..qt import QVARIANT, Property
 from .media import _month, _size
 from .settings import AsyncScreen
@@ -85,6 +86,7 @@ class SourcesBrowser(AsyncScreen):
     rowsChanged = Signal()
     updatesChanged = Signal()
     jobChanged = Signal()
+    arrivingChanged = Signal()
     queryChanged = Signal()
     message = Signal(str)
 
@@ -99,12 +101,15 @@ class SourcesBrowser(AsyncScreen):
         self._updates = []
         self._query = ""
         self._job = None
+        self._arriving = None
+        self._landed = False
         self._loaded_at = 0.0
         self._peeking = ""
         self._error = ""
         self._free = 0
         client.progress.connect(self._on_progress)
         client.jobFinished.connect(self._on_job_finished)
+        client.libraryChanged.connect(self._on_library_changed)
         client.mediaChanged.connect(lambda ident: self._show(self._shown))
 
     def _art(self, game_id):
@@ -226,7 +231,10 @@ class SourcesBrowser(AsyncScreen):
             return self._begin(self._client.update(self._source, row["id"]), row, f"Updating {row['title']}")
         if row["installed"]:
             return ""
-        return self._begin(self._client.install(self._source, row["id"]), row, f"Installing {row['title']}")
+        job_id = self._begin(self._client.install(self._source, row["id"]), row, f"Installing {row['title']}")
+        if job_id:
+            self._set_arriving(ArrivingGame(row["id"], row["title"], row["image"], self))
+        return job_id
 
     @Slot(int, result=str)
     def update(self, index):
@@ -294,10 +302,23 @@ class SourcesBrowser(AsyncScreen):
         self._show(self._shown)
         return job_id
 
+    # HOME's first tile while the download runs: it stays through the finish until the library holds the game.
+    def _set_arriving(self, game):
+        old, self._arriving, self._landed = self._arriving, game, False
+        self.arrivingChanged.emit()
+        if old is not None:
+            old.deleteLater()
+
+    def _on_library_changed(self, idents):
+        if self._landed:
+            self._set_arriving(None)
+
     def _on_progress(self, job_id, done, total, message):
         if not self._job or self._job["id"] != job_id or self._job["cancelled"]:
             return
         done, total = int(done), int(total)
+        if self._arriving is not None:
+            self._arriving.setProgress(done, total)
         # The source's message is the percentage; the bytes are the progress itself.
         text = f"{self._job['label']} · {message}" if message else self._job["label"]
         if total > 0:
@@ -313,6 +334,10 @@ class SourcesBrowser(AsyncScreen):
             text = f"Stopped {self._job['label'].split(' ')[0].lower()} {self._job['title']} · {kept}resume any time"
         self._job.update({"ok": bool(ok), "message": text or self._job["message"]})
         self.jobChanged.emit()
+        if ok and self._arriving is not None:
+            self._landed = True
+        else:
+            self._set_arriving(None)
         self.message.emit(text)
         self._reload(False)
         if self._query:
@@ -336,6 +361,7 @@ class SourcesBrowser(AsyncScreen):
     updates = Property(list, lambda self: list(self._updates), notify=updatesChanged)
     query = Property(str, lambda self: self._query, notify=queryChanged)
     job = Property(QVARIANT, lambda self: dict(self._job) if self._job else None, notify=jobChanged)
+    arriving = Property(QObject, lambda self: self._arriving, notify=arrivingChanged)
 
 
 def qr_matrix(text):

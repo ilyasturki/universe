@@ -569,6 +569,40 @@ def test_sources_browser_cancel_pauses_the_install(api, fake):
     assert [r["title"] for r in browser.rows] == ["Disco Elysium"]
 
 
+def test_an_install_arrives_on_home_first_and_lands_as_the_game(api, fake):
+    from universe_ui.models import HeadedGames, RecentGames
+
+    browser = api.screens.sources
+    browser.load()
+    settle(browser)
+    recent = RecentGames()
+    recent.setSourceModel(api.allGames)
+    row = HeadedGames()
+    row.source = recent
+    browser.arrivingChanged.connect(lambda: setattr(row, "head", browser.arriving))
+    heads = []
+    row.headChanged.connect(lambda: heads.append(row.head.id if row.head else None))
+    index = next(i for i, r in enumerate(browser.rows) if r["title"] == "The Witcher 3: Wild Hunt")
+    assert browser.install(index)
+    arriving = browser.arriving
+    assert arriving.installing and arriving.title == "The Witcher 3: Wild Hunt" and arriving.progress == -1
+    assert row.count == recent.count + 1 and row.get(0) is arriving and row.get(1) is recent.get(0)
+    wait_for(browser.jobChanged, 5000)
+    wait_for(browser.jobChanged, 5000)
+    assert 0 < arriving.progress < 1, "the download's bytes"
+    assert browser.cancel() is True
+    assert wait_for(browser.message, 5000)
+    settle(browser)
+    assert browser.arriving is None and row.count == recent.count and heads == ["arriving:1207658930", None], "stopped: nothing arrives"
+    browser.install(index)
+    assert wait_for(browser.message, 10000)[0] == "Installing 1207658930: done"
+    settle(browser)
+    landed = api.allGames.byId("the-witcher-3-wild-hunt")
+    assert landed is not None and landed.addedAt is not None and not landed.installing
+    assert recent.get(0) is landed and row.get(0) is landed and browser.arriving is None, "the library game takes the first tile"
+    assert next(r for r in browser.rows if r["title"] == "The Witcher 3: Wild Hunt")["game_id"] == "the-witcher-3-wild-hunt"
+
+
 def test_sources_browser_keeps_its_fetch(api, fake):
     calls = []
     original = fake.updates
