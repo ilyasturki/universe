@@ -49,7 +49,7 @@ Rectangle {
         active: root.focused
         sourceComponent: FocusRing {
             cornerRadius: root.radius
-            gapWidth: Theme.dp(6)
+            gapWidth: Theme.dp(Theme.ringGap)
         }
     }
 

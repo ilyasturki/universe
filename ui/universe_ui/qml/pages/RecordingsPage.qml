@@ -887,7 +887,7 @@ FocusScope {
         active: page.videoFocused
         sourceComponent: FocusRing {
             cornerRadius: pane.radius
-            gapWidth: Theme.dp(4)
+            gapWidth: Theme.dp(Theme.ringGap)
         }
     }
 

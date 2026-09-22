@@ -348,6 +348,7 @@ FocusScope {
                 active: card.focused && !page.browsing
                 sourceComponent: FocusRing {
                     cornerRadius: Theme.dp(12)
+                    gapWidth: Theme.dp(Theme.ringGap)
                 }
             }
 
@@ -622,6 +623,7 @@ FocusScope {
                         active: focused
                         sourceComponent: FocusRing {
                             cornerRadius: Theme.dp(12)
+                            gapWidth: Theme.dp(Theme.ringGap)
                         }
                     }
 

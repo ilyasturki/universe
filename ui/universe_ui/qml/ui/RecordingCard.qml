@@ -101,7 +101,7 @@ Column {
             active: card.focused
             sourceComponent: FocusRing {
                 cornerRadius: thumb.radius
-                gapWidth: Theme.dp(4)
+                gapWidth: Theme.dp(Theme.ringGap)
             }
         }
 

@@ -368,7 +368,7 @@ FocusScope {
                             active: heart.focused
                             sourceComponent: FocusRing {
                                 cornerRadius: heart.radius
-                                gapWidth: Theme.dp(6)
+                                gapWidth: Theme.dp(Theme.ringGap)
                             }
                         }
 

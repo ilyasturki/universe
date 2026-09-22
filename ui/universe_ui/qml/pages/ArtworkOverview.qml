@@ -271,6 +271,7 @@ FocusScope {
                             active: cell.focused
                             sourceComponent: FocusRing {
                                 cornerRadius: Theme.dp(8)
+                                gapWidth: Theme.dp(Theme.ringGap)
                             }
                         }
 

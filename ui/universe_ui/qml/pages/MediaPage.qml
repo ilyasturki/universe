@@ -108,7 +108,7 @@ FocusScope {
     readonly property real gap: Theme.dp(26)
     readonly property real sideMargin: Theme.dp(80)
     readonly property real cellWidth: (width - sideMargin * 2 + gap) / columns
-    readonly property real cellHeight: (cellWidth - gap) * 9 / 16 + gap + Theme.dp(58)
+    readonly property real cellHeight: (cellWidth - gap) * 9 / 16 + gap + Theme.dp(64)
 
     Component.onCompleted: {
         store.load();

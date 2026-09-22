@@ -104,7 +104,7 @@ Column {
                 active: current
                 sourceComponent: FocusRing {
                     cornerRadius: shotCard.radius
-                    gapWidth: Theme.dp(4)
+                    gapWidth: Theme.dp(Theme.ringGap)
                 }
             }
         }

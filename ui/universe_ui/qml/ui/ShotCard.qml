@@ -11,7 +11,7 @@ Item {
     property bool focused: false
     property bool dimmed: false
 
-    readonly property real captionHeight: caption === "" ? 0 : Theme.dp(subcaption === "" ? 34 : 58)
+    readonly property real captionHeight: caption === "" ? 0 : Theme.dp(subcaption === "" ? 40 : 64)
     readonly property real radius: Theme.dp(14)
 
     scale: focused ? 1.0 : 0.96
@@ -31,6 +31,7 @@ Item {
     FocusRing {
         anchors.fill: frame
         cornerRadius: root.radius
+        gapWidth: Theme.dp(Theme.ringGap)
         opacity: root.focused ? 1.0 : 0.0
         Behavior on opacity {
             Ease {
@@ -92,7 +93,7 @@ Item {
 
     Column {
         anchors.top: frame.bottom
-        anchors.topMargin: Theme.dp(8)
+        anchors.topMargin: Theme.dp(14)
         anchors.left: parent.left
         anchors.right: parent.right
         spacing: Theme.dp(2)

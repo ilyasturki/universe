@@ -43,6 +43,7 @@ QtObject {
 
     readonly property real idleOpacity: 0.72
     readonly property real ringIdle: 0.35
+    readonly property real ringGap: 6
     readonly property real tabBarHeight: 96
     readonly property real hintBarHeight: 92
     readonly property real edgeMargin: 80
