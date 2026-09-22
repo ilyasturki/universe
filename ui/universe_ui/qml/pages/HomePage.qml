@@ -86,6 +86,7 @@ FocusScope {
     readonly property real railGap: Theme.dp(24)
     readonly property real spread: (cellSize - slotSize) / 2
     readonly property real idleScale: 176 / 240
+    readonly property real ringGap: Theme.dp(6)
 
     readonly property int libraryCount: api.allGames.count
     readonly property int librarySeconds: api.allGames.totalPlayTime
@@ -172,9 +173,16 @@ FocusScope {
     }
 
     RecentGames {
-        id: recent
+        id: played
         sourceModel: api.allGames
         playingId: page.playingId
+    }
+
+    // The rail holds the last twelve, as the Switch 2 look's does; the library tile has the rest.
+    LimitedGames {
+        id: recent
+        sourceModel: played
+        limit: 12
     }
 
     GameAnchor {
@@ -447,6 +455,7 @@ FocusScope {
                     idleScale: page.idleScale
                     count: page.libraryCount
                     ringOpacity: rail.activeFocus || page.menuOpen ? 1.0 : Theme.ringIdle
+                    ringGap: page.ringGap
                     pointable: true
                     current: page.tileSelected && rail.activeFocus
                     onPicked: page.pointToTile(page.railCount)
@@ -570,6 +579,7 @@ FocusScope {
                     focusOrigin: Item.Bottom
                     cornerRadius: Theme.dp(Theme.radiusTile)
                     ringOpacity: rail.activeFocus || page.menuOpen ? 1.0 : Theme.ringIdle
+                    ringGap: page.ringGap
 
                     Behavior on x {
                         Ease {
@@ -585,7 +595,7 @@ FocusScope {
             anchors.top: rail.top
             anchors.bottom: rail.bottom
             // Stops short of where the focused ring's halo sits at either end.
-            width: Theme.dp(90 - 14)
+            width: Theme.dp(90 - 20)
             gradient: Gradient {
                 orientation: Gradient.Horizontal
                 GradientStop {
@@ -603,7 +613,7 @@ FocusScope {
             anchors.right: parent.right
             anchors.top: rail.top
             anchors.bottom: rail.bottom
-            width: Theme.dp(90 - 14)
+            width: Theme.dp(90 - 20)
             gradient: Gradient {
                 orientation: Gradient.Horizontal
                 GradientStop {

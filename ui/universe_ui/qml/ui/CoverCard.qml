@@ -15,6 +15,7 @@ Item {
     property bool playing: false
     property int focusOrigin: Item.Center
     property real ringOpacity: 1.0
+    property real ringGap: 0
     // Under the mouse: hovering lifts the idle dimming, a click on a card that is not `current` is `picked`, on one that is, A.
     property bool pointable: false
     property bool current: false
@@ -201,6 +202,7 @@ Item {
             opacity: root.ringOpacity
             sourceComponent: FocusRing {
                 cornerRadius: root.cornerRadius
+                gapWidth: root.ringGap
             }
         }
     }
