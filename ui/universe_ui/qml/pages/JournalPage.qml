@@ -618,6 +618,15 @@ FocusScope {
         }
     }
 
+    Scrollbar {
+        anchors.right: parent.right
+        anchors.rightMargin: Theme.dp(52)
+        anchors.top: flick.top
+        anchors.bottom: flick.bottom
+        flickable: flick
+        dimmed: page.mode !== 1
+    }
+
     HintBar {
         id: hintBar
         anchors.bottom: parent.bottom

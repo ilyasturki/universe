@@ -339,6 +339,15 @@ FocusScope {
                 }
             }
         }
+
+        Scrollbar {
+            anchors.right: parent.right
+            anchors.rightMargin: Theme.dp(10)
+            anchors.top: flick.top
+            anchors.bottom: flick.bottom
+            flickable: flick
+            dimmed: !page.reading
+        }
     }
 
     HintBar {

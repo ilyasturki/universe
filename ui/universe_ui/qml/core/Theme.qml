@@ -33,6 +33,7 @@ QtObject {
     readonly property color textFaint: Qt.rgba(0.949, 0.953, 0.961, 0.32)
     readonly property color textTab: Qt.rgba(0.949, 0.953, 0.961, 0.5)
     readonly property color textHint: Qt.rgba(0.949, 0.953, 0.961, 0.78)
+    readonly property color thumb: Qt.rgba(0.949, 0.953, 0.961, 0.3)
     readonly property color surface: Qt.rgba(1, 1, 1, 0.08)
     readonly property color surfaceBorder: Qt.rgba(1, 1, 1, 0.16)
     readonly property color cardBase: "#161616"

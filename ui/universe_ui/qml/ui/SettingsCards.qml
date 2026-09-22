@@ -544,4 +544,13 @@ FocusScope {
             }
         }
     }
+
+    Scrollbar {
+        anchors.left: parent.right
+        anchors.leftMargin: Theme.dp(24)
+        anchors.top: view.top
+        anchors.bottom: view.bottom
+        flickable: view
+        dimmed: cards.dimmed
+    }
 }
