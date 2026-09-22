@@ -624,7 +624,8 @@ FocusScope {
         anchors.top: flick.top
         anchors.bottom: flick.bottom
         flickable: flick
-        dimmed: page.mode !== 1
+        shown: page.mode === 1
+        to: recordingCard.y
     }
 
     HintBar {

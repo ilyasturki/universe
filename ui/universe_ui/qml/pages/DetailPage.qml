@@ -561,9 +561,13 @@ FocusScope {
         anchors.right: parent.right
         anchors.rightMargin: Theme.dp(52)
         anchors.top: parent.top
-        anchors.topMargin: Theme.dp(36)
+        anchors.topMargin: page.ledge
         anchors.bottom: hintBar.top
         flickable: flick
+        shown: page.section === 1
+        from: page.sectionTop(1)
+        to: body.y + about.y + about.height
+        window: flick.height - hintBar.height
     }
 
     HintBar {
