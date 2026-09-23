@@ -107,6 +107,7 @@ SECTION_SYNONYMS = {
     "modules": ["capture", "recording", "journal", "hooks", "extensions"],
     "artwork": ["art", "covers", "boxart", "logo", "banner", "steamgriddb"],
     "themes": ["look", "skin", "appearance", "reprise", "switch"],
+    "sound": ["audio", "output", "speakers", "headphones", "headset", "hdmi", "bluetooth", "tv"],
     "doctor": ["health", "checks", "prerequisites", "missing", "diagnose"],
     "about": ["version", "build", "info"],
     "quit": ["exit", "close", "leave", "power off"],

@@ -28,6 +28,7 @@ pub mod screenshots;
 pub mod session;
 pub mod sessions;
 pub mod slug;
+pub mod sound;
 pub mod sources;
 pub mod splash;
 pub mod thumbs;

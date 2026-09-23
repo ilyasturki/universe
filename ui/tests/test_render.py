@@ -918,3 +918,50 @@ def test_the_badge_tints_the_current_pad(api):
     assert pad.property("current") is False and pad.property("ink") == QColor(badge.property("tint")), "no pad current, no green"
     window.close()
     pump(50)
+
+
+def test_the_sound_section_plays_through_the_output_picked_in_both_looks(api, fake):
+    from PySide6.QtTest import QTest
+
+    _engine, window = render(api, activate=True)
+    root = window.property("contentItem").childItems()[0].property("item")
+    root.goToTab(root.property("settingsTab"))
+    settle(window)
+    page = root.property("activePage")
+    QMetaObject.invokeMethod(page, "land", Q_ARG("QVariant", "sound"))
+    wait_for(api.home.outputsChanged, 3000)
+    pump(100)
+    rows = page.property("content").toVariant()["rows"]
+    assert [(r["label"], r["display"], r["tag"]) for r in rows] == [
+        ("Speakers", "Built-in Audio", "In use"),
+        ("Headphones", "Built-in Audio", ""),
+        ("HDMI / DisplayPort", "TV", ""),
+    ]
+    assert page.property("acceptLabel") == "", "the output in use: nothing to do"
+    QTest.keyClick(window, Qt.Key.Key_Down)
+    pump(80)
+    assert page.property("acceptLabel") == "Use"
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    wait_for(api.home.outputsChanged, 3000)
+    pump(80)
+    assert [r["label"] for r in page.property("content").toVariant()["rows"] if r["tag"]] == ["Headphones"]
+    window.close()
+    pump(50)
+
+    api.theme.set("switch2")
+    _engine, window = render(api)
+    root = window.property("contentItem").childItems()[0].property("item")
+    QMetaObject.invokeMethod(root, "push", Q_ARG("QVariant", "pages/SettingsPage.qml"), Q_ARG("QVariant", {"section": "sound"}))
+    settle(window)
+    page = root.property("topPage")
+    rows = page.property("content").toVariant()
+    assert [(r["label"], r["path"], r["value"]) for r in rows] == [
+        ("Speakers", "Built-in Audio", False),
+        ("Headphones", "Built-in Audio", True),
+        ("HDMI / DisplayPort", "TV", False),
+    ]
+    QMetaObject.invokeMethod(page, "activate", Q_ARG("QVariant", 2), Q_ARG("QVariant", rows[2]))
+    wait_for(api.home.outputsChanged, 3000)
+    assert [r["label"] for r in page.property("content").toVariant() if r["value"]] == ["HDMI / DisplayPort"]
+    window.close()
+    pump(50)

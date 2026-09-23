@@ -287,6 +287,11 @@ class FakeCore:
         self.frames = 0
         self.filter = None
         self.level, self.muted = 62, False
+        self.outputs_list = [
+            {"id": "alsa_card.pci-0000_00_1f.3/analog-output-speaker", "label": "Speakers", "device": "Built-in Audio", "current": True},
+            {"id": "alsa_card.pci-0000_00_1f.3/analog-output-headphones", "label": "Headphones", "device": "Built-in Audio", "current": False},
+            {"id": "alsa_card.pci-0000_01_00.1/hdmi-output-0", "label": "HDMI / DisplayPort", "device": "TV", "current": False},
+        ]
         self._cards = X11Cards()
         self._config.setdefault("paths", {})["overrides"] = str(self._root / "overrides")
         self._lay_out()
@@ -875,7 +880,18 @@ class FakeCore:
             self.level = max(0, min(100, int(value)))
         elif change != "get":
             raise UniverseError("Invalid", f"volume: up, down, mute, set or get, not '{change}'")
-        return {"percent": self.level, "muted": self.muted, "output": "Fake speakers"}
+        output = next((o["label"] for o in self.outputs_list if o["current"]), "")
+        return {"percent": self.level, "muted": self.muted, "output": output}
+
+    def outputs(self):
+        return [dict(o) for o in self.outputs_list]
+
+    def set_output(self, id):
+        if not any(o["id"] == id for o in self.outputs_list):
+            raise UniverseError("Invalid", f"output: no '{id}' (universe output lists them)")
+        for o in self.outputs_list:
+            o["current"] = o["id"] == id
+        return self.volume("get")
 
     # A shot during a session lands in the game's screenshots dir, named by the moment, as the capture module's does.
     def screenshot(self):

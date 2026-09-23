@@ -174,6 +174,12 @@ FocusScope {
                     icon: "mute",
                     label: "Mute",
                     kind: "toggle"
+                },
+                {
+                    id: "output",
+                    icon: "headphones",
+                    label: "Output",
+                    kind: "value"
                 }
             ]
         }
@@ -202,8 +208,30 @@ FocusScope {
             filter: api.home.launchValue("gamescope_filter"),
             sharp: api.home.launchValue("gamescope_sharpness"),
             vol: api.home.volumePercent,
-            mute: api.home.muted
+            mute: api.home.muted,
+            output: outputApply.running ? vals.output : currentOutput()
         };
+    }
+
+    function currentOutput() {
+        var on = api.home.outputs.filter(function (o) {
+            return o.current;
+        })[0];
+        return on ? on.id : "";
+    }
+
+    // Two cards can both call theirs "HDMI / DisplayPort": the device tells them apart.
+    function outputName(id) {
+        var outs = api.home.outputs;
+        var o = outs.filter(function (x) {
+            return x.id === id;
+        })[0];
+        if (!o)
+            return "None";
+        var twin = outs.some(function (x) {
+            return x.id !== o.id && x.label === o.label;
+        });
+        return twin && o.device ? o.label + " · " + o.device : o.label;
     }
 
     // A copy: the same object assigned again is no change to the bindings.
@@ -214,6 +242,10 @@ FocusScope {
     }
 
     function options(item) {
+        if (item.id === "output")
+            return api.home.outputs.map(function (o) {
+                return o.id;
+            });
         return item.id === "fps" ? (vals.fpsOptions || []) : item.options;
     }
 
@@ -239,6 +271,8 @@ FocusScope {
             return v.vol + "%";
         case "mute":
             return v.mute ? "On" : "Off";
+        case "output":
+            return outputName(v.output);
         }
         return item.value || "";
     }
@@ -259,7 +293,9 @@ FocusScope {
         if (!opts.length)
             return;
         var next = opts[(Math.max(0, opts.indexOf(vals[item.id])) + dir + opts.length) % opts.length];
-        if (item.key)
+        if (item.id === "output")
+            outputApply.restart();
+        else if (item.key)
             api.home.setLaunchValue(item.key, next);
         else
             api.universe.setSetting("capture", session.id, item.id, next);
@@ -364,6 +400,7 @@ FocusScope {
             shots.open = false;
             refresh();
             api.home.volume("get", 0);
+            api.home.loadOutputs();
             Sound.panel();
             forceActiveFocus();
         } else
@@ -382,6 +419,10 @@ FocusScope {
             patch("vol", api.home.volumePercent);
             patch("mute", api.home.muted);
         }
+        function onOutputsChanged() {
+            if (!outputApply.running)
+                patch("output", dock.currentOutput());
+        }
         function onChanged() {
             if (dock.open && dock.vals.pause !== api.home.pauseOnHome)
                 patch("pause", api.home.pauseOnHome);
@@ -394,6 +435,16 @@ FocusScope {
                 Notices.show("Screenshot saved");
             else
                 Notices.fail("Screenshot failed");
+        }
+    }
+
+    // Stepping through the outputs switches once the cursor rests: each switch can change a card's profile.
+    Timer {
+        id: outputApply
+        interval: 500
+        onTriggered: {
+            if (dock.vals.output !== dock.currentOutput())
+                api.home.setOutput(dock.vals.output);
         }
     }
 

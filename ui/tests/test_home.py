@@ -575,6 +575,46 @@ def test_the_dock_renders_over_a_running_game(api, fake, tmp_path, monkeypatch):
     pump(50)
 
 
+def test_the_docks_output_row_switches_once_the_cursor_rests(api, fake, tmp_path, monkeypatch):
+    from universe_ui import fake_core
+
+    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+    switched = []
+    real_set = fake.core.set_output
+    monkeypatch.setattr(fake.core, "set_output", lambda ident: (switched.append(ident), real_set(ident))[1])
+    engine, window = render(api)
+    overlay = host.create_overlay(engine, window.size())
+    api.home.attachOverlay(overlay)
+    overlay.show()
+    pump(200)
+    fake.launch("mirrors-edge", "")
+    wait_for(fake.sessionShown, 3000)
+    pump(300)
+    api.home.openDock()
+    overlay.requestActivate()
+    wait_for(api.home.outputsChanged, 3000)
+    pump(300)
+    dock = overlay.property("contentItem").childItems()[0].property("item")
+    dock.setProperty("index", [b["id"] for b in dock.property("buttons").toVariant()].index("sound"))
+    key(overlay, Qt.Key.Key_Return)
+    key(overlay, Qt.Key.Key_Down)
+    key(overlay, Qt.Key.Key_Down)
+    assert dock.property("target").toVariant()["id"] == "output" and dock.property("vals").toVariant()["output"].endswith("speaker")
+    key(overlay, Qt.Key.Key_Right)
+    key(overlay, Qt.Key.Key_Right)
+    assert dock.property("vals").toVariant()["output"].endswith("hdmi-output-0"), "the row shows the pick at once"
+    assert [o["label"] for o in api.home.outputs if o["current"]] == ["Speakers"], "nothing switched while stepping"
+    wait_for(api.home.outputsChanged, 3000)
+    assert [o["label"] for o in api.home.outputs if o["current"]] == ["HDMI / DisplayPort"]
+    assert len(switched) == 1 and switched[0].endswith("hdmi-output-0"), "one switch, to where the cursor rested"
+    if os.environ.get("UNIVERSE_TEST_SHOTS"):
+        overlay.grabWindow().save(str(tmp_path / "dock-output.png"))
+    stop(api)
+    window.close()
+    overlay.close()
+    pump(50)
+
+
 def test_home_over_the_poster_raises_home_and_quit_and_home_drops_the_poster(api, fake, tmp_path, monkeypatch):
     from PySide6.QtCore import Q_ARG, QMetaObject, QObject
 
@@ -753,3 +793,21 @@ def test_home_from_the_game_zooms_the_frame_into_its_tile(api, fake, monkeypatch
     stop(api)
     window.close()
     pump(50)
+
+
+def test_an_output_picked_becomes_current_and_brings_its_level(api, fake):
+    home = api.home
+    home.loadOutputs()
+    wait_for(home.outputsChanged, 3000)
+    assert [o["label"] for o in home.outputs if o["current"]] == ["Speakers"]
+    headphones = next(o["id"] for o in home.outputs if o["label"] == "Headphones")
+    fake.core.level = 30
+    home.setOutput(headphones)
+    wait_for(home.outputsChanged, 3000)
+    assert [o["id"] for o in home.outputs if o["current"]] == [headphones]
+    assert home.volumePercent == 30, "the reply is the new sink's level"
+    errors = []
+    fake.error.connect(lambda kind, message: errors.append(kind))
+    home.setOutput("gone")
+    wait_for(home.outputsChanged, 3000)
+    assert errors == ["Invalid"] and [o["id"] for o in home.outputs if o["current"]] == [headphones]

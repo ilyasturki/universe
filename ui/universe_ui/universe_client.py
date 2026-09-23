@@ -296,6 +296,12 @@ class CoreClient(QObject):
     def volumeAsync(self, change, value, on_reply):
         self._call_async(lambda: self._core.volume(change, int(value)), on_reply)
 
+    def outputsAsync(self, on_reply):
+        self._call_async(self._core.outputs, on_reply)
+
+    def setOutputAsync(self, ident, on_reply, on_error=None):
+        self._call_async(lambda: self._core.set_output(ident), on_reply, on_error)
+
     def adoptScope(self):
         try:
             return str(self._call(self._core.adopt_scope) or "")

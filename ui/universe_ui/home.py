@@ -22,6 +22,7 @@ class Home(QObject):
     pressed = Signal()
     changed = Signal()
     volumeChanged = Signal()
+    outputsChanged = Signal()
     screenshotTaken = Signal(str)
     stopping = Signal(str)
 
@@ -54,6 +55,7 @@ class Home(QObject):
         self._captured_at = 0.0
         self._captured_still = False
         self._volume = {}
+        self._outputs = []
         self._polling = False
         # Bumped whenever `_shown` is set here, so a poll reply from before it is dropped.
         self._generation = 0
@@ -452,15 +454,38 @@ class Home(QObject):
     def screenRefresh(self):
         return int(self._screen_mode().get("refresh") or 0)
 
+    def _land_volume(self, level):
+        level = dict(level or {})
+        if level != self._volume:
+            self._volume = level
+            self.volumeChanged.emit()
+
     @Slot(str, int)
     def volume(self, change, value=0):
-        def landed(level):
-            level = dict(level or {})
-            if level != self._volume:
-                self._volume = level
-                self.volumeChanged.emit()
+        self._client.volumeAsync(change, int(value), self._land_volume)
 
-        self._client.volumeAsync(change, int(value), landed)
+    def _land_outputs(self, outputs, always=False):
+        outputs = [dict(o) for o in outputs or []]
+        if always or outputs != self._outputs:
+            self._outputs = outputs
+            self.outputsChanged.emit()
+
+    @Slot()
+    def loadOutputs(self):
+        self._client.outputsAsync(self._land_outputs)
+
+    # The new sink has a level of its own: the reply is it. A failed switch reloads too, so a pick shown ahead of it goes back.
+    @Slot(str)
+    def setOutput(self, ident):
+        def landed(level):
+            self._land_volume(level)
+            self.loadOutputs()
+
+        def failed(e):
+            self._client.error.emit(e.kind, e.message)
+            self._client.outputsAsync(lambda outputs: self._land_outputs(outputs, always=True))
+
+        self._client.setOutputAsync(ident, landed, failed)
 
     shown = Property(str, lambda self: self._shown, notify=changed)
     # The game is on screen over the launcher, which happens inside gamescope alone; on the desktop the launcher is a window of its own.
@@ -476,3 +501,4 @@ class Home(QObject):
     frame = Property(str, lambda self: self._frame, notify=changed)
     volumePercent = Property(int, lambda self: int(self._volume.get("percent") or 0), notify=volumeChanged)
     muted = Property(bool, lambda self: bool(self._volume.get("muted")), notify=volumeChanged)
+    outputs = Property(list, lambda self: list(self._outputs), notify=outputsChanged)

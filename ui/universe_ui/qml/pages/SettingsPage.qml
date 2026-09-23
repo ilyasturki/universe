@@ -94,6 +94,12 @@ FocusScope {
             group: "Extras"
         },
         {
+            id: "sound",
+            name: "Sound",
+            icon: "volume-up",
+            group: "System"
+        },
+        {
             id: "doctor",
             name: "Doctor",
             icon: "pulse",
@@ -292,7 +298,7 @@ FocusScope {
     }
 
     readonly property bool refreshable: sectionId === "install" || sectionId === "updates"
-    readonly property bool canRefresh: refreshable || sectionId === "doctor" || sectionId === "controller"
+    readonly property bool canRefresh: refreshable || sectionId === "doctor" || sectionId === "controller" || sectionId === "sound"
 
     readonly property real sideMargin: Theme.dp(80)
     readonly property real sideWidth: Theme.dp(300)
@@ -476,6 +482,41 @@ FocusScope {
                 groups: groups
             };
         }
+        if (sectionId === "sound") {
+            var outs = api.home.outputs;
+            for (var k = 0; k < outs.length; k++)
+                rows.push({
+                    section: "Sound",
+                    key: "output",
+                    label: outs[k].label,
+                    type: "action",
+                    display: outs[k].device,
+                    accent: outs[k].current,
+                    tag: outs[k].current ? "In use" : "",
+                    detail: "Where every sound plays: the games, Universe and the desktop.",
+                    action: outs[k].current ? "" : "Use",
+                    output: outs[k].id
+                });
+            if (rows.length === 0)
+                rows.push({
+                    section: "Sound",
+                    key: "",
+                    label: "No output found",
+                    type: "info",
+                    value: false,
+                    detail: "PipeWire lists none"
+                });
+            groups.push({
+                title: "Output",
+                rows: rows.map(function (r, i) {
+                    return i;
+                })
+            });
+            return {
+                rows: rows,
+                groups: groups
+            };
+        }
         if (sectionId === "about") {
             rows.push({
                 section: "About",
@@ -582,6 +623,8 @@ FocusScope {
                 artwork.item.load();
         } else if (sectionId === "doctor")
             modulesForm.loadDoctor();
+        else if (sectionId === "sound")
+            api.home.loadOutputs();
     }
 
     function refreshNow() {
@@ -678,6 +721,12 @@ FocusScope {
                         api.theme.set(theme.id);
                     });
             });
+        } else if (sectionId === "sound") {
+            if (row.output && row.action !== "") {
+                Sound.enter();
+                api.home.setOutput(row.output);
+            } else
+                Sound.edge();
         } else if (sectionId === "about") {
             if (row.key === "setup") {
                 Sound.enter();
@@ -1010,6 +1059,9 @@ FocusScope {
         launch.showAdvanced = false;
         controller.showAdvanced = false;
         refresh();
+        // `sectionId` still names the section left.
+        if (sections[section].id === "sound")
+            api.home.loadOutputs();
         if (sectionId === "search" && finder.item)
             finder.item.open();
         Qt.callLater(function () {

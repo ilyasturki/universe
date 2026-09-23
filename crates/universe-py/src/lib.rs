@@ -205,6 +205,12 @@ impl Core {
     fn volume(&self, py: Python<'_>, change: String, value: u8) -> PyResult<Py<PyAny>> {
         self.value(py, |c| async move { c.volume(&change, value).await })
     }
+    fn outputs(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| async move { c.outputs().await })
+    }
+    fn set_output(&self, py: Python<'_>, id: String) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| async move { c.set_output(&id).await })
+    }
     fn host_gamescope(&self, py: Python<'_>, screen: String) -> Option<Vec<String>> {
         self.run_infallible(py, |c| async move { c.host_gamescope(&screen).await }).map(|(p, a)| std::iter::once(p).chain(a).collect())
     }

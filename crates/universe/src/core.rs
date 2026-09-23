@@ -632,6 +632,20 @@ impl Core {
         Ok(serde_json::json!({"percent": level.percent, "muted": level.muted, "output": level.output}))
     }
 
+    pub async fn outputs(&self) -> Result<Vec<crate::sound::Output>> {
+        blocking(|| crate::sound::outputs().map_err(Error::Unavailable)).await
+    }
+
+    /// The new sink's level, as `volume("get")` reads it.
+    pub async fn set_output(&self, id: &str) -> Result<serde_json::Value> {
+        if !self.outputs().await?.iter().any(|o| o.id == id) {
+            return Err(Error::Invalid(format!("output: no '{id}' (universe output lists them)")));
+        }
+        let id = id.to_owned();
+        blocking(move || crate::sound::select(&id).map_err(Error::Unavailable)).await?;
+        self.volume("get", 0).await
+    }
+
     pub async fn host_gamescope(&self, screen: &str) -> Option<(String, Vec<String>)> {
         let cfg = self.config.read().await.clone();
         crate::launcher::host_gamescope_for(&cfg, screen).await

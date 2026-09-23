@@ -254,6 +254,11 @@ pub enum Cmd {
         #[command(subcommand)]
         action: ConfigCmd,
     },
+    /// Playback outputs; with an id, play through that one: the system default, as the desktop's own picker sets it
+    Output {
+        /// The output's id, as the list prints it
+        id: Option<String>,
+    },
     /// Take a screenshot through the module that provides one
     Screenshot,
     /// The player's own screenshots, newest first: of one game, or of every game
@@ -1403,6 +1408,24 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 println!("{key} = {value}");
             }
         },
+        Cmd::Output { id: Some(id) } => {
+            let level = core.set_output(&id).await?;
+            if json {
+                return print_json(&level);
+            }
+            println!("playing through {}", s(&level, "output"));
+        }
+        Cmd::Output { id: None } => {
+            let list = core.outputs().await?;
+            if json {
+                return print_json(&list);
+            }
+            let mut t = table(&["Output", "Device", "Id", ""]);
+            for o in list {
+                t.add_row(vec![o.label, o.device, o.id, if o.current { "current".into() } else { String::new() }]);
+            }
+            println!("{t}");
+        }
         Cmd::Screenshot => println!("{}", core.screenshot().await?),
         Cmd::Screenshots { name, remove, yes } => {
             let id = match &name {
@@ -1651,6 +1674,11 @@ fn complete(what: &str) -> anyhow::Result<()> {
                 println!("{id}\t{name}");
             }
         }
+        "outputs" => {
+            for o in crate::sound::outputs().unwrap_or_default() {
+                println!("{}\t{} · {}", o.id, o.label, o.device);
+            }
+        }
         other => anyhow::bail!("unknown completion set {other}"),
     }
     Ok(())
@@ -1745,6 +1773,7 @@ const POSITIONALS: &[(&str, usize, &str)] = &[
     ("uninstall", 1, "games"),
     ("sessions", 1, "games"),
     ("screenshots", 1, "games"),
+    ("output", 1, "outputs"),
     ("journal", 1, "games"),
     ("recordings", 1, "games"),
     ("update", 1, "games"),

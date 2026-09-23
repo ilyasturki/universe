@@ -72,6 +72,12 @@ FocusScope {
             groupLabel: "Extras"
         },
         {
+            id: "sound",
+            label: "Sound",
+            group: 4,
+            groupLabel: "System"
+        },
+        {
             id: "doctor",
             label: "Doctor",
             group: 4,
@@ -104,9 +110,15 @@ FocusScope {
             },
             doctor: function () {
                 modulesForm.loadDoctor();
+            },
+            sound: function () {
+                api.home.loadOutputs();
             }
         })
     readonly property var refreshers: ({
+            sound: function () {
+                api.home.loadOutputs();
+            },
             updates: function () {
                 sources.refresh();
             },
@@ -343,6 +355,28 @@ FocusScope {
                     detail: ""
                 }
             ];
+        if (sectionId === "sound") {
+            var outs = api.home.outputs.map(function (o) {
+                return {
+                    label: o.label,
+                    type: "radio",
+                    value: o.current,
+                    path: o.device,
+                    action: "output",
+                    output: o.id,
+                    detail: ""
+                };
+            });
+            return outs.length > 0 ? outs : [
+                {
+                    label: "No output found",
+                    type: "info",
+                    value: false,
+                    display: "PipeWire lists none",
+                    detail: ""
+                }
+            ];
+        }
         var looks = api.theme.themes;
         if (sectionId === "themes")
             return looks.map(function (t) {
@@ -462,6 +496,10 @@ FocusScope {
         } else if (sectionId === "controllers") {
             Sound.play("ok");
             shell.push("pages/ControllersPage.qml", {});
+        } else if (row.action === "output") {
+            Sound.play(row.value ? "edge" : "select");
+            if (!row.value)
+                api.home.setOutput(row.output);
         } else if (row.action === "theme") {
             Sound.play("select");
             var id = row.theme;

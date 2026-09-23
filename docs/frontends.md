@@ -27,7 +27,7 @@ One context property, `api`:
 | `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written, a game's sessions and their logs) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed` and `--size` turn it off) |
 | `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `frame`, `ground`, `detail`), `current`, `frame`, `set(id)`, `landing` / `takeLanding()`, `fontPath` |
-| `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `underGame` (the game is on screen over the launcher, inside gamescope), `open`, `loading` (a session this client launched has no window up yet), `paused`, `pauseOnHome`, `flipped`, `frame`, `volumePercent`, `muted`; `pressed()`, `stopping(title)`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher(landing?)` / `takeLanding()`, `covered()`, `stop()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotTaken(path)`), `volume(change, value)`, `launchValue(key)`, `launchChoices(key)`, `setLaunchValue(key, value)`, `screenRefresh()` |
+| `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `underGame` (the game is on screen over the launcher, inside gamescope), `open`, `loading` (a session this client launched has no window up yet), `paused`, `pauseOnHome`, `flipped`, `frame`, `volumePercent`, `muted`, `outputs` (`loadOutputs()` fills it); `pressed()`, `stopping(title)`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher(landing?)` / `takeLanding()`, `covered()`, `stop()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotTaken(path)`), `volume(change, value)`, `setOutput(id)`, `launchValue(key)`, `launchChoices(key)`, `setLaunchValue(key, value)`, `screenRefresh()` |
 
 A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `playTime`,
 `playCount`, `lastPlayed`, `releaseYear`, `developerList`, `publisherList`, `genreList`, `players`,
@@ -271,7 +271,9 @@ hook answers before either, see api.md § Screenshots). A failed shot emits an e
 toasts it, the flash stays off.
 Its volume row is the controller's macro by another route (`volume("up" | "down" | "mute")`,
 `controller.volume_step` per step, GNOME's OSD through `desktop::show_osd` on every change but a
-`get`). Quit asks, then `api.home.stop()`.
+`get`). Its Output row steps through `api.home.outputs` and switches once the cursor has rested
+500 ms (`setOutput(id)`: a switch can change a card's profile); the reply is the new sink's level.
+Quit asks, then `api.home.stop()`.
 
 The swap between the game and the launcher is gamescope's, one cut, so the last frame it painted
 bridges it: the Guide press from the game asks for it (`nest_frame`) and the flip — the hold, the
@@ -475,12 +477,13 @@ dialogs, the sheets, the lightbox, the search overlay) carries a bare `HoverHand
 ## The Settings tab
 
 `pages/SettingsPage.qml` is a sidebar (`ui/SectionList.qml`: Runners, Launch, Modules, Sources, Install,
-Updates, Controller, Themes, Doctor, Artwork, About, Quit) beside one column of `ui/SettingsCards.qml`
-(`columns: 1`). About is three `static` rows (the build — `api.universe.version()`, the version with the short git rev behind it — the look, the library's count), nothing to select. Quit is one row, confirmed in place (`Stay` /
+Updates, Controller, Themes, Sound, Doctor, Artwork, About, Quit) beside one column of `ui/SettingsCards.qml`
+(`columns: 1`). Sound is one row per `api.home.outputs` entry, the device as its value and the one
+in use tagged; A on another plays through it (`setOutput`). About is three `static` rows (the build — `api.universe.version()`, the version with the short git rev behind it — the look, the library's count), nothing to select. Quit is one row, confirmed in place (`Stay` /
 `Quit Universe`, which says when the running game closes with it), then `Qt.quit()` — the host
 stops the session and shuts the core down after the loop. Up and Down in the sidebar switch the section as they go, Right or A
 enter the cards, Left or B come back, L2/R2 cycle the section from anywhere, and □ refreshes the
-sections that fetch (Install, Updates, Doctor). The cards start level with the page title, not
+sections that fetch (Install, Updates, Sound, Doctor). The cards start level with the page title, not
 the sidebar. The tab bar's search glass is on every tab, Settings too, and opens the game search;
 the store's catalogue search is Switch 2's alone. A row's `icon` names a `MenuGlyph` kind; a pad
 button's row prints its `press` and `hold` macros as chips (`PRESS`/`HOLD`, the action's glyph
