@@ -142,7 +142,7 @@
           installPhase = ''
             mkdir -p $out/share/universe
             cp -r . $out/share/universe/${kind}
-            rm -rf $out/share/universe/${kind}/*/tests $out/share/universe/${kind}/*/extension
+            rm -rf $out/share/universe/${kind}/*/tests
             patchShebangs $out/share/universe/${kind}
           '';
         };
@@ -152,7 +152,7 @@
       universe-shell-extension = pkgs.stdenvNoCC.mkDerivation (finalAttrs: {
         pname = "universe-shell-extension";
         inherit version;
-        src = ./modules/capture/extension;
+        src = ./extension;
         installPhase = ''
           runHook preInstall
           install -Dm644 metadata.json extension.js -t \
@@ -333,7 +333,10 @@
       };
       pytestModules = pytestOf {
         name = "universe-pytest-modules";
-        dirs = [ "modules" ];
+        dirs = [
+          "modules"
+          "extension"
+        ];
         runtime = moduleRuntime;
       };
       pytestSources = pytestOf {

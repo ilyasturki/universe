@@ -3,8 +3,8 @@ import re
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-MODULE_DIR = Path(__file__).resolve().parents[1]
-EXTENSION = MODULE_DIR / "extension"
+EXTENSION = Path(__file__).resolve().parents[1]
+MODULES = EXTENSION.parent / "modules"
 
 
 def interface():
@@ -25,8 +25,8 @@ def interface():
 
 def test_the_bus_calls_match_the_extensions_interface():
     name, methods = interface()
-    common = (MODULE_DIR / "bin" / "_common.py").read_text()
-    shot = (MODULE_DIR.parent / "screenshot" / "bin" / "shot").read_text()
+    common = (MODULES / "capture" / "bin" / "_common.py").read_text()
+    shot = (MODULES / "screenshot" / "bin" / "shot").read_text()
     assert f'WINDOWS_BUS_NAME = "{name}"' in common and f'WINDOWS_BUS_NAME = "{name}"' in shot
     assert methods["ShowOSD"] == ("ssd", "") and '"ShowOSD", "ssd"' in common
     assert methods["Screenshot"] == ("sbb", "b") and '"Screenshot", "sbb"' in shot

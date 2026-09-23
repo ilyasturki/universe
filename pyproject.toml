@@ -1,5 +1,5 @@
 [tool.pytest.ini_options]
-testpaths = ["ui/tests", "modules", "sources", "crates/universe-py/tests"]
+testpaths = ["ui/tests", "modules", "extension", "sources", "crates/universe-py/tests"]
 pythonpath = ["ui"]
 qt_api = "pyside6"
 qt_log_level_fail = "WARNING"

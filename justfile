@@ -91,8 +91,8 @@ test *suites: build develop env
             rust) cargo test ;;
             python) "{{ python }}" -m pytest -q ;;
             bindings) "{{ python }}" -m pytest -q crates/universe-py/tests ;;
-            ui|modules|sources) "{{ python }}" -m pytest -q "$suite" ;;
-            *) echo "test: unknown suite '$suite' (rust, python, ui, modules, sources, bindings)" >&2; exit 2 ;;
+            ui|modules|extension|sources) "{{ python }}" -m pytest -q "$suite" ;;
+            *) echo "test: unknown suite '$suite' (rust, python, ui, modules, extension, sources, bindings)" >&2; exit 2 ;;
         esac
     done
 

@@ -75,7 +75,7 @@ if [ ${#files[@]} -gt 0 ]; then
             *.rs) rust_file "$f" || fail ;;
             *.qml) qml_file "$f" || fail ;;
             *.nix) nix_fmt "$f" || fail ;;
-            modules/capture/extension/*.js|modules/capture/extension/*.json) js_fmt "$f" || fail ;;
+            extension/*.js|extension/*.json) js_fmt "$f" || fail ;;
             *.js) echo "fmt: $f is QML-side JavaScript (.pragma/.import), no formatter covers it" >&2 ;;
             *) is_python "$f" && py+=("$f") ;;
         esac
