@@ -49,13 +49,18 @@ calls it on A, not as the cursor moves. `frameMap[session]` carries `thumbnail`,
 until extracted), `complete` and `duration`, for the listed sessions only, built once per change.
 
 `api.screens.journal` maps a game's entries to rows — `session`, `title`, `state`, `reason`,
-`started_at`, `dateText`, `duration_s`, `durationText`, `paragraphs`, `blocks`, `next_up`,
-`images` (`file://` URLs of the paths the core hands out), `hasRecording` (from the session rows),
-`gameId`, `gameTitle` — sorted by session id, last first. `state` is `written`, `pending` (the
-module is still writing: no title, no paragraphs; the row pulses with the time since `started_at`
-and cannot be opened) or `failed` (`reason` is the module's message, its one paragraph).
-`durationText` is the session's length — `42 min`, `1 h 05` — next to the date in the row and in
-the article header; the date is `written_at`, or `started_at` while there is none.
+`retry_at`, `retryText`, `started_at`, `dateText`, `duration_s`, `durationText`, `paragraphs`,
+`blocks`, `next_up`, `images` (`file://` URLs of the paths the core hands out), `hasRecording`
+(from the session rows), `gameId`, `gameTitle` — sorted by session id, last first. `state` is
+`written`, `pending` (the module is still writing: no title, no paragraphs; the row pulses with the
+time since `started_at` and cannot be opened), `deferred` (`reason` and `retryText`, the instant it
+is owed another run), `failed` (`reason` is the module's message, its one paragraph) or `none` —
+a session the module never wrote for, which carries the session's own date and duration and nothing
+else, so an imported recording is one action away from an entry. `write(gameId, session, rewrite)`
+hands it to the core (`journal_write`): A on a row that is not `written`, "Write the entry" / "Try
+again now" / "Write it again" in its Start menu. `durationText` is the session's length — `42 min`,
+`1 h 05` — next to the date in the row and in the article header; the date is `written_at`, or
+`started_at` while there is none.
 `api.screens.sessions` maps a game's played sessions (the rows with a `unit`; imports are left out)
 to rows — `session`, `started_at`, `dateText`, `durationText`, `end`, `endText` (`Quit`, `Stopped`,
 `Crashed (exit 6)`, `Killed`), `bad` (crashed or killed), `exit`, `hasRecording`, `hasJournal`,
@@ -90,7 +95,11 @@ place, no list reset. `api.screens.shots` rows carry the same `thumb` and `thumb
 the module's 30-min timeout show up); `appeared(session, title)` and
 `resolved(session, game, state, text)` fire once per session and become the "Journal: writing …",
 "Journal: <title>" and "Journal failed: <reason>" toasts, and the tab bar pulses a book next to
-the session badge while the count is not zero.
+the session badge while the count is not zero. Whenever nothing is being written it calls
+`sweep_journals()`: the core starts the oldest owed entry, and the reply's `next` arms a one-shot
+timer (a minute at least, half an hour at most) so a session put off until the quota lifts is
+picked up without anyone asking. That is the retry loop — one entry at a time, none while a game
+runs, and the frontend is what keeps time.
 
 The settings forms (`api.screens.launch`, `runner`, `module`, `source`, `gameSettings`, `controller`)
 hand QML a flat `rows` list and `groups` that index it; a row's `advanced` puts it in an `advanced`

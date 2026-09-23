@@ -1282,7 +1282,7 @@ class FakeCore:
                     "ended_at": line.get("ended_at") or "",
                     "duration_s": line.get("duration_s") or 0,
                     **e,
-                    "images": e.get("images") or shots,
+                    "images": e.get("images") or (shots if e.get("state", "written") == "written" else []),
                 }
             )
         return out
@@ -1321,6 +1321,30 @@ class FakeCore:
                 self._write_entry(ident, entry)
 
         self._later(JOURNAL_S, write)
+
+    def journal_write(self, ident, session_id, rewrite=False):
+        lines = self._data.get("sessions", {}).get(ident, [])
+        if not any(s.get("session") == session_id for s in lines):
+            raise UniverseError("NotFound", f"session {session_id} of {ident}")
+        entries = self._data.setdefault("journal", {}).setdefault(ident, [])
+        written = next((e for e in entries if e.get("session") == session_id and e.get("state", "written") == "written"), None)
+        if written and not rewrite:
+            raise UniverseError("Invalid", f"{session_id} already has an entry; ask for a rewrite to replace it")
+        self._data["journal"][ident] = [e for e in entries if e.get("session") != session_id]
+        self._pend_journal(ident, session_id)
+        return f"universe-journal-post-process-{session_id}.service"
+
+    def sweep_journals(self, ident=""):
+        waiting = [
+            (game, e) for game, entries in self._data.get("journal", {}).items() if not ident or game == ident for e in entries if e.get("state") == "deferred"
+        ]
+        nxt = min((e.get("retry_at") or "" for _, e in waiting), default="")
+        due = [(game, e) for game, e in waiting if (e.get("retry_at") or "") <= _now()]
+        if not due:
+            return {"started": None, "due": 0, "next": nxt}
+        game, entry = due[0]
+        self.journal_write(game, entry["session"], True)
+        return {"started": {"game": game, "session": entry["session"]}, "due": len(due) - 1, "next": nxt}
 
     def remove_journal_entry(self, ident, session_id):
         entries = self._data.get("journal", {}).get(ident, [])

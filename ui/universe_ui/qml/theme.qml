@@ -1283,7 +1283,7 @@ FocusScope {
             toast.show("Journal: writing " + title + "…");
         }
         function onResolved(session, id, state, text) {
-            toast.show(state === "failed" ? "Journal failed: " + text : "Journal: " + text);
+            toast.show(state === "failed" ? "Journal failed: " + text : state === "deferred" ? "Journal put off: " + text : "Journal: " + text);
         }
     }
 

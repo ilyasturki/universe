@@ -680,8 +680,9 @@ def test_removing_a_recording_or_an_entry_reloads_both_lists(api, fake):
     journal, recordings = api.screens.journal, api.screens.recordings
     journal.load("the-technomancer")
     recordings.load("the-technomancer")
-    assert journal.count == 2 and recordings.count == 2
-    entry, row = journal.rows[0], recordings.rows[0]
+    written = [r for r in journal.rows if r["state"] == "written"]
+    assert len(written) == 2 and recordings.count == 2
+    entry, row = written[0], recordings.rows[0]
     assert entry["paragraphs"] and entry["dateText"] and entry["hasRecording"] is True
     assert row["url"].startswith("file://") and row["sizeText"] == "2.0 GB" and row["hasJournal"] is True
     assert row["durationText"] == "1 h 10" and row["gameTitle"] == "The Technomancer"
@@ -698,7 +699,8 @@ def test_removing_a_recording_or_an_entry_reloads_both_lists(api, fake):
     assert recordings.remove("the-technomancer", session) is False and errors == ["NotFound"]
 
     assert journal.remove("the-technomancer", session) is True
-    assert journal.count == 1 and all(r["session"] != session for r in journal.rows)
+    # The session keeps a row of its own, now without an entry: the journal page is where it is written again.
+    assert [r["state"] for r in journal.rows if r["session"] == session] == ["none"]
 
 
 def test_journal_rows_carry_state_and_duration(api, fake):
@@ -720,13 +722,15 @@ def test_journal_rows_carry_state_and_duration(api, fake):
     journal = api.screens.journal
     journal.load("the-technomancer")
     rows = journal.rows
-    assert [r["state"] for r in rows] == ["pending", "written", "written", "failed"]
-    pending, first, second, failed = rows
+    assert [r["state"] for r in rows] == ["pending", "written", "written", "failed", "deferred"]
+    pending, first, second, failed, deferred = rows
     assert pending["title"] == "" and pending["durationText"] == "" and pending["reason"] == ""
     assert pending["started_at"] == "2026-09-12T20:00:00+02:00" and "20:00" in pending["dateText"]
     assert first["durationText"] == "1 h 10" and first["duration_s"] == 4215 and second["durationText"] == "1 h 17"
     assert failed["title"] == "Journal failed" and failed["reason"] == "codex timed out after 30 min"
     assert failed["durationText"] == "42 min" and failed["blocks"] == ["codex timed out after 30 min"]
+    assert deferred["title"] == "Journal put off" and deferred["reason"] == "codex quota reached"
+    assert deferred["retry_at"] == "2027-01-01T06:00:00+01:00" and "2027" in deferred["retryText"]
 
 
 def test_pending_journals_announce_each_session_once(api, fake):
@@ -782,8 +786,11 @@ def test_album_and_news_span_every_game(api):
     assert album.rows[0]["created_at"] >= album.rows[1]["created_at"], "newest first"
     news = api.screens.news
     news.loadAll()
-    assert news.count == 2 and news.rows[0]["gameTitle"] == "The Technomancer" and news.gameId == ""
-    assert news.rows[0]["written_at"] >= news.rows[1]["written_at"]
+    written = [r for r in news.rows if r["state"] == "written"]
+    assert len(written) == 2 and written[0]["gameTitle"] == "The Technomancer" and news.gameId == ""
+    assert written[0]["written_at"] >= written[1]["written_at"]
+    # Every session the library holds is a row, entry or not, newest first.
+    assert [r["state"] for r in news.rows] == ["written", "written", "none", "deferred"]
 
 
 def test_screenshots_list_per_game_and_across_games(api, fake):

@@ -526,6 +526,30 @@ def markdown_blocks(paragraphs):
     return blocks
 
 
+SESSION_ID = re.compile(r"^\d{8}-\d{6}$")
+
+STATE_TITLES = {"pending": "", "none": "", "failed": "Journal failed", "deferred": "Journal put off"}
+
+
+def _untitled(state):
+    return STATE_TITLES.get(state, "Untitled")
+
+
+def _empty_row():
+    """Every key a journal row carries, so a session without an entry reads like one."""
+    return {
+        "retry_at": "",
+        "retryText": "",
+        "reason": "",
+        "provider": "",
+        "paragraphs": [],
+        "blocks": [],
+        "next_up": "",
+        "images": [],
+        "written_at": "",
+    }
+
+
 class JournalList(QObject):
     rowsChanged = Signal()
     gameIdChanged = Signal()
@@ -551,19 +575,24 @@ class JournalList(QObject):
         self.gameIdChanged.emit()
         lines = self._client.sessions(game_id)
         recorded = {(str(line.get("game") or ""), str(line.get("session") or "")) for line in lines if line.get("recording")}
+        played = {}
+        for line in lines:
+            sid = str(line.get("session") or "")
+            if SESSION_ID.match(sid):
+                played.setdefault(str(line.get("game") or game_id), []).append(line)
         if game_id:
             titles = {game_id: str(self._client.game(game_id).get("title") or game_id)}
         else:
             titles = {}
             for line in lines:
                 titles.setdefault(str(line.get("game") or ""), str(line.get("title") or ""))
-        rows = [row for ident, title in titles.items() for row in self._rows_of(ident, title, recorded)]
+        rows = [row for ident, title in titles.items() for row in self._rows_of(ident, title, recorded, played.get(ident) or [])]
         # Session ids are timestamps: a pending entry sorts among the written ones by when it was played.
         rows.sort(key=lambda r: r["session"], reverse=True)
         self._rows = rows
         self.rowsChanged.emit()
 
-    def _rows_of(self, game_id, title, recorded):
+    def _rows_of(self, game_id, title, recorded, played):
         rows = []
         for entry in self._client.journal(game_id):
             session = str(entry.get("session") or "")
@@ -573,9 +602,11 @@ class JournalList(QObject):
             rows.append(
                 {
                     "session": session,
-                    "title": str(entry.get("title") or ("" if state == "pending" else "Journal failed" if state == "failed" else "Untitled")),
+                    "title": str(entry.get("title") or _untitled(state)),
                     "state": state,
-                    "reason": paragraphs[0] if state == "failed" and paragraphs else "",
+                    "retry_at": str(entry.get("retry_at") or ""),
+                    "retryText": _when(entry.get("retry_at")) if state == "deferred" else "",
+                    "reason": paragraphs[0] if state in ("failed", "deferred") and paragraphs else "",
                     "started_at": str(entry.get("started_at") or ""),
                     "dateText": _when(entry.get("written_at") or entry.get("started_at")),
                     "duration_s": duration,
@@ -591,6 +622,28 @@ class JournalList(QObject):
                     "gameTitle": title,
                 }
             )
+        # A session the module never wrote for (an imported recording, a game journaled later) is a row of its own: one action away from an entry.
+        seen = {r["session"] for r in rows}
+        for line in played:
+            session = str(line.get("session") or "")
+            if session in seen:
+                continue
+            duration = int(line.get("duration_s") or 0)
+            rows.append(
+                {
+                    **_empty_row(),
+                    "session": session,
+                    "title": "",
+                    "state": "none",
+                    "started_at": str(line.get("started_at") or ""),
+                    "dateText": _when(line.get("ended_at") or line.get("started_at")),
+                    "duration_s": duration,
+                    "durationText": _duration(duration) if duration else "",
+                    "hasRecording": (game_id, session) in recorded,
+                    "gameId": game_id,
+                    "gameTitle": title,
+                }
+            )
         return rows
 
     @Slot()
@@ -601,12 +654,28 @@ class JournalList(QObject):
     def remove(self, game_id, session):
         return bool(self._client.removeJournalEntry(game_id, session))
 
+    @Slot(str, str, result=bool)
+    @Slot(str, str, bool, result=bool)
+    def write(self, game_id, session, rewrite=False):
+        return bool(self._client.journalWrite(game_id, session, rewrite))
+
     rows = Property(list, lambda self: [dict(r) for r in self._rows], notify=rowsChanged)
     count = Property(int, lambda self: len(self._rows), notify=rowsChanged)
     gameId = Property(str, lambda self: self._game_id, notify=gameIdChanged)
 
 
 POLL_MS = 10000
+# The wall lifts at its own instant; the timer that waits for it never sleeps past half an hour, so a clock change cannot strand it.
+RETRY_FLOOR_MS = 60_000
+RETRY_CEILING_MS = 30 * 60_000
+
+
+def _seconds_until(stamp):
+    try:
+        when = datetime.fromisoformat(stamp)
+    except (TypeError, ValueError):
+        return None
+    return max(0.0, (when - datetime.now(when.tzinfo)).total_seconds())
 
 
 class PendingJournals(QObject):
@@ -621,9 +690,13 @@ class PendingJournals(QObject):
         self._announced = set()
         self._busy = False
         self._again = False
+        self._sweeping = False
         self._timer = QTimer(self)
         self._timer.setInterval(POLL_MS)
         self._timer.timeout.connect(self.refresh)
+        self._retry = QTimer(self)
+        self._retry.setSingleShot(True)
+        self._retry.timeout.connect(self._sweep)
         client.entryWritten.connect(lambda session, ident: self.refresh())
         client.sessionEnded.connect(lambda *args: self.refresh())
         self.refresh()
@@ -655,6 +728,7 @@ class PendingJournals(QObject):
             self._timer.start()
         else:
             self._timer.stop()
+            self._sweep()
         self.changed.emit()
         for session, row in now.items():
             if session not in self._announced:
@@ -667,17 +741,37 @@ class PendingJournals(QObject):
             self._again = False
             self.refresh()
 
+    # Nothing being written: hand the core whatever is owed, and come back when the next entry falls due.
+    def _sweep(self):
+        if self._sweeping:
+            return
+        self._sweeping = True
+        self._client.runAsync(self._client.sweepJournals, self._swept)
+
+    def _swept(self, report):
+        self._sweeping = False
+        report = report or {}
+        if report.get("started"):
+            self.refresh()
+            return
+        due = _seconds_until(str(report.get("next") or ""))
+        if due is None:
+            self._retry.stop()
+            return
+        self._retry.start(int(max(RETRY_FLOOR_MS, min(due * 1000, RETRY_CEILING_MS))))
+
     def _resolve(self, session, game):
         entry = next((e for e in self._client.journal(game) if str(e.get("session") or "") == session), None)
         if entry is None:
             return
         state = str(entry.get("state") or "written")
         paragraphs = [str(p) for p in entry.get("paragraphs") or []]
-        text = (paragraphs[0] if paragraphs else "") if state == "failed" else str(entry.get("title") or "Untitled")
+        text = (paragraphs[0] if paragraphs else "") if state in ("failed", "deferred") else str(entry.get("title") or "Untitled")
         self.resolved.emit(session, game, state, text)
 
     def shutdown(self):
         self._timer.stop()
+        self._retry.stop()
 
     rows = Property(list, lambda self: [dict(r) for r in self._rows], notify=changed)
     count = Property(int, lambda self: len(self._rows), notify=changed)

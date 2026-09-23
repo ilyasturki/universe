@@ -19,6 +19,13 @@ FocusScope {
     readonly property string currentSession: current ? current.session : ""
     readonly property var images: current ? current.images : []
     readonly property bool currentPending: current !== null && current.state === "pending"
+    // An entry nobody has written yet: never journaled, put off after a failure, or given up on.
+    readonly property bool currentBlank: current !== null && (current.state === "none" || current.state === "deferred" || current.state === "failed")
+    readonly property bool currentWritten: current !== null && current.state === "written"
+    // The sessions still without an entry are rows too, but they are not what the header counts.
+    readonly property int written: rows.filter(function (r) {
+        return r.state !== "none";
+    }).length
     readonly property bool anyPending: rows.some(function (r) {
         return r.state === "pending";
     })
@@ -77,7 +84,7 @@ FocusScope {
         else
             out.push({
                 glyph: "A",
-                label: currentPending ? "Being written" : "Read",
+                label: currentPending ? "Being written" : currentBlank ? "Write it" : "Read",
                 dim: currentPending
             });
         if (mode !== 3)
@@ -186,8 +193,22 @@ FocusScope {
             Sound.edge();
             return;
         }
+        if (currentBlank) {
+            write(false);
+            return;
+        }
         Sound.panel();
         mode = 1;
+    }
+
+    // Hands the session to the journal module: a first entry, another try, or a fresh one over what is there.
+    function write(again) {
+        if (!current || currentPending) {
+            Sound.edge();
+            return;
+        }
+        Sound.enter();
+        store.write(current.gameId, current.session, again);
     }
 
     function elapsedText(startedAt) {
@@ -237,11 +258,23 @@ FocusScope {
         }
         Sound.panel();
         var items = [];
-        if (!currentPending)
+        if (currentWritten)
             items.push({
                 icon: "book",
                 label: "Read",
                 action: "read"
+            });
+        if (currentBlank)
+            items.push({
+                icon: current.state === "none" ? "plus" : "refresh",
+                label: current.state === "none" ? "Write the entry" : "Try again now",
+                action: "write"
+            });
+        if (currentWritten)
+            items.push({
+                icon: "refresh",
+                label: "Write it again",
+                action: "rewrite"
             });
         if (current.hasRecording)
             items.push({
@@ -249,49 +282,57 @@ FocusScope {
                 label: "Recording",
                 action: "recording"
             });
-        items.push({
-            icon: "trash",
-            label: currentPending ? "Cancel the writing…" : "Remove entry…",
-            action: "remove",
-            danger: true
-        });
+        if (current.state !== "none" || current.hasRecording)
+            items.push({
+                icon: "trash",
+                label: currentPending ? "Cancel the writing…" : current.state === "none" ? "Remove the recording…" : "Remove entry…",
+                action: "remove",
+                danger: true
+            });
         menu.show(items, list, rowRect(), current.title !== "" ? current.title : whenText(current), menuAction);
     }
 
     function menuAction(action) {
         if (action === "read") {
             read();
+        } else if (action === "write") {
+            write(false);
+        } else if (action === "rewrite") {
+            write(true);
         } else if (action === "recording") {
             openRecording();
         } else if (action === "remove") {
             Sound.panel();
+            var blank = current.state === "none";
             var items = [
                 {
                     icon: "",
                     label: "Keep it",
                     action: ""
-                },
-                {
+                }
+            ];
+            if (!blank)
+                items.push({
                     icon: "trash",
                     label: currentPending ? "Stop the writing" : "Trash the entry",
                     action: "remove!",
                     danger: true
-                }
-            ];
+                });
             if (current.hasRecording)
                 items.push({
                     icon: "trash",
-                    label: currentPending ? "Stop it and trash the recording" : "Trash it and its recording",
+                    label: blank ? "Trash the recording" : currentPending ? "Stop it and trash the recording" : "Trash it and its recording",
                     action: "remove-both!",
                     danger: true
                 });
-            menu.show(items, list, rowRect(), currentPending ? "Cancel this entry?" : "Remove this entry?", menuAction);
+            menu.show(items, list, rowRect(), currentPending ? "Cancel this entry?" : blank ? "Remove this recording?" : "Remove this entry?", menuAction);
         } else if (action === "remove!" || action === "remove-both!") {
             Sound.enter();
-            var gameId = current.gameId, session = current.session;
+            var gameId = current.gameId, session = current.session, written = current.state !== "none";
             if (action === "remove-both!")
                 api.screens.recordings.remove(gameId, session);
-            store.remove(gameId, session);
+            if (written)
+                store.remove(gameId, session);
             mode = 0;
         }
         if (action !== "remove")
@@ -380,7 +421,7 @@ FocusScope {
         anchors.rightMargin: page.sideMargin
         game: page.game
         label: "JOURNAL"
-        detail: page.rows.length > 0 ? Format.plural(page.rows.length, "entry", "entries") : ""
+        detail: page.written > 0 ? Format.plural(page.written, "entry", "entries") : ""
     }
 
     Text {
@@ -426,13 +467,22 @@ FocusScope {
             id: entry
 
             readonly property bool pending: modelData.state === "pending"
+            readonly property bool blank: modelData.state === "none"
 
             width: list.width
             height: Theme.dp(96)
             lit: index === page.index && !page.reading
-            muted: pending
-            title: pending ? "Writing the entry…" : modelData.title
-            subtitle: pending ? page.elapsedText(modelData.started_at) : modelData.state === "failed" ? modelData.reason : page.whenText(modelData)
+            muted: pending || blank
+            title: pending ? "Writing the entry…" : blank ? "No entry yet" : modelData.title
+            subtitle: {
+                if (pending)
+                    return page.elapsedText(modelData.started_at);
+                if (modelData.state === "failed")
+                    return modelData.reason;
+                if (modelData.state === "deferred")
+                    return modelData.reason + "  ·  another try " + modelData.retryText;
+                return page.whenText(modelData);
+            }
             mark: "film"
             showMark: modelData.hasRecording
             leadWidth: pending ? Theme.dp(12) : 0
@@ -502,8 +552,8 @@ FocusScope {
 
             Text {
                 width: parent.width
-                text: page.current ? (page.currentPending ? "Writing the entry…" : page.current.title) : ""
-                color: page.currentPending ? Theme.textSecondary : Theme.text
+                text: page.current ? (page.currentPending ? "Writing the entry…" : page.current.state === "none" ? "No entry yet" : page.current.title) : ""
+                color: page.currentPending || page.currentBlank ? Theme.textSecondary : Theme.text
                 font.family: Theme.sans
                 font.weight: Font.Bold
                 font.pixelSize: Theme.dp(38)
@@ -517,8 +567,18 @@ FocusScope {
 
             Text {
                 width: parent.width
-                visible: page.currentPending
-                text: page.current && page.currentPending ? "The journal module is writing this entry — " + page.elapsedText(page.current.started_at) + " so far. It shows up here when it is done." : ""
+                visible: page.currentPending || page.currentBlank
+                text: {
+                    if (!page.current)
+                        return "";
+                    if (page.currentPending)
+                        return "The journal module is writing this entry — " + page.elapsedText(page.current.started_at) + " so far. It shows up here when it is done.";
+                    if (page.current.state === "deferred")
+                        return page.current.reason + ". Another try " + page.current.retryText + ", or ask for one now with Start.";
+                    if (page.current.state === "failed")
+                        return page.current.reason + ". Ask for another try with Start.";
+                    return "This session was never journaled. Start writes its entry from the recording and the screenshots you took.";
+                }
                 color: Theme.textMuted
                 font.family: Theme.sans
                 font.pixelSize: Theme.dp(24)
@@ -527,7 +587,8 @@ FocusScope {
             }
 
             Repeater {
-                model: page.current ? page.current.blocks : []
+                // A row with no entry says its piece above; its one paragraph is that same reason.
+                model: page.current && !page.currentBlank ? page.current.blocks : []
 
                 Text {
                     width: article.width

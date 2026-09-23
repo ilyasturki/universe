@@ -239,6 +239,19 @@
         ],
         "next_up": "Find a way into the officers' district.",
         "images": []
+      },
+      {
+        "session": "20260901-200000",
+        "game": "the-technomancer",
+        "state": "deferred",
+        "written_at": "2026-09-01T21:05:00+02:00",
+        "retry_at": "2027-01-01T06:00:00+01:00",
+        "lang": "en",
+        "title": "",
+        "provider": "codex",
+        "paragraphs": ["codex quota reached"],
+        "next_up": "",
+        "images": []
       }
     ]
   },

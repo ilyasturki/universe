@@ -539,6 +539,23 @@ class CoreClient(QObject):
             log.warning("pending_journals: %s", e.message)
             return []
 
+    @Slot(str, str, result=bool)
+    @Slot(str, str, bool, result=bool)
+    def journalWrite(self, ident, session_id, rewrite=False):
+        if not self._done(self._core.journal_write, ident, session_id, rewrite):
+            return False
+        self.entryWritten.emit(session_id, ident)
+        return True
+
+    @Slot(result="QVariant")
+    @Slot(str, result="QVariant")
+    def sweepJournals(self, ident=""):
+        try:
+            return dict(self._call(self._core.sweep_journals, ident) or {})
+        except UniverseError as e:
+            log.warning("sweep_journals: %s", e.message)
+            return {}
+
     @Slot(result="QVariant")
     def modules(self):
         return self._guarded([], self._core.modules)
