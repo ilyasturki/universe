@@ -11,6 +11,13 @@ os.environ.setdefault("QT_FORCE_STDERR_LOGGING", "1")
 time.tzset()
 
 
+# pytest-qt ships with the UI suite only; the other suites read the same pyproject.
+def pytest_addoption(parser, pluginmanager):
+    if not pluginmanager.hasplugin("pytestqt"):
+        for name in ("qt_api", "qt_log_level_fail", "qt_log_ignore"):
+            parser.addini(name, "pytest-qt, unused here")
+
+
 @pytest.fixture(scope="session")
 def xdg(tmp_path_factory):
     root = tmp_path_factory.mktemp("xdg")

@@ -319,7 +319,13 @@
       pytestUi = pytestOf {
         name = "universe-pytest-ui";
         dirs = [ "ui" ];
-        py = ps: uiPy ps ++ [ corePy ];
+        py =
+          ps:
+          uiPy ps
+          ++ [
+            corePy
+            ps.pytest-qt
+          ];
         runtime = qtRuntime ++ [
           pkgs.systemd
           pkgs.ffmpeg
@@ -414,7 +420,14 @@
             actionlint
             shellcheck
             maturin
-            (pyEnv (ps: uiPy ps ++ [ ps.setuptools ]))
+            (pyEnv (
+              ps:
+              uiPy ps
+              ++ [
+                ps.setuptools
+                ps.pytest-qt
+              ]
+            ))
             SDL2
           ]
           ++ qtRuntime

@@ -579,7 +579,7 @@ class HeadedGames(QAbstractListModel):
         self._head = None
         self._roles = {MODEL_DATA_ROLE: b"modelData", **{MODEL_DATA_ROLE + 1 + i: r.encode() for i, r in enumerate(GAME_ROLES)}}
         self._kept = []
-        self._open = False
+        self._open = 0
         self._deferred = None
         for signal in (self.rowsInserted, self.rowsRemoved, self.modelReset, self.layoutChanged):
             signal.connect(self.countChanged)
@@ -606,12 +606,13 @@ class HeadedGames(QAbstractListModel):
         self.endResetModel()
         self.sourceChanged.emit()
 
+    # A source nests changes (a sort's layout change inside its reset): depth, not a flag.
     def _begin(self):
-        self._open = True
+        self._open += 1
 
     def _end(self):
-        self._open = False
-        if self._deferred is not None:
+        self._open -= 1
+        if not self._open and self._deferred is not None:
             deferred, self._deferred = self._deferred, None
             self._set_source(deferred)
 
@@ -664,6 +665,11 @@ class HeadedGames(QAbstractListModel):
         self.beginResetModel()
 
     def _reset(self):
+        # Picked as the source between its two reset signals: its begin reached no one.
+        if not self._open:
+            self.beginResetModel()
+            self.endResetModel()
+            return
         self.endResetModel()
         self._end()
 

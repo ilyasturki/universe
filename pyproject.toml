@@ -1,6 +1,16 @@
 [tool.pytest.ini_options]
 testpaths = ["ui/tests", "modules", "sources", "crates/universe-py/tests"]
 pythonpath = ["ui"]
+qt_api = "pyside6"
+qt_log_level_fail = "WARNING"
+qt_log_ignore = [
+  # No sound server in CI or the Nix sandbox.
+  "QSoundEffect: playback of this format is not supported",
+  "PulseAudioService: pa_context_connect\\(\\) failed",
+  "Couldn't (load|resolve) pipewire-0\\.3",
+  # The fixture's store rows carry GOG's own image URLs; the sandbox has no network.
+  "QML Image: .*images\\.gog-statics\\.com",
+]
 
 [tool.ruff]
 line-length = 160
