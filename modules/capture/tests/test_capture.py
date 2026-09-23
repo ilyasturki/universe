@@ -295,44 +295,6 @@ def test_stop_no_recording_is_a_noop(tmp_path, fakebin):
     assert not (fakebin["logs"] / "universe.args").exists()
 
 
-def test_shot_under_the_screenshots_dir(tmp_path, fakebin):
-    result = run("shot", env_for(tmp_path, fakebin, {}))
-    assert result.returncode == 0, result.stderr
-    path = Path(result.stdout.strip())
-    assert path.parent == tmp_path / "screenshots"
-    assert path.suffix == ".png"
-    assert path.exists() and path.stat().st_size > 0
-
-
-def test_shot_grabs_in_the_shell_when_the_extension_is_loaded(tmp_path, fakebin):
-    env = env_for(tmp_path, fakebin, {"source": "window", "cursor": True}, extra={"FAKE_NAME_OWNED": "true"})
-    install_fake_extension(env)
-    result = run("shot", env)
-    assert result.returncode == 0, result.stderr
-    path = Path(result.stdout.strip())
-    assert path.parent == tmp_path / "screenshots" and path.suffix == ".png"
-    calls = (fakebin["logs"] / "busctl.args").read_text()
-    assert f"Screenshot\nsbb\n{path}\ntrue\ntrue\n" in calls
-    assert not (fakebin["logs"] / "gsr.args").exists()
-
-
-def test_shot_screen_source_grabs_every_monitor(tmp_path, fakebin):
-    env = env_for(tmp_path, fakebin, {"source": "screen"}, extra={"FAKE_NAME_OWNED": "true"})
-    install_fake_extension(env)
-    result = run("shot", env)
-    assert result.returncode == 0, result.stderr
-    assert "\nsbb\n" + result.stdout.strip() + "\nfalse\nfalse\n" in (fakebin["logs"] / "busctl.args").read_text()
-
-
-def test_shot_falls_back_to_gsr_when_the_shell_refuses(tmp_path, fakebin):
-    env = env_for(tmp_path, fakebin, {}, extra={"FAKE_NAME_OWNED": "true", "FAKE_SHOT_OK": "false"})
-    install_fake_extension(env)
-    result = run("shot", env)
-    assert result.returncode == 0, result.stderr
-    assert "shell screenshot" in result.stderr
-    assert flag_values((fakebin["logs"] / "gsr.args").read_text().splitlines(), "-o") == [result.stdout.strip()]
-
-
 WINDOW_JSON = '{"id":7,"pid":4242,"wm_class":"gamescope","title":"Dead Cells","focused":true,"width":3840,"height":2160,"hidden":false,"minimized":false}'
 
 
@@ -953,16 +915,6 @@ def test_finish_files_the_part_left_when_the_session_ended_between_monitors(tmp_
     result = subprocess.run([str(BIN_DIR / "finish")], env=env, capture_output=True, text=True, timeout=30, check=False)
     assert result.returncode == 0, result.stderr
     assert (fakebin["logs"] / "universe.args").read_text().splitlines()[:3] == ["recording-file", SESSION_ID, str(part1)]
-
-
-def test_shot_falls_back_to_the_screen_the_recorder_moved_to(tmp_path, fakebin):
-    env = env_for(tmp_path, fakebin, {}, extra={"FAKE_SHOT_OK": "false", "FAKE_NAME_OWNED": "true"})
-    install_fake_extension(env)
-    with _common.timeline(env["MODULE_DATA_DIR"], SESSION_ID, create=True) as state:
-        state["screen"] = "HDMI-A-1"
-    result = run("shot", env)
-    assert result.returncode == 0, result.stderr
-    assert flag_values((fakebin["logs"] / "gsr.args").read_text().splitlines(), "-w") == ["HDMI-A-1"]
 
 
 def test_active_outputs_and_argv_edits(tmp_path):

@@ -34,6 +34,7 @@ include = [
   "conftest.py",
   "ui/universe_ui",
   "modules/capture/bin",
+  "modules/screenshot/bin",
   "modules/journal/bin",
   "sources/gog/bin",
   "crates/universe-py/typings",

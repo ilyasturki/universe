@@ -659,7 +659,9 @@ def test_the_game_settings_page_lands_a_search_hit_behind_advanced(api, fake):
     form = api.screens.gameSettings
     assert page is not None and form.showAdvanced is True, "an advanced row: Advanced comes on"
     sections = [s["name"] for s in page.property("sections").toVariant()]
-    assert sections == ["Display", "Overlay", "Proton", "Launch", "Desktop and library", "Video capture", "Play journal"], "no advanced card of its own"
+    assert sections == ["Display", "Overlay", "Proton", "Launch", "Desktop and library", "Video capture", "Play journal", "Screenshots"], (
+        "no advanced card of its own"
+    )
     assert sections[body.property("section")] == "Proton" and page.property("row")["key"] == "launch.ntsync", (
         "the hit sits in the Proton card, the cursor on it"
     )

@@ -27,7 +27,7 @@ in
     shellExtension = lib.mkOption {
       type = lib.types.package;
       default = extensionPkg;
-      description = "The 'universe@ilyasturki.github.io' GNOME Shell extension: the capture module lists windows through it for window-only recording and takes its screenshots in it, the controller macros show the shell's OSD through it. GNOME loads it after the next logout.";
+      description = "The 'universe@ilyasturki.github.io' GNOME Shell extension: the capture module lists windows through it for window-only recording, the screenshot module takes its screenshots in it, the controller macros show the shell's OSD through it. GNOME loads it after the next logout.";
     };
     settings = lib.mkOption {
       type = lib.types.nullOr tomlFormat.type;
@@ -35,7 +35,10 @@ in
       example = {
         paths.recordings_root = "/mnt/recordings/games";
         launch.proton = "proton-ge";
-        modules.enabled = [ "capture" ];
+        modules.enabled = [
+          "capture"
+          "screenshot"
+        ];
         modules.capture.codec = "av1_10bit";
         sources.enabled = [ "gog" ];
         sources.gog.platform = "linux";

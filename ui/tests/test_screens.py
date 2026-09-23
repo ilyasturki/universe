@@ -29,9 +29,16 @@ def test_game_settings_form(api, fake):
     capture = rows_by_key(form, "capture")
     assert capture["enabled"]["value"] is True and capture["enabled"]["type"] == "bool"
     assert "codec" not in capture, "global settings do not belong to a game"
-    assert [g["title"] for g in form.groups] == ["Display", "Overlay", "Proton", "Launch", "Desktop and library", "Video capture", "Play journal"], (
-        "the launch page's cards, the runner's, the program, the modules; no Advanced row, a game's page flips it from a button"
-    )
+    assert [g["title"] for g in form.groups] == [
+        "Display",
+        "Overlay",
+        "Proton",
+        "Launch",
+        "Desktop and library",
+        "Video capture",
+        "Play journal",
+        "Screenshots",
+    ], "the launch page's cards, the runner's, the program, the modules; no Advanced row, a game's page flips it from a button"
     assert form.hasAdvanced is True and "advanced" not in [r["key"] for r in form.rows]
     assert [(g["title"], g["home"]) for g in form.advancedGroups] == [
         ("Scaling", "Display"),
@@ -45,9 +52,16 @@ def test_game_settings_form(api, fake):
     ], "the power user's cards, in the same order, each with the basic card it folds into"
     form.showAdvanced = True
     groups = {g["title"]: g for g in form.groups}
-    assert [g["title"] for g in form.groups] == ["Display", "Overlay", "Proton", "Launch", "Desktop and library", "Video capture", "Play journal"], (
-        "every advanced card folds into a basic one: the sidebar does not move with Advanced"
-    )
+    assert [g["title"] for g in form.groups] == [
+        "Display",
+        "Overlay",
+        "Proton",
+        "Launch",
+        "Desktop and library",
+        "Video capture",
+        "Play journal",
+        "Screenshots",
+    ], "every advanced card folds into a basic one: the sidebar does not move with Advanced"
     assert groups["Proton"]["divider"] == 3 and [form.rows[i]["key"] for i in groups["Proton"]["rows"][3:]] == [
         "launch.prefix",
         "launch.umu_id",
@@ -136,9 +150,12 @@ def test_modules_list(api, fake):
     journal_module.update(enabled=False, available=False, missing=["ffmpeg"])
     form = api.screens.modules
     form.load()
-    assert [r["module"] for r in form.rows] == ["capture", "journal"], "the manifests' order, sources apart"
+    assert [r["module"] for r in form.rows] == ["capture", "journal", "screenshot"], "the manifests' order, sources apart"
     assert all(r["type"] == "action" and r["key"] == "module" and r["switch"] is True and r["source"] is False for r in form.rows)
-    assert [(g["title"], [form.rows[i]["module"] for i in g["rows"]], g["off"]) for g in form.groups] == [("", ["capture"], False), ("Off", ["journal"], True)]
+    assert [(g["title"], [form.rows[i]["module"] for i in g["rows"]], g["off"]) for g in form.groups] == [
+        ("", ["capture", "screenshot"], False),
+        ("Off", ["journal"], True),
+    ]
     capture = form.rows[form.indexOf("capture")]
     assert capture["label"] == "Video capture" and capture["value"] is True and capture["display"] == "On" and capture["meta"] == "v0.1.0"
     journal = form.rows[form.indexOf("journal")]

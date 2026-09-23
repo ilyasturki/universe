@@ -13,7 +13,6 @@ post-launch = "bin/start"
 freeze      = "bin/freeze"
 thaw        = "bin/thaw"
 session-end = "bin/stop"
-screenshot  = "bin/shot"
 timeout_s   = 20
 
 [limits]

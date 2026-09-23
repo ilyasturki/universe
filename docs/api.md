@@ -502,8 +502,7 @@ back, else the first, as `pick_screen` — and starts the recorder again on it, 
 part's size (`-s`: a limit, a smaller monitor still gives a smaller part, which the stitch logs); a
 monitor that has just come up has no CRTC for a few seconds, so an exit right after the restart is
 retried. The pause closes at the new recorder's
-first frame, a frozen game gets `set-paused true` on it at once, the OSD names the new screen and
-the `screenshot` hook's gpu-screen-recorder fallback follows it (`screen` in the timeline). At
+first frame, a frozen game gets `set-paused true` on it at once and the OSD names the new screen. At
 session end `stop` marks the timeline `stopping` first — the recorder's own exit is then no switch
 — and, with parts to join, runs `bin/finish` in a unit of its own (`ffmpeg -f concat -c copy` into
 one `<session>.mkv`, then the usual checks and `recording-file`) and waits for it as long as the
@@ -528,14 +527,6 @@ module set capture <key>=<value>` — advanced rows on the module's page — rep
 `ffmpeg_video_opts` (gpu-screen-recorder's `-ffmpeg-video-opts`) and `gsr_extra_args` (appended
 to the command). `-bm cbr` stays pinned: it is the base the QVBR override needs.
 
-The module's `screenshot` hook grabs the frame in the shell through the extension
-(`org.universe.Windows.Screenshot(path, window, cursor)`): the focused window's client area with
-`source = "window"`, every monitor with `"screen"`, the cursor per `cursor`. Mutter reads the
-framebuffer synchronously, so the hook returns at the press, before the PNG is encoded; a write
-that fails afterwards is a shell notification. Off GNOME or before the shell has loaded the extension it is a
-gpu-screen-recorder `-o` capture of the session's screen. Either way the PNG goes to
-`SCREENSHOTS_DIR`.
-
 ## Screenshots
 
 | Rust | Python | CLI | Role |
@@ -555,6 +546,16 @@ a cue that follows its return never lands in the shot: the launcher plays the sh
 gamescope, paints a flash over the game (see `frontends.md`); the pad's `screenshot` macro reports
 back as a `screenshot` event on the watcher (`{"event": "screenshot", "path": …}`, the path empty
 when it failed). A journal entry names them by basename, which resolves to `screenshots/`.
+
+The **screenshot** module takes them, apart from recording: its own `enabled` switch, per game, is
+whether a game takes screenshots at all, and capture's settings have no say. Its hook grabs the
+frame in the shell through the extension (`org.universe.Windows.Screenshot(path, window, cursor)`):
+the focused window's client area with `window = true` (the default), every monitor with `false`, the
+cursor per `cursor` (both per game). Mutter reads the framebuffer synchronously, so the hook returns at the
+press, before the PNG is encoded; a write that fails afterwards is a shell notification. Off GNOME
+or before the shell has loaded the extension it is a gpu-screen-recorder `-o` capture of
+`SESSION_SCREEN` when gpu-screen-recorder is installed (the module requires only `busctl`), else
+the hook fails.
 
 `thumb` is the shot's thumbnail, a 960 px wide JPEG under `$XDG_CACHE_HOME/universe/thumbs/` (one flat
 directory, `<game>--<stem>-<mtime>.jpg`, so a file replaced in place gets a fresh one), and

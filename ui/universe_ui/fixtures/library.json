@@ -415,6 +415,20 @@
         {"key": "markdown_export", "type": "bool", "default": true, "label": "Render Markdown notes", "scope": "global", "advanced": false},
         {"key": "journal_root", "type": "path", "default": "~/Documents/notes/games/journal", "label": "Notes folder", "scope": "global", "advanced": false}
       ]
+    },
+    {
+      "id": "screenshot",
+      "name": "Screenshots",
+      "version": "0.1.0",
+      "description": "Takes the screenshots asked for from the dock, a pad button or `universe screenshot`, through the shell's own grab; gpu-screen-recorder when the shell cannot.",
+      "enabled": true,
+      "available": true,
+      "missing": [],
+      "settings": [
+        {"key": "enabled", "type": "bool", "default": true, "label": "Take screenshots", "scope": "game", "dynamic": false, "advanced": false},
+        {"key": "window", "type": "bool", "default": true, "label": "The game's window alone, not every monitor", "scope": "game", "dynamic": false, "advanced": false},
+        {"key": "cursor", "type": "bool", "default": false, "label": "Show the cursor in screenshots", "scope": "game", "dynamic": false, "advanced": false}
+      ]
     }
   ],
   "sources": [

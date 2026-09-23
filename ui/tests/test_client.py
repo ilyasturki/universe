@@ -28,7 +28,7 @@ def test_errors_are_signalled_not_raised(fake):
 
 def test_settings_merges_game_scope(fake):
     settings = fake.settings("the-technomancer")
-    assert set(settings) == {"capture", "journal"}
+    assert set(settings) == {"capture", "journal", "screenshot"}
     assert settings["journal"]["language"] == "fr"
     assert fake.settings("control")["capture"]["cursor"] is False
     assert fake.set("control", "tags", "a, b") is True

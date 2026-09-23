@@ -1,0 +1,33 @@
+api = 2
+id = "screenshot"
+name = "Screenshots"
+version = "0.0.5"
+description = "Takes the screenshots asked for from the dock, a pad button or `universe screenshot`, through the shell's own grab; gpu-screen-recorder when the shell cannot."
+
+[requires]
+bins = ["busctl"]
+
+[hooks]
+screenshot = "bin/shot"
+timeout_s  = 20
+
+[[settings]]
+key = "enabled"
+type = "bool"
+default = true
+label = "Take screenshots"
+scope = "game"
+
+[[settings]]
+key = "window"
+type = "bool"
+default = true
+label = "The game's window alone, not every monitor"
+scope = "game"
+
+[[settings]]
+key = "cursor"
+type = "bool"
+default = false
+label = "Show the cursor in screenshots"
+scope = "game"
