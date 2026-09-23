@@ -477,6 +477,94 @@ def test_quit_from_the_dock_over_a_loading_game_stops_it_through_the_launcher(ap
     assert not home.loading and not home.flipped and home.shown == "launcher"
 
 
+def test_the_dock_opens_over_the_poster_before_the_core_has_made_the_session(api, fake, monkeypatch):
+    from universe_ui import fake_core
+
+    class Overlay:
+        def winId(self):
+            return 7
+
+        def show(self):
+            pass
+
+    monkeypatch.setattr(fake_core, "START_S", 1.0)
+    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+    monkeypatch.setattr(fake_core, "WINDOW_S", 1.2)
+    monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
+    home = api.home
+    home.attachOverlay(Overlay())
+    fake.launch("mirrors-edge", "")
+    pump(100)
+    assert fake.currentSession is None and home.pending == {"id": "mirrors-edge", "title": "Mirror's Edge"} and home.loading
+    home.openDock()
+    pump(50)
+    assert home.open and not home.paused and fake.core.frozen is False, "HOME answers while the pads are still being taken"
+    wait_for(fake.launched, 3000)
+    pump(50)
+    assert home.pending is None and home.open and home.loading, "the session made: the same reduced dock stays up"
+    wait_for(fake.sessionShown, 3000)
+    pump(300)
+    assert not home.loading and home.open and home.paused
+    home.closeDock()
+    home.dockClosed()
+    pump(100)
+    stop(api)
+
+
+def test_quit_before_the_session_is_made_stops_it_once_the_core_hands_it_back(api, fake, monkeypatch):
+    from universe_ui import fake_core
+
+    class Overlay:
+        def winId(self):
+            return 7
+
+        def show(self):
+            pass
+
+    monkeypatch.setattr(fake_core, "START_S", 1.0)
+    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+    monkeypatch.setattr(fake_core, "WINDOW_S", 2.0)
+    monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
+    home = api.home
+    home.attachOverlay(Overlay())
+    quitting = []
+    home.stopping.connect(quitting.append)
+    fake.launch("mirrors-edge", "")
+    pump(100)
+    home.openDock()
+    pump(50)
+    home.stop()
+    pump(100)
+    assert quitting == ["Mirror's Edge"] and not home.open and home.flipped and fake.core.frames == 0
+    assert wait_for(fake.sessionEnded, 5000) is not None, "stopped as soon as it existed"
+    pump(100)
+    assert home.pending is None and not home.loading and not home.flipped and home.shown == "launcher"
+
+
+def test_a_launch_that_fails_before_its_session_takes_the_dock_down(api, fake, monkeypatch):
+    from universe_ui import fake_core
+
+    class Overlay:
+        def winId(self):
+            return 7
+
+        def show(self):
+            pass
+
+    monkeypatch.setattr(fake_core, "START_S", 0.5)
+    monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
+    home = api.home
+    home.attachOverlay(Overlay())
+    fake.launch("no-such-game", "")
+    pump(50)
+    home.openDock()
+    pump(50)
+    assert home.open
+    assert wait_for(fake.launchFailed, 3000) is not None
+    pump(50)
+    assert home.pending is None and not home.open and not home.loading
+
+
 def test_sharpness_reaches_gamescope_with_the_games_filter(api, fake, monkeypatch):
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
     home = api.home

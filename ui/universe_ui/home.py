@@ -4,7 +4,7 @@ from collections.abc import Callable
 
 from PySide6.QtCore import QObject, QTimer, QUrl, Signal, Slot
 
-from .qt import Property
+from .qt import QVARIANT, Property
 
 OPAQUE = 0xFFFFFFFF
 POLL_MS = 250
@@ -46,6 +46,9 @@ class Home(QObject):
         self._flipping = False
         # A session this client launched whose window is not up yet: the theme's poster holds, the dock is reduced and nothing freezes.
         self._loading = False
+        # The game this client asked for while the core has no session for it yet: the dock over the poster answers already.
+        self._pending = None
+        self._stop_on_launch = False
         self._keys_on_thaw = []
         self._frame = ""
         self._landing = ""
@@ -77,6 +80,9 @@ class Home(QObject):
         self._no_shutter = False
         client.currentSessionChanged.connect(self._on_session)
         client.sessionStarted.connect(self._on_started)
+        client.launchRequested.connect(self._on_requested)
+        client.launched.connect(self._on_launched)
+        client.launchFailed.connect(self._on_failed)
         client.sessionShown.connect(self._on_shown)
         controller.buttonPressed.connect(self._on_button)
         controller.screenshotTaken.connect(self._shot_taken)
@@ -97,6 +103,9 @@ class Home(QObject):
     def _session(self):
         current = self._client.currentSession
         return current if current and current.get("session_id") else None
+
+    def _session_or_pending(self):
+        return self._session() or self._pending
 
     def _game(self):
         session = self._session()
@@ -124,6 +133,28 @@ class Home(QObject):
         if self._session():
             self._loading = True
             self.changed.emit()
+
+    def _on_requested(self, ident):
+        game = self._client.game(ident) or {}
+        self._pending = {"id": ident, "title": str(game.get("title") or "")}
+        self._pause_on_home = bool((game.get("effective") or {}).get("pause_on_home"))
+        self._loading = True
+        self.changed.emit()
+
+    def _on_launched(self, session_id, ident):
+        self._pending = None
+        if self._stop_on_launch:
+            self._stop_on_launch = False
+            self._client.stop(session_id)
+        self.changed.emit()
+
+    def _on_failed(self, ident, message):
+        if self._pending is None:
+            return
+        self._pending = None
+        self._stop_on_launch = False
+        if not self._session():
+            self._on_session()
 
     def _on_shown(self, session_id, ok):
         if not self._session():
@@ -192,7 +223,7 @@ class Home(QObject):
 
     @Slot()
     def openDock(self):
-        if self._open or not self._session():
+        if self._open or not self._session_or_pending():
             return
         if self._overlay is None:
             self.toLauncher()
@@ -282,7 +313,7 @@ class Home(QObject):
     @Slot()
     @Slot(str)
     def toLauncher(self, landing=""):
-        if not self._session() or self._flipping:
+        if not self._session_or_pending() or self._flipping:
             return
         self._landing = str(landing or "")
         if self._open:
@@ -300,7 +331,7 @@ class Home(QObject):
     def _flip(self, path):
         self._flipping = False
         self._captured = None
-        if not self._session():
+        if not self._session_or_pending():
             return
         if path:
             # The same file every time: the query keeps the image cache from showing the previous frame.
@@ -345,12 +376,16 @@ class Home(QObject):
     # The launcher comes up first: the game is stopped once the frame is taken, since a quitting one paints nothing.
     @Slot()
     def stop(self):
-        session = self._session()
+        session = self._session_or_pending()
         if not session or self._stopping:
             return
         self._stopping = True
         self.stopping.emit(str(session.get("title") or ""))
-        if self._shown == "game" or self._open:
+        # No session to stop yet: it is stopped the moment the core hands one back.
+        if session is self._pending:
+            self._stop_on_launch = True
+            self.toLauncher()
+        elif self._shown == "game" or self._open:
             self.toLauncher()
         else:
             self._client.stop(str(session.get("session_id") or ""))
@@ -495,6 +530,8 @@ class Home(QObject):
     open = Property(bool, lambda self: self._open, notify=changed)
     # The session this client launched has no window up yet: the poster holds, the dock over it is reduced to Home and Quit.
     loading = Property(bool, lambda self: self._loading, notify=changed)
+    # `{id, title}` of the launch the core has not made a session of yet, else null.
+    pending = Property(QVARIANT, lambda self: self._pending, notify=changed)
     paused = Property(bool, lambda self: self._paused, notify=changed)
     pauseOnHome = Property(bool, lambda self: self._pause_on_home, notify=changed)
     flipped = Property(bool, lambda self: self._flipped, notify=changed)

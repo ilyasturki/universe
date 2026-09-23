@@ -197,7 +197,7 @@ FocusScope {
     }
 
     function launchGame(game) {
-        if (!game || launchOverlay.running || confirm.open)
+        if (!game || launchOverlay.running || api.home.pending || confirm.open)
             return;
         if (game.installing) {
             Sound.enter();
@@ -260,8 +260,8 @@ FocusScope {
 
     function homePressed() {
         if (root.launching || launchOverlay.running) {
-            // The poster holds while the game loads: HOME raises the reduced dock over it, and where there is no overlay window the host lands home, which drops the poster.
-            if (!launchOverlay.waiting || launchOverlay.launchedSession === "" || !sessionRunning)
+            // The poster holds while the game loads, its session made or not yet: HOME raises the reduced dock over it, and where there is no overlay window the host lands home, which drops the poster.
+            if (!launchOverlay.waiting)
                 return;
             if (api.home.open)
                 api.home.closeDock();

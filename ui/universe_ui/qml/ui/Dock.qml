@@ -6,9 +6,9 @@ import "../sound"
 FocusScope {
     id: dock
 
-    readonly property var session: api.universe.currentSession
-    readonly property bool sessionRunning: session != null && session.session_id !== undefined
-    readonly property var game: sessionRunning ? api.allGames.byId(session.id) : null
+    // A launch the core has not made a session of yet stands in: its id and title alone.
+    readonly property var session: api.universe.currentSession || api.home.pending
+    readonly property var game: session ? api.allGames.byId(session.id) : null
     readonly property bool open: api.home.open
     readonly property bool paused: api.home.paused
     readonly property bool loading: api.home.loading
@@ -685,6 +685,8 @@ FocusScope {
                 Text {
                     text: {
                         var total = dock.game ? Format.playTime(dock.game.playTime) : "";
+                        if (!dock.session || !dock.session.started_at)
+                            return total;
                         var now = Format.clockTime(dock.elapsed);
                         var session = dock.elapsed >= 3600 ? now.substring(0, now.length - 3).replace(":", " h ") : Math.max(1, Math.floor(dock.elapsed / 60)) + " min";
                         return (total ? total + " · " : "") + session + " this session";

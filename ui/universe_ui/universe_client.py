@@ -64,6 +64,8 @@ class CoreClient(QObject):
     modulesChanged = Signal()
     sourcesChanged = Signal()
     currentSessionChanged = Signal()
+    # The game asked for, before the core has made its session: a runner's pads can hold that back for seconds.
+    launchRequested = Signal(str)
     launched = Signal(str, str)
     notice = Signal(str)
     launchFailed = Signal(str, str)
@@ -232,6 +234,8 @@ class CoreClient(QObject):
         return self._done(self._core.set_runner_setting, runner, key, str(value))
 
     def launch(self, ident, screen, poster=None):
+        self.launchRequested.emit(ident)
+
         def on_reply(session_id):
             session_id = str(session_id or "")
             self._track(session_id, ident)
