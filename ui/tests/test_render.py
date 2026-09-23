@@ -803,11 +803,13 @@ def test_the_sheets_type_the_physical_keyboards_letters(fake, tmp_path, monkeypa
 
     monkeypatch.setenv("XKB_DEFAULT_LAYOUT", "fr")
     monkeypatch.setenv("XKB_DEFAULT_VARIANT", "")
+    exe = tmp_path / "The Technomancer" / "TheTechnomancer.exe"
+    exe.parent.mkdir()
+    fake.set("the-technomancer", "launch.exe", str(exe))
     api = Api(fake, memory_path=str(tmp_path / "memory.json"), power_root=FAKE)
     _engine, window = render(api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
     game = api.allGames.byId("the-technomancer")
-    exe = fake.game("the-technomancer")["launch"]["exe"]
     root.openSub("pages/GameSettingsPage.qml", {"game": game, "key": "launch.exe"})
     settle(window)
     pump(300)

@@ -337,6 +337,12 @@ def test_quitting_from_the_game_brings_the_launcher_up_first(api, fake, monkeypa
 def test_the_hud_is_the_games_key_and_the_reload_key_waits_for_the_thaw(api, fake):
     from universe_ui.screens.controller import FakeWatcher
 
+    def hud_settles(on):
+        for _ in range(60):
+            if fake.core.hud_shown is on:
+                return
+            pump(50)
+
     home = api.home
     home.attachOverlay(object())
     watcher = FakeWatcher("dualsense-edge")
@@ -347,11 +353,11 @@ def test_the_hud_is_the_games_key_and_the_reload_key_waits_for_the_thaw(api, fak
     pump(300)
     assert home.launchValue("mangohud") == "false" and fake.core.hud_shown is False, "off by default, hidden at launch"
     home.setLaunchValue("mangohud", "true")
-    pump(50)
+    hud_settles(True)
     assert fake.game("mirrors-edge")["launch"]["mangohud"] is True and fake.core.hud_shown is True, "written as the game's own key, shown in the game"
     assert home.launchValue("mangohud") == "true"
     home.setLaunchValue("mangohud", "false")
-    pump(50)
+    hud_settles(False)
     assert fake.game("mirrors-edge")["launch"]["mangohud"] is False and fake.core.hud_shown is False
     assert not any(c.get("action") == "keys" for c in watcher.commands), "no key typed for the HUD"
 
