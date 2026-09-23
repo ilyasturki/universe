@@ -43,7 +43,6 @@ rust_file() {
 }
 python_fmt() { if [ "$check" = 1 ]; then ruff format --check "$@"; else ruff format "$@"; fi; }
 nix_fmt() { if [ "$check" = 1 ]; then nixfmt --check "$@"; else nixfmt "$@"; fi; }
-# Inside a .claude worktree biome ignores every path (biome.json): that is not a failure.
 js_fmt() { if [ "$check" = 1 ]; then biome format --no-errors-on-unmatched "$@"; else biome format --write --no-errors-on-unmatched "$@"; fi; }
 qml_file() {
     local skip
