@@ -3,7 +3,7 @@ from collections.abc import Callable
 from PySide6.QtCore import Signal, Slot
 
 from ..qt import Property
-from .settings import HIDE_CURSOR, RowsForm, _add, _dig, _row, global_launch_rows, screen_label
+from .settings import HIDE_CURSOR, KEEP_AWAKE, RowsForm, _add, _dig, _row, global_launch_rows, screen_label
 
 # config.toml keys with no launch key of their own; every one is advanced: (section, key, label, type, choices, detail).
 CONFIG_ROWS = [
@@ -61,6 +61,13 @@ def build_launch(client, screen_mode):
         groups,
         "Overlay",
         _row("Overlay", "desktop.hide_cursor", "Hide the cursor while playing", "bool", bool(_dig(config, "desktop.hide_cursor", True)), detail=HIDE_CURSOR),
+        caps=True,
+    )
+    _add(
+        rows,
+        groups,
+        "Overlay",
+        _row("Overlay", "desktop.keep_awake", "Keep the screen awake", "bool", bool(_dig(config, "desktop.keep_awake", True)), detail=KEEP_AWAKE),
         caps=True,
     )
     for section, key, label, kind, choices, detail in CONFIG_ROWS:

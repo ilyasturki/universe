@@ -302,6 +302,13 @@ pub enum Cmd {
         #[arg(trailing_var_arg = true, allow_hyphen_values = true, required = true)]
         cmd: Vec<String>,
     },
+    /// Hold the desktop's idle inhibitor until stopped: the unit a launch binds to the game (desktop.keep_awake)
+    #[command(name = "keep-awake", hide = true)]
+    KeepAwake {
+        /// What the desktop shows as the reason
+        #[arg(long, default_value = "a game is running")]
+        reason: String,
+    },
     /// Completion candidates for the shell: games | sources | modules | …
     #[command(name = "__complete", hide = true)]
     Complete { what: String },
@@ -639,6 +646,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Cmd::Generate { dir } => return generate(dir),
         Cmd::LaunchKeys => return launch_keys(json),
         Cmd::Splash { image, cmd } => std::process::exit(crate::splash::run(image.as_deref(), cmd)),
+        Cmd::KeepAwake { reason } => return keep_awake(reason).await,
         _ => {}
     }
     let core = Core::open().await?;
@@ -1399,7 +1407,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 println!("  {} {}", k.path.dimmed(), k.reason);
             }
         }
-        Cmd::Complete { .. } | Cmd::Generate { .. } | Cmd::Splash { .. } | Cmd::LaunchKeys => unreachable!(),
+        Cmd::Complete { .. } | Cmd::Generate { .. } | Cmd::Splash { .. } | Cmd::LaunchKeys | Cmd::KeepAwake { .. } => unreachable!(),
     }
     Ok(())
 }
@@ -1546,6 +1554,18 @@ async fn runner(core: Core, action: RunnerCmd, json: bool) -> anyhow::Result<()>
     Ok(())
 }
 
+async fn keep_awake(reason: &str) -> anyhow::Result<()> {
+    let inhibitor = crate::desktop::inhibit_idle(reason).await.map_err(|e| anyhow::anyhow!("{e}"))?;
+    use tokio::signal::unix::{signal, SignalKind};
+    let (mut int, mut term) = (signal(SignalKind::interrupt())?, signal(SignalKind::terminate())?);
+    tokio::select! {
+        _ = int.recv() => {}
+        _ = term.recv() => {}
+    }
+    inhibitor.release().await;
+    Ok(())
+}
+
 /// One candidate per line, `value<TAB>description`: Fish shows the description.
 fn complete(what: &str) -> anyhow::Result<()> {
     match what {
@@ -1662,6 +1682,7 @@ fn config_keys() -> Vec<String> {
             "desktop.profile",
             "desktop.hide_cursor",
             "desktop.cursor_extension",
+            "desktop.keep_awake",
             "keys.sgdb",
             "keys.sgdb_file",
             "keys.rawg",

@@ -51,6 +51,7 @@ SYNONYMS = {
     "gamescope_bin": ["binary", "executable", "path"],
     "umu_run": ["umu", "binary", "executable", "path"],
     "hide_cursor": ["mouse", "pointer", "cursor"],
+    "keep_awake": ["idle", "sleep", "suspend", "screensaver", "blank", "screen saver"],
     "favorite": ["favourite", "star", "pinned"],
     "hidden": ["hide", "invisible", "unlisted"],
     "tags": ["labels", "groups", "collections"],

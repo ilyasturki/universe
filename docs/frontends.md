@@ -565,7 +565,8 @@ key written through `set_setting`. The rows are the core's launch-key catalogue
 (`launch_keys(scope, screen)`, `client.launchKeys`) in the catalogue's order, the keys tied to no
 runner (`runners` empty): each entry's `section` is the card — Display (the gamescope switch,
 resolution, refresh rate, adaptive sync; the card's meta is the screen, `screen`: `DP-1 3840×2160 @
-60 Hz`), Overlay (MangoHud, the frame rate limit, pause on HOME, then `desktop.hide_cursor` added by
+60 Hz`), Overlay (MangoHud, the frame rate limit, pause on HOME, then `desktop.hide_cursor` and
+`desktop.keep_awake` added by
 the screen), then behind Y Scaling (scaler, filter, sharpness, the raw gamescope arguments),
 folded into Display, and Environment (one row per variable, then Add a variable…, X removing one),
 Programs, Folders, API keys and Desktop as cards of their own — beginner first, expert last. Its

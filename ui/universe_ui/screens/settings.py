@@ -459,6 +459,7 @@ class RowsForm(AdvancedRows, AsyncScreen):
 
 
 HIDE_CURSOR = "Hide the desktop cursor while the game runs."
+KEEP_AWAKE = "Hold off the desktop's blanking and automatic suspend while a game runs: a pad is no activity to it."
 
 CORE_ROWS = [
     ("Desktop and library", "desktop.hide_cursor", "Hide the cursor while playing", "bool", False),

@@ -217,6 +217,11 @@ impl Core {
                 tracing::warn!("controller watch: {e}");
             }
         }
+        if cfg.desktop.keep_awake {
+            if let Err(e) = self.spawn_keep_awake(&session_id, &unit, &r.game.title).await {
+                tracing::warn!("keep awake: {e}");
+            }
+        }
         Ok(session_id)
     }
 
@@ -296,6 +301,20 @@ impl Core {
             description: "Universe controller watch".into(),
             program: paths::self_exe().to_string_lossy().to_string(),
             args: vec!["controller".into(), "watch".into(), "--wait".into()],
+            env: passthrough_env(),
+            bind_to: Some(game_unit.into()),
+            ..Default::default()
+        };
+        self.host.units.start(&spec).await
+    }
+
+    /// The desktop's idle inhibitor for the session: a unit of its own, since the inhibit stands only as long as the connection holding it.
+    async fn spawn_keep_awake(&self, session_id: &str, game_unit: &str, title: &str) -> Result<()> {
+        let spec = UnitSpec {
+            name: format!("universe-awake-{session_id}"),
+            description: "Universe keep awake".into(),
+            program: paths::self_exe().to_string_lossy().to_string(),
+            args: vec!["keep-awake".into(), "--reason".into(), format!("{title} is running")],
             env: passthrough_env(),
             bind_to: Some(game_unit.into()),
             ..Default::default()
@@ -531,6 +550,29 @@ mod tests {
 
         core.session_end("sample", &sid, None, None).await.unwrap();
         assert_eq!(sessions::read(&core.get("sample").await.unwrap().game.sessions_path()).unwrap().len(), 1, "idempotent");
+    }
+
+    #[tokio::test]
+    async fn the_desktop_is_kept_awake_for_as_long_as_the_game_runs() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let _sb = sandbox();
+        let (core, memory) = open().await;
+        let sid = core.launch("sample", "", "").await.unwrap();
+        let awake = memory.spec(&format!("universe-awake-{sid}")).expect("the inhibitor");
+        assert_eq!(awake.bind_to.as_deref(), Some(format!("universe-game-sample-{sid}.service").as_str()), "it is released with the game");
+        assert_eq!(awake.args[0], "keep-awake");
+    }
+
+    #[tokio::test]
+    async fn keep_awake_off_leaves_the_desktop_to_its_own_idle() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let _sb = sandbox();
+        let file = crate::paths::config_file();
+        let text = std::fs::read_to_string(&file).unwrap();
+        std::fs::write(&file, format!("{text}[desktop]\nkeep_awake = false\n")).unwrap();
+        let (core, memory) = open().await;
+        let sid = core.launch("sample", "", "").await.unwrap();
+        assert!(memory.spec(&format!("universe-awake-{sid}")).is_none(), "off, nothing holds the desktop awake");
     }
 
     #[tokio::test]

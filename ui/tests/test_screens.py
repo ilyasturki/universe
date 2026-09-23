@@ -291,7 +291,7 @@ def test_launch_form(api, fake):
         (section, ["launch." + k["key"] for k in keys if k["section"] == section and not k["runners"]])
         for section in ("Display", "Overlay", "Scaling", "Environment", "Programs")
     ]
-    expected[1][1].append("desktop.hide_cursor")
+    expected[1][1].extend(["desktop.hide_cursor", "desktop.keep_awake"])
     assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups] == expected[:2], (
         "beginner first, no Advanced row; a runner's keys sit on its page"
     )
@@ -306,7 +306,7 @@ def test_launch_form(api, fake):
     ], "with Advanced on: the scaling flags fold into Display, the environment, the programs and config.toml's own sections follow"
     assert form.groups[0]["dividers"] == [{"at": 4, "label": "Advanced · Scaling"}]
     assert expected[0][1] == ["launch.gamescope", "launch.gamescope_resolution", "launch.gamescope_refresh", "launch.gamescope_adaptive_sync"]
-    assert expected[1][1] == ["launch.mangohud", "launch.fps_limit", "launch.pause_on_home", "desktop.hide_cursor"]
+    assert expected[1][1] == ["launch.mangohud", "launch.fps_limit", "launch.pause_on_home", "desktop.hide_cursor", "desktop.keep_awake"]
     assert expected[2][1] == ["launch.gamescope_scaler", "launch.gamescope_filter", "launch.gamescope_sharpness", "launch.gamescope_args"]
     assert expected[3][1] == ["launch.env"] and expected[4][1] == ["launch.gamescope_bin", "launch.umu_run"]
     assert form.groups[0]["meta"] == form.screen and form.groups[1]["meta"] == ""

@@ -104,6 +104,20 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         format!("{} {}", config.desktop.cursor_extension, if ext_ok { "installed" } else { "missing" }),
         "core",
     );
+    if config.desktop.keep_awake {
+        let ok = crate::desktop::screensaver_available().await;
+        push(
+            "keep-awake",
+            ok,
+            if ok {
+                "org.freedesktop.ScreenSaver: the desktop stays awake while a game runs".into()
+            } else {
+                "no org.freedesktop.ScreenSaver on the session bus: the desktop may blank or suspend mid-game (desktop.keep_awake = false to stop asking)"
+                    .to_string()
+            },
+            "core",
+        );
+    }
     if crate::desktop::detect(config) == crate::desktop::Profile::Gnome {
         let uuid = crate::desktop::UNIVERSE_EXTENSION;
         let (ok, detail) = if !crate::desktop::extension_installed(uuid) {

@@ -41,11 +41,14 @@ operation; a dash means the surface doesn't expose it.
   is watching. The `freeze` and `thaw` hooks run blocking after `freeze(on)` (see Recordings).
 - Long jobs (`install`, `update`, `scan`, media refresh) run **in the calling process** with a
   progress callback. Closing the frontend interrupts them.
-- The one exception to "nothing in the background" is the **controller watcher**
+- One exception to "nothing in the background" is the **controller watcher**
   (`universe controller watch`), which lives exactly as long as the launcher or a session does: the
   UI starts one for its lifetime, `launch` starts one bound to the game's unit
   (`universe-controller-<session>`, `BindsTo=` the game), and a lock (`$XDG_RUNTIME_DIR/universe/
   controller.lock`) hands the pads over between them. Once both are gone nothing runs.
+- The other is `universe keep-awake`, started by a launch as `universe-awake-<session>` (`BindsTo=`
+  the game, `desktop.keep_awake`): it holds `org.freedesktop.ScreenSaver`'s inhibit, which stands
+  only as long as the connection that took it, so it is a unit rather than a step undone at the end.
 - Errors: `Kind ∈ NotFound, Ambiguous, Busy, Invalid, Unavailable, Io`. Python raises
   `universe_core.UniverseError(kind, message)`; the CLI prints `universe: <kind>: <message>` on
   stderr and exits 1.
@@ -732,6 +735,7 @@ pause_on_home = true                 # freeze the game while the launcher covers
 profile = "auto"                     # auto | gnome | none
 hide_cursor = true
 cursor_extension = "hide-cursor@elcste.com"   # enabled for the session, restored to its prior state after
+keep_awake = true                    # the desktop's idle inhibitor held for the session: a pad is no activity to it, and the screen would blank and suspend mid-game
 
 [proton]                             # name → path; a name with no path here is looked for as a family (GE-Proton10-4 for proton-ge) under Lutris, Steam and Heroic
 proton-ge = "~/.local/share/lutris/runners/wine/proton-ge"

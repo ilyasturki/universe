@@ -157,6 +157,48 @@ fn card_preferred_mode(card: &str, screen: &str) -> Option<crate::gamescope::Mod
     Some(crate::gamescope::Mode { width: w.into(), height: h.into(), refresh: mode.vrefresh(), vrr })
 }
 
+pub struct Inhibitor {
+    conn: zbus::Connection,
+    cookie: u32,
+}
+
+impl Inhibitor {
+    pub async fn release(self) {
+        if let Ok(proxy) = screensaver_proxy(&self.conn).await {
+            if let Err(e) = proxy.call::<_, _, ()>("UnInhibit", &(self.cookie,)).await {
+                tracing::warn!("UnInhibit({}): {e}", self.cookie);
+            }
+        }
+    }
+}
+
+async fn screensaver_proxy(conn: &zbus::Connection) -> zbus::Result<zbus::Proxy<'_>> {
+    zbus::Proxy::new(conn, "org.freedesktop.ScreenSaver", "/org/freedesktop/ScreenSaver", "org.freedesktop.ScreenSaver").await
+}
+
+/// GNOME counts keyboard and mouse alone as activity, and gamescope forwards no inhibitor of its own: a pad-played game idles the desktop.
+pub async fn inhibit_idle(reason: &str) -> Result<Inhibitor, String> {
+    let call = async {
+        let conn = zbus::Connection::session().await.map_err(|e| e.to_string())?;
+        let cookie: u32 = {
+            let proxy = screensaver_proxy(&conn).await.map_err(|e| e.to_string())?;
+            proxy.call("Inhibit", &("universe", reason)).await.map_err(|e| e.to_string())?
+        };
+        Ok(Inhibitor { conn, cookie })
+    };
+    tokio::time::timeout(std::time::Duration::from_secs(5), call).await.unwrap_or_else(|_| Err("org.freedesktop.ScreenSaver did not answer".into()))
+}
+
+/// Whether anything holds `org.freedesktop.ScreenSaver`: gsd's proxy on GNOME, the compositor's own elsewhere.
+pub async fn screensaver_available() -> bool {
+    let call = async {
+        let conn = zbus::Connection::session().await.ok()?;
+        let dbus = zbus::Proxy::new(&conn, "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus").await.ok()?;
+        dbus.call::<_, _, bool>("NameHasOwner", &("org.freedesktop.ScreenSaver",)).await.ok()
+    };
+    matches!(tokio::time::timeout(std::time::Duration::from_secs(5), call).await, Ok(Some(true)))
+}
+
 /// Returns whether the extension was already active.
 pub async fn cursor_extension_enable(conn: &zbus::Connection, profile: Profile, extension: &str) -> bool {
     let Some(proxy) = extensions_proxy(conn, profile, extension).await else { return false };
