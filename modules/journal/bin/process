@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
+import hashlib
 import json
 import os
 import shutil
+import signal
 import sys
-import tempfile
+import time
 import traceback
 from datetime import datetime, timedelta
 
@@ -23,8 +25,12 @@ from _common import (
     read_entries,
     read_json,
     read_sessions,
+    read_text,
     remove,
     rfc3339_local,
+    setting_bool,
+    setting_int,
+    setting_str,
     use_system_locale,
     validate_entry,
     write_json,
@@ -32,13 +38,25 @@ from _common import (
 from note import write_note
 
 EX_TEMPFAIL = 75
-LIMIT_FILE = "codex-limit.json"
+QUOTA_FILE = "quota.json"
+# A try that failed for a reason of its own; past this the session stops asking and waits for a hand.
+MAX_ATTEMPTS = 3
+BACKOFF_MIN = (15, 60, 240)
+# Work older than this is nobody's resume material any more.
+WORK_KEEP_DAYS = 7
 
 
 class Failed(Exception):
-    def __init__(self, reason, code=1):
+    """Nothing here will ever work: the session stops at a failed entry."""
+
+
+class Deferred(Exception):
+    """Worth another run: `until` when the wall is known, else a backoff on the try count."""
+
+    def __init__(self, reason, until=None, counts=True):
         super().__init__(reason)
-        self.code = code
+        self.until = until
+        self.counts = counts
 
 
 def env(name, default=""):
@@ -53,26 +71,60 @@ def state_path(journal_dir, sid, state):
     return os.path.join(journal_dir, f"{sid}.{state}.json")
 
 
+def clear_states(journal_dir, sid):
+    for state in ("pending", "deferred", "failed"):
+        remove(state_path(journal_dir, sid, state))
+
+
 def mark_pending(journal_dir, sid, game_id, provider):
     write_json(state_path(journal_dir, sid, "pending"), {"session": sid, "game": game_id, "started_at": now_rfc3339(), "provider": provider})
-    remove(state_path(journal_dir, sid, "failed"))
+    for state in ("deferred", "failed"):
+        remove(state_path(journal_dir, sid, state))
 
 
 def mark_failed(journal_dir, sid, game_id, reason):
     write_json(state_path(journal_dir, sid, "failed"), {"session": sid, "game": game_id, "written_at": now_rfc3339(), "reason": reason})
-    remove(state_path(journal_dir, sid, "pending"))
+    for state in ("pending", "deferred"):
+        remove(state_path(journal_dir, sid, state))
+
+
+def mark_deferred(journal_dir, sid, game_id, provider, reason, until, attempts):
+    write_json(
+        state_path(journal_dir, sid, "deferred"),
+        {
+            "session": sid,
+            "game": game_id,
+            "provider": provider,
+            "written_at": now_rfc3339(),
+            "until": rfc3339_local(until),
+            "reason": reason,
+            "attempts": attempts,
+        },
+    )
+    for state in ("pending", "failed"):
+        remove(state_path(journal_dir, sid, state))
+
+
+def backoff(attempts):
+    return datetime.now() + timedelta(minutes=BACKOFF_MIN[max(0, min(attempts, len(BACKOFF_MIN)) - 1)])
 
 
 def memory_path(data_dir, game_id):
     return os.path.join(data_dir, "memory", f"{game_id}.json")
 
 
-def active_limit(data_dir):
-    saved = read_json(os.path.join(data_dir, LIMIT_FILE))
-    until = parse_rfc3339((saved or {}).get("until"))
-    if until and until > datetime.now():
+def quota_path(data_dir):
+    return os.path.join(data_dir, QUOTA_FILE)
+
+
+def active_quota(data_dir, provider):
+    """The instant this provider's window reopens, while it is still shut."""
+    saved = read_json(quota_path(data_dir)) or {}
+    until = parse_rfc3339(saved.get("until"))
+    if until and until > datetime.now() and saved.get("provider", provider) == provider:
         return until
-    remove(os.path.join(data_dir, LIMIT_FILE))
+    if until and until <= datetime.now():
+        remove(quota_path(data_dir))
     return None
 
 
@@ -126,13 +178,120 @@ def persist_frames(frames, attachments, sid):
     return rels
 
 
+# --- the work directory: what a run leaves behind so the next one does not start over -------
+
+
+def prune_work(work_root):
+    cutoff = time.time() - WORK_KEEP_DAYS * 86400
+    try:
+        names = os.listdir(work_root)
+    except OSError:
+        return
+    for name in names:
+        path = os.path.join(work_root, name)
+        try:
+            if os.path.getmtime(path) < cutoff:
+                shutil.rmtree(path, ignore_errors=True)
+        except OSError:
+            pass
+
+
+def frame_stamp(recording, shots, max_images, long_edge):
+    try:
+        st = os.stat(recording) if recording else None
+    except OSError:
+        st = None
+    return {
+        "recording": recording,
+        "size": st.st_size if st else 0,
+        "mtime": int(st.st_mtime) if st else 0,
+        "max_images": max_images,
+        "long_edge": long_edge,
+        "shots": sorted(os.path.basename(s.file) for s in shots),
+    }
+
+
+def save_frames(work_dir, stamp, frames):
+    write_json(
+        os.path.join(work_dir, "frames.json"),
+        {"stamp": stamp, "frames": [{"file": f.file, "t": rfc3339_local(f.t), "tail": f.tail, "off": f.off, "hash": f.hash} for f in frames]},
+    )
+
+
+def load_frames(work_dir, stamp):
+    """The frames a previous run extracted for the same recording and settings, or None."""
+    saved = read_json(os.path.join(work_dir, "frames.json"))
+    if not isinstance(saved, dict) or saved.get("stamp") != stamp:
+        return None
+    out = []
+    for f in saved.get("frames") or []:
+        t = parse_rfc3339(f.get("t"))
+        if not t or not os.path.isfile(f.get("file") or ""):
+            return None
+        out.append(img.Image(f["file"], t, "frame", bool(f.get("tail")), float(f.get("off") or 0), f.get("hash")))
+    return out
+
+
+def save_answer(work_dir, key, raw):
+    write_json(os.path.join(work_dir, "answer.json"), {"key": key, "raw": raw})
+
+
+def load_answer(work_dir, key):
+    saved = read_json(os.path.join(work_dir, "answer.json"))
+    if isinstance(saved, dict) and saved.get("key") == key and isinstance(saved.get("raw"), dict):
+        return saved["raw"]
+    return None
+
+
+def answer_key(opts, system, brief, images):
+    # Not hash(): it is salted per process, and the run that reuses this answer is another one.
+    digest = hashlib.sha256(f"{system}\0{brief}".encode()).hexdigest()[:16]
+    return f"{opts.provider}|{opts.model}|{len(images)}|{digest}"
+
+
+def provider_options(settings, data_dir):
+    key = setting_str(settings, "api_key")
+    key_file = setting_str(settings, "api_key_file")
+    if key_file:
+        key = (read_text(key_file) or "").strip() or key
+    return providers.Options(
+        provider=setting_str(settings, "provider"),
+        model=setting_str(settings, "model"),
+        base_url=setting_str(settings, "base_url"),
+        api_key=key,
+        effort=setting_str(settings, "effort", "high"),
+        web_search=setting_bool(settings, "web_search", True),
+        timeout_s=max(30, setting_int(settings, "request_timeout_s", providers.TIMEOUT_S)),
+        attempts=max(1, setting_int(settings, "attempts", providers.ATTEMPTS)),
+        image_long_edge=max(256, setting_int(settings, "frame_long_edge", img.FRAMES_LONG_EDGE)),
+    )
+
+
+def resolved_system_prompt(settings, forced_lang, web):
+    override = ""
+    path = setting_str(settings, "prompt_file")
+    if path:
+        override = read_text(path) or ""
+        if not override.strip():
+            log(f"{path} is empty or unreadable; keeping the built-in prompt")
+    return pr.system_prompt(forced_lang, web=web, override=override)
+
+
 def main(argv):
     use_system_locale()
-    force = "--force" in argv
+    rewrite = "--force" in argv or env("JOURNAL_REWRITE") == "1"
     settings = load_settings()
     if not settings.get("enabled", True):
         log("journal disabled for this game")
         return 0
+
+    provider = setting_str(settings, "provider")
+    if not provider:
+        log("no writing model chosen yet: pick one in the journal's settings (universe module set journal provider=…)")
+        return 0
+    if provider not in providers.PROVIDERS:
+        log(f"unknown writing model {provider!r}; expected one of {', '.join(providers.PROVIDERS)}")
+        return 1
 
     sid = env("SESSION_ID")
     start_id = parse_session_id(sid)
@@ -143,31 +302,84 @@ def main(argv):
     journal_dir = env("JOURNAL_DIR")
     data_dir = env("MODULE_DATA_DIR")
 
-    if os.path.exists(os.path.join(journal_dir, f"{sid}.json")) and not force:
+    if os.path.exists(os.path.join(journal_dir, f"{sid}.json")) and not rewrite:
         log(f"entry for {sid} already exists, nothing to do (--force to regenerate)")
         return 0
 
-    provider = str(settings.get("provider") or "codex")
-    pending = state_path(journal_dir, sid, "pending")
+    prior = read_json(state_path(journal_dir, sid, "deferred")) or {}
+    attempts = int(prior.get("attempts") or 0) if not rewrite else 0
     mark_pending(journal_dir, sid, game_id, provider)
+
+    # SIGTERM (a stopped unit, a shutdown) leaves the session deferred, not stuck pending: the work already done waits in the work dir.
+    def stopped(signum, _frame):
+        raise Deferred(f"interrupted by signal {signum}", counts=False)
+
+    signal.signal(signal.SIGTERM, stopped)
+    signal.signal(signal.SIGINT, stopped)
+
     try:
-        journal_session(settings, sid, start_id, game_id, provider, journal_dir, data_dir)
+        journal_session(settings, sid, start_id, game_id, provider, journal_dir, data_dir, rewrite)
+    except Deferred as d:
+        count = attempts + (1 if d.counts else 0)
+        if d.counts and count >= MAX_ATTEMPTS:
+            log(f"no entry for {sid} after {count} tries: {d}")
+            mark_failed(journal_dir, sid, game_id, f"{d} (gave up after {count} tries)")
+            return 1
+        until = d.until or backoff(count)
+        log(f"entry for {sid} put off until {fmt_date(until)} {fmt_time(until)}: {d}")
+        mark_deferred(journal_dir, sid, game_id, provider, str(d), until, count)
+        return EX_TEMPFAIL
     except Failed as e:
         log(f"no entry for {sid}: {e}")
         mark_failed(journal_dir, sid, game_id, str(e))
-        return e.code
-    except Exception as e:
-        if os.path.exists(pending):
-            mark_failed(journal_dir, sid, game_id, f"error: {e}")
-        raise
-    remove(pending)
+        return 1
+    except Exception as e:  # noqa: BLE001 - a bug in here is still a session worth another run
+        traceback.print_exc()
+        mark_deferred(journal_dir, sid, game_id, provider, f"error: {e}", backoff(attempts + 1), attempts + 1)
+        return 1
+    remove(state_path(journal_dir, sid, "pending"))
     return 0
 
 
-def journal_session(settings, sid, start_id, game_id, provider, journal_dir, data_dir):
+def session_images(recording, shots, duration_s, start, max_images, long_edge, work_dir):
+    """The images fed to the model, and the frames among them; classifies what went missing."""
+    if recording and not os.path.exists(recording):
+        holder = os.path.dirname(recording) or "/"
+        if not os.path.isdir(holder):
+            raise Deferred(f"the recording is out of reach ({holder} is not mounted)")
+        if not shots:
+            raise Failed("the recording is gone")
+        log(f"{recording} is gone; journaling the screenshots alone")
+        recording = ""
+
+    stamp = frame_stamp(recording, shots, max_images, long_edge)
+    frames = load_frames(work_dir, stamp)
+    if frames is not None:
+        log(f"reusing {len(frames)} frame(s) extracted by an earlier run")
+    else:
+        need = max(0, min(img.FRAME_FILL_TARGET, max_images) - len(shots))
+        frames = []
+        if recording and need > 0:
+            footage = img.probe_duration(recording)
+            if not footage and not duration_s:
+                raise Deferred("ffprobe could not read the recording")
+            timeline = img.Timeline.from_env(env("RECORDING_STARTED_AT"), env("RECORDING_PAUSES"), start, parse_rfc3339)
+            frames = img.extract_frames(recording, shots, timeline, need, os.path.join(work_dir, "frames"), footage or duration_s, long_edge)
+        save_frames(work_dir, stamp, frames)
+
+    if len(shots) > max_images:
+        log(f"{len(shots)} screenshots exceed the {max_images}-image ceiling; feeding an even sample")
+    fed = sorted(img.even_sample(shots, max_images) + frames, key=lambda im: im.t)
+    if not fed:
+        raise Failed("the recording holds no picture and no screenshot covers the session")
+    return fed, frames
+
+
+def journal_session(settings, sid, start_id, game_id, provider, journal_dir, data_dir, rewrite):
     title = env("GAME_TITLE") or game_id
-    forced_lang = None if str(settings.get("language") or "auto") == "auto" else journal_lang(settings["language"])
-    max_images = int(settings["max_images"])
+    forced_lang = None if setting_str(settings, "language", "auto") == "auto" else journal_lang(settings["language"])
+    max_images = setting_int(settings, "max_images", 40)
+    opts = provider_options(settings, data_dir)
     recording = env("RECORDING_PATH")
 
     start = parse_rfc3339(env("SESSION_STARTED_AT")) or start_id
@@ -186,11 +398,10 @@ def journal_session(settings, sid, start_id, game_id, provider, journal_dir, dat
         log("no recording and no screenshot for this session; nothing to journal")
         return
 
-    if provider == "codex":
-        until = active_limit(data_dir)
-        if until:
-            log(f"codex usage limit in effect until {fmt_date(until)} {fmt_time(until)}; deferring, no work done")
-            raise Failed("codex quota reached", EX_TEMPFAIL)
+    until = active_quota(data_dir, provider)
+    if until:
+        log(f"{provider} usage limit in effect until {fmt_date(until)} {fmt_time(until)}; deferring, no work done")
+        raise Deferred(f"{provider} quota reached", until, counts=False)
 
     sessions = read_sessions(journal_dir)
     sessions.setdefault(
@@ -209,50 +420,38 @@ def journal_session(settings, sid, start_id, game_id, provider, journal_dir, dat
     memory = read_json(memory_path(data_dir, game_id))
     memory = memory if isinstance(memory, dict) else None
 
-    work_root = os.path.join(data_dir, "work")
-    os.makedirs(work_root, exist_ok=True)
-    work_dir = tempfile.mkdtemp(prefix=f"{sid}-", dir=work_root)
+    work_dir = os.path.join(data_dir, "work", sid)
+    prune_work(os.path.join(data_dir, "work"))
+    os.makedirs(work_dir, exist_ok=True)
+    keep_work = True
     try:
-        need = max(0, min(img.FRAME_FILL_TARGET, max_images) - len(shots))
-        frames = []
-        if recording and need > 0:
-            footage = img.probe_duration(recording) or duration_s
-            timeline = img.Timeline.from_env(env("RECORDING_STARTED_AT"), env("RECORDING_PAUSES"), start, parse_rfc3339)
-            frames = img.extract_frames(recording, shots, timeline, need, os.path.join(work_dir, "frames"), footage)
-        clear_session_frames(attachments, sid)
-
-        if len(shots) > max_images:
-            log(f"{len(shots)} screenshots exceed the {max_images}-image ceiling; feeding an even sample")
-        fed = sorted(img.even_sample(shots, max_images) + frames, key=lambda im: im.t)
-
-        if not fed:
-            log("the recording holds no picture and no screenshot covers the session")
-            raise Failed("no images")
+        fed, frames = session_images(recording, shots, duration_s, start, max_images, opts.image_long_edge, work_dir)
 
         prev = previous_entry_text(entries, sid)
         number, total = play_stats(sessions, sid, duration_s)
-        brief = pr.build_user_prompt(title, start, end, duration_s, number, total, fed, prev, memory)
+        system = resolved_system_prompt(settings, forced_lang, opts.web_search)
+        brief = pr.build_user_prompt(title, start, end, duration_s, number, total, fed, prev, memory, web=opts.web_search)
+        key = answer_key(opts, system, brief, fed)
 
-        log(f"asking {provider} for the entry ({len(shots)} screenshot(s) + {len(frames)} frame(s))…")
-        try:
-            raw = providers.generate(
-                provider, model=str(settings.get("model") or ""), title=title, brief=brief, images=fed, work_dir=work_dir, forced_lang=forced_lang
-            )
-        except providers.QuotaExceeded as e:
-            write_json(os.path.join(data_dir, LIMIT_FILE), {"until": rfc3339_local(e.until)})
-            log(f"codex usage limit reached; journal paused until {fmt_date(e.until)} {fmt_time(e.until)}")
-            raise Failed("codex quota reached", EX_TEMPFAIL) from e
-        except Exception as e:
-            traceback.print_exc()
-            raise Failed(f"provider error: {e}") from e
+        raw = None if rewrite else load_answer(work_dir, key)
+        if raw:
+            log("reusing the answer an earlier run already had")
+        else:
+            log(f"asking {provider} for the entry ({len(shots)} screenshot(s) + {len(frames)} frame(s))…")
+            pending = state_path(journal_dir, sid, "pending")
+            raw = ask(opts, data_dir, title=title, system=system, brief=brief, images=fed, work_dir=work_dir, forced_lang=forced_lang, pending=pending)
+            save_answer(work_dir, key, raw)
+
         result = pr.accept_result(raw)
         if not result:
-            raise Failed("the model produced no usable entry")
+            remove(os.path.join(work_dir, "answer.json"))
+            raise Deferred("the model produced no usable entry")
 
         merged = pr.merge_memory(memory, result["memory"])
         lang = forced_lang or journal_lang((merged or {}).get("language") or (entries[0].get("lang") if entries else None))
         order, unusable = img.normalize_review(result["images"], len(fed))
         kept_shots, picked = img.pick_gallery(fed, order, unusable, shots, frames)
+        clear_session_frames(attachments, sid)
         # A shot is named bare: the core resolves it to the game's screenshots/, wherever the journal sits.
         rels = [os.path.basename(s.file) for s in kept_shots] + persist_frames(picked, attachments, sid)
         entry = {
@@ -269,17 +468,20 @@ def journal_session(settings, sid, start_id, game_id, provider, journal_dir, dat
             "next_up": result["next"] or "",
             "images": rels,
         }
-    finally:
-        shutil.rmtree(work_dir, ignore_errors=True)
 
-    errors = validate_entry(entry)
-    if errors:
-        raise Failed(f"internal error, entry invalid: {errors}")
-    deliver(entry, journal_dir)
+        errors = validate_entry(entry)
+        if errors:
+            raise Failed(f"internal error, entry invalid: {errors}")
+        deliver(entry, journal_dir)
+        keep_work = False
+    finally:
+        if not keep_work:
+            shutil.rmtree(work_dir, ignore_errors=True)
+
     remove(state_path(journal_dir, sid, "pending"))
     if merged:
         write_json(memory_path(data_dir, game_id), merged)
-    if settings.get("markdown_export", True):
+    if setting_bool(settings, "markdown_export", True):
         entries = [e for e in entries if e["session"] != sid] + [entry]
         try:
             path, changed = write_note(
@@ -288,6 +490,31 @@ def journal_session(settings, sid, start_id, game_id, provider, journal_dir, dat
             log(f"markdown note {'updated' if changed else 'unchanged'}: {path}")
         except OSError as e:
             log(f"markdown render failed: {e}")
+
+
+def ask(opts, data_dir, *, title, system, brief, images, work_dir, forced_lang, pending):
+    """One round with the provider, its failures turned into the state the session ends in."""
+
+    def heartbeat():
+        # The core reads a pending file older than 30 minutes as dead; a long try keeps it fresh.
+        with open(pending, "a"):
+            os.utime(pending, None)
+
+    try:
+        return providers.generate(opts, title=title, system=system, brief=brief, images=images, work_dir=work_dir, forced_lang=forced_lang, heartbeat=heartbeat)
+    except providers.QuotaExceeded as e:
+        write_json(quota_path(data_dir), {"provider": opts.provider, "until": rfc3339_local(e.until)})
+        log(f"{opts.provider} usage limit reached; journal paused until {fmt_date(e.until)} {fmt_time(e.until)}")
+        raise Deferred(f"{opts.provider} quota reached", e.until, counts=False) from e
+    except providers.Permanent as e:
+        raise Failed(str(e)) from e
+    except providers.Transient as e:
+        raise Deferred(str(e)) from e
+    except (Deferred, Failed):
+        raise  # a signal caught mid-request already says what the session becomes
+    except Exception as e:
+        traceback.print_exc()
+        raise Deferred(f"provider error: {e}") from e
 
 
 if __name__ == "__main__":

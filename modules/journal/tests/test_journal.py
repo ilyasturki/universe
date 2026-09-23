@@ -1,10 +1,14 @@
+import base64
+import io
 import json
 import locale
 import os
+import pathlib
 import shutil
 import stat
 import subprocess
 import sys
+import urllib.error
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -188,7 +192,7 @@ def add_shot(tmp_path, name=SHOT):
 
 
 def state_files(journal_dir):
-    return sorted(p.name for p in journal_dir.iterdir() if p.name.endswith((".pending.json", ".failed.json", ".tmp")))
+    return sorted(p.name for p in journal_dir.iterdir() if p.name.endswith((".pending.json", ".deferred.json", ".failed.json", ".tmp")))
 
 
 def pending_seen_by_core(fakebin):
@@ -196,6 +200,14 @@ def pending_seen_by_core(fakebin):
     assert pending == {"session": SID, "game": "testgame", "started_at": pending["started_at"], "provider": "stub"}
     assert datetime.fromisoformat(pending["started_at"]).tzinfo is not None
     return pending
+
+
+def deferred_file(journal_dir):
+    entry = json.loads((journal_dir / f"{SID}.deferred.json").read_text())
+    assert entry["session"] == SID and entry["game"] == "testgame"
+    assert datetime.fromisoformat(entry["written_at"]).tzinfo is not None
+    assert state_files(journal_dir) == [f"{SID}.deferred.json"]
+    return entry
 
 
 def failed_file(journal_dir):
@@ -305,31 +317,42 @@ def test_core_rejection_marks_the_session_failed(tmp_path, fakebin):
     assert failed_file(journal_dir) == "the core rejected the entry"
 
 
-def test_codex_quota_marks_the_session_failed_and_defers(tmp_path, fakebin):
+def test_codex_quota_defers_the_session_until_the_wall_lifts(tmp_path, fakebin):
     add_shot(tmp_path)
     resets_at = int((datetime.now() + timedelta(days=3)).replace(microsecond=0).timestamp())
     fake_codex(fakebin, "You have hit your usage limit.", resets_at=resets_at)
     res, journal_dir = run_process(tmp_path, fakebin, {"provider": "codex"})
     assert res.returncode == 75 and "usage limit reached" in res.stderr
     assert not (fakebin / "universe.args").exists() and (fakebin / "codex.calls").read_text() == "exec\napp-server\n"
-    assert failed_file(journal_dir) == "codex quota reached"
-    saved = json.loads((tmp_path / "data" / "codex-limit.json").read_text())
-    assert datetime.fromisoformat(saved["until"]).timestamp() == resets_at, "the wall is codex's own reset instant"
+    entry = deferred_file(journal_dir)
+    assert entry["reason"] == "codex quota reached" and entry["provider"] == "codex"
+    assert datetime.fromisoformat(entry["until"]).timestamp() == resets_at, "the entry waits for codex's own reset instant"
+    assert entry["attempts"] == 0, "a wall nobody can climb is not a try"
+    saved = json.loads((tmp_path / "data" / "quota.json").read_text())
+    assert datetime.fromisoformat(saved["until"]).timestamp() == resets_at and saved["provider"] == "codex"
 
-    (journal_dir / f"{SID}.failed.json").write_text("{}")
     res, _ = run_process(tmp_path, fakebin, {"provider": "codex"})
     assert res.returncode == 75 and "deferring" in res.stderr
-    assert (fakebin / "codex.calls").read_text() == "exec\napp-server\n"
-    assert failed_file(journal_dir) == "codex quota reached"
+    assert (fakebin / "codex.calls").read_text() == "exec\napp-server\n", "the wall is read from the file, codex is not asked again"
+    assert deferred_file(journal_dir)["reason"] == "codex quota reached"
 
 
-def test_model_failure_marks_the_session_failed(tmp_path, fakebin):
+def test_a_failing_model_defers_then_gives_up(tmp_path, fakebin):
     add_shot(tmp_path)
     fake_codex(fakebin, "Reconnecting... 5/5")
-    res, journal_dir = run_process(tmp_path, fakebin, {"provider": "codex"})
-    assert res.returncode == 1 and not (fakebin / "universe.args").exists()
-    assert failed_file(journal_dir) == "the model produced no usable entry"
-    assert len((fakebin / "codex.calls").read_text().splitlines()) == providers.ATTEMPTS
+    seen = []
+    for run in range(1, 4):
+        res, journal_dir = run_process(tmp_path, fakebin, {"provider": "codex"})
+        seen.append(res.returncode)
+        if run < 3:
+            entry = deferred_file(journal_dir)
+            assert entry["attempts"] == run and "codex exited 1" in entry["reason"]
+            assert datetime.fromisoformat(entry["until"]) > datetime.now().astimezone(), "the session waits before another try"
+            (journal_dir / f"{SID}.deferred.json").write_text(json.dumps({**entry, "until": "2020-01-01T00:00:00+01:00"}))
+    assert seen == [75, 75, 1], "two tries put the session off, the third gives up"
+    assert "gave up after 3 tries" in failed_file(journal_dir)
+    assert not (fakebin / "universe.args").exists()
+    assert len((fakebin / "codex.calls").read_text().splitlines()) == 3 * providers.ATTEMPTS
 
 
 def test_blank_recording_marks_the_session_failed(tmp_path, fakebin):
@@ -338,7 +361,7 @@ def test_blank_recording_marks_the_session_failed(tmp_path, fakebin):
     res, journal_dir = run_process(tmp_path, fakebin, {}, recording=rec)
     assert res.returncode == 1 and "holds no picture" in res.stderr
     assert not (fakebin / "universe.args").exists()
-    assert failed_file(journal_dir) == "no images"
+    assert failed_file(journal_dir) == "the recording holds no picture and no screenshot covers the session"
 
 
 def test_disabled_and_forced_language(tmp_path, fakebin):
@@ -495,7 +518,8 @@ def test_codex_exec_arguments(tmp_path, monkeypatch):
     monkeypatch.setattr(providers.subprocess, "run", fake_run)
     ims = [img.Image("/tmp/a.png", datetime(2026, 9, 11, 12, 1), "frame"), img.Image("/tmp/b.png", datetime(2026, 9, 11, 12, 2), "frame", True)]
     brief = pr.build_user_prompt("Test", datetime(2026, 9, 11, 12, 0), datetime(2026, 9, 11, 12, 30), 1800, 1, 1800, ims, "", None)
-    out = providers.run_codex("gpt-5.6-sol", brief, ims, str(tmp_path))
+    opts = providers.Options(provider="codex", model="gpt-5.6-sol")
+    out = providers.run_codex(opts, pr.system_prompt(), brief, ims, str(tmp_path))
     assert out == answer
     args, kw = calls[0]
     schema, outp = str(tmp_path / "schema.json"), str(tmp_path / "entry.json")
@@ -556,7 +580,7 @@ def test_codex_quota_wall_and_retry(tmp_path, monkeypatch):
     monkeypatch.setattr(providers.subprocess, "run", walled)
     monkeypatch.setattr(providers, "read_limit_reset", lambda: None)
     with pytest.raises(providers.QuotaExceeded) as info:
-        providers.run_codex("m", "brief", [], str(tmp_path))
+        providers.run_codex(providers.Options(model="m"), "system", "brief", [], str(tmp_path))
     assert info.value.until == datetime(2026, 9, 7, 12, 7) and len(attempts) == 1
 
     # The typed event decides, not everything codex printed; codex's own instant wins over the prose
@@ -567,7 +591,7 @@ def test_codex_quota_wall_and_retry(tmp_path, monkeypatch):
     monkeypatch.setattr(providers.subprocess, "run", walled_json)
     monkeypatch.setattr(providers, "read_limit_reset", lambda: datetime(2026, 9, 27, 15, 40))
     with pytest.raises(providers.QuotaExceeded) as info:
-        providers.run_codex("m", "brief", [], str(tmp_path))
+        providers.run_codex(providers.Options(model="m"), "system", "brief", [], str(tmp_path))
     assert info.value.until == datetime(2026, 9, 27, 15, 40)
 
     def chatty(args, **kw):
@@ -576,7 +600,9 @@ def test_codex_quota_wall_and_retry(tmp_path, monkeypatch):
         )
 
     monkeypatch.setattr(providers.subprocess, "run", chatty)
-    assert providers.run_codex("m", "brief", [], str(tmp_path)) is None, "a limit mentioned outside the failure event is not the wall"
+    with pytest.raises(providers.Transient):
+        providers.run_codex(providers.Options(model="m"), "system", "brief", [], str(tmp_path))
+    # a limit mentioned outside the failure event is not the wall
 
     assert providers.limit_reset_from(
         {"rateLimits": {"primary": {"usedPercent": 100, "resetsAt": 1700000000}, "secondary": {"usedPercent": 100, "resetsAt": 1700003600}}}
@@ -593,7 +619,8 @@ def test_codex_quota_wall_and_retry(tmp_path, monkeypatch):
 
     attempts.clear()
     monkeypatch.setattr(providers.subprocess, "run", flaky)
-    assert providers.run_codex("m", "brief", [], str(tmp_path)) is None
+    with pytest.raises(providers.Transient):
+        providers.run_codex(providers.Options(model="m"), "system", "brief", [], str(tmp_path))
     assert len(attempts) == providers.ATTEMPTS
 
 
@@ -651,3 +678,257 @@ def test_choices_lists_the_providers_models(tmp_path):
 
     res = run_choices(tmp_path, {"provider": "codex"}, "exit 1")
     assert res.returncode == 0 and json.loads(res.stdout) == [] and "codex debug models failed" in res.stderr
+
+
+def test_no_writing_model_chosen_leaves_the_session_alone(tmp_path, fakebin):
+    add_shot(tmp_path)
+    res, journal_dir = run_process(tmp_path, fakebin, {"provider": ""})
+    assert res.returncode == 0 and "no writing model chosen" in res.stderr
+    assert not (fakebin / "universe.args").exists() and list(journal_dir.iterdir()) == []
+
+
+ANSWER = {
+    "title": "Into the Dome",
+    "body": "You walked in.",
+    "next": "Walk out.",
+    "images": {"gallery": [1], "unusable": []},
+    "memory": {"synopsis": "s", "entities": {"characters": [], "places": [], "bosses": []}, "language": "en", "profile": "arcade"},
+}
+
+
+def answering_codex(fakebin, answer=ANSWER):
+    """`codex exec` writes `answer` to its -o file, unless a `codex.broken` marker is there."""
+    body = "\n".join(
+        [
+            f'echo "$1" >> "{fakebin}/codex.calls"',
+            'if [ "$1" != exec ]; then exit 1; fi',
+            f'if [ -e "{fakebin}/codex.broken" ]; then echo \'{{"type":"turn.failed","error":{{"message":"stream disconnected"}}}}\'; exit 1; fi',
+            'out=""',
+            'while [ $# -gt 0 ]; do [ "$1" = "-o" ] && out="$2"; shift; done',
+            "cat > \"$out\" <<'JSON'",
+            json.dumps(answer),
+            "JSON",
+            "exit 0",
+        ]
+    )
+    write_shim(fakebin / "codex", body)
+
+
+def test_a_rejected_entry_is_kept_for_the_next_run(tmp_path, fakebin):
+    """The answer the model gave outlives a failed handoff: the next run delivers it without asking again."""
+    add_shot(tmp_path)
+    answering_codex(fakebin)
+    settings = {"provider": "codex", "markdown_export": False}
+    res, journal_dir = run_process(tmp_path, fakebin, settings, {"FAKE_UNIVERSE_EXIT": "1", "FAKE_UNIVERSE_STDERR": "universe: invalid: bad"})
+    assert res.returncode == 1 and failed_file(journal_dir) == "the core rejected the entry"
+    saved = json.loads((tmp_path / "data" / "work" / SID / "answer.json").read_text())
+    assert saved["raw"] == ANSWER, "the model's answer waits in the work directory"
+
+    (fakebin / "codex.broken").write_text("")
+    res, journal_dir = run_process(tmp_path, fakebin, settings)
+    assert res.returncode == 0, res.stderr
+    assert "reusing the answer" in res.stderr
+    entry = json.loads((fakebin / "universe.args").read_text().splitlines()[2])
+    assert entry["title"] == "Into the Dome" and entry["paragraphs"] == ["You walked in."]
+    assert (fakebin / "codex.calls").read_text().splitlines() == ["exec"], "the model is asked once, not twice"
+    assert not (tmp_path / "data" / "work" / SID).exists(), "a delivered entry takes its work with it"
+
+
+def test_a_rewrite_replaces_the_entry_and_asks_again(tmp_path, fakebin):
+    add_shot(tmp_path)
+    res, journal_dir = run_process(tmp_path, fakebin, {"markdown_export": False}, {"FAKE_UNIVERSE_EXIT": "1"})
+    assert res.returncode == 0 and (journal_dir / f"{SID}.json").exists()
+    first = json.loads((journal_dir / f"{SID}.json").read_text())
+
+    res, _ = run_process(tmp_path, fakebin, {"markdown_export": False}, {"FAKE_UNIVERSE_EXIT": "1"})
+    assert "already exists" in res.stderr
+    res, _ = run_process(tmp_path, fakebin, {"markdown_export": False}, {"FAKE_UNIVERSE_EXIT": "1", "JOURNAL_REWRITE": "1"})
+    assert res.returncode == 0, res.stderr
+    again = json.loads((journal_dir / f"{SID}.json").read_text())
+    assert again["written_at"] >= first["written_at"] and again["title"] == first["title"]
+    assert state_files(journal_dir) == []
+
+
+def test_a_prompt_file_replaces_the_built_in_prompt(tmp_path, fakebin):
+    add_shot(tmp_path)
+    prompt_file = tmp_path / "house-style.txt"
+    prompt_file.write_text("Write it like a ship's log.")
+    write_shim(fakebin / "codex", f'printf "%s" "${{@: -1}}" > "{fakebin}/codex.prompt"\nexit 1')
+    run_process(tmp_path, fakebin, {"provider": "codex", "prompt_file": str(prompt_file), "web_search": False})
+    sent = (fakebin / "codex.prompt").read_text()
+    assert sent.startswith("Write it like a ship's log.")
+    assert pr.LOCATING_OFFLINE in sent and "You keep the user's play journal." not in sent
+    assert "-c\ntools.web_search=false" in "\n".join(providers.codex_args("m", [], "s", "o", "p", ".", web_search=False))
+
+
+class Reply:
+    """What urlopen hands back: a context manager whose read() gives the body."""
+
+    def __init__(self, payload):
+        self._body = json.dumps(payload).encode()
+
+    def read(self):
+        return self._body
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_):
+        return False
+
+
+def http_error(code, body, headers=None):
+    return urllib.error.HTTPError("https://api.test/v1/chat/completions", code, "err", headers or {}, io.BytesIO(json.dumps(body).encode()))
+
+
+def chat_reply(answer=ANSWER):
+    return Reply({"choices": [{"message": {"content": json.dumps(answer)}}]})
+
+
+def openai_opts(**kw):
+    return providers.Options(provider="openai", model="gpt-x", base_url="https://api.test/v1", api_key="sk-test", **kw)
+
+
+def png(tmp_path, name="a.png"):
+    make_png(tmp_path / name)
+    return img.Image(str(tmp_path / name), datetime(2026, 9, 11, 12, 1), "shot")
+
+
+def test_the_endpoint_gets_the_schema_the_prompt_and_the_images_inline(tmp_path, monkeypatch):
+    sent = []
+
+    def urlopen(req, timeout=None):
+        sent.append((req, json.loads(req.data), timeout))
+        return chat_reply()
+
+    monkeypatch.setattr(providers.urllib.request, "urlopen", urlopen)
+    out = providers.run_openai(openai_opts(effort="medium"), "SYSTEM", "BRIEF", [png(tmp_path)], str(tmp_path))
+    assert out == ANSWER
+    req, payload, timeout = sent[0]
+    assert req.full_url == "https://api.test/v1/chat/completions" and req.get_header("Authorization") == "Bearer sk-test"
+    assert timeout == providers.TIMEOUT_S and payload["model"] == "gpt-x"
+    assert payload["messages"][0] == {"role": "system", "content": "SYSTEM"}
+    content = payload["messages"][1]["content"]
+    assert content[0] == {"type": "text", "text": "BRIEF"}
+    assert content[1]["type"] == "image_url" and content[1]["image_url"]["url"].startswith("data:image/jpeg;base64,")
+    assert base64.b64decode(content[1]["image_url"]["url"].split(",", 1)[1])[:2] == b"\xff\xd8", "a real jpeg, whatever the shot was"
+    schema = payload["response_format"]["json_schema"]
+    assert schema["strict"] is True and schema["schema"] == pr.OUTPUT_SCHEMA
+    assert payload["reasoning_effort"] == "medium" and payload["web_search_options"] == {}
+
+
+def test_the_endpoint_is_asked_again_without_a_field_it_refuses(tmp_path, monkeypatch):
+    seen = []
+
+    def urlopen(req, timeout=None):
+        payload = json.loads(req.data)
+        seen.append(sorted(k for k in payload if k in ("web_search_options", "reasoning_effort") or k == "response_format"))
+        if "web_search_options" in payload:
+            raise http_error(400, {"error": {"message": "Unrecognized request argument supplied: web_search_options"}})
+        if payload["response_format"]["type"] == "json_schema":
+            raise http_error(400, {"error": {"message": "response_format.json_schema is not supported by this model"}})
+        return chat_reply()
+
+    monkeypatch.setattr(providers.urllib.request, "urlopen", urlopen)
+    out = providers.run_openai(openai_opts(), "SYSTEM", "BRIEF", [], str(tmp_path))
+    assert out == ANSWER
+    assert seen == [
+        ["reasoning_effort", "response_format", "web_search_options"],
+        ["reasoning_effort", "response_format"],
+        ["reasoning_effort", "response_format"],
+    ], "one field dropped per refusal, and a rebuilt payload does not bring back a dropped one"
+
+
+def test_the_endpoints_failures_are_told_apart(tmp_path, monkeypatch):
+    def refusing(code, body, headers=None):
+        def urlopen(req, timeout=None):
+            raise http_error(code, body, headers)
+
+        monkeypatch.setattr(providers.urllib.request, "urlopen", urlopen)
+
+    refusing(429, {"error": {"message": "Rate limit reached. Try again in 30s"}})
+    with pytest.raises(providers.QuotaExceeded) as info:
+        providers.run_openai(openai_opts(), "S", "B", [], str(tmp_path))
+    assert timedelta(seconds=20) < info.value.until - datetime.now() < timedelta(seconds=40)
+    assert info.value.provider == "openai"
+
+    refusing(429, {"error": {"message": "You exceeded your current quota", "code": "insufficient_quota"}})
+    with pytest.raises(providers.QuotaExceeded) as info:
+        providers.run_openai(openai_opts(), "S", "B", [], str(tmp_path))
+    assert info.value.until - datetime.now() > timedelta(hours=1), "a spent account waits far longer than a rate limit"
+
+    refusing(429, {"error": {"message": "slow down"}}, {"Retry-After": "600"})
+    with pytest.raises(providers.QuotaExceeded) as info:
+        providers.run_openai(openai_opts(), "S", "B", [], str(tmp_path))
+    assert timedelta(minutes=9) < info.value.until - datetime.now() < timedelta(minutes=11)
+
+    refusing(401, {"error": {"message": "bad key"}})
+    with pytest.raises(providers.Permanent, match="refused the key"):
+        providers.run_openai(openai_opts(), "S", "B", [], str(tmp_path))
+
+    refusing(503, {"error": {"message": "overloaded"}})
+    with pytest.raises(providers.Transient, match="503"):
+        providers.run_openai(openai_opts(attempts=1), "S", "B", [], str(tmp_path))
+
+    def broken(req, timeout=None):
+        return Reply({"choices": [{"message": {"content": "sorry, no"}}]})
+
+    monkeypatch.setattr(providers.urllib.request, "urlopen", broken)
+    with pytest.raises(providers.Transient, match="not JSON"):
+        providers.run_openai(openai_opts(attempts=1), "S", "B", [], str(tmp_path))
+
+    with pytest.raises(providers.Permanent, match="no API key"):
+        providers.run_openai(providers.Options(provider="openai", model="m", base_url="https://api.test/v1"), "S", "B", [], str(tmp_path))
+    with pytest.raises(providers.Permanent, match="no model"):
+        providers.run_openai(providers.Options(provider="openai", base_url="https://api.test/v1", api_key="k"), "S", "B", [], str(tmp_path))
+
+
+def test_the_payload_drops_frames_until_the_request_fits(tmp_path, monkeypatch):
+    monkeypatch.setattr(providers, "PAYLOAD_BUDGET_BYTES", 4000)
+    shots = [png(tmp_path, "s.png")]
+    frames = [img.Image(str(tmp_path / f"f{i}.png"), datetime(2026, 9, 11, 12, 2 + i), "frame") for i in range(4)]
+    for f in frames:
+        make_png(pathlib.Path(f.file), color="red")
+    urls = providers.inline_images(shots + frames, str(tmp_path / "work"), 64)
+    assert sum(len(u) for _, u in urls) <= providers.PAYLOAD_BUDGET_BYTES
+    assert urls[0][0].kind == "shot", "the player's own shots are the last to go"
+
+
+def test_the_endpoint_lists_its_models(monkeypatch):
+    monkeypatch.setattr(providers.urllib.request, "urlopen", lambda req, timeout=None: Reply({"data": [{"id": "gpt-x"}, {"id": "llama-3"}, {"nope": 1}]}))
+    assert providers.models(openai_opts()) == ["gpt-x", "llama-3"]
+
+    def refuse(req, timeout=None):
+        raise urllib.error.URLError("no route to host")
+
+    monkeypatch.setattr(providers.urllib.request, "urlopen", refuse)
+    assert providers.models(openai_opts()) == []
+    assert providers.models(providers.Options(provider="stub")) == []
+
+
+def test_a_stopped_run_leaves_the_session_deferred_soon(tmp_path, fakebin):
+    """SIGTERM (a stopped unit, a shutdown) is not a failure of the model: the session waits minutes, not hours."""
+    add_shot(tmp_path)
+    write_shim(fakebin / "codex", f'echo "$1" >> "{fakebin}/codex.calls"\nkill -TERM $PPID\nsleep 30')
+    res, journal_dir = run_process(tmp_path, fakebin, {"provider": "codex"})
+    assert res.returncode == 75
+    entry = deferred_file(journal_dir)
+    assert entry["attempts"] == 0 and "signal 15" in entry["reason"]
+    waits = datetime.fromisoformat(entry["until"]) - datetime.now().astimezone()
+    assert timedelta(minutes=1) < waits < timedelta(hours=1), f"the first backoff, not the last: {waits}"
+
+
+def test_the_answer_key_holds_across_processes(tmp_path):
+    """A key built from hash() would be salted per process: the run that reuses the answer is another one."""
+    code = "\n".join(
+        [
+            "import importlib.machinery as m, importlib.util as u",
+            f"spec = u.spec_from_loader('hook', m.SourceFileLoader('hook', {str(BIN_DIR / 'process')!r}))",
+            "hook = u.module_from_spec(spec)",
+            "spec.loader.exec_module(hook)",
+            "print(hook.answer_key(hook.providers.Options(provider='codex', model='m'), 'system', 'brief', [1, 2]))",
+        ]
+    )
+    env = {**os.environ, "PYTHONHASHSEED": "random", "PYTHONPATH": str(BIN_DIR)}
+    out = [subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, env=env, check=True).stdout.strip() for _ in range(2)]
+    assert out[0] == out[1] and out[0].startswith("codex|m|2|")

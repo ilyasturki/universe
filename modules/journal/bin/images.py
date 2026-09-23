@@ -135,7 +135,7 @@ def hamming(a, b):
     return (a ^ b).bit_count()
 
 
-def grab_frame(recording, off, png_path):
+def grab_frame(recording, off, png_path, long_edge=FRAMES_LONG_EDGE):
     raw_path = png_path + ".raw"
     cmd = [
         "ffmpeg",
@@ -153,7 +153,7 @@ def grab_frame(recording, off, png_path):
         "-update",
         "1",
         "-vf",
-        f"scale='min({FRAMES_LONG_EDGE},iw)':-2",
+        f"scale='min({long_edge},iw)':-2",
         png_path,
         "-frames:v",
         "1",
@@ -179,6 +179,38 @@ def grab_frame(recording, off, png_path):
     if len(raw) < 72:
         return None
     return dhash(raw[:72]), statistics.pstdev(raw[:72])
+
+
+# An endpoint takes its images inside the request: a 4K PNG shot goes in as a JPEG of the same long edge as the frames.
+def as_jpeg(src, dst, long_edge=FRAMES_LONG_EDGE, quality=5):
+    cmd = [
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-y",
+        "-i",
+        src,
+        "-frames:v",
+        "1",
+        "-an",
+        "-update",
+        "1",
+        "-vf",
+        f"scale='min({long_edge},iw)':-2",
+        "-q:v",
+        str(quality),
+        dst,
+    ]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=120, check=False)
+    except (OSError, subprocess.TimeoutExpired) as e:
+        log(f"jpeg encode of {os.path.basename(src)} failed: {e}")
+        return None
+    if r.returncode != 0 or not os.path.exists(dst) or os.path.getsize(dst) == 0:
+        log(f"jpeg encode of {os.path.basename(src)} failed: {(r.stderr or '').strip()[-200:]}")
+        return None
+    return dst
 
 
 def _min_distance(cand, chosen):
@@ -228,7 +260,7 @@ def dedupe(images):
     return kept
 
 
-def extract_frames(recording, shots, timeline, need, frames_dir, duration_s):
+def extract_frames(recording, shots, timeline, need, frames_dir, duration_s, long_edge=FRAMES_LONG_EDGE):
     if need <= 0 or not duration_s or duration_s <= 3 or not os.path.exists(recording):
         return []
     os.makedirs(frames_dir, exist_ok=True)
@@ -267,7 +299,7 @@ def extract_frames(recording, shots, timeline, need, frames_dir, duration_s):
     def work(item):
         idx, (gi, off) = item
         png = os.path.join(frames_dir, f"f_{idx:03d}.png")
-        res = grab_frame(recording, off, png)
+        res = grab_frame(recording, off, png, long_edge)
         if res is None:
             return None
         h, sd = res

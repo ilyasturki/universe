@@ -5,7 +5,7 @@ version = "0.0.5"
 description = "After each session, a model writes an entry from the recording, when Video capture is on, and from the screenshots you took. A session with neither gets no entry."
 
 [requires]
-bins = ["ffmpeg", "codex"]
+bins = ["ffmpeg"]
 
 [hooks]
 post-process = "bin/process"
@@ -33,18 +33,41 @@ choices = ["auto", "fr", "en", "es", "de", "it", "pt", "ja"]
 [[settings]]
 key = "provider"
 type = "enum"
-default = "codex"
+default = ""
 label = "Writing model"
 scope = "global"
-choices = ["codex", "stub"]
+required = true
+choices = ["codex", "openai", "stub"]
+requires_bins = { codex = ["codex"] }
 
 [[settings]]
 key = "model"
 type = "string"
-default = "gpt-5.6-sol"
+default = ""
 label = "Model name passed to the provider"
 scope = "global"
 choices_exec = "bin/choices"
+
+[[settings]]
+key = "base_url"
+type = "string"
+default = "https://api.openai.com/v1"
+label = "API endpoint (OpenAI-compatible provider)"
+scope = "global"
+
+[[settings]]
+key = "api_key"
+type = "string"
+default = ""
+label = "API key (OpenAI-compatible provider)"
+scope = "global"
+
+[[settings]]
+key = "api_key_file"
+type = "path"
+default = ""
+label = "File holding the API key, read instead of the key above"
+scope = "global"
 
 [[settings]]
 key = "markdown_export"
@@ -54,9 +77,58 @@ label = "Render the Markdown note for Obsidian"
 scope = "global"
 
 [[settings]]
+key = "web_search"
+type = "bool"
+default = true
+label = "Let the model look the game up on the web"
+scope = "global"
+advanced = true
+
+[[settings]]
+key = "effort"
+type = "enum"
+default = "high"
+label = "Reasoning effort"
+scope = "global"
+advanced = true
+choices = ["minimal", "low", "medium", "high"]
+
+[[settings]]
+key = "attempts"
+type = "int"
+default = 2
+label = "Tries per session before the entry is put off"
+scope = "global"
+advanced = true
+
+[[settings]]
+key = "request_timeout_s"
+type = "int"
+default = 900
+label = "Seconds a single try may take"
+scope = "global"
+advanced = true
+
+[[settings]]
 key = "max_images"
 type = "int"
 default = 40
 label = "Maximum images sent to the model"
+scope = "global"
+advanced = true
+
+[[settings]]
+key = "frame_long_edge"
+type = "int"
+default = 1568
+label = "Long edge of the frames extracted from the recording, in pixels"
+scope = "global"
+advanced = true
+
+[[settings]]
+key = "prompt_file"
+type = "path"
+default = ""
+label = "File whose text replaces the built-in writing prompt"
 scope = "global"
 advanced = true

@@ -5,6 +5,7 @@ import os
 import re
 import subprocess
 import sys
+import time
 from datetime import datetime, timedelta
 
 SESSION_ID_RE = re.compile(r"^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})$")
@@ -16,6 +17,32 @@ def log(msg):
 
 def load_settings():
     return json.loads(os.environ.get("MODULE_SETTINGS_JSON") or "{}")
+
+
+def setting_str(settings, key, default=""):
+    value = settings.get(key)
+    return str(value).strip() if value not in (None, "") else default
+
+
+def setting_int(settings, key, default):
+    try:
+        return int(settings[key])
+    except (KeyError, TypeError, ValueError):
+        return default
+
+
+def setting_bool(settings, key, default):
+    value = settings.get(key)
+    return default if value is None else bool(value)
+
+
+def read_text(path):
+    try:
+        with open(os.path.expanduser(path), encoding="utf-8") as f:
+            return f.read()
+    except OSError as e:
+        log(f"{path}: {e}")
+        return None
 
 
 def read_json(path):
@@ -214,20 +241,33 @@ def read_entries(journal_dir):
     return entries
 
 
-def add_entry_via_core(sid, entry_json):
+CORE_ATTEMPTS = 3
+CORE_BACKOFF_S = 2
+
+
+def _journal_add(sid, entry_json):
     cmd = [os.environ.get("UNIVERSE_BIN") or "universe", "journal-add", sid, entry_json]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, check=False)
     except FileNotFoundError:
         log(f"{cmd[0]} not found")
         return "unavailable"
-    except subprocess.TimeoutExpired:
-        log("universe journal-add timed out")
+    except (OSError, subprocess.TimeoutExpired) as e:
+        log(f"universe journal-add: {e}")
         return "unavailable"
     if result.returncode == 0:
         return "ok"
     err = (result.stderr or "").strip()
     log(f"universe journal-add failed ({result.returncode}): {err}")
-    if "invalid:" in err:
-        return "invalid"
+    return "invalid" if "invalid:" in err else "unavailable"
+
+
+def add_entry_via_core(sid, entry_json):
+    """`ok`, `invalid` (the core read the entry and refused it) or `unavailable` after every try."""
+    for attempt in range(1, CORE_ATTEMPTS + 1):
+        outcome = _journal_add(sid, entry_json)
+        if outcome != "unavailable" or attempt == CORE_ATTEMPTS:
+            return outcome
+        time.sleep(CORE_BACKOFF_S * attempt)
+        log(f"retrying the handoff to the core ({attempt + 1}/{CORE_ATTEMPTS})")
     return "unavailable"
