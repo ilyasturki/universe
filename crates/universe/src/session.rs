@@ -153,7 +153,7 @@ impl Core {
         std::fs::create_dir_all(paths::state_home())?;
         std::fs::write(&env_file, "")?;
         for m in self.hook_modules(&r, "pre-launch").await {
-            let mut env = self.module_env(&m, &r, &cfg, &base);
+            let mut env = self.module_env(&m, Some(&r.game), &cfg, &base);
             env.set("UNIVERSE_ENV_FILE", env_file.to_string_lossy().to_string());
             let out = modules::run_blocking(&m, "pre-launch", &env).await?;
             if out.status != 0 {
@@ -208,7 +208,7 @@ impl Core {
             return Err(e);
         }
         for m in self.hook_modules(&r, "post-launch").await {
-            let env = self.module_env(&m, &r, &cfg, &base);
+            let env = self.module_env(&m, Some(&r.game), &cfg, &base);
             if let Err(e) = modules::run_async(&self.host.units, &m, "post-launch", &env, &session_id, Some(&unit)).await {
                 tracing::warn!("post-launch {}: {e}", m.id());
             }
@@ -352,7 +352,7 @@ impl Core {
         env_end.set("SESSION_ENDED_AT", session.ended_at.clone());
         env_end.set("SESSION_DURATION_S", session.duration_s.to_string());
         for m in self.hook_modules(&r, "session-end").await {
-            let env = self.module_env(&m, &r, &cfg, &env_end);
+            let env = self.module_env(&m, Some(&r.game), &cfg, &env_end);
             if let Err(e) = modules::run_blocking(&m, "session-end", &env).await {
                 tracing::warn!("session-end {}: {e}", m.id());
             }
@@ -418,7 +418,7 @@ impl Core {
         let cfg = self.config.read().await.clone();
         let env = self.post_process_env(&r, &cfg, session_id);
         for m in self.hook_modules(&r, "post-process").await {
-            let menv = self.module_env(&m, &r, &cfg, &env);
+            let menv = self.module_env(&m, Some(&r.game), &cfg, &env);
             if let Err(e) = modules::run_async(&self.host.units, &m, "post-process", &menv, session_id, None).await {
                 tracing::warn!("post-process {}: {e}", m.id());
             }
@@ -450,7 +450,7 @@ impl Core {
         let cfg = self.config.read().await.clone();
         let base = HookEnv { vars: marker.hook_env };
         for m in self.hook_modules(&r, hook).await {
-            let env = self.module_env(&m, &r, &cfg, &base);
+            let env = self.module_env(&m, Some(&r.game), &cfg, &base);
             if let Err(e) = modules::run_blocking(&m, hook, &env).await {
                 tracing::warn!("{hook} {}: {e}", m.id());
             }

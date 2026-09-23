@@ -431,20 +431,25 @@ impl Core {
         env
     }
 
-    pub(crate) fn module_env(&self, m: &Module, r: &Resolved, cfg: &Config, base: &HookEnv) -> HookEnv {
+    pub(crate) fn module_env(&self, m: &Module, game: Option<&Game>, cfg: &Config, base: &HookEnv) -> HookEnv {
         let mut env = base.clone();
-        env.set("MODULE_SETTINGS_JSON", serde_json::Value::Object(m.merged_settings(cfg, Some(&r.game))).to_string());
+        env.set("MODULE_SETTINGS_JSON", serde_json::Value::Object(m.merged_settings(cfg, game)).to_string());
         env
     }
 
     pub(crate) async fn hook_modules(&self, r: &Resolved, hook: &str) -> Vec<Module> {
         let cfg = self.config.read().await.clone();
+        self.modules_with_hook(&cfg, Some(&r.game), hook).await
+    }
+
+    /// The active modules declaring `hook` and switched on for `game`, or globally without one.
+    async fn modules_with_hook(&self, cfg: &Config, game: Option<&Game>, hook: &str) -> Vec<Module> {
         self.modules
             .read()
             .await
             .iter()
             .filter(|m| m.active() && m.hook(hook).is_some())
-            .filter(|m| m.merged_settings(&cfg, Some(&r.game)).get("enabled").and_then(|v| v.as_bool()).unwrap_or(true))
+            .filter(|m| m.merged_settings(cfg, game).get("enabled").and_then(|v| v.as_bool()).unwrap_or(true))
             .cloned()
             .collect()
     }
@@ -656,34 +661,41 @@ impl Core {
     }
 
     pub async fn screenshot(&self) -> Result<String> {
-        let cur = self.current().await;
         let cfg = self.config.read().await.clone();
-        let (r, env) = match cur {
+        let (game, env) = match self.current().await {
             Some(c) => {
                 let r = self.get(&c.id).await?;
                 let mut env = self.hook_env_base(&r, &cfg);
                 env.set("SESSION_ID", c.session_id);
                 env.set("SESSION_SCREEN", c.screen);
-                (r, env)
+                (Some(r.game), env)
             }
+            // The launcher's own screen: no game, a directory no listing shows.
             None => {
-                let games = self.games.read().await;
-                let r = games.first().cloned().ok_or_else(|| Error::NotFound("no session running".into()))?;
-                let mut env = self.hook_env_base(&r, &cfg);
+                let mut env = HookEnv::default();
+                for (k, v) in passthrough_env() {
+                    env.set(&k, v);
+                }
                 env.set("SESSION_SCREEN", crate::desktop::pick_screen(""));
                 env.set("SCREENSHOTS_DIR", paths::state_home().join("screenshots").to_string_lossy().to_string());
-                (r, env)
+                (None, env)
             }
         };
-        for m in self.hook_modules(&r, "screenshot").await {
-            let menv = self.module_env(&m, &r, &cfg, &env);
+        let shooters = self.modules_with_hook(&cfg, game.as_ref(), "screenshot").await;
+        if shooters.is_empty() {
+            return Err(Error::Unavailable("no enabled module takes screenshots".into()));
+        }
+        let mut failures = Vec::new();
+        for m in shooters {
+            let menv = self.module_env(&m, game.as_ref(), &cfg, &env);
             let out = modules::run_blocking(&m, "screenshot", &menv).await?;
             let path = out.stdout.trim().to_string();
             if out.status == 0 && !path.is_empty() {
                 return Ok(path);
             }
+            failures.push(format!("{}: {}", m.id(), out.stderr.trim().lines().last().unwrap_or("no path printed")));
         }
-        Err(Error::Unavailable("no module provides a screenshot hook".into()))
+        Err(Error::Io(format!("the screenshot failed ({})", failures.join("; "))))
     }
 
     /// The player's own shots, newest first; an empty `id` lists every visible game's. Read from disk on every call.
@@ -1837,6 +1849,38 @@ mod tests {
             crate::host::Units::Memory(m) => m,
             _ => unreachable!("the tests run on the memory host"),
         }
+    }
+
+    fn screenshot_sandbox(body: &str) -> tempfile::TempDir {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = journal_sandbox("stub");
+        std::fs::write(dir.path().join("config/config.toml"), "[modules]\nenabled = [\"screenshot\"]\n[sources]\nenabled = []\n").unwrap();
+        let m = dir.path().join("modules/screenshot");
+        std::fs::create_dir_all(m.join("bin")).unwrap();
+        std::fs::write(m.join("module.toml"), "api = 2\nid = \"screenshot\"\nname = \"Screenshots\"\n[hooks]\nscreenshot = \"bin/shot\"\n").unwrap();
+        std::fs::write(m.join("bin/shot"), format!("#!/bin/sh\n{body}\n")).unwrap();
+        std::fs::set_permissions(m.join("bin/shot"), std::fs::Permissions::from_mode(0o755)).unwrap();
+        dir
+    }
+
+    #[tokio::test]
+    async fn a_screenshot_off_a_session_is_the_launchers_and_no_games() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let dir = screenshot_sandbox("echo \"$SCREENSHOTS_DIR/${GAME_ID:-none}.png\"");
+        let shot = open().await.screenshot().await.unwrap();
+        assert_eq!(shot, dir.path().join("state/screenshots/none.png").to_string_lossy(), "no game stands in for the launcher");
+    }
+
+    #[tokio::test]
+    async fn a_failed_screenshot_says_why_and_a_missing_module_says_so() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let dir = screenshot_sandbox("echo 'shell refused' >&2\nexit 1");
+        let err = open().await.screenshot().await.unwrap_err().to_string();
+        assert!(err.contains("screenshot: shell refused"), "{err}");
+
+        std::fs::write(dir.path().join("config/config.toml"), "[modules]\nenabled = []\n[sources]\nenabled = []\n").unwrap();
+        let err = open().await.screenshot().await.unwrap_err();
+        assert!(matches!(err, Error::Unavailable(_)), "{err}");
     }
 
     #[tokio::test]
