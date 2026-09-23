@@ -3,6 +3,7 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
+use crate::config::Config;
 use crate::core::{passthrough_env, Core};
 use crate::host::{Prop, UnitSpec};
 use crate::launcher::{self, Plan};
@@ -395,11 +396,10 @@ impl Core {
         Ok(session)
     }
 
-    async fn post_process(&self, id: &str, session_id: &str) {
-        let Ok(r) = self.get(id).await else { return };
-        let cfg = self.config.read().await.clone();
+    /// What a `post-process` hook is told about one session of `r`, whether it just ended or is being written again later.
+    pub(crate) fn post_process_env(&self, r: &Resolved, cfg: &Config, session_id: &str) -> HookEnv {
         let sess = r.sessions.iter().find(|s| s.session == session_id).cloned();
-        let mut env = self.hook_env_base(&r, &cfg);
+        let mut env = self.hook_env_base(r, cfg);
         env.set("SESSION_ID", session_id);
         env.set("RECORDING_PATH", sess.as_ref().and_then(|s| s.recording.clone()).unwrap_or_default());
         env.set("RECORDING_STARTED_AT", sess.as_ref().map(|s| s.recording_started_at.clone()).unwrap_or_default());
@@ -410,6 +410,13 @@ impl Core {
             env.set("SESSION_DURATION_S", s.duration_s.to_string());
             env.set("SESSION_SCREEN", s.screen);
         }
+        env
+    }
+
+    async fn post_process(&self, id: &str, session_id: &str) {
+        let Ok(r) = self.get(id).await else { return };
+        let cfg = self.config.read().await.clone();
+        let env = self.post_process_env(&r, &cfg, session_id);
         for m in self.hook_modules(&r, "post-process").await {
             let menv = self.module_env(&m, &r, &cfg, &env);
             if let Err(e) = modules::run_async(&self.host.units, &m, "post-process", &menv, session_id, None).await {

@@ -23,8 +23,11 @@ pub struct Entry {
     pub paragraphs: Vec<String>,
     pub next_up: String,
     pub images: Vec<String>,
-    /// `written` | `pending` | `failed`: the file's kind, never read from its contents
+    /// `written` | `pending` | `deferred` | `failed`: the file's kind, never read from its contents
     pub state: String,
+    /// When a `deferred` entry is due for another run; empty on every other state
+    #[serde(skip_serializing_if = "String::is_empty")]
+    pub retry_at: String,
 }
 
 impl Default for Entry {
@@ -43,6 +46,7 @@ impl Default for Entry {
             next_up: String::new(),
             images: vec![],
             state: "written".into(),
+            retry_at: String::new(),
         }
     }
 }
@@ -101,9 +105,55 @@ fn failed_entry(p: &Path, sid: &str) -> crate::Result<Entry> {
     })
 }
 
-/// A session with a written entry hides its failed one, a failed one its pending one.
+/// `<sid>.deferred.json` (`{session, game, provider, written_at, until, reason, attempts}`): a failure worth another run.
+fn deferred_entry(p: &Path, sid: &str) -> crate::Result<Entry> {
+    let v = read_json(p)?;
+    let reason = field(&v, "reason");
+    Ok(Entry {
+        session: sid.into(),
+        game: field(&v, "game"),
+        written_at: field(&v, "written_at"),
+        provider: field(&v, "provider"),
+        paragraphs: if reason.is_empty() { vec![] } else { vec![reason] },
+        state: "deferred".into(),
+        retry_at: field(&v, "until"),
+        ..Entry::default()
+    })
+}
+
+/// Every session holding a `<sid>.pending.json` with no entry behind it, however old the file is:
+/// `pending()` hides the ones past the timeout, and those are exactly the runs a sweep has to pick up.
+pub fn unfinished(journal_dir: &Path) -> Vec<String> {
+    let Ok(rd) = std::fs::read_dir(journal_dir) else { return vec![] };
+    rd.flatten()
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().to_string();
+            let sid = name.strip_suffix(".pending.json").filter(|s| !s.starts_with('.'))?.to_string();
+            (!journal_dir.join(format!("{sid}.json")).exists()).then_some(sid)
+        })
+        .collect()
+}
+
+/// When the module means to try this session again, from its `<sid>.deferred.json`.
+pub fn deferrals(journal_dir: &Path) -> Vec<(String, DateTime<Local>)> {
+    let Ok(rd) = std::fs::read_dir(journal_dir) else { return vec![] };
+    rd.flatten()
+        .filter_map(|e| {
+            let name = e.file_name().to_string_lossy().to_string();
+            let sid = name.strip_suffix(".deferred.json").filter(|s| !s.starts_with('.'))?.to_string();
+            if journal_dir.join(format!("{sid}.json")).exists() {
+                return None;
+            }
+            let until = parse_rfc3339(&field(&read_json(&e.path()).ok()?, "until"))?;
+            Some((sid, until))
+        })
+        .collect()
+}
+
+/// A session with a written entry hides its failed one, a failed one its deferred one, and that one its pending one.
 pub fn read_all(journal_dir: &Path) -> crate::Result<Vec<Entry>> {
     let (mut written, mut failed, mut pending) = (Vec::new(), Vec::new(), Vec::new());
+    let mut deferred = Vec::new();
     let rd = match std::fs::read_dir(journal_dir) {
         Ok(r) => r,
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(written),
@@ -119,6 +169,8 @@ pub fn read_all(journal_dir: &Path) -> crate::Result<Vec<Entry>> {
             pending_entry(&p, sid).map(|en| pending.push(en))
         } else if let Some(sid) = name.strip_suffix(".failed.json") {
             failed_entry(&p, sid).map(|en| failed.push(en))
+        } else if let Some(sid) = name.strip_suffix(".deferred.json") {
+            deferred_entry(&p, sid).map(|en| deferred.push(en))
         } else {
             read_json(&p).and_then(|v| serde_json::from_value::<Entry>(v).map_err(Into::into)).map(|mut en| {
                 en.state = "written".into();
@@ -130,7 +182,7 @@ pub fn read_all(journal_dir: &Path) -> crate::Result<Vec<Entry>> {
         }
     }
     let mut out = written;
-    for en in failed.into_iter().chain(pending) {
+    for en in failed.into_iter().chain(deferred).chain(pending) {
         if !out.iter().any(|w| w.session == en.session) {
             out.push(en);
         }
@@ -146,7 +198,7 @@ pub fn pending(journal_dir: &Path) -> Vec<Entry> {
         .filter_map(|e| {
             let name = e.file_name().to_string_lossy().to_string();
             let sid = name.strip_suffix(".pending.json").filter(|s| !s.starts_with('.'))?.to_string();
-            if journal_dir.join(format!("{sid}.json")).exists() || journal_dir.join(format!("{sid}.failed.json")).exists() {
+            if ["json", "failed.json", "deferred.json"].iter().any(|ext| journal_dir.join(format!("{sid}.{ext}")).exists()) {
                 return None;
             }
             pending_entry(&e.path(), &sid).ok().filter(|en| en.state == "pending")
@@ -156,7 +208,8 @@ pub fn pending(journal_dir: &Path) -> Vec<Entry> {
 
 pub fn count_written(journal_dir: &Path) -> usize {
     let Ok(rd) = std::fs::read_dir(journal_dir) else { return 0 };
-    rd.flatten().filter(|e| matches!(e.file_name().to_str(), Some(n) if !n.starts_with('.') && n.ends_with(".json") && !n.ends_with(".pending.json") && !n.ends_with(".failed.json"))).count()
+    let state = |n: &str| ["pending", "deferred", "failed"].iter().any(|s| n.ends_with(&format!(".{s}.json")));
+    rd.flatten().filter(|e| matches!(e.file_name().to_str(), Some(n) if !n.starts_with('.') && n.ends_with(".json") && !state(n))).count()
 }
 
 pub fn fill_timing(entries: &mut [Entry], sessions: &HashMap<String, Session>) {
@@ -796,16 +849,41 @@ You reached the title screen.
         .unwrap();
         let stale = std::fs::OpenOptions::new().write(true).open(journal_dir.join("20260910-130000.pending.json")).unwrap();
         stale.set_modified(std::time::SystemTime::now() - Duration::from_secs(31 * 60)).unwrap();
+        let due = Local::now() - chrono::Duration::minutes(5);
+        std::fs::write(
+            journal_dir.join("20260910-140000.deferred.json"),
+            format!(
+                r#"{{"session":"20260910-140000","game":"x","provider":"codex","written_at":"2026-09-10T14:20:00+02:00","until":"{}","reason":"codex quota reached","attempts":0}}"#,
+                due.to_rfc3339()
+            ),
+        )
+        .unwrap();
+        // The session that is being written again keeps its deferred file until the run ends: the pending one does not show through it.
+        std::fs::write(journal_dir.join("20260910-140000.pending.json"), r#"{"session":"20260910-140000","game":"x","provider":"codex"}"#).unwrap();
         std::fs::write(journal_dir.join(".game-memory.json"), "{}").unwrap();
         std::fs::write(journal_dir.join("notes.txt"), "x").unwrap();
         let all = read_all(&journal_dir).unwrap();
         let states: Vec<(&str, &str)> = all.iter().map(|e| (e.session.as_str(), e.state.as_str())).collect();
-        assert_eq!(states, vec![("20260910-130000", "failed"), ("20260910-120000", "failed"), ("20260910-110000", "pending"), ("20260910-100000", "written")]);
-        assert_eq!(all[0].paragraphs, vec!["timed out"]);
-        assert_eq!(all[1].paragraphs, vec!["codex: rate limited"]);
-        assert_eq!(all[1].written_at, "2026-09-10T12:30:00+02:00");
-        assert_eq!((all[2].started_at.as_str(), all[2].provider.as_str(), all[2].title.as_str()), ("2026-09-10T11:00:00+02:00", "codex", ""));
-        assert!(all[2].paragraphs.is_empty());
+        assert_eq!(
+            states,
+            vec![
+                ("20260910-140000", "deferred"),
+                ("20260910-130000", "failed"),
+                ("20260910-120000", "failed"),
+                ("20260910-110000", "pending"),
+                ("20260910-100000", "written")
+            ]
+        );
+        assert_eq!(all[0].paragraphs, vec!["codex quota reached"]);
+        assert_eq!((all[0].retry_at.as_str(), all[0].provider.as_str()), (due.to_rfc3339().as_str(), "codex"));
+        assert_eq!(all[1].paragraphs, vec!["timed out"]);
+        assert_eq!(all[2].paragraphs, vec!["codex: rate limited"]);
+        assert_eq!(all[2].written_at, "2026-09-10T12:30:00+02:00");
+        assert_eq!((all[3].started_at.as_str(), all[3].provider.as_str(), all[3].title.as_str()), ("2026-09-10T11:00:00+02:00", "codex", ""));
+        assert!(all[3].paragraphs.is_empty());
+        assert_eq!(pending(&journal_dir).len(), 1, "only the session with nothing else to its name is pending");
+        assert_eq!(deferrals(&journal_dir), vec![("20260910-140000".to_string(), due)]);
+        assert_eq!(count_written(&journal_dir), 1);
     }
 
     #[test]

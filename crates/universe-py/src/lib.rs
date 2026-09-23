@@ -328,6 +328,20 @@ impl Core {
     fn pending_journals(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| c.pending_journals())
     }
+    #[pyo3(signature = (id, session_id, rewrite=false))]
+    fn journal_write(&self, py: Python<'_>, id: String, session_id: String, rewrite: bool) -> PyResult<String> {
+        self.run(py, |c| async move { c.journal_write(&id, &session_id, rewrite).await })
+    }
+    #[pyo3(signature = (id=String::new()))]
+    fn sweep_journals(&self, py: Python<'_>, id: String) -> PyResult<Py<PyAny>> {
+        self.value_infallible(py, move |c| async move {
+            if id.is_empty() {
+                c.sweep_journals().await
+            } else {
+                c.retry_journals(&id).await
+            }
+        })
+    }
     fn add_entry(&self, py: Python<'_>, session_id: String, entry: &Bound<'_, PyAny>) -> PyResult<()> {
         let entry: universe::journal::Entry = typed(entry)?;
         self.run(py, |c| async move { c.add_entry(&session_id, entry).await })

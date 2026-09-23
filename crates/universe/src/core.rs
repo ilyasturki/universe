@@ -15,6 +15,9 @@ use crate::{Error, Result};
 // gamescope encodes its screenshot png on one thread: a launcher frame takes ~450 ms at 4K, a busy game's ~4 s.
 const FRAME_WAIT: std::time::Duration = std::time::Duration::from_millis(5000);
 
+/// The module that writes the entries: the core starts it again for a retry or a rewrite.
+pub const JOURNAL_MODULE: &str = "journal";
+
 /// Two lifetimes: a caller reborrows the same callback across several awaited calls.
 pub type Progress<'a, 'b> = &'a mut (dyn FnMut(u64, u64, &str) + 'b);
 
@@ -858,7 +861,7 @@ impl Core {
             // The hook's `finally` does not run under SIGTERM: the pending file is ours to drop.
             let _ = self.host.units.stop_unit(&format!("universe-journal-post-process-{session_id}")).await;
         }
-        for state in ["pending", "failed"] {
+        for state in ["pending", "deferred", "failed"] {
             let p = journal_dir.join(format!("{session_id}.{state}.json"));
             if p.is_file() {
                 std::fs::remove_file(&p)?;
@@ -885,6 +888,133 @@ impl Core {
             self.render_journal(id).await?;
         }
         Ok(())
+    }
+
+    /// Writes one session's entry now: a retry of a deferred or failed one, a first entry for a session that never had one, `rewrite` over a written one.
+    pub async fn journal_write(&self, id: &str, session_id: &str, rewrite: bool) -> Result<String> {
+        let r = self.get(id).await?;
+        if crate::sessions::parse_session_id(session_id).is_none() {
+            return Err(Error::Invalid(format!("session {session_id} is not a timestamp: there is nothing to write from")));
+        }
+        if !r.sessions.iter().any(|s| s.session == session_id) {
+            return Err(Error::NotFound(format!("session {session_id} of {id}")));
+        }
+        if r.game.journal_dir().join(format!("{session_id}.json")).is_file() && !rewrite {
+            return Err(Error::Invalid(format!("{session_id} already has an entry; ask for a rewrite to replace it")));
+        }
+        let unit = format!("universe-{JOURNAL_MODULE}-post-process-{session_id}");
+        if self.host.units.is_active(&unit).await {
+            return Err(Error::Busy(format!("the journal is already writing {session_id}")));
+        }
+        let cfg = self.config.read().await.clone();
+        let m = self
+            .modules
+            .read()
+            .await
+            .iter()
+            .find(|m| m.id() == JOURNAL_MODULE && m.hook("post-process").is_some())
+            .cloned()
+            .ok_or_else(|| Error::NotFound(format!("module {JOURNAL_MODULE}")))?;
+        if !m.enabled {
+            return Err(Error::Unavailable(format!("{JOURNAL_MODULE} is not enabled")));
+        }
+        if !m.available {
+            return Err(Error::Unavailable(format!("{JOURNAL_MODULE}: missing {}", m.missing.join(", "))));
+        }
+        if m.needs_setup() {
+            return Err(Error::Unavailable(format!("{JOURNAL_MODULE}: {} not set", m.unset.join(", "))));
+        }
+        let mut env = self.post_process_env(&r, &cfg, session_id);
+        // Asked for by hand: the game's own "write an entry after each session" switch does not hold this one back.
+        let mut settings = m.merged_settings(&cfg, Some(&r.game));
+        settings.insert("enabled".into(), serde_json::Value::Bool(true));
+        env.set("MODULE_SETTINGS_JSON", serde_json::Value::Object(settings).to_string());
+        if rewrite {
+            env.set("JOURNAL_REWRITE", "1");
+        }
+        let started = modules::run_async(&self.host.units, &m, "post-process", &env, session_id, None).await?;
+        Ok(started.unwrap_or_default())
+    }
+
+    /// The sessions whose entry is owed another run: deferred past their instant, and pending ones whose unit is gone.
+    pub async fn due_journals(&self) -> Vec<(String, String)> {
+        self.due_journals_of(None).await
+    }
+
+    async fn due_journals_of(&self, only: Option<&str>) -> Vec<(String, String)> {
+        let now = chrono::Local::now();
+        let games = self.games.read().await;
+        let mut due = Vec::new();
+        for r in games.iter().filter(|r| r.game.removed_at.is_empty() && only.is_none_or(|id| r.game.id == id)) {
+            let dir = r.game.journal_dir();
+            for (session, until) in crate::journal::deferrals(&dir) {
+                if until <= now {
+                    due.push((r.game.id.clone(), session));
+                }
+            }
+            for session in crate::journal::unfinished(&dir) {
+                let unit = format!("universe-{JOURNAL_MODULE}-post-process-{session}");
+                if !self.host.units.is_active(&unit).await {
+                    due.push((r.game.id.clone(), session));
+                }
+            }
+        }
+        due.sort();
+        due.dedup();
+        due
+    }
+
+    /// Starts the oldest owed entry, one at a time, and says what is left: `{started, due, next}`. A running game holds the sweep back.
+    pub async fn sweep_journals(&self) -> serde_json::Value {
+        self.sweep_journals_of(None).await
+    }
+
+    /// The same sweep, over one game's sessions.
+    pub async fn retry_journals(&self, id: &str) -> serde_json::Value {
+        self.sweep_journals_of(Some(id)).await
+    }
+
+    async fn sweep_journals_of(&self, only: Option<&str>) -> serde_json::Value {
+        let mut due = self.due_journals_of(only).await;
+        let count = due.len();
+        if self.current().await.is_some() {
+            return serde_json::json!({"started": null, "due": count, "next": self.waiting_at(None).await, "held": "a game is running"});
+        }
+        if due.is_empty() {
+            return serde_json::json!({"started": null, "due": 0, "next": self.waiting_at(None).await});
+        }
+        let (id, session) = due.remove(0);
+        match self.journal_write(&id, &session, false).await {
+            // The session just started is owed nothing more: the instant reported is the next one after it.
+            Ok(_) => {
+                let next = self.waiting_at(Some(&session)).await;
+                serde_json::json!({"started": {"game": id, "session": session}, "due": count - 1, "next": next})
+            }
+            Err(e) => {
+                tracing::warn!("journal retry {id} {session}: {e}");
+                serde_json::json!({"started": null, "due": count, "next": self.waiting_at(None).await, "error": e.to_string()})
+            }
+        }
+    }
+
+    /// The nearest instant a deferred entry is due, across the library.
+    pub async fn next_journal_retry(&self) -> Option<chrono::DateTime<chrono::Local>> {
+        let games = self.games.read().await;
+        games.iter().filter(|r| r.game.removed_at.is_empty()).flat_map(|r| crate::journal::deferrals(&r.game.journal_dir())).map(|(_, until)| until).min()
+    }
+
+    /// That instant as the frontends read it, with one session left out: the one a sweep has just handed to the module.
+    async fn waiting_at(&self, skip: Option<&str>) -> String {
+        let games = self.games.read().await;
+        games
+            .iter()
+            .filter(|r| r.game.removed_at.is_empty())
+            .flat_map(|r| crate::journal::deferrals(&r.game.journal_dir()))
+            .filter(|(session, _)| Some(session.as_str()) != skip)
+            .map(|(_, until)| until)
+            .min()
+            .map(|t| t.to_rfc3339())
+            .unwrap_or_default()
     }
 
     pub async fn pending_journals(&self) -> Vec<serde_json::Value> {
@@ -1633,6 +1763,150 @@ mod tests {
 
     async fn open() -> Core {
         Core::open_with(crate::config::Config::load().unwrap(), Host::memory().0).await.unwrap()
+    }
+
+    /// A library of one game with two played sessions, and a `journal` module whose post-process hook is a stub.
+    fn journal_sandbox(provider: &str) -> tempfile::TempDir {
+        let dir = tempfile::tempdir().unwrap();
+        for (var, sub) in [
+            ("UNIVERSE_DATA_HOME", "data"),
+            ("UNIVERSE_STATE_HOME", "state"),
+            ("UNIVERSE_CONFIG_HOME", "config"),
+            ("UNIVERSE_MODULES_PATH", "modules"),
+            ("UNIVERSE_SOURCES_PATH", "sources"),
+        ] {
+            std::fs::create_dir_all(dir.path().join(sub)).unwrap();
+            std::env::set_var(var, dir.path().join(sub));
+        }
+        std::fs::write(
+            dir.path().join("config/config.toml"),
+            format!("[modules]\nenabled = [\"journal\"]\n[modules.journal]\nprovider = \"{provider}\"\n[sources]\nenabled = []\n"),
+        )
+        .unwrap();
+        let m = dir.path().join("modules/journal");
+        std::fs::create_dir_all(m.join("bin")).unwrap();
+        std::fs::write(
+            m.join("module.toml"),
+            "api = 2\nid = \"journal\"\nname = \"Play journal\"\n[hooks]\npost-process = \"bin/process\"\n\n[[settings]]\nkey = \"provider\"\ntype = \"enum\"\ndefault = \"\"\nscope = \"global\"\nrequired = true\nchoices = [\"codex\", \"stub\"]\n",
+        )
+        .unwrap();
+        std::fs::write(m.join("bin/process"), "#!/bin/sh\n").unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            std::fs::set_permissions(m.join("bin/process"), std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        let mut g = Game::new("Sample");
+        g.launch.exe = dir.path().join("sample.exe").to_string_lossy().into();
+        g.modules.insert("journal".into(), toml::from_str("enabled = false").unwrap());
+        g.save().unwrap();
+        for sid in ["20260910-100000", "20260911-200000"] {
+            crate::sessions::append(
+                &g.sessions_path(),
+                &crate::sessions::Session {
+                    session: sid.into(),
+                    game: "sample".into(),
+                    started_at: "2026-09-10T10:00:00+02:00".into(),
+                    ended_at: "2026-09-10T11:00:00+02:00".into(),
+                    duration_s: 3600,
+                    recording: Some("/mnt/rec.mkv".into()),
+                    ..Default::default()
+                },
+            )
+            .unwrap();
+        }
+        dir
+    }
+
+    fn memory(core: &Core) -> &std::sync::Arc<crate::host::Memory> {
+        match &core.host.units {
+            crate::host::Units::Memory(m) => m,
+            _ => unreachable!("the tests run on the memory host"),
+        }
+    }
+
+    #[tokio::test]
+    async fn an_entry_is_written_on_demand_whatever_the_games_own_switch_says() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let _dir = journal_sandbox("stub");
+        let core = open().await;
+        let unit = core.journal_write("sample", "20260910-100000", false).await.unwrap();
+        assert_eq!(unit, "universe-journal-post-process-20260910-100000");
+        let spec = memory(&core).spec(&unit).expect("the hook unit started");
+        let settings: serde_json::Value = serde_json::from_str(&spec.env["MODULE_SETTINGS_JSON"]).unwrap();
+        assert_eq!(settings["enabled"], serde_json::json!(true), "a hand-asked entry ignores the game's own switch");
+        assert_eq!(settings["provider"], serde_json::json!("stub"));
+        assert_eq!(spec.env["SESSION_ID"], "20260910-100000");
+        assert_eq!(spec.env["RECORDING_PATH"], "/mnt/rec.mkv");
+        assert_eq!(spec.env.get("JOURNAL_REWRITE"), None);
+        assert_eq!(spec.env["SESSION_DURATION_S"], "3600");
+
+        memory(&core).finish(&unit, 0);
+        let journal_dir = core.get("sample").await.unwrap().game.journal_dir();
+        crate::journal::write(&journal_dir, &crate::journal::Entry { session: "20260910-100000".into(), title: "Done".into(), ..Default::default() }).unwrap();
+        let err = core.journal_write("sample", "20260910-100000", false).await.unwrap_err();
+        assert!(matches!(err, Error::Invalid(_)), "{err}");
+        let unit = core.journal_write("sample", "20260910-100000", true).await.unwrap();
+        let spec = memory(&core).spec(&unit).expect("the rewrite unit started");
+        assert_eq!(spec.env["JOURNAL_REWRITE"], "1");
+        assert!(matches!(core.journal_write("sample", "lutris", false).await, Err(Error::Invalid(_))), "a session with no timestamp has nothing to read");
+        assert!(matches!(core.journal_write("sample", "20990101-000000", false).await, Err(Error::NotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn the_sweep_starts_one_owed_entry_at_a_time() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let _dir = journal_sandbox("stub");
+        let core = open().await;
+        let journal_dir = core.get("sample").await.unwrap().game.journal_dir();
+        std::fs::create_dir_all(&journal_dir).unwrap();
+        let report = core.sweep_journals().await;
+        assert_eq!((report["started"].as_object(), report["due"].as_u64(), report["next"].as_str()), (None, Some(0), Some("")));
+
+        let soon = (chrono::Local::now() + chrono::Duration::hours(3)).to_rfc3339();
+        let past = (chrono::Local::now() - chrono::Duration::minutes(1)).to_rfc3339();
+        for (sid, until) in [("20260911-200000", &soon), ("20260910-100000", &past)] {
+            std::fs::write(
+                journal_dir.join(format!("{sid}.deferred.json")),
+                format!(r#"{{"session":"{sid}","game":"sample","provider":"stub","until":"{until}","reason":"codex quota reached","attempts":1}}"#),
+            )
+            .unwrap();
+        }
+        assert_eq!(core.due_journals().await, vec![("sample".to_string(), "20260910-100000".to_string())], "only the one whose instant has passed");
+        let report = core.sweep_journals().await;
+        assert_eq!(report["started"]["session"], "20260910-100000");
+        assert_eq!(report["due"], 0);
+        assert_eq!(report["next"].as_str(), Some(soon.as_str()), "the timer is armed on the next one still waiting, not the one just started");
+
+        // A pending file whose unit is gone (a reboot, a stopped hook) is owed a run too, however long it has sat there.
+        std::fs::remove_file(journal_dir.join("20260910-100000.deferred.json")).unwrap();
+        std::fs::write(journal_dir.join("20260911-200000.pending.json"), r#"{"session":"20260911-200000","game":"sample","provider":"stub"}"#).unwrap();
+        std::fs::remove_file(journal_dir.join("20260911-200000.deferred.json")).unwrap();
+        assert_eq!(core.due_journals().await, vec![("sample".to_string(), "20260911-200000".to_string())]);
+        let stale = std::fs::OpenOptions::new().write(true).open(journal_dir.join("20260911-200000.pending.json")).unwrap();
+        stale.set_modified(std::time::SystemTime::now() - std::time::Duration::from_secs(3 * 3600)).unwrap();
+        assert_eq!(
+            crate::journal::load(&journal_dir).iter().find(|e| e.session == "20260911-200000").map(|e| e.state.clone()),
+            Some("failed".to_string()),
+            "it lists as timed out"
+        );
+        assert_eq!(core.due_journals().await, vec![("sample".to_string(), "20260911-200000".to_string())], "and is still owed a run");
+    }
+
+    #[tokio::test]
+    async fn a_module_waiting_on_a_setting_writes_nothing_and_doctor_says_so() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let _dir = journal_sandbox("");
+        let core = open().await;
+        let module = core.modules().await.into_iter().find(|m| m["id"] == "journal").unwrap();
+        assert_eq!(module["unset"], serde_json::json!(["provider"]), "the module is on, but it cannot guess its writing model");
+        let err = core.journal_write("sample", "20260910-100000", false).await.unwrap_err();
+        assert!(matches!(err, Error::Unavailable(ref m) if m.contains("provider")), "{err}");
+        let checks = core.doctor().await;
+        let check = checks.iter().find(|c| c.module == "journal" && c.check == "provider").expect("a doctor line for the choice it waits on");
+        assert!(!check.ok && check.detail.contains("universe module set journal provider="));
+        core.set_module_setting("journal", "", "provider", "stub").await.unwrap();
+        assert!(core.journal_write("sample", "20260910-100000", false).await.is_ok(), "chosen, the module writes");
     }
 
     #[tokio::test]

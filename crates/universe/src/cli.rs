@@ -165,7 +165,7 @@ pub enum Cmd {
     /// Journal entries of a game
     Journal {
         /// Game: exact id, then whole word, substring or path
-        name: String,
+        name: Option<String>,
         /// Render the Markdown note and print its path
         #[arg(long)]
         render: bool,
@@ -175,6 +175,15 @@ pub enum Cmd {
         /// Trash the entry of this session (a pending one is cancelled)
         #[arg(long, value_name = "SESSION")]
         remove: Option<String>,
+        /// Write the entry of this session now: a retry, or a first entry for a session that never had one
+        #[arg(long, value_name = "SESSION")]
+        write: Option<String>,
+        /// With --write: replace the entry the session already has
+        #[arg(long)]
+        force: bool,
+        /// Start the entry owed to the oldest session waiting for another try; without a game, across the library
+        #[arg(long)]
+        retry: bool,
         /// Do not ask for confirmation
         #[arg(long, short)]
         yes: bool,
@@ -1000,8 +1009,35 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 }
             }
         }
-        Cmd::Journal { name, render, open, remove, yes } => {
+        Cmd::Journal { name, render, open, remove, write, force, retry, yes } => {
+            if retry {
+                let report = match &name {
+                    Some(n) => core.retry_journals(&pick(&core, n).await?).await,
+                    None => core.sweep_journals().await,
+                };
+                if json {
+                    return print_json(&report);
+                }
+                match report["started"].as_object() {
+                    Some(s) => println!("{} {} ({})", "writing".yellow(), s["game"].as_str().unwrap_or(""), s["session"].as_str().unwrap_or("")),
+                    None => println!("{}", report["held"].as_str().or(report["error"].as_str()).unwrap_or("nothing waiting").dimmed()),
+                }
+                let due = report["due"].as_u64().unwrap_or(0);
+                if due > 0 {
+                    println!("{due} more waiting; they go one at a time");
+                }
+                if let Some(next) = report["next"].as_str().filter(|s| !s.is_empty()) {
+                    println!("next try {}", when(next, &loc).dimmed());
+                }
+                return Ok(());
+            }
+            let name = name.ok_or_else(|| anyhow::anyhow!("which game? (universe journal <name>)"))?;
             let id = pick(&core, &name).await?;
+            if let Some(session) = write {
+                let unit = core.journal_write(&id, &session, force).await?;
+                println!("{} {session} ({unit})", "writing".yellow());
+                return Ok(());
+            }
             if let Some(session) = remove {
                 if yes || confirm(&format!("trash the journal entry {session} of {id}?")) {
                     core.remove_journal_entry(&id, &session).await?;
@@ -1025,6 +1061,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 let state = s(&e, "state");
                 let tag = match state.as_str() {
                     "pending" => "writing…".yellow().to_string(),
+                    "deferred" => format!("waiting · another try {}", when(&s(&e, "retry_at"), &loc)).yellow().to_string(),
                     "failed" => "failed".red().to_string(),
                     _ => format!("[{}]", s(&e, "lang")).dimmed().to_string(),
                 };

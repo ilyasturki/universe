@@ -577,30 +577,50 @@ prose paragraph as plain text (emphasis dropped, links reduced to their text), f
 | `journal(id)` | `journal(id)` | `universe journal <name>` | `[Entry]`, last first, read from disk on every call, `images` made absolute; the state files below are entries too |
 | `pending_journals()` | `pending_journals()` | `universe status` (a `journal: writing <title>…` line; `pending_journals` in `--json`) | `[{game, title, session, started_at}]` for every `pending` entry across the library; `title` is the game's |
 | `render_journal(id)` | `render_journal(id)` | `universe journal <name> --render` | renders `<journal_root>/<id>/<Title>.md` from the `written` entries, returns the path |
-| `remove_journal_entry(id, session_id)` | `remove_journal_entry(id, session_id)` | `universe journal <name> --remove <session> [-y]` | trashes `journal/<session>.json` and the frames it lists (their mirrors beside the note too) — the player's own shots stay, they are the game's, not the entry's; a `pending` entry has its `universe-journal-post-process-<session>` unit stopped and its state file removed; the note is rendered again when its folder exists |
+| `remove_journal_entry(id, session_id)` | `remove_journal_entry(id, session_id)` | `universe journal <name> --remove <session> [-y]` | trashes `journal/<session>.json` and the frames it lists (their mirrors beside the note too) — the player's own shots stay, they are the game's, not the entry's; a `pending` entry has its `universe-journal-post-process-<session>` unit stopped, and every state file of the session goes; the note is rendered again when its folder exists |
+| `journal_write(id, session_id, rewrite)` | `journal_write(id, session_id, rewrite=False)` | `universe journal <name> --write <session> [--force]` | starts the journal module's `post-process` hook for that one session and returns its unit name: another try at a `deferred` or `failed` entry, a first entry for a session that never had one, or, with `rewrite`, a new entry over a written one (`JOURNAL_REWRITE=1` in the hook's environment). The game's own "write an entry after each session" switch does not hold it back. `Invalid` for a session id that is not a timestamp or an entry already written without `rewrite`, `NotFound` for an unknown session, `Busy` while that session's unit runs, `Unavailable` when the module is off, missing a binary or still waiting on a setting |
+| `sweep_journals()`, `retry_journals(id)` | `sweep_journals(id="")` | `universe journal [<name>] --retry` | starts the oldest owed entry — `deferred` past its instant, or `pending` with no unit behind it — and answers `{started: {game, session} or null, due, next, held?, error?}`: `due` is what is still waiting, `next` the nearest instant a deferred entry falls due (the frontends arm their timer on it), `held` why nothing started. One entry at a time, and none while a game runs |
+| `due_journals()`, `next_journal_retry()` | — | — | the sessions the sweep would take, and that nearest instant |
 
 `Entry` = `{"session", "game", "written_at", "started_at", "ended_at", "duration_s", "lang",
 "title", "provider", "paragraphs": [], "next_up": "", "images": ["relative path"],
-"state": "written"}`. On disk and in `add_entry` the images are relative to `games/<id>/journal/`,
+"state": "written", "retry_at": ""}`. On disk and in `add_entry` the images are relative to `games/<id>/journal/`,
 except the player's own shots, named by basename (`YYYYMMDD-HHMMSS.<ext>`) and read from
 `games/<id>/screenshots/`; `journal(id)` hands them all out absolute. `started_at`, `ended_at` and `duration_s` are the session's span,
 filled from `sessions.jsonl` by `add_entry` when the entry lacks them. `journal-add` is called by the journal module's
 `post-process` hook, which also passes `started_at`, `ended_at` and `duration_s` so an entry it
 writes itself (core unavailable) is self-contained. While the hook runs the session is
-`journal/<session>.pending.json` (`{"session", "game", "started_at", "provider"}`); the file is
-removed once the entry is in, or replaced by `<session>.failed.json` (`{"session", "game",
-"written_at", "reason"}`, the reason being "codex quota reached", "provider error: …" or "no
-images") when the run ends without one. A session with neither a recording nor a screenshot gets
-no entry and no failed file. The frames the module samples from the recording sit between the
+`journal/<session>.pending.json` (`{"session", "game", "started_at", "provider"}`), whose mtime the
+module refreshes before every try. The file is removed once the entry is in, or replaced when the
+run ends without one:
+
+- `<session>.deferred.json` (`{"session", "game", "provider", "written_at", "until", "reason",
+  "attempts"}`) for a failure worth another run — a quota wall, an endpoint that timed out or
+  answered 5xx, a model that gave nothing usable, a recording on a filesystem that is not mounted,
+  a hook killed by a signal. `until` is the wall's own reset instant when the provider gives one,
+  else a backoff on `attempts` (15 min, 1 h, 4 h); a quota wall does not count as a try, and the
+  third counted try writes a failed file instead ("… (gave up after 3 tries)").
+- `<session>.failed.json` (`{"session", "game", "written_at", "reason"}`) when nothing will ever
+  come of it: the core refused the entry, the recording is gone, it holds no picture, or the
+  provider is set up wrong (no key, unknown model, missing binary).
+
+A session with neither a recording nor a screenshot gets no entry and no state file, and neither
+does one whose module is enabled but still waiting on its `provider`.
+
+What a run extracts and what the model answered stay under
+`$XDG_DATA_HOME/universe/modules/journal/work/<session>/` until the entry is delivered, so the next
+run reuses the frames (same recording, same image settings) and the answer (same provider, model
+and prompt) instead of paying for them twice; a week without being touched and the folder goes. The frames the module samples from the recording sit between the
 session's screenshots, placed on the file through `RECORDING_STARTED_AT` and `RECORDING_PAUSES`
 (the wall-clock moment less the recorder's start and the pauses before it); without them, the
 session's start and no pause.
 
 The core lists those files as entries, sorted with the real ones: `state ∈ written, pending,
-failed`. A `pending` entry has the file's `started_at` and `provider`, an empty title and no
-paragraphs; a `failed` one has the file's `written_at` and `paragraphs = [reason]`. A pending file
-whose mtime is more than 30 minutes old lists as `failed` with the reason `timed out`. A written
-entry hides the failed one of the same session, a failed one the pending one. Dotfiles and anything
+deferred, failed`. A `pending` entry has the file's `started_at` and `provider`, an empty title and
+no paragraphs; a `failed` one has the file's `written_at` and `paragraphs = [reason]`; a `deferred`
+one adds `retry_at`, the instant it is owed another run. A pending file whose mtime is more than 30
+minutes old lists as `failed` with the reason `timed out`. A written entry hides the failed one of
+the same session, a failed one the deferred one, and that one the pending one. Dotfiles and anything
 that is not `*.json` are ignored, and `render_journal` only renders `written` entries.
 
 ## Modules
@@ -867,6 +887,7 @@ label = "Writing model"
 | `JOURNAL_DIR` | `games/<id>/journal` | all |
 | `SCREENSHOTS_DIR` | `games/<id>/screenshots`; `<state>/screenshots` for a `screenshot` with no session running | all |
 | `MODULE_SETTINGS_JSON` | global settings merged with the game's | all |
+| `JOURNAL_REWRITE` | `1` when `journal_write` asked for this session again; the hook replaces the entry instead of leaving it alone | `post-process` |
 | `UNIVERSE_ENV_FILE` | write `KEY=VALUE` lines here to add them to the game's environment, ahead of `launch.env`; the one key `UNIVERSE_GAMESCOPE_ARGS` is flags for the game's gamescope instead (see Gamescope) | `pre-launch` |
 | `MODULE_DIR`, `MODULE_DATA_DIR` | the module's directory, `$XDG_DATA_HOME/universe/modules/<id>` | all |
 | `UNIVERSE_BIN`, `UNIVERSE_{DATA,CONFIG,STATE}_HOME`, `UNIVERSE_{MODULES,SOURCES}_PATH`, `PATH` | the CLI to call back (`recording-file`, `journal-add`, `session-window`, `screen-mode`) and the environment that makes it open the same core | all |
