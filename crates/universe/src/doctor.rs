@@ -198,9 +198,13 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         if !m.enabled {
             continue;
         }
-        for bin in &m.manifest.requires.bins {
+        for bin in m.manifest.requires.bins.iter().chain(m.missing.iter()).collect::<std::collections::BTreeSet<_>>() {
             let hint = if bin == "gsr-cli" { "missing (ships with gpu-screen-recorder 6.1 or later)" } else { "missing" };
             push(bin, which(bin).is_some(), which(bin).unwrap_or_else(|| hint.into()), m.id());
+        }
+        for key in &m.unset {
+            let label = m.manifest.settings.iter().find(|s| &s.key == key).map(|s| s.label.clone()).unwrap_or_else(|| key.clone());
+            push(key, false, format!("not chosen yet: {label} (universe module set {} {key}=…)", m.id()), m.id());
         }
         if m.id() == "capture" {
             push(

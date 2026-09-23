@@ -71,6 +71,10 @@ pub struct Setting {
     pub choices: Vec<String>,
     pub choices_exec: String,
     pub advanced: bool,
+    /// No usable default: the module does nothing until the user picks a value.
+    pub required: bool,
+    /// Binaries a chosen value needs, by value; a missing one makes the module unavailable.
+    pub requires_bins: BTreeMap<String, Vec<String>>,
 }
 impl Default for Setting {
     fn default() -> Self {
@@ -83,6 +87,8 @@ impl Default for Setting {
             choices: vec![],
             choices_exec: String::new(),
             advanced: false,
+            required: false,
+            requires_bins: BTreeMap::new(),
         }
     }
 }
@@ -94,6 +100,8 @@ pub struct Module {
     pub enabled: bool,
     pub available: bool,
     pub missing: Vec<String>,
+    /// `required` settings still without a value: the module is enabled but does nothing.
+    pub unset: Vec<String>,
 }
 
 pub const HOOKS: [&str; 7] = ["pre-launch", "post-launch", "freeze", "thaw", "session-end", "post-process", "screenshot"];
@@ -115,6 +123,11 @@ impl Module {
         self.enabled && self.available
     }
 
+    /// Enabled and available, but a `required` setting has no value: its hooks run and do nothing.
+    pub fn needs_setup(&self) -> bool {
+        self.enabled && self.available && !self.unset.is_empty()
+    }
+
     pub fn to_json(&self) -> serde_json::Value {
         let m = &self.manifest;
         let hooks: BTreeMap<String, String> =
@@ -128,6 +141,7 @@ impl Module {
             "enabled": self.enabled,
             "available": self.available,
             "missing": self.missing,
+            "unset": self.unset,
             "hooks": hooks,
             "settings": self.settings_json(),
         })
@@ -179,6 +193,7 @@ pub fn setting_json(s: &Setting) -> serde_json::Value {
         "choices": s.choices,
         "dynamic": !s.choices_exec.is_empty(),
         "advanced": s.advanced || s.scope == "config",
+        "required": s.required,
     })
 }
 
@@ -237,15 +252,36 @@ pub fn missing_bins(requires: &Requires) -> Vec<String> {
     requires.bins.iter().filter(|b| crate::runners::on_path(b).is_none()).cloned().collect()
 }
 
+/// The manifest's bins, plus the ones the chosen value of a `requires_bins` setting asks for; and the `required` settings left empty.
+fn wants(m: &Manifest, chosen: Option<&toml::Table>) -> (Vec<String>, Vec<String>) {
+    let mut missing = missing_bins(&m.requires);
+    let mut unset = Vec::new();
+    for s in &m.settings {
+        let value = match chosen.and_then(|t| t.get(&s.key)).unwrap_or(&s.default) {
+            toml::Value::String(v) => v.clone(),
+            other => other.to_string(),
+        };
+        if s.required && value.is_empty() {
+            unset.push(s.key.clone());
+        }
+        for bin in s.requires_bins.get(&value).into_iter().flatten() {
+            if !missing.contains(bin) && crate::runners::on_path(bin).is_none() {
+                missing.push(bin.clone());
+            }
+        }
+    }
+    (missing, unset)
+}
+
 /// User modules override system modules on the same id.
 pub fn discover(config: &Config) -> Vec<Module> {
     let roots = paths::system_module_dirs().into_iter().rev().chain([paths::user_modules_dir()]);
     read_manifests::<Manifest>(roots, "module.toml", |m| &m.id)
         .into_values()
         .map(|(dir, m)| {
-            let missing = missing_bins(&m.requires);
+            let (missing, unset) = wants(&m, config.modules.settings.get(&m.id));
             let enabled = config.modules.enabled.iter().any(|e| e == &m.id);
-            Module { available: missing.is_empty(), missing, enabled, dir, manifest: m }
+            Module { available: missing.is_empty(), missing, unset, enabled, dir, manifest: m }
         })
         .collect()
 }
@@ -435,7 +471,7 @@ scope = "config"
 "#,
         )
         .unwrap();
-        let module = Module { available: false, missing: vec!["x".into()], enabled: true, dir: PathBuf::from("/m"), manifest: m };
+        let module = Module { available: false, missing: vec!["x".into()], unset: vec![], enabled: true, dir: PathBuf::from("/m"), manifest: m };
         let cfg: Config = toml::from_str("[modules.capture]\ncodec = \"hevc\"\ngsr_extra_args = \"-cr full\"").unwrap();
         let mut g = crate::game::Game::new("X");
         g.modules.insert("capture".into(), toml::from_str("cursor = true").unwrap());
@@ -500,7 +536,7 @@ choices_exec = "bin/choices"
 "#,
         )
         .unwrap();
-        let module = Module { available: true, missing: vec![], enabled: true, dir: dir.path().to_path_buf(), manifest: m };
+        let module = Module { available: true, missing: vec![], unset: vec![], enabled: true, dir: dir.path().to_path_buf(), manifest: m };
         let cfg: Config = toml::from_str("").unwrap();
         let settings = module.merged_settings(&cfg, None);
         assert_eq!(setting_choices(&module, &settings, "provider").await.unwrap(), vec!["codex", "claude"]);

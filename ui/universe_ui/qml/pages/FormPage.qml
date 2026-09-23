@@ -197,6 +197,12 @@ FocusScope {
         } else if (row.type === "bool") {
             form.toggle(index);
             Sound.favourite(!row.value);
+            // Switching a module on that cannot guess one of its settings: the cursor goes straight to it.
+            if (row.key === "enabled" && !row.value && form.setupIndex !== undefined) {
+                var setup = form.setupIndex();
+                if (setup >= 0)
+                    body.landOn(setup);
+            }
         } else if (row.key === "link" && source !== "") {
             Sound.enter();
             login.begin(source);

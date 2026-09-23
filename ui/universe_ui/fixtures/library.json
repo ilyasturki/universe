@@ -385,7 +385,9 @@
       "settings": [
         {"key": "enabled", "type": "bool", "default": true, "label": "Write a journal entry", "scope": "game", "advanced": false},
         {"key": "language", "type": "enum", "default": "fr", "label": "Language", "scope": "game", "choices": ["fr", "en"], "advanced": false},
-        {"key": "provider", "type": "enum", "default": "codex", "label": "Provider", "scope": "global", "choices": ["codex", "anthropic", "ollama"], "advanced": false},
+        {"key": "provider", "type": "enum", "default": "", "label": "Writing model", "scope": "global", "choices": ["codex", "openai", "stub"], "required": true, "advanced": false},
+        {"key": "base_url", "type": "string", "default": "https://api.openai.com/v1", "label": "API endpoint", "scope": "global", "advanced": false},
+        {"key": "api_key", "type": "string", "default": "", "label": "API key", "scope": "global", "advanced": false},
         {
           "key": "model",
           "type": "string",
@@ -572,7 +574,8 @@
     },
     "modules": {
       "enabled": ["capture", "journal"],
-      "capture": {"codec": "av1_10bit"}
+      "capture": {"codec": "av1_10bit"},
+      "journal": {"provider": "codex", "model": "gpt-5.6-sol"}
     },
     "sources": {
       "enabled": ["gog"],

@@ -1343,7 +1343,11 @@ class FakeCore:
         self._write_entry(ident, entry)
 
     def modules(self):
-        return copy.deepcopy(self._data.get("modules", []))
+        out = copy.deepcopy(self._data.get("modules", []))
+        for module in out:
+            values = self.module_settings(module["id"], "")
+            module["unset"] = [s["key"] for s in module.get("settings", []) if s.get("required") and not values.get(s["key"])]
+        return out
 
     def _module(self, ident):
         for module in self._data.get("modules", []):

@@ -670,6 +670,14 @@ def _state(entry):
     return ""
 
 
+def _setup(entry):
+    """On, but a setting it cannot guess is still empty: its hooks run and do nothing."""
+    if not entry.get("enabled") or not entry.get("unset"):
+        return ""
+    labels = {s["key"]: s.get("label", s["key"]) for s in entry.get("settings") or []}
+    return "waiting on " + ", ".join(labels.get(k, k).lower() for k in entry["unset"])
+
+
 class ModuleApi:
     source = False
     kind = "Modules"
@@ -725,16 +733,21 @@ class ListForm(RowsForm):
             name = entry.get("name", ident)
             enabled = bool(entry.get("enabled"))
             warning = _state(entry)
+            setup = _setup(entry)
             row = _row(self.section, "module", name, "action", enabled, module=ident)
             row.update(
-                display="Unavailable" if warning else "On" if enabled else "Off",
+                display="Unavailable" if warning else "Set it up" if setup else "On" if enabled else "Off",
                 action="Open",
                 runner="",
                 switch=True,
                 meta=_meta(entry),
                 warning=warning,
                 source=self.source,
-                detail=warning.replace("unavailable", "On, but its hooks are skipped" if enabled else "Cannot be enabled", 1) if warning else _meta(entry),
+                detail=warning.replace("unavailable", "On, but its hooks are skipped" if enabled else "Cannot be enabled", 1)
+                if warning
+                else f"On, {setup}"
+                if setup
+                else _meta(entry),
             )
             (on if enabled else off).append(len(rows))
             rows.append(row)
@@ -816,6 +829,7 @@ def page_info(api, entry, ident):
         "meta": _meta(entry),
         "description": str(entry.get("description") or ""),
         "warning": _state(entry),
+        "setup": _setup(entry),
         "enabled": bool(entry.get("enabled")),
         "source": api.source,
         "logged_in": bool(entry.get("logged_in")),
@@ -935,6 +949,16 @@ class PageForm(RowsForm):
             self._enable(row["module"], payload == "true")
             return True
         return self._set(row["module"], row["key"], payload)
+
+    @Slot(result=int)
+    def setupIndex(self):
+        """Row of the first setting this module is waiting on, so switching it on lands the cursor there; -1 when it needs nothing."""
+        entry = next((m for m in self._entries() if m.get("id") == self._ident), None)
+        for key in (entry or {}).get("unset") or []:
+            index = self._reveal(key, self._ident)
+            if index >= 0:
+                return index
+        return -1
 
     def _reload(self, row):
         self._refresh()

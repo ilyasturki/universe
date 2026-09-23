@@ -612,12 +612,16 @@ that is not `*.json` are ignored, and `render_journal` only renders `written` en
 | `module_settings(module, game_id)` | `module_settings(…)` | `universe module settings <id> [game]` | global settings merged with the game's; `game_id=""` is global only |
 | `set_module_setting(module, game_id, key, value)` | `set_module_setting(…)` | `universe module set <id> k=v [--game g]` | validated against `[[settings]]`. `game_id=""` writes `config.toml [modules.<id>]`, otherwise `game.toml [modules.<id>]` |
 | `module_setting_choices(module, key)` | `module_setting_choices(…)` | — | the global setting's choices; a setting with `choices_exec` gets them from the module, live (see below) |
-| `doctor()` | `doctor()` | `universe doctor` | `[{check, ok, detail, module}]`: the config file (absent: defaults; read-only: home-manager), required binaries of the enabled modules and sources (`module` names the one, or `core`, `runners`, `media`, `controller`), `gsr-kms-server`, Proton, cursor extension, tokens, one `runner-<id>` check per runner a library game uses (its program resolved), `runner-eden-stop` when Eden is one (its `[UI] confirmStop` at `2`, else a stop shows its "close?" question), `inputplumber` when an emulator wants it; `modules` and `sources` say what `config.toml` enables that is not found |
+| `doctor()` | `doctor()` | `universe doctor` | `[{check, ok, detail, module}]`: the config file (absent: defaults; read-only: home-manager), required binaries of the enabled modules and sources (`module` names the one, or `core`, `runners`, `media`, `controller`), one line per `required` setting an enabled module is still waiting on, `gsr-kms-server`, Proton, cursor extension, tokens, one `runner-<id>` check per runner a library game uses (its program resolved), `runner-eden-stop` when Eden is one (its `[UI] confirmStop` at `2`, else a stop shows its "close?" question), `inputplumber` when an emulator wants it; `modules` and `sources` say what `config.toml` enables that is not found |
 
 A module entry is `{id, name, version, description, dir, enabled, available, missing: [bin],
-hooks: {}, settings: [Setting]}`, and
+unset: [key], hooks: {}, settings: [Setting]}`, and
 `Setting` = `{"key", "type": "bool|string|int|enum|path", "default", "label",
-"scope": "global|game", "choices": [], "dynamic": bool}`. `choices` binds an `enum`; on an `int`
+"scope": "global|game", "choices": [], "dynamic": bool, "required": bool}`.
+`missing` holds the manifest's absent binaries plus those the chosen value of a `requires_bins`
+setting asks for, so a module is available or not by what it is set to. `unset` lists the
+`required` settings still empty on an enabled module: its hooks run and do nothing, `doctor` says
+which, and the settings page sends the cursor there when the module is switched on. `choices` binds an `enum`; on an `int`
 or a `string` it lists suggestions, any value stays accepted — except that an `int` also
 takes a listed non-numeric name (`"auto"`), which the module resolves itself. `dynamic` is
 set when the manifest names a `choices_exec`: `<module dir>/<choices_exec> <key>`, run with
@@ -841,6 +845,15 @@ type = "string"
 default = "gpt-5.6-sol"
 choices_exec = "bin/choices"      # `bin/choices model` prints the current choices as a JSON array
 label = "Model"
+
+[[settings]]
+key = "provider"
+type = "enum"
+default = ""
+choices = ["codex", "openai"]
+required = true                   # no usable default: the module runs and does nothing until a value is set
+requires_bins = { codex = ["codex"] }   # binaries the chosen value needs; a missing one makes the module unavailable
+label = "Writing model"
 ```
 
 ### Hook environment
