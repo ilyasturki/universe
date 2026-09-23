@@ -300,6 +300,7 @@ pub fn plan(
             let path = mangoapp_conf_path();
             mangoapp_conf = Some((path.clone(), mangoapp_conf_text(r.effective.mangohud)));
             env.insert("MANGOHUD_CONFIGFILE".into(), path.to_string_lossy().to_string());
+            env.extend(crate::keyboard::probe().env());
             // gamescope hosts X11 clients through its own Xwayland; a Wayland Proton finds no xdg-shell there.
             if !wrap.iter().any(|a| a == "--expose-wayland") {
                 env.remove("PROTON_ENABLE_WAYLAND");
@@ -385,7 +386,9 @@ pub async fn host_gamescope_for(config: &Config, screen: &str) -> Option<(String
 pub fn host_gamescope(config: &Config, screen: Option<crate::gamescope::Mode>) -> Option<(String, Vec<String>)> {
     let bin = crate::runners::on_path(&config.launch.gamescope_bin)?;
     let fields = crate::library::gamescope_fields_of(&crate::game::Game::default(), config);
-    let mut args = vec![format!("MANGOHUD_CONFIGFILE={}", mangoapp_conf_path().display()), bin.to_string_lossy().to_string()];
+    let mut args = vec![format!("MANGOHUD_CONFIGFILE={}", mangoapp_conf_path().display())];
+    args.extend(crate::keyboard::probe().env().iter().map(|(k, v)| format!("{k}={v}")));
+    args.push(bin.to_string_lossy().to_string());
     args.extend(gamescope_args(true, &fields, [&config.launch.gamescope_args, "", ""], config.launch.hdr, screen));
     Some((env_bin(), args))
 }
@@ -645,6 +648,7 @@ mod tests {
         assert!(!text.contains("no_display"), "the HUD is on: {text}");
         assert!(!p.env.contains_key("PROTON_ENABLE_WAYLAND"), "an X11 Proton under gamescope's Xwayland");
         assert_eq!(p.env["PROTONPATH"], "/p");
+        assert!(p.env.contains_key("XKB_DEFAULT_LAYOUT") && p.env.contains_key("XKB_DEFAULT_VARIANT"), "gamescope is told the keyboard layout");
 
         r.effective.gamescope_args = "--expose-wayland".into();
         let p = plan(&r, &cfg, &BTreeMap::new(), None, None, false).unwrap();
@@ -717,19 +721,21 @@ mod tests {
         cfg.launch.gamescope_args = "--adaptive-sync".into();
         cfg.launch.gamescope_filter = "fsr".into();
         let screen = Some(crate::gamescope::Mode { width: 3840, height: 2160, refresh: 60, vrr: false });
+        std::env::set_var("XKB_DEFAULT_LAYOUT", "fr");
+        std::env::set_var("XKB_DEFAULT_VARIANT", "bepo");
         let (program, args) = host_gamescope(&cfg, screen).unwrap();
         assert!(program.ends_with("env"), "{program}");
         let conf = format!("MANGOHUD_CONFIGFILE={}", mangoapp_conf_path().display());
-        assert_eq!(args[..2], [conf.clone(), bin.to_string_lossy().to_string()]);
+        assert_eq!(args[..4], [conf.clone(), "XKB_DEFAULT_LAYOUT=fr".into(), "XKB_DEFAULT_VARIANT=bepo".into(), bin.to_string_lossy().to_string()]);
         assert_eq!(
-            args[2..],
+            args[4..],
             ["-f", "--force-composition", "-W", "3840", "-H", "2160", "-w", "3840", "-h", "2160", "-r", "60", "-F", "fsr", "--adaptive-sync", "--mangoapp"]
         );
         cfg.launch.mangohud = false;
         cfg.launch.hdr = true;
         let (_, args) = host_gamescope(&cfg, None).unwrap();
         assert_eq!(
-            args[2..],
+            args[4..],
             ["-f", "--force-composition", "-F", "fsr", "--adaptive-sync", "--mangoapp", "--hdr-enabled"],
             "mangoapp is there whatever the HUD's state: a game shows it"
         );

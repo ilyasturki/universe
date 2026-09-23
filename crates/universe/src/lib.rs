@@ -11,6 +11,7 @@ pub mod gpu;
 pub mod host;
 pub mod inputplumber;
 pub mod journal;
+pub mod keyboard;
 pub mod launch_keys;
 pub mod launcher;
 pub mod library;

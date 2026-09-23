@@ -6,6 +6,7 @@ from typing import cast
 
 from PySide6.QtCore import QEvent, QObject, Qt, QTimer, Signal, Slot
 
+from . import keyboard
 from .home import Home
 from .models import Collection, CollectionGames, Game, GameListModel, ObjectListModel, collection_key
 from .qt import Property
@@ -145,6 +146,7 @@ class Keys(QObject):
         self._hold.timeout.connect(self.cancelHeld)
         self._mode = "pad"
         self._windows = []
+        self._layout = {"name": "", "rows": {}}
 
     def watch(self, window):
         self._windows.append(window)
@@ -219,6 +221,11 @@ class Keys(QObject):
     mode = Property(str, lambda self: self._mode, notify=modeChanged)
     # Pad glyph → key label ("A" → "Enter"), for the hints under a keyboard.
     labels = Property("QVariantMap", lambda self: {glyph: key_label(KEYS[action][0]) for glyph, action in GLYPH_ACTIONS.items()}, constant=True)
+    # The physical keyboard's rows for the on-screen ones (`keyboard.rows`): `name`, `rows` (`AE`, `AD`, `AC`, `AB` of `{value, shift}`).
+    layout = Property("QVariantMap", lambda self: self._layout, constant=True)
+
+    def setLayout(self, layout):
+        self._layout = layout
 
     isAccept = _is("Accept")
     isCancel = _is("Cancel")
@@ -384,6 +391,7 @@ class Api(QObject):
         super().__init__(parent)
         self._client = client
         self._keys = Keys(self)
+        self._keys.setLayout(keyboard.rows(**client.keyboardLayout()))
         self._pad = Pad(self)
         self._power = Power(power_root or SYSFS, self)
         self._memory = Memory(memory_path, self)

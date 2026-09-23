@@ -8,7 +8,7 @@ version = "0.0.5"
 description = "Gamepad-first launcher UI for Universe (PySide6 host; the Reprise and Switch 2 looks)"
 requires-python = ">=3.11"
 license = { text = "MIT" }
-dependencies = ["PySide6>=6.11", "pysdl2", "qrcode"]
+dependencies = ["PySide6>=6.11", "pysdl2", "qrcode", "xkbcommon"]
 
 [project.scripts]
 universe-ui = "universe_ui.host:main"

@@ -634,6 +634,10 @@ impl Core {
         crate::launcher::host_gamescope_for(&cfg, screen).await
     }
 
+    pub fn keyboard_layout(&self) -> crate::keyboard::Layout {
+        crate::keyboard::probe()
+    }
+
     pub async fn screenshot(&self) -> Result<String> {
         let cur = self.current().await;
         let cfg = self.config.read().await.clone();

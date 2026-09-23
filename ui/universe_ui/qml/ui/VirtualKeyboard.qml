@@ -19,7 +19,16 @@ Item {
     property bool shift: false
     property bool numeric: false
 
-    readonly property real keyUnit: (width - keyGap * 9) / 10
+    // The physical keyboard's rows (api.keys.layout): the number row and the top two letter rows eleven keys, the bottom one ten and ⌫.
+    readonly property var letters: api.keys.layout.rows
+    readonly property var ae: keys("AE", 11)
+    readonly property var ad: keys("AD", 11)
+    readonly property var ac: keys("AC", 11)
+    readonly property var ab: keys("AB", 10)
+
+    // A key spans units; a row's span counts its indent, and the widest row sets the unit (the keypad keeps a ten-unit grid).
+    readonly property real units: numeric ? 10 : Math.max(11, ae.length, ad.length, ac.length + 0.5, ab.length + 1.5)
+    readonly property real keyUnit: (width + keyGap) / units - keyGap
     readonly property real indent: (keyUnit + keyGap) / 2
 
     property int rowIndex: 1
@@ -32,6 +41,16 @@ Item {
             return {
                 label: c,
                 value: c
+            };
+        });
+    }
+
+    function keys(row, count) {
+        return (letters[row] || []).slice(0, count).map(function (k) {
+            return {
+                label: k.value,
+                value: k.value,
+                shift: k.shift
             };
         });
     }
@@ -114,19 +133,19 @@ Item {
         return [
             {
                 indent: 0,
-                keys: chars("1234567890")
+                keys: ae
             },
             {
                 indent: 0,
-                keys: chars("qwertyuiop")
+                keys: ad
             },
             {
                 indent: 1,
-                keys: chars("asdfghjkl")
+                keys: ac
             },
             {
                 indent: 1,
-                keys: chars("zxcvbnm").concat([
+                keys: ab.concat([
                     {
                         label: "⌫",
                         value: "",
@@ -151,12 +170,17 @@ Item {
         if (key.wide)
             return keyUnit * 2 + keyGap;
         if (key.action === "backspace")
-            return width - indent - keyUnit * 7 - keyGap * 7;
+            return width - indent - (keyUnit + keyGap) * ab.length;
         if (key.action === "clear" || key.action === "done" || key.action === "shift")
             return clearWidth;
         if (key.action === "space")
             return width - bottomFixed;
         return keyUnit;
+    }
+
+    // What a key types: its shift level while ⇧ is latched, for a key that has one.
+    function valueOf(key) {
+        return shift && key.shift !== undefined ? key.shift : key.value;
     }
 
     onNumericChanged: {
@@ -201,7 +225,7 @@ Item {
         else if (key.action === "shift")
             shift = !shift;
         else
-            charEntered(shift && key.value.length === 1 ? key.value.toUpperCase() : key.value);
+            charEntered(valueOf(key));
     }
 
     function move(dRow, dCol) {
@@ -276,7 +300,7 @@ Item {
                         Text {
                             anchors.centerIn: parent
                             visible: modelData.action !== "backspace"
-                            text: modelData.label.length === 1 ? modelData.label.toUpperCase() : modelData.label
+                            text: modelData.shift !== undefined ? keyboard.valueOf(modelData).toUpperCase() : modelData.label
                             color: key.selected ? Theme.onLight : Theme.text
                             font.family: Theme.sans
                             font.weight: key.selected ? Font.DemiBold : Font.Medium

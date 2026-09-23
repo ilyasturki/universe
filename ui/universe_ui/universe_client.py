@@ -281,6 +281,9 @@ class CoreClient(QObject):
     def hostGamescope(self, screen):
         return self._guarded(None, self._core.host_gamescope, screen or "")
 
+    def keyboardLayout(self):
+        return self._guarded({"layout": "us", "variant": ""}, self._core.keyboard_layout)
+
     def setFpsLimit(self, on_reply):
         self._call_async(self._core.set_fps_limit, lambda combo: on_reply(str(combo or "")))
 

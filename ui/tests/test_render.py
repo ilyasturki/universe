@@ -1,3 +1,5 @@
+import os
+
 from PySide6.QtCore import Q_ARG, Q_RETURN_ARG, QMetaObject, QObject, Qt, QUrl
 from PySide6.QtGui import QColor
 from PySide6.QtQml import QQmlApplicationEngine
@@ -779,6 +781,67 @@ def test_a_path_row_is_typed_first_under_a_keyboard(api, fake):
     assert labels()[0] == "Change" and warnings == []
     window.close()
     pump(50)
+
+
+def test_the_sheets_type_the_physical_keyboards_letters(fake, tmp_path, monkeypatch):
+    from PySide6.QtCore import Q_ARG, QMetaObject, Qt
+    from PySide6.QtTest import QTest
+
+    from universe_ui import gamepad
+    from universe_ui.api import Api
+    from universe_ui.screens.power import FAKE
+
+    def click(key, times=1):
+        for _ in range(times):
+            QTest.keyClick(window, key)
+        pump(80)
+
+    def press(key=Qt.Key.Key_Return):
+        gamepad.post_key(key, True, window=window)
+        gamepad.post_key(key, False, window=window)
+        pump(150)
+
+    monkeypatch.setenv("XKB_DEFAULT_LAYOUT", "fr")
+    monkeypatch.setenv("XKB_DEFAULT_VARIANT", "")
+    api = Api(fake, memory_path=str(tmp_path / "memory.json"), power_root=FAKE)
+    _engine, window = render(api, activate=True)
+    root = window.property("contentItem").childItems()[0].property("item")
+    game = api.allGames.byId("the-technomancer")
+    exe = fake.game("the-technomancer")["launch"]["exe"]
+    root.openSub("pages/GameSettingsPage.qml", {"game": game, "key": "launch.exe"})
+    settle(window)
+    pump(300)
+    page = window.findChild(QObject, "gameSettingsPage")
+    press()
+    click(Qt.Key.Key_F)
+    assert "Browse" in [h["label"] for h in page.property("hints").toVariant()], "Y on the folders: the keyboard sheet"
+    press()
+    click(Qt.Key.Key_Down, 4)
+    press()
+    click(Qt.Key.Key_Up, 4)
+    press()
+    press(Qt.Key.Key_F)
+    pump(200)
+    assert fake.game("the-technomancer")["launch"]["exe"] == os.path.dirname(exe) + "a&", (
+        "the first letter key is A, and ⇧ on the number row types the layout's own level"
+    )
+
+    api.theme.set("switch2")
+    settle(window)
+    root = window.property("contentItem").childItems()[0].property("item")
+    QMetaObject.invokeMethod(root, "push", Q_ARG("QVariant", "pages/SettingsSearchPage.qml"), Q_ARG("QVariant", {}))
+    settle(window)
+    pump(300)
+    press()
+    click(Qt.Key.Key_Down, 3)
+    press()
+    click(Qt.Key.Key_Up, 4)
+    press()
+    press()
+    assert api.screens.search.query == "a&1", "the Switch's ⇧ types one key"
+    window.close()
+    pump(50)
+    api.shutdown()
 
 
 def test_the_switch2_forms_share_the_sidebar_and_y(api, fake):

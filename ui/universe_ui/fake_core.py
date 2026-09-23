@@ -829,7 +829,21 @@ class FakeCore:
             return None
         mode = screen_mode(screen or next(iter(connected_outputs()), ""))
         size = ["-W", str(mode[0]), "-H", str(mode[1]), "-w", str(mode[0]), "-h", str(mode[1]), "-r", str(mode[2])] if mode else []
-        return [gamescope, "-f", "--force-composition", *size, "--mangoapp"]
+        layout = self.keyboard_layout()
+        return [
+            shutil.which("env") or "env",
+            f"XKB_DEFAULT_LAYOUT={layout['layout']}",
+            f"XKB_DEFAULT_VARIANT={layout['variant']}",
+            gamescope,
+            "-f",
+            "--force-composition",
+            *size,
+            "--mangoapp",
+        ]
+
+    # The environment's, `us` bare: the core probes the desktop.
+    def keyboard_layout(self):
+        return {"layout": os.environ.get("XKB_DEFAULT_LAYOUT", "").split(",")[0] or "us", "variant": os.environ.get("XKB_DEFAULT_VARIANT", "").split(",")[0]}
 
     def set_fps_limit(self):
         if not self.current():

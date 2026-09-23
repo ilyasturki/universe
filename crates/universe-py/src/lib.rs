@@ -208,6 +208,9 @@ impl Core {
     fn host_gamescope(&self, py: Python<'_>, screen: String) -> Option<Vec<String>> {
         self.run_infallible(py, |c| async move { c.host_gamescope(&screen).await }).map(|(p, a)| std::iter::once(p).chain(a).collect())
     }
+    fn keyboard_layout(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.value_infallible(py, |c| async move { c.keyboard_layout() })
+    }
     fn screenshot(&self, py: Python<'_>) -> PyResult<String> {
         self.run(py, |c| c.screenshot())
     }

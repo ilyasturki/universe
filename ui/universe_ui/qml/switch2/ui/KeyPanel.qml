@@ -44,10 +44,19 @@ Rectangle {
     }
 
     function chars(s) {
-        return s.split("");
+        return s.split("").map(function (c) {
+            return {
+                value: c
+            };
+        });
     }
 
-    readonly property var rows: numeric ? [chars("123"), chars("456"), chars("789"), chars("-0.")] : [chars("1234567890-"), chars("qwertyuiop/"), chars("asdfghjkl:'"), chars("zxcvbnm,.?!")]
+    // The physical keyboard's rows (api.keys.layout), eleven keys each; a key's `shift` is what ⇧ types on it.
+    function keys(row) {
+        return (api.keys.layout.rows[row] || []).slice(0, 11);
+    }
+
+    readonly property var rows: numeric ? [chars("123"), chars("456"), chars("789"), chars("-0.")] : [keys("AE"), keys("AD"), keys("AC"), keys("AB")]
     readonly property var bottomRow: numeric ? [] : [
         {
             label: "⇧",
@@ -81,12 +90,12 @@ Rectangle {
     readonly property var shownRows: symbols && !numeric ? symbolRows : rows
 
     function keyAt(r, c) {
-        if (r < shownRows.length)
-            return {
-                label: shownRows[r][c],
-                value: shownRows[r][c]
-            };
-        return bottomRow[c];
+        return r < shownRows.length ? shownRows[r][c] : bottomRow[c];
+    }
+
+    // What a key types: its shift level while ⇧ is on, for a key that has one.
+    function valueOf(key) {
+        return shift && key.shift !== undefined ? key.shift : key.value;
     }
 
     function rowLength(r) {
@@ -96,7 +105,7 @@ Rectangle {
 
     function put(ch) {
         Sound.play("type");
-        panel.typed(shift ? ch.toUpperCase() : ch);
+        panel.typed(ch);
         shift = false;
     }
 
@@ -115,7 +124,7 @@ Rectangle {
         if (!key)
             return;
         if (key.value !== undefined) {
-            put(key.value);
+            put(valueOf(key));
             return;
         }
         Sound.play("type");
@@ -209,7 +218,7 @@ Rectangle {
 
                         Label {
                             anchors.centerIn: parent
-                            text: key.spec.label !== undefined ? key.spec.label : (panel.shift && key.spec.value.length === 1 ? key.spec.value.toUpperCase() : key.spec.value)
+                            text: key.spec.label !== undefined ? key.spec.label : panel.valueOf(key.spec)
                             color: key.latched ? Theme.accent : Theme.text
                             font.pixelSize: Theme.dp((key.spec.label !== undefined && key.spec.label.length > 1 ? 28 : 34) * panel.scale)
                         }

@@ -213,6 +213,7 @@
         ps.pyside6
         ps.pysdl2
         ps.qrcode
+        ps.xkbcommon
       ];
       pyEnv = extra: pkgs.python3.withPackages (ps: [ ps.pytest ] ++ extra ps);
 
