@@ -669,6 +669,11 @@ def _plug(livebin, **status):
         (livebin["drm"] / f"card1-{name.replace('_', '-')}" / "status").write_text(f"{s}\n")
 
 
+def _light(livebin, **enabled):
+    for name, e in enabled.items():
+        (livebin["drm"] / f"card1-{name.replace('_', '-')}" / "enabled").write_text(f"{e}\n")
+
+
 def _wait_for(pred, timeout_s=10):
     deadline = time.monotonic() + timeout_s
     while time.monotonic() < deadline:
@@ -744,6 +749,26 @@ def test_record_follows_the_monitor_that_replaces_the_recorded_one(tmp_path, liv
 
     assert _end_session(env, thread) == pending_path(tmp_path)
     assert done == [0] and len(_gsr_runs(livebin)) == 2, "the session's own stop is not a switch"
+
+
+def test_record_follows_a_screen_the_desktop_stops_drawing_on(tmp_path, livebin, monkeypatch):
+    """Both cables stay in: only `enabled` says which screen the desktop moved to."""
+    env = env_for(tmp_path, livebin, {})
+    _apply_env(monkeypatch, env)
+    _plug(livebin, HDMI_A_1="connected")
+    _light(livebin, DP_1="enabled", HDMI_A_1="disabled")
+    thread, done = _recorder(tmp_path, livebin, env)
+    thread.start()
+    assert _wait_for((livebin["logs"] / "gsr.current").exists)
+    with _common.timeline(env["MODULE_DATA_DIR"], SESSION_ID, create=True):
+        pass
+
+    _light(livebin, DP_1="disabled", HDMI_A_1="enabled")
+    assert _wait_for(lambda: _timeline(tmp_path).get("screen") == "HDMI-A-1")
+    assert flag_values(_gsr_runs(livebin)[1], "-w") == ["HDMI-A-1"]
+
+    assert _end_session(env, thread) == pending_path(tmp_path)
+    assert done == [0]
 
 
 def test_record_retries_while_the_new_monitor_settles(tmp_path, livebin, monkeypatch):
@@ -909,14 +934,19 @@ def test_shot_falls_back_to_the_screen_the_recorder_moved_to(tmp_path, fakebin):
     assert flag_values((fakebin["logs"] / "gsr.args").read_text().splitlines(), "-w") == ["HDMI-A-1"]
 
 
-def test_connected_outputs_and_argv_edits(tmp_path):
+def test_active_outputs_and_argv_edits(tmp_path):
     drm = tmp_path / "drm"
     for name, status in (("card1-DP-1", "connected"), ("card1-HDMI-A-1", "disconnected"), ("card0-DP-3", "connected")):
         (drm / name).mkdir(parents=True)
         (drm / name / "status").write_text(status + "\n")
     (drm / "card1").mkdir()
-    assert _common.connected_outputs(str(drm)) == ["DP-1", "DP-3"]
-    assert _common.connected_outputs(str(tmp_path / "nope")) == []
+    assert _common.active_outputs(str(drm)) == ["DP-1", "DP-3"], "no `enabled` file: every cabled connector counts"
+    assert _common.active_outputs(str(tmp_path / "nope")) == []
+    (drm / "card1-DP-1" / "enabled").write_text("disabled\n")
+    (drm / "card0-DP-3" / "enabled").write_text("enabled\n")
+    assert _common.active_outputs(str(drm)) == ["DP-3"], "a cabled connector nothing is drawn on is not one"
+    (drm / "card0-DP-3" / "enabled").write_text("disabled\n")
+    assert _common.active_outputs(str(drm)) == ["DP-1", "DP-3"], "nothing lit: the cabled ones stand"
     argv = ["gpu-screen-recorder", "-w", "DP-1", "-o", "out.mkv"]
     assert _common.with_flag(argv, "-w", "HDMI-A-1") == ["gpu-screen-recorder", "-w", "HDMI-A-1", "-o", "out.mkv"]
     assert _common.with_flag(argv, "-s", "1920x1080") == ["gpu-screen-recorder", "-w", "DP-1", "-s", "1920x1080", "-o", "out.mkv"]

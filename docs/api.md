@@ -121,7 +121,7 @@ hooks write shows up that way, with no other channel.
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `launch(id, screen, splash)` | `launch(id, screen, splash="")` | `universe play <name> [--screen DP-1] [--no-wait]` | pre-launch hooks, marker, `StartTransientUnit` on the user manager, post-launch hooks; returns the `session_id` at once. `screen` is a DRM connector name or `""` for the profile default; `splash` a poster for gamescope's keep-alive window (see Gamescope) or `""`. `Busy` if a session is already running |
+| `launch(id, screen, splash)` | `launch(id, screen, splash="")` | `universe play <name> [--screen DP-1] [--no-wait]` | pre-launch hooks, marker, `StartTransientUnit` on the user manager, post-launch hooks; returns the `session_id` at once. `screen` is a DRM connector name or `""` for the first the display server is drawing on (`status` `connected` **and** `enabled` not `disabled`, alphabetical; the cabled ones when that leaves none) — a cable to a dark monitor is not a screen a recorder can name; `splash` a poster for gamescope's keep-alive window (see Gamescope) or `""`. `Busy` if a session is already running |
 | `stop(session_id)` | `stop(session_id)` | `universe stop` | SIGTERM to the game's processes (those under `universe splash`; every process of the unit when there is no gamescope of its own), up to 10 s for them to exit on their own terms — an emulator saves its caches — then a stop job on the unit, waited for 10 s at most. The SIGTERM is repeated every 3 s unless the runner's spec says once (`term_twice`): Dolphin takes the first as a "quit?" prompt and needs the second; Eden's handler resets to the default disposition, so a second would kill it mid-shutdown. Eden with its `confirmStop` at the default asks "close?" on the first and is killed by the stop job: doctor's `runner-eden-stop` says so |
 | `session_window()` | `session_window()` | `universe session-window [--json]` | the running game's window as the Universe shell extension lists it (`{id, pid, wm_class, title, focused, width, height, hidden, minimized}`): the largest visible toplevel whose pid is in the unit's cgroup — gamescope's when the game runs inside it. `None` before it maps; `Unavailable` off GNOME |
 | `wait_session_window(session_id, timeout)` | `wait_session_window(session_id, timeout_ms)` | `universe session-window --wait <secs> [--json]` | blocks until that window is up, then `Activate`s it (focus and raise) and returns it; `None` when the session ended first or the timeout ran out (the CLI prints `null`, exit 0); `Unavailable` off GNOME, at once. Polls the extension every 150 ms |
@@ -492,10 +492,11 @@ extension absent or not yet loaded, or when no game window appears in time, the 
 and the shell's OSD says so.
 
 A screen recording **follows a monitor switch**. gpu-screen-recorder's KMS capture is pinned to one
-connector, so the capture unit runs `bin/record` over it: it polls `/sys/class/drm/*/status` once a
-second and, when the recorded connector leaves `connected` or the recorder exits, asks the recorder
+connector, so the capture unit runs `bin/record` over it: it polls `/sys/class/drm/*/{status,enabled}` once a
+second and, when the recorded connector stops being drawn on — unplugged, or left `disabled` with
+the cable still in — or the recorder exits, asks the recorder
 to stop, moves the file aside as `pending/<session>.part<n>.mkv` (its `.ts` sidecar with it, the
-list under `parts` in the timeline), opens a pause, waits for a connected connector — the same one
+list under `parts` in the timeline), opens a pause, waits for a connector being drawn on — the same one
 back, else the first, as `pick_screen` — and starts the recorder again on it, capped at the first
 part's size (`-s`: a limit, a smaller monitor still gives a smaller part, which the stitch logs); a
 monitor that has just come up has no CRTC for a few seconds, so an exit right after the restart is

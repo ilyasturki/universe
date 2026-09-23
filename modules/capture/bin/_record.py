@@ -4,7 +4,7 @@ import subprocess
 import time
 
 from _common import (
-    connected_outputs,
+    active_outputs,
     first_frame_at,
     flag_value,
     game_frozen,
@@ -71,7 +71,7 @@ class Recorder:
         while True:
             time.sleep(self.poll_s)
             code = self.proc.poll()
-            lost = self.screen not in connected_outputs(self.drm_dir)
+            lost = self.screen not in active_outputs(self.drm_dir)
             if code is None and not lost:
                 continue
             if self.session_stopping():
@@ -136,9 +136,9 @@ class Recorder:
         return True
 
     def wait_screen(self):
-        """The connector to record next: the same one back, else the first connected; None once the session stops."""
+        """The connector to record next: the same one back, else the first being drawn on; None once the session stops."""
         while True:
-            outs = connected_outputs(self.drm_dir)
+            outs = active_outputs(self.drm_dir)
             if outs:
                 return self.screen if self.screen in outs else outs[0]
             time.sleep(self.poll_s)

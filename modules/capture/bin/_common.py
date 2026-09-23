@@ -305,24 +305,30 @@ DRM_DIR = "/sys/class/drm"
 UNIT_ENV_PREFIXES = ("PATH", "HOME", "XDG_", "DBUS_", "UNIVERSE_", "MODULE_", "SESSION_", "GAME_")
 
 
-def connected_outputs(drm_dir=None):
-    """Connected connectors, sorted, named as desktop.rs names them: `card1-DP-1` is `DP-1`."""
+def _sysfs(drm_dir, entry, attr):
+    try:
+        with open(os.path.join(drm_dir or DRM_DIR, entry, attr)) as f:
+            return f.read().strip()
+    except OSError:
+        return None
+
+
+def active_outputs(drm_dir=None):
+    """The connectors something is drawn on, sorted, named as desktop.rs names them: `card1-DP-1` is `DP-1`."""
     try:
         entries = os.listdir(drm_dir or DRM_DIR)
     except OSError:
         return []
-    names = []
+    cabled, lit = [], []
     for entry in entries:
-        if "-" not in entry:
+        if "-" not in entry or _sysfs(drm_dir, entry, "status") != "connected":
             continue
-        try:
-            with open(os.path.join(drm_dir or DRM_DIR, entry, "status")) as f:
-                status = f.read().strip()
-        except OSError:
-            continue
-        if status == "connected":
-            names.append(entry.split("-", 1)[1])
-    return sorted(names)
+        name = entry.split("-", 1)[1]
+        cabled.append(name)
+        # A driver that writes no `enabled` leaves the connector lit; "disabled" is a cable with nothing drawn on it.
+        if _sysfs(drm_dir, entry, "enabled") != "disabled":
+            lit.append(name)
+    return sorted(lit or cabled)
 
 
 def unit_env_args():

@@ -31,19 +31,46 @@ pub fn detect(config: &Config) -> Profile {
     }
 }
 
-pub fn connected_outputs() -> Vec<String> {
-    let Ok(rd) = std::fs::read_dir("/sys/class/drm") else { return vec![] };
-    let mut names: Vec<String> = rd
+const DRM_DIR: &str = "/sys/class/drm";
+
+/// Every cabled connector, sorted, and whether the display server drives it: `card1-DP-1` is `DP-1`.
+fn drm_outputs(dir: &str) -> Vec<(String, bool)> {
+    let Ok(rd) = std::fs::read_dir(dir) else { return vec![] };
+    let mut outputs: Vec<(String, bool)> = rd
         .flatten()
         .filter_map(|e| {
             let name = e.file_name().to_string_lossy().to_string();
             let (_, connector) = name.split_once('-')?;
             let status = std::fs::read_to_string(e.path().join("status")).ok()?;
-            (status.trim() == "connected").then(|| connector.to_string())
+            if status.trim() != "connected" {
+                return None;
+            }
+            // A driver that writes no `enabled` leaves the connector lit; "disabled" is a cable with nothing drawn on it.
+            let lit = std::fs::read_to_string(e.path().join("enabled")).map_or(true, |s| s.trim() != "disabled");
+            Some((connector.to_string(), lit))
         })
         .collect();
-    names.sort();
-    names
+    outputs.sort();
+    outputs
+}
+
+pub fn connected_outputs() -> Vec<String> {
+    drm_outputs(DRM_DIR).into_iter().map(|(name, _)| name).collect()
+}
+
+/// The connectors something is drawn on — what a recorder or a screenshot can name. Cabled ones when the sysfs
+/// flag leaves none, so a driver that lies still gets a screen rather than nothing.
+pub fn active_outputs() -> Vec<String> {
+    lit_or_cabled(drm_outputs(DRM_DIR))
+}
+
+fn lit_or_cabled(outputs: Vec<(String, bool)>) -> Vec<String> {
+    let lit: Vec<String> = outputs.iter().filter(|(_, lit)| *lit).map(|(name, _)| name.clone()).collect();
+    if lit.is_empty() {
+        outputs.into_iter().map(|(name, _)| name).collect()
+    } else {
+        lit
+    }
 }
 
 /// Qt/Mutter names HDMI outputs "HDMI-1"; DRM says "HDMI-A-1". gsr wants the DRM name.
@@ -65,7 +92,7 @@ pub fn pick_screen(requested: &str) -> String {
     if !requested.is_empty() {
         return normalize_connector(requested);
     }
-    connected_outputs().into_iter().next().unwrap_or_default()
+    active_outputs().into_iter().next().unwrap_or_default()
 }
 
 /// Mutter's DisplayConfig on GNOME, else the connector's preferred DRM mode; `None` when the connector is not there.
@@ -354,6 +381,28 @@ mod tests {
         assert!(cgroup_matches(&format!("0::{cg}\n"), cg));
         assert!(cgroup_matches(&format!("0::{cg}/child\n"), &format!("{cg}/")));
         assert!(!cgroup_matches("0::/user.slice/user-1000.slice/user@1000.service/app.slice/other.service\n", cg));
+    }
+
+    #[test]
+    fn a_cabled_but_dark_connector_is_not_one_to_record() {
+        let dir = tempfile::tempdir().unwrap();
+        let connector = |name: &str, status: &str, enabled: Option<&str>| {
+            let path = dir.path().join(name);
+            std::fs::create_dir(&path).unwrap();
+            std::fs::write(path.join("status"), format!("{status}\n")).unwrap();
+            if let Some(enabled) = enabled {
+                std::fs::write(path.join("enabled"), format!("{enabled}\n")).unwrap();
+            }
+        };
+        connector("card1-DP-1", "connected", Some("disabled"));
+        connector("card1-HDMI-A-1", "connected", Some("enabled"));
+        connector("card1-DP-2", "disconnected", Some("disabled"));
+        connector("card0-DP-3", "connected", None);
+        let outputs = drm_outputs(dir.path().to_str().unwrap());
+        assert_eq!(outputs, vec![("DP-1".into(), false), ("DP-3".into(), true), ("HDMI-A-1".into(), true)]);
+        assert_eq!(lit_or_cabled(outputs), vec!["DP-3", "HDMI-A-1"], "the dark cable is left out");
+        assert_eq!(lit_or_cabled(vec![("DP-1".into(), false)]), vec!["DP-1"], "nothing lit: the cabled one stands");
+        assert!(drm_outputs("/nope/at/all").is_empty());
     }
 
     #[test]
