@@ -1,7 +1,7 @@
 api = 2
 id = "screenshot"
 name = "Screenshots"
-version = "0.0.5"
+version = "0.0.6"
 description = "Takes the screenshots asked for from the dock, a pad button or `universe screenshot`, through the shell's own grab; gpu-screen-recorder when the shell cannot."
 
 [requires]
