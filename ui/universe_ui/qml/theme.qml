@@ -533,7 +533,7 @@ FocusScope {
             closeDetail();
         Sound.enter();
         if (api.universe.remove(game.id, false))
-            toast.show("Removed " + title + " from the library");
+            Notices.show("Removed " + title + " from the library");
     }
 
     function toggleFavourite(game) {
@@ -885,7 +885,7 @@ FocusScope {
                             root.openAdd();
                         }
                         function onMessage(text) {
-                            toast.show(text);
+                            Notices.show(text);
                         }
                     }
                 }
@@ -1066,7 +1066,7 @@ FocusScope {
                 });
             }
             function onMessage(text) {
-                toast.show(text);
+                Notices.show(text);
             }
         }
 
@@ -1105,7 +1105,7 @@ FocusScope {
             root.restoreFocus();
         }
         onFailed: function (game, message) {
-            toast.show("Could not launch" + (game ? " " + game.title : "") + (message ? ": " + message : ""));
+            Notices.fail("Could not launch" + (game ? " " + game.title : "") + (message ? ": " + message : ""));
         }
     }
 
@@ -1113,10 +1113,6 @@ FocusScope {
         id: flip
         objectName: "homeFlip"
         anchors.fill: parent
-    }
-
-    Toast {
-        id: toast
     }
 
     // The mouse back on a tab page takes the focus from the bar, without the pad's panel sound; the bar takes it through `pointed`.
@@ -1143,21 +1139,21 @@ FocusScope {
     Connections {
         target: api.universe
         function onError(kind, message) {
-            toast.show(message);
+            Notices.fail(message);
             root.pendingLaunch = null;
         }
         function onNotice(message) {
-            toast.show(message);
+            Notices.show(message);
         }
         function onSessionEnded(sessionId, id, duration, end) {
             var game = api.allGames.byId(id);
             var minutes = Math.max(1, Math.round(duration / 60)) + " min";
             if (game && end === "crashed")
-                toast.show(game.title + " crashed after " + minutes + " — its log is under Sessions and logs");
+                Notices.fail(game.title + " crashed after " + minutes + " — its log is under Sessions and logs", "stop");
             else if (game && end === "killed")
-                toast.show(game.title + " was killed after " + minutes + " — its log is under Sessions and logs");
+                Notices.fail(game.title + " was killed after " + minutes + " — its log is under Sessions and logs", "stop");
             else if (game)
-                toast.show(game.title + " · " + minutes);
+                Notices.show(game.title + " · " + minutes, "stop");
             var next = root.pendingLaunch;
             root.pendingLaunch = null;
             if (next)
@@ -1168,7 +1164,7 @@ FocusScope {
     Connections {
         target: api.screens.controller
         function onMacroNotice(text) {
-            toast.show(text);
+            Notices.show(text);
         }
         // A pad of a family never set up: the walk through its buttons, offered once.
         function onWalkOffered(family, name) {
@@ -1195,9 +1191,9 @@ FocusScope {
         function onPressed() {
             root.homePressed();
         }
-        // The unit gets a SIGTERM, a second one after ~3 s: the toast covers the wait.
+        // The unit gets a SIGTERM, a second one after ~3 s: the notice covers the wait.
         function onStopping(title) {
-            toast.show("Quitting " + title + "…");
+            Notices.show("Quitting " + title + "…", "stop");
         }
         function onChanged() {
             // Home from the dock over a loading game flips nothing: the launcher is already on screen under the poster, so the poster goes.
@@ -1280,10 +1276,13 @@ FocusScope {
     Connections {
         target: api.screens.pendingJournals
         function onAppeared(session, title) {
-            toast.show("Journal: writing " + title + "…");
+            Notices.show("Journal: writing " + title + "…", "journal:" + session);
         }
         function onResolved(session, id, state, text) {
-            toast.show(state === "failed" ? "Journal failed: " + text : state === "deferred" ? "Journal put off: " + text : "Journal: " + text);
+            if (state === "failed")
+                Notices.fail("Journal failed: " + text, "journal:" + session);
+            else
+                Notices.show((state === "deferred" ? "Journal put off: " : "Journal: ") + text, "journal:" + session);
         }
     }
 

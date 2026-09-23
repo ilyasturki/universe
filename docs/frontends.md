@@ -227,7 +227,7 @@ wherever it is (`api.home.toGame()`), the game menu offers "Resume" and "Quit <t
 Play on another game asks "Quit X and start Y?" (`ui/ConfirmDialog.qml`); yes stops the session,
 and `sessionEnded` starts the pending launch. Every quit goes through `api.home.stop()`: the
 launcher comes up first (a flip, when the game is on screen), the unit is stopped once it has,
-`stopping(title)` is the theme's cue for a "Quitting…" toast, and nothing freezes a game that is
+`stopping(title)` is the theme's cue for a "Quitting…" toast the end line replaces, and nothing freezes a game that is
 on its way out. The game's own exit brings the launcher back by
 itself (gamescope shows what is left). A session already running when the host starts
 (`CoreClient` tracks the marker at construction), or one the CLI started (the `state/` watch), is
@@ -425,6 +425,15 @@ A hint whose action the page has nothing for
 right now (no journal entry for this recording, no refresh in this section) is kept in place and
 dimmed (`dim: true`), never dropped; hints for what the pad makes obvious — moving with the d-pad
 — are not written, only a d-pad with a specific meaning is (`Seek 10 s`, `Previous / next`).
+
+Toasts are `core/Notices.qml`, a singleton both looks and the dock share: `show(text, key)`,
+`fail(text, key)` for a failure (a red mark, 8 s on screen instead of 4 s). One shows at a time,
+the rest wait their turn, and a message repeating the last one is dropped. A message with a key
+takes the place of the one with the same key, on screen or waiting: "Journal: writing …" becomes
+its result (`journal:<session>`), "Quitting …" the session's end line (`stop`). Reprise draws
+them in the hint bar's middle (`ui/NoticePill.qml`, in every `HintBar`, so the bar of a sub page
+has it too): centred, pushed aside by the hints and then elided, never over them or the page.
+The dock draws them at the left of its status row, Switch 2 in its card at the top left.
 
 Under a keyboard or a mouse (`api.keys.mode` not `pad`) `ui/ButtonGlyph.qml` draws a key cap
 with the key's name (`api.keys.labels`) in place of the pad button, the d-pad as arrows; a chord

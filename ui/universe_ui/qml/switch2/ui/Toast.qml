@@ -1,17 +1,11 @@
 import QtQuick
+import "../../core" as Base
 import "../core"
 
 Item {
     id: toast
 
-    property string text: ""
-    property bool shown: false
-
-    function show(message) {
-        text = message;
-        shown = true;
-        hideTimer.restart();
-    }
+    readonly property bool shown: Base.Notices.current !== null
 
     x: Theme.dp(72)
     y: shown ? Theme.dp(40) : -height
@@ -23,18 +17,23 @@ Item {
         Ease {}
     }
 
-    Timer {
-        id: hideTimer
-        interval: 4000
-        onTriggered: toast.shown = false
-    }
-
     Rectangle {
         anchors.fill: parent
         radius: Theme.dp(8)
         color: Theme.card
         border.width: 1
-        border.color: Theme.hairline
+        border.color: Base.Notices.error ? Theme.danger : Theme.hairline
+    }
+
+    Rectangle {
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.bottom: parent.bottom
+        anchors.margins: 1
+        width: Theme.dp(6)
+        radius: Theme.dp(2)
+        color: Theme.danger
+        visible: Base.Notices.error
     }
 
     Label {
@@ -43,7 +42,7 @@ Item {
         anchors.right: parent.right
         anchors.margins: Theme.dp(32)
         anchors.verticalCenter: parent.verticalCenter
-        text: toast.text
+        text: Base.Notices.text
         font.pixelSize: Theme.dp(Theme.fontSmall)
         elide: Text.ElideRight
     }

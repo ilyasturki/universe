@@ -54,6 +54,7 @@ Item {
     }
 
     HintRow {
+        id: leftHints
         anchors.left: parent.left
         anchors.leftMargin: root.sideMargin
         anchors.verticalCenter: parent.verticalCenter
@@ -61,9 +62,20 @@ Item {
     }
 
     HintRow {
+        id: rightHints
         anchors.right: parent.right
         anchors.rightMargin: root.sideMargin
         anchors.verticalCenter: parent.verticalCenter
         hints: root.arranged.right
+    }
+
+    // Centred on the bar, pushed aside and then elided by the hints, never over them.
+    NoticePill {
+        readonly property real from: leftHints.width > 0 ? leftHints.x + leftHints.width + Theme.dp(40) : root.sideMargin
+        readonly property real to: rightHints.width > 0 ? rightHints.x - Theme.dp(40) : root.width - root.sideMargin
+
+        maxWidth: Math.max(0, to - from)
+        x: Math.max(from, Math.min((root.width - width) / 2, to - width))
+        anchors.verticalCenter: parent.verticalCenter
     }
 }

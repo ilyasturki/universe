@@ -390,7 +390,10 @@ FocusScope {
             if (!dock.open)
                 return;
             dock.hidden = false;
-            toast.show(path ? "Screenshot saved" : "Screenshot failed");
+            if (path)
+                Notices.show("Screenshot saved");
+            else
+                Notices.fail("Screenshot failed");
         }
     }
 
@@ -458,7 +461,16 @@ FocusScope {
             }
         }
 
+        NoticePill {
+            anchors.right: status.left
+            anchors.rightMargin: Theme.dp(26)
+            anchors.verticalCenter: status.verticalCenter
+            maxWidth: dock.width / 2
+        }
+
         Row {
+            id: status
+
             anchors.right: parent.right
             anchors.rightMargin: Theme.dp(Theme.edgeMargin)
             anchors.top: parent.top
@@ -914,11 +926,6 @@ FocusScope {
         anchors.fill: parent
         z: 3
         onClosed: dock.forceActiveFocus()
-    }
-
-    Toast {
-        id: toast
-        z: 5
     }
 
     Keys.onPressed: function (event) {

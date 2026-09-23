@@ -235,16 +235,16 @@ FocusScope {
         });
     }
 
-    // The unit gets a SIGTERM, a second one after ~3 s: the toast covers the wait.
+    // The unit gets a SIGTERM, a second one after ~3 s: the notice covers the wait.
     function stopSession() {
         if (!sessionRunning)
             return;
-        toast.show("Closing " + session.title + "…");
+        Base.Notices.show("Closing " + session.title + "…", "stop");
         api.home.stop();
     }
 
     function showToast(text) {
-        toast.show(text);
+        Base.Notices.show(text);
     }
 
     Rectangle {
@@ -448,31 +448,30 @@ FocusScope {
             root.focusTop();
         }
         onFailed: function (game, message) {
-            toast.show("Could not start" + (game ? " " + game.title : "") + (message ? ": " + message : ""));
+            Base.Notices.fail("Could not start" + (game ? " " + game.title : "") + (message ? ": " + message : ""));
         }
     }
 
     Toast {
-        id: toast
         z: 13
     }
 
     Connections {
         target: api.universe
         function onError(kind, message) {
-            toast.show(message);
+            Base.Notices.fail(message);
             root.pendingLaunch = null;
         }
         function onNotice(message) {
-            toast.show(message);
+            Base.Notices.show(message);
         }
         function onSessionEnded(sessionId, id, duration, end) {
             var game = api.allGames.byId(id);
             var minutes = Math.max(1, Math.round(duration / 60)) + " min";
             if (game && (end === "crashed" || end === "killed"))
-                toast.show(game.title + (end === "crashed" ? " crashed after " : " was killed after ") + minutes + ". See its Play Log.");
+                Base.Notices.fail(game.title + (end === "crashed" ? " crashed after " : " was killed after ") + minutes + ". See its Play Log.", "stop");
             else if (game)
-                toast.show(game.title + " · " + minutes);
+                Base.Notices.show(game.title + " · " + minutes, "stop");
             if (root.pendingLaunch)
                 root.launch(root.pendingLaunch);
             root.pendingLaunch = null;
@@ -482,7 +481,7 @@ FocusScope {
     Connections {
         target: api.screens.controller
         function onMacroNotice(text) {
-            toast.show(text);
+            Base.Notices.show(text);
         }
         // A pad of a family never set up: the walk through its buttons, offered once.
         function onWalkOffered(family, name) {
