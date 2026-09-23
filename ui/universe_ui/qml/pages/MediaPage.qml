@@ -109,6 +109,8 @@ FocusScope {
     readonly property real sideMargin: Theme.dp(80)
     readonly property real cellWidth: (width - sideMargin * 2 + gap) / columns
     readonly property real cellHeight: (cellWidth - gap) * 9 / 16 + gap + Theme.dp(64)
+    // Room inside the grid's clip for the focused card's ring and halo, which reach past its cell.
+    readonly property real inset: Theme.dp(12)
 
     Component.onCompleted: {
         store.load();
@@ -118,11 +120,11 @@ FocusScope {
     onKindIndexChanged: {
         api.memory.set("mediaKind", kindIndex);
         index = 0;
-        grid.contentY = 0;
+        grid.contentY = -grid.topMargin;
     }
     onGameFilterChanged: {
         index = 0;
-        grid.contentY = 0;
+        grid.contentY = -grid.topMargin;
     }
     onRowsChanged: {
         if (index >= rows.length)
@@ -447,12 +449,16 @@ FocusScope {
         Wheel {}
 
         anchors.top: header.bottom
-        anchors.topMargin: Theme.dp(34)
+        anchors.topMargin: Theme.dp(34) - page.inset
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.right: parent.right
-        anchors.leftMargin: page.sideMargin - page.gap / 2
-        anchors.rightMargin: page.sideMargin - page.gap / 2
+        anchors.leftMargin: page.sideMargin - page.gap / 2 - page.inset
+        anchors.rightMargin: page.sideMargin - page.gap / 2 - page.inset
+        topMargin: page.inset
+        bottomMargin: page.inset
+        leftMargin: page.inset
+        rightMargin: page.inset
         clip: true
         focus: true
         model: page.rows

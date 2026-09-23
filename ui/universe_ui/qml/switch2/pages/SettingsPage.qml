@@ -327,12 +327,15 @@ FocusScope {
         }
         if (sectionId === "doctor") {
             var checks = Forms.grouped(modulesForm.doctorGroups, modulesForm.doctor, function (c) {
+                var ok = c.value === true;
                 return {
                     label: c.label,
+                    path: c.path || "",
                     type: "info",
-                    value: c.value === true,
-                    display: c.detail || "",
-                    detail: ""
+                    value: ok,
+                    display: ok ? c.detail || "" : "",
+                    detail: ok ? "" : c.detail || "",
+                    fix: ok ? "" : c.fix || ""
                 };
             });
             return checks.length > 0 ? checks : [

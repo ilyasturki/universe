@@ -21,6 +21,8 @@ FocusScope {
     readonly property real detailLine: Theme.dp(58)
     readonly property real inset: Theme.dp(24)
     readonly property real room: Theme.dp(Theme.ringRoom)
+    // Row index → the height of a failed check's wrapped problem and fix, reported by the row once laid out.
+    property var fixHeights: ({})
 
     function stops() {
         return model.map(function (r, i) {
@@ -32,7 +34,21 @@ FocusScope {
 
     function heightOf(i) {
         var r = model[i];
-        return !r ? 0 : r.heading ? headingHeight : rowHeight + (r.detail ? detailLine : 0);
+        if (!r)
+            return 0;
+        if (r.heading)
+            return headingHeight;
+        if (r.fix)
+            return rowHeight + (fixHeights[i] !== undefined ? fixHeights[i] : detailLine);
+        return rowHeight + (r.detail ? detailLine : 0);
+    }
+
+    function measured(i, h) {
+        if (fixHeights[i] === h)
+            return;
+        var next = Object.assign({}, fixHeights);
+        next[i] = h;
+        fixHeights = next;
     }
 
     function yOf(i) {
@@ -218,6 +234,7 @@ FocusScope {
                 readonly property bool disabled: entry.disabled === true
                 readonly property bool info: entry.type === "info"
                 readonly property bool hasDetail: entry.detail !== undefined && entry.detail !== ""
+                readonly property bool explains: entry.fix !== undefined && entry.fix !== ""
                 readonly property bool hasGlyph: entry.slot !== undefined && String(entry.slot) !== "" && entry.family !== undefined
                 // An icon naming a file (a runner's logo) is drawn whole; a bare name is a Glyph kind.
                 readonly property bool iconIsFile: entry.icon !== undefined && entry.icon !== null && String(entry.icon).indexOf("/") >= 0
@@ -441,6 +458,8 @@ FocusScope {
                                 text: row.entry.display || ""
                                 color: Theme.textSecondary
                                 font.pixelSize: Theme.dp(Theme.fontSmall)
+                                elide: Text.ElideMiddle
+                                width: Math.min(implicitWidth, row.width * 0.5)
                             }
 
                             Rectangle {
@@ -462,7 +481,7 @@ FocusScope {
                     }
 
                     Label {
-                        visible: row.hasDetail
+                        visible: row.hasDetail && !row.explains
                         x: rows.inset
                         y: rows.rowHeight + Theme.dp(16)
                         width: parent.width - rows.inset * 2
@@ -471,6 +490,40 @@ FocusScope {
                         text: row.entry.detail || ""
                         color: Theme.textSecondary
                         elide: Text.ElideRight
+                    }
+
+                    Column {
+                        visible: row.explains
+                        x: rows.inset
+                        y: rows.rowHeight + Theme.dp(8)
+                        width: parent.width - rows.inset * 2
+                        spacing: Theme.dp(14)
+
+                        function report() {
+                            if (row.explains)
+                                rows.measured(index, height + Theme.dp(34));
+                        }
+
+                        onHeightChanged: report()
+                        Component.onCompleted: report()
+
+                        Label {
+                            width: parent.width
+                            text: row.entry.detail || ""
+                            wrapMode: Text.Wrap
+                            lineHeight: 1.25
+                            color: Theme.textSecondary
+                            font.pixelSize: Theme.dp(Theme.fontSmall)
+                        }
+
+                        Label {
+                            width: parent.width
+                            text: "<b>To fix:</b> " + row.esc(row.entry.fix || "")
+                            textFormat: Text.StyledText
+                            wrapMode: Text.Wrap
+                            lineHeight: 1.25
+                            font.pixelSize: Theme.dp(Theme.fontSmall)
+                        }
                     }
                 }
             }

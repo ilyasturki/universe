@@ -569,11 +569,13 @@
     }
   ],
   "doctor": [
-    {"check": "gogdl on PATH", "ok": true, "detail": "/run/current-system/sw/bin/gogdl", "module": "gog"},
-    {"check": "gpu-screen-recorder", "ok": true, "detail": "1.9", "module": "capture"},
-    {"check": "gsr-kms-server", "ok": true, "detail": "/run/wrappers/bin/gsr-kms-server", "module": "capture"},
-    {"check": "Proton proton-ge", "ok": true, "detail": "GE-Proton11-5", "module": ""},
-    {"check": "hide-cursor extension", "ok": false, "detail": "hide-cursor@elcste.com not enabled", "module": ""}
+    {"check": "gogdl", "label": "gogdl", "ok": true, "detail": "/run/current-system/sw/bin/gogdl", "fix": "", "module": "gog"},
+    {"check": "gpu-screen-recorder", "label": "gpu-screen-recorder", "ok": true, "detail": "/run/current-system/sw/bin/gpu-screen-recorder", "fix": "", "module": "capture"},
+    {"check": "gsr-kms-server", "label": "gsr-kms-server", "ok": true, "detail": "/run/wrappers/bin/gsr-kms-server", "fix": "", "module": "capture"},
+    {"check": "proton", "label": "Proton (proton-ge)", "ok": true, "detail": "/home/user/.local/share/lutris/runners/wine/GE-Proton11-5", "fix": "", "module": "core"},
+    {"check": "cursor-extension", "label": "Cursor hiding extension", "ok": false, "detail": "hide-cursor@elcste.com missing", "fix": "install the hide-cursor@elcste.com shell extension, or set desktop.hide_cursor = false to stop asking", "module": "core"},
+    {"check": "runner-eden-stop", "label": "Eden quits on stop", "ok": false, "detail": "Eden asks before closing: a stop from Universe shows its question, then kills it 10 s later", "fix": "in Eden, set Configure › General › Confirm before stopping emulation to Never Ask ([UI] confirmStop=2 in /home/user/.config/eden/qt-config.ini)", "module": "runners"},
+    {"check": "runner-eden", "label": "Eden", "ok": true, "detail": "/run/current-system/sw/bin/eden (path)", "fix": "", "module": "runners"}
   ],
   "config": {
     "schema": 1,

@@ -1062,6 +1062,8 @@ FocusScope {
         // `sectionId` still names the section left.
         if (sections[section].id === "sound")
             api.home.loadOutputs();
+        else if (sections[section].id === "doctor")
+            modulesForm.loadDoctor();
         if (sectionId === "search" && finder.item)
             finder.item.open();
         Qt.callLater(function () {
@@ -1081,6 +1083,14 @@ FocusScope {
         target: page.sources
         function onMessage(text) {
             page.message(text);
+        }
+    }
+
+    Connections {
+        target: page.modulesForm
+        function onDoctorChanged() {
+            if (page.sectionId === "doctor")
+                Qt.callLater(cards.reset);
         }
     }
 

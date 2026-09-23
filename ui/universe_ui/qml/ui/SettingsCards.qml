@@ -32,6 +32,8 @@ FocusScope {
     readonly property real gap: Theme.dp(compact ? 24 : 32)
     readonly property real pad: Theme.dp(compact ? 6 : 8)
     readonly property real rowHeight: Theme.dp(compact ? 60 : 66)
+    // Row index → height, for the rows that grow past rowHeight; each row reports its own once laid out.
+    property var tallRows: ({})
     readonly property real dividerHeight: Theme.dp(compact ? 34 : 38)
     readonly property real columnWidth: (width - gap * (columns - 1)) / columns
     readonly property rect focusRect: {
@@ -39,6 +41,36 @@ FocusScope {
         if (!s)
             return Qt.rect(0, 0, 0, 0);
         return Qt.rect(columnX(s.col) + 1 + pad, s.y0 - view.contentY, (s.wide ? width : columnWidth) - 2 - pad * 2, s.y1 - s.y0);
+    }
+
+    function heightOf(row) {
+        var h = tallRows[row];
+        return h !== undefined ? h : rowHeight;
+    }
+
+    // A row reports while `layout` builds it: applied on the next tick, else the layout would depend on itself.
+    property var pendingHeights: ({})
+
+    function measured(row, h) {
+        pendingHeights[row] = h;
+        Qt.callLater(applyHeights);
+    }
+
+    function applyHeights() {
+        var next = Object.assign({}, tallRows), changed = false;
+        for (var row in pendingHeights) {
+            var h = pendingHeights[row];
+            if (h > rowHeight ? next[row] === h : next[row] === undefined)
+                continue;
+            if (h > rowHeight)
+                next[row] = h;
+            else
+                delete next[row];
+            changed = true;
+        }
+        pendingHeights = {};
+        if (changed)
+            tallRows = next;
     }
 
     function columnX(c) {
@@ -77,7 +109,10 @@ FocusScope {
     }
 
     function cardHeight(g) {
-        return pad * 2 + headerHeight(g) + g.rows.length * rowHeight + ruleCount(g) * dividerHeight + 2;
+        var rowsHeight = g.rows.reduce(function (sum, r) {
+            return sum + heightOf(r);
+        }, 0);
+        return pad * 2 + headerHeight(g) + rowsHeight + ruleCount(g) * dividerHeight + 2;
     }
 
     // Each card joins the shortest column; a stop's `top` is the card's top for its first stop, so the header comes into view with it.
@@ -122,16 +157,17 @@ FocusScope {
                 var first = r === 0 && !(group.control >= 0), last = r === group.rows.length - 1;
                 if (ruleAt(group, r) !== "")
                     cy += dividerHeight;
+                var h = heightOf(group.rows[r]);
                 stops[c].push({
                     row: group.rows[r],
                     col: c,
                     top: first ? top : cy,
                     y0: cy,
-                    y1: cy + rowHeight,
-                    bottom: cy + rowHeight + (last ? pad + 1 : 0),
+                    y1: cy + h,
+                    bottom: cy + h + (last ? pad + 1 : 0),
                     wide: wide
                 });
-                cy += rowHeight;
+                cy += h;
             }
             for (k = 0; k < columns; k++)
                 if (wide || k === c)
@@ -415,7 +451,7 @@ FocusScope {
                     readonly property bool prevFocused: index > 0 && card.group.rows[index - 1] === cards.index && cards.cursorShown
 
                     width: parent.width
-                    height: cards.rowHeight + (divided ? cards.dividerHeight : 0)
+                    height: cards.heightOf(modelData) + (divided ? cards.dividerHeight : 0)
 
                     Item {
                         visible: parent.divided
@@ -446,11 +482,15 @@ FocusScope {
                     SettingsRow {
                         anchors.bottom: parent.bottom
                         width: parent.width
-                        height: cards.rowHeight
+                        height: cards.heightOf(modelData)
+                        baseHeight: cards.rowHeight
                         entry: cards.rows[modelData] || ({})
                         focused: modelData === cards.index && cards.cursorShown
                         compact: cards.compact
                         separator: index > 0 && !parent.divided && !focused && !parent.prevFocused
+
+                        onNaturalHeightChanged: cards.measured(modelData, naturalHeight)
+                        Component.onCompleted: cards.measured(modelData, naturalHeight)
 
                         Pointer {
                             direct: true

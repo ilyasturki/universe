@@ -769,6 +769,9 @@ class ListForm(RowsForm):
         self.load()
 
 
+DOCTOR_GROUPS = {"core": "Core", "runners": "Runners", "media": "Media", "controller": "Controller"}
+
+
 class ModulesForm(ModuleApi, ListForm):
     doctorChanged = Signal()
 
@@ -787,20 +790,27 @@ class ModulesForm(ModuleApi, ListForm):
         self._client.runAsync(work, lambda result: self._show_doctor(*result))
 
     def _show_doctor(self, names, checks):
-        rows, groups = [], []
+        names = {**DOCTOR_GROUPS, **names}
+        rows, homes = [], {}
         for check in checks:
-            ident = check.get("module") or ""
-            name = names.get(ident, ident) or "Core"
-            group = next((g for g in groups if g["title"] == name), None)
-            if group is None:
-                group = _group(name, [])
-                groups.append(group)
-            group["rows"].append(len(rows))
-            rows.append(_row(name, "", check.get("check", ""), "info", bool(check.get("ok")), detail=str(check.get("detail") or ""), module=ident))
-        groups.sort(key=lambda g: g["title"] != "Core")
-        for group in groups:
-            passed = sum(1 for i in group["rows"] if rows[i]["value"])
-            group["meta"] = f"{passed} of {len(group['rows'])} checks pass"
+            ident = check.get("module") or "core"
+            name = names.get(ident, ident)
+            row = _row(
+                name, "", check.get("label") or check.get("check", ""), "info", bool(check.get("ok")), detail=str(check.get("detail") or ""), module=ident
+            )
+            row["fix"] = str(check.get("fix") or "")
+            homes.setdefault(name, []).append(len(rows))
+            rows.append(row)
+        failing = [i for i in range(len(rows)) if not rows[i]["value"]]
+        for i in failing:
+            rows[i]["path"] = rows[i]["section"]
+        groups = []
+        if failing:
+            groups.append(_group("Needs attention", failing, warning=f"{len(failing)} of {len(rows)} checks fail"))
+        for name in sorted(homes, key=lambda n: n != "Core"):
+            passing = [i for i in homes[name] if rows[i]["value"]]
+            if passing:
+                groups.append(_group(name, passing, meta=f"{len(passing)} of {len(homes[name])} checks pass"))
         self._doctor = rows
         self._doctor_groups = groups
         self.doctorChanged.emit()

@@ -1918,7 +1918,7 @@ mod tests {
         assert!(matches!(err, Error::Unavailable(ref m) if m.contains("provider")), "{err}");
         let checks = core.doctor().await;
         let check = checks.iter().find(|c| c.module == "journal" && c.check == "provider").expect("a doctor line for the choice it waits on");
-        assert!(!check.ok && check.detail.contains("universe module set journal provider="));
+        assert!(!check.ok && check.fix.contains("universe module set journal provider="));
         core.set_module_setting("journal", "", "provider", "stub").await.unwrap();
         assert!(core.journal_write("sample", "20260910-100000", false).await.is_ok(), "chosen, the module writes");
     }

@@ -644,7 +644,9 @@ the QR code and the URL then show under the cards) and `Enter the code` (`code`:
 `login.submit`); `login.finished` reloads both source screens. Listing the sources probes their
 logins once per process, on the network, so the sources list and page load off the UI thread and
 announce `rowsChanged` when they land. Doctor's checks stay on `api.screens.modules`
-(`loadDoctor`, `doctor`, `doctorGroups`), grouped by module or source name and run off the UI thread too.
+(`loadDoctor`, `doctor`, `doctorGroups`), grouped by module or source name and run off the UI thread too. The failing
+checks leave their card for a "Needs attention" one on top, each row carrying its card as `path` and its `fix`; a row
+with a `fix` wraps its problem and fix under the label in both looks, and a card keeps counting the checks that left it.
 
 ## The runners section
 

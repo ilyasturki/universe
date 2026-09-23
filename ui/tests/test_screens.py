@@ -158,8 +158,12 @@ def test_modules_list(api, fake):
     wait_for(form.doctorChanged, 3000)  # the checks run off the UI thread
     assert form.doctor and all("value" in r for r in form.doctor)
     doctor = {g["title"]: g for g in form.doctorGroups}
-    assert form.doctorGroups[0]["title"] == "Core" and doctor["Core"]["meta"] == "1 of 2 checks pass"
-    assert form.doctor[doctor["GOG"]["rows"][0]]["label"] == "gogdl on PATH", "a source's checks are grouped under its name"
+    assert [g["title"] for g in form.doctorGroups[:2]] == ["Needs attention", "Core"], "the failures come first, then the core's checks"
+    attention = [form.doctor[i] for i in doctor["Needs attention"]["rows"]]
+    assert [(r["path"], r["label"]) for r in attention] == [("Core", "Cursor hiding extension"), ("Runners", "Eden quits on stop")]
+    assert all(r["fix"] and r["detail"] for r in attention), "a failure says what is wrong and what to do"
+    assert doctor["Core"]["meta"] == "1 of 2 checks pass" and len(doctor["Core"]["rows"]) == 1, "a card keeps its count but not its failures"
+    assert form.doctor[doctor["GOG"]["rows"][0]]["label"] == "gogdl", "a source's checks are grouped under its name"
 
 
 def test_sources_list(api, fake):

@@ -9,8 +9,12 @@ Item {
     property bool focused: false
     property bool compact: false
     property bool separator: false
+    property real baseHeight: Theme.dp(66)
 
     readonly property bool info: entry.type === "info"
+    // A failed check reads whole: what is wrong and what to do wrap under the label, and the row grows to hold them.
+    readonly property bool explains: info && entry.fix !== undefined && entry.fix !== ""
+    readonly property real naturalHeight: explains ? notes.y + notes.height + Theme.dp(20) : baseHeight
     readonly property bool hasSwitch: entry.switch === true
     // A button with no code on this connection says "Unbound" instead: its macros cannot fire.
     readonly property var macros: entry.bound === false ? [] : [entry.press && {
@@ -90,13 +94,19 @@ Item {
         }
     }
 
+    Item {
+        id: band
+        width: parent.width
+        height: row.explains ? row.baseHeight : row.height
+    }
+
     Loader {
         id: thumb
 
         anchors.left: parent.left
         anchors.leftMargin: Theme.dp(10)
-        anchors.verticalCenter: parent.verticalCenter
-        height: parent.height - Theme.dp(12)
+        anchors.verticalCenter: band.verticalCenter
+        height: band.height - Theme.dp(12)
         width: height
         active: row.hasImage
 
@@ -125,8 +135,8 @@ Item {
 
         anchors.left: parent.left
         anchors.leftMargin: Theme.dp(18)
-        anchors.verticalCenter: parent.verticalCenter
-        height: parent.height
+        anchors.verticalCenter: band.verticalCenter
+        height: band.height
         active: row.hasGlyph || row.hasIcon
 
         sourceComponent: row.hasGlyph ? padGlyph : menuGlyph
@@ -170,8 +180,8 @@ Item {
         id: mark
         anchors.left: parent.left
         anchors.leftMargin: Theme.dp(16)
-        anchors.verticalCenter: parent.verticalCenter
-        height: parent.height - Theme.dp(22)
+        anchors.verticalCenter: band.verticalCenter
+        height: band.height - Theme.dp(22)
         width: height
         source: !row.hasImage && row.iconIsFile ? Qt.resolvedUrl("../" + row.entry.icon) : ""
         asynchronous: true
@@ -187,7 +197,7 @@ Item {
         anchors.leftMargin: row.labelInset
         anchors.right: control.left
         anchors.rightMargin: Theme.dp(20)
-        anchors.verticalCenter: parent.verticalCenter
+        anchors.verticalCenter: band.verticalCenter
         text: row.path !== "" ? "<font color=\"" + (row.focused ? "#5c5f69" : "#8a8d96") + "\">" + row.esc(row.path) + " › </font>" + row.esc(row.entry.label || "") : row.entry.label || ""
         textFormat: row.path !== "" ? Text.StyledText : Text.PlainText
         color: row.focused ? Theme.onLight : Theme.text
@@ -223,10 +233,10 @@ Item {
 
         anchors.right: parent.right
         anchors.rightMargin: Theme.dp(16)
-        anchors.verticalCenter: parent.verticalCenter
+        anchors.verticalCenter: band.verticalCenter
         // The shown variant alone: childrenRect would count the hidden ones too.
         width: boolRow.visible ? boolRow.width : valueRow.visible ? valueRow.width : infoRow.width
-        height: parent.height
+        height: band.height
 
         Row {
             id: boolRow
@@ -399,7 +409,7 @@ Item {
 
             Text {
                 anchors.verticalCenter: parent.verticalCenter
-                visible: text !== ""
+                visible: text !== "" && !row.explains
                 text: row.entry.detail || ""
                 color: row.focused ? row.onFocus : Theme.textMuted
                 font.family: Theme.sans
@@ -415,6 +425,35 @@ Item {
                 radius: width / 2
                 color: row.entry.value ? "#5fd48a" : "#e0655a"
             }
+        }
+    }
+
+    Column {
+        id: notes
+
+        x: row.labelInset
+        y: row.baseHeight - Theme.dp(10)
+        width: parent.width - x - Theme.dp(16) - Theme.dp(28)
+        visible: row.explains
+        spacing: Theme.dp(8)
+
+        Text {
+            width: parent.width
+            text: row.entry.detail || ""
+            wrapMode: Text.Wrap
+            color: row.focused ? row.onFocus : Theme.textSecondary
+            font.family: Theme.sans
+            font.pixelSize: Theme.dp(20)
+        }
+
+        Text {
+            width: parent.width
+            text: "<b>To fix:</b> " + row.esc(row.entry.fix || "")
+            textFormat: Text.StyledText
+            wrapMode: Text.Wrap
+            color: row.focused ? Theme.onLight : Theme.text
+            font.family: Theme.sans
+            font.pixelSize: Theme.dp(20)
         }
     }
 }

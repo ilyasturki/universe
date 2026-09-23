@@ -1370,25 +1370,24 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             if json {
                 return print_json(&list);
             }
-            let mut bad = 0;
-            for c in rows(&list) {
-                let ok = c["ok"].as_bool().unwrap_or(false);
-                if !ok {
-                    bad += 1;
+            let width = list.iter().map(|c| c.label.chars().count()).max().unwrap_or(0);
+            for c in &list {
+                if c.ok {
+                    println!("{} {:<width$}  {}  {}", "✓".green(), c.label, format!("{:<10}", c.module).dimmed(), c.detail);
+                } else {
+                    println!("{} {}  {}", "✗".red(), format!("{:<width$}", c.label).bold(), format!("{:<10}  {}", c.module, c.check).dimmed());
+                    println!("    {}", c.detail);
+                    if !c.fix.is_empty() {
+                        println!("    {} {}", "fix:".yellow(), c.fix);
+                    }
                 }
-                println!(
-                    "{} {:<18} {:<10} {}",
-                    if ok { "✓".green().to_string() } else { "✗".red().to_string() },
-                    s(&c, "check"),
-                    s(&c, "module").dimmed(),
-                    s(&c, "detail")
-                );
             }
+            let bad = list.iter().filter(|c| !c.ok).count();
             if bad > 0 {
-                println!("{bad} problem(s)");
+                println!("{} checks pass, {}", list.len() - bad, format!("{bad} need{} attention", if bad == 1 { "s" } else { "" }).red());
                 std::process::exit(1);
             }
-            println!("{}", "all good".green());
+            println!("{}", format!("all {} checks pass", list.len()).green());
         }
         Cmd::Config { action } => match action {
             ConfigCmd::Get { key } => {
