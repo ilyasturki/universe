@@ -68,6 +68,25 @@ def quit_on_signals(app, on_signal=None):
     return notifier
 
 
+_io_error_handlers = []
+
+
+def exit_with_the_display():
+    import ctypes
+
+    if _io_error_handlers:
+        return
+
+    def gone(display):
+        logging.getLogger("universe.host").info("the X display went away: quitting")
+        os._exit(0)
+        return 0
+
+    # Xlib's default exits from whichever thread hit the error, the render thread's included, racing Qt's own shutdown into a heap corruption.
+    _io_error_handlers.append(ctypes.CFUNCTYPE(ctypes.c_int, ctypes.c_void_p)(gone))
+    ctypes.CDLL("libX11.so.6").XSetIOErrorHandler(_io_error_handlers[0])
+
+
 def exec_in_gamescope(command, argv):
     if not command:
         logging.getLogger("universe.host").warning("no gamescope: running on the desktop")
@@ -116,6 +135,8 @@ def run(argv=None):
         # gamescope unsets WAYLAND_DISPLAY; a platform list naming wayland first would still try it.
         os.environ["QT_QPA_PLATFORM"] = "xcb"
     app = QGuiApplication(sys.argv[:1])
+    if app.platformName() == "xcb":
+        exit_with_the_display()
     app.setApplicationName("universe-ui")
     app.setOrganizationName("universe")
     app.setDesktopFileName("universe-ui")

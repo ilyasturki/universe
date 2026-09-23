@@ -86,3 +86,24 @@ def test_fullscreen_re_execs_before_the_core_opens(app, monkeypatch, tmp_path):
     with pytest.raises(Execed):
         host.run([])
     assert opened == [], "the library is loaded once, inside gamescope, not on each side of the exec"
+
+
+def test_a_lost_display_ends_the_process_at_once_from_any_thread(monkeypatch):
+    import ctypes
+
+    installed = []
+
+    class X11:
+        def XSetIOErrorHandler(self, handler):
+            installed.append(handler)
+
+    monkeypatch.setattr(ctypes, "CDLL", lambda name: X11())
+    monkeypatch.setattr(host, "_io_error_handlers", [])
+    exits = []
+
+    monkeypatch.setattr(os, "_exit", exits.append)
+    host.exit_with_the_display()
+    host.exit_with_the_display()
+    assert installed == host._io_error_handlers and len(installed) == 1, "set once, the callback kept alive by the module"
+    installed[0](None)
+    assert exits == [0], "no exit(): no destructors run on the thread that hit the error"
