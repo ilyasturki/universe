@@ -192,7 +192,7 @@ Modal {
         }
 
         Rectangle {
-            x: valueText.x + Math.min(valueText.implicitWidth, valueText.width) + Theme.dp(4)
+            x: valueText.x + Math.min(valueText.implicitWidth, valueText.width)
             y: valueText.y + Theme.dp(2)
             width: Theme.dp(3)
             height: Theme.dp(50)
@@ -231,7 +231,7 @@ Modal {
         }
 
         Rectangle {
-            x: secondText.x + Math.min(secondText.implicitWidth, secondText.width) + Theme.dp(4)
+            x: secondText.x + Math.min(secondText.implicitWidth, secondText.width)
             y: secondText.y + Theme.dp(2)
             width: Theme.dp(3)
             height: Theme.dp(50)

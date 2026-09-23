@@ -181,7 +181,7 @@ FocusScope {
         }
 
         Rectangle {
-            x: queryText.x + Math.min(queryText.implicitWidth, queryText.width) + Theme.dp(4)
+            x: queryText.x + Math.min(queryText.implicitWidth, queryText.width)
             anchors.verticalCenter: parent.verticalCenter
             width: Theme.dp(3)
             height: Theme.dp(48)

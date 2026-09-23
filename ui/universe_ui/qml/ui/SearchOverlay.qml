@@ -322,7 +322,6 @@ FocusScope {
 
             Rectangle {
                 anchors.left: queryText.right
-                anchors.leftMargin: Theme.dp(14)
                 anchors.verticalCenter: parent.verticalCenter
                 width: Theme.dp(3)
                 height: Theme.dp(30)

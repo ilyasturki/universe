@@ -207,7 +207,7 @@ Sheet {
 
         Rectangle {
             anchors.left: valueText.left
-            anchors.leftMargin: Math.min(valueText.implicitWidth, valueText.width) + Theme.dp(10)
+            anchors.leftMargin: Math.min(valueText.implicitWidth, valueText.width)
             anchors.verticalCenter: parent.verticalCenter
             width: Theme.dp(3)
             height: Theme.dp(30)
