@@ -43,6 +43,7 @@ def fakebin(tmp_path):
         f'''printf "%s\\n" "$@" >> "{logs}/systemctl.args"
 case "$*" in
   *FreezerState*) echo "${{FAKE_FREEZER_STATE:-running}}";;
+  *is-active*) echo "${{FAKE_UNIT_STATE:-active}}";;
 esac
 exit "${{FAKE_KILL_EXIT:-0}}"''',
     )
@@ -218,6 +219,23 @@ def test_start_enabled_false_exits_early(tmp_path, fakebin):
     result = run("start", env)
     assert result.returncode == 0, result.stderr
     assert not (fakebin["logs"] / "systemd-run.args").exists()
+
+
+def test_start_reports_a_recorder_gone_at_once(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {}, extra={"FAKE_RECORDER_DOWN": "1", "FAKE_UNIT_STATE": "failed"})
+    result = run("start", env)
+    assert result.returncode == 1, result.stderr
+    assert "not being recorded" in result.stderr
+    assert "Recording failed" in (fakebin["logs"] / "busctl.args").read_text()
+
+
+def test_start_opens_the_timeline_before_the_recorder(tmp_path, fakebin):
+    """A recorder that outlives its silent socket still has the timeline the supervisor reads."""
+    env = env_for(tmp_path, fakebin, {}, extra={"FAKE_RECORDER_DOWN": "1"})
+    result = run("start", env)
+    assert result.returncode == 0, result.stderr
+    assert "socket did not come up" in result.stderr
+    assert _timeline(tmp_path) is not None
 
 
 def test_pre_asks_gamescope_to_composite_only_for_a_window_recording(tmp_path, fakebin):
@@ -824,6 +842,19 @@ def test_record_exits_with_a_recorder_that_dies_on_a_live_monitor(tmp_path, live
     thread.join(timeout=10)
     assert done == [0] and len(_gsr_runs(livebin)) == 1
     assert "parts" not in _timeline(tmp_path)
+
+
+def test_record_reports_a_recorder_that_dies_at_once(tmp_path, livebin, monkeypatch):
+    """bin/start opens the timeline first: without it the supervisor read the death as a session already over."""
+    env = env_for(tmp_path, livebin, {})
+    _apply_env(monkeypatch, env)
+    (livebin["logs"] / "gsr.fail").touch()
+    with _common.timeline(env["MODULE_DATA_DIR"], SESSION_ID, create=True):
+        pass
+    thread, done = _recorder(tmp_path, livebin, env)
+    thread.start()
+    thread.join(timeout=10)
+    assert done == [3]
 
 
 def test_record_pauses_a_restarted_recorder_while_the_game_is_frozen(tmp_path, livebin, monkeypatch):

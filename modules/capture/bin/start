@@ -14,6 +14,7 @@ from _common import (
     set_paused,
     show_osd,
     timeline,
+    unit_active,
     unit_env_args,
     wait_recorder,
 )
@@ -76,14 +77,22 @@ def main():
         *gsr_args(settings, os.environ["SESSION_SCREEN"], output, token, session_id),
     ]
     log(" ".join(cmd))
+    # Ahead of the recorder: it reads a missing timeline as a session already stopping and dies without a word.
+    with timeline(data_dir, session_id, create=True):
+        pass
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         log(f"systemd-run failed ({result.returncode}): {result.stderr.strip()}")
         return 1
-    if not wait_recorder(session_id):
+    unit = f"universe-capture-{session_id}.service"
+    if not wait_recorder(session_id, alive=lambda: unit_active(unit)):
+        if not unit_active(unit):
+            log(f"the recorder is already gone; this session is not being recorded (journalctl --user -u {unit})")
+            show_osd("Recording failed", "dialog-warning-symbolic")
+            return 1
         log("the recorder's socket did not come up; pauses may be missed")
-    with timeline(data_dir, session_id, create=True) as state:
-        if game_frozen(game_unit):
+    with timeline(data_dir, session_id) as state:
+        if state is not None and game_frozen(game_unit):
             set_paused(state, session_id, True)
     return 0
 

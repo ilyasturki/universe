@@ -294,6 +294,11 @@ def set_paused(state, session_id, on):
     state["paused"] = on
 
 
+def unit_active(unit):
+    r = subprocess.run(["systemctl", "--user", "is-active", unit], capture_output=True, text=True, check=False)
+    return r.stdout.strip() in ("active", "activating")
+
+
 def game_frozen(unit):
     r = subprocess.run(["systemctl", "--user", "show", "-p", "FreezerState", "--value", unit], capture_output=True, text=True, check=False)
     return r.stdout.strip() in ("frozen", "freezing")

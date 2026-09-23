@@ -511,6 +511,13 @@ hook can; a stitch longer than that goes on alone, filed once done, and the jour
 filed and the others stay in `pending/`. A window (portal) recording follows its window on its own:
 `record` runs gpu-screen-recorder plain.
 
+A recorder that **never starts** is said so rather than passed over: `start` opens the timeline
+before the unit, so `record` cannot read the missing file as a session already stopping, and waits
+for the `-ipc` socket only as long as `universe-capture-<session>` is alive. Gone by then — a
+connector gpu-screen-recorder will not take, no encoder — the hook logs the unit to read and the
+shell's OSD says "Recording failed"; the session ends with no recording, and the journal's
+`post-process` then has only the screenshots to write from.
+
 `codec` is `auto` by default: the first of `av1_10bit`, `hevc_10bit`, `hevc`, `h264` in the
 `video_codecs` section of `gpu-screen-recorder --info` (what the card encodes), `h264` when it
 lists none of them. `audio` is `output` by default; `output+input` adds the microphone.

@@ -75,7 +75,10 @@ class Recorder:
             if code is None and not lost:
                 continue
             if self.session_stopping():
-                return self.proc.wait()
+                code = self.proc.wait()
+                if code:
+                    log(f"gpu-screen-recorder exited {code} as the session stopped")
+                return code
             if code is None:
                 self.save()
                 code = self.proc.returncode
