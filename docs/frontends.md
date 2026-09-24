@@ -782,14 +782,15 @@ game's menu or a cell of the Settings section; the Switch 2 look: `switch2/pages
 from Software Options, and `ArtworkSlotPage.qml` pushed over it, which shares the screen — only the
 page below unloads it). `load(id)` reads `media_status` into `slots` — one row per slot with `url`
 (what shows), `defaultUrl` and `overrideUrl` (the two layers, see `docs/api.md`), `kind`
-(`picked`, `default`, `missing`), `kindLabel` (the one pill both looks draw: "Your pick", the
-provider that fetched the default, or "Missing"), `originLabel` and `defaultOriginLabel`,
-`hasOverride`, `hasDefault`, `aspect`, `use` (where the themes show the slot) — and `entry`, the
+(`picked`, `default`, `missing`), `kindLabel` (the Switch 2 pill: "Your pick", the provider that
+fetched the default, or "Missing"), `originLabel` and `defaultOriginLabel`, `hasOverride`,
+`hasDefault`, `aspect`, `use` (where the themes show the slot, Switch 2's caption) — and `entry`, the
 SteamGridDB entry the candidates come from ("Name (year)"), named above the candidates only
 when `entryDiffers` (its name is not the game's), so a wrong match is seen and a right one says
 nothing. Reprise's page has two levels: the five slots as art cards (`ui/ArtFrame.qml`, the one
 slot tile both the page and the Settings matrix draw — the box front tall on the left, square
-and banner, then background and logo, in two rows beside it, sized to fill the width), then a
+and banner, then background and logo, in two rows beside it, sized to fill the width, each named
+under it and nothing more), then a
 slot's browser — what shows now, the default under a pick, and the candidates as a grid —
 opened by A, or straight away when the page is opened with a `slot` (the Settings section's A;
 B then leaves the page, the cards were never shown). `loadCandidates(slot)` fetches `media_candidates` off the UI

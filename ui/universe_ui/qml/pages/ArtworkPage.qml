@@ -63,7 +63,7 @@ FocusScope {
     readonly property real sideMargin: Theme.dp(90)
     readonly property real cardGap: Theme.dp(40)
     readonly property real rowGap: Theme.dp(44)
-    readonly property real captionHeight: Theme.dp(70)
+    readonly property real captionHeight: Theme.dp(54)
 
     onGameChanged: {
         index = 0;
@@ -369,35 +369,20 @@ FocusScope {
             ArtFrame {
                 anchors.fill: parent
                 row: card.modelData
-                badge: true
             }
         }
 
         // A narrow card's caption may run into the gap after it, never into the next card.
-        Column {
+        Text {
             anchors.top: artFrame.bottom
-            anchors.topMargin: Theme.dp(14)
+            anchors.topMargin: Theme.dp(22)
             width: artFrame.width + page.cardGap - Theme.dp(16)
-            spacing: Theme.dp(3)
-
-            Text {
-                width: parent.width
-                text: card.modelData.label
-                color: Theme.text
-                font.family: Theme.sans
-                font.weight: Font.DemiBold
-                font.pixelSize: Theme.dp(24)
-                elide: Text.ElideRight
-            }
-
-            Text {
-                width: parent.width
-                text: card.modelData.use
-                color: Theme.textSecondary
-                font.family: Theme.sans
-                font.pixelSize: Theme.dp(19)
-                elide: Text.ElideRight
-            }
+            text: card.modelData.label
+            color: Theme.text
+            font.family: Theme.sans
+            font.weight: Font.DemiBold
+            font.pixelSize: Theme.dp(24)
+            elide: Text.ElideRight
         }
     }
 
@@ -433,7 +418,6 @@ FocusScope {
             modelData: page.slots.length > 0 ? page.slots[0] : ({
                     slot: "",
                     label: "",
-                    use: "",
                     aspect: 1,
                     url: "",
                     kind: "missing"
@@ -509,7 +493,6 @@ FocusScope {
                     ArtFrame {
                         anchors.fill: parent
                         row: page.current
-                        badge: true
                     }
                 }
 
@@ -535,7 +518,6 @@ FocusScope {
                             kindLabel: page.current.defaultOriginLabel
                         } : null
                         dim: true
-                        badge: true
                     }
                 }
 
