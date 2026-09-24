@@ -1,6 +1,5 @@
 import QtQuick
 import "../core"
-import "../core/Format.js" as Format
 import "../sound"
 import "../ui"
 
@@ -22,10 +21,6 @@ FocusScope {
     // An entry nobody has written yet: never journaled, put off after a failure, or given up on.
     readonly property bool currentBlank: current !== null && (current.state === "none" || current.state === "deferred" || current.state === "failed")
     readonly property bool currentWritten: current !== null && current.state === "written"
-    // The sessions still without an entry are rows too, but they are not what the header counts.
-    readonly property int written: rows.filter(function (r) {
-        return r.state !== "none";
-    }).length
     readonly property bool anyPending: rows.some(function (r) {
         return r.state === "pending";
     })
@@ -86,12 +81,6 @@ FocusScope {
                 glyph: "A",
                 label: currentPending ? "Being written" : currentBlank ? "Write it" : "Read",
                 dim: currentPending
-            });
-        if (mode !== 3)
-            out.push({
-                glyph: "Y",
-                label: "Recording",
-                dim: !(current && current.hasRecording)
             });
         out.push({
             glyph: "Start",
@@ -287,9 +276,10 @@ FocusScope {
                 icon: "trash",
                 label: currentPending ? "Cancel the writing…" : current.state === "none" ? "Remove the recording…" : "Remove entry…",
                 action: "remove",
-                danger: true
+                danger: true,
+                gap: true
             });
-        menu.show(items, list, rowRect(), current.title !== "" ? current.title : whenText(current), menuAction);
+        menu.show(items, list, rowRect(), "", menuAction);
     }
 
     function menuAction(action) {
@@ -421,7 +411,6 @@ FocusScope {
         anchors.rightMargin: page.sideMargin
         game: page.game
         label: "JOURNAL"
-        detail: page.written > 0 ? Format.plural(page.written, "entry", "entries") : ""
     }
 
     Text {

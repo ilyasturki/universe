@@ -72,26 +72,11 @@ FocusScope {
             glyph: "A",
             label: videoFocused && playing ? "Pause" : "Play"
         });
-        out.push({
-            glyph: "X",
-            label: fullscreen ? "Exit fullscreen" : "Fullscreen",
-            dim: current === null
-        });
-        out.push({
-            glyph: "Y",
-            label: "Journal entry",
-            dim: !(current && current.hasJournal)
-        });
-        if (videoFocused) {
-            out.push({
-                glyph: "RS",
-                label: "Scrub"
-            });
+        if (videoFocused)
             out.push({
                 glyph: "dpad",
                 label: "Seek 10 s"
             });
-        }
         out.push({
             glyph: "Start",
             label: "More",
@@ -220,6 +205,11 @@ FocusScope {
                 icon: "play",
                 label: "Play",
                 action: "play"
+            },
+            {
+                icon: "screen",
+                label: fullscreen ? "Exit fullscreen" : "Fullscreen",
+                action: "fullscreen"
             }
         ];
         if (current.hasJournal)
@@ -232,9 +222,10 @@ FocusScope {
             icon: "trash",
             label: "Remove recording…",
             action: "remove",
-            danger: true
+            danger: true,
+            gap: true
         });
-        menu.show(items, list, rowRect(), current.dateText, menuAction);
+        menu.show(items, list, rowRect(), "", menuAction);
     }
 
     function rowRect() {
@@ -245,6 +236,8 @@ FocusScope {
     function menuAction(action) {
         if (action === "play") {
             focusVideo(true);
+        } else if (action === "fullscreen") {
+            toggleFullscreen();
         } else if (action === "journal") {
             openJournal();
         } else if (action === "remove") {
@@ -411,7 +404,6 @@ FocusScope {
         anchors.rightMargin: page.sideMargin
         game: page.game
         label: "RECORDINGS"
-        detail: Format.sessions(page.rows.length)
     }
 
     Text {

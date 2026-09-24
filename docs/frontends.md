@@ -526,16 +526,21 @@ row's menu, X cancels the running job from either tab.
 
 ## Detail, recordings and journal
 
-The detail page's hero holds Play, the heart and, when the game has any, a Recordings and a
-Journal pill (`recordingsRequested` / `journalRequested`, the shell's `openSub`); the counts
-follow `recordingFiled` and `entryWritten`. Start is the game's menu, with the same pages under Media ›.
+The detail page is the game's logo over its background, Play and the heart, then the
+description and the store's screenshots (`assets.screenshotList`), nothing else. Start is the game's
+menu: its recordings, journal and screenshots are under Media ›, the rest under Manage ›.
+
+Every page about one game — Game settings, Artwork, Sessions and logs, Screenshots, Recordings,
+Journal — opens under the same `ui/GameHeader.qml`: the page's name in caps over the game's title,
+no cover and no count. Their hints are the main action, More and Back (Seek 10 s while a video has
+the cursor); what X and Y do is in More too.
 
 `pages/RecordingsPage.qml` plays in a pane beside the list; □ (X) toggles it fullscreen — the
 pane fills the page, the hint bar rides the controls' auto-hide, ○ leaves fullscreen first, then
 the video, then the page. Moving the cursor touches no file: the pane shows the row's cached
 thumbnail once the cursor has rested 200 ms (the 16-frame mosaic instead when every frame is
 cached), and A hands the file to the player and asks `select` for the frames, so a game with
-ninety 4K recordings scrolls as fast as one with none. Start on a row is an `ActionMenu` (Play, Journal entry, Remove
+ninety 4K recordings scrolls as fast as one with none. Start on a row is an `ActionMenu` (Play, Fullscreen, Journal entry, Remove
 recording…); Remove asks in place — Keep it, Trash the recording, or trash it and its journal
 entry when it has one — and calls `api.screens.recordings.remove(gameId, session)`, which goes
 through `remove_recording`, drops the row's cached frames and reloads the list on the signal.
@@ -550,8 +555,8 @@ page on that session. Under the recordings pane a JOURNAL block shows the entry'
 paragraph; ▼ from the video focuses it, A reads it. Each page loads the other's store for the game
 unless it already holds it, so the jump finds them warm.
 
-The hero's Screenshots pill (`screenshotsRequested`, when `screenshots(id)` lists any; the game
-menu has the same entry) opens `pages/ScreenshotsPage.qml` on `api.screens.shots`: a four-wide
+Media › Screenshots in the game menu (when `screenshots(id)` lists any) opens
+`pages/ScreenshotsPage.qml` on `api.screens.shots`: a four-wide
 16:9 grid of the player's own shots, newest first, A a `Lightbox` (◀ ▶ step, B closes), Y the
 journal entry covering the shot (`jumpRequested` to the journal page on that session), Start an
 `ActionMenu` — View, Journal entry, Remove screenshot… (Keep it / Trash the screenshot, through
@@ -561,24 +566,22 @@ the store's promotional shots only (`assets.screenshotList`).
 
 ## The Media tab
 
-`pages/MediaPage.qml`, the fourth tab, is `api.screens.media` on one four-wide grid of
-`ui/MediaCard.qml`, a 16:9 cell shaped by its kind so the three read apart at a glance: a
-screenshot is the picture alone, a recording its frame under a play disc with the length in a
-pill, a journal entry its words (a JOURNAL caps label, the heading, the entry's `excerpt`, the
-session's length) with no picture; the game and the date sit below every card. Screenshots,
-recordings and journal entries of every game, newest first. The pictures are the core's
-thumbnails, never the 4K originals, fitted whole (a capture off 16:9 gets bars, never a cut, as in
-every other screenshot frame): a shot's card shows a camera until its thumbnail lands, which the
-first open after a session fills in over a few seconds and every open after that has at once.
-Two chips above it, reached with ▲ from the top row, narrow the list — the
-kind (All, Screenshots, Recordings, Journal; also cycled by `LT RT`, kept in `ui-memory.json`
-as `mediaKind`) and the game (every game with something on the list). A opens the row: a shot in
-the `Lightbox` (◀ ▶ step between the shots on the list), a recording on the game's recordings
-page at that session (`recordingsRequested(game, session)`), an entry on its journal page
-(`journalRequested(game, session)`); X is the game's details, Y the journal entry covering a shot
-or a recording; Start an `ActionMenu` with those and, for a shot, All of this game's
-(`screenshotsRequested(game, name)`) and Remove screenshot…. The shell opens each request as a
-sub-page over the tab, so B comes back to the list where it was.
+`pages/MediaPage.qml`, the second tab, is `api.screens.media` on one four-wide grid of
+`ui/MediaCard.qml` under the title of the game the cursor is on, as in the Library: nothing to
+filter or sort, the screenshots, recordings and journal entries of every game, newest first. A
+cell is 16:9 and shaped by its kind so the three read apart at a glance: a screenshot is the
+picture alone, a recording its frame under a play disc with the length in a pill, a journal entry
+its words (a book glyph, the heading, the entry's `excerpt`, the session's length) with no
+picture; nothing is written under a card. The pictures are the core's thumbnails, never the 4K
+originals, fitted whole (a capture off 16:9 gets bars, never a cut, as in every other screenshot
+frame): a shot's card shows a camera until its thumbnail lands, which the first open after a
+session fills in over a few seconds and every open after that has at once. ▲ from the top row is
+the tab bar. A opens the cell: a shot in the `Lightbox` (◀ ▶ step between the shots), a recording
+on the game's recordings page at that session (`recordingsRequested(game, session)`), an entry on
+its journal page (`journalRequested(game, session)`); Start is an `ActionMenu` with that, Details,
+the journal entry covering a shot or a recording, and Remove screenshot…; X and Y do the details
+and the entry straight away. The hints are View, Play or Read, More and Back. The shell opens each
+request as a sub-page over the tab, so B comes back to the grid where it was.
 
 ## The launch and modules sections
 

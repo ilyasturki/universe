@@ -855,12 +855,6 @@ FocusScope {
                                 slot: slot
                             });
                         }
-                        function onScreenshotsRequested(game, name) {
-                            root.openSub("pages/ScreenshotsPage.qml", {
-                                game: game,
-                                name: name || ""
-                            });
-                        }
                         function onRecordingsRequested(game, session) {
                             root.openSub("pages/RecordingsPage.qml", {
                                 game: game,

@@ -94,33 +94,36 @@ def test_themes_render_and_switch_live(api):
 def test_the_media_tab_and_the_screenshots_page(api, fake):
     _engine, window = render(api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
-    root.goToTab(2)
+    root.goToTab(1)
     settle(window)
+    if api.screens.media.loading:
+        assert wait_for(api.screens.media.rowsChanged, 5000) is not None
+        pump(50)
     page = root.property("activePage")
 
-    def rows():
-        return page.property("rows").toVariant()
-
-    def current():
-        value = page.property("current")
+    def read(name):
+        value = page.property(name)
         return value.toVariant() if hasattr(value, "toVariant") else value
 
-    assert root.property("tabIndex") == 2 and page is not None and rows() and current()["kind"] in ("shot", "recording", "journal")
+    def rows():
+        return read("rows")
+
+    def current():
+        return read("current")
+
+    assert root.property("tabIndex") == 1 and page is not None and rows() and current()["kind"] in ("shot", "recording", "journal")
+    assert {r["kind"] for r in rows()} == {"shot", "recording", "journal"}, "one grid, every kind, no filter"
+    assert [h["glyph"] for h in read("hints")] == ["A", "Start", "B"]
     before = lit_fraction(window.grabWindow(), api.theme.ground)
     assert before > 0.05
-    page.setProperty("kindIndex", 1)
-    pump(100)
-    assert all(r["kind"] == "shot" for r in rows()) and rows()
-    page.setProperty("gameFilter", "the-technomancer")
-    pump(100)
-    assert all(r["gameId"] == "the-technomancer" for r in rows()) and rows()
+    page.setProperty("index", next(i for i, r in enumerate(rows()) if r["kind"] == "shot" and r["gameId"] == "the-technomancer"))
     page.open()
     pump(100)
     assert page.property("lightbox") is True and page.property("modal") is True
     page.setProperty("lightbox", False)
     game = page.property("currentGame")
     assert game is not None and game.property("id") == "the-technomancer"
-    page.screenshotsRequested.emit(game, current()["name"])
+    root.openSub("pages/ScreenshotsPage.qml", {"game": game, "name": current()["name"]})
     settle(window)
     assert root.property("subOpen") is True and root.property("subSource") == "pages/ScreenshotsPage.qml"
     shots = api.screens.shots

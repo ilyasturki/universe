@@ -43,11 +43,6 @@ FocusScope {
             dim: current === null
         },
         {
-            glyph: "Y",
-            label: "Journal entry",
-            dim: !(current && current.hasJournal)
-        },
-        {
             glyph: "Start",
             label: "More",
             dim: current === null
@@ -150,9 +145,10 @@ FocusScope {
             icon: "trash",
             label: "Remove screenshot…",
             action: "remove",
-            danger: true
+            danger: true,
+            gap: true
         });
-        menu.show(items, cellAnchor(), cellRect(), current.dateText, menuAction);
+        menu.show(items, cellAnchor(), cellRect(), "", menuAction);
     }
 
     function menuAction(action) {
@@ -226,28 +222,17 @@ FocusScope {
         game: page.game
     }
 
-    Item {
+    GameHeader {
         id: header
 
         anchors.top: parent.top
-        anchors.topMargin: Theme.dp(44)
+        anchors.topMargin: Theme.dp(36)
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.leftMargin: page.sideMargin
         anchors.rightMargin: page.sideMargin
-        height: title.height
-
-        Text {
-            id: title
-            anchors.left: parent.left
-            anchors.right: parent.right
-            text: page.game ? page.game.title : ""
-            color: Theme.text
-            font.family: Theme.sans
-            font.weight: Font.Bold
-            font.pixelSize: Theme.dp(46)
-            elide: Text.ElideRight
-        }
+        game: page.game
+        label: "SCREENSHOTS"
     }
 
     Text {

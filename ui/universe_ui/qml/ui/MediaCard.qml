@@ -11,12 +11,9 @@ Item {
     property string heading: ""
     property string excerpt: ""
     property string durationText: ""
-    property string caption: ""
-    property string subcaption: ""
     property bool focused: false
     property bool dimmed: false
 
-    readonly property real captionHeight: caption === "" ? 0 : Theme.dp(subcaption === "" ? 40 : 64)
     readonly property real radius: Theme.dp(14)
     readonly property bool words: kind === "journal"
 
@@ -48,11 +45,7 @@ Item {
 
     RoundedMask {
         id: frame
-        anchors.top: parent.top
-        anchors.left: parent.left
-        anchors.right: parent.right
-        anchors.bottom: parent.bottom
-        anchors.bottomMargin: root.captionHeight
+        anchors.fill: parent
         radius: root.radius
 
         Rectangle {
@@ -130,25 +123,14 @@ Item {
             anchors.margins: Theme.dp(22)
             visible: root.words
 
-            Row {
+            MenuGlyph {
                 id: kindRow
                 anchors.top: parent.top
                 anchors.left: parent.left
-                spacing: Theme.dp(8)
-
-                MenuGlyph {
-                    anchors.verticalCenter: parent.verticalCenter
-                    width: Theme.dp(18)
-                    height: width
-                    kind: "book"
-                    tint: Theme.textMuted
-                }
-
-                CapsLabel {
-                    anchors.verticalCenter: parent.verticalCenter
-                    text: "JOURNAL"
-                    size: Theme.dp(15)
-                }
+                width: Theme.dp(20)
+                height: width
+                kind: "book"
+                tint: Theme.textMuted
             }
 
             Text {
@@ -194,35 +176,6 @@ Item {
                 font.family: Theme.sans
                 font.pixelSize: Theme.dp(17)
             }
-        }
-    }
-
-    Column {
-        anchors.top: frame.bottom
-        anchors.topMargin: Theme.dp(14)
-        anchors.left: parent.left
-        anchors.right: parent.right
-        spacing: Theme.dp(2)
-        visible: root.caption !== ""
-
-        Text {
-            width: parent.width
-            text: root.caption
-            color: root.focused ? Theme.text : Theme.textSecondary
-            font.family: Theme.sans
-            font.weight: Font.Medium
-            font.pixelSize: Theme.dp(19)
-            elide: Text.ElideRight
-        }
-
-        Text {
-            width: parent.width
-            visible: root.subcaption !== ""
-            text: root.subcaption
-            color: Theme.textMuted
-            font.family: Theme.sans
-            font.pixelSize: Theme.dp(17)
-            elide: Text.ElideRight
         }
     }
 }

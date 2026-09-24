@@ -10,7 +10,6 @@ FocusScope {
 
     signal chromeRequested
     signal detailRequested(var game)
-    signal screenshotsRequested(var game, string name)
     signal recordingsRequested(var game, string session)
     signal journalRequested(var game, string session)
 
@@ -21,37 +20,10 @@ FocusScope {
     readonly property real scrimTop: 0.62
     readonly property real scrimMid: 0.78
     readonly property real scrimBottom: 0.95
-    readonly property bool modal: picker.open || menu.open || lightbox
+    readonly property bool modal: menu.open || lightbox
     property bool lightbox: false
 
-    readonly property var kinds: ["All", "Screenshots", "Recordings", "Journal"]
-    readonly property var kindKeys: ["", "shot", "recording", "journal"]
-    property int kindIndex: 0
-    property string gameFilter: ""
-
-    readonly property var games: {
-        var seen = {}, out = [], all = store.rows;
-        for (var i = 0; i < all.length; i++) {
-            var r = all[i];
-            if (!seen[r.gameId]) {
-                seen[r.gameId] = true;
-                out.push({
-                    id: r.gameId,
-                    title: r.gameTitle
-                });
-            }
-        }
-        out.sort(function (a, b) {
-            return a.title.localeCompare(b.title);
-        });
-        return out;
-    }
-    readonly property var rows: {
-        var all = store.rows;
-        return all.filter(function (r) {
-            return (kindKeys[kindIndex] === "" || r.kind === kindKeys[kindIndex]) && (gameFilter === "" || r.gameId === gameFilter);
-        });
-    }
+    readonly property var rows: store.rows
     property int index: 0
     readonly property var current: index >= 0 && index < rows.length ? rows[index] : null
     readonly property var shotRows: rows.filter(function (r) {
@@ -59,7 +31,7 @@ FocusScope {
     })
     readonly property int shotIndex: current ? shotRows.indexOf(current) : -1
 
-    readonly property var hints: picker.open ? picker.hints : menu.open ? menu.hints : lightbox ? [
+    readonly property var hints: menu.open ? menu.hints : lightbox ? [
         {
             glyph: "dpad",
             label: "Previous / next"
@@ -68,30 +40,11 @@ FocusScope {
             glyph: "B",
             label: "Close"
         }
-    ] : chipBar.activeFocus ? [
-        {
-            glyph: "A",
-            label: "Change"
-        },
-        {
-            glyph: "B",
-            label: "Back to grid"
-        }
     ] : [
         {
             glyph: "A",
-            label: current ? (current.kind === "shot" ? "View" : current.kind === "recording" ? "Play" : "Read") : "Open",
+            label: openLabel,
             dim: current === null
-        },
-        {
-            glyph: "X",
-            label: "Game details",
-            dim: current === null
-        },
-        {
-            glyph: "Y",
-            label: "Journal entry",
-            dim: !(current && current.hasJournal && current.kind !== "journal")
         },
         {
             glyph: "Start",
@@ -99,72 +52,28 @@ FocusScope {
             dim: current === null
         },
         {
-            glyph: "LT RT",
-            label: "Kind"
+            glyph: "B",
+            label: "Back"
         }
     ]
+    readonly property string openLabel: current ? (current.kind === "shot" ? "View" : current.kind === "recording" ? "Play" : "Read") : "Open"
 
     readonly property int columns: 4
     readonly property real gap: Theme.dp(26)
     readonly property real sideMargin: Theme.dp(80)
     readonly property real cellWidth: (width - sideMargin * 2 + gap) / columns
-    readonly property real cellHeight: (cellWidth - gap) * 9 / 16 + gap + Theme.dp(64)
+    readonly property real cellHeight: (cellWidth - gap) * 9 / 16 + gap
     // Room inside the grid's clip for the focused card's ring and halo, which reach past its cell.
     readonly property real inset: Theme.dp(12)
 
-    Component.onCompleted: {
-        store.load();
-        if (api.memory.has("mediaKind"))
-            kindIndex = Math.min(api.memory.get("mediaKind"), kinds.length - 1);
-    }
-    onKindIndexChanged: {
-        api.memory.set("mediaKind", kindIndex);
-        index = 0;
-        grid.contentY = -grid.topMargin;
-    }
-    onGameFilterChanged: {
-        index = 0;
-        grid.contentY = -grid.topMargin;
-    }
+    Component.onCompleted: store.load()
     onRowsChanged: {
         if (index >= rows.length)
             index = Math.max(0, rows.length - 1);
     }
 
     function leave() {
-        picker.hide();
         lightbox = false;
-    }
-
-    function cycleKind(d) {
-        kindIndex = (kindIndex + d + kinds.length) % kinds.length;
-        Sound.collection();
-    }
-
-    function gameOptions() {
-        var all = store.rows;
-        var out = [
-            {
-                label: "All games",
-                trailing: all.length.toString()
-            }
-        ];
-        for (var i = 0; i < games.length; i++) {
-            var id = games[i].id;
-            out.push({
-                label: games[i].title,
-                trailing: all.filter(function (r) {
-                    return r.gameId === id;
-                }).length.toString()
-            });
-        }
-        return out;
-    }
-
-    function gameFilterIndex() {
-        return games.findIndex(function (g) {
-            return g.id === gameFilter;
-        }) + 1;
     }
 
     function step(d) {
@@ -178,12 +87,10 @@ FocusScope {
     function stepRow(d) {
         var next = index + d * columns;
         if (next < 0 || next >= rows.length) {
-            if (d < 0) {
-                Sound.panel();
-                chipBar.forceActiveFocus();
-            } else {
+            if (d < 0)
+                page.chromeRequested();
+            else
                 Sound.edge();
-            }
             return;
         }
         Sound.tick();
@@ -231,21 +138,15 @@ FocusScope {
         var items = [
             {
                 icon: current.kind === "recording" ? "play" : current.kind === "journal" ? "book" : "image",
-                label: current.kind === "shot" ? "View" : current.kind === "recording" ? "Play" : "Read",
+                label: openLabel,
                 action: "open"
             },
             {
                 icon: "info",
-                label: "Game details",
+                label: "Details",
                 action: "details"
             }
         ];
-        if (current.kind === "shot")
-            items.push({
-                icon: "camera",
-                label: "All of this game's",
-                action: "shots"
-            });
         if (current.hasJournal && current.kind !== "journal")
             items.push({
                 icon: "book",
@@ -257,9 +158,10 @@ FocusScope {
                 icon: "trash",
                 label: "Remove screenshot…",
                 action: "remove",
-                danger: true
+                danger: true,
+                gap: true
             });
-        menu.show(items, cellAnchor(), cellRect(), current.gameTitle + "  ·  " + current.dateText, menuAction);
+        menu.show(items, cellAnchor(), cellRect(), "", menuAction);
     }
 
     function menuAction(action) {
@@ -267,8 +169,6 @@ FocusScope {
             open();
         } else if (action === "details") {
             page.detailRequested(currentGame);
-        } else if (action === "shots") {
-            page.screenshotsRequested(currentGame, current.name);
         } else if (action === "journal") {
             openJournal();
         } else if (action === "remove") {
@@ -295,149 +195,27 @@ FocusScope {
             grid.forceActiveFocus();
     }
 
-    Item {
-        id: header
+    Text {
+        id: titleText
 
-        z: 2
         anchors.top: parent.top
         anchors.topMargin: Theme.dp(34)
         anchors.left: parent.left
         anchors.right: parent.right
         anchors.leftMargin: page.sideMargin
         anchors.rightMargin: page.sideMargin
-        height: titleText.height + Theme.dp(14) + metaText.height
-
-        Text {
-            id: titleText
-            anchors.left: parent.left
-            anchors.right: chipBar.left
-            anchors.rightMargin: Theme.dp(40)
-            text: page.current ? page.current.gameTitle : "Media"
-            color: Theme.text
-            font.family: Theme.sans
-            font.weight: Font.Bold
-            font.pixelSize: Theme.dp(58)
-            elide: Text.ElideRight
-        }
-
-        Text {
-            id: metaText
-            anchors.top: titleText.bottom
-            anchors.topMargin: Theme.dp(14)
-            anchors.left: parent.left
-            text: page.current ? (page.current.kind === "shot" ? "SCREENSHOT" : page.current.kind === "recording" ? "RECORDING  ·  " + page.current.title : "JOURNAL  ·  " + page.current.title) + "  ·  " + page.current.dateText : page.store.count === 0 && !page.store.loading ? "Screenshots, recordings and journal entries land here as you play." : ""
-            color: Theme.textSecondary
-            font.family: Theme.sans
-            font.weight: Font.Medium
-            font.pixelSize: Theme.dp(20)
-            font.letterSpacing: 1.5
-            elide: Text.ElideRight
-            width: parent.width - chipBar.width - Theme.dp(40)
-        }
-
-        FocusScope {
-            id: chipBar
-
-            anchors.right: parent.right
-            anchors.bottom: parent.bottom
-            width: chips.width
-            height: chips.height
-
-            property int index: 0
-
-            function step(d) {
-                index = (index + d + 2) % 2;
-                Sound.tick();
-            }
-
-            function pointTo(i) {
-                index = i;
-                chipBar.forceActiveFocus();
-            }
-
-            function openPicker() {
-                Sound.panel();
-                if (index === 0)
-                    picker.show(kindChip, page.kinds.map(function (k) {
-                        return {
-                            label: k
-                        };
-                    }), page.kindIndex);
-                else
-                    picker.show(gameChip, page.gameOptions(), page.gameFilterIndex());
-            }
-
-            Row {
-                id: chips
-                spacing: Theme.dp(14)
-
-                Chip {
-                    id: kindChip
-                    label: page.kinds[page.kindIndex]
-                    trailing: page.rows.length.toString()
-                    focused: chipBar.activeFocus && chipBar.index === 0
-                    onPicked: chipBar.pointTo(0)
-                }
-
-                Chip {
-                    id: gameChip
-                    label: page.gameFilter === "" ? "All games" : (page.games.find(function (g) {
-                            return g.id === page.gameFilter;
-                        }) || {
-                            title: ""
-                        }).title
-                    focused: chipBar.activeFocus && chipBar.index === 1
-                    onPicked: chipBar.pointTo(1)
-                }
-            }
-
-            ChipPicker {
-                id: picker
-
-                onChosen: function (index) {
-                    picker.hide();
-                    chipBar.forceActiveFocus();
-                    if (chipBar.index === 0) {
-                        page.kindIndex = index;
-                        Sound.collection();
-                    } else {
-                        page.gameFilter = index === 0 ? "" : page.games[index - 1].id;
-                        Sound.sort();
-                    }
-                }
-                onDismissed: {
-                    picker.hide();
-                    chipBar.forceActiveFocus();
-                }
-            }
-
-            Keys.onLeftPressed: chipBar.step(-1)
-            Keys.onRightPressed: chipBar.step(1)
-            Keys.onUpPressed: page.chromeRequested()
-            Keys.onDownPressed: function (event) {
-                Sound.panel();
-                grid.forceActiveFocus();
-            }
-
-            Keys.onPressed: function (event) {
-                if (event.isAutoRepeat)
-                    return;
-                if (api.keys.isAccept(event)) {
-                    event.accepted = true;
-                    chipBar.openPicker();
-                } else if (api.keys.isCancel(event)) {
-                    event.accepted = true;
-                    Sound.cancel();
-                    grid.forceActiveFocus();
-                }
-            }
-        }
+        text: page.current ? page.current.gameTitle : "Media"
+        color: Theme.text
+        font.family: Theme.sans
+        font.weight: Font.Bold
+        font.pixelSize: Theme.dp(58)
+        elide: Text.ElideRight
     }
 
     Text {
         anchors.centerIn: parent
-        visible: page.rows.length === 0 && page.store.count > 0
-        text: "Nothing of that kind" + (page.gameFilter !== "" ? " for this game" : "") + "."
+        visible: page.store.count === 0 && !page.store.loading
+        text: "Screenshots, recordings and journal entries land here as you play."
         color: Theme.textSecondary
         font.family: Theme.sans
         font.pixelSize: Theme.dp(26)
@@ -448,7 +226,7 @@ FocusScope {
 
         Wheel {}
 
-        anchors.top: header.bottom
+        anchors.top: titleText.bottom
         anchors.topMargin: Theme.dp(34) - page.inset
         anchors.bottom: parent.bottom
         anchors.left: parent.left
@@ -498,8 +276,6 @@ FocusScope {
                 heading: modelData.kind === "journal" ? modelData.title : ""
                 excerpt: modelData.excerpt
                 durationText: modelData.durationText
-                caption: modelData.gameTitle
-                subcaption: modelData.dateText
                 focused: parent.current && grid.activeFocus && !page.lightbox
                 dimmed: !parent.current && grid.activeFocus && !page.lightbox
             }
@@ -539,18 +315,8 @@ FocusScope {
                 page.stepScreen(screen);
             else if (api.keys.isFirst(event) || api.keys.isLast(event))
                 page.index = Sound.stepped(page.index, api.keys.isFirst(event) ? -page.rows.length : page.rows.length, page.rows.length);
-            else if (api.keys.isPageUp(event) || api.keys.isPageDown(event));else
+            else
                 event.accepted = false;
-        }
-
-        Keys.onReleased: function (event) {
-            if (event.isAutoRepeat)
-                return;
-            var d = api.keys.isPageUp(event) ? -1 : api.keys.isPageDown(event) ? 1 : 0;
-            if (!d)
-                return;
-            event.accepted = true;
-            page.cycleKind(d);
         }
     }
 

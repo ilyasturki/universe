@@ -158,7 +158,6 @@ FocusScope {
         anchors.rightMargin: page.sideMargin
         game: page.game
         label: "SESSIONS"
-        detail: page.rows.length > 0 ? Format.plural(page.rows.length, "session", "sessions") : ""
     }
 
     Text {

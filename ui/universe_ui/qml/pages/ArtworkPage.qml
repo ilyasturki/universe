@@ -50,15 +50,6 @@ FocusScope {
                 dim: browsing && candCount === 0
             },
             {
-                glyph: "X",
-                label: "Back to default",
-                dim: !picked
-            },
-            {
-                glyph: "Y",
-                label: "Wrong game?"
-            },
-            {
                 glyph: "Start",
                 label: "More"
             },
@@ -236,8 +227,26 @@ FocusScope {
                 action: "file"
             }
         ];
-        menu.show(items, anchor, Qt.rect(0, 0, anchor.width, anchor.height), current.label, function (action) {
-            if (action === "fetch") {
+        if (picked)
+            items.push({
+                icon: "refresh",
+                label: "Back to default",
+                action: "default"
+            });
+        items.push({
+            icon: "search",
+            label: "Wrong game?",
+            action: "wrong",
+            gap: true
+        });
+        menu.show(items, anchor, Qt.rect(0, 0, anchor.width, anchor.height), "", function (action) {
+            if (action === "default") {
+                page.forceActiveFocus();
+                backToDefault();
+            } else if (action === "wrong") {
+                page.forceActiveFocus();
+                askWrongGame();
+            } else if (action === "fetch") {
                 Sound.enter();
                 form.refresh();
                 page.forceActiveFocus();
@@ -306,9 +315,7 @@ FocusScope {
         anchors.leftMargin: page.sideMargin
         anchors.rightMargin: page.sideMargin
         game: page.game
-        tile: false
         label: page.browsing && page.current ? page.current.label.toUpperCase() : "ARTWORK"
-        detail: page.browsing && page.current ? page.current.use : ""
     }
 
     component SlotCard: Item {
