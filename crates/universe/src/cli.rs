@@ -1615,6 +1615,7 @@ async fn runner(core: Core, action: RunnerCmd, json: bool) -> anyhow::Result<()>
 
 async fn keep_awake(reason: &str) -> anyhow::Result<()> {
     let inhibitor = crate::desktop::inhibit_idle(reason).await.map_err(|e| anyhow::anyhow!("{e}"))?;
+    tracing::info!("holding {}", inhibitor.held().join(", "));
     use tokio::signal::unix::{signal, SignalKind};
     let (mut int, mut term) = (signal(SignalKind::interrupt())?, signal(SignalKind::terminate())?);
     tokio::select! {

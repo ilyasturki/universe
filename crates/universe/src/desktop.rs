@@ -184,49 +184,84 @@ fn card_preferred_mode(card: &str, screen: &str) -> Option<crate::gamescope::Mod
     Some(crate::gamescope::Mode { width: w.into(), height: h.into(), refresh: mode.vrefresh(), vrr })
 }
 
+/// `(name, path, interface)`, each `Inhibit(app, reason) → cookie`. ScreenSaver holds off the blank (and GNOME's suspend); KDE's and Xfce's power managers suspend on their own, which only PowerManagement holds off.
+const AWAKE_SERVICES: [(&str, &str, &str); 2] = [
+    ("org.freedesktop.ScreenSaver", "/org/freedesktop/ScreenSaver", "org.freedesktop.ScreenSaver"),
+    ("org.freedesktop.PowerManagement", "/org/freedesktop/PowerManagement/Inhibit", "org.freedesktop.PowerManagement.Inhibit"),
+];
+
 pub struct Inhibitor {
     conn: zbus::Connection,
-    cookie: u32,
+    cookies: Vec<(usize, u32)>,
+    idle_lock: Option<zbus::zvariant::OwnedFd>,
 }
 
 impl Inhibitor {
     pub async fn release(self) {
-        if let Ok(proxy) = screensaver_proxy(&self.conn).await {
-            if let Err(e) = proxy.call::<_, _, ()>("UnInhibit", &(self.cookie,)).await {
-                tracing::warn!("UnInhibit({}): {e}", self.cookie);
+        for (i, cookie) in &self.cookies {
+            let (name, path, interface) = AWAKE_SERVICES[*i];
+            let released = async { zbus::Proxy::new(&self.conn, name, path, interface).await?.call::<_, _, ()>("UnInhibit", &(*cookie,)).await };
+            if let Err(e) = released.await {
+                tracing::warn!("{name} UnInhibit({cookie}): {e}");
             }
         }
     }
+
+    pub fn held(&self) -> Vec<&'static str> {
+        let services = self.cookies.iter().map(|(i, _)| AWAKE_SERVICES[*i].0);
+        services.chain(self.idle_lock.is_some().then_some("logind")).collect()
+    }
 }
 
-async fn screensaver_proxy(conn: &zbus::Connection) -> zbus::Result<zbus::Proxy<'_>> {
-    zbus::Proxy::new(conn, "org.freedesktop.ScreenSaver", "/org/freedesktop/ScreenSaver", "org.freedesktop.ScreenSaver").await
+/// logind's IdleAction and hypridle wait on an `idle` lock. Not `sleep`: since systemd 257 a block lock refuses the user's own Suspend too.
+async fn logind_idle_lock(reason: &str) -> zbus::Result<zbus::zvariant::OwnedFd> {
+    let conn = zbus::Connection::system().await?;
+    let proxy = zbus::Proxy::new(&conn, "org.freedesktop.login1", "/org/freedesktop/login1", "org.freedesktop.login1.Manager").await?;
+    proxy.call("Inhibit", &("idle", "Universe", reason, "block")).await
 }
 
 /// GNOME counts keyboard and mouse alone as activity, and gamescope forwards no inhibitor of its own: a pad-played game idles the desktop.
 pub async fn inhibit_idle(reason: &str) -> Result<Inhibitor, String> {
     let call = async {
         let conn = zbus::Connection::session().await.map_err(|e| e.to_string())?;
-        let cookie: u32 = {
-            let proxy = screensaver_proxy(&conn).await.map_err(|e| e.to_string())?;
-            proxy.call("Inhibit", &("universe", reason)).await.map_err(|e| e.to_string())?
-        };
-        Ok(Inhibitor { conn, cookie })
+        let mut cookies = Vec::new();
+        let mut errors = Vec::new();
+        for (i, (name, path, interface)) in AWAKE_SERVICES.into_iter().enumerate() {
+            let taken = async { zbus::Proxy::new(&conn, name, path, interface).await?.call::<_, _, u32>("Inhibit", &("universe", reason)).await };
+            match taken.await {
+                Ok(cookie) => cookies.push((i, cookie)),
+                Err(e) => errors.push(format!("{name}: {e}")),
+            }
+        }
+        let idle_lock = logind_idle_lock(reason).await.map_err(|e| errors.push(format!("logind: {e}"))).ok();
+        let inhibitor = Inhibitor { conn, cookies, idle_lock };
+        if inhibitor.held().is_empty() {
+            return Err(errors.join("; "));
+        }
+        for e in errors {
+            tracing::debug!("keep awake: {e}");
+        }
+        Ok(inhibitor)
     };
-    tokio::time::timeout(std::time::Duration::from_secs(5), call).await.unwrap_or_else(|_| Err("org.freedesktop.ScreenSaver did not answer".into()))
+    tokio::time::timeout(std::time::Duration::from_secs(5), call).await.unwrap_or_else(|_| Err("the session bus did not answer".into()))
 }
 
-/// Whether anything holds `org.freedesktop.ScreenSaver`: gsd's proxy on GNOME, the compositor's own elsewhere.
-pub async fn screensaver_available() -> bool {
+pub async fn awake_services() -> Vec<&'static str> {
     let call = async {
         let conn = zbus::Connection::session().await.ok()?;
         let dbus = zbus::Proxy::new(&conn, "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus").await.ok()?;
-        dbus.call::<_, _, bool>("NameHasOwner", &("org.freedesktop.ScreenSaver",)).await.ok()
+        let mut owned = Vec::new();
+        for (name, _, _) in AWAKE_SERVICES {
+            if dbus.call::<_, _, bool>("NameHasOwner", &(name,)).await.ok()? {
+                owned.push(name);
+            }
+        }
+        Some(owned)
     };
-    matches!(tokio::time::timeout(std::time::Duration::from_secs(5), call).await, Ok(Some(true)))
+    tokio::time::timeout(std::time::Duration::from_secs(5), call).await.ok().flatten().unwrap_or_default()
 }
 
-/// Returns whether the extension was already active.
+/// Returns whether the extension was already active. No `extension` is Universe's own, whose `HideCursor` hides the resting pointer.
 pub async fn cursor_extension_enable(conn: &zbus::Connection, profile: Profile, extension: &str) -> bool {
     let Some(proxy) = extensions_proxy(conn, profile, extension).await else { return false };
     let was_active = extension_is_active(extension_state(&proxy, extension).await.flatten());

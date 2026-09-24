@@ -47,8 +47,12 @@ operation; a dash means the surface doesn't expose it.
   (`universe-controller-<session>`, `BindsTo=` the game), and a lock (`$XDG_RUNTIME_DIR/universe/
   controller.lock`) hands the pads over between them. Once both are gone nothing runs.
 - The other is `universe keep-awake`, started by a launch as `universe-awake-<session>` (`BindsTo=`
-  the game, `desktop.keep_awake`): it holds `org.freedesktop.ScreenSaver`'s inhibit, which stands
-  only as long as the connection that took it, so it is a unit rather than a step undone at the end.
+  the game, `desktop.keep_awake`): it holds every inhibit the session offers, each standing only
+  as long as the connection that took it, so it is a unit rather than a step undone at the end:
+  `org.freedesktop.ScreenSaver` (the blank and lock; GNOME's suspend with them),
+  `org.freedesktop.PowerManagement` (the idle suspend of KDE's PowerDevil and xfce4-power-manager,
+  which ScreenSaver does not hold off) and a logind `idle` lock (logind's `IdleAction`, hypridle).
+  No `sleep` lock: since systemd 257 it would refuse the player's own Suspend too.
 - Errors: `Kind ∈ NotFound, Ambiguous, Busy, Invalid, Unavailable, Io`. Python raises
   `universe_core.UniverseError(kind, message)`; the CLI prints `universe: <kind>: <message>` on
   stderr and exits 1.

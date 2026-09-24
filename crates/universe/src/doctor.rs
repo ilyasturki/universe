@@ -249,17 +249,17 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         );
     }
     if config.desktop.keep_awake {
-        let ok = crate::desktop::screensaver_available().await;
+        let services = crate::desktop::awake_services().await;
         push(
             "keep-awake",
             "Desktop stays awake in game",
-            ok,
-            if ok {
-                "org.freedesktop.ScreenSaver: the desktop stays awake while a game runs".into()
+            !services.is_empty(),
+            if services.is_empty() {
+                "neither org.freedesktop.ScreenSaver nor org.freedesktop.PowerManagement on the session bus: only logind's idle lock is held, and the screen may blank mid-game".into()
             } else {
-                "no org.freedesktop.ScreenSaver on the session bus: the desktop may blank or suspend mid-game".into()
+                format!("{} and logind's idle lock held while a game runs", services.join(", "))
             },
-            "run a desktop that offers org.freedesktop.ScreenSaver, or set desktop.keep_awake = false to stop asking".into(),
+            "run an idle daemon that offers org.freedesktop.ScreenSaver (hypridle does), or set desktop.keep_awake = false to stop asking".into(),
             "core",
         );
     }
