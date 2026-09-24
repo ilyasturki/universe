@@ -31,6 +31,11 @@ def empty_api(empty, tmp_path):
     api.shutdown()
 
 
+def signed_out(client):
+    for source in client.core._data["sources"]:
+        source["logged_in"] = False
+
+
 def loaded(form):
     form.load()
     wait_for(form.busyChanged, 3000)
@@ -47,7 +52,8 @@ def test_needed_once_on_an_empty_library(api, empty_api):
     assert empty_api.memory.get("onboarded") is True and empty_api.screens.onboarding.needed is False
 
 
-def test_steps_and_found_rows(empty_api):
+def test_steps_and_found_rows(empty_api, empty):
+    signed_out(empty)
     form = loaded(empty_api.screens.onboarding)
     assert [s["id"] for s in form.steps] == ["found", "stores", "preferences", "done"]
     assert form.stepId == "found"
@@ -59,9 +65,15 @@ def test_steps_and_found_rows(empty_api):
     assert rows["roms"]["display"] == "1 game" and rows["roms"]["action"] == "Import" and rows["roms"]["via"] == "roms"
     form.next()
     assert form.stepId == "stores" and [r["key"] for r in form.rows] == ["logged_in", "link", "code"]
-    assert form.rows[0]["display"] == "Signed in as yasso" and form.groups[0]["title"] == "GOG"
+    assert form.rows[0]["display"] == "Sign in to install games" and form.groups[0]["title"] == "GOG"
+    assert not any(r.get("quiet") for r in form.rows), "signed out, the sign-in rows show"
     form.back()
     assert form.stepId == "found"
+
+
+def test_signed_in_stores_skip_their_step(empty_api):
+    form = loaded(empty_api.screens.onboarding)
+    assert [s["id"] for s in form.steps] == ["found", "preferences", "done"], "every store signed in: nothing to do there"
 
 
 def test_found_rows_run_the_importers(empty_api, empty):
@@ -90,19 +102,16 @@ def test_found_rows_run_the_importers(empty_api, empty):
     assert [(r["label"], r["display"]) for r in form.rows] == [("Lutris", "2 games added"), ("Emulator folders", "1 game added")]
 
 
-def test_preferences_write_the_family_and_the_upgrades(empty_api, empty):
+def test_preferences_write_the_family_and_hdr(empty_api, empty):
     form = loaded(empty_api.screens.onboarding)
     while form.stepId != "preferences":
         form.next()
     rows = rows_by_key(form)
-    assert [g["title"] for g in form.groups] == ["Controller", "Graphics"]
+    assert [g["title"] for g in form.groups] == ["Controller", "Graphics"] and form.groups[1]["meta"] == ""
+    assert list(rows) == ["controller.family", "launch.hdr"], "the upscaler upgrades stay in Settings"
     assert rows["controller.family"]["display"] == "Xbox controller" and "Switch Pro Controller" in rows["controller.family"]["choices"]
-    assert rows["launch.fsr4_upgrade"]["choices"] == ["auto", "on", "off"], "no `default` entry: off is the default"
-    assert "launch.dlss_upgrade" not in rows, "an upgrade that does not fit the GPU is not offered"
     assert form.setValue(index_of(form, "controller.family"), "Switch Pro Controller") is True
     assert empty_api.screens.controller.family == "switch-pro" and empty_api.memory.get("controllerFamily") == "switch-pro"
-    assert form.setValue(index_of(form, "launch.fsr4_upgrade"), "auto") is True
-    assert empty.core.settings()["launch"]["fsr4_upgrade"] == "auto"
     form.toggle(index_of(form, "launch.hdr"))
     assert empty.core.settings()["launch"]["hdr"] is True
 
@@ -111,6 +120,7 @@ def test_preferences_write_the_family_and_the_upgrades(empty_api, empty):
 def test_read_only_config_skips_preferences(empty_api, empty, os_family, owner):
     empty.core._config["config_writable"] = False
     empty.core._config["os"] = os_family
+    signed_out(empty)
     form = loaded(empty_api.screens.onboarding)
     assert [s["id"] for s in form.steps] == ["found", "stores", "done"]
     assert form.runImport(index_of(form, "heroic-gog")) is True
@@ -123,7 +133,7 @@ def test_read_only_config_skips_preferences(empty_api, empty, os_family, owner):
 
 
 @pytest.mark.parametrize("theme", ["reprise", "switch2"])
-def test_the_wizard_opens_on_first_run_in_both_looks(empty_api, theme):
+def test_the_wizard_opens_on_first_run_in_both_looks(empty_api, empty, theme):
     from PySide6.QtCore import QObject, Qt
     from PySide6.QtTest import QTest
 
@@ -139,6 +149,7 @@ def test_the_wizard_opens_on_first_run_in_both_looks(empty_api, theme):
             QTest.keyClick(window, key)
             pump(150)
 
+    signed_out(empty)
     empty_api.theme.set(theme)
     empty_api.theme.takeLanding()
     _engine, window = render(empty_api, activate=True)

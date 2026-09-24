@@ -53,7 +53,7 @@ def test_rows_follow_the_watcher_and_the_macros(api, fake):
     assert rows["walk"]["label"] == "Set up the buttons" and "slot" not in rows["walk"]
     assert pad_rows(screen)[-1]["key"] == "dpad_right"
     group = screen.groups[0]
-    assert group["title"] == "DualSense Edge" and group["meta"] == "Bluetooth · 85% · 4 extra buttons"
+    assert group["title"] == "DualSense Edge" and group["meta"] == "", "the pad's battery is by the clock"
     assert group["rows"] == list(range(len(pad_rows(screen))))
 
     presses = []
@@ -93,11 +93,9 @@ def test_a_pads_own_charge_reading_shows_as_its_battery(started, api):
     line["battery"] = {"percent": 80, "charging": False}
     watcher.emit(line)
     assert api.power.forInput("event31") == {"name": "8BitDo Pro 3", "kind": "pad", "percent": 80, "charging": False, "inputs": ["event31"]}
-    screen.setCurrent("event31")
-    assert "80%" in screen.groups[0]["meta"]
     watcher.emit({"event": "battery", "id": "event31", "percent": 79, "charging": True})
     assert screen.devices[1]["battery"] == {"percent": 79, "charging": True}
-    assert "79%, charging" in screen.groups[0]["meta"]
+    assert api.power.forInput("event31")["charging"] is True
     watcher.emit({"event": "gone", "id": "event31"})
     assert api.power.forInput("event31") is None
 
@@ -268,7 +266,6 @@ def test_two_pads_and_hotplug(started, fake):
     assert screen.current == "event40" and screen.family == "xbox-elite"
     rows = rows_by_key(screen)
     assert rows["paddle_p1"]["display"] == "Press · Toggle MangoHud" and rows["south"]["label"] == "A"
-    assert screen.groups[0]["meta"] == "USB · 4 extra buttons"
     assert screen.setValue(0, "Nope") is False
 
     watcher.emit({"event": "gone", "id": "event40"})

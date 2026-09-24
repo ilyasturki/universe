@@ -23,7 +23,7 @@ One context property, `api`:
 | `api.memory` | `get`/`set`/`has`/`unset`, persisted to `$XDG_STATE_HOME/universe/ui-memory.json` |
 | `api.universe` | the client: every core call, plus the signals below. `adoptScope()` and `pendingJournals()` wrap `adopt_scope` and `pending_journals`; their failures get a log line, not a toast. `recordings(id)` is the client's own: `sessions(id)` kept to the rows with a `recording` |
 | `api.pad` | `rightX`: the right stick as a value, 0 without a controller |
-| `api.power` | the batteries the kernel lists under `/sys/class/power_supply`: `sources` (`kind` `system` or `pad`, `percent`, `charging`, `inputs` — the pad's evdev nodes), `count`; polled every 10 s, plus what the controller watcher reads off a pad the kernel keeps no supply for (an 8BitDo's HID report, BlueZ's `Battery1` for a pad in BLE mode), reported through `report(event, name, battery)` and dropped with the pad; the kernel's reading wins where both exist. Both looks draw them next to every clock (`ui/PowerBadge.qml`: one glyph and percent per source, the pad the controller page has current in green, one at 15 % or under in red), the controller pages next to the pad they belong to; `--fake` reads `fixtures/power_supply` |
+| `api.power` | the batteries the kernel lists under `/sys/class/power_supply`: `sources` (`kind` `system` or `pad`, `percent`, `charging`, `inputs` — the pad's evdev nodes), `count`; polled every 10 s, plus what the controller watcher reads off a pad the kernel keeps no supply for (an 8BitDo's HID report, BlueZ's `Battery1` for a pad in BLE mode), reported through `report(event, name, battery)` and dropped with the pad; the kernel's reading wins where both exist. Both looks draw them next to every clock (`ui/PowerBadge.qml`: one glyph and percent per source, the pad the controller page has current in green, one at 15 % or under in red), the Switch 2 controller page next to the pad it belongs to; `--fake` reads `fixtures/power_supply` |
 | `api.system` | what logind will do with the machine: `actions`, the ones of `suspend`, `reboot` and `power_off` it would carry out (the core's `power_actions()`, read once at startup), `run(action)` (`power(action)` off the UI thread; `reboot` and `power_off` stop a running session first, so its `session-end` runs before the machine goes down), `failed(action, message)` when logind refuses. `--fake` records the call and does nothing |
 | `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written, a game's sessions and their logs) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed` and `--size` turn it off) |
@@ -763,7 +763,7 @@ does the empty Home's "Set up" — a second pill beside "Add a game" in Reprise'
 disc beside the plus in the Switch 2 HOME row — shown while the library is empty, whatever the
 flag says. `load()`
 runs `discover()` off the UI thread and builds `steps` (`{id, title, subtitle}`): `found`, `stores`
-(when an enabled, available source exists), `preferences` (when `settings()` says
+(when an enabled, available source is signed out), `preferences` (when `settings()` says
 `config_writable`) and `done`; `step`, `stepId`, `next()`, `back()`, `finish()` (sets `onboarded`,
 emits `finished`; `next()` on the last step finishes). Every step is one `rows`/`groups` list in
 the settings forms' shape, so each look draws it with its settings rows and its value editor:
@@ -774,11 +774,10 @@ starts a `scan("gog")` job; the row's `display` follows: "Importing…", "N game
 new", the error), a `static` row otherwise ("No games", "N games · not importable yet", "· needs
 gogdl"), `quiet` when there is nothing to bring over and nothing was done — Reprise leaves quiet
 rows out unless every row is one — `stores` the source's Account row, "Get a sign-in link" (`link`) and "Enter the code"
-(`code`, both `quiet` once the source is signed in) through the shared `api.screens.login` — `ui/LoginCard.qml` and `switch2/ui/LoginCard.qml`
+(`code`, both `quiet` once the source is signed in there) through the shared `api.screens.login` — `ui/LoginCard.qml` and `switch2/ui/LoginCard.qml`
 are the QR, URL and status card `FormPage` shows too — `preferences` the controller family
 (`controller.family`, an `enum` over `api.screens.controller.families`, written with `setFamily`)
-and the graphics upgrades that fit this GPU (`launch.hdr`, the upscaler upgrades without their
-`default` choice, `launch.optiscaler`), `done` a summary row and, under a read-only config, why the
+and `launch.hdr` when it fits this GPU (the upscaler upgrades are left to Settings), `done` a summary row and, under a read-only config, why the
 preferences were skipped. The header is the step's title; under the rows sit two buttons, Back
 ("Skip setup" on the first step) and Continue ("Finish" on the last), reached with Down past the
 last row, Left/Right between them, A to press one — B and X do the same from anywhere in the
@@ -802,7 +801,8 @@ nothing. Reprise's page has two levels: the five slots as art cards (`ui/ArtFram
 slot tile both the page and the Settings matrix draw — the box front tall on the left, square
 and banner, then background and logo, in two rows beside it, sized to fill the width, each named
 under it and nothing more), then a
-slot's browser — what shows now, the default under a pick, and the candidates as a grid —
+slot's browser — what shows now, the default under a pick dimmed beside it, and the candidates as
+a grid, with no captions (a line only for another game's SteamGridDB entry or no candidates) —
 opened by A, or straight away when the page is opened with a `slot` (the Settings section's A;
 B then leaves the page, the cards were never shown). `loadCandidates(slot)` fetches `media_candidates` off the UI
 thread into `candidates` (`url` is the provider's, `thumb` what the grid shows, `votes`), `more`
@@ -848,7 +848,7 @@ button maps to its letter — the A on the right of a Nintendo-style pad confirm
 position. The hint glyphs follow the same rule (`PadNames.hintSlot`). The screen exposes `devices`,
 `current`, `family` (the current pad's, else the last one seen or the one `setFamily(id)` chose, kept in `api.memory` as
 `controllerFamily`, `xbox` until then: the button glyphs of both looks follow it), `families` (`{id, name}`), `connected`, `status` (`off`, `waiting`, `ready`), `passive`, `learning`,
-`testing`, the `rows`/`groups` of one card (a Controller picker row when two pads are connected,
+`testing`, the `rows`/`groups` of one card, titled with the pad's name and nothing under it (a Controller picker row when two pads are connected,
 a "Test the buttons" and a "Set up the buttons" row while the watcher is `ready`, then a row per button of the family — each
 with its `slot` and `family`, so the row draws the button's glyph, and its `press` and `hold`
 macros, each carrying its `label` — the extras (back buttons, Fn) first, then the standard

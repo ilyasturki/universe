@@ -15,7 +15,6 @@ TRIGGERS = ("press", "hold")
 HOME_SLOT = "guide"
 HOME_TEXT = "HOME · press for the menu, hold to go home"
 AXES = ("lx", "ly", "rx", "ry", "lt", "rt")
-BUS_NAMES = {"bluetooth": "Bluetooth", "usb": "USB"}
 PASSIVE_TEXT = "Macros are running in the game session"
 PASSIVE_DETAIL = "Live presses and learning resume when it ends"
 RESTART_MS = 2000
@@ -207,7 +206,6 @@ class ControllerScreen(AdvancedRows, QObject):
         self._walk_timer = QTimer(self)
         self._walk_timer.setInterval(1000)
         self._walk_timer.timeout.connect(self._walk_tick)
-        power.sourcesChanged.connect(self._rebuild)
         self._rebuild()
 
     def start(self, watcher):
@@ -656,15 +654,7 @@ class ControllerScreen(AdvancedRows, QObject):
                     action="Configure",
                 )
                 rows.append(row)
-            extras = sum(1 for s in slots if s.get("extra"))
-            meta = [BUS_NAMES.get(device["bus"], device["bus"])]
-            if device["name"] != name:
-                meta.insert(0, device["name"])
-            battery = self._power.forInput(device["id"])
-            if battery is not None:
-                meta.append(f"{battery['percent']}%" + (", charging" if battery["charging"] else ""))
-            meta.append(f"{extras} extra button" + ("" if extras == 1 else "s"))
-            groups.append(_group(name, list(range(len(rows))), meta=" · ".join(m for m in meta if m)))
+            groups.append(_group(name, list(range(len(rows)))))
         config = self._client.config()
         for key, label, choices, detail in TIMING_ROWS:
             value = _dig(config, key)

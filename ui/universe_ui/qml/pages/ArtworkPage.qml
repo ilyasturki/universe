@@ -482,47 +482,30 @@ FocusScope {
             id: showing
             spacing: Theme.dp(48)
 
-            Column {
-                spacing: Theme.dp(12)
+            Item {
+                id: nowFrame
+                width: Math.round(browser.nowHeight * page.currentAspect)
+                height: browser.nowHeight
 
-                Item {
-                    id: nowFrame
-                    width: Math.round(browser.nowHeight * page.currentAspect)
-                    height: browser.nowHeight
-
-                    ArtFrame {
-                        anchors.fill: parent
-                        row: page.current
-                    }
-                }
-
-                CapsLabel {
-                    text: "SHOWING NOW"
+                ArtFrame {
+                    anchors.fill: parent
+                    row: page.current
                 }
             }
 
-            Column {
-                spacing: Theme.dp(12)
+            Item {
+                width: nowFrame.width
+                height: browser.nowHeight
                 visible: page.picked && page.current.hasDefault
 
-                Item {
-                    width: nowFrame.width
-                    height: browser.nowHeight
-
-                    ArtFrame {
-                        anchors.fill: parent
-                        row: page.current ? {
-                            slot: page.current.slot,
-                            url: page.current.defaultUrl,
-                            kind: "default",
-                            kindLabel: page.current.defaultOriginLabel
-                        } : null
-                        dim: true
-                    }
-                }
-
-                CapsLabel {
-                    text: "UNDER IT"
+                ArtFrame {
+                    anchors.fill: parent
+                    row: page.current ? {
+                        slot: page.current.slot,
+                        url: page.current.defaultUrl,
+                        kind: "default"
+                    } : null
+                    dim: true
                 }
             }
         }
@@ -533,11 +516,6 @@ FocusScope {
             anchors.top: showing.bottom
             anchors.topMargin: Theme.dp(34)
             spacing: Theme.dp(14)
-
-            CapsLabel {
-                anchors.verticalCenter: parent.verticalCenter
-                text: "STEAMGRIDDB"
-            }
 
             Text {
                 anchors.verticalCenter: parent.verticalCenter
@@ -552,7 +530,8 @@ FocusScope {
 
             Text {
                 anchors.verticalCenter: parent.verticalCenter
-                text: page.form.candidatesBusy && page.candidates.length === 0 ? "fetching…" : page.candidates.length === 0 ? (page.form.sgdbId > 0 ? "nothing for this slot" : "no match") : page.candidates.length + (page.form.more ? "+" : "") + " for " + (page.current ? page.current.label.toLowerCase() : "")
+                visible: page.candidates.length === 0
+                text: page.form.candidatesBusy ? "Fetching…" : page.form.sgdbId > 0 ? "Nothing for this slot" : "No match"
                 color: Theme.textMuted
                 font.family: Theme.sans
                 font.pixelSize: Theme.dp(19)

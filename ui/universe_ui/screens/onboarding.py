@@ -5,7 +5,7 @@ from .add import _source_status
 from .settings import RowsForm, _add, _row, launch_row
 
 MEMORY_KEY = "onboarded"
-PREFERENCE_KEYS = ("hdr", "dlss_upgrade", "fsr4_upgrade", "xess_upgrade", "optiscaler")
+PREFERENCE_KEYS = ("hdr",)
 FAMILY_DETAIL = "The pad the button hints and the controller art follow until one is plugged in."
 READ_ONLY_HOME_MANAGER = "Settings are managed by home-manager on this machine: change them in programs.universe.settings."
 READ_ONLY = "config.toml is read-only on this machine: make it writable to change settings here."
@@ -43,9 +43,7 @@ def preference_rows(client, controller):
             value = spec["default"]
         row = launch_row("Graphics", spec, value, gpu=gpu)
         row["advanced"] = False
-        if row.get("choiceValues", [None])[0] == "":
-            row["choices"], row["choiceValues"] = row["choices"][1:], row["choiceValues"][1:]
-        _add(rows, groups, "Graphics", row, caps=True, meta=str(gpu.get("label") or ""))
+        _add(rows, groups, "Graphics", row, caps=True)
     return rows, groups
 
 
@@ -124,7 +122,7 @@ class Onboarding(RowsForm):
             self._writable = bool(config.get("config_writable", True))
             self._home_manager = config.get("os") == "nixos"
             steps = ["found"]
-            if self._sources:
+            if any(not s.get("logged_in") for s in self._sources):
                 steps.append("stores")
             if self._writable:
                 steps.append("preferences")
