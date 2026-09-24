@@ -334,7 +334,7 @@ def test_quitting_from_the_game_brings_the_launcher_up_first(api, fake, monkeypa
     assert len(ended) == 1 and home.shown == "launcher" and not home.paused
 
 
-def test_the_hud_is_the_games_key_and_the_reload_key_waits_for_the_thaw(api, fake):
+def test_the_hud_and_the_limit_reach_the_game_without_a_key(api, fake):
     from universe_ui.screens.controller import FakeWatcher
 
     def hud_settles(on):
@@ -368,13 +368,12 @@ def test_the_hud_is_the_games_key_and_the_reload_key_waits_for_the_thaw(api, fak
     home.setLaunchValue("fps_limit", "60")
     home.setLaunchValue("fps_limit", "30")
     pump(100)
-    assert not any(c.get("action") == "keys" for c in watcher.commands), "a frozen game reads no key"
+    assert fake.core.fps_limit_writes == 2, "each change rewrites the layer's conf, frozen or not"
     home.closeDock()
     home.dockClosed()
     pump(100)
     assert not home.paused and fake.core.frozen is False
-    typed = [c for c in watcher.commands if c.get("action") == "keys"]
-    assert typed == [{"cmd": "run", "action": "keys", "keys": "Shift_L+F4"}], "the reload, once, after the thaw"
+    assert not any(c.get("action") == "keys" for c in watcher.commands), "MangoHud rereads its conf by itself: no key typed, before or after the thaw"
     stop(api)
 
 

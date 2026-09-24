@@ -304,10 +304,11 @@ def test_the_hud_event_gets_a_toast_the_macros_do_not(started, fake):
     fire("screenshot")
     assert notices == [], "the fire says nothing: the HUD event after it does"
     watcher.emit({"event": "hud", "shown": None, "title": ""})
-    assert notices == ["MangoHud: no game running"]
+    watcher.emit({"event": "hud", "shown": None, "title": "", "error": "MangoHud is not installed: nothing draws the HUD"})
+    assert notices == ["MangoHud: no game running", "MangoHud is not installed: nothing draws the HUD"]
     watcher.emit({"event": "hud", "shown": True, "title": "Control"})
     watcher.emit({"event": "hud", "shown": False, "title": "Control"})
-    assert notices[1:] == ["MangoHud shown · Control", "MangoHud hidden · Control"]
+    assert notices[2:] == ["MangoHud shown · Control", "MangoHud hidden · Control"]
 
 
 def test_waiting_lists_the_cores_pads_passively(api, fake):

@@ -367,7 +367,7 @@ class ControllerScreen(AdvancedRows, QObject):
     def _hud_notice(line):
         shown = line.get("shown")
         if shown is None:
-            return "MangoHud: no game running"
+            return str(line.get("error") or "MangoHud: no game running")
         title = str(line.get("title") or "")
         return f"MangoHud {'shown' if shown else 'hidden'}" + (f" · {title}" if title else "")
 

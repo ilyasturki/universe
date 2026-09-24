@@ -286,6 +286,7 @@ class FakeCore:
         self.window_misses = 0
         self.frozen = False
         self.hud_shown = False
+        self.fps_limit_writes = 0
         self.frames = 0
         self.filter = None
         self.level, self.muted = 62, False
@@ -856,7 +857,7 @@ class FakeCore:
     def set_fps_limit(self):
         if not self.current():
             raise UniverseError("NotFound", "no session running")
-        return "Shift_L+F4"
+        self.fps_limit_writes += 1
 
     def set_mangohud(self, on=None):
         current = self.current()

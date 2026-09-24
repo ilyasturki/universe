@@ -190,7 +190,7 @@ impl Core {
     fn nest_frame(&self, py: Python<'_>) -> PyResult<Option<String>> {
         py.detach(|| self.core.nest_frame()).map_err(err)
     }
-    fn set_fps_limit(&self, py: Python<'_>) -> PyResult<String> {
+    fn set_fps_limit(&self, py: Python<'_>) -> PyResult<()> {
         self.run(py, |c| c.set_fps_limit())
     }
     #[pyo3(signature = (on = None))]

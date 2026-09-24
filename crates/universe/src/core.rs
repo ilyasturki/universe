@@ -567,7 +567,8 @@ impl Core {
     }
 
     async fn mangoapp_draws(&self, c: &crate::session::Current, r: &Resolved) -> bool {
-        c.gamescope_pid != 0 || (r.effective.gamescope && crate::runners::on_path(&self.config.read().await.launch.gamescope_bin).is_some())
+        let gamescope = c.gamescope_pid != 0 || (r.effective.gamescope && crate::runners::on_path(&self.config.read().await.launch.gamescope_bin).is_some());
+        gamescope && crate::launcher::mangoapp_installed()
     }
 
     async fn write_layer_conf(&self, c: &crate::session::Current, r: &Resolved) -> Result<()> {
@@ -579,10 +580,10 @@ impl Core {
         )?)
     }
 
-    pub async fn set_fps_limit(&self) -> Result<String> {
+    /// MangoHud rereads its conf on inotify's `IN_MODIFY`, and a frozen game's on the thaw: the write is the reload.
+    pub async fn set_fps_limit(&self) -> Result<()> {
         let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
-        self.write_layer_conf(&c, &self.get(&c.id).await?).await?;
-        Ok(crate::launcher::RELOAD_CFG.into())
+        self.write_layer_conf(&c, &self.get(&c.id).await?).await
     }
 
     /// The SysV queue outlives mangoapp: told with none running, the next to start obeys.
@@ -601,7 +602,11 @@ impl Core {
         let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
         // The dock and the watcher each hold a library: the other may have written the key since this one loaded.
         self.reload_game(&c.id).await?;
-        let was = self.get(&c.id).await?.effective.mangohud;
+        let r = self.get(&c.id).await?;
+        if !self.mangoapp_draws(&c, &r).await && crate::runners::on_path("mangohud").is_none() {
+            return Err(Error::Unavailable("MangoHud is not installed: nothing draws the HUD".into()));
+        }
+        let was = r.effective.mangohud;
         let on = on.unwrap_or(!was);
         self.set(&c.id, "launch.mangohud", if on { "true" } else { "false" }).await?;
         let r = self.get(&c.id).await?;

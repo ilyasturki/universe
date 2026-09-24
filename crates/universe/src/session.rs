@@ -174,7 +174,7 @@ impl Core {
         let splash = (!splash.is_empty()).then(|| std::path::PathBuf::from(splash));
         let gamescope_pid = self.nest().map_or(0, |n| n.pid);
         let launcher_pid = if gamescope_pid != 0 { std::process::id() } else { 0 };
-        let mut plan = launcher::plan(&r, &cfg, &extra_env, mode, splash.as_deref(), gamescope_pid != 0)?;
+        let mut plan = launcher::plan(&r, &cfg, &extra_env, mode, splash.as_deref(), gamescope_pid != 0, launcher::mangoapp_installed())?;
         for (path, text) in plan.mangohud_conf.iter().chain(&plan.mangoapp_conf) {
             std::fs::write(path, text)?;
         }
@@ -243,7 +243,7 @@ impl Core {
             let was_active = self.host.shell.cursor_enable().await;
             undo.push(Undo::Cursor { was_active });
         }
-        if current.gamescope_pid != 0 {
+        if current.gamescope_pid != 0 && launcher::mangoapp_installed() {
             self.apply_mangoapp(r.effective.mangohud, true)?;
             undo.push(Undo::Hud);
         }

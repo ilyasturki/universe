@@ -288,8 +288,8 @@ class CoreClient(QObject):
     def keyboardLayout(self):
         return self._guarded({"layout": "us", "variant": ""}, self._core.keyboard_layout)
 
-    def setFpsLimit(self, on_reply):
-        self._call_async(self._core.set_fps_limit, lambda combo: on_reply(str(combo or "")))
+    def setFpsLimit(self):
+        self._call_async(self._core.set_fps_limit)
 
     def setMangohud(self, on, on_reply=None):
         self._call_async(lambda: self._core.set_mangohud(on), on_reply)

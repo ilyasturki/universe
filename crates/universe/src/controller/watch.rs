@@ -769,9 +769,17 @@ impl Watcher {
             "mangohud" => {
                 let out = self.out;
                 tokio::spawn(async move {
-                    let shown = core.set_mangohud(None).await.inspect_err(|e| tracing::warn!("mangohud: {e}")).ok();
+                    let (shown, error) = match core.set_mangohud(None).await {
+                        Ok(shown) => (Some(shown), String::new()),
+                        Err(crate::Error::NotFound(_)) => (None, String::new()),
+                        Err(crate::Error::Unavailable(why)) => (None, why),
+                        Err(e) => (None, format!("MangoHud: {e}")),
+                    };
+                    if !error.is_empty() {
+                        tracing::warn!("mangohud: {error}");
+                    }
                     let title = if shown.is_some() { core.current().await.map(|c| c.title).unwrap_or_default() } else { String::new() };
-                    out.emit(serde_json::json!({"event": "hud", "shown": shown, "title": title}));
+                    out.emit(serde_json::json!({"event": "hud", "shown": shown, "title": title, "error": error}));
                 });
             }
             "keys" => {

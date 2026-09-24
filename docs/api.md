@@ -129,10 +129,10 @@ hooks write shows up that way, with no other channel.
 | `freeze(on)` | `freeze(on)` | — | `FreezeUnit` / `ThawUnit` on the running game's unit: every process of it stops in place, then the `freeze` / `thaw` hooks run (the capture module pauses its recorder). A stop job thaws on its own, so `stop` works on a frozen game |
 | `volume(change, value)` | `volume(change, value=0)` | — | the default sink through `wpctl`: `up` / `down` by `controller.volume_step`, `mute` toggles, `set` to `value` percent, `get`; returns `{percent, muted, output}` |
 | `outputs()` / `set_output(id)` | `outputs()` / `set_output(id)` | `universe output [<id>] [--json]` | the playback outputs, from one `pw-dump`: each output route of a card whose `available` is not `no` (jacks without detection say `unknown`) that the card's current profile plays or an available profile could, then each sink no route stands for (a filter, a pro-audio profile). `[{id, label, device, current}]`: `id` is `<device.name>/<route name>`, or the sink's `node.name`; `label` the route's description, `device` the card's; `current` marks the effective default sink's route (`default.audio.sink`, not the configured one, which can name a sink of a profile gone). `set_output` switches the card's profile when the route needs it (the one keeping the current input, else the highest priority), waits up to 3 s for the sink to come up, sets its route with `wpctl set-route`, then `wpctl set-default`: WirePlumber keeps it, the desktop follows. Returns the new sink's `volume("get")`; `Invalid` for an id not listed |
-| `set_fps_limit()` | `set_fps_limit()` | — | rewrites the running game's `<state>/MangoHud.conf` from its `fps_limit` as launch resolves it and returns the `reload_cfg` combo the file pins (`Shift_L+F4`): typed into the game (the watcher's `run` command, once the game is thawed), the layer rereads the file |
-| `set_mangohud(on)` | `set_mangohud(on=None)` | — | the running game's HUD: `None` flips it. Written as the game's `launch.mangohud` (reread from disk first: the dock and the watcher each hold a library), then applied in the game — mangoapp told over its control queue where one draws (see MangoHud), the layer over its control socket on the desktop — and the new state returned. `NotFound` without a session |
+| `set_fps_limit()` | `set_fps_limit()` | — | rewrites the running game's `<state>/MangoHud.conf` from its `fps_limit` as launch resolves it: the layer watches that file (inotify) and rereads it by itself, a frozen game on the thaw, so no key is typed and no uinput is needed |
+| `set_mangohud(on)` | `set_mangohud(on=None)` | — | the running game's HUD: `None` flips it. Written as the game's `launch.mangohud` (reread from disk first: the dock and the watcher each hold a library), then applied in the game — mangoapp told over its control queue where one draws (see MangoHud), the layer over its control socket elsewhere, each also through its conf, which it rereads — and the new state returned. `NotFound` without a session; `Unavailable`, nothing written, when nothing can draw the HUD (no mangoapp where one would, no `mangohud` for the layer) |
 | `nest()` / `nest_game_shown()` / `nest_overlay(window, input, opacity)` / `nest_frame()` / `nest_filter(filter, sharpness)` | `nested()` / `nest_game_shown()` / … | — | the gamescope this process runs in (see Gamescope): whether there is one; whether it shows a window of another process; `STEAM_OVERLAY` on a window of this process, with its `STEAM_INPUT_FOCUS` and `_NET_WM_WINDOW_OPACITY`; the game's last painted frame into `<state>/frame.png` (`None` when no paint came within 5 s); `GAMESCOPE_SCALING_FILTER` and `GAMESCOPE_FSR_SHARPNESS` (no sharpness deletes the card: gamescope reads its default, 2, back). `Unavailable` on the desktop |
-| `host_gamescope(screen)` | `host_gamescope(screen)` | — | the gamescope a launcher starts itself in: `[env, MANGOHUD_CONFIGFILE=<state>/mangoapp.conf, XKB_DEFAULT_LAYOUT=…, XKB_DEFAULT_VARIANT=…, gamescope, args…]` from `launch.gamescope_bin`, the global `gamescope_*` fields at the screen's mode, `launch.gamescope_args`, `--mangoapp` always and `--hdr-enabled` when `launch.hdr` is, the keyboard layout (see below); writes that conf with the HUD hidden (a game shows it). `None` when the binary is not installed |
+| `host_gamescope(screen)` | `host_gamescope(screen)` | — | the gamescope a launcher starts itself in: `[env, MANGOHUD_CONFIGFILE=<state>/mangoapp.conf, XKB_DEFAULT_LAYOUT=…, XKB_DEFAULT_VARIANT=…, gamescope, args…]` from `launch.gamescope_bin`, the global `gamescope_*` fields at the screen's mode, `launch.gamescope_args`, `--mangoapp` whenever mangoapp is installed and `--hdr-enabled` when `launch.hdr` is, the keyboard layout (see below); writes that conf with the HUD hidden (a game shows it). `None` when the binary is not installed |
 | `keyboard_layout()` | `keyboard_layout()` | — | `{layout, variant}`, the session's xkb keyboard layout (`fr` / `bepo`, `us` / `intl`…): `XKB_DEFAULT_LAYOUT` and `XKB_DEFAULT_VARIANT` when set, else what the desktop keeps — GNOME's `org.gnome.desktop.input-sources` (the most recently used source, else the first), Hyprland's `input:kb_layout`, KDE's `kxkbrc` — else `localectl`'s X11 layout or the console keymap up to its charset, else `us`. gamescope builds a US keymap of its own whatever the session's, so both the launcher's gamescope and a game's own get it as `XKB_DEFAULT_LAYOUT` / `XKB_DEFAULT_VARIANT` (which libxkbcommon reads), and a frontend draws its on-screen keyboard from it |
 | `adopt_scope()` | `adopt_scope()` | — (`universe play` does it unless `--no-wait`) | moves the calling process into the transient scope `universe-launcher-<pid>.scope` (`StartTransientUnit` on the user manager) and returns its name; every later `launch` binds the game to it. Idempotent. `Unavailable` without a user systemd |
 | `screenshot()` | `screenshot()` | `universe screenshot` | runs the `screenshot` hook of each enabled module declaring one (the screenshot module), the first path printed winning; returns the PNG path (see Screenshots). `Unavailable` when no module is on for the game, `Io` naming each hook's last stderr line when every one failed |
@@ -208,7 +208,7 @@ trashes `logs/<id>/`. A key of `[launch.env]` with the same name wins over the s
 
 A launcher that runs **inside** gamescope is the one window: `universe-ui` fullscreen starts
 `gamescope` around itself (`host_gamescope`: `-f --force-composition -W -H -w -h -r` from the screen's
-mode and the global `gamescope_*` fields, `launch.gamescope_args`, `--mangoapp`)
+mode and the global `gamescope_*` fields, `launch.gamescope_args`, `--mangoapp` when installed)
 and re-executes itself as its child, and every game it launches lands on that gamescope: the plan is
 the plain command — no gamescope of the game's own, no `splash`, no `setpriv` — with the launcher's
 `DISPLAY`, `GAMESCOPE_WAYLAND_DISPLAY`, `STEAM_GAME_DISPLAY_0`, `SDL_VIDEODRIVER` and
@@ -281,25 +281,30 @@ binary (`gamescope` on PATH, `/run/wrappers/bin` included). The game itself runs
 gamescope (NixOS `capSysNice`) hands CAP_SYS_NICE down to the game, and bwrap — umu's runtime —
 refuses to start holding one. With gamescope off — or not found: a warning, and the game runs on
 the desktop as before — the plain command runs. Inside gamescope
-the HUD is gamescope's `--mangoapp` rather than the game's layer, `launch.hdr` adds `--hdr-enabled`, and
+the HUD is gamescope's `--mangoapp` rather than the game's layer when mangoapp is installed, `launch.hdr` adds `--hdr-enabled`, and
 `PROTON_ENABLE_WAYLAND` is dropped (Proton goes X11 through gamescope's Xwayland) unless the
 arguments carry `--expose-wayland`. `doctor` checks the binary and `mangoapp`.
 
 ### MangoHud
 
 Two MangoHuds can be in play, and Universe owns the state of both — nothing depends on
-`~/.config/MangoHud/MangoHud.conf` but the layout. **mangoapp** draws the HUD inside gamescope:
-the launcher's own (`host_gamescope` passes `--mangoapp`, always) or the game's. It reads
+`~/.config/MangoHud/MangoHud.conf` but the layout and the keys. **mangoapp** draws the HUD inside gamescope
+when it is installed (Debian and Ubuntu ship it apart, as `mangoapp`): the launcher's own
+(`host_gamescope` passes `--mangoapp`, the HUD on or off) or the game's. It reads
 `<state>/mangoapp.conf` (`MANGOHUD_CONFIGFILE` on the gamescope, harmless there: the file alone
-loads no layer) — the user's lines minus `no_display`, `fps_limit`, `reload_cfg` and `control`,
+loads no layer) — the user's lines minus `no_display`, `fps_limit` and `control`,
 plus `no_display` when the HUD is off — and is told live over its SysV control queue, the one
-`mangohudctl` speaks (`ftok("mangoapp", 65)`, message type 2, `no_display` 1 hides, 2 shows): no
-key, no focus, and it lands while the game is frozen. The **layer** inside the game process is
-loaded whenever it has a job — the limit anywhere, on the desktop the HUD itself — on
+`mangohudctl` speaks (key `-1`, what their `ftok("mangoapp", 65)` fails to without such a file in
+their cwd; message type 2, `no_display` 1 hides, 2 shows): no key, no focus, and it lands while the
+game is frozen. The **layer** inside the game process is loaded whenever it has a job — the limit
+anywhere, the HUD itself where no mangoapp draws (the desktop, or a gamescope without mangoapp) — on
 `<state>/MangoHud.conf`: the same lines, `no_display` when mangoapp draws or the HUD is off,
-`fps_limit` ours, `reload_cfg=Shift_L+F4` pinned, and where no mangoapp draws
-`control=universe-mangohud-<id>` (an abstract socket its first Vulkan instance binds; `:hud;`
-flips it, and a frozen game reads it on the thaw).
+`fps_limit` ours, and where no mangoapp draws `control=universe-mangohud-<id>` (an abstract socket
+its first Vulkan instance binds; `:hud;` flips it at once, and a frozen game reads it on the thaw).
+Every MangoHud also watches its conf (inotify `IN_MODIFY`) and rereads it about 100 ms after a
+write — measured: a limit rewritten mid-game holds from then on, and one written while the process
+was stopped holds from the thaw — so a write alone is a reload, and the conf has the last word over
+the queue and the socket.
 
 `launch.mangohud` is the HUD's state: shown at launch when true — on the launcher's gamescope
 mangoapp is told at `begin` and hidden again when the session ends (`Undo::Hud`), between sessions
@@ -319,7 +324,9 @@ which paces itself (a second limiter on top of its own jitters against it). The 
 `<state>/MangoHud.conf` before each launch and gives the game `MANGOHUD=1
 MANGOHUD_CONFIGFILE=<that>`: on the unit when no gamescope runs there, else through `env` in
 front of the program, after `setpriv`, since gamescope (a Vulkan client itself) would draw the
-layer. Inside gamescope the layer limits and draws nothing while mangoapp shows the HUD. A native
+layer. Inside gamescope the layer limits and draws nothing while mangoapp shows the HUD. A change
+mid-game (`set_fps_limit`) rewrites the conf, which the layer rereads by itself. A 32-bit game needs
+MangoHud's 32-bit layer (`MangoHud.x86.json`), which `doctor` looks for. A native
 or emulator program (not one run through Proton) with a limit goes through the `mangohud` wrapper
 so an OpenGL game is limited too; Proton and Wine get the Vulkan layer alone, nothing preloaded
 into the runtime. No `mangohud` on PATH: a warning, no limit, no layer; `doctor` checks for it

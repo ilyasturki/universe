@@ -18,15 +18,15 @@ fn ctrl_message(shown: bool) -> [u8; 8 + CTRL_LEN] {
     msg
 }
 
+/// What mangoapp's and mangohudctl's `ftok("mangoapp", 65)` fails to without a `mangoapp` file in their cwd.
+const QUEUE_KEY: libc::key_t = -1;
+
 /// Every mangoapp on the queue, not one game's.
 pub fn set_shown(shown: bool) -> std::io::Result<()> {
     let msg = ctrl_message(shown);
-    // ftok of a relative "mangoapp" fails without such a file in the cwd, so mangoapp, mangohudctl and this all share key -1.
-    let path = std::ffi::CString::new("mangoapp").unwrap();
-    // SAFETY: the C strings and the buffer outlive the calls; msgsnd reads CTRL_LEN bytes past the 8-byte type, all inside `msg`, the length mangohudctl sends.
+    // SAFETY: the buffer outlives the calls; msgsnd reads CTRL_LEN bytes past the 8-byte type, all inside `msg`, the length mangohudctl sends.
     unsafe {
-        let key = libc::ftok(path.as_ptr(), 65);
-        let id = libc::msgget(key, 0o666 | libc::IPC_CREAT);
+        let id = libc::msgget(QUEUE_KEY, 0o666 | libc::IPC_CREAT);
         if id < 0 {
             return Err(std::io::Error::last_os_error());
         }

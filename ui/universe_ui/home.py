@@ -49,7 +49,6 @@ class Home(QObject):
         # The game this client asked for while the core has no session for it yet: the dock over the poster answers already.
         self._pending = None
         self._stop_on_launch = False
-        self._keys_on_thaw = []
         self._frame = ""
         self._landing = ""
         self._taken = 0
@@ -122,7 +121,6 @@ class Home(QObject):
             self._swap.stop()
             self._drop()
             self._open = self._closing = self._flipped = self._flipping = self._paused = self._thaw_on_release = self._stopping = self._loading = False
-            self._keys_on_thaw = []
             self._set_shown("launcher")
             self._frame = ""
             self._landing = ""
@@ -396,21 +394,8 @@ class Home(QObject):
         self._paused = on
         if not on:
             self._captured_still = False
-        self._client.freeze(on, None if on else lambda _: self._type_held())
+        self._client.freeze(on)
         self.changed.emit()
-
-    # A frozen game reads no key: what the dock asks of the game's MangoHud waits for the thaw.
-    def _type(self, combo):
-        if self._paused:
-            if combo not in self._keys_on_thaw:
-                self._keys_on_thaw.append(combo)
-        else:
-            self._controller.run("keys", combo)
-
-    def _type_held(self):
-        keys, self._keys_on_thaw = self._keys_on_thaw, []
-        for combo in keys:
-            self._controller.run("keys", combo)
 
     @Slot(bool)
     def setPauseOnHome(self, on):
@@ -477,7 +462,7 @@ class Home(QObject):
             return
         self._client.set(str(session.get("id") or ""), "launch." + key, value)
         if key == "fps_limit":
-            self._client.setFpsLimit(lambda combo: combo and self._type(combo))
+            self._client.setFpsLimit()
         elif key in ("gamescope_filter", "gamescope_sharpness") and self._client.nested:
             effective = self._game().get("effective") or {}
             filter = value if key == "gamescope_filter" else str(effective.get("gamescope_filter") or "")
