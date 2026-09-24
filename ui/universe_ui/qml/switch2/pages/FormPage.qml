@@ -24,7 +24,8 @@ FocusScope {
         return {
             label: g.title,
             detail: g.meta || "",
-            group: 0
+            group: 0,
+            changed: g.changed === true
         };
     })
     property int section: 0

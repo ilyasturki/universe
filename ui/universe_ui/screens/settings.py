@@ -5,7 +5,8 @@
 # appends an Advanced action row that opens them; the other pages flip `showAdvanced` from a button.
 # `origin` is where a value comes from when the row can inherit: "game" (set on the game), "runner" (set on the runner),
 # "global" (config.toml sets it), "default" (neither does); empty when the row has no such story. `inherited` is true for
-# the last two. A map key (launch.env) is one row per entry, `entry` naming the map, then an `action` row with `map` set
+# the last two; the first two are a change made on this page, and a shown group's `changed` says it holds one, its hidden
+# advanced rows counted. A map key (launch.env) is one row per entry, `entry` naming the map, then an `action` row with `map` set
 # that adds one; an entry's empty value removes it.
 import json
 import os
@@ -25,6 +26,7 @@ LOGOS = {os.path.splitext(f)[0]: f"assets/runners/{f}" for f in sorted(os.listdi
 
 ADVANCED_KEY = "advanced"
 ADVANCED_DETAIL = "Settings for power users: sync modes, scaling, upscaler upgrades, programs and folders."
+CHANGED = ("game", "runner")
 
 
 def _display(kind, value):
@@ -69,6 +71,7 @@ def _group(title, rows, meta="", warning="", caps=False, control=-1, off=False, 
         "rows": list(rows),
         "divider": -1,
         "dividers": [],
+        "changed": False,
     }
 
 
@@ -334,14 +337,21 @@ class AdvancedRows(QObject if TYPE_CHECKING else object):
         self._groups = groups
         self.rowsChanged.emit()
 
+    def _changed(self, group):
+        return any(self._row_at(i).get("origin") in CHANGED for i in group["rows"])
+
     def _shown_groups(self):
         if not self._has_advanced:
-            return list(self._groups)
-        basic = [dict(g) for g in self._groups if not g["advanced"]]
-        advanced = [g for g in self._groups if g["advanced"]] if self._show_advanced else []
-        homes = [next((b for b in basic if b["title"] and b["title"] == (g["home"] or g["title"])), None) for g in advanced]
-        more = [g for g, home in zip(advanced, homes, strict=True) if home is None]
-        folded = [(g, home) for g, home in zip(advanced, homes, strict=True) if home is not None]
+            return [{**g, "changed": self._changed(g)} for g in self._groups]
+        basic = [{**g, "changed": self._changed(g)} for g in self._groups if not g["advanced"]]
+        every = [g for g in self._groups if g["advanced"]]
+        homes = [next((b for b in basic if b["title"] and b["title"] == (g["home"] or g["title"])), None) for g in every]
+        for group, home in zip(every, homes, strict=True):
+            if home is not None and self._changed(group):
+                home["changed"] = True
+        advanced = list(zip(every, homes, strict=True)) if self._show_advanced else []
+        more = [{**g, "changed": self._changed(g)} for g, home in advanced if home is None]
+        folded = [(g, home) for g, home in advanced if home is not None]
         # A card's own advanced rows come first, the cards homed in it after them, each under a rule of its own.
         for group, home in sorted(folded, key=lambda pair: bool(pair[0]["home"])):
             at, label = len(home["rows"]), group["title"] if group["home"] else ""

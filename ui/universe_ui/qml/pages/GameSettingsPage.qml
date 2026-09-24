@@ -26,7 +26,8 @@ FocusScope {
         var first = form.rows[g.rows[0]] || {};
         return {
             name: g.title,
-            icon: first.module ? "grid" : page.icons[g.title] || "play"
+            icon: first.module ? "grid" : page.icons[g.title] || "play",
+            changed: g.changed === true
         };
     })
     readonly property var icons: ({
@@ -65,7 +66,7 @@ FocusScope {
     readonly property var moreItems: (canReset ? [
             {
                 icon: "refresh",
-                label: rowAction === "Remove" ? "Remove" : "Reset to default",
+                label: rowAction,
                 action: "reset"
             }
         ] : []).concat(form.hasAdvanced ? [

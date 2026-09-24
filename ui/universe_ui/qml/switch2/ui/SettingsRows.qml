@@ -247,8 +247,8 @@ FocusScope {
                 readonly property color ink: disabled || entry.dim === true ? Theme.textDisabled : Theme.text
                 // A search hit: where the row lives, muted, in front of its label.
                 readonly property string path: entry.path !== undefined && entry.path !== null ? String(entry.path) : ""
-                // Where an inheritable value comes from when something sets it: this game or runner, or the global settings; the default reads plain.
-                readonly property string originTag: entry.origin === "game" ? "THIS GAME" : entry.origin === "runner" ? "THIS RUNNER" : entry.origin === "global" ? "GLOBAL" : ""
+                // A value this game or runner sets for itself; what it inherits reads plain.
+                readonly property bool changed: entry.origin === "game" || entry.origin === "runner"
 
                 function esc(text) {
                     return String(text).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -366,7 +366,7 @@ FocusScope {
                         id: label
                         x: rows.inset + (lead.visible ? lead.width + Theme.dp(8) : 0) + (swatch.visible ? swatch.width + Theme.dp(30) : 0)
                         height: rows.rowHeight
-                        width: (row.own ? ownTag.x : control.x) - x - Theme.dp(24)
+                        width: (row.changed ? ownTag.x : control.x) - x - Theme.dp(24)
                         verticalAlignment: Text.AlignVCenter
                         text: row.path !== "" ? "<font color=\"" + Theme.textSecondary + "\">" + row.esc(row.path) + " › </font>" + row.esc(row.entry.label || "") : row.entry.label || ""
                         textFormat: row.path !== "" ? Text.StyledText : Text.PlainText
@@ -374,16 +374,37 @@ FocusScope {
                         elide: Text.ElideRight
                     }
 
-                    Label {
+                    Rectangle {
+                        x: Theme.dp(8)
+                        anchors.verticalCenter: control.verticalCenter
+                        width: Theme.dp(5)
+                        height: rows.rowHeight - Theme.dp(44)
+                        radius: width / 2
+                        visible: row.changed
+                        color: Theme.accent
+                    }
+
+                    Rectangle {
                         id: ownTag
                         anchors.right: control.left
                         anchors.rightMargin: Theme.dp(22)
                         anchors.verticalCenter: control.verticalCenter
-                        visible: row.originTag !== ""
-                        text: row.originTag
-                        color: Theme.textSecondary
-                        font.pixelSize: Theme.dp(Theme.fontTiny)
-                        font.letterSpacing: Theme.dp(2)
+                        visible: row.changed
+                        width: ownText.width + Theme.dp(20)
+                        height: ownText.height + Theme.dp(10)
+                        radius: Theme.dp(8)
+                        color: "transparent"
+                        border.width: Theme.dp(2)
+                        border.color: Theme.accent
+
+                        Label {
+                            id: ownText
+                            anchors.centerIn: parent
+                            text: "CHANGED"
+                            color: Theme.accent
+                            font.pixelSize: Theme.dp(Theme.fontTiny)
+                            font.letterSpacing: Theme.dp(2)
+                        }
                     }
 
                     Item {

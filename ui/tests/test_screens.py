@@ -255,6 +255,7 @@ def test_module_form(api, fake):
             "rows": [0],
             "divider": -1,
             "dividers": [],
+            "changed": False,
         }
     ], "the page header carries the name and the warning"
     form.load("capture")
@@ -416,6 +417,20 @@ def test_game_settings_reset(api, fake):
     assert not hasattr(form, "override"), "an inherited value is overridden by changing it, not from a button"
 
 
+def test_game_settings_marks_changed_cards(api, fake):
+    form = api.screens.gameSettings
+    form.load("the-technomancer")
+
+    def changed():
+        return {g["title"]: g["changed"] for g in form.groups}
+
+    proton = next(g for g in form.groups if index_of(form, "launch.proton") in g["rows"])["title"]
+    assert changed()[proton] is True and changed()["Display"] is False, "a card holding a value of the game's own is marked"
+    assert not form.showAdvanced and form.setValue(index_of(form, "launch.gamescope_scaler"), "fsr") is True
+    assert changed()["Display"] is True, "a change behind Advanced marks its card while Advanced is off"
+    assert form.reset(index_of(form, "launch.gamescope_scaler")) is True and changed()["Display"] is False
+
+
 def test_game_settings_mirrors_the_cards(api, fake):
     form = api.screens.gameSettings
     form.load("the-technomancer")
@@ -458,7 +473,7 @@ def test_game_settings_mirrors_the_cards(api, fake):
     assert rows["launch.gamescope_resolution"]["choices"][:2] == ["auto", "2560x1440"]
     assert rows["launch.gamescope_scaler"]["value"] == "Global · auto" and rows["launch.gamescope_scaler"]["inherited"] is True
     assert rows["launch.gamescope_scaler"]["display"] == "auto" and rows["launch.gamescope_scaler"]["origin"] == "default", (
-        "the bare built-in: the row's origin tag says it is the default"
+        "the bare built-in: the row's origin says it is the default"
     )
     assert rows["launch.gamescope_adaptive_sync"]["value"] == "Global · auto" and rows["launch.gamescope_adaptive_sync"]["display"] == "auto · On"
     assert rows["launch.gamescope_adaptive_sync"]["inherited"] is True and rows["launch.gamescope_adaptive_sync"]["origin"] == "default"

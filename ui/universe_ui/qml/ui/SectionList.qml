@@ -5,7 +5,7 @@ import "../sound"
 FocusScope {
     id: list
 
-    // [{ name, icon }]
+    // [{ name, icon, changed }]: `changed` marks an entry holding a value set on this page.
     property var sections: []
     property var badges: []
     property int current: 0
@@ -121,7 +121,7 @@ FocusScope {
                 Text {
                     anchors.left: icon.right
                     anchors.leftMargin: Theme.dp(16)
-                    anchors.right: badgePill.visible ? badgePill.left : parent.right
+                    anchors.right: badgePill.visible ? badgePill.left : changedDot.visible ? changedDot.left : parent.right
                     anchors.rightMargin: Theme.dp(16)
                     anchors.verticalCenter: parent.verticalCenter
                     text: modelData.name
@@ -130,6 +130,18 @@ FocusScope {
                     font.weight: active ? Font.DemiBold : Font.Medium
                     font.pixelSize: Theme.dp(21)
                     elide: Text.ElideRight
+                }
+
+                Rectangle {
+                    id: changedDot
+                    visible: modelData.changed === true && badge === ""
+                    anchors.right: parent.right
+                    anchors.rightMargin: Theme.dp(20)
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Theme.dp(10)
+                    height: width
+                    radius: width / 2
+                    color: focused ? Theme.accentOnLight : Theme.accent
                 }
 
                 Rectangle {

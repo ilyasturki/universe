@@ -5,7 +5,8 @@ import "../sound"
 FocusScope {
     id: list
 
-    // [{ id, label, detail, group, groupLabel }]: a hairline rules between groups, a `groupLabel` names the group over its first entry.
+    // [{ id, label, detail, group, groupLabel, changed }]: a hairline rules between groups, a `groupLabel` names the group over its first
+    // entry; `changed` marks an entry holding a value set on this page.
     property var sections: []
     property int index: 0
     readonly property bool cursorShown: activeFocus
@@ -150,10 +151,22 @@ FocusScope {
                     visible: line.open
                 }
 
+                Rectangle {
+                    id: changedDot
+                    anchors.right: parent.right
+                    anchors.rightMargin: Theme.dp(30)
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: Theme.dp(14)
+                    height: width
+                    radius: width / 2
+                    visible: modelData.changed === true
+                    color: Theme.accent
+                }
+
                 Column {
                     x: Theme.dp(68)
                     anchors.verticalCenter: parent.verticalCenter
-                    width: parent.width - x - Theme.dp(24)
+                    width: (changedDot.visible ? changedDot.x - Theme.dp(12) : parent.width - Theme.dp(24)) - x
                     spacing: Theme.dp(2)
 
                     Label {

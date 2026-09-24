@@ -39,6 +39,8 @@ QtObject {
     readonly property color cardBase: "#161616"
     readonly property color onLight: "#101116"
     readonly property color danger: "#e5484d"
+    readonly property color accent: "#5aa0ff"
+    readonly property color accentOnLight: "#1f5fbf"
 
     readonly property real radiusCover: 12
     readonly property real radiusTile: 16

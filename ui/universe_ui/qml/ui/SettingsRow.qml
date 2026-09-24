@@ -33,10 +33,9 @@ Item {
     // A search hit: where the row lives, muted, in front of its label; a tag (ADVANCED) next to the value.
     readonly property string path: entry.path !== undefined && entry.path !== null ? String(entry.path) : ""
     readonly property string tag: entry.tag !== undefined && entry.tag !== null ? String(entry.tag) : ""
-    // Where an inheritable value comes from when something sets it: this game or runner, or the global settings; the
-    // default, most rows, reads plain. A row inherited with no `origin` (a runner's found program) keeps the plain chip.
-    readonly property string origin: entry.origin !== undefined && entry.origin !== null ? String(entry.origin) : ""
-    readonly property var tags: [tag, origin === "game" ? "THIS GAME" : origin === "runner" ? "THIS RUNNER" : origin === "global" ? "GLOBAL" : origin === "" && entry.inherited === true ? "INHERITED" : ""].filter(Boolean)
+    // A value this game or runner sets for itself; what it inherits reads plain.
+    readonly property bool changed: entry.origin === "game" || entry.origin === "runner"
+    readonly property var tags: [tag, changed ? "CHANGED" : ""].filter(Boolean)
 
     opacity: entry.disabled === true && !focused ? 0.45 : 1.0
 
@@ -63,6 +62,17 @@ Item {
         Behavior on color {
             ColorEase {}
         }
+    }
+
+    Rectangle {
+        anchors.left: parent.left
+        anchors.leftMargin: Theme.dp(5)
+        anchors.verticalCenter: band.verticalCenter
+        width: Theme.dp(4)
+        height: band.height - Theme.dp(24)
+        radius: width / 2
+        visible: row.changed
+        color: Theme.accent
     }
 
     // How much of a download is on the disk, as a hairline along the row's foot.
@@ -203,14 +213,15 @@ Item {
 
     component TagChip: Rectangle {
         property string text: ""
+        property bool accented: false
 
         anchors.verticalCenter: parent.verticalCenter
         width: tagText.width + Theme.dp(18)
         height: tagText.height + Theme.dp(8)
         radius: Theme.dp(8)
-        color: "transparent"
+        color: accented ? Qt.rgba(0.353, 0.627, 1, 0.14) : "transparent"
         border.width: 1
-        border.color: row.focused ? Qt.rgba(0.063, 0.067, 0.086, 0.25) : Qt.rgba(1, 1, 1, 0.14)
+        border.color: accented ? Theme.accent : row.focused ? Qt.rgba(0.063, 0.067, 0.086, 0.25) : Qt.rgba(1, 1, 1, 0.14)
 
         CapsLabel {
             id: tagText
@@ -218,7 +229,7 @@ Item {
             text: parent.text
             size: Theme.dp(15)
             tracking: 0.08
-            color: row.focused ? Qt.rgba(0.063, 0.067, 0.086, 0.55) : Theme.textFaint
+            color: parent.accented ? (row.focused ? Theme.accentOnLight : Theme.accent) : row.focused ? Qt.rgba(0.063, 0.067, 0.086, 0.55) : Theme.textFaint
         }
     }
 
@@ -243,6 +254,7 @@ Item {
 
                 TagChip {
                     text: modelData
+                    accented: modelData === "CHANGED"
                 }
             }
 
@@ -264,6 +276,7 @@ Item {
 
                 TagChip {
                     text: modelData
+                    accented: modelData === "CHANGED"
                 }
             }
 
@@ -299,7 +312,7 @@ Item {
                 anchors.verticalCenter: parent.verticalCenter
                 visible: text !== "" && !(row.hasSwitch && !row.entry.warning)
                 text: row.value
-                color: row.focused ? row.onFocus : row.entry.accent === true ? "#5aa0ff" : Theme.textSecondary
+                color: row.focused ? row.onFocus : row.entry.accent === true || row.changed ? Theme.accent : Theme.textSecondary
                 font.family: Theme.sans
                 font.pixelSize: Theme.dp(21)
                 elide: Text.ElideMiddle

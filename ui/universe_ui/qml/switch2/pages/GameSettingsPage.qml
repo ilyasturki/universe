@@ -23,7 +23,8 @@ FocusScope {
         return {
             label: g.title,
             detail: g.meta || "",
-            group: g.caps === true ? 0 : 1
+            group: g.caps === true ? 0 : 1,
+            changed: g.changed === true
         };
     })
     property int section: 0

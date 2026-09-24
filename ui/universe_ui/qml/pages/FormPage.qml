@@ -34,7 +34,8 @@ FocusScope {
     readonly property var sections: groups.map(function (g) {
         return {
             name: g.title,
-            icon: page.icons[g.title] || "sliders"
+            icon: page.icons[g.title] || "sliders",
+            changed: g.changed === true
         };
     })
     readonly property var icons: ({
@@ -73,7 +74,7 @@ FocusScope {
     readonly property var moreItems: (canReset && page.runner !== "" ? [
             {
                 icon: "refresh",
-                label: rowAction === "Remove" ? "Remove" : "Reset to default",
+                label: rowAction,
                 action: "reset"
             }
         ] : []).concat(form.hasAdvanced ? [
