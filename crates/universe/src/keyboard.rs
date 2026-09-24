@@ -57,6 +57,15 @@ fn from_desktop() -> Option<Layout> {
     if std::env::var_os("HYPRLAND_INSTANCE_SIGNATURE").is_some() {
         return from_hyprland();
     }
+    if std::env::var_os("SWAYSOCK").is_some() {
+        return from_sway();
+    }
+    if std::env::var_os("NIRI_SOCKET").is_some() {
+        return from_niri();
+    }
+    if desktop.contains("cinnamon") {
+        return from_cinnamon();
+    }
     if desktop.contains("gnome") {
         return from_gnome();
     }
@@ -74,6 +83,69 @@ fn output(program: &str, args: &[&str]) -> Option<String> {
 fn from_gnome() -> Option<Layout> {
     // The switched-to source leads `mru-sources`; `sources` is the list as configured.
     ["mru-sources", "sources"].iter().find_map(|key| gnome_sources(&output("gsettings", &["get", "org.gnome.desktop.input-sources", key])?))
+}
+
+fn from_cinnamon() -> Option<Layout> {
+    gnome_sources(&output("gsettings", &["get", "org.cinnamon.desktop.input-sources", "sources"])?)
+}
+
+fn from_sway() -> Option<Layout> {
+    by_description(&sway_active(&output("swaymsg", &["-t", "get_inputs", "--raw"])?)?)
+}
+
+/// The first keyboard's active layout, named as xkbcommon names it ("French (BEPO)"): sway reports no codes.
+fn sway_active(json: &str) -> Option<String> {
+    let inputs: Vec<serde_json::Value> = serde_json::from_str(json).ok()?;
+    inputs.iter().filter(|i| i["type"] == "keyboard").find_map(|i| {
+        let names = i["xkb_layout_names"].as_array()?;
+        let at = i["xkb_active_layout_index"].as_u64().unwrap_or(0) as usize;
+        names.get(at).or_else(|| names.first())?.as_str().map(str::to_string)
+    })
+}
+
+fn from_niri() -> Option<Layout> {
+    by_description(&niri_active(&output("niri", &["msg", "--json", "keyboard-layouts"])?)?)
+}
+
+/// `{"names": [...], "current_idx": n}`: descriptions, as sway's.
+fn niri_active(json: &str) -> Option<String> {
+    let v: serde_json::Value = serde_json::from_str(json).ok()?;
+    let names = v["names"].as_array()?;
+    let at = v["current_idx"].as_u64().unwrap_or(0) as usize;
+    names.get(at).or_else(|| names.first())?.as_str().map(str::to_string)
+}
+
+/// A description back to its code through xkeyboard-config's `evdev.lst`; `None` where the rules are not installed.
+fn by_description(description: &str) -> Option<Layout> {
+    let root = std::env::var_os("XKB_CONFIG_ROOT").map(std::path::PathBuf::from);
+    let data = std::env::var("XDG_DATA_DIRS").ok().filter(|d| !d.is_empty()).unwrap_or_else(|| "/usr/local/share:/usr/share".into());
+    let shared = data.split(':').filter(|d| !d.is_empty()).flat_map(|d| [Path::new(d).join("X11/xkb"), Path::new(d).join("xkeyboard-config-2")]);
+    root.into_iter().chain(shared).find_map(|dir| lst_lookup(&std::fs::read_to_string(dir.join("rules/evdev.lst")).ok()?, description))
+}
+
+/// `! layout` lines are `fr  French`, `! variant` lines `bepo  fr: French (BEPO)`.
+fn lst_lookup(lst: &str, description: &str) -> Option<Layout> {
+    let mut section = "";
+    for line in lst.lines() {
+        if let Some(name) = line.strip_prefix('!') {
+            section = name.trim();
+            continue;
+        }
+        let Some((code, rest)) = line.trim().split_once(char::is_whitespace) else { continue };
+        let rest = rest.trim();
+        match section {
+            "layout" if rest == description => return Some(Layout::new(code, "")),
+            "variant" => {
+                if let Some((layout, text)) = rest.split_once(": ") {
+                    if text == description {
+                        return Some(Layout::new(layout, code));
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    None
 }
 
 /// `[('xkb', 'fr'), ('ibus', 'anthy')]`, or `@a(ss) []` when unset: the first `xkb` source.
@@ -169,6 +241,21 @@ mod tests {
         );
         assert_eq!(localectl("   System Locale: LANG=C\n       VC Keymap: de-latin1-nodeadkeys\n"), Some(Layout::new("de", "")));
         assert_eq!(localectl("   System Locale: LANG=C\n       VC Keymap: (unset)\n"), None);
+    }
+
+    #[test]
+    fn sway_and_niri_name_the_active_layout_and_the_rules_give_its_code() {
+        let sway = r#"[{"identifier": "1:1:mouse", "type": "pointer"},
+            {"identifier": "1:1:kbd", "type": "keyboard", "xkb_layout_names": ["English (US)", "French (BEPO)"], "xkb_active_layout_index": 1}]"#;
+        assert_eq!(sway_active(sway).as_deref(), Some("French (BEPO)"));
+        assert_eq!(sway_active(r#"[{"type": "keyboard", "xkb_layout_names": []}]"#), None);
+        assert_eq!(niri_active(r#"{"names": ["German", "English (US)"], "current_idx": 0}"#).as_deref(), Some("German"));
+        let lst = "! model\n  pc105           Generic 105-key PC\n\n! layout\n  us              English (US)\n  fr              French\n\n! variant\n  bepo            fr: French (BEPO)\n  euro            us: English (US, euro on 5)\n";
+        assert_eq!(lst_lookup(lst, "French"), Some(Layout::new("fr", "")));
+        assert_eq!(lst_lookup(lst, "French (BEPO)"), Some(Layout::new("fr", "bepo")));
+        assert_eq!(lst_lookup(lst, "English (US, euro on 5)"), Some(Layout::new("us", "euro")));
+        assert_eq!(lst_lookup(lst, "Generic 105-key PC"), None, "a model is no layout");
+        assert_eq!(lst_lookup(lst, "Klingon"), None);
     }
 
     #[test]
