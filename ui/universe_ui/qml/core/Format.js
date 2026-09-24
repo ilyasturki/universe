@@ -9,10 +9,14 @@ function playTime(seconds) {
     return (seconds / 3600).toFixed(1) + " h";
 }
 
-function totalPlayTime(seconds) {
-    if (!seconds || seconds <= 0)
-        return "0 h";
-    return Math.round(seconds / 3600) + " h";
+function playLabel(game, playingId) {
+    if (!game)
+        return "Play";
+    if (game.installing)
+        return "Manage install";
+    if (game.id === playingId)
+        return "Resume";
+    return game.playTime > 0 ? "Continue" : "Play";
 }
 
 function lastPlayed(date) {

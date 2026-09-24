@@ -5,6 +5,7 @@ Column {
     id: strip
 
     property var images: []
+    property string label: "SCREENSHOTS"
     property int index: 0
     property bool focused: false
     property real sideMargin: 0
@@ -20,7 +21,8 @@ Column {
     visible: images.length > 0
 
     CapsLabel {
-        text: "SCREENSHOTS"
+        visible: text !== ""
+        text: strip.label
         tracking: 0.11
         color: strip.focused ? Theme.textSecondary : Theme.textMuted
     }

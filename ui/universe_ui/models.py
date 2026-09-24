@@ -315,11 +315,8 @@ class Collection(QObject):
 
 
 class GameListModel(ObjectListModel):
-    totalPlayTimeChanged = Signal()
-
     def __init__(self, parent=None):
         super().__init__(parent=parent, roles=GAME_ROLES)
-        self.countChanged.connect(self.totalPlayTimeChanged)
 
     def setGames(self, games):
         for game in self._objects:
@@ -334,7 +331,6 @@ class GameListModel(ObjectListModel):
         if row >= 0:
             index = self.index(row, 0)
             self.dataChanged.emit(index, index)
-            self.totalPlayTimeChanged.emit()
 
     def rowOf(self, game):
         return next((i for i, g in enumerate(self._objects) if g is game), -1)
@@ -342,8 +338,6 @@ class GameListModel(ObjectListModel):
     @Slot(str, result=QObject)
     def byId(self, ident):
         return next((g for g in self._objects if g.id == ident), None)
-
-    totalPlayTime = Property(int, lambda self: sum(g.playTime for g in self._objects), notify=totalPlayTimeChanged)
 
 
 class GameProxy(QSortFilterProxyModel):
@@ -479,28 +473,13 @@ class LimitedGames(GameProxy):
 
 
 @QmlElement
-class FavouriteGames(GameProxy):
-    # `pinned`: source rows kept in place after Y unfavourited them.
-    pinnedChanged = Signal()
-
+class FavouritesFirstGames(GameProxy):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self._pinned = []
-        self._sort_name = "playTime"
-        self._descending = True
+        self._sort_name = "sortTitle"
 
-    def _set_pinned(self, rows):
-        rows = [int(r) for r in (rows or [])]
-        if rows == self._pinned:
-            return
-        self._pinned = rows
-        self.pinnedChanged.emit()
-        self.invalidate()
-
-    def acceptsGame(self, game, source_row):
-        return game.favorite or source_row in self._pinned
-
-    pinned = Property(list, lambda self: list(self._pinned), _set_pinned, notify=pinnedChanged)
+    def sortKey(self, game):
+        return (0 if game.favorite else 1, *super().sortKey(game))
 
 
 @QmlElement

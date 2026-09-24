@@ -1,7 +1,7 @@
 .pragma library
 
-// The near-global hints go right, so they never move as the labels around them change.
-var RIGHT = ["LT RT", "LB RB"];
+// The near-global hint goes right, so it never moves as the labels around it change.
+var RIGHT = ["LB RB"];
 
 function arrange(hints) {
     var out = { left: [], right: [] };

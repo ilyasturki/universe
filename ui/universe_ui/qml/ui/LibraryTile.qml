@@ -1,6 +1,5 @@
 import QtQuick
 import "../core"
-import "../core/Format.js" as Format
 
 Item {
     id: root
@@ -8,7 +7,6 @@ Item {
     property string kind: "library"
     property bool selected: false
     property real idleScale: 1.0
-    property int count: 0
     property real cornerRadius: Theme.dp(Theme.radiusTile)
     property real ringOpacity: 1.0
     property real ringGap: Theme.dp(Theme.ringGap)
@@ -72,7 +70,7 @@ Item {
 
             MenuGlyph {
                 anchors.horizontalCenter: parent.horizontalCenter
-                width: Theme.dp(56)
+                width: Theme.dp(root.kind === "add" ? 72 : 56)
                 height: width
                 kind: root.kind === "add" ? "plus" : "library"
                 tint: Theme.text
@@ -80,20 +78,12 @@ Item {
 
             Text {
                 anchors.horizontalCenter: parent.horizontalCenter
-                text: root.kind === "add" ? "Add a game" : "Library"
+                visible: root.kind !== "add"
+                text: "Library"
                 color: Theme.text
                 font.family: Theme.sans
                 font.weight: Font.DemiBold
                 font.pixelSize: Theme.dp(30)
-            }
-
-            Text {
-                anchors.horizontalCenter: parent.horizontalCenter
-                visible: root.kind !== "add"
-                text: Format.plural(root.count, "game", "games")
-                color: Theme.textMuted
-                font.family: Theme.sans
-                font.pixelSize: Theme.dp(22)
             }
         }
 

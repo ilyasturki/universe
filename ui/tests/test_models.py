@@ -2,7 +2,7 @@ from PySide6.QtCore import QDateTime, QUrl
 
 from conftest import pump
 from universe_ui.models import (
-    FavouriteGames,
+    FavouritesFirstGames,
     Game,
     GameAnchor,
     LibraryGames,
@@ -178,14 +178,14 @@ def test_sorted_and_limited(api):
     assert newest.count == 1
 
 
-def test_favourites_with_pinned(api):
-    favourites = FavouriteGames()
-    favourites.setSourceModel(api.allGames)
-    assert titles(favourites) == ["The Technomancer", "Dead Cells"]
-    row = api.allGames.rowOf(api.allGames.byId("control"))
-    favourites.pinned = [row]
-    assert titles(favourites) == ["The Technomancer", "Dead Cells", "Control"]
-    assert favourites.sourceRow(2) == row
+def test_favourites_first_then_titles(api):
+    shelf = FavouritesFirstGames()
+    shelf.setSourceModel(api.allGames)
+    assert titles(shelf)[:2] == ["Dead Cells", "The Technomancer"]
+    rest = titles(shelf)[2:]
+    assert rest == sorted(rest, key=lambda t: sort_title(t).casefold()) and "Control" in rest
+    api.allGames.byId("control").favorite = True
+    assert titles(shelf)[:3] == ["Control", "Dead Cells", "The Technomancer"], "a heart moves the game up at once"
 
 
 def test_search(api):
@@ -215,6 +215,6 @@ def test_favorite_setter_writes_through(api, fake):
     game.favorite = True
     assert fake.game("control")["favorite"] is True
     assert api.allGames.byId("control").favorite is True
-    favourites = FavouriteGames()
-    favourites.setSourceModel(api.allGames)
-    assert "Control" in titles(favourites)
+    shelf = FavouritesFirstGames()
+    shelf.setSourceModel(api.allGames)
+    assert titles(shelf)[0] == "Control"

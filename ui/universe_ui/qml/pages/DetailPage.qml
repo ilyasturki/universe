@@ -1,6 +1,7 @@
 import QtQuick
 import "../core"
 import "../sound"
+import "../core/Format.js" as Format
 import "../ui"
 
 FocusScope {
@@ -13,58 +14,16 @@ FocusScope {
     signal launchRequested(var game)
     signal closeRequested
     signal menuRequested(var game, Item anchor)
-    signal recordingsRequested(var game)
-    signal journalRequested(var game)
-    signal screenshotsRequested(var game)
-    signal sessionsRequested(var game)
 
-    readonly property int recordingCount: game && filed >= 0 ? (api.universe.recordings(game.id) || []).length : 0
-    readonly property int entryCount: game && filed >= 0 ? (api.universe.journal(game.id) || []).length : 0
-    readonly property int shotCount: game && filed >= 0 ? (api.universe.screenshots(game.id) || []).length : 0
-    property int filed: 0
-    readonly property bool played: game !== null && game.playCount > 0
-    readonly property var pills: ["play", "favourite"].concat(shotCount > 0 ? ["shots"] : [], recordingCount > 0 ? ["recordings"] : [], entryCount > 0 ? ["journal"] : [], played ? ["sessions"] : [])
-    readonly property string action: pills[Math.max(0, Math.min(actionIndex, pills.length - 1))] || "play"
-    readonly property string acceptLabel: action === "favourite" ? favouriteLabel : action === "shots" ? "Screenshots" : action === "recordings" ? "Recordings" : action === "journal" ? "Journal" : action === "sessions" ? "Sessions" : game && game.playTime > 0 ? "Continue" : "Play"
+    readonly property var pills: ["play", "favourite"]
+    readonly property string action: pills[Math.max(0, Math.min(actionIndex, pills.length - 1))]
+    readonly property var session: api.universe.currentSession
+    readonly property string playLabel: Format.playLabel(game, session && session.id !== undefined ? session.id : "")
 
     readonly property real scrollY: flick.contentY
 
     readonly property var screenshots: game && game.assets.screenshotList ? game.assets.screenshotList : []
     readonly property string description: game ? (game.description || game.summary || "") : ""
-    readonly property var facts: {
-        if (!game)
-            return [];
-        var out = [];
-        if (game.developerList.length > 0)
-            out.push({
-                label: "DEVELOPER",
-                value: game.developerList.join(", ")
-            });
-        if (game.publisherList.length > 0)
-            out.push({
-                label: "PUBLISHER",
-                value: game.publisherList.join(", ")
-            });
-        if (game.extra["metacritic"] !== undefined)
-            out.push({
-                label: "METACRITIC",
-                value: String(game.extra["metacritic"][0])
-            });
-        var hours = function (v) {
-            return (Number(v) >= 10 ? Math.round(Number(v)) : Number(v).toFixed(1)) + " h";
-        };
-        var hltb = [["hltb-main", "Main"], ["hltb-extra", "Extra"], ["hltb-completionist", "100%"]].filter(function (k) {
-            return game.extra[k[0]] !== undefined;
-        }).map(function (k) {
-            return k[1] + " " + hours(game.extra[k[0]][0]);
-        });
-        if (hltb.length > 0)
-            out.push({
-                label: "HOW LONG TO BEAT",
-                value: hltb.join("  ·  ")
-            });
-        return out;
-    }
 
     // 0 hero actions, 1 about, 2 screenshots
     property int section: 0
@@ -76,7 +35,7 @@ FocusScope {
     readonly property real heroHeight: Theme.dp(Theme.heroDetail)
     readonly property real ledge: Theme.dp(150)
 
-    readonly property bool hasAbout: description !== "" || facts.length > 0
+    readonly property bool hasAbout: description !== ""
     readonly property bool hasShots: screenshots.length > 0
 
     readonly property var hints: lightbox ? [
@@ -91,11 +50,7 @@ FocusScope {
     ] : [
         {
             glyph: "A",
-            label: section === 2 ? "View" : section === 1 ? "Play" : acceptLabel
-        },
-        {
-            glyph: "Y",
-            label: favouriteLabel
+            label: section === 2 ? "View" : section === 0 && action === "favourite" ? (game && game.favorite ? "Remove from favourites" : "Add to favourites") : playLabel
         },
         {
             glyph: "Start",
@@ -107,23 +62,7 @@ FocusScope {
         }
     ]
 
-    readonly property string favouriteLabel: game && game.favorite ? "Remove from favourites" : "Add to favourites"
-
     onGameChanged: reset()
-
-    Connections {
-        target: api.universe
-        function onRecordingFiled(session, id, path) {
-            page.filed++;
-        }
-        function onEntryWritten(session, id) {
-            page.filed++;
-        }
-        function onLibraryChanged(ids) {
-            if (page.game && (ids.length === 0 || ids.indexOf(page.game.id) >= 0))
-                page.filed++;
-        }
-    }
 
     function reset() {
         section = 0;
@@ -217,14 +156,6 @@ FocusScope {
         actionIndex = Math.max(0, pills.indexOf(name));
     }
 
-    component InfoPill: Rectangle {
-        height: Theme.dp(41)
-        radius: height / 2
-        color: Qt.rgba(1, 1, 1, 0.10)
-        border.width: 1
-        border.color: Theme.surfaceBorder
-    }
-
     Flickable {
         id: flick
 
@@ -262,60 +193,8 @@ FocusScope {
                 height: actions.y + actions.height
                 opacity: Math.max(0, 1 - flick.contentY / Theme.dp(300))
 
-                Row {
-                    id: chips
-                    spacing: Theme.dp(14)
-
-                    InfoPill {
-                        visible: page.game !== null && page.game.collections.count > 0
-                        width: platformIcon.width + Theme.dp(36)
-
-                        PlatformIcon {
-                            id: platformIcon
-                            anchors.centerIn: parent
-                            game: page.game
-                            size: Theme.dp(24)
-                            labelSize: Theme.dp(20)
-                        }
-                    }
-
-                    InfoPill {
-                        visible: page.game !== null && page.game.runner !== ""
-                        width: runnerBadge.width + Theme.dp(36)
-
-                        RunnerBadge {
-                            id: runnerBadge
-                            anchors.centerIn: parent
-                            runner: page.game ? page.game.runner : ""
-                            name: page.game ? page.game.runnerName : ""
-                            size: Theme.dp(24)
-                            labelSize: Theme.dp(20)
-                        }
-                    }
-
-                    Repeater {
-                        model: page.game ? page.game.genreList.slice(0, 3).concat(page.game.players > 1 ? [page.game.players + " players"] : []) : []
-
-                        InfoPill {
-                            width: chipText.width + Theme.dp(40)
-
-                            Text {
-                                id: chipText
-                                anchors.centerIn: parent
-                                text: modelData
-                                color: Theme.text
-                                font.family: Theme.sans
-                                font.weight: Font.Medium
-                                font.pixelSize: Theme.dp(20)
-                            }
-                        }
-                    }
-                }
-
                 HeroLogo {
                     id: heroLogo
-                    anchors.top: chips.bottom
-                    anchors.topMargin: Theme.dp(24)
                     game: page.game
                     logoWidth: Theme.dp(460)
                     logoHeight: Theme.dp(160)
@@ -332,7 +211,7 @@ FocusScope {
                     readonly property bool active: page.section === 0 && !page.lightbox
 
                     PillButton {
-                        label: page.game && page.game.playTime > 0 ? "Continue" : "Play"
+                        label: page.playLabel
                         focused: actions.active && page.action === "play"
                         dimmed: actions.active && page.action !== "play"
                         onPicked: page.pointToAction("play")
@@ -386,46 +265,6 @@ FocusScope {
                             onPicked: page.pointToAction("favourite")
                         }
                     }
-
-                    PillButton {
-                        visible: page.shotCount > 0
-                        label: "Screenshots"
-                        icon: "camera"
-                        ghost: true
-                        focused: actions.active && page.action === "shots"
-                        dimmed: actions.active && page.action !== "shots"
-                        onPicked: page.pointToAction("shots")
-                    }
-
-                    PillButton {
-                        visible: page.recordingCount > 0
-                        label: "Recordings"
-                        icon: "film"
-                        ghost: true
-                        focused: actions.active && page.action === "recordings"
-                        dimmed: actions.active && page.action !== "recordings"
-                        onPicked: page.pointToAction("recordings")
-                    }
-
-                    PillButton {
-                        visible: page.entryCount > 0
-                        label: "Journal"
-                        icon: "book"
-                        ghost: true
-                        focused: actions.active && page.action === "journal"
-                        dimmed: actions.active && page.action !== "journal"
-                        onPicked: page.pointToAction("journal")
-                    }
-
-                    PillButton {
-                        visible: page.played
-                        label: "Sessions"
-                        icon: "terminal"
-                        ghost: true
-                        focused: actions.active && page.action === "sessions"
-                        dimmed: actions.active && page.action !== "sessions"
-                        onPicked: page.pointToAction("sessions")
-                    }
                 }
             }
 
@@ -439,89 +278,37 @@ FocusScope {
                 y: page.heroHeight + Theme.dp(44)
                 spacing: Theme.dp(48)
 
-                StatRow {
-                    spacing: Theme.dp(74)
-                    game: page.game
-                }
-
-                Item {
+                Text {
                     id: about
 
-                    width: parent.width
-                    height: Math.max(aboutText.height, factsColumn.height)
-                    visible: page.hasAbout
-
                     readonly property bool focused: page.section === 1 && !page.lightbox
+
+                    width: Theme.dp(1080)
+                    visible: page.hasAbout
+                    text: page.description
+                    color: about.focused ? Theme.text : Theme.textSecondary
+                    font.family: Theme.sans
+                    font.pixelSize: Theme.dp(24)
+                    lineHeight: 1.5
+                    wrapMode: Text.WordWrap
+
+                    Behavior on color {
+                        ColorEase {
+                            duration: Theme.durBase
+                        }
+                    }
 
                     Pointer {
                         accept: false
                         wash: 0
                         onPicked: page.section = 1
                     }
-
-                    Column {
-                        id: aboutText
-                        width: Theme.dp(1080)
-                        spacing: Theme.dp(16)
-                        visible: page.description !== ""
-
-                        CapsLabel {
-                            text: "ABOUT"
-                            tracking: 0.11
-                            color: about.focused ? Theme.textSecondary : Theme.textMuted
-                        }
-
-                        Text {
-                            width: parent.width
-                            text: page.description
-                            color: about.focused ? Theme.text : Theme.textSecondary
-                            font.family: Theme.sans
-                            font.pixelSize: Theme.dp(24)
-                            lineHeight: 1.5
-                            wrapMode: Text.WordWrap
-
-                            Behavior on color {
-                                ColorEase {
-                                    duration: Theme.durBase
-                                }
-                            }
-                        }
-                    }
-
-                    Column {
-                        id: factsColumn
-                        anchors.right: parent.right
-                        width: Theme.dp(520)
-                        spacing: Theme.dp(28)
-
-                        Repeater {
-                            model: page.facts
-
-                            Column {
-                                width: factsColumn.width
-                                spacing: Theme.dp(8)
-
-                                CapsLabel {
-                                    text: modelData.label
-                                    tracking: 0.11
-                                }
-                                Text {
-                                    width: parent.width
-                                    text: modelData.value
-                                    color: Theme.text
-                                    font.family: Theme.sans
-                                    font.weight: Font.DemiBold
-                                    font.pixelSize: Theme.dp(26)
-                                    wrapMode: Text.WordWrap
-                                }
-                            }
-                        }
-                    }
                 }
 
                 ScreenshotStrip {
                     id: shots
 
+                    label: ""
                     width: parent.width
                     images: page.screenshots
                     index: page.shotIndex
@@ -608,14 +395,6 @@ FocusScope {
                 page.lightbox = true;
             } else if (page.section === 0 && page.action === "favourite") {
                 page.toggleFavourite();
-            } else if (page.section === 0 && page.action === "shots") {
-                page.screenshotsRequested(page.game);
-            } else if (page.section === 0 && page.action === "recordings") {
-                page.recordingsRequested(page.game);
-            } else if (page.section === 0 && page.action === "journal") {
-                page.journalRequested(page.game);
-            } else if (page.section === 0 && page.action === "sessions") {
-                page.sessionsRequested(page.game);
             } else {
                 page.launchRequested(page.game);
             }
@@ -637,8 +416,16 @@ FocusScope {
             else
                 Sound.edge();
         } else if (api.keys.isMenu(event)) {
-            if (page.game)
-                page.menuRequested(page.game, heroLogo);
+            if (!page.game)
+                return;
+            // The menu sits beside the logo: a scrolled page snaps back under it.
+            if (flick.contentY > 0) {
+                pageEase.enabled = false;
+                page.section = 0;
+                flick.contentY = 0;
+                pageEase.enabled = true;
+            }
+            page.menuRequested(page.game, heroLogo);
         }
     }
 }

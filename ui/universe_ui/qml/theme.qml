@@ -23,10 +23,6 @@ FocusScope {
             source: "pages/HomePage.qml"
         },
         {
-            name: "Favourites",
-            source: "pages/FavouritesPage.qml"
-        },
-        {
             name: "Media",
             source: "pages/MediaPage.qml"
         },
@@ -39,9 +35,9 @@ FocusScope {
             source: "pages/LibraryPage.qml"
         }
     ]
-    readonly property int barCount: 4
-    readonly property int settingsTab: 3
-    readonly property int libraryTab: 4
+    readonly property int barCount: 3
+    readonly property int settingsTab: 2
+    readonly property int libraryTab: 3
     property int tabIndex: 0
     property bool detailOpen: false
     property var detailGame: null
@@ -374,22 +370,19 @@ FocusScope {
             out.push({
                 icon: "camera",
                 label: "Screenshots",
-                action: "screenshots",
-                detail: String(shots)
+                action: "screenshots"
             });
         if (recordings > 0)
             out.push({
                 icon: "film",
                 label: "Recordings",
-                action: "recordings",
-                detail: String(recordings)
+                action: "recordings"
             });
         if (entries > 0)
             out.push({
                 icon: "book",
                 label: "Journal",
-                action: "journal",
-                detail: String(entries)
+                action: "journal"
             });
         return out;
     }
@@ -403,7 +396,7 @@ FocusScope {
         }
         Sound.panel();
         var media = mediaItems(game);
-        var play = sessionRunning && game.id === playingId ? [
+        var items = sessionRunning && game.id === playingId ? [
             {
                 icon: "play",
                 label: "Resume",
@@ -440,6 +433,14 @@ FocusScope {
                 action: "media",
                 more: true
             });
+        look.push({
+            icon: "sliders",
+            label: "Manage",
+            action: "manage",
+            more: true
+        });
+        look[0].gap = true;
+        items = items.concat(look);
         var manage = [
             {
                 icon: "sliders",
@@ -447,27 +448,23 @@ FocusScope {
                 action: "settings"
             },
             {
-                icon: "terminal",
-                label: "Sessions and logs",
-                action: "sessions"
-            },
-            {
                 icon: "image",
                 label: "Artwork",
                 action: "artwork"
             },
             {
+                icon: "terminal",
+                label: "Sessions and logs",
+                action: "sessions"
+            },
+            {
                 icon: "eye-off",
                 label: "Remove from library…",
                 action: "remove",
-                danger: true
+                danger: true,
+                gap: true
             }
         ];
-        var items = [];
-        [play, look, manage].forEach(function (group) {
-            group[0].gap = items.length > 0;
-            items = items.concat(group);
-        });
         var pages = {
             settings: "GameSettingsPage",
             artwork: "ArtworkPage",
@@ -476,35 +473,40 @@ FocusScope {
             journal: "JournalPage",
             sessions: "SessionsPage"
         };
+        var openPage = function (action) {
+            root.restoreFocus();
+            root.openSub("pages/" + pages[action] + ".qml", {
+                game: game
+            });
+        };
+        var askRemove = function () {
+            Sound.panel();
+            gameMenu.push([
+                {
+                    icon: "",
+                    label: "Keep it",
+                    action: ""
+                },
+                {
+                    icon: "eye-off",
+                    label: "Remove from the library",
+                    action: "yes",
+                    danger: true
+                }
+            ], "Remove " + game.title + "?", function (answer) {
+                if (answer === "yes")
+                    root.removeGame(game);
+                root.restoreFocus();
+            });
+        };
         gameMenu.show(items, anchor, Qt.rect(0, 0, anchor.width, anchor.height), "", function (action) {
-            if (action === "media") {
+            if (action === "media" || action === "manage") {
                 Sound.enter();
-                gameMenu.push(media, "Media", function (page) {
-                    root.restoreFocus();
-                    root.openSub("pages/" + pages[page] + ".qml", {
-                        game: game
-                    });
-                });
-                return;
-            }
-            if (action === "remove") {
-                Sound.panel();
-                gameMenu.push([
-                    {
-                        icon: "",
-                        label: "Keep it",
-                        action: ""
-                    },
-                    {
-                        icon: "eye-off",
-                        label: "Remove from the library",
-                        action: "yes",
-                        danger: true
-                    }
-                ], "Remove " + game.title + "?", function (answer) {
-                    if (answer === "yes")
-                        root.removeGame(game);
-                    root.restoreFocus();
+                gameMenu.push(action === "media" ? media : manage, action === "media" ? "Media" : "Manage", function (picked) {
+                    if (picked === "remove")
+                        askRemove();
+                    else
+                        openPage(picked);
                 });
                 return;
             }
@@ -519,10 +521,6 @@ FocusScope {
                 root.stopSession();
             else if (action === "resume")
                 root.resumeSession();
-            else
-                root.openSub("pages/" + pages[action] + ".qml", {
-                    game: game
-                });
         });
     }
 
@@ -979,26 +977,6 @@ FocusScope {
             }
             function onMenuRequested(game, anchor) {
                 root.openMenu(game, anchor);
-            }
-            function onRecordingsRequested(game) {
-                root.openSub("pages/RecordingsPage.qml", {
-                    game: game
-                });
-            }
-            function onJournalRequested(game) {
-                root.openSub("pages/JournalPage.qml", {
-                    game: game
-                });
-            }
-            function onScreenshotsRequested(game) {
-                root.openSub("pages/ScreenshotsPage.qml", {
-                    game: game
-                });
-            }
-            function onSessionsRequested(game) {
-                root.openSub("pages/SessionsPage.qml", {
-                    game: game
-                });
             }
         }
 

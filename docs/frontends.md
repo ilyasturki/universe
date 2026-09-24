@@ -94,8 +94,7 @@ place, no list reset. `api.screens.shots` rows carry the same `thumb` and `thumb
 `entryWritten`, on `sessionEnded` and every 10 s while any is pending (so the elapsed time and
 the module's 30-min timeout show up); `appeared(session, title)` and
 `resolved(session, game, state, text)` fire once per session and become the "Journal: writing …",
-"Journal: <title>" and "Journal failed: <reason>" toasts, and the tab bar pulses a book next to
-the session badge while the count is not zero. Whenever nothing is being written it calls
+"Journal: <title>" and "Journal failed: <reason>" toasts. Whenever nothing is being written it calls
 `sweep_journals()`: the core starts the oldest owed entry, and the reply's `next` arms a one-shot
 timer (a minute at least, half an hour at most) so a session put off until the quota lifts is
 picked up without anyone asking. That is the retry loop — one entry at a time, none while a game
@@ -324,7 +323,8 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
 - **`QtQml.Models.SortFilterProxyModel` cannot carry the theme's filters.** It has no `get()`, no
   `ExpressionFilter`, and its `FunctionFilter` segfaults. Every proxy the theme needs is instead a
   `QSortFilterProxyModel` subclass. `SortedGames`, `RecentGames`, `LimitedGames`,
-  `FavouriteGames`, `SearchGames` and `LibraryGames` are exported to QML as `import Universe`;
+  `FavouritesFirstGames` (Reprise's Library: hearted first, then by title), `SearchGames` and
+  `LibraryGames` are exported to QML as `import Universe`;
   `CollectionGames` is instantiated Python-side, one per collection. `get(i)` returns the `Game`;
   `sourceRow(i)` stands in for `mapToSource(i)`, whose C++ name is virtual and breaks sorting if
   shadowed. `RecentGames` admits a game played or added (`added_at`) and orders by the later of the
@@ -355,8 +355,8 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
   fine; so is a single `store.rows.length` or `store.rows[3]`.
 - **Behind a game the scene holds still.** `Theme.covered` is `api.home.underGame` (bound by the
   root): the game is on screen over the launcher, which happens inside gamescope alone (on the
-  desktop the launcher is a window of its own, and Alt-Tab must find it live). The hero's drift, the session badge's pulse and second hand, the journal mark's
-  pulse and the clock pause on it and catch up when the launcher is back, so nothing repaints
+  desktop the launcher is a window of its own, and Alt-Tab must find it live). The hero's drift, the session badge's pulse and second hand
+  and the clock pause on it and catch up when the launcher is back, so nothing repaints
   under the game. The host's polls keep their cadence (the HOME flip is as fast as before) but
   answer off the UI thread, and the pad thread reads no button while covered, so a press meant
   for the game costs the launcher nothing.
@@ -368,9 +368,9 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
   binding does not re-evaluate on a reorder. `GameAnchor` (`import Universe`) does: bind `model` and
   `index` to the view's and `client` to `api.universe`, read `game`, follow `moved(index)`; `hold(id)`
   picks the game to follow, and the anchor holds the one whose session just ended.
-- **Collections are platforms.** The theme labels a collection by its `shortName` and looks for
-  `assets/platforms/<shortName>.svg`; the core gives a platform string, which `api.py` maps
-  (`windows`, `switch`, `wii`, `gamecube`, `nds`, `ps3`, …) and falls back to the source id.
+- **Collections are platforms.** A collection's `shortName` comes from the core's platform
+  string, which `api.py` maps (`windows`, `switch`, `wii`, `gamecube`, `nds`, `ps3`, …), falling
+  back to the source id. The Switch 2 look groups its software by them; Reprise shows none.
 - **Gamepad.** SDL2 in a `QThread`, `SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS=1`, hot-plug. Each
   button becomes the keyboard key Pegasus already bound to that action, so the theme's key logic is
   untouched. Axes use hysteresis — 0.5 to press, 0.3 to release — and arrows repeat after 350 ms
@@ -381,7 +381,7 @@ These cost real time to discover; they are properties of Qt 6.11 / PySide6 6.11,
 | A / B | Return / Esc | Accept / Cancel |
 | X / Y | I / F | Details / Filters |
 | LB / RB | Q / E | previous / next tab |
-| LT / RT | PageUp / PageDown | collection, section, keyboard page |
+| LT / RT | PageUp / PageDown | settings section, keyboard page |
 | Start | F1 | context menu of the game on screen, whichever part of the page has focus |
 | Guide | — | HOME, through the watcher (`api.home`), not the mapper |
 | d-pad, left stick | arrows | navigation |
@@ -404,27 +404,29 @@ outline and letters.
 
 Start, A held 450 ms or Guide with no session opens `ui/ActionMenu.qml` beside the game on
 screen (`theme.qml` `openMenu`, fed by `focusTarget.currentGame` and `menuAnchor`; a page with an
-`openMenu()` of its own, the Media tab, gets that one instead), three groups
-parted by a hairline: play (Play / Continue — Resume and Quit *title* for the running game); look
-(Details, dropped when the detail page is already open on it; the favourite toggle; Media ›, only
-when the game has a screenshot, a recording or a journal entry); manage (Game settings, Artwork,
-Remove from library…). Media › pushes a second list in place — the non-empty pages with their
-counts at the right — on A or Right, and B or Left comes back to the first; Remove asks in place (Keep it / Remove from
-the library) and goes through `api.universe.remove(id, false)`: the watcher drops the game, the
-detail page closes if it was on it. An item's `gap` draws the hairline above it, `detail` a
+`openMenu()` of its own, the Media tab, gets that one instead): the everyday rows, the rest one
+list away. Play / Continue (Resume and Quit *title* for the running game), a hairline, then Details
+(dropped when the detail page is already open on it), the favourite toggle, Media › (only when the
+game has a screenshot, a recording or a journal entry) and Manage ›. Media › pushes the non-empty
+pages, Manage › Game settings, Artwork, Sessions and logs and, past a
+hairline, Remove from library…; either opens on A or Right, and B or Left comes back to the first.
+Remove asks in place (Keep it / Remove from the library) and goes through
+`api.universe.remove(id, false)`: the watcher drops the game, the detail page closes if it was on it. An item's `gap` draws the hairline above it, `detail` a
 secondary text at the right, `more` a chevron that Right opens; `push(list, heading, after)` stacks a list over the
 one showing, `cancel()` pops before it closes.
 
 ## The hint bar
 
 Every page and overlay exposes `hints`, `[{ glyph, label, dim }]`, and the bar on screen shows
-the one with the focus (`theme.qml` picks the menu's, the tab bar's or the page's). `ui/Hints.js`
-splits them: the page's hints on the left in the order the page wrote them, the near-global ones
-— `LT RT` (the section or collection cycled by the triggers) and `LB RB` (the tabs, appended by
-the shell) — on the right, so they never move as the labels around them change. The clock and the pad's
+the one with the focus (`theme.qml` picks the menu's, the tab bar's or the page's). Reprise's
+lists stay short — the main action, More (Start) and Back where there is one — and leave out the
+shortcuts they would repeat on every page: X (details) and Y (favourite) still work unlisted.
+`theme.qml` adds `LB RB` Tabs itself, on the tab bar and on a tab page that is not modal.
+`ui/Hints.js` splits them: the page's hints on the left in the order the page wrote them, the
+near-global `LB RB` on the right, so it never moves as the labels around it change. The clock and the pad's
 battery live in the tab bar alone; a sub page's bar carries hints only.
 A hint whose action the page has nothing for
-right now (no journal entry for this recording, no refresh in this section) is kept in place and
+right now (More on a settings row with nothing to list, a media grid with nothing on it) is kept in place and
 dimmed (`dim: true`), never dropped; hints for what the pad makes obvious — moving with the d-pad
 — are not written, only a d-pad with a specific meaning is (`Seek 10 s`, `Previous / next`).
 
@@ -450,8 +452,7 @@ click opens the game menu as a held A does). A button, a menu row, a tab, a sett
 of the on-screen keyboard is `direct`: one click picks and presses. A right click is B. The wheel
 scrolls the view under it, the ring staying where it is — a notch adds a fixed step to where the
 view is heading and it eases after, so notches run into one motion, and a touchpad's pixels move
-it as they come — a strip that scrolls sideways (the Home rail, the favourites, a screenshot
-strip) by a card from the wheel's y, its x or Shift+y; the next key brings the view back to the
+it as they come — a strip that scrolls sideways (the Home rail, a screenshot strip) by a card from the wheel's y, its x or Shift+y; the next key brings the view back to the
 ring. The keys go through
 `api.keys.press`, so a page handles a click exactly as it handles the pad.
 
@@ -674,8 +675,7 @@ through `uninstall(id)` / `remove(id)` on the form (a `message` when done). Both
 `libraryChanged` — the counts, the Games card — so neither has a Refresh. Back on the tab, the cursor finds
 the runner again. The Switch 2 look has the same list as System Settings › Runners and the same
 page as `switch2/pages/FormPage.qml`, pushed on its stack. The game settings page's Launch group follows the runner: a Runner picker (names
-shown, ids written), then the rows the runner takes. The detail page shows the runner's logo next
-to the platform.
+shown, ids written), then the rows the runner takes.
 
 ## Adding a game
 
@@ -683,10 +683,11 @@ The runner page's row is for someone who already knows the runner. Everyone else
 the Library: `ui/CoverGrid.qml` and `switch2/pages/SoftwareGrid.qml` take `addTile`, one more cell
 after the last game (a "+" tile, the cursor on it as `addSelected` / `atAddTile`, never a model
 index; `currentGame` is null there and A emits `addRequested`). With nothing in the library, Home
-and the Library are the prompt: Reprise's hero band reads "Add your first game" and its rail
-tile (`ui/LibraryTile.qml` `kind: "add"`) adds one instead of opening the Library; the Switch 2
+and the Library are the prompt: Reprise's hero band reads "Welcome", a line on where games come
+from, and Add a game and Set up; its rail tile (`ui/LibraryTile.qml` `kind: "add"`, a plus with no
+words, as the Library's own add tile) adds one instead of opening the Library; the Switch 2
 HOME row's disc does the same and All Software says so under its tile. Reprise's Library is no tab
-of its own: `theme.qml` keeps it past the four the bar shows (`libraryTab`), Home's rail tile opens it
+of its own: `theme.qml` keeps it past the three the bar shows (`libraryTab`), Home's rail tile opens it
 (`libraryRequested`), the bar lights Home while it is up, LB / RB step over it and B returns to Home.
 
 Both open `api.screens.add` — Reprise as `pages/AddGamePage.qml` over the tab (`openSub` with

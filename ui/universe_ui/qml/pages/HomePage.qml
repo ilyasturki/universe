@@ -10,7 +10,6 @@ FocusScope {
 
     focus: true
 
-    signal detailRequested(var game)
     signal libraryRequested
     signal chromeRequested
     signal addRequested
@@ -36,41 +35,24 @@ FocusScope {
 
     readonly property var hints: {
         var out = [];
-        if (tileSelected) {
+        if (tileSelected)
             out.push({
                 glyph: "A",
-                label: onSetup ? "Set up" : page.empty ? "Add a game" : "Open library"
+                label: onSetup ? "Set up" : page.empty ? "Add a game" : "Open"
             });
-            out.push({
-                glyph: "X",
-                label: "Details",
-                dim: true
-            });
-            out.push({
-                glyph: "Y",
-                label: favouriteLabel,
-                dim: true
-            });
-        } else {
+        else
             out.push({
                 glyph: "A",
-                label: heroActions.activeFocus && heroActions.index === 1 ? "Details" : playLabel
-            });
-            out.push({
-                glyph: "X",
-                label: "Details",
+                label: playLabel
+            }, {
+                glyph: "Start",
+                label: "More",
                 dim: arriving
             });
-            out.push({
-                glyph: "Y",
-                label: favouriteLabel,
-                dim: arriving
-            });
-        }
         if (heroActions.activeFocus)
             out.push({
                 glyph: "B",
-                label: "Back to games"
+                label: "Back"
             });
         return out;
     }
@@ -78,8 +60,7 @@ FocusScope {
     readonly property var session: api.universe.currentSession
     readonly property string playingId: session && session.id !== undefined ? session.id : ""
     readonly property bool arriving: currentGame !== null && currentGame.installing
-    readonly property string playLabel: arriving ? "Manage install" : currentGame && currentGame.id === playingId ? "Resume" : currentGame && currentGame.playTime > 0 ? "Continue" : "Play"
-    readonly property string favouriteLabel: currentGame && currentGame.favorite ? "Remove from favourites" : "Add to favourites"
+    readonly property string playLabel: Format.playLabel(currentGame, playingId)
 
     readonly property real bandHeight: Theme.dp(Theme.heroBand)
     readonly property real railGapTop: Theme.dp(28)
@@ -90,9 +71,7 @@ FocusScope {
     readonly property real spread: (cellSize - slotSize) / 2
     readonly property real idleScale: 176 / 240
 
-    readonly property int libraryCount: api.allGames.count
-    readonly property int librarySeconds: api.allGames.totalPlayTime
-    readonly property bool empty: libraryCount === 0
+    readonly property bool empty: api.allGames.count === 0
 
     onRailCountChanged: if (railCount === 0)
         tileSelected = true
@@ -274,7 +253,7 @@ FocusScope {
 
             Text {
                 anchors.bottom: heroLogo.bottom
-                text: page.empty ? "Add your first game" : "Library"
+                text: page.empty ? "Welcome" : "Library"
                 color: Theme.text
                 font.family: Theme.sans
                 font.weight: Font.Bold
@@ -286,26 +265,15 @@ FocusScope {
                 }
             }
 
-            GameMetaLine {
-                id: heroMeta
+            Text {
+                id: emptyNote
                 anchors.top: heroLogo.bottom
                 anchors.topMargin: Theme.dp(28)
-                game: page.currentGame
-                showYear: false
-                opacity: page.tileSelected ? 0.0 : 1.0
-
-                Behavior on opacity {
-                    Ease {}
-                }
-            }
-
-            Text {
-                anchors.verticalCenter: heroMeta.verticalCenter
-                text: page.empty ? "Nothing in the library yet: a file on this machine, a store, or your Lutris games." : Format.plural(page.libraryCount, "game", "games") + " · " + Format.totalPlayTime(page.librarySeconds) + " played"
+                text: "Add a game from this machine, a store or Lutris."
                 color: Theme.textSecondary
                 font.family: Theme.sans
                 font.pixelSize: Theme.dp(24)
-                opacity: page.tileSelected ? 1.0 : 0.0
+                opacity: page.tileSelected && page.empty ? 1.0 : 0.0
 
                 Behavior on opacity {
                     Ease {}
@@ -315,13 +283,13 @@ FocusScope {
             FocusScope {
                 id: heroActions
 
-                anchors.top: heroMeta.bottom
+                anchors.top: page.empty ? emptyNote.bottom : heroLogo.bottom
                 anchors.topMargin: Theme.dp(34)
                 width: page.tileSelected ? tileButtons.width : buttons.width
                 height: buttons.height
 
                 property int index: 0
-                readonly property int last: page.tileSelected ? (page.empty ? 1 : 0) : 1
+                readonly property int last: page.tileSelected && page.empty ? 1 : 0
 
                 function step(d) {
                     index = Sound.stepped(index, d, last + 1);
@@ -339,18 +307,8 @@ FocusScope {
 
                     PillButton {
                         label: page.playLabel
-                        focused: heroActions.activeFocus && heroActions.index === 0
-                        dimmed: heroActions.activeFocus && heroActions.index !== 0
+                        focused: heroActions.activeFocus
                         onPicked: page.pointToAction(0)
-                    }
-
-                    PillButton {
-                        ghost: true
-                        icon: "info"
-                        label: "Details"
-                        focused: heroActions.activeFocus && heroActions.index === 1
-                        dimmed: heroActions.activeFocus && heroActions.index !== 1
-                        onPicked: page.pointToAction(1)
                     }
                 }
 
@@ -366,7 +324,7 @@ FocusScope {
 
                     PillButton {
                         icon: page.empty ? "plus" : "library"
-                        label: page.empty ? "Add a game" : "Open library"
+                        label: page.empty ? "Add a game" : "Open"
                         focused: heroActions.activeFocus && heroActions.index === 0
                         dimmed: heroActions.activeFocus && heroActions.index !== 0
                         onPicked: page.pointToAction(0)
@@ -392,10 +350,7 @@ FocusScope {
                 }
 
                 Keys.onPressed: function (event) {
-                    if (api.keys.isAccept(event) && !page.tileSelected && heroActions.index === 1) {
-                        event.accepted = true;
-                        page.detailRequested(page.currentGame);
-                    } else if (api.keys.isCancel(event)) {
+                    if (api.keys.isCancel(event)) {
                         event.accepted = true;
                         Sound.cancel();
                         rail.forceActiveFocus();
@@ -412,22 +367,11 @@ FocusScope {
         anchors.right: parent.right
         color: Theme.ground
 
-        CapsLabel {
-            id: standInNote
-
-            anchors.top: parent.top
-            anchors.left: parent.left
-            anchors.leftMargin: Theme.dp(90)
-            size: Theme.dp(15)
-            visible: page.standingIn && !page.empty
-            text: "FROM YOUR LIBRARY · RECENTLY PLAYED GOES HERE"
-        }
-
         ListView {
             id: rail
 
             anchors.top: parent.top
-            anchors.topMargin: page.railGapTop + (standInNote.visible ? standInNote.height + Theme.dp(14) : 0)
+            anchors.topMargin: page.railGapTop
             anchors.left: parent.left
             anchors.right: parent.right
             // A header would move originX negative, and the view then refuses to scroll all the way to it.
@@ -462,7 +406,6 @@ FocusScope {
                     kind: page.empty ? "add" : "library"
                     selected: page.tileSelected
                     idleScale: page.idleScale
-                    count: page.libraryCount
                     ringOpacity: rail.activeFocus || page.menuOpen ? 1.0 : Theme.ringIdle
                     pointable: true
                     current: page.tileSelected && rail.activeFocus

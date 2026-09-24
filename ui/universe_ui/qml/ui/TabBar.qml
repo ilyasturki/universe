@@ -39,12 +39,12 @@ FocusScope {
             label: "Resume"
         },
         {
-            glyph: "B",
-            label: "Back"
+            glyph: "Start",
+            label: "More"
         },
         {
-            glyph: "≡",
-            label: "Options"
+            glyph: "B",
+            label: "Back"
         },
         {
             glyph: "LB RB",
@@ -303,32 +303,6 @@ FocusScope {
         anchors.rightMargin: Theme.dp(Theme.edgeMargin)
         anchors.verticalCenter: parent.verticalCenter
         spacing: Theme.dp(34)
-
-        MenuGlyph {
-            id: journalMark
-
-            anchors.verticalCenter: parent.verticalCenter
-            width: Theme.dp(24)
-            height: width
-            visible: api.screens.pendingJournals.count > 0
-            kind: "book"
-            tint: Theme.textSecondary
-
-            SequentialAnimation on opacity {
-                running: journalMark.visible && !Theme.covered
-                loops: Animation.Infinite
-                NumberAnimation {
-                    to: 0.35
-                    duration: 900
-                    easing.type: Easing.InOutQuad
-                }
-                NumberAnimation {
-                    to: 1.0
-                    duration: 900
-                    easing.type: Easing.InOutQuad
-                }
-            }
-        }
 
         MenuGlyph {
             id: glass

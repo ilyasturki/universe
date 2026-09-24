@@ -375,6 +375,37 @@ def test_the_install_pages_render_a_running_install_in_both_looks(api, fake):
     pump(50)
 
 
+def test_the_reprise_library_leads_with_hearts_and_y_hearts_the_game_under_the_cursor(api):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    def title():
+        game = page.property("currentGame")
+        return game.property("title") if game is not None else None
+
+    def click(key, times=1):
+        for _ in range(times):
+            QTest.keyClick(window, key)
+        pump(80)
+
+    _engine, window = render(api, activate=True)
+    root = window.property("contentItem").childItems()[0].property("item")
+    root.goToTab(root.property("libraryTab"))
+    settle(window)
+    page = root.property("activePage")
+    assert title() == "Dead Cells", "the hearted games first, by title"
+    click(Qt.Key.Key_Right, 2)
+    assert title() == "Batman: Arkham Origins", "then the rest, by title"
+    assert [h["glyph"] for h in page.property("hints").toVariant()] == ["A", "Start", "B"]
+    click(Qt.Key.Key_F)
+    assert api.allGames.byId("batman-arkham-origins").favorite is True
+    assert title() == "Batman: Arkham Origins", "the cursor follows the game to its place among the hearts"
+    click(Qt.Key.Key_Right)
+    assert title() == "Dead Cells"
+    window.close()
+    pump(50)
+
+
 def test_the_right_stick_pages_the_grids_in_both_looks(api):
     from PySide6.QtCore import Q_ARG, QMetaObject, Qt
     from PySide6.QtTest import QTest
@@ -607,15 +638,15 @@ def test_the_reprise_game_menu_groups_its_rows_and_hides_the_media_a_game_has_no
     click(Qt.Key.Key_F1)
     assert menu.property("open") is True and root.property("activePage").property("currentGame").id == "the-technomancer"
     items = menu.property("items").toVariant()
-    assert [i["action"] for i in items] == ["play", "details", "favourite", "media", "settings", "sessions", "artwork", "remove"]
-    assert [i.get("gap", False) for i in items] == [False, True, False, False, True, False, False, False], "three groups"
-    assert items[3]["more"] is True and items[7]["danger"] is True
+    assert [i["action"] for i in items] == ["play", "details", "favourite", "media", "manage"]
+    assert [i.get("gap", False) for i in items] == [False, True, False, False, False], "play, then the rest"
+    assert items[3]["more"] is True and items[4]["more"] is True
     click(Qt.Key.Key_Down, 3)
     click(Qt.Key.Key_Return)
     assert menu.property("open") is True and menu.property("title") == "Media" and len(menu.property("stack").toVariant()) == 1
     counts = {kind: len(getattr(fake, kind)("the-technomancer")) for kind in ("screenshots", "recordings", "journal")}
     assert all(counts.values()), "the fixture game has every kind"
-    assert [(i["action"], i["detail"]) for i in menu.property("items").toVariant()] == [(kind, str(n)) for kind, n in counts.items()]
+    assert [i["action"] for i in menu.property("items").toVariant()] == list(counts), "the kinds the game has, no counts"
     click(Qt.Key.Key_Escape)
     assert menu.property("open") is True and menu.property("index") == 3 and actions()[3] == "media", "B comes back to the row that opened it"
     click(Qt.Key.Key_Escape)
@@ -625,8 +656,12 @@ def test_the_reprise_game_menu_groups_its_rows_and_hides_the_media_a_game_has_no
     game = api.allGames.byId("mini-metro")
     QMetaObject.invokeMethod(root, "openMenu", Q_ARG("QVariant", game), Q_ARG("QVariant", page.property("menuAnchor")))
     pump(100)
-    assert actions() == ["play", "details", "favourite", "settings", "sessions", "artwork", "remove"], "nothing to browse: no Media row"
-    click(Qt.Key.Key_Down, 6)
+    assert actions() == ["play", "details", "favourite", "manage"], "nothing to browse: no Media row"
+    click(Qt.Key.Key_Down, 3)
+    click(Qt.Key.Key_Return)
+    assert menu.property("title") == "Manage" and actions() == ["settings", "artwork", "sessions", "remove"]
+    assert menu.property("items").toVariant()[3]["danger"] is True
+    click(Qt.Key.Key_Down, 3)
     click(Qt.Key.Key_Return)
     assert menu.property("open") is True and menu.property("title") == "Remove Mini Metro?"
     click(Qt.Key.Key_Down)
