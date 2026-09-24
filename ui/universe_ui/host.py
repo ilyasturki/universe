@@ -5,7 +5,10 @@ import os
 import shutil
 import signal
 import socket
+import subprocess
 import sys
+import tempfile
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING, cast
 
@@ -13,6 +16,9 @@ if TYPE_CHECKING:
     from PySide6.QtQuick import QQuickWindow
 
 QML_DIR = Path(__file__).parent / "qml"
+READY_ENV = "UNIVERSE_HOST_READY"
+# A gamescope that fails to start mostly exits at once; one that hangs (NVIDIA) shows nothing at all.
+READY_S = 30
 
 
 def parse_args(argv):
@@ -87,10 +93,7 @@ def exit_with_the_display():
     ctypes.CDLL("libX11.so.6").XSetIOErrorHandler(_io_error_handlers[0])
 
 
-def exec_in_gamescope(command, argv):
-    if not command:
-        logging.getLogger("universe.host").warning("no gamescope: running on the desktop")
-        return
+def gamescope_argv(command, argv):
     # argv[0] is the installed launcher: on Nix a compiled wrapper, not a script for the interpreter.
     launcher = shutil.which(sys.argv[0])
     launcher = [launcher] if launcher else [sys.executable, sys.argv[0]]
@@ -98,7 +101,60 @@ def exec_in_gamescope(command, argv):
     libs = os.environ.get("LD_LIBRARY_PATH")
     if libs:
         launcher = [shutil.which("env") or "env", f"LD_LIBRARY_PATH={libs}", *launcher]
-    os.execv(command[0], [*command, "--", *launcher, *argv])
+    return [*command, "--", *launcher, *argv]
+
+
+def run_in_gamescope(command, argv, ready_s=READY_S):
+    """gamescope's exit code once the launcher inside it came up; None to run on the desktop instead."""
+    log = logging.getLogger("universe.host")
+    if not command:
+        log.warning("no gamescope: running on the desktop")
+        return None
+    # gamescope closes every inherited fd in its child: the launcher inside says it is up through a file.
+    ready = Path(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()) / f"universe-ui-ready-{os.getpid()}"
+    ready.unlink(missing_ok=True)
+    proc = subprocess.Popen(gamescope_argv(command, argv), env={**os.environ, READY_ENV: str(ready)})
+    stopping = []
+
+    def forward(signum, frame):
+        stopping.append(signum)
+        # The terminal's Ctrl+C reaches gamescope itself, in the same process group.
+        if signum != signal.SIGINT:
+            proc.send_signal(signum)
+
+    previous = {sig: signal.signal(sig, forward) for sig in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)}
+    try:
+        deadline = time.monotonic() + ready_s
+        while not ready.exists():
+            try:
+                code = proc.wait(timeout=0.2)
+            except subprocess.TimeoutExpired:
+                if time.monotonic() < deadline or stopping:
+                    continue
+                log.warning("gamescope showed no launcher within %d s: running on the desktop", ready_s)
+                proc.terminate()
+                try:
+                    proc.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    proc.kill()
+                    proc.wait()
+                return None
+            if stopping:
+                return code
+            log.warning("gamescope exited (%s) before the launcher came up: running on the desktop", code)
+            return None
+        return proc.wait()
+    finally:
+        ready.unlink(missing_ok=True)
+        for sig, handler in previous.items():
+            signal.signal(sig, handler)
+
+
+def mark_ready():
+    path = os.environ.pop(READY_ENV, "")
+    if path:
+        with contextlib.suppress(OSError):
+            Path(path).touch()
 
 
 def create_overlay(engine, size):
@@ -125,12 +181,25 @@ def run(argv=None):
     os.environ.setdefault("QT_AUDIO_BACKEND", "pulseaudio")
     logging.basicConfig(level=logging.INFO, format="%(name)s: %(message)s")
 
+    nested = bool(os.environ.get("GAMESCOPE_WAYLAND_DISPLAY"))
+    # Before the core opens, the library is loaded once, inside gamescope; before the app, no display is held while it runs.
+    client = build_client(args) if args.fake else None
+    if args.fullscreen and not nested:
+        if client is not None:
+            command = client.hostGamescope("")
+        else:
+            import universe_core
+
+            command = universe_core.host_gamescope("")
+        code = run_in_gamescope(command, argv)
+        if code is not None:
+            return code
+
     import PySide6.QtQuick  # noqa: F401  before rootObjects(): the wrapper is otherwise a bare QWindow, no grabWindow
     from PySide6.QtCore import Qt, QTimer, QUrl
     from PySide6.QtGui import QGuiApplication
     from PySide6.QtQml import QQmlApplicationEngine
 
-    nested = bool(os.environ.get("GAMESCOPE_WAYLAND_DISPLAY"))
     if nested:
         # gamescope unsets WAYLAND_DISPLAY; a platform list naming wayland first would still try it.
         os.environ["QT_QPA_PLATFORM"] = "xcb"
@@ -145,16 +214,6 @@ def run(argv=None):
     from .api import Api
     from .screens.power import FAKE as FAKE_POWER
 
-    # Re-exec before the core opens: the library is loaded once, inside gamescope, not once on each side of it.
-    client = build_client(args) if args.fake else None
-    if args.fullscreen and not nested:
-        if client is not None:
-            command = client.hostGamescope("")
-        else:
-            import universe_core
-
-            command = universe_core.host_gamescope("")
-        exec_in_gamescope(command, argv)
     if client is None:
         client = build_client(args)
     if not args.fake:
@@ -169,6 +228,7 @@ def run(argv=None):
         print("universe-ui: main.qml failed to load", file=sys.stderr)
         return 1
     window = cast("QQuickWindow", engine.rootObjects()[0])
+    mark_ready()
     api.attachWindow(window)
     if not args.fullscreen:
         try:

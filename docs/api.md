@@ -214,7 +214,7 @@ trashes `logs/<id>/`. A key of `[launch.env]` with the same name wins over the s
 A launcher that runs **inside** gamescope is the one window: `universe-ui` fullscreen starts
 `gamescope` around itself (`host_gamescope`: `-f --force-composition -W -H -w -h -r` from the screen's
 mode and the global `gamescope_*` fields, `launch.gamescope_args`, `--mangoapp` when installed)
-and re-executes itself as its child, and every game it launches lands on that gamescope: the plan is
+and runs itself as its child (on the desktop instead when gamescope fails to bring it up), and every game it launches lands on that gamescope: the plan is
 the plain command — no gamescope of the game's own, no `splash`, no `setpriv` — with the launcher's
 `DISPLAY`, `GAMESCOPE_WAYLAND_DISPLAY`, `STEAM_GAME_DISPLAY_0`, `SDL_VIDEODRIVER` and
 `SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS` passed to the unit, MangoHud's layer silent (`no_display`, the

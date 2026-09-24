@@ -190,9 +190,13 @@ process**: closing the frontend mid-install interrupts it, by design.
 
 The launcher is gamescope's base app (`docs/api.md` § Gamescope): fullscreen, `host.py` starts
 `gamescope` around itself (`universe_core.host_gamescope("")`, a free function that reads the
-config alone, then `os.execv`) before it opens the core, so the library is loaded once, inside
-gamescope, and not on each side of the exec; `--fake` goes through its client instead. It skips
-the exec when already inside one (`GAMESCOPE_WAYLAND_DISPLAY`), forces the `xcb` platform there, and every game lands on that
+config alone) before it opens the core or the app, so the library is loaded once, inside gamescope,
+and no display is held outside it; `--fake` goes through its client instead. The outer process
+waits on gamescope and exits with its code once the launcher inside has said it is up (it touches
+the file `UNIVERSE_HOST_READY` names, after `main.qml` loads: gamescope closes inherited fds). A
+gamescope that exits before that, or shows nothing within 30 s (a nested start that fails on
+NVIDIA), leaves the launcher on the desktop, in the outer process. SIGTERM and SIGHUP are passed on
+to gamescope. It skips gamescope when already inside one (`GAMESCOPE_WAYLAND_DISPLAY`), forces the `xcb` platform there, and every game lands on that
 gamescope, which shows the most recently mapped window — the game's, once it has one. The launcher
 never lowers, raises or hides itself; `api.home` flips which window gamescope shows (`toGame`,
 `toLauncher`: `focus_session` / `focus_pid`), and `Api.screenName()` is `""` inside gamescope, where
