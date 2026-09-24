@@ -223,7 +223,7 @@ frame gamescope painted when HOME brought the launcher up (`api.home.frame`, `ne
 hero pill reading "Resume", and the tab bar's badge "<title> · m:ss" on every tab; the badge is a
 chrome slot past the glass: A resumes, Start opens the game menu. A resumes on the pinned game
 wherever it is (`api.home.toGame()`), the game menu offers "Resume" and "Quit <title>" for it.
-Play on another game asks "Quit X and start Y?" (`ui/ConfirmDialog.qml`); yes stops the session,
+Play on another game asks "Quit X and start Y?" (`ui/ConfirmDialog.qml`, the pop-up list in the middle of the screen); yes stops the session,
 and `sessionEnded` starts the pending launch. Every quit goes through `api.home.stop()`: the
 launcher comes up first (a flip, when the game is on screen), the unit is stopped once it has,
 `stopping(title)` is the theme's cue for a "Quitting…" toast the end line replaces, and nothing freezes a game that is
@@ -463,7 +463,7 @@ owns it). `current` is the site's word for "this item holds the lit ring", the s
 ring reads, so a click on an idle-ringed cover focuses instead of launching. `accept: false`
 makes a click that picks and never presses (the article of a journal entry, so the wheel reads
 it). Every pick also raises `Theme.pointed(item)`: `theme.qml` hands the focus between the tab
-bar and the page by it, and an open `ChipPicker` closes when a click lands outside it.
+bar and the page by it.
 `ui/Wheel.qml` scrolls its parent `Flickable` (`horizontal` for a strip, `nested` for a strip
 inside a page that scrolls — plain y then goes to the page — `ease` the view's own Behavior on
 its contentX/Y, held off while the wheel drives it, `halt()` from a move of the view's own);

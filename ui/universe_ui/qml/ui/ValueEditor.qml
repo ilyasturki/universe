@@ -24,19 +24,24 @@ FocusScope {
         pendingRow = row;
         var choices = row.choices || [];
         if (row.type === "enum" || ((row.type === "int" || row.type === "string") && choices.length > 0)) {
+            var current = choices.indexOf(String(row.value));
             // A choice's icon (a runner's logo) rides along when the row lists them.
             var opts = choices.map(function (c, i) {
                 return {
                     label: c,
-                    icon: row.icons && row.icons[i] ? row.icons[i] : ""
+                    image: row.icons && row.icons[i] ? row.icons[i] : "",
+                    active: i === current,
+                    action: String(i)
                 };
             });
             if (row.type !== "enum")
                 opts.push({
-                    label: customLabel
+                    icon: "keyboard",
+                    label: customLabel,
+                    action: "custom",
+                    gap: true
                 });
-            var current = choices.indexOf(String(row.value));
-            picker.show(cards, opts, current >= 0 ? current : (row.type === "enum" ? 0 : opts.length - 1));
+            picker.show(opts, cards, cards.focusRect, "", editor.chosen, current >= 0 ? current : (row.type === "enum" ? 0 : opts.length - 1));
         } else if (row.type === "path") {
             // A pad walks the folders; a keyboard or a mouse types the path, the folders one hop away.
             if (api.keys.mode === "pad")
@@ -82,6 +87,18 @@ FocusScope {
             after(value, second);
     }
 
+    function chosen(action) {
+        var row = editor.pendingRow || ({});
+        var choices = row.choices || [];
+        if (action === "custom") {
+            Sound.panel();
+            editor.sheetsOf().sheet.show(row.label, row.value, row.type === "int" ? "number" : "text");
+            return;
+        }
+        Sound.sort();
+        editor.finish(choices[Number(action)]);
+    }
+
     function hide() {
         picker.hide();
         if (sheets.item) {
@@ -90,31 +107,13 @@ FocusScope {
         }
     }
 
-    ChipPicker {
+    ActionMenu {
         id: picker
 
-        x: editor.cards ? editor.cards.x + editor.cards.focusRect.x + editor.cards.focusRect.width - Theme.dp(16) - width : 0
-        y: editor.cards ? Math.min(editor.floor - height - Theme.dp(20), editor.cards.y + editor.cards.focusRect.y + editor.cards.focusRect.height + Theme.dp(8)) : 0
+        anchors.fill: parent
         z: 3
 
-        onChosen: function (index) {
-            var row = editor.pendingRow || ({});
-            var choices = row.choices || [];
-            picker.hide();
-            if (index >= 0 && index < choices.length) {
-                Sound.sort();
-                editor.finish(choices[index]);
-            } else if (index === choices.length && row.type !== "enum") {
-                Sound.panel();
-                editor.sheetsOf().sheet.show(row.label, row.value, row.type === "int" ? "number" : "text");
-            } else {
-                editor.closed();
-            }
-        }
-        onDismissed: {
-            picker.hide();
-            editor.closed();
-        }
+        onDismissed: editor.closed()
     }
 
     Loader {

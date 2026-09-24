@@ -804,7 +804,7 @@ def test_the_dock_lists_the_sessions_shots_and_trashes_one(api, fake, tmp_path, 
     key(overlay, Qt.Key.Key_Escape)
     assert panel.property("busy") is False and panel.property("count") == earlier + 1, "B keeps it"
     key(overlay, Qt.Key.Key_F)
-    key(overlay, Qt.Key.Key_Right)
+    key(overlay, Qt.Key.Key_Down)
     key(overlay, Qt.Key.Key_Return)
     for _ in range(40):
         pump(50)

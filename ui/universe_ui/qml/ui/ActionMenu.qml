@@ -2,13 +2,16 @@ import QtQuick
 import "../core"
 import "../sound"
 
-// Items: [{ icon, label, action, danger, detail, more, gap }]; the row stays lit above the scrim as a live copy.
-// `detail` sits at the row's right, `more` draws a chevron there and lets Right open it, `gap` parts the row from the one above.
+// Items: MenuRow's plus `action` and `gap`; the row stays lit above the scrim as a live copy. `detail` sits at the row's right,
+// `more` draws a chevron there and lets Right open it, `gap` parts the row from the one above. With no anchor the list sits
+// in the middle of the screen, a question: `title` is asked, `note` says more under it.
 FocusScope {
     id: menu
 
     property bool open: false
     property string title: ""
+    property string note: ""
+    property bool centered: false
     property var items: []
     property int index: 0
     property var done: null
@@ -41,15 +44,19 @@ FocusScope {
         Ease {}
     }
 
-    function show(list, anchor, rect, heading, after) {
+    function show(list, anchor, rect, heading, after, start) {
         items = list;
         title = heading || "";
+        note = "";
         done = after || null;
-        index = 0;
-        var p = anchor.mapToItem(menu, rect.x, rect.y);
-        row = Qt.rect(p.x, p.y, rect.width, rect.height);
-        copy.sourceRect = Qt.rect(rect.x - copyMargin, rect.y - copyMargin, rect.width + copyMargin * 2, rect.height + copyMargin * 2);
-        copy.sourceItem = anchor;
+        index = start || 0;
+        centered = !anchor;
+        if (anchor) {
+            var p = anchor.mapToItem(menu, rect.x, rect.y);
+            row = Qt.rect(p.x, p.y, rect.width, rect.height);
+            copy.sourceRect = Qt.rect(rect.x - copyMargin, rect.y - copyMargin, rect.width + copyMargin * 2, rect.height + copyMargin * 2);
+        }
+        copy.sourceItem = anchor || null;
         shown++;
         asking = false;
         open = true;
@@ -92,6 +99,7 @@ FocusScope {
         ]);
         items = list;
         title = heading || "";
+        note = "";
         done = after || null;
         index = 0;
         shown++;
@@ -144,6 +152,19 @@ FocusScope {
             copy.sourceItem = null;
     }
 
+    // A list taller than the screen scrolls under the cursor.
+    onIndexChanged: Qt.callLater(reveal)
+
+    function reveal() {
+        var slot = slots.itemAt(index);
+        var top = scroller.contentY;
+        if (slot && slot.y < top)
+            top = slot.y;
+        else if (slot && slot.y + slot.height > top + scroller.height)
+            top = slot.y + slot.height - scroller.height;
+        scroller.contentY = Math.max(0, Math.min(top, scroller.contentHeight - scroller.height));
+    }
+
     Rectangle {
         id: scrim
         anchors.fill: parent
@@ -179,153 +200,126 @@ FocusScope {
     Rectangle {
         id: panel
 
-        width: Theme.dp(460)
-        height: rows.height + Theme.dp(24) + (heading.visible ? heading.height + Theme.dp(8) : 0)
+        readonly property real room: menu.height - Theme.dp(80)
+
+        width: Theme.dp(menu.centered ? 640 : 460)
+        height: Math.min(room, scroller.contentHeight + Theme.dp(24) + (head.visible ? head.height + Theme.dp(8) : 0))
         radius: Theme.dp(24)
         color: "#1b1d24"
         border.width: 1
         border.color: Theme.surfaceBorder
-        x: (menu.onRight ? menu.row.x + menu.row.width + menu.gap : menu.row.x - menu.gap - width) + (menu.onRight ? -1 : 1) * menu.slide * Theme.dp(16)
-        y: Math.max(Theme.dp(40), Math.min(menu.row.y + menu.row.height / 2 - height / 2, menu.height - height - Theme.dp(40)))
+        x: menu.centered ? (menu.width - width) / 2 : (menu.onRight ? menu.row.x + menu.row.width + menu.gap : menu.row.x - menu.gap - width) + (menu.onRight ? -1 : 1) * menu.slide * Theme.dp(16)
+        y: menu.centered ? (menu.height - height) / 2 : Math.max(Theme.dp(40), Math.min(menu.row.y + menu.row.height / 2 - height / 2, menu.height - height - Theme.dp(40)))
         opacity: 1.0 - menu.slide
         scale: 1.0 - menu.slide * 0.04
-        transformOrigin: menu.onRight ? Item.Left : Item.Right
+        transformOrigin: menu.centered ? Item.Center : menu.onRight ? Item.Left : Item.Right
 
         // The panel's own padding is neither a row nor the scrim.
         HoverHandler {}
         TapHandler {}
 
-        Text {
-            id: heading
+        Column {
+            id: head
 
             anchors.top: parent.top
             anchors.left: parent.left
             anchors.right: parent.right
-            anchors.margins: Theme.dp(12)
+            anchors.topMargin: Theme.dp(menu.centered ? 30 : 12)
             anchors.leftMargin: Theme.dp(34)
             anchors.rightMargin: Theme.dp(34)
-            height: visible ? Theme.dp(44) : 0
-            verticalAlignment: Text.AlignVCenter
+            spacing: Theme.dp(10)
             visible: menu.title !== ""
-            text: menu.title
-            color: Theme.textSecondary
-            font.family: Theme.sans
-            font.weight: Font.Medium
-            font.pixelSize: Theme.dp(21)
-            elide: Text.ElideRight
+
+            Text {
+                width: parent.width
+                topPadding: menu.centered ? 0 : Theme.dp(9)
+                bottomPadding: menu.centered ? 0 : Theme.dp(9)
+                text: menu.title
+                color: menu.centered ? Theme.text : Theme.textSecondary
+                font.family: Theme.sans
+                font.weight: menu.centered ? Font.DemiBold : Font.Medium
+                font.pixelSize: Theme.dp(menu.centered ? 28 : 21)
+                wrapMode: menu.centered ? Text.WordWrap : Text.NoWrap
+                elide: menu.centered ? Text.ElideNone : Text.ElideRight
+            }
+
+            Text {
+                width: parent.width
+                visible: menu.note !== ""
+                bottomPadding: Theme.dp(10)
+                text: menu.note
+                color: Theme.textSecondary
+                font.family: Theme.sans
+                font.pixelSize: Theme.dp(21)
+                wrapMode: Text.WordWrap
+                lineHeight: 1.2
+            }
         }
 
-        Column {
-            id: rows
+        Flickable {
+            id: scroller
 
-            anchors.top: heading.visible ? heading.bottom : parent.top
-            anchors.topMargin: heading.visible ? Theme.dp(8) : Theme.dp(12)
+            anchors.top: head.visible ? head.bottom : parent.top
+            anchors.topMargin: head.visible ? Theme.dp(8) : Theme.dp(12)
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: Theme.dp(12)
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.leftMargin: Theme.dp(12)
             anchors.rightMargin: Theme.dp(12)
-            spacing: Theme.dp(4)
+            contentHeight: rows.height
+            interactive: false
+            clip: contentHeight > height
 
-            Repeater {
-                model: menu.items
+            // The panel settles its height after the rows: the cursor's row is placed again once it has.
+            onHeightChanged: menu.reveal()
+            onContentHeightChanged: menu.reveal()
 
-                Item {
-                    id: slot
+            Behavior on contentY {
+                Ease {
+                    duration: Theme.durQuick
+                }
+            }
 
-                    readonly property bool parted: modelData.gap === true
+            Column {
+                id: rows
 
-                    width: rows.width
-                    height: row.height + (parted ? menu.gapHeight : 0)
+                width: parent.width
+                spacing: Theme.dp(4)
 
-                    Rectangle {
-                        anchors.top: parent.top
-                        anchors.topMargin: (menu.gapHeight - height) / 2
-                        anchors.left: parent.left
-                        anchors.right: parent.right
-                        anchors.leftMargin: Theme.dp(10)
-                        anchors.rightMargin: Theme.dp(10)
-                        height: 1
-                        visible: slot.parted
-                        color: Theme.surfaceBorder
-                    }
+                Repeater {
+                    id: slots
 
-                    Rectangle {
-                        id: row
+                    model: menu.items
 
-                        readonly property bool focused: index === menu.index
-                        readonly property bool danger: modelData.danger === true
-                        readonly property color ink: focused ? Theme.onLight : danger ? "#e0655a" : Theme.text
-                        readonly property color inkSoft: focused ? Theme.onLight : Theme.textSecondary
+                    Item {
+                        id: slot
 
-                        anchors.bottom: parent.bottom
-                        width: parent.width
-                        height: Theme.dp(66)
-                        radius: Theme.dp(16)
-                        color: focused ? (danger ? "#e0655a" : Theme.text) : "transparent"
+                        readonly property bool parted: modelData.gap === true
 
-                        Behavior on color {
-                            ColorEase {}
-                        }
+                        width: rows.width
+                        height: line.height + (parted ? menu.gapHeight : 0)
 
-                        Pointer {
-                            direct: true
-                            radius: Theme.dp(16)
-                            onPicked: menu.index = index
-                        }
-
-                        MenuGlyph {
-                            id: glyph
-
+                        Rectangle {
+                            anchors.top: parent.top
+                            anchors.topMargin: (menu.gapHeight - height) / 2
                             anchors.left: parent.left
-                            anchors.leftMargin: Theme.dp(22)
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: Theme.dp(26)
-                            height: Theme.dp(26)
-                            visible: modelData.icon !== undefined && modelData.icon !== ""
-                            kind: modelData.icon || ""
-                            tint: row.ink
-                        }
-
-                        Text {
-                            anchors.left: glyph.visible ? glyph.right : parent.left
-                            anchors.leftMargin: glyph.visible ? Theme.dp(18) : Theme.dp(22)
-                            anchors.right: trailing.left
-                            anchors.rightMargin: Theme.dp(12)
-                            anchors.verticalCenter: parent.verticalCenter
-                            text: modelData.label
-                            color: row.ink
-                            font.family: Theme.sans
-                            font.weight: row.focused ? Font.DemiBold : Font.Medium
-                            font.pixelSize: Theme.dp(25)
-                            elide: Text.ElideRight
-                        }
-
-                        Row {
-                            id: trailing
-
                             anchors.right: parent.right
-                            anchors.rightMargin: Theme.dp(20)
-                            anchors.verticalCenter: parent.verticalCenter
-                            spacing: Theme.dp(8)
+                            anchors.leftMargin: Theme.dp(10)
+                            anchors.rightMargin: Theme.dp(10)
+                            height: 1
+                            visible: slot.parted
+                            color: Theme.surfaceBorder
+                        }
 
-                            Text {
-                                anchors.verticalCenter: parent.verticalCenter
-                                visible: modelData.detail !== undefined && modelData.detail !== ""
-                                text: modelData.detail || ""
-                                color: row.inkSoft
-                                font.family: Theme.sans
-                                font.weight: Font.Medium
-                                font.pixelSize: Theme.dp(21)
-                            }
+                        MenuRow {
+                            id: line
 
-                            MenuGlyph {
-                                anchors.verticalCenter: parent.verticalCenter
-                                width: Theme.dp(22)
-                                height: Theme.dp(22)
-                                visible: modelData.more === true
-                                kind: "chevron"
-                                tint: row.inkSoft
-                            }
+                            anchors.bottom: parent.bottom
+                            width: parent.width
+                            item: modelData
+                            focused: index === menu.index
+                            onPicked: menu.index = index
                         }
                     }
                 }
