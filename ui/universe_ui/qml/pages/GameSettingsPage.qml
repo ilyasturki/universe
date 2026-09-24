@@ -43,7 +43,7 @@ FocusScope {
     readonly property string rowAction: row && row.entry ? "Remove" : "Reset"
     readonly property bool canReset: inRows && row !== null && form.resettable(row)
 
-    readonly property var hints: editor.open ? editor.hints : [
+    readonly property var hints: editor.open ? editor.hints : menu.open ? menu.hints : [
         {
             glyph: "A",
             label: !inRows ? "Open" : row && row.type === "bool" ? "Toggle" : row && row.type === "action" ? row.action || "Select" : "Change",
@@ -51,25 +51,31 @@ FocusScope {
         }
     ].concat(inRows ? [
         {
-            glyph: "X",
-            label: rowAction,
-            dim: !canReset
-        }
-    ] : []).concat(form.hasAdvanced ? [
-        {
-            glyph: "Y",
-            label: form.showAdvanced ? "Hide advanced" : "Show advanced"
+            glyph: "Start",
+            label: "More",
+            dim: moreItems.length === 0
         }
     ] : []).concat([
         {
             glyph: "B",
-            label: inRows ? "Sections" : "Back"
-        },
-        {
-            glyph: "LT RT",
-            label: "Section"
+            label: "Back"
         }
     ])
+
+    // X and Y do these straight away; More lists them.
+    readonly property var moreItems: (canReset ? [
+            {
+                icon: "refresh",
+                label: rowAction === "Remove" ? "Remove" : "Reset to default",
+                action: "reset"
+            }
+        ] : []).concat(form.hasAdvanced ? [
+        {
+            icon: "sliders",
+            label: form.showAdvanced ? "Hide advanced" : "Show advanced",
+            action: "advanced"
+        }
+    ] : [])
 
     readonly property real sideMargin: Theme.dp(90)
 
@@ -114,6 +120,21 @@ FocusScope {
             return;
         }
         form.reset(body.cards.index) ? Sound.enter() : Sound.edge();
+    }
+
+    function openMenu() {
+        if (!inRows || moreItems.length === 0) {
+            Sound.edge();
+            return;
+        }
+        Sound.panel();
+        menu.show(moreItems, body.cards, body.cards.focusRect, "", function (action) {
+            body.cards.forceActiveFocus();
+            if (action === "reset")
+                page.resetRow();
+            else if (action === "advanced")
+                page.toggleAdvanced();
+        });
     }
 
     function activate(index, row) {
@@ -204,10 +225,22 @@ FocusScope {
         onClosed: body.cards.forceActiveFocus()
     }
 
+    ActionMenu {
+        id: menu
+
+        anchors.fill: parent
+        z: 4
+
+        onDismissed: body.cards.forceActiveFocus()
+    }
+
     Keys.onPressed: function (event) {
-        if (event.isAutoRepeat || editor.open)
+        if (event.isAutoRepeat || editor.open || menu.open)
             return;
-        if (api.keys.isFilters(event) && form.hasAdvanced) {
+        if (api.keys.isMenu(event)) {
+            event.accepted = true;
+            page.openMenu();
+        } else if (api.keys.isFilters(event) && form.hasAdvanced) {
             event.accepted = true;
             page.toggleAdvanced();
         } else if (api.keys.isDetails(event)) {

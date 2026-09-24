@@ -16,7 +16,7 @@ FocusScope {
     signal escapedUp
     signal cancelled
 
-    // Thirteen entries and four group heads fit the page under the title.
+    // Settings' eleven entries fit the page under the tabs, with room left.
     readonly property real entryHeight: Theme.dp(46)
     readonly property real entrySpacing: Theme.dp(3)
     readonly property real groupHeight: Theme.dp(34)

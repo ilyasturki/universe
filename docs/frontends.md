@@ -129,8 +129,8 @@ button). A map key (`launch.env`, `launch.dll_overrides`) is one `string` row pe
 entry (`launch.env.FOO`, `entry` naming the map, on a game's page `origin` per entry: the game's
 own or the global's), then an `action` row with `map: true`, `fields` (`["Variable", "Value"]`) and
 `action: "Add"`; `setMapEntry(index, name, value)` from either writes one entry, the name cleaned
-to one key, an empty value removing it. `api.screens.search` is the settings index: the page hands it
-its `sections` (`[{id, label}]`), `load()` rebuilds the index off the UI thread from the same
+to one key, an empty value removing it. `api.screens.search` is the settings index: the look hands it
+its `sections` (`[{id, label}]`: Reprise's tab bar search from `ui/Sections.js`, the Switch 2 settings page its own), `load()` rebuilds the index off the UI thread from the same
 row builders the forms use (`build_launch`, `build_runner`, `build_page`, `build_game`), setting
 `query` recomputes `results` at once — rows with `path`, `display`, `detail`, `tag`, `kind`
 (`setting`, `section`, `game`, `gamekey`, `gamerow`) and a `target` (`{page, id, key, module}`)
@@ -477,16 +477,22 @@ dialogs, the sheets, the lightbox, the search overlay) carries a bare `HoverHand
 
 ## The Settings tab
 
-`pages/SettingsPage.qml` is a sidebar (`ui/SectionList.qml`: Runners, Launch, Modules, Sources, Install,
-Updates, Controller, Themes, Sound, Doctor, Artwork, About, Quit) beside one column of `ui/SettingsCards.qml`
-(`columns: 1`). Sound is one row per `api.home.outputs` entry, the device as its value and the one
-in use tagged; A on another plays through it (`setOutput`). About is three `static` rows (the build — `api.universe.version()`, the version with the short git rev behind it — the look, the library's count), nothing to select. Quit is one row, confirmed in place (`Stay` /
-`Quit Universe`, which says when the running game closes with it), then `Qt.quit()` — the host
-stops the session and shuts the core down after the loop. Up and Down in the sidebar switch the section as they go, Right or A
-enter the cards, Left or B come back, L2/R2 cycle the section from anywhere, and □ refreshes the
-sections that fetch (Install, Updates, Sound, Doctor). The cards start level with the page title, not
-the sidebar. The tab bar's search glass is on every tab, Settings too, and opens the game search;
-the store's catalogue search is Switch 2's alone. A row's `icon` names a `MenuGlyph` kind; a pad
+`pages/SettingsPage.qml` is a sidebar (`ui/SectionList.qml` over `ui/Sections.js`: Launch, Runners,
+Controller, Sources, Install, Modules, Artwork, Themes, Sound, Doctor, About; no title, the tab
+says it, and no group captions) beside one column of `ui/SettingsCards.qml` (`columns: 1`). A
+landing on a section folded into another opens that one (`Sections.aliases`: `updates` → Install,
+`quit` → About). Sound is one row per `api.home.outputs` entry, the device as its value and the one
+in use tagged; A on another plays through it (`setOutput`). About is its Version (`static`:
+`api.universe.version()`, the version with the short git rev behind it), First-run setup (Run again)
+and Quit Universe, confirmed in place (`Stay` / `Quit Universe`, which says when the running game
+closes with it), then `Qt.quit()` — the host stops the session and shuts the core down after the
+loop. Up and Down in the sidebar switch the section as they go, Right or A enter the cards, Left or
+B come back, L2/R2 cycle the section from anywhere. In the cards the hints are A, More and Back:
+Start lists what X and Y do there (Refresh the sections that fetch — Install, Sound, Doctor —
+Remove a Launch variable, Enable or Disable a module or a source, Show or Hide advanced), and X and
+Y still do it straight away. Game settings and a runner's, module's or source's page do the same
+with Reset to default and the advanced rows. The tab bar's search glass is on every tab and finds
+the games and the settings (see Search); the store's catalogue search is Switch 2's alone. A row's `icon` names a `MenuGlyph` kind; a pad
 button's row prints its `press` and `hold` macros as chips (`PRESS`/`HOLD`, the action's glyph
 from `ui/Macros.js`, the macro's `label`). A source's game row shows the library's art when the
 game is in it — the `square` slot, else the cover — cropped to a square thumbnail; the home
@@ -514,7 +520,8 @@ failed with `cancelled`, the toast says what was kept, and the row turns `partia
 the network.
 
 Reprise keeps it as Settings › Install: an Installing card (running and paused, a hairline of
-progress under a paused row) over Installed and Owned, every game with its size in figures of one
+progress under a paused row), an Updates card when some are pending (one row, Update everything,
+`updateAll()`; a game's own Update is in its row's menu), then Installed and Owned, every game with its size in figures of one
 width, the library's age or the store's failure in the card meta; A opens the row's menu (Cancel
 install · Resume · Update · Game settings · Uninstall… · Remove…), Install first asks in a
 `ConfirmDialog` with the download, the disk and the free space; X refreshes; the cursor on a game
@@ -582,6 +589,21 @@ its journal page (`journalRequested(game, session)`); Start is an `ActionMenu` w
 the journal entry covering a shot or a recording, and Remove screenshot…; X and Y do the details
 and the entry straight away. The hints are View, Play or Read, More and Back. The shell opens each
 request as a sub-page over the tab, so B comes back to the grid where it was.
+
+## Search
+
+The tab bar's glass opens `ui/SearchOverlay.qml` over any tab: the on-screen keyboard at the
+bottom, the games whose title holds the query as covers along the top (`SearchGames`, the
+recently played first; every game while the query is empty), and under them, once a word is
+typed, the settings that match (`api.screens.search`, the index's own game entries left out —
+the covers are those; a query that is only a game's title, `titleOnly`, lists none). While typing
+with both, the covers keep the room and the settings are one line under them ("Settings: Resolution,
+Launch…"); ▲ from the keyboard reaches the settings, ▲ again the covers, and while a list has the
+cursor the keyboard lowers to its field so the lists get the height. A on a cover plays
+(Start is the game's menu, X its details); A on a setting closes the search and opens it
+(`theme.qml` `openSetting`): a runner's, a module's or a source's row on its own page, a game's
+row on the game's settings, the rest on its Settings section with the row revealed — a `gamekey`
+row instead unfolds into its games. B closes the search from anywhere in it.
 
 ## The launch and modules sections
 

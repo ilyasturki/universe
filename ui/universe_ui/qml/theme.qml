@@ -92,7 +92,8 @@ FocusScope {
         goToTab(libraryTab);
     }
 
-    property string settingsLanding: ""
+    // A section's id, or a search hit's target ({page: "section" or a section, id, key}) that `open` reveals.
+    property var settingsLanding: ""
     property bool walkOnLanding: false
 
     function openSettings(section) {
@@ -104,9 +105,12 @@ FocusScope {
     function deliverLanding() {
         if (settingsLanding === "" || tabIndex !== settingsTab || !activePage || !activePage.land)
             return;
-        var section = settingsLanding;
+        var landing = settingsLanding;
         settingsLanding = "";
-        activePage.land(section);
+        if (typeof landing === "string")
+            activePage.land(landing);
+        else
+            activePage.open(landing);
         if (walkOnLanding) {
             walkOnLanding = false;
             api.screens.controller.startWalk();
@@ -169,6 +173,31 @@ FocusScope {
         searchOpen = false;
         focusOwner = "chrome";
         tabBar.forceActiveFocus();
+    }
+
+    // A setting found by the search: a runner's, a module's, a source's or a game's on its own page, the rest on its Settings section.
+    function openSetting(target) {
+        searchOpen = false;
+        focusOwner = "page";
+        var page = target.page;
+        if (page === "runner" || page === "module" || page === "source") {
+            var args = {
+                key: target.key
+            };
+            args[page] = target.id;
+            openSub("pages/FormPage.qml", args);
+        } else if (page === "game") {
+            var game = api.allGames.byId(target.id);
+            if (game)
+                openSub("pages/GameSettingsPage.qml", {
+                    game: game,
+                    key: target.key,
+                    settingModule: target.module
+                });
+        } else {
+            openSettings(target);
+        }
+        restoreFocus();
     }
 
     function openDetail(game) {
@@ -843,9 +872,6 @@ FocusScope {
                                 source: source
                             });
                         }
-                        function onFormRequested(args) {
-                            root.openSub(args.game ? "pages/GameSettingsPage.qml" : "pages/FormPage.qml", args);
-                        }
                         function onSetupRequested() {
                             root.openSetup();
                         }
@@ -931,6 +957,9 @@ FocusScope {
             ignoreUnknownSignals: true
             function onCloseRequested() {
                 root.closeSearch();
+            }
+            function onSettingRequested(target) {
+                root.openSetting(target);
             }
         }
     }

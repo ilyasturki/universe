@@ -4,6 +4,7 @@ import "../core/Format.js" as Format
 import "../sound"
 import "../ui"
 import "../ui/Macros.js" as Macros
+import "../ui/Sections.js" as Sections
 
 FocusScope {
     id: page
@@ -17,7 +18,6 @@ FocusScope {
     signal runnerRequested(string runner)
     signal moduleRequested(string module)
     signal sourceRequested(string source)
-    signal formRequested(var args)
     signal setupRequested
     signal artworkRequested(var game, string slot)
     signal message(string text)
@@ -31,99 +31,14 @@ FocusScope {
     readonly property Item menuAnchor: null
     readonly property bool modal: editor.open || menu.open || dialog.open || testing || learning || walking
 
-    // The sidebar: Search first, then the sections in four groups.
-    readonly property var sections: [
-        {
-            id: "search",
-            name: "Search",
-            icon: "search",
-            group: ""
-        },
-        {
-            id: "launch",
-            name: "Launch",
-            icon: "sliders",
-            group: "Play"
-        },
-        {
-            id: "runners",
-            name: "Runners",
-            icon: "play",
-            group: "Play"
-        },
-        {
-            id: "controller",
-            name: "Controller",
-            icon: "gamepad",
-            group: "Play"
-        },
-        {
-            id: "sources",
-            name: "Sources",
-            icon: "cloud",
-            group: "Store"
-        },
-        {
-            id: "install",
-            name: "Install",
-            icon: "download",
-            group: "Store"
-        },
-        {
-            id: "updates",
-            name: "Updates",
-            icon: "refresh",
-            group: "Store"
-        },
-        {
-            id: "modules",
-            name: "Modules",
-            icon: "grid",
-            group: "Extras"
-        },
-        {
-            id: "artwork",
-            name: "Artwork",
-            icon: "image",
-            group: "Extras"
-        },
-        {
-            id: "themes",
-            name: "Themes",
-            icon: "sun",
-            group: "Extras"
-        },
-        {
-            id: "sound",
-            name: "Sound",
-            icon: "volume-up",
-            group: "System"
-        },
-        {
-            id: "doctor",
-            name: "Doctor",
-            icon: "pulse",
-            group: "System"
-        },
-        {
-            id: "about",
-            name: "About",
-            icon: "info",
-            group: "System"
-        },
-        {
-            id: "quit",
-            name: "Quit",
-            icon: "power",
-            group: "System"
-        }
-    ]
-    property int section: 1
+    readonly property var sections: Sections.list
+    property int section: 0
     readonly property string sectionId: sections[section].id
 
     function sectionIndex(id) {
+        var to = Sections.aliases[id] || id;
         return sections.findIndex(function (s) {
-            return s.id === id;
+            return s.id === to;
         });
     }
 
@@ -140,39 +55,14 @@ FocusScope {
             tester.forceActiveFocus();
         else if (sectionId === "artwork" && artwork.item)
             artwork.item.forceActiveFocus();
-        else if (sectionId === "search" && finder.item)
-            finder.item.forceActiveFocus();
         else
             cards.forceActiveFocus();
     }
 
-    // A search hit: its section, the row revealed (the Advanced row opened when it sits behind it), or its own page.
+    // A hit of the tab bar's search on this tab: its section, the row revealed (the Advanced row opened when it sits behind it).
     function open(target) {
         var index = sectionIndex(target.page === "section" ? target.id : target.page);
-        if (target.page === "runner")
-            page.formRequested({
-                runner: target.id,
-                key: target.key
-            });
-        else if (target.page === "module")
-            page.formRequested({
-                module: target.id,
-                key: target.key
-            });
-        else if (target.page === "source")
-            page.formRequested({
-                source: target.id,
-                key: target.key
-            });
-        else if (target.page === "game") {
-            var game = api.allGames.byId(target.id);
-            if (game)
-                page.formRequested({
-                    game: game,
-                    key: target.key,
-                    settingModule: target.module
-                });
-        } else if (index >= 0) {
+        if (index >= 0) {
             section = index;
             var form = target.page === "launch" ? launch : target.page === "controller" ? controller : null;
             Qt.callLater(function () {
@@ -206,7 +96,7 @@ FocusScope {
     property string openedModule: ""
     property string openedSource: ""
 
-    readonly property var hints: editor.open ? editor.hints : menu.open ? menu.hints : dialog.open ? dialog.hints : artwork.item && artwork.item.activeFocus ? artwork.item.hints : finder.item && finder.item.activeFocus ? finder.item.hints : testing ? [
+    readonly property var hints: editor.open ? editor.hints : menu.open ? menu.hints : dialog.open ? dialog.hints : artwork.item && artwork.item.activeFocus ? artwork.item.hints : testing ? [
         {
             glyph: "B",
             label: "Hold to finish"
@@ -228,60 +118,71 @@ FocusScope {
         {
             glyph: "B",
             label: "Back"
-        },
-        {
-            glyph: "LT RT",
-            label: "Section"
-        }
-    ] : listForm !== null ? [
-        {
-            glyph: "A",
-            label: "Open"
-        },
-        {
-            glyph: "Y",
-            label: cards.currentRow && cards.currentRow.value === true ? "Disable" : "Enable",
-            dim: !cards.currentRow || (cards.currentRow.warning !== "" && cards.currentRow.value !== true)
-        },
-        {
-            glyph: "B",
-            label: "Sections"
-        },
-        {
-            glyph: "LT RT",
-            label: "Section"
         }
     ] : [
         {
             glyph: "A",
             label: acceptLabel !== "" ? acceptLabel : "Select",
             dim: acceptLabel === ""
-        }
-    ].concat(canRefresh ? [
-        {
-            glyph: "X",
-            label: "Refresh"
-        }
-    ] : canRemove ? [
-        {
-            glyph: "X",
-            label: "Remove"
-        }
-    ] : []).concat(sectionId === "launch" && launch.hasAdvanced ? [
-        {
-            glyph: "Y",
-            label: launch.showAdvanced ? "Hide advanced" : "Show advanced"
-        }
-    ] : []).concat([
-        {
-            glyph: "B",
-            label: "Sections"
         },
         {
-            glyph: "LT RT",
-            label: "Section"
+            glyph: "Start",
+            label: "More",
+            dim: moreItems.length === 0
+        },
+        {
+            glyph: "B",
+            label: "Back"
         }
-    ])
+    ]
+
+    // X and Y do these straight away; More lists them.
+    readonly property var moreItems: {
+        var out = [];
+        var row = cards.currentRow;
+        if (listForm !== null && row && !(row.warning !== "" && row.value !== true))
+            out.push({
+                icon: row.value === true ? "eye-off" : "check",
+                label: row.value === true ? "Disable" : "Enable",
+                action: "toggle"
+            });
+        if (canRemove)
+            out.push({
+                icon: "trash",
+                label: "Remove",
+                action: "refresh"
+            });
+        else if (canRefresh)
+            out.push({
+                icon: "refresh",
+                label: "Refresh",
+                action: "refresh"
+            });
+        if (sectionId === "launch" && launch.hasAdvanced)
+            out.push({
+                icon: "sliders",
+                label: launch.showAdvanced ? "Hide advanced" : "Show advanced",
+                action: "advanced"
+            });
+        return out;
+    }
+
+    function openMenu() {
+        if (side.activeFocus || artShown || sectionId === "artwork" || moreItems.length === 0) {
+            Sound.edge();
+            return;
+        }
+        Sound.panel();
+        menu.show(moreItems, cards, cards.focusRect, "", function (action) {
+            cards.forceActiveFocus();
+            if (action === "toggle")
+                page.toggleModule();
+            else if (action === "refresh")
+                page.refreshNow();
+            else if (action === "advanced")
+                page.toggleAdvanced();
+        });
+    }
 
     // X on the Launch section: a variable's row goes out of its map.
     readonly property bool canRemove: sectionId === "launch" && cards.currentRow !== null && cards.currentRow.entry !== undefined && launch.resettable(cards.currentRow)
@@ -297,14 +198,14 @@ FocusScope {
         return "Change";
     }
 
-    readonly property bool refreshable: sectionId === "install" || sectionId === "updates"
+    readonly property bool refreshable: sectionId === "install"
     readonly property bool canRefresh: refreshable || sectionId === "doctor" || sectionId === "controller" || sectionId === "sound"
 
     readonly property real sideMargin: Theme.dp(80)
     readonly property real sideWidth: Theme.dp(300)
     readonly property real mainRoom: width - sideMargin * 2 - sideWidth - Theme.dp(56)
     readonly property real mainWidth: Math.min(mainRoom, Theme.dp(1280))
-    readonly property real mainTop: titleText.y
+    readonly property real mainTop: Theme.dp(34)
     readonly property real mainX: sideMargin + sideWidth + Theme.dp(56) + (mainRoom - mainWidth) / 2
 
     readonly property var currentSource: sources.current
@@ -312,7 +213,7 @@ FocusScope {
 
     readonly property var content: {
         var rows = [], groups = [];
-        if (sectionId === "artwork" || sectionId === "search")
+        if (sectionId === "artwork")
             return {
                 rows: rows,
                 groups: groups
@@ -373,6 +274,22 @@ FocusScope {
                     meta: [running > 0 ? running + " running" : "", paused > 0 ? paused + " paused" : ""].filter(Boolean).join(" · "),
                     rows: jobs
                 });
+            var pending = sources.updates.length;
+            if (pending > 0) {
+                rows.push({
+                    section: sourceName,
+                    key: "all",
+                    label: "Update everything",
+                    type: "action",
+                    display: Format.plural(pending, "update", "updates"),
+                    detail: "",
+                    action: "Update"
+                });
+                groups.push({
+                    title: "Updates",
+                    rows: [rows.length - 1]
+                });
+            }
             var where = currentSource && currentSource.games_dir ? " · " + currentSource.games_dir : "";
             var sized = onDisk > 0 ? " · " + Format.bytes(onDisk) : "";
             groups.push({
@@ -385,58 +302,6 @@ FocusScope {
                 meta: Format.plural(owned.length, "game", "games") + (sources.libraryAge && !stale ? " · refreshed " + sources.libraryAge : ""),
                 warning: stale,
                 rows: owned
-            });
-            return {
-                rows: rows,
-                groups: groups
-            };
-        }
-        if (sectionId === "updates") {
-            var n = sources.updates.length;
-            if (n === 0) {
-                rows.push({
-                    section: "Updates",
-                    key: "",
-                    label: sources.busy ? "Checking…" : "Everything is up to date",
-                    type: "info",
-                    value: true,
-                    detail: ""
-                });
-                groups.push({
-                    title: "Updates",
-                    rows: [0]
-                });
-                return {
-                    rows: rows,
-                    groups: groups
-                };
-            }
-            rows.push({
-                section: "Updates",
-                key: "all",
-                label: "Update everything",
-                type: "action",
-                display: n + " pending",
-                detail: ""
-            });
-            for (var j = 0; j < n; j++) {
-                var u = sources.updates[j];
-                rows.push({
-                    section: "Updates",
-                    key: "update",
-                    label: u.title,
-                    type: "action",
-                    display: (u.version ? u.version + " · " : "") + (u.date || ""),
-                    detail: "",
-                    row: j
-                });
-            }
-            groups.push({
-                title: "Pending",
-                meta: Format.plural(n, "update", "updates"),
-                rows: rows.map(function (r, i) {
-                    return i;
-                })
             });
             return {
                 rows: rows,
@@ -521,25 +386,9 @@ FocusScope {
             rows.push({
                 section: "About",
                 key: "version",
-                label: "Universe",
+                label: "Version",
                 type: "static",
                 display: api.universe.version() || "development build",
-                detail: ""
-            });
-            rows.push({
-                section: "About",
-                key: "look",
-                label: "Look",
-                type: "static",
-                display: api.theme.name,
-                detail: ""
-            });
-            rows.push({
-                section: "About",
-                key: "library",
-                label: "Library",
-                type: "static",
-                display: api.allGames.count + (api.allGames.count === 1 ? " game" : " games"),
                 detail: ""
             });
             rows.push({
@@ -551,18 +400,8 @@ FocusScope {
                 detail: "What other launchers hold, your stores, a few choices.",
                 action: "Run again"
             });
-            groups.push({
-                title: "Universe",
-                rows: [0, 1, 2, 3]
-            });
-            return {
-                rows: rows,
-                groups: groups
-            };
-        }
-        if (sectionId === "quit") {
             rows.push({
-                section: "Quit",
+                section: "About",
                 key: "quit",
                 label: "Quit Universe",
                 type: "action",
@@ -573,8 +412,7 @@ FocusScope {
             });
             groups.push({
                 title: "Universe",
-                meta: api.universe.currentSession ? "The running game is closed with it" : "",
-                rows: [0]
+                rows: [0, 1, 2]
             });
             return {
                 rows: rows,
@@ -697,17 +535,14 @@ FocusScope {
             cards.forceActiveFocus();
             openedRunner = row.runner;
             page.runnerRequested(row.runner);
+        } else if (sectionId === "install" && row.key === "all") {
+            Sound.enter();
+            sources.updateAll();
         } else if (sectionId === "install") {
             Sound.panel();
-            menu.show(page.gameActions(row), cards, cards.focusRect, row.label, function (action) {
+            menu.show(page.gameActions(row), cards, cards.focusRect, "", function (action) {
                 page.gameAction(row, action);
             });
-        } else if (sectionId === "updates") {
-            Sound.enter();
-            if (row.key === "all")
-                sources.updateAll();
-            else
-                sources.update(row.row);
         } else if (sectionId === "themes") {
             Sound.panel();
             editor.edit(row, function (value) {
@@ -727,17 +562,16 @@ FocusScope {
                 api.home.setOutput(row.output);
             } else
                 Sound.edge();
-        } else if (sectionId === "about") {
-            if (row.key === "setup") {
-                Sound.enter();
-                page.setupRequested();
-            } else
-                Sound.edge();
-        } else if (sectionId === "quit") {
+        } else if (sectionId === "about" && row.key === "setup") {
+            Sound.enter();
+            page.setupRequested();
+        } else if (sectionId === "about" && row.key === "quit") {
             Sound.panel();
             menu.confirm("Stay", "power", api.universe.currentSession ? "Quit and close the game" : "Quit Universe", "Quit Universe?", cards, cards.focusRect, function () {
                 Qt.quit();
             });
+        } else if (sectionId === "about") {
+            Sound.edge();
         } else if (sectionId === "controller") {
             if (row.key === "test") {
                 if (controller.setTesting(true))
@@ -1036,13 +870,6 @@ FocusScope {
     }
 
     Component.onCompleted: {
-        api.screens.search.sections = sections.map(function (s) {
-            return {
-                id: s.id,
-                label: s.name,
-                icon: s.icon
-            };
-        });
         modulesForm.load();
         sourceList.load();
         runners.load();
@@ -1064,8 +891,6 @@ FocusScope {
             api.home.loadOutputs();
         else if (sections[section].id === "doctor")
             modulesForm.loadDoctor();
-        if (sectionId === "search" && finder.item)
-            finder.item.open();
         Qt.callLater(function () {
             cards.reset();
             if (mainHad)
@@ -1128,28 +953,16 @@ FocusScope {
         }
     }
 
-    Text {
-        id: titleText
-
-        x: page.sideMargin
-        y: Theme.dp(34)
-        text: "Settings"
-        color: Theme.text
-        font.family: Theme.sans
-        font.weight: Font.Bold
-        font.pixelSize: Theme.dp(50)
-    }
-
     SectionList {
         id: side
 
         x: page.sideMargin
-        y: titleText.y + titleText.height + Theme.dp(26)
+        y: page.mainTop
         width: page.sideWidth
         focus: true
         sections: page.sections
         badges: page.sections.map(function (s, i) {
-            return i === page.sectionIndex("updates") && page.sources.updates.length > 0 ? page.sources.updates.length.toString() : "";
+            return i === page.sectionIndex("install") && page.sources.updates.length > 0 ? page.sources.updates.length.toString() : "";
         })
         current: page.section
         opacity: page.artShown ? 0.35 : 1.0
@@ -1166,34 +979,6 @@ FocusScope {
         onEntered: page.focusMain()
         onEscapedUp: page.chromeRequested()
         onCancelled: page.chromeRequested()
-    }
-
-    Loader {
-        id: finder
-
-        x: page.mainX
-        y: page.mainTop
-        width: page.mainWidth
-        height: page.height - y
-        active: page.sectionId === "search"
-        source: "../ui/SettingsSearch.qml"
-        visible: active
-
-        onLoaded: item.open()
-
-        Connections {
-            target: finder.item
-            ignoreUnknownSignals: true
-            function onOpenRequested(target) {
-                page.open(target);
-            }
-            function onEscapedLeft() {
-                side.forceActiveFocus();
-            }
-            function onEscapedUp() {
-                page.chromeRequested();
-            }
-        }
     }
 
     Loader {
@@ -1362,7 +1147,7 @@ FocusScope {
         rows: page.content.rows
         groups: page.content.groups
         dimmed: editor.open
-        opacity: page.artShown || page.sectionId === "artwork" || page.sectionId === "search" ? 0.0 : 1.0
+        opacity: page.artShown || page.sectionId === "artwork" ? 0.0 : 1.0
         visible: opacity > 0.01
 
         Behavior on opacity {

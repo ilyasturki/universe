@@ -102,14 +102,14 @@ SECTION_SYNONYMS = {
     "controller": ["gamepad", "pad", "macros", "buttons", "paddles", "dualsense", "xbox"],
     "controllers": ["gamepad", "pad", "macros", "buttons", "paddles", "dualsense", "xbox"],
     "sources": ["gog", "store", "shop", "login", "sign in"],
-    "install": ["download", "store", "shop", "library", "owned"],
+    "install": ["download", "store", "shop", "library", "owned", "updates", "upgrade", "patch", "pending"],
     "updates": ["upgrade", "patch", "pending"],
     "modules": ["capture", "recording", "journal", "hooks", "extensions"],
     "artwork": ["art", "covers", "boxart", "logo", "banner", "steamgriddb"],
     "themes": ["look", "skin", "appearance", "reprise", "switch"],
     "sound": ["audio", "output", "speakers", "headphones", "headset", "hdmi", "bluetooth", "tv"],
     "doctor": ["health", "checks", "prerequisites", "missing", "diagnose"],
-    "about": ["version", "build", "info"],
+    "about": ["version", "build", "info", "quit", "exit", "leave", "power off"],
     "quit": ["exit", "close", "leave", "power off"],
     "search": [],
 }
@@ -264,6 +264,7 @@ class SettingsSearch(QObject):
         self._games = []
         self._query = ""
         self._results = []
+        self._title_only = False
         self._expanded = set()
         self._ready = False
         self._loading = False
@@ -530,6 +531,7 @@ class SettingsSearch(QObject):
 
     def _search(self):
         tokens = normal(self._query).split()
+        self._title_only = False
         if not tokens:
             self._results = []
             self.resultsChanged.emit()
@@ -547,6 +549,7 @@ class SettingsSearch(QObject):
                 self.resultsChanged.emit()
                 return
         picked = [g for g in self._games if all(word_score(t, normal(g["title"]).split()) for t in filters)] if filters else []
+        self._title_only = bool(filters) and not wanted
         scored = []
         for entry in self._entries:
             if entry.kind == "game":
@@ -614,6 +617,8 @@ class SettingsSearch(QObject):
     sections = Property(list, lambda self: list(self._sections), _set_sections, notify=sectionsChanged)
     results = Property(list, lambda self: [dict(r) for r in self._results], notify=resultsChanged)
     count = Property(int, lambda self: len(self._results), notify=resultsChanged)
+    # The query names games and nothing else: the results are every setting of theirs.
+    titleOnly = Property(bool, lambda self: self._title_only, notify=resultsChanged)
     ready = Property(bool, lambda self: self._ready, notify=readyChanged)
     indexed = Property(int, lambda self: len(self._entries), notify=readyChanged)
 

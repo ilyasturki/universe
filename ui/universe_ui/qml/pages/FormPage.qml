@@ -57,27 +57,48 @@ FocusScope {
             label: !inRows ? "Open" : row && row.type === "bool" ? "Toggle" : row && row.key === "add_file" ? "Pick a file" : row && row.type === "action" ? row.action || "Select" : "Change",
             dim: inRows && (!row || row.disabled === true || row.type === "info")
         }
-    ].concat(inRows && page.runner !== "" ? [
+    ].concat(inRows ? [
         {
-            glyph: "X",
-            label: rowAction,
-            dim: !canReset
-        }
-    ] : []).concat(form.hasAdvanced ? [
-        {
-            glyph: "Y",
-            label: form.showAdvanced ? "Hide advanced" : "Show advanced"
+            glyph: "Start",
+            label: "More",
+            dim: moreItems.length === 0
         }
     ] : []).concat([
         {
             glyph: "B",
-            label: inRows ? "Sections" : "Back"
-        },
-        {
-            glyph: "LT RT",
-            label: "Section"
+            label: "Back"
         }
     ])
+
+    // X and Y do these straight away; More lists them.
+    readonly property var moreItems: (canReset && page.runner !== "" ? [
+            {
+                icon: "refresh",
+                label: rowAction === "Remove" ? "Remove" : "Reset to default",
+                action: "reset"
+            }
+        ] : []).concat(form.hasAdvanced ? [
+        {
+            icon: "sliders",
+            label: form.showAdvanced ? "Hide advanced" : "Show advanced",
+            action: "advanced"
+        }
+    ] : [])
+
+    function openMenu() {
+        if (!inRows || moreItems.length === 0) {
+            Sound.edge();
+            return;
+        }
+        Sound.panel();
+        menu.show(moreItems, body.cards, body.cards.focusRect, "", function (action) {
+            body.cards.forceActiveFocus();
+            if (action === "reset")
+                page.resetRow();
+            else if (action === "advanced")
+                page.toggleAdvanced();
+        });
+    }
 
     readonly property real sideMargin: Theme.dp(90)
     readonly property bool hasLogo: info !== null && info.icon !== undefined && String(info.icon) !== "" && logo.status === Image.Ready
@@ -386,7 +407,10 @@ FocusScope {
     Keys.onPressed: function (event) {
         if (event.isAutoRepeat || editor.open || menu.open)
             return;
-        if (api.keys.isFilters(event) && form.hasAdvanced) {
+        if (api.keys.isMenu(event)) {
+            event.accepted = true;
+            page.openMenu();
+        } else if (api.keys.isFilters(event) && form.hasAdvanced) {
             event.accepted = true;
             page.toggleAdvanced();
         } else if (api.keys.isDetails(event) && page.runner !== "") {

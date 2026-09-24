@@ -136,6 +136,40 @@ def test_the_media_tab_and_the_screenshots_page(api, fake):
     pump(50)
 
 
+def test_the_tab_bar_search_finds_the_settings_under_the_games(api, fake):
+    from PySide6.QtTest import QTest
+
+    _engine, window = render(api, activate=True)
+    root = window.property("contentItem").childItems()[0].property("item")
+    root.openSearch()
+    settle(window)
+    overlay = root.property("focusTarget")
+    search = api.screens.search
+    while not search.ready:
+        assert wait_for(search.readyChanged, 5000) is not None
+    assert [s["id"] for s in search.sections][:3] == ["launch", "runners", "controller"], "indexed with Reprise's sections before Settings ever opened"
+    overlay.setProperty("query", "techno")
+    pump(100)
+    assert overlay.property("hasGames") is True and overlay.property("hasSettings") is False, "a title alone: the cover, not the game's every setting"
+    overlay.setProperty("query", "quit")
+    pump(100)
+    assert {"page": "section", "id": "about", "key": "", "module": ""} in [r["target"] for r in search.results], "Quit lives in About: its word finds About"
+    overlay.setProperty("query", "vrr")
+    pump(100)
+    assert overlay.property("hasSettings") is True and overlay.property("hasGames") is False
+    overlay.toResults()
+    pump(100)
+    assert overlay.property("zone") == "settings" and [h["label"] for h in overlay.property("hints").toVariant()] == ["Open", "Close"]
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    settle(window)
+    page = root.property("activePage")
+    assert root.property("searchOpen") is False and root.property("tabIndex") == root.property("settingsTab")
+    cards = next(c for c in page.findChildren(QObject) if c.property("focusRect") is not None)
+    assert page.property("sectionId") == "launch" and cards.property("currentRow")["label"] == "Adaptive sync", "the hit's row, on its section"
+    window.close()
+    pump(50)
+
+
 def test_the_screenshots_page_puts_the_running_sessions_shots_first(api, fake, monkeypatch):
     from PySide6.QtCore import QObject
 
@@ -339,8 +373,9 @@ def test_the_install_pages_render_a_running_install_in_both_looks(api, fake):
     content = js(page, "content")
     groups = content["groups"]
     assert [content["rows"][i]["label"] for i in groups[0]["rows"]] == ["Disco Elysium"], "the paused download sits in the Installing card"
-    assert [g["title"] for g in groups] == ["Installing", "Installed", "Owned, not installed"]
-    assert groups[0]["meta"] == "1 paused" and " GB · /mnt/games/PC" in groups[1]["meta"]
+    assert [g["title"] for g in groups] == ["Installing", "Updates", "Installed", "Owned, not installed"], "the pending updates fold into Install"
+    assert [content["rows"][i]["label"] for i in groups[1]["rows"]] == ["Update everything"]
+    assert groups[0]["meta"] == "1 paused" and " GB · /mnt/games/PC" in groups[2]["meta"]
     row = next(i for i, r in enumerate(sources.rows) if r["title"] == "Stardew Valley")
     sources.install(row)
     pump(300)
@@ -613,12 +648,14 @@ def test_reprise_about_shows_the_build(api, fake):
     root.goToTab(root.property("settingsTab"))
     settle(window)
     page = root.property("activePage")
-    QMetaObject.invokeMethod(page, "land", Q_ARG("QVariant", "about"))
+    QMetaObject.invokeMethod(page, "land", Q_ARG("QVariant", "quit"))
     pump(100)
+    assert page.property("sectionId") == "about", "Quit lives in About now"
     content = page.property("content").toVariant()
-    rows = {r["label"]: r["display"] for r in content["rows"]}
-    assert rows["Universe"] == fake.version() and rows["Look"] == "Reprise" and rows["Library"].endswith(" games")
-    assert page.property("acceptLabel") == "", "nothing to select"
+    assert [r["label"] for r in content["rows"]] == ["Version", "First-run setup", "Quit Universe"]
+    assert content["rows"][0]["display"] == fake.version()
+    assert page.property("acceptLabel") == "", "nothing to select on the version"
+    assert [s["id"] for s in page.property("sections").toVariant()][-3:] == ["sound", "doctor", "about"], "no Search, Updates or Quit section"
     window.close()
     pump(50)
 
@@ -703,13 +740,19 @@ def test_the_game_settings_page_lands_a_search_hit_behind_advanced(api, fake):
     assert sections[body.property("section")] == "Proton" and page.property("row")["key"] == "launch.ntsync", (
         "the hit sits in the Proton card, the cursor on it"
     )
-    assert [h["label"] for h in page.property("hints").toVariant()] == ["Toggle", "Reset", "Hide advanced", "Sections", "Section"]
-    assert page.property("canReset") is False, "nothing of the game's to drop: X reads dim"
+    assert [h["label"] for h in page.property("hints").toVariant()] == ["Toggle", "More", "Back"]
+    assert page.property("canReset") is False, "nothing of the game's to drop"
+    assert [i["action"] for i in page.property("moreItems").toVariant()] == ["advanced"], "More lists what X and Y do here"
     click(Qt.Key.Key_Return)
     assert fake.game("the-technomancer")["launch"]["ntsync"] is False and page.property("row")["origin"] == "game", (
         "changing the value is what sets it on the game"
     )
     assert page.property("canReset") is True
+    click(Qt.Key.Key_F1)
+    menu = next(c for c in page.findChildren(QObject) if c.property("stack") is not None and c.property("open"))
+    assert menu.property("open") is True and [i["action"] for i in menu.property("items").toVariant()] == ["reset", "advanced"]
+    click(Qt.Key.Key_Escape)
+    assert menu.property("open") is False
     click(Qt.Key.Key_I)
     assert "ntsync" not in fake.game("the-technomancer")["launch"] and page.property("row")["origin"] == "default", "X drops it"
     click(Qt.Key.Key_F)
@@ -718,7 +761,7 @@ def test_the_game_settings_page_lands_a_search_hit_behind_advanced(api, fake):
         "the cursor lands on the card's first row"
     )
     click(Qt.Key.Key_Escape)
-    assert [h["label"] for h in page.property("hints").toVariant()] == ["Open", "Show advanced", "Back", "Section"], "B: the sidebar"
+    assert [h["label"] for h in page.property("hints").toVariant()] == ["Open", "Back"], "B: the sidebar"
     click(Qt.Key.Key_PageUp)
     assert form.groups[body.property("section")]["title"] == "Overlay", "LT steps the card"
     click(Qt.Key.Key_Escape)
@@ -758,7 +801,7 @@ def test_the_game_settings_page_adds_a_variable_from_one_sheet(api, fake):
     assert form.groups[body.property("section")]["title"] == "Launch" and row["map"] is True and row["label"] == "Add a variable…", (
         "the environment folds into Launch; the hit lands on the row that adds a variable"
     )
-    assert [h["label"] for h in page.property("hints").toVariant()][:2] == ["Add", "Reset"]
+    assert [h["label"] for h in page.property("hints").toVariant()][:2] == ["Add", "More"]
     click(Qt.Key.Key_Return)
     assert [h["label"] for h in page.property("hints").toVariant()] == ["Next", "Cancel"], "one sheet, two fields: the name first"
     type_text("DXVK_HUD")
@@ -770,7 +813,8 @@ def test_the_game_settings_page_adds_a_variable_from_one_sheet(api, fake):
     assert fake.game("the-technomancer")["launch"]["env"] == {"DXVK_HUD": "fps"}
     row = page.property("row")
     assert row["key"] == "launch.env.DXVK_HUD" and row["origin"] == "game", "the new variable is a row of its own, the cursor on it"
-    assert [h["label"] for h in page.property("hints").toVariant()][:2] == ["Change", "Remove"]
+    assert [h["label"] for h in page.property("hints").toVariant()][:2] == ["Change", "More"]
+    assert page.property("moreItems").toVariant()[0]["label"] == "Remove", "More lists the variable's removal"
     click(Qt.Key.Key_I)
     assert fake.game("the-technomancer")["launch"].get("env", {}) == {}, "X removes it"
     window.close()

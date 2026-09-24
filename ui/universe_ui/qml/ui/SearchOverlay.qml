@@ -1,8 +1,11 @@
 import QtQuick
 import Universe
 import "../core"
+import "../core/Format.js" as Format
 import "../sound"
+import "Sections.js" as Sections
 
+// The tab bar's search: the games as covers, the settings that match under them, the keyboard at the bottom while typing.
 FocusScope {
     id: overlay
 
@@ -10,19 +13,48 @@ FocusScope {
 
     property bool open: false
     property string query: ""
-    property bool resultsFocused: false
+    // "keys" | "games" | "settings"
+    property string zone: "keys"
 
     signal closeRequested
+    signal settingRequested(var target)
 
-    readonly property bool typing: !resultsFocused
+    readonly property var search: api.screens.search
+    readonly property bool typing: zone === "keys"
+    readonly property bool hasGames: matches.count > 0
+    // The games are covers already: the index's own game entries stay out, and a game's title alone lists no settings.
+    readonly property var settingRows: {
+        var out = [], all = search.results;
+        for (var i = 0; i < all.length; i++)
+            if (all[i].kind !== "game")
+                out.push(i);
+        return out;
+    }
+    readonly property bool hasSettings: query.trim() !== "" && !search.titleOnly && settingRows.length > 0
+    // While typing the covers keep the room and the settings are one line under them; ▲ lowers the keyboard and lists them.
+    readonly property bool previewing: typing && hasGames && hasSettings
+    readonly property string preview: {
+        var seen = [], all = search.results, more = false;
+        for (var i = 0; i < all.length; i++) {
+            if (all[i].kind === "game" || seen.indexOf(all[i].label) >= 0)
+                continue;
+            if (seen.length === 3) {
+                more = true;
+                break;
+            }
+            seen.push(all[i].label);
+        }
+        return "Settings: " + seen.join(", ") + (more ? "…" : "");
+    }
 
-    readonly property var currentGame: !typing && results.currentIndex >= 0 && matches.count > 0 ? matches.get(results.currentIndex) : null
-    readonly property Item menuAnchor: typing || !results.currentItem ? null : results.currentItem.artItem
+    readonly property var session: api.universe.currentSession
+    readonly property var currentGame: zone === "games" && results.currentIndex >= 0 && matches.count > 0 ? matches.get(results.currentIndex) : null
+    readonly property Item menuAnchor: zone !== "games" || !results.currentItem ? null : results.currentItem.artItem
 
     readonly property var hints: typing ? (api.keys.mode === "keyboard" ? [
             {
                 glyph: "A",
-                label: "To the games"
+                label: "To the results"
             },
             {
                 glyph: "B",
@@ -41,14 +73,23 @@ FocusScope {
                 glyph: "B",
                 label: "Close"
             }
-        ]) : [
+        ]) : zone === "settings" ? [
         {
             glyph: "A",
-            label: "Launch"
+            label: settingsList.currentRow && settingsList.currentRow.kind === "gamekey" ? (settingsList.currentRow.expanded ? "Collapse" : "Expand") : "Open"
         },
         {
-            glyph: "X",
-            label: "Details"
+            glyph: "B",
+            label: "Close"
+        }
+    ] : [
+        {
+            glyph: "A",
+            label: Format.playLabel(currentGame, session && session.id !== undefined ? session.id : "")
+        },
+        {
+            glyph: "Start",
+            label: "More"
         },
         {
             glyph: "B",
@@ -59,21 +100,45 @@ FocusScope {
     readonly property real sheetInner: Math.min(Theme.dp(880), width - Theme.dp(280))
     readonly property real sheetPad: Theme.dp(28)
     readonly property real fieldHeight: Theme.dp(66)
-    readonly property real cardHeight: Math.max(Theme.dp(150), Math.min(Theme.dp(300), resultsArea.height - Theme.dp(96)))
+    readonly property real cardHeight: Math.max(Theme.dp(150), Math.min(Theme.dp(300), gamesZone.height - Theme.dp(96)))
     readonly property real cardWidth: cardHeight / 1.5
 
-    function toResults() {
-        if (matches.count === 0) {
-            Sound.edge();
+    Component.onCompleted: search.sections = Sections.list.map(function (s) {
+        return {
+            id: s.id,
+            label: s.name,
+            icon: s.icon
+        };
+    })
+
+    function goTo(next) {
+        Sound.panel();
+        zone = next;
+        claim();
+    }
+
+    // The overlay keeps the keys for the keyboard and the covers; the settings list takes them while it has the cursor.
+    function claim() {
+        if (zone === "settings") {
+            settingsList.forceActiveFocus();
             return;
         }
-        Sound.panel();
-        resultsFocused = true;
+        settingsList.focus = false;
+        overlay.forceActiveFocus();
+    }
+
+    // Up from the keys reaches the nearest list: the settings sit between the covers and the keyboard.
+    function toResults() {
+        if (hasSettings)
+            goTo("settings");
+        else if (hasGames)
+            goTo("games");
+        else
+            Sound.edge();
     }
 
     function toKeyboard() {
-        Sound.panel();
-        resultsFocused = false;
+        goTo("keys");
     }
 
     function moveResult(d) {
@@ -84,31 +149,50 @@ FocusScope {
         keyboard.move(dRow, dCol) ? Sound.kbtick() : Sound.edge();
     }
 
+    function activate(index, row) {
+        if (row.kind === "gamekey") {
+            Sound.panel();
+            search.expand(index);
+            return;
+        }
+        Sound.enter();
+        overlay.settingRequested(row.target);
+    }
+
     SearchGames {
         id: matches
         sourceModel: api.allGames
         query: overlay.query
     }
 
-    onOpenChanged: if (open)
-        resultsFocused = false
+    onActiveFocusChanged: if (activeFocus)
+        claim()
+
+    onOpenChanged: {
+        if (!open)
+            return;
+        zone = "keys";
+        search.load();
+    }
 
     onQueryChanged: {
+        search.query = query;
         results.currentIndex = 0;
         results.contentX = -results.leftMargin;
-        if (matches.count === 0)
-            resultsFocused = false;
+        if (zone !== "keys" && (zone === "games" ? !hasGames : !hasSettings))
+            goTo("keys");
     }
 
     Keys.onLeftPressed: overlay.typing ? overlay.kbMove(0, -1) : overlay.moveResult(-1)
     Keys.onRightPressed: overlay.typing ? overlay.kbMove(0, 1) : overlay.moveResult(1)
 
     Keys.onUpPressed: !overlay.typing ? Sound.edge() : keyboard.rowIndex === 0 ? overlay.toResults() : overlay.kbMove(-1, 0)
-    Keys.onDownPressed: overlay.typing ? overlay.kbMove(1, 0) : overlay.toKeyboard()
+    Keys.onDownPressed: overlay.typing ? overlay.kbMove(1, 0) : overlay.hasSettings ? overlay.goTo("settings") : overlay.toKeyboard()
 
-    // The mouse on a card or a key: the focus goes to that half of the overlay, without the pad's panel sound.
+    // The mouse on a card or a key: the focus goes to that part of the overlay, without the pad's panel sound.
     function pointToResult(index) {
-        resultsFocused = true;
+        zone = "games";
+        claim();
         results.currentIndex = index;
     }
 
@@ -169,90 +253,155 @@ FocusScope {
 
         Text {
             anchors.centerIn: parent
-            visible: matches.count === 0
-            text: overlay.query === "" ? "" : "No games match that."
+            visible: !overlay.hasGames && !overlay.hasSettings && overlay.query.trim() !== ""
+            text: "Nothing matches that."
             color: Theme.textMuted
             font.family: Theme.sans
             font.pixelSize: Theme.dp(26)
         }
 
-        ListView {
-            id: results
+        Item {
+            id: gamesZone
 
-            anchors.fill: parent
-            visible: matches.count > 0
+            anchors.top: parent.top
+            anchors.left: parent.left
+            anchors.right: parent.right
+            height: !overlay.hasGames ? 0 : overlay.previewing ? parent.height - Theme.dp(48) : overlay.hasSettings ? parent.height * 0.52 : parent.height
 
-            Wheel {
-                horizontal: true
-                step: overlay.cardWidth + results.spacing
+            Behavior on height {
+                Ease {
+                    duration: Theme.durView
+                }
             }
 
-            model: matches
-            orientation: ListView.Horizontal
-            spacing: Theme.dp(30)
-            interactive: false
-            keyNavigationEnabled: false
-            cacheBuffer: overlay.cardWidth * 3
-            highlightRangeMode: ListView.ApplyRange
-            preferredHighlightBegin: (width - overlay.cardWidth) / 2
-            preferredHighlightEnd: preferredHighlightBegin + overlay.cardWidth
-            highlightMoveDuration: Theme.durView
+            ListView {
+                id: results
 
-            leftMargin: Math.max(Theme.dp(80), (width - (matches.count * overlay.cardWidth + Math.max(0, matches.count - 1) * spacing)) / 2)
-            rightMargin: Theme.dp(80)
+                anchors.fill: parent
+                visible: overlay.hasGames
 
-            delegate: Item {
-                id: card
+                Wheel {
+                    horizontal: true
+                    step: overlay.cardWidth + results.spacing
+                }
 
-                readonly property bool selected: ListView.isCurrentItem && !overlay.typing
-                property alias artItem: art
+                model: matches
+                orientation: ListView.Horizontal
+                spacing: Theme.dp(30)
+                interactive: false
+                keyNavigationEnabled: false
+                cacheBuffer: overlay.cardWidth * 3
+                highlightRangeMode: ListView.ApplyRange
+                preferredHighlightBegin: (width - overlay.cardWidth) / 2
+                preferredHighlightEnd: preferredHighlightBegin + overlay.cardWidth
+                highlightMoveDuration: Theme.durView
 
-                width: overlay.cardWidth
-                height: results.height
+                leftMargin: Math.max(Theme.dp(80), (width - (matches.count * overlay.cardWidth + Math.max(0, matches.count - 1) * spacing)) / 2)
+                rightMargin: Theme.dp(80)
 
-                Column {
-                    anchors.horizontalCenter: parent.horizontalCenter
-                    anchors.verticalCenter: parent.verticalCenter
-                    spacing: Theme.dp(16)
+                delegate: Item {
+                    id: card
 
-                    CoverCard {
-                        id: art
-                        width: overlay.cardWidth
-                        height: overlay.cardHeight
-                        game: model
-                        selected: card.selected
-                        selectedScale: 1.0
-                        idleScale: 0.94
-                        cornerRadius: Theme.dp(14)
-                        ringOpacity: overlay.typing ? Theme.ringIdle : 1.0
-                        pointable: true
-                        current: card.selected
-                        onPicked: overlay.pointToResult(index)
-                    }
+                    readonly property bool selected: ListView.isCurrentItem && overlay.zone === "games"
+                    property alias artItem: art
 
-                    Text {
+                    width: overlay.cardWidth
+                    height: results.height
+
+                    Column {
                         anchors.horizontalCenter: parent.horizontalCenter
-                        width: overlay.cardWidth
-                        horizontalAlignment: Text.AlignHCenter
-                        text: model.title
-                        color: card.selected ? Theme.text : Theme.textSecondary
-                        font.family: Theme.sans
-                        font.weight: card.selected ? Font.DemiBold : Font.Medium
-                        font.pixelSize: Theme.dp(23)
-                        elide: Text.ElideRight
+                        anchors.verticalCenter: parent.verticalCenter
+                        spacing: Theme.dp(16)
+
+                        CoverCard {
+                            id: art
+                            width: overlay.cardWidth
+                            height: overlay.cardHeight
+                            game: model
+                            selected: card.selected
+                            selectedScale: 1.0
+                            idleScale: 0.94
+                            cornerRadius: Theme.dp(14)
+                            ringOpacity: overlay.zone !== "games" ? Theme.ringIdle : 1.0
+                            pointable: true
+                            current: card.selected
+                            onPicked: overlay.pointToResult(index)
+                        }
+
+                        Text {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            width: overlay.cardWidth
+                            horizontalAlignment: Text.AlignHCenter
+                            text: model.title
+                            color: card.selected ? Theme.text : Theme.textSecondary
+                            font.family: Theme.sans
+                            font.weight: card.selected ? Font.DemiBold : Font.Medium
+                            font.pixelSize: Theme.dp(23)
+                            elide: Text.ElideRight
+                        }
                     }
                 }
             }
         }
+
+        Text {
+            anchors.top: gamesZone.bottom
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: overlay.sheetInner
+            horizontalAlignment: Text.AlignHCenter
+            visible: overlay.previewing
+            text: overlay.preview
+            color: Theme.textSecondary
+            font.family: Theme.sans
+            font.pixelSize: Theme.dp(22)
+            elide: Text.ElideRight
+        }
+
+        SettingsCards {
+            id: settingsList
+
+            anchors.top: gamesZone.bottom
+            anchors.topMargin: overlay.hasGames ? Theme.dp(12) : 0
+            anchors.bottom: parent.bottom
+            anchors.bottomMargin: Theme.dp(20)
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: overlay.sheetInner
+            columns: 1
+            compact: true
+            rows: overlay.search.results
+            groups: overlay.hasSettings ? [
+                {
+                    title: "",
+                    rows: overlay.settingRows
+                }
+            ] : []
+            opacity: overlay.hasSettings && !overlay.previewing ? 1.0 : 0.0
+            visible: opacity > 0.01
+
+            Behavior on opacity {
+                Ease {
+                    duration: Theme.durQuick
+                }
+            }
+
+            onActivated: function (index, row) {
+                overlay.activate(index, row);
+            }
+            onPointed: overlay.zone = "settings"
+            onEscapedUp: overlay.hasGames ? overlay.goTo("games") : Sound.edge()
+            onEscapedDown: overlay.toKeyboard()
+            onEscapedLeft: Sound.edge()
+        }
     }
 
+    // Down while typing; out of the way while a list has the cursor, so the lists get the whole height.
     Item {
         id: sheet
 
         anchors.left: parent.left
         anchors.right: parent.right
         height: overlay.sheetPad * 2 + overlay.fieldHeight + Theme.dp(22) + keyboard.height
-        y: overlay.open ? parent.height - height : parent.height
+        y: !overlay.open ? parent.height : overlay.typing ? parent.height - height : parent.height - overlay.sheetPad - overlay.fieldHeight - Theme.dp(16)
 
         Behavior on y {
             Ease {
@@ -313,7 +462,7 @@ FocusScope {
                 anchors.left: glass.right
                 anchors.leftMargin: Theme.dp(18)
                 anchors.verticalCenter: parent.verticalCenter
-                text: "Search your library"
+                text: "Search games and settings"
                 color: Theme.textMuted
                 font.family: Theme.sans
                 font.weight: Font.Medium
@@ -327,16 +476,6 @@ FocusScope {
                 height: Theme.dp(30)
                 color: Theme.text
                 visible: overlay.open && overlay.typing && caret.on
-            }
-
-            Text {
-                anchors.right: parent.right
-                anchors.rightMargin: Theme.dp(26)
-                anchors.verticalCenter: parent.verticalCenter
-                text: matches.count + " of " + api.allGames.count
-                color: Theme.textMuted
-                font.family: Theme.sans
-                font.pixelSize: Theme.dp(21)
             }
         }
 
@@ -360,13 +499,6 @@ FocusScope {
             height: implicitHeight
             keyHeight: Theme.dp(52)
             keyGap: Theme.dp(9)
-            opacity: overlay.typing ? 1.0 : 0.55
-
-            Behavior on opacity {
-                Ease {
-                    duration: Theme.durQuick
-                }
-            }
 
             onCharEntered: function (value) {
                 Sound.type();
@@ -381,7 +513,10 @@ FocusScope {
                 overlay.query = "";
             }
             onDone: overlay.toResults()
-            onPointed: overlay.resultsFocused = false
+            onPointed: {
+                overlay.zone = "keys";
+                overlay.claim();
+            }
         }
     }
 }
