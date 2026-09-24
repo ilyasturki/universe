@@ -34,8 +34,7 @@ FocusScope {
     readonly property var sections: groups.map(function (g) {
         return {
             name: g.title,
-            icon: page.icons[g.title] || "sliders",
-            group: ""
+            icon: page.icons[g.title] || "sliders"
         };
     })
     readonly property var icons: ({

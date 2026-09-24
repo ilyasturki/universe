@@ -26,8 +26,7 @@ FocusScope {
         var first = form.rows[g.rows[0]] || {};
         return {
             name: g.title,
-            icon: first.module ? "grid" : page.icons[g.title] || "play",
-            group: first.module ? "Modules" : ""
+            icon: first.module ? "grid" : page.icons[g.title] || "play"
         };
     })
     readonly property var icons: ({

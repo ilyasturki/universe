@@ -2,7 +2,7 @@ import QtQuick
 import "../core"
 import "../sound"
 
-// A form's cards as a sidebar beside the picked card's rows: `sections` ([{ name, icon, group }]) names `groups` one for one.
+// A form's cards as a sidebar beside the picked card's rows: `sections` ([{ name, icon }]) names `groups` one for one.
 // The cursor sits in one `zone`, "side" or "rows"; A or Right enters the rows, B or Left comes back, LT / RT step the cards.
 // Fills the page, so its `cards` sit in page coordinates for an editor or a menu; the columns run from `columnsTop` to `floor`.
 FocusScope {
