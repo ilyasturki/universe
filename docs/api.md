@@ -715,11 +715,13 @@ set when the manifest names a `choices_exec`: `<module dir>/<choices_exec> <key>
 A slot with only a press macro fires on the key down; with a hold macro too, press fires on a release
 before `hold_ms` and hold once at `hold_ms`. `volume_up`, `volume_down` and `mute` go straight to
 WirePlumber through `wpctl`: the default sink's volume moves by `volume_step` percent, clamped to
-[0, 100 %], `mute` toggles the sink; no key is typed, so nothing reaches the game. On GNOME the new
-level shows on the shell's OSD through `org.universe.Windows.ShowOSD` on the Universe extension,
-labelled with the output as GNOME's own volume keys print it (the sink's active route, else the
-sink, as `outputs()` labels it); without the extension the
-macro runs silently. `screenshot` is `screenshot()`, reported back as a `screenshot` event
+[0, 100 %], `mute` toggles the sink; no key is typed, so nothing reaches the game. The new level
+is reported as a `volume` event (`{"event": "volume", "percent", "muted", "output"}`, the output
+labelled as GNOME's own volume keys print it: the sink's active route, else the sink, as
+`outputs()` labels it). Inside the launcher's gamescope the launcher's overlay draws it over the
+game, whatever the desktop; on the desktop it shows on GNOME's OSD through
+`org.universe.Windows.ShowOSD` on the Universe extension, and without the extension the macro runs
+silently. `screenshot` is `screenshot()`, reported back as a `screenshot` event
 (`{"event": "screenshot", "path"}`) that the launcher turns into its flash and shutter. `keys` types through uinput; `mangohud` is `set_mangohud(None)` — no key: the running
 game's `launch.mangohud` flipped and the HUD told (see MangoHud) — and the watcher reports the
 outcome as a `hud` event, which the launcher toasts: "MangoHud shown · <title>", "MangoHud hidden ·

@@ -760,9 +760,13 @@ impl Watcher {
                     _ => super::volume::Change::ToggleMute,
                 };
                 let percent = self.cfg.volume_step;
+                let out = self.out;
                 tokio::spawn(async move {
-                    if let Err(e) = super::volume::change(change, percent).await {
-                        tracing::warn!("{change:?}: {e}");
+                    match super::volume::change(change, percent).await {
+                        Ok(level) => {
+                            out.emit(serde_json::json!({"event": "volume", "percent": level.percent, "muted": level.muted, "output": level.output}));
+                        }
+                        Err(e) => tracing::warn!("{change:?}: {e}"),
                     }
                 });
             }

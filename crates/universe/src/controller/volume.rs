@@ -20,7 +20,8 @@ pub struct Level {
 
 pub async fn change(change: Change, percent: u8) -> Result<Level, String> {
     let level = tokio::task::spawn_blocking(move || apply(change, percent)).await.map_err(|e| e.to_string())??;
-    if change != Change::Get {
+    // Inside the launcher's gamescope its overlay draws the level whatever the desktop; the shell's would be a second one.
+    if change != Change::Get && !crate::nest::inside() {
         osd(&level).await;
     }
     Ok(level)

@@ -175,6 +175,7 @@ class ControllerScreen(AdvancedRows, QObject):
     learned = Signal(str, str, str)
     macroNotice = Signal(str)
     screenshotTaken = Signal(str)
+    volumeReported = Signal(object)
     message = Signal(str)
     mapping = Signal(int, int, str)
     walkChanged = Signal()
@@ -327,6 +328,8 @@ class ControllerScreen(AdvancedRows, QObject):
             self.macroNotice.emit(self._hud_notice(line))
         elif kind == "screenshot":
             self.screenshotTaken.emit(str(line.get("path") or ""))
+        elif kind == "volume":
+            self.volumeReported.emit({"percent": int(line.get("percent") or 0), "muted": bool(line.get("muted")), "output": str(line.get("output") or "")})
         elif kind == "learned":
             self._learned(line)
         elif kind == "learn_timeout":

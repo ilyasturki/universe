@@ -329,6 +329,26 @@ def test_a_launch_holds_the_poster_until_the_window_is_shown(api, fake):
     pump(50)
 
 
+def test_the_overlay_draws_the_volume_level_inside_gamescope(api, fake, monkeypatch):
+    from PySide6.QtCore import QRect, QSize
+
+    monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
+    monkeypatch.setattr(fake, "overlay", lambda window, input, opacity: None)
+    engine = QQmlApplicationEngine()
+    engine.rootContext().setContextProperty("api", api)
+    overlay = host.create_overlay(engine, QSize(1280, 720))
+    assert api.home.attachOverlay(overlay)
+    settle(overlay)
+    band = QRect(320, 540, 640, 120)
+    before = lit_fraction(overlay.grabWindow().copy(band), "#000000")
+    api.screens.controller._on_event({"event": "volume", "percent": 60, "muted": False, "output": "Speakers"})
+    pump(400)
+    shot = overlay.grabWindow()
+    if os.environ.get("UNIVERSE_SHOT_DIR"):
+        shot.save(os.path.join(os.environ["UNIVERSE_SHOT_DIR"], "overlay-osd.png"))
+    assert api.home.osd and lit_fraction(shot.copy(band), "#000000") > before + 0.05, "the level's pill above the bottom edge"
+
+
 def test_signals_end_the_loop_while_it_idles(app):
     import os
     import signal

@@ -31,6 +31,31 @@ def test_a_shot_from_the_pad_or_the_dock_cues_the_same_way(api, fake):
     assert len(taken) == 3 and taken[2].endswith("screenshot.png"), "the dock's shot goes through the same signal"
 
 
+def test_a_volume_macro_shows_its_level_on_the_overlay_for_a_moment(api, fake, monkeypatch):
+    from universe_ui import home as home_module
+
+    monkeypatch.setattr(home_module, "OSD_MS", 150)
+    monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
+    home = home_module.Home(fake, api.screens.controller)
+    states = []
+    monkeypatch.setattr(fake, "overlay", lambda window, input, opacity: states.append((input, opacity)))
+    home.attachOverlay(SimpleNamespace(winId=lambda: 1, show=lambda: None))
+    states.clear()
+    api.screens.controller._on_event({"event": "volume", "percent": 40, "muted": False, "output": "Speakers"})
+    assert home.osd and (home.volumePercent, home.muted, home.volumeOutput) == (40, False, "Speakers")
+    assert states == [(False, home_module.OPAQUE)], "painted over whatever is shown, the pad left where it was"
+    pump(400)
+    assert not home.osd and states[-1] == (False, 0), "gone again"
+    home._open = True
+    states.clear()
+    api.screens.controller._on_event({"event": "volume", "percent": 45, "muted": False, "output": "Speakers"})
+    assert not home.osd and states == [] and home.volumePercent == 45, "the open dock prints the level itself"
+    home._open = False
+    monkeypatch.delenv("GAMESCOPE_WAYLAND_DISPLAY")
+    api.screens.controller._on_event({"event": "volume", "percent": 50, "muted": True, "output": "Speakers"})
+    assert not home.osd and states == [], "on the desktop the shell shows it"
+
+
 def test_home_flips_between_the_game_and_the_launcher(api, fake, monkeypatch):
     from universe_ui import fake_core
 

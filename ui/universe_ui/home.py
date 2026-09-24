@@ -11,6 +11,7 @@ POLL_MS = 250
 HOLD_MS = 600
 # The overlay stays painted over the game this long for the flash the theme draws on a shot.
 CUE_MS = 450
+OSD_MS = 1500
 SHUTTER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "qml", "assets", "sounds", "shutter.wav")
 # How long the swap waits for the theme to say the frame is painted (`covered`) before going ahead anyway: a 4K png decodes slowly.
 COVER_MS = 700
@@ -22,6 +23,7 @@ class Home(QObject):
     pressed = Signal()
     changed = Signal()
     volumeChanged = Signal()
+    osdChanged = Signal()
     outputsChanged = Signal()
     screenshotTaken = Signal(str)
     stopping = Signal(str)
@@ -75,6 +77,11 @@ class Home(QObject):
         self._cue.setSingleShot(True)
         self._cue.setInterval(CUE_MS)
         self._cue.timeout.connect(self._cue_done)
+        self._osd = False
+        self._osd_timer = QTimer(self)
+        self._osd_timer.setSingleShot(True)
+        self._osd_timer.setInterval(OSD_MS)
+        self._osd_timer.timeout.connect(self._osd_done)
         self._shutter = None
         self._no_shutter = False
         client.currentSessionChanged.connect(self._on_session)
@@ -85,6 +92,7 @@ class Home(QObject):
         client.sessionShown.connect(self._on_shown)
         controller.buttonPressed.connect(self._on_button)
         controller.screenshotTaken.connect(self._shot_taken)
+        controller.volumeReported.connect(self._volume_reported)
         self._on_session()
 
     def attachOverlay(self, window):
@@ -422,7 +430,26 @@ class Home(QObject):
         self.screenshotTaken.emit(path)
 
     def _cue_done(self):
-        if not self._open and not self._closing:
+        self._release_overlay()
+
+    # A pad's volume macro: the open dock prints the level in its own row, else the overlay shows it for a moment.
+    def _volume_reported(self, level):
+        self._land_volume(level)
+        if not self._client.nested or self._open or self._closing:
+            return
+        self._overlay_state(False, OPAQUE)
+        self._osd_timer.start()
+        if not self._osd:
+            self._osd = True
+            self.osdChanged.emit()
+
+    def _osd_done(self):
+        self._osd = False
+        self.osdChanged.emit()
+        self._release_overlay()
+
+    def _release_overlay(self):
+        if not (self._open or self._closing or self._cue.isActive() or self._osd_timer.isActive()):
             self._overlay_state(False, 0)
 
     def _play_shutter(self):
@@ -523,4 +550,6 @@ class Home(QObject):
     frame = Property(str, lambda self: self._frame, notify=changed)
     volumePercent = Property(int, lambda self: int(self._volume.get("percent") or 0), notify=volumeChanged)
     muted = Property(bool, lambda self: bool(self._volume.get("muted")), notify=volumeChanged)
+    volumeOutput = Property(str, lambda self: str(self._volume.get("output") or ""), notify=volumeChanged)
+    osd = Property(bool, lambda self: self._osd, notify=osdChanged)
     outputs = Property(list, lambda self: list(self._outputs), notify=outputsChanged)
