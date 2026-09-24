@@ -462,10 +462,12 @@ FocusScope {
             height: Theme.dp(96)
             lit: index === page.index && !page.reading
             muted: pending || blank
-            title: pending ? "Writing the entry…" : blank ? "No entry yet" : modelData.title
+            title: pending ? "Writing the entry…" : blank ? modelData.dateText : modelData.title
             subtitle: {
                 if (pending)
                     return page.elapsedText(modelData.started_at);
+                if (blank)
+                    return modelData.durationText;
                 if (modelData.state === "failed")
                     return modelData.reason;
                 if (modelData.state === "deferred")
@@ -556,7 +558,7 @@ FocusScope {
 
             Text {
                 width: parent.width
-                visible: page.currentPending || page.currentBlank
+                visible: text !== ""
                 text: {
                     if (!page.current)
                         return "";
@@ -566,7 +568,7 @@ FocusScope {
                         return page.current.reason + ". Another try " + page.current.retryText + ", or ask for one now with Start.";
                     if (page.current.state === "failed")
                         return page.current.reason + ". Ask for another try with Start.";
-                    return "This session was never journaled. Start writes its entry from the recording and the screenshots you took.";
+                    return "";
                 }
                 color: Theme.textMuted
                 font.family: Theme.sans

@@ -56,7 +56,8 @@ until extracted), `complete` and `duration`, for the listed sessions only, built
 time since `started_at` and cannot be opened), `deferred` (`reason` and `retryText`, the instant it
 is owed another run), `failed` (`reason` is the module's message, its one paragraph) or `none` —
 a session the module never wrote for, which carries the session's own date and duration and nothing
-else, so an imported recording is one action away from an entry. `write(gameId, session, rewrite)`
+else, so an imported recording is one action away from an entry; Reprise's row reads that date over
+that duration, and its pane "No entry yet". `write(gameId, session, rewrite)`
 hands it to the core (`journal_write`): A on a row that is not `written`, "Write the entry" / "Try
 again now" / "Write it again" in its Start menu. `durationText` is the session's length — `42 min`,
 `1 h 05` — next to the date in the row and in the article header; the date is `written_at`, or
