@@ -180,11 +180,7 @@ impl Default for Config {
             paths: Paths::default(),
             launch: LaunchDefaults::default(),
             desktop: DesktopConfig::default(),
-            proton: BTreeMap::from([
-                ("proton-ge".into(), "~/.local/share/lutris/runners/wine/proton-ge".into()),
-                ("proton-em".into(), "~/.local/share/lutris/runners/wine/proton-em".into()),
-                ("proton-cachyos".into(), "~/.local/share/lutris/runners/wine/proton-cachyos".into()),
-            ]),
+            proton: BTreeMap::new(),
             runners: BTreeMap::new(),
             modules: ModulesConfig::default(),
             sources: SourcesConfig::default(),
@@ -266,6 +262,12 @@ impl Default for LutrisConfig {
             pegasus_library: "~/.local/share/pegasus-library".into(),
         }
     }
+}
+
+/// umu-run's `PROTONPATH` codename for a family it can download; `None` leaves it to its own UMU-Proton.
+pub fn umu_codename(name: &str) -> Option<&'static str> {
+    let flat: String = name.chars().filter(|c| c.is_ascii_alphanumeric()).collect::<String>().to_ascii_lowercase();
+    matches!(flat.as_str(), "protonge" | "geproton" | "gelatest").then_some("GE-Proton")
 }
 
 /// The newest directory across `dirs` whose name is a build of `name`'s family: the name's words in either
@@ -352,17 +354,34 @@ impl Config {
         Some(std::fs::canonicalize(&p).unwrap_or(p))
     }
 
-    /// Where Lutris, Steam and Heroic keep their Proton builds, plus Universe's own.
+    /// Where Lutris, Steam, Heroic and umu keep their Proton builds, plus Universe's own.
     fn proton_dirs(&self) -> Vec<PathBuf> {
         let home = paths::home();
+        let data = paths::xdg("XDG_DATA_HOME", ".local/share");
         vec![
             paths::data_home().join("proton"),
             paths::expand(&self.lutris.runners_dir),
             home.join(".local/share/Steam/compatibilitytools.d"),
+            data.join("Steam/compatibilitytools.d"),
+            data.join("umu/compatibilitytools"),
             home.join(".var/app/com.valvesoftware.Steam/data/Steam/compatibilitytools.d"),
             home.join(".config/heroic/tools/proton"),
             home.join(".var/app/com.heroicgameslauncher.hgl/config/heroic/tools/proton"),
         ]
+    }
+
+    /// The names a game's `proton` can take here: `[proton]`'s, then every build in the tool directories (a folder holding a `proton` script).
+    pub fn proton_names(&self) -> Vec<String> {
+        let builds = self
+            .proton_dirs()
+            .into_iter()
+            .filter_map(|d| std::fs::read_dir(d).ok())
+            .flatten()
+            .flatten()
+            .filter(|e| e.path().join("proton").is_file())
+            .map(|e| e.file_name().to_string_lossy().into_owned());
+        let names: std::collections::BTreeSet<String> = self.proton.keys().cloned().chain(builds).collect();
+        names.into_iter().collect()
     }
 
     pub fn api_key(&self, which: &str) -> Option<String> {
@@ -395,6 +414,7 @@ impl Config {
             .map(|t| crate::modules::toml_to_json(&toml::Value::Table(t)))
             .unwrap_or_else(|| serde_json::json!({}));
         v["data_home"] = serde_json::Value::String(paths::data_home().to_string_lossy().into());
+        v["protons"] = self.proton_names().into();
         v
     }
 
@@ -474,5 +494,28 @@ mod tests {
         assert!(newest_of_family(&dirs, "proton-em").is_none());
         assert!(newest_of_family(&dirs, "proton-gecko").is_none(), "a family is followed by its version");
         assert!(newest_of_family(&dirs, "/opt/proton").is_none(), "a path is no family");
+    }
+
+    #[test]
+    fn a_missing_proton_is_one_umu_downloads() {
+        assert_eq!(umu_codename("proton-ge"), Some("GE-Proton"));
+        assert_eq!(umu_codename("GE-Proton"), Some("GE-Proton"));
+        assert_eq!(umu_codename("proton-cachyos"), None, "no codename: umu's own UMU-Proton");
+        assert!(Config::default().proton.is_empty(), "no Proton paths of one machine shipped");
+    }
+
+    #[test]
+    fn proton_names_list_the_builds_found_and_the_configs() {
+        let dir = tempfile::tempdir().unwrap();
+        for d in ["GE-Proton10-4", "wine-ge-8-26"] {
+            std::fs::create_dir(dir.path().join(d)).unwrap();
+        }
+        std::fs::write(dir.path().join("GE-Proton10-4/proton"), b"#!/usr/bin/env python3\n").unwrap();
+        let mut c = Config::default();
+        c.lutris.runners_dir = dir.path().to_string_lossy().into();
+        c.proton.insert("mine".into(), "/opt/mine".into());
+        let names = c.proton_names();
+        assert!(names.contains(&"GE-Proton10-4".to_string()) && names.contains(&"mine".to_string()), "{names:?}");
+        assert!(!names.contains(&"wine-ge-8-26".to_string()), "a Wine build is no Proton");
     }
 }

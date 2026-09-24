@@ -348,10 +348,14 @@ FSR 4 on RDNA 4, XeSS on Intel — and off elsewhere and when no GPU is known.
 
 `launch.proton` names a build: `proton/<name>` under the data home, then `[proton]`'s path, then a
 path as given, then `<name>` under each Proton directory — Lutris's `runners_dir`, Steam's
-`compatibilitytools.d` (native and Flatpak), Heroic's `tools/proton` (native and Flatpak) — then the
-newest build of the name's family in any of them: `proton-ge` is `GE-Proton10-12` over
-`GE-Proton9-27`, `proton-cachyos` is `proton-cachyos-10.0-…`. `doctor` says which one, or that none
-was found. A switch off removes the same name from
+`compatibilitytools.d` (native and Flatpak), umu's `umu/compatibilitytools`, Heroic's `tools/proton`
+(native and Flatpak) — then the newest build of the name's family in any of them: `proton-ge` is
+`GE-Proton10-12` over `GE-Proton9-27`, `proton-cachyos` is `proton-cachyos-10.0-…`. None found is
+no error: umu-run downloads one — `PROTONPATH=GE-Proton` for the GE family, the latest GE-Proton
+into Steam's `compatibilitytools.d`, where the next launch finds it; any other name leaves
+`PROTONPATH` unset (unless `[launch.env]` sets it) for umu's own UMU-Proton, with a warning. `doctor`
+says which build, or which download. `settings()`'s `protons` lists the names a game can take here:
+`[proton]`'s, then every build in those directories. A switch off removes the same name from
 `[launch.env]`; `launch.env` on the game still wins. `launch.dll_overrides` (`d3d11 = "n,b"`, keys
 without `.dll`) is `WINEDLLOVERRIDES`. `wine` runs `<launch.runner_exe or wine> <exe>` with
 `WINEPREFIX`, `WINEARCH` (`launch.arch`), `WINEESYNC`/`WINEFSYNC` as `1`/`0` and
@@ -779,10 +783,8 @@ hide_cursor = true
 cursor_extension = "hide-cursor@elcste.com"   # enabled for the session, restored to its prior state after
 keep_awake = true                    # the desktop's idle inhibitor held for the session: a pad is no activity to it, and the screen would blank and suspend mid-game
 
-[proton]                             # name → path; a name with no path here is looked for as a family (GE-Proton10-4 for proton-ge) under Lutris, Steam and Heroic
-proton-ge = "~/.local/share/lutris/runners/wine/proton-ge"
-proton-em = "~/.local/share/lutris/runners/wine/proton-em"
-proton-cachyos = "~/.local/share/lutris/runners/wine/proton-cachyos"
+[proton]                             # name → path, none by default; a name with no path here is looked for as a family (GE-Proton10-4 for proton-ge) under Lutris, Steam, umu and Heroic
+# proton-em = "~/.local/share/lutris/runners/wine/proton-em"
 
 # [runners.<id>]                     # per runner (`universe runner set`): exe (absent: detected), args, gamescope, its options
 

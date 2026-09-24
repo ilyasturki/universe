@@ -596,11 +596,8 @@
     "config_writable": true,
     "paths": {"games_root": "/mnt/games/PC", "prefixes_root": "/mnt/games/prefixes"},
     "desktop": {"hide_cursor": true},
-    "proton": {
-      "proton-ge": "~/.local/share/lutris/runners/wine/proton-ge",
-      "proton-em": "~/.local/share/lutris/runners/wine/proton-em",
-      "proton-cachyos": "~/.local/share/lutris/runners/wine/proton-cachyos"
-    },
+    "proton": {},
+    "protons": ["proton-cachyos", "proton-em", "proton-ge"],
     "modules": {
       "enabled": ["capture", "journal"],
       "capture": {"codec": "av1_10bit"},

@@ -154,7 +154,7 @@ def auto_rate(mode, gamescope, gamescope_refresh):
 
 
 def proton_choices(config):
-    choices = sorted((config.get("proton") or {}).keys())
+    choices = sorted(config.get("protons") or [])
     default = str(_dig(config, "launch.proton", "") or "")
     if default and default not in choices:
         choices.insert(0, default)

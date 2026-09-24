@@ -170,10 +170,14 @@ fn proton_env(g: &crate::game::Game, r: &Resolved, config: &Config, env: &mut BT
     std::fs::create_dir_all(&prefix)?;
     env.insert("WINEPREFIX".into(), prefix.to_string_lossy().into());
     let proton = r.effective.proton_path.clone();
-    if proton.is_empty() {
-        return Err(crate::Error::Unavailable(format!("{}: Proton '{}' not found", g.id, r.effective.proton)));
+    if !proton.is_empty() {
+        env.insert("PROTONPATH".into(), proton);
+    } else if let Some(codename) = crate::config::umu_codename(&r.effective.proton) {
+        tracing::info!("{}: Proton '{}' not installed: umu-run downloads {codename}", g.id, r.effective.proton);
+        env.insert("PROTONPATH".into(), codename.into());
+    } else if !env.contains_key("PROTONPATH") {
+        tracing::warn!("{}: Proton '{}' not installed: umu-run downloads its own UMU-Proton", g.id, r.effective.proton);
     }
-    env.insert("PROTONPATH".into(), proton);
     env.insert("GAMEID".into(), if g.launch.umu_id.is_empty() { "umu-default".into() } else { g.launch.umu_id.clone() });
     if !g.launch.store.is_empty() {
         env.insert("STORE".into(), g.launch.store.clone());
@@ -934,5 +938,22 @@ mod tests {
         r.effective.runner_path.clear();
         let err = plan(&r, &cfg, &BTreeMap::new(), None, None, false, true).unwrap_err();
         assert!(matches!(err, crate::Error::Unavailable(_)), "{err}");
+    }
+
+    #[test]
+    fn plan_leaves_a_missing_proton_to_umu() {
+        let dir = tempfile::tempdir().unwrap();
+        let mut g = game(dir.path(), "Game.exe", "");
+        g.launch.gamescope = Some(false);
+        let mut cfg = Config::default();
+        cfg.launch.fps_limit = "none".into();
+        let mut r = crate::library::resolve(g, &cfg, &[]);
+        r.effective.proton = "proton-ge".into();
+        r.effective.proton_path.clear();
+        let p = plan(&r, &cfg, &BTreeMap::new(), None, None, false, true).unwrap();
+        assert_eq!(p.env["PROTONPATH"], "GE-Proton", "umu fetches the latest GE-Proton");
+        r.effective.proton = "proton-cachyos".into();
+        let p = plan(&r, &cfg, &BTreeMap::new(), None, None, false, true).unwrap();
+        assert!(!p.env.contains_key("PROTONPATH"), "no codename for it: umu's own UMU-Proton");
     }
 }

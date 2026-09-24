@@ -627,7 +627,7 @@ Programs, Folders, API keys and Desktop as cards of their own — beginner first
 sized by the screen the window is on (`screen_mode`: `auto`, the screen's mode, the standard heights
 below it at its aspect ratio; the rates below its own). `screens/settings.py`'s `launch_row` is the
 presentation over an entry: an `enum`, `toggle` or `int` with choices lists a `default` choice that clears the
-key (through `choiceValues`), a `proton` entry lists the config's `[proton]` names, `fps_limit`'s
+key (through `choiceValues`), a `proton` entry lists the settings' `protons` (the `[proton]` names and the builds found), `fps_limit`'s
 `auto` displays as `auto · 60`, the rate it stands for, and a `toggle` (adaptive sync, the upscaler
 upgrades) on `auto` as `auto · On` or `auto · Off`, what it comes to here (`gpu().auto`, the
 screen's `vrr`). The keys tied to a runner (`proton`, the
