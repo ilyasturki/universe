@@ -248,8 +248,9 @@ pub fn read_manifests<M: serde::de::DeserializeOwned>(
     found
 }
 
+/// A tool Universe fetches on first use (`tools::TOOLS`) is never missing.
 pub fn missing_bins(requires: &Requires) -> Vec<String> {
-    requires.bins.iter().filter(|b| crate::runners::on_path(b).is_none()).cloned().collect()
+    requires.bins.iter().filter(|b| crate::runners::on_path(b).is_none() && crate::tools::find(b).is_none()).cloned().collect()
 }
 
 /// The manifest's bins, plus the ones the chosen value of a `requires_bins` setting asks for; and the `required` settings left empty.
@@ -309,6 +310,7 @@ pub(crate) fn command(exe: &Path, dir: &Path, data_dir: &Path, prefix: &str) -> 
     let mut cmd = tokio::process::Command::new(exe);
     cmd.env(format!("{prefix}_DIR"), dir)
         .env(format!("{prefix}_DATA_DIR"), data_dir)
+        .env("PATH", crate::tools::search_path())
         .current_dir(dir)
         .stdin(Stdio::null())
         .stdout(Stdio::piped())

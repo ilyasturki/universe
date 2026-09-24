@@ -372,6 +372,17 @@ becomes the switch. Lutris's `fps_limit` is `launch.fps_limit`; its `fsr`, `batt
 DXVK/VKD3D versions and registry options have no counterpart (Proton bundles its own DXVK, and reads
 none of those variables).
 
+### Fetched tools
+
+Two programs most distributions do not package are fetched by Universe itself when they are not on
+PATH: `umu-run` (umu-launcher 1.4.4's zipapp, which needs python3 3.10 or later) before a Proton
+launch that uses `launch.umu_run`, and `gogdl` (heroic-gogdl 1.3.0's x86_64 build) before any command
+of a source that requires it. Each is pinned to one GitHub release asset and its sha256: a download
+that does not match is refused, nothing written. They land in `<data>/bin`, which every lookup of a
+program searches after PATH (an installed one wins) and which is appended to the `PATH` of the
+modules, the sources and the units Universe starts. A required binary Universe fetches never makes
+a source unavailable, and `doctor` reports it as fetched on first use.
+
 ## Sources
 
 | Rust | Python | CLI | Role |
@@ -924,7 +935,7 @@ description = "Installs GOG games."   # optional, as a module's
 exe = "bin/source"                # run as: bin/source <verb> [args]
 
 [requires]
-bins = ["gogdl"]                  # a missing binary makes the source "unavailable" and it is never run
+bins = ["gogdl"]                  # a missing binary makes the source "unavailable" and it is never run, unless Universe fetches it (see Fetched tools)
 
 [[settings]]                      # as a module's, without `scope`: every setting is global, in config.toml [sources.<id>]
 key = "platform"

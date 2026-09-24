@@ -143,6 +143,9 @@ where
     F: FnMut(SourceEvent),
 {
     use tokio::io::AsyncBufReadExt;
+    for bin in &source.manifest.requires.bins {
+        crate::tools::ensure(bin).await?;
+    }
     let exe = source.dir.join(&source.manifest.exe);
     let mut child = modules::command(&exe, &source.dir, &source.data_dir(), "SOURCE")?
         .arg(verb)

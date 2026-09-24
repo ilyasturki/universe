@@ -556,6 +556,7 @@ pub(crate) fn on_path(bin: &str) -> Option<PathBuf> {
     }
     let mut dirs: Vec<PathBuf> = std::env::var_os("PATH").map(|p| std::env::split_paths(&p).collect()).unwrap_or_default();
     dirs.push("/run/wrappers/bin".into());
+    dirs.push(crate::tools::dir());
     dirs.iter().map(|d| d.join(bin)).find(|p| p.is_file())
 }
 

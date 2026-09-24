@@ -33,6 +33,7 @@ pub mod sources;
 pub mod splash;
 pub mod thumbs;
 pub mod timeline;
+pub mod tools;
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 // The version with the short git rev behind it (build.rs), `-dirty` when the tree was.

@@ -73,6 +73,7 @@ pub(crate) fn passthrough_env() -> BTreeMap<String, String> {
             env.insert(k.to_string(), v);
         }
     }
+    env.insert("PATH".into(), crate::tools::search_path().to_string_lossy().into_owned());
     env.insert("UNIVERSE_BIN".into(), paths::self_exe().to_string_lossy().to_string());
     env
 }
