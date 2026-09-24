@@ -722,8 +722,8 @@ of its own: `theme.qml` keeps it past the three the bar shows (`libraryTab`), Ho
 Both open `api.screens.add` — Reprise as `pages/AddGamePage.qml` over the tab (`openSub` with
 `{ add: true }`), the Switch 2 look as `switch2/pages/AddGamePage.qml` on its stack. `load()`
 builds three cards: a "Pick a game file…" action, one action row per source of `sources()`
-(`store`, `loggedIn`; its `display` says whether it is signed in) and "Import from Lutris". The
-file flow is file first: `setFile(path)` keeps it and sorts `runners()` into `runnerChoices` /
+(`store`, `loggedIn`; its `display` says whether it is signed in) and "Import from Lutris";
+Reprise joins them into one untitled card under the page's title. The file flow is file first: `setFile(path)` keeps it and sorts `runners()` into `runnerChoices` /
 `runnerIds` — the ones whose `extensions` take the file first (`linux` takes a bare binary, `.sh`,
 `.x86_64`, `.AppImage`), found before missing, Proton before Wine, then by name — with `runnerIndex` on the
 first; the page shows that list as a picker, `pickRunner(i)` takes the choice, `pendingTitle()`

@@ -22,16 +22,18 @@ FocusScope {
             dim: !cards.currentRow || form.busy
         },
         {
-            glyph: "dpad",
-            label: "Navigate"
-        },
-        {
             glyph: "B",
             label: "Back"
         }
     ]
 
     readonly property real sideMargin: Theme.dp(90)
+    // The file, the stores and Lutris as one list, with no card titles.
+    readonly property var groups: form.groups.length === 0 ? [] : [Object.assign({}, form.groups[0], {
+            rows: [].concat.apply([], form.groups.map(function (g) {
+                return g.rows;
+            }))
+        })]
 
     onArgsChanged: if (args.add)
         form.load()
@@ -136,10 +138,6 @@ FocusScope {
             anchors.verticalCenter: parent.verticalCenter
             spacing: Theme.dp(4)
 
-            CapsLabel {
-                text: "LIBRARY"
-            }
-
             Text {
                 width: parent.width
                 text: "Add a game"
@@ -152,7 +150,8 @@ FocusScope {
 
             Text {
                 width: parent.width
-                text: page.form.busy ? "Reading the Lutris library…" : "A file on this machine, a store, or what Lutris already has."
+                visible: page.form.busy
+                text: "Reading the Lutris library…"
                 color: Theme.textMuted
                 font.family: Theme.sans
                 font.pixelSize: Theme.dp(21)
@@ -175,7 +174,7 @@ FocusScope {
         columns: 1
         compact: true
         rows: page.form.rows
-        groups: page.form.groups
+        groups: page.groups
         dimmed: editor.open || confirm.open
 
         onActivated: function (index, row) {
