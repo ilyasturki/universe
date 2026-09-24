@@ -431,7 +431,7 @@ pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
             game.save()?;
         }
         crate::recording::import_existing(&game, &config.recordings_root())?;
-        if import_pegasus_media(&game.media_dir(), &game, &paths::expand(&config.lutris.pegasus_library))? {
+        if !config.lutris.pegasus_library.is_empty() && import_pegasus_media(&game.media_dir(), &game, &paths::expand(&config.lutris.pegasus_library))? {
             report.media_imported.push(game.id.clone());
         }
         let sessions = sessions::read(&game.sessions_path())?;

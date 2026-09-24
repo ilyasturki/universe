@@ -817,7 +817,7 @@ enabled = ["gog"]
 config_dir = "~/.config/lutris"
 pga_db = "~/.local/share/lutris/pga.db"
 runners_dir = "~/.local/share/lutris/runners/wine"
-pegasus_library = "~/.local/share/pegasus-library"   # art fetched by pegasus-sync, copied into media/ on migrate
+pegasus_library = ""                 # a Pegasus library's folder (<platform>/media/<slug>/): its art is copied into media/ on migrate; empty: none
 
 [keys]
 sgdb = ""                            # or sgdb_file, pointing at a file holding the key

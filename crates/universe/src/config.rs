@@ -259,7 +259,7 @@ impl Default for LutrisConfig {
             config_dir: "~/.config/lutris".into(),
             pga_db: "~/.local/share/lutris/pga.db".into(),
             runners_dir: "~/.local/share/lutris/runners/wine".into(),
-            pegasus_library: "~/.local/share/pegasus-library".into(),
+            pegasus_library: String::new(),
         }
     }
 }
