@@ -72,7 +72,7 @@ def key_label(key):
     return KEY_LABELS.get(key) or QKeySequence(key).toString()
 
 
-# B held this long asks to quit the launcher: the A-hold that opens a game's menu.
+# B held this long opens the power menu: the A-hold that opens a game's menu.
 CANCEL_HOLD_MS = 450
 # Escape only: Backspace held in a text sheet is deleting, not leaving.
 HOLD_KEYS = (Qt.Key.Key_Escape,)
@@ -386,6 +386,28 @@ class Library(QObject):
         self._client.launch(game.id, api.screenName(), poster)
 
 
+class System(QObject):
+    changed = Signal()
+    failed = Signal(str, str)
+
+    def __init__(self, client, parent=None):
+        super().__init__(parent)
+        self._client = client
+        self._actions = []
+        client.powerActionsAsync(self._set_actions)
+
+    def _set_actions(self, ids):
+        self._actions = ids
+        self.changed.emit()
+
+    # "suspend" | "reboot" | "power_off"; `failed(action, message)` when logind refuses.
+    @Slot(str)
+    def run(self, action):
+        self._client.powerAsync(action, lambda e: self.failed.emit(action, e.message or e.kind))
+
+    actions = Property("QStringList", lambda self: self._actions, notify=changed)
+
+
 class Api(QObject):
     def __init__(self, client, memory_path=None, fullscreen=False, theme="", power_root=None, parent=None):
         super().__init__(parent)
@@ -394,6 +416,7 @@ class Api(QObject):
         self._keys.setLayout(keyboard.rows(**client.keyboardLayout()))
         self._pad = Pad(self)
         self._power = Power(power_root or SYSFS, self)
+        self._system = System(client, self)
         self._memory = Memory(memory_path, self)
         self._theme = ThemeSelector(self._memory, theme, self)
         self._library = Library(client, self)
@@ -435,6 +458,7 @@ class Api(QObject):
     keys = Property(QObject, lambda self: self._keys, constant=True)
     pad = Property(QObject, lambda self: self._pad, constant=True)
     power = Property(QObject, lambda self: self._power, constant=True)
+    system = Property(QObject, lambda self: self._system, constant=True)
 
     def _theme_list(self):
         return [{**t, "current": t["id"] == self._theme.current} for t in self._theme.themes]

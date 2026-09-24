@@ -19,6 +19,7 @@ FocusScope {
     signal moduleRequested(string module)
     signal sourceRequested(string source)
     signal setupRequested
+    signal powerRequested
     signal artworkRequested(var game, string slot)
     signal message(string text)
 
@@ -402,13 +403,13 @@ FocusScope {
             });
             rows.push({
                 section: "About",
-                key: "quit",
-                label: "Quit Universe",
+                key: "power",
+                label: "Power",
                 type: "action",
                 display: "",
-                detail: "",
+                detail: "Quit Universe, suspend, reboot or power off.",
                 icon: "power",
-                action: "Quit"
+                action: "Open"
             });
             groups.push({
                 title: "Universe",
@@ -565,11 +566,8 @@ FocusScope {
         } else if (sectionId === "about" && row.key === "setup") {
             Sound.enter();
             page.setupRequested();
-        } else if (sectionId === "about" && row.key === "quit") {
-            Sound.panel();
-            menu.confirm("Stay", "power", api.universe.currentSession ? "Quit and close the game" : "Quit Universe", "Quit Universe?", cards, cards.focusRect, function () {
-                Qt.quit();
-            });
+        } else if (sectionId === "about" && row.key === "power") {
+            page.powerRequested();
         } else if (sectionId === "about") {
             Sound.edge();
         } else if (sectionId === "controller") {

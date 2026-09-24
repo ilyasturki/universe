@@ -295,6 +295,9 @@ class FakeCore:
             {"id": "alsa_card.pci-0000_00_1f.3/analog-output-headphones", "label": "Headphones", "device": "Built-in Audio", "current": False},
             {"id": "alsa_card.pci-0000_01_00.1/hdmi-output-0", "label": "HDMI / DisplayPort", "device": "TV", "current": False},
         ]
+        self.power_list = ["suspend", "reboot", "power_off"]
+        self.powered = []
+        self.power_error = ""
         self._cards = X11Cards()
         self._config.setdefault("paths", {})["overrides"] = str(self._root / "overrides")
         self._lay_out()
@@ -896,6 +899,16 @@ class FakeCore:
         for o in self.outputs_list:
             o["current"] = o["id"] == id
         return self.volume("get")
+
+    def power_actions(self):
+        return list(self.power_list)
+
+    def power(self, action):
+        if action not in ("suspend", "reboot", "power_off"):
+            raise UniverseError("Invalid", f"power: suspend, reboot or power_off, not '{action}'")
+        if self.power_error:
+            raise UniverseError("Unavailable", self.power_error)
+        self.powered.append(action)
 
     # A shot during a session lands in the game's screenshots dir, named by the moment, as the capture module's does.
     def screenshot(self):

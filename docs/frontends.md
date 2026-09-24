@@ -17,13 +17,14 @@ One context property, `api`:
 
 | Member | What it is |
 |---|---|
-| `api.keys` | `is{Accept,Cancel,Details,Filters,PageUp,PageDown,PrevPage,NextPage,Menu}(event)` — the Pegasus key-action contract (Backspace is a Cancel too) — plus `isScreenUp` / `isScreenDown` (`[` / `]`, the right stick up and down): a screenful in a long list, and `isFirst` / `isLast` (Home / End): the ends of one; `cancelHeld()` fires when B (Escape, not Backspace) is held 450 ms on the window, whatever has the focus (an event filter, so the press still lands): both looks ask "Quit Universe?" on it; `dropHold()` from a question B just closed keeps the hold from asking again. `mode` is the last device used, `pad`, `keyboard` or `mouse` (the pad's presses are told from the keyboard's by `gamepad.POSTED`, which every posted key goes through; the cursor is shown under a mouse only), `labels` maps a pad glyph to its key (`A` → `Enter`), `press` / `hold` / `release(action)` post an action's key as the pad would, for a click or the wheel, and `layout` is the physical keyboard's rows for the on-screen ones (`keyboard.rows` over the core's `keyboard_layout()`): `name` (`fr`, `fr:bepo`) and `rows` — `AE` (the number row), `AD`, `AC`, `AB` (the letter rows), each a list of `{value, shift}` left to right, dead keys left out, the digits leading the number row whichever level the layout keeps them on; `us` when libxkbcommon or the layout is missing. Reprise's `ui/VirtualKeyboard.qml` shows eleven keys of the first three rows and ten of the last, staggered, ⌫ closing the last; the Switch 2 `ui/KeyPanel.qml` eleven of each |
+| `api.keys` | `is{Accept,Cancel,Details,Filters,PageUp,PageDown,PrevPage,NextPage,Menu}(event)` — the Pegasus key-action contract (Backspace is a Cancel too) — plus `isScreenUp` / `isScreenDown` (`[` / `]`, the right stick up and down): a screenful in a long list, and `isFirst` / `isLast` (Home / End): the ends of one; `cancelHeld()` fires when B (Escape, not Backspace) is held 450 ms on the window, whatever has the focus (an event filter, so the press still lands): both looks open their power menu on it; `dropHold()` from a question B just closed keeps the hold from asking again. `mode` is the last device used, `pad`, `keyboard` or `mouse` (the pad's presses are told from the keyboard's by `gamepad.POSTED`, which every posted key goes through; the cursor is shown under a mouse only), `labels` maps a pad glyph to its key (`A` → `Enter`), `press` / `hold` / `release(action)` post an action's key as the pad would, for a click or the wheel, and `layout` is the physical keyboard's rows for the on-screen ones (`keyboard.rows` over the core's `keyboard_layout()`): `name` (`fr`, `fr:bepo`) and `rows` — `AE` (the number row), `AD`, `AC`, `AB` (the letter rows), each a list of `{value, shift}` left to right, dead keys left out, the digits leading the number row whichever level the layout keeps them on; `us` when libxkbcommon or the layout is missing. Reprise's `ui/VirtualKeyboard.qml` shows eleven keys of the first three rows and ten of the last, staggered, ⌫ closing the last; the Switch 2 `ui/KeyPanel.qml` eleven of each |
 | `api.allGames` | the library model |
 | `api.collections` | collections, one per platform |
 | `api.memory` | `get`/`set`/`has`/`unset`, persisted to `$XDG_STATE_HOME/universe/ui-memory.json` |
 | `api.universe` | the client: every core call, plus the signals below. `adoptScope()` and `pendingJournals()` wrap `adopt_scope` and `pending_journals`; their failures get a log line, not a toast. `recordings(id)` is the client's own: `sessions(id)` kept to the rows with a `recording` |
 | `api.pad` | `rightX`: the right stick as a value, 0 without a controller |
 | `api.power` | the batteries the kernel lists under `/sys/class/power_supply`: `sources` (`kind` `system` or `pad`, `percent`, `charging`, `inputs` — the pad's evdev nodes), `count`; polled every 10 s, plus what the controller watcher reads off a pad the kernel keeps no supply for (an 8BitDo's HID report, BlueZ's `Battery1` for a pad in BLE mode), reported through `report(event, name, battery)` and dropped with the pad; the kernel's reading wins where both exist. Both looks draw them next to every clock (`ui/PowerBadge.qml`: one glyph and percent per source, the pad the controller page has current in green, one at 15 % or under in red), the controller pages next to the pad they belong to; `--fake` reads `fixtures/power_supply` |
+| `api.system` | what logind will do with the machine: `actions`, the ones of `suspend`, `reboot` and `power_off` it would carry out (the core's `power_actions()`, read once at startup), `run(action)` (`power(action)` off the UI thread; `reboot` and `power_off` stop a running session first, so its `session-end` runs before the machine goes down), `failed(action, message)` when logind refuses. `--fake` records the call and does nothing |
 | `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written, a game's sessions and their logs) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed` and `--size` turn it off) |
 | `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `frame`, `ground`, `detail`), `current`, `frame`, `set(id)`, `landing` / `takeLanding()`, `fontPath` |
@@ -481,18 +482,26 @@ hover at the first handler it finds under the cursor, so a modal layer's scrim (
 dialogs, the sheets, the lightbox, the search overlay) carries a bare `HoverHandler` and a
 `TapHandler` — B on the scrim, nothing on the panel — and the page beneath never sees the mouse.
 
+## Power
+
+B held anywhere (`api.keys.cancelHeld`) opens the power menu, in Reprise also Settings › About ›
+Power: Quit Universe first, then Suspend, Reboot and Power off as `api.system.actions` lists them,
+then Stay. Reprise asks it with `ConfirmDialog.choose`, the centered question with more than two
+answers; the Switch 2 look with its picker (Power Options: Quit Universe, Sleep Mode, Restart, Turn
+Off). Quit Universe and Suspend act at once; Reboot and Power off ask again, the focus on Cancel, and
+say when the running game closes first. Suspend leaves the game running. A refusal (an inhibitor,
+polkit) is a notice with logind's own message.
+
 ## The Settings tab
 
 `pages/SettingsPage.qml` is a sidebar (`ui/SectionList.qml` over `ui/Sections.js`: Launch, Runners,
 Controller, Sources, Install, Modules, Artwork, Themes, Sound, Doctor, About; no title, the tab
 says it, and no group captions) beside one column of `ui/SettingsCards.qml` (`columns: 1`). A
 landing on a section folded into another opens that one (`Sections.aliases`: `updates` → Install,
-`quit` → About). Sound is one row per `api.home.outputs` entry, the device as its value and the one
+`quit` and `power` → About). Sound is one row per `api.home.outputs` entry, the device as its value and the one
 in use tagged; A on another plays through it (`setOutput`). About is its Version (`static`:
 `api.universe.version()`, the version with the short git rev behind it), First-run setup (Run again)
-and Quit Universe, confirmed in place (`Stay` / `Quit Universe`, which says when the running game
-closes with it), then `Qt.quit()` — the host stops the session and shuts the core down after the
-loop. Up and Down in the sidebar switch the section as they go, Right or A enter the cards, Left or
+and Power, which opens the power menu B held opens (see "Power"). Up and Down in the sidebar switch the section as they go, Right or A enter the cards, Left or
 B come back, L2/R2 cycle the section from anywhere. In the cards the hints are A, More and Back:
 Start lists what X and Y do there (Refresh the sections that fetch — Install, Sound, Doctor —
 Remove a Launch variable, Enable or Disable a module or a source, Show or Hide advanced), and X and

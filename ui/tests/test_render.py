@@ -612,7 +612,7 @@ def test_the_switch2_artwork_page_opens_a_slot_with_what_shows_first(api, fake):
     pump(50)
 
 
-def test_b_held_asks_to_quit_in_both_looks(api):
+def test_b_held_opens_the_power_menu_in_both_looks(api):
     from PySide6.QtCore import QObject, Qt
     from PySide6.QtTest import QTest
 
@@ -622,24 +622,107 @@ def test_b_held_asks_to_quit_in_both_looks(api):
         QTest.keyRelease(window, Qt.Key.Key_Escape)
         pump(50)
 
+    wait_for(api.system.changed, 3000)
     _engine, window = render(api, activate=True)
     confirm = window.findChild(QObject, "confirm")
     hold(150)
     assert confirm.property("open") is False, "a tap is a tap"
     hold(600)
-    assert confirm.property("open") is True and confirm.property("message") == "Quit Universe?"
+    assert confirm.property("open") is True and confirm.property("message") == "Power"
+    assert [i["label"] for i in confirm.property("items").toVariant()] == ["Quit Universe", "Suspend", "Reboot", "Power off", "Stay"]
+    assert confirm.property("index") == 0, "Quit Universe first, under the cursor"
     QTest.keyClick(window, Qt.Key.Key_Escape)
     pump(100)
-    assert confirm.property("open") is False, "B on the question stays"
+    assert confirm.property("open") is False, "B on the menu stays"
     api.theme.set("switch2")
     settle(window)
+    picker = window.findChild(QObject, "picker")
+    hold(600)
+    assert picker.property("open") is True and picker.property("title") == "Power Options"
+    assert picker.property("choices").toVariant() == ["Quit Universe", "Sleep Mode", "Restart", "Turn Off"]
+    hold(600)
+    assert picker.property("open") is False, "held on the menu: B closes it and the hold asks nothing more"
     dialog = window.findChild(QObject, "dialog")
     hold(600)
-    assert dialog.property("open") is True and dialog.property("message") == "Quit Universe?"
-    hold(600)
-    assert dialog.property("open") is False, "held on the question: B closes it and the hold asks nothing more"
+    for _ in range(3):
+        QTest.keyClick(window, Qt.Key.Key_Down)
+        pump(30)
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    pump(100)
+    assert dialog.property("open") is True and dialog.property("message") == "Turn off the system?"
+    assert dialog.property("index") == 0, "Cancel under the cursor"
+    QTest.keyClick(window, Qt.Key.Key_Right)
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    for _ in range(100):
+        if api.universe.core.powered:
+            break
+        pump(30)
+    assert api.universe.core.powered == ["power_off"]
     window.close()
     pump(50)
+
+
+def test_reboot_and_power_off_ask_again_and_close_the_game_first(api, fake, monkeypatch):
+    from PySide6.QtCore import QObject, Qt
+    from PySide6.QtTest import QTest
+
+    from universe_ui import fake_core
+
+    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+
+    def pick(downs):
+        root.askPower()
+        pump(100)
+        for _ in range(downs):
+            QTest.keyClick(window, Qt.Key.Key_Down)
+            pump(30)
+        QTest.keyClick(window, Qt.Key.Key_Return)
+        pump(100)
+
+    def powered(n):
+        for _ in range(100):
+            if len(fake.core.powered) >= n:
+                break
+            pump(30)
+        return fake.core.powered
+
+    wait_for(api.system.changed, 3000)
+    fake.launch("mirrors-edge", "")
+    wait_for(fake.launched, 3000)
+    _engine, window = render(api, activate=True)
+    root = window.property("contentItem").childItems()[0].property("item")
+    confirm = window.findChild(QObject, "confirm")
+    pick(1)
+    assert confirm.property("open") is False and powered(1) == ["suspend"]
+    assert fake.core.current(), "suspend leaves the game running"
+    pick(3)
+    assert confirm.property("open") is True and confirm.property("message") == "Power off the computer?"
+    assert confirm.property("note") == "Mirror's Edge is closed first."
+    assert confirm.property("index") == 0, "Cancel under the cursor: one A too many powers nothing off"
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    pump(200)
+    assert confirm.property("open") is False and fake.core.powered == ["suspend"]
+    pick(2)
+    assert confirm.property("message") == "Reboot the computer?"
+    QTest.keyClick(window, Qt.Key.Key_Down)
+    pump(30)
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    assert powered(2) == ["suspend", "reboot"]
+    assert fake.core.current() is None, "the game is stopped before the reboot"
+    fake.core.power_error = 'Operation inhibited by "nosleep"'
+    api.system.run("suspend")
+    assert wait_for(api.system.failed, 3000) == ("suspend", 'Operation inhibited by "nosleep"')
+    window.close()
+    pump(50)
+
+
+def test_the_power_menu_lists_what_logind_would_do(fake):
+    from universe_ui.api import System
+
+    fake.core.power_list = ["reboot"]
+    system = System(fake)
+    wait_for(system.changed, 3000)
+    assert system.actions == ["reboot"]
 
 
 def test_reprise_about_shows_the_build(api, fake):
@@ -652,10 +735,14 @@ def test_reprise_about_shows_the_build(api, fake):
     pump(100)
     assert page.property("sectionId") == "about", "Quit lives in About now"
     content = page.property("content").toVariant()
-    assert [r["label"] for r in content["rows"]] == ["Version", "First-run setup", "Quit Universe"]
+    assert [r["label"] for r in content["rows"]] == ["Version", "First-run setup", "Power"]
     assert content["rows"][0]["display"] == fake.version()
     assert page.property("acceptLabel") == "", "nothing to select on the version"
     assert [s["id"] for s in page.property("sections").toVariant()][-3:] == ["sound", "doctor", "about"], "no Search, Updates or Quit section"
+    QMetaObject.invokeMethod(page, "activate", Q_ARG("QVariant", 2), Q_ARG("QVariant", content["rows"][2]))
+    pump(100)
+    confirm = window.findChild(QObject, "confirm")
+    assert confirm.property("open") is True and confirm.property("message") == "Power", "the row opens the menu B held opens"
     window.close()
     pump(50)
 

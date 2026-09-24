@@ -62,5 +62,6 @@ var list = [
 // Sections folded into another: a landing on one opens the other.
 var aliases = {
     updates: "install",
-    quit: "about"
+    quit: "about",
+    power: "about"
 };

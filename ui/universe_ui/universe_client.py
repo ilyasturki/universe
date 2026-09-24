@@ -1,3 +1,4 @@
+import contextlib
 import json
 import logging
 import os
@@ -305,6 +306,21 @@ class CoreClient(QObject):
 
     def setOutputAsync(self, ident, on_reply, on_error=None):
         self._call_async(lambda: self._core.set_output(ident), on_reply, on_error)
+
+    def powerActionsAsync(self, on_reply):
+        self._call_async(self._core.power_actions, lambda ids: on_reply(list(ids or [])), on_error=lambda e: on_reply([]))
+
+    # Reboot and power off stop the game first: its session-end runs before the machine goes down.
+    def powerAsync(self, action, on_error):
+        stop_first = action != "suspend" and bool(self._current)
+
+        def work():
+            if stop_first:
+                with contextlib.suppress(UniverseError):
+                    self._call(self._core.stop, "")
+            self._call(self._core.power, action)
+
+        self._call_async(work, on_error=on_error)
 
     def adoptScope(self):
         try:

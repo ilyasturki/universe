@@ -90,7 +90,7 @@ FocusScope {
             id: "power",
             icon: "power",
             color: Theme.barGrey,
-            label: "Quit"
+            label: "Power"
         }
     ]
 
@@ -130,18 +130,66 @@ FocusScope {
 
     function openBar(item) {
         if (item.id === "power")
-            dialog.show({
-                message: "Quit Universe?",
-                detail: api.universe.currentSession ? "The running game is closed with it." : "",
-                buttons: ["Cancel", "Quit"]
-            }, function (i) {
-                if (i === 1)
-                    Qt.quit();
-                else
-                    focusTop();
-            });
+            askPower();
         else
             push(item.source, {});
+    }
+
+    function askPower() {
+        var session = api.universe.currentSession;
+        var can = api.system.actions;
+        var items = [
+            {
+                label: "Quit Universe",
+                act: "quit"
+            },
+            {
+                label: "Sleep Mode",
+                act: "suspend"
+            },
+            {
+                label: "Restart",
+                act: "reboot"
+            },
+            {
+                label: "Turn Off",
+                act: "power_off"
+            }
+        ].filter(function (i) {
+            return i.act === "quit" || can.indexOf(i.act) >= 0;
+        });
+        pick({
+            title: "Power Options",
+            choices: items.map(function (i) {
+                return i.label;
+            })
+        }, function (i) {
+            var act = i >= 0 ? items[i].act : "";
+            if (act === "quit")
+                Qt.quit();
+            else if (act === "suspend")
+                api.system.run("suspend");
+            else if (act === "reboot" || act === "power_off")
+                confirmPower(act, session);
+            else
+                api.keys.dropHold();
+        });
+    }
+
+    function confirmPower(act, session) {
+        var restart = act === "reboot";
+        dialogAsk({
+            message: restart ? "Restart the system?" : "Turn off the system?",
+            detail: session ? session.title + " will be closed. Unsaved progress will be lost." : "",
+            buttons: ["Cancel", restart ? "Restart" : "Turn Off"],
+            danger: 1,
+            index: 0
+        }, function (i) {
+            if (i !== 1)
+                return;
+            Base.Notices.show(restart ? "Restarting…" : "Turning off…", "power");
+            api.system.run(act);
+        });
     }
 
     function after(done) {
@@ -424,6 +472,7 @@ FocusScope {
 
     Picker {
         id: picker
+        objectName: "picker"
         z: 11
     }
 
@@ -506,14 +555,23 @@ FocusScope {
         }
     }
 
-    // B held: the way out from anywhere, the bar's own Quit question.
+    // B held: the way out from anywhere, the bar's own Power Options.
     Connections {
         target: api.keys
         function onCancelHeld() {
             if (!root.modal)
-                openBar({
-                    id: "power"
-                });
+                askPower();
+        }
+    }
+
+    Connections {
+        target: api.system
+        function onFailed(action, message) {
+            Base.Notices.fail("Could not " + ({
+                    suspend: "enter Sleep Mode",
+                    reboot: "restart",
+                    power_off: "turn off"
+                })[action] + ": " + message, "power");
         }
     }
 

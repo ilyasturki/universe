@@ -875,6 +875,9 @@ FocusScope {
                         function onSetupRequested() {
                             root.openSetup();
                         }
+                        function onPowerRequested() {
+                            root.askPower();
+                        }
                         function onArtworkRequested(game, slot) {
                             root.openSub("pages/ArtworkPage.qml", {
                                 game: game,
@@ -1256,21 +1259,84 @@ FocusScope {
             });
     }
 
-    // B held: the way out of the launcher from anywhere, the same question Settings › Quit asks.
+    // B held and Settings › About › Power: quit the launcher, or what logind will do with the machine.
+    function askPower() {
+        var session = api.universe.currentSession;
+        var can = api.system.actions;
+        var items = [
+            {
+                icon: "exit",
+                label: "Quit Universe",
+                action: "quit"
+            }
+        ];
+        if (can.indexOf("suspend") >= 0)
+            items.push({
+                icon: "moon",
+                label: "Suspend",
+                action: "suspend"
+            });
+        if (can.indexOf("reboot") >= 0)
+            items.push({
+                icon: "refresh",
+                label: "Reboot",
+                action: "reboot"
+            });
+        if (can.indexOf("power_off") >= 0)
+            items.push({
+                icon: "power",
+                label: "Power off",
+                action: "power_off"
+            });
+        items.push({
+            icon: "",
+            label: "Stay",
+            action: "",
+            gap: true
+        });
+        confirm.choose("Power", session ? "Suspend keeps " + session.title + " running. The others close it." : "", items, function (action) {
+            if (action === "quit")
+                Qt.quit();
+            else if (action === "suspend")
+                api.system.run("suspend");
+            else if (action === "reboot" || action === "power_off")
+                confirmPower(action, session);
+        });
+    }
+
+    function confirmPower(action, session) {
+        var reboot = action === "reboot";
+        confirm.ask({
+            message: reboot ? "Reboot the computer?" : "Power off the computer?",
+            detail: session ? session.title + " is closed first." : "",
+            yes: reboot ? "Reboot" : "Power off",
+            no: "Cancel",
+            index: 0
+        }, function (yes) {
+            if (!yes)
+                return;
+            Notices.show(reboot ? "Rebooting…" : "Powering off…", "power");
+            api.system.run(action);
+        });
+    }
+
     Connections {
         target: api.keys
         function onCancelHeld() {
             if (root.launching || launchOverlay.running || confirm.open || root.searchOpen || root.menuOpen || (root.activePage && root.activePage.modal))
                 return;
-            confirm.ask({
-                message: "Quit Universe?",
-                detail: api.universe.currentSession ? "The running game is closed with it." : "",
-                yes: "Quit",
-                no: "Stay"
-            }, function (yes) {
-                if (yes)
-                    Qt.quit();
-            });
+            root.askPower();
+        }
+    }
+
+    Connections {
+        target: api.system
+        function onFailed(action, message) {
+            Notices.fail("Could not " + ({
+                    suspend: "suspend",
+                    reboot: "reboot",
+                    power_off: "power off"
+                })[action] + ": " + message, "power");
         }
     }
 

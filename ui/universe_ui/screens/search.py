@@ -109,8 +109,8 @@ SECTION_SYNONYMS = {
     "themes": ["look", "skin", "appearance", "reprise", "switch"],
     "sound": ["audio", "output", "speakers", "headphones", "headset", "hdmi", "bluetooth", "tv"],
     "doctor": ["health", "checks", "prerequisites", "missing", "diagnose"],
-    "about": ["version", "build", "info", "quit", "exit", "leave", "power off"],
-    "quit": ["exit", "close", "leave", "power off"],
+    "about": ["version", "build", "info", "quit", "exit", "leave", "power", "power off", "shut down", "reboot", "restart", "suspend", "sleep"],
+    "quit": ["exit", "close", "leave"],
     "search": [],
 }
 
