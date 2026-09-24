@@ -95,7 +95,7 @@ pub fn pick_screen(requested: &str) -> String {
     active_outputs().into_iter().next().unwrap_or_default()
 }
 
-/// Mutter's DisplayConfig on GNOME, else the connector's preferred DRM mode; `None` when the connector is not there.
+/// Mutter's DisplayConfig on GNOME, else the connector's DRM mode; `None` when the connector is not there.
 pub async fn screen_mode(screen: &str) -> Option<crate::gamescope::Mode> {
     if screen.is_empty() {
         return None;
@@ -106,7 +106,7 @@ pub async fn screen_mode(screen: &str) -> Option<crate::gamescope::Mode> {
         Ok(Err(e)) => tracing::debug!("DisplayConfig.GetCurrentState: {e}"),
         Err(_) => tracing::warn!("DisplayConfig.GetCurrentState: timeout"),
     }
-    drm_preferred_mode(screen)
+    drm_mode(screen)
 }
 
 /// The `is-current` mode of the monitor on `screen`; Mutter spells HDMI outputs without the `-A`, so both spellings match.
@@ -144,16 +144,16 @@ impl std::os::fd::AsFd for Card {
 impl drm::Device for Card {}
 impl drm::control::Device for Card {}
 
-/// The connector's preferred mode with its rate, asked of the card that owns it (`card1-DP-1` in sysfs).
-fn drm_preferred_mode(screen: &str) -> Option<crate::gamescope::Mode> {
-    let rd = std::fs::read_dir("/sys/class/drm").ok()?;
+/// The connector's mode with its rate, asked of the card that owns it (`card1-DP-1` in sysfs): any compositor's, X11's too.
+fn drm_mode(screen: &str) -> Option<crate::gamescope::Mode> {
+    let rd = std::fs::read_dir(DRM_DIR).ok()?;
     for e in rd.flatten() {
         let name = e.file_name().to_string_lossy().to_string();
         let Some((card, connector)) = name.split_once('-') else { continue };
         if connector != screen {
             continue;
         }
-        if let Some(mode) = card_preferred_mode(card, screen) {
+        if let Some(mode) = card_mode(card, screen) {
             return Some(mode);
         }
         // Without the device (no seat, no video group): the first line of `modes` is the preferred one, `WxH`, no rate.
@@ -166,7 +166,8 @@ fn drm_preferred_mode(screen: &str) -> Option<crate::gamescope::Mode> {
     None
 }
 
-fn card_preferred_mode(card: &str, screen: &str) -> Option<crate::gamescope::Mode> {
+/// The mode the connector's CRTC scans out, else the preferred one of a connector nothing drives.
+fn card_mode(card: &str, screen: &str) -> Option<crate::gamescope::Mode> {
     use drm::control::{Device as _, ModeTypeFlags};
     let dev = Card(std::fs::OpenOptions::new().read(true).write(true).open(format!("/dev/dri/{card}")).ok()?);
     let handles = dev.resource_handles().ok()?;
@@ -175,7 +176,8 @@ fn card_preferred_mode(card: &str, screen: &str) -> Option<crate::gamescope::Mod
         .iter()
         .filter_map(|h| dev.get_connector(*h, false).ok())
         .find(|c| format!("{}-{}", c.interface().as_str(), c.interface_id()) == screen)?;
-    let mode = info.modes().iter().find(|m| m.mode_type().contains(ModeTypeFlags::PREFERRED)).or_else(|| info.modes().first())?;
+    let running = info.current_encoder().and_then(|h| dev.get_encoder(h).ok()).and_then(|e| e.crtc()).and_then(|h| dev.get_crtc(h).ok()).and_then(|c| c.mode());
+    let mode = running.or_else(|| info.modes().iter().find(|m| m.mode_type().contains(ModeTypeFlags::PREFERRED)).or_else(|| info.modes().first()).copied())?;
     let (w, h) = mode.size();
     let vrr = dev
         .get_properties(info.handle())
@@ -454,20 +456,16 @@ mod tests {
 mod live {
     #[test]
     #[ignore]
-    fn the_preferred_mode_of_every_connected_output_carries_a_rate() {
-        let outputs = super::connected_outputs();
-        assert!(!outputs.is_empty(), "a connected output");
+    fn the_mode_of_every_lit_output_carries_a_rate_and_matches_the_desktops() {
+        let outputs = super::active_outputs();
+        assert!(!outputs.is_empty(), "a lit output");
+        let rt = tokio::runtime::Runtime::new().unwrap();
         for name in outputs {
-            let mode = super::drm_preferred_mode(&name).unwrap_or_else(|| panic!("{name}: no mode"));
+            let mode = super::drm_mode(&name).unwrap_or_else(|| panic!("{name}: no mode"));
             assert!(mode.width > 0 && mode.height > 0 && mode.refresh > 0, "{name}: {mode:?}");
-            let modes = std::fs::read_to_string(format!("/sys/class/drm/card1-{name}/modes"))
-                .or_else(|_| std::fs::read_to_string(format!("/sys/class/drm/card0-{name}/modes")))
-                .unwrap_or_default();
-            assert_eq!(
-                modes.lines().next().map(str::trim),
-                Some(format!("{}x{}", mode.width, mode.height).as_str()),
-                "{name}: the card's preferred mode is sysfs's first"
-            );
+            if let Ok(Some(shell)) = rt.block_on(super::mutter_current_mode(&name)) {
+                assert_eq!((mode.width, mode.height, mode.refresh), (shell.width, shell.height, shell.refresh), "{name}: the CRTC runs what Mutter set");
+            }
         }
     }
 }
