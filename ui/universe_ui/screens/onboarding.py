@@ -154,10 +154,12 @@ class Onboarding(RowsForm):
                 _add(rows, groups, "", _static("none", "Other launchers", "None found"))
         elif step == "stores":
             for source in self._sources:
-                name = source.get("name", source["id"])
+                name, signed_in = source.get("name", source["id"]), bool(source.get("logged_in"))
                 _add(rows, groups, name, {**_static("logged_in", "Account", _source_status(source)[0]), "module": source["id"]}, caps=True)
-                _add(rows, groups, name, {**_row(name, "link", "Get a sign-in link", "action", "", module=source["id"]), "action": "Sign in", "display": ""})
-                _add(rows, groups, name, {**_row(name, "code", "Enter the code", "action", "", module=source["id"]), "action": "Enter", "display": ""})
+                link = _row(name, "link", "Get a sign-in link", "action", "", module=source["id"])
+                _add(rows, groups, name, {**link, "action": "Sign in", "display": "", "quiet": signed_in})
+                code = _row(name, "code", "Enter the code", "action", "", module=source["id"])
+                _add(rows, groups, name, {**code, "action": "Enter", "display": "", "quiet": signed_in})
         elif step == "preferences":
             rows, groups = preference_rows(self._client, self._controller)
         elif step == "done":

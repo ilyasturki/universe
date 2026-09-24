@@ -22,11 +22,9 @@ FocusScope {
     signal closeRequested
     signal message(string text)
 
-    // The launchers with nothing to bring over stay out, unless that is all of them.
+    // Quiet rows stay out, a launcher with nothing to bring over or a signed-in store's sign-in, unless that is all of them.
     readonly property var groups: {
         var all = form.groups, rows = form.rows;
-        if (form.stepId !== "found")
-            return all;
         var kept = all.map(function (g) {
             return Object.assign({}, g, {
                 rows: g.rows.filter(function (i) {
@@ -41,13 +39,17 @@ FocusScope {
 
     readonly property string backLabel: form.step > 0 ? "Back" : "Skip setup"
     readonly property string nextLabel: last ? "Finish" : "Continue"
-    readonly property var hints: editor.open ? editor.hints : [
-        {
+    readonly property string acceptLabel: nav.activeFocus ? (nav.index === 1 ? nextLabel : backLabel) : selectLabel(cards.currentRow)
+    readonly property var hints: editor.open ? editor.hints : [acceptLabel !== "" && {
             glyph: "A",
-            label: nav.activeFocus ? (nav.index === 1 ? nextLabel : backLabel) : selectLabel(cards.currentRow),
-            dim: !nav.activeFocus && (!cards.currentRow || form.busy || cards.currentRow.type === "info" || cards.currentRow.type === "static")
+            label: acceptLabel,
+            dim: !nav.activeFocus && (!cards.currentRow || form.busy)
+        },
+        {
+            glyph: "B",
+            label: backLabel
         }
-    ]
+    ].filter(Boolean)
 
     Component.onCompleted: form.load()
 
@@ -173,10 +175,6 @@ FocusScope {
             width: parent.width - panel.pad * 2
             spacing: Theme.dp(4)
 
-            CapsLabel {
-                text: (page.form.step + 1) + " / " + page.form.steps.length
-            }
-
             Text {
                 width: parent.width
                 text: page.current.title
@@ -251,7 +249,6 @@ FocusScope {
                 PillButton {
                     ghost: true
                     icon: ""
-                    glyph: "B"
                     label: page.backLabel
                     focused: nav.activeFocus && nav.index === 0
                     dimmed: nav.activeFocus && nav.index !== 0
@@ -260,7 +257,6 @@ FocusScope {
 
                 PillButton {
                     icon: ""
-                    glyph: "X"
                     label: page.nextLabel
                     focused: nav.activeFocus && nav.index === 1
                     dimmed: nav.activeFocus && nav.index !== 1

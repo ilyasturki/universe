@@ -761,17 +761,17 @@ the games over (`display` the count; `runImport(index)` runs `import_lutris(true
 `import_roms(true)` for the emulators' folders, or, for `heroic-gog`, adds `gog_dirs` to the gog source's `scan_dirs` when the config takes writes and
 starts a `scan("gog")` job; the row's `display` follows: "Importing…", "N games added", "Nothing
 new", the error), a `static` row otherwise ("No games", "N games · not importable yet", "· needs
-gogdl"), `quiet` when there is nothing to bring over and nothing was done — Reprise leaves those
-out unless every row is one — `stores` the source's Account row, "Get a sign-in link" (`link`) and "Enter the code"
-(`code`) through the shared `api.screens.login` — `ui/LoginCard.qml` and `switch2/ui/LoginCard.qml`
+gogdl"), `quiet` when there is nothing to bring over and nothing was done — Reprise leaves quiet
+rows out unless every row is one — `stores` the source's Account row, "Get a sign-in link" (`link`) and "Enter the code"
+(`code`, both `quiet` once the source is signed in) through the shared `api.screens.login` — `ui/LoginCard.qml` and `switch2/ui/LoginCard.qml`
 are the QR, URL and status card `FormPage` shows too — `preferences` the controller family
 (`controller.family`, an `enum` over `api.screens.controller.families`, written with `setFamily`)
 and the graphics upgrades that fit this GPU (`launch.hdr`, the upscaler upgrades without their
 `default` choice, `launch.optiscaler`), `done` a summary row and, under a read-only config, why the
-preferences were skipped. The header is the step count (`1 / 4`) and the step's title; under the
-rows sit two buttons, Back (B; "Skip setup" on the first step) and Continue (X; "Finish" on the
-last), reached with Down past the last row, Left/Right between them, A to press one — the B and X
-buttons themselves do the same from anywhere in the dialog, so the hint bar shows A alone. The
+preferences were skipped. The header is the step's title; under the rows sit two buttons, Back
+("Skip setup" on the first step) and Continue ("Finish" on the last), reached with Down past the
+last row, Left/Right between them, A to press one — B and X do the same from anywhere in the
+dialog, the hint bar showing A and B. The
 Reprise Home rail lands on its first game when it fills while the page is up (the setup importing
 behind the dialog, the add page), as a cold start does.
 
