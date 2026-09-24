@@ -16,6 +16,7 @@ pub mod keyboard;
 pub mod launch_keys;
 pub mod launcher;
 pub mod library;
+pub mod logind;
 pub mod lutris;
 pub mod mangoapp;
 pub mod media;

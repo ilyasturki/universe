@@ -657,6 +657,24 @@ impl Core {
         self.volume("get", 0).await
     }
 
+    /// What logind would carry out now: `inhibited` and `challenge` stay listed, the call itself says why or asks for a password.
+    pub async fn power_actions(&self) -> Vec<&'static str> {
+        let mut ids = Vec::new();
+        for action in crate::logind::PowerAction::ALL {
+            if crate::logind::can(action).await.is_some_and(|answer| answer != "no" && answer != "na") {
+                ids.push(action.id());
+            }
+        }
+        ids
+    }
+
+    pub async fn power(&self, action: &str) -> Result<()> {
+        let Some(action) = crate::logind::PowerAction::parse(action) else {
+            return Err(Error::Invalid(format!("power: suspend, reboot or power_off, not '{action}'")));
+        };
+        crate::logind::request(action).await.map_err(Error::Unavailable)
+    }
+
     pub async fn host_gamescope(&self, screen: &str) -> Option<(String, Vec<String>)> {
         let cfg = self.config.read().await.clone();
         crate::launcher::host_gamescope_for(&cfg, screen).await
