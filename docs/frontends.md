@@ -497,8 +497,8 @@ Remove a Launch variable, Enable or Disable a module or a source, Show or Hide a
 Y still do it straight away. Game settings and a runner's, module's or source's page do the same
 with Reset to default and the advanced rows. The tab bar's search glass is on every tab and finds
 the games and the settings (see Search); the store's catalogue search is Switch 2's alone. A row's `icon` names a `MenuGlyph` kind; a pad
-button's row prints its `press` and `hold` macros as chips (`PRESS`/`HOLD`, the action's glyph
-from `ui/Macros.js`, the macro's `label`). A source's game row shows the library's art when the
+button's row reads its macros' `label`s as its value, the `hold` one after "Hold ·", and nothing
+without one. A source's game row shows the library's art when the
 game is in it — the `square` slot, else the cover — cropped to a square thumbnail; the home
 rail's tiles pick their art the same way.
 

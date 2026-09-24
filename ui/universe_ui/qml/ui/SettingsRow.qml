@@ -1,6 +1,5 @@
 import QtQuick
 import "../core"
-import "Macros.js" as Macros
 
 Item {
     id: row
@@ -16,14 +15,9 @@ Item {
     readonly property bool explains: info && entry.fix !== undefined && entry.fix !== ""
     readonly property real naturalHeight: explains ? notes.y + notes.height + Theme.dp(20) : baseHeight
     readonly property bool hasSwitch: entry.switch === true
-    // A button with no code on this connection says "Unbound" instead: its macros cannot fire.
-    readonly property var macros: entry.bound === false ? [] : [entry.press && {
-            tag: "PRESS",
-            macro: entry.press
-        }, entry.hold && {
-            tag: "HOLD",
-            macro: entry.hold
-        }].filter(Boolean)
+    // A pad button reads its macros by name, the hold one marked, and nothing without one; with no code it keeps "Unbound".
+    readonly property bool button: entry.bound === true && entry.home !== true
+    readonly property string value: button ? [entry.press && entry.press.label, entry.hold && "Hold · " + entry.hold.label].filter(Boolean).join(" · ") : entry.display || ""
     readonly property bool hasImage: entry.image != null && String(entry.image) !== ""
     readonly property bool hasGlyph: entry.slot !== undefined && String(entry.slot) !== "" && entry.family !== undefined
     // An icon naming a file (a runner's logo) is drawn whole in a square; a bare name is a menu glyph.
@@ -303,8 +297,8 @@ Item {
 
             Text {
                 anchors.verticalCenter: parent.verticalCenter
-                visible: text !== "" && row.macros.length === 0 && !(row.hasSwitch && !row.entry.warning)
-                text: row.entry.display || ""
+                visible: text !== "" && !(row.hasSwitch && !row.entry.warning)
+                text: row.value
                 color: row.focused ? row.onFocus : row.entry.accent === true ? "#5aa0ff" : Theme.textSecondary
                 font.family: Theme.sans
                 font.pixelSize: Theme.dp(21)
@@ -318,64 +312,6 @@ Item {
                 on: row.entry.value === true
                 focused: row.focused
                 opacity: row.entry.warning && row.entry.value !== true ? 0.35 : 1.0
-            }
-
-            Loader {
-                visible: active
-                active: row.macros.length > 0
-                anchors.verticalCenter: parent.verticalCenter
-
-                sourceComponent: Row {
-                    spacing: Theme.dp(10)
-
-                    Repeater {
-                        model: row.macros
-
-                        Rectangle {
-                            anchors.verticalCenter: parent.verticalCenter
-                            width: chip.width + Theme.dp(24)
-                            height: Theme.dp(38)
-                            radius: height / 2
-                            color: row.focused ? Qt.rgba(0.063, 0.067, 0.086, 0.08) : Qt.rgba(1, 1, 1, 0.07)
-                            border.width: 1
-                            border.color: row.focused ? Qt.rgba(0.063, 0.067, 0.086, 0.14) : Qt.rgba(1, 1, 1, 0.12)
-
-                            Row {
-                                id: chip
-                                anchors.centerIn: parent
-                                spacing: Theme.dp(9)
-
-                                CapsLabel {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: modelData.tag
-                                    size: Theme.dp(14)
-                                    tracking: 0.1
-                                    color: row.focused ? Qt.rgba(0.063, 0.067, 0.086, 0.55) : Theme.textMuted
-                                }
-
-                                MenuGlyph {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    visible: kind !== ""
-                                    width: Theme.dp(20)
-                                    height: width
-                                    kind: Macros.icon(modelData.macro.action)
-                                    tint: row.focused ? Theme.onLight : Theme.text
-                                }
-
-                                Text {
-                                    anchors.verticalCenter: parent.verticalCenter
-                                    text: modelData.macro.label || ""
-                                    color: row.focused ? Theme.onLight : Theme.text
-                                    font.family: Theme.sans
-                                    font.weight: Font.Medium
-                                    font.pixelSize: Theme.dp(19)
-                                    elide: Text.ElideRight
-                                    width: Math.min(implicitWidth, Theme.dp(260))
-                                }
-                            }
-                        }
-                    }
-                }
             }
 
             Canvas {
