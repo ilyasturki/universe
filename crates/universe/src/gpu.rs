@@ -99,11 +99,36 @@ impl Gpu {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
 struct Card {
-    vendor: Vendor,
+    vendor: Option<Vendor>,
+    vendor_id: u16,
+    device_id: u16,
     vram: u64,
     gc: Option<(u32, u32)>,
+    /// `0000:03:00.0`
+    slot: String,
+    driver: String,
+    boot_vga: bool,
+}
+
+impl Card {
+    /// NVIDIA shows no VRAM in sysfs: ranked above any iGPU by hand.
+    fn rank(&self) -> u64 {
+        if self.vendor == Some(Vendor::Nvidia) {
+            u64::MAX
+        } else {
+            self.vram
+        }
+    }
+}
+
+/// A render GPU stronger than the one the firmware drives the screen with: a hybrid laptop's.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Offload {
+    /// gamescope's `--prefer-vk-device`: `vendor:device` in hex.
+    pub vk_device: String,
+    pub env: Vec<(String, String)>,
 }
 
 fn read_hex(path: &Path) -> Option<u16> {
@@ -119,32 +144,59 @@ fn cards(drm: &Path) -> Vec<Card> {
     let Ok(rd) = std::fs::read_dir(drm) else { return vec![] };
     let mut names: Vec<_> = rd.flatten().map(|e| e.file_name().to_string_lossy().to_string()).filter(|n| n.starts_with("card") && !n.contains('-')).collect();
     names.sort();
+    let link_name = |p: &Path| std::fs::read_link(p).ok().and_then(|l| l.file_name().map(|f| f.to_string_lossy().into_owned())).unwrap_or_default();
     names
         .iter()
         .filter_map(|n| {
             let dev = drm.join(n).join("device");
-            let vendor = Vendor::of(read_hex(&dev.join("vendor"))?)?;
+            let vendor_id = read_hex(&dev.join("vendor"))?;
             let gc = dev.join("ip_discovery/die/0/GC/0");
             Some(Card {
-                vendor,
+                vendor: Vendor::of(vendor_id),
+                vendor_id,
+                device_id: read_hex(&dev.join("device")).unwrap_or(0),
                 vram: read_u64(&dev.join("mem_info_vram_total")).unwrap_or(0),
                 gc: read_u64(&gc.join("major")).zip(read_u64(&gc.join("minor"))).map(|(a, b)| (a as u32, b as u32)),
+                slot: link_name(&dev),
+                driver: link_name(&dev.join("driver")),
+                boot_vga: read_u64(&dev.join("boot_vga")) == Some(1),
             })
         })
         .collect()
 }
 
-/// NVIDIA shows no VRAM in sysfs: ranked above any iGPU by hand.
 fn pick(cards: Vec<Card>) -> Option<Gpu> {
-    let card = cards.into_iter().min_by_key(|c| std::cmp::Reverse(if c.vendor == Vendor::Nvidia { u64::MAX } else { c.vram }))?;
-    let rdna = if card.vendor == Vendor::Amd { card.gc.and_then(|(a, b)| rdna_of(a, b)) } else { None };
-    Some(Gpu::new(card.vendor, rdna))
+    let card = cards.into_iter().filter(|c| c.vendor.is_some()).min_by_key(|c| std::cmp::Reverse(c.rank()))?;
+    let vendor = card.vendor?;
+    let rdna = if vendor == Vendor::Amd { card.gc.and_then(|(a, b)| rdna_of(a, b)) } else { None };
+    Some(Gpu::new(vendor, rdna))
+}
+
+/// Mesa and NVIDIA's own driver render on the firmware's display GPU (`boot_vga`) unless told otherwise.
+fn offload_of(cards: &[Card]) -> Option<Offload> {
+    let display = cards.iter().find(|c| c.boot_vga)?;
+    let best = cards.iter().filter(|c| c.vendor.is_some()).min_by_key(|c| std::cmp::Reverse(c.rank()))?;
+    if best.rank() <= display.rank() || best.slot.is_empty() {
+        return None;
+    }
+    let env: Vec<(&str, String)> = if best.driver == "nvidia" {
+        vec![("__NV_PRIME_RENDER_OFFLOAD", "1".into()), ("__GLX_VENDOR_LIBRARY_NAME", "nvidia".into()), ("__VK_LAYER_NV_optimus", "NVIDIA_only".into())]
+    } else {
+        vec![("DRI_PRIME", format!("pci-{}", best.slot.replace([':', '.'], "_")))]
+    };
+    Some(Offload { vk_device: format!("{:04x}:{:04x}", best.vendor_id, best.device_id), env: env.into_iter().map(|(k, v)| (k.to_string(), v)).collect() })
 }
 
 /// `None` when sysfs shows no card of a known vendor.
 pub fn detected() -> Option<&'static Gpu> {
     static GPU: OnceLock<Option<Gpu>> = OnceLock::new();
     GPU.get_or_init(|| pick(cards(Path::new("/sys/class/drm")))).as_ref()
+}
+
+/// `None` off a hybrid machine: one GPU, or the display's is already the strongest.
+pub fn offload() -> Option<&'static Offload> {
+    static OFFLOAD: OnceLock<Option<Offload>> = OnceLock::new();
+    OFFLOAD.get_or_init(|| offload_of(&cards(Path::new("/sys/class/drm")))).as_ref()
 }
 
 #[cfg(test)]
@@ -197,5 +249,36 @@ mod tests {
         assert_eq!(rdna_of(10, 1), Some(1));
         assert!(rdna_of(9, 4).is_none());
         assert!(pick(cards(&dir.path().join("nope"))).is_none());
+    }
+
+    fn gpu(vendor_id: u16, device_id: u16, vram: u64, slot: &str, driver: &str, boot_vga: bool) -> Card {
+        Card { vendor: Vendor::of(vendor_id), vendor_id, device_id, vram, slot: slot.into(), driver: driver.into(), boot_vga, ..Default::default() }
+    }
+
+    #[test]
+    fn a_hybrid_laptop_renders_on_its_discrete_gpu_and_a_desktop_is_left_alone() {
+        let intel = gpu(0x8086, 0xa7a0, 0, "0000:00:02.0", "i915", true);
+        let nvidia = gpu(0x10de, 0x28e0, 0, "0000:01:00.0", "nvidia", false);
+        let o = offload_of(&[intel.clone(), nvidia]).unwrap();
+        assert_eq!(o.vk_device, "10de:28e0");
+        assert_eq!(
+            o.env.iter().map(|(k, _)| k.as_str()).collect::<Vec<_>>(),
+            ["__NV_PRIME_RENDER_OFFLOAD", "__GLX_VENDOR_LIBRARY_NAME", "__VK_LAYER_NV_optimus"]
+        );
+        let apu = gpu(0x1002, 0x1681, 536_870_912, "0000:06:00.0", "amdgpu", true);
+        let radeon = gpu(0x1002, 0x7480, 8_573_157_376, "0000:03:00.0", "amdgpu", false);
+        let o = offload_of(&[apu.clone(), radeon.clone()]).unwrap();
+        assert_eq!(
+            (o.vk_device.as_str(), o.env.clone()),
+            ("1002:7480", vec![("DRI_PRIME".to_string(), "pci-0000_03_00_0".to_string())]),
+            "Mesa's GL and Vulkan both take the pci tag"
+        );
+        let nouveau = gpu(0x10de, 0x28e0, 0, "0000:01:00.0", "nouveau", false);
+        assert_eq!(offload_of(&[intel, nouveau]).unwrap().env[0].0, "DRI_PRIME", "nouveau and NVK are Mesa's");
+        let display_dgpu = gpu(0x1002, 0x744c, 25_753_026_560, "0000:03:00.0", "amdgpu", true);
+        let igpu = gpu(0x1002, 0x164e, 536_870_912, "0000:17:00.0", "amdgpu", false);
+        assert_eq!(offload_of(&[igpu, display_dgpu]), None, "the screen's GPU is already the strongest");
+        assert_eq!(offload_of(std::slice::from_ref(&radeon)), None, "no firmware display GPU, nothing to steer away from");
+        assert_eq!(offload_of(&[Card { boot_vga: true, ..radeon }]), None);
     }
 }

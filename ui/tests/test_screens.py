@@ -329,7 +329,13 @@ def test_launch_form(api, fake):
     assert form.groups[0]["dividers"] == [{"at": 4, "label": "Advanced · Scaling"}]
     assert expected[0][1] == ["launch.gamescope", "launch.gamescope_resolution", "launch.gamescope_refresh", "launch.gamescope_adaptive_sync"]
     assert expected[1][1] == ["launch.mangohud", "launch.fps_limit", "launch.pause_on_home", "desktop.hide_cursor", "desktop.keep_awake"]
-    assert expected[2][1] == ["launch.gamescope_scaler", "launch.gamescope_filter", "launch.gamescope_sharpness", "launch.gamescope_args"]
+    assert expected[2][1] == [
+        "launch.gamescope_scaler",
+        "launch.gamescope_filter",
+        "launch.gamescope_sharpness",
+        "launch.gamescope_args",
+        "launch.discrete_gpu",
+    ]
     assert expected[3][1] == ["launch.env"] and expected[4][1] == ["launch.gamescope_bin", "launch.umu_run"]
     assert form.groups[0]["meta"] == form.screen and form.groups[1]["meta"] == ""
     config_rows = rows_by_key(form)

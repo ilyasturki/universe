@@ -26,6 +26,7 @@ SYNONYMS = {
     "gamescope_filter": ["fsr", "nis", "nearest", "pixel art", "upscale", "sharpen", "linear"],
     "gamescope_sharpness": ["sharpen", "fsr", "nis"],
     "gamescope_args": ["flags", "command line", "extra arguments"],
+    "discrete_gpu": ["dgpu", "igpu", "hybrid", "laptop", "prime", "prime-run", "optimus", "dri_prime", "graphics card", "nvidia"],
     "env": ["environment", "variables", "export", "env vars"],
     "debug_log": ["logs", "proton log", "wine log", "dxvk", "crash", "debugging", "troubleshoot"],
     "wrapper": ["gamemode", "gamemoderun", "taskset", "prime-run", "mangohud"],

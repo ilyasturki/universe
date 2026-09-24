@@ -127,6 +127,7 @@ pub static LAUNCH_KEYS: &[LaunchKey] = &[
     advanced!("gamescope_filter", Kind::Enum(&gamescope::FILTERS), "", "Filter", "Scaling", Both, &[], "The upscaling filter: fsr and nis sharpen, nearest and pixel keep pixel art crisp."),
     advanced!("gamescope_sharpness", Kind::Int { max: Some(gamescope::SHARPNESS_MAX) }, "", "Sharpness", "Scaling", Both, &[], "For fsr and nis: 0 is sharpest, 20 softest."),
     advanced!("gamescope_args", Kind::Str, "", "Gamescope arguments", "Scaling", Both, &[], "Extra gamescope flags, after and over the fields above."),
+    advanced!("discrete_gpu", Kind::Bool, "true", "Discrete GPU", "Scaling", Both, &[], "On a laptop with two GPUs, the game and gamescope render on the stronger one rather than the one driving the screen. Off leaves the choice to the system. Nothing changes on a machine with one GPU."),
     advanced!("env", Kind::Map, "", "Environment variables", "Environment", Both, &[], "Environment variables for the game; a game's win over the global ones."),
     advanced!("wrapper", Kind::Str, "", "Wrapper command", "Launch", Game, &[], "A command the game runs through, innermost: gamemoderun, taskset -c 0-7…"),
     advanced!("args", Kind::List, "", "Arguments", "Launch", Game, &[], "Arguments appended to the game's command line."),

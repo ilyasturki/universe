@@ -97,7 +97,7 @@ comma-separated for lists, `""` deletes the key. A runner is written under its s
                "runner_path": "/…/bin/dolphin-emu", "platform": "Nintendo GameCube",
                "options": {"batch": true, "user_directory": "", "inputplumber": true}, "inputplumber": true,
                "proton": "proton-ge", "proton_path": "…", "esync": true, "fsync": true, "ntsync": true,
-               "wayland": true, "hdr": false, "dlss_upgrade": false, "fsr4_upgrade": false, "xess_upgrade": false,
+               "wayland": true, "hdr": false, "discrete_gpu": true, "dlss_upgrade": false, "fsr4_upgrade": false, "xess_upgrade": false,
                "optiscaler": false, "mangohud": false, "gamescope": true, "gamescope_args": "", "gamescope_resolution": "auto", "gamescope_refresh": "auto", "gamescope_scaler": "", "gamescope_filter": "", "gamescope_sharpness": null, "gamescope_adaptive_sync": "auto", "fps_limit": "auto", "hide_cursor": true, "env": {},
                "working_dir": "/…/games/melee", "prefix": "", "modules": {"capture": {"enabled": true, "cursor": false}}},
  "removed": false}
@@ -250,6 +250,14 @@ directly, no composite of its own per frame; Mutter's window screencast (`captur
 blits such a buffer as one flat colour, so for a window recording the capture module's pre-launch
 hook writes `UNIVERSE_GAMESCOPE_ARGS=--force-composition`. The launcher's own gamescope
 (`host_gamescope`) is up before any game is known and keeps the flag.
+
+On a hybrid machine — the firmware's display GPU (`boot_vga` in sysfs) is not the strongest card,
+NVIDIA ranked first, then VRAM — `discrete_gpu` (on by default, global or per game) points the game
+at the stronger one: `DRI_PRIME=pci-<slot>` for a Mesa driver (GL and Vulkan alike),
+`__NV_PRIME_RENDER_OFFLOAD=1 __GLX_VENDOR_LIBRARY_NAME=nvidia __VK_LAYER_NV_optimus=NVIDIA_only`
+for NVIDIA's own, neither over a value the game's `env` sets; and its gamescope, and the
+launcher's (from the global key), get `--prefer-vk-device <vendor>:<device>` unless the flags
+already name one. A single GPU, or a display GPU that is already the strongest, changes nothing.
 
 gamescope unmaps its own window whenever no client inside it is focused, and a game that closes
 its first window before opening the real one (Dead Cells) would flash the desktop through, so
@@ -785,6 +793,7 @@ fsync = true
 ntsync = true                        # a sync mode off is PROTON_NO_*=1 (WINEESYNC/WINEFSYNC=0 for wine)
 wayland = true                       # PROTON_ENABLE_WAYLAND=1; dropped inside gamescope unless --expose-wayland
 hdr = false                          # PROTON_ENABLE_HDR=1, and --hdr-enabled on gamescope
+discrete_gpu = true                  # a hybrid laptop: the game and gamescope render on the stronger GPU, not the screen's (DRI_PRIME or PRIME offload, --prefer-vk-device)
 dlss_upgrade = "off"                # PROTON_DLSS_UPGRADE, PROTON_FSR4_UPGRADE, PROTON_XESS_UPGRADE, PROTON_USE_OPTISCALER
 fsr4_upgrade = "off"                # auto | on | off (or a bool): auto is on where the GPU makes it a plain win; on RDNA 3 PROTON_FSR4_RDNA3_UPGRADE instead
 xess_upgrade = "off"

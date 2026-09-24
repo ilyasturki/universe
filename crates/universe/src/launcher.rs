@@ -266,6 +266,10 @@ pub fn plan(
     args.extend(g.launch.args.iter().cloned());
     env.extend(g.launch.env.clone());
     let (program, args) = wrap(&g.launch.wrapper, program, args);
+    let offload = r.effective.discrete_gpu.then(crate::gpu::offload).flatten();
+    for (k, v) in offload.map(|o| o.env.as_slice()).unwrap_or_default() {
+        env.entry(k.clone()).or_insert_with(|| v.clone());
+    }
     let gamescope = (!nested && r.effective.gamescope).then(|| runners::on_path(&config.launch.gamescope_bin)).flatten();
     if !nested && r.effective.gamescope && gamescope.is_none() {
         tracing::warn!("{}: {} not found, launching on the desktop", g.id, config.launch.gamescope_bin);
@@ -304,6 +308,7 @@ pub fn plan(
                 screen,
                 mangoapp,
             );
+            prefer_vk_device(&mut wrap, offload);
             // Its mangoapp draws the HUD from Universe's conf; the file alone on the unit loads no layer, MANGOHUD=1 would.
             if mangoapp {
                 let path = mangoapp_conf_path();
@@ -403,7 +408,15 @@ pub fn host_gamescope(config: &Config, screen: Option<crate::gamescope::Mode>, m
     args.extend(crate::keyboard::probe().env().iter().map(|(k, v)| format!("{k}={v}")));
     args.push(bin.to_string_lossy().to_string());
     args.extend(gamescope_args(true, &fields, [&config.launch.gamescope_args, "", ""], config.launch.hdr, screen, mangoapp));
+    prefer_vk_device(&mut args, config.launch.discrete_gpu.then(crate::gpu::offload).flatten());
     Some((env_bin(), args))
+}
+
+/// gamescope composites on the GPU the game renders on, not on the display's.
+fn prefer_vk_device(args: &mut Vec<String>, offload: Option<&crate::gpu::Offload>) {
+    if let Some(o) = offload.filter(|_| !args.iter().any(|a| a == "--prefer-vk-device")) {
+        args.extend(["--prefer-vk-device".into(), o.vk_device.clone()]);
+    }
 }
 
 pub async fn run_shell(command: &str, env: &BTreeMap<String, String>, cwd: &Path) -> crate::Result<i32> {
@@ -720,6 +733,20 @@ mod tests {
             assert!(p.mangoapp_conf.is_none(), "the launcher's mangoapp is told, not configured");
             assert_eq!((p.program.as_str(), p.env["MANGOHUD"].as_str()), ("umu-run", "1"), "no gamescope on the unit: the layer's variables ride on it");
         }
+    }
+
+    #[test]
+    fn a_hybrid_laptops_gamescope_prefers_the_discrete_gpu_unless_told_another() {
+        let offload = crate::gpu::Offload { vk_device: "10de:28e0".into(), env: vec![] };
+        let mut args = vec!["-f".to_string()];
+        prefer_vk_device(&mut args, Some(&offload));
+        assert_eq!(args, ["-f", "--prefer-vk-device", "10de:28e0"]);
+        let mut own = vec!["--prefer-vk-device".to_string(), "8086:a7a0".into()];
+        prefer_vk_device(&mut own, Some(&offload));
+        assert_eq!(own, ["--prefer-vk-device", "8086:a7a0"], "the user's gamescope_args win");
+        let mut none = vec!["-f".to_string()];
+        prefer_vk_device(&mut none, None);
+        assert_eq!(none, ["-f"]);
     }
 
     #[test]

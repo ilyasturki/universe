@@ -188,6 +188,18 @@
     "advanced": true
   },
   {
+    "key": "discrete_gpu",
+    "type": "bool",
+    "default": true,
+    "choices": [],
+    "label": "Discrete GPU",
+    "section": "Scaling",
+    "scope": "both",
+    "runners": [],
+    "description": "On a laptop with two GPUs, the game and gamescope render on the stronger one rather than the one driving the screen. Off leaves the choice to the system. Nothing changes on a machine with one GPU.",
+    "advanced": true
+  },
+  {
     "key": "env",
     "type": "map",
     "default": "",
