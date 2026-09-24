@@ -33,8 +33,7 @@ FocusScope {
             id: "quit",
             icon: "power",
             label: "Quit",
-            kind: "action",
-            value: "asks first"
+            kind: "action"
         })
     // Over the poster of a game still loading there is nothing to resume, shoot or tune: Home and Quit alone.
     readonly property var row: loading ? [home, quit] : full
@@ -59,18 +58,6 @@ FocusScope {
                     kind: "action"
                 },
                 {
-                    id: "journal",
-                    icon: "book",
-                    label: "Journal",
-                    kind: "action"
-                },
-                {
-                    id: "recordings",
-                    icon: "film",
-                    label: "Recordings",
-                    kind: "action"
-                },
-                {
                     id: "pause",
                     icon: "snowflake",
                     label: "Pause on HOME",
@@ -84,36 +71,6 @@ FocusScope {
             icon: "camera",
             label: "Screenshot",
             kind: "action"
-        },
-        {
-            id: "cap",
-            icon: "video",
-            label: "Capture",
-            kind: "group",
-            children: [
-                {
-                    id: "rec",
-                    icon: "record",
-                    label: "Recording",
-                    kind: "info"
-                },
-                {
-                    id: "source",
-                    icon: "screen",
-                    label: "Source",
-                    kind: "value",
-                    options: ["screen", "window"],
-                    names: ["Screen", "Window"],
-                    later: true
-                },
-                {
-                    id: "cursor",
-                    icon: "cursor",
-                    label: "Cursor",
-                    kind: "toggle",
-                    later: true
-                }
-            ]
         },
         {
             id: "perf",
@@ -145,17 +102,8 @@ FocusScope {
                     kind: "value",
                     options: ["", "linear", "nearest", "fsr", "nis", "pixel"],
                     names: ["Default", "Linear", "Nearest", "FSR", "NIS", "Pixel"]
-                },
-                {
-                    id: "sharp",
-                    key: "gamescope_sharpness",
-                    icon: "sun",
-                    label: "Sharpness",
-                    kind: "value",
-                    options: ["", "0", "2", "5", "10", "15", "20"],
-                    names: ["Default", "0 · sharpest", "2", "5", "10", "15", "20 · softest"]
                 }
-            ]
+            ].concat(sharpens ? [sharpness] : [])
         },
         {
             id: "sound",
@@ -170,12 +118,6 @@ FocusScope {
                     kind: "range"
                 },
                 {
-                    id: "mute",
-                    icon: "mute",
-                    label: "Mute",
-                    kind: "toggle"
-                },
-                {
                     id: "output",
                     icon: "headphones",
                     label: "Output",
@@ -184,6 +126,17 @@ FocusScope {
             ]
         }
     ]
+    // Gamescope sharpens only through FSR and NIS: the row comes with them. A bool, so a step elsewhere rebuilds no list.
+    readonly property bool sharpens: vals.filter === "fsr" || vals.filter === "nis"
+    readonly property var sharpness: ({
+            id: "sharp",
+            key: "gamescope_sharpness",
+            icon: "sun",
+            label: "Sharpness",
+            kind: "value",
+            options: ["", "0", "2", "5", "10", "15", "20"],
+            names: ["Default", "0 · sharpest", "2", "5", "10", "15", "20 · softest"]
+        })
     readonly property var buttons: row.filter(function (b) {
         return b !== "|";
     })
@@ -199,8 +152,6 @@ FocusScope {
         vals = {
             pause: api.home.pauseOnHome,
             rec: on && cap.enabled !== false,
-            source: String(cap.source || "screen"),
-            cursor: cap.cursor === true,
             hud: api.home.launchValue("mangohud") === "true",
             fps: api.home.launchValue("fps_limit") || "auto",
             fpsOptions: api.home.launchChoices("fps_limit"),
@@ -256,21 +207,13 @@ FocusScope {
             return v.pause ? "On" : "Off";
         case "hud":
             return v.hud ? "Shown" : "Hidden";
-        case "rec":
-            return v.rec ? "On · " + Format.clockTime(dock.elapsed) : "Off";
-        case "source":
-            return (v.source === "window" ? "Window" : "Screen") + " · next session";
-        case "cursor":
-            return (v.cursor ? "On" : "Off") + " · next session";
         case "fps":
             return v.fps === "auto" ? "Auto · " + (v.hz > 0 ? v.hz : "screen") : v.fps === "none" ? "None" : v.fps;
         case "filter":
         case "sharp":
             return item.names[Math.max(0, item.options.indexOf(v[item.id]))];
         case "vol":
-            return v.vol + "%";
-        case "mute":
-            return v.mute ? "On" : "Off";
+            return v.mute ? "Muted" : v.vol + "%";
         case "output":
             return outputName(v.output);
         }
@@ -295,10 +238,8 @@ FocusScope {
         var next = opts[(Math.max(0, opts.indexOf(vals[item.id])) + dir + opts.length) % opts.length];
         if (item.id === "output")
             outputApply.restart();
-        else if (item.key)
-            api.home.setLaunchValue(item.key, next);
         else
-            api.universe.setSetting("capture", session.id, item.id, next);
+            api.home.setLaunchValue(item.key, next);
         Sound.tick();
         patch(item.id, next);
     }
@@ -310,10 +251,7 @@ FocusScope {
         else if (item.id === "hud") {
             api.home.setLaunchValue("mangohud", vals.hud ? "false" : "true");
             patch("hud", !vals.hud);
-        } else if (item.id === "cursor") {
-            api.universe.setSetting("capture", session.id, "cursor", vals.cursor ? "false" : "true");
-            patch("cursor", !vals.cursor);
-        } else if (item.id === "mute")
+        } else if (item.id === "vol")
             api.home.volume("mute", 0);
     }
 
@@ -328,8 +266,6 @@ FocusScope {
             api.home.toLauncher();
             break;
         case "details":
-        case "journal":
-        case "recordings":
             Sound.enter();
             api.home.toLauncher(item.id);
             break;
@@ -355,7 +291,7 @@ FocusScope {
     function select() {
         var t = target;
         if (opened) {
-            if (t.kind === "toggle")
+            if (t.kind === "toggle" || t.kind === "range")
                 flip(t);
             else if (t.kind === "action") {
                 opened = false;
@@ -681,20 +617,6 @@ FocusScope {
                     maximumLineCount: 2
                     elide: Text.ElideRight
                 }
-
-                Text {
-                    text: {
-                        var total = dock.game ? Format.playTime(dock.game.playTime) : "";
-                        if (!dock.session || !dock.session.started_at)
-                            return total;
-                        var now = Format.clockTime(dock.elapsed);
-                        var session = dock.elapsed >= 3600 ? now.substring(0, now.length - 3).replace(":", " h ") : Math.max(1, Math.floor(dock.elapsed / 60)) + " min";
-                        return (total ? total + " · " : "") + session + " this session";
-                    }
-                    color: Qt.rgba(0.949, 0.953, 0.961, 0.6)
-                    font.family: Theme.sans
-                    font.pixelSize: Theme.dp(18)
-                }
             }
         }
 
@@ -921,7 +843,7 @@ FocusScope {
                                 color: line.focused ? Qt.rgba(0.063, 0.067, 0.086, 0.18) : Qt.rgba(1, 1, 1, 0.14)
 
                                 Rectangle {
-                                    width: parent.width * Math.max(0, Math.min(100, dock.vals.vol || 0)) / 100
+                                    width: dock.vals.mute ? 0 : parent.width * Math.max(0, Math.min(100, dock.vals.vol || 0)) / 100
                                     height: parent.height
                                     radius: height / 2
                                     color: line.focused ? Theme.onLight : Theme.text
@@ -936,9 +858,9 @@ FocusScope {
 
                             Text {
                                 anchors.verticalCenter: parent.verticalCenter
-                                width: Theme.dp(46)
+                                width: Theme.dp(64)
                                 horizontalAlignment: Text.AlignRight
-                                text: (dock.vals.vol || 0) + "%"
+                                text: dock.shows(modelData)
                                 color: line.ink
                                 font.family: Theme.sans
                                 font.pixelSize: Theme.dp(19)

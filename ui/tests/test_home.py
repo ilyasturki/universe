@@ -621,10 +621,10 @@ def test_the_dock_renders_over_a_running_game(api, fake, tmp_path, monkeypatch):
     key(overlay, Qt.Key.Key_Return)
     assert dock.property("opened") is True, "Game opens its card"
     assert api.home.pauseOnHome is True
-    for _ in range(3):
-        key(overlay, Qt.Key.Key_Down)
+    assert [c["id"] for c in dock.property("current").toVariant()["children"]] == ["details", "pause", "quit"]
+    key(overlay, Qt.Key.Key_Down)
     key(overlay, Qt.Key.Key_Return)
-    assert api.home.pauseOnHome is False, "past Details, Journal and Recordings sits Pause on HOME, on by default: A turns it off"
+    assert api.home.pauseOnHome is False, "past Details sits Pause on HOME, on by default: A turns it off"
     key(overlay, Qt.Key.Key_Escape)
     assert dock.property("opened") is False
     key(overlay, Qt.Key.Key_Escape)
@@ -685,7 +685,13 @@ def test_the_docks_output_row_switches_once_the_cursor_rests(api, fake, tmp_path
     dock = overlay.property("contentItem").childItems()[0].property("item")
     dock.setProperty("index", [b["id"] for b in dock.property("buttons").toVariant()].index("sound"))
     key(overlay, Qt.Key.Key_Return)
-    key(overlay, Qt.Key.Key_Down)
+    assert [c["id"] for c in dock.property("current").toVariant()["children"]] == ["vol", "output"], "Mute is A on Volume"
+    key(overlay, Qt.Key.Key_Return)
+    wait_for(api.home.volumeChanged, 3000)
+    assert api.home.muted is True
+    key(overlay, Qt.Key.Key_Return)
+    wait_for(api.home.volumeChanged, 3000)
+    assert api.home.muted is False
     key(overlay, Qt.Key.Key_Down)
     assert dock.property("target").toVariant()["id"] == "output" and dock.property("vals").toVariant()["output"].endswith("speaker")
     key(overlay, Qt.Key.Key_Right)

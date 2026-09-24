@@ -244,8 +244,12 @@ flips to its HOME menu over the game (`toLauncher`) and back (`toGame`); Reprise
 **dock** over the live game (`openDock`), a second press or B closes it, and from home a press
 resumes. With no session, Reprise treats it as Start (the game menu).
 
-The dock is `ui/Dock.qml` in the overlay window: the game's card at the left, a row of round
-buttons at the right (`row` in `Dock.qml`), a group's settings in a card above its button. ◀ ▶ move
+The dock is `ui/Dock.qml` in the overlay window: the game's card at the left (its art, PLAYING or
+PAUSED, the title), a row of round buttons at the right (`row` in `Dock.qml`), a group's settings
+in a card above its button — Resume, Home, Game (Details, Pause on HOME, Quit), then Screenshot,
+Performance (MangoHud, FPS limit, Filter, and Sharpness while the filter is FSR or NIS, the two
+gamescope sharpens) and Sound (Volume, where A mutes, and Output). A recording shows as REC by the
+clock; what it records is the game's Video capture settings. ◀ ▶ move
 along the row or change the focused value, ▲ ▼ the rows of a card, A acts, flips or opens, B closes
 the card or the dock, X takes a screenshot with the band faded out so the shell grabs the game alone.
 ▼ from the row raises `ui/DockShots.qml` over the whole frame: the playing game's own screenshots
@@ -254,10 +258,10 @@ since the session's `started_at`: a running session is not in `sessions.jsonl` y
 carry no `session`), a hairline, the rest — A a `Lightbox`, Y "Remove this screenshot?" through the
 dock's `ConfirmDialog` (Keep it focused, Trash the screenshot → `shots.remove`), B or ▲ past the top
 row lowers it onto the dock. A shot taken meanwhile lands through the screenshots watcher. The
-Game card's Details, Journal and Recordings rows call `toLauncher(landing)`: the launcher comes up
-as for Home, and the theme's `landHome` takes the landing (`takeLanding()`, once) and opens the
-detail or the sub page on the playing game over Home, the frame fading rather than shrinking into
-the tile.
+Game card's Details row calls `toLauncher("details")`: the launcher comes up as for Home, and the
+theme's `landHome` takes the landing (`takeLanding()`, once) and opens the detail on the playing
+game over Home, the frame fading rather than shrinking into the tile; its More › Media holds the
+journal and the recordings.
 
 The shutter is the launcher's, not the shell's, so it is the same for the dock's camera, a pad
 macro and `universe screenshot`: `api.home` plays `qml/assets/sounds/shutter.wav` and emits
@@ -268,7 +272,7 @@ outside the theme's loader, answers a non-empty path with a white flash. Inside 
 holding it up; on the desktop there is no window over the game, so only the shutter is heard (the
 hook answers before either, see api.md § Screenshots). A failed shot emits an empty path: the dock
 toasts it, the flash stays off.
-Its volume row is the controller's macro by another route (`volume("up" | "down" | "mute")`,
+Its volume row is the controller's macro by another route (◀ ▶ `volume("up" | "down")`, A `"mute"`,
 `controller.volume_step` per step, GNOME's OSD through `desktop::show_osd` on every change but a
 `get`). Its Output row steps through `api.home.outputs` and switches once the cursor has rested
 500 ms (`setOutput(id)`: a switch can change a card's profile); the reply is the new sink's level.
