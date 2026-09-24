@@ -761,7 +761,8 @@ the games over (`display` the count; `runImport(index)` runs `import_lutris(true
 `import_roms(true)` for the emulators' folders, or, for `heroic-gog`, adds `gog_dirs` to the gog source's `scan_dirs` when the config takes writes and
 starts a `scan("gog")` job; the row's `display` follows: "Importing…", "N games added", "Nothing
 new", the error), a `static` row otherwise ("No games", "N games · not importable yet", "· needs
-gogdl") — `stores` the source's Account row, "Get a sign-in link" (`link`) and "Enter the code"
+gogdl"), `quiet` when there is nothing to bring over and nothing was done — Reprise leaves those
+out unless every row is one — `stores` the source's Account row, "Get a sign-in link" (`link`) and "Enter the code"
 (`code`) through the shared `api.screens.login` — `ui/LoginCard.qml` and `switch2/ui/LoginCard.qml`
 are the QR, URL and status card `FormPage` shows too — `preferences` the controller family
 (`controller.family`, an `enum` over `api.screens.controller.families`, written with `setFamily`)

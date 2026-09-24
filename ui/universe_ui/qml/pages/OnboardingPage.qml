@@ -22,6 +22,23 @@ FocusScope {
     signal closeRequested
     signal message(string text)
 
+    // The launchers with nothing to bring over stay out, unless that is all of them.
+    readonly property var groups: {
+        var all = form.groups, rows = form.rows;
+        if (form.stepId !== "found")
+            return all;
+        var kept = all.map(function (g) {
+            return Object.assign({}, g, {
+                rows: g.rows.filter(function (i) {
+                    return rows[i].quiet !== true;
+                })
+            });
+        }).filter(function (g) {
+            return g.rows.length > 0;
+        });
+        return kept.length > 0 ? kept : all;
+    }
+
     readonly property string backLabel: form.step > 0 ? "Back" : "Skip setup"
     readonly property string nextLabel: last ? "Finish" : "Continue"
     readonly property var hints: editor.open ? editor.hints : [
@@ -192,7 +209,7 @@ FocusScope {
             columns: 1
             compact: true
             rows: page.form.rows
-            groups: page.form.groups
+            groups: page.groups
             dimmed: editor.open
 
             onActivated: function (index, row) {

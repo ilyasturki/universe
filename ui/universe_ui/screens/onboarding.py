@@ -148,6 +148,7 @@ class Onboarding(RowsForm):
                     row.update(via=launcher["via"], display=_plural(launcher["games"], "game"), action="Adopt" if launcher["via"] == "gog" else "Import")
                 else:
                     row = _static(launcher["id"], launcher["name"], _found_display(launcher))
+                    row["quiet"] = not _importable(launcher) and not launcher["state"]
                 _add(rows, groups, "", row)
             if not rows:
                 _add(rows, groups, "", _static("none", "Other launchers", "None found"))
