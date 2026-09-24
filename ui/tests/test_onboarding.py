@@ -107,16 +107,19 @@ def test_preferences_write_the_family_and_the_upgrades(empty_api, empty):
     assert empty.core.settings()["launch"]["hdr"] is True
 
 
-def test_read_only_config_skips_preferences(empty_api, empty):
+@pytest.mark.parametrize(("os_family", "owner"), [("nixos", "home-manager"), ("arch", "config.toml")])
+def test_read_only_config_skips_preferences(empty_api, empty, os_family, owner):
     empty.core._config["config_writable"] = False
+    empty.core._config["os"] = os_family
     form = loaded(empty_api.screens.onboarding)
     assert [s["id"] for s in form.steps] == ["found", "stores", "done"]
     assert form.runImport(index_of(form, "heroic-gog")) is True
-    assert rows_by_key(form)["heroic-gog"]["display"].startswith("Settings are read-only: add /mnt/games/PC"), "no scan_dirs write, so no scan"
+    display = rows_by_key(form)["heroic-gog"]["display"]
+    assert display.startswith("Settings are read-only: add /mnt/games/PC") and display.endswith(owner), "no scan_dirs write, so no scan"
     assert "scan_dirs" not in empty.core._config.get("sources", {}).get("gog", {})
     form.next()
     form.next()
-    assert form.stepId == "done" and form.rows[-1]["key"] == "read_only" and "home-manager" in form.rows[-1]["detail"]
+    assert form.stepId == "done" and form.rows[-1]["key"] == "read_only" and owner in form.rows[-1]["detail"]
 
 
 @pytest.mark.parametrize("theme", ["reprise", "switch2"])

@@ -129,6 +129,12 @@ async fn manager_proxy(conn: &zbus::Connection) -> zbus::Result<zbus::Proxy<'sta
         .await
 }
 
+/// The user manager's release, the number leading its `Version` (`258.3`, `255.4-1ubuntu8`).
+pub(crate) async fn systemd_version(conn: &zbus::Connection) -> Option<u32> {
+    let version: String = manager_proxy(conn).await.ok()?.get_property("Version").await.ok()?;
+    version.trim_start_matches(|c: char| !c.is_ascii_digit()).split(|c: char| !c.is_ascii_digit()).next()?.parse().ok()
+}
+
 fn is_dbus_error(e: &zbus::Error, name: &str) -> bool {
     matches!(e, zbus::Error::MethodError(n, _, _) if n.as_str() == name)
 }

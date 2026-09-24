@@ -4,6 +4,7 @@ pub mod controller;
 pub mod core;
 pub mod desktop;
 pub mod discover;
+pub mod distro;
 pub mod doctor;
 pub mod game;
 pub mod gamescope;

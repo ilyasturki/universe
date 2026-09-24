@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
 
-/// The Universe GNOME Shell extension: window capture and the like; the home-manager module installs it.
+/// The Universe GNOME Shell extension (`extension/`): window capture and the like.
 pub const UNIVERSE_EXTENSION: &str = "universe@ilyasturki.github.io";
 
 // ExtensionState.ACTIVE (js/misc/extensionUtils.js)

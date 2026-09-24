@@ -7,7 +7,8 @@ from .settings import RowsForm, _add, _row, launch_row
 MEMORY_KEY = "onboarded"
 PREFERENCE_KEYS = ("hdr", "dlss_upgrade", "fsr4_upgrade", "xess_upgrade", "optiscaler")
 FAMILY_DETAIL = "The pad the button hints and the controller art follow until one is plugged in."
-READ_ONLY = "Settings are managed by home-manager on this machine: change them in programs.universe.settings."
+READ_ONLY_HOME_MANAGER = "Settings are managed by home-manager on this machine: change them in programs.universe.settings."
+READ_ONLY = "config.toml is read-only on this machine: make it writable to change settings here."
 NO_GOG_SOURCE = "needs gogdl"
 NOT_YET = "not importable yet"
 
@@ -86,6 +87,7 @@ class Onboarding(RowsForm):
         self._gog_dirs = []
         self._sources = []
         self._writable = True
+        self._home_manager = False
         self._summary = []
         self._scan_job = ""
         login.finished.connect(self._on_login)
@@ -118,7 +120,9 @@ class Onboarding(RowsForm):
                 if launcher.get("via") == "gog" and not gog:
                     launcher["importable"] = False
                 launcher["detail"] = "" if launcher["importable"] else NO_GOG_SOURCE if launcher.get("via") == "gog" else NOT_YET
-            self._writable = bool((self._client.config() or {}).get("config_writable", True))
+            config = self._client.config() or {}
+            self._writable = bool(config.get("config_writable", True))
+            self._home_manager = config.get("os") == "nixos"
             steps = ["found"]
             if self._sources:
                 steps.append("stores")
@@ -166,7 +170,10 @@ class Onboarding(RowsForm):
             for label, display in self._summary or [("Library", "Nothing added yet: games can join any time from the Library")]:
                 _add(rows, groups, "", _static(label, label, display))
             if not self._writable:
-                _add(rows, groups, "", _static("read_only", "Settings", "Managed by home-manager", READ_ONLY))
+                if self._home_manager:
+                    _add(rows, groups, "", _static("read_only", "Settings", "Managed by home-manager", READ_ONLY_HOME_MANAGER))
+                else:
+                    _add(rows, groups, "", _static("read_only", "Settings", "Read-only", READ_ONLY))
         self._set_rows(rows, groups)
 
     @Slot()
@@ -242,7 +249,8 @@ class Onboarding(RowsForm):
         current = [d.strip() for d in str(self._client.core.source_settings("gog").get("scan_dirs") or "").split(",") if d.strip()]
         missing = [d for d in self._gog_dirs if d not in current]
         if missing and not self._writable:
-            self._set_state(launcher, "failed", error=f"Settings are read-only: add {', '.join(missing)} to sources.gog.scan_dirs in home-manager")
+            where = "home-manager" if self._home_manager else "config.toml"
+            self._set_state(launcher, "failed", error=f"Settings are read-only: add {', '.join(missing)} to sources.gog.scan_dirs in {where}")
             return
         if missing and not self._client.setSourceSetting("gog", "scan_dirs", ",".join(current + missing)):
             self._set_state(launcher, "failed", error="Could not add the folders to the GOG source")

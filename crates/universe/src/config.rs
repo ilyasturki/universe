@@ -415,6 +415,7 @@ impl Config {
             .unwrap_or_else(|| serde_json::json!({}));
         v["data_home"] = serde_json::Value::String(paths::data_home().to_string_lossy().into());
         v["protons"] = self.proton_names().into();
+        v["os"] = crate::distro::detect().as_str().into();
         v
     }
 
@@ -426,10 +427,11 @@ impl Config {
             std::fs::create_dir_all(parent)?;
         }
         std::fs::write(path, doc.to_string()).map_err(|e| match e.kind() {
-            std::io::ErrorKind::PermissionDenied => crate::Error::Invalid(format!(
+            std::io::ErrorKind::PermissionDenied if crate::distro::detect() == crate::distro::Family::NixOs => crate::Error::Invalid(format!(
                 "{} is read-only: home-manager's programs.universe.settings owns it; set it to null to change settings here",
                 path.display()
             )),
+            std::io::ErrorKind::PermissionDenied => crate::Error::Invalid(format!("{} is read-only: make it writable to change settings here", path.display())),
             _ => e.into(),
         })?;
         Ok(())
