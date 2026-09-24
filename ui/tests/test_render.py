@@ -848,7 +848,7 @@ def test_a_path_row_is_typed_first_under_a_keyboard(api, fake):
     gamepad.post_key(Qt.Key.Key_Return, True, window=window)
     gamepad.post_key(Qt.Key.Key_Return, False, window=window)
     pump(150)
-    assert api.keys.mode == "pad" and labels() == ["Up", "Type a path", "Cancel"], "under a pad the folders come first"
+    assert api.keys.mode == "pad" and labels() == ["Up", "More", "Cancel"], "under a pad the folders come first"
     click(Qt.Key.Key_Escape)
     click(Qt.Key.Key_Return)
     assert api.keys.mode == "keyboard" and labels() == ["Done", "Browse", "Cancel"], "under a keyboard the path is typed first"
@@ -858,7 +858,7 @@ def test_a_path_row_is_typed_first_under_a_keyboard(api, fake):
     assert fake.game("the-technomancer")["launch"]["exe"] == "/mnt/games/PC/The Technomancer/TheTechnomancer.exe2", "the field held the value"
     click(Qt.Key.Key_Return)
     click(Qt.Key.Key_F1)
-    assert labels() == ["Up", "Type a path", "Cancel"] and api.screens.paths.files is True, "F1: the folders, for a file"
+    assert labels() == ["Up", "More", "Cancel"] and api.screens.paths.files is True, "F1: the folders, for a file"
     click(Qt.Key.Key_F)
     assert labels() == ["Done", "Browse", "Cancel"], "Y: back to typing"
     click(Qt.Key.Key_Escape)

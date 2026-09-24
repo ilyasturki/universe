@@ -5,8 +5,6 @@ import "../sound"
 Sheet {
     id: sheet
 
-    property string zone: "list"
-    property int chipIndex: 0
     property int index: 0
 
     signal accepted(string path)
@@ -18,45 +16,32 @@ Sheet {
     readonly property var entries: browser.entries
     readonly property int rowCount: entries.length + 1
 
-    readonly property var hints: zone === "chips" ? [
-        {
-            glyph: "A",
-            label: "Go"
-        }
-    ].concat(commonHints) : [
+    readonly property var hints: menu.open ? menu.hints : [
         {
             glyph: "A",
             label: index === 0 ? "Up" : (entries[index - 1] && !entries[index - 1].dir ? "Choose" : "Open")
-        }
-    ].concat(commonHints)
-    readonly property var commonHints: (files ? [] : [
-            {
-                glyph: "X",
-                label: "Use this folder"
-            }
-        ]).concat([
+        },
         {
-            glyph: "Y",
-            label: "Type a path"
+            glyph: "Start",
+            label: "More"
         },
         {
             glyph: "B",
             label: "Cancel"
         }
-    ])
+    ]
 
     readonly property real rowHeight: Theme.dp(58)
     readonly property int visibleRows: 8
 
     innerMax: Theme.dp(1100)
-    contentHeight: Theme.dp(10) + pathText.height + Theme.dp(12) + chips.height + Theme.dp(12) + list.height
+    contentHeight: Theme.dp(10) + pathText.height + Theme.dp(12) + list.height
+    Keys.enabled: !menu.open
 
     function show(label, path, withFiles) {
         title = label;
         browser.open(path || "", withFiles === true);
-        zone = "list";
         index = 0;
-        chipIndex = 0;
         open = true;
         forceActiveFocus();
     }
@@ -75,13 +60,6 @@ Sheet {
     }
 
     function activate() {
-        if (zone === "chips") {
-            Sound.enter();
-            browser.go(browser.shortcuts[chipIndex].path);
-            zone = "list";
-            index = 0;
-            return;
-        }
         if (index === 0) {
             if (browser.up()) {
                 Sound.enter();
@@ -103,71 +81,106 @@ Sheet {
         }
     }
 
-    function moveChip(d) {
-        var n = chipIndex + d;
-        if (zone !== "chips" || n < 0 || n >= browser.shortcuts.length) {
+    function useFolder() {
+        if (files) {
             Sound.edge();
-            return;
+        } else {
+            Sound.enter();
+            finish(browser.path);
         }
-        chipIndex = n;
-        Sound.tick();
+    }
+
+    function typePath() {
+        Sound.panel();
+        open = false;
+        focus = false;
+        typeRequested(browser.path);
+    }
+
+    // Centred: a row runs the sheet's width and leaves the list no side to open on.
+    function openMenu() {
+        var items = files ? [] : [
+            {
+                icon: "check",
+                label: "Use this folder",
+                action: "use"
+            }
+        ];
+        items.push({
+            icon: "keyboard",
+            label: "Type a path…",
+            action: "type"
+        });
+        if (browser.shortcuts.length > 0)
+            items.push({
+                icon: "folder",
+                label: "Go to",
+                action: "go",
+                more: true
+            });
+        Sound.panel();
+        menu.show(items, null, Qt.rect(0, 0, 0, 0), "", function (action) {
+            if (action === "go") {
+                Sound.enter();
+                menu.push(browser.shortcuts.map(function (s) {
+                    return {
+                        icon: "folder",
+                        label: s.label,
+                        action: s.path
+                    };
+                }), "Go to", function (path) {
+                    Sound.enter();
+                    browser.go(path);
+                    index = 0;
+                    sheet.forceActiveFocus();
+                });
+                return;
+            }
+            sheet.forceActiveFocus();
+            if (action === "use")
+                useFolder();
+            else if (action === "type")
+                typePath();
+        });
     }
 
     Keys.onUpPressed: {
-        if (zone === "chips") {
+        if (index === 0) {
             Sound.edge();
-        } else if (index === 0) {
-            if (browser.shortcuts.length > 0) {
-                zone = "chips";
-                Sound.tick();
-            } else {
-                Sound.edge();
-            }
         } else {
             index--;
             Sound.tick();
         }
     }
     Keys.onDownPressed: {
-        if (zone === "chips") {
-            zone = "list";
-            Sound.tick();
-        } else if (index < rowCount - 1) {
+        if (index < rowCount - 1) {
             index++;
             Sound.tick();
         } else {
             Sound.edge();
         }
     }
-    Keys.onLeftPressed: moveChip(-1)
-    Keys.onRightPressed: moveChip(1)
 
     Keys.onPressed: function (event) {
         event.accepted = true;
         if (api.keys.isFirst(event) || api.keys.isLast(event)) {
-            zone = "list";
             index = Sound.stepped(index, api.keys.isFirst(event) ? -rowCount : rowCount, rowCount);
             return;
         }
         if (event.isAutoRepeat)
             return;
-        if (api.keys.isAccept(event)) {
+        if (api.keys.isAccept(event))
             activate();
-        } else if (api.keys.isCancel(event)) {
+        else if (api.keys.isCancel(event))
             cancel();
-        } else if (api.keys.isDetails(event)) {
-            if (files) {
-                Sound.edge();
-            } else {
-                Sound.enter();
-                finish(browser.path);
-            }
-        } else if (api.keys.isFilters(event)) {
-            Sound.panel();
-            open = false;
-            focus = false;
-            typeRequested(browser.path);
-        }
+        else if (api.keys.isMenu(event))
+            openMenu();
+        else if (api.keys.isDetails(event))
+            useFolder();
+        else if (api.keys.isFilters(event))
+            typePath();
+        else if (event.key === Qt.Key_Left || event.key === Qt.Key_Right)
+            Sound.edge();
     }
 
     Text {
@@ -184,56 +197,6 @@ Sheet {
         elide: Text.ElideMiddle
     }
 
-    Item {
-        id: chips
-
-        anchors.top: pathText.bottom
-        anchors.topMargin: Theme.dp(12)
-        anchors.horizontalCenter: parent.horizontalCenter
-        // Room for the focus ring, which the clip would otherwise cut at the edges.
-        readonly property real edge: Theme.dp(8)
-        width: sheet.inner + edge * 2
-        height: Theme.dp(45) + edge * 2
-        clip: true
-
-        Row {
-            id: chipRow
-
-            y: chips.edge
-            spacing: Theme.dp(12)
-            x: {
-                var view = chips.width - chips.edge * 2;
-                var item = chipRepeater.itemAt(sheet.chipIndex);
-                if (!item || width <= view)
-                    return chips.edge;
-                var left = item.x, right = item.x + item.width;
-                var shift = Math.max(0, Math.min(right - view, left));
-                return chips.edge - Math.min(shift, width - view);
-            }
-
-            Behavior on x {
-                Ease {
-                    duration: Theme.durQuick
-                }
-            }
-
-            Repeater {
-                id: chipRepeater
-                model: sheet.browser.shortcuts
-
-                Chip {
-                    label: modelData.label
-                    active: modelData.path === sheet.browser.path
-                    focused: sheet.zone === "chips" && index === sheet.chipIndex
-                    onPicked: {
-                        sheet.zone = "chips";
-                        sheet.chipIndex = index;
-                    }
-                }
-            }
-        }
-    }
-
     ListView {
         id: list
 
@@ -241,7 +204,7 @@ Sheet {
             step: sheet.rowHeight
         }
 
-        anchors.top: chips.bottom
+        anchors.top: pathText.bottom
         anchors.topMargin: Theme.dp(12)
         anchors.horizontalCenter: parent.horizontalCenter
         width: sheet.inner
@@ -260,7 +223,7 @@ Sheet {
 
             readonly property bool up: index === 0
             readonly property var entry: up ? null : sheet.entries[index - 1]
-            readonly property bool focused: sheet.zone === "list" && index === sheet.index
+            readonly property bool focused: index === sheet.index
             readonly property color ink: focused ? Theme.onLight : Theme.text
 
             width: list.width
@@ -280,10 +243,7 @@ Sheet {
             Pointer {
                 current: row.focused
                 radius: Theme.dp(14)
-                onPicked: {
-                    sheet.zone = "list";
-                    sheet.index = index;
-                }
+                onPicked: sheet.index = index
             }
 
             MenuGlyph {
@@ -322,5 +282,16 @@ Sheet {
             font.family: Theme.sans
             font.pixelSize: Theme.dp(22)
         }
+    }
+
+    // The sheet's own content sits in its panel; the menu covers the whole sheet, scrim and all.
+    ActionMenu {
+        id: menu
+
+        parent: sheet
+        anchors.fill: parent
+        z: 5
+
+        onDismissed: sheet.forceActiveFocus()
     }
 }

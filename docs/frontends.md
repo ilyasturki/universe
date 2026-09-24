@@ -123,8 +123,9 @@ inherited with no `origin` (a runner's found program) is only that, chipped INHE
 (an empty write, the key leaves the file) so the row inherits again, or a map's entry, which goes
 out of the map. A runner picker's `valueIcon` is the picked runner's logo, drawn by the value;
 `icons` are the choices'. A `path` row under a pad opens the folder sheet (`ui/PathSheet.qml`,
-Switch 2 `FolderSheet`, over `api.screens.paths`: the value's nearest folder, the shortcuts as
-chips, Y to type the path instead); under a keyboard or a mouse Reprise opens the keyboard sheet
+Switch 2 `FolderSheet`, over `api.screens.paths`: the value's nearest folder, Y to type the path
+instead; Switch 2 shows the shortcuts as chips, Reprise's Start opens a menu of Use this folder,
+Type a path… and Go to ›, the shortcuts, X and Y still doing the first two); under a keyboard or a mouse Reprise opens the keyboard sheet
 first, the value in the field, the folders one hop away (Start / F1, or the field's Browse
 button). A map key (`launch.env`, `launch.dll_overrides`) is one `string` row per
 entry (`launch.env.FOO`, `entry` naming the map, on a game's page `origin` per entry: the game's
