@@ -30,11 +30,11 @@ CONFIG_ROWS = [
         "Cursor extension",
         "string",
         (),
-        "The GNOME Shell extension toggled to hide the cursor, restored to its prior state after the session.",
+        "Empty: the Universe extension hides the resting cursor. Else another GNOME Shell extension toggled to hide it, restored to its prior state after the session.",
     ),
 ]
 
-CONFIG_DEFAULTS = {"desktop.profile": "auto", "desktop.cursor_extension": "hide-cursor@elcste.com"}
+CONFIG_DEFAULTS = {"desktop.profile": "auto", "desktop.cursor_extension": ""}
 
 
 def config_row(config, section, key, label, kind, choices, detail):

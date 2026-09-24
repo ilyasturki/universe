@@ -32,6 +32,8 @@ def test_the_bus_calls_match_the_extensions_interface():
     assert methods["Screenshot"] == ("sbb", "b") and '"Screenshot", "sbb"' in shot
     # the core's desktop.rs reads List's JSON and activates by id
     assert methods["List"] == ("", "s") and methods["Activate"] == ("t", "b")
+    desktop = (EXTENSION.parent / "crates" / "universe" / "src" / "desktop.rs").read_text()
+    assert methods["HideCursor"] == ("b", "") and '"HideCursor", &(true,)' in desktop and '"HideCursor", &(false,)' in desktop
 
 
 def test_the_metadata_names_the_shells_it_runs_on():

@@ -239,7 +239,7 @@ impl Default for LaunchDefaults {
 
 impl Default for DesktopConfig {
     fn default() -> Self {
-        DesktopConfig { profile: "auto".into(), hide_cursor: true, cursor_extension: "hide-cursor@elcste.com".into(), keep_awake: true }
+        DesktopConfig { profile: "auto".into(), hide_cursor: true, cursor_extension: String::new(), keep_awake: true }
     }
 }
 

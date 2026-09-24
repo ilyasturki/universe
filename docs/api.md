@@ -22,7 +22,7 @@ operation; a dash means the surface doesn't expose it.
   `ExitType=cgroup` — it lives as long as any process of the game lives. Its
   `ExecStopPost=universe session-end <id> <session>` runs when the cgroup empties, whatever became
   of the launcher: it appends the `sessions.jsonl` line, undoes what the launch began in reverse
-  order (the cursor extension, InputPlumber, `post_command` for `pre_command`) as the marker lists
+  order (the cursor hiding, InputPlumber, `post_command` for `pre_command`) as the marker lists
   them, then runs the `session-end` hooks, then the `post-process` hooks.
 - **Who owns the game's lifetime** depends on the launcher. One that called `adopt_scope()` — the UI,
   and `universe play` without `--no-wait` — was moved into `universe-launcher-<pid>.scope`, and every
@@ -518,8 +518,9 @@ later, for `-ipc` and `gsr-cli`.
 The capture module records the whole **screen** (`source = "screen"`, the default: gpu-screen-recorder's
 KMS capture of the session's output) or the game's **window** (`source = "window"`, per game). The
 window source needs GNOME and the `universe@ilyasturki.github.io` shell extension (`extension/`,
-installed by the home-manager module on NixOS, copied into `~/.local/share/gnome-shell/extensions/`
-elsewhere; loaded after one logout): the module enables it, waits for the game's toplevel
+GNOME 45 to 50, installed by the home-manager module on NixOS, copied into `~/.local/share/gnome-shell/extensions/`
+elsewhere; loaded after one logout; it also hides the resting pointer for `desktop.hide_cursor`
+through `HideCursor(b)`): the module enables it, waits for the game's toplevel
 through `universe session-window --wait` (`window_wait_s`, gamescope's window stays hidden until the
 game draws; the core focuses it once it maps), then runs
 gpu-screen-recorder on GNOME's screencast portal. The first launch of a game shows GNOME's picker —
@@ -815,8 +816,8 @@ pause_on_home = true                 # freeze the game while the launcher covers
 [desktop]
 profile = "auto"                     # auto | gnome | none
 hide_cursor = true
-cursor_extension = "hide-cursor@elcste.com"   # enabled for the session, restored to its prior state after
-keep_awake = true                    # the desktop's idle inhibitor held for the session: a pad is no activity to it, and the screen would blank and suspend mid-game
+cursor_extension = ""                # empty: the Universe extension hides the pointer after 5 s at rest; another extension's uuid is enabled for the session instead, restored to its prior state after
+keep_awake = true                    # the desktop's idle inhibitors held for the session (see universe keep-awake): a pad is no activity to it, and the screen would blank and suspend mid-game
 
 [proton]                             # name → path, none by default; a name with no path here is looked for as a family (GE-Proton10-4 for proton-ge) under Lutris, Steam, umu and Heroic
 # proton-em = "~/.local/share/lutris/runners/wine/proton-em"

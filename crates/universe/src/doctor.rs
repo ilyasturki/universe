@@ -237,7 +237,7 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
     };
     push("proton", &format!("Proton ({name})"), ok, detail, format!("install {name}, or point [proton] {name} at it in config.toml"), "core");
     let gnome = crate::desktop::detect(config) == crate::desktop::Profile::Gnome;
-    if gnome {
+    if gnome && !config.desktop.cursor_extension.is_empty() {
         let ext_ok = crate::desktop::extension_installed(&config.desktop.cursor_extension);
         push(
             "cursor-extension",
@@ -268,7 +268,7 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         let (ok, detail, fix) = if !crate::desktop::extension_installed(uuid) {
             (
                 false,
-                "not installed: window capture falls back to the whole screen".to_string(),
+                "not installed: window capture falls back to the whole screen, and the cursor stays shown in game".to_string(),
                 if nixos {
                     "the home-manager module installs the universe shell extension; log out and back in to load it".to_string()
                 } else {

@@ -265,6 +265,14 @@ pub async fn awake_services() -> Vec<&'static str> {
 
 /// Returns whether the extension was already active. No `extension` is Universe's own, whose `HideCursor` hides the resting pointer.
 pub async fn cursor_extension_enable(conn: &zbus::Connection, profile: Profile, extension: &str) -> bool {
+    if extension.is_empty() {
+        if profile == Profile::Gnome {
+            if let Err(e) = universe_extension_call("HideCursor", &(true,)).await {
+                tracing::warn!("cursor hiding: {e}");
+            }
+        }
+        return true;
+    }
     let Some(proxy) = extensions_proxy(conn, profile, extension).await else { return false };
     let was_active = extension_is_active(extension_state(&proxy, extension).await.flatten());
     if !was_active {
@@ -285,6 +293,14 @@ pub fn extension_is_active(state: Option<f64>) -> bool {
 }
 
 pub async fn cursor_extension_restore(conn: &zbus::Connection, profile: Profile, extension: &str, was_active: bool) {
+    if extension.is_empty() {
+        if profile == Profile::Gnome {
+            if let Err(e) = universe_extension_call("HideCursor", &(false,)).await {
+                tracing::warn!("cursor hiding: {e}");
+            }
+        }
+        return;
+    }
     if was_active {
         return;
     }
@@ -393,19 +409,32 @@ pub fn extension_installed(extension: &str) -> bool {
     dirs.split(':').any(|d| std::path::Path::new(d).join("gnome-shell/extensions").join(extension).exists())
 }
 
-/// org.gnome.Shell.ShowOSD refuses callers other than gsd, so through the extension, enabled on the first call; `level` in [0, 1] shows the bar.
+/// org.gnome.Shell.ShowOSD refuses callers other than gsd, so through the extension; `level` in [0, 1] shows the bar.
 pub async fn show_osd(icon: &str, label: Option<&str>, level: Option<f64>) -> Result<(), String> {
-    let args = (icon, label.unwrap_or(""), level.unwrap_or(-1.0));
+    universe_extension_call("ShowOSD", &(icon, label.unwrap_or(""), level.unwrap_or(-1.0))).await
+}
+
+/// A method of the Universe extension, which the shell is asked to enable when nobody answers the first call.
+async fn universe_extension_call<B>(method: &str, body: &B) -> Result<(), String>
+where
+    B: serde::Serialize + zbus::zvariant::DynamicType,
+{
     let call = async {
         let proxy = windows_proxy().await?;
-        let Err(first) = proxy.call_method("ShowOSD", &args).await else { return Ok(()) };
+        let Err(first) = proxy.call_method(method, body).await else { return Ok(()) };
         let Some(ext) = extensions_proxy(proxy.connection(), Profile::Gnome, UNIVERSE_EXTENSION).await else { return Err(first.to_string()) };
         if !call_bool(&ext, "EnableExtension", UNIVERSE_EXTENSION).await {
             return Err(format!("{first}; the shell has not loaded {UNIVERSE_EXTENSION}"));
         }
-        proxy.call_method("ShowOSD", &args).await.map(|_| ()).map_err(|e| e.to_string())
+        // EnableExtension answers before enable() has taken the bus name.
+        loop {
+            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+            if proxy.call_method(method, body).await.is_ok() {
+                return Ok(());
+            }
+        }
     };
-    tokio::time::timeout(std::time::Duration::from_secs(5), call).await.unwrap_or_else(|_| Err("gnome-shell did not answer".into()))
+    tokio::time::timeout(std::time::Duration::from_secs(5), call).await.unwrap_or_else(|_| Err(format!("{UNIVERSE_EXTENSION} did not answer {method}")))
 }
 
 #[cfg(test)]

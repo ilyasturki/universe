@@ -1,3 +1,4 @@
+import Clutter from 'gi://Clutter';
 import Gio from 'gi://Gio';
 import GLib from 'gi://GLib';
 import Shell from 'gi://Shell';
@@ -6,6 +7,7 @@ import { Extension } from 'resource:///org/gnome/shell/extensions/extension.js';
 
 const BUS_NAME = 'org.universe.Windows';
 const OBJECT_PATH = '/org/universe/Windows';
+const CURSOR_IDLE_MS = 5000;
 
 const IFACE = `
 <node>
@@ -28,6 +30,9 @@ const IFACE = `
       <arg type="b" name="cursor" direction="in"/>
       <arg type="b" name="ok" direction="out"/>
     </method>
+    <method name="HideCursor">
+      <arg type="b" name="on" direction="in"/>
+    </method>
   </interface>
 </node>`;
 
@@ -39,9 +44,47 @@ export default class UniverseExtension extends Extension {
     }
 
     disable() {
+        this.HideCursor(false);
         Gio.bus_unown_name(this._nameId);
         this._dbus.unexport();
         this._dbus = null;
+    }
+
+    // While on, the pointer hides once it has rested CURSOR_IDLE_MS and shows again when it moves.
+    HideCursor(on) {
+        if (on && !this._cursorTimer) {
+            this._tracker = global.backend.get_cursor_tracker();
+            this._seat = Clutter.get_default_backend().get_default_seat();
+            this._cursorMoved = Date.now();
+            this._movedId = this._tracker.connect('position-invalidated', () => {
+                this._cursorMoved = Date.now();
+                this._setCursorHidden(false);
+            });
+            this._cursorTimer = GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
+                if (Date.now() - this._cursorMoved >= CURSOR_IDLE_MS) this._setCursorHidden(true);
+                return GLib.SOURCE_CONTINUE;
+            });
+        } else if (!on && this._cursorTimer) {
+            GLib.Source.remove(this._cursorTimer);
+            this._cursorTimer = 0;
+            this._tracker.disconnect(this._movedId);
+            this._setCursorHidden(false);
+            this._tracker = this._seat = null;
+        }
+    }
+
+    // A hidden pointer unfocuses its surface unless held; Mutter 49 counts visibility inhibitors, before it the visibility is one flag.
+    _setCursorHidden(hidden) {
+        if (hidden === Boolean(this._cursorHidden)) return;
+        this._cursorHidden = hidden;
+        if (hidden) this._seat.inhibit_unfocus();
+        else this._seat.uninhibit_unfocus();
+        if (this._tracker.inhibit_cursor_visibility) {
+            if (hidden) this._tracker.inhibit_cursor_visibility();
+            else this._tracker.uninhibit_cursor_visibility();
+        } else {
+            this._tracker.set_pointer_visible(!hidden);
+        }
     }
 
     // The ids are what org.gnome.Mutter.ScreenCast.Session.RecordWindow takes as window-id.
