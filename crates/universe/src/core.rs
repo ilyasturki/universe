@@ -559,7 +559,7 @@ impl Core {
     /// The game as gamescope last painted it, without the overlay: `state/frame.png`, or `None` when nothing was painted in time.
     pub fn nest_frame(&self) -> Result<Option<String>> {
         let started = std::time::Instant::now();
-        let shot = self.nest_or()?.frame(&paths::state_home().join("frame.png"), FRAME_WAIT)?;
+        let shot = self.nest_or()?.frame(&paths::state_home().join("frame.png"), crate::nest::Shot::BasePlane, FRAME_WAIT)?;
         match &shot {
             Some(_) => tracing::debug!("nest: frame in {} ms", started.elapsed().as_millis()),
             None => tracing::warn!("nest: no frame within {} ms", FRAME_WAIT.as_millis()),

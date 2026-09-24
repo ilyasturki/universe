@@ -10,7 +10,13 @@ use crate::{Error, Result};
 
 /// gamescope's fixed screenshot path; a new mtime is a new shot.
 const SCREENSHOT_PATH: &str = "/tmp/gamescope.png";
-const SCREENSHOT_BASE_PLANE: u32 = 1;
+
+/// gamescope-control's `screenshot_type`: the game alone at its render size, or with the overlay layers (mangoapp's HUD, a visible dock).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Shot {
+    BasePlane = 1,
+    AllRealLayers = 2,
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Focusable {
@@ -94,10 +100,11 @@ impl Nest {
         Ok(())
     }
 
-    pub fn frame(&self, into: &Path, timeout: Duration) -> Result<Option<PathBuf>> {
+    /// gamescope takes one shot at a time: a request made while another is in flight is dropped, and waits out `timeout`.
+    pub fn frame(&self, into: &Path, shot: Shot, timeout: Duration) -> Result<Option<PathBuf>> {
         let src = Path::new(SCREENSHOT_PATH);
         let before = std::fs::metadata(src).and_then(|m| m.modified()).ok();
-        self.set_card(self.root, "GAMESCOPECTRL_REQUEST_SCREENSHOT", SCREENSHOT_BASE_PLANE)?;
+        self.set_card(self.root, "GAMESCOPECTRL_REQUEST_SCREENSHOT", shot as u32)?;
         let deadline = Instant::now() + timeout;
         loop {
             let now = std::fs::metadata(src).and_then(|m| m.modified()).ok();

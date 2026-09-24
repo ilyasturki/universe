@@ -61,6 +61,20 @@ def take_in_shell(path, window, cursor):
     )
 
 
+def take_in_gamescope(path, window):
+    """gamescope's own shot of its screen, whatever the desktop around it: the game alone, else with the HUD over it."""
+    cmd = [os.environ.get("UNIVERSE_BIN") or "universe", "nest-shot", path, *([] if window else ["--overlays"])]
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=TAKE_TIMEOUT_S, check=False)
+    except (OSError, subprocess.SubprocessError) as e:
+        log(f"universe nest-shot: {e}")
+        return False
+    if r.returncode == 0 and os.path.exists(path) and os.path.getsize(path) > 0:
+        return True
+    log(f"universe nest-shot {path} failed: {r.stderr.strip()}")
+    return False
+
+
 def take_with_gsr(screen, path):
     # gsr leaves gsr-kms-server running (reparented): a stderr pipe would block on it, and killpg reaps it.
     with tempfile.TemporaryFile(mode="w+") as errf:
@@ -85,8 +99,13 @@ def main():
     os.makedirs(directory, exist_ok=True)
     path = os.path.join(directory, time.strftime("%Y%m%d-%H%M%S") + ".png")
 
-    if extension_ready():
-        if take_in_shell(path, bool(settings.get("window", True)), bool(settings.get("cursor"))):
+    window = bool(settings.get("window", True))
+    if os.environ.get("GAMESCOPE_WAYLAND_DISPLAY"):
+        if take_in_gamescope(path, window):
+            print(path)
+            return 0
+    elif extension_ready():
+        if take_in_shell(path, window, bool(settings.get("cursor"))):
             print(path)
             return 0
         log(f"the shell refused {path} or did not answer")

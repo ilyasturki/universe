@@ -323,6 +323,14 @@ pub enum Cmd {
         #[arg(long, default_value = "a game is running")]
         reason: String,
     },
+    /// Save what the gamescope around this process shows to <path>, through its own screenshot: the screenshot module inside the launcher's gamescope
+    #[command(name = "nest-shot", hide = true)]
+    NestShot {
+        path: std::path::PathBuf,
+        /// The overlay layers too (mangoapp's HUD), not the game alone
+        #[arg(long)]
+        overlays: bool,
+    },
     /// Completion candidates for the shell: games | sources | modules | …
     #[command(name = "__complete", hide = true)]
     Complete { what: String },
@@ -661,6 +669,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Cmd::LaunchKeys => return launch_keys(json),
         Cmd::Splash { image, cmd } => std::process::exit(crate::splash::run(image.as_deref(), cmd)),
         Cmd::KeepAwake { reason } => return keep_awake(reason).await,
+        Cmd::NestShot { path, overlays } => return nest_shot(path, *overlays),
         _ => {}
     }
     let core = Core::open().await?;
@@ -1466,7 +1475,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 println!("  {} {}", k.path.dimmed(), k.reason);
             }
         }
-        Cmd::Complete { .. } | Cmd::Generate { .. } | Cmd::Splash { .. } | Cmd::LaunchKeys | Cmd::KeepAwake { .. } => unreachable!(),
+        Cmd::Complete { .. } | Cmd::Generate { .. } | Cmd::Splash { .. } | Cmd::LaunchKeys | Cmd::KeepAwake { .. } | Cmd::NestShot { .. } => unreachable!(),
     }
     Ok(())
 }
@@ -1623,6 +1632,18 @@ async fn keep_awake(reason: &str) -> anyhow::Result<()> {
         _ = term.recv() => {}
     }
     inhibitor.release().await;
+    Ok(())
+}
+
+fn nest_shot(path: &std::path::Path, overlays: bool) -> anyhow::Result<()> {
+    const WAIT: std::time::Duration = std::time::Duration::from_secs(10);
+    let nest = crate::nest::Nest::open()?;
+    if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+        std::fs::create_dir_all(dir)?;
+    }
+    let shot = if overlays { crate::nest::Shot::AllRealLayers } else { crate::nest::Shot::BasePlane };
+    let Some(saved) = nest.frame(path, shot, WAIT)? else { anyhow::bail!("gamescope wrote no screenshot within {} s", WAIT.as_secs()) };
+    println!("{}", saved.display());
     Ok(())
 }
 

@@ -577,8 +577,14 @@ back as a `screenshot` event on the watcher (`{"event": "screenshot", "path": â€
 when it failed). A journal entry names them by basename, which resolves to `screenshots/`.
 
 The **screenshot** module takes them, apart from recording: its own `enabled` switch, per game, is
-whether a game takes screenshots at all, and capture's settings have no say. Its hook grabs the
-frame in the shell through the extension (`org.universe.Windows.Screenshot(path, window, cursor)`):
+whether a game takes screenshots at all, and capture's settings have no say. Inside the launcher's
+gamescope (`GAMESCOPE_WAYLAND_DISPLAY` set) its hook asks gamescope itself, whatever the desktop:
+`universe nest-shot <path> [--overlays]` sets `GAMESCOPECTRL_REQUEST_SCREENSHOT` on its root and
+copies the `/tmp/gamescope.png` it writes â€” the game alone at its render size with `window = true`,
+the overlay layers (mangoapp's HUD) too with `false`. gamescope takes one shot at a time, so a
+screenshot pressed while HOME's frame of the game is being taken is dropped, and the hook falls back
+to gpu-screen-recorder as below.
+Elsewhere it grabs the frame in the shell through the extension (`org.universe.Windows.Screenshot(path, window, cursor)`):
 the focused window's client area with `window = true` (the default), every monitor with `false`, the
 cursor per `cursor` (both per game). Mutter reads the framebuffer synchronously, so the hook returns at the
 press, before the PNG is encoded; a write that fails afterwards is a shell notification. Off GNOME

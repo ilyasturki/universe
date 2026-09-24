@@ -32,6 +32,12 @@ esac
 exit 0''',
     )
     _write_shim(
+        bindir / "universe",
+        f'''printf "%s\\n" "$@" >> "{logs}/universe.args"
+[ "${{FAKE_NEST_OK:-true}}" = true ] || {{ echo "gamescope wrote no screenshot" >&2; exit 1; }}
+echo fake > "$2"; echo "$2"''',
+    )
+    _write_shim(
         bindir / "gpu-screen-recorder",
         f'''printf "%s\\n" "$@" >> "{logs}/gsr.args"
 for ((i=1; i<=$#; i++)); do [ "${{!i}}" = "-o" ] && {{ j=$((i+1)); echo fake > "${{!j}}"; }}; done
@@ -94,6 +100,23 @@ def test_a_refused_shell_grab_falls_back_to_gsr_on_the_sessions_screen(tmp_path,
     assert result.returncode == 0, result.stderr
     assert "the shell refused" in result.stderr
     assert gsr_flag(fakebin, "-o") == [result.stdout.strip()] and gsr_flag(fakebin, "-w") == ["HDMI-A-1"]
+
+
+def test_inside_gamescope_its_own_shot_is_taken_and_the_shell_left_alone(tmp_path, fakebin):
+    nested = {"GAMESCOPE_WAYLAND_DISPLAY": "gamescope-0", "UNIVERSE_BIN": str(fakebin["bin"] / "universe")}
+    result = run(env_for(tmp_path, fakebin, {}, extension=True, FAKE_NAME_OWNED="true", **nested))
+    assert result.returncode == 0, result.stderr
+    assert (fakebin["logs"] / "universe.args").read_text() == f"nest-shot\n{result.stdout.strip()}\n"
+    assert not (fakebin["logs"] / "busctl.args").exists()
+    result = run(env_for(tmp_path, fakebin, {"window": False}, **nested))
+    assert (fakebin["logs"] / "universe.args").read_text().endswith(f"nest-shot\n{result.stdout.strip()}\n--overlays\n"), "every layer: the HUD too"
+
+
+def test_a_failed_gamescope_shot_falls_back_to_gsr(tmp_path, fakebin):
+    nested = {"GAMESCOPE_WAYLAND_DISPLAY": "gamescope-0", "UNIVERSE_BIN": str(fakebin["bin"] / "universe"), "FAKE_NEST_OK": "false"}
+    result = run(env_for(tmp_path, fakebin, {}, **nested))
+    assert result.returncode == 0, result.stderr
+    assert "gamescope wrote no screenshot" in result.stderr and gsr_flag(fakebin, "-o") == [result.stdout.strip()]
 
 
 def test_no_shell_and_no_gsr_fails_saying_so(tmp_path, fakebin):
