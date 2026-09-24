@@ -620,6 +620,11 @@ mod tests {
             "off by config, hidden: {:?}",
             std::fs::read_to_string(&conf)
         );
+        if crate::runners::on_path("mangohud").is_none() {
+            assert!(matches!(core.set_mangohud(None).await, Err(Error::Unavailable(_))), "no MangoHud installed: nothing to draw the HUD");
+            assert_eq!(core.get("sample").await.unwrap().game.launch.mangohud, None, "and nothing written");
+            return;
+        }
 
         assert!(core.set_mangohud(None).await.unwrap(), "off flips on");
         assert_eq!(core.get("sample").await.unwrap().game.launch.mangohud, Some(true), "written as the game's own key");
