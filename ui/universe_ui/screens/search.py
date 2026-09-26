@@ -67,7 +67,7 @@ SYNONYMS = {
     "sgdb_file": ["steamgriddb", "api key", "token"],
     "rawg": ["api key", "token", "metadata"],
     "rawg_file": ["api key", "token"],
-    "profile": ["gnome", "shell", "integration", "desktop environment"],
+    "profile": ["gnome", "kde", "plasma", "cinnamon", "sway", "hyprland", "niri", "x11", "compositor", "integration", "desktop environment"],
     "cursor_extension": ["gnome", "shell extension", "cursor"],
     "hold_ms": ["long press", "hold", "duration", "milliseconds"],
     "volume_step": ["volume", "loudness", "sound", "percent"],

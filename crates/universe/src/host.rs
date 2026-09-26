@@ -545,30 +545,22 @@ pub enum Shell {
 }
 
 impl Shell {
-    /// Returns whether the extension was already active.
-    pub async fn cursor_enable(&self) -> bool {
+    pub async fn cursor_enable(&self) -> crate::desktop::CursorUndo {
         match self {
-            Shell::Live { profile, extension } => match session_bus().await {
-                Some(conn) => crate::desktop::cursor_extension_enable(&conn, *profile, extension).await,
-                None => false,
-            },
+            Shell::Live { profile, extension } => crate::desktop::hide_cursor(*profile, extension).await,
             #[cfg(test)]
             Shell::Memory(m) => {
                 m.record("cursor:enable".into());
-                false
+                crate::desktop::CursorUndo::Nothing
             }
         }
     }
 
-    pub async fn cursor_restore(&self, was_active: bool) {
+    pub async fn cursor_restore(&self, undo: &crate::desktop::CursorUndo) {
         match self {
-            Shell::Live { profile, extension } => {
-                if let Some(conn) = session_bus().await {
-                    crate::desktop::cursor_extension_restore(&conn, *profile, extension, was_active).await;
-                }
-            }
+            Shell::Live { .. } => crate::desktop::restore_cursor(undo).await,
             #[cfg(test)]
-            Shell::Memory(m) => m.record(format!("cursor:restore({was_active})")),
+            Shell::Memory(m) => m.record("cursor:restore".into()),
         }
     }
 }

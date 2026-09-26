@@ -49,8 +49,15 @@ pub struct Marker {
 #[serde(tag = "step", rename_all = "snake_case")]
 pub enum Undo {
     Pads,
-    Cursor { was_active: bool },
-    PostCommand { command: String, cwd: String, env: BTreeMap<String, String> },
+    Cursor {
+        #[serde(default)]
+        restore: crate::desktop::CursorUndo,
+    },
+    PostCommand {
+        command: String,
+        cwd: String,
+        env: BTreeMap<String, String>,
+    },
     Hud,
 }
 
@@ -244,8 +251,8 @@ impl Core {
             self.host.pads.ensure_free().await;
         }
         if r.effective.hide_cursor {
-            let was_active = self.host.shell.cursor_enable().await;
-            undo.push(Undo::Cursor { was_active });
+            let restore = self.host.shell.cursor_enable().await;
+            undo.push(Undo::Cursor { restore });
         }
         if current.gamescope_pid != 0 && launcher::mangoapp_installed() {
             self.apply_mangoapp(r.effective.mangohud, true)?;
@@ -282,7 +289,7 @@ impl Core {
     async fn rollback(&self, undo: &[Undo]) {
         for step in undo.iter().rev() {
             match step {
-                Undo::Cursor { was_active } => self.host.shell.cursor_restore(*was_active).await,
+                Undo::Cursor { restore } => self.host.shell.cursor_restore(restore).await,
                 Undo::Pads => self.host.pads.release().await,
                 // From ExecStopPost the launcher's gamescope may be gone already: told only while it is there.
                 Undo::Hud => {
@@ -542,7 +549,7 @@ mod tests {
         let marker = read_marker().expect("a marker");
         assert_eq!((marker.current.session_id.as_str(), marker.current.unit.as_str()), (sid.as_str(), unit.as_str()));
         assert_eq!(undo_steps(&marker), ["post_command", "pads", "cursor"]);
-        assert_eq!(marker.undo[2], Undo::Cursor { was_active: false });
+        assert_eq!(marker.undo[2], Undo::Cursor { restore: crate::desktop::CursorUndo::Nothing });
         assert_eq!(core.current().await.map(|c| c.id).as_deref(), Some("sample"));
         assert!(!sb.post_ran.exists());
 
@@ -557,7 +564,7 @@ mod tests {
         assert!(sb.post_ran.exists(), "post_command ran");
         let calls = memory.calls();
         assert_eq!(calls[..3], ["pads:engage".to_string(), "cursor:enable".into(), format!("unit:start {unit}")]);
-        assert_eq!(calls[calls.len() - 2..], ["cursor:restore(false)", "pads:release"], "{calls:?}");
+        assert_eq!(calls[calls.len() - 2..], ["cursor:restore", "pads:release"], "{calls:?}");
 
         core.session_end("sample", &sid, None, None).await.unwrap();
         assert_eq!(sessions::read(&core.get("sample").await.unwrap().game.sessions_path()).unwrap().len(), 1, "idempotent");
@@ -653,7 +660,7 @@ mod tests {
         assert!(read_marker().is_none());
         assert!(sb.post_ran.exists());
         let calls = memory.calls();
-        assert_eq!(calls[calls.len() - 2..], ["cursor:restore(false)", "pads:release"]);
+        assert_eq!(calls[calls.len() - 2..], ["cursor:restore", "pads:release"]);
         assert!(core.launch("sample", "", "").await.is_ok(), "the next launch is not Busy");
     }
 
@@ -670,7 +677,7 @@ mod tests {
         let calls = memory.calls();
         assert_eq!(calls[..2], ["pads:engage", "cursor:enable"]);
         assert!(calls[2].starts_with("unit:start universe-game-sample-"), "{calls:?}");
-        assert_eq!(calls[3..], ["cursor:restore(false)", "pads:release"]);
+        assert_eq!(calls[3..], ["cursor:restore", "pads:release"]);
         memory.refuse_starts(false);
         assert!(core.launch("sample", "", "").await.is_ok());
     }

@@ -1,6 +1,7 @@
 use serde::Serialize;
 
 use crate::config::Config;
+use crate::desktop::Profile;
 use crate::distro::Family;
 use crate::modules::Module;
 use crate::sources::Source;
@@ -236,9 +237,53 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         (None, None) => (false, format!("{name} not found: umu-run runs games on its own UMU-Proton instead")),
     };
     push("proton", &format!("Proton ({name})"), ok, detail, format!("install {name}, or point [proton] {name} at it in config.toml"), "core");
-    let gnome = crate::desktop::detect(config) == crate::desktop::Profile::Gnome;
+    let desktop = crate::desktop::detect(config);
+    let gnome = desktop == Profile::Gnome;
+    push(
+        "desktop",
+        "Desktop",
+        desktop != Profile::None || config.desktop.profile == "none",
+        match (desktop, config.desktop.profile.as_str()) {
+            (Profile::None, "none") => "none (desktop.profile): no window focus, OSD or screenshots from the desktop".into(),
+            (Profile::None, _) => "none detected: the launcher cannot focus a game's window, draw the OSD or take screenshots on this desktop".into(),
+            (d, "auto") => format!("{} (detected)", d.name()),
+            (d, _) => format!("{} (desktop.profile)", d.name()),
+        },
+        format!("set desktop.profile to one of {}, or to none to stop asking", crate::desktop::PROFILES[1..crate::desktop::PROFILES.len() - 1].join(", ")),
+        "core",
+    );
+    for (tool, package, purpose) in crate::desktop::tools(desktop) {
+        let found = which(tool);
+        push(
+            &format!("desktop-{tool}"),
+            tool,
+            found.is_some(),
+            found.map(|p| format!("{p}: {purpose}")).unwrap_or_else(|| format!("not on PATH: no {purpose}")),
+            if nixos { format!("add pkgs.{package} to your packages") } else { format!("install {package}") },
+            "core",
+        );
+    }
+    if crate::desktop::osd_by_notification(desktop) {
+        let owned = match &bus {
+            Some(conn) => crate::desktop::name_owned(conn, "org.freedesktop.Notifications").await,
+            None => false,
+        };
+        push(
+            "desktop-notifications",
+            "OSD notifications",
+            owned,
+            if owned { "the volume and recording OSD show as notifications".into() } else { "no notification daemon: no volume or recording OSD".into() },
+            "run a notification daemon: mako, dunst, swaync or fnott draw the level as a bar".into(),
+            "core",
+        );
+    }
+    if config.desktop.hide_cursor {
+        if let Err(why) = crate::desktop::cursor_route(desktop) {
+            push("cursor", "Cursor hiding", false, why.to_string(), "set desktop.hide_cursor = false to stop asking".into(), "core");
+        }
+    }
     if gnome && !config.desktop.cursor_extension.is_empty() {
-        let ext_ok = crate::desktop::extension_installed(&config.desktop.cursor_extension);
+        let ext_ok = crate::desktop::gnome::extension_installed(&config.desktop.cursor_extension);
         push(
             "cursor-extension",
             "Cursor hiding extension",
@@ -253,8 +298,10 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         push(
             "keep-awake",
             "Desktop stays awake in game",
-            !services.is_empty(),
-            if services.is_empty() {
+            !services.is_empty() || desktop == Profile::Sway,
+            if services.is_empty() && desktop == Profile::Sway {
+                "logind's idle lock held while a game runs: swayidle waits on it".into()
+            } else if services.is_empty() {
                 "neither org.freedesktop.ScreenSaver nor org.freedesktop.PowerManagement on the session bus: only logind's idle lock is held, and the screen may blank mid-game".into()
             } else {
                 format!("{} and logind's idle lock held while a game runs", services.join(", "))
@@ -265,7 +312,7 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
     }
     if gnome {
         let uuid = crate::desktop::UNIVERSE_EXTENSION;
-        let (ok, detail, fix) = if !crate::desktop::extension_installed(uuid) {
+        let (ok, detail, fix) = if !crate::desktop::gnome::extension_installed(uuid) {
             (
                 false,
                 "not installed: window capture falls back to the whole screen, and the cursor stays shown in game".to_string(),
@@ -278,12 +325,12 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         } else {
             let mut state = None;
             if let Some(conn) = shell {
-                if let Some(p) = crate::desktop::extensions_proxy(conn, crate::desktop::Profile::Gnome, uuid).await {
-                    state = crate::desktop::extension_state(&p, uuid).await;
+                if let Some(p) = crate::desktop::gnome::extensions_proxy(conn).await {
+                    state = crate::desktop::gnome::extension_state(&p, uuid).await;
                 }
             }
             match state {
-                Some(s) if crate::desktop::extension_is_active(s) => (true, format!("{uuid} active"), String::new()),
+                Some(s) if crate::desktop::gnome::extension_is_active(s) => (true, format!("{uuid} active"), String::new()),
                 Some(Some(_)) => (false, "installed but not enabled".to_string(), format!("gnome-extensions enable {uuid}")),
                 Some(None) => (false, "installed but not loaded yet".to_string(), "log out and back in to load it".to_string()),
                 None => (false, "installed; GNOME Shell did not answer".to_string(), "check that GNOME Shell is running, then refresh".to_string()),

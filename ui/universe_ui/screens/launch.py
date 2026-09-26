@@ -21,8 +21,8 @@ CONFIG_ROWS = [
         "desktop.profile",
         "Desktop",
         "enum",
-        ("auto", "gnome", "none"),
-        "What the launcher integrates with: auto detects GNOME, none skips the shell extension and cursor hiding.",
+        ("auto", "gnome", "kde", "cinnamon", "sway", "hyprland", "niri", "x11", "none"),
+        "The desktop the launcher focuses windows, shows its OSD, takes screenshots and hides the cursor on: auto detects it, none skips all of that.",
     ),
     (
         "Desktop",

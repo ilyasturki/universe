@@ -4,7 +4,6 @@ import xml.etree.ElementTree as ET
 from pathlib import Path
 
 EXTENSION = Path(__file__).resolve().parents[1]
-MODULES = EXTENSION.parent / "modules"
 
 
 def interface():
@@ -25,15 +24,12 @@ def interface():
 
 def test_the_bus_calls_match_the_extensions_interface():
     name, methods = interface()
-    common = (MODULES / "capture" / "bin" / "_common.py").read_text()
-    shot = (MODULES / "screenshot" / "bin" / "shot").read_text()
-    assert f'WINDOWS_BUS_NAME = "{name}"' in common and f'WINDOWS_BUS_NAME = "{name}"' in shot
-    assert methods["ShowOSD"] == ("ssd", "") and '"ShowOSD", "ssd"' in common
-    assert methods["Screenshot"] == ("sbb", "b") and '"Screenshot", "sbb"' in shot
-    # the core's desktop.rs reads List's JSON and activates by id
+    gnome = (EXTENSION.parent / "crates" / "universe" / "src" / "desktop" / "gnome.rs").read_text()
+    assert f'"{name}", "/org/universe/Windows", "{name}"' in gnome
+    assert methods["ShowOSD"] == ("ssd", "") and '"ShowOSD", &(icon, label, level.unwrap_or(-1.0))' in gnome
+    assert methods["Screenshot"] == ("sbb", "b") and '"Screenshot", &(path.to_string_lossy().as_ref(), window, cursor)' in gnome
     assert methods["List"] == ("", "s") and methods["Activate"] == ("t", "b")
-    desktop = (EXTENSION.parent / "crates" / "universe" / "src" / "desktop.rs").read_text()
-    assert methods["HideCursor"] == ("b", "") and '"HideCursor", &(true,)' in desktop and '"HideCursor", &(false,)' in desktop
+    assert methods["HideCursor"] == ("b", "") and '"HideCursor", &(true,)' in gnome and '"HideCursor", &(false,)' in gnome
 
 
 def test_the_metadata_names_the_shells_it_runs_on():

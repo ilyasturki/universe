@@ -31,7 +31,13 @@ pub fn cache_home() -> PathBuf {
     universe_home("UNIVERSE_CACHE_HOME", "XDG_CACHE_HOME", ".cache")
 }
 
-/// xdg-user-dirs: `$XDG_<NAME>_DIR`, else the entry in `~/.config/user-dirs.dirs`, else `~/<fallback>`.
+pub fn runtime_dir() -> PathBuf {
+    let dir = std::env::var_os("XDG_RUNTIME_DIR").map(PathBuf::from).filter(|p| p.is_absolute()).unwrap_or_else(state_home).join("universe");
+    let _ = std::fs::create_dir_all(&dir);
+    dir
+}
+
+/// xdg-user-dirs:`$XDG_<NAME>_DIR`, else the entry in `~/.config/user-dirs.dirs`, else `~/<fallback>`.
 pub fn user_dir(name: &str, fallback: &str) -> PathBuf {
     let var = format!("XDG_{name}_DIR");
     if let Some(p) = std::env::var_os(&var).map(PathBuf::from).filter(|p| p.is_absolute()) {

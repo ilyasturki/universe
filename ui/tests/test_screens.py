@@ -341,7 +341,8 @@ def test_launch_form(api, fake):
     config_rows = rows_by_key(form)
     assert config_rows["paths.games_root"]["value"] == "/mnt/games/PC" and config_rows["paths.games_root"]["type"] == "path"
     assert config_rows["keys.sgdb"]["display"] == "—" and config_rows["keys.sgdb"]["secret"] is True
-    assert config_rows["desktop.profile"]["value"] == "auto" and config_rows["desktop.profile"]["choices"] == ["auto", "gnome", "none"]
+    assert config_rows["desktop.profile"]["value"] == "auto"
+    assert config_rows["desktop.profile"]["choices"] == ["auto", "gnome", "kde", "cinnamon", "sway", "hyprland", "niri", "x11", "none"]
     assert form.setValue(index_of(form, "keys.sgdb"), "abc123") is True and fake.config()["keys"]["sgdb"] == "abc123"
     assert rows_by_key(form)["keys.sgdb"]["display"] == "Set" and rows_by_key(form)["keys.sgdb"]["value"] == "abc123"
     assert form.setMapEntry(index_of(form, "launch.env"), "MANGOHUD", "1") is True and fake.config()["launch"]["env"] == {"MANGOHUD": "1"}, (

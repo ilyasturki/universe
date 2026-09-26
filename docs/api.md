@@ -127,8 +127,8 @@ hooks write shows up that way, with no other channel.
 |---|---|---|---|
 | `launch(id, screen, splash)` | `launch(id, screen, splash="")` | `universe play <name> [--screen DP-1] [--no-wait]` | pre-launch hooks, marker, `StartTransientUnit` on the user manager, post-launch hooks; returns the `session_id` at once. `screen` is a DRM connector name or `""` for the first the display server is drawing on (`status` `connected` **and** `enabled` not `disabled`, alphabetical; the cabled ones when that leaves none) — a cable to a dark monitor is not a screen a recorder can name; `splash` a poster for gamescope's keep-alive window (see Gamescope) or `""`. `Busy` if a session is already running |
 | `stop(session_id)` | `stop(session_id)` | `universe stop` | SIGTERM to the game's processes (those under `universe splash`; every process of the unit when there is no gamescope of its own), up to 10 s for them to exit on their own terms — an emulator saves its caches — then a stop job on the unit, waited for 10 s at most. The SIGTERM is repeated every 3 s unless the runner's spec says once (`term_twice`): Dolphin takes the first as a "quit?" prompt and needs the second; Eden's handler resets to the default disposition, so a second would kill it mid-shutdown. Eden with its `confirmStop` at the default asks "close?" on the first and is killed by the stop job: doctor's `runner-eden-stop` says so |
-| `session_window()` | `session_window()` | `universe session-window [--json]` | the running game's window as the Universe shell extension lists it (`{id, pid, wm_class, title, focused, width, height, hidden, minimized}`): the largest visible toplevel whose pid is in the unit's cgroup — gamescope's when the game runs inside it. `None` before it maps; `Unavailable` off GNOME |
-| `wait_session_window(session_id, timeout)` | `wait_session_window(session_id, timeout_ms)` | `universe session-window --wait <secs> [--json]` | blocks until that window is up, then `Activate`s it (focus and raise) and returns it; `None` when the session ended first or the timeout ran out (the CLI prints `null`, exit 0); `Unavailable` off GNOME, at once. Polls the extension every 150 ms |
+| `session_window()` | `session_window()` | `universe session-window [--json]` | the running game's window as the desktop lists it (see Desktop; `{id, pid, wm_class, title, focused, x, y, width, height, hidden, minimized}`, `id` the desktop's own handle as a string): the largest visible toplevel whose pid is in the unit's cgroup — gamescope's when the game runs inside it. `None` before it maps; `Unavailable` where the profile has no window list |
+| `wait_session_window(session_id, timeout)` | `wait_session_window(session_id, timeout_ms)` | `universe session-window --wait <secs> [--json]` | blocks until that window is up, then `Activate`s it (focus and raise) and returns it; `None` when the session ended first or the timeout ran out (the CLI prints `null`, exit 0); `Unavailable` where the profile has no window list, at once. Polls the desktop every 150 ms |
 | `focus_session()` / `focus_pid(pid)` | `focus_session()` / `focus_pid(pid)` | — | `Activate` on the game's window / on the largest window of a process (a frontend's own, once the game is gone). On the launcher's gamescope (see Gamescope) `focus_session` shows the game again and `focus_pid(own pid)` takes the screen back from it |
 | `freeze(on)` | `freeze(on)` | — | `FreezeUnit` / `ThawUnit` on the running game's unit: every process of it stops in place, then the `freeze` / `thaw` hooks run (the capture module pauses its recorder). A stop job thaws on its own, so `stop` works on a frozen game |
 | `volume(change, value)` | `volume(change, value=0)` | — | the default sink through `wpctl`: `up` / `down` by `controller.volume_step`, `mute` toggles, `set` to `value` percent, `get`; returns `{percent, muted, output}` |
@@ -679,7 +679,7 @@ that is not `*.json` are ignored, and `render_journal` only renders `written` en
 | `module_settings(module, game_id)` | `module_settings(…)` | `universe module settings <id> [game]` | global settings merged with the game's; `game_id=""` is global only |
 | `set_module_setting(module, game_id, key, value)` | `set_module_setting(…)` | `universe module set <id> k=v [--game g]` | validated against `[[settings]]`. `game_id=""` writes `config.toml [modules.<id>]`, otherwise `game.toml [modules.<id>]` |
 | `module_setting_choices(module, key)` | `module_setting_choices(…)` | — | the global setting's choices; a setting with `choices_exec` gets them from the module, live (see below) |
-| `doctor()` | `doctor()` | `universe doctor` | `[{check, label, ok, detail, fix, module}]` (`check` a stable id, `label` its plain name, `detail` the problem when not `ok`, `fix` what to do about it, empty when `ok`, worded for the distribution: NixOS options on NixOS, the Arch, Fedora or Debian package names elsewhere): the config file (absent: defaults; read-only), the systemd user manager (250 or later, for `ExitType=cgroup`) and cgroup v2, umu-run (or python3 for the one Universe would fetch), MangoHud and its 32-bit layer, gamescope and mangoapp, required binaries of the enabled modules and sources (`module` names the one, or `core`, `runners`, `media`, `controller`; a tool Universe fetches is fine missing), one line per `required` setting an enabled module is still waiting on, `gsr-kms-server`, Proton, the cursor and Universe extensions on GNOME, tokens, one `runner-<id>` check per runner a library game uses (its program resolved), `runner-eden-stop` when Eden is one (its `[UI] confirmStop` at `2`, else a stop shows its "close?" question), `inputplumber` when an emulator wants it; `modules` and `sources` say what `config.toml` enables that is not found |
+| `doctor()` | `doctor()` | `universe doctor` | `[{check, label, ok, detail, fix, module}]` (`check` a stable id, `label` its plain name, `detail` the problem when not `ok`, `fix` what to do about it, empty when `ok`, worded for the distribution: NixOS options on NixOS, the Arch, Fedora or Debian package names elsewhere): the config file (absent: defaults; read-only), the systemd user manager (250 or later, for `ExitType=cgroup`) and cgroup v2, umu-run (or python3 for the one Universe would fetch), MangoHud and its 32-bit layer, gamescope and mangoapp, required binaries of the enabled modules and sources (`module` names the one, or `core`, `runners`, `media`, `controller`; a tool Universe fetches is fine missing), one line per `required` setting an enabled module is still waiting on, `gsr-kms-server`, Proton, the desktop (`desktop`, then per profile the programs it drives, `desktop-<program>`, a notification daemon where the OSD is a notification, `cursor` where the profile cannot hide it), the cursor and Universe extensions on GNOME, tokens, one `runner-<id>` check per runner a library game uses (its program resolved), `runner-eden-stop` when Eden is one (its `[UI] confirmStop` at `2`, else a stop shows its "close?" question), `inputplumber` when an emulator wants it; `modules` and `sources` say what `config.toml` enables that is not found |
 
 A module entry is `{id, name, version, description, dir, enabled, available, missing: [bin],
 unset: [key], hooks: {}, settings: [Setting]}`, and
@@ -694,6 +694,36 @@ takes a listed non-numeric name (`"auto"`), which the module resolves itself. `d
 set when the manifest names a `choices_exec`: `<module dir>/<choices_exec> <key>`, run with
 `MODULE_SETTINGS_JSON`, `MODULE_DIR`, `MODULE_DATA_DIR` and `UNIVERSE_BIN` (the capture module asks it
 `screen-mode` for the fps choices), prints the choices as a JSON array of strings (20 s at most).
+
+## Desktop
+
+`desktop.profile` names the desktop the core works with; `auto` detects it from the compositor's own
+socket first (`HYPRLAND_INSTANCE_SIGNATURE`, `NIRI_SOCKET`, `SWAYSOCK`), then `XDG_CURRENT_DESKTOP`
+(GNOME, KDE, Cinnamon), then an X11 session (`XDG_SESSION_TYPE=x11`, or `DISPLAY` without
+`WAYLAND_DISPLAY`: Xfce, MATE, i3 and the like); anything else, COSMIC or Cinnamon on Wayland
+included, is `none`. Inside the launcher's gamescope none of it is asked: gamescope focuses, draws the
+OSD on the launcher's overlay and takes the screenshots itself.
+
+| profile | windows (`session_window`, focus) | OSD | screenshots | cursor hiding (`desktop.hide_cursor`) |
+|---|---|---|---|---|
+| `gnome` | the Universe extension's `List` and `Activate` | its `ShowOSD` | its `Screenshot` | its `HideCursor`, or the `cursor_extension` enabled for the session |
+| `kde` | a KWin script loaded through `org.kde.KWin /Scripting`, which calls back with the list | plasmashell's `org.kde.osdService` (`mediaPlayerVolumeChanged`, `showText`) | `spectacle -b -n` | KWin's `hidecursor` effect (Plasma 6.1 and later), its `InactivityDuration` set to 5 s for the session |
+| `cinnamon` | EWMH, on an X11 session | `org.Cinnamon.ShowOSD` | the X server's root image | — |
+| `sway` | `swaymsg -t get_tree`, `[con_id=N] focus` | a notification | `grim`, the focused window's rectangle with `window` | `seat * hide_cursor 5000` |
+| `hyprland` | `hyprctl -j clients`, `dispatch focuswindow` | a notification | `grim`, as Sway | `keyword cursor:inactive_timeout 5` |
+| `niri` | `niri msg -j windows`, `action focus-window` | a notification | `grim` of the output | — (its config's `cursor { hide-after-inactive-ms }`) |
+| `x11` | EWMH: `_NET_CLIENT_LIST`, a `_NET_ACTIVE_WINDOW` request as a pager's (source 2, past focus-stealing prevention) | a notification | the X server's root image | — |
+| `none` | `Unavailable` | — | gpu-screen-recorder | — |
+
+A notification OSD is `org.freedesktop.Notifications.Notify` with the `value` hint (mako, dunst,
+swaync, fnott and xfce4-notifyd draw it as a bar) and `x-canonical-private-synchronous`, replacing
+the previous bubble by the id kept in `$XDG_RUNTIME_DIR/universe/osd-notification`, so bubbles from
+the watcher and the modules do not stack. Cursor hiding leaves a timeout the user set alone (Sway's
+config file, Hyprland's option, KWin's duration) and records what it changed in the session's
+`Undo::Cursor`, so the stop — `ExecStopPost` in another process — puts it back. The modules reach the
+profile through two hidden commands: `universe osd [--level <0-1>] <icon> <label>` and
+`universe desktop-shot <path> [--screen <connector>] [--window] [--cursor]`. On Sway keep-awake needs
+nothing more: swayidle waits on logind's idle lock.
 
 ## Settings
 
@@ -728,9 +758,8 @@ WirePlumber through `wpctl`: the default sink's volume moves by `volume_step` pe
 is reported as a `volume` event (`{"event": "volume", "percent", "muted", "output"}`, the output
 labelled as GNOME's own volume keys print it: the sink's active route, else the sink, as
 `outputs()` labels it). Inside the launcher's gamescope the launcher's overlay draws it over the
-game, whatever the desktop; on the desktop it shows on GNOME's OSD through
-`org.universe.Windows.ShowOSD` on the Universe extension, and without the extension the macro runs
-silently. `screenshot` is `screenshot()`, reported back as a `screenshot` event
+game, whatever the desktop; on the desktop it shows on the desktop's OSD (see Desktop), and where
+there is none the macro runs silently. `screenshot` is `screenshot()`, reported back as a `screenshot` event
 (`{"event": "screenshot", "path"}`) that the launcher turns into its flash and shutter. `keys` types through uinput; `mangohud` is `set_mangohud(None)` — no key: the running
 game's `launch.mangohud` flipped and the HUD told (see MangoHud) — and the watcher reports the
 outcome as a `hud` event, which the launcher toasts: "MangoHud shown · <title>", "MangoHud hidden ·
@@ -814,7 +843,7 @@ fps_limit = "auto"                   # MangoHud's limiter in the game: auto (the
 pause_on_home = true                 # freeze the game while the launcher covers it (HOME); off for a game that must keep running
 
 [desktop]
-profile = "auto"                     # auto | gnome | none
+profile = "auto"                     # auto | gnome | kde | cinnamon | sway | hyprland | niri | x11 | none (see Desktop)
 hide_cursor = true
 cursor_extension = ""                # empty: the Universe extension hides the pointer after 5 s at rest; another extension's uuid is enabled for the session instead, restored to its prior state after
 keep_awake = true                    # the desktop's idle inhibitors held for the session (see universe keep-awake): a pad is no activity to it, and the screen would blank and suspend mid-game

@@ -331,6 +331,28 @@ pub enum Cmd {
         #[arg(long)]
         overlays: bool,
     },
+    /// Save a screenshot to <path> through the desktop (desktop.profile): the screenshot module off gamescope
+    #[command(name = "desktop-shot", hide = true)]
+    DesktopShot {
+        path: std::path::PathBuf,
+        /// DRM connector of a whole-screen shot, e.g. DP-1 (default: the desktop's choice)
+        #[arg(long, default_value = "")]
+        screen: String,
+        /// The focused window alone
+        #[arg(long)]
+        window: bool,
+        /// Draw the pointer
+        #[arg(long)]
+        cursor: bool,
+    },
+    /// Show the desktop's on-screen display: <icon> is a themed icon name, --level in [0, 1] draws a bar
+    #[command(name = "osd", hide = true)]
+    Osd {
+        icon: String,
+        label: String,
+        #[arg(long)]
+        level: Option<f64>,
+    },
     /// Completion candidates for the shell: games | sources | modules | …
     #[command(name = "__complete", hide = true)]
     Complete { what: String },
@@ -670,6 +692,15 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Cmd::Splash { image, cmd } => std::process::exit(crate::splash::run(image.as_deref(), cmd)),
         Cmd::KeepAwake { reason } => return keep_awake(reason).await,
         Cmd::NestShot { path, overlays } => return nest_shot(path, *overlays),
+        Cmd::DesktopShot { path, screen, window, cursor } => {
+            if let Some(dir) = path.parent().filter(|d| !d.as_os_str().is_empty()) {
+                std::fs::create_dir_all(dir)?;
+            }
+            crate::desktop::screenshot(desktop_profile(), path, screen, *window, *cursor).await.map_err(|e| anyhow::anyhow!("{e}"))?;
+            println!("{}", path.display());
+            return Ok(());
+        }
+        Cmd::Osd { icon, label, level } => return crate::desktop::show_osd(desktop_profile(), icon, label, *level).await.map_err(|e| anyhow::anyhow!("{e}")),
         _ => {}
     }
     let core = Core::open().await?;
@@ -1475,7 +1506,14 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 println!("  {} {}", k.path.dimmed(), k.reason);
             }
         }
-        Cmd::Complete { .. } | Cmd::Generate { .. } | Cmd::Splash { .. } | Cmd::LaunchKeys | Cmd::KeepAwake { .. } | Cmd::NestShot { .. } => unreachable!(),
+        Cmd::Complete { .. }
+        | Cmd::Generate { .. }
+        | Cmd::Splash { .. }
+        | Cmd::LaunchKeys
+        | Cmd::KeepAwake { .. }
+        | Cmd::NestShot { .. }
+        | Cmd::DesktopShot { .. }
+        | Cmd::Osd { .. } => unreachable!(),
     }
     Ok(())
 }
@@ -1633,6 +1671,10 @@ async fn keep_awake(reason: &str) -> anyhow::Result<()> {
     }
     inhibitor.release().await;
     Ok(())
+}
+
+fn desktop_profile() -> crate::desktop::Profile {
+    crate::desktop::detect(&crate::config::Config::load().unwrap_or_default())
 }
 
 fn nest_shot(path: &std::path::Path, overlays: bool) -> anyhow::Result<()> {

@@ -47,12 +47,7 @@ impl Out {
 }
 
 pub fn lock_path() -> PathBuf {
-    std::env::var_os("XDG_RUNTIME_DIR")
-        .map(PathBuf::from)
-        .filter(|p| p.is_absolute())
-        .unwrap_or_else(paths::state_home)
-        .join("universe")
-        .join("controller.lock")
+    paths::runtime_dir().join("controller.lock")
 }
 
 async fn take_lock(wait: bool, out: &Out) -> crate::Result<Option<std::fs::File>> {
@@ -762,7 +757,7 @@ impl Watcher {
                 let percent = self.cfg.volume_step;
                 let out = self.out;
                 tokio::spawn(async move {
-                    match super::volume::change(change, percent).await {
+                    match super::volume::change(change, percent, core.desktop().await).await {
                         Ok(level) => {
                             out.emit(serde_json::json!({"event": "volume", "percent": level.percent, "muted": level.muted, "output": level.output}));
                         }

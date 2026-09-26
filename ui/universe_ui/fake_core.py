@@ -787,7 +787,7 @@ class FakeCore:
         return ""
 
     def _window(self):
-        return {"id": 1, "pid": os.getpid(), "focused": True}
+        return {"id": "1", "pid": os.getpid(), "focused": True}
 
     def session_window(self):
         if not self.current():

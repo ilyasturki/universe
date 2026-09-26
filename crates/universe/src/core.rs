@@ -463,10 +463,14 @@ impl Core {
         self.nest().ok_or_else(|| Error::Unavailable("not inside gamescope".into()))
     }
 
-    /// The running game's window, as the shell sees it: `None` before it maps; `Unavailable` off GNOME.
+    pub async fn desktop(&self) -> crate::desktop::Profile {
+        crate::desktop::detect(&*self.config.read().await)
+    }
+
+    /// The running game's window, as the desktop sees it: `None` before it maps; `Unavailable` where no window list is reachable.
     pub async fn session_window(&self) -> Result<Option<crate::desktop::Toplevel>> {
         let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
-        let windows = crate::desktop::list_windows().await.map_err(Error::Unavailable)?;
+        let windows = crate::desktop::list_windows(self.desktop().await).await.map_err(Error::Unavailable)?;
         if c.gamescope_pid != 0 {
             return Ok(crate::desktop::pick_window(&windows, |pid| pid == i64::from(c.gamescope_pid)));
         }
@@ -477,7 +481,7 @@ impl Core {
     /// Waits for the session's window, then focuses it; `None` once the session ended or `timeout` ran out.
     pub async fn wait_session_window(&self, session_id: &str, timeout: std::time::Duration) -> Result<Option<crate::desktop::Toplevel>> {
         if !self.current().await.is_some_and(|c| c.gamescope_pid != 0) {
-            crate::desktop::list_windows().await.map_err(Error::Unavailable)?;
+            crate::desktop::list_windows(self.desktop().await).await.map_err(Error::Unavailable)?;
         }
         let deadline = std::time::Instant::now() + timeout;
         loop {
@@ -497,8 +501,8 @@ impl Core {
                 None
             };
             if let Some(w) = window {
-                if w.id != 0 {
-                    if let Err(e) = crate::desktop::activate_window(w.id).await {
+                if !w.id.is_empty() {
+                    if let Err(e) = crate::desktop::activate_window(self.desktop().await, &w.id).await {
                         tracing::warn!("activate {}: {e}", w.id);
                     }
                 }
@@ -517,7 +521,7 @@ impl Core {
             return self.nest_or()?.show(c.launcher_pid, true);
         }
         let w = self.session_window().await?.ok_or_else(|| Error::NotFound("the game has no window yet".into()))?;
-        match crate::desktop::activate_window(w.id).await {
+        match crate::desktop::activate_window(self.desktop().await, &w.id).await {
             Ok(true) => Ok(()),
             Ok(false) => Err(Error::NotFound("the game's window is gone".into())),
             Err(e) => Err(Error::Unavailable(e)),
@@ -530,13 +534,14 @@ impl Core {
                 return n.show(self.launcher_pid(), false);
             }
         }
-        let windows = crate::desktop::list_windows().await.map_err(Error::Unavailable)?;
+        let profile = self.desktop().await;
+        let windows = crate::desktop::list_windows(profile).await.map_err(Error::Unavailable)?;
         let w = windows
             .iter()
             .filter(|w| w.pid == pid as i64 && !w.hidden)
             .max_by_key(|w| w.width * w.height)
             .ok_or_else(|| Error::NotFound(format!("no window of pid {pid}")))?;
-        crate::desktop::activate_window(w.id).await.map_err(Error::Unavailable)?;
+        crate::desktop::activate_window(profile, &w.id).await.map_err(Error::Unavailable)?;
         Ok(())
     }
 
@@ -639,7 +644,7 @@ impl Core {
             other => return Err(Error::Invalid(format!("volume: up, down, mute, set or get, not '{other}'"))),
         };
         let step = self.config.read().await.controller.volume_step;
-        let level = crate::controller::volume::change(change, step).await.map_err(Error::Unavailable)?;
+        let level = crate::controller::volume::change(change, step, self.desktop().await).await.map_err(Error::Unavailable)?;
         Ok(serde_json::json!({"percent": level.percent, "muted": level.muted, "output": level.output}))
     }
 

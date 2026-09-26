@@ -4,31 +4,101 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
 
-/// The Universe GNOME Shell extension (`extension/`): window capture and the like.
-pub const UNIVERSE_EXTENSION: &str = "universe@ilyasturki.github.io";
+mod cinnamon;
+pub mod gnome;
+mod hyprland;
+mod kde;
+mod niri;
+mod notify;
+mod sway;
+mod x11;
 
-// ExtensionState.ACTIVE (js/misc/extensionUtils.js)
-const EXTENSION_ACTIVE: f64 = 1.0;
+pub use gnome::UNIVERSE_EXTENSION;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Profile {
     Gnome,
+    Kde,
+    Cinnamon,
+    Sway,
+    Hyprland,
+    Niri,
+    X11,
     None,
+}
+
+/// `desktop.profile`'s values: `auto` detects.
+pub const PROFILES: [&str; 9] = ["auto", "gnome", "kde", "cinnamon", "sway", "hyprland", "niri", "x11", "none"];
+
+impl Profile {
+    pub fn name(self) -> &'static str {
+        match self {
+            Profile::Gnome => "GNOME",
+            Profile::Kde => "KDE Plasma",
+            Profile::Cinnamon => "Cinnamon",
+            Profile::Sway => "Sway",
+            Profile::Hyprland => "Hyprland",
+            Profile::Niri => "niri",
+            Profile::X11 => "X11",
+            Profile::None => "none",
+        }
+    }
 }
 
 pub fn detect(config: &Config) -> Profile {
     match config.desktop.profile.as_str() {
         "gnome" => Profile::Gnome,
+        "kde" => Profile::Kde,
+        "cinnamon" => Profile::Cinnamon,
+        "sway" => Profile::Sway,
+        "hyprland" => Profile::Hyprland,
+        "niri" => Profile::Niri,
+        "x11" => Profile::X11,
         "none" => Profile::None,
-        _ => {
-            let cur = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default().to_lowercase();
-            if cur.contains("gnome") {
-                Profile::Gnome
-            } else {
-                Profile::None
-            }
-        }
+        _ => from_env(&env),
     }
+}
+
+fn env(key: &str) -> Option<String> {
+    std::env::var(key).ok().filter(|v| !v.is_empty())
+}
+
+/// The compositors' own sockets first: XDG_CURRENT_DESKTOP is whatever the session file claims.
+fn from_env(var: &impl Fn(&str) -> Option<String>) -> Profile {
+    if var("HYPRLAND_INSTANCE_SIGNATURE").is_some() {
+        return Profile::Hyprland;
+    }
+    if var("NIRI_SOCKET").is_some() {
+        return Profile::Niri;
+    }
+    if var("SWAYSOCK").is_some() {
+        return Profile::Sway;
+    }
+    let desktops = var("XDG_CURRENT_DESKTOP").unwrap_or_default().to_lowercase();
+    if desktops.contains("gnome") {
+        return Profile::Gnome;
+    }
+    if desktops.contains("kde") {
+        return Profile::Kde;
+    }
+    if desktops.contains("cinnamon") {
+        return Profile::Cinnamon;
+    }
+    if x11_session(var) {
+        return Profile::X11;
+    }
+    Profile::None
+}
+
+/// Inside the launcher's gamescope `DISPLAY` is gamescope's own Xwayland and `WAYLAND_DISPLAY` unset: no sign of an X11 desktop.
+fn x11_session(var: &impl Fn(&str) -> Option<String>) -> bool {
+    var("XDG_SESSION_TYPE").as_deref() == Some("x11")
+        || (var("GAMESCOPE_WAYLAND_DISPLAY").is_none() && var("DISPLAY").is_some() && var("WAYLAND_DISPLAY").is_none())
+}
+
+/// The desktop's X server, not gamescope's.
+fn x11_reachable() -> bool {
+    !crate::nest::inside() && x11_session(&env)
 }
 
 const DRM_DIR: &str = "/sys/class/drm";
@@ -249,133 +319,227 @@ pub async fn inhibit_idle(reason: &str) -> Result<Inhibitor, String> {
 }
 
 pub async fn awake_services() -> Vec<&'static str> {
-    let call = async {
-        let conn = zbus::Connection::session().await.ok()?;
-        let dbus = zbus::Proxy::new(&conn, "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus").await.ok()?;
-        let mut owned = Vec::new();
-        for (name, _, _) in AWAKE_SERVICES {
-            if dbus.call::<_, _, bool>("NameHasOwner", &(name,)).await.ok()? {
-                owned.push(name);
-            }
-        }
-        Some(owned)
-    };
-    tokio::time::timeout(std::time::Duration::from_secs(5), call).await.ok().flatten().unwrap_or_default()
-}
-
-/// Returns whether the extension was already active. No `extension` is Universe's own, whose `HideCursor` hides the resting pointer.
-pub async fn cursor_extension_enable(conn: &zbus::Connection, profile: Profile, extension: &str) -> bool {
-    if extension.is_empty() {
-        if profile == Profile::Gnome {
-            if let Err(e) = universe_extension_call("HideCursor", &(true,)).await {
-                tracing::warn!("cursor hiding: {e}");
-            }
-        }
-        return true;
-    }
-    let Some(proxy) = extensions_proxy(conn, profile, extension).await else { return false };
-    let was_active = extension_is_active(extension_state(&proxy, extension).await.flatten());
-    if !was_active {
-        call_bool(&proxy, "EnableExtension", extension).await;
-    }
-    was_active
-}
-
-/// `None` when the shell cannot be asked, `Some(None)` when it has not loaded the extension, else the ExtensionState.
-pub async fn extension_state(proxy: &zbus::Proxy<'_>, extension: &str) -> Option<Option<f64>> {
-    shell_call::<HashMap<String, zbus::zvariant::OwnedValue>>(proxy, "GetExtensionInfo", extension)
-        .await
-        .map(|info| info.get("state").and_then(|v| f64::try_from(v).ok()))
-}
-
-pub fn extension_is_active(state: Option<f64>) -> bool {
-    state == Some(EXTENSION_ACTIVE)
-}
-
-pub async fn cursor_extension_restore(conn: &zbus::Connection, profile: Profile, extension: &str, was_active: bool) {
-    if extension.is_empty() {
-        if profile == Profile::Gnome {
-            if let Err(e) = universe_extension_call("HideCursor", &(false,)).await {
-                tracing::warn!("cursor hiding: {e}");
-            }
-        }
-        return;
-    }
-    if was_active {
-        return;
-    }
-    if let Some(proxy) = extensions_proxy(conn, profile, extension).await {
-        call_bool(&proxy, "DisableExtension", extension).await;
-    }
-}
-
-pub async fn extensions_proxy(conn: &zbus::Connection, profile: Profile, extension: &str) -> Option<zbus::Proxy<'static>> {
-    if profile != Profile::Gnome || extension.is_empty() {
-        return None;
-    }
-    match zbus::Proxy::new(conn, "org.gnome.Shell", "/org/gnome/Shell", "org.gnome.Shell.Extensions").await {
-        Ok(p) => Some(p),
-        Err(e) => {
-            tracing::warn!("gnome shell extensions proxy: {e}");
-            None
+    let Ok(conn) = zbus::Connection::session().await else { return vec![] };
+    let mut owned = Vec::new();
+    for (name, _, _) in AWAKE_SERVICES {
+        if name_owned(&conn, name).await {
+            owned.push(name);
         }
     }
+    owned
 }
 
-async fn shell_call<T: serde::de::DeserializeOwned + zbus::zvariant::Type>(proxy: &zbus::Proxy<'_>, method: &str, extension: &str) -> Option<T> {
-    match tokio::time::timeout(std::time::Duration::from_secs(5), proxy.call::<_, _, T>(method, &(extension,))).await {
-        Ok(Ok(v)) => Some(v),
-        Ok(Err(e)) => {
-            tracing::warn!("{method}({extension}): {e}");
-            None
-        }
-        Err(_) => {
-            tracing::warn!("{method}({extension}): timeout");
-            None
-        }
-    }
-}
-
-async fn call_bool(proxy: &zbus::Proxy<'_>, method: &str, extension: &str) -> bool {
-    shell_call(proxy, method, extension).await.unwrap_or(false)
-}
-
-/// `id` is what the extension's `Activate` and Mutter's `RecordWindow` take.
+/// `id` is the desktop's own handle, which `activate_window` takes back: a number, a KWin uuid, a Hyprland address.
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Toplevel {
-    pub id: u64,
+    pub id: String,
     pub pid: i64,
     pub wm_class: Option<String>,
     pub title: Option<String>,
     pub focused: bool,
+    pub x: i64,
+    pub y: i64,
     pub width: i64,
     pub height: i64,
     pub hidden: bool,
     pub minimized: bool,
 }
 
-async fn windows_proxy() -> Result<zbus::Proxy<'static>, String> {
-    let conn = zbus::Connection::session().await.map_err(|e| e.to_string())?;
-    zbus::Proxy::new(&conn, "org.universe.Windows", "/org/universe/Windows", "org.universe.Windows").await.map_err(|e| e.to_string())
+fn unsupported(profile: Profile, what: &str) -> String {
+    match profile {
+        Profile::None => format!("no desktop profile ({what} needs one: desktop.profile)"),
+        p => format!("{} has no {what} Universe can reach", p.name()),
+    }
 }
 
-/// The shell's toplevels through the Universe extension; an error off GNOME or before the shell has loaded it.
-pub async fn list_windows() -> Result<Vec<Toplevel>, String> {
-    let proxy = windows_proxy().await?;
-    let json: String = tokio::time::timeout(std::time::Duration::from_secs(5), proxy.call("List", &()))
-        .await
-        .map_err(|_| "gnome-shell did not answer".to_string())?
-        .map_err(|e| e.to_string())?;
-    serde_json::from_str(&json).map_err(|e| e.to_string())
+pub async fn list_windows(profile: Profile) -> Result<Vec<Toplevel>, String> {
+    match profile {
+        Profile::Gnome => gnome::list_windows().await,
+        Profile::Kde => kde::list_windows().await,
+        Profile::Sway => sway::list_windows().await,
+        Profile::Hyprland => hyprland::list_windows().await,
+        Profile::Niri => niri::list_windows().await,
+        Profile::X11 | Profile::Cinnamon if x11_reachable() => x11::list_windows().await,
+        p => Err(unsupported(p, "window list")),
+    }
 }
 
-pub async fn activate_window(id: u64) -> Result<bool, String> {
-    let proxy = windows_proxy().await?;
-    tokio::time::timeout(std::time::Duration::from_secs(5), proxy.call("Activate", &(id,)))
+pub async fn activate_window(profile: Profile, id: &str) -> Result<bool, String> {
+    match profile {
+        Profile::Gnome => gnome::activate_window(id).await,
+        Profile::Kde => kde::activate_window(id).await,
+        Profile::Sway => sway::activate_window(id).await,
+        Profile::Hyprland => hyprland::activate_window(id).await,
+        Profile::Niri => niri::activate_window(id).await,
+        Profile::X11 | Profile::Cinnamon if x11_reachable() => x11::activate_window(id).await,
+        p => Err(unsupported(p, "window list")),
+    }
+}
+
+/// `level` in [0, 1] draws a bar under `label`.
+pub async fn show_osd(profile: Profile, icon: &str, label: &str, level: Option<f64>) -> Result<(), String> {
+    match profile {
+        Profile::Gnome => gnome::show_osd(icon, label, level).await,
+        Profile::Kde => kde::show_osd(icon, label, level).await,
+        Profile::Cinnamon => cinnamon::show_osd(icon, label, level).await,
+        Profile::None => Err(unsupported(profile, "OSD")),
+        _ => notify::show_osd(icon, label, level).await,
+    }
+}
+
+/// `screen` is the DRM connector a whole-screen shot takes; `window` the focused window alone.
+pub async fn screenshot(profile: Profile, path: &std::path::Path, screen: &str, window: bool, cursor: bool) -> Result<(), String> {
+    let _ = std::fs::remove_file(path);
+    match profile {
+        Profile::Gnome => gnome::screenshot(path, window, cursor).await?,
+        Profile::Kde => kde::screenshot(path, window, cursor).await?,
+        Profile::Sway | Profile::Hyprland | Profile::Niri => {
+            let region = if window { focused_region(profile).await } else { None };
+            grim(path, screen, region, cursor).await?;
+        }
+        Profile::X11 | Profile::Cinnamon if x11_reachable() => x11::screenshot(path, window).await?,
+        p => return Err(unsupported(p, "screenshot")),
+    }
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(3);
+    while !std::fs::metadata(path).is_ok_and(|m| m.len() > 0) {
+        if std::time::Instant::now() > deadline {
+            return Err(format!("no screenshot at {}", path.display()));
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+    }
+    Ok(())
+}
+
+/// niri lists no window's place on the output: its shot is the output's.
+async fn focused_region(profile: Profile) -> Option<(i64, i64, i64, i64)> {
+    if profile == Profile::Niri {
+        return None;
+    }
+    let windows = list_windows(profile).await.ok()?;
+    let w = windows.iter().find(|w| w.focused && w.width > 0 && w.height > 0)?;
+    Some((w.x, w.y, w.width, w.height))
+}
+
+async fn grim(path: &std::path::Path, screen: &str, region: Option<(i64, i64, i64, i64)>, cursor: bool) -> Result<(), String> {
+    let mut args: Vec<String> = Vec::new();
+    match region {
+        Some((x, y, w, h)) => args.extend(["-g".into(), format!("{x},{y} {w}x{h}")]),
+        None if !screen.is_empty() => args.extend(["-o".into(), screen.to_string()]),
+        None => {}
+    }
+    if cursor {
+        args.push("-c".into());
+    }
+    args.push(path.to_string_lossy().into_owned());
+    run("grim", &args).await.map(drop)
+}
+
+/// A desktop's own CLI, its stdout; the error names the program and what it printed.
+pub(crate) async fn run(program: &str, args: &[String]) -> Result<String, String> {
+    let out = tokio::time::timeout(std::time::Duration::from_secs(10), tokio::process::Command::new(program).args(args).kill_on_drop(true).output())
         .await
-        .map_err(|_| "gnome-shell did not answer".to_string())?
-        .map_err(|e| e.to_string())
+        .map_err(|_| format!("{program} did not answer"))?
+        .map_err(|e| format!("{program}: {e}"))?;
+    if !out.status.success() {
+        let err = String::from_utf8_lossy(&out.stderr);
+        let said = if err.trim().is_empty() { String::from_utf8_lossy(&out.stdout).into_owned() } else { err.into_owned() };
+        return Err(format!("{program} {}: {}", args.first().map(String::as_str).unwrap_or(""), said.trim()));
+    }
+    Ok(String::from_utf8_lossy(&out.stdout).into_owned())
+}
+
+/// What a session's cursor hiding changed: the stop, maybe from another process, puts it back from the marker.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(tag = "via", rename_all = "snake_case")]
+pub enum CursorUndo {
+    #[default]
+    Nothing,
+    Universe,
+    Extension {
+        uuid: String,
+    },
+    Kde {
+        duration: Option<String>,
+        loaded: bool,
+    },
+    Hyprland {
+        seconds: f64,
+    },
+    Sway {
+        ms: u32,
+    },
+}
+
+/// Hides the pointer after `CURSOR_IDLE_S` at rest; `cursor_extension` is GNOME's alone.
+pub async fn hide_cursor(profile: Profile, cursor_extension: &str) -> CursorUndo {
+    let undo = match profile {
+        Profile::Gnome => return gnome::hide_cursor(cursor_extension).await,
+        Profile::Kde => kde::hide_cursor().await,
+        Profile::Hyprland => hyprland::hide_cursor().await,
+        Profile::Sway => sway::hide_cursor().await,
+        _ => return CursorUndo::Nothing,
+    };
+    undo.unwrap_or_else(|e| {
+        tracing::warn!("cursor hiding: {e}");
+        CursorUndo::Nothing
+    })
+}
+
+pub async fn restore_cursor(undo: &CursorUndo) {
+    let restored = match undo {
+        CursorUndo::Nothing => Ok(()),
+        CursorUndo::Universe | CursorUndo::Extension { .. } => {
+            gnome::restore_cursor(undo).await;
+            Ok(())
+        }
+        CursorUndo::Kde { duration, loaded } => kde::restore_cursor(duration.as_deref(), *loaded).await,
+        CursorUndo::Hyprland { seconds } => hyprland::restore_cursor(*seconds).await,
+        CursorUndo::Sway { ms } => sway::restore_cursor(*ms).await,
+    };
+    if let Err(e) = restored {
+        tracing::warn!("cursor restore: {e}");
+    }
+}
+
+pub const CURSOR_IDLE_S: u32 = 5;
+
+/// `(program, package, what it does)`: the programs a profile drives.
+pub fn tools(profile: Profile) -> Vec<(&'static str, &'static str, &'static str)> {
+    match profile {
+        Profile::Sway => vec![("swaymsg", "sway", "window focus and cursor hiding"), ("grim", "grim", "screenshots")],
+        Profile::Hyprland => vec![("hyprctl", "hyprland", "window focus and cursor hiding"), ("grim", "grim", "screenshots")],
+        Profile::Niri => vec![("niri", "niri", "window focus"), ("grim", "grim", "screenshots")],
+        Profile::Kde => vec![("spectacle", "spectacle", "screenshots"), ("kwriteconfig6", "kconfig", "cursor hiding")],
+        _ => vec![],
+    }
+}
+
+pub fn osd_by_notification(profile: Profile) -> bool {
+    matches!(profile, Profile::Sway | Profile::Hyprland | Profile::Niri | Profile::X11)
+}
+
+pub async fn name_owned(conn: &zbus::Connection, name: &str) -> bool {
+    let asked = async {
+        zbus::Proxy::new(conn, "org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus")
+            .await?
+            .call::<_, _, bool>("NameHasOwner", &(name,))
+            .await
+    };
+    tokio::time::timeout(std::time::Duration::from_secs(5), asked).await.ok().and_then(|r| r.ok()).unwrap_or(false)
+}
+
+/// How the profile hides the resting cursor, or why it cannot: for doctor.
+pub fn cursor_route(profile: Profile) -> Result<&'static str, &'static str> {
+    match profile {
+        Profile::Gnome => Ok("the Universe extension"),
+        Profile::Kde => Ok("KWin's hidecursor effect (Plasma 6.1 and later)"),
+        Profile::Hyprland => Ok("cursor:inactive_timeout"),
+        Profile::Sway => Ok("seat * hide_cursor"),
+        Profile::Niri => Err("niri hides the cursor from its own config only: cursor { hide-after-inactive-ms 5000; }"),
+        Profile::Cinnamon | Profile::X11 => Err("no cursor hiding on this desktop: unclutter does it for any X11 session"),
+        Profile::None => Err("no desktop profile"),
+    }
 }
 
 pub fn pid_in_cgroup(pid: i64, cgroup: &str) -> bool {
@@ -399,47 +563,24 @@ pub fn pick_window(windows: &[Toplevel], in_unit: impl Fn(i64) -> bool) -> Optio
         .max_by_key(|w| w.width * w.height)
         .cloned()
 }
-
-pub fn extension_installed(extension: &str) -> bool {
-    let home = crate::paths::home().join(".local/share/gnome-shell/extensions").join(extension);
-    if home.exists() {
-        return true;
-    }
-    let dirs = std::env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/share".into());
-    dirs.split(':').any(|d| std::path::Path::new(d).join("gnome-shell/extensions").join(extension).exists())
-}
-
-/// org.gnome.Shell.ShowOSD refuses callers other than gsd, so through the extension; `level` in [0, 1] shows the bar.
-pub async fn show_osd(icon: &str, label: Option<&str>, level: Option<f64>) -> Result<(), String> {
-    universe_extension_call("ShowOSD", &(icon, label.unwrap_or(""), level.unwrap_or(-1.0))).await
-}
-
-/// A method of the Universe extension, which the shell is asked to enable when nobody answers the first call.
-async fn universe_extension_call<B>(method: &str, body: &B) -> Result<(), String>
-where
-    B: serde::Serialize + zbus::zvariant::DynamicType,
-{
-    let call = async {
-        let proxy = windows_proxy().await?;
-        let Err(first) = proxy.call_method(method, body).await else { return Ok(()) };
-        let Some(ext) = extensions_proxy(proxy.connection(), Profile::Gnome, UNIVERSE_EXTENSION).await else { return Err(first.to_string()) };
-        if !call_bool(&ext, "EnableExtension", UNIVERSE_EXTENSION).await {
-            return Err(format!("{first}; the shell has not loaded {UNIVERSE_EXTENSION}"));
-        }
-        // EnableExtension answers before enable() has taken the bus name.
-        loop {
-            tokio::time::sleep(std::time::Duration::from_millis(200)).await;
-            if proxy.call_method(method, body).await.is_ok() {
-                return Ok(());
-            }
-        }
-    };
-    tokio::time::timeout(std::time::Duration::from_secs(5), call).await.unwrap_or_else(|_| Err(format!("{UNIVERSE_EXTENSION} did not answer {method}")))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_compositors_socket_names_the_desktop_before_the_session_file() {
+        let env = |vars: &'static [(&'static str, &'static str)]| move |k: &str| vars.iter().find(|(key, _)| *key == k).map(|(_, v)| v.to_string());
+        assert_eq!(from_env(&env(&[("XDG_CURRENT_DESKTOP", "Hyprland"), ("HYPRLAND_INSTANCE_SIGNATURE", "abc")])), Profile::Hyprland);
+        assert_eq!(from_env(&env(&[("XDG_CURRENT_DESKTOP", "sway"), ("SWAYSOCK", "/run/user/1000/sway-ipc.sock")])), Profile::Sway);
+        assert_eq!(from_env(&env(&[("XDG_CURRENT_DESKTOP", "niri"), ("NIRI_SOCKET", "/run/user/1000/niri.sock")])), Profile::Niri);
+        assert_eq!(from_env(&env(&[("XDG_CURRENT_DESKTOP", "ubuntu:GNOME")])), Profile::Gnome);
+        assert_eq!(from_env(&env(&[("XDG_CURRENT_DESKTOP", "KDE")])), Profile::Kde);
+        assert_eq!(from_env(&env(&[("XDG_CURRENT_DESKTOP", "X-Cinnamon")])), Profile::Cinnamon);
+        assert_eq!(from_env(&env(&[("XDG_CURRENT_DESKTOP", "XFCE"), ("XDG_SESSION_TYPE", "x11")])), Profile::X11);
+        assert_eq!(from_env(&env(&[("DISPLAY", ":0")])), Profile::X11, "an X server and no Wayland one");
+        assert_eq!(from_env(&env(&[("DISPLAY", ":2"), ("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")])), Profile::None, "gamescope's own Xwayland");
+        assert_eq!(from_env(&env(&[("XDG_CURRENT_DESKTOP", "COSMIC"), ("WAYLAND_DISPLAY", "wayland-1"), ("DISPLAY", ":1")])), Profile::None);
+    }
 
     #[test]
     fn a_process_is_in_its_unit_or_under_it() {
@@ -473,9 +614,9 @@ mod tests {
 
     #[test]
     fn the_session_window_is_the_largest_visible_one_of_the_unit() {
-        let w = |id, pid, width, hidden| Toplevel { id, pid, width, height: 100, hidden, ..Default::default() };
+        let w = |id: u32, pid, width, hidden| Toplevel { id: id.to_string(), pid, width, height: 100, hidden, ..Default::default() };
         let windows = vec![w(1, 10, 300, true), w(2, 10, 200, false), w(3, 11, 100, false), w(4, 99, 900, false), w(5, 0, 900, false)];
-        assert_eq!(pick_window(&windows, |pid| pid == 10 || pid == 11).map(|w| w.id), Some(2));
+        assert_eq!(pick_window(&windows, |pid| pid == 10 || pid == 11).map(|w| w.id), Some("2".into()));
         assert!(pick_window(&windows, |_| false).is_none());
     }
 }
@@ -496,5 +637,22 @@ mod live {
                 assert_eq!((mode.width, mode.height, mode.refresh), (shell.width, shell.height, shell.refresh), "{name}: the CRTC runs what Mutter set");
             }
         }
+    }
+
+    /// Against the desktop this runs in, with a window open on it.
+    #[test]
+    #[ignore]
+    fn the_desktops_windows_are_listed_and_focused_and_its_cursor_put_back() {
+        let rt = tokio::runtime::Runtime::new().unwrap();
+        let profile = super::from_env(&super::env);
+        let windows = rt.block_on(super::list_windows(profile)).unwrap();
+        eprintln!("{profile:?}: {windows:#?}");
+        let w = windows.iter().find(|w| w.pid > 0).expect("a window with a pid");
+        assert!(rt.block_on(super::activate_window(profile, &w.id)).unwrap(), "{w:?}");
+        let gone = if profile == super::Profile::Hyprland { "0xdead" } else { "4000000000" };
+        assert!(!rt.block_on(super::activate_window(profile, gone)).unwrap());
+        let undo = rt.block_on(super::hide_cursor(profile, ""));
+        eprintln!("cursor: {undo:?}");
+        rt.block_on(super::restore_cursor(&undo));
     }
 }

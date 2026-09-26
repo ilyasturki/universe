@@ -18,16 +18,16 @@ pub struct Level {
     pub output: String,
 }
 
-pub async fn change(change: Change, percent: u8) -> Result<Level, String> {
+pub async fn change(change: Change, percent: u8, desktop: crate::desktop::Profile) -> Result<Level, String> {
     let level = tokio::task::spawn_blocking(move || apply(change, percent)).await.map_err(|e| e.to_string())??;
     // Inside the launcher's gamescope its overlay draws the level whatever the desktop; the shell's would be a second one.
     if change != Change::Get && !crate::nest::inside() {
-        osd(&level).await;
+        osd(&level, desktop).await;
     }
     Ok(level)
 }
 
-async fn osd(level: &Level) {
+async fn osd(level: &Level, desktop: crate::desktop::Profile) {
     static REPORTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
     let icon = match level.percent {
         p if level.muted || p == 0 => "audio-volume-muted-symbolic",
@@ -35,9 +35,9 @@ async fn osd(level: &Level) {
         34..=66 => "audio-volume-medium-symbolic",
         _ => "audio-volume-high-symbolic",
     };
-    if let Err(e) = crate::desktop::show_osd(icon, Some(&level.output), Some(f64::from(level.percent) / 100.0)).await {
+    if let Err(e) = crate::desktop::show_osd(desktop, icon, &level.output, Some(f64::from(level.percent) / 100.0)).await {
         if !REPORTED.swap(true, std::sync::atomic::Ordering::Relaxed) {
-            tracing::warn!("no OSD: {e} (installed extensions load after a logout)");
+            tracing::warn!("no OSD: {e}");
         }
     }
 }
