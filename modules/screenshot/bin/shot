@@ -9,8 +9,6 @@ import sys
 import tempfile
 import time
 
-EXTENSION_UUID = "universe@ilyasturki.github.io"
-WINDOWS_BUS_NAME = "org.universe.Windows"
 TAKE_TIMEOUT_S = 15
 
 
@@ -18,61 +16,27 @@ def log(msg):
     print(f"[screenshot] {msg}", file=sys.stderr, flush=True)
 
 
-def bus_call_bool(call, timeout=None):
-    """A session-bus call whose reply is one boolean; False on any failure."""
+def take_with_universe(path, *args):
+    cmd = [os.environ.get("UNIVERSE_BIN") or "universe", *args]
     try:
-        r = subprocess.run(["busctl", "--user", "--json=short", "call", *call], capture_output=True, text=True, timeout=timeout, check=False)
-        return r.returncode == 0 and json.loads(r.stdout)["data"] == [True]
-    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError):
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=TAKE_TIMEOUT_S, check=False)
+    except (OSError, subprocess.SubprocessError) as e:
+        log(f"universe {args[0]}: {e}")
         return False
-
-
-def bus_name_has_owner(name):
-    return bus_call_bool(["org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "NameHasOwner", "s", name])
-
-
-def extension_ready():
-    if "GNOME" not in (os.environ.get("XDG_CURRENT_DESKTOP") or ""):
-        return False
-    dirs = [os.path.expanduser("~/.local/share"), *(os.environ.get("XDG_DATA_DIRS") or "/usr/share").split(":")]
-    if not any(os.path.isdir(os.path.join(d, "gnome-shell/extensions", EXTENSION_UUID)) for d in dirs):
-        log(f"{EXTENSION_UUID} not installed")
-        return False
-    if bus_name_has_owner(WINDOWS_BUS_NAME):
+    if r.returncode == 0 and os.path.exists(path) and os.path.getsize(path) > 0:
         return True
-    if not bus_call_bool(["org.gnome.Shell.Extensions", "/org/gnome/Shell/Extensions", "org.gnome.Shell.Extensions", "EnableExtension", "s", EXTENSION_UUID]):
-        log(f"{EXTENSION_UUID} installed but not loaded (log out once to load it)")
-        return False
-    # EnableExtension returns before enable() runs: the name lags the call.
-    deadline = time.monotonic() + 3
-    while not bus_name_has_owner(WINDOWS_BUS_NAME):
-        if time.monotonic() > deadline:
-            log(f"{EXTENSION_UUID} enabled but {WINDOWS_BUS_NAME} never came up")
-            return False
-        time.sleep(0.25)
-    return True
-
-
-def take_in_shell(path, window, cursor):
-    """org.universe.Windows.Screenshot: answers once the pixels are grabbed, the PNG lands a moment later."""
-    return bus_call_bool(
-        [WINDOWS_BUS_NAME, "/org/universe/Windows", WINDOWS_BUS_NAME, "Screenshot", "sbb", path, "true" if window else "false", "true" if cursor else "false"],
-        timeout=TAKE_TIMEOUT_S,
-    )
+    log(f"universe {args[0]} {path} failed: {r.stderr.strip()}")
+    return False
 
 
 def take_in_gamescope(path, window):
     """gamescope's own shot of its screen, whatever the desktop around it: the game alone, else with the HUD over it."""
-    cmd = [os.environ.get("UNIVERSE_BIN") or "universe", "nest-shot", path, *([] if window else ["--overlays"])]
-    try:
-        r = subprocess.run(cmd, capture_output=True, text=True, timeout=TAKE_TIMEOUT_S, check=False)
-    except (OSError, subprocess.SubprocessError) as e:
-        log(f"universe nest-shot: {e}")
-        return False
-    if r.returncode == 0 and os.path.exists(path) and os.path.getsize(path) > 0:
-        return True
-    log(f"universe nest-shot {path} failed: {r.stderr.strip()}")
-    return False
+    return take_with_universe(path, "nest-shot", path, *([] if window else ["--overlays"]))
+
+
+def take_on_desktop(path, screen, window, cursor):
+    """The desktop's own grab, as desktop.profile picks it: the GNOME extension, spectacle, grim, the X server."""
+    return take_with_universe(path, "desktop-shot", path, "--screen", screen, *(["--window"] if window else []), *(["--cursor"] if cursor else []))
 
 
 def take_with_gsr(screen, path):
@@ -98,21 +62,20 @@ def main():
     directory = os.environ["SCREENSHOTS_DIR"]
     os.makedirs(directory, exist_ok=True)
     path = os.path.join(directory, time.strftime("%Y%m%d-%H%M%S") + ".png")
+    screen = os.environ.get("SESSION_SCREEN") or ""
 
     window = bool(settings.get("window", True))
     if os.environ.get("GAMESCOPE_WAYLAND_DISPLAY"):
-        if take_in_gamescope(path, window):
-            print(path)
-            return 0
-    elif extension_ready():
-        if take_in_shell(path, window, bool(settings.get("cursor"))):
-            print(path)
-            return 0
-        log(f"the shell refused {path} or did not answer")
+        taken = take_in_gamescope(path, window)
+    else:
+        taken = take_on_desktop(path, screen, window, bool(settings.get("cursor")))
+    if taken:
+        print(path)
+        return 0
     if not shutil.which("gpu-screen-recorder"):
-        log("no shell grab and no gpu-screen-recorder to fall back on")
+        log("the desktop took no shot and there is no gpu-screen-recorder to fall back on")
         return 1
-    if not take_with_gsr(os.environ["SESSION_SCREEN"], path):
+    if not take_with_gsr(screen, path):
         return 1
     print(path)
     return 0

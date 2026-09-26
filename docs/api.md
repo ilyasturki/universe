@@ -517,18 +517,18 @@ later, for `-ipc` and `gsr-cli`.
 
 The capture module records the whole **screen** (`source = "screen"`, the default: gpu-screen-recorder's
 KMS capture of the session's output) or the game's **window** (`source = "window"`, per game). The
-window source needs GNOME and the `universe@ilyasturki.github.io` shell extension (`extension/`,
-GNOME 45 to 50, installed by the home-manager module on NixOS, copied into `~/.local/share/gnome-shell/extensions/`
-elsewhere; loaded after one logout; it also hides the resting pointer for `desktop.hide_cursor`
-through `HideCursor(b)`): the module enables it, waits for the game's toplevel
-through `universe session-window --wait` (`window_wait_s`, gamescope's window stays hidden until the
-game draws; the core focuses it once it maps), then runs
-gpu-screen-recorder on GNOME's screencast portal. The first launch of a game shows GNOME's picker —
+window source needs a desktop whose windows the core lists (see Desktop; on GNOME the
+`universe@ilyasturki.github.io` shell extension, `extension/`, GNOME 45 to 50, installed by the
+home-manager module on NixOS, copied into `~/.local/share/gnome-shell/extensions/` elsewhere, loaded
+after one logout, which also hides the resting pointer through `HideCursor(b)`): the module waits for
+the game's toplevel through `universe session-window --wait` (`window_wait_s`, gamescope's window
+stays hidden until the game draws; the core focuses it once it maps), then runs
+gpu-screen-recorder on the desktop's screencast portal. The first launch of a game shows GNOME's picker —
 pick the game's window, which is on screen by then — and the portal's restore token is kept in
 `<data>/modules/capture/portal/<game id>`; GNOME restores the pick by the window's app id and title,
-so later launches record without a dialog. A cancelled picker records nothing. Off GNOME, with the
-extension absent or not yet loaded, or when no game window appears in time, the screen is recorded
-and the shell's OSD says so.
+so later launches record without a dialog. A cancelled picker records nothing. Where no window
+list is reachable, or when no game window appears in time, the screen is recorded and the desktop's
+OSD says so.
 
 A screen recording **follows a monitor switch**. gpu-screen-recorder's KMS capture is pinned to one
 connector, so the capture unit runs `bin/record` over it: it polls `/sys/class/drm/*/{status,enabled}` once a
@@ -593,13 +593,12 @@ copies the `/tmp/gamescope.png` it writes — the game alone at its render size 
 the overlay layers (mangoapp's HUD) too with `false`. gamescope takes one shot at a time, so a
 screenshot pressed while HOME's frame of the game is being taken is dropped, and the hook falls back
 to gpu-screen-recorder as below.
-Elsewhere it grabs the frame in the shell through the extension (`org.universe.Windows.Screenshot(path, window, cursor)`):
-the focused window's client area with `window = true` (the default), every monitor with `false`, the
-cursor per `cursor` (both per game). Mutter reads the framebuffer synchronously, so the hook returns at the
-press, before the PNG is encoded; a write that fails afterwards is a shell notification. Off GNOME
-or before the shell has loaded the extension it is a gpu-screen-recorder `-o` capture of
-`SESSION_SCREEN` when gpu-screen-recorder is installed (the module requires only `busctl`), else
-the hook fails.
+Elsewhere it asks the desktop, `universe desktop-shot` (see Desktop): the focused window with
+`window = true` (the default), the session's screen with `false`, the cursor per `cursor` (both per
+game). On GNOME the extension grabs it (`org.universe.Windows.Screenshot(path, window, cursor)`):
+Mutter reads the framebuffer synchronously, so the grab returns at the press, before the PNG is
+encoded. When the desktop takes none it is a gpu-screen-recorder `-o` capture of `SESSION_SCREEN`
+when gpu-screen-recorder is installed, else the hook fails.
 
 `thumb` is the shot's thumbnail, a 960 px wide JPEG under `$XDG_CACHE_HOME/universe/thumbs/` (one flat
 directory, `<game>--<stem>-<mtime>.jpg`, so a file replaced in place gets a fresh one), and

@@ -61,16 +61,6 @@ exit 0''',
     )
     _write_shim(bindir / "ffprobe", 'echo "${FAKE_DURATION:-300}"\nexit 0\n')
     _write_shim(
-        bindir / "busctl",
-        f'''printf "%s\\n" "$@" >> "{logs}/busctl.args"
-case "$*" in
-  *NameHasOwner*) echo "{{\\"type\\":\\"b\\",\\"data\\":[${{FAKE_NAME_OWNED:-false}}]}}"; exit 0;;
-  *EnableExtension*) echo "{{\\"type\\":\\"b\\",\\"data\\":[${{FAKE_NAME_OWNED:-false}}]}}"; exit 0;;
-  *" Screenshot "*) [ "${{FAKE_SHOT_OK:-true}}" = true ] && echo fake > "$9"; echo "{{\\"type\\":\\"b\\",\\"data\\":[${{FAKE_SHOT_OK:-true}}]}}"; exit 0;;
-esac
-exit 0''',
-    )
-    _write_shim(
         bindir / "gsr-cli",
         f'''printf "%s\\n" "$@" >> "{logs}/gsr-cli.args"
 case "$3" in
@@ -121,11 +111,14 @@ def env_for(tmp_path, fakebin, settings, extra=None):
     return env
 
 
-def install_fake_extension(env):
-    uuid = "universe@ilyasturki.github.io"
-    ext_dir = Path(env["HOME"]) / ".local/share/gnome-shell/extensions" / uuid
-    ext_dir.mkdir(parents=True, exist_ok=True)
-    (ext_dir / "metadata.json").write_text(json.dumps({"uuid": uuid}))
+def universe_calls(fakebin):
+    path = fakebin["logs"] / "universe.args"
+    return path.read_text().splitlines() if path.exists() else []
+
+
+def osd_labels(fakebin):
+    calls = universe_calls(fakebin)
+    return [calls[i + 3] for i, a in enumerate(calls) if a == "osd"]
 
 
 def run(script, env):
@@ -226,7 +219,7 @@ def test_start_reports_a_recorder_gone_at_once(tmp_path, fakebin):
     result = run("start", env)
     assert result.returncode == 1, result.stderr
     assert "not being recorded" in result.stderr
-    assert "Recording failed" in (fakebin["logs"] / "busctl.args").read_text()
+    assert "Recording failed" in osd_labels(fakebin)
 
 
 def test_start_opens_the_timeline_before_the_recorder(tmp_path, fakebin):
@@ -303,9 +296,8 @@ def test_start_window_records_through_the_portal_once_the_window_is_up(tmp_path,
         tmp_path,
         fakebin,
         {"source": "window", "window_wait_s": 45},
-        extra={"FAKE_NAME_OWNED": "true", "FAKE_WINDOW_JSON": WINDOW_JSON, "GAME_ID": "dead-cells"},
+        extra={"FAKE_WINDOW_JSON": WINDOW_JSON, "GAME_ID": "dead-cells"},
     )
-    install_fake_extension(env)
     result = run("start", env)
     assert result.returncode == 0, result.stderr
 
@@ -317,72 +309,44 @@ def test_start_window_records_through_the_portal_once_the_window_is_up(tmp_path,
     assert flag_values(args, "-restore-portal-session") == ["yes"]
     assert flag_values(args, "-portal-session-token-filepath") == [str(tmp_path / "data" / "portal" / "dead-cells")]
     assert (tmp_path / "data" / "portal").is_dir()
-    assert "ShowOSD" not in (fakebin["logs"] / "busctl.args").read_text()
+    assert osd_labels(fakebin) == []
 
 
 def test_start_window_records_the_screen_when_no_window_shows_up(tmp_path, fakebin):
-    env = env_for(tmp_path, fakebin, {"source": "window", "window_wait_s": 0}, extra={"FAKE_NAME_OWNED": "true", "GAME_ID": "dead-cells"})
-    install_fake_extension(env)
+    env = env_for(tmp_path, fakebin, {"source": "window", "window_wait_s": 0}, extra={"GAME_ID": "dead-cells"})
     result = run("start", env)
     assert result.returncode == 0, result.stderr
     assert "no game window within 0s" in result.stderr
     args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
     assert flag_values(args, "-w") == ["DP-1"]
-    assert "ShowOSD" in (fakebin["logs"] / "busctl.args").read_text()
+    assert osd_labels(fakebin) == ["Recording the screen"]
 
 
 def test_start_window_records_the_screen_when_the_cli_has_no_shell(tmp_path, fakebin):
-    env = env_for(
-        tmp_path, fakebin, {"source": "window", "window_wait_s": 0}, extra={"FAKE_NAME_OWNED": "true", "FAKE_UNIVERSE_EXIT": "1", "GAME_ID": "dead-cells"}
-    )
-    install_fake_extension(env)
+    env = env_for(tmp_path, fakebin, {"source": "window", "window_wait_s": 0}, extra={"FAKE_UNIVERSE_EXIT": "1", "GAME_ID": "dead-cells"})
     result = run("start", env)
     assert result.returncode == 0, result.stderr
     assert "no shell" in result.stderr and "no game window" in result.stderr
     assert flag_values((fakebin["logs"] / "systemd-run.args").read_text().splitlines(), "-w") == ["DP-1"]
 
 
-def test_start_window_falls_back_to_gsr_when_extension_not_loaded(tmp_path, fakebin):
-    env = env_for(tmp_path, fakebin, {"source": "window"}, extra={"FAKE_NAME_OWNED": "false"})
-    install_fake_extension(env)
-    result = run("start", env)
-    assert result.returncode == 0, result.stderr
-    assert "log out once" in result.stderr
-
-    args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
-    assert flag_values(args, "-w") == ["DP-1"]
-    assert "ShowOSD" in (fakebin["logs"] / "busctl.args").read_text()
-
-
-def test_extension_ready_guards(tmp_path, monkeypatch):
-    monkeypatch.setenv("XDG_CURRENT_DESKTOP", "GNOME")
-    monkeypatch.setenv("HOME", str(tmp_path))
-    monkeypatch.setenv("XDG_DATA_DIRS", str(tmp_path))
-    assert not _common.extension_ready()
-    install_fake_extension({"HOME": str(tmp_path)})
-    monkeypatch.setenv("XDG_CURRENT_DESKTOP", "KDE")
-    assert not _common.extension_ready()
-
-
-def test_show_osd_passes_a_negative_level_past_busctl(tmp_path, fakebin):
+def test_show_osd_goes_through_the_core_past_a_dash_led_label(tmp_path, fakebin):
     env = dict(os.environ, PATH=f"{fakebin['bin']}:{os.environ['PATH']}")
+    env.pop("UNIVERSE_BIN", None)
     result = subprocess.run(
-        [sys.executable, "-c", "import _common; _common.show_osd('Recording the screen')"], cwd=BIN_DIR, env=env, capture_output=True, text=True, check=False
+        [sys.executable, "-c", "import _common; _common.show_osd('-1 frame')"], cwd=BIN_DIR, env=env, capture_output=True, text=True, check=False
     )
     assert result.returncode == 0, result.stderr
-    args = (fakebin["logs"] / "busctl.args").read_text().splitlines()
-    assert args[args.index("ssd") + 1] == "--"
-    assert args[-1] == "-1"
+    assert (fakebin["logs"] / "universe.args").read_text() == "osd\n--\nvideo-display-symbolic\n-1 frame\n"
 
 
-def test_start_screen_source_skips_the_extension(tmp_path, fakebin):
-    env = env_for(tmp_path, fakebin, {"source": "screen"}, extra={"FAKE_NAME_OWNED": "true"})
-    install_fake_extension(env)
+def test_start_screen_source_waits_on_no_window(tmp_path, fakebin):
+    env = env_for(tmp_path, fakebin, {"source": "screen"})
     result = run("start", env)
     assert result.returncode == 0, result.stderr
     args = (fakebin["logs"] / "systemd-run.args").read_text().splitlines()
     assert "gpu-screen-recorder" in args
-    assert not (fakebin["logs"] / "busctl.args").exists()
+    assert "session-window" not in universe_calls(fakebin)
 
 
 def test_start_and_stop_follow_the_container(tmp_path, fakebin):
@@ -725,7 +689,7 @@ def test_record_follows_the_monitor_that_replaces_the_recorded_one(tmp_path, liv
     assert flag_values(second, "-o") == [pending_path(tmp_path)]
     state = _timeline(tmp_path)
     assert state["screen"] == "HDMI-A-1" and not state["paused"]
-    assert (livebin["logs"] / "busctl.args").read_text().count("Recording HDMI-A-1") == 1
+    assert osd_labels(livebin).count("Recording HDMI-A-1") == 1
 
     assert _end_session(env, thread) == pending_path(tmp_path)
     assert done == [0] and len(_gsr_runs(livebin)) == 2, "the session's own stop is not a switch"

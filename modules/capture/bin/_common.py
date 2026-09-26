@@ -17,9 +17,6 @@ QUALITY_PRESETS = {
     "ultra": (70, 17, 24000, 48000),
 }
 
-EXTENSION_UUID = "universe@ilyasturki.github.io"
-WINDOWS_BUS_NAME = "org.universe.Windows"
-
 AUDIO_ARGS = {"output": ["-a", "default_output"], "none": [], "output+input": ["-a", "default_output", "-a", "default_input"]}
 
 # `codec = auto`: the first the card encodes, best first.
@@ -192,51 +189,10 @@ def gsr_args(settings, screen, output_path, token_path=None, session_id=None):
     ]
 
 
-def extension_ready():
-    if "GNOME" not in (os.environ.get("XDG_CURRENT_DESKTOP") or ""):
-        return False
-    dirs = [os.path.expanduser("~/.local/share"), *(os.environ.get("XDG_DATA_DIRS") or "/usr/share").split(":")]
-    if not any(os.path.isdir(os.path.join(d, "gnome-shell/extensions", EXTENSION_UUID)) for d in dirs):
-        log(f"{EXTENSION_UUID} not installed")
-        return False
-    if bus_name_has_owner(WINDOWS_BUS_NAME):
-        return True
-    enabled = bus_call_bool(["org.gnome.Shell.Extensions", "/org/gnome/Shell/Extensions", "org.gnome.Shell.Extensions", "EnableExtension", "s", EXTENSION_UUID])
-    if not enabled:
-        log(f"{EXTENSION_UUID} installed but not loaded (log out once to load it)")
-        return False
-    # EnableExtension returns before enable() runs: the name lags the call.
-    deadline = time.monotonic() + 3
-    while not bus_name_has_owner(WINDOWS_BUS_NAME):
-        if time.monotonic() > deadline:
-            log(f"{EXTENSION_UUID} enabled but {WINDOWS_BUS_NAME} never came up")
-            return False
-        time.sleep(0.25)
-    return True
-
-
 def show_osd(label, icon="video-display-symbolic"):
+    """The desktop's OSD, as desktop.profile picks it."""
     with contextlib.suppress(OSError, subprocess.SubprocessError):
-        subprocess.run(
-            ["busctl", "--user", "call", WINDOWS_BUS_NAME, "/org/universe/Windows", WINDOWS_BUS_NAME, "ShowOSD", "ssd", "--", icon, label, "-1"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            check=False,
-        )
-
-
-def bus_call_bool(call, timeout=None):
-    """A session-bus call whose reply is one boolean; False on any failure."""
-    try:
-        r = subprocess.run(["busctl", "--user", "--json=short", "call", *call], capture_output=True, text=True, timeout=timeout, check=False)
-        return r.returncode == 0 and json.loads(r.stdout)["data"] == [True]
-    except (OSError, subprocess.SubprocessError, ValueError, KeyError, TypeError):
-        return False
-
-
-def bus_name_has_owner(name):
-    return bus_call_bool(["org.freedesktop.DBus", "/org/freedesktop/DBus", "org.freedesktop.DBus", "NameHasOwner", "s", name])
+        subprocess.run([os.environ.get("UNIVERSE_BIN") or "universe", "osd", "--", icon, label], capture_output=True, text=True, timeout=5, check=False)
 
 
 def timeline_path(data_dir, session_id):

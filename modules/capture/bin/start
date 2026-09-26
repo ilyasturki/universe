@@ -6,7 +6,6 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _common import (
     cli_json,
-    extension_ready,
     game_frozen,
     gsr_args,
     load_settings,
@@ -23,10 +22,8 @@ RECORD = os.path.join(os.path.dirname(os.path.abspath(__file__)), "record")
 
 
 def window_token(settings, data_dir):
-    if not extension_ready():
-        return None
     wait_s = max(0, int(settings.get("window_wait_s", 60)))
-    # The CLI opens the core and asks the shell before its own wait starts.
+    # The CLI opens the core and asks the desktop before its own wait starts: Unavailable where no window list is reachable.
     if not cli_json(["session-window", "--wait", str(wait_s)], timeout=wait_s + 30):
         log(f"no game window within {wait_s}s")
         return None
