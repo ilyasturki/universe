@@ -5,9 +5,10 @@ speak, no schema to negotiate, and no second implementation to keep in step — 
 links the Rust crate, or imports `universe_core` (the PyO3 module) and calls the same methods the
 CLI calls. [`api.md`](api.md) is the full surface.
 
-Two frontends ship. `universe-ui` (Universe Big Screen) lives in `ui/`: a PySide6 host around two
-QML looks, the [Reprise](https://github.com/ilyasturki/pegasus-theme-reprise) theme and the
-Switch 2 HOME menu (`qml/switch2/`, see its README). `universe-desktop` (Universe Desktop) lives in
+Two frontends ship. `universe-ui` (Universe Big Screen) lives in `ui/`: a PySide6 host around three
+QML looks, the [Reprise](https://github.com/ilyasturki/pegasus-theme-reprise) theme, the
+Switch 2 HOME menu (`qml/switch2/`) and the PS5 home screen (`qml/ps5/`), each of the last two with
+its README. `universe-desktop` (Universe Desktop) lives in
 `crates/universe-desktop/`: a GTK 4 and libadwaita app for mouse and keyboard, § Universe Desktop.
 Most of what follows is the Qt host's contract and the parts of it that were expensive to get
 right; another frontend owes none of it except the "Changes" section, which is a property of the
@@ -29,7 +30,7 @@ One context property, `api`:
 | `api.system` | what logind will do with the machine: `actions`, the ones of `suspend`, `reboot` and `power_off` it would carry out (the core's `power_actions()`, read once at startup), `run(action)` (`power(action)` off the UI thread; `reboot` and `power_off` stop a running session first, so its `session-end` runs before the machine goes down), `failed(action, message)` when logind refuses. `--fake` records the call and does nothing. `steam`: the launcher runs in Steam's Game Mode (the core's `under_steam()`): no power actions (the menu keeps Quit Universe alone, and says Steam's menu has the rest), no Sound section, no dock over a game, no MangoHud, frame limit or Pause on HOME rows. `deck`: `lcd` or `oled` on a Steam Deck. `controls`: the core's `system_controls()`, read after `apply_system()` at startup and on `reload()`; `set(id, value)` shows the value at once and writes it off the UI thread, a refusal raising `controlFailed(id, message)` and reading the machine back; `control(id)` one of them. Reprise lists them under Settings › System and in the dock's System group (a step writes once the cursor rests, 400 ms), Switch 2 under System Settings › Performance; `ui/Controls.js` turns one into rows either look uses. `--fake` lists an OLED Deck's under `UNIVERSE_DECK`, and plays Game Mode under `GAMESCOPE_WAYLAND_DISPLAY` with `UNIVERSE_FAKE_STEAM=1` |
 | `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written, a game's sessions and their logs) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed` and `--size` turn it off) |
-| `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `frame`, `ground`, `detail`), `current`, `frame`, `set(id)`, `landing` / `takeLanding()`, `fontPath` |
+| `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `frame`, `ground`, `detail`), `current`, `frame`, `set(id)`, `landing` / `takeLanding()`, `fontPath` (the current look's own font file, stored under `<id>Font`: `switch2Font`, `ps5Font`) |
 | `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `underGame` (the game is on screen over the launcher, inside gamescope), `open`, `loading` (a session this client launched has no window up yet), `paused`, `pauseOnHome`, `flipped`, `frame`, `volumePercent`, `muted`, `outputs` (`loadOutputs()` fills it); `pressed()`, `stopping(title)`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher(landing?)` / `takeLanding()`, `covered()`, `stop()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotTaken(path)`), `volume(change, value)`, `setOutput(id)`, `launchValue(key)`, `launchChoices(key)`, `setLaunchValue(key, value)`, `screenRefresh()` |
 
 A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `playTime`,
@@ -147,11 +148,13 @@ the page opens; `expand(index)` unfolds a `gamekey` head into its games.
 QML file under `qml/` and switching one for another rebuilds the tree in place: no restart, and
 the new look opens on its own Settings › Themes (`set(id)` leaves `landing = "themes"`, which the
 theme reads and `takeLanding()` clears). `overlay.qml` is the second window, the one gamescope
-paints over the game; its `Loader` takes `api.theme.overlay` — Reprise's `ui/Dock.qml`, nothing for
-the Switch 2 look, whose HOME goes straight to its HOME menu. The choice lives in `ui-memory.json` (`theme`), `--theme ID` overrides it
-for one run, and both looks offer it in Settings › Themes. A theme calls the same `api` and the same `api.screens` objects;
+paints over the game; its `Loader` takes `api.theme.overlay` — Reprise's `ui/Dock.qml`, the PS5
+look's `ps5/ui/ControlCenter.qml`, nothing for the Switch 2 look, whose HOME goes straight to its HOME
+menu. The choice lives in `ui-memory.json` (`theme`), `--theme ID` overrides it
+for one run, and every look offers it in Settings › Themes. A theme calls the same `api` and the same `api.screens` objects;
 `api.screens.album` and `api.screens.news` are the recordings and journal lists across every
-visible game (`loadAll()`, over `sessions("")`), which the Switch 2 look shows as its Album and News;
+visible game (`loadAll()`, over `sessions("")`), which the Switch 2 look shows as its Album and News
+and the PS5 look as its Media Gallery and Journal;
 the Album lays `api.screens.shots` (`loadAll()`) on the same grid, newest first, a Show pick
 narrowing it to screenshots or videos, A on a shot opening it full-screen (◀ ▶ step between shots).
 
@@ -252,7 +255,9 @@ offers only Learn on its row), and a hold of `controller.hold_ms` from the game 
 (`toLauncher`) whatever the press opened. What a press does is the theme's: the Switch 2 look
 flips to its HOME menu over the game (`toLauncher`) and back (`toGame`); Reprise opens its
 **dock** over the live game (`openDock`), a second press or B closes it, and from home a press
-resumes. With no session, Reprise treats it as Start (the game menu).
+resumes; the PS5 look opens its **Control Center** the same way (the dock contract: `open`,
+`closeDock()`, `dockClosed()` once its fade ends, `loading` for the reduced row), the hold going
+home as the console's does. With no session, Reprise treats it as Start (the game menu).
 
 The dock is `ui/Dock.qml` in the overlay window: the game's card at the left (its art, PLAYING or
 PAUSED, the title), a row of round buttons at the right (`row` in `Dock.qml`), a group's settings
@@ -297,7 +302,8 @@ Quit asks, then `api.home.stop()`.
 The swap between the game and the launcher is gamescope's, one cut, so the last frame it painted
 bridges it: the Guide press from the game asks for it (`nest_frame`) and the flip — the hold, the
 dock's Home or Quit — reuses what the press took, or waits for it to land. A look registered with
-`frame: False` (the Switch 2 one) paints nothing and waits for none. `toLauncher` then sets
+`frame: False` (the Switch 2 and PS5 ones) paints nothing and waits for none; the PS5 look blanks
+its home while the game is shown and builds it back up in beats when it returns. `toLauncher` then sets
 `frame` (`""` when none came) and `shown`; with a frame it waits for the theme's `covered()` —
 Reprise's `ui/HomeFlip.qml` paints the frame full screen and calls it once the image is up — before
 `focusLauncher` (`COVER_MS` later regardless), without one it swaps at once; `flipped` says the
