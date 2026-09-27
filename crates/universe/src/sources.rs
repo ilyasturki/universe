@@ -157,6 +157,11 @@ pub enum SourceEvent {
     },
     Update(serde_json::Map<String, serde_json::Value>),
     Achievement(serde_json::Map<String, serde_json::Value>),
+    Window {
+        class: String,
+        #[serde(default)]
+        title: String,
+    },
     Done,
     #[serde(other)]
     Unknown,

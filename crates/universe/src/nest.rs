@@ -29,6 +29,21 @@ pub fn parse_focusable(cards: &[u32]) -> Vec<Focusable> {
     cards.as_chunks::<3>().0.iter().map(|&[window, app_id, pid]| Focusable { window, app_id, pid }).collect()
 }
 
+/// The window to show among one program's (named, else the newest: ids grow), and the STEAM_GAME each window needs for it.
+fn presenting(theirs: &[(Focusable, String)], title: &str) -> (Option<u32>, Vec<(u32, u32)>) {
+    let target =
+        theirs.iter().find(|(_, name)| !title.is_empty() && name == title).or_else(|| theirs.iter().max_by_key(|(w, _)| w.window)).map(|(w, _)| w.window);
+    let cards = theirs
+        .iter()
+        .filter_map(|(w, _)| match (Some(w.window) == target, w.app_id) {
+            (true, 0) => Some((w.window, w.window)),
+            (false, app) if app != 0 => Some((w.window, 0)),
+            _ => None,
+        })
+        .collect();
+    (target, cards)
+}
+
 pub fn inside() -> bool {
     std::env::var_os("GAMESCOPE_WAYLAND_DISPLAY").is_some_and(|v| !v.is_empty())
 }
@@ -164,21 +179,26 @@ impl Nest {
 
     /// The windows the game may have, and the launcher's app id under Steam. Steam's gamescope lists no window without an app
     /// id, and a game started as a unit has none (no Steam reaper above it): there they come off the X tree, the ones whose
-    /// process runs in `game_unit`.
-    fn candidates(&self, launcher: u32, game_unit: Option<&str>) -> Result<(Vec<Focusable>, Option<u32>)> {
+    /// process runs in `game_unit`. On the launcher's own gamescope a store client's windows are not the game's either
+    /// (`game`), yet stand aside with the game's when the launcher shows.
+    fn candidates(&self, launcher: u32, game_unit: Option<&str>, game: bool) -> Result<(Vec<Focusable>, Option<u32>)> {
+        let owned = |pid: u32, unit: &str| std::fs::read_to_string(format!("/proc/{pid}/cgroup")).is_ok_and(|text| in_unit(&text, unit));
         if !self.steam {
-            return Ok((self.windows()?, None));
+            let windows = self.windows()?;
+            return Ok(match game_unit.filter(|_| game) {
+                Some(unit) => (windows.into_iter().filter(|w| owned(w.pid, unit)).collect(), None),
+                None => (windows, None),
+            });
         }
         let app = launcher_app(&self.windows()?, launcher).ok_or_else(|| Error::Unavailable("Steam gave the launcher no app id".into()))?;
         let Some(unit) = game_unit else { return Ok((vec![], Some(app))) };
-        let owned = |pid: u32| std::fs::read_to_string(format!("/proc/{pid}/cgroup")).is_ok_and(|text| in_unit(&text, unit));
-        let windows = self.tree()?.into_iter().filter(|w| w.pid != 0 && owned(w.pid)).collect();
+        let windows = self.tree()?.into_iter().filter(|w| w.pid != 0 && owned(w.pid, unit)).collect();
         Ok((windows, Some(app)))
     }
 
     pub fn game_shown(&self, launcher: u32, game_unit: Option<&str>) -> Result<bool> {
         let Some(focused) = self.focused()? else { return Ok(false) };
-        let (windows, steam_app) = self.candidates(launcher, game_unit)?;
+        let (windows, steam_app) = self.candidates(launcher, game_unit, true)?;
         let shown = game_windows(&windows, launcher, steam_app).any(|w| w.window == focused);
         Ok(shown)
     }
@@ -186,11 +206,43 @@ impl Nest {
     // Without --steam gamescope shows the newest mapped window whose STEAM_GAME is not 0; the BASELAYER atoms act only under --steam.
     // Under --steam the game's windows take the launcher's app id, and the newer window shows.
     pub fn show(&self, launcher: u32, game: bool, game_unit: Option<&str>) -> Result<()> {
-        let (windows, steam_app) = self.candidates(launcher, game_unit)?;
+        let (windows, steam_app) = self.candidates(launcher, game_unit, game)?;
         for (window, value) in stamps(&windows, launcher, steam_app, game) {
             self.set_card(window, "STEAM_GAME", value)?;
         }
         Ok(())
+    }
+
+    /// Keeps the window of `class` titled `title` (else the class's newest) the one gamescope may show among that class's
+    /// windows; Steam's own gamescope shows what Steam picks.
+    pub fn present(&self, launcher: u32, class: &str, title: &str) -> Result<()> {
+        if self.steam {
+            return Ok(());
+        }
+        let mut theirs = Vec::new();
+        for w in self.windows()?.into_iter().filter(|w| w.pid != launcher) {
+            if self.class_of(w.window)? == class {
+                theirs.push((w, self.name_of(w.window)?));
+            }
+        }
+        for (window, value) in presenting(&theirs, title).1 {
+            self.set_card(window, "STEAM_GAME", value)?;
+        }
+        Ok(())
+    }
+
+    fn class_of(&self, window: u32) -> Result<String> {
+        let reply = self.conn.get_property(false, window, AtomEnum::WM_CLASS, AtomEnum::STRING, 0, 256).map_err(x)?.reply().map_err(x)?;
+        Ok(reply.value.split(|b| *b == 0).nth(1).map(|c| String::from_utf8_lossy(c).into_owned()).unwrap_or_default())
+    }
+
+    fn name_of(&self, window: u32) -> Result<String> {
+        let (net, utf8) = (self.atom("_NET_WM_NAME")?, self.atom("UTF8_STRING")?);
+        let mut value = self.conn.get_property(false, window, net, utf8, 0, 1024).map_err(x)?.reply().map_err(x)?.value;
+        if value.is_empty() {
+            value = self.conn.get_property(false, window, AtomEnum::WM_NAME, AtomEnum::ANY, 0, 1024).map_err(x)?.reply().map_err(x)?.value;
+        }
+        Ok(String::from_utf8_lossy(&value).into_owned())
     }
 
     /// gamescope takes one shot at a time: a request made while another is in flight is dropped, and waits out `timeout`.
@@ -293,5 +345,16 @@ mod tests {
         assert!(steam_driven(None, false, true), "a shortcut before Steam set the base layer");
         assert!(!steam_driven(None, false, false), "a bare gamescope someone else started");
         assert!(!steam_driven(Some(Own::Nested), false, true), "the launcher's own gamescope, started from Steam's desktop client");
+    }
+
+    #[test]
+    fn the_named_window_is_shown_and_its_siblings_are_not() {
+        let window = |window, app_id| Focusable { window, app_id, pid: 7 };
+        let steam = [(window(0x220003f, 0x220003f), "Steam".to_string()), (window(0x220009f, 0x220009f), "Install".to_string())];
+        assert_eq!(presenting(&steam, "Install"), (Some(0x220009f), vec![(0x220003f, 0)]), "the main window stands aside");
+        assert_eq!(presenting(&steam, "Installer"), (Some(0x220009f), vec![(0x220003f, 0)]), "another language: the newest window");
+        let hidden = [(window(0x220003f, 0), "Steam".to_string()), (window(0x220009f, 0), "Install".to_string())];
+        assert_eq!(presenting(&hidden, "Install"), (Some(0x220009f), vec![(0x220009f, 0x220009f)]), "a window hidden before comes back");
+        assert_eq!(presenting(&[], "Install"), (None, vec![]));
     }
 }

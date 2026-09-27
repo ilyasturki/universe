@@ -25,6 +25,8 @@ fn trash(path: &Path) -> Result<()> {
     trash::delete(path).map_err(|e| Error::Io(format!("trash {}: {e}", path.display())))
 }
 
+const PRESENT_POLL: std::time::Duration = std::time::Duration::from_millis(250);
+
 pub fn title_of(path: &Path) -> String {
     let stem = if path.is_dir() { path.file_name() } else { path.file_stem() }.map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
     let mut s = stem.replace('_', " ");
@@ -1453,7 +1455,8 @@ impl Core {
         let settings = m.merged_settings(&cfg, None);
         let mut events = Vec::new();
         let key = (matches!(verb, "install" | "update") && !args.is_empty()).then(|| format!("{}:{}", m.id(), args[0]));
-        let result = sources::run(
+        let (ask, asked) = tokio::sync::watch::channel(None::<(String, String)>);
+        let run = sources::run(
             m,
             &settings,
             verb,
@@ -1467,15 +1470,39 @@ impl Core {
                 if let (SourceEvent::Progress { done, total, message }, Some(p)) = (&ev, progress.as_mut()) {
                     p(*done, *total, message);
                 }
+                if let SourceEvent::Window { class, title } = &ev {
+                    ask.send_replace(Some((class.clone(), title.clone())));
+                }
                 events.push(ev);
             },
-        )
-        .await;
+        );
+        let result = tokio::select! {
+            result = run => result,
+            () = self.present(asked) => unreachable!("present never returns"),
+        };
         if let Some(k) = &key {
             self.source_jobs.lock().unwrap().remove(k);
         }
         result?;
         Ok(events)
+    }
+
+    /// A source's `window` event: while its verb runs, that window stays the one the launcher's gamescope shows, since a
+    /// window of the same program mapped after it would take gamescope's pick back.
+    async fn present(&self, mut asked: tokio::sync::watch::Receiver<Option<(String, String)>>) {
+        let Some(nest) = self.nest() else { return std::future::pending().await };
+        if asked.wait_for(Option::is_some).await.is_err() {
+            return std::future::pending().await;
+        }
+        let launcher = self.launcher_pid();
+        loop {
+            if let Some((class, title)) = asked.borrow().clone() {
+                if let Err(e) = nest.present(launcher, &class, &title) {
+                    tracing::debug!("nest: present {class}: {e}");
+                }
+            }
+            tokio::time::sleep(PRESENT_POLL).await;
+        }
     }
 
     /// SIGTERMs the source process installing or updating `game_id`; the source stops its downloader and keeps
