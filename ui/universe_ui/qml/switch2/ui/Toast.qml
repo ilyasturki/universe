@@ -9,7 +9,7 @@ Item {
 
     x: Theme.dp(72)
     y: shown ? Theme.dp(40) : -height
-    width: Math.min(label.implicitWidth + Theme.dp(64), parent ? parent.width - Theme.dp(144) : 0)
+    width: Math.min(label.implicitWidth + label.anchors.margins * 2, parent ? parent.width - Theme.dp(144) : 0)
     height: Theme.dp(84)
     visible: y > -height + 1
 

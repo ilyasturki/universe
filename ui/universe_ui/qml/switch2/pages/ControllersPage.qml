@@ -652,7 +652,7 @@ FocusScope {
         Label {
             anchors.horizontalCenter: parent.horizontalCenter
             visible: page.walking
-            text: page.walking ? page.step.prompt : ""
+            text: page.walking ? page.step.prompt || "" : ""
             color: Theme.accent
             font.pixelSize: Theme.dp(Theme.fontBody)
         }
