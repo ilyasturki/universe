@@ -10,7 +10,7 @@ FocusScope {
     property var model: []
     property int index: 0
     property var shell: null
-    readonly property bool cursorShown: activeFocus
+    property bool cursorShown: activeFocus
     readonly property var currentRow: index >= 0 && index < model.length ? model[index] : null
 
     signal activated(int index, var row)

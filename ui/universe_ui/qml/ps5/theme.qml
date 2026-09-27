@@ -79,6 +79,19 @@ FocusScope {
         Qt.callLater(focusTop);
     }
 
+    // A game picked on a page (the library, a search): home, its tile focused, its hero open, as the console's.
+    function openGame(id) {
+        if (!api.allGames.byId(id)) {
+            Sound.play("edge");
+            return;
+        }
+        Sound.play("ok");
+        stack.clear();
+        home.focusGame(id);
+        home.down();
+        Qt.callLater(focusTop);
+    }
+
     function focusTop() {
         var target = onHome ? home : topPage;
         if (!modal && target)

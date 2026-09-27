@@ -143,14 +143,36 @@ FocusScope {
                 label: "Welcome"
             }
         ];
+        var ids = {};
         for (var i = 0; i < headed.count; i++) {
             var g = headed.get(i);
-            if (g)
+            if (g) {
+                ids[g.id] = true;
                 out.push({
                     kind: "game",
                     game: g
                 });
+            }
         }
+        // An empty library: first-run setup and a game file of this machine, first on the row, as Switch 2's discs.
+        if (api.allGames.count === 0)
+            out.push({
+                kind: "setup",
+                label: "Set Up",
+                tagline: "What other launchers hold, your stores, a few choices",
+                action: "Set Up"
+            }, {
+                kind: "add",
+                label: "Add a Game",
+                tagline: "A game file on this machine, a store's games, or your Lutris library",
+                action: "Add a Game"
+            });
+        var guest = guestId !== "" && !ids[guestId] ? api.allGames.byId(guestId) : null;
+        if (guest)
+            out.splice(1, 0, {
+                kind: "game",
+                game: guest
+            });
         out.push({
             kind: "store",
             label: "Store",
@@ -656,14 +678,23 @@ FocusScope {
             api.screens.media.load();
     }
 
+    // A game opened from elsewhere that the row does not hold sits first on it, as the console puts it there.
+    property string guestId: ""
+
     function focusGame(id) {
-        for (var i = 0; i < gameEntries.length; i++)
-            if (gameEntries[i].game && gameEntries[i].game.id === id) {
-                tab = 0;
-                zone = "rail";
-                gamesIndex = i;
-                return true;
-            }
+        for (var pass = 0; pass < 2; pass++) {
+            for (var i = 0; i < gameEntries.length; i++)
+                if (gameEntries[i].game && gameEntries[i].game.id === id) {
+                    tab = 0;
+                    zone = "rail";
+                    gamesIndex = i;
+                    return true;
+                }
+            if (!api.allGames.byId(id))
+                return false;
+            guestId = id;
+            buildGames();
+        }
         return false;
     }
 
@@ -771,6 +802,10 @@ FocusScope {
             shell.push("pages/LibraryPage.qml", {});
         else if (e.kind === "journal")
             shell.push("pages/NewsPage.qml", {});
+        else if (e.kind === "setup")
+            shell.push("pages/OnboardingPage.qml", {});
+        else if (e.kind === "add")
+            shell.push("pages/AddGamePage.qml", {});
         else if (e.kind === "channel")
             shell.push("pages/MediaGalleryPage.qml", {
                 gameId: e.game.id
@@ -1406,17 +1441,6 @@ FocusScope {
             font.weight: Font.Light
             font.pixelSize: Theme.dp(Theme.fontTitle)
         }
-    }
-
-    Label {
-        x: Theme.dp(Theme.edge)
-        y: Theme.dp(Theme.hubY)
-        width: parent.width - x * 2
-        visible: page.empty && page.tab === 0 && page.zone === "rail"
-        text: "Nothing in the library yet. The Store installs from your stores; Settings › Sources links them, and a game file on this machine can be added from the Game Library."
-        wrapMode: Text.WordWrap
-        color: Theme.textSecondary
-        font.pixelSize: Theme.dp(Theme.fontSmall)
     }
 
     Rectangle {
