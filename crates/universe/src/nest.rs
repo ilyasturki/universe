@@ -2,7 +2,7 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use x11rb::connection::Connection;
-use x11rb::protocol::xproto::{AtomEnum, ConnectionExt, PropMode};
+use x11rb::protocol::xproto::{AtomEnum, ConnectionExt, MapState, PropMode};
 use x11rb::rust_connection::RustConnection;
 use x11rb::wrapper::ConnectionExt as _;
 
@@ -63,6 +63,12 @@ fn launcher_app(windows: &[Focusable], launcher: u32) -> Option<u32> {
         .find(|w| w.pid == launcher && w.app_id != 0)
         .map(|w| w.app_id)
         .or_else(|| std::env::var("SteamGameId").ok()?.parse().ok().filter(|id| *id != 0))
+}
+
+/// Whether a `/proc/<pid>/cgroup` puts the process in systemd's `unit` (a service, `.service` optional).
+pub fn in_unit(cgroup: &str, unit: &str) -> bool {
+    let service = format!("{unit}.service");
+    cgroup.lines().any(|line| line.rsplit(':').next().is_some_and(|path| path.split('/').any(|seg| seg == unit || seg == service)))
 }
 
 /// The game's windows: every one not the launcher's; under Steam (`steam_app`, the launcher's id) only those no app claims
@@ -140,27 +146,47 @@ impl Nest {
         Ok(self.cards(self.root, "GAMESCOPE_FOCUSED_WINDOW")?.first().copied().filter(|w| *w != 0))
     }
 
-    /// The launcher's app id under Steam, `None` on any other gamescope.
-    fn steam_app(&self, windows: &[Focusable], launcher: u32) -> Result<Option<u32>> {
-        match self.steam {
-            true => Ok(Some(launcher_app(windows, launcher).ok_or_else(|| Error::Unavailable("Steam gave the launcher no app id".into()))?)),
-            false => Ok(None),
+    /// The mapped top-level windows as the X tree has them, with `_NET_WM_PID` and `STEAM_GAME` (0 where unset).
+    fn tree(&self) -> Result<Vec<Focusable>> {
+        let children = self.conn.query_tree(self.root).map_err(x)?.reply().map_err(x)?.children;
+        let mut out = vec![];
+        for window in children {
+            let Ok(attrs) = self.conn.get_window_attributes(window).map_err(x)?.reply() else { continue };
+            if attrs.map_state != MapState::VIEWABLE || attrs.override_redirect {
+                continue;
+            }
+            let pid = self.cards(window, "_NET_WM_PID").ok().and_then(|c| c.first().copied()).unwrap_or(0);
+            let app_id = self.cards(window, "STEAM_GAME").ok().and_then(|c| c.first().copied()).unwrap_or(0);
+            out.push(Focusable { window, app_id, pid });
         }
+        Ok(out)
     }
 
-    pub fn game_shown(&self, launcher: u32) -> Result<bool> {
+    /// The windows the game may have, and the launcher's app id under Steam. Steam's gamescope lists no window without an app
+    /// id, and a game started as a unit has none (no Steam reaper above it): there they come off the X tree, the ones whose
+    /// process runs in `game_unit`.
+    fn candidates(&self, launcher: u32, game_unit: Option<&str>) -> Result<(Vec<Focusable>, Option<u32>)> {
+        if !self.steam {
+            return Ok((self.windows()?, None));
+        }
+        let app = launcher_app(&self.windows()?, launcher).ok_or_else(|| Error::Unavailable("Steam gave the launcher no app id".into()))?;
+        let Some(unit) = game_unit else { return Ok((vec![], Some(app))) };
+        let owned = |pid: u32| std::fs::read_to_string(format!("/proc/{pid}/cgroup")).is_ok_and(|text| in_unit(&text, unit));
+        let windows = self.tree()?.into_iter().filter(|w| w.pid != 0 && owned(w.pid)).collect();
+        Ok((windows, Some(app)))
+    }
+
+    pub fn game_shown(&self, launcher: u32, game_unit: Option<&str>) -> Result<bool> {
         let Some(focused) = self.focused()? else { return Ok(false) };
-        let windows = self.windows()?;
-        let steam_app = self.steam_app(&windows, launcher)?;
+        let (windows, steam_app) = self.candidates(launcher, game_unit)?;
         let shown = game_windows(&windows, launcher, steam_app).any(|w| w.window == focused);
         Ok(shown)
     }
 
     // Without --steam gamescope shows the newest mapped window whose STEAM_GAME is not 0; the BASELAYER atoms act only under --steam.
-    // Under --steam a game started as a unit has no app id (no Steam reaper above it): it takes the launcher's, and the newer window shows.
-    pub fn show(&self, launcher: u32, game: bool) -> Result<()> {
-        let windows = self.windows()?;
-        let steam_app = self.steam_app(&windows, launcher)?;
+    // Under --steam the game's windows take the launcher's app id, and the newer window shows.
+    pub fn show(&self, launcher: u32, game: bool, game_unit: Option<&str>) -> Result<()> {
+        let (windows, steam_app) = self.candidates(launcher, game_unit)?;
         for (window, value) in stamps(&windows, launcher, steam_app, game) {
             self.set_card(window, "STEAM_GAME", value)?;
         }
@@ -249,6 +275,16 @@ mod tests {
         assert_eq!(stamps(&game_mode, 10, Some(7_000_000), false), [(0x300, 0)], "nor is it hidden, nor the launcher's window touched");
         let shown: Vec<u32> = game_windows(&game_mode, 10, Some(7_000_000)).map(|w| w.window).collect();
         assert_eq!(shown, [0x200, 0x300], "Steam's UI focused is no game shown");
+    }
+
+    #[test]
+    fn a_process_is_the_games_by_its_cgroup() {
+        let game = "0::/user.slice/user-1000.slice/user@1000.service/app.slice/universe-game-dead-cells-20260927-173200.service\n";
+        assert!(in_unit(game, "universe-game-dead-cells-20260927-173200.service"));
+        assert!(in_unit(game, "universe-game-dead-cells-20260927-173200"), "the suffix is optional");
+        assert!(!in_unit(game, "universe-game-dead-cells-20260927-170805.service"), "another session of the same game");
+        let steam = "0::/user.slice/user-1000.slice/user@1000.service/app.slice/app-steam@autostart.service\n";
+        assert!(!in_unit(steam, "universe-game-dead-cells-20260927-173200.service"));
     }
 
     #[test]

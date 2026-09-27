@@ -245,10 +245,13 @@ the Steam and … buttons, its overlay, the HUD, the frame limit, volume, screen
 so the core steps aside:
 
 - Focus: under `--steam` gamescope shows the windows of the app Steam focuses. A game started as a
-  transient unit has no Steam reaper above it and no app id, so `focus_session` stamps the
-  launcher's own (`STEAM_GAME` of the launcher's window, else its `SteamGameId`) on the game's
-  windows — the ones no app claims yet, never Steam's own UI — and gamescope shows the newer one;
-  `focus_pid` puts 0 back, and `nest_game_shown()` counts only those windows.
+  transient unit has no Steam reaper above it and no app id, and such a window is not even on
+  `GAMESCOPE_FOCUSABLE_WINDOWS`: the core finds the game's windows on the X tree instead (mapped
+  top-levels whose `_NET_WM_PID` runs in the session's unit, by its cgroup) and stamps the
+  launcher's app id (`STEAM_GAME` of the launcher's window, else its `SteamGameId`) on them, which
+  gamescope then shows as the app's newer window. `wait_session_window` stamps as it waits, so the
+  game comes up as its window maps; `focus_session` does the same, `focus_pid` puts 0 back, and
+  `nest_game_shown()` counts only those windows. Steam's own UI is never touched.
 - The plan: no MangoHud layer and no limit (`mangohud` false, `fps_limit` none), and the launcher's
   mangoapp is not told a thing, since the SysV queue would reach Steam's.
 - `set_mangohud`, `set_fps_limit`, `volume` (all but `get`), `set_output`, `screenshot`,

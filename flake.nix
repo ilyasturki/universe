@@ -278,8 +278,12 @@
           qtWrapperArgs+=(--set UNIVERSE_SOURCES_PATH ${sourcesDir})
           qtWrapperArgs+=(--prefix PATH : ${runtimePath})
         '';
+        # Steam preloads its overlay into a non-Steam shortcut: the Qt wrapper goes behind a static entry point that drops it (nix/steam-safe.c).
         postFixup = ''
           for f in $out/bin/*; do wrapQtApp "$f"; done
+          mv $out/bin/universe-ui $out/bin/.universe-ui-qt
+          ${pkgs.pkgsStatic.stdenv.cc}/bin/${pkgs.pkgsStatic.stdenv.cc.targetPrefix}cc -static -O2 \
+            -DTARGET='"'"$out/bin/.universe-ui-qt"'"' -o $out/bin/universe-ui ${./nix/steam-safe.c}
         '';
         doCheck = false;
         meta.mainProgram = "universe-ui";
@@ -463,6 +467,18 @@
         pytest-modules = pytestModules;
         pytest-sources = pytestSources;
         pytest-core-py = pytestCorePy;
+        # A stand-in for Steam's overlay with a dependency nothing resolves: it kills a dynamic binary, not universe-ui.
+        steam-preload = pkgs.runCommandCC "universe-ui-steam-preload" { } ''
+          mkdir gone overlay
+          echo 'void gone(void) {}' > gone.c
+          cc -shared -o gone/libgone.so gone.c
+          echo 'void gone(void); void hook(void) { gone(); }' > overlay.c
+          cc -shared -o overlay/gameoverlayrenderer.so overlay.c -Lgone -lgone
+          preload=$PWD/overlay/gameoverlayrenderer.so
+          if LD_PRELOAD=$preload ${pkgs.coreutils}/bin/true 2>/dev/null; then echo "the stand-in overlay failed nothing"; exit 1; fi
+          LD_PRELOAD=$preload HOME=$PWD ${ui}/bin/universe-ui --help > /dev/null
+          touch $out
+        '';
       };
 
       nixosModules.default = import ./nix/nixos.nix { gsrPkg = pkgs.gpu-screen-recorder; };

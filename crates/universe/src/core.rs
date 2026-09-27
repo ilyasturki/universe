@@ -526,9 +526,13 @@ impl Core {
                 return Ok(None);
             }
             // On the launcher's gamescope the shell's toplevel is the gamescope's; without the extension a stand-in carries its pid.
+            // Under Steam nothing shows a window no app id claims: each new window of the game takes the launcher's as it maps.
+            if c.gamescope_pid != 0 && self.under_steam() {
+                self.nest_or()?.show(c.launcher_pid, true, Some(&c.unit))?;
+            }
             let window = if c.gamescope_pid == 0 {
                 self.session_window().await?
-            } else if self.nest_or()?.game_shown(c.launcher_pid)? {
+            } else if self.nest_or()?.game_shown(c.launcher_pid, Some(&c.unit))? {
                 match self.session_window().await {
                     Err(Error::Unavailable(_)) => Some(crate::desktop::Toplevel { pid: i64::from(c.gamescope_pid), focused: true, ..Default::default() }),
                     w => w?,
@@ -554,7 +558,7 @@ impl Core {
     pub async fn focus_session(&self) -> Result<()> {
         let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
         if c.gamescope_pid != 0 {
-            return self.nest_or()?.show(c.launcher_pid, true);
+            return self.nest_or()?.show(c.launcher_pid, true, Some(&c.unit));
         }
         let w = self.session_window().await?.ok_or_else(|| Error::NotFound("the game has no window yet".into()))?;
         match crate::desktop::activate_window(self.desktop().await, &w.id).await {
@@ -567,7 +571,8 @@ impl Core {
     pub async fn focus_pid(&self, pid: u32) -> Result<()> {
         if pid == std::process::id() {
             if let Some(n) = self.nest() {
-                return n.show(self.launcher_pid(), false);
+                let unit = self.current().await.map(|c| c.unit);
+                return n.show(self.launcher_pid(), false, unit.as_deref());
             }
         }
         let profile = self.desktop().await;
@@ -582,7 +587,8 @@ impl Core {
     }
 
     pub fn nest_game_shown(&self) -> Result<bool> {
-        self.nest_or()?.game_shown(self.launcher_pid())
+        let unit = crate::session::read_marker().map(|m| m.current.unit);
+        self.nest_or()?.game_shown(self.launcher_pid(), unit.as_deref())
     }
 
     /// The launcher the running game was started from, as the marker says; this process before a launch.
