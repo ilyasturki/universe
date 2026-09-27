@@ -345,17 +345,16 @@ impl Core {
     pub async fn remove(&self, id: &str, purge: bool) -> Result<()> {
         let r = self.get(id).await?;
         let config = self.config.read().await.clone();
-        for (root, label) in [(config.recordings_root(), "recordings"), (config.journal_root(), "journal")] {
-            let from = root.join(id);
-            if from.is_dir() {
-                let archive = root.join(".archive");
-                std::fs::create_dir_all(&archive)?;
-                let to = archive.join(id);
-                if to.exists() {
-                    tracing::warn!("{label}: {} already archived", to.display());
-                } else {
-                    std::fs::rename(&from, &to)?;
-                }
+        let root = config.recordings_root();
+        let from = root.join(id);
+        if from.is_dir() {
+            let archive = root.join(".archive");
+            std::fs::create_dir_all(&archive)?;
+            let to = archive.join(id);
+            if to.exists() {
+                tracing::warn!("recordings: {} already archived", to.display());
+            } else {
+                std::fs::rename(&from, &to)?;
             }
         }
         if purge {
@@ -422,7 +421,7 @@ impl Core {
         Ok(report)
     }
 
-    pub(crate) fn hook_env_base(&self, r: &Resolved, cfg: &Config) -> HookEnv {
+    pub(crate) fn hook_env_base(&self, r: &Resolved) -> HookEnv {
         let mut env = HookEnv::default();
         env.set("GAME_ID", r.game.id.clone());
         env.set("GAME_SLUG", r.game.id.clone());
@@ -436,7 +435,6 @@ impl Core {
             env.set(&k, v);
         }
         env.set("UNIVERSE_GAME_JSON", r.to_json().to_string());
-        env.set("UNIVERSE_JOURNAL_ROOT", cfg.journal_root().to_string_lossy().to_string());
         env
     }
 
@@ -814,7 +812,7 @@ impl Core {
         let (game, env) = match self.current().await {
             Some(c) => {
                 let r = self.get(&c.id).await?;
-                let mut env = self.hook_env_base(&r, &cfg);
+                let mut env = self.hook_env_base(&r);
                 env.set("SESSION_ID", c.session_id);
                 env.set("SESSION_SCREEN", c.screen);
                 (Some(r.game), env)
@@ -897,23 +895,10 @@ impl Core {
         }
         trash(&path)?;
         let journal_dir = r.game.journal_dir();
-        let mut named = false;
         for mut entry in crate::journal::read_all(&journal_dir).unwrap_or_default() {
             if entry.images.iter().any(|i| i.rsplit('/').next() == Some(name)) {
                 entry.images.retain(|i| i.rsplit('/').next() != Some(name));
                 crate::journal::write(&journal_dir, &entry)?;
-                named = true;
-            }
-        }
-        if named {
-            let cfg = self.config.read().await.clone();
-            let note_dir = cfg.journal_root().join(id);
-            let mirrored = note_dir.join(name);
-            if mirrored.is_file() {
-                trash(&mirrored)?;
-            }
-            if note_dir.is_dir() {
-                self.render_journal(id).await?;
             }
         }
         Ok(())
@@ -1030,8 +1015,6 @@ impl Core {
         let journal_dir = r.game.journal_dir();
         let entries = crate::journal::read_all(&journal_dir)?;
         let entry = entries.iter().find(|e| e.session == session_id).ok_or_else(|| Error::NotFound(format!("journal entry {session_id}")))?;
-        let cfg = self.config.read().await.clone();
-        let note_dir = cfg.journal_root().join(id);
         if entry.state == "pending" {
             // The hook's `finally` does not run under SIGTERM: the pending file is ours to drop.
             let _ = self.host.units.stop_unit(&format!("universe-journal-post-process-{session_id}")).await;
@@ -1051,17 +1034,12 @@ impl Core {
             if rel.starts_with('/') || rel.split('/').any(|seg| seg == "..") {
                 continue;
             }
-            for dir in [&journal_dir, &note_dir] {
-                let p = dir.join(rel);
-                if p.is_file() {
-                    trash(&p)?;
-                }
+            let p = journal_dir.join(rel);
+            if p.is_file() {
+                trash(&p)?;
             }
         }
         self.reload_game(id).await?;
-        if note_dir.is_dir() {
-            self.render_journal(id).await?;
-        }
         Ok(())
     }
 
@@ -1099,7 +1077,7 @@ impl Core {
         if m.needs_setup() {
             return Err(Error::Unavailable(format!("{JOURNAL_MODULE}: {} not set", m.unset.join(", "))));
         }
-        let mut env = self.post_process_env(&r, &cfg, session_id);
+        let mut env = self.post_process_env(&r, session_id);
         // Asked for by hand: the game's own "write an entry after each session" switch does not hold this one back.
         let mut settings = m.merged_settings(&cfg, Some(&r.game));
         settings.insert("enabled".into(), serde_json::Value::Bool(true));
@@ -1201,25 +1179,6 @@ impl Core {
             }
         }
         out
-    }
-
-    pub async fn render_journal(&self, id: &str) -> Result<String> {
-        let r = self.get(id).await?;
-        let cfg = self.config.read().await.clone();
-        let note_dir = cfg.journal_root().join(id);
-        let journal_dir = r.game.journal_dir();
-        let sessions = crate::journal::sessions_by_id(&r.sessions);
-        let entries = crate::journal::load(&journal_dir);
-        let path = crate::journal::write_note(
-            &r.game.title,
-            &entries,
-            &sessions,
-            &journal_dir,
-            &r.game.screenshots_dir(),
-            &note_dir,
-            &crate::journal::Locale::from_env(),
-        )?;
-        Ok(path.to_string_lossy().into())
     }
 
     pub async fn modules(&self) -> Vec<serde_json::Value> {

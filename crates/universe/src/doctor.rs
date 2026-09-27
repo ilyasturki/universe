@@ -338,19 +338,15 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         };
         push("universe-extension", "Universe shell extension", ok, detail, fix, "core");
     }
-    for (check, label, dir, key) in [
-        ("recordings_root", "Recordings folder", config.recordings_root(), "recordings_root"),
-        ("journal_root", "Journal folder", config.journal_root(), "journal_root"),
-    ] {
-        push(
-            check,
-            label,
-            dir.is_dir(),
-            if dir.is_dir() { dir.to_string_lossy().into() } else { format!("{} does not exist", dir.display()) },
-            format!("create it, or set paths.{key} to a folder that exists"),
-            "core",
-        );
-    }
+    let recordings = config.recordings_root();
+    push(
+        "recordings_root",
+        "Recordings folder",
+        recordings.is_dir(),
+        if recordings.is_dir() { recordings.to_string_lossy().into() } else { format!("{} does not exist", recordings.display()) },
+        "create it, or set paths.recordings_root to a folder that exists".into(),
+        "core",
+    );
     let used: std::collections::BTreeSet<&String> = game_runners.iter().chain(config.runners.keys()).collect();
     let mut inputplumber_wanted = false;
     for id in used {

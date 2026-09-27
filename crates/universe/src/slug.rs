@@ -30,23 +30,6 @@ pub fn slug(name: &str) -> String {
     }
 }
 
-/// Obsidian-safe note name (gameNoteName): keeps accents and apostrophes, drops / \ : # ^ [ ] |.
-pub fn note_name(title: &str) -> String {
-    let replaced: String = title
-        .chars()
-        .map(|c| match c {
-            '\\' | '/' | ':' | '#' | '^' | '[' | ']' | '|' => ' ',
-            c => c,
-        })
-        .collect();
-    let squeezed = replaced.split_whitespace().collect::<Vec<_>>().join(" ");
-    if squeezed.is_empty() {
-        "Journal".into()
-    } else {
-        squeezed
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -61,11 +44,5 @@ mod tests {
         assert_eq!(slug("KINGDOM HEARTS HD 1.5+2.5 ReMIX (All Games)"), "kingdom-hearts-hd-1-5-2-5-remix-all-games");
         assert_eq!(slug(""), "unknown");
         assert_eq!(slug("’’"), "unknown");
-    }
-
-    #[test]
-    fn note_names() {
-        assert_eq!(note_name("Pokémon: HeartGold"), "Pokémon HeartGold");
-        assert_eq!(note_name("  "), "Journal");
     }
 }

@@ -353,9 +353,6 @@ impl Core {
     fn journal(&self, py: Python<'_>, id: String) -> PyResult<Py<PyAny>> {
         self.value(py, |c| async move { c.journal(&id).await })
     }
-    fn render_journal(&self, py: Python<'_>, id: String) -> PyResult<String> {
-        self.run(py, |c| async move { c.render_journal(&id).await })
-    }
     fn pending_journals(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| c.pending_journals())
     }

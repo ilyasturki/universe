@@ -178,7 +178,7 @@ clean:
 env:
     #!/usr/bin/env bash
     set -euo pipefail
-    mkdir -p "{{ dev }}"/{data,config,state,cache,recordings,journal}
+    mkdir -p "{{ dev }}"/{data,config,state,cache,recordings}
     cfg="{{ dev }}/config/config.toml"
     [ -e "$cfg" ] && exit 0
     cat > "$cfg" <<EOF
@@ -186,7 +186,6 @@ env:
     [paths]
     games_root = "{{ dev }}/data/games"
     recordings_root = "{{ dev }}/recordings"
-    journal_root = "{{ dev }}/journal"
     overrides = "~/Dotfiles/home/config/pegasus-art"   # hand-picked art; drop the line to test without
     [modules]
     enabled = ["capture", "journal", "screenshot"]

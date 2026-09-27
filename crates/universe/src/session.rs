@@ -3,7 +3,6 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-use crate::config::Config;
 use crate::core::{passthrough_env, Core};
 use crate::host::{Prop, UnitSpec};
 use crate::launcher::{self, Plan};
@@ -151,7 +150,7 @@ impl Core {
         let screen = crate::desktop::pick_screen(screen);
         let unit = format!("{}.service", launcher::unit_name(id, &session_id));
 
-        let mut base = self.hook_env_base(&r, &cfg);
+        let mut base = self.hook_env_base(&r);
         base.set("SESSION_ID", session_id.clone());
         base.set("SESSION_UNIT", unit.clone());
         base.set("SESSION_SCREEN", screen.clone());
@@ -363,7 +362,7 @@ impl Core {
         let mut env_end = match &marker {
             Some(m) => HookEnv { vars: m.hook_env.clone() },
             None => {
-                let mut e = self.hook_env_base(&r, &cfg);
+                let mut e = self.hook_env_base(&r);
                 e.set("SESSION_ID", session_id);
                 e.set("SESSION_UNIT", session.unit.clone());
                 e.set("SESSION_SCREEN", session.screen.clone());
@@ -419,9 +418,9 @@ impl Core {
     }
 
     /// What a `post-process` hook is told about one session of `r`, whether it just ended or is being written again later.
-    pub(crate) fn post_process_env(&self, r: &Resolved, cfg: &Config, session_id: &str) -> HookEnv {
+    pub(crate) fn post_process_env(&self, r: &Resolved, session_id: &str) -> HookEnv {
         let sess = r.sessions.iter().find(|s| s.session == session_id).cloned();
-        let mut env = self.hook_env_base(r, cfg);
+        let mut env = self.hook_env_base(r);
         env.set("SESSION_ID", session_id);
         env.set("RECORDING_PATH", sess.as_ref().and_then(|s| s.recording.clone()).unwrap_or_default());
         env.set("RECORDING_STARTED_AT", sess.as_ref().map(|s| s.recording_started_at.clone()).unwrap_or_default());
@@ -438,7 +437,7 @@ impl Core {
     async fn post_process(&self, id: &str, session_id: &str) {
         let Ok(r) = self.get(id).await else { return };
         let cfg = self.config.read().await.clone();
-        let env = self.post_process_env(&r, &cfg, session_id);
+        let env = self.post_process_env(&r, session_id);
         for m in self.hook_modules(&r, "post-process").await {
             let menv = self.module_env(&m, Some(&r.game), &cfg, &env);
             if let Err(e) = modules::run_async(&self.host.units, &m, "post-process", &menv, session_id, None).await {

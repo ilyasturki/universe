@@ -72,7 +72,7 @@ operation; a dash means the surface doesn't expose it.
 | `get(id)` | `get(id)` | `universe info <name> --json` | resolved `Game`: global defaults merged in, session stats, media, active modules |
 | `resolve(query)` | `resolve(query)` | — | candidate ids: exact › whole word › substring › path › every word a prefix of a title word or genre. Empty means unknown, more than one means ambiguous |
 | `set(id, key, value)` | `set(id, key, value)` | `universe set <name> k=v …` | writes one `game.toml` key |
-| `remove(id, purge)` | `remove(id, purge)` | `universe rm <name> [--purge]` | parks recordings and journal under `.archive/`, marks `removed_at`; `purge` also trashes the prefix |
+| `remove(id, purge)` | `remove(id, purge)` | `universe rm <name> [--purge]` | parks recordings under `.archive/` (the journal stays in `games/<id>/journal/`), marks `removed_at`; `purge` also trashes the prefix |
 | `uninstall(id)` | `uninstall(id)` | `universe uninstall <name>` | trashes `source.dir` and clears `source.dir`, `source.build_id` and `launch.exe`; the game stays in the library, not installed. Refuses a root, a home or the games root |
 | `reload_all()` | `reload()` | — | rereads config and `games/*/game.toml` |
 | `rescan()` | `rescan()` | `universe rescan` | `reload_all`, then `import_roms(true)`: its report |
@@ -702,8 +702,7 @@ prose paragraph as plain text (emphasis dropped, links reduced to their text), f
 | `add_entry(session_id, entry)` | `add_entry(session_id, entry)` | `universe journal-add <session> <entry>` | validates the schema, fills `started_at`/`ended_at`/`duration_s` from the session line when the entry lacks them, writes `journal/<session>.json` |
 | `journal(id)` | `journal(id)` | `universe journal <name>` | `[Entry]`, last first, read from disk on every call, `images` made absolute; the state files below are entries too |
 | `pending_journals()` | `pending_journals()` | `universe status` (a `journal: writing <title>…` line; `pending_journals` in `--json`) | `[{game, title, session, started_at}]` for every `pending` entry across the library; `title` is the game's |
-| `render_journal(id)` | `render_journal(id)` | `universe journal <name> --render` | renders `<journal_root>/<id>/<Title>.md` from the `written` entries, returns the path |
-| `remove_journal_entry(id, session_id)` | `remove_journal_entry(id, session_id)` | `universe journal <name> --remove <session> [-y]` | trashes `journal/<session>.json` and the frames it lists (their mirrors beside the note too) — the player's own shots stay, they are the game's, not the entry's; a `pending` entry has its `universe-journal-post-process-<session>` unit stopped, and every state file of the session goes; the note is rendered again when its folder exists |
+| `remove_journal_entry(id, session_id)` | `remove_journal_entry(id, session_id)` | `universe journal <name> --remove <session> [-y]` | trashes `journal/<session>.json` and the frames it lists — the player's own shots stay, they are the game's, not the entry's; a `pending` entry has its `universe-journal-post-process-<session>` unit stopped, and every state file of the session goes |
 | `journal_write(id, session_id, rewrite)` | `journal_write(id, session_id, rewrite=False)` | `universe journal <name> --write <session> [--force]` | starts the journal module's `post-process` hook for that one session and returns its unit name: another try at a `deferred` or `failed` entry, a first entry for a session that never had one, or, with `rewrite`, a new entry over a written one (`JOURNAL_REWRITE=1` in the hook's environment). The game's own "write an entry after each session" switch does not hold it back. `Invalid` for a session id that is not a timestamp or an entry already written without `rewrite`, `NotFound` for an unknown session, `Busy` while that session's unit runs, `Unavailable` when the module is off, missing a binary or still waiting on a setting |
 | `sweep_journals()`, `retry_journals(id)` | `sweep_journals(id="")` | `universe journal [<name>] --retry` | starts the oldest owed entry — `deferred` past its instant, or `pending` with no unit behind it — and answers `{started: {game, session} or null, due, next, held?, error?}`: `due` is what is still waiting, `next` the nearest instant a deferred entry falls due (the frontends arm their timer on it), `held` why nothing started. One entry at a time, and none while a game runs |
 | `due_journals()`, `next_journal_retry()` | — | — | the sessions the sweep would take, and that nearest instant |
@@ -747,7 +746,7 @@ no paragraphs; a `failed` one has the file's `written_at` and `paragraphs = [rea
 one adds `retry_at`, the instant it is owed another run. A pending file whose mtime is more than 30
 minutes old lists as `failed` with the reason `timed out`. A written entry hides the failed one of
 the same session, a failed one the deferred one, and that one the pending one. Dotfiles and anything
-that is not `*.json` are ignored, and `render_journal` only renders `written` entries.
+that is not `*.json` are ignored.
 
 ## Virtual pads
 
@@ -989,7 +988,6 @@ schema = 1
 games_root = "~/Games"               # $XDG_GAMES_DIR: where sources install
 prefixes_root = "~/.local/share/universe/prefixes"
 recordings_root = "~/Videos/universe"            # $XDG_VIDEOS_DIR/universe
-journal_root = "~/Documents/universe/journal"    # $XDG_DOCUMENTS_DIR/universe/journal
 overrides = "~/.config/universe/overrides"       # picked art, shown over media/: <id>/{box_front,square,banner,background,logo}.*, <id>/screenshots/
 
 [launch]
@@ -1150,7 +1148,7 @@ label = "Writing model"
 | `UNIVERSE_ENV_FILE` | write `KEY=VALUE` lines here to add them to the game's environment, ahead of `launch.env`; the one key `UNIVERSE_GAMESCOPE_ARGS` is flags for the game's gamescope instead (see Gamescope) | `pre-launch` |
 | `MODULE_DIR`, `MODULE_DATA_DIR` | the module's directory, `$XDG_DATA_HOME/universe/modules/<id>` | all |
 | `UNIVERSE_BIN`, `UNIVERSE_{DATA,CONFIG,STATE}_HOME`, `UNIVERSE_{MODULES,SOURCES}_PATH`, `PATH` | the CLI to call back (`recording-file`, `journal-add`, `session-window`, `screen-mode`) and the environment that makes it open the same core | all |
-| `UNIVERSE_GAME_JSON`, `UNIVERSE_JOURNAL_ROOT` | the resolved `Game`, serialized; `paths.journal_root` | all |
+| `UNIVERSE_GAME_JSON` | the resolved `Game`, serialized | all |
 
 Exit codes: 0 is success; anything else is logged and the session continues — except a `pre-launch`
 hook, where a non-zero exit cancels the launch.

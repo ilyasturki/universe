@@ -166,12 +166,6 @@ pub enum Cmd {
     Journal {
         /// Game: exact id, then whole word, substring or path
         name: Option<String>,
-        /// Render the Markdown note and print its path
-        #[arg(long)]
-        render: bool,
-        /// Render, then open the note with xdg-open
-        #[arg(long)]
-        open: bool,
         /// Trash the entry of this session (a pending one is cancelled)
         #[arg(long, value_name = "SESSION")]
         remove: Option<String>,
@@ -1110,7 +1104,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 }
             }
         }
-        Cmd::Journal { name, render, open, remove, write, force, retry, yes } => {
+        Cmd::Journal { name, remove, write, force, retry, yes } => {
             if retry {
                 let report = match &name {
                     Some(n) => core.retry_journals(&pick(&core, n).await?).await,
@@ -1143,14 +1137,6 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 if yes || confirm(&format!("trash the journal entry {session} of {id}?")) {
                     core.remove_journal_entry(&id, &session).await?;
                     println!("removed {session}");
-                }
-                return Ok(());
-            }
-            if render || open {
-                let path = core.render_journal(&id).await?;
-                println!("{path}");
-                if open {
-                    let _ = std::process::Command::new("xdg-open").arg(&path).spawn();
                 }
                 return Ok(());
             }
@@ -1882,8 +1868,7 @@ fn game_keys() -> Vec<String> {
 
 fn config_keys() -> Vec<String> {
     use crate::launch_keys::{Kind, Scope, LAUNCH_KEYS};
-    let mut keys: Vec<String> =
-        ["paths.games_root", "paths.prefixes_root", "paths.recordings_root", "paths.journal_root", "paths.overrides"].map(String::from).to_vec();
+    let mut keys: Vec<String> = ["paths.games_root", "paths.prefixes_root", "paths.recordings_root", "paths.overrides"].map(String::from).to_vec();
     keys.extend(LAUNCH_KEYS.iter().filter(|k| k.scope != Scope::Game).map(|k| {
         if k.kind == Kind::Map {
             format!("launch.{}.", k.key)
