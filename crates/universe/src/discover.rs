@@ -5,7 +5,7 @@ use serde::Serialize;
 use crate::config::Config;
 use crate::paths;
 
-/// One launcher's games on this machine. `importable` names what Universe can launch itself; `via` is the importer (`lutris`, `gog`).
+/// One launcher's games on this machine. `importable` names what Universe can launch itself; `via` is the importer (`lutris`, `roms`) or the source that adopts them (`gog`, `epic`, `steam`).
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Launcher {
     pub id: String,
@@ -33,11 +33,13 @@ pub fn run(config: &Config) -> Report {
     let home = paths::home();
     let heroic = first_dir(&[home.join(".config/heroic"), home.join(".var/app/com.heroicgameslauncher.hgl/config/heroic")]);
     let steam = first_dir(&[home.join(".local/share/Steam"), home.join(".steam/steam"), home.join(".var/app/com.valvesoftware.Steam/.local/share/Steam")]);
+    let itch = first_dir(&[home.join(".config/itch"), home.join(".var/app/io.itch.itch/config/itch")]);
     let mut gog_dirs = heroic.as_deref().map(heroic_gog_dirs).unwrap_or_default();
     gog_dirs.retain(|d| d != &config.games_root());
     let mut launchers = vec![lutris()];
     launchers.push(steam.as_deref().map(steam_launcher).unwrap_or_else(|| Launcher { id: "steam".into(), name: "Steam".into(), ..Default::default() }));
     launchers.extend(heroic_launchers(heroic.as_deref(), &gog_dirs, &config.games_root()));
+    launchers.push(itch_launcher(itch.as_deref()));
     launchers.push(roms_launcher(config, library_files()));
     Report { launchers, gog_dirs: gog_dirs.iter().map(|d| d.to_string_lossy().into()).collect() }
 }
@@ -125,9 +127,38 @@ fn steam_launcher(root: &Path) -> Launcher {
         dir: root.to_string_lossy().into(),
         games: titles.len(),
         titles: titles.into_iter().take(TITLES).collect(),
-        detail: "Steam games launch through Steam; a Steam source comes later.".into(),
+        importable: true,
+        via: "steam".into(),
         ..Default::default()
     }
+}
+
+/// The itch app's installs, from its butler database; the itch source adopts them where they lie.
+fn itch_launcher(root: Option<&Path>) -> Launcher {
+    let mut l = Launcher { id: "itch".into(), name: "itch".into(), found: root.is_some(), importable: true, via: "itch".into(), ..Default::default() };
+    let Some(root) = root else { return l };
+    let db = root.join("db/butler.db");
+    l.dir = db.to_string_lossy().into();
+    let flags = rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX;
+    let titles = rusqlite::Connection::open_with_flags(&db, flags).and_then(|c| {
+        let mut q = c.prepare(
+            "SELECT coalesce(g.title, ''), coalesce(nullif(v.custom_install_folder, ''), l.path || '/' || v.install_folder_name) FROM caves v \
+             LEFT JOIN games g ON g.id = v.game_id LEFT JOIN install_locations l ON l.id = v.install_location_id",
+        )?;
+        let rows = q.query_map([], |r| Ok((r.get::<_, String>(0)?, r.get::<_, Option<String>>(1)?)))?;
+        Ok(rows.flatten().filter(|(t, dir)| !t.is_empty() && dir.as_deref().is_some_and(|d| Path::new(d).is_dir())).map(|(t, _)| t).collect::<Vec<_>>())
+    });
+    match titles {
+        Ok(mut titles) => {
+            titles.sort();
+            titles.dedup();
+            l.games = titles.len();
+            l.titles = titles.into_iter().take(TITLES).collect();
+        }
+        Err(e) if db.exists() => l.detail = format!("{}: {e}", db.display()),
+        Err(_) => {}
+    }
+    l
 }
 
 /// The quoted tokens of a VDF document, quotes and escapes dropped, braces skipped.
@@ -233,18 +264,22 @@ fn heroic_launchers(heroic: Option<&Path>, gog_dirs: &[PathBuf], games_root: &Pa
         ..Default::default()
     }];
     let stores = [
-        ("heroic-epic", "Heroic · Epic Games", "legendaryConfig/legendary/installed.json", "Epic games launch through Heroic; an Epic source comes later."),
-        ("heroic-amazon", "Heroic · Amazon Games", "nile_store/installed.json", "Amazon games launch through Heroic; an Amazon source comes later."),
+        ("heroic-epic", "Heroic · Epic Games", "legendaryConfig/legendary/installed.json", "epic", ""),
+        ("heroic-amazon", "Heroic · Amazon Games", "nile_store/installed.json", "", "Amazon games launch through Heroic."),
     ];
-    for (id, name, file, detail) in stores {
+    for (id, name, file, via, detail) in stores {
         let mut titles: Vec<String> = heroic
             .and_then(|h| json_file(&h.join(file)))
             .map(|v| match v {
-                serde_json::Value::Object(m) => m.values().filter_map(|g| g["title"].as_str().map(String::from)).collect(),
-                serde_json::Value::Array(a) => a.iter().filter_map(|g| g["title"].as_str().map(String::from)).collect(),
+                serde_json::Value::Object(m) => m.into_values().collect(),
+                serde_json::Value::Array(a) => a,
                 _ => Vec::new(),
             })
-            .unwrap_or_default();
+            .into_iter()
+            .flatten()
+            .filter(|g| g["install_path"].as_str().is_none_or(|p| Path::new(p).is_dir()))
+            .filter_map(|g| g["title"].as_str().map(String::from))
+            .collect();
         titles.sort();
         out.push(Launcher {
             id: id.into(),
@@ -253,8 +288,9 @@ fn heroic_launchers(heroic: Option<&Path>, gog_dirs: &[PathBuf], games_root: &Pa
             dir: dir.clone(),
             games: titles.len(),
             titles: titles.into_iter().take(TITLES).collect(),
+            importable: !via.is_empty(),
+            via: via.into(),
             detail: detail.into(),
-            ..Default::default()
         });
     }
     out
@@ -289,7 +325,7 @@ mod tests {
         std::fs::write(root.join("steamapps/appmanifest_620.acf"), "\"AppState\"\n{\n\t\"appid\"\t\t\"620\"\n\t\"name\"\t\t\"Portal 2\"\n}\n").unwrap();
         std::fs::write(other.join("steamapps/appmanifest_413150.acf"), "\"AppState\"\n{\n\t\"name\"\t\t\"Stardew \\\"Valley\\\"\"\n}\n").unwrap();
         let l = steam_launcher(&root);
-        assert!(l.found && !l.importable);
+        assert!(l.found && l.importable && l.via == "steam");
         assert_eq!(l.titles, vec!["Portal 2", "Stardew \"Valley\""]);
         assert_eq!(l.games, 2);
     }
@@ -310,17 +346,48 @@ mod tests {
         )
         .unwrap();
         std::fs::write(heroic.join("config.json"), format!(r#"{{"defaultSettings":{{"defaultInstallPath":"{}"}}}}"#, games.display())).unwrap();
-        std::fs::write(heroic.join("legendaryConfig/legendary/installed.json"), r#"{"abc":{"app_name":"abc","title":"Hades","install_path":"/x/Hades"}}"#)
-            .unwrap();
+        std::fs::create_dir_all(games.join("Hades")).unwrap();
+        std::fs::write(
+            heroic.join("legendaryConfig/legendary/installed.json"),
+            format!(
+                r#"{{"abc":{{"title":"Hades","install_path":"{}/Hades"}},"gone":{{"title":"Fall Guys","install_path":"/nonexistent/Fall Guys"}}}}"#,
+                games.display()
+            ),
+        )
+        .unwrap();
         let dirs = heroic_gog_dirs(&heroic);
         assert_eq!(dirs, vec![games.clone()]);
         let l = heroic_launchers(Some(&heroic), &dirs, &dir.path().join("none"));
         assert_eq!(
             l.iter().map(|l| (l.id.as_str(), l.games, l.importable)).collect::<Vec<_>>(),
-            vec![("heroic-gog", 1, true), ("heroic-epic", 1, false), ("heroic-amazon", 0, false)]
+            vec![("heroic-gog", 1, true), ("heroic-epic", 1, true), ("heroic-amazon", 0, false)]
         );
         assert_eq!(l[0].titles, vec!["Mini Metro"]);
         assert_eq!(l[1].titles, vec!["Hades"]);
+    }
+
+    #[test]
+    fn the_itch_apps_installs_that_are_still_there() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path().join("itch");
+        std::fs::create_dir_all(root.join("db")).unwrap();
+        std::fs::create_dir_all(dir.path().join("apps/celeste")).unwrap();
+        let c = rusqlite::Connection::open(root.join("db/butler.db")).unwrap();
+        c.execute_batch(&format!(
+            "CREATE TABLE games (id INTEGER PRIMARY KEY, title TEXT);
+             CREATE TABLE install_locations (id TEXT PRIMARY KEY, path TEXT);
+             CREATE TABLE caves (id TEXT PRIMARY KEY, game_id INTEGER, install_location_id TEXT, install_folder_name TEXT, custom_install_folder TEXT);
+             INSERT INTO games VALUES (1, 'Celeste'), (2, 'Gone');
+             INSERT INTO install_locations VALUES ('loc', '{}');
+             INSERT INTO caves VALUES ('a', 1, 'loc', 'celeste', ''), ('b', 2, 'loc', 'gone', NULL);",
+            dir.path().join("apps").display()
+        ))
+        .unwrap();
+        drop(c);
+        let l = itch_launcher(Some(&root));
+        assert!(l.found && l.importable && l.via == "itch");
+        assert_eq!((l.games, l.titles.clone()), (1, vec!["Celeste".to_string()]), "a cave whose folder is gone is not counted");
+        assert!(!itch_launcher(None).found);
     }
 
     #[test]
