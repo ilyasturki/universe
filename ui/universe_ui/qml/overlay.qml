@@ -22,8 +22,12 @@ Window {
     // An unlock over the game, whichever look: Home keeps the window painted (and the game's input) while it shows.
     Column {
         id: unlocks
+        objectName: "unlocks"
 
         readonly property real s: overlay.height > 0 ? overlay.height / 1080 : 1
+        // A game that files a save's worth at once shows a few cards and counts the rest.
+        readonly property int most: 3
+        property int more: 0
 
         anchors.top: parent.top
         anchors.topMargin: 36 * s
@@ -68,7 +72,11 @@ Window {
                         duration: 300
                     }
                     ScriptAction {
-                        script: shown.remove(0)
+                        script: {
+                            shown.remove(0);
+                            if (shown.count === 0)
+                                unlocks.more = 0;
+                        }
                     }
                 }
 
@@ -122,9 +130,34 @@ Window {
             }
         }
 
+        Rectangle {
+            anchors.horizontalCenter: parent.horizontalCenter
+            visible: unlocks.more > 0
+            width: moreText.implicitWidth + 44 * unlocks.s
+            height: 48 * unlocks.s
+            radius: height / 2
+            color: "#1b1d24"
+            border.width: 1
+            border.color: Qt.rgba(1, 1, 1, 0.16)
+
+            Text {
+                id: moreText
+                anchors.centerIn: parent
+                text: "+" + unlocks.more + " more unlocked"
+                color: Qt.rgba(0.949, 0.953, 0.961, 0.8)
+                font.family: Theme.sans
+                font.weight: Font.DemiBold
+                font.pixelSize: 18 * unlocks.s
+            }
+        }
+
         Connections {
             target: api.home
             function onAchievementUnlocked(item) {
+                if (shown.count >= unlocks.most) {
+                    unlocks.more += 1;
+                    return;
+                }
                 shown.append({
                     name: item.name,
                     description: item.description,

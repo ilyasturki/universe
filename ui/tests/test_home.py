@@ -1,7 +1,7 @@
 import os
 from types import SimpleNamespace
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QObject, Qt
 from PySide6.QtTest import QTest
 from test_render import lit_fraction, render
 
@@ -712,6 +712,22 @@ def test_the_dock_opens_the_playing_games_achievements(api, fake, monkeypatch):
     root = window.property("contentItem").childItems()[0].property("item")
     assert api.home.shown == "launcher" and root.property("subOpen") is True, "the launcher, on the game's achievements"
     stop(api)
+    window.close()
+    overlay.close()
+    pump(50)
+
+
+def test_a_burst_of_unlocks_shows_a_few_cards_and_counts_the_rest(api, fake):
+    engine, window = render(api)
+    overlay = host.create_overlay(engine, window.size())
+    overlay.show()
+    pump(200)
+    for n in range(7):
+        api.home.achievementUnlocked.emit({"name": f"A{n}", "description": "", "icon": "", "rarityText": ""})
+    pump(100)
+    unlocks = overlay.findChild(QObject, "unlocks")
+    cards = [c for c in unlocks.childItems() if c.property("radius") == 20 * unlocks.property("s")]
+    assert len(cards) == 3 and unlocks.property("more") == 4
     window.close()
     overlay.close()
     pump(50)

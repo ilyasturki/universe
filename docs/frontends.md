@@ -612,7 +612,9 @@ when the game has a store source and no list yet; the cache it writes brings the
 While a game runs, `Home`'s `UnlockWatch` rereads its list on every change to the game's folder and
 emits `achievementUnlocked({gameId, gameTitle, key, name, description, icon, rarityText})` for each
 unlock newer than the session's start, once. `overlay.qml` draws it, outside the theme's loader so
-both looks get it: a card at the top of the screen for 4.8 s, several stacking. Home lifts the
+both looks get it: a card at the top of the screen for 4.8 s, up to three stacking; past three
+(a game that files a save's worth at once) a pill under them counts the rest, *+n more unlocked*,
+until the last card goes. Home lifts the
 overlay window to opaque without taking the game's input for 5 s (the same lift as the screenshot
 flash, the longer of the two standing), unless the dock is already holding it up. On the desktop
 there is no window over the game, so the unlock shows on the Achievements page alone.
