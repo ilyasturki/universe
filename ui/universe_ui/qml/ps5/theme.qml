@@ -4,6 +4,7 @@ import "core"
 import "sound"
 import "ui"
 import "pages"
+import "pages/Sections.js" as Sections
 
 FocusScope {
     id: root
@@ -12,6 +13,8 @@ FocusScope {
 
     Component.onCompleted: {
         Sound.preload();
+        // The search from home finds the sections before Settings has ever been opened.
+        api.screens.search.sections = Sections.forSearch(api.system);
         if (api.theme.takeLanding() === "themes")
             push("pages/SettingsPage.qml", {
                 section: "themes"

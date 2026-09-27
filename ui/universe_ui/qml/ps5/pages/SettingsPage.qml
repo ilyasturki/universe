@@ -3,8 +3,10 @@ import "../core"
 import "../sound"
 import "../ui"
 import "../../ui/Controls.js" as Controls
+import "../../core/Format.js" as Format
 import "Details.js" as Details
 import "Forms.js" as Forms
+import "Sections.js" as Sections
 
 // The console's Settings: a list of sections, each opening on two columns, its sub-sections left and their rows right.
 FocusScope {
@@ -22,77 +24,17 @@ FocusScope {
     readonly property var sources: api.screens.sources
     readonly property var listForm: sectionId === "modules" ? modulesForm : sectionId === "sources" ? sourceList : null
 
-    readonly property var sections: [
-        {
-            id: "search",
-            label: "Search Settings",
-            icon: "search",
-            first: "Search"
-        },
-        {
-            id: "launch",
-            label: "Launch",
-            icon: "rocket"
-        },
-        {
-            id: "runners",
-            label: "Runners",
-            icon: "chip"
-        },
-        {
-            id: "controllers",
-            label: "Controllers",
-            icon: "gamepad"
-        },
-        {
-            id: "sources",
-            label: "Sources",
-            icon: "cloud"
-        },
-        {
-            id: "updates",
-            label: "Updates",
-            icon: "download",
-            detail: sources.updates.length > 0 ? sources.updates.length + " pending" : ""
-        },
-        {
-            id: "modules",
-            label: "Modules",
-            icon: "puzzle"
-        },
-        {
-            id: "themes",
-            label: "Themes",
-            icon: "palette",
-            first: "Look"
-        },
-        {
-            id: "sound",
-            label: "Sound",
-            icon: "sound",
-            first: "Audio Output"
-        },
-        {
-            id: "performance",
-            label: "Performance",
-            icon: "bolt",
-            detail: "Brightness, refresh, power limit, GPU clock and fan"
-        },
-        {
-            id: "doctor",
-            label: "Doctor",
-            icon: "doctor",
-            first: "Checks"
-        },
-        {
-            id: "about",
-            label: "About",
-            icon: "info",
-            first: "System Information"
-        }
-    ].filter(function (s) {
-        // Steam's Game Mode keeps the sound; Performance needs a control this machine has.
-        return !(s.id === "sound" && api.system.steam) && !(s.id === "performance" && api.system.controls.length === 0);
+    readonly property var artworkOverview: api.screens.artworkOverview
+    readonly property var artJob: artworkOverview.job
+    readonly property bool artFetching: artJob !== null && artJob !== undefined && (artJob.ok === null || artJob.ok === undefined)
+
+    readonly property var sections: Sections.shown(api.system).map(function (s) {
+        var out = Object.assign({}, s);
+        if (s.id === "updates")
+            out.detail = sources.updates.length > 0 ? sources.updates.length + " pending" : "";
+        else if (s.id === "artwork")
+            out.detail = artworkOverview.missingGames > 0 ? artworkOverview.missingGames + (artworkOverview.missingGames === 1 ? " game misses art" : " games miss art") : "";
+        return out;
     })
     property int section: 1
     readonly property string sectionId: sections[section].id
@@ -125,9 +67,15 @@ FocusScope {
             },
             performance: function () {
                 api.system.reload();
+            },
+            artwork: function () {
+                artworkOverview.load();
             }
         })
     readonly property var refreshers: ({
+            artwork: function () {
+                artworkOverview.load();
+            },
             sound: function () {
                 api.home.loadOutputs();
             },
@@ -276,12 +224,7 @@ FocusScope {
     }
 
     Component.onCompleted: {
-        api.screens.search.sections = sections.map(function (s) {
-            return {
-                id: s.id,
-                label: s.label
-            };
-        });
+        api.screens.search.sections = Sections.forSearch(api.system);
         roots.index = section;
         sources.load();
         loadSection();
@@ -390,6 +333,64 @@ FocusScope {
                     detail: ""
                 }
             ];
+        }
+        if (sectionId === "artwork") {
+            var job = artJob;
+            var missing = artworkOverview.rows.filter(function (r) {
+                return r.slots.some(function (sl) {
+                    return sl.kind === "missing";
+                });
+            });
+            return [
+                {
+                    label: artFetching ? (job.cancelled ? "Stopping…" : "Stop fetching") : "Fetch missing art",
+                    type: "action",
+                    action: "artwork-fetch",
+                    icon: "download",
+                    display: artFetching ? (job.total > 0 ? (job.done + 1) + " of " + job.total : "") : artworkOverview.missingGames === 0 ? "Nothing missing" : Format.plural(artworkOverview.missingGames, "game", "games"),
+                    disabled: !artFetching && artworkOverview.missingGames === 0,
+                    detail: "Asks SteamGridDB for every game's missing covers, banners, backgrounds and logos."
+                }
+            ].concat(missing.length > 0 ? [
+                {
+                    heading: true,
+                    part: true,
+                    label: "Missing Art",
+                    display: ""
+                }
+            ] : [], missing.map(function (r) {
+                return {
+                    label: r.title,
+                    type: "action",
+                    action: "artwork-game",
+                    gameId: r.id,
+                    display: "Missing: " + r.slots.filter(function (sl) {
+                        return sl.kind === "missing";
+                    }).map(function (sl) {
+                        return sl.label;
+                    }).join(", "),
+                    detail: ""
+                };
+            }), [
+                {
+                    heading: true,
+                    part: true,
+                    label: "Every Game",
+                    display: ""
+                }
+            ], artworkOverview.rows.map(function (r) {
+                var mine = r.slots.filter(function (sl) {
+                    return sl.kind !== "missing";
+                }).length;
+                return {
+                    label: r.title,
+                    type: "action",
+                    action: "artwork-game",
+                    gameId: r.id,
+                    display: mine + " of " + r.slots.length,
+                    detail: ""
+                };
+            }));
         }
         if (sectionId === "controllers")
             return [
@@ -578,6 +579,18 @@ FocusScope {
                 sources.updateAll();
             else
                 sources.update(row.row);
+        } else if (row.action === "artwork-fetch") {
+            if (artFetching)
+                artworkOverview.cancelRefresh() ? Sound.play("back") : Sound.play("edge");
+            else {
+                Sound.play("ok");
+                artworkOverview.refreshAll();
+            }
+        } else if (row.action === "artwork-game") {
+            Sound.play("ok");
+            shell.push("pages/ArtworkPage.qml", {
+                gameId: row.gameId
+            });
         } else if (sectionId === "controllers") {
             Sound.play("ok");
             shell.push("pages/ControllersPage.qml", {});
@@ -655,6 +668,15 @@ FocusScope {
             page.shell.showToast(text);
         }
     }
+
+    Connections {
+        target: page.artworkOverview
+        function onMessage(text) {
+            page.shell.showToast(text);
+        }
+    }
+
+    Component.onDestruction: artworkOverview.unload()
 
     Keys.onPressed: function (event) {
         if (event.isAutoRepeat)
@@ -792,7 +814,7 @@ FocusScope {
             x: rows.x
             y: sectionTitle.height + Theme.dp(24)
             width: rows.width
-            job: page.sources.job
+            job: page.sectionId === "artwork" ? page.artJob : page.sources.job
         }
 
         SettingsRows {

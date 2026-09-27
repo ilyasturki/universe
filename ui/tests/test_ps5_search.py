@@ -54,3 +54,26 @@ def test_a_setting_found_lands_on_its_row_in_settings(ps5):  # noqa: F811
     top = root.property("topPage")
     assert root.property("depth") == 1 and top.property("sectionId") == "launch"
     assert top.property("level") == "section" and top.property("zone") == "rows"
+
+
+def test_the_sections_are_found_before_settings_was_ever_opened(ps5):  # noqa: F811
+    window, root = ps5
+    page = open_search(root)
+    QTest.keyClick(window, Qt.Key.Key_E)
+    page.setProperty("query", "themes")
+    pump(300)
+    assert any(h["kind"] == "section" and h["target"]["id"] == "themes" for h in value(page, "settingHits"))
+    page.setProperty("query", "steamgriddb")
+    pump(300)
+    assert any(h["kind"] == "section" and h["target"]["id"] == "artwork" for h in value(page, "settingHits"))
+
+
+def test_settings_artwork_lists_every_game_and_fetches_the_missing_art(ps5):  # noqa: F811
+    _window, root = ps5
+    QMetaObject.invokeMethod(root, "push", Q_ARG("QVariant", "pages/SettingsPage.qml"), Q_ARG("QVariant", {"section": "artwork"}))
+    pump(800)
+    page = root.property("topPage")
+    assert page.property("sectionId") == "artwork" and page.property("level") == "section"
+    rows = value(page, "content")
+    assert rows[0]["action"] == "artwork-fetch"
+    assert [r for r in rows if r.get("action") == "artwork-game"], "a row per game, the ones missing art first"
