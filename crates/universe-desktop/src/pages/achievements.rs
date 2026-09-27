@@ -46,7 +46,7 @@ fn row(item: &Value) -> adw::ActionRow {
     } else {
         (if text(item, "name").is_empty() { text(item, "key") } else { text(item, "name") }, text(item, "description"))
     };
-    let row = adw::ActionRow::builder().title(name).subtitle(description).use_markup(false).build();
+    let row = crate::rows::plain(adw::ActionRow::builder().build(), name, description);
     let icon = Cover::new(48, 48);
     icon.set_placeholder("trophy-symbolic");
     icon.add_css_class("thumb");

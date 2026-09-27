@@ -222,7 +222,7 @@ impl Controller {
         let mut rows = Vec::new();
         for slot in self.slots() {
             let id = text(&slot, "id");
-            let row = adw::ActionRow::builder().title(text(&slot, "label")).subtitle(self.display(&id)).activatable(true).use_markup(false).build();
+            let row = crate::rows::plain(adw::ActionRow::builder().activatable(true).build(), text(&slot, "label"), self.display(&id));
             row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
             let (this, label) = (Rc::downgrade(self), text(&slot, "label"));
             row.connect_activated(move |_| {
@@ -585,7 +585,7 @@ impl Controller {
         prefs.add(&art_group);
 
         let button = adw::PreferencesGroup::builder().title(gettext("Button")).build();
-        let learn = adw::ActionRow::builder().title(gettext("Learn the Button")).use_markup(false).build();
+        let learn = crate::rows::plain(adw::ActionRow::builder().build(), gettext("Learn the Button"), "");
         let learn_button = gtk::Button::builder().valign(gtk::Align::Center).build();
         learn.add_suffix(&learn_button);
         button.add(&learn);

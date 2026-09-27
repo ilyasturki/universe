@@ -13,6 +13,7 @@ mod media;
 mod pages;
 mod play;
 mod qr;
+mod rows;
 mod script;
 mod state;
 mod watcher;

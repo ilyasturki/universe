@@ -141,7 +141,7 @@ fn launcher_row(this: &Rc<Onboarding>, launcher: &Launcher, gog: bool) -> adw::A
     } else {
         gettext("{} · not importable yet").replace("{}", &plural_games(launcher.games))
     };
-    let row = adw::ActionRow::builder().title(launcher.name.clone()).subtitle(subtitle).use_markup(false).build();
+    let row = crate::rows::plain(adw::ActionRow::builder().build(), launcher.name.clone(), subtitle);
     if !launcher.titles.is_empty() {
         row.set_tooltip_text(Some(&launcher.titles.join(", ")));
     }
@@ -257,7 +257,7 @@ fn done_page(this: &Rc<Onboarding>) -> adw::NavigationPage {
         );
     }
     for (what, how) in summary {
-        group.add(&adw::ActionRow::builder().title(what).subtitle(how).use_markup(false).build());
+        group.add(&crate::rows::plain(adw::ActionRow::builder().build(), what, how));
     }
     content.append(&group);
     let weak = Rc::downgrade(this);

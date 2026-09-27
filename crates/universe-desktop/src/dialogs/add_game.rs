@@ -114,7 +114,7 @@ fn home(this: &Rc<AddGame>) -> adw::NavigationPage {
         let Some(this) = weak.upgrade() else { return };
         for source in sources {
             let ready = source["enabled"].as_bool() == Some(true) && source["logged_in"].as_bool() == Some(true);
-            let row = adw::ActionRow::builder().title(text(&source, "name")).subtitle(signin::status(&source)).use_markup(false).build();
+            let row = crate::rows::plain(adw::ActionRow::builder().build(), text(&source, "name"), signin::status(&source));
             let button = gtk::Button::builder().label(if ready { gettext("Browse") } else { gettext("Set Up") }).valign(gtk::Align::Center).build();
             let weak = Rc::downgrade(&this);
             button.connect_clicked(move |_| {
@@ -251,7 +251,7 @@ fn file_page(this: &Rc<AddGame>, path: PathBuf, runners: Vec<Value>) -> adw::Nav
     group.add(&runner);
     let platform = adw::ComboRow::builder().title(gettext("Platform")).build();
     group.add(&platform);
-    let file = adw::ActionRow::builder().title(gettext("File")).subtitle(path.to_string_lossy()).use_markup(false).subtitle_selectable(true).build();
+    let file = crate::rows::plain(adw::ActionRow::builder().subtitle_selectable(true).build(), gettext("File"), path.to_string_lossy());
     group.add(&file);
     prefs.add(&group);
 

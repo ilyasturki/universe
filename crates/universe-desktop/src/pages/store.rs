@@ -481,7 +481,7 @@ impl StorePage {
     }
 
     fn row(&self, entry: &Entry, line: &str) -> adw::ActionRow {
-        let row = adw::ActionRow::builder().title(&entry.title).subtitle(line).use_markup(false).title_lines(1).subtitle_lines(1).build();
+        let row = crate::rows::plain(adw::ActionRow::builder().title_lines(1).subtitle_lines(1).build(), &entry.title, line);
         let art = Cover::new(80, 45);
         art.add_css_class("thumb");
         art.set_valign(gtk::Align::Center);

@@ -332,7 +332,7 @@ impl Artwork {
                 };
                 for hit in &result {
                     let title = if hit.year > 0 { format!("{} ({})", hit.name, hit.year) } else { hit.name.clone() };
-                    let row = adw::ActionRow::builder().title(title).use_markup(false).activatable(true).build();
+                    let row = crate::rows::plain(adw::ActionRow::builder().activatable(true).build(), title, "");
                     if hit.verified {
                         row.add_suffix(
                             &gtk::Image::builder()
@@ -401,7 +401,7 @@ pub fn present(win: &Window, game: &GameObject) {
 
     let prefs = adw::PreferencesPage::new();
     let source = adw::PreferencesGroup::builder().title(gettext("Fetched From")).description(gettext("The SteamGridDB game the art comes from")).build();
-    let entry = adw::ActionRow::builder().title(gettext("Not matched yet")).use_markup(false).build();
+    let entry = crate::rows::plain(adw::ActionRow::builder().build(), gettext("Not matched yet"), "");
     entry.add_prefix(&gtk::Image::from_icon_name("image-x-generic-symbolic"));
     let change = gtk::Button::builder().label(gettext("_Change…")).use_underline(true).valign(gtk::Align::Center).build();
     entry.add_suffix(&change);
@@ -411,7 +411,7 @@ pub fn present(win: &Window, game: &GameObject) {
     let group = adw::PreferencesGroup::builder().title(gettext("Pictures")).build();
     let mut rows = Vec::new();
     for (slot, label, aspect, _) in slots() {
-        let row = adw::ActionRow::builder().title(label).activatable(true).use_markup(false).build();
+        let row = crate::rows::plain(adw::ActionRow::builder().activatable(true).build(), label, "");
         let cover = sized(aspect, 48);
         cover.set_halign(gtk::Align::Center);
         row.add_prefix(&adw::Bin::builder().width_request(144).child(&cover).build());

@@ -8,5 +8,5 @@ pub mod signin;
 
 /// A toast whose title shows as written: it reads markup by default, and titles and errors carry `&` and `<`.
 pub fn toast(text: &str) -> adw::Toast {
-    adw::Toast::builder().title(text).use_markup(false).build()
+    adw::Toast::builder().use_markup(false).title(text).build()
 }

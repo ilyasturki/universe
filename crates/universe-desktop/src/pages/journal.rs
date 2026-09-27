@@ -498,7 +498,7 @@ pub fn open_list(win: &Window, game: &str) {
                 if duration > 0 {
                     line.push(format::duration(duration));
                 }
-                let row = adw::ActionRow::builder().use_markup(false).title_lines(1).subtitle_lines(1).build();
+                let row = crate::rows::plain(adw::ActionRow::builder().title_lines(1).subtitle_lines(1).build(), "", "");
                 let art = Cover::new(80, 45);
                 art.add_css_class("thumb");
                 art.set_valign(gtk::Align::Center);

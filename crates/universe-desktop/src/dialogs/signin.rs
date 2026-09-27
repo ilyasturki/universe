@@ -35,12 +35,12 @@ pub fn status(source: &Value) -> String {
 pub fn account_group(source: &Value, say: Say, signed_in: Say) -> adw::PreferencesGroup {
     let id = text(source, "id");
     let group = adw::PreferencesGroup::builder().title(gettext("Account")).build();
-    let state = adw::ActionRow::builder().title(status(source)).use_markup(false).build();
+    let state = crate::rows::plain(adw::ActionRow::builder().build(), status(source), "");
     state.add_prefix(&gtk::Image::from_icon_name("avatar-default-symbolic"));
     group.add(&state);
     let get_link = adw::ButtonRow::builder().title(gettext("Get a Sign-In Link")).start_icon_name("web-browser-symbolic").build();
     group.add(&get_link);
-    let link = adw::ActionRow::builder().title(gettext("Open the link, sign in, then enter the code it shows")).use_markup(false).visible(false).build();
+    let link = crate::rows::plain(adw::ActionRow::builder().visible(false).build(), gettext("Open the link, sign in, then enter the code it shows"), "");
     let open = gtk::Button::builder().label(gettext("Open")).valign(gtk::Align::Center).build();
     link.add_suffix(&open);
     group.add(&link);

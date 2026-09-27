@@ -62,12 +62,8 @@ pub fn open(win: &Window, game: &str) {
                 let listed: Vec<SessionRow> = listed.unwrap_or_default().into_iter().filter(|r| !r.session.unit.is_empty()).collect();
                 let mut added = Vec::new();
                 if let Some(current) = win.app().current().filter(|c| c.id == game) {
-                    let row = adw::ActionRow::builder()
-                        .title(media::moment(&current.started_at))
-                        .subtitle(gettext("Playing now"))
-                        .activatable(true)
-                        .use_markup(false)
-                        .build();
+                    let row =
+                        crate::rows::plain(adw::ActionRow::builder().activatable(true).build(), media::moment(&current.started_at), gettext("Playing now"));
                     row.add_prefix(&gtk::Image::from_icon_name("media-playback-start-symbolic"));
                     row.add_suffix(&gtk::Image::from_icon_name("go-next-symbolic"));
                     let (weak, game) = (win.downgrade(), game.clone());
@@ -82,7 +78,7 @@ pub fn open(win: &Window, game: &str) {
                     let bad = matches!(universe::sessions::end_of(&session.session), "crashed" | "killed");
                     let subtitle = [format::duration(session.session.duration_s), end_text(&session)].join(" · ");
                     let when = media::moment(&session.session.started_at);
-                    let row = adw::ActionRow::builder().title(&when).subtitle(&subtitle).activatable(true).use_markup(false).build();
+                    let row = crate::rows::plain(adw::ActionRow::builder().activatable(true).build(), &when, &subtitle);
                     let icon = gtk::Image::from_icon_name(if bad { "dialog-warning-symbolic" } else { "object-select-symbolic" });
                     if bad {
                         icon.add_css_class("error");

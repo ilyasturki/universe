@@ -315,7 +315,7 @@ impl FormView {
         });
         let control = match field.kind.as_str() {
             "bool" => {
-                let row = adw::SwitchRow::builder().title(field.label.clone()).use_markup(false).build();
+                let row = adw::SwitchRow::builder().use_markup(false).title(field.label.clone()).build();
                 row.set_subtitle(&field.description);
                 row.add_suffix(&origin);
                 row.add_suffix(&reset);
@@ -329,7 +329,7 @@ impl FormView {
             }
             "map" => Control::Map(group.clone(), RefCell::default()),
             "secret" => {
-                let row = adw::PasswordEntryRow::builder().title(field.label.clone()).use_markup(false).show_apply_button(true).build();
+                let row = adw::PasswordEntryRow::builder().use_markup(false).title(field.label.clone()).show_apply_button(true).build();
                 row.set_tooltip_text(Some(&field.description));
                 row.add_suffix(&reset);
                 let (view, key) = (self.weak(), field.key.clone());
@@ -340,7 +340,7 @@ impl FormView {
                 Control::Secret(row)
             }
             kind if !field.choices.is_empty() || field.dynamic || matches!(kind, "enum" | "toggle" | "proton") => {
-                let row = adw::ComboRow::builder().title(field.label.clone()).use_markup(false).build();
+                let row = adw::ComboRow::builder().use_markup(false).title(field.label.clone()).build();
                 row.set_subtitle(&first_clause(&field.description));
                 row.set_tooltip_text(Some(field.description.as_str()).filter(|d| !d.is_empty()));
                 row.add_suffix(&reset);
@@ -359,7 +359,7 @@ impl FormView {
                 Control::Combo(row, RefCell::default())
             }
             kind => {
-                let row = adw::EntryRow::builder().title(field.label.clone()).use_markup(false).show_apply_button(true).build();
+                let row = adw::EntryRow::builder().use_markup(false).title(field.label.clone()).show_apply_button(true).build();
                 row.set_tooltip_text(Some(field.description.as_str()).filter(|d| !d.is_empty()));
                 if kind == "int" {
                     row.set_input_purpose(gtk::InputPurpose::Digits);
@@ -427,7 +427,9 @@ impl FormView {
                 }
                 let mut made: Vec<gtk::Widget> = Vec::new();
                 for entry in &field.entries {
-                    let r = adw::EntryRow::builder().title(entry.name.clone()).use_markup(false).text(entry.value.clone()).show_apply_button(true).build();
+                    let r = adw::EntryRow::builder().text(entry.value.clone()).show_apply_button(true).build();
+                    r.set_use_markup(false);
+                    r.set_title(&entry.name);
                     let key = format!("{}.{}", field.key, entry.name);
                     if entry.origin == Origin::Global && field.key.starts_with("launch.") && matches!(self.form, Form::Game(_)) {
                         r.add_suffix(&gtk::Label::builder().label(gettext("Global")).valign(gtk::Align::Center).css_classes(["dimmed", "caption"]).build());
