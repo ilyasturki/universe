@@ -537,7 +537,7 @@ def achievement(key, unlocked=None, visible=True):
         "achievement_key": key,
         "name": key.title(),
         "description": f"Do {key}",
-        "image_url_unlocked": f"https://img/{key}.png",
+        "image_url_unlocked": f"https://img/{key}_gac_60.jpg",
         "image_url_locked": f"https://img/{key}-locked.png",
         "visible": visible,
         "date_unlocked": unlocked,
@@ -571,7 +571,7 @@ def test_achievements_page_through_the_games_client(src, env, capsys, monkeypatc
         "description": "Do first",
         "unlocked_at": "2024-05-01T20:11:04+0000",
         "hidden": False,
-        "icon": "https://img/first.png",
+        "icon": "https://img/first.jpg",
         "icon_locked": "https://img/first-locked.png",
         "rarity": 12.5,
     }

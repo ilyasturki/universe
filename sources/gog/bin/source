@@ -654,6 +654,11 @@ def game_client(settings, game_id):
     return client
 
 
+# GOG names the 60 px thumbnail (`…_gac_60.jpg`); the bare name is the 256 px original.
+def full_icon(url):
+    return re.sub(r"_gac_\d+(?=\.\w+$)", "", url or "")
+
+
 def achievement_event(item):
     emit(
         "achievement",
@@ -662,8 +667,8 @@ def achievement_event(item):
         description=item.get("description") or "",
         unlocked_at=item.get("date_unlocked") or "",
         hidden=not item.get("visible", True),
-        icon=item.get("image_url_unlocked") or "",
-        icon_locked=item.get("image_url_locked") or "",
+        icon=full_icon(item.get("image_url_unlocked")),
+        icon_locked=full_icon(item.get("image_url_locked")),
         rarity=item.get("rarity"),
     )
 
@@ -891,8 +896,8 @@ def report_unlock(row, at):
         "description": row["description"],
         "unlocked_at": at,
         "hidden": not row["visible_while_locked"],
-        "icon": row["image_url_unlocked"],
-        "icon_locked": row["image_url_locked"],
+        "icon": full_icon(row["image_url_unlocked"]),
+        "icon_locked": full_icon(row["image_url_locked"]),
         "rarity": row["rarity"],
     }
     proc = subprocess.run(

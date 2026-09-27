@@ -452,7 +452,8 @@ cache is rewritten by a rename, so the `games/<id>/` watch sees every unlock; th
 
 The **gog** source fills it. Its `achievements <gog id>` verb asks GOG's gameplay API with a token
 for the game's own Galaxy client (its id and secret are read once from the build manifest and kept
-in `clients.json`; gogdl issues the token), paging through the list. For a game with the Galaxy SDK
+in `clients.json`; gogdl issues the token), paging through the list. Its icons are GOG's 256 px
+originals: the API names the 60 px thumbnail (`…_gac_60.jpg`), and the source drops the suffix. For a game with the Galaxy SDK
 (`Galaxy.dll`, `Galaxy64.dll`, `libGalaxy.so` or `libGalaxy64.so` in its folder or up to three folders down) and its
 game-scope `achievements` setting on (the default), its session hooks run **comet**, the open
 implementation of GOG Galaxy's communication service, so the SDK in the game has something to talk
