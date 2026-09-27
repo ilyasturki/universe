@@ -25,6 +25,7 @@ USER_URL = "https://embed.gog.com/userData.json"
 CATALOG_URL = "https://catalog.gog.com/v1/catalog"
 BUILDS_URL = "https://content-system.gog.com/products/{id}/os/{platform}/builds?generation=2"
 ACHIEVEMENTS_URL = "https://gameplay.gog.com/clients/{client}/users/{user}/achievements"
+UMU_URL = "https://umu.openwinecomponents.org/umu_api.php?store=gog&codename={id}"
 GALAXY_CLIENT_ID = "46899977096215655"
 USER_AGENT = "universe-gog/0.1"
 HTTP_TIMEOUT_S = 30
@@ -427,10 +428,29 @@ def find_install(settings, game_id, roots):
     return next((i for i in scan_installs(settings, roots) if i["id"] == game_id), None)
 
 
+def umu_ids_path():
+    return data_dir() / "umu.json"
+
+
+# An answer, found or not, is kept; a failed lookup is asked again next time.
+def umu_id(game_id):
+    ids = load_json(umu_ids_path())
+    ids = ids if isinstance(ids, dict) else {}
+    if game_id not in ids:
+        try:
+            found = fetch(UMU_URL.format(id=urllib.parse.quote(game_id)))
+        except SourceError as exc:
+            log(str(exc))
+            return None
+        ids[game_id] = (found[0].get("umu_id") if isinstance(found, list) and found and isinstance(found[0], dict) else None) or ""
+        save_json(umu_ids_path(), ids)
+    return ids[game_id] or None
+
+
 def game_event(game_id, title, owned, install=None, product=None, partials=None):
     fields = {}
     if install:
-        fields["disk_size"] = install.get("disk_size")
+        fields.update(disk_size=install.get("disk_size"), store="gog", umu_id=umu_id(game_id))
     else:
         partial = partial_of(game_id, partials)
         if partial:

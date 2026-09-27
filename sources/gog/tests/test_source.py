@@ -7,6 +7,7 @@ import sqlite3
 import stat
 import sys
 import time
+import urllib.request
 import zlib
 from pathlib import Path
 
@@ -116,8 +117,18 @@ def src():
     return module
 
 
+@pytest.fixture(autouse=True)
+def offline(monkeypatch):
+    def refuse(*args, **kwargs):
+        raise OSError("no network in tests")
+
+    monkeypatch.setattr(urllib.request, "urlopen", refuse)
+
+
 @pytest.fixture
 def env(tmp_path, monkeypatch):
+    (tmp_path / "data").mkdir()
+    (tmp_path / "data" / "umu.json").write_text(json.dumps({"1434554947": "umu-287980"}))
     shim_dir = tmp_path / "bin"
     shim_dir.mkdir()
     shim = shim_dir / "gogdl"
@@ -240,6 +251,8 @@ def test_library(src, env, capsys, monkeypatch):
         "release_year": 2015,
         "image": "https://images-2.gog-statics.com/abc.jpg",
         "disk_size": info_size,
+        "store": "gog",
+        "umu_id": "umu-287980",
     }
     assert drift["installed"] is False and drift["dir"] is None and drift["release_year"] is None
     assert "disk_size" not in drift
@@ -352,6 +365,8 @@ def test_install(src, env, capsys, monkeypatch):
         "release_year": 2015,
         "image": "https://images-2.gog-statics.com/abc.jpg",
         "disk_size": (env["games"] / "Mini Metro" / "goggame-1434554947.info").stat().st_size,
+        "store": "gog",
+        "umu_id": "umu-287980",
     }
     info, call = calls(env)
     assert info["args"][2] == "info", "the folder and the sizes come from info before the download"
@@ -508,6 +523,8 @@ def test_scan(src, env, capsys):
         "release_year": None,
         "image": None,
         "disk_size": sum(p.stat().st_size for p in folder.iterdir()),
+        "store": "gog",
+        "umu_id": None,
     }
     assert [e["id"] for e in events[:-1]] == ["1237807960", "1434554947", "7"]
     assert "OnlyDlc" in err
@@ -821,3 +838,13 @@ def test_session_end_stops_its_own_comet_only(src, hooks, monkeypatch, capsys):
 def test_post_process_refreshes_the_cache(src, hooks, capsys):
     assert src.main(["post-process"]) == 0
     assert hooks["ran"] == [["/nix/bin/universe", "achievements", "mini-metro", "--refresh", "--json"]]
+
+
+def test_umu_id_is_asked_once_and_a_failed_lookup_again(src, env, monkeypatch):
+    seen = fake_fetch(monkeypatch, src, {"https://umu.openwinecomponents.org/umu_api.php?store=gog&codename=20920": [{"title": "W2", "umu_id": "umu-20920"}]})
+    assert src.umu_id("20920") == "umu-20920"
+    assert src.umu_id("20920") == "umu-20920" and len(seen) == 1, "kept"
+    assert src.umu_id("404") is None and src.umu_id("404") is None and len(seen) == 3, "no answer is not kept: asked again"
+    fake_fetch(monkeypatch, src, {"https://umu.openwinecomponents.org": []})
+    assert src.umu_id("1") is None
+    assert json.loads((env["data"] / "umu.json").read_text()) == {"1434554947": "umu-287980", "20920": "umu-20920", "1": ""}, "an empty answer is kept"
