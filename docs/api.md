@@ -226,7 +226,7 @@ listing joins onto it, in the line's place:
 when it was killed by a signal; `stopped` says whether `stop` asked for that end. The row's `end`
 reads both: `quit` (0), `stopped` (asked), `crashed` (a code), `killed` (a signal nobody asked
 for: the launcher's scope went, the OOM killer), `ended` (a signal on a line older than `stopped`).
-The CLI tables and both looks say so; the end-of-session toast names a crash or a kill. What
+The CLI tables and every look say so; the end-of-session toast names a crash or a kill. What
 `exit` sees is the unit's main process — gamescope or umu-run — so a game that dies inside a
 wrapper that exits 0 files as `quit`: the log tells.
 
