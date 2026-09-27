@@ -36,3 +36,35 @@ jobs:
       - run: gh release upload "$GITHUB_REF_NAME" universe-x86_64-linux.tar.gz install.sh
         env:
           GH_TOKEN: ${{ github.token }}
+  aur:
+    needs: notes
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: grep -qx "pkgver=${GITHUB_REF_NAME#v}" packaging/aur/universe/PKGBUILD
+      - uses: KSXGitHub/github-actions-deploy-aur@v4.2.0
+        with:
+          pkgname: universe
+          pkgbuild: packaging/aur/universe/PKGBUILD
+          updpkgsums: true
+          commit_username: Ilyas Turki
+          commit_email: turki.ilyass@gmail.com
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: ${{ github.ref_name }}
+          force_push: true
+  aur-bin:
+    needs: dist
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: grep -qx "pkgver=${GITHUB_REF_NAME#v}" packaging/aur/universe-bin/PKGBUILD
+      - uses: KSXGitHub/github-actions-deploy-aur@v4.2.0
+        with:
+          pkgname: universe-bin
+          pkgbuild: packaging/aur/universe-bin/PKGBUILD
+          updpkgsums: true
+          commit_username: Ilyas Turki
+          commit_email: turki.ilyass@gmail.com
+          ssh_private_key: ${{ secrets.AUR_SSH_PRIVATE_KEY }}
+          commit_message: ${{ github.ref_name }}
+          force_push: true
