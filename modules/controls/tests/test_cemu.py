@@ -101,3 +101,8 @@ def test_a_games_profile_follows_the_held_pad_and_keeps_its_mapping(cemu):
     assert controller.findtext("uuid") == f"0_{XBOX.guid.hex()}" and controller.findtext("display_name") == XBOX.name
     assert maps == {1: 0} and controller.findtext("rumble") == "0.25"
     assert text.replace(f"0_{XBOX.guid.hex()}", "0_030057564c050000e60c000000006800").replace(XBOX.name, "DualSense Wireless Controller") == EXISTING
+
+
+def test_swapped_shoulders_exchange_l_r_with_zl_zr(cemu):
+    _, _, maps = parse(_cemu.plan(Context([EDGE], shoulders="swapped"))[cemu / "controllerProfiles" / "controller0.xml"])
+    assert (maps[5], maps[6], maps[7], maps[8], maps[9]) == (42, 43, 9, 10, 6)

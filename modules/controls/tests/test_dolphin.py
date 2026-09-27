@@ -74,7 +74,7 @@ def test_devices_count_pads_of_the_same_name():
 def test_gamecube_takes_dolphins_preset_and_keeps_the_users_settings(dolphin):
     gc = ini_section(run(Context([EDGE], "positional"))["GCPadNew.ini"], "GCPad1")
     assert gc["Device"] == "SDL/0/DualSense Edge Wireless Controller"
-    assert (gc["Buttons/A"], gc["Buttons/B"], gc["Buttons/Z"]) == ("`Button S`", "`Button E`", "`Shoulder R`")
+    assert (gc["Buttons/A"], gc["Buttons/B"], gc["Buttons/Z"]) == ("`Button S`", "`Button E`", "`Shoulder R` | `Shoulder L`")
     assert gc["Triggers/L-Analog"] == "`Trigger L`" and gc["Main Stick/Up"] == "`Left Y+`"
     assert gc["Main Stick/Calibration"] == "90.00 120.00" and gc["Options/Always Connected"] == "True"
     assert gc["C-Stick/Calibration"] == _dolphin.CALIBRATION
@@ -199,3 +199,11 @@ def test_a_profile_on_a_keyboard_is_left_alone(dolphin):
 def test_userpath_holds_config_and_game_settings(tmp_path, monkeypatch):
     monkeypatch.setenv("DOLPHIN_EMU_USERPATH", str(tmp_path / "user"))
     assert _dolphin.user_dirs() == (tmp_path / "user" / "Config", tmp_path / "user" / "GameSettings")
+
+
+def test_swapped_shoulders_put_gamecube_l_and_r_on_the_bumpers(dolphin):
+    files = run(Context([EDGE], shoulders="swapped"))
+    gc = ini_section(files["GCPadNew.ini"], "GCPad1")
+    assert (gc["Triggers/L"], gc["Triggers/R-Analog"], gc["Buttons/Z"]) == ("`Shoulder L`", "`Shoulder R`", "`Trigger R` | `Trigger L`")
+    wm = ini_section(files["WiimoteNew.ini"], "Wiimote1")
+    assert (wm["Buttons/B"], wm["Nunchuk/Buttons/Z"], wm["Nunchuk/Buttons/C"]) == ("`Shoulder R`", "`Shoulder L`", "`Trigger L`")

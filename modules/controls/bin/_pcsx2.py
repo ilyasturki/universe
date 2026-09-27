@@ -4,7 +4,7 @@ import re
 import shutil
 from pathlib import Path
 
-from _controls import Context, Skip, config_home, edit_section, first_file, key_of, section_values, sections, value_of
+from _controls import Context, Skip, config_home, edit_section, first_file, key_of, section_values, sections, swap_names, value_of
 
 KEYS = {
     "Up": "DPadUp",
@@ -69,7 +69,7 @@ def write_pads(path, slots, ctx: Context, *, name, face, taken, pad_type):
     names = [*taken, *([] if ctx.guide else ["Guide"])]
     pattern = re.compile(rf"^SDL-[^/]+/({'|'.join(map(re.escape, names))})$")
     for slot, pid in zip(slots(text), player_ids(ctx.pads), strict=False):
-        values = {k: f"SDL-{pid}/{v}" for k, v in {**face, **KEYS}.items()}
+        values = {k: f"SDL-{pid}/{v}" for k, v in swap_names(ctx, {**face, **KEYS}, "LeftShoulder", "RightShoulder", "+LeftTrigger", "+RightTrigger").items()}
         if ctx.guide:
             values["Analog"] = f"SDL-{pid}/Guide"
         text = edit_section(text, slot, lambda lines, v=values: bind(lines, v, pad_type, pattern))

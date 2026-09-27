@@ -5,17 +5,13 @@ from _controls import (
     DPAD_RIGHT,
     DPAD_UP,
     GUIDE,
-    LEFT_SHOULDER,
     LEFT_STICK,
     LEFT_X,
     LEFT_Y,
-    RIGHT_SHOULDER,
     RIGHT_STICK,
     RIGHT_X,
     RIGHT_Y,
     START,
-    TRIGGER_LEFT,
-    TRIGGER_RIGHT,
     Context,
     Skip,
     axis,
@@ -25,6 +21,7 @@ from _controls import (
     ini_rewrite,
     ini_section,
     ordinals,
+    pad_shoulders,
 )
 from _gamepads import BIND_AXIS, BIND_BUTTON, BIND_HAT
 
@@ -39,19 +36,15 @@ EMPTY = "[empty]"
 BUTTONS = {
     "lstick": LEFT_STICK,
     "rstick": RIGHT_STICK,
-    "l": LEFT_SHOULDER,
-    "r": RIGHT_SHOULDER,
     "plus": START,
     "minus": BACK,
     "dleft": DPAD_LEFT,
     "dup": DPAD_UP,
     "dright": DPAD_RIGHT,
     "ddown": DPAD_DOWN,
-    "slleft": LEFT_SHOULDER,
-    "srleft": RIGHT_SHOULDER,
-    "slright": LEFT_SHOULDER,
-    "srright": RIGHT_SHOULDER,
 }
+# Each onto the pad's LB, RB, LT or RT.
+SHOULDERS = {"l": 0, "r": 1, "zl": 2, "zr": 3, "slleft": 0, "srleft": 1, "slright": 0, "srright": 1}
 HAT = {1: "up", 2: "right", 4: "down", 8: "left"}
 
 
@@ -101,12 +94,12 @@ def _stick(head, pad, x, y):
     return f"{head},axis_x:{bx.index},axis_y:{by.index},offset_x:0.000000,offset_y:0.000000,invert_x:+,invert_y:+"
 
 
-def player_values(player, pad, port, face, guide):
+def player_values(player, pad, port, ctx: Context):
     head = f"engine:sdl,port:{port},guid:{eden_guid(pad.guid)}"
-    values = {f"button_{k}": _param(head, button(pad, b)) for k, b in {**face, **BUTTONS}.items()}
-    values["button_zl"] = _param(head, axis(pad, TRIGGER_LEFT))
-    values["button_zr"] = _param(head, axis(pad, TRIGGER_RIGHT))
-    values["button_home"] = _param(head, button(pad, GUIDE)) if guide else EMPTY
+    values = {f"button_{k}": _param(head, button(pad, b)) for k, b in {**ctx.face, **BUTTONS}.items()}
+    held = pad_shoulders(ctx, pad)
+    values.update({f"button_{k}": _param(head, held[i]) for k, i in SHOULDERS.items()})
+    values["button_home"] = _param(head, button(pad, GUIDE)) if ctx.guide else EMPTY
     values["button_screenshot"] = EMPTY
     values["lstick"] = _stick(head, pad, LEFT_X, LEFT_Y)
     values["rstick"] = _stick(head, pad, RIGHT_X, RIGHT_Y)
@@ -122,7 +115,7 @@ def values_for(ctx: Context):
     pads = ctx.pads[:PLAYERS]
     out = {}
     for player, (pad, port) in enumerate(zip(pads, ports(pads), strict=True)):
-        out.update(player_values(player, pad, port, ctx.face, ctx.guide))
+        out.update(player_values(player, pad, port, ctx))
     for player in range(len(pads), PLAYERS):
         out[f"player_{player}_connected"] = "false"
     return out

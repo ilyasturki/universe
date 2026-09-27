@@ -26,6 +26,8 @@ KEYS = {
     "RightAn.Left": 4005,
     "RightAn.Right": 4004,
 }
+# SDL's trigger axes 4 and 5 pressed toward +, as PPSSPP codes an axis: 4000 + 2 * axis.
+TRIGGERS = {"L": 4008, "R": 4010}
 
 
 def face(pad):
@@ -46,6 +48,8 @@ def without_pads(value):
 
 def rebind(lines, device, pad, guide=False):
     ours = {k: [f"{device}-{code}"] for k, code in {**face(pad), **KEYS}.items()}
+    for k, code in TRIGGERS.items():
+        ours[k].append(f"{device}-{code}")
     if not guide:
         ours["Home"] = [f"{device}-{GUIDE}"]
     out, done = [], set()

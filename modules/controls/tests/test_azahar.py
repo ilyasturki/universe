@@ -79,3 +79,8 @@ def test_plan_writes_azahars_config(tmp_path):
     (tmp_path / "azahar-emu").mkdir()
     (tmp_path / "azahar-emu" / "qt-config.ini").write_text(INI)
     assert list(_azahar.plan(Context([EDGE]))) == [tmp_path / "azahar-emu" / "qt-config.ini"]
+
+
+def test_swapped_shoulders_exchange_l_r_with_zl_zr():
+    got = _azahar.values_for(Context([EDGE], shoulders="swapped"))
+    assert params(got["button_l"])["axis"] == "4" and got["button_zr"] == f"button:10,{G}"

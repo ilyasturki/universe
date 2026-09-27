@@ -69,3 +69,10 @@ def test_stale_pads_and_shortcuts_on_universes_buttons_are_unset(conf):
     assert ini_section(text, "Joypad 6") == {"Up": "Unset"}
     assert ini_section(text, "Shortcuts") == {"GTK_quit": "Unset", "GTK_fullscreen": "Joystick 1 Button 3", "QuickSave000": "Keyboard F1"}
     assert ini_section(text, "Display") == {"Fullscreen": "true"}
+
+
+def test_the_second_set_puts_l_and_r_on_the_triggers(conf):
+    text = _snes9x.plan(Context([EDGE], runner_path=GTK))[conf]
+    assert (ini_section(text, "Joypad 0")["L"], ini_section(text, "Joypad 5")["R"]) == ("Joystick 1 Button 9", "Joystick 1 Axis 5 + 0%")
+    swapped = _snes9x.plan(Context([EDGE], runner_path=GTK, shoulders="swapped"))[conf]
+    assert (ini_section(swapped, "Joypad 0")["L"], ini_section(swapped, "Joypad 5")["L"]) == ("Joystick 1 Axis 4 + 0%", "Joystick 1 Button 9")

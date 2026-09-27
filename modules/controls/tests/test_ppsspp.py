@@ -30,7 +30,7 @@ def test_every_pad_mapping_goes_and_the_held_pad_is_bound_at_its_sdl_index(contr
     text = _ppsspp.plan(Context([XBOX, EDGE]))[controls]
     got = section_values(text, "ControlMapping")
     assert got["Cross"] == "1-54,11-189" and got["Circle"] == "1-52,11-190" and got["Up"] == "1-19,11-19"
-    assert got["L"] == "1-45,11-193" and got["R"] == "11-192" and got["An.Up"] == "11-4003" and got["RightAn.Right"] == "11-4004"
+    assert got["L"] == "1-45,11-193,11-4008" and got["R"] == "11-192,11-4010" and got["An.Up"] == "11-4003" and got["RightAn.Right"] == "11-4004"
     assert got["Pause"] == "1-111" and "Analog speed" not in got and got["Fast-forward"] == "1-61"
     assert got["Start"] == "11-197" and got["Select"] == "11-196"
     assert not any(part.split(":")[-1].split("-")[1] in ("198", "199", "200", "201", "202", "203") for v in got.values() for part in v.split(","))

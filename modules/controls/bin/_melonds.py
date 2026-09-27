@@ -4,10 +4,8 @@ from _controls import (
     DPAD_LEFT,
     DPAD_RIGHT,
     DPAD_UP,
-    LEFT_SHOULDER,
     LEFT_X,
     LEFT_Y,
-    RIGHT_SHOULDER,
     START,
     Context,
     Skip,
@@ -17,6 +15,7 @@ from _controls import (
     first_file,
     ini_section,
     ini_set,
+    pad_shoulders,
     taken_buttons,
 )
 from _gamepads import BIND_AXIS, BIND_BUTTON, BIND_HAT
@@ -29,7 +28,7 @@ NO_BUTTON = 0xFFFF
 HAT_FLAG = 0x100
 AXIS_FLAG = 0x10000
 ABOVE_HALF, BELOW_HALF, TRIGGER = 0, 1, 2
-BUTTONS = {"L": LEFT_SHOULDER, "R": RIGHT_SHOULDER, "Select": BACK, "Start": START}
+BUTTONS = {"Select": BACK, "Start": START}
 # The d-pad, each direction also taken from the left stick: (d-pad button, stick axis, the stick's half).
 DPAD = {"Up": (DPAD_UP, LEFT_Y, -1), "Down": (DPAD_DOWN, LEFT_Y, 1), "Left": (DPAD_LEFT, LEFT_X, -1), "Right": (DPAD_RIGHT, LEFT_X, 1)}
 
@@ -73,10 +72,27 @@ def _dpad(pad, dpad_button, stick, half):
     return (NO_BUTTON if part is None else part) | (a or 0)
 
 
+def _either(first, second):
+    """A value packs one button and one axis: the second input joins only when the kinds differ."""
+    value = encode(first)
+    if value == UNSET:
+        return encode(second)
+    extra = encode(second)
+    if extra == UNSET:
+        return value
+    if value & AXIS_FLAG and not extra & AXIS_FLAG:
+        return value & ~0xFFFF | extra
+    if not value & AXIS_FLAG and extra & AXIS_FLAG:
+        return value | extra & ~0xFFFF
+    return value
+
+
 def values_for(ctx: Context):
     pad = ctx.pads[0]
     values = {k.upper(): encode(button(pad, b)) for k, b in ctx.face.items()}
     values.update({k: encode(button(pad, b)) for k, b in BUTTONS.items()})
+    lb, rb, lt, rt = pad_shoulders(ctx, pad)
+    values.update({"L": _either(lb, lt), "R": _either(rb, rt)})
     values.update({k: _dpad(pad, *spec) for k, spec in DPAD.items()})
     return values
 

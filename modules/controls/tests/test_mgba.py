@@ -1,6 +1,7 @@
 import _mgba
 import pytest
 from _controls import Context, ini_section, taken_buttons
+from _gamepads import BIND_AXIS, BIND_BUTTON, Input, Pad
 from controls_fixtures import EDGE, XBOX, twin
 
 EDGE_POSITIONAL = {
@@ -26,6 +27,10 @@ EDGE_POSITIONAL = {
     "axisUpValue": "-16384",
     "axisDownAxis": "+1",
     "axisDownValue": "16384",
+    "axisLAxis": "+4",
+    "axisLValue": "-1",
+    "axisRAxis": "+5",
+    "axisRValue": "-1",
 }
 
 CONFIG = """[gba.input.QT_K]
@@ -69,11 +74,11 @@ def mgba(tmp_path):
 
 
 def test_bindings_follow_the_research_example():
-    assert {k: str(v) for k, v in _mgba.bindings(EDGE, Context([EDGE]).face).items()} == EDGE_POSITIONAL
+    assert {k: str(v) for k, v in _mgba.bindings(EDGE, Context([EDGE])).items()} == EDGE_POSITIONAL
 
 
 def test_xbox_layout_swaps_a_and_b_only():
-    got = _mgba.bindings(EDGE, Context([EDGE], "xbox").face)
+    got = _mgba.bindings(EDGE, Context([EDGE], "xbox"))
     assert (got["keyA"], got["keyB"], got["keyL"]) == (0, 1, 9)
 
 
@@ -107,3 +112,10 @@ def test_the_raw_buttons_universe_keeps():
 def test_qt_escapes_a_group_name_as_qsettings_does():
     assert _mgba.qt_escape("PS4 Controller") == "PS4%20Controller"
     assert _mgba.qt_escape("8BitDo (Pro) é/ž") == "8BitDo%20%28Pro%29%20%E9\\%U017E"
+
+
+def test_digital_triggers_leave_l_to_the_bumper_unless_swapped():
+    digital = Pad(**{**vars(EDGE), "bindings": {**EDGE.bindings, (BIND_AXIS, 4): Input(BIND_BUTTON, 12)}})
+    standard = _mgba.bindings(digital, Context([digital]))
+    assert standard["keyL"] == 9 and "axisLAxis" not in standard and standard["axisRAxis"] == "+5"
+    assert _mgba.bindings(digital, Context([digital], shoulders="swapped"))["keyL"] == 12

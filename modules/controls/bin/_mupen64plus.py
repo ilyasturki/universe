@@ -5,16 +5,12 @@ from _controls import (
     DPAD_LEFT,
     DPAD_RIGHT,
     DPAD_UP,
-    LEFT_SHOULDER,
     LEFT_X,
     LEFT_Y,
-    RIGHT_SHOULDER,
     RIGHT_X,
     RIGHT_Y,
     SOUTH,
     START,
-    TRIGGER_LEFT,
-    TRIGGER_RIGHT,
     WEST,
     Context,
     Skip,
@@ -22,6 +18,7 @@ from _controls import (
     button,
     config_home,
     edit_section,
+    pad_shoulders,
 )
 from _gamepads import BIND_AXIS, BIND_BUTTON, BIND_HAT
 
@@ -56,24 +53,24 @@ def _quote(value):
     return '"' + value.replace('"', "") + '"'
 
 
-def player(pad):
+def player(pad, ctx: Context):
     """mupen's own convention for a modern pad: A on SOUTH, B on WEST, C on the right stick, Z on the left trigger."""
     rx_neg, rx_pos = _stick(pad, RIGHT_X)
     ry_neg, ry_pos = _stick(pad, RIGHT_Y)
     lx_neg, lx_pos = _stick(pad, LEFT_X)
     ly_neg, ly_pos = _stick(pad, LEFT_Y)
-    shoulder, trigger = button(pad, RIGHT_SHOULDER), axis(pad, TRIGGER_RIGHT)
+    lb, rb, lt, rt = pad_shoulders(ctx, pad)
     # A value holds one token of each kind, so a digital right trigger cannot join the shoulder's button().
-    r = _source(shoulder)
-    if trigger and (not shoulder or trigger.kind != shoulder.kind):
-        r = f"{r} {_source(trigger)}".strip()
+    r = _source(rb)
+    if rt and (not rb or rt.kind != rb.kind):
+        r = f"{r} {_source(rt)}".strip()
     values = {
         "DPad R": _source(button(pad, DPAD_RIGHT)),
         "DPad L": _source(button(pad, DPAD_LEFT)),
         "DPad D": _source(button(pad, DPAD_DOWN)),
         "DPad U": _source(button(pad, DPAD_UP)),
         "Start": _source(button(pad, START)),
-        "Z Trig": _source(axis(pad, TRIGGER_LEFT)),
+        "Z Trig": _source(lt),
         "B Button": _source(button(pad, WEST)),
         "A Button": _source(button(pad, SOUTH)),
         "C Button R": f"axis({rx_pos})" if rx_pos else "",
@@ -81,7 +78,7 @@ def player(pad):
         "C Button D": f"axis({ry_pos})" if ry_pos else "",
         "C Button U": f"axis({ry_neg})" if ry_neg else "",
         "R Trig": r,
-        "L Trig": _source(button(pad, LEFT_SHOULDER)),
+        "L Trig": _source(lb),
         "Mempak switch": "",
         "Rumblepak switch": "",
         "X Axis": f"axis({lx_neg},{lx_pos})" if lx_neg else "",
@@ -111,6 +108,6 @@ def plan(ctx: Context):
     text = path.read_text() if path.is_file() else ""
     pads = ctx.pads[:PLAYERS]
     for n in range(PLAYERS):
-        values = player(pads[n]) if n < len(pads) else UNPLUGGED
+        values = player(pads[n], ctx) if n < len(pads) else UNPLUGGED
         text = edit_section(text, f"Input-SDL-Control{n + 1}", lambda _, v=values: [f"{k} = {x}" for k, x in v.items()])
     return {path: text}

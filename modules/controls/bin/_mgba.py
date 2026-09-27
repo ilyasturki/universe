@@ -4,10 +4,8 @@ from _controls import (
     DPAD_LEFT,
     DPAD_RIGHT,
     DPAD_UP,
-    LEFT_SHOULDER,
     LEFT_X,
     LEFT_Y,
-    RIGHT_SHOULDER,
     START,
     Context,
     Skip,
@@ -16,6 +14,7 @@ from _controls import (
     config_home,
     ini_rewrite,
     ini_section,
+    pad_shoulders,
     taken_buttons,
 )
 from _gamepads import BIND_AXIS, BIND_BUTTON, BIND_HAT
@@ -39,9 +38,17 @@ def _raw(binding):
     return binding.index if binding and binding.kind == BIND_BUTTON else -1
 
 
-def bindings(pad, face):
-    keys = {"A": face["a"], "B": face["b"], "Select": BACK, "Start": START, "L": LEFT_SHOULDER, "R": RIGHT_SHOULDER}
+def bindings(pad, ctx: Context):
+    keys = {"A": ctx.face["a"], "B": ctx.face["b"], "Select": BACK, "Start": START}
     out = {f"key{k}": _raw(button(pad, b)) for k, b in keys.items()}
+    lb, rb, lt, rt = pad_shoulders(ctx, pad)
+    for key, inputs in (("L", (lb, lt)), ("R", (rb, rt))):
+        out[f"key{key}"] = next((b.index for b in inputs if b and b.kind == BIND_BUTTON), -1)
+        a = next((b for b in inputs if b and b.kind == BIND_AXIS), None)
+        if a:
+            # mGBA presses past axis<Key>Value: the middle of the trigger's travel, on the side it moves to.
+            out[f"axis{key}Axis"] = f"{'+' if a.hi > a.lo else '-'}{a.index}"
+            out[f"axis{key}Value"] = (a.lo + a.hi) // 2
     hats = {}
     for name, out_button in DPAD.items():
         b = button(pad, out_button)
@@ -105,13 +112,13 @@ def plan(ctx: Context):
     devices = {f"device{n}": p.guid.hex() for n, p in enumerate(pads)}
     stale = [k for k in ini_section(text, SDLB) if k.startswith("device") and k not in devices]
     text = ini_rewrite(text, SDLB, {}, drop=stale)
-    text = _replace_bindings(text, SDLB, bindings(pads[0], ctx.face), devices)
+    text = _replace_bindings(text, SDLB, bindings(pads[0], ctx), devices)
     seen = set()
     for pad in pads:
         if pad.guid in seen:
             continue
         seen.add(pad.guid)
-        values = bindings(pad, ctx.face)
+        values = bindings(pad, ctx)
         text = _replace_bindings(text, f"gba.input-profile.{pad.guid.hex()}", values)
         if pad.joystick_name:
             text = _replace_bindings(text, f"gba.input-profile.{pad.joystick_name}", values)

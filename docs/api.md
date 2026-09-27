@@ -1119,7 +1119,13 @@ by themselves) or `xbox` (A at the bottom), per game over a global default; Game
 Dolphin's own preset and N64 mupen64plus's (A bottom, B left). `wiimote` picks how a Wii game holds
 the remote, per game over a global default, on every held port: `nunchuk` (upright with a nunchuk),
 `sideways` (no extension, Dolphin's `Sideways Wiimote` on, the D-pad and left stick on its D-pad, 2,
-1 and A on `layout`'s A, B and X) or `classic` (the Classic Controller). A game's own input profile
+1 and A on `layout`'s A, B and X) or `classic` (the Classic Controller). `shoulders`, per game over
+a global default, `standard` or `swapped`, exchanges the pad's bumpers and triggers in every writer
+that binds them (not xemu, Flycast or ScummVM): standard is L/R on the bumpers and ZL/ZR, L2/R2 on
+the triggers; GameCube L/R on the triggers and Z on either bumper; N64 L/R on the bumpers, Z on
+the left trigger and R on the right one too. A console with only L and R (GBA, DS, SNES, PSP) takes
+them on the bumpers and the triggers both; on a pad with digital triggers mGBA and melonDS, which
+bind one button per key, keep the bumper, or the trigger when swapped. A game's own input profile
 keeps its scheme and only follows the held pad (Dolphin `PadProfileN`/`WiimoteProfileN`, Cemu
 `gameProfiles` `controllerN`, RPCS3's other and per-title configs). Dolphin reads every port after
 a game's profiled one from that profile's file, so each held port past it gets

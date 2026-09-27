@@ -109,3 +109,8 @@ def test_hints_put_a_ds3_on_hidapi_and_load_rpcs3s_database(rpcs3):
     assert _rpcs3.hints() == {"SDL_JOYSTICK_HIDAPI_PS3": "1"}
     (rpcs3 / "gamecontrollerdb.txt").write_text("")
     assert _rpcs3.databases() == [rpcs3 / "gamecontrollerdb.txt"]
+
+
+def test_swapped_shoulders_exchange_l1_r1_with_l2_r2(rpcs3):
+    got = blocks(_rpcs3.plan(Context([EDGE], shoulders="swapped"))[rpcs3 / "global" / "Default.yml"])
+    assert (got[1]["    L1"], got[1]["    R2"], got[1]["    L3"]) == ('"LT"', '"RB"', '"LS"')

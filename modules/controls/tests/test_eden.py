@@ -119,3 +119,9 @@ def test_rewrite_sets_owned_keys_in_place_and_keeps_every_other_line():
     assert "player_0_vibration_enabled=true" in lines and "Shortcuts\\Main%20Window\\Exit%20Eden\\Controller_KeySeq=Home+Minus" in lines
     assert ini_section(new, "Controls")["player_0_button_a"] == "engine:sdl,port:0,guid:00,button:1"
     assert _eden.rewrite(new, {"player_0_button_a": "engine:sdl,port:0,guid:00,button:1"}) == new
+
+
+def test_swapped_shoulders_exchange_l_r_with_zl_zr():
+    got = player(_eden.values_for(Context([EDGE], shoulders="swapped")))
+    assert params(got["button_l"])["axis"] == "4" and params(got["button_slleft"])["axis"] == "4"
+    assert params(got["button_zr"])["button"] == "10"

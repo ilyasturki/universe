@@ -5,15 +5,11 @@ from _controls import (
     DPAD_RIGHT,
     DPAD_UP,
     GUIDE,
-    LEFT_SHOULDER,
     LEFT_X,
     LEFT_Y,
-    RIGHT_SHOULDER,
     RIGHT_X,
     RIGHT_Y,
     START,
-    TRIGGER_LEFT,
-    TRIGGER_RIGHT,
     Context,
     Skip,
     axis,
@@ -22,6 +18,7 @@ from _controls import (
     first_file,
     ini_rewrite,
     ini_section,
+    pad_shoulders,
 )
 from _gamepads import BIND_AXIS, BIND_BUTTON, BIND_HAT
 
@@ -33,8 +30,6 @@ BUTTONS = {
     "down": DPAD_DOWN,
     "left": DPAD_LEFT,
     "right": DPAD_RIGHT,
-    "l": LEFT_SHOULDER,
-    "r": RIGHT_SHOULDER,
     "start": START,
     "select": BACK,
 }
@@ -80,8 +75,8 @@ def values_for(ctx: Context):
     pad = ctx.pads[0]
     device = {"engine": "sdl", "guid": pad.guid.hex(), "port": 0}
     values = {f"button_{k}": _param(device, button(pad, b)) for k, b in {**ctx.face, **BUTTONS}.items()}
-    values["button_zl"] = _param(device, axis(pad, TRIGGER_LEFT))
-    values["button_zr"] = _param(device, axis(pad, TRIGGER_RIGHT))
+    held = dict(zip(("button_l", "button_r", "button_zl", "button_zr"), pad_shoulders(ctx, pad), strict=True))
+    values.update({k: _param(device, b) for k, b in held.items()})
     values["button_home"] = _param(device, button(pad, GUIDE)) if ctx.guide else EMPTY
     values["circle_pad"] = _stick(device, pad, LEFT_X, LEFT_Y)
     values["c_stick"] = _stick(device, pad, RIGHT_X, RIGHT_Y)

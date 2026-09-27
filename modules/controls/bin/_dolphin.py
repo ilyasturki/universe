@@ -2,7 +2,7 @@ import os
 import re
 from pathlib import Path
 
-from _controls import EAST, NORTH, SOUTH, WEST, Context, Skip, config_home, data_home, ini_rewrite, ini_section, ordinals
+from _controls import EAST, NORTH, SOUTH, WEST, Context, Skip, config_home, data_home, ini_rewrite, ini_section, ordinals, swap_names
 
 PORTS = 4
 GC_CONTROLLER, WIIU_ADAPTER = "6", "12"
@@ -23,6 +23,10 @@ OWN_PROFILE = "universe-"
 SETTING = re.compile(r"^(-?[0-9.]+( -?[0-9.]+)*|True|False)$")
 
 
+def _shoulders(ctx: Context, keys):
+    return swap_names(ctx, keys, "`Shoulder L`", "`Shoulder R`", "`Trigger L`", "`Trigger R`")
+
+
 def _stick(prefix, side):
     return {
         f"{prefix}/Up": f"`{side} Y+`",
@@ -41,7 +45,7 @@ GCPAD = {
     "Buttons/B": "`Button E`",
     "Buttons/X": "`Button W`",
     "Buttons/Y": "`Button N`",
-    "Buttons/Z": "`Shoulder R`",
+    "Buttons/Z": "`Shoulder R` | `Shoulder L`",
     "Buttons/Start": "Start",
     **_stick("Main Stick", "Left"),
     **_stick("C-Stick", "Right"),
@@ -148,7 +152,7 @@ def wiimote(ctx: Context, pad):
     else:
         keys.update(_stick("IR", "Right"))
         defaults["IR/Relative Input"] = "True"
-    return keys, defaults
+    return _shoulders(ctx, keys), defaults
 
 
 def _section(text, name, device, keys, defaults):
@@ -216,7 +220,7 @@ def plan(ctx: Context):
     dolphin = _read(config / "Dolphin.ini")
     core = ini_section(dolphin, "Core")
     for n, (pad, device) in enumerate(zip(pads, names, strict=True)):
-        gcpad = _section(gcpad, f"GCPad{n + 1}", device, GCPAD, GCPAD_DEFAULTS)
+        gcpad = _section(gcpad, f"GCPad{n + 1}", device, _shoulders(ctx, GCPAD), GCPAD_DEFAULTS)
         section = f"Wiimote{n + 1}"
         keys, defaults = wiimote(ctx, pad)
         if wii and ini_section(wiimotes, section).get("Source", "1" if n == 0 else "0") == "0":

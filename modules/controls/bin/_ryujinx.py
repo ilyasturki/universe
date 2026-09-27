@@ -1,6 +1,6 @@
 import json
 
-from _controls import EAST, NORTH, SOUTH, WEST, Context, Skip, config_home, ordinals
+from _controls import EAST, NORTH, SOUTH, WEST, Context, Skip, config_home, ordinals, swap_names
 from _gamepads import LABEL_A, LABEL_B, LABEL_CIRCLE, LABEL_CROSS, LABEL_SQUARE, LABEL_TRIANGLE, LABEL_X, LABEL_Y
 
 PLAYERS = 8
@@ -36,7 +36,8 @@ def _stick(side, old):
     return stick
 
 
-def entry(pad, pad_id, player, face, old):
+def entry(pad, pad_id, player, ctx: Context, old):
+    face = ctx.face
     motion = {"motion_backend": "GamepadDriver", "sensitivity": 100, "gyro_deadzone": 1, **(old.get("motion") or {}), "enable_motion": pad.gyro}
     out = {
         "left_joycon_stick": _stick("Left", old.get("left_joycon_stick") or {}),
@@ -79,6 +80,8 @@ def entry(pad, pad_id, player, face, old):
         "player_index": f"Player{player}",
         "enable_dynamic_gamepad_swap": False,
     }
+    for side in ("left_joycon", "right_joycon"):
+        out[side] = swap_names(ctx, out[side], "LeftShoulder", "RightShoulder", "LeftTrigger", "RightTrigger")
     for k in TUNING:
         value = old.get(k)
         if isinstance(out[k], dict) and isinstance(value, dict):
@@ -91,7 +94,7 @@ def entry(pad, pad_id, player, face, old):
 def rewrite(doc, ctx: Context):
     pads = ctx.pads[:PLAYERS]
     old = {e.get("player_index"): e for e in doc.get("input_config") or [] if isinstance(e, dict)}
-    entries = [entry(pad, pad_id, n, ctx.face, old.get(f"Player{n}") or {}) for n, (pad, pad_id) in enumerate(zip(pads, ids(pads), strict=True), 1)]
+    entries = [entry(pad, pad_id, n, ctx, old.get(f"Player{n}") or {}) for n, (pad, pad_id) in enumerate(zip(pads, ids(pads), strict=True), 1)]
     doc["input_config"] = entries
     doc["player_input_assignments"] = [
         {"player_index": e["player_index"], "enable_dynamic_input_swap": False, "devices": [{"type": "Controller", "id": e["id"], "profile_name": None}]}

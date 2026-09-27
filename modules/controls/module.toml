@@ -33,6 +33,14 @@ scope = "game"
 choices = ["nunchuk", "sideways", "classic"]
 
 [[settings]]
+key = "shoulders"
+type = "enum"
+default = "standard"
+label = "Shoulder buttons (standard: as the emulator maps them; swapped: bumpers and triggers exchanged, e.g. GameCube L/R on the bumpers and Z on the triggers)"
+scope = "game"
+choices = ["standard", "swapped"]
+
+[[settings]]
 key = "guide"
 type = "bool"
 default = false

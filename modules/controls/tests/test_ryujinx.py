@@ -97,3 +97,10 @@ def test_plan_skips_without_a_readable_config(base):
     (base / "Config.json").write_text('{"version": "x"}')
     with pytest.raises(Skip):
         _ryujinx.plan(Context([EDGE]))
+
+
+def test_swapped_shoulders_exchange_l_r_with_zl_zr():
+    entry = _ryujinx.rewrite({"version": 73}, Context([EDGE], shoulders="swapped"))["input_config"][0]
+    assert (entry["left_joycon"]["button_l"], entry["left_joycon"]["button_zl"]) == ("LeftTrigger", "LeftShoulder")
+    right = entry["right_joycon"]
+    assert (right["button_r"], right["button_zr"], right["button_sr"]) == ("RightTrigger", "RightShoulder", "SingleRightTrigger1")

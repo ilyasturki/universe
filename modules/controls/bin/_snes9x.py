@@ -6,10 +6,8 @@ from _controls import (
     DPAD_LEFT,
     DPAD_RIGHT,
     DPAD_UP,
-    LEFT_SHOULDER,
     LEFT_X,
     LEFT_Y,
-    RIGHT_SHOULDER,
     START,
     Context,
     Skip,
@@ -18,6 +16,7 @@ from _controls import (
     config_home,
     ini_section,
     ini_set,
+    pad_shoulders,
     taken_buttons,
 )
 from _gamepads import BIND_AXIS, BIND_BUTTON, BIND_HAT
@@ -41,18 +40,25 @@ def _source(pad, binding, joystick):
         offset, sign = HAT[binding.mask]
         return f"{joystick} Axis {pad.axes + 2 * binding.index + offset} {sign} 50%"
     if binding.kind == BIND_AXIS:
-        return f"{joystick} Axis {binding.index} {'+' if binding.hi > binding.lo else '-'} 50%"
+        sign = 1 if binding.hi > binding.lo else -1
+        # A threshold is a share of the travel from 0 (snes9x calibrates only on request): a trigger resting at -32768 presses past 0%.
+        middle = sign * (binding.lo + binding.hi) / 2
+        return f"{joystick} Axis {binding.index} {'+' if sign > 0 else '-'} {max(0, round(middle * 100 / 32767))}%"
     return UNSET
 
 
-def pad_sets(pad, face):
+def pad_sets(pad, ctx: Context):
     joystick = f"Joystick {pad.index + 1}"
-    buttons = {**{k.upper(): b for k, b in face.items()}, "L": LEFT_SHOULDER, "R": RIGHT_SHOULDER, "Select": BACK, "Start": START, **DPAD}
+    buttons = {**{k.upper(): b for k, b in ctx.face.items()}, "Select": BACK, "Start": START, **DPAD}
+    lb, rb, lt, rt = pad_shoulders(ctx, pad)
     main = {
         **{k: _source(pad, button(pad, b), joystick) for k, b in buttons.items()},
+        "L": _source(pad, lb, joystick),
+        "R": _source(pad, rb, joystick),
         **dict.fromkeys(TURBO_STICKY, UNSET),
     }
     stick = dict.fromkeys(main, UNSET)
+    stick.update({"L": _source(pad, lt, joystick), "R": _source(pad, rt, joystick)})
     for out, names in ((LEFT_X, ("Left", "Right")), (LEFT_Y, ("Up", "Down"))):
         a = axis(pad, out)
         if a and a.kind == BIND_AXIS:
@@ -77,7 +83,7 @@ def plan(ctx: Context):
     pads = ctx.pads[:PLAYERS]
     text = ini_set(text, "Input", {"ControllerPort0": "joypad", "ControllerPort1": "multitap" if len(pads) >= 3 else "joypad"}, sep=" = ")
     for k, pad in enumerate(pads):
-        main, stick = pad_sets(pad, ctx.face)
+        main, stick = pad_sets(pad, ctx)
         text = ini_set(text, f"Joypad {k}", main, sep=" = ")
         text = ini_set(text, f"Joypad {k + SETS}", stick, sep=" = ")
     for k in range(len(pads), PLAYERS):

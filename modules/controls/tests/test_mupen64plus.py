@@ -75,3 +75,8 @@ def test_old_sections_are_replaced_and_the_rest_kept(cfg):
 def test_m64p_is_left_alone(cfg):
     with pytest.raises(Skip):
         _mupen64plus.plan(Context([EDGE], runner_path="/usr/bin/m64p"))
+
+
+def test_swapped_shoulders_put_z_on_the_left_bumper(cfg):
+    got = ini_section(_mupen64plus.plan(Context([XBOX], shoulders="swapped"))[cfg], "Input-SDL-Control1")
+    assert (got["Z Trig"], got["L Trig"], got["R Trig"]) == ("button(4)", "axis(2+)", "axis(5+) button(5)")

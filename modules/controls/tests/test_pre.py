@@ -114,3 +114,9 @@ def test_pre_stands_down_for_the_pads_module_and_without_pads(hook, monkeypatch)
 def test_an_emulator_never_started_is_left_to_its_first_start(emulator):
     with pytest.raises(Skip):
         importlib.import_module(f"_{emulator}").plan(Context([EDGE]))
+
+
+def test_the_shoulders_setting_reaches_the_writer(hook, monkeypatch):
+    monkeypatch.setenv("MODULE_SETTINGS_JSON", json.dumps({"shoulders": "swapped"}))
+    assert hook(EDEN) == 0
+    assert ",axis:4," in ini_section(hook.ini.read_text(), "Controls")["player_0_button_l"]

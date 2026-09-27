@@ -3,7 +3,7 @@ import os
 import re
 from pathlib import Path
 
-from _controls import Context, Skip, config_home, ordinals
+from _controls import Context, Skip, config_home, ordinals, swap_names
 
 PLAYERS = 7
 # RPCS3's SDL handler default, less `PS Button`, which the writer decides.
@@ -80,7 +80,8 @@ def render(ctx: Context):
     out = []
     for n, device in enumerate(devices(ctx.pads[:PLAYERS]), 1):
         out += [f"Player {n} Input:", "  Handler: SDL", f"  Device: {q(device)}", "  Config:"]
-        out += [f"    {k}: {q(v)}" for k, v in {**CONFIG, "PS Button": "Guide" if ctx.guide else ""}.items()]
+        config = swap_names(ctx, CONFIG, "LB", "RB", "LT", "RT")
+        out += [f"    {k}: {q(v)}" for k, v in {**config, "PS Button": "Guide" if ctx.guide else ""}.items()]
         out += [f"    {k}: {v}" for k, v in DEVICE.items()]
         out.append(f"  Buddy Device: {q('')}")
     for n in range(len(ctx.pads[:PLAYERS]) + 1, PLAYERS + 1):

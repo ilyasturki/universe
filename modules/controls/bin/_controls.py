@@ -1,4 +1,5 @@
 import os
+import re
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -15,6 +16,7 @@ FACE = {
     "xbox": {"a": SOUTH, "b": EAST, "x": WEST, "y": NORTH},
 }
 WIIMOTE = ("nunchuk", "sideways", "classic")
+SHOULDERS = ("standard", "swapped")
 
 # SDL3 gamepad outputs Universe keeps: guide, misc1, the four paddles, misc2-6.
 TAKEN = (GUIDE, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25)
@@ -31,6 +33,7 @@ class Context:
     runner_path: str = ""
     platform: str = ""
     wiimote: str = "nunchuk"
+    shoulders: str = "standard"
 
     @property
     def face(self):
@@ -59,6 +62,20 @@ def button(pad, b):
 
 def axis(pad, a):
     return pad.bindings.get((BIND_AXIS, a))
+
+
+def shoulders(ctx: Context, lb, rb, lt, rt):
+    return (lt, rt, lb, rb) if ctx.shoulders == "swapped" else (lb, rb, lt, rt)
+
+
+def pad_shoulders(ctx: Context, pad):
+    return shoulders(ctx, button(pad, LEFT_SHOULDER), button(pad, RIGHT_SHOULDER), axis(pad, TRIGGER_LEFT), axis(pad, TRIGGER_RIGHT))
+
+
+def swap_names(ctx: Context, values, lb, rb, lt, rt):
+    swap = dict(zip((lb, rb, lt, rt), shoulders(ctx, lb, rb, lt, rt), strict=True))
+    pattern = re.compile(rf"(?<![A-Za-z])({'|'.join(map(re.escape, swap))})(?![A-Za-z])")
+    return {k: pattern.sub(lambda m: swap[m.group()], v) if isinstance(v, str) else v for k, v in values.items()}
 
 
 def taken_buttons(pad, guide=False):

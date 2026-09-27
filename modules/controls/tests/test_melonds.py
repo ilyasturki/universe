@@ -1,6 +1,6 @@
 import _melonds
 from _controls import Context, ini_section, taken_buttons
-from _gamepads import BIND_AXIS, Input
+from _gamepads import BIND_AXIS, BIND_BUTTON, Input, Pad
 from controls_fixtures import EDGE, XBOX
 
 
@@ -9,7 +9,7 @@ def test_face_buttons_follow_the_layout():
     assert [positional[k] for k in "ABXY"] == [1, 0, 3, 2]
     xbox = _melonds.values_for(Context([EDGE], "xbox"))
     assert [xbox[k] for k in "ABXY"] == [0, 1, 2, 3]
-    assert (xbox["L"], xbox["R"], xbox["Select"], xbox["Start"]) == (9, 10, 4, 6)
+    assert (xbox["Select"], xbox["Start"]) == (4, 6)
 
 
 def test_the_dpad_also_reads_the_left_stick():
@@ -68,3 +68,16 @@ def test_rewrite_sets_the_pad_and_leaves_the_keyboard_and_the_rest():
 
 def test_joystick_id_is_the_pads_place_among_all_joysticks():
     assert ini_section(_melonds.rewrite(TOML, Context([EDGE])), "Instance0")["JoystickID"] == "0"
+
+
+def test_l_and_r_read_the_bumper_and_the_trigger():
+    got = _melonds.values_for(Context([EDGE]))
+    trigger = 0x10000 | 2 << 20
+    assert (got["L"], got["R"]) == (9 | trigger | 4 << 24, 10 | trigger | 5 << 24)
+    assert _melonds.values_for(Context([EDGE], shoulders="swapped"))["L"] == got["L"]
+
+
+def test_digital_triggers_leave_l_to_the_bumper_unless_swapped():
+    digital = Pad(**{**vars(EDGE), "bindings": {**EDGE.bindings, (BIND_AXIS, 4): Input(BIND_BUTTON, 12)}})
+    assert _melonds.values_for(Context([digital]))["L"] == 9
+    assert _melonds.values_for(Context([digital], shoulders="swapped"))["L"] == 12

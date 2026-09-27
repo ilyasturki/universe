@@ -175,3 +175,8 @@ def test_duckstation_hints_follow_its_input_sources(duck):
 
 def test_section_values_takes_the_last_of_a_repeated_key():
     assert section_values(PCSX2_INI, "Pad1")["Cross"] == "SDL-3/FaceEast"
+
+
+def test_swapped_shoulders_exchange_l1_r1_with_l2_r2(pcsx2):
+    pad1 = lines_of(_pcsx2.plan(Context([EDGE], shoulders="swapped"))[pcsx2], "Pad1")
+    assert "L1 = SDL-0/+LeftTrigger" in pad1 and "R2 = SDL-0/RightShoulder" in pad1 and "L3 = SDL-0/LeftStick" in pad1

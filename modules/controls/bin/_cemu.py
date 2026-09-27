@@ -2,7 +2,7 @@ import xml.etree.ElementTree as ET
 from html import escape
 from pathlib import Path
 
-from _controls import EAST, GUIDE, NORTH, SOUTH, WEST, Context, Skip, config_home, ini_section, ordinals
+from _controls import EAST, GUIDE, LEFT_SHOULDER, NORTH, RIGHT_SHOULDER, SOUTH, WEST, Context, Skip, config_home, ini_section, ordinals, shoulders
 from _gamepads import LABEL_B
 
 # Cemu's SDL init; the PS4/PS5 rumble pair reaches SDL3 as ENHANCED_REPORTS through sdl2-compat.
@@ -49,7 +49,8 @@ def uuids(pads):
 def mappings(ctx: Context, pad, kind):
     swap = pad.labels[0] == LABEL_B
     out = {i: (LABEL_SWAP[b] if swap else b) for i, b in zip((1, 2, 3, 4), (ctx.face[k] for k in "abxy"), strict=True)}
-    out.update(REST[kind])
+    held: dict[int, int] = dict(zip((LEFT_SHOULDER, RIGHT_SHOULDER, ZL, ZR), shoulders(ctx, LEFT_SHOULDER, RIGHT_SHOULDER, ZL, ZR), strict=True))
+    out.update({m: held.get(b, b) for m, b in REST[kind].items()})
     if ctx.guide:
         out[HOME[kind]] = GUIDE
     return out
