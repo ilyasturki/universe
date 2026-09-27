@@ -1,0 +1,134 @@
+import os
+
+from PySide6.QtCore import QObject, Qt
+from PySide6.QtTest import QTest
+from test_render import lit_fraction, render
+
+from conftest import pump, wait_for
+from universe_ui import host
+
+
+def key(window, k):
+    QTest.keyClick(window, k)
+    pump(60)
+
+
+def covered_fraction(image, rows):
+    small = image.scaled(96, 54)
+    covered = sum(1 for y in rows(small.height()) for x in range(small.width()) if small.pixelColor(x, y).alpha() > 10)
+    return covered / (small.width() * len(rows(small.height())))
+
+
+def start(api, fake, monkeypatch, ident):
+    from universe_ui import fake_core
+
+    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+    api.theme.set("ps5")
+    api.theme.takeLanding()
+    engine, window = render(api)
+    overlay = host.create_overlay(engine, window.size())
+    assert overlay is not None
+    api.home.attachOverlay(overlay)
+    overlay.show()
+    pump(200)
+    fake.launch(ident, "")
+    wait_for(fake.sessionShown, 3000)
+    pump(300)
+    return engine, window, overlay
+
+
+def open_cc(api, overlay, wait=600):
+    api.home.openDock()
+    overlay.requestActivate()
+    pump(wait)
+    return overlay.property("contentItem").childItems()[0].property("item")
+
+
+def shot(overlay, name):
+    where = os.environ.get("UNIVERSE_TEST_SHOTS")
+    if where:
+        overlay.grabWindow().save(os.path.join(where, name + ".png"))
+
+
+def stop(api, window, overlay):
+    api.home.stop()
+    pump(200)
+    window.close()
+    overlay.close()
+    pump(50)
+
+
+def test_the_control_center_lays_its_cards_over_the_bottom_of_the_game(api, fake, monkeypatch):
+    _engine, window, overlay = start(api, fake, monkeypatch, "batman-arkham-origins")
+    cc = open_cc(api, overlay, wait=60)
+    shot(overlay, "cc-open-60ms")
+    assert cc is not None and cc.property("open") is True and cc.property("zone") == "cards"
+    assert cc.appearOf(0) == cc.appearOf(1) and cc.appearOf(3) < 1, "the first two cards land together, the rest follow"
+    pump(1400)
+    assert all(cc.appearOf(i) == 1 for i in range(len(cc.property("cards").toVariant())))
+    ids = [c["id"] for c in cc.property("cards").toVariant()]
+    assert ids[:2] == ["game", "hub"] and "trophies" in ids and "captures" in ids
+    shot(overlay, "cc-open")
+    image = overlay.grabWindow()
+    assert covered_fraction(image, lambda h: range(h - 12, h)) > 0.9, "the lower band is drawn over the game"
+    assert image.pixelColor(4, 4).alpha() == 0, "the top of the frame stays clear"
+    assert lit_fraction(image, "#000000") > 0.01
+    stop(api, window, overlay)
+
+
+def test_the_bar_opens_a_panel_over_its_icon_and_b_steps_back_out(api, fake, monkeypatch):
+    _engine, window, overlay = start(api, fake, monkeypatch, "mirrors-edge")
+    cc = open_cc(api, overlay)
+    key(overlay, Qt.Key.Key_Down)
+    assert cc.property("zone") == "bar"
+    key(overlay, Qt.Key.Key_Right)
+    assert cc.property("current").toVariant()["id"] == "game"
+    key(overlay, Qt.Key.Key_Return)
+    pump(200)
+    shot(overlay, "cc-panel")
+    assert cc.property("zone") == "panel"
+    assert [r["id"] for r in cc.property("panelRows").toVariant()] == ["resume", "details", "pause", "quit"]
+    was = api.home.pauseOnHome
+    key(overlay, Qt.Key.Key_Down)
+    key(overlay, Qt.Key.Key_Down)
+    key(overlay, Qt.Key.Key_Return)
+    assert api.home.pauseOnHome is (not was)
+    key(overlay, Qt.Key.Key_Escape)
+    assert cc.property("zone") == "bar"
+    key(overlay, Qt.Key.Key_Escape)
+    pump(400)
+    assert api.home.open is False, "B closes the Control Center"
+    stop(api, window, overlay)
+
+
+def test_the_game_hub_card_lands_on_the_games_hero_at_home(api, fake, monkeypatch):
+    _engine, window, overlay = start(api, fake, monkeypatch, "dead-cells")
+    cc = open_cc(api, overlay)
+    key(overlay, Qt.Key.Key_Right)
+    assert cc.property("cards").toVariant()[cc.property("card")]["id"] == "hub"
+    key(overlay, Qt.Key.Key_Return)
+    pump(600)
+    assert api.home.shown == "launcher" and api.home.open is False
+    root = window.property("contentItem").childItems()[0].property("item")
+    home = root.findChild(QObject, "homePage")
+    assert home.property("zone") == "hero" and home.property("currentGame").property("id") == "dead-cells"
+    assert api.home.takeLanding() == "", "taken once"
+    api.home.toGame()
+    pump(300)
+    stop(api, window, overlay)
+
+
+def test_the_trophies_card_grows_into_the_games_list(api, fake, monkeypatch):
+    _engine, window, overlay = start(api, fake, monkeypatch, "batman-arkham-origins")
+    cc = open_cc(api, overlay)
+    ids = [c["id"] for c in cc.property("cards").toVariant()]
+    for _ in range(ids.index("trophies")):
+        key(overlay, Qt.Key.Key_Right)
+    key(overlay, Qt.Key.Key_Return)
+    pump(400)
+    shot(overlay, "cc-trophies")
+    assert cc.property("zone") == "sheet" and cc.property("sheet") == "trophies"
+    assert len(api.screens.dockAchievements.rows) > 0
+    key(overlay, Qt.Key.Key_Escape)
+    assert cc.property("zone") == "cards"
+    stop(api, window, overlay)

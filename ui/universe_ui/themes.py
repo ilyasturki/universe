@@ -25,7 +25,7 @@ THEMES = [
         "id": "ps5",
         "name": "PS5",
         "entry": "ps5/theme.qml",
-        "overlay": "",
+        "overlay": "ps5/ui/ControlCenter.qml",
         "frame": False,
         "ground": "#0b0d12",
         "detail": "The PS5 home screen: the game's world behind a row of tiles.",

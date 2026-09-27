@@ -518,22 +518,30 @@ FocusScope {
 
     Connections {
         target: api.home
+        // A press opens the Control Center over the game (held, the host goes home); with no overlay window the host lands home itself.
         function onPressed() {
-            if (root.launching)
+            if (root.launching || splash.running) {
+                // The splash holds while the game loads: HOME raises the reduced Control Center over it.
+                if (!splash.waiting)
+                    return;
+                if (api.home.open)
+                    api.home.closeDock();
+                else
+                    api.home.openDock();
                 return;
+            }
             if (!root.sessionRunning) {
                 if (!root.modal)
                     root.goHome();
                 return;
             }
-            if (api.home.shown === "game") {
-                if (root.depth === 0)
-                    Sound.play("home");
-                api.home.toLauncher();
-                root.goHome();
-            } else if (!root.modal) {
-                root.resume();
-            }
+            if (api.home.shown !== "game") {
+                if (!root.modal)
+                    root.resume();
+            } else if (api.home.open)
+                api.home.closeDock();
+            else
+                api.home.openDock();
         }
         function onStopping(title) {
             Base.Notices.show("Closing " + title + "…", "stop");
