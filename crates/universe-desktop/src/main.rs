@@ -23,6 +23,12 @@ use gtk::prelude::*;
 use gtk::{gio, glib};
 
 fn main() -> glib::ExitCode {
+    // The core runs `$UNIVERSE_BIN` for session hooks, falling back to this binary, which is not the CLI.
+    if std::env::var_os("UNIVERSE_BIN").is_none_or(|bin| bin.is_empty()) {
+        if let Some(cli) = glib::find_program_in_path("universe") {
+            std::env::set_var("UNIVERSE_BIN", cli);
+        }
+    }
     universe::init_tracing();
     gettextrs::setlocale(LocaleCategory::LcAll, "");
     let _ = gettextrs::bindtextdomain(config::GETTEXT_PACKAGE, config::LOCALE_DIR);
