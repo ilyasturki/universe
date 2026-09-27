@@ -166,6 +166,7 @@ FocusScope {
             x: page.gridX
             y: page.gridY
             width: implicitWidth
+            room: parent.width - x - Theme.dp(137)
             height: parent.height - y - Theme.dp(Theme.hintBarHeight)
             games: sorted
             addTile: page.query === ""
@@ -187,6 +188,7 @@ FocusScope {
         x: page.gridX
         y: page.gridY
         width: implicitWidth
+        room: parent.width - x - Theme.dp(137)
         height: parent.height - y - Theme.dp(Theme.hintBarHeight)
         visible: page.tab === 1
         games: page.groupList

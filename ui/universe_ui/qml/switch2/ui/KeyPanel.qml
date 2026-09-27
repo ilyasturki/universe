@@ -24,10 +24,11 @@ Rectangle {
     // Up from the top row: the owner may move on to what sits above the panel.
     signal escapedUp
 
-    readonly property real keyW: Theme.dp(128 * scale)
-    readonly property real keyH: Theme.dp(72 * scale)
     readonly property real keyGap: Theme.dp(6)
     readonly property real keysLeft: Theme.dp(134)
+    // Eleven keys and the side column keep a 120dp right margin: a narrower screen narrows the keys.
+    readonly property real keyW: Math.min(Theme.dp(128 * scale), width > 0 ? Math.floor((width - keysLeft - Theme.dp(12 + 120) - Theme.dp(180)) / 11 - keyGap) : Theme.dp(128 * scale))
+    readonly property real keyH: Theme.dp(72 * scale)
     readonly property real keysTop: Theme.dp(46 * scale)
     readonly property real sideX: keysLeft + 11 * (keyW + keyGap) + Theme.dp(12)
     readonly property real sideW: Theme.dp(180)

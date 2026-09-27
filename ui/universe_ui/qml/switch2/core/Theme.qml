@@ -68,6 +68,8 @@ QtObject {
     readonly property real ringRoomTight: ringLine
 
     readonly property real edgeMargin: 72
+    // Right of a settings column: its margin at 1920 wide, kept on a narrower screen.
+    readonly property real columnRight: 192
     readonly property real headerHeight: 126
     readonly property real hintBarHeight: 108
     readonly property real tileSize: 384

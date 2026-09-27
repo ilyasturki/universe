@@ -90,9 +90,12 @@ Item {
             Image {
                 id: hero
 
+                // Art near the screen's shape (a 16:9 background on a 16:10 Deck) fills it; a 3:1 banner stays whole, feathered.
+                readonly property bool nearScreen: implicitHeight > 0 && height > 0 && Math.abs(implicitWidth / implicitHeight / (width / height) - 1) < 0.2
+
                 anchors.fill: parent
                 source: frame.heroSource
-                fillMode: Image.PreserveAspectFit
+                fillMode: nearScreen ? Image.PreserveAspectCrop : Image.PreserveAspectFit
                 asynchronous: true
                 cache: true
                 mipmap: true

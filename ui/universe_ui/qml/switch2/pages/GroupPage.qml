@@ -121,6 +121,7 @@ FocusScope {
         x: Theme.dp(253)
         y: Theme.dp(190)
         width: implicitWidth
+        room: parent.width - x - Theme.dp(137)
         height: parent.height - y - Theme.dp(Theme.hintBarHeight)
         games: page.list
         focus: page.zone === "grid"

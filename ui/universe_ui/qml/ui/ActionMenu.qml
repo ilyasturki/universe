@@ -208,7 +208,11 @@ FocusScope {
         color: "#1b1d24"
         border.width: 1
         border.color: Theme.surfaceBorder
-        x: menu.centered ? (menu.width - width) / 2 : (menu.onRight ? menu.row.x + menu.row.width + menu.gap : menu.row.x - menu.gap - width) + (menu.onRight ? -1 : 1) * menu.slide * Theme.dp(16)
+        readonly property real leftX: menu.row.x - menu.gap - width
+        // A row too wide for either side (a settings row on a 16:10 screen) has it over its right end, where its value is.
+        readonly property real sideX: menu.onRight ? menu.row.x + menu.row.width + menu.gap : leftX >= Theme.dp(40) ? leftX : menu.width - width - Theme.dp(40)
+
+        x: menu.centered ? (menu.width - width) / 2 : sideX + (menu.onRight ? -1 : 1) * menu.slide * Theme.dp(16)
         y: menu.centered ? (menu.height - height) / 2 : Math.max(Theme.dp(40), Math.min(menu.row.y + menu.row.height / 2 - height / 2, menu.height - height - Theme.dp(40)))
         opacity: 1.0 - menu.slide
         scale: 1.0 - menu.slide * 0.04

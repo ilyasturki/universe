@@ -26,8 +26,10 @@ FocusScope {
     readonly property var job: store.job
     readonly property bool fetching: job !== null && job !== undefined && (job.ok === null || job.ok === undefined)
 
-    readonly property real titleWidth: Theme.dp(300)
     readonly property real thumbHeight: Theme.dp(96)
+    readonly property real thumbsWidth: (columns || []).reduce((sum, column) => sum + widthOf(column) + cellGap, 0)
+    // The titles give way first on a narrow screen; the ring's room stays on the right.
+    readonly property real titleWidth: Math.max(Theme.dp(200), Math.min(Theme.dp(300), width - thumbsWidth - Theme.dp(12)))
     readonly property real rowHeight: Theme.dp(110)
     readonly property real cellGap: Theme.dp(18)
 

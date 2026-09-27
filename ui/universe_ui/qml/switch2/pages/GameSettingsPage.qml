@@ -195,7 +195,7 @@ FocusScope {
         shell: page.shell
         x: Theme.dp(705)
         y: header.height + Theme.dp(64)
-        width: Theme.dp(1023)
+        width: parent.width - x - Theme.dp(Theme.columnRight)
         height: parent.height - y - Theme.dp(Theme.hintBarHeight) - Theme.dp(20)
         model: page.content
         focus: page.zone === "rows"

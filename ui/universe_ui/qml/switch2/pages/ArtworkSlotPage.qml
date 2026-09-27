@@ -80,7 +80,7 @@ FocusScope {
     readonly property int columns: aspect > 1.5 ? 4 : 6
     readonly property real gap: Theme.dp(22)
     readonly property real captionHeight: Theme.dp(44)
-    readonly property real cellWidth: Math.floor((Theme.dp(1600) - gap * (columns - 1)) / columns)
+    readonly property real cellWidth: Math.floor((Math.min(Theme.dp(1600), width - Theme.dp(160 * 2)) - gap * (columns - 1)) / columns)
     readonly property real artHeight: Math.round(cellWidth / aspect)
 
     // The "under" cell comes and goes at index 1: the ring stays on the same candidate.

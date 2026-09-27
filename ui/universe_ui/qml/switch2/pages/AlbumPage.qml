@@ -91,7 +91,7 @@ FocusScope {
 
     signal closeRequested
 
-    readonly property real thumbWidth: Theme.dp(290)
+    readonly property real thumbWidth: Math.min(Theme.dp(290), Math.floor((width - Theme.dp(253 + 169) - Theme.dp(12) * 4) / 5))
     readonly property real thumbHeight: Math.round(thumbWidth * 9 / 16)
 
     focus: true

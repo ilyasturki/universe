@@ -6,7 +6,7 @@ import "ui"
 Window {
     id: overlay
 
-    readonly property real unit: Math.max(1, height / 1080)
+    readonly property real unit: Math.max(0.66, height / 1080)
 
     color: "transparent"
     flags: Qt.FramelessWindowHint

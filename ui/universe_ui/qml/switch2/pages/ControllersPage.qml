@@ -444,7 +444,7 @@ FocusScope {
 
         x: page.testing ? Theme.dp(Theme.edgeMargin) : Theme.dp(120)
         y: Theme.dp(180)
-        width: page.testing ? parent.width - Theme.dp(Theme.edgeMargin) * 2 : Theme.dp(1000)
+        width: page.testing ? parent.width - Theme.dp(Theme.edgeMargin) * 2 : hairline.x - Theme.dp(60) - x
         height: page.testing ? parent.height - y - Theme.dp(Theme.hintBarHeight) - Theme.dp(30) : Theme.dp(560)
         radius: Theme.dp(12)
         color: "#2d2d2d"
@@ -646,7 +646,9 @@ FocusScope {
     }
 
     Rectangle {
-        x: Theme.dp(1180)
+        id: hairline
+
+        x: rows.x - Theme.dp(50)
         y: Theme.dp(160)
         width: 1
         height: parent.height - y - Theme.dp(Theme.hintBarHeight) - Theme.dp(20)
@@ -658,7 +660,7 @@ FocusScope {
         id: rows
 
         shell: page.shell
-        x: Theme.dp(1230)
+        x: parent.width - width - Theme.dp(130)
         y: Theme.dp(170)
         width: Theme.dp(560)
         height: parent.height - y - Theme.dp(Theme.hintBarHeight) - Theme.dp(20)

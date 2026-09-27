@@ -290,7 +290,7 @@ FocusScope {
 
         x: Theme.dp(990)
         y: Theme.dp(250)
-        width: Theme.dp(790)
+        width: parent.width - x - Theme.dp(140)
         height: parent.height - y - Theme.dp(Theme.hintBarHeight) - Theme.dp(30)
 
         Flickable {

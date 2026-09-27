@@ -51,7 +51,7 @@ FocusScope {
 
     signal closeRequested
 
-    readonly property real cardWidth: Theme.dp(489)
+    readonly property real cardWidth: Math.min(Theme.dp(489), Math.floor((width - Theme.dp(253 + 164) - Theme.dp(18) * 2) / 3))
     readonly property real imageHeight: Math.round(cardWidth * 9 / 16)
     readonly property real captionHeight: Theme.dp(105)
 

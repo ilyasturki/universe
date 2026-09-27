@@ -25,9 +25,12 @@ FocusScope {
     signal activated(int index)
     signal optionsRequested(int index)
     signal addRequested
+    signal pointed
 
     readonly property int columns: 6
-    readonly property real tile: Theme.dp(237)
+    // The width the grid may take; a narrower screen shrinks the tiles, never the column count.
+    property real room: 0
+    readonly property real tile: room > 0 ? Math.min(Theme.dp(237), Math.floor(room / columns - Theme.dp(18))) : Theme.dp(237)
     readonly property real gap: Theme.dp(18)
     readonly property real pitch: tile + gap
     readonly property real inset: Theme.dp(Theme.ringRoom)
