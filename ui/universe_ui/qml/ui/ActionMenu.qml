@@ -203,7 +203,7 @@ FocusScope {
         readonly property real room: menu.height - Theme.dp(80)
 
         width: Theme.dp(menu.centered ? 640 : 460)
-        height: Math.min(room, scroller.contentHeight + Theme.dp(24) + (head.visible ? head.height + Theme.dp(8) : 0))
+        height: Math.min(room, (head.visible ? head.y + head.height : 0) + scroller.anchors.topMargin + scroller.contentHeight + scroller.anchors.bottomMargin)
         radius: Theme.dp(24)
         color: "#1b1d24"
         border.width: 1
@@ -235,6 +235,8 @@ FocusScope {
             visible: menu.title !== ""
 
             Text {
+                id: heading
+
                 width: parent.width
                 topPadding: menu.centered ? 0 : Theme.dp(9)
                 bottomPadding: menu.centered ? 0 : Theme.dp(9)
@@ -244,10 +246,15 @@ FocusScope {
                 font.weight: menu.centered ? Font.DemiBold : Font.Medium
                 font.pixelSize: Theme.dp(menu.centered ? 28 : 21)
                 wrapMode: menu.centered ? Text.WordWrap : Text.NoWrap
-                elide: menu.centered ? Text.ElideNone : Text.ElideRight
+                maximumLineCount: 3
+                elide: Text.ElideRight
             }
 
             Text {
+                id: noteText
+
+                readonly property real room: panel.room - Math.min(scroller.contentHeight, panel.room / 2) - scroller.anchors.topMargin - scroller.anchors.bottomMargin - head.anchors.topMargin - heading.height - head.spacing - bottomPadding
+
                 width: parent.width
                 visible: menu.note !== ""
                 bottomPadding: Theme.dp(10)
@@ -257,6 +264,16 @@ FocusScope {
                 font.pixelSize: Theme.dp(21)
                 wrapMode: Text.WordWrap
                 lineHeight: 1.2
+                maximumLineCount: Math.max(1, Math.floor(room / noteLine.height))
+                elide: Text.ElideRight
+
+                Text {
+                    id: noteLine
+                    visible: false
+                    text: "X"
+                    font: noteText.font
+                    lineHeight: noteText.lineHeight
+                }
             }
         }
 

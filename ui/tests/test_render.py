@@ -736,6 +736,46 @@ def test_reboot_and_power_off_ask_again_and_close_the_game_first(api, fake, monk
     pump(50)
 
 
+def test_a_reprise_list_that_fits_shows_every_row_without_scrolling(api):
+    from PySide6.QtCore import Q_ARG, QMetaObject, QObject, Qt
+    from PySide6.QtTest import QTest
+
+    def fits(menu, what):
+        pump(500)
+        assert menu.property("open") is True, what
+        flick = next(o for o in menu.findChildren(QObject) if o.metaObject().className().startswith("QQuickFlickable"))
+        assert flick.property("contentHeight") <= flick.property("height") + 0.5, (
+            f"{what}: the rows need {flick.property('contentHeight')}, the panel leaves {flick.property('height')}"
+        )
+        assert flick.property("contentY") == 0, what
+
+    _engine, window = render(api, activate=True)
+    root = window.property("contentItem").childItems()[0].property("item")
+    confirm = window.findChild(QObject, "confirm")
+    api.screens.controller.walkOffered.emit("x", "8BitDo Ultimate 2C")
+    fits(confirm, "a question with a note")
+    QTest.keyClick(window, Qt.Key.Key_Escape)
+    pump(300)
+    root.askPower()
+    fits(confirm, "a question alone")
+    QTest.keyClick(window, Qt.Key.Key_Escape)
+    pump(300)
+    spec = {"message": "A question that goes on " * 20, "detail": "A note that goes on and on. " * 200}
+    QMetaObject.invokeMethod(confirm, "ask", Q_ARG("QVariant", spec), Q_ARG("QVariant", None))
+    fits(confirm, "a question with an endless note")
+    QTest.keyClick(window, Qt.Key.Key_Escape)
+    pump(300)
+    menu = window.findChild(QObject, "gameMenu")
+    QTest.keyClick(window, Qt.Key.Key_F1)
+    fits(menu, "a list beside its row")
+    for key in (Qt.Key.Key_Down,) * 3 + (Qt.Key.Key_Return,):
+        QTest.keyClick(window, key)
+        pump(80)
+    fits(menu, "a titled list beside its row")
+    window.close()
+    pump(50)
+
+
 def test_the_power_menu_lists_what_logind_would_do(fake):
     from universe_ui.api import System
 
