@@ -28,11 +28,22 @@ Modal {
         buttons = spec.buttons || ["OK"];
         index = spec.index !== undefined ? spec.index : buttons.length - 1;
         dangerIndex = spec.danger !== undefined ? spec.danger : -1;
+        bodyView.contentY = 0;
         present(done);
     }
 
+    function scroll(d) {
+        var next = Math.max(0, Math.min(bodyView.contentHeight - bodyView.height, bodyView.contentY + d * Theme.dp(120)));
+        if (next === bodyView.contentY) {
+            Sound.play("edge");
+            return;
+        }
+        Sound.play("tick");
+        bodyView.contentY = next;
+    }
+
     card.width: Theme.dp(1072)
-    card.height: Math.max(Theme.dp(420), body.height + Theme.dp(120) + buttonRow.height)
+    card.height: Math.min(dialog.height - Theme.dp(120), Math.max(Theme.dp(420), body.height + Theme.dp(120) + buttonRow.height))
 
     Keys.onPressed: function (event) {
         event.accepted = true;
@@ -48,37 +59,68 @@ Modal {
         } else if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
             index = Sound.stepped(index, event.key === Qt.Key_Left ? -1 : 1, buttons.length);
         } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
-            Sound.play("edge");
+            scroll(event.key === Qt.Key_Up ? -1 : 1);
         }
     }
 
-    Column {
-        id: body
+    Flickable {
+        id: bodyView
 
         anchors.left: parent.left
         anchors.right: parent.right
+        anchors.top: parent.top
+        anchors.bottom: buttonRow.top
         anchors.leftMargin: Theme.dp(160)
         anchors.rightMargin: Theme.dp(120)
-        anchors.verticalCenter: parent.verticalCenter
-        anchors.verticalCenterOffset: -buttonRow.height / 2
-        spacing: Theme.dp(10)
+        anchors.topMargin: Theme.dp(60)
+        anchors.bottomMargin: Theme.dp(60)
+        contentWidth: width
+        contentHeight: body.height
+        interactive: false
+        clip: true
 
-        Label {
-            width: parent.width
-            text: dialog.message
-            wrapMode: Text.WordWrap
-            lineHeight: 1.25
+        Behavior on contentY {
+            id: scrollEase
+            Ease {}
         }
 
-        Label {
-            width: parent.width
-            visible: dialog.detail !== ""
-            text: dialog.detail
-            color: Theme.textSecondary
-            font.pixelSize: Theme.dp(Theme.fontSmall)
-            wrapMode: Text.WordWrap
-            lineHeight: 1.25
+        Column {
+            id: body
+
+            width: bodyView.width
+            y: Math.max(0, (bodyView.height - height) / 2)
+            spacing: Theme.dp(10)
+
+            Label {
+                width: parent.width
+                text: dialog.message
+                wrapMode: Text.WordWrap
+                lineHeight: 1.25
+            }
+
+            Label {
+                width: parent.width
+                visible: dialog.detail !== ""
+                text: dialog.detail
+                color: Theme.textSecondary
+                font.pixelSize: Theme.dp(Theme.fontSmall)
+                wrapMode: Text.WordWrap
+                lineHeight: 1.25
+            }
         }
+    }
+
+    Swipe {
+        flickable: bodyView
+        ease: scrollEase
+    }
+
+    Scrollbar {
+        anchors.right: parent.right
+        anchors.rightMargin: Theme.dp(60)
+        anchors.top: bodyView.top
+        anchors.bottom: bodyView.bottom
+        flickable: bodyView
     }
 
     Hairline {

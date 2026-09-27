@@ -796,6 +796,46 @@ def test_the_switch2_picker_opens_on_a_late_choice_with_its_ring_whole(api):
     pump(50)
 
 
+def test_a_switch2_dialog_taller_than_the_screen_scrolls_its_text(api):
+    from PySide6.QtCore import Q_ARG, QMetaObject, QObject, Qt
+    from PySide6.QtTest import QTest
+
+    def ask(spec):
+        QMetaObject.invokeMethod(dialog, "show", Q_ARG("QVariant", spec), Q_ARG("QVariant", None))
+        pump(400)
+
+    def down(times):
+        for _ in range(times):
+            QTest.keyClick(window, Qt.Key.Key_Down)
+            pump(30)
+        pump(400)
+
+    _engine, window = render(api, activate=True)
+    api.theme.set("switch2")
+    settle(window)
+    dialog = window.findChild(QObject, "dialog")
+    flick = next(o for o in dialog.findChildren(QObject) if o.metaObject().className().startswith("QQuickFlickable"))
+    ask({"message": "Delete the save?", "buttons": ["Cancel", "Delete"]})
+    down(1)
+    assert flick.property("contentY") == 0, "a short question does not move"
+    QTest.keyClick(window, Qt.Key.Key_Escape)
+    pump(300)
+    ask({"message": "A question", "detail": "A detail that goes on and on. " * 300, "buttons": ["Cancel", "OK"]})
+    card = flick.parentItem()
+    assert card.property("height") <= window.height(), "the card stays on the screen"
+    assert flick.property("contentHeight") > flick.property("height")
+    down(1)
+    assert flick.property("contentY") > 0, "Down reads on"
+    down(200)
+    assert flick.property("contentY") == flick.property("contentHeight") - flick.property("height"), "Down reaches the end"
+    QTest.keyClick(window, Qt.Key.Key_Escape)
+    pump(300)
+    ask({"message": "Again", "buttons": ["OK"]})
+    assert flick.property("contentY") == 0, "a new question starts at its top"
+    window.close()
+    pump(50)
+
+
 def test_a_long_journal_paragraph_stops_above_the_hint_bar(api):
     _engine, window = render(api, 1280, 800, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
