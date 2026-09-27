@@ -1,0 +1,62 @@
+api = 2
+id = "epic"
+name = "Epic Games"
+version = "0.0.6"
+description = "Installs and updates the games of your Epic Games account through legendary; lists their achievements."
+exe = "bin/source"
+capabilities = ["achievements", "uninstall"]
+
+[requires]
+bins = ["legendary"]
+
+[hooks]
+pre-launch   = "bin/pre-launch"
+post-process = "bin/post-process"
+timeout_s    = 40
+
+[[settings]]
+key = "achievements"
+type = "bool"
+default = true
+label = "Achievements (fetched after each session)"
+scope = "game"
+
+[[settings]]
+key = "games_dir"
+type = "path"
+default = ""
+label = "Install folder (empty: paths.games_root)"
+
+[[settings]]
+key = "with_dlcs"
+type = "bool"
+default = true
+label = "Install owned DLCs"
+
+[[settings]]
+key = "anticheat_runtimes"
+type = "bool"
+default = true
+label = "Easy Anti-Cheat and BattlEye runtimes for Proton (fetched from Lutris)"
+advanced = true
+
+[[settings]]
+key = "config_path"
+type = "path"
+default = "~/.config/legendary"
+label = "legendary's folder (login, installed games)"
+advanced = true
+
+[[settings]]
+key = "adopt_from"
+type = "path"
+default = "~/.config/heroic/legendaryConfig/legendary"
+label = "Another legendary's folder whose installs a scan adopts (Heroic's)"
+advanced = true
+
+[[settings]]
+key = "install_timeout_s"
+type = "int"
+default = 7200
+label = "Maximum install or update time (s)"
+advanced = true

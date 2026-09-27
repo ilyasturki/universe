@@ -1,0 +1,778 @@
+#!/usr/bin/env python3
+import contextlib
+import csv
+import io
+import json
+import os
+import queue
+import re
+import shlex
+import signal
+import subprocess
+import sys
+import tarfile
+import threading
+import time
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+LOGIN_URL = (
+    "https://www.epicgames.com/id/login?redirectUrl="
+    "https%3A%2F%2Fwww.epicgames.com%2Fid%2Fapi%2Fredirect%3FclientId%3D34a02cf8f4414e29b15921876da36f9a%26responseType%3Dcode"
+)
+UMU_URL = "https://umu.openwinecomponents.org/umu_api.php?store=egs&codename={id}"
+RUNTIMES_URL = "https://lutris.net/api/runtimes"
+USER_AGENT = "universe-epic/0.1"
+HTTP_TIMEOUT_S = 30
+LEGENDARY_TIMEOUT_S = 120
+LIST_TIMEOUT_S = 900  # the first listing fetches every owned title's metadata, one request each
+LAUNCH_TIMEOUT_S = 20  # the online try and the offline one fit the pre-launch timeout_s, which cancels the launch
+KILL_GRACE_S = 10
+PROGRESS_INTERVAL_S = 1.0
+PROGRESS_RE = re.compile(r"= Progress: ([\d.]+)% \((\d+)/(\d+)\)")
+DOWNLOAD_SIZE_RE = re.compile(r"Download size: ([\d.]+) MiB")
+ERROR_RE = re.compile(r"^\[[\w.]+\] (?:CRITICAL|ERROR): (.*)")
+NOT_LOGGED_IN = "<not logged in>"
+NO_CREDENTIALS = "ValueError: No saved credentials"  # legendary's traceback when a verb that logs in runs signed out
+ADOPT_RETRY_S = 3600
+ANTICHEAT_DEPTH = 3
+ANTICHEATS = (("easyanticheat", "eac_runtime", "PROTON_EAC_RUNTIME"), ("battleye", "battleye_runtime", "PROTON_BATTLEYE_RUNTIME"))
+IMAGE_TYPES = ("DieselGameBoxTall", "DieselGameBox", "OfferImageTall", "Thumbnail")
+
+_child = None
+
+
+class SourceError(Exception):
+    pass
+
+
+def emit(event, **fields):
+    print(json.dumps({"event": event, **fields}), flush=True)
+
+
+def log(message):
+    print(f"epic: {message}", file=sys.stderr, flush=True)
+
+
+def data_dir():
+    path = Path(os.environ["SOURCE_DATA_DIR"])
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def load_settings():
+    settings = json.loads(os.environ["SOURCE_SETTINGS_JSON"])
+    for key in ("games_dir", "config_path", "adopt_from"):
+        settings[key] = os.path.expanduser(str(settings.get(key) or ""))
+    settings["install_timeout_s"] = int(settings["install_timeout_s"])
+    for key in ("achievements", "with_dlcs", "anticheat_runtimes"):
+        settings[key] = bool(settings.get(key, True))
+    return settings
+
+
+def dlc_flag(settings):
+    return "--with-dlcs" if settings["with_dlcs"] else "--skip-dlcs"
+
+
+def load_json(path):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def save_json(path, data):
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data))
+    tmp.replace(path)
+
+
+def fetch(url):
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_S) as response:
+            return json.load(response)
+    except (OSError, ValueError) as exc:
+        raise SourceError(f"GET {url.split('?')[0]}: {exc}") from exc
+
+
+def fetch_bytes(url):
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT})
+    try:
+        with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_S) as response:
+            return response.read()
+    except OSError as exc:
+        raise SourceError(f"GET {url.split('?')[0]}: {exc}") from exc
+
+
+def legendary_env(settings):
+    return {**os.environ, "LEGENDARY_CONFIG_PATH": settings["config_path"]}
+
+
+def last_error(text):
+    if NO_CREDENTIALS in text:
+        return ": not signed in to Epic (run login)"
+    errors = [m.group(1) for m in map(ERROR_RE.match, text.splitlines()) if m]
+    return f": {errors[-1]}" if errors else ""
+
+
+def legendary(settings, verb, *args, yes=False, timeout=LEGENDARY_TIMEOUT_S):
+    command = ["legendary", *(["-y"] if yes else []), verb, *args]
+    try:
+        proc = subprocess.run(
+            command, env=legendary_env(settings), stdin=subprocess.DEVNULL, capture_output=True, text=True, errors="replace", timeout=timeout, check=False
+        )
+    except FileNotFoundError:
+        raise SourceError("legendary is not installed") from None
+    except subprocess.TimeoutExpired:
+        raise SourceError(f"legendary {verb} timed out after {timeout}s") from None
+    signed_out = NO_CREDENTIALS in proc.stderr
+    for line in proc.stderr.splitlines():
+        if not signed_out or line.startswith("["):
+            log(line)
+    return proc
+
+
+def failure(verb, proc):
+    return SourceError(f"legendary {verb} failed (exit {proc.returncode}){last_error(proc.stderr)}")
+
+
+def legendary_json(settings, verb, *args, timeout=LEGENDARY_TIMEOUT_S):
+    proc = legendary(settings, verb, *args, timeout=timeout)
+    if proc.returncode != 0:
+        raise failure(verb, proc)
+    try:
+        return json.loads(proc.stdout)
+    except ValueError:
+        raise SourceError(f"legendary {verb} printed no JSON{last_error(proc.stderr)}") from None
+
+
+def kill_group(proc):
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    try:
+        proc.wait(timeout=KILL_GRACE_S)
+    except subprocess.TimeoutExpired:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(proc.pid, signal.SIGKILL)
+        proc.wait()
+
+
+# Its progress counts chunks; the bytes are the download size it announces first, scaled by the percentage.
+def legendary_stream(settings, verb, *args, timeout, total=None):
+    global _child  # noqa: PLW0603
+    try:
+        proc = subprocess.Popen(
+            ["legendary", "-y", verb, *args],
+            env=legendary_env(settings),
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            errors="replace",
+            start_new_session=True,
+        )
+    except FileNotFoundError:
+        raise SourceError("legendary is not installed") from None
+    _child = proc
+    stdout = proc.stdout
+    assert stdout is not None
+    lines = queue.Queue()
+
+    def pump():
+        for line in stdout:
+            lines.put(line.rstrip("\n"))
+        lines.put(None)
+
+    threading.Thread(target=pump, daemon=True).start()
+    deadline = time.monotonic() + timeout
+    last_emit, error = 0.0, ""
+    try:
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                kill_group(proc)
+                raise SourceError(f"legendary {verb} exceeded {timeout}s, killed")
+            try:
+                line = lines.get(timeout=min(remaining, PROGRESS_INTERVAL_S))
+            except queue.Empty:
+                continue
+            if line is None:
+                break
+            if size := DOWNLOAD_SIZE_RE.search(line):
+                total = int(float(size.group(1)) * 1024 * 1024)
+            match = PROGRESS_RE.search(line)
+            if not match:
+                if found := ERROR_RE.match(line):
+                    error = found.group(1)
+                log(line)
+                continue
+            percent = float(match.group(1))
+            done, count = (int(total * percent / 100), total) if total else (int(match.group(2)), int(match.group(3)))
+            now = time.monotonic()
+            if now - last_emit >= PROGRESS_INTERVAL_S or percent >= 100:
+                emit("progress", done=done, total=count, message=f"{match.group(1)}%")
+                last_emit = now
+        code = proc.wait()
+    finally:
+        _child = None
+    if code != 0:
+        raise SourceError(f"legendary {verb} failed (exit {code})" + (f": {error}" if error else ""))
+    return error
+
+
+def installed_games(settings):
+    return {g["app_name"]: g for g in legendary_json(settings, "list-installed", "--json") or [] if isinstance(g, dict) and g.get("app_name")}
+
+
+def library_index():
+    # The core writes library.json (its game events) after every `library`; the source only reads it.
+    products = load_json(data_dir() / "library.json")
+    return None if not isinstance(products, list) else {str(p.get("id")): p for p in products}
+
+
+def owned_status(app, index):
+    return (app in index) if index is not None else None
+
+
+def attribute(game, key):
+    return (((game.get("metadata") or {}).get("customAttributes") or {}).get(key) or {}).get("value")
+
+
+def facts(game):
+    images = {i.get("type"): i.get("url") for i in (game.get("metadata") or {}).get("keyImages") or [] if isinstance(i, dict)}
+    return {
+        "image": next((images[t] for t in IMAGE_TYPES if images.get(t)), None),
+        "folder": attribute(game, "FolderName") or game.get("app_name"),
+        "owned_dlcs": [d["app_name"] for d in game.get("dlcs") or [] if isinstance(d, dict) and d.get("app_name")],
+    }
+
+
+def refusal(game):
+    if store := attribute(game, "ThirdPartyManagedApp") or attribute(game, "ThirdPartyManagedProvider"):
+        return f"installs through {store}"
+    if "Windows" not in (game.get("asset_infos") or {}):
+        return "has no Windows build"
+    return None
+
+
+def folder_size(folder):
+    total = 0
+    for root, _dirs, files in os.walk(folder):
+        for name in files:
+            with contextlib.suppress(OSError):
+                total += os.lstat(os.path.join(root, name)).st_size
+    return total
+
+
+def umu_ids_path():
+    return data_dir() / "umu.json"
+
+
+# An answer, found or not, is kept; a failed lookup is asked again next time.
+def umu_id(app):
+    ids = load_json(umu_ids_path())
+    ids = ids if isinstance(ids, dict) else {}
+    if app not in ids:
+        try:
+            found = fetch(UMU_URL.format(id=urllib.parse.quote(app)))
+        except SourceError as exc:
+            log(str(exc))
+            return None
+        ids[app] = (found[0].get("umu_id") if isinstance(found, list) and found and isinstance(found[0], dict) else None) or ""
+        save_json(umu_ids_path(), ids)
+    return ids[app] or None
+
+
+def partials_path():
+    return data_dir() / "partials.json"
+
+
+def load_partials():
+    partials = load_json(partials_path())
+    return partials if isinstance(partials, dict) else {}
+
+
+def set_partial(app, entry):
+    partials = load_partials()
+    if entry is None:
+        partials.pop(app, None)
+    else:
+        partials[app] = entry
+    save_json(partials_path(), partials)
+
+
+# legendary keeps a stopped download's progress in <config>/tmp/<app>.resume and picks it up on the next install.
+def resumable(settings, app, entry):
+    return bool(entry and entry.get("dir") and (Path(settings["config_path"]) / "tmp" / f"{app}.resume").exists())
+
+
+def partial_of(settings, app, partials):
+    entry = partials.get(app)
+    if not resumable(settings, app, entry):
+        return None
+    folder = Path(entry["dir"])
+    return {"dir": str(folder), "bytes": folder_size(folder) if folder.is_dir() else 0, **{k: entry[k] for k in ("download_size", "disk_size") if entry.get(k)}}
+
+
+def exe_of(install):
+    return (install.get("executable") or "").replace("\\", "/").lstrip("/") or None
+
+
+def game_event(settings, app, title, owned, install=None, known=None, installs=None, partials=None):
+    known = known or {}
+    fields = {}
+    dlcs = []
+    if install:
+        fields.update(disk_size=install.get("install_size") or None, store="egs", umu_id=umu_id(app))
+        dlcs = sorted(d for d in known.get("owned_dlcs") or [] if d in (installs or {}))
+    else:
+        partial = partial_of(settings, app, partials if partials is not None else load_partials())
+        if partial:
+            fields.update(partial_dir=partial["dir"], partial_bytes=partial["bytes"])
+            fields.update({k: partial[k] for k in ("download_size", "disk_size") if partial.get(k)})
+    emit(
+        "game",
+        id=app,
+        title=title,
+        owned=owned,
+        installed=install is not None,
+        dir=install["install_path"] if install else None,
+        exe=exe_of(install) if install else None,
+        build=install.get("version") if install else None,
+        dlcs=dlcs,
+        release_year=None,
+        image=known.get("image"),
+        folder=known.get("folder"),
+        owned_dlcs=known.get("owned_dlcs") or [],
+        **fields,
+    )
+
+
+def present(installs):
+    return {app: g for app, g in installs.items() if not g.get("is_dlc") and os.path.isdir(g.get("install_path") or "")}
+
+
+def require_id(args, verb):
+    if not args or not args[0].strip():
+        raise SourceError(f"usage: {verb} <app name>")
+    return args[0].strip()
+
+
+def account(settings):
+    proc = legendary(settings, "status", "--offline", "--json")
+    try:
+        name = str(json.loads(proc.stdout).get("account") or "") if proc.returncode == 0 else ""
+    except (ValueError, AttributeError):
+        name = ""
+    return "" if name == NOT_LOGGED_IN else name
+
+
+# The page after the sign-in shows JSON; the code alone or the whole of it is taken.
+def authorization_code(text):
+    text = text.strip()
+    if text.startswith("{"):
+        with contextlib.suppress(ValueError, AttributeError):
+            text = str(json.loads(text).get("authorizationCode") or "")
+    return text.strip().strip('"')
+
+
+def cmd_login(settings, args):
+    if not args:
+        emit("login_url", url=LOGIN_URL)
+        emit("done")
+        return
+    code = authorization_code(args[0])
+    if not code:
+        raise SourceError("no authorization code")
+    # legendary keeps a valid session and ignores a new code: the sign-in asked for is another account's.
+    if account(settings):
+        legendary(settings, "auth", "--delete")
+    legendary(settings, "auth", "--code", code)
+    user = account(settings)
+    if not user:
+        raise SourceError("Epic rejected the authorization code")
+    emit("logged_in", user=user)
+    emit("done")
+
+
+def cmd_status(settings, args):
+    user = account(settings)
+    if user:
+        emit("logged_in", user=user)
+    emit("done")
+
+
+def cmd_library(settings, args):
+    games = legendary_json(settings, "list", "--json", timeout=LIST_TIMEOUT_S)
+    installs = installed_games(settings)
+    on_disk = present(installs)
+    partials = load_partials()
+    for game in games or []:
+        app = game.get("app_name")
+        title = (game.get("app_title") or app or "").strip()
+        if not app:
+            continue
+        if why := refusal(game):
+            log(f"{title}: {why}, left out")
+            continue
+        game_event(settings, app, title, True, on_disk.get(app), facts(game), installs, partials)
+    emit("done")
+
+
+def cmd_search(settings, args):
+    text = " ".join(args).strip()
+    if not text:
+        raise SourceError("usage: search <text>")
+    index = library_index()
+    if index is None:
+        raise SourceError("the library was never listed: Epic has no catalogue to search, only your games")
+    installs = installed_games(settings)
+    on_disk = present(installs)
+    for app, known in index.items():
+        title = str(known.get("title") or app)
+        if text.casefold() in title.casefold():
+            game_event(settings, app, title, True, on_disk.get(app), known, installs)
+    emit("done")
+
+
+def size_info(settings, app):
+    data = legendary_json(settings, "info", app, "--json", "--platform", "Windows")
+    manifest = (data or {}).get("manifest") or {}
+    return data, {k: manifest[k] for k in ("download_size", "disk_size") if isinstance(manifest.get(k), int)}
+
+
+def cmd_info(settings, args):
+    app = require_id(args, "info")
+    data, sizes = size_info(settings, app)
+    emit("info", data=data, **sizes)
+    emit("done")
+
+
+def cmd_install(settings, args):
+    app = require_id(args, "install")
+    games_dir = settings["games_dir"]
+    os.makedirs(games_dir, exist_ok=True)
+    index = library_index()
+    known = (index or {}).get(app) or {}
+    if index is not None and app not in index:
+        log(f"{app} is not in the cached library; legendary may refuse it")
+    title = known.get("title") or app
+    try:
+        _data, sizes = size_info(settings, app)
+    except SourceError as exc:
+        log(f"no sizes: {exc}")
+        sizes = {}
+    set_partial(app, {"dir": os.path.join(games_dir, known.get("folder") or app), "title": title, **sizes})
+    error = legendary_stream(
+        settings,
+        "install",
+        app,
+        "--base-path",
+        games_dir,
+        "--platform",
+        "Windows",
+        "--skip-sdl",
+        dlc_flag(settings),
+        timeout=settings["install_timeout_s"],
+        total=sizes.get("download_size"),
+    )
+    installs = installed_games(settings)
+    install = installs.get(app)
+    if install is None:
+        raise SourceError(f"legendary finished but {title} is not installed" + (f": {error}" if error else ""))
+    set_partial(app, None)
+    game_event(settings, app, install.get("title") or title, True, install, known, installs)
+    emit("done")
+
+
+def pending_updates(settings):
+    proc = legendary(settings, "list-installed", "--check-updates", "--csv")
+    if proc.returncode != 0:
+        raise failure("list-installed", proc)
+    return [row for row in csv.DictReader(io.StringIO(proc.stdout)) if row.get("Update available") == "True"]
+
+
+def cmd_uninstall(settings, args):
+    app = require_id(args, "uninstall")
+    if app in installed_games(settings):
+        proc = legendary(settings, "uninstall", app, yes=True, timeout=settings["install_timeout_s"])
+        if proc.returncode != 0 or app in installed_games(settings):
+            raise failure("uninstall", proc)
+    emit("done")
+
+
+def cmd_update(settings, args):
+    installs = installed_games(settings)
+    index = library_index()
+    if not args:
+        on_disk = present(installs)
+        for row in pending_updates(settings):
+            app = row.get("App name") or ""
+            if app not in on_disk:
+                continue
+            emit(
+                "update",
+                id=app,
+                title=row.get("App title") or app,
+                local_build=row.get("Installed version") or "",
+                remote_build=row.get("Available version") or "",
+                version=row.get("Available version") or "",
+                date="",
+            )
+        emit("done")
+        return
+    app = require_id(args, "update")
+    install = present(installs).get(app)
+    if install is None:
+        raise SourceError(f"{app} is not installed")
+    if owned_status(app, index) is False:
+        raise SourceError(f"{install.get('title') or app} is not in the Epic library, refusing to update")
+    legendary_stream(settings, "update", app, "--skip-sdl", dlc_flag(settings), timeout=settings["install_timeout_s"])
+    installs = installed_games(settings)
+    after = installs.get(app)
+    if after is None:
+        raise SourceError(f"legendary finished but {install.get('title') or app} is gone")
+    game_event(settings, app, after.get("title") or app, True, after, (index or {}).get(app), installs)
+    emit("done")
+
+
+def adopted_path():
+    return data_dir() / "adopted.json"
+
+
+# A game another legendary installed (Heroic's) is registered with ours where it lies; a failed import waits ADOPT_RETRY_S.
+def adopt(settings, installs):
+    other = Path(settings["adopt_from"]) if settings["adopt_from"] else None
+    if other is None or not (other / "installed.json").is_file():
+        return installs
+    with contextlib.suppress(OSError):
+        if other.resolve() == Path(settings["config_path"]).resolve():
+            return installs
+    theirs = load_json(other / "installed.json")
+    tried = load_json(adopted_path())
+    tried = tried if isinstance(tried, dict) else {}
+    imports = {}
+    for app, game in (theirs if isinstance(theirs, dict) else {}).items():
+        path = game.get("install_path") if isinstance(game, dict) else None
+        if app in installs or not path or game.get("is_dlc") or game.get("platform", "Windows") != "Windows":
+            continue
+        if not os.path.isdir(path):
+            log(f"{game.get('title') or app}: {path} is gone, not adopted")
+            continue
+        if time.time() - float(tried.get(app) or 0) < ADOPT_RETRY_S:
+            continue
+        imports[app] = (game, legendary(settings, "import", app, path, "--with-dlcs", "--platform", "Windows", yes=True))
+    if not imports:
+        return installs
+    installs = installed_games(settings)
+    for app, (game, proc) in imports.items():
+        if app in installs:
+            log(f"adopted {game.get('title') or app} from {other}")
+            tried.pop(app, None)
+        else:
+            log(f"{game.get('title') or app} not adopted{last_error(proc.stderr) or ' (sign in to Epic first)'}")
+            tried[app] = time.time()
+    save_json(adopted_path(), tried)
+    return installs
+
+
+def cmd_scan(settings, args):
+    index = library_index()
+    installs = adopt(settings, installed_games(settings))
+    on_disk = present(installs)
+    for app, install in installs.items():
+        if not install.get("is_dlc") and app not in on_disk:
+            log(f"{install.get('title') or app}: {install.get('install_path')} is gone, skipped")
+    for app, install in on_disk.items():
+        game_event(settings, app, install.get("title") or app, owned_status(app, index), install, (index or {}).get(app), installs)
+    partials = load_partials()
+    for app, entry in partials.items():
+        if app not in on_disk and resumable(settings, app, entry):
+            known = (index or {}).get(app) or {}
+            game_event(settings, app, entry.get("title") or known.get("title") or app, owned_status(app, index), None, known, installs, partials)
+    emit("done")
+
+
+def unlock_time(value):
+    return str(value or "").replace(" ", "T", 1)
+
+
+def rarity_of(value):
+    if isinstance(value, dict):
+        value = value.get("percent")
+    return float(value) if isinstance(value, int | float) else None
+
+
+def cmd_achievements(settings, args):
+    app = require_id(args, "achievements")
+    proc = legendary(settings, "achievements", app, "--json")
+    if proc.returncode != 0:
+        raise failure("achievements", proc)
+    if not proc.stdout.strip():
+        emit("done")
+        return
+    try:
+        data = json.loads(proc.stdout)
+    except ValueError:
+        raise SourceError("legendary achievements printed no JSON") from None
+    for group in ("completed", "in_progress", "uninitiated", "hidden"):
+        for item in data.get(group) or []:
+            unlocked = bool(item.get("unlocked"))
+            emit(
+                "achievement",
+                key=item.get("name") or "",
+                name=item.get("display_name") or "",
+                description=item.get("description") or "",
+                unlocked_at=unlock_time(item.get("unlock_date")) if unlocked else "",
+                hidden=bool(item.get("hidden")),
+                icon=item.get("icon_link") or "" if unlocked else "",
+                icon_locked="" if unlocked else item.get("icon_link") or "",
+                rarity=rarity_of(item.get("rarity")),
+            )
+    emit("done")
+
+
+def launch_parameters(settings, app):
+    for extra in ([], ["--offline"]):
+        try:
+            return legendary_json(settings, "launch", app, "--json", "--skip-version-check", "--no-wine", *extra, timeout=LAUNCH_TIMEOUT_S)
+        except SourceError as exc:
+            log(f"{exc}{': launching offline' if not extra else ''}")
+    return None
+
+
+# Wine maps the root filesystem to Z:; a Unix path in an argument would name a file on C:.
+def windows_path(argument):
+    key, sep, value = argument.partition("=")
+    if sep and value.startswith("/"):
+        return f"{key}=Z:{value.replace('/', chr(92))}"
+    return argument
+
+
+def has_folder(root, name):
+    stack = [(Path(root), 1)]
+    while stack:
+        folder, depth = stack.pop()
+        try:
+            with os.scandir(folder) as it:
+                dirs = [e for e in it if e.is_dir(follow_symlinks=False)]
+        except OSError:
+            continue
+        if any(e.name.lower() == name for e in dirs):
+            return True
+        if depth < ANTICHEAT_DEPTH:
+            stack.extend((Path(e.path), depth + 1) for e in dirs)
+    return False
+
+
+def runtime_dir(name):
+    root = data_dir() / "runtimes" / name
+    found = next((p for p in root.iterdir() if p.is_dir()), None) if root.is_dir() else None
+    if found is not None:
+        return found
+    runtimes = fetch(RUNTIMES_URL)
+    url = next((r.get("url") for r in runtimes if isinstance(r, dict) and r.get("name") == name), None) if isinstance(runtimes, list) else None
+    if not url:
+        raise SourceError(f"Lutris lists no {name}")
+    staging = root.with_suffix(".part")
+    staging.mkdir(parents=True, exist_ok=True)
+    with tarfile.open(fileobj=io.BytesIO(fetch_bytes(url)), mode="r:*") as archive:
+        archive.extractall(staging, filter="data")
+    staging.replace(root)
+    return next((p for p in root.iterdir() if p.is_dir()), root)
+
+
+def anticheat_env(game_dir):
+    lines = []
+    for folder, runtime, variable in ANTICHEATS:
+        if not game_dir or not has_folder(game_dir, folder):
+            continue
+        try:
+            lines.append(f"{variable}={runtime_dir(runtime)}")
+        except (SourceError, OSError, tarfile.TarError) as exc:
+            log(f"{runtime}: {exc}")
+    return lines
+
+
+def hook_pre_launch(settings):
+    app, env_file = os.environ.get("SOURCE_GAME_ID", ""), os.environ.get("UNIVERSE_ENV_FILE", "")
+    if not app or not env_file:
+        return
+    kind = (json.loads(os.environ.get("UNIVERSE_GAME_JSON") or "{}").get("effective") or {}).get("runner_kind")
+    lines = []
+    params = launch_parameters(settings, app)
+    if params is not None:
+        args = [*(params.get("game_parameters") or []), *(params.get("egl_parameters") or [])]
+        if kind in ("proton", "wine"):
+            args = [windows_path(a) for a in args]
+        lines.append(f"UNIVERSE_GAME_ARGS={shlex.join(args)}")
+    if settings["anticheat_runtimes"] and kind == "proton":
+        lines.extend(anticheat_env(os.environ.get("GAME_DIR", "")))
+    with open(env_file, "a") as f:
+        f.writelines(f"{line}\n" for line in lines)
+
+
+def hook_post_process(settings):
+    if not settings["achievements"]:
+        return
+    proc = subprocess.run(
+        [os.environ["UNIVERSE_BIN"], "achievements", os.environ["GAME_ID"], "--refresh", "--json"], capture_output=True, text=True, check=False
+    )
+    if proc.returncode != 0:
+        log(f"achievements refresh: {proc.stderr.strip()}")
+
+
+VERBS = {
+    "login": cmd_login,
+    "status": cmd_status,
+    "library": cmd_library,
+    "search": cmd_search,
+    "info": cmd_info,
+    "install": cmd_install,
+    "uninstall": cmd_uninstall,
+    "update": cmd_update,
+    "scan": cmd_scan,
+    "achievements": cmd_achievements,
+}
+
+# Run by bin/<hook>: a session goes on whatever they meet, so each logs and returns.
+HOOKS = {
+    "pre-launch": hook_pre_launch,
+    "post-process": hook_post_process,
+}
+
+
+def on_signal(signum, frame):
+    if _child is not None:
+        kill_group(_child)
+    sys.exit(128 + signum)
+
+
+def main(argv):
+    if argv and argv[0] in HOOKS:
+        try:
+            HOOKS[argv[0]](load_settings())
+        except (SourceError, OSError, ValueError, subprocess.SubprocessError) as exc:
+            log(f"{argv[0]}: {exc}")
+        return 0
+    if not argv or argv[0] not in VERBS:
+        log(f"usage: source {{{'|'.join(VERBS)}}} [args]")
+        return 2
+    try:
+        settings = load_settings()
+        VERBS[argv[0]](settings, argv[1:])
+    except SourceError as exc:
+        log(str(exc))
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, on_signal)
+    signal.signal(signal.SIGINT, on_signal)
+    sys.exit(main(sys.argv[1:]))
