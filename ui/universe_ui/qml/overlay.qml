@@ -25,13 +25,11 @@ Window {
         objectName: "unlocks"
 
         readonly property real s: overlay.height > 0 ? overlay.height / 1080 : 1
-        // A game that files a save's worth at once shows a few cards and counts the rest.
-        readonly property int most: 3
-        property int more: 0
 
         anchors.top: parent.top
         anchors.topMargin: 36 * s
-        anchors.horizontalCenter: parent.horizontalCenter
+        anchors.right: parent.right
+        anchors.rightMargin: 36 * s
         spacing: 12 * s
         z: 5
 
@@ -72,10 +70,10 @@ Window {
                         duration: 300
                     }
                     ScriptAction {
+                        // Removing the card ends this script: the word goes first.
                         script: {
+                            api.home.bannerDone();
                             shown.remove(0);
-                            if (shown.count === 0)
-                                unlocks.more = 0;
                         }
                     }
                 }
@@ -131,8 +129,8 @@ Window {
         }
 
         Rectangle {
-            anchors.horizontalCenter: parent.horizontalCenter
-            visible: unlocks.more > 0
+            anchors.right: parent.right
+            visible: api.home.bannersWaiting > 0
             width: moreText.implicitWidth + 44 * unlocks.s
             height: 48 * unlocks.s
             radius: height / 2
@@ -143,7 +141,7 @@ Window {
             Text {
                 id: moreText
                 anchors.centerIn: parent
-                text: "+" + unlocks.more + " more unlocked"
+                text: "+" + api.home.bannersWaiting + " more unlocked"
                 color: Qt.rgba(0.949, 0.953, 0.961, 0.8)
                 font.family: Theme.sans
                 font.weight: Font.DemiBold
@@ -154,10 +152,6 @@ Window {
         Connections {
             target: api.home
             function onAchievementUnlocked(item) {
-                if (shown.count >= unlocks.most) {
-                    unlocks.more += 1;
-                    return;
-                }
                 shown.append({
                     name: item.name,
                     description: item.description,

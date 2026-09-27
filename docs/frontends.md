@@ -617,11 +617,12 @@ when the game has a store source and no list yet; the cache it writes brings the
 While a game runs, `Home`'s `UnlockWatch` rereads its list on every change to the game's folder and
 emits `achievementUnlocked({gameId, gameTitle, key, name, description, icon, rarityText})` for each
 unlock newer than the session's start, once. `overlay.qml` draws it, outside the theme's loader so
-both looks get it: a card at the top of the screen for 4.8 s, up to three stacking; past three
-(a game that files a save's worth at once) a pill under them counts the rest, *+n more unlocked*,
-until the last card goes. Home lifts the
-overlay window to opaque without taking the game's input for 5 s (the same lift as the screenshot
-flash, the longer of the two standing), unless the dock is already holding it up. On the desktop
+both looks get it: a card in the top right corner for 4.8 s, three at most. Home queues the rest
+(a game that files a save's worth at once) and sends the next as a card calls `bannerDone()`; a
+pill under the cards counts the queue (`bannersWaiting`), *+n more unlocked*. Home lifts the
+overlay window to opaque without taking the game's input for 5 s on every card it sends (the same
+lift as the screenshot flash, the longer of the two standing), unless the dock is already holding
+it up. With no overlay attached, nothing would call `bannerDone()`: every unlock goes out at once. On the desktop
 there is no window over the game, so the unlock shows on the Achievements page alone.
 
 A replay (`universe achievements <name> --replay`, see api.md § Achievements) comes the same way:

@@ -743,17 +743,26 @@ def test_the_docks_achievements_open_in_its_tray_while_the_source_tracks_them(ap
     pump(50)
 
 
-def test_a_burst_of_unlocks_shows_a_few_cards_and_counts_the_rest(api, fake):
+def test_a_burst_of_unlocks_waits_its_turn_behind_three_cards(api, fake, tmp_path):
     engine, window = render(api)
     overlay = host.create_overlay(engine, window.size())
+    api.home.attachOverlay(overlay)
     overlay.show()
     pump(200)
     for n in range(7):
-        api.home.achievementUnlocked.emit({"name": f"A{n}", "description": "", "icon": "", "rarityText": ""})
+        api.home._unlocked({"name": f"A{n}", "description": "", "icon": "", "rarityText": ""})
     pump(100)
     unlocks = overlay.findChild(QObject, "unlocks")
-    cards = [c for c in unlocks.childItems() if c.property("radius") == 20 * unlocks.property("s")]
-    assert len(cards) == 3 and unlocks.property("more") == 4
+
+    def cards():
+        return [c for c in unlocks.childItems() if c.property("radius") == 20 * unlocks.property("s")]
+
+    assert len(cards()) == 3 and api.home.bannersWaiting == 4
+    assert unlocks.property("x") + unlocks.property("width") > overlay.width() * 0.9, "top right, clear of the game's middle"
+    if os.environ.get("UNIVERSE_TEST_SHOTS"):
+        overlay.grabWindow().save(str(tmp_path / "unlocks.png"))
+    pump(5200)
+    assert len(cards()) == 3 and api.home.bannersWaiting == 1, "the next three came in as the first left"
     window.close()
     overlay.close()
     pump(50)

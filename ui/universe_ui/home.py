@@ -1,5 +1,6 @@
 import os
 import time
+from collections import deque
 from collections.abc import Callable
 
 from PySide6.QtCore import QObject, QTimer, QUrl, Signal, Slot
@@ -15,6 +16,8 @@ CUE_MS = 450
 OSD_MS = 1500
 # And this long for an unlock's banner.
 BANNER_MS = 5000
+# Banners on screen at once; a burst waits its turn behind them.
+BANNERS = 3
 SHUTTER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "qml", "assets", "sounds", "shutter.wav")
 # How long the swap waits for the theme to say the frame is painted (`covered`) before going ahead anyway: a 4K png decodes slowly.
 COVER_MS = 700
@@ -30,6 +33,7 @@ class Home(QObject):
     outputsChanged = Signal()
     screenshotTaken = Signal(str)
     achievementUnlocked = Signal(QVARIANT)
+    bannersWaitingChanged = Signal()
     stopping = Signal(str)
 
     def __init__(self, client, controller, screen_mode: Callable[[], dict] = dict, parent=None, frames=lambda: True):
@@ -39,6 +43,8 @@ class Home(QObject):
         self._screen_mode = screen_mode
         self._frames = frames
         self._overlay = None
+        self._waiting = deque()
+        self._banners = 0
         self._open = False
         self._closing = False
         self._shown = "launcher"
@@ -434,8 +440,22 @@ class Home(QObject):
         self.screenshotTaken.emit(path)
 
     def _unlocked(self, item):
-        self._lift(BANNER_MS)
-        self.achievementUnlocked.emit(item)
+        self._waiting.append(item)
+        self._next_banner()
+
+    # Without an overlay no card comes to say it left: everything goes out at once.
+    def _next_banner(self):
+        while self._waiting and (self._overlay is None or self._banners < BANNERS):
+            item = self._waiting.popleft()
+            self._banners += 1
+            self._lift(BANNER_MS)
+            self.achievementUnlocked.emit(item)
+        self.bannersWaitingChanged.emit()
+
+    @Slot()
+    def bannerDone(self):
+        self._banners = max(0, self._banners - 1)
+        self._next_banner()
 
     # Painted over the game for `ms`, its input left alone; a longer cue already running stands.
     def _lift(self, ms):
@@ -567,4 +587,5 @@ class Home(QObject):
     muted = Property(bool, lambda self: bool(self._volume.get("muted")), notify=volumeChanged)
     volumeOutput = Property(str, lambda self: str(self._volume.get("output") or ""), notify=volumeChanged)
     osd = Property(bool, lambda self: self._osd, notify=osdChanged)
+    bannersWaiting = Property(int, lambda self: len(self._waiting), notify=bannersWaitingChanged)
     outputs = Property(list, lambda self: list(self._outputs), notify=outputsChanged)
