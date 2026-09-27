@@ -1,0 +1,44 @@
+api = 2
+id = "itch"
+name = "itch.io"
+version = "0.0.6"
+description = "Installs and updates the games you own on itch.io through butler, and adopts the itch app's installs."
+exe = "bin/source"
+capabilities = ["uninstall"]
+
+[requires]
+bins = ["butler"]
+
+[[settings]]
+key = "games_dir"
+type = "path"
+default = ""
+label = "Install folder (empty: paths.games_root)"
+
+[[settings]]
+key = "platform"
+type = "enum"
+default = "linux"
+label = "Build to install when a game has both"
+choices = ["linux", "windows"]
+
+[[settings]]
+key = "db_path"
+type = "path"
+default = ""
+label = "butler's database (empty: the source's own)"
+advanced = true
+
+[[settings]]
+key = "adopt_from"
+type = "path"
+default = "~/.config/itch/db/butler.db"
+label = "The itch app's database, whose install folders a scan adopts"
+advanced = true
+
+[[settings]]
+key = "install_timeout_s"
+type = "int"
+default = 7200
+label = "Maximum install or update time (s)"
+advanced = true

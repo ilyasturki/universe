@@ -1,0 +1,763 @@
+#!/usr/bin/env python3
+import contextlib
+import hashlib
+import json
+import os
+import queue
+import signal
+import sqlite3
+import subprocess
+import sys
+import threading
+import time
+import tomllib
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+KEYS_URL = "https://itch.io/user/settings/api-keys"
+SEARCH_URL = "https://api.itch.io/search/games?query={query}"
+USER_AGENT = "universe-itch/0.1"
+HTTP_TIMEOUT_S = 30
+CALL_TIMEOUT_S = 300  # a fresh owned-keys listing fetches every page before it answers
+CONFIGURE_TIMEOUT_S = 120
+KILL_GRACE_S = 10
+PROGRESS_INTERVAL_S = 1.0
+PAGE = 100
+PLAYABLE = ("game", "tool")
+PACKAGES = (".deb", ".rpm", ".pkg", ".dmg")
+FLAVORS = {"linux": ("script", "linux"), "windows": ("windows",)}
+
+_child = None
+
+
+class SourceError(Exception):
+    pass
+
+
+def emit(event, **fields):
+    print(json.dumps({"event": event, **fields}), flush=True)
+
+
+def log(message):
+    print(f"itch: {message}", file=sys.stderr, flush=True)
+
+
+def data_dir():
+    path = Path(os.environ["SOURCE_DATA_DIR"])
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def load_settings():
+    settings = json.loads(os.environ["SOURCE_SETTINGS_JSON"])
+    for key in ("games_dir", "db_path", "adopt_from"):
+        settings[key] = os.path.expanduser(str(settings.get(key) or ""))
+    settings["db_path"] = settings["db_path"] or str(data_dir() / "butler.db")
+    settings["install_timeout_s"] = int(settings["install_timeout_s"])
+    settings["platform"] = settings.get("platform") or "linux"
+    return settings
+
+
+def load_json(path):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def save_json(path, data):
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(data))
+    tmp.replace(path)
+
+
+def kill_group(proc):
+    try:
+        os.killpg(proc.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        return
+    try:
+        proc.wait(timeout=KILL_GRACE_S)
+    except subprocess.TimeoutExpired:
+        with contextlib.suppress(ProcessLookupError):
+            os.killpg(proc.pid, signal.SIGKILL)
+        proc.wait()
+
+
+# butlerd over stdio: JSON-RPC on stdout, its own log on stderr; this source sends one request at a time.
+class Butler:
+    def __init__(self, settings):
+        global _child  # noqa: PLW0603
+        Path(settings["db_path"]).parent.mkdir(parents=True, exist_ok=True)
+        try:
+            self.proc = subprocess.Popen(
+                ["butler", "daemon", "--json", "--transport", "stdio", "--dbpath", settings["db_path"]],
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                errors="replace",
+                start_new_session=True,
+            )
+        except FileNotFoundError:
+            raise SourceError("butler is not installed") from None
+        _child = self.proc
+        self.lines = queue.Queue()
+        self.next_id = 0
+        threading.Thread(target=self._pump, daemon=True).start()
+        threading.Thread(target=self._logs, daemon=True).start()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+
+    def _pump(self):
+        stdout = self.proc.stdout
+        assert stdout is not None
+        for line in stdout:
+            self.lines.put(line)
+        self.lines.put(None)
+
+    def _logs(self):
+        stderr = self.proc.stderr
+        assert stderr is not None
+        for line in stderr:
+            try:
+                entry = json.loads(line)
+            except ValueError:
+                log(line.rstrip())
+                continue
+            if isinstance(entry, dict) and entry.get("level") in ("warning", "error"):
+                log(str(entry.get("message") or ""))
+
+    def _send(self, message):
+        stdin = self.proc.stdin
+        assert stdin is not None
+        stdin.write(json.dumps(message) + "\n")
+        stdin.flush()
+
+    def call(self, method, params=None, notify=None, timeout=CALL_TIMEOUT_S):
+        self.next_id += 1
+        ident = self.next_id
+        try:
+            self._send({"jsonrpc": "2.0", "id": ident, "method": method, "params": params or {}})
+        except OSError:
+            raise SourceError(f"butler exited before {method}") from None
+        deadline = time.monotonic() + timeout
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise SourceError(f"butler {method} exceeded {timeout}s")
+            try:
+                line = self.lines.get(timeout=min(remaining, PROGRESS_INTERVAL_S))
+            except queue.Empty:
+                continue
+            if line is None:
+                raise SourceError(f"butler exited during {method}")
+            try:
+                message = json.loads(line)
+            except ValueError:
+                log(line.rstrip())
+                continue
+            if "method" in message:
+                self._served(message, notify)
+            elif message.get("id") == ident:
+                if "error" in message:
+                    error = message["error"] or {}
+                    text = str(error.get("message") if isinstance(error, dict) else error)
+                    raise SourceError("not signed in to itch.io (run login)" if "No profiles found" in text else f"{method}: {text}")
+                return message.get("result") or {}
+
+    def _served(self, message, notify):
+        method, params = message["method"], message.get("params") or {}
+        if "id" in message:
+            answer = {"confirm": True} if method == "Install.Locations.Scan.ConfirmImport" else None
+            reply = {"result": answer} if answer is not None else {"error": {"code": -32601, "message": f"{method} is not answered"}}
+            self._send({"jsonrpc": "2.0", "id": message["id"], **reply})
+        elif method == "Log":
+            if params.get("level") in ("warning", "error"):
+                log(str(params.get("message") or ""))
+        elif notify is not None:
+            notify(method, params)
+
+    def close(self):
+        global _child  # noqa: PLW0603
+        with contextlib.suppress(OSError):
+            if self.proc.stdin:
+                self.proc.stdin.close()
+        try:
+            self.proc.wait(timeout=KILL_GRACE_S)
+        except subprocess.TimeoutExpired:
+            kill_group(self.proc)
+        _child = None
+
+
+def paged(butler, method, params, fresh=False):
+    items, cursor = [], None
+    while True:
+        page = {**params, "limit": PAGE, **({"cursor": cursor} if cursor else {"fresh": True} if fresh else {})}
+        result = butler.call(method, page)
+        items.extend(result.get("items") or [])
+        cursor = result.get("nextCursor")
+        if not cursor:
+            return items
+
+
+def profile(butler):
+    profiles = butler.call("Profile.List").get("profiles") or []
+    if not profiles:
+        raise SourceError("not signed in to itch.io (run login)")
+    return max(profiles, key=lambda p: str(p.get("lastConnected") or ""))
+
+
+def numeric_id(args, verb):
+    if not args or not args[0].strip().isdigit():
+        raise SourceError(f"usage: {verb} <itch.io game id>")
+    return args[0].strip()
+
+
+def library_index():
+    # The core writes library.json (its game events) after every `library`; the source only reads it.
+    products = load_json(data_dir() / "library.json")
+    return None if not isinstance(products, list) else {str(p.get("id")): p for p in products}
+
+
+def owned_status(game_id, index):
+    return (game_id in index) if index is not None else None
+
+
+def game_fields(game):
+    published = str(game.get("publishedAt") or game.get("createdAt") or "")
+    return {
+        "id": str(game.get("id") or ""),
+        "title": game.get("title") or str(game.get("id") or ""),
+        "image": game.get("stillCoverUrl") or game.get("coverUrl") or None,
+        "release_year": int(published[:4]) if published[:4].isdigit() else None,
+    }
+
+
+def folder_of(cave):
+    return str((cave.get("installInfo") or {}).get("installFolder") or "")
+
+
+def platform_of(upload, preferred):
+    platforms = (upload or {}).get("platforms") or {}
+    return preferred if platforms.get(preferred) else next((p for p in FLAVORS if platforms.get(p)), None)
+
+
+# butler's own ranking, cut to what runs here: a full build (no demo, no preorder, no package) for Linux or Windows, the preferred one first.
+def pick_upload(uploads, preferred):
+    def usable(upload):
+        name = str(upload.get("filename") or "").lower()
+        return (
+            upload.get("type", "default") == "default"
+            and not upload.get("demo")
+            and not upload.get("preorder")
+            and not name.endswith(PACKAGES)
+            and platform_of(upload, preferred) is not None
+        )
+
+    def rank(pair):
+        index, upload = pair
+        platforms = upload.get("platforms") or {}
+        name = str(upload.get("filename") or "").lower()
+        return (platform_of(upload, preferred) != preferred, platforms.get(platform_of(upload, preferred)) == "386", not name.endswith(".zip"), index)
+
+    candidates = sorted(((i, u) for i, u in enumerate(uploads) if usable(u)), key=rank)
+    return candidates[0][1] if candidates else None
+
+
+def manifest_target(folder, platform):
+    try:
+        with open(Path(folder) / ".itch.toml", "rb") as f:
+            actions = tomllib.load(f).get("actions") or []
+    except (OSError, tomllib.TOMLDecodeError):
+        return None
+    for action in actions:
+        path = action.get("path") if isinstance(action, dict) else None
+        if path and action.get("platform", platform) == platform and (Path(folder) / path).is_file():
+            return path
+    return None
+
+
+# The itch app's pick: a manifest's action, else the shallowest candidate of the build's OS, a lone script before a binary.
+def launch_target(folder, platform):
+    if found := manifest_target(folder, platform):
+        return found
+    command = ["butler", "configure", "--json", "--os-filter", platform, "--arch-filter", "amd64", folder]
+    try:
+        proc = subprocess.run(command, capture_output=True, text=True, errors="replace", timeout=CONFIGURE_TIMEOUT_S, check=False)
+    except (OSError, subprocess.SubprocessError) as exc:
+        log(f"butler configure {folder}: {exc}")
+        return None
+    result = {}
+    for line in proc.stdout.splitlines():
+        with contextlib.suppress(ValueError, AttributeError):
+            message = json.loads(line)
+            if message.get("type") == "result":
+                result = message.get("value") or {}
+    candidates = [
+        c
+        for c in result.get("candidates") or []
+        if c.get("flavor") in FLAVORS[platform] and not (c.get("windowsInfo") or {}).get("installerType") and c.get("arch", "amd64") in ("amd64", None)
+    ]
+    if not candidates:
+        return None
+    shallowest = min(int(c.get("depth") or 0) for c in candidates)
+    candidates = [c for c in candidates if int(c.get("depth") or 0) == shallowest]
+    scripts = [c for c in candidates if c.get("flavor") == "script"]
+    if len(scripts) == 1:
+        return scripts[0]["path"]
+    candidates.sort(key=lambda c: (c.get("flavor") == "script", (c.get("windowsInfo") or {}).get("gui") is False, -int(c.get("size") or 0)))
+    return candidates[0]["path"]
+
+
+def folder_size(folder):
+    total = 0
+    for root, _dirs, files in os.walk(folder):
+        for name in files:
+            with contextlib.suppress(OSError):
+                total += os.lstat(os.path.join(root, name)).st_size
+    return total
+
+
+def partials_path():
+    return data_dir() / "partials.json"
+
+
+def load_partials():
+    partials = load_json(partials_path())
+    return partials if isinstance(partials, dict) else {}
+
+
+def set_partial(game_id, entry):
+    partials = load_partials()
+    if entry is None:
+        partials.pop(game_id, None)
+    else:
+        partials[game_id] = entry
+    save_json(partials_path(), partials)
+
+
+# butler keeps a stopped install's state in its staging folder; Install.Perform over the same folder picks it up.
+def resumable(entry):
+    return bool(entry) and (Path(str(entry.get("staging") or "")) / "operate-context.json").is_file()
+
+
+def partial_of(game_id, partials):
+    entry = partials.get(game_id)
+    if not resumable(entry):
+        return None
+    staging = Path(str(entry.get("staging") or ""))
+    kept = folder_size(staging) + (folder_size(entry["dir"]) if entry.get("dir") and os.path.isdir(entry["dir"]) else 0)
+    return {"dir": entry.get("dir") or str(staging), "bytes": kept, **{k: entry[k] for k in ("download_size", "disk_size") if entry.get(k)}}
+
+
+def game_event(known, owned, cave=None, partials=None):
+    fields = {}
+    if cave:
+        info, upload, build = cave.get("installInfo") or {}, cave.get("upload") or {}, cave.get("build") or {}
+        folder = folder_of(cave)
+        platform = platform_of(upload, "linux")
+        if platform:
+            exe = launch_target(folder, platform)
+        else:
+            exe = launch_target(folder, "linux")
+            platform = "linux" if exe else "windows"
+            exe = exe or launch_target(folder, "windows")
+        fields.update(disk_size=info.get("installedSize") or None, store="itchio")
+        if platform == "linux":
+            fields["runner"] = "linux"
+            # A zip made elsewhere carries no mode bits; the itch app sets the target's at launch, the linux runner runs it as it is.
+            target = Path(folder) / exe if exe else None
+            if target and target.is_file() and not os.access(target, os.X_OK):
+                with contextlib.suppress(OSError):
+                    target.chmod(target.stat().st_mode | 0o111)
+        installed = {"dir": folder, "exe": exe, "build": str(build.get("id") or upload.get("id") or "") or None}
+    else:
+        installed = {"dir": None, "exe": None, "build": None}
+        partial = partial_of(known["id"], partials if partials is not None else load_partials())
+        if partial:
+            fields.update(partial_dir=partial["dir"], partial_bytes=partial["bytes"])
+            fields.update({k: partial[k] for k in ("download_size", "disk_size") if partial.get(k)})
+    emit(
+        "game",
+        id=known["id"],
+        title=known["title"],
+        owned=owned,
+        installed=cave is not None,
+        **installed,
+        dlcs=[],
+        release_year=known.get("release_year"),
+        image=known.get("image"),
+        **fields,
+    )
+
+
+def caves_by_game(butler):
+    caves = {}
+    for cave in paged(butler, "Fetch.Caves", {}):
+        game_id = str((cave.get("game") or {}).get("id") or "")
+        if game_id and game_id not in caves and os.path.isdir(folder_of(cave)):
+            caves[game_id] = cave
+    return caves
+
+
+def cmd_login(settings, args):
+    if not args:
+        emit("login_url", url=KEYS_URL)
+        emit("done")
+        return
+    with Butler(settings) as butler:
+        result = butler.call("Profile.LoginWithAPIKey", {"apiKey": args[0].strip()})
+    user = ((result.get("profile") or {}).get("user") or {}).get("username") or ""
+    if not user:
+        raise SourceError("itch.io refused the API key")
+    emit("logged_in", user=user)
+    emit("done")
+
+
+def cmd_status(settings, args):
+    with Butler(settings) as butler:
+        profiles = butler.call("Profile.List").get("profiles") or []
+    if profiles:
+        latest = max(profiles, key=lambda p: str(p.get("lastConnected") or ""))
+        emit("logged_in", user=(latest.get("user") or {}).get("username") or "")
+    emit("done")
+
+
+def cmd_library(settings, args):
+    with Butler(settings) as butler:
+        profile_id = profile(butler)["id"]
+        keys = paged(butler, "Fetch.ProfileOwnedKeys", {"profileId": profile_id}, fresh=True)
+        caves = caves_by_game(butler)
+    partials, seen = load_partials(), set()
+    for key in keys:
+        game = key.get("game") or {"id": key.get("gameId")}
+        known = game_fields(game)
+        if not known["id"] or known["id"] in seen:
+            continue
+        seen.add(known["id"])
+        if game.get("classification", "game") not in PLAYABLE:
+            log(f"{known['title']}: a {game.get('classification')}, left out")
+            continue
+        game_event(known, True, caves.get(known["id"]), partials)
+    emit("done")
+
+
+def api_key(settings):
+    try:
+        with contextlib.closing(sqlite3.connect(f"file:{settings['db_path']}?mode=ro", uri=True, timeout=1)) as con:
+            row = con.execute("SELECT api_key FROM profiles WHERE coalesce(api_key, '') != '' ORDER BY last_connected DESC LIMIT 1").fetchone()
+    except sqlite3.Error as exc:
+        raise SourceError(f"{settings['db_path']}: {exc}") from exc
+    if not row:
+        raise SourceError("not signed in to itch.io (run login)")
+    return row[0]
+
+
+def api_search(settings, text):
+    headers = {"User-Agent": USER_AGENT, "Accept": "application/vnd.itch.v2", "Authorization": api_key(settings)}
+    request = urllib.request.Request(SEARCH_URL.format(query=urllib.parse.quote(text)), headers=headers)
+    try:
+        with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_S) as response:
+            data = json.load(response)
+    except (OSError, ValueError) as exc:
+        raise SourceError(f"GET {SEARCH_URL.partition('?')[0]}: {exc}") from exc
+    if data.get("errors"):
+        raise SourceError(f"itch.io search: {', '.join(map(str, data['errors']))}")
+    return [game_fields(g) for g in data.get("games") or [] if g.get("classification", "game") in PLAYABLE]
+
+
+def cmd_search(settings, args):
+    text = " ".join(args).strip()
+    if not text:
+        raise SourceError("usage: search <text>")
+    index = library_index()
+    try:
+        found = api_search(settings, text)
+    except SourceError as exc:
+        log(f"{exc}: searching the library instead")
+        found = [known for known in (index or {}).values() if text.casefold() in str(known.get("title") or "").casefold()]
+    with Butler(settings) as butler:
+        caves = caves_by_game(butler)
+    for known in found:
+        game_event(known, owned_status(str(known["id"]), index), caves.get(str(known["id"])))
+    emit("done")
+
+
+def fetch_game(butler, game_id):
+    game = butler.call("Fetch.Game", {"gameId": int(game_id), "fresh": True}).get("game")
+    if not game:
+        raise SourceError(f"itch.io has no game {game_id}")
+    return game
+
+
+def upload_for(butler, settings, game):
+    uploads = butler.call("Fetch.GameUploads", {"gameId": game["id"], "compatible": False, "fresh": True}).get("uploads") or []
+    upload = pick_upload(uploads, settings["platform"])
+    if upload is None:
+        raise SourceError(f"{game.get('title')}: no Linux or Windows build to download (a browser game, a demo alone?)")
+    return upload
+
+
+def cmd_info(settings, args):
+    game_id = numeric_id(args, "info")
+    with Butler(settings) as butler:
+        game = fetch_game(butler, game_id)
+        upload = upload_for(butler, settings, game)
+        try:
+            plan = butler.call("Install.PlanUpload", {"uploadId": upload["id"]}).get("info") or {}
+        except SourceError as exc:
+            log(str(exc))
+            plan = {}
+    sizes = {"download_size": int(upload["size"])} if upload.get("size") else {}
+    if disk := (plan.get("diskUsage") or {}).get("finalDiskUsage"):
+        sizes["disk_size"] = int(disk)
+    emit("info", data={"game": game, "upload": upload, "plan": plan}, **sizes)
+    emit("done")
+
+
+# One location per folder: the id is fixed by the path, since a location's installs resolve through its row.
+def location(butler, folder):
+    ident = "universe-" + hashlib.sha1(os.path.realpath(folder).encode()).hexdigest()[:12]
+    butler.call("Install.Locations.Add", {"id": ident, "path": folder})
+    return ident
+
+
+# A paid game installs with its download key, which only a fresh listing of the owned keys brings into butler's database.
+def ensure_key(butler, settings, profile_id, game_id):
+    try:
+        with contextlib.closing(sqlite3.connect(f"file:{settings['db_path']}?mode=ro", uri=True, timeout=1)) as con:
+            if con.execute("SELECT 1 FROM download_keys WHERE game_id = ?", (int(game_id),)).fetchone():
+                return
+    except sqlite3.Error:
+        pass
+    paged(butler, "Fetch.ProfileOwnedKeys", {"profileId": profile_id}, fresh=True)
+
+
+# butler refuses an upload it thinks installed: a record whose folder is gone (an uninstall made outside butler) is dropped first.
+def queue_install(butler, params):
+    try:
+        return butler.call("Install.Queue", params)
+    except SourceError as exc:
+        if "already installed" not in str(exc):
+            raise
+    upload_id = (params.get("upload") or {}).get("id")
+    for cave in paged(butler, "Fetch.Caves", {}):
+        if (cave.get("upload") or {}).get("id") == upload_id and not os.path.isdir(folder_of(cave)):
+            butler.call("Uninstall.Perform", {"caveId": cave["id"]})
+    return butler.call("Install.Queue", params)
+
+
+class Progress:
+    def __init__(self, total):
+        self.total, self.last = int(total or 0), 0.0
+
+    def __call__(self, method, params):
+        if method == "TaskStarted" and params.get("totalSize"):
+            self.total = int(params["totalSize"])
+        elif method == "Progress":
+            fraction = min(max(float(params.get("progress") or 0), 0.0), 1.0)
+            now = time.monotonic()
+            if now - self.last >= PROGRESS_INTERVAL_S or fraction >= 1:
+                self.last = now
+                done, total = (int(self.total * fraction), self.total) if self.total else (int(fraction * 1000), 1000)
+                emit("progress", done=done, total=total, message=f"{fraction * 100:.1f}%")
+
+
+def cmd_install(settings, args):
+    game_id = numeric_id(args, "install")
+    os.makedirs(settings["games_dir"], exist_ok=True)
+    entry = load_partials().get(game_id)
+    with Butler(settings) as butler:
+        profile_id = profile(butler)["id"]
+        location_id = location(butler, settings["games_dir"])
+        if entry and resumable(entry):
+            log(f"{entry.get('title') or game_id}: resuming from {entry['staging']}")
+            handle, staging, total = f"resume-{game_id}", entry["staging"], entry.get("download_size")
+        else:
+            game = fetch_game(butler, game_id)
+            ensure_key(butler, settings, profile_id, game_id)
+            upload = upload_for(butler, settings, game)
+            queued = queue_install(
+                butler,
+                {"game": game, "upload": upload, "installLocationId": location_id, "reason": "install", "fastQueue": True, "profileId": profile_id},
+            )
+            handle, staging, total = queued["id"], queued["stagingFolder"], upload.get("size")
+            set_partial(game_id, {"dir": queued["installFolder"], "staging": staging, "title": game.get("title") or game_id, "download_size": total or None})
+        done = butler.call("Install.Perform", {"id": handle, "stagingFolder": staging}, notify=Progress(total), timeout=settings["install_timeout_s"])
+        cave = butler.call("Fetch.Cave", {"caveId": done.get("caveId")}).get("cave")
+    if not cave:
+        raise SourceError(f"butler finished but left no install of {game_id}")
+    set_partial(game_id, None)
+    game_event(game_fields(cave.get("game") or {"id": game_id}), True, cave)
+    emit("done")
+
+
+def build_label(item):
+    build, upload = item.get("build") or {}, item.get("upload") or {}
+    return str(build["id"]) if build.get("id") else f"upload {upload.get('id')}"
+
+
+def version_of(choice):
+    build, upload = choice.get("build") or {}, choice.get("upload") or {}
+    return build.get("userVersion") or (f"build {build['version']}" if build.get("version") else upload.get("displayName") or upload.get("filename") or "?")
+
+
+def direct_updates(butler, caves):
+    if not caves:
+        return []
+    updates = butler.call("CheckUpdate", {"caveIds": list(caves)}).get("updates") or []
+    return [u for u in updates if u.get("direct") and u.get("choices") and u.get("caveId") in caves]
+
+
+def cmd_uninstall(settings, args):
+    game_id = numeric_id(args, "uninstall")
+    with Butler(settings) as butler:
+        for cave in paged(butler, "Fetch.Caves", {}):
+            if str((cave.get("game") or {}).get("id") or "") == game_id:
+                butler.call("Uninstall.Perform", {"caveId": cave["id"]})
+    emit("done")
+
+
+def cmd_update(settings, args):
+    index = library_index()
+    with Butler(settings) as butler:
+        present = {c["id"]: c for c in paged(butler, "Fetch.Caves", {}) if os.path.isdir(folder_of(c))}
+        if not args:
+            for update in direct_updates(butler, present):
+                cave, choice = present[update["caveId"]], update["choices"][0]
+                known = game_fields(cave.get("game") or {})
+                stamp = (choice.get("build") or {}).get("updatedAt") or (choice.get("upload") or {}).get("updatedAt") or ""
+                emit(
+                    "update",
+                    id=known["id"],
+                    title=known["title"],
+                    local_build=build_label(cave),
+                    remote_build=build_label(choice),
+                    version=version_of(choice),
+                    date=str(stamp)[:10],
+                )
+            emit("done")
+            return
+        game_id = numeric_id(args, "update")
+        cave = next((c for c in present.values() if str((c.get("game") or {}).get("id")) == game_id), None)
+        if cave is None:
+            raise SourceError(f"{game_id} is not installed")
+        if owned_status(game_id, index) is False:
+            raise SourceError(f"{(cave.get('game') or {}).get('title') or game_id} is not in the itch.io library, refusing to update")
+        updates = direct_updates(butler, {cave["id"]: cave})
+        if not updates:
+            log(f"{(cave.get('game') or {}).get('title') or game_id} is already current")
+            emit("done")
+            return
+        choice = updates[0]["choices"][0]
+        queued = butler.call(
+            "Install.Queue",
+            {"caveId": cave["id"], "game": cave["game"], "upload": choice["upload"], "build": choice.get("build"), "reason": "update", "fastQueue": True},
+        )
+        total = (choice.get("upload") or {}).get("size")
+        butler.call(
+            "Install.Perform", {"id": queued["id"], "stagingFolder": queued["stagingFolder"]}, notify=Progress(total), timeout=settings["install_timeout_s"]
+        )
+        after = butler.call("Fetch.Cave", {"caveId": cave["id"]}).get("cave") or cave
+    game_event(game_fields(after.get("game") or {}), True, after)
+    emit("done")
+
+
+# The itch app's install folders join butler's locations; a scan of them registers each install found by its receipt, where it lies.
+def adopt(butler, settings):
+    other = settings["adopt_from"]
+    if not other or not os.path.isfile(other):
+        return
+    with contextlib.suppress(OSError):
+        if os.path.samefile(other, settings["db_path"]):
+            return
+    try:
+        with contextlib.closing(sqlite3.connect(f"file:{other}?mode=ro", uri=True, timeout=1)) as con:
+            folders = [row[0] for row in con.execute("SELECT path FROM install_locations") if row[0]]
+    except sqlite3.Error as exc:
+        log(f"{other}: {exc}")
+        return
+    registered = 0
+    for folder in filter(os.path.isdir, folders):
+        try:
+            location(butler, folder)
+            registered += 1
+        except SourceError as exc:
+            log(f"{folder}: {exc}")
+    if not registered:
+        return
+    try:
+        found = butler.call("Install.Locations.Scan")
+    except SourceError as exc:
+        log(f"the itch app's installs: {exc}")
+        return
+    if found.get("numImportedItems"):
+        log(f"adopted {found['numImportedItems']} of the itch app's installs")
+
+
+def cmd_scan(settings, args):
+    index = library_index()
+    with Butler(settings) as butler:
+        adopt(butler, settings)
+        caves = paged(butler, "Fetch.Caves", {})
+    found = set()
+    for cave in caves:
+        known = game_fields(cave.get("game") or {})
+        if not known["id"] or known["id"] in found:
+            continue
+        if not os.path.isdir(folder_of(cave)):
+            log(f"{known['title']}: {folder_of(cave)} is gone, skipped")
+            continue
+        found.add(known["id"])
+        game_event(known, owned_status(known["id"], index), cave)
+    partials = load_partials()
+    for game_id, entry in partials.items():
+        if game_id not in found and resumable(entry):
+            known = (index or {}).get(game_id) or {}
+            game_event({**known, "id": game_id, "title": entry.get("title") or known.get("title") or game_id}, owned_status(game_id, index), None, partials)
+    emit("done")
+
+
+VERBS = {
+    "login": cmd_login,
+    "status": cmd_status,
+    "library": cmd_library,
+    "search": cmd_search,
+    "info": cmd_info,
+    "install": cmd_install,
+    "uninstall": cmd_uninstall,
+    "update": cmd_update,
+    "scan": cmd_scan,
+}
+
+
+def on_signal(signum, frame):
+    if _child is not None:
+        kill_group(_child)
+    sys.exit(128 + signum)
+
+
+def main(argv):
+    if not argv or argv[0] not in VERBS:
+        log(f"usage: source {{{'|'.join(VERBS)}}} [args]")
+        return 2
+    try:
+        settings = load_settings()
+        VERBS[argv[0]](settings, argv[1:])
+    except SourceError as exc:
+        log(str(exc))
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, on_signal)
+    signal.signal(signal.SIGINT, on_signal)
+    sys.exit(main(sys.argv[1:]))

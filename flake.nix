@@ -187,6 +187,8 @@
       sourceRuntime = with pkgs; [
         gogdl
         comet-gog
+        legendary-gl
+        butler
       ];
       universeFhs = pkgs.buildFHSEnv (
         pkgs.appimageTools.defaultFhsEnvArgs
