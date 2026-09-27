@@ -13,6 +13,11 @@ var list = [
         icon: "play"
     },
     {
+        id: "components",
+        name: "Components",
+        icon: "bolt"
+    },
+    {
         id: "controller",
         name: "Controller",
         icon: "gamepad"

@@ -83,6 +83,7 @@ FocusScope {
     readonly property var listForm: sectionId === "modules" ? modulesForm : sectionId === "sources" ? sourceList : null
     readonly property var launch: api.screens.launch
     readonly property var runners: api.screens.runners
+    readonly property var components: api.screens.components
     readonly property var sources: api.screens.sources
     readonly property var controller: api.screens.controller
 
@@ -192,6 +193,8 @@ FocusScope {
 
     readonly property string acceptLabel: {
         var row = cards.currentRow;
+        if (sectionId === "doctor" && row && row.component)
+            return "Install";
         if (!row || row.type === "info" || row.type === "static")
             return "";
         if (row.type === "bool")
@@ -202,7 +205,7 @@ FocusScope {
     }
 
     readonly property bool refreshable: sectionId === "install"
-    readonly property bool canRefresh: refreshable || sectionId === "doctor" || sectionId === "controller" || sectionId === "sound" || sectionId === "system"
+    readonly property bool canRefresh: refreshable || sectionId === "components" || sectionId === "doctor" || sectionId === "controller" || sectionId === "sound" || sectionId === "system"
 
     readonly property real sideMargin: Theme.dp(80)
     readonly property real sideWidth: Theme.dp(300)
@@ -235,6 +238,11 @@ FocusScope {
             return {
                 rows: runners.rows,
                 groups: runners.groups
+            };
+        if (sectionId === "components")
+            return {
+                rows: components.rows,
+                groups: components.groups
             };
         if (sectionId === "install") {
             var jobs = [], installed = [], owned = [], running = 0, paused = 0, onDisk = 0;
@@ -489,6 +497,8 @@ FocusScope {
             launch.load();
         else if (sectionId === "runners")
             runners.load();
+        else if (sectionId === "components")
+            components.load();
         else if (refreshable)
             sources.load();
         else if (sectionId === "controller")
@@ -516,8 +526,39 @@ FocusScope {
         Sound.enter();
         if (refreshable)
             sources.refresh();
+        else if (sectionId === "components")
+            components.refresh();
         else
             refresh();
+    }
+
+    function componentMenu(index, items, title) {
+        if (items.length === 0) {
+            Sound.edge();
+            return;
+        }
+        menu.show(items, cards, cards.focusRect, title, function (action) {
+            page.componentAction(index, action);
+        });
+    }
+
+    function componentAction(index, action) {
+        if (action === "versions") {
+            Sound.panel();
+            componentMenu(index, components.versionActions(index), "Another version");
+            return;
+        }
+        var ask = components.confirm(index, action);
+        if (ask) {
+            dialog.ask(ask, function (yes) {
+                if (yes)
+                    components.act(index, action) ? Sound.enter() : Sound.edge();
+                cards.forceActiveFocus();
+            });
+            return;
+        }
+        components.act(index, action) ? Sound.enter() : Sound.edge();
+        cards.forceActiveFocus();
     }
 
     function toggleAdvanced() {
@@ -574,6 +615,21 @@ FocusScope {
             cards.forceActiveFocus();
             openedRunner = row.runner;
             page.runnerRequested(row.runner);
+        } else if (sectionId === "components") {
+            Sound.panel();
+            componentMenu(index, components.actions(index), row.label);
+        } else if (sectionId === "doctor" && row.component) {
+            Sound.panel();
+            dialog.ask(components.question(row.component) || {
+                message: "Install " + row.label + "?",
+                detail: "",
+                yes: "Install",
+                no: "Not now"
+            }, function (yes) {
+                if (yes)
+                    components.installById(row.component) ? Sound.enter() : Sound.edge();
+                cards.forceActiveFocus();
+            });
         } else if (sectionId === "install" && row.key === "all") {
             Sound.enter();
             sources.updateAll();
@@ -930,6 +986,7 @@ FocusScope {
         modulesForm.load();
         sourceList.load();
         runners.load();
+        components.load();
         sources.load();
         if (api.theme.takeLanding() === "themes")
             section = sectionIndex("themes");
@@ -948,6 +1005,8 @@ FocusScope {
             api.home.loadOutputs();
         else if (sections[section].id === "doctor")
             modulesForm.loadDoctor();
+        else if (sections[section].id === "components")
+            components.load();
         Qt.callLater(function () {
             cards.reset();
             if (mainHad)
@@ -968,6 +1027,12 @@ FocusScope {
         }
     }
 
+    Connections {
+        target: page.components
+        function onRunnerRequested(id) {
+            page.runnerRequested(id);
+        }
+    }
     Connections {
         target: page.modulesForm
         function onDoctorChanged() {
@@ -1021,6 +1086,8 @@ FocusScope {
         focus: true
         sections: page.sections
         badges: page.sections.map(function (s, i) {
+            if (i === page.sectionIndex("components"))
+                return page.components.pending > 0 ? page.components.pending.toString() : "";
             return i === page.sectionIndex("install") && page.sources.updates.length > 0 ? page.sources.updates.length.toString() : "";
         })
         current: page.section
@@ -1099,9 +1166,9 @@ FocusScope {
             height: Theme.dp(64)
             radius: Theme.dp(14)
             color: Theme.surface
-            visible: page.sources.job != null
+            visible: job != null
 
-            readonly property var job: page.sources.job
+            readonly property var job: page.sectionId === "components" && page.components.job ? page.components.job : page.sources.job || page.components.job
             readonly property real fraction: job && job.total > 0 ? job.done / job.total : 0
 
             Text {

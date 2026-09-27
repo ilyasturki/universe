@@ -1,0 +1,83 @@
+{
+  "components": [
+    {
+      "id": "ge-proton", "name": "GE-Proton", "kind": "proton", "family": "proton-ge", "bin": "", "homepage": "https://github.com/GloriousEggroll/proton-ge-custom", "runner": "",
+      "builds": [
+        {"version": "GE-Proton11-7", "origin": "universe", "program": "/fake/components/ge-proton/GE-Proton11-7", "managed": true, "in_use": true, "pinned": false, "disk": 1210000000, "size": 498000000, "date": "2026-09-16T12:00:00Z", "installed_at": "", "auto": true},
+        {"version": "GE-Proton11-6", "origin": "universe", "program": "/fake/components/ge-proton/GE-Proton11-6", "managed": true, "in_use": false, "pinned": false, "disk": 1190000000, "size": 495000000, "date": "2026-09-02T12:00:00Z", "installed_at": "2026-09-03T09:00:00+02:00", "auto": true}
+      ],
+      "latest": {"version": "GE-Proton11-7", "date": "2026-09-16T12:00:00Z", "channel": "stable", "size": 498000000},
+      "available": [
+        {"version": "GE-Proton11-7", "date": "2026-09-16T12:00:00Z", "channel": "stable", "size": 498000000, "installed": true, "skipped": false},
+        {"version": "GE-Proton11-6", "date": "2026-09-02T12:00:00Z", "channel": "stable", "size": 495000000, "installed": true, "skipped": false},
+        {"version": "GE-Proton11-5", "date": "2026-08-20T12:00:00Z", "channel": "stable", "size": 494000000, "installed": false, "skipped": false}
+      ],
+      "update": "", "proposal": "", "used_by": 3, "setting": "proton-ge", "recent": {"version": "GE-Proton11-7", "at": ""}, "skipped": []
+    },
+    {
+      "id": "proton-cachyos", "name": "Proton-CachyOS", "kind": "proton", "family": "proton-cachyos", "bin": "", "homepage": "https://github.com/CachyOS/proton-cachyos", "runner": "",
+      "builds": [], "in_use": null,
+      "latest": {"version": "proton-cachyos-11.0-20260703-slr", "date": "2026-07-22T00:57:55Z", "channel": "stable", "size": 520000000},
+      "available": [{"version": "proton-cachyos-11.0-20260703-slr", "date": "2026-07-22T00:57:55Z", "channel": "stable", "size": 520000000, "installed": false, "skipped": false}],
+      "update": "", "proposal": "", "used_by": 0, "setting": "", "recent": null, "skipped": []
+    },
+    {
+      "id": "wine", "name": "Wine (staging)", "kind": "wine", "family": "", "bin": "", "homepage": "https://github.com/Kron4ek/Wine-Builds", "runner": "wine",
+      "builds": [{"version": "11.8", "origin": "nix", "program": "/nix/store/fake-wine-wow64-staging-11.8/bin/wine", "managed": false, "in_use": true, "pinned": false, "disk": 0, "size": 0, "date": "", "installed_at": "", "auto": false}],
+      "latest": {"version": "11.18", "date": "2026-09-19T18:30:25Z", "channel": "stable", "size": 61000000},
+      "available": [
+        {"version": "11.18", "date": "2026-09-19T18:30:25Z", "channel": "stable", "size": 61000000, "installed": false, "skipped": false},
+        {"version": "11.17", "date": "2026-09-05T14:39:53Z", "channel": "stable", "size": 60800000, "installed": false, "skipped": false}
+      ],
+      "update": "", "proposal": "newer", "used_by": 1, "setting": "", "recent": null, "skipped": []
+    },
+    {
+      "id": "eden", "name": "Eden", "kind": "emulator", "family": "", "bin": "", "homepage": "https://git.eden-emu.dev/eden-emu/eden", "runner": "eden",
+      "builds": [{"version": "0.2.1", "origin": "nix", "program": "/nix/store/fake-eden-0.2.1/bin/eden", "managed": false, "in_use": true, "pinned": false, "disk": 0, "size": 0, "date": "", "installed_at": "", "auto": false}],
+      "latest": {"version": "0.2.1", "date": "2026-06-01T19:57:41+02:00", "channel": "stable", "size": 98000000},
+      "available": [{"version": "0.2.1", "date": "2026-06-01T19:57:41+02:00", "channel": "stable", "size": 98000000, "installed": false, "skipped": false}],
+      "update": "", "proposal": "", "used_by": 2, "setting": "", "recent": null, "skipped": []
+    },
+    {
+      "id": "dolphin", "name": "Dolphin", "kind": "emulator", "family": "", "bin": "", "homepage": "", "runner": "dolphin",
+      "builds": [{"version": "2606a", "origin": "nix", "program": "/nix/store/fake-dolphin-emu-2606a/bin/dolphin-emu", "managed": false, "in_use": true, "pinned": false, "disk": 0, "size": 0, "date": "", "installed_at": "", "auto": false}],
+      "latest": null, "available": [], "update": "", "proposal": "", "used_by": 1, "setting": "", "recent": null, "skipped": []
+    },
+    {
+      "id": "xemu", "name": "xemu", "kind": "emulator", "family": "", "bin": "", "homepage": "https://github.com/xemu-project/xemu", "runner": "xemu",
+      "builds": [{"version": "0.8.135", "origin": "universe", "program": "/fake/components/xemu/0.8.135/AppRun", "managed": true, "in_use": true, "pinned": false, "disk": 64000000, "size": 21000000, "date": "2026-05-20T00:30:44Z", "installed_at": "2026-05-21T10:00:00+02:00", "auto": false}],
+      "latest": {"version": "0.8.136", "date": "2026-06-08T05:54:34Z", "channel": "stable", "size": 21300000},
+      "available": [{"version": "0.8.136", "date": "2026-06-08T05:54:34Z", "channel": "stable", "size": 21300000, "installed": false, "skipped": false}],
+      "update": "0.8.136", "proposal": "", "used_by": 0, "setting": "", "recent": null, "skipped": []
+    },
+    {
+      "id": "rpcs3", "name": "RPCS3", "kind": "emulator", "family": "", "bin": "", "homepage": "https://github.com/RPCS3/rpcs3-binaries-linux", "runner": "rpcs3",
+      "builds": [], "in_use": null,
+      "latest": {"version": "0.0.42-20069-3fa07db7", "date": "2026-09-26T10:00:00Z", "channel": "rolling", "size": 170000000},
+      "available": [{"version": "0.0.42-20069-3fa07db7", "date": "2026-09-26T10:00:00Z", "channel": "rolling", "size": 170000000, "installed": false, "skipped": false}],
+      "update": "", "proposal": "", "used_by": 0, "setting": "", "recent": null, "skipped": []
+    },
+    {
+      "id": "mame", "name": "MAME", "kind": "emulator", "family": "", "bin": "", "homepage": "", "runner": "mame",
+      "builds": [], "in_use": null, "latest": null, "available": [], "update": "", "proposal": "", "used_by": 0, "setting": "", "recent": null, "skipped": []
+    },
+    {
+      "id": "umu-run", "name": "umu-launcher", "kind": "tool", "family": "", "bin": "umu-run", "homepage": "https://github.com/Open-Wine-Components/umu-launcher", "runner": "",
+      "builds": [{"version": "1.4.0-bwrap", "origin": "nix", "program": "/nix/store/fake-umu-launcher-1.4.0-bwrap/bin/umu-run", "managed": false, "in_use": true, "pinned": false, "disk": 0, "size": 0, "date": "", "installed_at": "", "auto": false}],
+      "latest": {"version": "1.4.4", "date": "2025-09-01T00:00:00Z", "channel": "stable", "size": 32000000},
+      "available": [{"version": "1.4.4", "date": "2025-09-01T00:00:00Z", "channel": "stable", "size": 32000000, "installed": false, "skipped": false}],
+      "update": "", "proposal": "", "used_by": 0, "setting": "", "recent": null, "skipped": []
+    },
+    {
+      "id": "gamescope", "name": "gamescope", "kind": "system", "family": "", "bin": "gamescope", "homepage": "", "runner": "",
+      "builds": [{"version": "3.16.15", "name": "", "origin": "system", "program": "/usr/bin/gamescope", "managed": false, "in_use": true, "pinned": false, "disk": 0, "size": 0, "date": "", "installed_at": "", "auto": false}],
+      "latest": null, "available": [], "update": "", "proposal": "", "used_by": 0, "setting": "", "recent": null, "skipped": [],
+      "packages": ["gamescope"], "installable": true, "fix": ""
+    },
+    {
+      "id": "gpu-screen-recorder", "name": "gpu-screen-recorder", "kind": "system", "family": "", "bin": "gpu-screen-recorder", "homepage": "", "runner": "",
+      "builds": [], "in_use": null, "latest": null, "available": [], "update": "", "proposal": "install", "used_by": 0, "setting": "", "recent": null, "skipped": [],
+      "packages": ["gpu-screen-recorder"], "installable": true, "fix": ""
+    }
+  ]
+}

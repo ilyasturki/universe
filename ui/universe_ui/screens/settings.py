@@ -838,6 +838,7 @@ class ModulesForm(ModuleApi, ListForm):
                 name, "", check.get("label") or check.get("check", ""), "info", bool(check.get("ok")), detail=str(check.get("detail") or ""), module=ident
             )
             row["fix"] = str(check.get("fix") or "")
+            row["component"] = str(check.get("component") or "")
             homes.setdefault(name, []).append(len(rows))
             rows.append(row)
         failing = [i for i in range(len(rows)) if not rows[i]["value"]]

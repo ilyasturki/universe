@@ -18,6 +18,7 @@ FocusScope {
     readonly property var sourceList: api.screens.sourceList
     readonly property var launch: api.screens.launch
     readonly property var runners: api.screens.runners
+    readonly property var components: api.screens.components
     readonly property var sources: api.screens.sources
     readonly property var listForm: sectionId === "modules" ? modulesForm : sectionId === "sources" ? sourceList : null
 
@@ -38,6 +39,13 @@ FocusScope {
         {
             id: "runners",
             label: "Runners",
+            group: 1,
+            groupLabel: "Play"
+        },
+        {
+            id: "components",
+            label: "Components",
+            detail: components.pending > 0 ? components.pending + " to look at" : "",
             group: 1,
             groupLabel: "Play"
         },
@@ -110,6 +118,9 @@ FocusScope {
             runners: function () {
                 runners.load();
             },
+            components: function () {
+                components.load();
+            },
             launch: function () {
                 launch.load();
             },
@@ -130,6 +141,9 @@ FocusScope {
             }
         })
     readonly property var refreshers: ({
+            components: function () {
+                components.refresh();
+            },
             sound: function () {
                 api.home.loadOutputs();
             },
@@ -289,6 +303,20 @@ FocusScope {
                     dim: g.off === true
                 };
             });
+        if (sectionId === "components")
+            return Forms.grouped(components.groups, components.rows, function (c, i, g) {
+                return {
+                    label: c.label,
+                    type: "action",
+                    action: "component",
+                    form: i,
+                    icon: c.icon,
+                    iconSlot: true,
+                    display: c.tag && c.tag !== "Updated" ? c.tag : c.display,
+                    detail: c.detail,
+                    dim: g.off === true
+                };
+            });
         if (sectionId === "launch")
             return Forms.grouped(launch.groups, launch.rows, function (r, i) {
                 return Object.assign(Details.withDetail(r, ""), {
@@ -345,10 +373,13 @@ FocusScope {
         if (sectionId === "doctor") {
             var checks = Forms.grouped(modulesForm.doctorGroups, modulesForm.doctor, function (c) {
                 var ok = c.value === true;
+                var fixable = !ok && c.component !== "";
                 return {
                     label: c.label,
                     path: c.path || "",
-                    type: "info",
+                    type: fixable ? "action" : "info",
+                    action: fixable ? "Install" : "",
+                    component: fixable ? c.component : "",
                     value: ok,
                     display: ok ? c.detail || "" : "",
                     detail: ok ? "" : c.detail || "",
@@ -483,6 +514,20 @@ FocusScope {
             Forms.addEntry(shell, row, function (name, value) {
                 launch.setMapEntry(row.form, name, value);
             });
+        } else if (sectionId === "components") {
+            Sound.play("ok");
+            componentMenu(row.form, components.actions(row.form), row.label);
+        } else if (sectionId === "doctor" && row.component) {
+            Sound.play("ok");
+            var ask = components.question(row.component);
+            shell.dialogAsk({
+                message: ask ? ask.message : "Install " + row.label + "?",
+                detail: ask ? ask.detail : "",
+                buttons: ["Not now", "Install"]
+            }, function (i) {
+                if (i === 1)
+                    Sound.play(components.installById(row.component) ? "ok" : "edge");
+            });
         } else if (sectionId === "runners") {
             Sound.play("ok");
             reopen = {
@@ -560,6 +605,40 @@ FocusScope {
         }
     }
 
+    function componentMenu(index, items, title) {
+        if (items.length === 0) {
+            Sound.play("edge");
+            return;
+        }
+        shell.menu(title, items.map(function (i) {
+            return {
+                label: i.label,
+                act: i.action
+            };
+        }), function (action) {
+            page.componentAction(index, action);
+        });
+    }
+    function componentAction(index, action) {
+        if (action === "versions") {
+            componentMenu(index, components.versionActions(index), "Another version");
+            return;
+        }
+        var ask = components.confirm(index, action);
+        if (!ask) {
+            Sound.play(components.act(index, action) ? "ok" : "edge");
+            return;
+        }
+        shell.dialogAsk({
+            message: ask.message,
+            detail: ask.detail,
+            buttons: [ask.no, ask.yes],
+            danger: action === "rollback" || action.indexOf("remove:") === 0 ? 1 : -1
+        }, function (i) {
+            if (i === 1)
+                Sound.play(components.act(index, action) ? "ok" : "edge");
+        });
+    }
     function toggleModule() {
         var row = rows.currentRow;
         if (listForm === null || zone !== "rows" || !row || row.heading || row.dim === true) {
@@ -603,6 +682,14 @@ FocusScope {
         target: page.sources
         function onMessage(text) {
             page.shell.showToast(text);
+        }
+    }
+    Connections {
+        target: page.components
+        function onRunnerRequested(id) {
+            page.shell.push("pages/FormPage.qml", {
+                runner: id
+            });
         }
     }
 
@@ -672,7 +759,7 @@ FocusScope {
         x: Theme.dp(705)
         y: header.height + Theme.dp(40)
         width: parent.width - x - Theme.dp(Theme.columnRight)
-        job: page.sources.job
+        job: page.sectionId === "components" && page.components.job ? page.components.job : page.sources.job || page.components.job
     }
 
     SettingsRows {

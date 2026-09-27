@@ -232,6 +232,30 @@ class CoreClient(QObject):
     def setRunnerSetting(self, runner, key, value):
         return self._done(self._core.set_runner_setting, runner, key, str(value))
 
+    def components(self, refresh=False):
+        """Raises on a core error."""
+        return self._call(self._core.components, refresh) or {}
+
+    def componentInstall(self, ident, version):
+        return self._job("component", ident, lambda progress: self._core.component_install(ident, version, progress))
+
+    # The job's text names what was updated, "" when nothing was.
+    def componentUpdate(self, ident):
+        def work(progress):
+            done = self._core.component_update(ident, progress)
+            return ", ".join(f"{u['name']} {u['version']}" + (f" failed: {u['error']}" if u.get("error") else "") for u in done)
+
+        return self._job("component", ident, work)
+
+    def componentRemove(self, ident, version):
+        return self._call(self._core.component_remove, ident, version)
+
+    def componentRollback(self, ident):
+        return self._call(self._core.component_rollback, ident)
+
+    def componentUse(self, ident, build):
+        return self._done(self._core.component_use, ident, build)
+
     def launch(self, ident, screen, poster=None):
         self.launchRequested.emit(ident)
 
@@ -479,6 +503,9 @@ class CoreClient(QObject):
             j["cancelled"] = True
             self._guarded(None, self._core.media_cancel)
             return True
+        if j["kind"] == "component":
+            j["cancelled"] = True
+            return bool(self._guarded(False, self._core.component_cancel, j["target"]))
         if j["kind"] not in ("install", "update") or not j["target"]:
             return False
         j["cancelled"] = True

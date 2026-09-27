@@ -147,7 +147,7 @@ def test_the_tab_bar_search_finds_the_settings_under_the_games(api, fake):
     search = api.screens.search
     while not search.ready:
         assert wait_for(search.readyChanged, 5000) is not None
-    assert [s["id"] for s in search.sections][:3] == ["launch", "runners", "controller"], "indexed with Reprise's sections before Settings ever opened"
+    assert [s["id"] for s in search.sections][:3] == ["launch", "runners", "components"], "indexed with Reprise's sections before Settings ever opened"
     overlay.setProperty("query", "techno")
     pump(100)
     assert overlay.property("hasGames") is True and overlay.property("hasSettings") is False, "a title alone: the cover, not the game's every setting"

@@ -8,6 +8,11 @@ from ..models import file_url
 from ..qt import QVARIANT, Property
 from .settings import HOMES, RowsForm, _group, _row, _to_bus, global_launch_rows, runner_logo
 
+FOUND = {"path": "Found on PATH"}
+SYSTEM_FIRST = "The system's, else Universe's"
+NEWEST = "Universe's newest"
+BUILD_DETAIL = "Which program runs: the one installed on the system before Universe's builds, Universe's newest, or one build of it."
+
 
 def suggested_title(path):
     base = os.path.basename(str(path or "").rstrip("/"))
@@ -91,11 +96,19 @@ def build_runner(client, ident, screen_mode):
     rows, groups = [], []
     if runner.get("kind") != "linux":
         own = runner.get("exe") or ""
-        where = {"path": "Found on PATH"}.get(source, "Found") if found and not own else ""
+        where = (f"Installed by Universe ({runner.get('version')})" if source == "universe" else FOUND.get(source, "Found")) if found and not own else ""
         rows.append(
             _row(name, "exe", "Program", "path", own or found, module=ident, detail=where, inherited=not own and bool(found), origin="runner" if own else "")
         )
         rows.append(_row(name, "args", "Arguments", "string", runner.get("args") or "", module=ident))
+        builds = runner.get("builds") or []
+        if builds:
+            values, labels = ["", "latest", *builds], [SYSTEM_FIRST, NEWEST, *builds]
+            current = str(runner.get("build") or "")
+            shown = labels[values.index(current)] if current in values else current
+            row = _row(name, "build", "Build", "enum", shown, labels, module=ident, detail=BUILD_DETAIL, origin="runner" if current else "")
+            row["choiceValues"] = values
+            rows.append(row)
     config = client.config()
     launch = config.get("launch") or {}
     own = runner.get("gamescope")

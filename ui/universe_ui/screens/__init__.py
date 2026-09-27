@@ -6,6 +6,7 @@ from ..qt import Property
 from .achievements import AchievementsList
 from .add import AddGameForm
 from .artwork import ArtworkForm, ArtworkOverview
+from .components import ComponentsForm
 from .controller import ControllerScreen
 from .launch import LaunchForm
 from .media import JournalList, MediaTimeline, PendingJournals, RecordingsList, ScreenshotsList, Thumbs
@@ -44,17 +45,19 @@ class Screens(QObject):
         self._controller = ControllerScreen(client, memory, power, self)
         self._runners = RunnersForm(client, self)
         self._runner = RunnerForm(client, screen_mode, self)
+        self._components = ComponentsForm(client, self)
         self._artwork = ArtworkForm(client, self)
         self._artworkOverview = ArtworkOverview(client, self)
         self._add = AddGameForm(client, self)
         self._search = SettingsSearch(client, screen_mode, themes, self._controller, self)
-        self._onboarding = Onboarding(client, memory, games, self._login, self._controller, self)
+        self._onboarding = Onboarding(client, memory, games, self._login, self._controller, self._components, self)
 
     def shutdown(self):
         self._thumbs.shutdown()
         self._recordings.shutdown()
         self._pendingJournals.shutdown()
         self._controller.shutdown()
+        self._components.shutdown()
 
     gameSettings = Property(QObject, lambda self: self._gameSettings, constant=True)
     modules = Property(QObject, lambda self: self._modules, constant=True)
@@ -79,6 +82,7 @@ class Screens(QObject):
     controller = Property(QObject, lambda self: self._controller, constant=True)
     runners = Property(QObject, lambda self: self._runners, constant=True)
     runner = Property(QObject, lambda self: self._runner, constant=True)
+    components = Property(QObject, lambda self: self._components, constant=True)
     artwork = Property(QObject, lambda self: self._artwork, constant=True)
     artworkOverview = Property(QObject, lambda self: self._artworkOverview, constant=True)
     add = Property(QObject, lambda self: self._add, constant=True)

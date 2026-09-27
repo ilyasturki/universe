@@ -10,6 +10,7 @@ FAMILY_DETAIL = "The pad the button hints and the controller art follow until on
 READ_ONLY_HOME_MANAGER = "Settings are managed by home-manager on this machine: change them in programs.universe.settings."
 READ_ONLY = "config.toml is read-only on this machine: make it writable to change settings here."
 NO_GOG_SOURCE = "needs gogdl"
+NEEDED = "Runners your games need"
 NOT_YET = "not importable yet"
 
 TITLES = {"found": "What's on this machine", "stores": "Your stores", "preferences": "A few choices", "done": "You're set"}
@@ -73,12 +74,13 @@ class Onboarding(RowsForm):
     finished = Signal()
     message = Signal(str)
 
-    def __init__(self, client, memory, games, login, controller, parent=None):
+    def __init__(self, client, memory, games, login, controller, components, parent=None):
         super().__init__(client, parent)
         self._memory = memory
         self._games = games
         self._login = login
         self._controller = controller
+        self._components = components
         self._steps = []
         self._step = 0
         self._launchers = []
@@ -90,6 +92,7 @@ class Onboarding(RowsForm):
         self._scan_job = ""
         login.finished.connect(self._on_login)
         client.jobFinished.connect(self._on_job_finished)
+        components.listingChanged.connect(lambda: self._refresh() if self._step_id() == "found" else None)
 
     def _needed(self):
         if self._memory.get(MEMORY_KEY):
@@ -131,6 +134,7 @@ class Onboarding(RowsForm):
             self._go(0)
 
         self._run(self._client.core.discover, done)
+        self._components.load()
 
     def _step_id(self):
         return self._steps[self._step]["id"] if 0 <= self._step < len(self._steps) else ""
@@ -154,6 +158,14 @@ class Onboarding(RowsForm):
                 _add(rows, groups, "", row)
             if not rows:
                 _add(rows, groups, "", _static("none", "Other launchers", "None found"))
+            for component in self._components.needed():
+                row = _row(NEEDED, "component", component["name"], "action", "")
+                busy = self._components.busyOn(component["id"])
+                used = int(component.get("used_by") or 0)
+                row.update(
+                    via="component", component=component["id"], display="Installing…" if busy else _plural(used, "game"), action="" if busy else "Install"
+                )
+                _add(rows, groups, NEEDED, row, caps=True)
         elif step == "stores":
             for source in self._sources:
                 name, signed_in = source.get("name", source["id"]), bool(source.get("logged_in"))
@@ -200,7 +212,10 @@ class Onboarding(RowsForm):
 
     @Slot(int, result=bool)
     def runImport(self, index):
-        launcher = self._launcher(self.row(index).get("key", ""))
+        row = self.row(index)
+        if row.get("via") == "component":
+            return not self._components.busyOn(row["component"]) and self._components.installById(row["component"])
+        launcher = self._launcher(row.get("key", ""))
         if launcher is None or launcher["state"] or self._busy or not _importable(launcher):
             return False
         if launcher["via"] == "lutris":
@@ -221,6 +236,7 @@ class Onboarding(RowsForm):
                 return
             imported = list(report.get("imported") or [])
             self._client.libraryChanged.emit([])
+            self._components.load()
             self._set_state(launcher, "imported", len(imported))
             if imported:
                 self._summary.append(("Lutris", f"{_plural(len(imported), 'game')} added"))
@@ -236,6 +252,7 @@ class Onboarding(RowsForm):
                 return
             imported = list(report.get("imported") or [])
             self._client.libraryChanged.emit([])
+            self._components.load()
             self._set_state(launcher, "imported", len(imported))
             if imported:
                 self._summary.append(("Emulator folders", f"{_plural(len(imported), 'game')} added"))

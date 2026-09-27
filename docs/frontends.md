@@ -513,7 +513,7 @@ polkit) is a notice with logind's own message.
 ## The Settings tab
 
 `pages/SettingsPage.qml` is a sidebar (`ui/SectionList.qml` over `ui/Sections.js`: Launch, Runners,
-Controller, Sources, Install, Modules, Artwork, Themes, Sound, Doctor, About; no title, the tab
+Components, Controller, Sources, Install, Modules, Artwork, Themes, Sound, Doctor, About; no title, the tab
 says it, and no group captions) beside one column of `ui/SettingsCards.qml` (`columns: 1`). A
 landing on a section folded into another opens that one (`Sections.aliases`: `updates` → Install,
 `quit` and `power` → About). Sound is one row per `api.home.outputs` entry, the device as its value and the one
@@ -767,7 +767,38 @@ through `uninstall(id)` / `remove(id)` on the form (a `message` when done). Both
 `libraryChanged` — the counts, the Games card — so neither has a Refresh. Back on the tab, the cursor finds
 the runner again. The Switch 2 look has the same list as System Settings › Runners and the same
 page as `switch2/pages/FormPage.qml`, pushed on its stack. The game settings page's Launch group follows the runner: a Runner picker (names
-shown, ids written), then the rows the runner takes.
+shown, ids written), then the rows the runner takes. Once Universe holds builds of a runner its
+Runner card gains a Build row (`build`, an enum over `""`, `latest` and the versions), written
+through `set_runner_setting`.
+
+## The components section
+
+`api.screens.components` (`ComponentsForm`) is Settings › Components in both looks, over the core's
+`components()` (see api.md, Components): `load()` reads it off the UI thread (the cached catalogue),
+`refresh()` fetches the catalogue first (Y). `rows`/`groups` in the settings forms' shape: a
+"Recently updated" card when an update landed in the last 7 days, then one card per kind (Proton,
+Wine, Emulators, Tools, System; `meta` "N of M installed"), a runner a game waits on first, then an
+update or a newer build, then by the games on it; the runners with no build to download and none
+installed close in a dimmed "No download" card. A row is the component's name and icon, the build
+that runs as `display`, a `tag` for what to do with `accent`, the download's `size`, a `detail`
+sentence and `progress` while its job runs. A is its options: `actions(index)` — `{icon, label,
+action, danger}`, the look's menu (Reprise `menu.show`, Switch 2 `shell.menu`); `versions` opens
+`versionActions(index)` as a second menu, `runner` emits `runnerRequested(id)`, which opens the
+runner's page.
+`confirm(index, action)` is what to ask first or null — an install's size and the room left, a
+removal, a rollback — and `act(index, action)` does it: an install or an update is a client job
+(`componentInstall`, `componentUpdate`, `job` the running one like the Install page's, drawn by
+the same bar), an install from a proposal over a system build switches to it (`use:latest`) once
+in, a finished job toasts through `message`. `pending` counts the updates and proposals: Reprise's
+sidebar badge, Switch 2's section detail. `busyOn(id)` and `needed()` (the missing runners the
+library needs) serve the first-run page. A failed launch whose runner is missing and offered
+(`launchFailed`) emits `installProposed(gameId, id, name, version)`: both roots ask "Install … to
+play?" (`question(id)` the size and room), `installFor(gameId, id)` installs, and
+`readyToLaunch(gameId)` launches the game again once it is in. A doctor row carries `component`
+when an install fixes it: Reprise's A reads Install, Switch 2 turns the row into an action; both
+ask, then `installById(id)`. Once a day while the UI runs (the first check 90 s after start), with
+`components.auto_update` on, no session running and no job of the user's, the form runs
+`componentUpdate("")` quietly — no bar — and toasts "Updated …" when something was.
 
 ## Adding a game
 
@@ -825,7 +856,10 @@ the games over (`display` the count; `runImport(index)` runs `import_lutris(true
 starts a `scan("gog")` job; the row's `display` follows: "Importing…", "N games added", "Nothing
 new", the error), a `static` row otherwise ("No games", "N games · not importable yet", "· needs
 gogdl"), `quiet` when there is nothing to bring over and nothing was done — Reprise leaves quiet
-rows out unless every row is one — `stores` the source's Account row, "Get a sign-in link" (`link`) and "Enter the code"
+rows out unless every row is one — then, under "Runners your games need", one row per missing
+runner the library needs that Universe can install (`via: "component"`; `runImport` installs it
+through `api.screens.components`, the row reading "Installing…" meanwhile; an import asks the
+components again) — `stores` the source's Account row, "Get a sign-in link" (`link`) and "Enter the code"
 (`code`, both `quiet` once the source is signed in there) through the shared `api.screens.login` — `ui/LoginCard.qml` and `switch2/ui/LoginCard.qml`
 are the QR, URL and status card `FormPage` shows too — `preferences` the controller family
 (`controller.family`, an `enum` over `api.screens.controller.families`, written with `setFamily`)

@@ -17,6 +17,7 @@ from .errors import UniverseError
 
 FIXTURE = Path(__file__).parent / "fixtures" / "library.json"
 LAUNCH_KEYS = Path(__file__).parent / "fixtures" / "launch_keys.json"
+COMPONENTS = Path(__file__).parent / "fixtures" / "components.json"
 GPU = {
     "vendor": "amd",
     "name": "AMD Radeon RX 7900 GRE",
@@ -389,6 +390,12 @@ class FakeCore:
         self.system_error = ""
         self.system_applied = 0
         self._cards = X11Cards()
+        with open(COMPONENTS) as f:
+            self._components = json.load(f)
+        self._component_cancel = ""
+        for c in self._components["components"]:
+            if c.get("recent"):
+                c["recent"]["at"] = _now()
         self._lay_out()
 
     def data_home(self):
@@ -1576,7 +1583,165 @@ class FakeCore:
             self._write_game(owner)
 
     def doctor(self):
-        return copy.deepcopy(self._data.get("doctor", []))
+        checks = copy.deepcopy(self._data.get("doctor", []))
+        for c in self.components()["components"]:
+            if c["proposal"] == "install" and c["kind"] in ("emulator", "wine"):
+                fix = f"universe component install {c['id']} (Settings › Components), or install it, or set runners.{c['id']}.exe"
+                checks.append(
+                    {
+                        "check": f"runner-{c['id']}",
+                        "label": c["name"],
+                        "ok": False,
+                        "detail": f"{c['name']} not found",
+                        "fix": fix,
+                        "module": "runners",
+                        "component": c["id"],
+                    }
+                )
+        return checks
+
+    def _component(self, ident):
+        found = next((c for c in self._components["components"] if c["id"] == ident), None)
+        if found is None:
+            raise UniverseError("NotFound", f"{ident} is not in the catalogue")
+        return found
+
+    def _settle(self, c):
+        if c["kind"] in ("emulator", "wine"):
+            c["used_by"] = sum(1 for g in self._data["games"] if self._runner_of(g.get("launch") or {}) == c["id"])
+            if c["used_by"] and not c["builds"] and c.get("latest"):
+                c["proposal"] = "install"
+        managed = [b for b in c["builds"] if b["managed"]]
+        c["builds"] = sorted(managed, key=lambda b: b["date"], reverse=True) + [b for b in c["builds"] if not b["managed"]]
+        have = {b["version"] for b in managed}
+        c["in_use"] = next((b for b in c["builds"] if b["in_use"]), None)
+        for a in c["available"]:
+            a.update(installed=a["version"] in have, skipped=a["version"] in c["skipped"])
+        latest = (c.get("latest") or {}).get("version", "")
+        c["update"] = latest if managed and latest and latest not in have and latest not in c["skipped"] else ""
+        if (c["builds"] and c["proposal"] == "install") or (latest in have and c["proposal"] == "newer"):
+            c["proposal"] = ""
+
+    def components(self, refresh=False):
+        with self._lock:
+            for c in self._components["components"]:
+                self._settle(c)
+            out = copy.deepcopy(self._components)
+        out["auto_update"] = (self._config.get("components") or {}).get("auto_update", True)
+        return out
+
+    def component_install(self, ident, version="", progress=None):
+        c = self._component(ident)
+        if c["kind"] == "system":
+            for step in range(1, 5):
+                if progress is not None:
+                    progress(step * 25, 100, f"Installing {c['name']} · {step * 25}%")
+                time.sleep(0.05)
+            with self._lock:
+                c["builds"] = [{"version": "1.0", "origin": "system", "program": f"/usr/bin/{c['bin']}", "managed": False, "in_use": True}]
+                self._settle(c)
+            return "1.0"
+        version = version or (c.get("latest") or {}).get("version", "")
+        build = next((a for a in c["available"] if a["version"] == version), None)
+        if build is None:
+            raise UniverseError("NotFound", f"{c['name']} {version}: no such build in the catalogue")
+        total = build["size"] or 1
+        for step in range(1, 5):
+            if self._component_cancel == ident:
+                self._component_cancel = ""
+                raise UniverseError("Busy", f"{c['name']} {version}: cancelled")
+            if progress is not None:
+                progress(total * step // 4, total, f"Downloading {c['name']} {version}")
+            time.sleep(0.05)
+        with self._lock:
+            if not any(b["managed"] and b["version"] == version for b in c["builds"]):
+                first = not any(b["in_use"] for b in c["builds"])
+                c["builds"].append(
+                    {
+                        "version": version,
+                        "origin": "universe",
+                        "program": f"/fake/components/{ident}/{version}",
+                        "managed": True,
+                        "in_use": first,
+                        "pinned": False,
+                        "disk": build["size"] * 2,
+                        "date": build["date"],
+                    }
+                )
+            if version in c["skipped"]:
+                c["skipped"].remove(version)
+            self._settle(c)
+        return version
+
+    def component_update(self, ident="", progress=None):
+        out = []
+        for c in self.components()["components"]:
+            if (ident and c["id"] != ident) or not c["update"]:
+                continue
+            follows = bool(c["in_use"] and c["in_use"]["managed"])
+            version = self.component_install(c["id"], c["update"], progress)
+            with self._lock:
+                live = self._component(c["id"])
+                if follows:
+                    for b in live["builds"]:
+                        b["in_use"] = b["managed"] and b["version"] == version
+                live["recent"] = {"version": version, "at": _now()}
+                self._settle(live)
+            out.append({"id": c["id"], "name": c["name"], "version": version})
+        return out
+
+    def component_remove(self, ident, version):
+        with self._lock:
+            c = self._component(ident)
+            b = next((b for b in c["builds"] if b["managed"] and b["version"] == version), None)
+            if b is None:
+                raise UniverseError("NotFound", f"{ident} {version} is not installed")
+            if b["in_use"] or b["pinned"]:
+                raise UniverseError("Busy", f"{ident} {version} is in use: pick another build for what names it first")
+            c["builds"].remove(b)
+            self._settle(c)
+
+    def component_rollback(self, ident):
+        with self._lock:
+            c = self._component(ident)
+            self._settle(c)
+            managed = [b for b in c["builds"] if b["managed"]]
+            found = [b for b in c["builds"] if not b["managed"]]
+            if not managed:
+                raise UniverseError("NotFound", f"Universe holds no build of {ident}")
+            newest = managed[0]
+            if len(managed) < 2 and not found:
+                raise UniverseError("Invalid", f"{c['name']} {newest['version']} is the only build of {ident}: nothing to roll back to")
+            c["builds"].remove(newest)
+            c["skipped"].append(newest["version"])
+            if newest["in_use"]:
+                (managed[1:] or found)[0]["in_use"] = True
+            c["recent"] = None
+            self._settle(c)
+            return managed[1]["version"] if len(managed) > 1 else ""
+
+    def component_use(self, ident, build):
+        with self._lock:
+            c = self._component(ident)
+            if c["kind"] == "tool":
+                raise UniverseError("Invalid", f"{ident} has no choice of build: the one on PATH runs, else Universe's")
+            managed = [b for b in c["builds"] if b["managed"]]
+            if build == "latest":
+                pick = managed[0] if managed else None
+            elif build == "system":
+                pick = next((b for b in c["builds"] if not b["managed"]), None)
+            else:
+                pick = next((b for b in c["builds"] if build in (b["version"], b.get("name"))), None)
+            if pick is None:
+                raise UniverseError("NotFound", f"{ident} {build} is not installed")
+            for b in c["builds"]:
+                b["in_use"] = b is pick
+            c["setting"] = "" if build == "system" else build
+            self._settle(c)
+
+    def component_cancel(self, ident):
+        self._component_cancel = ident
+        return True
 
     def discover(self):
         report = copy.deepcopy(self._data.get("discover") or {"launchers": [], "gog_dirs": []})

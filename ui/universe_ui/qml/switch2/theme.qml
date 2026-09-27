@@ -531,6 +531,30 @@ FocusScope {
     }
 
     Connections {
+        target: api.screens.components
+        function onInstallProposed(gameId, component, name, version) {
+            var ask = api.screens.components.question(component);
+            var game = api.allGames.byId(gameId);
+            root.dialogAsk({
+                message: "Install " + name + " " + version + " to play" + (game ? " " + game.title : "") + "?",
+                detail: ask ? ask.detail : "",
+                buttons: ["Not now", "Install and play"]
+            }, function (i) {
+                if (i === 1)
+                    api.screens.components.installFor(gameId, component);
+            });
+        }
+        function onReadyToLaunch(gameId) {
+            var game = api.allGames.byId(gameId);
+            if (game)
+                root.launch(game);
+        }
+        function onMessage(text) {
+            Base.Notices.show(text);
+        }
+    }
+
+    Connections {
         target: api.screens.controller
         function onMacroNotice(text) {
             Base.Notices.show(text);
