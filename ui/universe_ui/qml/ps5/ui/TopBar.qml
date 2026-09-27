@@ -99,6 +99,8 @@ Item {
         anchors.verticalCenter: clock.verticalCenter
         tint: Qt.rgba(1, 1, 1, 0.85)
         size: Theme.dp(26)
+        fontFamily: Theme.sans
+        fontWeight: Font.Normal
     }
 
     // The icons stand left of the battery and the clock, 105 apart as the console's.

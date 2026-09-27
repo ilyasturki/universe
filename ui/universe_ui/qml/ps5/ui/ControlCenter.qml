@@ -771,6 +771,8 @@ FocusScope {
                 anchors.verticalCenter: parent.verticalCenter
                 tint: Qt.rgba(1, 1, 1, 0.85)
                 size: Theme.dp(26)
+                fontFamily: Theme.sans
+                fontWeight: Font.Normal
             }
 
             Label {

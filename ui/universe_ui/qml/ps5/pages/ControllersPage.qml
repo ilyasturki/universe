@@ -24,6 +24,7 @@ FocusScope {
     // Newest first: { slot, label, dt }.
     property var inputs: []
     property var log: History.fresh()
+    property string unknownCode: ""
 
     readonly property var hints: testing ? [
         {
@@ -369,16 +370,41 @@ FocusScope {
 
     onTestingChanged: {
         clearArt();
-        if (testing) {
+        artToggled("test");
+    }
+    onWalkingChanged: artToggled("walk")
+
+    function artToggled(key) {
+        if (testing || walking) {
             tester.forceActiveFocus();
             return;
         }
         var i = entries.map(function (e) {
             return e.key;
-        }).indexOf("test");
+        }).indexOf(key);
         if (i >= 0)
             rows.index = i;
         rows.forceActiveFocus();
+    }
+
+    function walkKey(event) {
+        if (api.keys.isCancel(event)) {
+            Sound.play("back");
+            controller.cancelWalk();
+        } else if (api.keys.isAccept(event)) {
+            Sound.play("ok");
+            controller.finishWalk();
+        } else if (event.key === Qt.Key_Left) {
+            Sound.play(controller.backStep() ? "tick" : "edge");
+        }
+    }
+
+    onLearningChanged: unknownCode = ""
+
+    Timer {
+        id: unknownOut
+        interval: 4000
+        onTriggered: page.unknownCode = ""
     }
 
     Timer {
@@ -410,8 +436,10 @@ FocusScope {
                 page.axis(axis, value);
         }
         function onUnknownPressed(id, code) {
-            if (!page.learning && id === page.controller.current)
-                page.shell.showToast(code + " is not one of the pad's buttons yet: learn it from a row");
+            if (page.learning || id !== page.controller.current)
+                return;
+            page.unknownCode = code;
+            unknownOut.restart();
         }
         function onLearned(family, slot, code) {
             page.shell.showToast(page.labelOf(slot) + " is now " + code);
@@ -461,7 +489,7 @@ FocusScope {
         y: page.columnTop
         width: page.listWidth
         height: parent.height - y - Theme.dp(96)
-        focus: !page.testing
+        focus: !page.testing && !page.walking
         model: page.entries
         opacity: page.testing ? 0.0 : 1.0
         visible: opacity > 0.01
@@ -482,14 +510,7 @@ FocusScope {
         Keys.onPressed: function (event) {
             if (event.isAutoRepeat)
                 return;
-            if (api.keys.isCancel(event) && page.walking) {
-                event.accepted = true;
-                Sound.play("back");
-                page.controller.cancelWalk();
-            } else if (event.key === Qt.Key_Left && page.walking) {
-                event.accepted = true;
-                Sound.play(page.controller.backStep() ? "tick" : "edge");
-            } else if (api.keys.isCancel(event) && page.learning) {
+            if (api.keys.isCancel(event) && page.learning) {
                 event.accepted = true;
                 Sound.play("back");
                 page.controller.cancelLearn();
@@ -708,8 +729,55 @@ FocusScope {
         Label {
             anchors.horizontalCenter: parent.horizontalCenter
             visible: page.walking
-            text: page.walking && page.step.index !== undefined ? "Step " + page.step.index + " of " + page.step.count + " · skipped in " + page.step.seconds + " s · " + (page.step.back ? "← back · " : "") + "B stops" : ""
+            text: page.walking && page.step.index !== undefined ? "Step " + page.step.index + " of " + page.step.count + " · skipped in " + page.step.seconds + " s" : ""
             color: Theme.textSecondary
+            font.pixelSize: Theme.dp(Theme.fontSmall)
+        }
+
+        // The pad is muted while it walks: the keyboard, a click or a tap answer.
+        Column {
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: Theme.dp(4)
+            visible: page.walking
+
+            Repeater {
+                model: [
+                    {
+                        label: "Previous button (←)",
+                        action: "Left"
+                    },
+                    {
+                        label: "Keep and finish (Enter)",
+                        action: "Accept"
+                    },
+                    {
+                        label: "Cancel, undo all (Esc)",
+                        action: "Cancel"
+                    }
+                ]
+
+                Label {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    visible: modelData.action !== "Left" || page.step.back === true
+                    text: modelData.label
+                    font.pixelSize: Theme.dp(Theme.fontSmall)
+
+                    Touch {
+                        direct: true
+                        action: modelData.action
+                    }
+                }
+            }
+        }
+
+        Label {
+            anchors.horizontalCenter: parent.horizontalCenter
+            width: parent.width
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.WordWrap
+            visible: page.controller.connected && !page.learning && page.unknownCode !== ""
+            text: page.unknownCode + " is not one of the pad's buttons yet: learn it from a row"
+            color: Theme.accent
             font.pixelSize: Theme.dp(Theme.fontSmall)
         }
 
@@ -717,7 +785,7 @@ FocusScope {
             anchors.horizontalCenter: parent.horizontalCenter
             width: parent.width
             horizontalAlignment: Text.AlignHCenter
-            visible: page.controller.connected && !page.learning && page.controller.unboundSlots.length > 0
+            visible: page.controller.connected && !page.learning && page.unknownCode === "" && page.controller.unboundSlots.length > 0
             text: "Dashed buttons have no code on this connection: learn them"
             color: Theme.textMuted
             wrapMode: Text.WordWrap
@@ -729,13 +797,15 @@ FocusScope {
         id: tester
 
         anchors.fill: panel
-        focus: page.testing
+        focus: page.testing || page.walking
 
         Keys.onPressed: function (event) {
             event.accepted = true;
             if (event.isAutoRepeat)
                 return;
-            if (api.keys.isCancel(event)) {
+            if (page.walking) {
+                page.walkKey(event);
+            } else if (api.keys.isCancel(event)) {
                 Sound.play("back");
                 page.controller.setTesting(false);
             }

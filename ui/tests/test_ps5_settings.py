@@ -145,7 +145,47 @@ def test_the_walk_starts_from_the_offer(ps5, api):
     assert page is not None and page.property("walking") is True and screen.walking
     assert value(page, "hints") == [], "the walk's own line says what to press"
     click(window, Qt.Key.Key_Escape)
-    assert not screen.walking, "B stops the walk"
+    assert not screen.walking, "Esc stops the walk"
+    assert warnings == []
+
+
+def test_enter_keeps_what_the_walk_set_up_and_escape_undoes_it(ps5, api):
+    window, root, warnings = ps5
+    screen = api.screens.controller
+    screen.restart_ms = 0
+    messages = []
+    screen.message.connect(messages.append)
+    watcher = FakeWatcher("8bitdo-pro-3")
+    screen.start(watcher)
+    pump(200)
+    click(window, Qt.Key.Key_Return)
+    pump(300)
+    page = root.property("topPage")
+    assert screen.walking and focused_row(page) is None, "the pad is muted: the keys answer the walk, not the rows"
+    watcher.emit({"event": "learned", "family": "8bitdo-pro-3", "slot": "south", "code": "BTN_EAST", "from": None})
+    click(window, Qt.Key.Key_Return)
+    assert not screen.walking and messages[-1] == "8BitDo Pro 3: 1 set up, the rest as they were"
+    assert focused_row(page)["key"] == "walk", "back on the row it started from"
+    click(window, Qt.Key.Key_Return)
+    assert screen.walking
+    click(window, Qt.Key.Key_Escape)
+    assert not screen.walking and messages[-1] == "Setup canceled, nothing changed"
+    assert focused_row(page)["key"] == "walk"
+    assert warnings == []
+
+
+def test_an_unknown_button_is_named_on_the_page(ps5, api):
+    window, root, warnings = ps5
+    screen = api.screens.controller
+    screen.restart_ms = 0
+    watcher = FakeWatcher("dualsense-edge")
+    screen.start(watcher)
+    pump(200)
+    page = push(window, root, "pages/ControllersPage.qml", {})
+    watcher.emit({"event": "unknown", "id": screen.current, "code": "BTN_TRIGGER_HAPPY1"})
+    pump(50)
+    shown = [t.property("text") for t in page.findChildren(QQuickItem) if t.inherits("QQuickText") and t.property("visible")]
+    assert "BTN_TRIGGER_HAPPY1 is not one of the pad's buttons yet: learn it from a row" in shown
     assert warnings == []
 
 

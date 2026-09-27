@@ -11,8 +11,6 @@ var SENTENCES = {
     "journal.language": "The language the entries are written in.",
     "journal.provider": "The model provider that writes the entries.",
     "journal.model": "The model asked for the entry.",
-    "journal.markdown_export": "Also render each entry as a Markdown note.",
-    "journal.journal_root": "Where the Markdown notes go.",
     "gog.games_dir": "Where GOG installs games; empty, the library's games folder.",
     "gog.scan_dirs": "Folders scanned for GOG installs, comma-separated; empty, the install folder.",
     "gog.platform": "The depot gogdl downloads: Windows builds run through Proton.",
