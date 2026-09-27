@@ -1,0 +1,53 @@
+name: Bug report
+description: Something in Universe doesn't work as it should
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you did, what you expected, and what Universe did instead. Name the game and its runner if it's about a launch.
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How you installed it
+      options:
+        - AUR (universe)
+        - AUR (universe-bin)
+        - AUR (universe-git)
+        - install.sh
+        - Nix flake
+        - Other
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The output of `universe --version`.
+      placeholder: universe 0.0.6 (030024d)
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Distro and desktop
+      placeholder: Arch, KDE Plasma 6.4 on Wayland, Steam Deck in Game Mode...
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: universe doctor
+      description: The output of `universe doctor`. It checks the setup and usually points at the cause.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Session log
+      description: For a game that won't start or quits early, `universe logs <game>` prints what its last session wrote.
+      render: text
