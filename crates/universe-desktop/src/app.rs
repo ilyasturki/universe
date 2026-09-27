@@ -30,6 +30,8 @@ pub struct Unlocks {
     known: std::collections::HashSet<String>,
 }
 
+const BIG_SCREEN: &str = "universe-ui";
+
 /// A delete held back while its toast offers Undo: what runs once the toast goes.
 pub type Commit = Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = ()>>>>;
 
@@ -57,6 +59,8 @@ mod imp {
         /// Deletes waiting on their Undo, by what they delete.
         pub deferred: RefCell<Vec<(String, Commit)>>,
         pub unlocks: RefCell<Unlocks>,
+        /// Universe Big Screen, while the one started from here runs.
+        pub big_screen: RefCell<Option<gio::Subprocess>>,
     }
 
     impl std::fmt::Debug for Application {
@@ -169,6 +173,7 @@ impl Application {
         }
         self.imp().current.replace(Some(current.clone()));
         self.emit_by_name::<()>("session-changed", &[]);
+        self.sync_big_screen();
         let since = chrono::DateTime::parse_from_rfc3339(&current.started_at).map(|t| t.timestamp()).unwrap_or(0);
         self.imp().unlocks.replace(Unlocks { game: current.id.clone(), title: current.title.clone(), since, known: Default::default() });
         self.look_for_unlocks();
@@ -238,6 +243,7 @@ impl Application {
         self.imp().current.replace(None);
         self.imp().unlocks.replace(Unlocks::default());
         self.emit_by_name::<()>("session-changed", &[]);
+        self.sync_big_screen();
         let length = crate::format::duration(ended.duration_s);
         let failure = match ended.end.as_str() {
             "crashed" => Some(gettext("{} crashed after {}")),
@@ -708,6 +714,34 @@ impl Application {
             })
             .build();
         self.add_action_entries([quit, about, preferences, preferences_page, entry]);
+        if glib::find_program_in_path(BIG_SCREEN).is_some() {
+            self.add_action_entries([gio::ActionEntry::builder("big-screen").activate(|app: &Self, _, _| app.big_screen()).build()]);
+        }
+    }
+
+    /// Universe Big Screen, the couch launcher, over the desktop; the window stays open under it.
+    fn big_screen(&self) {
+        let Some(program) = glib::find_program_in_path(BIG_SCREEN) else { return };
+        match gio::Subprocess::newv(&[program.as_os_str()], gio::SubprocessFlags::NONE) {
+            Ok(child) => {
+                self.imp().big_screen.replace(Some(child.clone()));
+                self.sync_big_screen();
+                let app = self.downgrade();
+                child.wait_async(gio::Cancellable::NONE, move |_| {
+                    let Some(app) = app.upgrade() else { return };
+                    app.imp().big_screen.replace(None);
+                    app.sync_big_screen();
+                });
+            }
+            Err(e) => self.say(&e.to_string()),
+        }
+    }
+
+    /// One Big Screen at a time, and none over a game.
+    fn sync_big_screen(&self) {
+        if let Some(action) = self.lookup_action("big-screen").and_downcast::<gio::SimpleAction>() {
+            action.set_enabled(self.current().is_none() && self.imp().big_screen.borrow().is_none());
+        }
     }
 
     fn setup_accels(&self) {

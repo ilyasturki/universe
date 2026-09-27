@@ -153,6 +153,14 @@ menu main_menu {
   }
 
   section {
+    item {
+      label: _("Open _Big Screen");
+      action: "app.big-screen";
+      hidden-when: "action-missing";
+    }
+  }
+
+  section {
     item (_("_Preferences"), "app.preferences")
     item (_("_Keyboard Shortcuts"), "app.shortcuts")
     item (_("_About Universe Desktop"), "app.about")
