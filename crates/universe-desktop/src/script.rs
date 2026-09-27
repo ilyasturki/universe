@@ -56,7 +56,8 @@ pub async fn run(window: gtk::Window, steps: Vec<Step>) {
     window.application().inspect(|app| app.quit());
 }
 
-/// Runs the action from the first widget that reaches it: a page's own group (`store.`) sits below the window.
+/// Runs the action from the first widget on screen that reaches it: a page's own group (`store.`, a grid's `list.`) sits
+/// below the window.
 fn activate(root: &gtk::Widget, name: &str, target: Option<&glib::Variant>) -> bool {
     let mut widgets = vec![root.clone()];
     while let Some(widget) = widgets.pop() {
@@ -66,7 +67,9 @@ fn activate(root: &gtk::Widget, name: &str, target: Option<&glib::Variant>) -> b
         let mut child = widget.last_child();
         while let Some(c) = child {
             child = c.prev_sibling();
-            widgets.push(c);
+            if c.is_mapped() {
+                widgets.push(c);
+            }
         }
     }
     false

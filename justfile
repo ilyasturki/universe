@@ -84,12 +84,14 @@ desktop *args: build env
     @{{ nix }} target/debug/universe-desktop {{ args }}
 
 # The desktop app in a headless compositor, nothing on screen: the steps run, then it quits. just desktop-shot DIR [steps…]: size:WxH wait:MS action:win.sort::a-z shot:NAME.png, each shot under DIR (default: one shot once loaded)
+[positional-arguments]
 desktop-shot dir *steps: build env
     #!/usr/bin/env -S nix develop --quiet --command bash
     set -euo pipefail
     mkdir -p "{{ dir }}"
     script=""
-    for step in {{ steps }}; do
+    shift
+    for step in "$@"; do
         case "$step" in
             shot:/*) script="$script $step" ;;
             shot:*) script="$script shot:{{ dir }}/${step#shot:}" ;;
@@ -102,7 +104,8 @@ desktop-shot dir *steps: build env
     compositor=$!
     trap 'kill $compositor 2>/dev/null' EXIT
     for _ in $(seq 50); do [ -S "$XDG_RUNTIME_DIR/$socket" ] && break; sleep 0.1; done
-    WAYLAND_DISPLAY="$socket" GDK_BACKEND=wayland UNIVERSE_DESKTOP_SCRIPT="$script" target/debug/universe-desktop
+    # A shot draws the window's render node, which an offloaded video (a subsurface) is not part of.
+    WAYLAND_DISPLAY="$socket" GDK_BACKEND=wayland GDK_DISABLE=offload,dmabuf UNIVERSE_DESKTOP_SCRIPT="$script" target/debug/universe-desktop
 
 # Follow the units of games, hooks and session ends
 logs:
