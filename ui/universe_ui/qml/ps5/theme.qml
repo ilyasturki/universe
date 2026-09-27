@@ -540,13 +540,47 @@ FocusScope {
         }
         function onChanged() {
             var shown = api.home.shown;
-            if (shown === "launcher" && root.lastShown === "game")
-                api.home.takeLanding();
+            if (shown === "game" && root.lastShown !== "game")
+                home.blank();
+            else if (shown === "launcher" && root.lastShown === "game")
+                root.landHome();
             root.lastShown = shown;
         }
     }
 
     property string lastShown: api.home.shown
+
+    // Back from a game: no frame bridges the swap, so the home builds itself up from black, as the console's.
+    function landHome() {
+        var landing = api.home.takeLanding();
+        stack.clear();
+        home.rebuild();
+        Qt.callLater(focusTop);
+        openLanding(landing);
+    }
+
+    // What the dock asked for over the game: its details, trophies, captures, journal or log.
+    function openLanding(landing) {
+        var id = playingId;
+        if (landing === "" || id === "")
+            return;
+        if (landing === "details") {
+            home.focusGame(id);
+            home.down();
+            return;
+        }
+        var page = {
+            achievements: "AchievementsPage",
+            journal: "NewsPage",
+            recordings: "MediaGalleryPage",
+            screenshots: "MediaGalleryPage",
+            sessions: "PlayLogPage"
+        }[landing];
+        if (page)
+            push("pages/" + page + ".qml", {
+                gameId: id
+            });
+    }
 
     Keys.onPressed: function (event) {
         if (root.modal) {
