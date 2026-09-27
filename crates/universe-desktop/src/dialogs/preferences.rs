@@ -76,7 +76,7 @@ fn chevron() -> gtk::Image {
     gtk::Image::from_icon_name("go-next-symbolic")
 }
 
-/// `page`: `launch`, `runners`, `stores`, `modules`, `controller` or `artwork`; empty for the first.
+/// `page`: `launch`, `runners`, `stores`, `modules`, `controller`, `artwork` or `doctor`; empty for the first.
 pub fn present(win: &Window, page: &str) {
     let dialog = adw::PreferencesDialog::builder().search_enabled(true).content_height(720).build();
     let connector = win.connector();
@@ -106,6 +106,10 @@ pub fn present(win: &Window, page: &str) {
     let artwork = ListPage::new("artwork", &gettext("Artwork"), "image-x-generic-symbolic");
     dialog.add(&artwork.page);
     load_artwork(&artwork, win);
+
+    let doctor = ListPage::new("doctor", &gettext("Doctor"), "emblem-ok-symbolic");
+    dialog.add(&doctor.page);
+    load_doctor(&dialog, &doctor);
     let (weak_page, weak_win) = (Rc::downgrade(&artwork), win.downgrade());
     let job = win.app().connect_local("job-changed", false, move |_| {
         if let (Some(page), Some(win)) = (weak_page.upgrade(), weak_win.upgrade()) {
@@ -116,7 +120,7 @@ pub fn present(win: &Window, page: &str) {
 
     let (app, job) = (win.app().downgrade(), RefCell::new(Some(job)));
     dialog.connect_closed(move |_| {
-        let _ = (&launch, &runners, &stores, &modules, &controller, &artwork);
+        let _ = (&launch, &runners, &stores, &modules, &controller, &artwork, &doctor);
         if let (Some(app), Some(job)) = (app.upgrade(), job.take()) {
             app.disconnect(job);
         }
@@ -154,7 +158,7 @@ fn load_runners(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, win: &Wind
             let id = text(&runner, "id");
             let count = usage.get(&id).map(|u| u.0).unwrap_or(0);
             let platforms = list(&runner, "platforms").iter().map(|p| crate::library::platform_name(p)).collect::<Vec<_>>().join(", ");
-            let row = adw::ActionRow::builder().title(text(&runner, "name")).subtitle(platforms).use_markup(false).activatable(true).build();
+            let row = crate::rows::plain(adw::ActionRow::builder().activatable(true).build(), text(&runner, "name"), platforms);
             if count > 0 {
                 row.add_suffix(
                     &gtk::Label::builder()
@@ -197,7 +201,7 @@ fn open_runner(dialog: &adw::PreferencesDialog, runner: &Value, games: &[(String
         let mut games = games.to_vec();
         games.sort_by_key(|(_, title, _)| crate::library::fold(title));
         for (id, title, hours) in games {
-            let row = adw::ActionRow::builder().title(title).subtitle(crate::format::played(hours)).use_markup(false).activatable(true).build();
+            let row = crate::rows::plain(adw::ActionRow::builder().activatable(true).build(), title, crate::format::played(hours));
             row.add_suffix(&chevron());
             let (dialog_ref, win) = (dialog.downgrade(), win.downgrade());
             row.connect_activated(move |_| {
@@ -224,7 +228,7 @@ fn load_stores(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, connector: 
         let group = page.group("", &gettext("Where your games come from: sign in to list them and install them from Store"));
         for source in sources {
             let id = text(&source, "id");
-            let row = adw::ActionRow::builder().title(text(&source, "name")).subtitle(signin::status(&source)).use_markup(false).activatable(true).build();
+            let row = crate::rows::plain(adw::ActionRow::builder().activatable(true).build(), text(&source, "name"), signin::status(&source));
             let switch = gtk::Switch::builder().valign(gtk::Align::Center).active(source["enabled"].as_bool() == Some(true)).build();
             switch.set_sensitive(source["available"].as_bool() != Some(false) || switch.is_active());
             let (weak_dialog, weak_page, sid, conn) = (dialog.downgrade(), Rc::downgrade(&page), id.clone(), connector.clone());
@@ -298,13 +302,7 @@ fn load_modules(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, connector:
         for module in modules {
             let id = text(&module, "id");
             let enabled = module["enabled"].as_bool() == Some(true);
-            let row = adw::ActionRow::builder()
-                .title(text(&module, "name"))
-                .subtitle(module_status(&module))
-                .subtitle_lines(2)
-                .use_markup(false)
-                .activatable(true)
-                .build();
+            let row = crate::rows::plain(adw::ActionRow::builder().subtitle_lines(2).activatable(true).build(), text(&module, "name"), module_status(&module));
             let switch = gtk::Switch::builder().valign(gtk::Align::Center).active(enabled).build();
             switch.set_sensitive(module["available"].as_bool() != Some(false) || enabled);
             let (weak_dialog, weak_page, mid, conn) = (dialog.downgrade(), Rc::downgrade(&page), id.clone(), connector.clone());
@@ -394,12 +392,7 @@ fn load_artwork(page: &Rc<ListPage>, win: &Window) {
         if !missing.is_empty() {
             let games = page.group(&gettext("Missing Art"), "");
             for (id, title, gaps) in missing {
-                let row = adw::ActionRow::builder()
-                    .title(title)
-                    .subtitle(gettext("No {}").replace("{}", &gaps.join(", ")))
-                    .use_markup(false)
-                    .activatable(true)
-                    .build();
+                let row = crate::rows::plain(adw::ActionRow::builder().activatable(true).build(), title, gettext("No {}").replace("{}", &gaps.join(", ")));
                 row.add_suffix(&chevron());
                 let weak = win.downgrade();
                 row.connect_activated(move |_| {
@@ -417,7 +410,7 @@ fn load_artwork(page: &Rc<ListPage>, win: &Window) {
 
 /// The running art fetch: how far along, and a way to stop it after the game in hand.
 fn job_row(job: &Job) -> adw::ActionRow {
-    let row = adw::ActionRow::builder().title(job.label()).use_markup(false).build();
+    let row = crate::rows::plain(adw::ActionRow::builder().build(), job.label(), "");
     let bar = gtk::ProgressBar::builder().valign(gtk::Align::Center).width_request(120).build();
     let stop = gtk::Button::builder().label(gettext("_Stop")).use_underline(true).valign(gtk::Align::Center).build();
     row.add_suffix(&bar);
@@ -467,4 +460,134 @@ fn confirm_fetch_all(win: &Window) {
         }
     });
     dialog.present(Some(win));
+}
+
+/// What Universe needs from this machine, the checks that fail first with what to do about them.
+fn load_doctor(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>) {
+    page.loading();
+    let (dialog, page) = (dialog.downgrade(), page.clone());
+    glib::spawn_future_local(async move {
+        let (checks, names, gnome) = backend::pinned(|core| async move {
+            let mut names: HashMap<String, String> = HashMap::new();
+            for entry in core.modules().await.into_iter().chain(core.sources().await) {
+                names.insert(text(&entry, "id"), text(&entry, "name"));
+            }
+            (core.doctor().await, names, core.desktop().await == universe::desktop::Profile::Gnome)
+        })
+        .await;
+        let Some(dialog) = dialog.upgrade() else { return };
+        page.clear();
+        let area = |module: &str| match module {
+            "" | "core" => gettext("Core"),
+            "runners" => gettext("Runners"),
+            "media" => gettext("Media"),
+            "controller" => gettext("Controller"),
+            other => names.get(other).cloned().unwrap_or_else(|| other.to_string()),
+        };
+        let failing: Vec<&universe::doctor::Check> = checks.iter().filter(|c| !c.ok).collect();
+        let top = page.group(
+            "",
+            &if failing.is_empty() {
+                gettext("Every check passes")
+            } else {
+                ngettext("{} of {} checks fails", "{} of {} checks fail", failing.len() as u32).replacen("{}", &failing.len().to_string(), 1).replacen(
+                    "{}",
+                    &checks.len().to_string(),
+                    1,
+                )
+            },
+        );
+        let again = adw::ButtonRow::builder().title(gettext("Check Again")).start_icon_name("view-refresh-symbolic").build();
+        let (weak_dialog, weak_page) = (dialog.downgrade(), Rc::downgrade(&page));
+        again.connect_activated(move |_| {
+            if let (Some(dialog), Some(page)) = (weak_dialog.upgrade(), weak_page.upgrade()) {
+                load_doctor(&dialog, &page);
+            }
+        });
+        top.add(&again);
+        if gnome {
+            if let Some(check) = checks.iter().find(|c| c.check == "universe-extension") {
+                let group = page.group(&gettext("System Setup"), &gettext("The GNOME Shell extension finds, focuses and captures game windows"));
+                let row = crate::rows::plain(adw::ActionRow::builder().build(), check.label.clone(), check.detail.clone());
+                row.add_prefix(&gtk::Image::from_icon_name(if check.ok { "object-select-symbolic" } else { "dialog-warning-symbolic" }));
+                if !check.ok && (check.detail.starts_with("not installed") || check.detail.contains("not enabled")) {
+                    let install = gtk::Button::builder()
+                        .label(gettext("_Set Up"))
+                        .use_underline(true)
+                        .valign(gtk::Align::Center)
+                        .css_classes(["suggested-action"])
+                        .build();
+                    let (weak_dialog, weak_page) = (dialog.downgrade(), Rc::downgrade(&page));
+                    install.connect_clicked(move |button| {
+                        button.set_sensitive(false);
+                        let (weak_dialog, weak_page) = (weak_dialog.clone(), weak_page.clone());
+                        glib::spawn_future_local(async move {
+                            let result = backend::run(async {
+                                use universe::desktop::gnome::{self, ExtensionCopy};
+                                let copied = match gnome::install_extension() {
+                                    Ok(ExtensionCopy::Written(_)) => gettext("Installed"),
+                                    Ok(ExtensionCopy::Current) => gettext("Up to date"),
+                                    Ok(ExtensionCopy::System) => gettext("Provided by the system"),
+                                    Err(e) => return Err(e.to_string()),
+                                };
+                                gnome::enable_extension().await.map(|_| copied)
+                            })
+                            .await;
+                            let (Some(dialog), Some(page)) = (weak_dialog.upgrade(), weak_page.upgrade()) else { return };
+                            let line = match result {
+                                Ok(copied) => gettext("{}: the extension loads at the next login").replace("{}", &copied),
+                                Err(e) => e,
+                            };
+                            dialog.add_toast(crate::dialogs::toast(&line));
+                            load_doctor(&dialog, &page);
+                        });
+                    });
+                    row.add_suffix(&install);
+                }
+                group.add(&row);
+            }
+        }
+        if !failing.is_empty() {
+            let group = page.group(&gettext("Needs Attention"), "");
+            for check in &failing {
+                let row = crate::rows::plain_expander(
+                    adw::ExpanderRow::builder().build(),
+                    check.label.clone(),
+                    format!("{} · {}", area(&check.module), check.detail),
+                );
+                let icon = gtk::Image::from_icon_name("dialog-warning-symbolic");
+                icon.add_css_class("warning");
+                row.add_prefix(&icon);
+                if !check.fix.is_empty() {
+                    let fix = crate::rows::plain(adw::ActionRow::builder().subtitle_selectable(true).build(), gettext("What to do"), &check.fix);
+                    row.add_row(&fix);
+                }
+                group.add(&row);
+            }
+        }
+        let mut areas: Vec<String> = Vec::new();
+        for check in &checks {
+            let name = area(&check.module);
+            if !areas.contains(&name) {
+                areas.push(name);
+            }
+        }
+        let core = gettext("Core");
+        areas.sort_by_key(|name| *name != core);
+        for name in areas {
+            let passing: Vec<&universe::doctor::Check> = checks.iter().filter(|c| c.ok && area(&c.module) == name).collect();
+            if passing.is_empty() {
+                continue;
+            }
+            let total = checks.iter().filter(|c| area(&c.module) == name).count();
+            let group = page.group(&name, &gettext("{} of {} pass").replacen("{}", &passing.len().to_string(), 1).replacen("{}", &total.to_string(), 1));
+            for check in passing {
+                let row = crate::rows::plain(adw::ActionRow::builder().build(), check.label.clone(), check.detail.clone());
+                let icon = gtk::Image::from_icon_name("object-select-symbolic");
+                icon.add_css_class("success");
+                row.add_prefix(&icon);
+                group.add(&row);
+            }
+        }
+    });
 }
