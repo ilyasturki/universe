@@ -838,7 +838,9 @@ game's `launch.mangohud` flipped and the HUD told (see MangoHud) — and the wat
 outcome as a `hud` event, which the launcher toasts: "MangoHud shown · <title>", "MangoHud hidden ·
 <title>", "MangoHud: no game running".
 
-Families: `dualsense-edge` (fn_left, fn_right, paddle_left, paddle_right), `dualsense`,
+Families: `steam-deck` (grip_l4, grip_l5, grip_r4, grip_r5, quick, pad_left, pad_right: hid-steam's
+`BTN_GRIPL`, `BTN_GRIPL2`, `BTN_GRIPR`, `BTN_GRIPR2`, `BTN_BASE`, `BTN_THUMB`, `BTN_THUMB2`; its
+analog triggers on `ABS_HAT2Y` and `ABS_HAT2X`), `dualsense-edge` (fn_left, fn_right, paddle_left, paddle_right), `dualsense`,
 `dualshock4`, `xbox-elite` (paddle_p1…p4), `xbox` (share), `switch-pro` (capture), `8bitdo-pro-3`
 (paddle_l4, paddle_r4, paddle_pl, paddle_pr, star), `generic`; every family has the standard slots
 `south east north west lb rb lt rt select start guide ls rs dpad_up dpad_down dpad_left dpad_right`.
@@ -846,6 +848,12 @@ A slot's codes are candidates: on every connect the first one the pad advertises
 wins, so the Edge's paddles (`BTN_TRIGGER_HAPPY1…4`, kernel ≥ 7.2) and the Elite's (`BTN_GRIP*` over
 xpadneo or xone, `BTN_TRIGGER_HAPPY5…8` on older drivers) resolve without a hardcoded number, and a
 slot with no code present is reported unbound.
+
+On a Deck (`deck_model()`, below) Steam Input's virtual pad, `28de:11ff`, is taken for the
+built-in controls: under Steam that is all the watcher sees of them. A frontend with no pad seen
+yet shows the Deck's glyphs there, since SDL's hidraw driver may also take the controls from
+hid-steam's evdev node. Without Steam and without InputPlumber, hid-steam starts the Deck in its
+mouse-and-keyboard mode, and holding Menu for about half a second switches it to a gamepad.
 
 `watch` reads every `/dev/input/event*` that advertises `BTN_GAMEPAD` **without grabbing it** (a
 game, SDL or Proton reads the same node untouched), rescans every 2 s (hotplug, and pads

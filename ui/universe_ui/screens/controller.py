@@ -200,7 +200,8 @@ class ControllerScreen(AdvancedRows, QObject):
         self._wanted = ""
         self.restart_ms = RESTART_MS
         self._restart_delay = RESTART_MS
-        self._last_family = str(memory.get("controllerFamily") or "xbox")
+        # A Deck's own controls may never reach the watcher: Steam hides them behind its virtual pad, SDL's hidraw driver takes them from hid-steam.
+        self._last_family = str(memory.get("controllerFamily") or ("steam-deck" if getattr(client, "deck", "") else "xbox"))
         self._walk = None
         self._walk_seconds = 0
         self._offered = set()

@@ -398,25 +398,32 @@ Item {
             font.pixelSize: Math.max(8, Math.round((button.spec.kind === "face" ? button.spec.r * 1.05 : button.spec.kind === "stick" ? button.spec.r * 0.42 : button.spec.kind === "paddle" ? button.spec.w * 0.42 : button.spec.kind === "trigger" ? 18 : button.spec.kind === "bumper" ? 16 : button.spec.kind === "arm" ? 10 : Math.min(button.spec.w, button.spec.h) * (button.glyph.text.length > 1 ? 0.62 : 0.8)) * art.k))
         }
 
-        // The numbers beside a stick or a trigger, outside its box on the side away from the pad's middle.
+        // The numbers beside a stick or a trigger, outside its box on the side away from the pad's middle; `readout: "below"` puts them under it.
         Column {
+            id: readout
+
             readonly property real gap: 24 * art.k - button.margin
+            readonly property bool below: button.spec.readout === "below"
 
             visible: art.readouts && (button.spec.kind === "stick" || button.spec.kind === "trigger")
-            anchors.left: button.leftSide ? undefined : parent.right
-            anchors.right: button.leftSide ? parent.left : undefined
+            anchors.left: below || button.leftSide ? undefined : parent.right
+            anchors.right: !below && button.leftSide ? parent.left : undefined
             anchors.leftMargin: gap
             anchors.rightMargin: gap
-            anchors.verticalCenter: parent.verticalCenter
+            anchors.verticalCenter: below ? undefined : parent.verticalCenter
             anchors.verticalCenterOffset: button.spec.kind === "trigger" ? (15 - button.box.h / 2) * art.k : 0
+            anchors.top: below ? parent.bottom : undefined
+            anchors.topMargin: 4 * art.k - button.margin
+            anchors.horizontalCenter: below ? parent.horizontalCenter : undefined
             spacing: 0
 
             Repeater {
                 model: button.spec.kind === "stick" ? ["x " + (button.leanX >= 0 ? "+" : "−") + Math.round(Math.abs(button.leanX) * 100) + " %", "y " + (button.leanY >= 0 ? "+" : "−") + Math.round(Math.abs(button.leanY) * 100) + " %"] : [Math.round(button.pull * 100) + " %"]
 
                 Text {
-                    anchors.left: button.leftSide ? undefined : parent.left
-                    anchors.right: button.leftSide ? parent.right : undefined
+                    anchors.horizontalCenter: readout.below ? parent.horizontalCenter : undefined
+                    anchors.left: readout.below || button.leftSide ? undefined : parent.left
+                    anchors.right: !readout.below && button.leftSide ? parent.right : undefined
                     text: modelData
                     color: Theme.text
                     font.family: Theme.sans

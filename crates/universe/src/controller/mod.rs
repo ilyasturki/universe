@@ -213,6 +213,7 @@ pub const STANDARD: [Slot; 17] = standard!("A", "B", "Y", "X", "LB", "RB", "LT",
 const SONY: [Slot; 17] = standard!("Cross", "Circle", "Triangle", "Square", "L1", "R1", "L2", "R2", "Create", "Options", "PS", "L3", "R3");
 const SONY_DS4: [Slot; 17] = standard!("Cross", "Circle", "Triangle", "Square", "L1", "R1", "L2", "R2", "Share", "Options", "PS", "L3", "R3");
 const XBOX: [Slot; 17] = standard!("A", "B", "Y", "X", "LB", "RB", "LT", "RT", "View", "Menu", "Xbox", "LS", "RS");
+const DECK: [Slot; 17] = standard!("A", "B", "Y", "X", "L1", "R1", "L2", "R2", "View", "Menu", "Steam", "L3", "R3");
 const SWITCH: [Slot; 17] = standard!("B", "A", "X", "Y", "L", "R", "ZL", "ZR", "Minus", "Plus", "Home", "LS", "RS");
 // In D-input mode the Pro 3 reports its lettered buttons by their letters, Xbox-fashion: the A on the right is BTN_SOUTH, the B at the bottom BTN_EAST.
 const EIGHTBITDO: [Slot; 17] = standard!("B", "A", "X", "Y", "L1", "R1", "L2", "R2", "Select", "Start", "Home", "L3", "R3"; &["BTN_EAST"], &["BTN_SOUTH"]);
@@ -233,7 +234,24 @@ impl Family {
     }
 }
 
-const FAMILIES: [Family; 8] = [
+const FAMILIES: [Family; 9] = [
+    // hid-steam's own device. Steam Input's virtual pad counts only on Deck hardware: `detect_family_on`.
+    Family {
+        id: "steam-deck",
+        name: "Steam Deck",
+        standard: &DECK,
+        extras: &[
+            extra("grip_l4", "L4", &["BTN_GRIPL"]),
+            extra("grip_l5", "L5", &["BTN_GRIPL2"]),
+            extra("grip_r4", "R4", &["BTN_GRIPR"]),
+            extra("grip_r5", "R5", &["BTN_GRIPR2"]),
+            extra("quick", "Quick access", &["BTN_BASE"]),
+            extra("pad_left", "Left trackpad", &["BTN_THUMB"]),
+            extra("pad_right", "Right trackpad", &["BTN_THUMB2"]),
+        ],
+        ids: &[(0x28de, 0x1205)],
+        name_hints: &["steam deck"],
+    },
     Family {
         id: "dualsense-edge",
         name: "DualSense Edge",
@@ -311,6 +329,17 @@ pub fn family_by_id(id: &str) -> Option<&'static Family> {
     FAMILIES.iter().find(|s| s.id == id)
 }
 
+/// Steam Input's virtual pad: one per physical pad, whatever that pad is.
+pub const STEAM_VIRTUAL: (u16, u16) = (0x28de, 0x11ff);
+
+/// On a Deck, Steam's virtual pad is taken for the built-in controls; an external pad routed through Steam reads as one too.
+pub fn detect_family_on(deck: bool, vendor: u16, product: u16, name: &str, keys: &[u16]) -> &'static Family {
+    if deck && (vendor, product) == STEAM_VIRTUAL {
+        return family_by_id("steam-deck").unwrap();
+    }
+    detect_family(vendor, product, name, keys)
+}
+
 /// xpadneo presents an Elite as a plain "Xbox Wireless Controller" 045e:028e: grip or paddle codes make it an Elite whatever it says.
 pub fn detect_family(vendor: u16, product: u16, name: &str, keys: &[u16]) -> &'static Family {
     let lname = name.to_lowercase();
@@ -345,12 +374,12 @@ pub const AXIS_ROLES: [&str; 6] = ["lx", "ly", "rx", "ry", "lt", "rt"];
 
 /// What each absolute axis of a pad stands for (role, runs backwards): what was learned for the family, else read off the
 /// pad's shape — a right stick on RX/RY leaves Z/RZ to the triggers (xpad, hid-playstation); without one, Z/RZ are the
-/// right stick and BRAKE/GAS the triggers (Android-style HID, a D-input 8BitDo).
+/// right stick and BRAKE/GAS the triggers (Android-style HID, a D-input 8BitDo); HAT2Y/HAT2X are the Deck's (hid-steam).
 pub fn axis_roles(config: &ControllerConfig, family: &Family, axes: &[u16]) -> BTreeMap<u16, (&'static str, bool)> {
     let mut out = BTreeMap::new();
     let has = |c: u16| axes.contains(&c);
     let stick_right = has(3) || has(4);
-    let guess: [(u16, &'static str); 8] = [
+    let guess: [(u16, &'static str); 10] = [
         (0, "lx"),
         (1, "ly"),
         (3, "rx"),
@@ -359,6 +388,8 @@ pub fn axis_roles(config: &ControllerConfig, family: &Family, axes: &[u16]) -> B
         (5, if stick_right { "rt" } else { "ry" }),
         (10, "lt"),
         (9, "rt"),
+        (21, "lt"),
+        (20, "rt"),
     ];
     for (code, role) in guess {
         if has(code) && !out.values().any(|(r, _)| *r == role) {
@@ -536,6 +567,21 @@ mod tests {
         assert_eq!(detect_family(0x2dc8, 0x6009, "8BitDo Pro 3", &[]).id, "8bitdo-pro-3");
         assert_eq!(detect_family(0x1234, 0x0001, "Some Pad", &[]).id, "generic");
         assert_eq!(detect_family(0x054c, 0x0df2, "DualSense Edge Wireless Controller", &[]).slots().filter(|s| s.extra).count(), 4);
+    }
+
+    #[test]
+    fn a_deck_is_known_by_hid_steam_and_by_steam_inputs_pad_on_valve_hardware() {
+        let deck = detect_family(0x28de, 0x1205, "Steam Deck", &[]);
+        assert_eq!(deck.id, "steam-deck");
+        let codes: Vec<&str> = deck.slots().filter(|s| s.extra).map(|s| s.codes[0]).collect();
+        assert_eq!(codes, ["BTN_GRIPL", "BTN_GRIPL2", "BTN_GRIPR", "BTN_GRIPR2", "BTN_BASE", "BTN_THUMB", "BTN_THUMB2"]);
+        assert_eq!(detect_family_on(true, 0x28de, 0x11ff, "Microsoft X-Box 360 pad 0", &[]).id, "steam-deck");
+        assert_eq!(detect_family_on(false, 0x28de, 0x11ff, "Microsoft X-Box 360 pad 0", &[]).id, "xbox", "a desktop's Steam Input pad");
+        assert_eq!(detect_family_on(true, 0x054c, 0x0ce6, "DualSense Wireless Controller", &[]).id, "dualsense", "a pad Steam leaves alone");
+        // ABS_X ABS_Y ABS_RX ABS_RY, the pads on HAT0/HAT1, the triggers on HAT2Y (left) and HAT2X (right)
+        let roles = axis_roles(&ControllerConfig::default(), deck, &[0, 1, 3, 4, 16, 17, 18, 19, 20, 21]);
+        assert_eq!((roles[&21].0, roles[&20].0), ("lt", "rt"));
+        assert!(!roles.contains_key(&16), "a trackpad is no stick");
     }
 
     // The Pro 3 over Bluetooth in D-input mode, as captured: keys 0x130..0x13f and eight TRIGGER_HAPPY, axes X Y Z RZ GAS BRAKE and a hat.
@@ -728,7 +774,7 @@ mod tests {
     #[test]
     fn state_lists_families_macros_and_presets() {
         let v = state_json(&ControllerConfig::default());
-        assert_eq!(v["families"].as_array().unwrap().len(), 8);
+        assert_eq!(v["families"].as_array().unwrap().len(), 9);
         assert_eq!(v["presets"].as_array().unwrap().len(), 8);
         let edge = v["families"].as_array().unwrap().iter().find(|f| f["id"] == "dualsense-edge").unwrap();
         let slots = edge["slots"].as_array().unwrap();

@@ -13,7 +13,7 @@ use tokio::sync::{mpsc, Mutex};
 
 use super::engine::{Binding, Engine, Fire};
 use super::keys::{self, Source};
-use super::{axis_roles, detect_family, resolve_slots, sdl_axis, sdl_element, ControllerConfig, Family};
+use super::{axis_roles, detect_family, detect_family_on, resolve_slots, sdl_axis, sdl_element, ControllerConfig, Family};
 use crate::core::Core;
 use crate::paths;
 
@@ -382,7 +382,7 @@ fn describe(dev: &Device) -> Caps {
     let name = dev.name().unwrap_or("").to_string();
     let id = dev.input_id();
     let keys: Vec<u16> = dev.supported_keys().map(|k| k.iter().map(|c| c.code()).collect()).unwrap_or_default();
-    let family = detect_family(id.vendor(), id.product(), &name, &keys);
+    let family = detect_family_on(crate::deck::model().is_some(), id.vendor(), id.product(), &name, &keys);
     let axes: Vec<u16> = dev.supported_absolute_axes().map(|a| a.iter().map(|c| c.0).collect()).unwrap_or_default();
     let ranges = dev.get_absinfo().map(|it| it.map(|(c, i)| (c.0, (i.minimum(), i.maximum()))).collect()).unwrap_or_default();
     Caps { name, family, vendor: id.vendor(), product: id.product(), keys, axes, ranges }

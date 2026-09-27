@@ -3,6 +3,7 @@ pub mod cli;
 pub mod config;
 pub mod controller;
 pub mod core;
+pub mod deck;
 pub mod desktop;
 pub mod discover;
 pub mod distro;

@@ -616,6 +616,36 @@
     ],
     "families": [
       {
+        "id": "steam-deck",
+        "name": "Steam Deck",
+        "slots": [
+          {"id": "south", "label": "A", "codes": ["BTN_SOUTH"], "extra": false},
+          {"id": "east", "label": "B", "codes": ["BTN_EAST"], "extra": false},
+          {"id": "north", "label": "Y", "codes": ["BTN_NORTH"], "extra": false},
+          {"id": "west", "label": "X", "codes": ["BTN_WEST"], "extra": false},
+          {"id": "lb", "label": "L1", "codes": ["BTN_TL"], "extra": false},
+          {"id": "rb", "label": "R1", "codes": ["BTN_TR"], "extra": false},
+          {"id": "lt", "label": "L2", "codes": ["BTN_TL2"], "extra": false},
+          {"id": "rt", "label": "R2", "codes": ["BTN_TR2"], "extra": false},
+          {"id": "select", "label": "View", "codes": ["BTN_SELECT"], "extra": false},
+          {"id": "start", "label": "Menu", "codes": ["BTN_START"], "extra": false},
+          {"id": "guide", "label": "Steam", "codes": ["BTN_MODE"], "extra": false},
+          {"id": "ls", "label": "L3", "codes": ["BTN_THUMBL"], "extra": false},
+          {"id": "rs", "label": "R3", "codes": ["BTN_THUMBR"], "extra": false},
+          {"id": "dpad_up", "label": "D-pad up", "codes": ["BTN_DPAD_UP"], "extra": false},
+          {"id": "dpad_down", "label": "D-pad down", "codes": ["BTN_DPAD_DOWN"], "extra": false},
+          {"id": "dpad_left", "label": "D-pad left", "codes": ["BTN_DPAD_LEFT"], "extra": false},
+          {"id": "dpad_right", "label": "D-pad right", "codes": ["BTN_DPAD_RIGHT"], "extra": false},
+          {"id": "grip_l4", "label": "L4", "codes": ["BTN_GRIPL"], "extra": true},
+          {"id": "grip_l5", "label": "L5", "codes": ["BTN_GRIPL2"], "extra": true},
+          {"id": "grip_r4", "label": "R4", "codes": ["BTN_GRIPR"], "extra": true},
+          {"id": "grip_r5", "label": "R5", "codes": ["BTN_GRIPR2"], "extra": true},
+          {"id": "quick", "label": "Quick access", "codes": ["BTN_BASE"], "extra": true},
+          {"id": "pad_left", "label": "Left trackpad", "codes": ["BTN_THUMB"], "extra": true},
+          {"id": "pad_right", "label": "Right trackpad", "codes": ["BTN_THUMB2"], "extra": true}
+        ]
+      },
+      {
         "id": "dualsense-edge",
         "name": "DualSense Edge",
         "slots": [

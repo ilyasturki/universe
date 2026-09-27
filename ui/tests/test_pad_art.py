@@ -6,7 +6,7 @@ from PySide6.QtQuick import QQuickItem  # noqa: F401  (down-casts created object
 from conftest import pump
 from universe_ui import host
 
-FAMILIES = ["dualsense-edge", "dualsense", "dualshock4", "xbox-elite", "xbox", "switch-pro", "8bitdo-pro-3", "generic"]
+FAMILIES = ["steam-deck", "dualsense-edge", "dualsense", "dualshock4", "xbox-elite", "xbox", "switch-pro", "8bitdo-pro-3", "generic"]
 
 
 @pytest.fixture

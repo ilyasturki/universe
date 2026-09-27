@@ -3,7 +3,7 @@
 var STYLE = {
     "dualsense-edge": "sony", "dualsense": "sony", "dualshock4": "sony",
     "xbox": "xbox", "xbox-elite": "xbox", "generic": "xbox",
-    "switch-pro": "nintendo", "8bitdo-pro-3": "eightbitdo"
+    "switch-pro": "nintendo", "8bitdo-pro-3": "eightbitdo", "steam-deck": "deck"
 };
 
 // slot → [text, symbol]
@@ -19,14 +19,19 @@ var FACE = {
                 guide: ["", "home"], ls: ["LS"], rs: ["RS"] },
     eightbitdo: { south: ["B"], east: ["A"], north: ["X"], west: ["Y"],
                   lb: ["L1"], rb: ["R1"], lt: ["L2"], rt: ["R2"], select: ["", "minus"], start: ["", "plus"],
-                  guide: ["", "home"], ls: ["L3"], rs: ["R3"] }
+                  guide: ["", "home"], ls: ["L3"], rs: ["R3"] },
+    deck: { south: ["A"], east: ["B"], north: ["Y"], west: ["X"],
+            lb: ["L1"], rb: ["R1"], lt: ["L2"], rt: ["R2"], select: ["", "view"], start: ["", "menu"],
+            guide: ["", "steam"], ls: ["L3"], rs: ["R3"] }
 };
 
 var EXTRA = {
     fn_left: ["Fn"], fn_right: ["Fn"], paddle_left: ["LB"], paddle_right: ["RB"],
     paddle_p1: ["P1"], paddle_p2: ["P2"], paddle_p3: ["P3"], paddle_p4: ["P4"],
     paddle_l4: ["L4"], paddle_r4: ["R4"], paddle_pl: ["PL"], paddle_pr: ["PR"],
-    share: ["", "share"], capture: ["", "capture"], mute: ["", "mic"], star: ["", "star"]
+    share: ["", "share"], capture: ["", "capture"], mute: ["", "mic"], star: ["", "star"],
+    grip_l4: ["L4"], grip_l5: ["L5"], grip_r4: ["R4"], grip_r5: ["R5"], quick: ["", "more"],
+    pad_left: ["", "pad"], pad_right: ["", "pad"]
 };
 
 function style(family) { return STYLE[family] || "xbox"; }
@@ -40,11 +45,13 @@ function shape(slot) {
         return "trigger";
     if (slot === "ls" || slot === "rs")
         return "stick";
-    if (slot === "select" || slot === "start" || slot === "share" || slot === "capture" || slot === "mute" || slot === "star")
+    if (slot === "select" || slot === "start" || slot === "share" || slot === "capture" || slot === "mute" || slot === "star" || slot === "quick")
         return "small";
+    if (slot.indexOf("pad_") === 0)
+        return "circle";
     if (slot.indexOf("fn_") === 0)
         return "tab";
-    if (slot.indexOf("paddle_") === 0)
+    if (slot.indexOf("paddle_") === 0 || slot.indexOf("grip_") === 0)
         return "paddle";
     return "circle";
 }
