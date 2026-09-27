@@ -819,7 +819,7 @@ pub(crate) mod tests {
         assert!(core.hook_modules(&core.get("sample").await.unwrap(), "pre-launch").await.is_empty(), "a manual game runs no source's hooks");
 
         g.source.kind = "store".into();
-        g.source.gog_id = "77".into();
+        g.source.id = "77".into();
         g.sources.insert("store".into(), toml::from_str("extras = false").unwrap());
         g.save().unwrap();
         core.reload_game("sample").await.unwrap();

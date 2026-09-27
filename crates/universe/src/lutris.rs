@@ -330,7 +330,7 @@ pub fn convert(p: &PgaGame, lutris_dir: &Path, runners_dir: &Path, global_env: &
         if let Some(m) = read_gog_manifest(&exe_dir) {
             if p.service == "gog" && (p.service_id.is_empty() || p.service_id == m.game_id) {
                 g.source.kind = "gog".into();
-                g.source.gog_id = m.game_id.clone();
+                g.source.id = m.game_id.clone();
                 g.source.build_id = m.build_id.clone();
             } else {
                 parked.insert("gog_manifest".into(), toml::Value::String(m.game_id.clone()));
@@ -519,7 +519,7 @@ mod tests {
         let g = imp.game;
         assert_eq!(g.id, "the-technomancer");
         assert_eq!(g.source.kind, "gog");
-        assert_eq!(g.source.gog_id, "1972906591");
+        assert_eq!(g.source.id, "1972906591");
         assert_eq!(g.source.build_id, "52654527801265271");
         assert_eq!(g.launch.proton, "proton-ge");
         assert_eq!(g.launch.esync, Some(false));

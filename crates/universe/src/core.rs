@@ -45,6 +45,21 @@ pub fn title_of(path: &Path) -> String {
     words.join(" ").trim_end_matches(['-', ' ']).trim().to_string()
 }
 
+/// Added by hand or imported from Lutris: a store that finds it installed takes it over.
+fn unclaimed(g: &Game) -> bool {
+    matches!(g.source.kind.as_str(), "manual" | "lutris" | "")
+}
+
+fn free_id(slug: &str, source: &str, sid: &str, taken: &[String]) -> String {
+    let free = |id: &str| !taken.iter().any(|t| t == id) && !paths::game_dir(id).join("game.toml").exists();
+    let slug = if slug.is_empty() { crate::slug::slug(&format!("{source} {sid}")) } else { slug.to_string() };
+    if free(&slug) {
+        return slug;
+    }
+    let base = format!("{slug}-{source}");
+    std::iter::once(base.clone()).chain((2..).map(|n| format!("{base}-{n}"))).find(|id| free(id)).unwrap_or(base)
+}
+
 /// What the hooks, `ExecStopPost` and the game need of the launcher's environment.
 pub(crate) fn passthrough_env() -> BTreeMap<String, String> {
     let mut env = BTreeMap::new();
@@ -370,7 +385,8 @@ impl Core {
                 tracing::warn!("trash {} failed; left in place", logs.display());
             }
             let prefix = crate::launcher::prefix_of(&r.game, &config);
-            if prefix.is_dir() && trash(&prefix).is_err() {
+            // Only a prefix under prefixes_root is Universe's: a store's (Steam's compatdata) or an imported one stays.
+            if prefix.starts_with(config.prefixes_root()) && prefix.is_dir() && trash(&prefix).is_err() {
                 tracing::warn!("trash {} failed; left in place", prefix.display());
             }
         }
@@ -449,7 +465,7 @@ impl Core {
             Hooker::Module(m) => env.set("MODULE_SETTINGS_JSON", serde_json::Value::Object(m.merged_settings(cfg, game)).to_string()),
             Hooker::Source(s) => {
                 env.set("SOURCE_SETTINGS_JSON", serde_json::Value::Object(s.merged_settings(cfg, game)).to_string());
-                env.set("SOURCE_GAME_ID", game.map(|g| g.source.gog_id.clone()).unwrap_or_default());
+                env.set("SOURCE_GAME_ID", game.map(|g| g.source.id.clone()).unwrap_or_default());
             }
         }
         env
@@ -1584,7 +1600,7 @@ impl Core {
             .into_iter()
             .map(|mut g| {
                 let gid = g.get("id").and_then(|v| v.as_str()).unwrap_or("").to_string();
-                if let Some(local) = games.iter().find(|x| x.game.source.gog_id == gid && !gid.is_empty()) {
+                if let Some(local) = games.iter().find(|x| x.game.source.kind == source && x.game.source.id == gid && !gid.is_empty()) {
                     g.insert("installed".into(), serde_json::Value::Bool(local.game.is_installed()));
                     g.insert("game_id".into(), serde_json::Value::String(local.game.id.clone()));
                     g.insert("build".into(), serde_json::Value::String(local.game.source.build_id.clone()));
@@ -1671,19 +1687,34 @@ impl Core {
             return Ok(None);
         }
         let cfg = self.config.read().await.clone();
-        let existing = {
+        let claim = installed && owned == Some(true);
+        let arriving = create && claim;
+        let (existing, taken) = {
             let games = self.games.read().await;
-            games.iter().find(|x| x.game.source.gog_id == sid).or_else(|| games.iter().find(|x| x.game.id == crate::slug::slug(&title))).map(|x| x.game.clone())
+            let slug = crate::slug::slug(&title);
+            let ours = |g: &Game| g.source.kind == source || unclaimed(g);
+            let existing = games
+                .iter()
+                .find(|x| x.game.source.id == sid && ours(&x.game))
+                .or_else(|| games.iter().find(|x| x.game.id == slug && x.game.source.id.is_empty() && ours(&x.game)))
+                .map(|x| x.game.clone());
+            let taken = if existing.is_none() && arriving { games.iter().map(|x| x.game.id.clone()).collect() } else { Vec::new() };
+            (existing, taken)
         };
-        let arriving = create && installed && owned == Some(true);
         let mut game = match existing {
-            Some(g) => g,
+            Some(g) if g.source.kind == source || claim => g,
+            Some(_) => return Ok(None),
             None => {
                 if !arriving {
                     return Ok(None);
                 }
                 let mut ng = Game::new(&title);
-                ng.launch.prefix = cfg.prefixes_root().join(&ng.id).to_string_lossy().into();
+                ng.id = free_id(&ng.id, source, &sid, &taken);
+                let (prefix, proton) = (field("prefix"), field("proton"));
+                ng.launch.prefix = if Path::new(&prefix).is_absolute() { prefix } else { cfg.prefixes_root().join(&ng.id).to_string_lossy().into() };
+                if Path::new(&proton).is_absolute() {
+                    ng.launch.proton = proton;
+                }
                 ng
             }
         };
@@ -1697,11 +1728,22 @@ impl Core {
         if !build.is_empty() {
             game.source.build_id = build;
         }
-        if game.source.gog_id.is_empty() {
-            game.source.gog_id = sid.clone();
-        }
-        if owned == Some(true) && installed {
+        if claim {
             game.source.kind = source.into();
+        }
+        game.source.id = sid;
+        // umu-run's GAMEID and STORE pick the game's protonfixes.
+        for (key, value) in [(&mut game.launch.umu_id, field("umu_id")), (&mut game.launch.store, field("store"))] {
+            if key.is_empty() {
+                *key = value;
+            }
+        }
+        if let Some(spec) = crate::runners::spec(&field("runner")).filter(|_| game.launch.runner.is_empty()) {
+            game.launch.runner = spec.id.into();
+            game.platform = spec.default_platform().into();
+            if matches!(spec.kind, crate::runners::Kind::Linux | crate::runners::Kind::Emulator) {
+                game.launch.arch.clear();
+            }
         }
         if let Some(y) = g.get("release_year").and_then(|v| v.as_u64()) {
             if game.release_year == 0 {
@@ -1720,20 +1762,27 @@ impl Core {
         Ok(Some(game.id))
     }
 
+    pub async fn active_source_ids(&self) -> Vec<String> {
+        self.sources.read().await.iter().filter(|m| m.active()).map(|m| m.id().to_string()).collect()
+    }
+
     /// Scans the installed games of one source (all active ones when empty); returns how many entered the library.
     pub async fn source_scan(&self, source: &str, mut progress: Option<Progress<'_, '_>>) -> Result<usize> {
-        let ids: Vec<String> = if source.is_empty() {
-            self.sources.read().await.iter().filter(|m| m.active()).map(|m| m.id().to_string()).collect()
-        } else {
-            vec![self.source(source).await?.id().to_string()]
-        };
+        let ids: Vec<String> = if source.is_empty() { self.active_source_ids().await } else { vec![self.source(source).await?.id().to_string()] };
         let mut found = 0;
         for sid in ids {
             let m = self.source(&sid).await?;
             if let Err(e) = self.fetch_source_library(&m, false).await {
                 tracing::warn!("{sid}: library unavailable, scanning without ownership: {e}");
             }
-            let events = self.run_verb(&m, "scan", &[], progress.as_deref_mut()).await?;
+            let events = match self.run_verb(&m, "scan", &[], progress.as_deref_mut()).await {
+                Ok(events) => events,
+                Err(e) if source.is_empty() => {
+                    tracing::warn!("{sid}: scan failed: {e}");
+                    continue;
+                }
+                Err(e) => return Err(e),
+            };
             for g in Self::game_events(&events) {
                 if let Ok(Some(_)) = self.apply_source_game(&sid, &g, true, false).await {
                     found += 1;
@@ -1760,8 +1809,15 @@ impl Core {
     pub async fn source_updates(&self) -> Result<Vec<serde_json::Value>> {
         let mut out = Vec::new();
         let sources: Vec<Source> = self.sources.read().await.iter().filter(|m| m.active()).cloned().collect();
-        for m in sources {
-            let events = self.run_verb(&m, "update", &[], None).await?;
+        let listed = futures_util::future::join_all(sources.iter().map(|m| self.run_verb(m, "update", &[], None))).await;
+        for (m, listed) in sources.iter().zip(listed) {
+            let events = match listed {
+                Ok(events) => events,
+                Err(e) => {
+                    tracing::warn!("{}: no updates listed: {e}", m.id());
+                    continue;
+                }
+            };
             for e in events {
                 if let SourceEvent::Update(mut u) = e {
                     u.insert("source".into(), serde_json::Value::String(m.id().into()));
@@ -1803,14 +1859,14 @@ impl Core {
             return Ok(c.to_json());
         }
         let capable = self.sources.read().await.iter().any(|s| s.id() == r.game.source.kind && s.can("achievements"));
-        if !capable || r.game.source.gog_id.is_empty() {
+        if !capable || r.game.source.id.is_empty() {
             return match cached {
                 Some(c) if !refresh => Ok(c.to_json()),
                 _ => Err(Error::Unavailable(format!("{}: no source lists its achievements", r.game.title))),
             };
         }
         let m = self.source(&r.game.source.kind).await?;
-        let events = self.run_verb(&m, "achievements", std::slice::from_ref(&r.game.source.gog_id), None).await?;
+        let events = self.run_verb(&m, "achievements", std::slice::from_ref(&r.game.source.id), None).await?;
         let items = events
             .into_iter()
             .filter_map(|e| if let SourceEvent::Achievement(a) = e { serde_json::from_value::<Achievement>(serde_json::Value::Object(a)).ok() } else { None })

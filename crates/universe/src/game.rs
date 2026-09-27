@@ -36,7 +36,9 @@ pub struct Game {
 #[serde(default)]
 pub struct Source {
     pub kind: String,
-    pub gog_id: String,
+    /// The store's own id of the game, in the store `kind` names.
+    #[serde(alias = "gog_id")]
+    pub id: String,
     pub dir: String,
     pub build_id: String,
     pub dlcs: Vec<String>,
@@ -137,7 +139,7 @@ impl Default for Game {
 
 impl Default for Source {
     fn default() -> Self {
-        Source { kind: "manual".into(), gog_id: String::new(), dir: String::new(), build_id: String::new(), dlcs: vec![], lutris_slug: String::new() }
+        Source { kind: "manual".into(), id: String::new(), dir: String::new(), build_id: String::new(), dlcs: vec![], lutris_slug: String::new() }
     }
 }
 
@@ -329,9 +331,10 @@ pub fn set_dotted(doc: &mut toml_edit::DocumentMut, key: &str, value: &str) -> c
     let is_system = parts[0] == "system";
     // A build is a version, which `2606` or `2.8` would otherwise turn into a number.
     let is_build = key == "launch.runner_build" || (parts.len() == 3 && parts[0] == "runners" && last == "build");
+    let is_store_id = matches!(key, "source.id" | "source.build_id");
     let v = if is_list && !value.starts_with('[') {
         parse_value(&format!("[{value}]"))
-    } else if is_rate || is_text_map || is_system || is_build {
+    } else if is_rate || is_text_map || is_system || is_build || is_store_id {
         value.into()
     } else {
         parse_value(value)
@@ -348,6 +351,13 @@ pub fn set_key(game_toml: &Path, key: &str, value: &str) -> crate::Result<Game> 
         ["title", "sort_title", "platform", "release_year", "hidden", "favorite", "tags", "source", "launch", "desktop", "metadata", "modules", "sources"];
     if !allowed.contains(&top) {
         return Err(crate::Error::Invalid(format!("unknown key {key}")));
+    }
+    // A game.toml from before the rename holds `gog_id`: next to `id` it would no longer parse.
+    let key = if key == "source.gog_id" { "source.id" } else { key };
+    if key == "source.id" {
+        if let Some(source) = doc.get_mut("source").and_then(|s| s.as_table_like_mut()) {
+            source.remove("gog_id");
+        }
     }
     set_dotted(&mut doc, key, value)?;
     let g: Game = toml::from_str(&doc.to_string())?;
@@ -432,6 +442,7 @@ configpath = "the-technomancer-1780794348"
             "a map's entry is text whatever it looks like"
         );
         assert_eq!(g.launch.mangohud, None);
+        assert_eq!(g.source.id, "1972906591", "`gog_id` reads as the store's id");
         assert!(doc.to_string().contains("gog_id = \"1972906591\""));
         set_dotted(&mut doc, "runners.dolphin.args", "--config Dolphin.Display.Fullscreen=True").unwrap();
         assert_eq!(doc["runners"]["dolphin"]["args"].as_str(), Some("--config Dolphin.Display.Fullscreen=True"));
@@ -440,6 +451,12 @@ configpath = "the-technomancer-1780794348"
         std::fs::write(&p, "title = \"F-Zero GX\"\n\n[launch]\nrunner = \"dolphin\"\n\n[launch.options]\nbatch = true\n").unwrap();
         set_key(&p, "launch.options.batch", "false").unwrap();
         assert_eq!(Game::load(&p).unwrap().launch.options["batch"].as_bool(), Some(false));
+
+        std::fs::write(&p, SAMPLE).unwrap();
+        assert_eq!(set_key(&p, "source.id", "42").unwrap().source.id, "42", "the old key goes, or both would clash");
+        assert_eq!(set_key(&p, "source.gog_id", "43").unwrap().source.id, "43");
+        let text = std::fs::read_to_string(&p).unwrap();
+        assert!(!text.contains("gog_id") && text.contains("id = \"43\""), "{text}");
     }
 
     #[test]

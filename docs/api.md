@@ -499,16 +499,27 @@ source unavailable, and `doctor` reports it as fetched on first use.
 | `source_cancel(source, game_id)` | `cancel(source, game_id)` | Ctrl-C | SIGTERMs the source process installing or updating `game_id`; it stops its downloader and keeps the files, so the next `install` resumes. False when nothing was running for it. The interrupted `install`/`update` call fails |
 | `source_install(source, game_id, progress)` | `install(source, game_id, progress)` | `universe install <id> [--source]` | id of the installed game |
 | `source_update(source, game_id, progress)` | `update(source, game_id, progress)` | `universe update [name] [-y]` | how many were updated; `game_id=""` updates everything pending |
-| `source_updates()` | `updates()` | `universe update` | `[{id, title, local_build, remote_build, version, date}]` |
+| `source_updates()` | `updates()` | `universe update` | `[{id, title, local_build, remote_build, version, date, source}]`, every enabled source's |
 | `source_scan(source, progress)` | `scan(source, progress)` | `universe scan [source]` | how many games entered the library; `source=""` scans all |
 
-`progress` is called `(done, total, message)` as the job runs.
+`progress` is called `(done, total, message)` as the job runs. The CLI's `[source]` and `--source`
+may be left out while a single source is enabled.
 
 `SourceGame` = `{"id": "1434554947", "title": "Mini Metro", "owned": true, "installed": true,
 "dir": "path|null", "build": "…|null", "remote_build": "…|null", "disk_size": bytes|null,
 "download_size": bytes|null, "partial_dir": "path|null", "partial_bytes": bytes|null}`. `disk_size` is what
 the install takes (measured) or would take (from `info`); `partial_*` name a download stopped by `cancel`
 that `install` resumes.
+
+A game a source reports installed and owned enters the library with `source.kind`, the source's
+id, and `source.id`, the store's id of the game (a `game.toml` written before this carried it as
+`gog_id`, which still reads). The next report finds it again by that pair, else by its title's
+slug among the games no store has claimed (`kind` `manual` or `lutris`), which the source takes over.
+A game another store holds keeps its entry: the same title from a second store is a second game,
+`<slug>-<source>`. The report's `umu_id`, `store` and `runner` fill `launch.umu_id`, `launch.store` and
+`launch.runner` while they are empty (see Proton and Wine). A game entering the library takes the
+report's `prefix`, an absolute path, as `launch.prefix` instead of `<prefixes_root>/<id>`, and its
+`proton`, one too, as `launch.proton`; a game already there keeps its own.
 
 A source's `Setting` is a module's, `scope: global` unless the manifest says `game`: a game-scope key
 holds for the games the source installed or found, each of which can set its own. A module
@@ -1355,7 +1366,7 @@ label = "Depot platform"
 `<exe> <verb> [args]` runs in the source's directory with `SOURCE_SETTINGS_JSON`, `SOURCE_DIR`,
 `SOURCE_DATA_DIR` and `UNIVERSE_BIN` in the environment (a `choices_exec` gets the same). A source's
 hooks run as a module's do — the same environment, with `SOURCE_SETTINGS_JSON` (merged with the
-game's own keys), `SOURCE_DIR`, `SOURCE_DATA_DIR` and `SOURCE_GAME_ID` (the store's id of the game)
+game's own keys), `SOURCE_DIR`, `SOURCE_DATA_DIR` and `SOURCE_GAME_ID` (`source.id`, the store's id of the game)
 in place of the `MODULE_*` names — for the games whose `source.kind` is the source's id, after the
 modules' hooks of the same name; a source's `session-end` timeout counts in the game unit's stop
 budget.
@@ -1385,7 +1396,19 @@ One JSON object per line on stdout, human-readable logs on stderr, meaningful ex
 {"event":"done"}
 ```
 
-`exe` is relative to `dir`. `owned` may be `null` when the source cannot tell. The core writes `library.json` (the last `library` run's games) in the source's data dir after every listing; a source reads it for ownership and writes nothing there itself.
+`exe` is relative to `dir`. `owned` may be `null` when the source cannot tell. A `game` may carry
+`umu_id` (the game's umu-database id, `umu-<n>`) and `store` (umu's name for the store: `gog`, `egs`,
+`itchio`…), which pick its protonfixes, and `runner` (`linux` for a native build), which sets
+`launch.runner` and the platform while the game has no runner of its own; without one the game runs
+through Proton. A `game` may also carry `prefix` and `proton`, the absolute paths of the prefix the
+store keeps for it and of the Proton the store runs it with, which a game entering the library takes
+as its own. The core writes `library.json` (the last `library` run's games) in the source's data dir after every listing; a source reads it for ownership and writes nothing there itself.
+
+Any verb may emit `{"event":"window","class":"steam","title":"Install"}` before it waits on the
+user in another program's window: the one whose `WM_CLASS` class is `class`, titled `title`, else
+that program's newest (titles follow its language; an empty `title` means the newest). Inside the
+launcher's gamescope the core keeps that window the one shown among the program's windows, their
+`STEAM_GAME` at 0, until the verb ends (see Gamescope); elsewhere the event changes nothing.
 
 ---
 

@@ -73,17 +73,17 @@ pub enum Cmd {
     /// Search a source's catalogue
     Search {
         query: String,
-        /// Source id
-        #[arg(long, default_value = "gog")]
-        source: String,
+        /// Source id; the one enabled when omitted
+        #[arg(long)]
+        source: Option<String>,
     },
     /// Install a title from a source
     Install {
         /// Id in the source's catalogue
         id: String,
-        /// Source id
-        #[arg(long, default_value = "gog")]
-        source: String,
+        /// Source id; the one enabled when omitted
+        #[arg(long)]
+        source: Option<String>,
     },
     /// Pending updates, or update one game
     Update {
@@ -227,9 +227,8 @@ pub enum Cmd {
     },
     /// Owned titles of a source
     Library {
-        /// Source id
-        #[arg(default_value = "gog")]
-        source: String,
+        /// Source id; the one enabled when omitted
+        source: Option<String>,
         /// Fetch again instead of reading the cache
         #[arg(long)]
         refresh: bool,
@@ -943,7 +942,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 return print_json(&g);
             }
             println!("{}  {}", s(&g, "title").bold(), s(&g, "id").dimmed());
-            println!("  source     {} {}  build {}", s(&g["source"], "kind"), s(&g["source"], "gog_id"), s(&g["source"], "build_id"));
+            println!("  source     {} {}  build {}", s(&g["source"], "kind"), s(&g["source"], "id"), s(&g["source"], "build_id"));
             println!(
                 "  runner     {} ({}) · {}",
                 s(&g["effective"], "runner"),
@@ -980,6 +979,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             println!("  journal    {} entries · recordings {}", g["journal_count"], g["recording_count"]);
         }
         Cmd::Search { query, source } => {
+            let source = enabled_source(&core, source).await?;
             let list = core.source_search(&source, &query).await?;
             if json {
                 return print_json(&list);
@@ -991,6 +991,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             println!("{t}");
         }
         Cmd::Install { id, source } => {
+            let source = enabled_source(&core, source).await?;
             if !json {
                 println!("installing {id} from {source}");
             }
@@ -1001,7 +1002,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             Some(n) => {
                 let id = pick(&core, &n).await?;
                 let g = core.get(&id).await?.to_json();
-                let gid = s(&g["source"], "gog_id");
+                let gid = s(&g["source"], "id");
                 if gid.is_empty() {
                     anyhow::bail!("{id} has no source id");
                 }
@@ -1387,6 +1388,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             report(json, true, &user);
         }
         Cmd::Library { source, refresh } => {
+            let source = enabled_source(&core, source).await?;
             let list = core.source_library(&source, refresh).await?;
             if json {
                 return print_json(&list);
@@ -1417,10 +1419,12 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             let n = core.source_scan(source.as_deref().unwrap_or(""), Some(&mut p)).await?;
             report(json, true, &format!("{n} game(s)"));
             if !json {
-                let mut t = table(&["Title", "Source", "Id", "Build"]);
+                let active = core.active_source_ids().await;
+                let mut t = table(&["Title", "Source", "Store id", "Id", "Build"]);
                 for g in core.list().await {
-                    if s(&g["source"], "kind") == source.clone().unwrap_or_else(|| "gog".into()) {
-                        t.add_row(vec![s(&g, "title"), s(&g["source"], "gog_id"), s(&g, "id"), s(&g["source"], "build_id")]);
+                    let kind = s(&g["source"], "kind");
+                    if source.as_ref().map_or(active.contains(&kind), |src| *src == kind) {
+                        t.add_row(vec![s(&g, "title"), kind, s(&g["source"], "id"), s(&g, "id"), s(&g["source"], "build_id")]);
                     }
                 }
                 println!("{t}");
@@ -2160,6 +2164,18 @@ fn fmt_duration(secs: u64) -> String {
         format!("{m}m")
     } else {
         format!("{secs}s")
+    }
+}
+
+async fn enabled_source(core: &Core, source: Option<String>) -> anyhow::Result<String> {
+    if let Some(s) = source {
+        return Ok(s);
+    }
+    let active = core.active_source_ids().await;
+    match active.as_slice() {
+        [only] => Ok(only.clone()),
+        [] => anyhow::bail!("no source is enabled (universe source enable <id>)"),
+        _ => anyhow::bail!("{} are enabled: name the source", active.join(", ")),
     }
 }
 

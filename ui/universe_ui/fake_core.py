@@ -1240,7 +1240,7 @@ class FakeCore:
             game = {
                 "id": ident,
                 "title": entry["title"],
-                "source": {"kind": source, "gog_id": entry["id"], "dir": entry["dir"]},
+                "source": {"kind": source, "id": entry["id"], "dir": entry["dir"]},
                 "favorite": False,
                 "hidden": False,
                 "platform": "PC",

@@ -80,7 +80,7 @@ impl Row {
             } else {
                 universe::paths::expand(&g.source.dir).to_string_lossy().into_owned()
             },
-            store_id: g.source.gog_id.clone(),
+            store_id: g.source.id.clone(),
             has_prefix: !r.effective.prefix.is_empty() && std::path::Path::new(&r.effective.prefix).is_dir(),
             has_install: !g.source.dir.is_empty() && universe::paths::expand(&g.source.dir).is_dir(),
         }

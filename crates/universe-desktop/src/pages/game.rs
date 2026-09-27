@@ -305,7 +305,7 @@ impl GamePage {
                 let r = core.get(&id).await?;
                 let shots = core.screenshots(&id).await.map(|s| s.len()).unwrap_or(0);
                 let listed =
-                    !r.game.source.gog_id.is_empty()
+                    !r.game.source.id.is_empty()
                         && core.sources().await.iter().any(|s| {
                             s["id"] == r.game.source.kind.as_str() && s["capabilities"].as_array().is_some_and(|c| c.iter().any(|c| c == "achievements"))
                         });
