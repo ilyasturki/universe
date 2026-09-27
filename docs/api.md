@@ -807,9 +807,12 @@ Wii's Classic Controller): `positional` (A on the right, as on a Switch and as t
 by themselves) or `xbox` (A at the bottom), per game over a global default; GameCube keeps
 Dolphin's own preset and N64 mupen64plus's (A bottom, B left). A game's own input profile keeps its
 scheme and only follows the held pad (Dolphin `PadProfileN`/`WiimoteProfileN`, Cemu
-`gameProfiles` `controllerN`, RPCS3's other and per-title configs). Everything else in a file is
-left as it is; a file is written only when it changes, through a symlink to its target, and the
-first write copies it to `<file>.before-universe`. A file the emulator makes on its first start is
+`gameProfiles` `controllerN`, RPCS3's other and per-title configs). Dolphin reads every port after
+a game's profiled one from that profile's file, so each held port past it gets
+`Profiles/<GCPad|Wiimote>/universe-player-N.ini`, a copy of its section as written, named in the
+game's `[Controls]`. Everything else in a file is left as it is; a file is written only when it
+changes, through a symlink to its target, and the first write copies it to
+`<file>.before-universe`. A file the emulator makes on its first start is
 never created, the hook logging "start X once" instead; mupen64plus, snes9x and ScummVM files are
 written whole, missing or not.
 

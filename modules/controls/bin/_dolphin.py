@@ -17,6 +17,7 @@ SDL_HINTS = {
 }
 FACE_NAME = {SOUTH: "`Button S`", EAST: "`Button E`", WEST: "`Button W`", NORTH: "`Button N`"}
 CALIBRATION = "100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42"
+OWN_PROFILE = "universe-player-{}"
 # A setting's value is a number or a flag; anything else is a binding expression the module replaces.
 SETTING = re.compile(r"^(-?[0-9.]+( -?[0-9.]+)*|True|False)$")
 
@@ -143,20 +144,36 @@ def _section(text, name, device, keys, defaults):
     return ini_rewrite(text, name, lines, drop=set(existing) - set(values))
 
 
-def _profiles(config, games, pads, device_names):
+def _own_profile(section):
+    return "".join(["[Profile]\n", *(f"{k} = {v}\n" for k, v in section.items() if k != "Source")])
+
+
+def _profiles(config, games, pads, device_names, sections):
     out = {}
     for game in sorted(games.glob("*.ini")) if games.is_dir() else ():
-        controls = ini_section(_read(game), "Controls")
+        text = _read(game)
+        controls = ini_section(text, "Controls")
+        added = {}
         for kind, folder in (("PadProfile", "GCPad"), ("WiimoteProfile", "Wiimote")):
-            for n in range(1, PORTS + 1):
+            profiled = [n for n in range(1, PORTS + 1) if controls.get(f"{kind}{n}")]
+            for n in range(1, min(len(pads), PORTS) + 1):
                 name = controls.get(f"{kind}{n}")
-                if not name or n > len(pads):
+                # Dolphin's InputConfig::LoadConfig reads every port after a profiled one from that profile's file, so it gets no bindings.
+                if not name and profiled and n > profiled[0]:
+                    name = OWN_PROFILE.format(n)
+                    added[f"{kind}{n}"] = f"{kind}{n} = {name}"
+                if not name:
                     continue
                 path = config / "Profiles" / folder / f"{name}.ini"
-                text = out.get(path) or _read(path)
-                if not ini_section(text, "Profile").get("Device", "").startswith("SDL/"):
+                if name == OWN_PROFILE.format(n):
+                    out[path] = _own_profile(sections[folder][n])
                     continue
-                out[path] = ini_rewrite(text, "Profile", {"Device": f"Device = {device_names[n - 1]}"})
+                profile = out.get(path) or _read(path)
+                if not ini_section(profile, "Profile").get("Device", "").startswith("SDL/"):
+                    continue
+                out[path] = ini_rewrite(profile, "Profile", {"Device": f"Device = {device_names[n - 1]}"})
+        if added:
+            out[game] = ini_rewrite(text, "Controls", added)
     return out
 
 
@@ -184,5 +201,9 @@ def plan(ctx: Context):
             dolphin = ini_rewrite(dolphin, "Core", {f"SIDevice{n}": f"SIDevice{n} = {GC_CONTROLLER}"})
 
     out = {config / "GCPadNew.ini": gcpad, config / "WiimoteNew.ini": wiimotes, config / "Dolphin.ini": dolphin}
-    out.update(_profiles(config, games, pads, names))
+    sections = {
+        "GCPad": {n: ini_section(gcpad, f"GCPad{n}") for n in range(1, len(pads) + 1)},
+        "Wiimote": {n: ini_section(wiimotes, f"Wiimote{n}") for n in range(1, len(pads) + 1)},
+    }
+    out.update(_profiles(config, games, pads, names, sections))
     return out

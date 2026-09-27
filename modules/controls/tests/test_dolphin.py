@@ -130,6 +130,43 @@ def test_a_games_own_profile_keeps_its_scheme_on_the_held_pad(dolphin):
     assert config / "Profiles" / "GCPad" / "pad.ini" not in files
 
 
+def test_ports_after_a_games_profile_get_a_profile_of_their_own(dolphin):
+    config, games = dolphin
+    (games / "GM4P01.ini").write_text("[Controls]\nPadType0 = 6\nPadProfile1 = pad\n\n[Core]\nGameCubeLanguage = 2\n")
+    (games / "RMCP01.ini").write_text("[Controls]\nWiimoteProfile2 = wheel\n")
+    (config / "Profiles" / "GCPad").mkdir(parents=True)
+    (config / "Profiles" / "GCPad" / "pad.ini").write_text("[Profile]\nDevice = SDL/0/DualSense Wireless Controller\n")
+    files = _dolphin.plan(Context([EDGE, XBOX, SWITCH_PRO]))
+    game = files[games / "GM4P01.ini"]
+    assert ini_section(game, "Controls") == {
+        "PadType0": "6",
+        "PadProfile1": "pad",
+        "PadProfile2": "universe-player-2",
+        "PadProfile3": "universe-player-3",
+    }
+    assert ini_section(game, "Core") == {"GameCubeLanguage": "2"}
+    own = ini_section(files[config / "Profiles" / "GCPad" / "universe-player-2.ini"], "Profile")
+    assert own == ini_section(files[config / "GCPadNew.ini"], "GCPad2")
+    assert own["Device"] == "SDL/0/Xbox Wireless Controller"
+    assert ini_section(files[games / "RMCP01.ini"], "Controls") == {"WiimoteProfile2": "wheel", "WiimoteProfile3": "universe-player-3"}
+    assert config / "Profiles" / "Wiimote" / "universe-player-2.ini" not in files
+
+    (games / "GM4P01.ini").write_text(game)
+    again = _dolphin.plan(Context([XBOX, EDGE]))
+    assert games / "GM4P01.ini" not in again
+    assert ini_section(again[config / "Profiles" / "GCPad" / "universe-player-2.ini"], "Profile")["Device"] == ("SDL/0/DualSense Edge Wireless Controller")
+
+
+def test_an_own_wiimote_profile_leaves_the_source_to_wiimotenew(dolphin):
+    config, games = dolphin
+    (games / "RMCP01.ini").write_text("[Controls]\nWiimoteProfile1 = wheel\n")
+    files = _dolphin.plan(Context([EDGE, XBOX], platform="Nintendo Wii"))
+    assert ini_section(files[games / "RMCP01.ini"], "Controls")["WiimoteProfile2"] == "universe-player-2"
+    own = ini_section(files[config / "Profiles" / "Wiimote" / "universe-player-2.ini"], "Profile")
+    assert own["Device"] == "SDL/0/Xbox Wireless Controller" and "Source" not in own
+    assert ini_section(files[config / "WiimoteNew.ini"], "Wiimote2")["Source"] == "1"
+
+
 def test_a_profile_on_a_keyboard_is_left_alone(dolphin):
     config, games = dolphin
     (games / "GFZP01.ini").write_text("[Controls]\nPadProfile1 = keys\n")
