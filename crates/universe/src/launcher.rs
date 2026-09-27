@@ -62,6 +62,9 @@ pub fn fps_limit_hz(e: &crate::library::Effective, screen: Option<crate::gamesco
 /// A pre-launch hook's line in `UNIVERSE_ENV_FILE`: flags for the game's gamescope, never the game's environment.
 pub const HOOK_GAMESCOPE_ARGS: &str = "UNIVERSE_GAMESCOPE_ARGS";
 
+/// A pre-launch hook's line in `UNIVERSE_ENV_FILE`: arguments for the game, ahead of `launch.args`.
+pub const HOOK_GAME_ARGS: &str = "UNIVERSE_GAME_ARGS";
+
 /// Some distros ship mangoapp apart from MangoHud (Debian's `mangoapp` package): without it gamescope gets no `--mangoapp` and the layer in the game draws the HUD.
 pub fn mangoapp_installed() -> bool {
     crate::runners::on_path("mangoapp").is_some()
@@ -234,6 +237,8 @@ pub fn plan(
     }
     let mut env = extra_env.clone();
     let hook_gamescope_args = env.remove(HOOK_GAMESCOPE_ARGS).unwrap_or_default();
+    let hook_args = env.remove(HOOK_GAME_ARGS).unwrap_or_default();
+    let hook_args = shell_words::split(&hook_args).map_err(|e| crate::Error::Invalid(format!("{}: {HOOK_GAME_ARGS}: {e}", g.id)))?;
     env.extend(config.launch.env.clone());
     let file = exe.to_string_lossy().to_string();
     let (program, mut args) = match spec.kind {
@@ -263,6 +268,7 @@ pub fn plan(
             }
         }
     };
+    args.extend(hook_args);
     args.extend(g.launch.args.iter().cloned());
     env.extend(g.launch.env.clone());
     let (program, args) = match Path::new(&program).starts_with(crate::components::root()).then(crate::components::fhs).flatten() {
@@ -517,6 +523,14 @@ mod tests {
         assert_eq!(p.program, "gamemoderun");
         assert_eq!(p.args, vec!["taskset", "-c", "0-7", "umu-run", &exe]);
         assert!(!p.env.contains_key("PROTON_ENABLE_WAYLAND"), "the field off beats the seed");
+
+        r.game.launch.args = vec!["-windowed".into()];
+        let hook = BTreeMap::from([(HOOK_GAME_ARGS.to_string(), "-AUTH_TYPE=exchangecode '-epicusername=A B'".to_string())]);
+        let p = plan(&r, &cfg, &hook, None, None, false, true).unwrap();
+        assert_eq!(p.args[5..], ["-AUTH_TYPE=exchangecode", "-epicusername=A B", "-windowed"], "the hook's arguments come first, then the game's own");
+        assert!(!p.env.contains_key(HOOK_GAME_ARGS), "never the game's environment");
+        let unclosed = BTreeMap::from([(HOOK_GAME_ARGS.to_string(), "'-open".to_string())]);
+        assert!(matches!(plan(&r, &cfg, &unclosed, None, None, false, true), Err(crate::Error::Invalid(_))));
         assert_eq!(p.env["PROTON_NO_NTSYNC"], "1");
         assert_eq!(p.env["PROTON_ENABLE_HDR"], "1");
         assert_eq!(p.env["PROTON_DLSS_UPGRADE"], "1");

@@ -1305,7 +1305,7 @@ label = "Writing model"
 | `SCREENSHOTS_DIR` | `games/<id>/screenshots`; `<state>/screenshots` for a `screenshot` with no session running | all |
 | `MODULE_SETTINGS_JSON` | global settings merged with the game's | all |
 | `JOURNAL_REWRITE` | `1` when `journal_write` asked for this session again; the hook replaces the entry instead of leaving it alone | `post-process` |
-| `UNIVERSE_ENV_FILE` | write `KEY=VALUE` lines here to add them to the game's environment, ahead of `launch.env`; the one key `UNIVERSE_GAMESCOPE_ARGS` is flags for the game's gamescope instead (see Gamescope) | `pre-launch` |
+| `UNIVERSE_ENV_FILE` | write `KEY=VALUE` lines here to add them to the game's environment, ahead of `launch.env`; two keys are not the environment: `UNIVERSE_GAMESCOPE_ARGS` is flags for the game's gamescope (see Gamescope), `UNIVERSE_GAME_ARGS` the game's own arguments, shell-quoted, ahead of `launch.args` (the session's recorded command line holds them) | `pre-launch` |
 | `MODULE_DIR`, `MODULE_DATA_DIR` | the module's directory, `$XDG_DATA_HOME/universe/modules/<id>` | all |
 | `UNIVERSE_BIN`, `UNIVERSE_{DATA,CONFIG,STATE}_HOME`, `UNIVERSE_{MODULES,SOURCES}_PATH`, `PATH` | the CLI to call back (`recording-file`, `journal-add`, `session-window`, `screen-mode`) and the environment that makes it open the same core | all |
 | `UNIVERSE_GAME_JSON` | the resolved `Game`, serialized | all |
