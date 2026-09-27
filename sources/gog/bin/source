@@ -768,8 +768,7 @@ def start_comet(settings, comet, username):
 
 def wine_command(game):
     effective, launch = game.get("effective") or {}, game.get("launch") or {}
-    prefix = effective.get("prefix") or ""
-    env = {**os.environ, "WINEPREFIX": prefix}
+    env = {"WINEPREFIX": effective.get("prefix") or ""}
     if effective.get("runner_kind") == "proton":
         env.update(
             PROTONPATH=effective.get("proton_path") or "",
@@ -786,11 +785,16 @@ def wine_command(game):
     return None, env
 
 
+# Under gamescope the hook inherits its CAP_SYS_NICE, which Proton's bwrap refuses: the user manager runs the step clean, as it does the game.
 def wine_step(program, env, *args):
+    setenv = [f"--setenv={k}={v}" for k, v in {"PATH": os.environ.get("PATH", ""), **env}.items()]
+    command = ["systemd-run", "--user", "--wait", "--pipe", "--quiet", "--collect", f"--property=RuntimeMaxSec={WINE_STEP_S}", *setenv, program, *args]
     try:
-        subprocess.run([program, *args], env=env, capture_output=True, check=True, timeout=WINE_STEP_S)
+        subprocess.run(command, capture_output=True, check=True, timeout=WINE_STEP_S + 2)
     except (OSError, subprocess.SubprocessError) as exc:
-        log(f"{args[0]} in the prefix: {exc}")
+        output = getattr(exc, "stderr", None) or getattr(exc, "stdout", None) or b""
+        tail = " | ".join(output.decode(errors="replace").strip().splitlines()[-6:])
+        log(f"{args[0]} in the prefix: {exc}" + (f": {tail}" if tail else ""))
         return False
     return True
 

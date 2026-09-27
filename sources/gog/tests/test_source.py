@@ -607,14 +607,13 @@ def hooks(src, env, monkeypatch, tmp_path):
     game = tmp_path / "game"
     game.mkdir()
     (game / "Galaxy64.dll").write_bytes(b"")
-    ran, envs = [], []
+    ran = []
     real_run = src.subprocess.run
 
     def fake_run(cmd, **kwargs):
         if cmd[0] == "gogdl":
             return real_run(cmd, **kwargs)
         ran.append(cmd)
-        envs.append(kwargs.get("env"))
         return src.subprocess.CompletedProcess(cmd, 0, "", "")
 
     monkeypatch.setattr(src.subprocess, "run", fake_run)
@@ -630,7 +629,7 @@ def hooks(src, env, monkeypatch, tmp_path):
     auth = tmp_path / "auth" / "auth.json"
     auth.parent.mkdir(parents=True, exist_ok=True)
     auth.write_text(json.dumps({src.GALAXY_CLIENT_ID: {"access_token": "tok", "refresh_token": "r", "user_id": "4242"}}))
-    return {"ran": ran, "envs": envs, "game": game, "auth": auth, **env}
+    return {"ran": ran, "game": game, "auth": auth, **env}
 
 
 def test_pre_launch_starts_one_comet_on_gogdls_tokens(src, hooks, capsys):
@@ -693,10 +692,12 @@ def prefix(src, hooks, monkeypatch, tmp_path):
 def test_pre_launch_registers_galaxys_service_in_the_prefix(src, hooks, prefix, capsys):
     assert src.main(["pre-launch"]) == 0
     sc, reg, _stop, start = hooks["ran"]
-    assert sc == ["/nix/bin/umu-run", "sc", "create", "GalaxyCommunication", f"binpath={src.GALAXY_SERVICE_EXE}"]
-    assert reg[:4] == ["/nix/bin/umu-run", "reg", "add", src.GALAXY_PATHS_KEY]
-    env = hooks["envs"][0]
+    assert sc[:4] == ["systemd-run", "--user", "--wait", "--pipe"], "through the user manager: gamescope's capabilities stop at the hook"
+    assert sc[sc.index("/nix/bin/umu-run") :] == ["/nix/bin/umu-run", "sc", "create", "GalaxyCommunication", f"binpath={src.GALAXY_SERVICE_EXE}"]
+    assert reg[reg.index("/nix/bin/umu-run") :][:4] == ["/nix/bin/umu-run", "reg", "add", src.GALAXY_PATHS_KEY]
+    env = dict(a.removeprefix("--setenv=").split("=", 1) for a in sc if a.startswith("--setenv="))
     assert (env["WINEPREFIX"], env["PROTONPATH"], env["GAMEID"], env["PROTON_VERB"]) == (str(prefix), "/nix/proton-ge", "umu-default", "run")
+    assert env["PATH"] == os.environ["PATH"]
     assert (prefix / "drive_c/ProgramData/GOG.com/Galaxy/redists/GalaxyCommunication.exe").read_bytes() == b"MZ stub"
     assert start[0] == "systemd-run"
 
@@ -725,7 +726,7 @@ def test_pre_launch_starts_comet_when_wine_hangs(src, hooks, prefix, monkeypatch
     fake_run = src.subprocess.run
 
     def hang(cmd, **kwargs):
-        if cmd[0] == "/nix/bin/umu-run":
+        if "/nix/bin/umu-run" in cmd:
             raise src.subprocess.TimeoutExpired(cmd, src.WINE_STEP_S)
         return fake_run(cmd, **kwargs)
 
@@ -733,6 +734,19 @@ def test_pre_launch_starts_comet_when_wine_hangs(src, hooks, prefix, monkeypatch
     assert src.main(["pre-launch"]) == 0
     assert "sc in the prefix" in capsys.readouterr().err
     assert [cmd[0] for cmd in hooks["ran"]] == ["systemctl", "systemd-run"], "no reg add after a failed sc"
+
+
+def test_pre_launch_logs_why_the_runner_refused(src, hooks, prefix, monkeypatch, capsys):
+    fake_run = src.subprocess.run
+
+    def refuse(cmd, **kwargs):
+        if "/nix/bin/umu-run" in cmd:
+            raise src.subprocess.CalledProcessError(1, cmd, b"", b"steamrt4 updates disabled\nFileNotFoundError: no such runtime\n")
+        return fake_run(cmd, **kwargs)
+
+    monkeypatch.setattr(src.subprocess, "run", refuse)
+    assert src.main(["pre-launch"]) == 0
+    assert "status 1.: steamrt4 updates disabled | FileNotFoundError: no such runtime" in capsys.readouterr().err
 
 
 COMET_ROW = "INSERT INTO achievement (key, name, description, visible_while_locked, unlock_time, image_url_locked, image_url_unlocked, changed, rarity) VALUES (?, ?, '', 1, ?, '', '', 0, 1.5)"

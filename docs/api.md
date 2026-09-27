@@ -470,7 +470,8 @@ Wine game `pre-launch` first copies comet's do-nothing stand-in (`GalaxyCommunic
 source's folder, fetched from comet's release by the flake) to
 `C:\ProgramData\GOG.com\Galaxy\redists\` in the prefix, then runs `sc create GalaxyCommunication`
 and sets `HKLM\SOFTWARE\WOW6432Node\GOG.com\GalaxyClient\paths` through the game's runner
-(`PROTON_VERB=run`), each at most 10 s and only while `system.reg` lacks it. A prefix not made yet
+(`PROTON_VERB=run`) in a `systemd-run --user --wait` unit, since bwrap refuses the capabilities a
+hook inherits under gamescope, each at most 10 s and only while `system.reg` lacks it. A prefix not made yet
 gets it on the next launch.
 
 ## Runners
