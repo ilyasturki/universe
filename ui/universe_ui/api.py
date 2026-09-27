@@ -11,6 +11,7 @@ from .home import Home
 from .models import Collection, CollectionGames, Game, GameListModel, ObjectListModel, collection_key
 from .qt import Property
 from .screens import Screens
+from .screens.network import Network
 from .screens.paths import universe_home
 from .screens.power import SYSFS, Power
 from .themes import ThemeSelector
@@ -457,13 +458,14 @@ class System(QObject):
 
 
 class Api(QObject):
-    def __init__(self, client, memory_path=None, fullscreen=False, theme="", power_root=None, parent=None):
+    def __init__(self, client, memory_path=None, fullscreen=False, theme="", power_root=None, net_root=None, parent=None):
         super().__init__(parent)
         self._client = client
         self._keys = Keys(self)
         self._keys.setLayout(keyboard.rows(**client.keyboardLayout()))
         self._pad = Pad(self)
         self._power = Power(power_root or SYSFS, self)
+        self._network = Network(os.path.join(net_root, "class"), os.path.join(net_root, "wireless"), self) if net_root else Network(parent=self)
         self._system = System(client, self)
         self._memory = Memory(memory_path, self)
         self._theme = ThemeSelector(self._memory, theme, self)
@@ -506,6 +508,7 @@ class Api(QObject):
     keys = Property(QObject, lambda self: self._keys, constant=True)
     pad = Property(QObject, lambda self: self._pad, constant=True)
     power = Property(QObject, lambda self: self._power, constant=True)
+    network = Property(QObject, lambda self: self._network, constant=True)
     system = Property(QObject, lambda self: self._system, constant=True)
 
     def _theme_list(self):

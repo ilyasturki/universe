@@ -46,9 +46,10 @@ def fake(app, xdg, tmp_path):
 @pytest.fixture
 def api(fake, tmp_path):
     from universe_ui.api import Api
+    from universe_ui.screens.network import FAKE as FAKE_NET
     from universe_ui.screens.power import FAKE
 
-    api = Api(fake, memory_path=str(tmp_path / "memory.json"), power_root=FAKE)
+    api = Api(fake, memory_path=str(tmp_path / "memory.json"), power_root=FAKE, net_root=FAKE_NET)
     yield api
     api.shutdown()
 

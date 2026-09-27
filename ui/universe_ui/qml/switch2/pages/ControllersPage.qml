@@ -636,7 +636,14 @@ FocusScope {
 
                 Label {
                     anchors.verticalCenter: parent.verticalCenter
-                    text: modelData.name + (modelData.bus ? " · " + (modelData.bus === "bluetooth" ? "Bluetooth" : modelData.bus === "usb" ? "USB" : modelData.bus) : "") + (parent.battery ? " · " + parent.battery.percent + "%" + (parent.battery.charging ? ", charging" : "") : "")
+                    text: modelData.name + (modelData.bus ? " · " + (modelData.bus === "bluetooth" ? "Bluetooth" : modelData.bus === "usb" ? "USB" : modelData.bus) : "")
+                }
+
+                Battery {
+                    anchors.verticalCenter: parent.verticalCenter
+                    visible: parent.battery !== null
+                    percent: parent.battery ? parent.battery.percent : 0
+                    charging: parent.battery ? parent.battery.charging : false
                 }
             }
         }

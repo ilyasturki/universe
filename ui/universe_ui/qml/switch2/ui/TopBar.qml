@@ -1,9 +1,16 @@
 import QtQuick
 import "../core"
-import "../../ui" as Base
 
 Item {
     id: bar
+
+    readonly property var battery: {
+        var sources = api.power.sources;
+        for (var i = 0; i < sources.length; i++)
+            if (sources[i].kind === "system")
+                return sources[i];
+        return null;
+    }
 
     implicitHeight: Theme.dp(170)
 
@@ -31,32 +38,39 @@ Item {
         }
     }
 
-    Base.PowerBadge {
-        anchors.right: clockLabel.left
-        anchors.rightMargin: Theme.dp(34)
-        anchors.verticalCenter: clockLabel.verticalCenter
-        tint: Theme.text
-        currentTint: Theme.okGreen
-        size: Theme.dp(Theme.fontSmall)
-        fontFamily: Theme.sans
-        fontWeight: Font.Normal
-        players: false
-        padGlyph: Glyph {
-            anchors.fill: parent
-            kind: "controllers"
-            tint: parent.ink
-        }
-    }
+    Row {
+        id: status
 
-    Label {
-        id: clockLabel
         anchors.right: parent.right
         anchors.rightMargin: Theme.dp(72)
-        y: Theme.dp(90)
-        text: Theme.clock
-        font.family: Theme.clockSans
-        // Sawarabi ships one weight; Qt emboldens it (DemiBold would render as Regular).
-        font.weight: Font.Bold
-        font.pixelSize: Theme.dp(Theme.fontClock)
+        y: Theme.dp(83)
+        height: clockLabel.height
+        spacing: Theme.dp(28)
+
+        Label {
+            id: clockLabel
+            text: Theme.clock
+            font.family: Theme.clockSans
+            font.pixelSize: Theme.dp(Theme.fontClock)
+            font.letterSpacing: Theme.dp(2)
+        }
+
+        Glyph {
+            anchors.verticalCenter: parent.verticalCenter
+            width: Theme.dp(36)
+            height: width
+            visible: api.network.kind !== ""
+            kind: api.network.kind
+            level: api.network.bars
+            stroke: 2.2
+            tint: Theme.text
+        }
+
+        Battery {
+            anchors.verticalCenter: parent.verticalCenter
+            visible: bar.battery !== null
+            percent: bar.battery ? bar.battery.percent : 0
+            charging: bar.battery ? bar.battery.charging : false
+        }
     }
 }

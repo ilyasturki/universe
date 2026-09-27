@@ -213,13 +213,16 @@ def run(argv=None):
 
     from . import models  # noqa: F401  (registers the Universe QML module)
     from .api import Api
+    from .screens.network import FAKE as FAKE_NET
     from .screens.power import FAKE as FAKE_POWER
 
     # The fake library paints its art with fonts, which need the app.
     client = build_client(args)
     if not args.fake:
         client.adoptScope()
-    api = Api(client, fullscreen=args.fullscreen, theme=args.theme, power_root=FAKE_POWER if args.fake else None, parent=app)
+    api = Api(
+        client, fullscreen=args.fullscreen, theme=args.theme, power_root=FAKE_POWER if args.fake else None, net_root=FAKE_NET if args.fake else None, parent=app
+    )
     quit_on_signals(app)
 
     engine = QQmlApplicationEngine()

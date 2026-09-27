@@ -2,13 +2,14 @@ import pytest
 
 from conftest import pump, wait_for
 from universe_ui.api import Api
+from universe_ui.screens.network import FAKE as FAKE_NET
 from universe_ui.screens.power import FAKE
 
 
 @pytest.fixture
 def deck_api(monkeypatch, fake, tmp_path):
     monkeypatch.setenv("UNIVERSE_DECK", "oled")
-    api = Api(fake, memory_path=str(tmp_path / "memory.json"), power_root=FAKE)
+    api = Api(fake, memory_path=str(tmp_path / "memory.json"), power_root=FAKE, net_root=FAKE_NET)
     wait_for(api.system.controlsChanged)
     yield api
     api.shutdown()
@@ -45,7 +46,7 @@ def test_steams_game_mode_keeps_power_and_the_machines_controls(monkeypatch, fak
     monkeypatch.setenv("UNIVERSE_DECK", "lcd")
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
     monkeypatch.setenv("UNIVERSE_FAKE_STEAM", "1")
-    api = Api(fake, memory_path=str(tmp_path / "memory.json"), power_root=FAKE)
+    api = Api(fake, memory_path=str(tmp_path / "memory.json"), power_root=FAKE, net_root=FAKE_NET)
     pump(300)
     assert api.system.steam is True
     assert list(api.system.actions) == [] and api.system.controls == [], "Steam's Quick Access menu has them"
@@ -57,6 +58,6 @@ def test_steams_game_mode_keeps_power_and_the_machines_controls(monkeypatch, fak
 
 def test_the_decks_own_glyphs_until_a_pad_says_otherwise(monkeypatch, fake, tmp_path):
     monkeypatch.setenv("UNIVERSE_DECK", "lcd")
-    api = Api(fake, memory_path=str(tmp_path / "memory.json"), power_root=FAKE)
+    api = Api(fake, memory_path=str(tmp_path / "memory.json"), power_root=FAKE, net_root=FAKE_NET)
     assert api.screens.controller.family == "steam-deck", "Steam or SDL may keep the built-in controls from the watcher"
     api.shutdown()

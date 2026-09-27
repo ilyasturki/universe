@@ -7,8 +7,11 @@ Canvas {
     property string kind: ""
     property color tint: Theme.text
     property real stroke: 1.9
+    // Lit arcs of "wifi", 0-3
+    property int level: 3
 
     onKindChanged: requestPaint()
+    onLevelChanged: requestPaint()
     onTintChanged: requestPaint()
     onWidthChanged: requestPaint()
 
@@ -190,6 +193,35 @@ Canvas {
             ctx.bezierCurveTo(6 * s, 19.5 * s, 2.4 * s, 19 * s, 2 * s, 15 * s);
             ctx.bezierCurveTo(1.5 * s, 10 * s, 3 * s, 6.5 * s, 7 * s, 6.5 * s);
             ctx.closePath();
+            ctx.fill();
+        } else if (kind === "wifi") {
+            ctx.fillRule = Qt.OddEvenFill;
+            for (var i = 0; i < 3; i++) {
+                ctx.globalAlpha = i < glyph.level ? 1 : 0.25;
+                ctx.beginPath();
+                ctx.moveTo(12 * s, 20 * s);
+                ctx.arc(12 * s, 20 * s, (6 + 5.5 * i) * s, Math.PI * 1.25, Math.PI * 1.75);
+                ctx.closePath();
+                if (i > 0) {
+                    ctx.arc(12 * s, 20 * s, (6 + 5.5 * (i - 1) + 1.6) * s, Math.PI * 1.75, Math.PI * 1.25, true);
+                    ctx.closePath();
+                }
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+        } else if (kind === "wired") {
+            rr(8, 3.5, 8, 6.5, 1.2);
+            ctx.stroke();
+            line(12, 10, 12, 14);
+            line(5, 14, 19, 14);
+            line(5, 14, 5, 17);
+            line(19, 14, 19, 17);
+            line(12, 14, 12, 17);
+            rr(3, 17, 4, 3.5, 0.8);
+            ctx.fill();
+            rr(10, 17, 4, 3.5, 0.8);
+            ctx.fill();
+            rr(17, 17, 4, 3.5, 0.8);
             ctx.fill();
         }
     }
