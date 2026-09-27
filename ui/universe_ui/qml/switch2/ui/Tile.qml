@@ -7,8 +7,9 @@ Item {
 
     property var game: null
     property bool focused: false
-    // A download's icon, faded until it is playable.
-    property bool dimmed: false
+    property bool installing: false
+    // 0-1, or below 0 while the size is unknown
+    property real progress: -1
     property real cornerRadius: Math.round(Theme.dp(Theme.radiusTile) * Math.min(width, height) / Theme.dp(Theme.tileSize))
     property bool outlineShown: true
 
@@ -58,11 +59,70 @@ Item {
             visible: tile.shown === "box"
         }
 
-        Rectangle {
-            anchors.fill: parent
-            color: Theme.ground
-            opacity: tile.dimmed ? 0.55 : 0
-            visible: opacity > 0
+        Item {
+            id: band
+
+            readonly property real stripe: height * 0.5
+
+            anchors.left: parent.left
+            anchors.right: parent.right
+            anchors.bottom: parent.bottom
+            height: Math.round(parent.height * 44 / 384)
+            visible: tile.installing
+            clip: true
+
+            Rectangle {
+                anchors.fill: parent
+                color: Qt.rgba(0, 0, 0, 0.7)
+            }
+
+            Row {
+                id: stripes
+
+                y: -band.height
+                height: band.height * 3
+                spacing: band.stripe
+
+                Repeater {
+                    model: band.visible && band.stripe > 0 ? Math.ceil(band.width / (band.stripe * 2)) + 3 : 0
+
+                    Rectangle {
+                        width: band.stripe
+                        height: stripes.height
+                        rotation: 45
+                        color: Qt.rgba(1, 1, 1, 0.09)
+                    }
+                }
+
+                NumberAnimation on x {
+                    from: -band.stripe * 4
+                    to: -band.stripe * 2
+                    duration: 900
+                    loops: Animation.Infinite
+                    running: band.visible
+                }
+            }
+
+            Rectangle {
+                anchors.verticalCenter: parent.verticalCenter
+                x: Math.round(parent.width * 28 / 384)
+                width: parent.width - 2 * x
+                height: Math.max(2, Math.round(parent.width * 6 / 384))
+                radius: height / 2
+                color: "#948f8c"
+
+                Rectangle {
+                    width: parent.width * Math.max(0, Math.min(1, tile.progress))
+                    height: parent.height
+                    radius: parent.radius
+                    color: "#43a5ec"
+                    visible: tile.progress >= 0
+
+                    Behavior on width {
+                        Ease {}
+                    }
+                }
+            }
         }
 
         Label {

@@ -96,7 +96,7 @@ FocusScope {
 
     readonly property Item topPage: pages.count > 0 && pages.itemAt(pages.count - 1) ? pages.itemAt(pages.count - 1).item : null
     readonly property bool topOverlay: topPage !== null && topPage.overlay === true
-    readonly property var hints: dialog.open ? dialog.hints : sheet.open ? sheet.hints : picker.open ? picker.hints : folder.open ? folder.hints : launching ? [] : !onHome && topPage ? topPage.hints : homeFocus === "bar" ? bottomBar.hints : home.hints
+    readonly property var hints: dialog.open ? dialog.hints : sheet.open ? sheet.hints : picker.open ? picker.hints : folder.open ? folder.hints : !onHome && topPage ? topPage.hints : homeFocus === "bar" ? bottomBar.hints : home.hints
 
     function push(source, args) {
         stack.append({
@@ -231,7 +231,7 @@ FocusScope {
         });
     }
 
-    function launch(game) {
+    function launch(game, from) {
         if (!game || launchScreen.running)
             return;
         if (sessionRunning) {
@@ -255,7 +255,7 @@ FocusScope {
         }
         Sound.play("launch");
         launching = true;
-        launchScreen.begin(game);
+        launchScreen.begin(game, from);
     }
 
     function resume() {
@@ -304,11 +304,15 @@ FocusScope {
         id: homeLayer
 
         anchors.fill: parent
-        opacity: (root.onHome || root.depth === 1 && root.topOverlay) && !root.launching ? 1.0 : 0.0
+        opacity: root.onHome || root.depth === 1 && root.topOverlay ? 1.0 : 0.0
         visible: opacity > 0.01
 
         Behavior on opacity {
-            Ease {}
+            id: homeFade
+
+            Swap {
+                entering: homeFade.targetValue > 0.5
+            }
         }
 
         TopBar {
@@ -365,7 +369,11 @@ FocusScope {
             focus: isTop
 
             Behavior on opacity {
-                Ease {}
+                id: pageFade
+
+                Swap {
+                    entering: pageFade.targetValue > 0.5
+                }
             }
 
             Rectangle {
@@ -377,7 +385,7 @@ FocusScope {
 
             // Bound after creation, so a page fades in instead of appearing at full opacity.
             Component.onCompleted: opacity = Qt.binding(function () {
-                return shown && !root.launching ? 1.0 : 0.0;
+                return shown ? 1.0 : 0.0;
             })
 
             onLoaded: {
@@ -462,8 +470,8 @@ FocusScope {
         anchors.right: parent.right
         z: 11.5
         hints: root.hints
-        hairline: !root.onHome && !(root.topPage && root.topPage.bare === true)
-        visible: !root.launching && !(root.topPage && root.topPage.bare === true && !dialog.open && !sheet.open)
+        hairline: !root.onHome && !sheet.open && !(root.topPage && root.topPage.bare === true)
+        visible: !(root.topPage && root.topPage.bare === true && !dialog.open && !sheet.open)
     }
 
     TextSheet {

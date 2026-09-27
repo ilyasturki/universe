@@ -27,10 +27,11 @@ Item {
         readonly property real line: ring.lineWidth
         readonly property real gap: ring.gap
         readonly property real phase: ring.visible ? Theme.ringPhase : 0
-        readonly property color c0: Theme.ringBlue
-        readonly property color c1: Theme.ringCyan
-        readonly property color c2: Theme.ringPink
-        readonly property color c3: Theme.ringLavender
+        readonly property color c0: Theme.ringPink
+        readonly property color c1: Theme.ringLavender
+        readonly property color c2: Theme.ringBlue
+        readonly property color c3: Theme.ringPale
+        readonly property color c4: Theme.ringDeep
         readonly property color inner: Theme.ringInner
 
         fragmentShader: Qt.resolvedUrl("../assets/shaders/ring.frag.qsb")

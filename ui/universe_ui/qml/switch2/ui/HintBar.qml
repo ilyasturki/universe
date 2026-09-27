@@ -32,37 +32,33 @@ Item {
     }
 
     Item {
-        anchors.left: parent.left
-        anchors.leftMargin: Theme.dp(78)
-        anchors.verticalCenter: parent.verticalCenter
-        width: Theme.dp(72)
-        height: Theme.dp(60)
+        x: Theme.dp(93)
+        y: Theme.dp(10)
+        width: Theme.dp(78)
+        height: Theme.dp(78)
 
         readonly property bool connected: api.screens.controller.connected
 
         Row {
-            anchors.left: parent.left
-            anchors.top: parent.top
-            spacing: Theme.dp(4)
+            x: Theme.dp(9)
+            spacing: Theme.dp(6)
             Repeater {
                 model: 4
                 Rectangle {
-                    width: Theme.dp(9)
-                    height: Theme.dp(9)
+                    width: Theme.dp(10)
+                    height: Theme.dp(10)
                     radius: Theme.dp(1.5)
-                    color: index === 0 && parent.parent.connected ? Theme.okGreen : bar.muted
+                    color: index === 0 && parent.parent.connected ? "#00ae02" : "#b2b2b2"
                 }
             }
         }
 
         Glyph {
-            anchors.left: parent.left
-            anchors.top: parent.top
-            anchors.topMargin: Theme.dp(12)
-            width: Theme.dp(56)
-            height: Theme.dp(56)
+            y: Theme.dp(-3)
+            width: parent.width
+            height: parent.height
             kind: "gamepad"
-            tint: parent.connected ? bar.ink : bar.muted
+            tint: parent.connected ? "#242424" : bar.muted
         }
     }
 
@@ -70,6 +66,7 @@ Item {
         anchors.right: parent.right
         anchors.rightMargin: Theme.dp(96)
         anchors.verticalCenter: parent.verticalCenter
+        anchors.verticalCenterOffset: Theme.dp(-7)
         spacing: Theme.dp(42)
 
         Repeater {
@@ -86,6 +83,7 @@ Item {
                     HintGlyph {
                         anchors.verticalCenter: parent.verticalCenter
                         glyph: modelData
+                        unit: Theme.dp(38)
                         dim: hint.dim === true
                         fill: bar.glyphFill
                         ink: bar.glyphInk

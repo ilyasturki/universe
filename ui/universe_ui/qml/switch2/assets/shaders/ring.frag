@@ -13,6 +13,7 @@ layout(std140, binding = 0) uniform buf {
     vec4 c1;
     vec4 c2;
     vec4 c3;
+    vec4 c4;
     vec4 inner;
 };
 
@@ -26,10 +27,10 @@ float perimeter(vec2 q) {
 }
 
 vec4 palette(float t) {
-    t = fract(t) * 4.0;
-    vec4 a = t < 1.0 ? c0 : t < 2.0 ? c1 : t < 3.0 ? c2 : c3;
-    vec4 b = t < 1.0 ? c1 : t < 2.0 ? c2 : t < 3.0 ? c3 : c0;
-    return mix(a, b, fract(t));
+    t = fract(t) * 5.0;
+    vec4 a = t < 1.0 ? c0 : t < 2.0 ? c1 : t < 3.0 ? c2 : t < 4.0 ? c3 : c4;
+    vec4 b = t < 1.0 ? c1 : t < 2.0 ? c2 : t < 3.0 ? c3 : t < 4.0 ? c4 : c0;
+    return mix(a, b, smoothstep(0.0, 1.0, fract(t)));
 }
 
 void main() {

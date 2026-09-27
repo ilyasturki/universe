@@ -22,7 +22,8 @@ FocusScope {
     readonly property real discSize: Theme.dp(96)
     // 123: the Switch's icon pitch; fewer icons shorten the pill, never widen the gap.
     readonly property real pitch: Theme.dp(123)
-    readonly property real endPad: Theme.dp(50)
+    // 70 from the pill's end to the first icon's centre
+    readonly property real endPad: Theme.dp(70) - iconSize / 2
 
     width: endPad * 2 + Math.max(0, items.length - 1) * pitch + iconSize
     height: Theme.dp(Theme.barHeight)
@@ -98,7 +99,7 @@ FocusScope {
                 height: bar.iconSize
                 kind: modelData.icon
                 tint: modelData.color || Theme.barGrey
-                stroke: 1.7
+                stroke: 2.1
             }
 
             Label {

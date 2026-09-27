@@ -129,7 +129,8 @@ FocusScope {
             });
             return;
         }
-        onPlaying ? shell.resume() : shell.launch(currentGame);
+        var cell = row.itemAtIndex(index);
+        onPlaying ? shell.resume() : shell.launch(currentGame, cell ? cell.tileArt : null);
     }
 
     onLastChanged: {
@@ -173,21 +174,20 @@ FocusScope {
         }
     }
 
-    Label {
+    Marquee {
         id: title
 
         readonly property real centre: page.index * page.pitch - row.contentX + page.tile / 2
-        readonly property real margin: Theme.dp(Theme.edgeMargin)
+        readonly property real margin: Theme.dp(32)
         readonly property real room: 2 * Math.min(centre - margin, page.width - margin - centre)
 
         x: centre - width / 2
         y: Theme.dp(Theme.tileRowY) - Theme.dp(66)
-        width: Math.max(0, Math.min(implicitWidth, page.pitch * 2.5, room))
+        maxWidth: Math.max(0, Math.min(page.pitch * 2.5, room))
         visible: page.activeFocus && (page.currentGame !== null || page.onAll || page.onSetup)
-        text: page.onSetup ? "Set up" : page.onAll ? (page.empty ? "Add a game" : "All Software") : (page.currentGame ? page.currentGame.title : "")
+        text: page.onSetup ? "Set up" : page.onAll ? (page.empty ? "Add a game" : "View More") : (page.currentGame ? page.currentGame.title : "")
         color: Theme.accent
-        horizontalAlignment: Text.AlignHCenter
-        elide: Text.ElideRight
+        font.pixelSize: Theme.dp(33)
     }
 
     ListView {
@@ -229,6 +229,7 @@ FocusScope {
             id: cell
 
             readonly property bool focused: page.activeFocus && index === page.index
+            readonly property Item tileArt: art
 
             width: page.tile
             height: row.height
@@ -241,8 +242,9 @@ FocusScope {
                 width: page.tile
                 height: page.tile
                 game: modelData
-                focused: cell.focused
-                dimmed: modelData.installing
+                focused: cell.focused && !(page.shell && page.shell.launching)
+                installing: modelData.installing
+                progress: modelData.installing ? modelData.progress : -1
 
                 Touch {
                     current: cell.focused
@@ -251,14 +253,55 @@ FocusScope {
                 }
             }
 
-            Label {
-                visible: modelData.id === page.playingId || modelData.installing
-                anchors.top: art.bottom
-                anchors.topMargin: Theme.dp(Theme.ringRoom + 4)
-                anchors.horizontalCenter: art.horizontalCenter
-                text: modelData.installing ? (modelData.progress >= 0 ? "Installing · " + Math.round(modelData.progress * 100) + "%" : "Installing…") : "Playing"
-                color: Theme.accent
-                font.pixelSize: Theme.dp(Theme.fontSmall)
+            Item {
+                x: art.x
+                y: art.y
+                width: page.tile
+                height: page.tile
+                visible: modelData.id === page.playingId && !modelData.installing
+                z: 3
+
+                Rectangle {
+                    id: playing
+
+                    x: Theme.dp(113)
+                    y: parent.height - Theme.dp(24) - height
+                    width: Theme.dp(248)
+                    height: Theme.dp(73)
+                    radius: height / 2
+                    color: "#111111"
+                    border.width: Theme.dp(3)
+                    border.color: "#ffffff"
+
+                    Label {
+                        anchors.centerIn: parent
+                        text: "Playing"
+                        color: "#ffffff"
+                        font.pixelSize: Theme.dp(34)
+                    }
+                }
+
+                Rectangle {
+                    x: Theme.dp(26)
+                    anchors.verticalCenter: playing.verticalCenter
+                    width: Theme.dp(80)
+                    height: width
+                    radius: width / 2
+                    color: Theme.disc
+                    border.width: Theme.dp(3)
+                    border.color: "#ffffff"
+
+                    Image {
+                        anchors.fill: parent
+                        anchors.margins: Theme.dp(12)
+                        source: Qt.resolvedUrl("../../../../icons/hicolor/scalable/apps/universe-ui.svg")
+                        fillMode: Image.PreserveAspectFit
+                        sourceSize.width: 128
+                        sourceSize.height: 128
+                        smooth: true
+                        mipmap: true
+                    }
+                }
             }
         }
 
@@ -275,14 +318,14 @@ FocusScope {
 
                     x: page.gap + index * page.pitch + (page.tile - width) / 2
                     y: Theme.dp(30) + (page.tile - height) / 2
-                    width: Theme.dp(236)
+                    width: Theme.dp(248)
                     height: width
 
                     Rectangle {
                         id: disc
                         anchors.fill: parent
                         radius: width / 2
-                        color: Theme.slot
+                        color: Theme.disc
                     }
 
                     FocusOutline {

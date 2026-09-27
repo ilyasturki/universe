@@ -317,7 +317,7 @@ def test_the_switch2_home_row_follows_the_game_too(api, fake, monkeypatch):
     root = window.property("contentItem").childItems()[0].property("item")
     home = root.findChild(QObject, "homePage")
     assert home.property("currentGame").property("id") == "the-technomancer"
-    QMetaObject.invokeMethod(root, "launch", Q_ARG("QVariant", api.allGames.byId("dead-cells")))
+    QMetaObject.invokeMethod(root, "launch", Q_ARG("QVariant", api.allGames.byId("dead-cells")), Q_ARG("QVariant", None))
     wait_for(fake.sessionStarted, 3000)
     pump(50)
     assert home.property("currentGame").property("id") == "the-technomancer" and home.property("index") == 1

@@ -39,8 +39,9 @@ FocusScope {
         opacity: modal.open ? modal.scrimOpacity : 0.0
 
         Behavior on opacity {
-            Ease {
-                duration: Theme.durQuick
+            NumberAnimation {
+                duration: modal.open ? Theme.durQuick : 170
+                easing.type: Easing.InOutQuad
             }
         }
 
@@ -55,21 +56,16 @@ FocusScope {
 
         anchors.centerIn: modal.carded ? parent : undefined
         anchors.fill: modal.carded ? undefined : parent
-        radius: Theme.dp(6)
-        color: modal.carded ? Theme.card : "transparent"
+        radius: Theme.dp(16)
+        color: modal.carded ? Theme.dialog : "transparent"
         // Fading out, it takes no finger: an A it sent would land on the page.
         enabled: modal.open
         opacity: modal.open ? 1.0 : 0.0
-        scale: modal.open || !modal.carded ? 1.0 : 0.98
 
         Behavior on opacity {
-            Ease {
-                duration: Theme.durQuick
-            }
-        }
-        Behavior on scale {
-            Ease {
-                duration: Theme.durQuick
+            NumberAnimation {
+                duration: modal.open ? Theme.durQuick : 170
+                easing.type: Easing.InOutQuad
             }
         }
 

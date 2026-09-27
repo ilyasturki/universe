@@ -12,12 +12,23 @@ Item {
     signal finished
     signal failed(var game, string message)
 
-    function begin(target) {
+    // from: the tile the game was started from, echoed as the screen goes dark
+    function begin(target, from) {
         if (running)
             return;
         game = target;
         launchedSession = "";
-        art.scale = 0.92;
+        echo.visible = !!from;
+        if (from) {
+            var p = from.mapToItem(screen, 0, 0);
+            echo.x = p.x;
+            echo.y = p.y;
+            echo.width = from.width;
+            echo.height = from.height;
+        }
+        echo.scale = 1.0;
+        echo.opacity = 0.35;
+        echo.drift = 0;
         sequence.start();
     }
 
@@ -26,6 +37,7 @@ Item {
         waiting = false;
         launchedSession = "";
         frame.opacity = 0.0;
+        echo.visible = false;
         game = null;
     }
 
@@ -65,36 +77,26 @@ Item {
         }
     }
 
+    Tile {
+        id: echo
+
+        property real drift: 0
+
+        transform: Translate {
+            y: echo.drift
+        }
+        visible: false
+        game: screen.game
+        outlineShown: false
+    }
+
     Rectangle {
         id: frame
 
         anchors.fill: parent
-        color: Theme.ground
+        color: "#000000"
         opacity: 0.0
         visible: opacity > 0.001
-
-        Tile {
-            id: art
-            anchors.centerIn: parent
-            anchors.verticalCenterOffset: -Theme.dp(50)
-            width: Theme.dp(420)
-            height: Theme.dp(420)
-            game: screen.game
-            outlineShown: false
-        }
-
-        Label {
-            anchors.top: art.bottom
-            anchors.topMargin: Theme.dp(40)
-            anchors.horizontalCenter: parent.horizontalCenter
-            width: parent.width - Theme.dp(300)
-            text: screen.game ? screen.game.title : ""
-            horizontalAlignment: Text.AlignHCenter
-            wrapMode: Text.WordWrap
-            maximumLineCount: 2
-            elide: Text.ElideRight
-            font.pixelSize: Theme.dp(Theme.fontTitle)
-        }
     }
 
     SequentialAnimation {
@@ -102,22 +104,38 @@ Item {
 
         ParallelAnimation {
             NumberAnimation {
-                target: frame
-                property: "opacity"
-                to: 1.0
-                duration: Theme.durFade
-                easing.type: Easing.InOutQuad
-            }
-            NumberAnimation {
-                target: art
+                target: echo
                 property: "scale"
-                to: 1.0
-                duration: Theme.durFade
+                to: 1.3
+                duration: 300
                 easing.type: Easing.OutCubic
             }
-        }
-        PauseAnimation {
-            duration: 500
+            NumberAnimation {
+                target: echo
+                property: "drift"
+                to: -Theme.dp(40)
+                duration: 300
+                easing.type: Easing.OutCubic
+            }
+            NumberAnimation {
+                target: echo
+                property: "opacity"
+                to: 0
+                duration: 300
+                easing.type: Easing.OutQuad
+            }
+            SequentialAnimation {
+                PauseAnimation {
+                    duration: 200
+                }
+                NumberAnimation {
+                    target: frame
+                    property: "opacity"
+                    to: 1.0
+                    duration: 190
+                    easing.type: Easing.InQuad
+                }
+            }
         }
         ScriptAction {
             script: {
