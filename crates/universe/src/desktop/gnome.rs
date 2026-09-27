@@ -137,13 +137,73 @@ pub async fn activate_window(id: &str) -> Result<bool, String> {
         .map_err(|e| e.to_string())
 }
 
+fn user_extensions_dir() -> std::path::PathBuf {
+    crate::paths::xdg("XDG_DATA_HOME", ".local/share").join("gnome-shell/extensions")
+}
+
 pub fn extension_installed(extension: &str) -> bool {
-    let home = crate::paths::home().join(".local/share/gnome-shell/extensions").join(extension);
-    if home.exists() {
+    if user_extensions_dir().join(extension).exists() {
         return true;
     }
     let dirs = std::env::var("XDG_DATA_DIRS").unwrap_or_else(|_| "/usr/share".into());
     dirs.split(':').any(|d| std::path::Path::new(d).join("gnome-shell/extensions").join(extension).exists())
+}
+
+const EXTENSION_FILES: [(&str, &str); 2] =
+    [("metadata.json", include_str!("../../../../extension/metadata.json")), ("extension.js", include_str!("../../../../extension/extension.js"))];
+
+#[derive(Debug, PartialEq, Eq)]
+pub enum ExtensionCopy {
+    System,
+    Current,
+    Written(std::path::PathBuf),
+}
+
+/// A copy under the user's data dir shadows a system one, so it is kept current; with none there, a system copy is left to serve.
+pub fn install_extension() -> std::io::Result<ExtensionCopy> {
+    let dir = user_extensions_dir().join(UNIVERSE_EXTENSION);
+    if !dir.exists() && extension_installed(UNIVERSE_EXTENSION) {
+        return Ok(ExtensionCopy::System);
+    }
+    if EXTENSION_FILES.iter().all(|(name, text)| std::fs::read_to_string(dir.join(name)).is_ok_and(|t| t == *text)) {
+        return Ok(ExtensionCopy::Current);
+    }
+    std::fs::create_dir_all(&dir)?;
+    for (name, text) in EXTENSION_FILES {
+        std::fs::write(dir.join(name), text)?;
+    }
+    Ok(ExtensionCopy::Written(dir))
+}
+
+/// The shell's EnableExtension refuses an extension it has not loaded, which a fresh copy is until the next login: the settings are written instead.
+/// `disabled-extensions` overrides `enabled-extensions`, so the uuid leaves the one as it joins the other.
+pub async fn enable_extension() -> Result<bool, String> {
+    let enabled = shell_list("enabled-extensions").await?;
+    let disabled = shell_list("disabled-extensions").await?;
+    let listed = enabled.iter().any(|u| u == UNIVERSE_EXTENSION);
+    let blocked = disabled.iter().any(|u| u == UNIVERSE_EXTENSION);
+    if blocked {
+        set_shell_list("disabled-extensions", disabled.into_iter().filter(|u| u != UNIVERSE_EXTENSION)).await?;
+    }
+    if !listed {
+        set_shell_list("enabled-extensions", enabled.into_iter().chain([UNIVERSE_EXTENSION.to_string()])).await?;
+    }
+    Ok(blocked || !listed)
+}
+
+async fn shell_list(key: &str) -> Result<Vec<String>, String> {
+    Ok(parse_strv(&super::run("gsettings", &["get", "org.gnome.shell", key].map(String::from)).await?))
+}
+
+async fn set_shell_list(key: &str, uuids: impl Iterator<Item = String>) -> Result<(), String> {
+    let value = format!("[{}]", uuids.map(|u| format!("'{u}'")).collect::<Vec<_>>().join(", "));
+    super::run("gsettings", &["set".to_string(), "org.gnome.shell".to_string(), key.to_string(), value]).await.map(drop)
+}
+
+/// GVariant text of an `as`: `['a', 'b']`, or `@as []` when empty.
+fn parse_strv(text: &str) -> Vec<String> {
+    let inner = text.trim().trim_start_matches("@as").trim().trim_start_matches('[').trim_end_matches(']');
+    inner.split(',').map(|s| s.trim().trim_matches(['\'', '"']).to_string()).filter(|s| !s.is_empty()).collect()
 }
 
 /// org.gnome.Shell.ShowOSD refuses callers other than gsd, so through the extension; `level` in [0, 1] shows the bar.
@@ -191,6 +251,39 @@ where
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_settings_string_list_is_read_empty_or_quoted() {
+        assert_eq!(super::parse_strv("@as []\n"), Vec::<String>::new());
+        assert_eq!(super::parse_strv("['a@b.c', \"d@e\"]\n"), ["a@b.c", "d@e"]);
+    }
+
+    #[test]
+    fn the_extension_is_written_once_and_a_system_copy_left_alone() {
+        let _guard = crate::paths::ENV_LOCK.lock().unwrap();
+        let (home, system) = (tempfile::tempdir().unwrap(), tempfile::tempdir().unwrap());
+        let was = (std::env::var_os("XDG_DATA_HOME"), std::env::var_os("XDG_DATA_DIRS"));
+        std::env::set_var("XDG_DATA_HOME", home.path());
+        std::env::set_var("XDG_DATA_DIRS", system.path());
+        let first = super::install_extension().unwrap();
+        let second = super::install_extension().unwrap();
+        let user = home.path().join("gnome-shell/extensions").join(super::UNIVERSE_EXTENSION);
+        std::fs::write(user.join("extension.js"), "stale").unwrap();
+        let refreshed = super::install_extension().unwrap();
+        std::fs::remove_dir_all(&user).unwrap();
+        std::fs::create_dir_all(system.path().join("gnome-shell/extensions").join(super::UNIVERSE_EXTENSION)).unwrap();
+        let shipped = super::install_extension().unwrap();
+        for (var, v) in [("XDG_DATA_HOME", was.0), ("XDG_DATA_DIRS", was.1)] {
+            match v {
+                Some(v) => std::env::set_var(var, v),
+                None => std::env::remove_var(var),
+            }
+        }
+        assert_eq!(first, super::ExtensionCopy::Written(user.clone()));
+        assert_eq!(second, super::ExtensionCopy::Current);
+        assert_eq!(refreshed, super::ExtensionCopy::Written(user.clone()), "a stale copy is rewritten");
+        assert_eq!(shipped, super::ExtensionCopy::System, "a packaged copy serves");
+    }
+
     #[test]
     fn the_extensions_numeric_ids_come_back_as_handles() {
         let windows = super::parse_windows(r#"[{"id":123456789012,"pid":42,"wm_class":"steam_app_1","focused":true,"width":10,"height":20}]"#).unwrap();

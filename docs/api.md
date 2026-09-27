@@ -53,6 +53,11 @@ operation; a dash means the surface doesn't expose it.
   `org.freedesktop.PowerManagement` (the idle suspend of KDE's PowerDevil and xfce4-power-manager,
   which ScreenSaver does not hold off) and a logind `idle` lock (logind's `IdleAction`, hypridle).
   No `sleep` lock: since systemd 257 it would refuse the player's own Suspend too.
+- The CLI that units and hooks call back is `$UNIVERSE_BIN`, else the running `universe`'s argv[0],
+  else (the UI's in-process core) `universe` on PATH. The Nix packages and `install.sh`'s wrappers
+  (`~/.local/lib/universe`, beside the core's own `~/.local/share/universe`) set it along with
+  `UNIVERSE_{MODULES,SOURCES}_PATH`; the AUR package puts the modules and sources under
+  `/usr/share/universe`, which `XDG_DATA_DIRS` already names.
 - Errors: `Kind ∈ NotFound, Ambiguous, Busy, Invalid, Unavailable, Io`. Python raises
   `universe_core.UniverseError(kind, message)`; the CLI prints `universe: <kind>: <message>` on
   stderr and exits 1.
@@ -519,7 +524,8 @@ The capture module records the whole **screen** (`source = "screen"`, the defaul
 KMS capture of the session's output) or the game's **window** (`source = "window"`, per game). The
 window source needs a desktop whose windows the core lists (see Desktop; on GNOME the
 `universe@ilyasturki.github.io` shell extension, `extension/`, GNOME 45 to 50, installed by the
-home-manager module on NixOS, copied into `~/.local/share/gnome-shell/extensions/` elsewhere, loaded
+home-manager module on NixOS, the AUR package under `/usr/share`, `universe setup` into
+`~/.local/share/gnome-shell/extensions/` otherwise, loaded
 after one logout, which also hides the resting pointer through `HideCursor(b)`): the module waits for
 the game's toplevel through `universe session-window --wait` (`window_wait_s`, gamescope's window
 stays hidden until the game draws; the core focuses it once it maps), then runs
@@ -679,6 +685,7 @@ that is not `*.json` are ignored, and `render_journal` only renders `written` en
 | `set_module_setting(module, game_id, key, value)` | `set_module_setting(…)` | `universe module set <id> k=v [--game g]` | validated against `[[settings]]`. `game_id=""` writes `config.toml [modules.<id>]`, otherwise `game.toml [modules.<id>]` |
 | `module_setting_choices(module, key)` | `module_setting_choices(…)` | — | the global setting's choices; a setting with `choices_exec` gets them from the module, live (see below) |
 | `doctor()` | `doctor()` | `universe doctor` | `[{check, label, ok, detail, fix, module}]` (`check` a stable id, `label` its plain name, `detail` the problem when not `ok`, `fix` what to do about it, empty when `ok`, worded for the distribution: NixOS options on NixOS, the Arch, Fedora or Debian package names elsewhere): the config file (absent: defaults; read-only), the systemd user manager (250 or later, for `ExitType=cgroup`) and cgroup v2, umu-run (or python3 for the one Universe would fetch), MangoHud and its 32-bit layer, gamescope and mangoapp, required binaries of the enabled modules and sources (`module` names the one, or `core`, `runners`, `media`, `controller`; a tool Universe fetches is fine missing), one line per `required` setting an enabled module is still waiting on, `gsr-kms-server`, Proton, the desktop (`desktop`, then per profile the programs it drives, `desktop-<program>`, a notification daemon where the OSD is a notification, `cursor` where the profile cannot hide it), the cursor and Universe extensions on GNOME, tokens, one `runner-<id>` check per runner a library game uses (its program resolved), `runner-eden-stop` when Eden is one (its `[UI] confirmStop` at `2`, else a stop shows its "close?" question), `inputplumber` when an emulator wants it; `modules` and `sources` say what `config.toml` enables that is not found |
+| — | — | `universe setup` | after an install: on GNOME, writes the `universe@ilyasturki.github.io` extension the binary carries into `~/.local/share/gnome-shell/extensions/` (rewritten when stale; left to a system copy when there is none there) and adds it to `org.gnome.shell enabled-extensions` (out of `disabled-extensions`, which overrides it), read by the shell at the next login; then prints `doctor` |
 
 A module entry is `{id, name, version, description, dir, enabled, available, missing: [bin],
 unset: [key], hooks: {}, settings: [Setting]}`, and

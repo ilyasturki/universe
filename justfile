@@ -209,8 +209,9 @@ bump level: check
     copies=(ui/pyproject.toml modules/*/module.toml sources/*/source.toml docs/api.md)
     sed -i "/^\[workspace.package\]/,/^\[/s/^version = \"$cur\"$/version = \"$new\"/" Cargo.toml
     sed -i "s/^version = \"$cur\"$/version = \"$new\"/" "${copies[@]}"
+    sed -i "s/^pkgver=$cur$/pkgver=$new/" packaging/aur/PKGBUILD
     cargo update --workspace --offline --quiet
-    git add Cargo.toml Cargo.lock "${copies[@]}"
+    git add Cargo.toml Cargo.lock packaging/aur/PKGBUILD "${copies[@]}"
     git commit --quiet -m "chore(release): v$new"
     git tag -a "v$new" -m "v$new"
     echo "$cur -> $new: committed and tagged v$new (not pushed)"

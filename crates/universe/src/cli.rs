@@ -249,6 +249,8 @@ pub enum Cmd {
     Discover,
     /// Check prerequisites of the core, the enabled modules and sources
     Doctor,
+    /// After an install: put the desktop's part in place (GNOME's shell extension), then run doctor
+    Setup,
     /// Global config
     Config {
         #[command(subcommand)]
@@ -668,6 +670,31 @@ fn finish(json: bool, r: crate::Result<String>) {
             std::process::exit(1);
         }
     }
+}
+
+fn print_doctor(list: &[crate::doctor::Check], json: bool) -> anyhow::Result<()> {
+    if json {
+        return print_json(&list);
+    }
+    let width = list.iter().map(|c| c.label.chars().count()).max().unwrap_or(0);
+    for c in list {
+        if c.ok {
+            println!("{} {:<width$}  {}  {}", "✓".green(), c.label, format!("{:<10}", c.module).dimmed(), c.detail);
+        } else {
+            println!("{} {}  {}", "✗".red(), format!("{:<width$}", c.label).bold(), format!("{:<10}  {}", c.module, c.check).dimmed());
+            println!("    {}", c.detail);
+            if !c.fix.is_empty() {
+                println!("    {} {}", "fix:".yellow(), c.fix);
+            }
+        }
+    }
+    let bad = list.iter().filter(|c| !c.ok).count();
+    if bad > 0 {
+        println!("{} checks pass, {}", list.len() - bad, format!("{bad} need{} attention", if bad == 1 { "s" } else { "" }).red());
+        std::process::exit(1);
+    }
+    println!("{}", format!("all {} checks pass", list.len()).green());
+    Ok(())
 }
 
 fn report(json: bool, ok: bool, message: &str) {
@@ -1405,29 +1432,25 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 println!("Emulator folders: universe rescan adds them");
             }
         }
-        Cmd::Doctor => {
-            let list = core.doctor().await;
-            if json {
-                return print_json(&list);
-            }
-            let width = list.iter().map(|c| c.label.chars().count()).max().unwrap_or(0);
-            for c in &list {
-                if c.ok {
-                    println!("{} {:<width$}  {}  {}", "✓".green(), c.label, format!("{:<10}", c.module).dimmed(), c.detail);
-                } else {
-                    println!("{} {}  {}", "✗".red(), format!("{:<width$}", c.label).bold(), format!("{:<10}  {}", c.module, c.check).dimmed());
-                    println!("    {}", c.detail);
-                    if !c.fix.is_empty() {
-                        println!("    {} {}", "fix:".yellow(), c.fix);
-                    }
+        Cmd::Doctor => return print_doctor(&core.doctor().await, json),
+        Cmd::Setup => {
+            if core.desktop().await == crate::desktop::Profile::Gnome {
+                use crate::desktop::gnome::{self, ExtensionCopy};
+                let uuid = crate::desktop::UNIVERSE_EXTENSION;
+                match gnome::install_extension() {
+                    Ok(ExtensionCopy::Written(dir)) => println!("{} {uuid} into {}", "installed".green(), dir.display()),
+                    Ok(ExtensionCopy::Current) => println!("{uuid} is up to date"),
+                    Ok(ExtensionCopy::System) => println!("{uuid} comes with the system's package"),
+                    Err(e) => println!("{} {uuid}: {e}", "failed".red()),
                 }
+                match gnome::enable_extension().await {
+                    Ok(true) => println!("{} {uuid}: it loads at the next login", "enabled".green()),
+                    Ok(false) => {}
+                    Err(e) => println!("{} to enable {uuid}: {e}", "failed".red()),
+                }
+                println!();
             }
-            let bad = list.iter().filter(|c| !c.ok).count();
-            if bad > 0 {
-                println!("{} checks pass, {}", list.len() - bad, format!("{bad} need{} attention", if bad == 1 { "s" } else { "" }).red());
-                std::process::exit(1);
-            }
-            println!("{}", format!("all {} checks pass", list.len()).green());
+            return print_doctor(&core.doctor().await, json);
         }
         Cmd::Config { action } => match action {
             ConfigCmd::Get { key } => {
@@ -1948,6 +1971,11 @@ fn generate(dir: &std::path::Path) -> anyhow::Result<()> {
     fish.push_str("complete -c universe -n \"__fish_seen_subcommand_from module\" -l game -x -a \"(universe __complete games)\"\n");
     std::fs::create_dir_all(dir)?;
     std::fs::write(dir.join("universe.fish"), fish)?;
+    for (shell, file) in [(clap_complete::Shell::Bash, "universe.bash"), (clap_complete::Shell::Zsh, "_universe")] {
+        let mut buf = Vec::new();
+        clap_complete::generate(shell, &mut cmd, "universe", &mut buf);
+        std::fs::write(dir.join(file), buf)?;
+    }
 
     let man = dir.join("man");
     std::fs::create_dir_all(&man)?;

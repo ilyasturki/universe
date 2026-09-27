@@ -1,0 +1,96 @@
+# Maintainer: Ilyas Turki <turki.ilyass@gmail.com>
+pkgname=universe
+pkgver=0.0.6
+pkgrel=1
+pkgdesc='Gamepad-first game launcher: a Rust core, a PySide6 UI, games inside gamescope'
+arch=('x86_64')
+url='https://github.com/ilyasturki/universe'
+license=('MIT')
+depends=(
+  'gcc-libs'
+  'glibc'
+  'hicolor-icon-theme'
+  'python'
+  'pyside6'
+  'python-pysdl2'
+  'python-qrcode'
+  'python-xkbcommon'
+  'qt6-5compat'
+  'qt6-declarative'
+  'qt6-imageformats'
+  'qt6-multimedia'
+  'qt6-svg'
+  'qt6-wayland'
+  'sdl2'
+  'systemd'
+)
+makedepends=(
+  'cargo'
+  'maturin'
+  'python-build'
+  'python-installer'
+  'python-setuptools'
+  'scdoc'
+)
+checkdepends=('tzdata')
+optdepends=(
+  'gamescope: games run inside it'
+  'mangohud: the frame rate limit and the in-game HUD'
+  "lib32-mangohud: the HUD in 32-bit games, Proton's included"
+  'umu-launcher: Proton launches; fetched on first use when missing'
+  'heroic-gogdl: the GOG source; fetched on first use when missing'
+  "gpu-screen-recorder: the capture module's recordings"
+  "ffmpeg: the capture module's thumbnails and cuts"
+  'trash-cli: recordings deleted to the trash'
+  'inputplumber: one composite pad handed to an emulator'
+  "game-devices-udev: /dev/uinput for the controller's key macros"
+  'grim: screenshots on sway, hyprland and niri'
+  'spectacle: screenshots on KDE Plasma'
+)
+# makepkg's -flto C objects (ring's) are GCC bitcode that rust-lld cannot link
+options=('!lto')
+source=("$pkgname-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
+sha256sums=('SKIP')
+
+prepare() {
+  cd "$pkgname-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable
+  cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+}
+
+build() {
+  cd "$pkgname-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable CARGO_TARGET_DIR=target
+  cargo build --frozen --release -p universe
+  maturin build --frozen --release --compatibility linux -m crates/universe-py/Cargo.toml -o dist
+  python -m build --wheel --no-isolation --outdir dist ui
+  target/release/universe __generate gen
+  scdoc < ui/universe-ui.1.scd > gen/man/universe-ui.1
+}
+
+check() {
+  cd "$pkgname-$pkgver"
+  export RUSTUP_TOOLCHAIN=stable CARGO_TARGET_DIR=target
+  # the journal tests expect Paris local time, as the flake's check does
+  TZ=Europe/Paris cargo test --frozen -p universe
+}
+
+package() {
+  cd "$pkgname-$pkgver"
+  python -m installer --destdir="$pkgdir" dist/*.whl
+  install -Dm755 target/release/universe -t "$pkgdir/usr/bin"
+  for kind in modules sources; do
+    install -d "$pkgdir/usr/share/universe/$kind"
+    cp -r "$kind/." "$pkgdir/usr/share/universe/$kind"
+    rm -rf "$pkgdir/usr/share/universe/$kind"/*/tests
+  done
+  install -Dm644 extension/metadata.json extension/extension.js -t "$pkgdir/usr/share/gnome-shell/extensions/universe@ilyasturki.github.io"
+  install -Dm644 gen/man/*.1 -t "$pkgdir/usr/share/man/man1"
+  install -Dm644 gen/universe.fish "$pkgdir/usr/share/fish/vendor_completions.d/universe.fish"
+  install -Dm644 gen/universe.bash "$pkgdir/usr/share/bash-completion/completions/universe"
+  install -Dm644 gen/_universe "$pkgdir/usr/share/zsh/site-functions/_universe"
+  install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname"
+  install -Dm644 ui/universe-ui.desktop -t "$pkgdir/usr/share/applications"
+  install -Dm644 ui/icons/hicolor/scalable/apps/universe-ui.svg -t "$pkgdir/usr/share/icons/hicolor/scalable/apps"
+  install -Dm644 ui/icons/hicolor/symbolic/apps/universe-ui-symbolic.svg -t "$pkgdir/usr/share/icons/hicolor/symbolic/apps"
+}

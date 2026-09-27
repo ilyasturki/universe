@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=Universe
+GenericName=Game Launcher
+Comment=Gamepad-first game library
+Exec=universe-ui
+Icon=universe-ui
+Terminal=false
+Categories=Game;
+StartupNotify=true
+# fullscreen runs inside gamescope, whose toplevel hardcodes app_id "gamescope"
+StartupWMClass=gamescope

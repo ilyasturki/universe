@@ -86,10 +86,15 @@ pub fn session_log_dir(id: &str, session_id: &str) -> PathBuf {
     game_logs_dir(id).join(session_id)
 }
 
-/// The CLI for hooks and ExecStopPost: $UNIVERSE_BIN, else argv[0] (makeWrapper's `exec -a "$0"` keeps the wrapper path where current_exe() would not).
+/// The CLI for hooks and ExecStopPost: $UNIVERSE_BIN, else argv[0] (makeWrapper's `exec -a "$0"` keeps the wrapper path where current_exe() would not);
+/// inside another program (the UI's Python), `universe` on PATH.
 pub fn self_exe() -> PathBuf {
     if let Some(p) = std::env::var_os("UNIVERSE_BIN").filter(|p| !p.is_empty()) {
         return PathBuf::from(p);
+    }
+    let embedded = std::env::current_exe().ok().and_then(|e| e.file_name().map(|n| !n.to_string_lossy().starts_with("universe"))).unwrap_or(false);
+    if let Some(cli) = embedded.then(|| crate::runners::on_path("universe")).flatten() {
+        return cli;
     }
     let argv0 = std::env::args_os().next().map(PathBuf::from).unwrap_or_default();
     let resolved = if argv0.components().count() > 1 {

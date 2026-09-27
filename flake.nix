@@ -42,6 +42,10 @@
               "Cargo.toml"
               "Cargo.lock"
               "rustfmt.toml"
+              # the core embeds the shell extension for `universe setup`
+              "extension"
+              "extension/extension.js"
+              "extension/metadata.json"
             ]
           );
       };
@@ -107,10 +111,9 @@
           pkgs.pkg-config
           pkgs.installShellFiles
         ];
-        buildInputs = [ pkgs.sqlite ];
         postInstall = ''
           $out/bin/universe __generate gen
-          installShellCompletion --fish gen/universe.fish
+          installShellCompletion --cmd universe --fish gen/universe.fish --bash gen/universe.bash --zsh gen/_universe
           installManPage gen/man/*.1
         '';
         meta.mainProgram = "universe";
@@ -127,7 +130,6 @@
           maturinBuildHook
           pkgs.pkg-config
         ];
-        buildInputs = [ pkgs.sqlite ];
         buildAndTestSubdir = "crates/universe-py";
         env.UNIVERSE_GIT_REV = gitRev;
         pythonImportsCheck = [ "universe_core" ];
@@ -217,20 +219,6 @@
       ];
       pyEnv = extra: pkgs.python3.withPackages (ps: [ ps.pytest ] ++ extra ps);
 
-      uiDesktopItem = pkgs.makeDesktopItem {
-        name = "universe-ui";
-        desktopName = "Universe";
-        genericName = "Game Launcher";
-        comment = "Gamepad-first game library";
-        exec = "universe-ui";
-        icon = "universe-ui";
-        terminal = false;
-        categories = [ "Game" ];
-        startupNotify = true;
-        # fullscreen runs inside gamescope, whose toplevel hardcodes app_id "gamescope"
-        startupWMClass = "gamescope";
-      };
-
       ui = pkgs.python3Packages.buildPythonApplication {
         pname = "universe-ui";
         inherit version;
@@ -240,13 +228,13 @@
         dependencies = uiPy pkgs.python3Packages ++ [ corePy ];
         nativeBuildInputs = [
           pkgs.qt6.wrapQtAppsHook
-          pkgs.copyDesktopItems
           pkgs.installShellFiles
           pkgs.scdoc
         ];
         postInstall = ''
           scdoc < universe-ui.1.scd > universe-ui.1
           installManPage universe-ui.1
+          install -Dm644 universe-ui.desktop -t $out/share/applications
           install -Dm644 icons/hicolor/scalable/apps/universe-ui.svg $out/share/icons/hicolor/scalable/apps/universe-ui.svg
           install -Dm644 icons/hicolor/symbolic/apps/universe-ui-symbolic.svg $out/share/icons/hicolor/symbolic/apps/universe-ui-symbolic.svg
         '';
@@ -259,7 +247,6 @@
           qtsvg
           qtimageformats
         ];
-        desktopItems = [ uiDesktopItem ];
         # The hooks and systemd's ExecStopPost need the CLI; a Python process has no argv[0] to find it by.
         preFixup = ''
           qtWrapperArgs+=(--prefix LD_LIBRARY_PATH : ${

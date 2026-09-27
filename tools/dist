@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+    cat <<'USAGE'
+usage: tools/dist OUT
+
+Builds the release tree that install.sh installs from, outside Nix:
+  OUT/bin/universe                    the CLI (release, sqlite bundled)
+  OUT/wheels/                         universe_core (abi3) and universe_ui
+  OUT/share/universe/{modules,sources}
+  OUT/share/{applications,icons,man,fish,bash-completion,zsh}
+  OUT/install.sh
+
+Needs cargo and python3 (3.11+) with pip; pip fetches maturin and
+setuptools for the wheel builds. scdoc, when found, adds universe-ui.1.
+USAGE
+}
+
+case "${1:-}" in
+    "" | -h | --help) usage; exit 0 ;;
+esac
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+mkdir -p "$1"
+out="$(cd "$1" && pwd)"
+python="${PYTHON:-python3}"
+
+cargo build --release --locked -p universe --manifest-path "$repo/Cargo.toml"
+install -Dm755 "${CARGO_TARGET_DIR:-$repo/target}/release/universe" "$out/bin/universe"
+
+rm -rf "$out/wheels"
+"$python" -m pip wheel --quiet --no-deps --wheel-dir "$out/wheels" "$repo/crates/universe-py" "$repo/ui"
+
+for kind in modules sources; do
+    rm -rf "${out:?}/share/universe/$kind"
+    mkdir -p "$out/share/universe/$kind"
+    cp -r "$repo/$kind/." "$out/share/universe/$kind"
+    rm -rf "$out/share/universe/$kind"/*/tests
+    find "$out/share/universe/$kind" -name __pycache__ -prune -exec rm -rf {} +
+done
+
+gen="$(mktemp -d)"
+trap 'rm -rf "$gen"' EXIT
+"$out/bin/universe" __generate "$gen"
+install -Dm644 "$gen"/man/*.1 -t "$out/share/man/man1"
+install -Dm644 "$gen/universe.fish" "$out/share/fish/vendor_completions.d/universe.fish"
+install -Dm644 "$gen/universe.bash" "$out/share/bash-completion/completions/universe"
+install -Dm644 "$gen/_universe" "$out/share/zsh/site-functions/_universe"
+if command -v scdoc >/dev/null; then
+    scdoc < "$repo/ui/universe-ui.1.scd" > "$out/share/man/man1/universe-ui.1"
+fi
+
+install -Dm644 "$repo/ui/universe-ui.desktop" -t "$out/share/applications"
+install -Dm644 "$repo/ui/icons/hicolor/scalable/apps/universe-ui.svg" -t "$out/share/icons/hicolor/scalable/apps"
+install -Dm644 "$repo/ui/icons/hicolor/symbolic/apps/universe-ui-symbolic.svg" -t "$out/share/icons/hicolor/symbolic/apps"
+install -Dm755 "$repo/install.sh" "$out/install.sh"
+install -Dm644 "$repo/LICENSE" "$out/LICENSE"
+echo "$out"

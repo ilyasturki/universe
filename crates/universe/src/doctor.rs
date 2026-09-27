@@ -319,7 +319,7 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
                 if nixos {
                     "the home-manager module installs the universe shell extension; log out and back in to load it".to_string()
                 } else {
-                    format!("copy the extension/ folder of Universe to ~/.local/share/gnome-shell/extensions/{uuid}, then log out and back in")
+                    "run universe setup, then log out and back in".to_string()
                 },
             )
         } else {
