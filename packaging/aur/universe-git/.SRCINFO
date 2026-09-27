@@ -29,7 +29,7 @@ pkgname = universe-git
 	depends = glibc
 	depends = hicolor-icon-theme
 	depends = python
-	depends = pyside6
+	depends = pyside6>=6.11
 	depends = python-pysdl2
 	depends = python-qrcode
 	depends = python-xkbcommon
@@ -65,10 +65,10 @@ pkgname = universe-desktop-git
 	depends = glibc
 	depends = gst-plugins-base
 	depends = gst-plugins-good
-	depends = gtk4
+	depends = gtk4>=1:4.22
 	depends = hicolor-icon-theme
-	depends = libadwaita
-	depends = universe
+	depends = libadwaita>=1:1.9
+	depends = universe=0.0.6.r160.g030024d
 	optdepends = gst-libav: recordings played in the app (H.264, HEVC)
 	optdepends = gst-plugins-bad: recordings played in the app (AV1, VA-API)
 	provides = universe-desktop=0.0.6.r160.g030024d

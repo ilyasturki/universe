@@ -61,7 +61,7 @@ package_universe() {
     'glibc'
     'hicolor-icon-theme'
     'python'
-    'pyside6'
+    'pyside6>=6.11'
     'python-pysdl2'
     'python-qrcode'
     'python-xkbcommon'
@@ -118,10 +118,10 @@ package_universe-desktop() {
     'glibc'
     'gst-plugins-base'
     'gst-plugins-good'
-    'gtk4'
+    'gtk4>=1:4.22'
     'hicolor-icon-theme'
-    'libadwaita'
-    'universe'
+    'libadwaita>=1:1.9'
+    "universe=$pkgver"
   )
   optdepends=(
     'gst-libav: recordings played in the app (H.264, HEVC)'
