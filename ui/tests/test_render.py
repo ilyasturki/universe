@@ -776,6 +776,26 @@ def test_a_reprise_list_that_fits_shows_every_row_without_scrolling(api):
     pump(50)
 
 
+def test_the_switch2_picker_opens_on_a_late_choice_with_its_ring_whole(api):
+    from PySide6.QtCore import Q_ARG, QMetaObject, QObject
+
+    _engine, window = render(api, activate=True)
+    api.theme.set("switch2")
+    settle(window)
+    picker = window.findChild(QObject, "picker")
+    title = "A title far longer than the card that holds it, and then some more words to be sure"
+    spec = {"title": title, "choices": [f"Choice {i}" for i in range(12)], "index": 11}
+    QMetaObject.invokeMethod(picker, "show", Q_ARG("QVariant", spec), Q_ARG("QVariant", None))
+    pump(500)
+    heading = next(o for o in picker.findChildren(QObject) if o.property("text") == title)
+    assert heading.property("x") + heading.property("width") <= heading.parentItem().property("width"), "the title stays on the card"
+    flick = next(o for o in picker.findChildren(QObject) if o.metaObject().className().startswith("QQuickListView"))
+    bottom = flick.property("originY") + flick.property("contentHeight")
+    assert flick.property("contentY") + flick.property("height") == bottom, "the last row shows with the room under it"
+    window.close()
+    pump(50)
+
+
 def test_a_long_journal_paragraph_stops_above_the_hint_bar(api):
     _engine, window = render(api, 1280, 800, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")

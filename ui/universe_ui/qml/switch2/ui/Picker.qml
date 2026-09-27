@@ -27,6 +27,7 @@ Modal {
     ]
     readonly property real rowHeight: Theme.dp(100)
     readonly property real room: Theme.dp(Theme.ringRoom)
+    readonly property int shownRows: Math.min(7, Math.max(1, choices.length))
 
     function show(spec, done) {
         title = spec.title || "";
@@ -35,7 +36,7 @@ Modal {
         current = spec.index !== undefined ? spec.index : -1;
         index = Math.max(0, current);
         present(done);
-        list.positionViewAtIndex(index, ListView.Contain);
+        list.contentY = list.originY + Math.max(0, index - shownRows + 1) * rowHeight;
     }
 
     card.width: Theme.dp(1000)
@@ -62,12 +63,14 @@ Modal {
         id: heading
         x: Theme.dp(60)
         y: Theme.dp(20)
+        width: parent.width - x * 2
         height: picker.title !== "" ? Theme.dp(80) : 0
         verticalAlignment: Text.AlignVCenter
         visible: picker.title !== ""
         text: picker.title
         color: Theme.textSecondary
         font.pixelSize: Theme.dp(Theme.fontSmall)
+        elide: Text.ElideRight
     }
 
     ListView {
@@ -76,7 +79,7 @@ Modal {
         x: Theme.dp(40) - picker.room
         y: heading.y + heading.height + Theme.dp(10) - picker.room
         width: parent.width - Theme.dp(80) + picker.room * 2
-        height: picker.rowHeight * Math.min(7, Math.max(1, picker.choices.length)) + picker.room * 2
+        height: picker.rowHeight * picker.shownRows + picker.room * 2
         model: picker.choices
         currentIndex: picker.index
         interactive: false
