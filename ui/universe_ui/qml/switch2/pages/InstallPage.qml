@@ -278,8 +278,13 @@ FocusScope {
                     tabs.step(-1);
                 focusMain();
             });
+        } else if (id === "store") {
+            shell.menu("Store", sources.stores.map(function(s) { return { label: s.name, act: s.id }; }), function(store) {
+                sources.pick(store);
+                focusMain();
+            });
         } else if (id === "signin") {
-            shell.push("pages/SettingsPage.qml", { section: "signin" });
+            shell.push("pages/FormPage.qml", { source: sources.source });
         } else if (id === "clear") {
             sources.search("");
         }
@@ -345,6 +350,8 @@ FocusScope {
         focus: page.zone === "rail"
         items: {
             var out = [ { id: "search", icon: "search", label: "Search" } ];
+            if (page.sources.stores.length > 1)
+                out.unshift({ id: "store", icon: "shop", label: page.sourceName });
             if (page.sources.query !== "")
                 out.push({ id: "clear", icon: "filter", label: "Clear the search" });
             out.push({ id: "signin", icon: "key", label: page.loggedIn ? "Signed in" : "Sign in" });

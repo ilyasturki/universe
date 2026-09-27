@@ -452,6 +452,61 @@
         {"key": "install_timeout_s", "type": "int", "default": 7200, "label": "Maximum install or update time (s)", "scope": "global", "choices": [], "dynamic": false, "advanced": true},
         {"key": "achievements", "type": "bool", "default": true, "label": "Achievements (comet stands in for GOG Galaxy)", "scope": "game", "choices": [], "dynamic": false, "advanced": false}
       ]
+    },
+    {
+      "id": "epic",
+      "name": "Epic Games",
+      "version": "0.1.0",
+      "description": "Installs and updates the games of your Epic Games account through legendary; lists their achievements.",
+      "enabled": false,
+      "available": true,
+      "missing": [],
+      "logged_in": false,
+      "user": "",
+      "games_dir": "/mnt/games/PC",
+      "library_at": "",
+      "capabilities": ["achievements", "uninstall"],
+      "settings": [
+        {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder (empty: paths.games_root)", "scope": "global", "choices": [], "dynamic": false, "advanced": false},
+        {"key": "with_dlcs", "type": "bool", "default": true, "label": "Install owned DLCs", "scope": "global", "choices": [], "dynamic": false, "advanced": false},
+        {"key": "achievements", "type": "bool", "default": true, "label": "Achievements (fetched after each session)", "scope": "game", "choices": [], "dynamic": false, "advanced": false}
+      ]
+    },
+    {
+      "id": "itch",
+      "name": "itch.io",
+      "version": "0.1.0",
+      "description": "Installs and updates the games you own on itch.io through butler, and adopts the itch app's installs.",
+      "enabled": false,
+      "available": true,
+      "missing": [],
+      "logged_in": false,
+      "user": "",
+      "games_dir": "/mnt/games/PC",
+      "library_at": "",
+      "capabilities": ["uninstall"],
+      "settings": [
+        {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder (empty: paths.games_root)", "scope": "global", "choices": [], "dynamic": false, "advanced": false},
+        {"key": "platform", "type": "enum", "default": "linux", "label": "Build to install when a game has both", "scope": "global", "choices": ["linux", "windows"], "dynamic": false, "advanced": false}
+      ]
+    },
+    {
+      "id": "steam",
+      "name": "Steam",
+      "version": "0.1.0",
+      "description": "Runs the games of your Steam library itself, with the Steam client in the background; installs them through Steam's window and reads their achievements.",
+      "enabled": false,
+      "available": true,
+      "missing": [],
+      "logged_in": false,
+      "user": "",
+      "games_dir": null,
+      "library_at": "",
+      "capabilities": ["achievements", "uninstall"],
+      "settings": [
+        {"key": "achievements", "type": "bool", "default": true, "label": "Achievements (read from Steam after each session)", "scope": "game", "choices": [], "dynamic": false, "advanced": false},
+        {"key": "shared_prefix", "type": "bool", "default": true, "label": "Share Steam's prefix, and the saves in it (games added from now on)", "scope": "global", "choices": [], "dynamic": false, "advanced": false}
+      ]
     }
   ],
   "lutris": {"imported": ["celeste", "hades"], "hours_imported": {"celeste": 12.5, "hades": 30.2}},

@@ -5,11 +5,19 @@ from universe_ui.screens.add import runner_candidates
 def test_add_form_rows(api, fake):
     form = api.screens.add
     form.load()
-    assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups] == [("", ["pick_file"]), ("Stores", ["store"]), ("Lutris", ["lutris"])]
+    assert [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups] == [
+        ("", ["pick_file"]),
+        ("Stores", ["store", "store", "store", "store"]),
+        ("Lutris", ["lutris"]),
+    ]
     rows = rows_by_key(form)
     assert rows["pick_file"]["type"] == "action" and rows["pick_file"]["action"] == "Pick a file"
-    assert rows["store"]["label"] == "GOG" and rows["store"]["source"] == "gog" and rows["store"]["action"] == "Open"
-    assert rows["store"]["display"] == "Signed in as yasso" and rows["store"]["loggedIn"] is True and rows["store"]["available"] is True
+    gog, epic, itch, steam = (r for r in form.rows if r["key"] == "store")
+    assert gog["label"] == "GOG" and gog["source"] == "gog" and gog["action"] == "Open"
+    assert gog["display"] == "Signed in as yasso" and gog["loggedIn"] is True and gog["available"] is True
+    assert (epic["label"], epic["display"], epic["action"], epic["available"]) == ("Epic Games", "Not set up", "Set up", False), "off: set it up first"
+    assert (itch["label"], itch["available"]) == ("itch.io", False)
+    assert (steam["label"], steam["available"]) == ("Steam", False)
     assert rows["lutris"]["display"] == "" and rows["lutris"]["action"] == "Import"
 
 

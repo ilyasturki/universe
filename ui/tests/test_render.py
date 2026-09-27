@@ -49,6 +49,11 @@ def count_frames(window, ms):
     return len(frames)
 
 
+def js(obj, name):
+    value = obj.property(name)
+    return value.toVariant() if hasattr(value, "toVariant") else value
+
+
 def test_the_scene_holds_still_behind_the_game(api, fake, monkeypatch):
     from universe_ui import fake_core
 
@@ -391,6 +396,47 @@ def test_signals_end_the_loop_while_it_idles(app):
         notifier.deleteLater()
 
 
+def test_a_second_store_switches_the_install_pages_of_both_looks(api, fake):
+    from PySide6.QtCore import Q_ARG, QMetaObject
+
+    fake.core._source("epic").update(enabled=True, logged_in=True)
+    fake.core._data["source_library"]["epic"] = [{"id": "Min", "title": "Hades", "owned": True, "installed": False}]
+    sources = api.screens.sources
+    _engine, window = render(api, activate=True)
+    root = window.property("contentItem").childItems()[0].property("item")
+
+    def until(done):
+        for _ in range(60):
+            pump(50)
+            if done():
+                return
+        raise AssertionError("never came")
+
+    root.setProperty("tabIndex", root.property("settingsTab"))
+    pump(100)
+    page = root.property("activePage")
+    QMetaObject.invokeMethod(page, "land", Q_ARG("QVariant", "install"))
+    until(lambda: sources.rows)
+    content = js(page, "content")
+    store = content["groups"][0]
+    assert store["title"] == "Store" and content["rows"][store["rows"][0]]["display"] == "GOG", "the store card comes first"
+    sources.pick("epic")
+    until(lambda: [r["title"] for r in sources.rows] == ["Hades"])
+    content = js(page, "content")
+    assert content["rows"][content["groups"][0]["rows"][0]]["display"] == "Epic Games"
+    assert [r["label"] for r in content["rows"] if r["key"] == "game"] == ["Hades"]
+
+    api.theme.set("switch2")
+    settle(window)
+    root = window.property("contentItem").childItems()[0].property("item")
+    QMetaObject.invokeMethod(root, "push", Q_ARG("QVariant", "pages/InstallPage.qml"), Q_ARG("QVariant", {}))
+    pump(500)
+    install = root.property("topPage")
+    assert install.property("sourceName") == "Epic Games" and [c["game"]["title"] for c in js(install, "cells") if not c.get("heading")] == ["Hades"]
+    window.close()
+    pump(50)
+
+
 def test_the_install_pages_render_a_running_install_in_both_looks(api, fake):
     from PySide6.QtCore import Q_ARG, QMetaObject, Qt
     from PySide6.QtTest import QTest
@@ -398,10 +444,6 @@ def test_the_install_pages_render_a_running_install_in_both_looks(api, fake):
     sources = api.screens.sources
     _engine, window = render(api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
-
-    def js(obj, name):
-        value = obj.property(name)
-        return value.toVariant() if hasattr(value, "toVariant") else value
 
     root.setProperty("tabIndex", root.property("settingsTab"))
     pump(100)

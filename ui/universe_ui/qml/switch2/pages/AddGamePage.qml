@@ -50,15 +50,12 @@ FocusScope {
             });
         } else if (row.key === "store") {
             Sound.play("ok");
-            if (!row.available)
-                shell.push("pages/SettingsPage.qml", {
-                    section: "modules"
-                });
-            else if (row.loggedIn)
+            if (row.available && row.loggedIn) {
+                api.screens.sources.pick(row.source);
                 shell.push("pages/InstallPage.qml", {});
-            else
-                shell.push("pages/SettingsPage.qml", {
-                    section: "signin"
+            } else
+                shell.push("pages/FormPage.qml", {
+                    source: row.source
                 });
         } else if (row.key === "lutris") {
             importLutris();

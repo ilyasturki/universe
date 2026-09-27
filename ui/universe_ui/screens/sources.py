@@ -73,6 +73,10 @@ def _age(iso):
 STALE_S = 15 * 60
 
 
+def _stores(sources):
+    return [s for s in sources if s.get("enabled", True) and s.get("available", True)]
+
+
 def _free_space(path):
     try:
         return shutil.disk_usage(path).free if path else 0
@@ -107,6 +111,7 @@ class SourcesBrowser(AsyncScreen):
         self._peeking = ""
         self._error = ""
         self._free = 0
+        self._all_updates = []
         client.progress.connect(self._on_progress)
         client.jobFinished.connect(self._on_job_finished)
         client.libraryChanged.connect(self._on_library_changed)
@@ -136,27 +141,35 @@ class SourcesBrowser(AsyncScreen):
         """Y: the store's listing, so games bought since show up."""
         self._reload(True)
 
-    def _reload(self, store):
+    def _reload(self, store, relist=True):
         if self._busy:
             return
+        asked, listed = self._source, self._all_updates
 
         def work():
             sources = self._client.sources()
-            source = self._source or (sources[0]["id"] if sources else "")
-            updates = self._client.updates() if source else []
+            stores = [s["id"] for s in _stores(sources)]
+            source = self._source if self._source in stores else (stores[0] if stores else "")
+            all_updates = self._client.updates() if relist and source else listed
             games = self._client.sourceLibrary(source, store) if source else []
             if store and source:
                 sources = self._client.sources()  # library_at moved
             current = next((s for s in sources if s.get("id") == source), {})
-            return sources, source, updates, games, _free_space(str(current.get("games_dir") or ""))
+            return sources, source, all_updates, games, _free_space(str(current.get("games_dir") or ""))
 
         def done(result, error):
+            if result:
+                self._all_updates = result[2]
+            if asked != self._source:
+                self._reload(False, relist=relist and not result)
+                return
             self._error = error or ""
             if error:
                 self.sourceChanged.emit()
                 self.message.emit(error)
                 return
-            sources, source, updates, games, free = result
+            sources, source, all_updates, games, free = result
+            updates = [u for u in all_updates if u.get("source", source) == source]
             self._sources = sources
             self._free = free
             self.sourcesChanged.emit()
@@ -170,6 +183,18 @@ class SourcesBrowser(AsyncScreen):
                 self._rebuild()
 
         self._run(work, done)
+
+    @Slot(str)
+    def pick(self, ident):
+        """Lists another of the stores: its cached listing and the disk, as `load` does; a search is dropped."""
+        if not ident or ident == self._source:
+            return
+        self._source, self._query, self._games, self._updates, self._error = ident, "", [], [], ""
+        self.sourceChanged.emit()
+        self.queryChanged.emit()
+        self.updatesChanged.emit()
+        self._show([])
+        self._reload(False, relist=False)
 
     @Slot(int)
     def peek(self, index):
@@ -351,6 +376,7 @@ class SourcesBrowser(AsyncScreen):
         return str((current or {}).get("library_at") or "")
 
     sources = Property(list, lambda self: list(self._sources), notify=sourcesChanged)
+    stores = Property(list, lambda self: [{"id": s["id"], "name": s.get("name") or s["id"]} for s in _stores(self._sources)], notify=sourcesChanged)
     source = Property(str, lambda self: self._source, notify=sourceChanged)
     current = Property(QVARIANT, _current_source, notify=sourceChanged)
     libraryAt = Property(str, _library_at, notify=sourceChanged)

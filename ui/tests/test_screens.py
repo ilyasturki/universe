@@ -189,15 +189,16 @@ def test_sources_list(api, fake):
     form = api.screens.sourceList
     form.load()
     wait_for(form.rowsChanged, 3000)  # the listing probes the logins: off the UI thread
-    assert [r["module"] for r in form.rows] == ["gog"]
+    assert [r["module"] for r in form.rows] == ["gog", "epic", "itch", "steam"], "the running ones first"
     gog = form.rows[0]
     assert gog["section"] == "Sources" and gog["switch"] is True and gog["source"] is True
     assert gog["label"] == "GOG" and gog["value"] is True and gog["display"] == "On" and gog["meta"] == "v0.1.0"
-    assert [(g["title"], g["rows"]) for g in form.groups] == [("", [0])]
+    assert form.rows[1]["value"] is False and form.rows[1]["display"] == "Off"
+    assert [(g["title"], g["rows"]) for g in form.groups] == [("", [0]), ("Off", [1, 2, 3])]
     form.toggle(0)
     wait_for(form.rowsChanged, 3000)
     assert next(s for s in fake.sources() if s["id"] == "gog")["enabled"] is False
-    assert form.rows[0]["value"] is False and form.rows[0]["display"] == "Off"
+    assert [r["value"] for r in form.rows] == [False, False, False, False] and form.rows[0]["display"] == "Off"
     assert [g["title"] for g in form.groups] == ["Off"], "no empty card for the running ones"
 
 
@@ -661,6 +662,25 @@ def test_sources_browser_keeps_its_fetch(api, fake):
     browser.refresh()
     settle(browser)
     assert len(calls) == 2
+
+
+def test_sources_browser_lists_the_store_picked(api, fake):
+    browser = api.screens.sources
+    browser.load()
+    settle(browser)
+    assert [s["id"] for s in browser.stores] == ["gog"] and browser.source == "gog", "a store that is off is not one to list"
+    fake.core._source("epic").update(enabled=True, logged_in=True)
+    fake.core._data["source_library"]["epic"] = [{"id": "Min", "title": "Hades", "owned": True, "installed": False}]
+    browser.refresh()
+    settle(browser)
+    assert [s["name"] for s in browser.stores] == ["GOG", "Epic Games"] and browser.source == "gog"
+    browser.pick("epic")
+    settle(browser)
+    assert browser.source == "epic" and [r["title"] for r in browser.rows] == ["Hades"] and browser.updates == []
+    fake.core._source("epic")["enabled"] = False
+    browser.refresh()
+    settle(browser)
+    assert browser.source == "gog", "the store turned off, the page goes back to one still on"
 
 
 def test_sources_browser_uninstall_and_remove(api, fake):

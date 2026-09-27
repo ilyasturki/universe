@@ -148,6 +148,15 @@ def test_cancel_reaches_the_running_install_only(fake):
     assert row["installed"] is False and row["partial_bytes"] > 0
 
 
+def test_uninstall_via_names_the_store_that_removes_the_files_itself(fake):
+    assert fake.uninstallVia("control") == "", "GOG's folder goes to the trash"
+    fake.core._game("control")["source"] = "epic"
+    assert fake.uninstallVia("control") == "", "Epic Games is off"
+    next(s for s in fake.core._data["sources"] if s["id"] == "epic")["enabled"] = True
+    assert fake.uninstallVia("control") == "Epic Games"
+    assert fake.uninstallVia("no-such-game") == ""
+
+
 def test_a_failing_job_reports_its_end(fake):
     def broken(source, game_id, progress=None):
         raise RuntimeError("offline")

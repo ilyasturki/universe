@@ -54,7 +54,10 @@ FocusScope {
             });
         } else if (row.key === "store") {
             Sound.enter();
-            page.installRequested(row.source, !row.available ? "modules" : row.loggedIn ? "install" : "login");
+            const ready = row.available && row.loggedIn;
+            if (ready)
+                api.screens.sources.pick(row.source);
+            page.installRequested(row.source, ready ? "install" : "source");
         } else if (row.key === "lutris") {
             importLutris();
         }

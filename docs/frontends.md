@@ -541,7 +541,9 @@ rail's tiles pick their art the same way.
 
 ## The Install page
 
-`api.screens.sources` (`SourcesBrowser`) lists one source's games: `rows` of `{id, title, game_id,
+`api.screens.sources` (`SourcesBrowser`) lists one source's games — `source`, one of `stores` (the
+enabled, available sources, `{id, name}`), the first until `pick(id)` lists another from its cache
+and the disk as `load()` does, dropping a search: `rows` of `{id, title, game_id,
 image, installed, pending, partial, busy, status, action, disk_size, download_size, partial_bytes,
 size, sizeText, sizeKind}`, installed first. `load()` (opening the page) serves the core's cache and the
 disk, re-listed once 15 min old, never the store; `refresh()` (Y) asks the store, so a game
@@ -560,7 +562,8 @@ failed with `cancelled`, the toast says what was kept, and the row turns `partia
 "Paused · X of Y kept", `action` `Resume`. Reloads after a job, an uninstall or a removal stay off
 the network.
 
-Reprise keeps it as Settings › Install: an Installing card (running and paused, a hairline of
+Reprise keeps it as Settings › Install: with two stores or more a Store card first (one row, the
+store's name; A opens the menu of them), an Installing card (running and paused, a hairline of
 progress under a paused row), an Updates card when some are pending (one row, Update everything,
 `updateAll()`; a game's own Update is in its row's menu), then Installed and Owned, every game with its size in figures of one
 width, the library's age or the store's failure in the card meta; A opens the row's menu (Cancel
@@ -570,7 +573,8 @@ without a size peeks it. The Switch 2 look's `pages/InstallPage.qml` is two tabs
 Store, the tiles of what is owned and not installed (a download or a pause painted on the tile's
 foot) and the search's results, A installs after the same confirm; Manage, the install folder's
 strip (used · free), then Installing and Installed as rows with a size and an action — A is the
-row's menu, X cancels the running job from either tab.
+row's menu, X cancels the running job from either tab. With two stores or more the rail's first entry,
+the store's name, opens the menu of them.
 
 ## Detail, recordings and journal
 
@@ -832,11 +836,12 @@ Reprise joins them into one untitled card under the page's title. The file flow 
 `runnerIds` — the ones whose `extensions` take the file first (`linux` takes a bare binary, `.sh`,
 `.x86_64`, `.AppImage`), found before missing, Proton before Wine, then by name — with `runnerIndex` on the
 first; the page shows that list as a picker, `pickRunner(i)` takes the choice, `pendingTitle()`
-proposes the title and `addGame(title)` calls `add_game`, toasting `message`. A store row leaves
-the hub for Settings › Install (Reprise: `installRequested(source, section)` → `theme.qml`
-`openSettings(section)`, whose `deliverLanding` calls the Settings page's `land(name)` once it is
-the active page; the Switch 2 look pushes its Install page), signed out for Login / Sign-in, and
-with the source's module off (`available` false) for Modules. The
+proposes the title and `addGame(title)` calls `add_game`, toasting `message`. A signed-in store
+row picks that store (`api.screens.sources.pick`) and leaves the hub for Settings › Install (Reprise:
+`installRequested(source, "install")` → `theme.qml` `openSettings(section)`, whose `deliverLanding`
+calls the Settings page's `land(name)` once it is the active page; the Switch 2 look pushes its
+Install page); one signed out or off (`available` false) opens the source's own page instead
+(`pages/FormPage.qml` with `{ source }`), where its switch and Sign-in card are. The
 Lutris row is two presses: `previewLutris()` runs `import_lutris(false)` off the UI thread
 (`busy`) into `lutris` (the report) or `lutrisError` (Lutris absent: shown on the row, never
 toasted — the client's `attempt(work)` returns the error instead of emitting it), the row then

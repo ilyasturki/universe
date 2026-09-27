@@ -1071,7 +1071,12 @@ FocusScope {
             }
             function onInstallRequested(source, section) {
                 root.closeSub();
-                root.openSettings(section);
+                if (section === "source")
+                    root.openSub("pages/FormPage.qml", {
+                        source: source
+                    });
+                else
+                    root.openSettings(section);
             }
             function onSettingsRequested(game) {
                 root.pushSub("pages/GameSettingsPage.qml", {

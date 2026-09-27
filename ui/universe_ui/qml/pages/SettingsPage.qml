@@ -279,6 +279,21 @@ FocusScope {
             }
             var busy = sources.busy ? (listed.length > 0 ? " · refreshing…" : "loading…") : "";
             var stale = sources.error !== "" ? sourceName + " could not be reached" + (sources.libraryAge ? " · listing from " + sources.libraryAge : "") : "";
+            if (sources.stores.length > 1) {
+                rows.push({
+                    section: sourceName,
+                    key: "store",
+                    label: "Store",
+                    type: "action",
+                    display: sourceName,
+                    detail: "",
+                    action: "Change"
+                });
+                groups.push({
+                    title: "Store",
+                    rows: [rows.length - 1]
+                });
+            }
             if (jobs.length > 0)
                 groups.push({
                     title: "Installing",
@@ -633,6 +648,19 @@ FocusScope {
         } else if (sectionId === "install" && row.key === "all") {
             Sound.enter();
             sources.updateAll();
+        } else if (sectionId === "install" && row.key === "store") {
+            Sound.panel();
+            menu.show(sources.stores.map(function (s) {
+                return {
+                    icon: "download",
+                    label: s.name,
+                    action: s.id,
+                    active: s.id === sources.source
+                };
+            }), cards, cards.focusRect, "", function (id) {
+                sources.pick(id);
+                cards.forceActiveFocus();
+            });
         } else if (sectionId === "install") {
             Sound.panel();
             menu.show(page.gameActions(row), cards, cards.focusRect, "", function (action) {
