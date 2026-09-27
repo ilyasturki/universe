@@ -21,10 +21,18 @@ THEMES = [
         "ground": "#ebebeb",
         "detail": "The Switch 2 HOME menu.",
     },
+    {
+        "id": "ps5",
+        "name": "PS5",
+        "entry": "ps5/theme.qml",
+        "overlay": "",
+        "frame": False,
+        "ground": "#0b0d12",
+        "detail": "The PS5 home screen: the game's world behind a row of tiles.",
+    },
 ]
 DEFAULT = "reprise"
 MEMORY_KEY = "theme"
-FONT_KEY = "switch2Font"
 
 
 def theme_by_id(ident):
@@ -38,7 +46,7 @@ class ThemeSelector(QObject):
     def __init__(self, memory, initial="", parent=None):
         super().__init__(parent)
         self._memory = memory
-        self._current = theme_by_id(initial) or theme_by_id(memory.get(MEMORY_KEY)) or theme_by_id(DEFAULT)
+        self._current = theme_by_id(initial) or theme_by_id(memory.get(MEMORY_KEY)) or theme_by_id(DEFAULT) or THEMES[0]
         self._landing = ""
 
     # A switch rebuilds the whole tree: the new look opens on its Themes page, once.
@@ -52,6 +60,7 @@ class ThemeSelector(QObject):
             self._current = theme
             self._landing = "themes"
             self.changed.emit()
+            self.fontChanged.emit()
         return True
 
     @Slot(result=str)
@@ -59,16 +68,20 @@ class ThemeSelector(QObject):
         landing, self._landing = self._landing, ""
         return landing
 
+    # Stored in ui-memory.json: renaming a look's id orphans its font.
+    def _font_key(self):
+        return self._current["id"] + "Font"
+
     def _font(self):
-        return self._memory.get(FONT_KEY) or ""
+        return self._memory.get(self._font_key()) or ""
 
     def _set_font(self, path):
         if path == self._font():
             return
         if path:
-            self._memory.set(FONT_KEY, path)
+            self._memory.set(self._font_key(), path)
         else:
-            self._memory.unset(FONT_KEY)
+            self._memory.unset(self._font_key())
         self.fontChanged.emit()
 
     themes = Property(list, lambda self: [dict(t) for t in THEMES], constant=True)

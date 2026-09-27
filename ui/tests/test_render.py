@@ -91,6 +91,24 @@ def test_themes_render_and_switch_live(api):
     pump(50)
 
 
+def test_the_ps5_look_renders_and_lands_on_its_themes(api):
+    _engine, window = render(api)
+    api.theme.set("ps5")
+    settle(window)
+    assert lit_fraction(window.grabWindow(), api.theme.ground) > 0.01
+    root = window.property("contentItem").childItems()[0].property("item")
+    top = root.property("topPage")
+    assert root.property("depth") == 1 and top is not None, "a switch lands on the new look's Settings"
+    assert top.property("sectionId") == "themes" and top.property("level") == "section", "open on the Themes section"
+    assert api.theme.landing == "", "taken once"
+    api.theme.set("reprise")
+    settle(window)
+    root = window.property("contentItem").childItems()[0].property("item")
+    assert root.property("activePage").property("sectionId") == "themes"
+    window.close()
+    pump(50)
+
+
 def test_the_media_tab_and_the_screenshots_page(api, fake):
     _engine, window = render(api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
