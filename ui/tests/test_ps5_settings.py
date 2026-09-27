@@ -291,7 +291,7 @@ def test_the_wizard_opens_on_first_run_and_runs_again_from_about(empty_api, empt
     press(Qt.Key.Key_Down, 6)
     press(Qt.Key.Key_Return)
     assert form.stepId == "stores", "Down past the last row reaches the buttons, A on Continue moves on"
-    press(Qt.Key.Key_Down, 3)
+    press(Qt.Key.Key_Down, 5)
     press(Qt.Key.Key_Left)
     press(Qt.Key.Key_Return)
     assert form.stepId == "found", "the Back button goes back"

@@ -863,21 +863,26 @@ does the empty Home's "Set up" — a second pill beside "Add a game" in Reprise'
 disc beside the plus in the Switch 2 HOME row — shown while the library is empty, whatever the
 flag says. `load()`
 runs `discover()` off the UI thread and builds `steps` (`{id, title, subtitle}`): `found`, `stores`
-(when an enabled, available source is signed out), `preferences` (when `settings()` says
+(when an enabled, available source is signed out, or one that is off has its launcher on this
+machine), `preferences` (when `settings()` says
 `config_writable`) and `done`; `step`, `stepId`, `next()`, `back()`, `finish()` (sets `onboarded`,
 emits `finished`; `next()` on the last step finishes). Every step is one `rows`/`groups` list in
 the settings forms' shape, so each look draws it with its settings rows and its value editor:
 `found` is a row per launcher found on the machine — an action row (`via`) where Universe can take
 the games over (`display` the count; `runImport(index)` runs `import_lutris(true)`,
-`import_roms(true)` for the emulators' folders, or, for `heroic-gog`, adds `gog_dirs` to the gog source's `scan_dirs` when the config takes writes and
-starts a `scan("gog")` job; the row's `display` follows: "Importing…", "N games added", "Nothing
-new", the error), a `static` row otherwise ("No games", "N games · not importable yet", "· needs
-gogdl"), `quiet` when there is nothing to bring over and nothing was done — Reprise leaves quiet
+`import_roms(true)` for the emulators' folders, or has the source the `via` names adopt them: for
+`heroic-gog` it adds `gog_dirs` to the gog source's `scan_dirs` when the config takes writes, any
+other source it turns on; then it starts a `scan(via)` job. The row's `display` follows:
+"Importing…", "N games added", "Nothing new", the error, or — a scan that brought nothing while the
+source is signed out — "Sign in to X to adopt them", the scan running again once that sign-in
+succeeds), a `static` row otherwise ("No games", "N games · not importable yet", "· needs
+<program>", "· no <via> source"), `quiet` when there is nothing to bring over and nothing was done — Reprise leaves quiet
 rows out unless every row is one — then, under "Runners your games need", one row per missing
 runner the library needs that Universe can install (`via: "component"`; `runImport` installs it
-through `api.screens.components`, the row reading "Installing…" meanwhile; an import asks the
-components again) — `stores` the source's Account row, "Get a sign-in link" (`link`) and "Enter the code"
-(`code`, both `quiet` once the source is signed in there) through the shared `api.screens.login` — `ui/LoginCard.qml` and `switch2/ui/LoginCard.qml`
+through `api.screens.components`, the row reading "Installing…" meanwhile; an import or an
+adoption that brought games asks the components again) — `stores` the source's Account row, "Get a sign-in link" (`link`) and "Enter the code"
+(`code`, both `quiet` once the source is signed in there), or for a source still off a `Use <name>`
+switch (`enabled`, a `bool` row) whose sign-in rows replace it once on, through the shared `api.screens.login` — `ui/LoginCard.qml` and `switch2/ui/LoginCard.qml`
 are the QR, URL and status card `FormPage` shows too — `preferences` the controller family
 (`controller.family`, an `enum` over `api.screens.controller.families`, written with `setFamily`)
 and `launch.hdr` when it fits this GPU (the upscaler upgrades are left to Settings), `done` a summary row and, under a read-only config, why the

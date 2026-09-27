@@ -9,9 +9,9 @@ PREFERENCE_KEYS = ("hdr",)
 FAMILY_DETAIL = "The pad the button hints and the controller art follow until one is plugged in."
 READ_ONLY_HOME_MANAGER = "Settings are managed by home-manager on this machine: change them in programs.universe.settings."
 READ_ONLY = "config.toml is read-only on this machine: make it writable to change settings here."
-NO_GOG_SOURCE = "needs gogdl"
 NEEDED = "Runners your games need"
 NOT_YET = "not importable yet"
+IMPORTERS = ("lutris", "roms")
 
 TITLES = {"found": "What's on this machine", "stores": "Your stores", "preferences": "A few choices", "done": "You're set"}
 SUBTITLES = {"done": "Everything here can be changed later under Settings."}
@@ -58,7 +58,7 @@ def _found_display(launcher):
         return "Importing…"
     if state == "imported":
         return f"{_plural(n, 'game')} added" if n else "Nothing new"
-    if state == "failed":
+    if state in ("failed", "waiting"):
         return launcher["error"] or "Failed"
     if not launcher["games"]:
         return "No games"
@@ -67,6 +67,13 @@ def _found_display(launcher):
 
 def _importable(launcher):
     return bool(launcher["importable"] and launcher["games"])
+
+
+def _unusable(source, via):
+    """Why a launcher's games cannot go to the source that adopts them; empty when they can."""
+    if source is None:
+        return f"no {via} source"
+    return "" if source.get("available", True) else "needs " + ", ".join(source.get("missing") or ["its programs"])
 
 
 class Onboarding(RowsForm):
@@ -89,7 +96,7 @@ class Onboarding(RowsForm):
         self._writable = True
         self._home_manager = False
         self._summary = []
-        self._scan_job = ""
+        self._scans = {}
         login.finished.connect(self._on_login)
         client.jobFinished.connect(self._on_job_finished)
         components.listingChanged.connect(lambda: self._refresh() if self._step_id() == "found" else None)
@@ -104,7 +111,7 @@ class Onboarding(RowsForm):
 
     @Slot()
     def load(self):
-        self._steps, self._step, self._summary, self._scan_job = [_step("found")], 0, [], ""
+        self._steps, self._step, self._summary, self._scans = [_step("found")], 0, [], {}
         self._launchers, self._gog_dirs, self._sources = [], [], []
         self._set_rows([], [])
         self.stepChanged.emit()
@@ -114,13 +121,17 @@ class Onboarding(RowsForm):
                 self.message.emit(f"Could not look at this machine: {error}")
             report = report or {}
             self._gog_dirs = [str(d) for d in report.get("gog_dirs") or []]
-            self._sources = [s for s in self._client.sources() if s.get("available", True) and s.get("enabled", True)]
-            gog = any(s["id"] == "gog" for s in self._sources)
             self._launchers = [{**launcher, "state": "", "count": 0, "error": ""} for launcher in report.get("launchers") or []]
+            found = {launcher.get("via") for launcher in self._launchers if launcher.get("found")}
+            everything = self._client.sources()
+            self._sources = [s for s in everything if s.get("available", True) and (s.get("enabled", True) or s["id"] in found)]
+            known = {s["id"]: s for s in everything}
             for launcher in self._launchers:
-                if launcher.get("via") == "gog" and not gog:
+                via = launcher.get("via") or ""
+                why = _unusable(known.get(via), via) if via and via not in IMPORTERS else ""
+                if why:
                     launcher["importable"] = False
-                launcher["detail"] = "" if launcher["importable"] else NO_GOG_SOURCE if launcher.get("via") == "gog" else NOT_YET
+                launcher["detail"] = why or ("" if launcher["importable"] else NOT_YET)
             config = self._client.config() or {}
             self._writable = bool(config.get("config_writable", True))
             self._home_manager = config.get("os") == "nixos"
@@ -151,7 +162,7 @@ class Onboarding(RowsForm):
             for launcher in filter(lambda launcher: launcher["found"], self._launchers):
                 if _importable(launcher) and not launcher["state"]:
                     row = _row("", launcher["id"], launcher["name"], "action", "")
-                    row.update(via=launcher["via"], display=_plural(launcher["games"], "game"), action="Adopt" if launcher["via"] == "gog" else "Import")
+                    row.update(via=launcher["via"], display=_plural(launcher["games"], "game"), action="Import" if launcher["via"] in IMPORTERS else "Adopt")
                 else:
                     row = _static(launcher["id"], launcher["name"], _found_display(launcher))
                     row["quiet"] = not _importable(launcher) and not launcher["state"]
@@ -169,6 +180,9 @@ class Onboarding(RowsForm):
         elif step == "stores":
             for source in self._sources:
                 name, signed_in = source.get("name", source["id"]), bool(source.get("logged_in"))
+                if not source.get("enabled", True):
+                    _add(rows, groups, name, _row(name, "enabled", f"Use {name}", "bool", False, module=source["id"]), caps=True)
+                    continue
                 _add(rows, groups, name, {**_static("logged_in", "Account", _source_status(source)[0]), "module": source["id"]}, caps=True)
                 link = _row(name, "link", "Get a sign-in link", "action", "", module=source["id"])
                 _add(rows, groups, name, {**link, "action": "Sign in", "display": "", "quiet": signed_in})
@@ -220,12 +234,12 @@ class Onboarding(RowsForm):
             return False
         if launcher["via"] == "lutris":
             self._import_lutris(launcher)
-        elif launcher["via"] == "gog":
-            self._adopt_gog(launcher)
         elif launcher["via"] == "roms":
             self._import_roms(launcher)
+        elif launcher["via"] == "gog":
+            self._adopt_gog(launcher)
         else:
-            return False
+            self._adopt(launcher)
         return True
 
     def _import_lutris(self, launcher):
@@ -270,40 +284,79 @@ class Onboarding(RowsForm):
         if missing and not self._client.setSourceSetting("gog", "scan_dirs", ",".join(current + missing)):
             self._set_state(launcher, "failed", error="Could not add the folders to the GOG source")
             return
+        self._scan(launcher)
+
+    def _source(self, ident):
+        return next((s for s in self._sources if s["id"] == ident), None)
+
+    def _reread(self):
+        by_id = {s["id"]: s for s in self._client.sources()}
+        self._sources = [by_id[s["id"]] for s in self._sources if s["id"] in by_id]
+
+    def _adopt(self, launcher):
+        source = self._source(launcher["via"])
+        if source is None:
+            self._set_state(launcher, "failed", error=_unusable(None, launcher["via"]))
+            return
+        if not source.get("enabled", True):
+            if not self._writable:
+                self._set_state(launcher, "failed", error=f"Settings are read-only: add {launcher['via']} to sources.enabled")
+                return
+            self._client.enableSource(launcher["via"], True)
+            self._reread()
+        self._scan(launcher)
+
+    def _scan(self, launcher):
         self._set_state(launcher, "importing")
-        self._scan_job = self._client.scan("gog")
-        if not self._scan_job:
+        job = self._client.scan(launcher["via"])
+        if job:
+            self._scans[job] = launcher["id"]
+        else:
             self._set_state(launcher, "failed", error="The scan could not start")
 
     def _on_job_finished(self, job, ok, text):
-        if not job or job != self._scan_job:
-            return
-        self._scan_job = ""
-        launcher = self._launcher("heroic-gog")
+        launcher = self._launcher(self._scans.pop(job, "")) if job else None
         if launcher is None:
             return
+        source = self._source(launcher["via"]) or {}
+        name = source.get("name") or launcher["via"]
         if not ok:
             self._set_state(launcher, "failed", error=text)
-            self.message.emit(f"GOG scan failed: {text}")
+            self.message.emit(f"{name} scan failed: {text}")
             return
         count = int(text.split(" ")[0]) if text[:1].isdigit() else 0
+        if not count and not source.get("logged_in", True):
+            self._set_state(launcher, "waiting", error=f"Sign in to {name} to adopt them")
+            if all(s["id"] != "stores" for s in self._steps):
+                self._steps.insert(1, _step("stores"))
+                self.stepChanged.emit()
+            return
+        if count:
+            self._components.load()
         self._set_state(launcher, "imported", count)
         if count:
-            self._summary.append(("GOG", f"{_plural(count, 'game')} adopted"))
+            self._summary.append((name, f"{_plural(count, 'game')} adopted"))
 
     def _on_login(self, ok, text):
         if not ok:
             return
-        self._sources = [s for s in self._client.sources() if s.get("available", True) and s.get("enabled", True)]
-        source = next((s for s in self._sources if s["id"] == self._login.source), None)
+        self._reread()
+        source = self._source(self._login.source)
         if source is not None:
             self._summary.append((source.get("name", source["id"]), "Signed in"))
+        for launcher in self._launchers:
+            if launcher["state"] == "waiting" and launcher["via"] == self._login.source:
+                self._scan(launcher)
         if self._step_id() == "stores":
             self._refresh()
 
     def _write(self, row, payload):
         if row["key"] == "controller.family":
             return self._controller.setFamily(payload)
+        if row["key"] == "enabled" and row.get("module"):
+            self._client.enableSource(row["module"], payload == "true")
+            self._reread()
+            return True
         return self._client.setConfig(row["key"], payload)
 
     def _reload(self, row):

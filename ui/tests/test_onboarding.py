@@ -60,20 +60,52 @@ def test_steps_and_found_rows(empty_api, empty):
     rows = rows_by_key(form)
     assert rows["lutris"]["display"] == "2 games" and rows["lutris"]["action"] == "Import" and rows["lutris"]["detail"] == "", "no title list"
     assert rows["heroic-gog"]["display"] == "1 game" and rows["heroic-gog"]["action"] == "Adopt"
-    assert rows["steam"]["display"] == "3 games · not importable yet" and rows["steam"]["type"] == "static"
-    assert rows["heroic-epic"]["display"] == "1 game · not importable yet" and rows["heroic-amazon"]["display"] == "No games"
+    assert rows["steam"]["display"] == "3 games" and rows["steam"]["action"] == "Adopt" and rows["steam"]["via"] == "steam"
+    assert rows["heroic-epic"]["display"] == "1 game" and rows["heroic-epic"]["action"] == "Adopt" and rows["heroic-epic"]["via"] == "epic"
+    assert rows["heroic-amazon"]["display"] == "No games"
     assert rows["roms"]["display"] == "1 game" and rows["roms"]["action"] == "Import" and rows["roms"]["via"] == "roms"
     form.next()
-    assert form.stepId == "stores" and [r["key"] for r in form.rows] == ["logged_in", "link", "code"]
-    assert form.rows[0]["display"] == "Sign in to install games" and form.groups[0]["title"] == "GOG"
+    assert form.stepId == "stores" and [r["key"] for r in form.rows] == ["logged_in", "link", "code", "enabled", "enabled"]
+    assert form.rows[0]["display"] == "Sign in to install games" and [g["title"] for g in form.groups] == ["GOG", "Epic Games", "Steam"]
+    assert (form.rows[3]["type"], form.rows[3]["label"]) == ("bool", "Use Epic Games"), "off by default, offered since Heroic is here"
+    assert form.rows[4]["label"] == "Use Steam", "and Steam, whose folder is here"
     assert not any(r.get("quiet") for r in form.rows), "signed out, the sign-in rows show"
     form.back()
     assert form.stepId == "found"
 
 
-def test_signed_in_stores_skip_their_step(empty_api):
+def test_signed_in_stores_skip_their_step(empty_api, empty):
+    empty.core._data["sources"] = [s for s in empty.core._data["sources"] if s["id"] == "gog"]
     form = loaded(empty_api.screens.onboarding)
     assert [s["id"] for s in form.steps] == ["found", "preferences", "done"], "every store signed in: nothing to do there"
+
+
+def test_an_offered_store_turns_on_and_adopts_its_launchers_games_once_signed_in(empty_api, empty):
+    form = loaded(empty_api.screens.onboarding)
+    assert [s["id"] for s in form.steps] == ["found", "stores", "preferences", "done"], "Epic is off, its launcher is here"
+    assert form.runImport(index_of(form, "heroic-epic")) is True
+    wait_for(empty.jobFinished, 5000)
+    pump(50)
+    assert empty.core._source("epic")["enabled"] is True, "adopting turns the source on"
+    assert rows_by_key(form)["heroic-epic"]["display"] == "Sign in to Epic Games to adopt them"
+    form.next()
+    assert form.stepId == "stores" and [r["key"] for r in form.rows if r["module"] == "epic"] == ["logged_in", "link", "code"], "on, it asks for a sign-in"
+    empty.core._source("epic")["logged_in"] = True
+    empty_api.screens.login._source = "epic"
+    form._on_login(True, "Signed in.")
+    wait_for(empty.jobFinished, 5000)
+    pump(50)
+    form.back()
+    assert rows_by_key(form)["heroic-epic"]["display"] == "Nothing new", "signed in, the scan runs again"
+
+
+def test_the_store_switch_turns_a_source_on_and_off(empty_api, empty):
+    form = loaded(empty_api.screens.onboarding)
+    form.next()
+    assert form.stepId == "stores"
+    form.toggle(index_of(form, "enabled"))
+    assert empty.core._source("epic")["enabled"] is True
+    assert [r["key"] for r in form.rows if r["module"] == "epic"] == ["logged_in", "link", "code"], "its sign-in rows replace the switch"
 
 
 def test_found_rows_run_the_importers(empty_api, empty):
@@ -85,7 +117,7 @@ def test_found_rows_run_the_importers(empty_api, empty):
     assert rows_by_key(form)["lutris"]["display"] == "2 games added" and rows_by_key(form)["lutris"]["type"] == "static"
     assert empty_api.allGames.count == 2
     assert form.runImport(index_of(form, "lutris")) is False, "an import runs once"
-    assert form.runImport(index_of(form, "steam")) is False, "a launcher Universe cannot take over has nothing to run"
+    assert form.runImport(index_of(form, "heroic-amazon")) is False, "a launcher Universe cannot take over has nothing to run"
     assert form.runImport(index_of(form, "heroic-gog")) is True
     wait_for(empty.jobFinished, 5000)
     pump(50)
@@ -167,7 +199,7 @@ def test_the_wizard_opens_on_first_run_in_both_looks(empty_api, empty, theme):
     press(Qt.Key.Key_Down, 6)
     press(Qt.Key.Key_Return)
     assert form.stepId == "stores", "Down past the last row reaches the buttons, A on Continue moves on"
-    press(Qt.Key.Key_Down, 3)
+    press(Qt.Key.Key_Down, 5)
     press(Qt.Key.Key_Left)
     press(Qt.Key.Key_Return)
     assert form.stepId == "found", "the Back button goes back"
