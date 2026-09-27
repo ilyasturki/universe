@@ -40,6 +40,7 @@ Item {
         size: Theme.dp(Theme.fontSmall)
         fontFamily: Theme.sans
         fontWeight: Font.Normal
+        players: false
         padGlyph: Glyph {
             anchors.fill: parent
             kind: "controllers"

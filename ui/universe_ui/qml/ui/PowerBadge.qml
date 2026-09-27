@@ -8,11 +8,12 @@ Row {
     property real size: Theme.dp(22)
     property string fontFamily: Theme.sans
     property int fontWeight: Font.Medium
-    property Component padGlyph: MenuGlyph {
+    property Component padGlyph: PadIcon {
         anchors.fill: parent
-        kind: "gamepad"
+        family: parent.family
         tint: parent.ink
     }
+    property bool players: true
 
     readonly property int lowPercent: 15
     readonly property color lowTint: "#e0655a"
@@ -32,7 +33,6 @@ Row {
             readonly property color ink: low ? badge.lowTint : current ? badge.currentTint : badge.tint
 
             anchors.verticalCenter: parent.verticalCenter
-            spacing: Theme.dp(7)
 
             Item {
                 anchors.verticalCenter: parent.verticalCenter
@@ -41,6 +41,7 @@ Row {
 
                 Loader {
                     readonly property color ink: source.ink
+                    readonly property string family: modelData.family
 
                     anchors.centerIn: parent
                     width: badge.size * 1.1
@@ -102,6 +103,19 @@ Row {
 
             Text {
                 anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenterOffset: -badge.size * 0.36
+                leftPadding: badge.size * 0.08
+                visible: badge.players && modelData.player > 0
+                text: modelData.player
+                color: source.ink
+                font.family: badge.fontFamily
+                font.weight: Font.Bold
+                font.pixelSize: badge.size * 0.62
+            }
+
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                leftPadding: Theme.dp(7)
                 text: modelData.percent + "%"
                 color: source.ink
                 font.family: badge.fontFamily

@@ -92,7 +92,15 @@ def test_a_pads_own_charge_reading_shows_as_its_battery(started, api):
     line = watcher.device("event31", family="8bitdo-pro-3")
     line["battery"] = {"percent": 80, "charging": False}
     watcher.emit(line)
-    assert api.power.forInput("event31") == {"name": "8BitDo Pro 3", "kind": "pad", "percent": 80, "charging": False, "inputs": ["event31"]}
+    assert api.power.forInput("event31") == {
+        "name": "8BitDo Pro 3",
+        "kind": "pad",
+        "percent": 80,
+        "charging": False,
+        "inputs": ["event31"],
+        "family": "8bitdo-pro-3",
+        "player": 2,
+    }
     watcher.emit({"event": "battery", "id": "event31", "percent": 79, "charging": True})
     assert screen.devices[1]["battery"] == {"percent": 79, "charging": True}
     assert api.power.forInput("event31")["charging"] is True
@@ -306,6 +314,22 @@ def test_the_hud_event_gets_a_toast_the_macros_do_not(started, fake):
     watcher.emit({"event": "hud", "shown": True, "title": "Control"})
     watcher.emit({"event": "hud", "shown": False, "title": "Control"})
     assert notices[2:] == ["MangoHud shown · Control", "MangoHud hidden · Control"]
+
+
+def test_a_passive_listing_keeps_the_last_charge_read(api, fake, tmp_path):
+    from universe_ui.screens.controller import ControllerScreen
+    from universe_ui.screens.power import Power
+
+    power = Power(str(tmp_path / "power_supply"))
+    screen = ControllerScreen(fake, api.memory, power)
+    screen.restart_ms = 0
+    watcher = FakeWatcher("dualsense-edge")
+    screen.start(watcher)
+    watcher.emit({"event": "battery", "id": "event30", "percent": 33, "charging": False})
+    watcher.emit({"event": "waiting"})
+    assert power.forInput("event30")["percent"] == 33 and power.forInput("event30")["family"] == "dualsense-edge"
+    watcher.emit({"event": "ready"})
+    assert power.forInput("event30") is None
 
 
 def test_waiting_lists_the_cores_pads_passively(api, fake):

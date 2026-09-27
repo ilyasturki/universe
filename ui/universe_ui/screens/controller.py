@@ -246,9 +246,17 @@ class ControllerScreen(AdvancedRows, QObject):
         self.stateChanged.emit()
 
     def _enumerate(self):
-        self._devices = [self._entry(p) for p in self._client.controllerPads() if p.get("id")]
+        known = {d["id"]: d for d in self._devices}
+        devices = [self._entry(p) for p in self._client.controllerPads() if p.get("id")]
+        for gone in known.keys() - {d["id"] for d in devices}:
+            self._power.forget(gone)
+        self._devices = devices
         for device in self._devices:
+            # A listing reads no charge: the last one the watcher read stands.
+            if device["battery"] is None and device["id"] in known:
+                device["battery"] = known[device["id"]]["battery"]
             self._map(device)
+            self._power.pad(device["id"], device["name"], device["family"], device["battery"])
         if self._device() is None:
             self._current = self._devices[0]["id"] if self._devices else ""
             if self._devices:
@@ -316,7 +324,7 @@ class ControllerScreen(AdvancedRows, QObject):
             device = self._device(ident)
             if device is not None:
                 device["battery"] = {"percent": int(line.get("percent") or 0), "charging": bool(line.get("charging"))}
-                self._power.report(ident, device["name"], device["battery"])
+                self._power.report(ident, device["battery"])
         elif kind == "button":
             self.buttonPressed.emit(ident, str(line.get("slot") or ""), bool(line.get("pressed")))
         elif kind == "axis":
@@ -391,7 +399,7 @@ class ControllerScreen(AdvancedRows, QObject):
 
     def _clear_devices(self):
         for device in self._devices:
-            self._power.report(device["id"], device["name"], None)
+            self._power.forget(device["id"])
         self._devices = []
         self._current = ""
         self.currentChanged.emit()
@@ -401,7 +409,7 @@ class ControllerScreen(AdvancedRows, QObject):
         ident = str(line.get("id") or "")
         entry = self._entry(line)
         self._map(entry)
-        self._power.report(ident, entry["name"], entry["battery"])
+        self._power.pad(ident, entry["name"], entry["family"], entry["battery"])
         for i, d in enumerate(self._devices):
             if d["id"] == ident:
                 self._devices[i] = entry
@@ -433,7 +441,7 @@ class ControllerScreen(AdvancedRows, QObject):
         if gone is None:
             return
         self._devices = [d for d in self._devices if d["id"] != ident]
-        self._power.report(ident, gone["name"], None)
+        self._power.forget(ident)
         if self._walk is not None and self._walk["id"] == ident:
             self._stop_walk()
             self.message.emit("Controller gone: setup stopped")

@@ -1265,7 +1265,9 @@ def test_the_badge_tints_the_current_pad(api):
     assert sources[True].property("ink") == badge.property("currentTint") and sources[False].property("ink") == badge.property("tint")
     watcher.emit({"event": "gone", "id": "event30"})
     pump(50)
-    pad = sources[True]
+    rows = [c for c in badge.childItems() if c.property("low") is not None]
+    assert len(rows) == 2, "the kernel still reads the pad's charge"
+    pad = rows[1]
     assert pad.property("current") is False and pad.property("ink") == QColor(badge.property("tint")), "no pad current, no green"
     window.close()
     pump(50)
