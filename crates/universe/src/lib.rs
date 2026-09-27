@@ -24,6 +24,7 @@ pub mod mangoapp;
 pub mod media;
 pub mod modules;
 pub mod nest;
+pub mod packagekit;
 pub mod paths;
 pub mod recording;
 pub mod roms;
