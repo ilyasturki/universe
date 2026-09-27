@@ -295,7 +295,23 @@ impl Application {
             })
             .build();
         let about = gio::ActionEntry::builder("about").activate(|app: &Self, _, _| app.show_about()).build();
-        self.add_action_entries([quit, about]);
+        let preferences = gio::ActionEntry::builder("preferences")
+            .activate(|app: &Self, _, _| {
+                if let Some(win) = app.active_window().and_downcast::<Window>() {
+                    crate::dialogs::preferences::present(&win, "");
+                }
+            })
+            .build();
+        let preferences_page = gio::ActionEntry::builder("preferences-page")
+            .parameter_type(Some(glib::VariantTy::STRING))
+            .activate(|app: &Self, _, param| {
+                let page = param.and_then(|p| p.get::<String>()).unwrap_or_default();
+                if let Some(win) = app.active_window().and_downcast::<Window>() {
+                    crate::dialogs::preferences::present(&win, &page);
+                }
+            })
+            .build();
+        self.add_action_entries([quit, about, preferences, preferences_page]);
     }
 
     fn setup_accels(&self) {

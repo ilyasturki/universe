@@ -37,12 +37,13 @@ where
     run(async move { f(core).await }).await
 }
 
-/// `call` for a core future the compiler cannot prove `Send` (`launch`): polled to the end on a blocking thread of the runtime.
-pub async fn call_pinned<T, F, Fut>(f: F) -> universe::Result<T>
+/// `call` for a core future the compiler cannot prove `Send` (`launch`, a source's verbs): polled to the end on a blocking thread
+/// of the runtime.
+pub async fn pinned<T, F, Fut>(f: F) -> T
 where
     T: Send + 'static,
     F: FnOnce(Arc<Core>) -> Fut + Send + 'static,
-    Fut: Future<Output = universe::Result<T>> + 'static,
+    Fut: Future<Output = T> + 'static,
 {
     let core = core();
     let handle = runtime().handle().clone();

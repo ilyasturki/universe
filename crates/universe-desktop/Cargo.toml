@@ -17,6 +17,7 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg",
 gettext-rs = { version = "0.7", features = ["gettext-system"] }
 tracing = "0.1"
 unicode-normalization = "0.1"
+qrcode = { version = "0.14", default-features = false }
 
 [build-dependencies]
 glib-build-tools = "0.22"

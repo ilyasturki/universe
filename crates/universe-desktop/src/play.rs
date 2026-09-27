@@ -32,7 +32,15 @@ impl Window {
                 }
             })
             .build();
-        self.add_action_entries([stop, focus, screenshot, open, play]);
+        let settings = gio::ActionEntry::builder("game-settings")
+            .parameter_type(Some(glib::VariantTy::STRING))
+            .activate(|win: &Self, _, param| {
+                if let Some(game) = param.and_then(|p| p.get::<String>()).and_then(|id| win.app().library().get(&id)) {
+                    crate::dialogs::game_settings::present(win, &game);
+                }
+            })
+            .build();
+        self.add_action_entries([stop, focus, screenshot, open, play, settings]);
         self.sync_play_actions();
     }
 
@@ -59,7 +67,7 @@ impl Window {
     }
 
     /// The monitor the window is on, as a connector: the game starts there.
-    fn connector(&self) -> String {
+    pub(crate) fn connector(&self) -> String {
         self.surface()
             .and_then(|surface| surface.display().monitor_at_surface(&surface))
             .and_then(|monitor| monitor.connector())
@@ -98,7 +106,7 @@ impl Window {
         let (id, screen) = (game.id(), self.connector());
         let (win, game) = (self.downgrade(), game.clone());
         glib::spawn_future_local(async move {
-            let result = backend::call_pinned(move |core| async move { core.launch(&id, &screen, "").await }).await;
+            let result = backend::pinned(move |core| async move { core.launch(&id, &screen, "").await }).await;
             let Some(win) = win.upgrade() else { return };
             match result {
                 Ok(_) => {

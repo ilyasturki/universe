@@ -33,7 +33,7 @@ pub fn sync_game(group: &gio::SimpleActionGroup, game: Option<&GameObject>) {
     for (name, on) in [
         ("play", playable),
         ("details", known),
-        ("settings", false),
+        ("settings", known),
         ("artwork", false),
         ("open-folder", folder),
         ("remove", false),
