@@ -154,7 +154,7 @@
             --replace-fail '"@libSDL3@"' '"${lib.getLib pkgs.sdl3}/lib/libSDL3.so.0"'
         '';
       };
-      # comet's release, not nixpkgs' comet-gog: that package ships no Windows side
+      # comet's release, not nixpkgs' comet-gog: that package ships no Windows side. tools/dist and the source PKGBUILDs pin the same file
       galaxyServiceStub = pkgs.fetchurl {
         url = "https://github.com/imLinguin/comet/releases/download/v0.3.2/GalaxyCommunication-dummy.exe";
         hash = "sha256-x2lSZ9o2OoYa+Z25XK/mi3Mq50PlgwtP7qG8fudF+Z0=";

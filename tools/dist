@@ -16,7 +16,8 @@ Builds the release tree that install.sh installs from, outside Nix:
   OUT/install.sh
 
 Needs cargo and python3 (3.11+) with pip; pip fetches maturin and
-setuptools for the wheel builds. scdoc, when found, adds universe-ui.1 and
+setuptools for the wheel builds, python the GOG source's Galaxy service stub
+from comet's release. scdoc, when found, adds universe-ui.1 and
 universe-desktop.1. UNIVERSE_DESKTOP_BIN names a universe-desktop built
 elsewhere to ship instead; without it or the libraries the GTK app is left out.
 USAGE
@@ -43,6 +44,15 @@ for kind in modules sources; do
     rm -rf "$out/share/universe/$kind"/*/tests
     find "$out/share/universe/$kind" -name __pycache__ -prune -exec rm -rf {} +
 done
+# The flake's galaxyServiceStub: same URL and hash
+"$python" - "$out/share/universe/sources/gog/GalaxyCommunication.exe" <<'PY'
+import hashlib, sys, urllib.request
+url = "https://github.com/imLinguin/comet/releases/download/v0.3.2/GalaxyCommunication-dummy.exe"
+data = urllib.request.urlopen(url, timeout=60).read()
+if hashlib.sha256(data).hexdigest() != "c7695267da363a861af99db95cafe68b732ae743e5830b4feea1bc7ee745f99d":
+    sys.exit(f"dist: {url} does not match its pinned hash")
+open(sys.argv[1], "wb").write(data)
+PY
 
 gen="$(mktemp -d)"
 trap 'rm -rf "$gen"' EXIT
