@@ -41,7 +41,7 @@ pub async fn run(window: gtk::Window, steps: Vec<Step>) {
             Step::Size(w, h) => window.set_default_size(w, h),
             Step::Action(detailed) => match gio::Action::parse_detailed_name(&detailed) {
                 Ok((name, target)) => {
-                    if window.activate_action(&name, target.as_ref()).is_err() {
+                    if !activate(window.upcast_ref(), &name, target.as_ref()) {
                         tracing::warn!("script: no action {name}");
                     }
                 }
@@ -54,6 +54,22 @@ pub async fn run(window: gtk::Window, steps: Vec<Step>) {
         }
     }
     window.application().inspect(|app| app.quit());
+}
+
+/// Runs the action from the first widget that reaches it: a page's own group (`store.`) sits below the window.
+fn activate(root: &gtk::Widget, name: &str, target: Option<&glib::Variant>) -> bool {
+    let mut widgets = vec![root.clone()];
+    while let Some(widget) = widgets.pop() {
+        if widget.activate_action(name, target).is_ok() {
+            return true;
+        }
+        let mut child = widget.last_child();
+        while let Some(c) = child {
+            child = c.prev_sibling();
+            widgets.push(c);
+        }
+    }
+    false
 }
 
 fn shot(widget: &impl IsA<gtk::Widget>, path: &Path) -> Result<(), String> {
