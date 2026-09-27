@@ -1,0 +1,88 @@
+#!/usr/bin/env python3
+import contextlib
+import json
+import os
+import subprocess
+import sys
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _pads
+from _pads import game_env, log, state_path, unit_name
+
+FORWARD = os.path.join(os.path.dirname(os.path.abspath(__file__)), "forward")
+UNIT_ENV_PREFIXES = ("PATH", "HOME", "XDG_", "DBUS_", "SESSION_", "SDL_", "LD_LIBRARY_PATH")
+# Inside the manifest's timeout_s = 10, with room for systemd-run.
+READY_WAIT_S = 7
+
+
+def unit_active(unit):
+    r = subprocess.run(["systemctl", "--user", "is-active", unit], capture_output=True, text=True, check=False)
+    return r.stdout.strip() in ("active", "activating")
+
+
+def ready(path):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def main():
+    settings = json.loads(os.environ.get("MODULE_SETTINGS_JSON") or "{}")
+    effective = json.loads(os.environ.get("UNIVERSE_GAME_JSON") or "{}").get("effective") or {}
+    if effective.get("runner_kind") != "emulator":
+        log(f"{effective.get('runner') or 'this runner'} is no emulator: its pads stay as they are")
+        return 0
+    if effective.get("inputplumber"):
+        log("InputPlumber has this game's pads (its runner's inputplumber option is on): no virtual pads")
+        return 0
+    if not os.access(_pads.UHID, os.R_OK | os.W_OK):
+        log("/dev/uhid is not open to this user (programs.universe.controller.enable on NixOS): the emulator gets the pads as they are")
+        return 0
+
+    session_id = os.environ["SESSION_ID"]
+    unit = unit_name(session_id)
+    state_file = state_path(session_id)
+    with contextlib.suppress(FileNotFoundError):
+        os.remove(state_file)
+    env = {k: v for k, v in os.environ.items() if k.startswith(UNIT_ENV_PREFIXES)}
+    env["PADS_GUIDE"] = "1" if settings.get("guide") else "0"
+    cmd = [
+        "systemd-run",
+        "--user",
+        f"--unit={unit}",
+        "--description=Universe virtual pads",
+        "--collect",
+        "-p",
+        "TimeoutStopSec=5",
+        *(f"--setenv={k}={v}" for k, v in sorted(env.items())),
+        FORWARD,
+    ]
+    r = subprocess.run(cmd, capture_output=True, text=True, check=False)
+    if r.returncode != 0:
+        log(f"systemd-run failed ({r.returncode}): {r.stderr.strip()}")
+        return 0
+
+    deadline = time.monotonic() + READY_WAIT_S
+    doc = None
+    while time.monotonic() < deadline:
+        doc = ready(state_file)
+        if doc or not unit_active(unit):
+            break
+        time.sleep(0.1)
+    if not doc:
+        log(f"the forwarder did not come up (journalctl --user -u {unit}): the emulator gets the pads as they are")
+        subprocess.run(["systemctl", "--user", "stop", unit], capture_output=True, check=False)
+        return 0
+
+    with open(os.environ["UNIVERSE_ENV_FILE"], "a") as f:
+        f.writelines(f"{k}={v}\n" for k, v in game_env().items())
+    for p in doc.get("players", []):
+        log(f"{p['name']}: {p.get('pad') or 'no pad yet'}")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

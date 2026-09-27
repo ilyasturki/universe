@@ -716,6 +716,30 @@ minutes old lists as `failed` with the reason `timed out`. A written entry hides
 the same session, a failed one the deferred one, and that one the pending one. Dotfiles and anything
 that is not `*.json` are ignored, and `render_journal` only renders `written` entries.
 
+## Virtual pads
+
+The `pads` module gives an emulator one virtual pad per player, whatever pads are held: its
+`pre-launch` hook starts `universe-pads-<session>.service`, which reads every physical pad through
+SDL3 and creates `Universe Pad <n>` over `/dev/uhid` (vendor `0079`, product `5550` + player, uniq
+`universe-pad-<n>`), a third-party PS5-class pad as SDL's PS5 driver knows it: sticks, triggers,
+buttons, gyro and accelerometer, touchpad, battery; the emulator's rumble goes back to the physical
+pad. The game's environment gets `SDL_GAMECONTROLLER_IGNORE_DEVICES_EXCEPT` listing the eight
+players and `SDL_JOYSTICK_HIDAPI_PS5=1`, so its SDL sees the virtual pads alone; nothing is grabbed
+or hidden, and the watcher and the launcher read the physical pads as before (the virtual ones have
+no evdev node). A pad takes the lowest player with none; one that goes leaves its player's pad in
+place, reporting nothing held, for the next to take, so the emulator's bindings survive a change of
+pad. Each virtual pad's SDL GUID stays the same from session to session. HOME stays Universe's
+unless `guide` is on. While the game is frozen the pads report nothing held, so what is pressed
+under the launcher is not queued for the game.
+
+Only an emulator runner with its `inputplumber` option off is served; a Proton, Wine or native
+game keeps the physical pads (Wine's winebus reads hidraw and evdev past SDL's hints). Without
+`/dev/uhid` open to the user (on NixOS `programs.universe.controller.enable`, which also opens the
+virtual pads' hidraw nodes) or without SDL3, the hook logs why and the game gets the physical pads.
+`$XDG_RUNTIME_DIR/universe/pads-<session>.json` holds `{ready, pid, players: [{player, name, vendor,
+product, pad}]}` while the forwarder runs; it stops with the session, or by itself once the game's
+unit is gone.
+
 ## Modules
 
 | Rust | Python | CLI | Role |

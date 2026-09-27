@@ -148,7 +148,12 @@
             patchShebangs $out/share/universe/${kind}
           '';
         };
-      modulesPkg = treePkg "modules" ./modules;
+      modulesPkg = (treePkg "modules" ./modules).overrideAttrs {
+        postFixup = ''
+          substituteInPlace $out/share/universe/modules/pads/bin/_sdl.py \
+            --replace-fail '"@libSDL3@"' '"${lib.getLib pkgs.sdl3}/lib/libSDL3.so.0"'
+        '';
+      };
       # comet's release, not nixpkgs' comet-gog: that package ships no Windows side
       galaxyServiceStub = pkgs.fetchurl {
         url = "https://github.com/imLinguin/comet/releases/download/v0.3.2/GalaxyCommunication-dummy.exe";
@@ -440,7 +445,10 @@
           export UNIVERSE_MODULES_PATH="$PWD/modules"
           export UNIVERSE_SOURCES_PATH="$PWD/sources"
           export LD_LIBRARY_PATH="${
-            lib.makeLibraryPath [ pkgs.pipewire ]
+            lib.makeLibraryPath [
+              pkgs.pipewire
+              pkgs.sdl3
+            ]
           }''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           export QT_FORCE_STDERR_LOGGING=1
           export RUSTC_WRAPPER=sccache

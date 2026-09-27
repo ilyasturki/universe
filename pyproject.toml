@@ -16,7 +16,7 @@ qt_log_ignore = [
 line-length = 160
 target-version = "py311"
 include = ["*.py", "*.pyi", "**/pyproject.toml", "modules/*/bin/*", "sources/*/bin/*", "tools/release-notes"]
-extend-exclude = ["modules/capture/bin/thaw"]
+extend-exclude = ["modules/capture/bin/thaw", "modules/pads/bin/thaw"]
 
 [tool.ruff.lint]
 select = [
@@ -36,6 +36,7 @@ include = [
   "modules/capture/bin",
   "modules/screenshot/bin",
   "modules/journal/bin",
+  "modules/pads/bin",
   "sources/gog/bin",
   "crates/universe-py/typings",
   "tools/release-notes",

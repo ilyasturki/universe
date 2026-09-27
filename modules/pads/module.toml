@@ -1,0 +1,29 @@
+api = 2
+id = "pads"
+name = "Virtual pads"
+version = "0.0.6"
+description = "An emulator sees one virtual PlayStation-class pad per player, with gyro, touchpad and rumble, whatever pads you hold; the real ones stay hidden from it and change without the emulator noticing."
+
+[requires]
+bins = ["systemd-run", "systemctl"]
+
+[hooks]
+pre-launch  = "bin/pre"
+freeze      = "bin/freeze"
+thaw        = "bin/thaw"
+session-end = "bin/stop"
+timeout_s   = 10
+
+[[settings]]
+key = "enabled"
+type = "bool"
+default = true
+label = "Hand the pads to the emulator as virtual pads"
+scope = "game"
+
+[[settings]]
+key = "guide"
+type = "bool"
+default = false
+label = "Pass the HOME button to the emulator too"
+scope = "global"

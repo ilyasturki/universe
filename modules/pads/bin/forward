@@ -1,0 +1,237 @@
+#!/usr/bin/env python3
+import contextlib
+import ctypes
+import os
+import select
+import signal
+import subprocess
+import sys
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import _sdl
+from _pads import FIRST_PRODUCT, MAX_PLAYERS, NEUTRAL, VENDOR, VirtualPad, ignore_list, log, state_path, write_state
+
+# A DualSense's USB rate; the report's 16-bit microsecond stamp wraps at 65 ms, so none may be skipped for long.
+TICK_S = 0.004
+SETTLE_S = 0.5
+START_WAIT_S = 2.0
+UNIT_CHECK_S = 2.0
+# Other modules' pre-launch hooks and the game's pre-command run between this start and the game unit's.
+UNIT_START_WAIT_S = 300
+ALIVE = ("active", "activating", "reloading", "refreshing")
+QUIET = (
+    _sdl.EVENT_GAMEPAD_AXIS_MOTION,
+    _sdl.EVENT_GAMEPAD_BUTTON_DOWN,
+    _sdl.EVENT_GAMEPAD_BUTTON_UP,
+    _sdl.EVENT_GAMEPAD_TOUCHPAD_DOWN,
+    _sdl.EVENT_GAMEPAD_TOUCHPAD_MOTION,
+    _sdl.EVENT_GAMEPAD_TOUCHPAD_UP,
+    _sdl.EVENT_GAMEPAD_SENSOR_UPDATE,
+)
+
+
+class Forwarder:
+    def __init__(self, sdl, session_id, guide):
+        self.sdl = sdl
+        self.state_file = state_path(session_id)
+        self.guide = guide
+        self.slots: list[VirtualPad] = []
+        self.held: dict[int, _sdl.Gamepad] = {}
+        self.sent: dict[int, float] = {}
+        self.frozen = False
+        self.stopping = False
+        self.epoch = time.monotonic_ns()
+
+    def tick_us(self):
+        return (time.monotonic_ns() - self.epoch) // 1000
+
+    def add_slot(self):
+        pad = VirtualPad(len(self.slots))
+        self.slots.append(pad)
+        log(f"created {pad.name} (0x{VENDOR:04x}:0x{FIRST_PRODUCT + pad.player:04x})")
+        return pad
+
+    def player_of(self, instance_id):
+        return next((p for p, g in self.held.items() if g.id == instance_id), None)
+
+    def on_added(self, instance_id):
+        handle = self.sdl.SDL_OpenGamepad(instance_id)
+        if not handle:
+            log(f"cannot open pad {instance_id}: {self.sdl.SDL_GetError().decode(errors='replace')}")
+            return
+        pad = _sdl.Gamepad(self.sdl, handle, instance_id)
+        if pad.vendor == VENDOR and FIRST_PRODUCT <= pad.product < FIRST_PRODUCT + MAX_PLAYERS:
+            pad.close()
+            return
+        player = next((s.player for s in self.slots if s.player not in self.held), None)
+        if player is None:
+            if len(self.slots) >= MAX_PLAYERS:
+                log(f"{pad.name}: every one of the {MAX_PLAYERS} players has a pad, left out")
+                pad.close()
+                return
+            player = self.add_slot().player
+        self.held[player] = pad
+        log(f"player {player + 1}: {pad.name} ({pad.vendor:04x}:{pad.product:04x}, gyro {'yes' if pad.gyro else 'no'})")
+        self.publish()
+
+    def on_removed(self, instance_id):
+        player = self.player_of(instance_id)
+        if player is None:
+            return
+        pad = self.held.pop(player)
+        log(f"player {player + 1}: {pad.name} gone, its virtual pad stays")
+        pad.close()
+        self.send(player)
+        self.publish()
+
+    def send(self, player):
+        pad = self.held.get(player)
+        state = pad.state() if pad and not self.frozen else NEUTRAL
+        try:
+            self.slots[player].send(state, self.tick_us(), self.guide)
+        except OSError as e:
+            log(f"player {player + 1}: {e}")
+        self.sent[player] = time.monotonic()
+
+    def serve(self, timeout=0.0):
+        ready, _, _ = select.select([s.fd for s in self.slots], [], [], timeout)
+        for slot in self.slots:
+            if slot.fd not in ready:
+                continue
+            rumble = slot.handle()
+            pad = self.held.get(slot.player)
+            if rumble is not None and pad is not None:
+                pad.rumble(*rumble)
+
+    def dispatch(self, raw):
+        kind = _sdl.event_kind(raw)
+        if kind == _sdl.EVENT_QUIT:
+            self.stopping = True
+        elif kind == _sdl.EVENT_GAMEPAD_ADDED:
+            self.on_added(_sdl.event_which(raw))
+        elif kind == _sdl.EVENT_GAMEPAD_REMOVED:
+            self.on_removed(_sdl.event_which(raw))
+        elif kind == _sdl.EVENT_GAMEPAD_UPDATE_COMPLETE and not self.frozen:
+            player = self.player_of(_sdl.event_which(raw))
+            if player is not None:
+                self.send(player)
+
+    def pump(self, event):
+        while self.sdl.SDL_PollEvent(event):
+            self.dispatch(event.raw)
+
+    def heartbeat(self):
+        now = time.monotonic()
+        for slot in self.slots:
+            if now - self.sent.get(slot.player, 0.0) >= TICK_S:
+                self.send(slot.player)
+
+    def publish(self, ready=True):
+        players = [
+            {
+                "player": s.player + 1,
+                "name": s.name,
+                "vendor": f"{VENDOR:04x}",
+                "product": f"{FIRST_PRODUCT + s.player:04x}",
+                "pad": self.held[s.player].name if s.player in self.held else None,
+            }
+            for s in self.slots
+        ]
+        write_state(self.state_file, {"ready": ready, "pid": os.getpid(), "players": players})
+
+    def close(self):
+        for pad in self.held.values():
+            pad.close()
+        for slot in self.slots:
+            slot.close()
+        with contextlib.suppress(FileNotFoundError):
+            os.remove(self.state_file)
+
+
+class Event:
+    def __init__(self):
+        self.raw = ctypes.create_string_buffer(_sdl.EVENT_SIZE)
+        self._as_parameter_ = ctypes.cast(self.raw, ctypes.c_void_p)
+
+
+def unit_state(unit):
+    r = subprocess.run(["systemctl", "--user", "is-active", unit], capture_output=True, text=True, check=False)
+    return r.stdout.strip()
+
+
+def main():
+    session_id = os.environ["SESSION_ID"]
+    session_unit = os.environ["SESSION_UNIT"]
+    guide = os.environ.get("PADS_GUIDE") == "1"
+    try:
+        sdl = _sdl.load()
+    except OSError as e:
+        log(f"SDL3 not found ({e}): the emulator gets the pads as they are")
+        return 1
+    sdl.SDL_SetHint(b"SDL_GAMECONTROLLER_IGNORE_DEVICES", ignore_list().encode())
+    sdl.SDL_SetHint(b"SDL_JOYSTICK_ALLOW_BACKGROUND_EVENTS", b"1")
+    sdl.SDL_SetHint(b"SDL_NO_SIGNAL_HANDLERS", b"1")
+    if not sdl.SDL_Init(_sdl.INIT_GAMEPAD):
+        log(f"SDL_Init: {sdl.SDL_GetError().decode(errors='replace')}")
+        return 1
+    for kind in QUIET:
+        sdl.SDL_SetEventEnabled(kind, False)
+    sdl.SDL_SetEventEnabled(_sdl.EVENT_GAMEPAD_UPDATE_COMPLETE, True)
+
+    fw = Forwarder(sdl, session_id, guide)
+
+    def on_signal(signum, _frame):
+        if signum == signal.SIGUSR1:
+            fw.frozen = True
+        elif signum == signal.SIGUSR2:
+            fw.frozen = False
+        else:
+            fw.stopping = True
+
+    for signum in (signal.SIGTERM, signal.SIGINT, signal.SIGUSR1, signal.SIGUSR2):
+        signal.signal(signum, on_signal)
+
+    event = Event()
+    try:
+        first = fw.add_slot()
+        deadline = time.monotonic() + START_WAIT_S
+        while not first.started and time.monotonic() < deadline:
+            fw.serve(0.05)
+        settle = time.monotonic() + SETTLE_S
+        while time.monotonic() < settle:
+            fw.pump(event)
+            fw.serve(0.01)
+        fw.publish()
+
+        began = time.monotonic()
+        seen = False
+        next_check = began
+        while not fw.stopping:
+            if sdl.SDL_WaitEventTimeout(event, 1):
+                fw.dispatch(event.raw)
+            fw.pump(event)
+            fw.heartbeat()
+            fw.serve()
+            if time.monotonic() >= next_check:
+                next_check = time.monotonic() + UNIT_CHECK_S
+                state = unit_state(session_unit)
+                if state in ALIVE:
+                    seen = True
+                elif seen:
+                    log(f"{session_unit} is {state}, stopping")
+                    break
+                elif time.monotonic() - began > UNIT_START_WAIT_S:
+                    log(f"{session_unit} never started, stopping")
+                    break
+    except OSError as e:
+        log(f"/dev/uhid: {e}")
+        return 1
+    finally:
+        fw.close()
+        sdl.SDL_Quit()
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
