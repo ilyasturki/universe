@@ -1,7 +1,7 @@
 api = 2
 id = "controls"
 name = "Emulator controls"
-version = "0.0.7"
+version = "0.0.6"
 description = "Sets up the emulator's controllers for you at every launch: each pad you hold becomes a player, mapped like the emulator would map it, and HOME, capture and the paddles stay Universe's. It replaces the controller settings made inside the emulator, so a change made there lasts one session; a game's own control profile is kept and moved to the pad you hold. To keep your own mapping, turn this off for that game."
 
 [hooks]
