@@ -363,16 +363,33 @@ FocusScope {
 
     onTestingChanged: {
         clearArt();
-        if (testing) {
+        artToggled("test");
+    }
+    onWalkingChanged: artToggled("walk")
+
+    function artToggled(key) {
+        if (testing || walking) {
             tester.forceActiveFocus();
             return;
         }
         var i = entries.map(function (e) {
             return e.key;
-        }).indexOf("test");
+        }).indexOf(key);
         if (i >= 0)
             rows.index = i;
         rows.forceActiveFocus();
+    }
+
+    function walkKey(event) {
+        if (api.keys.isCancel(event)) {
+            Sound.play("back");
+            controller.cancelWalk();
+        } else if (api.keys.isAccept(event)) {
+            Sound.play("ok");
+            controller.finishWalk();
+        } else if (event.key === Qt.Key_Left) {
+            Sound.play(controller.backStep() ? "tick" : "edge");
+        }
     }
 
     onLearningChanged: unknownCode = ""
@@ -589,13 +606,14 @@ FocusScope {
 
         Label {
             anchors.horizontalCenter: parent.horizontalCenter
+            visible: !page.walking
             text: page.controller.connected ? "Controllers" : "Connect a controller"
             color: Theme.textSecondary
             font.pixelSize: Theme.dp(Theme.fontSmall)
         }
 
         Repeater {
-            model: page.controller.devices
+            model: page.walking ? [] : page.controller.devices
 
             Row {
                 readonly property var battery: {
@@ -642,9 +660,44 @@ FocusScope {
         Label {
             anchors.horizontalCenter: parent.horizontalCenter
             visible: page.walking
-            text: page.walking ? "Step " + page.step.index + " of " + page.step.count + " · skipped in " + page.step.seconds + " s · " + (page.step.back ? "← back · " : "") + "Esc stops" : ""
+            text: page.walking ? "Step " + page.step.index + " of " + page.step.count + " · skipped in " + page.step.seconds + " s" : ""
             color: Theme.textSecondary
             font.pixelSize: Theme.dp(Theme.fontSmall)
+        }
+
+        Column {
+            anchors.horizontalCenter: parent.horizontalCenter
+            spacing: Theme.dp(4)
+            visible: page.walking
+
+            Repeater {
+                model: [
+                    {
+                        label: "Previous button (←)",
+                        action: "Left"
+                    },
+                    {
+                        label: "Keep and finish (Enter)",
+                        action: "Accept"
+                    },
+                    {
+                        label: "Cancel, undo all (Esc)",
+                        action: "Cancel"
+                    }
+                ]
+
+                Label {
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    visible: modelData.action !== "Left" || page.step.back === true
+                    text: modelData.label
+                    font.pixelSize: Theme.dp(Theme.fontSmall)
+
+                    Touch {
+                        direct: true
+                        action: modelData.action
+                    }
+                }
+            }
         }
 
         Label {
@@ -686,7 +739,7 @@ FocusScope {
         y: Theme.dp(170)
         width: Theme.dp(560)
         height: parent.height - y - Theme.dp(Theme.hintBarHeight) - Theme.dp(20)
-        focus: !page.testing
+        focus: !page.testing && !page.walking
         model: page.entries
         opacity: page.testing ? 0.0 : 1.0
         visible: opacity > 0.01
@@ -704,14 +757,7 @@ FocusScope {
         Keys.onPressed: function (event) {
             if (event.isAutoRepeat)
                 return;
-            if (api.keys.isCancel(event) && page.walking) {
-                event.accepted = true;
-                Sound.play("back");
-                page.controller.cancelWalk();
-            } else if (event.key === Qt.Key_Left && page.walking) {
-                event.accepted = true;
-                Sound.play(page.controller.backStep() ? "tick" : "edge");
-            } else if (api.keys.isCancel(event) && page.learning) {
+            if (api.keys.isCancel(event) && page.learning) {
                 event.accepted = true;
                 Sound.play("back");
                 page.controller.cancelLearn();
@@ -723,13 +769,15 @@ FocusScope {
         id: tester
 
         anchors.fill: panel
-        focus: page.testing
+        focus: page.testing || page.walking
 
         Keys.onPressed: function (event) {
             event.accepted = true;
             if (event.isAutoRepeat)
                 return;
-            if (api.keys.isCancel(event)) {
+            if (page.walking) {
+                page.walkKey(event);
+            } else if (api.keys.isCancel(event)) {
                 Sound.play("back");
                 page.controller.setTesting(false);
             }

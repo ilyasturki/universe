@@ -1269,9 +1269,13 @@ FocusScope {
             unbound: page.controller.unboundSlots
             learningSlot: page.walking ? page.controller.learning : ""
             step: page.walking ? page.controller.walkStep : null
-            onStopRequested: {
+            onCancelRequested: {
                 Sound.cancel();
                 page.controller.cancelWalk();
+            }
+            onFinishRequested: {
+                Sound.enter();
+                page.controller.finishWalk();
             }
             onBackRequested: page.controller.backStep() ? Sound.tick() : Sound.edge()
         }
@@ -1292,6 +1296,9 @@ FocusScope {
                     page.controller.cancelWalk();
                 else
                     page.controller.setTesting(false);
+            } else if (api.keys.isAccept(event) && page.walking) {
+                Sound.enter();
+                page.controller.finishWalk();
             } else if (event.key === Qt.Key_Left && page.walking) {
                 page.controller.backStep() ? Sound.tick() : Sound.edge();
             }

@@ -18,7 +18,8 @@ Item {
     property var entries: []
     property var log: History.fresh()
 
-    signal stopRequested
+    signal cancelRequested
+    signal finishRequested
     signal backRequested
 
     property real pulse: 0.15
@@ -142,43 +143,54 @@ Item {
                 font.pixelSize: Theme.dp(30)
             }
 
+            Text {
+                anchors.horizontalCenter: parent.horizontalCenter
+                text: live.step ? "Step " + live.step.index + " of " + live.step.count + " · skipped in " + live.step.seconds + " s" : ""
+                color: Theme.textSecondary
+                font.family: Theme.sans
+                font.pixelSize: Theme.dp(18)
+            }
+
             Row {
                 anchors.horizontalCenter: parent.horizontalCenter
-                spacing: Theme.dp(6)
+                spacing: Theme.dp(28)
 
-                Text {
-                    text: live.step ? "Step " + live.step.index + " of " + live.step.count + " · skipped in " + live.step.seconds + " s · " : ""
-                    color: Theme.textSecondary
-                    font.family: Theme.sans
-                    font.pixelSize: Theme.dp(18)
-                }
+                Repeater {
+                    model: [
+                        {
+                            label: "Previous button (←)",
+                            act: "back"
+                        },
+                        {
+                            label: "Keep and finish (Enter)",
+                            act: "finish"
+                        },
+                        {
+                            label: "Cancel, undo all (Esc)",
+                            act: "cancel"
+                        }
+                    ]
 
-                Text {
-                    visible: live.step !== null && live.step.back
-                    text: "Back (←) · "
-                    color: Theme.text
-                    font.family: Theme.sans
-                    font.weight: Font.Medium
-                    font.pixelSize: Theme.dp(18)
+                    Text {
+                        visible: modelData.act !== "back" || (live.step !== null && live.step.back === true)
+                        text: modelData.label
+                        color: Theme.text
+                        font.family: Theme.sans
+                        font.weight: Font.Medium
+                        font.pixelSize: Theme.dp(18)
 
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: live.backRequested()
-                    }
-                }
-
-                Text {
-                    text: "Stop (Esc)"
-                    color: Theme.text
-                    font.family: Theme.sans
-                    font.weight: Font.Medium
-                    font.pixelSize: Theme.dp(18)
-
-                    MouseArea {
-                        anchors.fill: parent
-                        cursorShape: Qt.PointingHandCursor
-                        onClicked: live.stopRequested()
+                        MouseArea {
+                            anchors.fill: parent
+                            cursorShape: Qt.PointingHandCursor
+                            onClicked: {
+                                if (modelData.act === "back")
+                                    live.backRequested();
+                                else if (modelData.act === "finish")
+                                    live.finishRequested();
+                                else
+                                    live.cancelRequested();
+                            }
+                        }
                     }
                 }
             }

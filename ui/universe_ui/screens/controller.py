@@ -569,6 +569,23 @@ class ControllerScreen(AdvancedRows, QObject):
         spec = next((s for s in (self._families().get(family) or {}).get("slots") or [] if s.get("id") == slot), {})
         return [str(c) for c in spec.get("codes") or []]
 
+    # Cancel: every slot back to the codes it had when the walk began, every stick learned again or forgotten.
+    def _walk_restore(self, walk):
+        family, before = walk["family"], walk["before"]
+        changed = False
+        for slot, codes in before["buttons"].items():
+            if self._codes(family, slot) != codes:
+                self._client.controllerSetButton(family, slot, codes)
+                changed = True
+        axes = _dig(self._client.config(), f"controller.axes.{family}") or {}
+        for role in sorted(set(axes) | set(before["axes"])):
+            if axes.get(role) != before["axes"].get(role):
+                self._client.setConfig(f"controller.axes.{family}.{role}", str(before["axes"].get(role) or ""))
+                changed = True
+        if changed:
+            self.load()
+            self.reload()
+
     def _walk_advance(self, walk):
         self._walk_timer.stop()
         walk["index"] += 1
@@ -746,7 +763,7 @@ class ControllerScreen(AdvancedRows, QObject):
     @Slot()
     def cancelLearn(self):
         if self._walk is not None:
-            self.cancelWalk()
+            self.finishWalk()
         elif self._stop_learning() and self._watcher is not None:
             self._watcher.send({"cmd": "cancel"})
 
@@ -766,10 +783,16 @@ class ControllerScreen(AdvancedRows, QObject):
         self._stop_testing()
         self.cancelLearn()
         self._offered.add(device["family"])
+        family = device["family"]
+        before = {
+            "buttons": {s["id"]: self._codes(family, s["id"]) for s in (self._families().get(family) or {}).get("slots") or [] if s.get("id")},
+            "axes": dict(_dig(self._client.config(), f"controller.axes.{family}") or {}),
+        }
         self._walk = {
             "id": device["id"],
-            "family": device["family"],
+            "family": family,
             "name": device["name"],
+            "before": before,
             "steps": steps,
             "index": 0,
             "found": [],
@@ -781,12 +804,24 @@ class ControllerScreen(AdvancedRows, QObject):
         return True
 
     @Slot()
-    def cancelWalk(self):
-        if self._walk is None:
+    def finishWalk(self):
+        walk = self._walk
+        if walk is None:
             return
         self._send({"cmd": "cancel"})
         self._stop_walk()
-        self.message.emit("Setup stopped")
+        found = len(walk["found"])
+        self.message.emit(f"{walk['name']}: {found} set up, the rest as they were" if found else f"{walk['name']}: nothing set up")
+
+    @Slot()
+    def cancelWalk(self):
+        walk = self._walk
+        if walk is None:
+            return
+        self._send({"cmd": "cancel"})
+        self._stop_walk()
+        self._walk_restore(walk)
+        self.message.emit("Setup canceled, nothing changed")
 
     @Slot()
     def skipStep(self):

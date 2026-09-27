@@ -142,6 +142,46 @@ def test_a_walk_step_can_be_taken_back(api, fake):
     assert screen.backStep() and screen.walkStep["slot"] == "west" and screen._walk["missed"] == [], "a skip is taken back too"
 
 
+def test_a_canceled_walk_puts_every_button_back(api, fake):
+    screen = api.screens.controller
+    messages = []
+    screen.message.connect(messages.append)
+    watcher = FakeWatcher("8bitdo-pro-3")
+    screen.start(watcher)
+    family = "8bitdo-pro-3"
+
+    def codes(slot):
+        return next(s["codes"] for s in screen._families()[family]["slots"] if s["id"] == slot)
+
+    before = {slot: codes(slot) for slot in ("south", "east", "west")}
+    fake.setConfig(f"controller.axes.{family}.ly", "ABS_Y")
+    line = watcher.device()
+    line["axes"] = {"lx": "ABS_X", "ly": "ABS_Y", "rx": "ABS_Z", "ry": "ABS_RZ"}
+    watcher.emit(line)
+    assert screen.startWalk()
+    # A pressed where B was asked, then X where A was: the core moved each code as the watcher learned it.
+    fake._core.set_controller_button(family, "south", ["BTN_EAST"])
+    fake._core.set_controller_button(family, "east", [])
+    watcher.emit({"event": "learned", "family": family, "slot": "south", "code": "BTN_EAST", "from": "east"})
+    fake._core.set_controller_button(family, "east", ["BTN_WEST"])
+    fake._core.set_controller_button(family, "west", [])
+    watcher.emit({"event": "learned", "family": family, "slot": "east", "code": "BTN_WEST", "from": "west"})
+    while screen.walkStep["slot"]:
+        screen.skipStep()
+    fake.setConfig(f"controller.axes.{family}.lx", "ABS_X-")
+    watcher.emit({"event": "learned", "family": family, "axis": "lx", "code": "ABS_X-"})
+    fake.setConfig(f"controller.axes.{family}.ly", "ABS_RY")
+    watcher.emit({"event": "learned", "family": family, "axis": "ly", "code": "ABS_RY"})
+    assert screen.walkStep["axis"] == "rx"
+
+    screen.cancelWalk()
+    assert not screen.walking and screen.learning == "" and messages[-1] == "Setup canceled, nothing changed"
+    assert {slot: codes(slot) for slot in before} == before
+    assert fake.config()["controller"]["axes"][family] == {"ly": "ABS_Y"}, "a stick learned before the walk is kept, one it placed is forgotten"
+    assert watcher.commands[-2:] == [{"cmd": "cancel"}, {"cmd": "reload"}]
+    assert api.memory.get("controllerWalks") is None, "a canceled walk is offered again"
+
+
 def test_the_walk_learns_each_button_then_the_sticks(api, fake):
     screen = api.screens.controller
     offers, messages = [], []
@@ -197,8 +237,12 @@ def test_the_walk_learns_each_button_then_the_sticks(api, fake):
     assert api.memory.get("controllerWalks") == {"8bitdo-pro-3": "done"}
 
     assert screen.startWalk() is True
-    screen.cancelWalk()
-    assert not screen.walking and watcher.commands[-1] == {"cmd": "cancel"} and messages[-1] == "Setup stopped"
+    watcher.emit({"event": "learned", "family": "8bitdo-pro-3", "slot": "south", "code": "BTN_EAST", "from": None})
+    screen.finishWalk()
+    assert not screen.walking and watcher.commands[-1] == {"cmd": "cancel"} and messages[-1] == "8BitDo Pro 3: 1 set up, the rest as they were"
+    assert screen.startWalk() is True
+    screen.resume()
+    assert not screen.walking and messages[-1] == "8BitDo Pro 3: nothing set up", "leaving the page keeps what the walk set up"
     assert screen.startWalk() is True
     watcher.emit({"event": "gone", "id": "event30"})
     assert not screen.walking and messages[-1] == "Controller gone: setup stopped"

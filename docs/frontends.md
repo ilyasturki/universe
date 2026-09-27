@@ -904,8 +904,8 @@ position. The hint glyphs follow the same rule (`PadNames.hintSlot`). The screen
 a "Test the buttons" and a "Set up the buttons" row while the watcher is `ready`, then a row per button of the family — each
 with its `slot` and `family`, so the row draws the button's glyph, and its `press` and `hold`
 macros, each carrying its `label` — the extras (back buttons, Fn) first, then the standard
-buttons) and `bind`, `unbind`, `learn`, `cancelLearn`, `setTesting`, `startWalk`, `cancelWalk`,
-`skipStep`, `declineWalk`, `suspend`, `resume`. Macros and families come from the core's `controller_state`; a write goes
+buttons) and `bind`, `unbind`, `learn`, `cancelLearn`, `setTesting`, `startWalk`, `finishWalk`, `cancelWalk`,
+`skipStep`, `backStep`, `declineWalk`, `suspend`, `resume`. Macros and families come from the core's `controller_state`; a write goes
 through `set_controller_macro`/`remove_controller_macro` and is followed by a `reload` to the watcher.
 
 The walk (`startWalk`, from the "Set up the buttons" row) learns the pad's buttons one after the
@@ -913,9 +913,13 @@ other — the standard slots, the family's extras, then the four stick throws �
 each answered by the watcher's `learned` or skipped after `WALK_STEP_MS` (8 s, counted down in
 `walkStep.seconds`; `learn_timeout` skips too). `walking` is true throughout and `walkStep` is
 `{slot, axis, art, label, prompt, index, count, seconds}`; `learning` names the slot (or the stick)
-the art pulses. The mapper is muted like the live view's, so a press learns and navigates nothing;
-Escape (`cancelWalk`, also what `cancelLearn` does while walking) stops it, as does leaving the section, losing the
-pad or the watcher. A press that was another step's button earlier in the walk moves it and says so.
+the art pulses. The mapper is muted like the live view's, so a press learns and navigates nothing:
+the keyboard, a click or a tap on the actions under the step answer instead. Enter (`finishWalk`, also what
+`cancelLearn` does while walking) stops it and keeps what it set up, as do leaving the section and losing the
+pad or the watcher. Escape or Backspace (`cancelWalk`) stops it and puts back everything it changed: each
+slot's codes as `controller_state` had them when it began (through `controllerSetButton`), each stick in
+`[controller.axes]` learned again or forgotten (through `setConfig`), and the family is not kept under
+`controllerWalks`. A press that was another step's button earlier in the walk moves it and says so.
 Left (`backStep`, false on the first step; `walkStep.back` says when it is offered) takes the last step
 back: a code goes to the slot it came from (through `controllerSetButton`) or off the slot it was
 given to, a skip is unmarked, an axis is left for the next answer, and the step is asked again.
