@@ -775,23 +775,55 @@ unit is gone.
 
 ## Emulator controls
 
-The `controls` module writes an emulator's controls for the physical pads held, before each launch
-(Eden for now; its forks' config directories — citron, sudachi, suyu, yuzu — in the core's order).
-Its `pre-launch` hook lists the gamepads through SDL3 under the joystick hints the emulator's own SDL
-sets (Eden: `SDL_JOYSTICK_HIDAPI_XBOX=0`, the Switch drivers per its `enable_joycon_driver` and
-`enable_procon_driver`, the game's `launch.env` `SDL_*` over them), so each pad gets the GUID and
-joystick indices the emulator will see, and maps them as the emulator's auto-mapping would: player
-`n` is the `n`th pad in SDL's order (at most 8), a second pad with the same GUID takes the next
-`port`, players past the last pad are disconnected, and gyro binds to the same pad's motion when
-it has one. `layout` picks the Nintendo face buttons, `positional` (A on the right, as on a Switch
-and as the emulator maps by itself) or `xbox` (A at the bottom), per game over a global default.
-HOME, capture and the paddles stay unbound, so the emulator's `Home+…` hotkeys never fire and
-Universe's macros own them; `guide` binds HOME too. The keys it owns (`player_<0-7>_{type,
-connected, button_*, lstick, rstick, motionleft, motionright}` in `[Controls]`, each with
-`\default=false`) are rewritten on every launch; every other line is left as it is, and the first
-write copies the file to `qt-config.ini.before-universe`. It writes nothing when no pad is held, for
-a runner's `inputplumber` option on, or when the `pads` module serves the game (its virtual pads
-hide the physical ones from the emulator).
+The `controls` module sets up an emulator's controllers for the physical pads held, before each
+launch of an emulator runner whose `inputplumber` option is off (nothing when no pad is held, or
+when the `pads` module serves the game: its virtual pads hide the physical ones). Its `pre-launch`
+hook lists the gamepads through SDL3 under the joystick hints the emulator's own SDL sets (they pick
+the driver that claims a pad, and with it the GUID and indices the emulator sees; the game's
+`launch.env` `SDL_*` go over them), then does two things.
+
+Every emulator: the game's environment gets `SDL_GAMECONTROLLERCONFIG_FILE`, pointing at
+`$XDG_RUNTIME_DIR/universe/controls-<session>.txt` (removed at `session-end`): each held pad's
+SDL mapping without `guide` (unless `guide` is on), `misc1`…`misc6` and `paddle1`…`paddle4`, after
+the controller databases an emulator would itself give that hint, so a line for the same GUID
+ends up ours. An emulator reading pads through SDL's gamepad API never sees
+HOME, capture or the paddles — its hard-wired uses of them included (Vita3K's pause, xemu's and
+Flycast's menus, ScummVM engines' guide keys); the touchpad stays, PS4 and Vita games use it.
+Raw-index readers (Eden, Azahar, melonDS, mGBA, snes9x, mupen64plus) ignore the mapping, and
+their writers never bind those buttons. Xenia runs through Proton, whose own SDL reads the pads:
+nothing is done for it.
+
+The emulators with pad identities or player slots in their config get them written, the way the
+emulator's own auto-mapping would, player `n` being the `n`th pad in SDL's order:
+
+| Runner | File | Written |
+|---|---|---|
+| `eden` (and citron, sudachi, suyu, yuzu dirs) | `qt-config.ini [Controls]` | `player_0-7_*`, each with `\default=false`; players past the pads disconnected |
+| `ryujinx` | `Config.json`, `games/*/Config.json` | `input_config` + `player_input_assignments`; a game's own config too unless `use_input_global_config` |
+| `dolphin` | `GCPadNew.ini`, `WiimoteNew.ini`, `Dolphin.ini` | `[GCPadN]`/`[WiimoteN]` on `SDL/<n>/<name>` (calibration and options kept), `SIDeviceN`/`Source` 0→on for held pads |
+| `cemu` | `controllerProfiles/controllerN.xml` | `SDLController` uuid `<n>_<guid>`, Cemu's default mapping; type, rumble and deadzones kept |
+| `azahar` | `azahar-emu/qt-config.ini [Controls]` | the active profile's buttons, sticks and motion |
+| `melonds` | `melonDS.toml` | `Instance0 JoystickID`, `[Instance0.Joystick]`; hotkeys on HOME lose that button |
+| `mgba` | `config.ini`, `qt.ini` | `[gba.input.SDLB]` `deviceN` and player 1's keys, the per-GUID and per-name profiles; pad shortcuts on HOME cleared |
+| `snes9x` (gtk) | `snes9x.conf` | `[Input]` ports (multitap from 3 pads), `[Joypad K]`, the stick in `[Joypad K+5]` |
+| `mupen64plus` | `mupen64plus.cfg` | `[Input-SDL-Control1-4]` in manual mode, mem pak |
+| `rpcs3` | `input_configs/global/<active>.yml` | every player on the SDL handler (`<name> <k>`), `PS Button` unbound |
+| `pcsx2`, `duckstation` | `PCSX2.ini`, `settings.ini` | `[Pad1-2]` (more with the user's multitap) on `SDL-<n>`; HOME, capture and paddles out of `[Hotkeys]` |
+| `ppsspp` | `controls.ini [ControlMapping]` | player 1's pad; HOME on the PSP's Home, so PPSSPP's own menu stays shut |
+| `xemu` | `xemu.toml [input.bindings]` | `portN` = GUID |
+| `flycast` | `emu.cfg [input]` | stale `maple_sdl_joystick_*` gone, `device2-4` on for held pads |
+| `scummvm` | `scummvm.ini` / `~/.scummvmrc` | `joystick_num` = the first pad |
+
+`layout` picks the face buttons of a Nintendo diamond (Switch, 3DS, Wii U, DS, GBA, SNES, the
+Wii's Classic Controller): `positional` (A on the right, as on a Switch and as these emulators map
+by themselves) or `xbox` (A at the bottom), per game over a global default; GameCube keeps
+Dolphin's own preset and N64 mupen64plus's (A bottom, B left). A game's own input profile keeps its
+scheme and only follows the held pad (Dolphin `PadProfileN`/`WiimoteProfileN`, Cemu
+`gameProfiles` `controllerN`, RPCS3's other and per-title configs). Everything else in a file is
+left as it is; a file is written only when it changes, through a symlink to its target, and the
+first write copies it to `<file>.before-universe`. A file the emulator makes on its first start is
+never created, the hook logging "start X once" instead; mupen64plus, snes9x and ScummVM files are
+written whole, missing or not.
 
 ## Modules
 

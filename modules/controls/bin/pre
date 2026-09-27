@@ -1,15 +1,39 @@
 #!/usr/bin/env python3
+import importlib
 import json
 import os
 import shutil
 import subprocess
 import sys
 import tempfile
+from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-import _eden
-import _sdl
+import _gamepads
+import _mapping
+from _controls import FACE, Context, Skip
 
+WRITERS = (
+    "eden",
+    "ryujinx",
+    "dolphin",
+    "cemu",
+    "azahar",
+    "melonds",
+    "mgba",
+    "snes9x",
+    "mupen64plus",
+    "rpcs3",
+    "pcsx2",
+    "duckstation",
+    "ppsspp",
+    "xemu",
+    "flycast",
+    "scummvm",
+)
+# Emulators with nothing to write whose own SDL hints change which driver claims a pad, and with it its GUID.
+HINTS = {"vita3k": {"SDL_JOYSTICK_ENHANCED_REPORTS": "1", "SDL_JOYSTICK_HIDAPI_SWITCH": "1", "SDL_JOYSTICK_HIDAPI_JOY_CONS": "1"}}
+PROTON_RUNNERS = ("xenia",)
 BACKUP_SUFFIX = ".before-universe"
 
 
@@ -36,12 +60,22 @@ def pads_module_runs(game_id):
     return bool(settings.get("enabled", True))
 
 
-def write_atomic(path, text):
-    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(path), prefix=".qt-config.", suffix=".tmp")
+def write(path: Path, text):
+    """Through a symlink to its target, so a config kept in a dotfiles repository stays linked."""
+    path = Path(os.path.realpath(path))
+    if path.exists():
+        if path.read_text() == text:
+            return
+        backup = path.with_name(path.name + BACKUP_SUFFIX)
+        if not backup.exists():
+            shutil.copy2(path, backup)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=path.parent, prefix=f".{path.name}.", suffix=".tmp")
     try:
         with os.fdopen(fd, "w") as f:
             f.write(text)
-        shutil.copymode(path, tmp)
+        if path.exists():
+            shutil.copymode(path, tmp)
         os.replace(tmp, path)
     except BaseException:
         os.unlink(tmp)
@@ -52,9 +86,10 @@ def main():
     settings = json.loads(os.environ.get("MODULE_SETTINGS_JSON") or "{}")
     effective = json.loads(os.environ.get("UNIVERSE_GAME_JSON") or "{}").get("effective") or {}
     runner = effective.get("runner") or ""
-    if runner != "eden":
-        if effective.get("runner_kind") == "emulator":
-            log(f"no writer for {runner}'s controls yet: left as they are")
+    if effective.get("runner_kind") != "emulator":
+        return 0
+    if runner in PROTON_RUNNERS:
+        log(f"{runner} runs through Proton, whose SDL reads the pads: controls left as they are")
         return 0
     if effective.get("inputplumber"):
         log("InputPlumber has this game's pads (its runner's inputplumber option is on): controls left as they are")
@@ -62,33 +97,45 @@ def main():
     if pads_module_runs(os.environ.get("GAME_ID", "")):
         log("the pads module serves this game its virtual pads: controls left as they are")
         return 0
-    path = _eden.config_path()
-    if path is None:
-        log("no qt-config.ini under eden, citron, sudachi, suyu or yuzu: start Eden once, then its controls are written")
-        return 0
 
-    text = path.read_text()
+    writer = importlib.import_module(f"_{runner}") if runner in WRITERS else None
     for k, v in (effective.get("env") or {}).items():
         if k.startswith("SDL_"):
             os.environ[k] = v
+    databases = writer.databases() if writer and hasattr(writer, "databases") else []
+    hints = writer.hints() if writer and hasattr(writer, "hints") else HINTS.get(runner, {})
     try:
-        pads = _sdl.pads(_eden.driver_hints(_eden.section(text)))
+        pads = _gamepads.pads({**({"SDL_GAMECONTROLLERCONFIG_FILE": str(databases[-1])} if databases else {}), **hints})
     except OSError as e:
         log(f"SDL3 could not list the pads ({e}): controls left as they are")
         return 0
     if not pads:
         log("no pad held: controls left as they are")
         return 0
+    ctx = Context(
+        pads=pads,
+        layout=settings.get("layout") if settings.get("layout") in FACE else "positional",
+        guide=bool(settings.get("guide")),
+        runner_path=effective.get("runner_path") or "",
+        platform=effective.get("platform") or "",
+    )
 
-    layout = settings.get("layout") if settings.get("layout") in _eden.FACE else "positional"
-    new = _eden.rewrite(text, _eden.values_for(pads, layout, bool(settings.get("guide"))))
-    if new != text:
-        backup = path.with_name(path.name + BACKUP_SUFFIX)
-        if not backup.exists():
-            shutil.copy2(path, backup)
-        write_atomic(str(path), new)
-    for player, (pad, port) in enumerate(zip(pads[: _eden.PLAYERS], _eden.ports(pads[: _eden.PLAYERS]), strict=True)):
-        log(f"player {player + 1}: {pad.name} ({_eden.eden_guid(pad.guid)}, port {port}), {layout}")
+    mappings = _mapping.path(os.environ["SESSION_ID"])
+    mappings.parent.mkdir(parents=True, exist_ok=True)
+    mappings.write_text(_mapping.text(pads, ctx.guide, databases))
+    with open(os.environ["UNIVERSE_ENV_FILE"], "a") as f:
+        f.write(f"SDL_GAMECONTROLLERCONFIG_FILE={mappings}\n")
+
+    if writer is None:
+        log(f"{runner} has no controls to write: only HOME, capture and the paddles are taken from its pads")
+    else:
+        try:
+            for path, text in writer.plan(ctx).items():
+                write(Path(path), text)
+        except Skip as e:
+            log(str(e))
+    for player, pad in enumerate(pads, 1):
+        log(f"player {player}: {pad.name}")
     return 0
 
 

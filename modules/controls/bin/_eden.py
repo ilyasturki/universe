@@ -1,7 +1,32 @@
-import os
-from pathlib import Path
-
-from _sdl import BIND_AXIS, BIND_BUTTON, BIND_HAT, Pad
+from _controls import (
+    BACK,
+    DPAD_DOWN,
+    DPAD_LEFT,
+    DPAD_RIGHT,
+    DPAD_UP,
+    GUIDE,
+    LEFT_SHOULDER,
+    LEFT_STICK,
+    LEFT_X,
+    LEFT_Y,
+    RIGHT_SHOULDER,
+    RIGHT_STICK,
+    RIGHT_X,
+    RIGHT_Y,
+    START,
+    TRIGGER_LEFT,
+    TRIGGER_RIGHT,
+    Context,
+    Skip,
+    axis,
+    button,
+    config_home,
+    first_file,
+    ini_rewrite,
+    ini_section,
+    ordinals,
+)
+from _gamepads import BIND_AXIS, BIND_BUTTON, BIND_HAT
 
 # The core's order for the forks sharing Eden's config layout (roms.rs EDEN_CONFIGS).
 CONFIG_DIRS = ("eden", "citron", "sudachi", "suyu", "yuzu")
@@ -10,15 +35,6 @@ SECTION = "Controls"
 PLAYERS = 8
 EMPTY = "[empty]"
 
-SOUTH, EAST, WEST, NORTH = 0, 1, 2, 3
-BACK, GUIDE, START, LEFT_STICK, RIGHT_STICK, LEFT_SHOULDER, RIGHT_SHOULDER = 4, 5, 6, 7, 8, 9, 10
-DPAD_UP, DPAD_DOWN, DPAD_LEFT, DPAD_RIGHT = 11, 12, 13, 14
-LEFT_X, LEFT_Y, RIGHT_X, RIGHT_Y, TRIGGER_LEFT, TRIGGER_RIGHT = 0, 1, 2, 3, 4, 5
-
-FACE = {
-    "positional": {"a": EAST, "b": SOUTH, "x": NORTH, "y": WEST},
-    "xbox": {"a": SOUTH, "b": EAST, "x": WEST, "y": NORTH},
-}
 # Eden's GetDefaultButtonBinding past the face buttons; SL/SR land on the shoulders on a pad that is no Joy-Con.
 BUTTONS = {
     "lstick": LEFT_STICK,
@@ -39,25 +55,8 @@ BUTTONS = {
 HAT = {1: "up", 2: "right", 4: "down", 8: "left"}
 
 
-def config_path(config_home=None):
-    root = Path(config_home or os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
-    return next((p for p in (root / d / "qt-config.ini" for d in CONFIG_DIRS) if p.is_file()), None)
-
-
-def _unquote(value):
-    return value[1:-1] if len(value) >= 2 and value[0] == value[-1] == '"' else value
-
-
-def section(text, name=SECTION):
-    out, current = {}, None
-    for line in text.splitlines():
-        s = line.strip()
-        if s.startswith("[") and s.endswith("]"):
-            current = s[1:-1]
-        elif current == name and "=" in s:
-            k, v = s.split("=", 1)
-            out[k.strip()] = _unquote(v.strip())
-    return out
+def config_path():
+    return first_file(*(config_home() / d / "qt-config.ini" for d in CONFIG_DIRS))
 
 
 def _flag(controls, key, default):
@@ -80,41 +79,34 @@ def eden_guid(guid):
 
 def ports(pads):
     """Eden numbers pads sharing a GUID in the order SDL adds them."""
-    seen, out = {}, []
-    for p in pads:
-        g = eden_guid(p.guid)
-        out.append(seen.get(g, 0))
-        seen[g] = out[-1] + 1
-    return out
+    return ordinals([eden_guid(p.guid) for p in pads])
 
 
 def _param(head, binding):
     if binding is None:
         return EMPTY
-    kind, index, mask = binding
-    if kind == BIND_BUTTON:
-        return f"{head},button:{index}"
-    if kind == BIND_HAT and mask in HAT:
-        return f"{head},hat:{index},direction:{HAT[mask]}"
-    if kind == BIND_AXIS:
-        return f"{head},axis:{index},threshold:0.5,invert:+"
+    if binding.kind == BIND_BUTTON:
+        return f"{head},button:{binding.index}"
+    if binding.kind == BIND_HAT and binding.mask in HAT:
+        return f"{head},hat:{binding.index},direction:{HAT[binding.mask]}"
+    if binding.kind == BIND_AXIS:
+        return f"{head},axis:{binding.index},threshold:0.5,invert:+"
     return EMPTY
 
 
 def _stick(head, pad, x, y):
-    bx, by = pad.bindings.get((BIND_AXIS, x)), pad.bindings.get((BIND_AXIS, y))
-    if not bx or not by or bx[0] != BIND_AXIS or by[0] != BIND_AXIS:
+    bx, by = axis(pad, x), axis(pad, y)
+    if not bx or not by or bx.kind != BIND_AXIS or by.kind != BIND_AXIS:
         return EMPTY
-    return f"{head},axis_x:{bx[1]},axis_y:{by[1]},offset_x:0.000000,offset_y:0.000000,invert_x:+,invert_y:+"
+    return f"{head},axis_x:{bx.index},axis_y:{by.index},offset_x:0.000000,offset_y:0.000000,invert_x:+,invert_y:+"
 
 
-def player_values(player, pad, port, layout, guide):
+def player_values(player, pad, port, face, guide):
     head = f"engine:sdl,port:{port},guid:{eden_guid(pad.guid)}"
-    buttons = {**FACE[layout], **BUTTONS}
-    values = {f"button_{k}": _param(head, pad.bindings.get((BIND_BUTTON, b))) for k, b in buttons.items()}
-    values["button_zl"] = _param(head, pad.bindings.get((BIND_AXIS, TRIGGER_LEFT)))
-    values["button_zr"] = _param(head, pad.bindings.get((BIND_AXIS, TRIGGER_RIGHT)))
-    values["button_home"] = _param(head, pad.bindings.get((BIND_BUTTON, GUIDE))) if guide else EMPTY
+    values = {f"button_{k}": _param(head, button(pad, b)) for k, b in {**face, **BUTTONS}.items()}
+    values["button_zl"] = _param(head, axis(pad, TRIGGER_LEFT))
+    values["button_zr"] = _param(head, axis(pad, TRIGGER_RIGHT))
+    values["button_home"] = _param(head, button(pad, GUIDE)) if guide else EMPTY
     values["button_screenshot"] = EMPTY
     values["lstick"] = _stick(head, pad, LEFT_X, LEFT_Y)
     values["rstick"] = _stick(head, pad, RIGHT_X, RIGHT_Y)
@@ -126,11 +118,12 @@ def player_values(player, pad, port, layout, guide):
     return out
 
 
-def values_for(pads: list[Pad], layout, guide):
+def values_for(ctx: Context):
+    pads = ctx.pads[:PLAYERS]
     out = {}
-    for player, (pad, port) in enumerate(zip(pads[:PLAYERS], ports(pads[:PLAYERS]), strict=True)):
-        out.update(player_values(player, pad, port, layout, guide))
-    for player in range(len(pads[:PLAYERS]), PLAYERS):
+    for player, (pad, port) in enumerate(zip(pads, ports(pads), strict=True)):
+        out.update(player_values(player, pad, port, ctx.face, ctx.guide))
+    for player in range(len(pads), PLAYERS):
         out[f"player_{player}_connected"] = "false"
     return out
 
@@ -139,33 +132,22 @@ def _encode(value):
     return value if value in (EMPTY, "true", "false") or value.isdigit() else f'"{value}"'
 
 
-def rewrite(text, values, name=SECTION):
+def rewrite(text, values):
     """A value Eden reads needs its `\\default=false` beside it, else Eden takes its built-in default."""
-    wanted = {}
+    lines = {}
     for k, v in values.items():
-        wanted[f"{k}\\default"] = f"{k}\\default=false"
-        wanted[k] = f"{k}={_encode(v)}"
-    out, current, done, end = [], None, set(), None
-    for line in text.splitlines():
-        s = line.strip()
-        if s.startswith("[") and s.endswith("]"):
-            if current == name:
-                end = len(out)
-            current = s[1:-1]
-        elif current == name and "=" in s:
-            key = s.split("=", 1)[0].strip()
-            if key in wanted:
-                out.append(wanted[key])
-                done.add(key)
-                continue
-        out.append(line)
-    if current == name:
-        end = len(out)
-    missing = [line for k, line in wanted.items() if k not in done]
-    if end is None:
-        out += ["", f"[{name}]", *missing]
-    else:
-        while end > 0 and not out[end - 1].strip():
-            end -= 1
-        out[end:end] = missing
-    return "\n".join(out) + "\n"
+        lines[f"{k}\\default"] = f"{k}\\default=false"
+        lines[k] = f"{k}={_encode(v)}"
+    return ini_rewrite(text, SECTION, lines)
+
+
+def hints():
+    path = config_path()
+    return driver_hints(ini_section(path.read_text(), SECTION) if path else {})
+
+
+def plan(ctx: Context):
+    path = config_path()
+    if path is None:
+        raise Skip("no qt-config.ini under eden, citron, sudachi, suyu or yuzu: start Eden once, then its controls are written")
+    return {path: rewrite(path.read_text(), values_for(ctx))}
