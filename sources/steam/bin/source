@@ -1,0 +1,1178 @@
+#!/usr/bin/env python3
+import contextlib
+import datetime
+import functools
+import json
+import mmap
+import os
+import re
+import shlex
+import shutil
+import signal
+import struct
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.parse
+import urllib.request
+from pathlib import Path
+
+KEY_URL = "https://steamcommunity.com/dev/apikey"
+OWNED_URL = (
+    "https://api.steampowered.com/IPlayerService/GetOwnedGames/v1/?key={key}&steamid={steamid}&include_appinfo=1&include_played_free_games=1&format=json"
+)
+SEARCH_URL = "https://store.steampowered.com/api/storesearch/?term={term}&l=english&cc=us"
+PERCENT_URL = "https://api.steampowered.com/ISteamUserStats/GetGlobalAchievementPercentagesForApp/v2/?gameid={id}&format=json"
+IMAGE_URL = "https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/{id}/library_600x900.jpg"
+ICON_URL = "https://shared.fastly.steamstatic.com/community_assets/images/apps/{id}/{icon}"
+USER_AGENT = "universe-steam/0.1"
+HTTP_TIMEOUT_S = 30
+KEY_RE = re.compile(r"[0-9A-Fa-f]{32}")
+STEAMID64_BASE = 76561197960265728
+CLIENT_UNIT = "universe-steam"
+START_TIMEOUT_S = 120
+HOOK_START_TIMEOUT_S = 70  # inside the manifest's pre-launch timeout_s, past which the launch is cancelled
+SYSTEMD_RUN_TIMEOUT_S = 30
+POLL_S = 2.0
+PROGRESS_INTERVAL_S = 1.0
+# Proton copies these from $STEAM_COMPAT_CLIENT_INSTALL_PATH/legacycompat, which umu-run blanks: without them steam_api finds no client.
+CLIENT_FILES = (
+    ("steamclient.dll", "steamclient.dll"),
+    ("steamclient64.dll", "steamclient64.dll"),
+    ("GameOverlayRenderer64.dll", "GameOverlayRenderer64.dll"),
+    ("SteamService.exe", "steam.exe"),
+    ("Steam.dll", "Steam.dll"),
+)
+UPDATE_REQUIRED = 2
+FULLY_INSTALLED = 4
+UPDATE_PAUSED = 512
+# EAppState: update running, update started, adding files, preallocating, downloading, staging, committing.
+BUSY = 256 | 1024 | 262144 | 524288 | 1048576 | 2097152 | 4194304
+GAME_TYPES = ("game", "demo", "mod")
+TOOL_TITLES = ("Proton", "Steam Linux Runtime", "Steamworks Common Redistributables")
+SKIPPED_LAUNCH_TYPES = ("server", "editor", "config", "manual", "vr", "othervr", "openvr", "osvr", "safemode")
+# Bytes between an app's size field and its KeyValues, by appinfo.vdf version: 28 added a second SHA-1, 29 a string table for the keys.
+APPINFO_BODY = {0x07564427: 40, 0x07564428: 60, 0x07564429: 60}
+APPINFO_STRING_TABLE = 0x07564429
+# SteamPlay 2.0 Manifests: its appinfo names Valve's compat tools (by app id) and the tool Valve picks for some games.
+STEAM_PLAY_APP = "891390"
+CLIENT_ENV = (
+    "PATH",
+    "HOME",
+    "DISPLAY",
+    "WAYLAND_DISPLAY",
+    "XAUTHORITY",
+    "XDG_RUNTIME_DIR",
+    "DBUS_SESSION_BUS_ADDRESS",
+    "XDG_CURRENT_DESKTOP",
+    "XDG_SESSION_TYPE",
+    "LANG",
+)
+
+_watching = None
+
+
+class SourceError(Exception):
+    pass
+
+
+class HttpError(SourceError):
+    def __init__(self, message, status):
+        super().__init__(message)
+        self.status = status
+
+
+class ClientUnavailable(SourceError):
+    pass
+
+
+def emit(event, **fields):
+    print(json.dumps({"event": event, **fields}), flush=True)
+
+
+def log(message):
+    print(f"steam: {message}", file=sys.stderr, flush=True)
+
+
+def data_dir():
+    path = Path(os.environ["SOURCE_DATA_DIR"])
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def load_settings():
+    settings = json.loads(os.environ["SOURCE_SETTINGS_JSON"])
+    settings["steam_root"] = os.path.expanduser(str(settings.get("steam_root") or ""))
+    for key, default in (("confirm_timeout_s", 600), ("install_timeout_s", 14400)):
+        settings[key] = int(settings.get(key) or default)
+    settings["achievements"] = bool(settings.get("achievements", True))
+    settings["shared_prefix"] = bool(settings.get("shared_prefix", True))
+    return settings
+
+
+def load_json(path):
+    try:
+        with open(path) as f:
+            return json.load(f)
+    except (OSError, ValueError):
+        return None
+
+
+def fetch(url):
+    request = urllib.request.Request(url, headers={"User-Agent": USER_AGENT, "Accept": "application/json"})
+    try:
+        with urllib.request.urlopen(request, timeout=HTTP_TIMEOUT_S) as response:
+            return json.load(response)
+    except urllib.error.HTTPError as exc:
+        raise HttpError(f"GET {url.split('?')[0]}: HTTP {exc.code}", exc.code) from None
+    except (OSError, ValueError) as exc:
+        raise SourceError(f"GET {url.split('?')[0]}: {exc}") from exc
+
+
+VDF_TOKEN = re.compile(r'"((?:[^"\\]|\\.)*)"|([{}])')
+
+
+def unescape(text):
+    return re.sub(r"\\(.)", lambda m: {"n": "\n", "t": "\t"}.get(m.group(1), m.group(1)), text)
+
+
+def vdf_loads(text):
+    root = {}
+    stack = [root]
+    key = None
+    for match in VDF_TOKEN.finditer(text):
+        brace = match.group(2)
+        if brace == "{":
+            child = {}
+            if key is not None:
+                stack[-1][key] = child
+            stack.append(child)
+            key = None
+        elif brace == "}":
+            if len(stack) > 1:
+                stack.pop()
+            key = None
+        elif key is None:
+            key = unescape(match.group(1))
+        else:
+            stack[-1][key] = unescape(match.group(1))
+            key = None
+    return root
+
+
+def vdf_file(path):
+    try:
+        return vdf_loads(Path(path).read_text(encoding="utf-8", errors="replace"))
+    except OSError:
+        return None
+
+
+# Steam spells the same key in more than one case across its files.
+def get(table, key, default=None):
+    if not isinstance(table, dict):
+        return default
+    if key in table:
+        return table[key]
+    folded = key.lower()
+    return next((value for name, value in table.items() if name.lower() == folded), default)
+
+
+def dig(table, *keys):
+    for key in keys:
+        table = get(table, key)
+    return table
+
+
+def number(table, key):
+    with contextlib.suppress(TypeError, ValueError):
+        return int(get(table, key) or 0)
+    return 0
+
+
+def c_string(buf, pos):
+    end = buf.find(b"\0", pos)
+    if end < 0:
+        raise ValueError(f"unterminated string at {pos}")
+    return bytes(buf[pos:end]).decode("utf-8", "replace"), end + 1
+
+
+def kv_read(buf, pos, strings=None):
+    out = {}
+    while True:
+        kind = buf[pos]
+        pos += 1
+        if kind in (8, 11):
+            return out, pos
+        if strings is None:
+            key, pos = c_string(buf, pos)
+        else:
+            (index,) = struct.unpack_from("<I", buf, pos)
+            pos += 4
+            key = strings[index]
+        if kind == 0:
+            value, pos = kv_read(buf, pos, strings)
+        elif kind == 1:
+            value, pos = c_string(buf, pos)
+        elif kind in (2, 4, 6):
+            (value,) = struct.unpack_from("<i", buf, pos)
+            pos += 4
+        elif kind == 3:
+            (value,) = struct.unpack_from("<f", buf, pos)
+            pos += 4
+        elif kind == 7:
+            (value,) = struct.unpack_from("<Q", buf, pos)
+            pos += 8
+        elif kind == 10:
+            (value,) = struct.unpack_from("<q", buf, pos)
+            pos += 8
+        else:
+            raise ValueError(f"binary KeyValues type {kind} at {pos - 1}")
+        out[key] = value
+
+
+def kv_file(path):
+    try:
+        data, _ = kv_read(Path(path).read_bytes(), 0)
+    except (OSError, ValueError, IndexError, struct.error) as exc:
+        log(f"{path}: {exc}")
+        return None
+    return data
+
+
+class AppInfo:
+    def __init__(self, path):
+        self.offsets = {}
+        self.strings = None
+        self.buf = b""
+        try:
+            with open(path, "rb") as f:
+                self.buf = mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ)
+        except (OSError, ValueError):
+            return
+        try:
+            self.index(path)
+        except (ValueError, IndexError, struct.error) as exc:
+            log(f"{path}: {exc}")
+
+    def index(self, path):
+        buf = self.buf
+        magic, _universe = struct.unpack_from("<II", buf, 0)
+        body = APPINFO_BODY.get(magic)
+        if body is None:
+            log(f"{path}: unknown appinfo version {magic:#x}")
+            return
+        pos = 8
+        if magic == APPINFO_STRING_TABLE:
+            (table,) = struct.unpack_from("<q", buf, 8)
+            pos = 16
+            (count,) = struct.unpack_from("<I", buf, table)
+            strings, at = [], table + 4
+            for _ in range(count):
+                text, at = c_string(buf, at)
+                strings.append(text)
+            self.strings = strings
+        while pos + 8 <= len(buf):
+            appid, size = struct.unpack_from("<II", buf, pos)
+            if appid == 0:
+                break
+            self.offsets[str(appid)] = pos + 8 + body
+            pos += 8 + size
+
+    def get(self, appid):
+        offset = self.offsets.get(str(appid))
+        if offset is None:
+            return {}
+        try:
+            data, _ = kv_read(self.buf, offset, self.strings)
+        except (ValueError, IndexError, struct.error) as exc:
+            log(f"appinfo {appid}: {exc}")
+            return {}
+        found = get(data, "appinfo")
+        return found if isinstance(found, dict) else data
+
+    @functools.cached_property
+    def steam_play(self):
+        extended = get(self.get(STEAM_PLAY_APP), "extended") or {}
+        return get(extended, "compat_tools") or {}, get(extended, "app_mappings") or {}
+
+
+def steam_root(settings):
+    if settings["steam_root"]:
+        root = Path(settings["steam_root"])
+        if not (root / "steamapps").is_dir():
+            raise SourceError(f"{root} is not a Steam folder (steam_root)")
+        return root
+    home = Path.home()
+    for candidate in (home / ".steam/root", home / ".local/share/Steam", home / ".steam/steam", home / ".steam/debian-installation"):
+        if (candidate / "steamapps").is_dir():
+            return candidate.resolve()
+    raise SourceError("no Steam folder found: start Steam once, or set steam_root")
+
+
+def appinfo_of(root):
+    return AppInfo(root / "appcache" / "appinfo.vdf")
+
+
+def libraries(root):
+    found = [root]
+    for name in ("steamapps/libraryfolders.vdf", "config/libraryfolders.vdf"):
+        folders = get(vdf_file(root / name) or {}, "libraryfolders")
+        if isinstance(folders, dict):
+            found += [Path(path) for entry in folders.values() if isinstance(entry, dict) and (path := get(entry, "path"))]
+            break
+    unique = {}
+    for lib in found:
+        with contextlib.suppress(OSError):
+            unique.setdefault(str(lib.resolve()), lib)
+    return [lib for lib in unique.values() if (lib / "steamapps").is_dir()]
+
+
+def manifest_at(path):
+    manifest = get(vdf_file(path) or {}, "AppState")
+    return manifest if isinstance(manifest, dict) else None
+
+
+def manifests(root):
+    found = {}
+    for lib in libraries(root):
+        for path in sorted((lib / "steamapps").glob("appmanifest_*.acf")):
+            manifest = manifest_at(path)
+            appid = str(get(manifest, "appid") or path.stem.removeprefix("appmanifest_"))
+            if manifest is not None and appid not in found:
+                found[appid] = (lib, manifest)
+    return found
+
+
+def find_manifest(root, appid):
+    for lib in libraries(root):
+        manifest = manifest_at(lib / "steamapps" / f"appmanifest_{appid}.acf")
+        if manifest is not None:
+            return lib, manifest
+    return None
+
+
+def state(manifest):
+    return number(manifest, "StateFlags")
+
+
+def installed(manifest):
+    return bool(state(manifest) & FULLY_INSTALLED)
+
+
+def complete(manifest):
+    flags = state(manifest)
+    return bool(flags & FULLY_INSTALLED) and not flags & (UPDATE_REQUIRED | BUSY)
+
+
+def folder_of(lib, manifest):
+    return lib / "steamapps" / "common" / str(get(manifest, "installdir") or "")
+
+
+def title_of(manifest, appid):
+    return str(get(manifest, "name") or appid)
+
+
+@functools.cache
+def compat_mapping(root):
+    config = vdf_file(root / "config" / "config.vdf") or {}
+    return dig(config, "InstallConfigStore", "Software", "Valve", "Steam", "CompatToolMapping") or {}
+
+
+def tool_folder(root, appinfo, name):
+    tools, _ = appinfo.steam_play
+    for tool_name, tool in tools.items():
+        if name == tool_name or name in (alias.strip() for alias in str(get(tool, "aliases") or "").split(",")):
+            found = find_manifest(root, str(get(tool, "appid") or ""))
+            return folder_of(*found) if found and installed(found[1]) else None
+    for manifest in sorted((root / "compatibilitytools.d").glob("*/compatibilitytool.vdf")):
+        tool = dig(vdf_file(manifest), "compatibilitytools", "compat_tools", name)
+        if isinstance(tool, dict):
+            return manifest.parent / str(get(tool, "install_path") or ".")
+    return None
+
+
+# The tool Steam runs a Windows game with: the user's pick for it, else Valve's, else the one for all other titles.
+def steam_proton(root, appinfo, appid):
+    mapping = compat_mapping(root)
+    _, picks = appinfo.steam_play
+    name = get(get(mapping, appid), "name") or get(get(picks, appid), "tool") or get(get(mapping, "0"), "name")
+    folder = tool_folder(root, appinfo, str(name)) if name else None
+    return folder if folder is not None and (folder / "proton").is_file() else None
+
+
+def is_game(app, title):
+    kind = str(get(get(app, "common") or {}, "type") or "").lower()
+    return kind in GAME_TYPES if kind else not title.startswith(TOOL_TITLES)
+
+
+def game_manifests(root, appinfo):
+    for appid, (lib, manifest) in sorted(manifests(root).items(), key=lambda item: title_of(item[1][1], item[0]).casefold()):
+        app = appinfo.get(appid)
+        if is_game(app, title_of(manifest, appid)):
+            yield appid, lib, manifest, app
+
+
+def signed_in_user(root):
+    users = get(vdf_file(root / "config" / "loginusers.vdf") or {}, "users")
+    entries = [(steamid, user) for steamid, user in (users or {}).items() if isinstance(user, dict) and steamid.isdigit()]
+    if not entries:
+        return None
+    steamid, user = max(entries, key=lambda item: (str(get(item[1], "MostRecent")) == "1", number(item[1], "Timestamp")))
+    return {"steamid": steamid, "name": str(get(user, "PersonaName") or get(user, "AccountName") or steamid), "account": str(int(steamid) - STEAMID64_BASE)}
+
+
+def client_language():
+    registry = vdf_file(Path.home() / ".steam" / "registry.vdf") or {}
+    steam = dig(registry, "Registry", "HKCU", "Software", "Valve", "Steam")
+    return str(get(steam, "language") or "english")
+
+
+# steam.pid outlives a killed client: its pid may be another program's by now.
+def client_pid():
+    try:
+        pid = int((Path.home() / ".steam" / "steam.pid").read_text().strip())
+        name = Path(f"/proc/{pid}/comm").read_text().strip()
+    except (OSError, ValueError):
+        return None
+    return pid if name == "steam" else None
+
+
+def logged_on_since(log_path, mark):
+    try:
+        with open(log_path, "rb") as f:
+            f.seek(mark)
+            return b"[Logged On," in f.read()
+    except OSError:
+        return False
+
+
+def unit_active(unit):
+    try:
+        return subprocess.run(["systemctl", "--user", "is-active", "--quiet", unit], stdin=subprocess.DEVNULL, check=False, timeout=10).returncode == 0
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def systemd_run(*args, unit=None):
+    command = ["systemd-run", "--user", "--collect", "--quiet", *([f"--unit={unit}"] if unit else [])]
+    # A unit inherits the user manager's environment: one gamescope keeps from its children (WAYLAND_DISPLAY) must not come back from there.
+    for key in CLIENT_ENV:
+        command += ["-E", f"{key}={os.environ[key]}"] if key in os.environ else ["-p", f"UnsetEnvironment={key}"]
+    try:
+        proc = subprocess.run([*command, "--", *args], stdin=subprocess.DEVNULL, capture_output=True, text=True, timeout=SYSTEMD_RUN_TIMEOUT_S, check=False)
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        raise ClientUnavailable(f"systemd-run: {exc}") from None
+    if proc.returncode != 0:
+        raise ClientUnavailable(f"systemd-run failed (exit {proc.returncode}): {proc.stderr.strip()}")
+
+
+def steam_bin():
+    found = shutil.which("steam")
+    if found is None:
+        raise ClientUnavailable("steam is not installed")
+    return found
+
+
+# A steam:// URL goes out only once the client runs, from a unit of its own: with none running, `steam` becomes the client.
+def ensure_client(root, timeout):
+    if client_pid() is not None:
+        return
+    log_path = root / "logs" / "connection_log.txt"
+    mark = log_path.stat().st_size if log_path.exists() else 0
+    if not unit_active(CLIENT_UNIT):
+        log("starting Steam")
+        systemd_run(steam_bin(), "-silent", unit=CLIENT_UNIT)
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if client_pid() is not None and logged_on_since(log_path, mark):
+            return
+        time.sleep(POLL_S)
+    if client_pid() is None:
+        raise ClientUnavailable(f"Steam did not start within {timeout} s")
+    log(f"Steam runs but has not signed in after {timeout} s")
+
+
+def open_url(url):
+    systemd_run(steam_bin(), url)
+
+
+# Every window of Steam's has the WM_CLASS class steam; titles follow its language, and an empty one means its newest window.
+def ask_in_window(title):
+    emit("window", **{"class": "steam", "title": title})
+
+
+def library_index():
+    # The core writes library.json (its game events) after every `library`; the source only reads it.
+    games = load_json(data_dir() / "library.json")
+    return None if not isinstance(games, list) else {str(g.get("id")): g for g in games if isinstance(g, dict)}
+
+
+def owned_status(appid, manifest, user, index):
+    if index is not None and appid in index:
+        return True
+    if manifest is not None and user and str(get(manifest, "LastOwner") or "") == user["steamid"]:
+        return True
+    return False if index is not None else None
+
+
+def oslist(table):
+    return [name.strip() for name in str(get(get(table, "config") or {}, "oslist") or "").lower().split(",") if name.strip()]
+
+
+# Launch entries name files in any case: Spacewar's SteamWorksExample.exe is SteamworksExample.exe on disk.
+def resolve(folder, relative):
+    base = path = Path(folder)
+    for part in relative.replace("\\", "/").split("/"):
+        if part in ("", "."):
+            continue
+        candidate = path / part
+        if not candidate.exists():
+            try:
+                with os.scandir(path) as entries:
+                    match = next((e.name for e in entries if e.name.lower() == part.lower()), None)
+            except OSError:
+                return None
+            if match is None:
+                return None
+            candidate = path / match
+        path = candidate
+    return path if path != base and path.is_file() else None
+
+
+def launch_entries(app):
+    launch = get(get(app, "config") or {}, "launch") or {}
+    items = [(name, entry) for name, entry in launch.items() if isinstance(entry, dict) and get(entry, "executable")]
+    return [entry for _, entry in sorted(items, key=lambda item: int(item[0]) if item[0].isdigit() else 1 << 30)]
+
+
+def launch_entry(app, platform, folder):
+    def fits(entry):
+        config = get(entry, "config") or {}
+        oses = oslist(entry)
+        return (
+            (not oses or platform in oses)
+            and not get(config, "betakey")
+            and not get(config, "ownsdlc")
+            and str(get(config, "realm") or "").lower() != "steamchina"
+            and str(get(entry, "type") or "").lower() not in SKIPPED_LAUNCH_TYPES
+        )
+
+    def rank(entry):
+        arch = str(get(get(entry, "config") or {}, "osarch") or "")
+        return (resolve(folder, str(get(entry, "executable"))) is not None, str(get(entry, "type") or "").lower() == "default", arch != "32")
+
+    fitting = [entry for entry in launch_entries(app) if fits(entry)]
+    return max(fitting, key=rank) if fitting else None
+
+
+def platform_of(lib, manifest, app):
+    for key in ("MountedConfig", "UserConfig"):
+        forced = str(get(get(manifest, key) or {}, "platform_override_source") or "").lower()
+        if forced in ("windows", "linux"):
+            return forced
+    depots = get(app, "depots") or {}
+    oses = {name for depot in get(manifest, "InstalledDepots") or {} for name in oslist(get(depots, depot) or {})}
+    if "linux" in oses and "windows" not in oses:
+        return "linux"
+    if "windows" in oses:
+        return "windows"
+    if "linux" not in str(get(get(app, "common") or {}, "oslist") or "").lower():
+        return "windows"
+    folder = folder_of(lib, manifest)
+    linux = [entry for entry in launch_entries(app) if "linux" in oslist(entry)]
+    return "linux" if any(resolve(folder, str(get(entry, "executable"))) for entry in linux) else "windows"
+
+
+def release_year(app):
+    common = get(app, "common") or {}
+    for key in ("original_release_date", "steam_release_date"):
+        with contextlib.suppress(TypeError, ValueError, OverflowError, OSError):
+            stamp = int(get(common, key) or 0)
+            if stamp > 0:
+                return datetime.datetime.fromtimestamp(stamp, tz=datetime.UTC).year
+    return None
+
+
+def installed_event(settings, root, appinfo, appid, lib, manifest, owned, title):
+    app = appinfo.get(appid)
+    folder = folder_of(lib, manifest)
+    platform = platform_of(lib, manifest, app)
+    entry = launch_entry(app, platform, folder)
+    exe = resolve(folder, str(get(entry, "executable"))) if entry else None
+    if exe is None:
+        log(f"{title}: no {platform} launch entry names a program in {folder}")
+    shared = settings["shared_prefix"] and platform != "linux"
+    proton = steam_proton(root, appinfo, appid) if shared else None
+    emit(
+        "game",
+        id=appid,
+        title=title,
+        owned=owned,
+        installed=True,
+        dir=str(folder),
+        exe=str(exe.relative_to(folder)) if exe else None,
+        build=str(get(manifest, "buildid") or "") or None,
+        dlcs=[],
+        release_year=release_year(app),
+        image=IMAGE_URL.format(id=appid),
+        disk_size=number(manifest, "SizeOnDisk") or None,
+        store="steam",
+        umu_id=f"umu-{appid}",
+        **({"runner": "linux"} if platform == "linux" else {}),
+        **({"prefix": str(lib / "steamapps" / "compatdata" / appid)} if shared else {}),
+        **({"proton": str(proton)} if proton else {}),
+    )
+
+
+def partial_fields(lib, manifest):
+    return {
+        "partial_dir": str(folder_of(lib, manifest)),
+        "partial_bytes": number(manifest, "BytesDownloaded"),
+        "download_size": number(manifest, "BytesToDownload") or None,
+    }
+
+
+def listed_event(appid, title, owned, partial=None):
+    emit(
+        "game",
+        id=appid,
+        title=title,
+        owned=owned,
+        installed=False,
+        dir=None,
+        exe=None,
+        build=None,
+        dlcs=[],
+        release_year=None,
+        image=IMAGE_URL.format(id=appid),
+        **(partial or {}),
+    )
+
+
+def game_event(settings, root, appinfo, appid, title, owned, found):
+    if found and installed(found[1]) and folder_of(*found).is_dir():
+        installed_event(settings, root, appinfo, appid, found[0], found[1], owned, title)
+    else:
+        listed_event(appid, title, owned, partial_fields(*found) if found else None)
+
+
+def require_id(args, verb):
+    if not args or not args[0].strip().isdigit():
+        raise SourceError(f"usage: {verb} <app id>")
+    return args[0].strip()
+
+
+def key_path():
+    return data_dir() / "key.json"
+
+
+def save_key(key, steamid):
+    tmp = key_path().with_suffix(".tmp")
+    tmp.unlink(missing_ok=True)
+    with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as f:
+        json.dump({"key": key, "steamid": steamid}, f)
+    tmp.replace(key_path())
+
+
+def saved_key(root):
+    saved = load_json(key_path())
+    user = signed_in_user(root)
+    if not isinstance(saved, dict) or not saved.get("key") or not saved.get("steamid"):
+        return None, user
+    if user is not None and user["steamid"] != saved["steamid"]:
+        return None, user
+    return saved, user
+
+
+def owned_games(key, steamid):
+    try:
+        data = fetch(OWNED_URL.format(key=urllib.parse.quote(key), steamid=steamid))
+    except HttpError as exc:
+        if exc.status in (401, 403):
+            raise SourceError("Steam refused the Web API key") from None
+        raise
+    games = get(get(data, "response") or {}, "games")
+    if not isinstance(games, list):
+        log("Steam listed no games: the key's account may keep its game details private")
+        return []
+    return [game for game in games if isinstance(game, dict) and game.get("appid")]
+
+
+def cmd_login(settings, args):
+    if not args:
+        emit("login_url", url=KEY_URL)
+        emit("done")
+        return
+    key = args[0].strip()
+    if not KEY_RE.fullmatch(key):
+        raise SourceError("a Steam Web API key is 32 hexadecimal characters")
+    user = signed_in_user(steam_root(settings))
+    if user is None:
+        raise SourceError("sign in to Steam first: the key lists the games of the account Steam remembers")
+    owned_games(key, user["steamid"])
+    save_key(key, user["steamid"])
+    emit("logged_in", user=user["name"])
+    emit("done")
+
+
+def cmd_status(settings, args):
+    with contextlib.suppress(SourceError):
+        saved, user = saved_key(steam_root(settings))
+        if saved is not None and user is not None:
+            emit("logged_in", user=user["name"])
+    emit("done")
+
+
+def cmd_library(settings, args):
+    root = steam_root(settings)
+    saved, user = saved_key(root)
+    if saved is None:
+        other = f", or it is not {user['name']}'s, the account Steam remembers" if user else ""
+        raise SourceError(f"no Steam Web API key{other} (run login)")
+    games = owned_games(saved["key"], saved["steamid"])
+    installs = manifests(root)
+    appinfo = appinfo_of(root)
+    for game in sorted(games, key=lambda g: str(g.get("name") or "").casefold()):
+        appid = str(game["appid"])
+        game_event(settings, root, appinfo, appid, str(game.get("name") or "").strip() or appid, True, installs.get(appid))
+    emit("done")
+
+
+def cmd_search(settings, args):
+    text = " ".join(args).strip()
+    if not text:
+        raise SourceError("usage: search <text>")
+    root = steam_root(settings)
+    index = library_index()
+    try:
+        data = fetch(SEARCH_URL.format(term=urllib.parse.quote(text)))
+        items = [
+            (str(i["id"]), str(i.get("name") or i["id"]))
+            for i in get(data, "items") or []
+            if isinstance(i, dict) and i.get("id") and i.get("type", "app") == "app"
+        ]
+    except SourceError as exc:
+        if index is None:
+            raise SourceError(f"{exc}, and the library was never listed") from None
+        log(f"{exc}: searching the listed library")
+        items = [(appid, str(known.get("title") or appid)) for appid, known in index.items() if text.casefold() in str(known.get("title") or "").casefold()]
+    user = signed_in_user(root)
+    installs = manifests(root)
+    appinfo = appinfo_of(root)
+    for appid, title in items:
+        found = installs.get(appid)
+        game_event(settings, root, appinfo, appid, title, owned_status(appid, found[1] if found else None, user, index), found)
+    emit("done")
+
+
+def depot_sizes(app, platform):
+    disk = download = 0
+    for name, depot in (get(app, "depots") or {}).items():
+        if not name.isdigit() or not isinstance(depot, dict) or get(depot, "depotfromapp") or get(depot, "dlcappid"):
+            continue
+        config = get(depot, "config") or {}
+        oses = oslist(depot)
+        if (oses and platform not in oses) or get(config, "lowviolence") or str(get(config, "language") or "english") != "english":
+            continue
+        public = get(get(depot, "manifests") or {}, "public")
+        if isinstance(public, dict):
+            disk += number(public, "size")
+            download += number(public, "download")
+    return {key: value for key, value in (("download_size", download), ("disk_size", disk)) if value}
+
+
+def cmd_info(settings, args):
+    appid = require_id(args, "info")
+    root = steam_root(settings)
+    app = appinfo_of(root).get(appid)
+    common = get(app, "common") or {}
+    found = find_manifest(root, appid)
+    platform = platform_of(found[0], found[1], app) if found else "windows"
+    data = {"appid": appid, "name": get(common, "name"), "type": get(common, "type"), "oslist": get(common, "oslist"), "platform": platform}
+    emit("info", data=data, **depot_sizes(app, platform))
+    emit("done")
+
+
+def progress_of(manifest):
+    paused = " (paused in Steam)" if state(manifest) & UPDATE_PAUSED else ""
+    to_download, downloaded = number(manifest, "BytesToDownload"), number(manifest, "BytesDownloaded")
+    to_stage, staged = number(manifest, "BytesToStage"), number(manifest, "BytesStaged")
+    if to_download and downloaded < to_download:
+        return downloaded, to_download, f"{100 * downloaded / to_download:.1f}%{paused}"
+    if to_stage and staged < to_stage:
+        return staged, to_stage, f"installing {100 * staged / to_stage:.1f}%{paused}"
+    if to_download:
+        return to_download, to_download, f"finishing{paused}"
+    return 0, 0, f"queued in Steam{paused}"
+
+
+def watch(settings, root, appid, title, began, waiting, unstarted):
+    global _watching  # noqa: PLW0603
+    _watching = title
+    start = time.monotonic()
+    emit("progress", done=0, total=0, message=waiting)
+    last_emit, started = start, False
+    try:
+        while True:
+            found = find_manifest(root, appid)
+            if found is not None:
+                started = started or began(found[1])
+                if complete(found[1]):
+                    return found
+                now = time.monotonic()
+                if started and now - last_emit >= PROGRESS_INTERVAL_S:
+                    done, total, message = progress_of(found[1])
+                    emit("progress", done=done, total=total, message=message)
+                    last_emit = now
+            elapsed = time.monotonic() - start
+            if not started and elapsed > settings["confirm_timeout_s"]:
+                raise SourceError(unstarted)
+            if elapsed > settings["install_timeout_s"]:
+                raise SourceError(f"{title} did not finish within {settings['install_timeout_s']} s; Steam goes on with it")
+            time.sleep(POLL_S)
+    finally:
+        _watching = None
+
+
+def cmd_install(settings, args):
+    appid = require_id(args, "install")
+    root = steam_root(settings)
+    index = library_index() or {}
+    found = find_manifest(root, appid)
+    title = title_of(found[1], appid) if found else str((index.get(appid) or {}).get("title") or appid)
+    if found is None or not installed(found[1]):
+        if found is None and index and appid not in index:
+            log(f"{title} is not in the listed library: Steam may show its store page rather than an install")
+        ensure_client(root, START_TIMEOUT_S)
+        if found is None:
+            ask_in_window("Install")
+            open_url(f"steam://install/{appid}")
+        found = watch(
+            settings,
+            root,
+            appid,
+            title,
+            began=lambda manifest: True,
+            waiting="confirm the install in Steam's window",
+            unstarted=f"Steam started no install of {title} within {settings['confirm_timeout_s']} s: its window was closed, or is still waiting",
+        )
+    owned = owned_status(appid, found[1], signed_in_user(root), library_index())
+    installed_event(settings, root, appinfo_of(root), appid, found[0], found[1], owned, title_of(found[1], appid))
+    emit("done")
+
+
+def cmd_uninstall(settings, args):
+    appid = require_id(args, "uninstall")
+    root = steam_root(settings)
+    found = find_manifest(root, appid)
+    if found is not None:
+        title = title_of(found[1], appid)
+        ensure_client(root, START_TIMEOUT_S)
+        ask_in_window("")
+        open_url(f"steam://uninstall/{appid}")
+        emit("progress", done=0, total=0, message="confirm the uninstall in Steam's window")
+        deadline = time.monotonic() + settings["confirm_timeout_s"]
+        while find_manifest(root, appid) is not None:
+            if time.monotonic() > deadline:
+                raise SourceError(f"Steam did not uninstall {title} within {settings['confirm_timeout_s']} s: its window was closed, or is still waiting")
+            time.sleep(POLL_S)
+    emit("done")
+
+
+def cmd_update(settings, args):
+    root = steam_root(settings)
+    if not args:
+        for appid, lib, manifest, _app in game_manifests(root, appinfo_of(root)):
+            flags = state(manifest)
+            if flags & FULLY_INSTALLED and flags & UPDATE_REQUIRED and folder_of(lib, manifest).is_dir():
+                target = str(get(manifest, "TargetBuildID") or "")
+                emit(
+                    "update",
+                    id=appid,
+                    title=title_of(manifest, appid),
+                    local_build=str(get(manifest, "buildid") or ""),
+                    remote_build=target,
+                    version=target,
+                    date="",
+                )
+        emit("done")
+        return
+    appid = require_id(args, "update")
+    found = find_manifest(root, appid)
+    if found is None or not installed(found[1]):
+        raise SourceError(f"{appid} is not installed")
+    title = title_of(found[1], appid)
+    # No steam:// URL asks for an update: the client runs the ones it has queued, and this waits for it.
+    if not complete(found[1]):
+        ensure_client(root, START_TIMEOUT_S)
+        found = watch(
+            settings,
+            root,
+            appid,
+            title,
+            began=lambda manifest: bool(state(manifest) & BUSY),
+            waiting="waiting for Steam to update it",
+            unstarted=f"Steam has not started updating {title}: start it from Steam's Downloads",
+        )
+    owned = owned_status(appid, found[1], signed_in_user(root), library_index())
+    installed_event(settings, root, appinfo_of(root), appid, found[0], found[1], owned, title)
+    emit("done")
+
+
+def cmd_scan(settings, args):
+    root = steam_root(settings)
+    user = signed_in_user(root)
+    index = library_index()
+    appinfo = appinfo_of(root)
+    for appid, lib, manifest, _app in game_manifests(root, appinfo):
+        title = title_of(manifest, appid)
+        owned = owned_status(appid, manifest, user, index)
+        if not installed(manifest):
+            listed_event(appid, title, owned, partial_fields(lib, manifest))
+        elif folder_of(lib, manifest).is_dir():
+            installed_event(settings, root, appinfo, appid, lib, manifest, owned, title)
+        else:
+            log(f"{title}: {folder_of(lib, manifest)} is gone, skipped")
+    emit("done")
+
+
+def localized(value, language):
+    if isinstance(value, dict):
+        text = get(value, language) or get(value, "english") or next((v for k, v in value.items() if k != "token"), "")
+        return str(text or "")
+    return str(value or "")
+
+
+def icon_url(appid, icon):
+    return ICON_URL.format(id=appid, icon=urllib.parse.quote(str(icon))) if icon else ""
+
+
+def achievement_stat(stat):
+    return isinstance(stat, dict) and (str(get(stat, "type")).upper() in ("4", "ACHIEVEMENTS") or number(stat, "type_int") == 4)
+
+
+def rarities(appid):
+    try:
+        data = fetch(PERCENT_URL.format(id=appid))
+    except SourceError as exc:
+        log(f"no rarities: {exc}")
+        return {}
+    found = get(get(data, "achievementpercentages") or {}, "achievements") or []
+    out = {}
+    for item in found:
+        with contextlib.suppress(AttributeError, TypeError, ValueError):
+            out[str(item["name"])] = float(item["percent"])
+    return out
+
+
+def stamp(seconds):
+    return datetime.datetime.fromtimestamp(seconds, tz=datetime.UTC).isoformat()
+
+
+def cmd_achievements(settings, args):
+    appid = require_id(args, "achievements")
+    root = steam_root(settings)
+    stats_dir = root / "appcache" / "stats"
+    schema_file = stats_dir / f"UserGameStatsSchema_{appid}.bin"
+    schema = kv_file(schema_file) if schema_file.exists() else None
+    if not schema:
+        emit("done")
+        return
+    top = get(schema, appid) or next(iter(schema.values()), {})
+    user = signed_in_user(root)
+    progress, saved_at = {}, 0
+    if user is not None:
+        progress_file = stats_dir / f"UserGameStats_{user['account']}_{appid}.bin"
+        if progress_file.exists():
+            progress = get(kv_file(progress_file) or {}, "cache") or {}
+            saved_at = int(progress_file.stat().st_mtime)
+    language = client_language()
+    rarity = None
+    for stat_id, stat in (get(top, "stats") or {}).items():
+        if not achievement_stat(stat):
+            continue
+        mine = get(progress, stat_id) or {}
+        bits = number(mine, "data") & 0xFFFFFFFF
+        times = get(mine, "AchievementTimes") or {}
+        for bit, item in (get(stat, "bits") or {}).items():
+            if not isinstance(item, dict) or not str(bit).isdigit():
+                continue
+            if rarity is None:
+                rarity = rarities(appid)
+            display = get(item, "display") or {}
+            name = str(get(item, "name") or "")
+            unlocked = bool(bits >> int(bit) & 1)
+            emit(
+                "achievement",
+                key=name,
+                name=localized(get(display, "name"), language),
+                description=localized(get(display, "desc"), language),
+                unlocked_at=stamp(number(times, str(bit)) or saved_at) if unlocked else "",
+                hidden=str(get(display, "hidden") or "0") not in ("0", ""),
+                icon=icon_url(appid, get(display, "icon")),
+                icon_locked=icon_url(appid, get(display, "icon_gray")),
+                rarity=rarity.get(name),
+            )
+    emit("done")
+
+
+def client_folder(prefix):
+    # umu links the prefix's pfx to itself; Steam's compatdata holds the Wine prefix in a real pfx folder.
+    pfx = prefix / "pfx"
+    base = pfx if pfx.is_dir() and not pfx.is_symlink() else prefix
+    return base / "drive_c" / "Program Files (x86)" / "Steam"
+
+
+def link_client_files(root, prefix):
+    folder = client_folder(prefix)
+    folder.mkdir(parents=True, exist_ok=True)
+    for name, target in CLIENT_FILES:
+        source = root / "legacycompat" / name
+        link = folder / target
+        if not source.exists():
+            if name.startswith("steamclient"):
+                log(f"{source} is missing: the game may not reach Steam")
+            continue
+        if link.is_symlink():
+            if os.readlink(link) == str(source):
+                continue
+            link.unlink()
+        elif link.exists():
+            continue
+        link.symlink_to(source)
+
+
+def windows_words(text):
+    words, word, quoted, pending = [], [], False, False
+    for char in text:
+        if char == '"':
+            quoted, pending = not quoted, True
+        elif char.isspace() and not quoted:
+            if word or pending:
+                words.append("".join(word))
+            word, pending = [], False
+        else:
+            word.append(char)
+    if word or pending:
+        words.append("".join(word))
+    return words
+
+
+# SteamStub, Steam's DRM wrapper, adds a .bind section; a program it wraps restarts itself through Steam.
+def steamstub(exe):
+    try:
+        with open(exe, "rb") as f:
+            head = f.read(64)
+            if head[:2] != b"MZ":
+                return False
+            (pe,) = struct.unpack_from("<I", head, 0x3C)
+            f.seek(pe)
+            header = f.read(24)
+            if header[:4] != b"PE\0\0":
+                return False
+            (count,) = struct.unpack_from("<H", header, 6)
+            (optional,) = struct.unpack_from("<H", header, 20)
+            f.seek(pe + 24 + optional)
+            table = f.read(40 * count)
+    except (OSError, struct.error):
+        return False
+    return any(table[i * 40 : i * 40 + 8].rstrip(b"\0") == b".bind" for i in range(len(table) // 40))
+
+
+def launch_arguments(root, appid, platform, exe):
+    found = find_manifest(root, appid)
+    if found is None or not exe:
+        return []
+    folder = folder_of(*found)
+    for entry in launch_entries(appinfo_of(root).get(appid)):
+        oses = oslist(entry)
+        if (not oses or platform in oses) and resolve(folder, str(get(entry, "executable"))) == Path(exe):
+            return windows_words(str(get(entry, "arguments") or ""))
+    return []
+
+
+def hook_pre_launch(settings):
+    appid, env_file = os.environ.get("SOURCE_GAME_ID", ""), os.environ.get("UNIVERSE_ENV_FILE", "")
+    if not appid or not env_file:
+        return
+    effective = json.loads(os.environ.get("UNIVERSE_GAME_JSON") or "{}").get("effective") or {}
+    kind = effective.get("runner_kind")
+    root = steam_root(settings)
+    if kind in ("proton", "wine") and effective.get("prefix"):
+        link_client_files(root, Path(effective["prefix"]))
+    exe = os.environ.get("GAME_EXE", "")
+    lines = []
+    if words := launch_arguments(root, appid, "linux" if kind == "linux" else "windows", exe):
+        lines.append(f"UNIVERSE_GAME_ARGS={shlex.join(words)}")
+    if kind == "linux":
+        lines += [f"SteamAppId={appid}", f"SteamGameId={appid}"]
+    if exe and steamstub(exe):
+        log(f"{exe} is wrapped in SteamStub: it restarts itself through Steam, outside this session")
+    with open(env_file, "a") as f:
+        f.writelines(f"{line}\n" for line in lines)
+    ensure_client(root, HOOK_START_TIMEOUT_S)
+
+
+def hook_post_process(settings):
+    if not settings["achievements"]:
+        return
+    proc = subprocess.run(
+        [os.environ["UNIVERSE_BIN"], "achievements", os.environ["GAME_ID"], "--refresh", "--json"], capture_output=True, text=True, check=False
+    )
+    if proc.returncode != 0:
+        log(f"achievements refresh: {proc.stderr.strip()}")
+
+
+VERBS = {
+    "login": cmd_login,
+    "status": cmd_status,
+    "library": cmd_library,
+    "search": cmd_search,
+    "info": cmd_info,
+    "install": cmd_install,
+    "uninstall": cmd_uninstall,
+    "update": cmd_update,
+    "scan": cmd_scan,
+    "achievements": cmd_achievements,
+}
+
+# Run by bin/<hook>: a session goes on whatever they meet, except a client that cannot start, which cancels the launch.
+HOOKS = {
+    "pre-launch": hook_pre_launch,
+    "post-process": hook_post_process,
+}
+
+
+def on_signal(signum, frame):
+    if _watching is not None:
+        log(f"stopped following {_watching}; Steam goes on with it (pause it in Steam's Downloads)")
+    sys.exit(128 + signum)
+
+
+def main(argv):
+    if argv and argv[0] in HOOKS:
+        try:
+            HOOKS[argv[0]](load_settings())
+        except ClientUnavailable as exc:
+            log(f"{argv[0]}: {exc}")
+            return 1
+        except (SourceError, OSError, ValueError, subprocess.SubprocessError) as exc:
+            log(f"{argv[0]}: {exc}")
+        return 0
+    if not argv or argv[0] not in VERBS:
+        log(f"usage: source {{{'|'.join(VERBS)}}} [args]")
+        return 2
+    try:
+        settings = load_settings()
+        VERBS[argv[0]](settings, argv[1:])
+    except SourceError as exc:
+        log(str(exc))
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    signal.signal(signal.SIGTERM, on_signal)
+    signal.signal(signal.SIGINT, on_signal)
+    sys.exit(main(sys.argv[1:]))

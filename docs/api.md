@@ -565,6 +565,160 @@ and sets `HKLM\SOFTWARE\WOW6432Node\GOG.com\GalaxyClient\paths` through the game
 hook inherits under gamescope, each at most 10 s and only while `system.reg` lacks it. A prefix not made yet
 gets it on the next launch.
 
+The **epic** source lists them too, after the fact: `achievements <app name>` is `legendary
+achievements --json` (the store's list with the player's unlocks, each group of it), and its
+`post-process` hook refreshes the cache after every session while the game-scope `achievements`
+setting is on. Nothing watches a session: an unlock shows once the session has ended.
+
+The **steam** source reads them from the client's own cache, no key needed:
+`appcache/stats/UserGameStatsSchema_<app id>.bin` (binary KeyValues: the achievement stats' bits,
+each with its name, its display name and description in every language — the client's language is
+used, else English —, `hidden`, and the icon hashes, served under
+`shared.fastly.steamstatic.com/community_assets/images/apps/<app id>/`) and
+`UserGameStats_<account id>_<app id>.bin` (each stat's bitmask and `AchievementTimes`, the unlock
+times by bit; an unlock without one takes the file's time). Rarity is Steam's global percentage
+(`GetGlobalAchievementPercentagesForApp`, keyless). A game the client has never loaded has no schema
+yet, and lists nothing. Its `post-process` hook refreshes the cache after every session, as Epic's.
+
+### Epic Games
+
+The **epic** source drives legendary with `LEGENDARY_CONFIG_PATH` set to its `config_path`
+(legendary's own folder by default, so a legendary used by hand shares the sign-in and the
+installs). It is off until enabled. `login` without a code gives Epic's sign-in page, which ends on
+a JSON page whose `authorizationCode` is the code; the code alone or the whole JSON is taken, a
+session already there is dropped first (legendary keeps a valid one over a new code), and `status`
+reads legendary's session offline. `library` is `legendary list --json`, the first run fetching
+every owned title's metadata (up to 15 min): a title installed through a third-party store (EA,
+Ubisoft) or without a Windows build is left out and logged. Epic has no catalogue search for a
+launcher, so `search` filters the cached library by title. `install` asks `info` for the sizes,
+then runs `legendary -y install <app> --base-path <games_dir> --platform Windows --skip-sdl` with
+`--with-dlcs` or `--skip-dlcs`: its progress counts chunks, so `done` is its percentage of the
+download size it announces. Stopped, legendary keeps a resume file under `<config_path>/tmp/`, the
+folder is reported as `partial_dir` while it is there, and the next `install` picks the download
+up. legendary exits 0 on some failures (a held lock), so an install is judged by `list-installed`
+afterwards. `update` lists the installed games whose version is behind (`list-installed
+--check-updates --csv`; a DLC's update rides on its game's) and runs `legendary -y update`.
+`uninstall` runs `legendary -y uninstall`: the files and legendary's record go together. `scan` lists legendary's installs whose folder is still there and first adopts those of another
+legendary (`adopt_from`, Heroic's by default) with `legendary import`, which needs the sign-in: a
+refused import waits an hour before the next try. The game's `store` is `egs` and its `umu_id` the
+umu database's for the app name, looked up once and kept in `umu.json`.
+
+A game needs Epic's launch arguments, one of them a single-use exchange code, so the source's
+`pre-launch` asks `legendary launch <app> --json --skip-version-check --no-wine` (online first,
+`--offline` when that fails, so an offline-capable game still starts) and hands the game its
+`game_parameters` and `egl_parameters` through `UNIVERSE_GAME_ARGS`; a Unix path among them
+(`-epicovt=`, the ownership token) becomes `Z:\…` for a Proton or Wine game. The recorded command
+line holds the exchange code, spent by then. For a Proton game with an `EasyAntiCheat` or `BattlEye`
+folder (up to three levels down), the hook sets `PROTON_EAC_RUNTIME` or `PROTON_BATTLEYE_RUNTIME`
+to the runtime Lutris publishes (`https://lutris.net/api/runtimes`), fetched once into the source's
+data folder while the `anticheat_runtimes` setting is on.
+
+### itch.io
+
+The **itch** source drives butler's daemon (`butler daemon --json --transport stdio`) on a database
+of its own (`db_path`, the source's data folder by default), one request at a time. It is off until
+enabled. Signing in takes an API key: `login` without a code gives itch.io's API keys page, and the
+key is the code; butler keeps the profile, so `status` reads it offline. `library` lists the owned
+keys (purchases and claims; bundle games not claimed yet are not among them), fetched fresh once and
+then paged, leaving out what is not a game or a tool (soundtracks, assets, books). `search` asks
+itch.io's search API with the key, and filters the cached library when that fails. `install` picks
+the build: a full one (no demo, no preorder, no `.deb`/`.rpm`/`.pkg`/`.dmg`) for Linux or Windows,
+the `platform` setting's first, 64-bit and `.zip` before the others; a browser game has none. Its
+download goes into a butler install location for the install folder, whose id is fixed by the
+folder's path (a location's installs resolve through that row), and a paid game's download key is
+fetched first when butler's database lacks it. Progress is butler's fraction of the size its task
+announces. Stopped, butler keeps the state in the queue's staging folder, reported as `partial_dir`
+(with the install folder's bytes) while it holds `operate-context.json`, and the next `install`
+performs over the same folder. `uninstall` is butler's `Uninstall.Perform` for each of the game's
+installs; one whose folder was removed outside butler is forgotten that way when the same build is
+installed again. The
+launch target is the itch app's: a `.itch.toml` action, else the shallowest candidate `butler
+configure` finds for the build's OS, a lone script before a binary, an installer never, the biggest
+program otherwise; a Linux build comes with `runner: linux`. `update` offers what butler calls a
+direct update (a newer build on the same channel); its guesses among other uploads are left out, and
+a file replaced under the same upload is not seen. `scan` lists butler's installs whose folder is
+still there, after adopting the itch app's: the install folders its database (`adopt_from`) names
+join butler's locations and `Install.Locations.Scan` registers the installs found by their receipts,
+where they lie. The `store` is `itchio`; the umu database has no itch.io entries. There are no
+achievements.
+
+### Steam
+
+The **steam** source runs the games of the Steam library itself, through Proton, while the Steam
+client runs in the background. It is off until enabled, and needs `steam` on PATH; it reads the
+client's folder (`steam_root`, else `~/.steam/root`, `~/.local/share/Steam`…) and writes nothing
+there. Steam keeps no list of the account's games on disk, so signing in takes a Steam Web API key:
+`login` without a code gives `steamcommunity.com/dev/apikey`, the key is the code, and it is checked
+against the account the client last signed in with (`config/loginusers.vdf`, the latest
+`Timestamp`), then kept in `key.json` (mode 600) in the source's data folder. `status` is that key
+matching the client's account; the client's own sign-in is Steam's. `library` is
+`IPlayerService/GetOwnedGames` with the key; `search` is the store's search (`storesearch`,
+keyless), `owned` crossed with the cached library, and filters the cached library when the store is
+out of reach.
+
+`scan` reads every library of `steamapps/libraryfolders.vdf`: each `appmanifest_<app id>.acf` of a
+game (its type in the client's `appcache/appinfo.vdf` — versions 27 to 29, the string table of 29
+included — is game, demo or mod: Proton, the runtimes and the redistributables are left out). An
+installed one is a `game` with `dir` = `<library>/steamapps/common/<installdir>`, `build` the
+manifest's `buildid`, `disk_size` its `SizeOnDisk`, `owned` true when the manifest's `LastOwner` is
+the client's account (a family-shared game is not claimed); one not fully installed is a stopped
+download (`partial_bytes` = `BytesDownloaded`). The platform is the manifest's
+`platform_override_source` when Steam was made to run a native game through Proton, else the
+`oslist` of its installed depots, else Windows unless a Linux launch entry's program is there; the
+program is the `config/launch` entry for that platform (no beta key, no DLC requirement, not a
+server, editor or VR one; the `default` type first, 64-bit first), its path matched part by part
+regardless of case, since the entries name files in any case. A Linux build comes with
+`runner: linux` and runs outside Steam's runtime, where one that needs the runtime's libraries does
+not start (on NixOS, most). The `store` is `steam` and the `umu_id` `umu-<app id>`, which is how
+umu-run gives the game its `SteamAppId`: protonfixes then runs its Steam defaults, not the per-game
+Steam fixes, which it keys by the bare number.
+
+With `shared_prefix` (on by default), a Windows game's `prefix` is Steam's own for it,
+`<library>/steamapps/compatdata/<app id>`, and its `proton` the folder of the tool Steam runs it
+with: the game's pick in `config/config.vdf`'s `CompatToolMapping`, else Valve's (the
+`app_mappings` of app 891390's appinfo, whose `compat_tools` give each Valve tool's app by name or
+alias), else the pick for all other titles (`CompatToolMapping`'s `0`); a custom tool is found
+through `compatibilitytools.d/*/compatibilitytool.vdf`, and one not installed, or without a
+`proton` script, gives none. Steam and Universe then run the game on one prefix with one Proton and
+see the same saves. On two Protons, each switch between them rewrites the prefix for the other's
+version, and the first launch after one may quit ("Prefix has an invalid version"): a game added
+before a change of Steam's pick keeps the Proton it came with, which its settings change. umu-run
+keeps the real `pfx` folder of a prefix Steam made, and makes `pfx` a link to the prefix itself in
+one it makes, which Steam's Proton runs as it is. With `shared_prefix` off, a game added from then
+on gets a prefix of Universe's own and Universe's Proton.
+
+The client has to run for a game to reach it. `pre-launch` starts it when `~/.steam/steam.pid`
+names no live Steam: `systemd-run --user --unit=universe-steam … steam -silent` with the launcher's
+display variables, and `UnsetEnvironment=` for each one the launcher lacks, which the unit would
+otherwise take from the user manager (gamescope keeps `WAYLAND_DISPLAY` from its children: the
+manager's is the desktop's), so a client started inside the launcher's gamescope lands there; one
+started there dies with it. It then waits up to 70 s for a new `[Logged On,` in
+`logs/connection_log.txt`; a client that does not start cancels the launch (the game would only show
+"Steam must be running"), one that does not sign in lets it go on (offline mode). For a Proton or Wine game the hook links the client's
+`legacycompat/steamclient.dll`, `steamclient64.dll`, `GameOverlayRenderer64.dll`, `Steam.dll` and
+`SteamService.exe` (as `steam.exe`) into the prefix's `C:\Program Files (x86)\Steam\` — Proton copies
+them there from `STEAM_COMPAT_CLIENT_INSTALL_PATH`, which umu-run leaves empty, and without them the
+game's `steam_api` finds no client; a file already there (Proton's copy, in a prefix Steam made) is
+kept. A native game gets `SteamAppId` and `SteamGameId`. The launch entry's `arguments` (split as
+Windows does, quotes and all) reach the game through `UNIVERSE_GAME_ARGS` when the game's program is
+that entry's. A program wrapped in SteamStub (a `.bind` section) is logged: it restarts itself
+through Steam, outside the session.
+
+`install` needs no install folder: it starts the client, opens `steam://install/<app id>` (from a
+unit of its own, so a `steam` that would start a client never becomes the source's child) and
+waits `confirm_timeout_s` for the manifest that confirming Steam's window writes — announced first
+as a `window` event (class `steam`, title `Install`), since Steam opens its main window with the
+dialog, at the size it last had on the desktop, and inside the launcher's gamescope that one would
+be shown —, then follows it:
+`BytesDownloaded` of `BytesToDownload`, then `BytesStaged` of `BytesToStage`, until the
+`StateFlags` say fully installed and nothing pending. Steam does the download: stopping the install
+stops the watch, not Steam, and the next `install` follows it again. `update` lists the installed
+games whose manifest asks for an update (`buildid` → `TargetBuildID`); updating one starts the
+client and waits for it to run its update — no `steam://` URL asks for one, and a game Steam
+updates only at launch waits for `confirm_timeout_s`, then says so. `uninstall` starts the client,
+opens `steam://uninstall/<app id>` and waits `confirm_timeout_s` for the manifest to go: Steam asks,
+then removes the files.
+
 ## Runners
 
 A runner is what starts a game: `proton` (through umu-run), `wine`, `linux` (the program itself),

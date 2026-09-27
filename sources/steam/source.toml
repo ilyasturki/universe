@@ -1,0 +1,49 @@
+api = 2
+id = "steam"
+name = "Steam"
+version = "0.0.6"
+description = "Runs the games of your Steam library itself, with the Steam client in the background; installs them through Steam's window and reads their achievements."
+exe = "bin/source"
+capabilities = ["achievements", "uninstall"]
+
+[requires]
+bins = ["steam"]
+
+[hooks]
+pre-launch   = "bin/pre-launch"
+post-process = "bin/post-process"
+timeout_s    = 90
+
+[[settings]]
+key = "achievements"
+type = "bool"
+default = true
+label = "Achievements (read from Steam after each session)"
+scope = "game"
+
+[[settings]]
+key = "shared_prefix"
+type = "bool"
+default = true
+label = "Share Steam's prefix, and the saves in it (games added from now on)"
+
+[[settings]]
+key = "steam_root"
+type = "path"
+default = ""
+label = "Steam's folder (empty: the one Steam uses)"
+advanced = true
+
+[[settings]]
+key = "confirm_timeout_s"
+type = "int"
+default = 600
+label = "Time to confirm an install in Steam's window (s)"
+advanced = true
+
+[[settings]]
+key = "install_timeout_s"
+type = "int"
+default = 14400
+label = "Maximum install or update time (s)"
+advanced = true
