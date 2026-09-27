@@ -31,6 +31,8 @@ just ui-record <out.mp4> [keys…]
 
 The UI in a headless sway rendering on the boot GPU, recorded by wf-recorder: no window, no sound, the real scenegraph with every effect. Out is H.264 at 60 fps, supersampled 2x and scaled back, ready to post. Same keys and `UNIVERSE_UI_*` variables as `ui-shot`, 500 ms between keys; `tools/ui-record --help` has the rest. Check it with `ffmpeg -ss <t> -i <out> -frames:v 1 <png>` and Read the frame.
 
+Anything shown outside the repo (README, posts) is recorded on `UNIVERSE_DEV=.dev-showcase`, which `just showcase` rebuilds from `.dev`: PC games with full artwork only, no emulated or hand-added games. The Media tab there still holds dev test sessions; leave it out of public footage.
+
 ## Visible run
 
 Not reachable offscreen: the gamescope re-exec and nested overlay path, a real game or `just sample` launch, the physical gamepad, the Recordings player's video. When the change lives there, run it visibly (`just ui`, `just ui --windowed`) — but tell the user first, in the sentence before the command, that a window and sound are coming.

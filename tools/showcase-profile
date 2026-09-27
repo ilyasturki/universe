@@ -1,0 +1,101 @@
+#!/usr/bin/env python3
+import argparse
+import json
+import os
+import shutil
+import subprocess
+import sys
+from pathlib import Path
+
+ART = ("box_front", "square", "background", "logo")
+SHARED_DIRS = ("journal", "media", "screenshots")
+
+
+def library(src: Path) -> list[dict]:
+    env = {
+        **os.environ,
+        "UNIVERSE_DATA_HOME": str(src / "data"),
+        "UNIVERSE_CONFIG_HOME": str(src / "config"),
+        "UNIVERSE_STATE_HOME": str(src / "state"),
+        "UNIVERSE_CACHE_HOME": str(src / "cache"),
+    }
+    out = subprocess.run([os.environ["UNIVERSE_BIN"], "ls", "--json"], env=env, check=True, capture_output=True, text=True)
+    return json.loads(out.stdout)
+
+
+def refusal(game: dict) -> str | None:
+    if game.get("hidden") or game.get("removed"):
+        return "hidden"
+    if (game.get("source") or {}).get("kind") == "manual":
+        return "added by hand"
+    if (game.get("effective") or {}).get("runner_kind") == "emulator":
+        return "emulated"
+    media = game.get("media") or {}
+    missing = [k for k in ART if not (media.get(k) and Path(media[k]).is_file())]
+    return f"no {', '.join(missing)}" if missing else None
+
+
+def copy_game(src_dir: Path, dest_dir: Path) -> None:
+    for path in src_dir.rglob("*"):
+        if path.is_dir():
+            continue
+        rel = path.relative_to(src_dir)
+        target = dest_dir / rel
+        target.parent.mkdir(parents=True, exist_ok=True)
+        # The UI rewrites game.toml and sessions.jsonl in place: those are copied, the art and journals hardlinked.
+        if rel.parts[0] in SHARED_DIRS and not rel.name.startswith("."):
+            os.link(path, target)
+        else:
+            shutil.copy2(path, target)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Build DEST, a dev profile for screenshots and recordings, from SRC's games: "
+        "PC games with every artwork (box, tile, background, logo), none hidden, emulated or added by hand. "
+        "DEST is rebuilt from scratch."
+    )
+    parser.add_argument("src", type=Path)
+    parser.add_argument("dest", type=Path)
+    args = parser.parse_args()
+    src, dest = args.src.resolve(), args.dest.resolve()
+    if not dest.name.startswith(".dev-") or dest == src or dest.is_relative_to(src) or src.is_relative_to(dest):
+        parser.error(f"{dest} must be a .dev-* profile apart from {src}: it is deleted and rebuilt")
+
+    kept, dropped = [], []
+    for game in library(src):
+        reason = refusal(game)
+        (dropped if reason else kept).append((game, reason))
+
+    if dest.exists():
+        shutil.rmtree(dest)
+    for sub in ("data/games", "config", "state", "cache", "recordings", "journal"):
+        (dest / sub).mkdir(parents=True, exist_ok=True)
+    for game, _ in kept:
+        copy_game(Path(game["dir"]), dest / "data/games" / game["id"])
+    for cache in ("thumbs", "frames"):
+        if (src / "cache" / cache).is_dir():
+            shutil.copytree(src / "cache" / cache, dest / "cache" / cache, copy_function=os.link)
+
+    (dest / "config/config.toml").write_text(
+        f"""schema = 1
+[paths]
+games_root = "{dest}/data/games"
+recordings_root = "{dest}/recordings"
+journal_root = "{dest}/journal"
+[modules]
+enabled = ["capture", "journal", "screenshot"]
+[sources]
+enabled = []
+"""
+    )
+    (dest / "state/ui-memory.json").write_text(json.dumps({"theme": "reprise", "onboarded": True}) + "\n")
+
+    for game, reason in dropped:
+        print(f"  - {game['id']}: {reason}", file=sys.stderr)
+    print(f"{dest}: {len(kept)} games, {len(dropped)} left out")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())
