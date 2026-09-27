@@ -792,6 +792,48 @@ fn nix_version(real: &Path) -> Option<String> {
     name_version(store.split_once('-')?.1)
 }
 
+fn wrapper_copied_from(script: &str, name: &str) -> Option<PathBuf> {
+    let target = format!("\"$wrapperDir/{name}\"");
+    script.lines().find_map(|l| Some(PathBuf::from(l.strip_prefix("cp ")?.strip_suffix(target.as_str())?.trim())))
+}
+
+// /run/wrappers holds root-only copies of store binaries: the unit that makes them names each source.
+fn wrapper_source(name: &str) -> Option<PathBuf> {
+    let unit = std::fs::read_to_string("/etc/systemd/system/suid-sgid-wrappers.service").ok()?;
+    let start = unit.lines().find_map(|l| l.strip_prefix("ExecStart="))?.trim_start_matches(['@', '-', '+', '!']).split_whitespace().next()?;
+    wrapper_copied_from(&std::fs::read_to_string(start).ok()?, name)
+}
+
+fn embedded_program(file: &Path, bin: &str) -> Option<PathBuf> {
+    use std::io::Read;
+    let mut bytes = Vec::new();
+    std::fs::File::open(file).ok()?.take(4 << 20).read_to_end(&mut bytes).ok()?;
+    let text = String::from_utf8_lossy(&bytes);
+    let (plain, wrapped) = (format!("/bin/{bin}"), format!("/bin/.{bin}-wrapped"));
+    text.match_indices("/nix/store/").find_map(|(i, _)| {
+        let path: String = text[i..].chars().take_while(|c| c.is_ascii_alphanumeric() || "/._+-".contains(*c)).collect();
+        (path.ends_with(&plain) || path.ends_with(&wrapped)).then(|| PathBuf::from(path)).filter(|p| p != file)
+    })
+}
+
+fn store_program(program: &Path) -> Option<PathBuf> {
+    let bin = program.file_name()?.to_str()?;
+    let mut path = if program.starts_with("/run/wrappers") { wrapper_source(bin)? } else { canonical(program) };
+    for _ in 0..4 {
+        if !path.starts_with("/nix/store") {
+            return None;
+        }
+        if nix_version(&path).is_some() {
+            break;
+        }
+        match embedded_program(&path, bin) {
+            Some(next) => path = canonical(&next),
+            None => break,
+        }
+    }
+    path.starts_with("/nix/store").then_some(path)
+}
+
 fn package_version(real: &Path) -> Option<String> {
     use crate::distro::Family;
     let path = real.as_os_str();
@@ -815,10 +857,10 @@ fn package_version(real: &Path) -> Option<String> {
 }
 
 pub fn system_version(program: &Path) -> String {
-    let real = canonical(program);
-    if let Some(v) = nix_version(&real) {
+    if let Some(v) = store_program(program).and_then(|p| nix_version(&p)) {
         return v;
     }
+    let real = canonical(program);
     let name = real.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     if name.to_ascii_lowercase().ends_with(".appimage") {
         return name_version(&name)
@@ -829,7 +871,7 @@ pub fn system_version(program: &Path) -> String {
 }
 
 fn origin(program: &Path, fallback: &str) -> String {
-    if canonical(program).starts_with("/nix/store") { "nix" } else { fallback }.into()
+    if store_program(program).is_some() { "nix" } else { fallback }.into()
 }
 
 fn proton_version(dir: &Path, name: &str) -> String {
@@ -1630,6 +1672,23 @@ mod tests {
         assert_eq!(newer("GE-Proton11-7", "GE-Proton10-15"), Some(true));
         assert_eq!(newer("0.0.38-18123", "0.0.42-unstable-2026-08-15"), None, "a snapshot proposes nothing");
         assert_eq!(newer("GE-Proton11-7", "0.2.1"), None, "two schemes");
+    }
+
+    #[test]
+    fn a_nixos_wrapper_leads_to_the_versioned_program_it_runs() {
+        let setcap = "/nix/store/z0rh-security-wrapper-gamescope-x86_64-unknown-linux-musl/bin/security-wrapper";
+        let script = format!("cp {setcap} \"$wrapperDir/gamescope\"\nchmod 0000 \"$wrapperDir/gamescope\"\n");
+        assert_eq!(wrapper_copied_from(&script, "gamescope"), Some(PathBuf::from(setcap)));
+        assert_eq!(wrapper_copied_from(&script, "gamescopectl"), None);
+        let dir = tempfile::tempdir().unwrap();
+        let binary = dir.path().join("gamescope");
+        std::fs::write(&binary, b"\x7fELF\0/nix/store/6j9n-gamescope/lib/x.so\0/nix/store/sw8a-gamescope-3.16.23/bin/gamescope\0").unwrap();
+        let found = embedded_program(&binary, "gamescope").unwrap();
+        assert_eq!((found.to_str(), nix_version(&found).as_deref()), (Some("/nix/store/sw8a-gamescope-3.16.23/bin/gamescope"), Some("3.16.23")));
+        let script = dir.path().join("dolphin-emu");
+        std::fs::write(&script, "#!/bin/sh\nexec \"/nix/store/j01n-dolphin-emu/bin/.dolphin-emu-wrapped\" \"$@\"\n").unwrap();
+        assert_eq!(embedded_program(&script, "dolphin-emu"), Some(PathBuf::from("/nix/store/j01n-dolphin-emu/bin/.dolphin-emu-wrapped")));
+        assert_eq!(store_program(Path::new("/usr/bin/gamescope")), None);
     }
 
     #[test]

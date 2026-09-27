@@ -625,9 +625,10 @@ recent ({version, at} of an update in the last 7 days, or null), skipped}`, and 
 `packages`, `installable` (PackageKit can install them here) and `fix`. `proposal` is `install`
 when nothing is installed and the library needs it (a runner a game uses; the default Proton's
 family once a game runs on Proton; umu-run), `newer` when what runs is the system's and the latest
-is surely newer, `""` otherwise. A system program's version comes from its Nix store path, else an
-AppImage's file name, else the distribution's package (pacman, dpkg, rpm); a snapshot (`unstable`,
-`git`) or two numbering schemes propose nothing.
+is surely newer, `""` otherwise. A system program's version comes from its Nix store path (followed
+through a `/run/wrappers` copy, which the `suid-sgid-wrappers` unit names, and through binary
+wrappers), else an AppImage's file name, else the distribution's package (pacman, dpkg, rpm); a
+snapshot (`unstable`, `git`) or two numbering schemes propose nothing.
 
 ## Media
 
