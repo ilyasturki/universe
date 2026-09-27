@@ -14,6 +14,8 @@ use crate::runners::{self, Kind, RunnerSpec};
 const NOT_GAMES: &[&str] = &["updates", "dlc", "mods", "firmware", "amiibo", "backups", "downloads", "prefixes", "saves", "textures", "shaders"];
 /// Eden and the forks sharing its CLI keep `qt-config.ini` under their own name.
 pub const EDEN_CONFIGS: &[&str] = &["eden", "citron", "sudachi", "suyu", "yuzu"];
+/// Azahar moves `lime3ds-emu` and `citra-emu` into `azahar-emu` on its first start.
+const AZAHAR_CONFIGS: &[&str] = &["azahar-emu", "lime3ds-emu", "citra-emu"];
 /// Eden's and Azahar's virtual entries in `Paths\gamedirs`.
 const VIRTUAL_DIRS: &[&str] = &["SDMC", "UserNAND", "SysNAND", "INSTALLED", "SYSTEM"];
 /// A `.bin` / `.img` / `.raw` beside one of these is a track of it, not a game.
@@ -63,7 +65,7 @@ fn folders_under(config: &Config, cfg: &Path, data: &Path) -> Vec<Folder> {
         }
         let dirs: Vec<(PathBuf, bool)> = match spec.id {
             "eden" => qt_config(cfg, EDEN_CONFIGS).map(|p| qt_gamedirs(&p)).unwrap_or_default(),
-            "azahar" => qt_config(cfg, &["azahar", "citra-emu"]).map(|p| qt_gamedirs(&p)).unwrap_or_default(),
+            "azahar" => qt_config(cfg, AZAHAR_CONFIGS).map(|p| qt_gamedirs(&p)).unwrap_or_default(),
             "dolphin" => dolphin_paths(&cfg.join("dolphin-emu/Dolphin.ini")),
             "ryujinx" => json_dirs(&cfg.join("Ryujinx/Config.json"), "game_dirs").into_iter().map(|d| (d, true)).collect(),
             "rpcs3" => rpcs3_dirs(&cfg.join("rpcs3")),
@@ -418,6 +420,16 @@ mod tests {
         .unwrap();
         assert_eq!(qt_gamedirs(&ini), vec![(PathBuf::from("/roms/switch"), false), (PathBuf::from("/roms/deep"), true)]);
         assert_eq!(qt_config(dir.path(), &["missing"]), None);
+    }
+
+    #[test]
+    fn azahar_reads_azahar_emu_over_a_leftover_citra_emu() {
+        let dir = tempfile::tempdir().unwrap();
+        for name in ["citra-emu", "azahar-emu"] {
+            std::fs::create_dir(dir.path().join(name)).unwrap();
+            std::fs::write(dir.path().join(name).join("qt-config.ini"), "").unwrap();
+        }
+        assert_eq!(qt_config(dir.path(), AZAHAR_CONFIGS), Some(dir.path().join("azahar-emu/qt-config.ini")));
     }
 
     #[test]
