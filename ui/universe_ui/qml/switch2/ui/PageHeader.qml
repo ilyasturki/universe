@@ -38,6 +38,8 @@ Item {
     }
 
     Column {
+        id: titles
+
         x: header.icon !== "" ? glyph.x + glyph.width + Theme.dp(18) : thumb.visible ? thumb.x + thumb.width + Theme.dp(24) : Theme.dp(120)
         anchors.verticalCenter: glyph.verticalCenter
         spacing: Theme.dp(2)
@@ -59,8 +61,10 @@ Item {
         anchors.right: parent.right
         anchors.rightMargin: Theme.dp(120)
         anchors.verticalCenter: glyph.verticalCenter
+        width: Math.max(0, Math.min(implicitWidth, header.width - anchors.rightMargin - titles.x - titles.width - Theme.dp(40)))
         text: header.trailing
         color: Theme.textSecondary
+        elide: Text.ElideMiddle
     }
 
     Hairline {

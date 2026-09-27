@@ -836,6 +836,41 @@ def test_a_switch2_dialog_taller_than_the_screen_scrolls_its_text(api):
     pump(50)
 
 
+def test_the_switch2_folder_sheet_follows_the_chip_past_the_screen_edge(api, tmp_path, monkeypatch):
+    from PySide6.QtCore import Q_ARG, QMetaObject, QObject, Qt
+    from PySide6.QtTest import QTest
+
+    from universe_ui.screens import paths
+
+    drives = [tmp_path / f"Drive {i:02}" for i in range(30)]
+    for d in drives:
+        d.mkdir()
+    monkeypatch.setattr(paths, "_mounts", lambda: [str(d) for d in drives])
+    _engine, window = render(api, activate=True)
+    api.theme.set("switch2")
+    settle(window)
+    root = window.property("contentItem").childItems()[0].property("item")
+    QMetaObject.invokeMethod(root, "browse", Q_ARG("QVariant", {"path": str(drives[0])}), Q_ARG("QVariant", None))
+    pump(400)
+    views = (o for o in root.findChildren(QObject) if o.metaObject().className().startswith("QQuickListView"))
+    chips = next(v for v in views if (v.property("count") or 0) >= 30)
+    texts = [o for o in root.findChildren(QObject) if o.inherits("QQuickText") and o.property("visible")]
+    title = next(t for t in texts if t.property("text") == "Choose a folder")
+    path = next(t for t in texts if str(t.property("text")).endswith("Drive 00"))
+    left = path.mapToItem(window.contentItem(), 0, 0).x()
+    assert left >= title.mapToItem(window.contentItem(), title.property("width"), 0).x(), "the path stays clear of the title"
+    QTest.keyClick(window, Qt.Key.Key_Up)
+    for _ in range(chips.property("count")):
+        QTest.keyClick(window, Qt.Key.Key_Right)
+        pump(30)
+    pump(600)
+    chip = chips.property("currentItem")
+    assert chips.property("currentIndex") == chips.property("count") - 1
+    assert chip.property("x") + chip.property("width") <= chips.property("contentX") + chips.property("width"), "the last chip is in view"
+    window.close()
+    pump(50)
+
+
 def test_a_long_journal_paragraph_stops_above_the_hint_bar(api):
     _engine, window = render(api, 1280, 800, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")

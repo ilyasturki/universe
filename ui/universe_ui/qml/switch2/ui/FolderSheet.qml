@@ -158,20 +158,43 @@ Modal {
         trailing: sheet.browser.display(sheet.browser.path)
     }
 
-    Row {
+    ListView {
         id: chips
 
-        x: (parent.width - sheet.inner) / 2
-        y: header.height + Theme.dp(36)
+        x: (parent.width - sheet.inner) / 2 - sheet.room
+        y: header.height + Theme.dp(36) - sheet.room
+        width: sheet.inner + sheet.room * 2
+        height: count > 0 ? Theme.dp(72) + sheet.room * 2 : 0
+        orientation: ListView.Horizontal
         spacing: Theme.dp(18)
+        model: sheet.browser.shortcuts
+        currentIndex: sheet.chipIndex
+        interactive: false
+        clip: true
+        highlightFollowsCurrentItem: true
+        preferredHighlightBegin: sheet.room
+        preferredHighlightEnd: width - sheet.room
+        highlightRangeMode: ListView.ApplyRange
+        highlightMoveDuration: Theme.durQuick
+        highlightMoveVelocity: -1
+        header: Item {
+            width: sheet.room
+        }
+        footer: Item {
+            width: sheet.room
+        }
 
-        Repeater {
-            model: sheet.browser.shortcuts
+        delegate: Item {
+            width: chip.width
+            height: chips.height
 
             Item {
+                id: chip
+
                 readonly property bool focused: sheet.zone === "chips" && index === sheet.chipIndex
                 readonly property bool here: modelData.path === sheet.browser.path
 
+                y: sheet.room
                 width: chipLabel.implicitWidth + Theme.dp(56)
                 height: Theme.dp(72)
 
@@ -200,7 +223,7 @@ Modal {
         id: list
 
         x: (parent.width - sheet.inner) / 2 - sheet.room
-        y: chips.y + chips.height + Theme.dp(36) - sheet.room
+        y: chips.y + chips.height + Theme.dp(36) - (chips.count > 0 ? sheet.room * 2 : 0)
         width: sheet.inner + sheet.room * 2
         height: parent.height - y - Theme.dp(Theme.hintBarHeight) - Theme.dp(20) + sheet.room
         model: sheet.rowCount
