@@ -135,6 +135,32 @@ def test_downloads_opens_with_tab_one_and_the_bumpers_switch_tabs(ps5, api):
     assert store.property("tab") == 1
 
 
+def test_a_second_store_puts_a_switch_on_top_whose_menu_lists_the_stores(ps5, api, fake):
+    window, root = ps5
+    fake.core._source("epic").update(enabled=True, logged_in=True)
+    fake.core._data["source_library"]["epic"] = [{"id": "Min", "title": "Hades", "owned": True, "installed": False}]
+    sources = api.screens.sources
+    store = open_store(root)
+
+    def until(done):
+        for _ in range(60):
+            pump(50)
+            if done():
+                return
+        raise AssertionError("never came")
+
+    until(lambda: len(value(store, "icons")) == 5)
+    assert [i["id"] for i in value(store, "icons")] == ["store", "search", "refresh", "sources", "options"]
+    QMetaObject.invokeMethod(store, "openStores")
+    pump(100)
+    popup = root.findChild(QObject, "popup")
+    assert popup.property("open") is True and [i["label"] for i in value(popup, "items")] == ["GOG", "Epic Games"]
+    QTest.keyClick(window, Qt.Key.Key_Down)
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    until(lambda: [r["title"] for r in sources.rows] == ["Hades"])
+    assert sources.source == "epic" and value(store, "tabs") == ["Epic Games", "Downloads"]
+
+
 def test_start_opens_every_action_in_a_menu(ps5):
     window, root = ps5
     store = open_store(root)

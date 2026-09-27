@@ -50,8 +50,9 @@ impl Library {
         let wanted: Vec<String> = ids.to_vec();
         let rows = backend::run(async move {
             let core = backend::core();
+            let prefixes = core.config.read().await.prefixes_root();
             let games = core.games.read().await;
-            games.iter().filter(|r| r.game.removed_at.is_empty() && (whole || wanted.contains(&r.game.id))).map(Row::of).collect::<Vec<Row>>()
+            games.iter().filter(|r| r.game.removed_at.is_empty() && (whole || wanted.contains(&r.game.id))).map(|r| Row::of(r, &prefixes)).collect::<Vec<Row>>()
         })
         .await;
         let present: BTreeSet<String> = rows.iter().map(|r| r.id.clone()).collect();
@@ -222,6 +223,9 @@ pub fn platform_name(platform: &str) -> String {
 pub fn source_name(kind: &str) -> String {
     match kind {
         "gog" => "GOG".into(),
+        "epic" => "Epic Games".into(),
+        "itch" => "itch.io".into(),
+        "steam" => "Steam".into(),
         "lutris" => "Lutris".into(),
         "manual" => gettextrs::gettext("Added"),
         other => {
@@ -241,6 +245,9 @@ pub fn platform_icon(platform: &str) -> &'static str {
 pub fn source_icon(kind: &str) -> &'static str {
     match kind {
         "gog" => "source-gog-symbolic",
+        "epic" => "source-epic-symbolic",
+        "itch" => "source-itch-symbolic",
+        "steam" => "source-steam-symbolic",
         "lutris" => "source-lutris-symbolic",
         _ => "folder-new-symbolic",
     }

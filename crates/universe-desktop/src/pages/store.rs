@@ -853,10 +853,17 @@ impl StorePage {
 
     fn confirm_uninstall(&self, id: &str) {
         let Some(entry) = self.entry(id).filter(|e| !e.game_id.is_empty()) else { return };
-        let dialog = adw::AlertDialog::new(
-            Some(&gettext("Uninstall {}?").replace("{}", &entry.title)),
-            Some(&gettext("Its install folder goes to the trash. The game stays in the library with its hours, journal and recordings.")),
-        );
+        let (page, asked) = (self.downgrade(), entry.game_id.clone());
+        glib::spawn_future_local(async move {
+            let via = backend::call(move |core| async move { core.uninstall_via(&asked).await }).await.ok().flatten();
+            if let Some(page) = page.upgrade() {
+                page.ask_uninstall(entry, via.as_deref());
+            }
+        });
+    }
+
+    fn ask_uninstall(&self, entry: Entry, via: Option<&str>) {
+        let dialog = adw::AlertDialog::new(Some(&gettext("Uninstall {}?").replace("{}", &entry.title)), Some(&crate::game::uninstall_body(via)));
         dialog.add_responses(&[("cancel", &gettext("_Cancel")), ("uninstall", &gettext("_Uninstall"))]);
         dialog.set_response_appearance("uninstall", adw::ResponseAppearance::Destructive);
         dialog.set_default_response(Some("cancel"));

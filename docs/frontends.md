@@ -574,7 +574,8 @@ Store, the tiles of what is owned and not installed (a download or a pause paint
 foot) and the search's results, A installs after the same confirm; Manage, the install folder's
 strip (used · free), then Installing and Installed as rows with a size and an action — A is the
 row's menu, X cancels the running job from either tab. With two stores or more the rail's first entry,
-the store's name, opens the menu of them.
+the store's name, opens the menu of them; in the PS5 look's Store, a Change Store icon heads the top
+row and the Options menu, with the same menu.
 
 ## Detail, recordings and journal
 
@@ -839,8 +840,8 @@ first; the page shows that list as a picker, `pickRunner(i)` takes the choice, `
 proposes the title and `addGame(title)` calls `add_game`, toasting `message`. A signed-in store
 row picks that store (`api.screens.sources.pick`) and leaves the hub for Settings › Install (Reprise:
 `installRequested(source, "install")` → `theme.qml` `openSettings(section)`, whose `deliverLanding`
-calls the Settings page's `land(name)` once it is the active page; the Switch 2 look pushes its
-Install page); one signed out or off (`available` false) opens the source's own page instead
+calls the Settings page's `land(name)` once it is the active page; the Switch 2 and PS5 looks push
+their Install page); one signed out or off (`available` false) opens the source's own page instead
 (`pages/FormPage.qml` with `{ source }`), where its switch and Sign-in card are. The
 Lutris row is two presses: `previewLutris()` runs `import_lutris(false)` off the UI thread
 (`busy`) into `lutris` (the report) or `lutrisError` (Lutris absent: shown on the row, never
@@ -1035,8 +1036,9 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
 
 - **The bridge** (`backend.rs`): the core runs on a tokio runtime of its own, which the main loop
   awaits through `run` (a future), `call` (a core method) and `pinned` (a core future that is not
-  `Send` — `launch`, the source verbs, `sources()`, `media_*`, `achievements` — on a blocking
-  thread). Nothing blocks the main loop, `launch` and its pre-launch hooks included.
+  `Send` — `launch`, the source verbs, `uninstall` (a store's own runs one), `sources()`, `media_*`,
+  `achievements` — on a blocking thread). Nothing blocks the main loop, `launch` and its pre-launch
+  hooks included.
 - **Changes**: `universe::changes::watch` with the journal sweep on, each event re-emitted on the
   application (`changed`). The library keeps one `GameObject` per game across refreshes, so a bound
   card follows its game.
@@ -1050,7 +1052,13 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
 - **Undo, not confirmation**, for what can come back: hiding, favourites, removing a game, a
   screenshot, a recording, a journal entry. A removal is held (`Application::defer`) while its toast
   shows and done when the toast goes, or on quit; Undo, or Ctrl+Z for the newest toast, drops it.
-  Uninstalling and removing with the Wine prefix ask instead.
+  Uninstalling and removing with the Wine prefix ask instead. The uninstall dialog names the store
+  that removes the files itself (`uninstall_via`), and removing with the prefix is offered only for
+  one under `paths.prefixes_root`: a purge leaves a store's, Steam's `compatdata`.
+- **Stores**: the Store page's switcher lists the signed-in stores, each with its label and icon in
+  the library. The first run adopts what `discover()` finds through the store a launcher's `via`
+  names, turning it on when it is off; one that found nothing while signed out is listed on the
+  stores step, and adopted again once its sign-in succeeds.
 - **Search provider**: `org.gnome.Shell.SearchProvider2` at
   `/io/github/ilyasturki/UniverseDesktop/SearchProvider`, registered with the application on the
   bus and answered once the core has opened; a result opens the game's page and starts it, "search

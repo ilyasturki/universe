@@ -2,6 +2,7 @@ use std::cell::{Cell, RefCell};
 
 use adw::prelude::*;
 use adw::subclass::prelude::*;
+use gettextrs::gettext;
 use gtk::glib;
 use universe::library::Resolved;
 
@@ -34,7 +35,7 @@ pub struct Row {
     /// Where the game's files are: its install folder, else the folder of its program or ROM.
     pub folder: String,
     pub store_id: String,
-    /// The prefix it names or the one its launch made, on disk.
+    /// The prefix it names or the one its launch made, on disk and under `prefixes_root`: a store's is not Universe's to trash.
     pub has_prefix: bool,
     pub has_install: bool,
 }
@@ -44,12 +45,20 @@ pub fn removal_key(id: &str) -> String {
     format!("game:{id}")
 }
 
+/// `via`: the store `uninstall_via` names, which removes the files itself.
+pub fn uninstall_body(via: Option<&str>) -> String {
+    match via {
+        Some(store) => gettext("{} removes its files. The game stays in the library with its hours, journal and recordings.").replace("{}", store),
+        None => gettext("Its install folder goes to the trash. The game stays in the library with its hours, journal and recordings."),
+    }
+}
+
 fn unix(rfc3339: &str) -> i64 {
     chrono::DateTime::parse_from_rfc3339(rfc3339).map(|t| t.timestamp()).unwrap_or(0)
 }
 
 impl Row {
-    pub fn of(r: &Resolved) -> Row {
+    pub fn of(r: &Resolved, prefixes_root: &std::path::Path) -> Row {
         let slot = |name: &str| r.media.iter().find(|(s, _)| s == name).map(|(_, p)| p.clone()).unwrap_or_default();
         let g = &r.game;
         Row {
@@ -81,7 +90,9 @@ impl Row {
                 universe::paths::expand(&g.source.dir).to_string_lossy().into_owned()
             },
             store_id: g.source.id.clone(),
-            has_prefix: !r.effective.prefix.is_empty() && std::path::Path::new(&r.effective.prefix).is_dir(),
+            has_prefix: !r.effective.prefix.is_empty()
+                && std::path::Path::new(&r.effective.prefix).starts_with(prefixes_root)
+                && std::path::Path::new(&r.effective.prefix).is_dir(),
             has_install: !g.source.dir.is_empty() && universe::paths::expand(&g.source.dir).is_dir(),
         }
     }
@@ -204,5 +215,16 @@ impl GameObject {
         flag(&imp.favorite, row.favorite, "favorite");
         flag(&imp.has_prefix, row.has_prefix, "has-prefix");
         flag(&imp.has_install, row.has_install, "has-install");
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn an_uninstall_names_the_store_that_removes_the_files() {
+        assert!(uninstall_body(Some("Steam")).starts_with("Steam removes its files."));
+        assert!(uninstall_body(None).starts_with("Its install folder goes to the trash."));
     }
 }

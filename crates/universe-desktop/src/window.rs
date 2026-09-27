@@ -646,11 +646,18 @@ impl Window {
     }
 
     fn confirm_uninstall(&self, game: &GameObject) {
-        let (id, title) = (game.id(), game.title());
-        let dialog = adw::AlertDialog::new(
-            Some(&gettext("Uninstall {}?").replace("{}", &title)),
-            Some(&gettext("Its install folder goes to the trash. The game stays in the library with its hours, journal and recordings.")),
-        );
+        let (id, title, this) = (game.id(), game.title(), self.downgrade());
+        glib::spawn_future_local(async move {
+            let asked = id.clone();
+            let via = backend::call(move |core| async move { core.uninstall_via(&asked).await }).await.ok().flatten();
+            if let Some(win) = this.upgrade() {
+                win.ask_uninstall(id, title, via.as_deref());
+            }
+        });
+    }
+
+    fn ask_uninstall(&self, id: String, title: String, via: Option<&str>) {
+        let dialog = adw::AlertDialog::new(Some(&gettext("Uninstall {}?").replace("{}", &title)), Some(&crate::game::uninstall_body(via)));
         dialog.add_responses(&[("cancel", &gettext("_Cancel")), ("uninstall", &gettext("_Uninstall"))]);
         dialog.set_response_appearance("uninstall", adw::ResponseAppearance::Destructive);
         dialog.set_default_response(Some("cancel"));

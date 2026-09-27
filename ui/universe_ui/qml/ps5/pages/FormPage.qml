@@ -154,9 +154,10 @@ FocusScope {
                     gameId: gameId
                 });
             } else if (a === "uninstall") {
+                var via = api.universe.uninstallVia(gameId);
                 shell.dialogAsk({
                     message: "Uninstall " + title + "?",
-                    detail: "The install folder goes to the trash; the hours and the journal stay.",
+                    detail: (via ? via + " removes the files" : "The install folder goes to the trash") + "; the hours and the journal stay.",
                     buttons: ["Cancel", "Uninstall"],
                     danger: 1
                 }, function (k) {

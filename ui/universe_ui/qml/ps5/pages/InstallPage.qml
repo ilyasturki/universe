@@ -39,7 +39,13 @@ FocusScope {
     readonly property string libraryLine: sources.error !== "" ? sourceName + " unreachable · listing from " + (sources.libraryAge || "before") : sources.busy ? "Loading…" : !linked ? "" : (loggedIn ? "Signed in" : "Not signed in") + (sources.libraryAge ? " · refreshed " + sources.libraryAge : "")
 
     readonly property var tabs: [linked ? sourceName : "Store", "Downloads"]
-    readonly property var icons: [
+    readonly property var icons: (sources.stores.length > 1 ? [
+            {
+                id: "store",
+                glyph: "store",
+                label: "Change Store"
+            }
+        ] : []).concat([
         {
             id: "search",
             glyph: "search",
@@ -60,7 +66,7 @@ FocusScope {
             glyph: "more",
             label: "Options"
         }
-    ]
+    ])
 
     // The store's games: the search's results alone while there is one, else what could install, what waits, what is in.
     readonly property var collections: {
@@ -444,9 +450,10 @@ FocusScope {
                 gameId: gameId
             });
         } else if (id === "uninstall") {
+            var via = api.universe.uninstallVia(gameId);
             shell.dialogAsk({
                 message: "Uninstall " + title + "?",
-                detail: "The install folder goes to the trash; the hours and the journal stay.",
+                detail: (via ? via + " removes the files" : "The install folder goes to the trash") + "; the hours and the journal stay.",
                 buttons: ["Cancel", "Uninstall"],
                 danger: 1,
                 index: 0
@@ -511,6 +518,24 @@ FocusScope {
         });
     }
 
+    function openStores() {
+        Sound.play("ok");
+        shell.menu("Store", sources.stores.map(function (s) {
+            return {
+                label: s.name,
+                glyph: s.id === sources.source ? "check" : "store",
+                act: s.id
+            };
+        }), function (id) {
+            if (id === sources.source)
+                return;
+            sources.pick(id);
+            row = 0;
+            setTab(0, true);
+            zone = "main";
+        });
+    }
+
     function topAction(i) {
         if (i < tabs.length) {
             setTab(i);
@@ -518,7 +543,9 @@ FocusScope {
             return;
         }
         var id = icons[i - tabs.length].id;
-        if (id === "search")
+        if (id === "store")
+            openStores();
+        else if (id === "search")
             openSearch();
         else if (id === "refresh")
             refresh();
@@ -582,6 +609,12 @@ FocusScope {
                 glyph: "download",
                 act: "update-all"
             });
+        if (sources.stores.length > 1)
+            general.push({
+                label: "Change Store",
+                glyph: "store",
+                act: "store"
+            });
         general.push({
             label: tab === 0 ? "Downloads" : page.tabs[0],
             glyph: tab === 0 ? "download" : "store",
@@ -612,6 +645,8 @@ FocusScope {
                 page.cancel();
             else if (act === "update-all")
                 Sound.play(sources.updateAll() !== "" ? "ok" : "edge");
+            else if (act === "store")
+                page.openStores();
             else if (act === "tab")
                 page.setTab(page.tab === 0 ? 1 : 0);
             else if (act === "refresh")

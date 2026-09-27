@@ -58,13 +58,10 @@ FocusScope {
             });
         } else if (row.key === "store") {
             Sound.play("ok");
-            if (!row.available)
-                shell.push("pages/SettingsPage.qml", {
-                    section: "sources"
-                });
-            else if (row.loggedIn)
+            if (row.available && row.loggedIn) {
+                api.screens.sources.pick(row.source);
                 shell.push("pages/InstallPage.qml", {});
-            else
+            } else
                 shell.push("pages/FormPage.qml", {
                     source: row.source
                 });
