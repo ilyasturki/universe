@@ -38,7 +38,8 @@ def test_game_settings_form(api, fake):
         "Video capture",
         "Play journal",
         "Screenshots",
-    ], "the launch page's cards, the runner's, the program, the modules; no Advanced row, a game's page flips it from a button"
+        "GOG",
+    ], "the launch page's cards, the runner's, the program, the modules, the source's; no Advanced row, a game's page flips it from a button"
     assert form.hasAdvanced is True and "advanced" not in [r["key"] for r in form.rows]
     assert [(g["title"], g["home"]) for g in form.advancedGroups] == [
         ("Scaling", "Display"),
@@ -61,6 +62,7 @@ def test_game_settings_form(api, fake):
         "Video capture",
         "Play journal",
         "Screenshots",
+        "GOG",
     ], "every advanced card folds into a basic one: the sidebar does not move with Advanced"
     assert groups["Proton"]["divider"] == 3 and [form.rows[i]["key"] for i in groups["Proton"]["rows"][3:]] == [
         "launch.prefix",

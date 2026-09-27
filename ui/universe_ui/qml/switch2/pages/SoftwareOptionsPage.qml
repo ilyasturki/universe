@@ -28,6 +28,11 @@ FocusScope {
 
     focus: true
 
+    onGameChanged: {
+        if (game)
+            api.screens.achievements.prime(game.id, game.source, game.achievementsTotal);
+    }
+
     readonly property var entries: {
         if (!game)
             return [];
@@ -50,6 +55,15 @@ FocusScope {
                 type: "action"
             }
         ];
+        var achievements = game.achievementsTotal > 0 ? [
+            {
+                key: "achievements",
+                label: "Achievements",
+                type: "action",
+                display: game.achievementsUnlocked + " / " + game.achievementsTotal,
+                page: "pages/AchievementsPage.qml"
+            }
+        ] : [];
         return start.concat([
             {
                 key: "info",
@@ -61,7 +75,8 @@ FocusScope {
                 key: "favourite",
                 label: game.favorite ? "Remove from Favourites" : "Add to Favourites",
                 type: "action"
-            },
+            }
+        ], achievements, [
             {
                 key: "settings",
                 label: "Game Settings",

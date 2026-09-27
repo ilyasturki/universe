@@ -417,7 +417,8 @@ Start, A held 450 ms or Guide with no session opens `ui/ActionMenu.qml` beside t
 screen (`theme.qml` `openMenu`, fed by `focusTarget.currentGame` and `menuAnchor`; a page with an
 `openMenu()` of its own, the Media tab, gets that one instead): the everyday rows, the rest one
 list away. Play / Continue (Resume and Quit *title* for the running game), a hairline, then Details
-(dropped when the detail page is already open on it), the favourite toggle, Media › (only when the
+(dropped when the detail page is already open on it), the favourite toggle, Achievements (only
+when the game's `achievementsTotal` is not 0), Media › (only when the
 game has a screenshot, a recording or a journal entry) and Manage ›. Media › pushes the non-empty
 pages, Manage › Game settings, Artwork, Sessions and logs and, past a
 hairline, Remove from library…; either opens on A or Right, and B or Left comes back to the first.
@@ -590,6 +591,31 @@ journal entry covering the shot (`jumpRequested` to the journal page on that ses
 a hairline parts the session's shots from the rest, as in the dock's panel. The detail strip keeps
 the store's promotional shots only (`assets.screenshotList`).
 
+## Achievements
+
+`pages/AchievementsPage.qml` (the game menu's Achievements; Switch 2: `switch2/pages/AchievementsPage.qml`,
+a row of Software Options showing *unlocked / total*) reads `api.screens.achievements`
+(`screens/achievements.py`, `achievements(id)` on a worker): the unlocked ones first, the newest on
+top, then the locked ones from the most to the least common, a hidden locked one last and masked
+("Hidden achievement"). Reprise lists them beside a pane — *n of m unlocked*, a bar, when the store
+last answered, then the highlighted one large; Switch 2 groups them under Unlocked and Locked
+headings, the description and rarity under each. X asks the store again (`refresh()`). The store
+follows the game's `libraryChanged`, so an unlock filed while the page is open shows at once. The
+icons are the store's URLs; one that does not load is drawn as a trophy (a lock while locked),
+`ui/AchievementBadge.qml`.
+
+A game has the menu row once its cache holds a list. The first time a game's detail page (Switch 2:
+its options) opens in a run, `achievements.prime(id, source, total)` asks for it in the background
+when the game has a store source and no list yet; the cache it writes brings the row.
+
+While a game runs, `Home`'s `UnlockWatch` rereads its list on every change to the game's folder and
+emits `achievementUnlocked({gameId, gameTitle, key, name, description, icon, rarityText})` for each
+unlock newer than the session's start, once. `overlay.qml` draws it, outside the theme's loader so
+both looks get it: a card at the top of the screen for 4.8 s, several stacking. Home lifts the
+overlay window to opaque without taking the game's input for 5 s (the same lift as the screenshot
+flash, the longer of the two standing), unless the dock is already holding it up. On the desktop
+there is no window over the game, so the unlock shows on the Achievements page alone.
+
 ## The Media tab
 
 `pages/MediaPage.qml`, the second tab, is `api.screens.media` on one four-wide grid of
@@ -656,7 +682,8 @@ filtered by the runner's kind (`runners`), and mirrors the cards — Display (wi
 Overlay — then the runner's own, named after it (Proton: the build, Wayland, HDR; folded in, the
 Wine prefix, the DLL overrides, Sync, Upscaling, Logs), then Launch (the runner picker, the program,
 an emulator's options; folded in, the wrapper, arguments, working directory, the environment), then
-Desktop and library (with Artwork folded in); a `both` key inherited from the global value until set
+Desktop and library (with Artwork folded in), then each module's game-scope settings and the game's
+source's (GOG's Achievements switch, written as `sources.gog.achievements` through `set`); a `both` key inherited from the global value until set
 (a `toggle` inherits the global switch, not what `effective` resolved it to). X on a row resets the
 game's own value or removes a variable (`reset` above); an inherited value is overridden by
 changing it. Adding a variable is one sheet with two fields (`ValueEditor.promptPair`,

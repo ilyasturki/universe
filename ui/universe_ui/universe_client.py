@@ -348,6 +348,10 @@ class CoreClient(QObject):
     def sessions(self, ident):
         return self._guarded([], self._core.sessions, ident)
 
+    # On the worker: a game without a cache yet, or a refresh, asks the store.
+    def achievementsAsync(self, ident, refresh, on_reply, on_error=None):
+        self._call_async(lambda: self._core.achievements(ident, refresh), on_reply, on_error)
+
     # The unit's journal on the worker: the read shells out to journalctl.
     def sessionLogAsync(self, ident, session, tail, on_reply, on_error=None):
         self._call_async(lambda: self._core.session_log(ident, session, tail), on_reply, on_error)
@@ -611,6 +615,9 @@ class CoreClient(QObject):
     @Slot(str, result="QVariant")
     def getSourceSettings(self, source):
         return self._guarded({}, self._core.source_settings, source)
+
+    def sourceSettingsOf(self, source, ident):
+        return self._guarded({}, self._core.source_settings, source, ident)
 
     @Slot(str, str, result="QVariant")
     def sourceSettingChoices(self, source, key):

@@ -455,6 +455,12 @@ FocusScope {
             label: game.favorite ? "Remove from favourites" : "Add to favourites",
             action: "favourite"
         });
+        if (game.achievementsTotal > 0)
+            look.push({
+                icon: "trophy",
+                label: "Achievements",
+                action: "achievements"
+            });
         if (media.length > 0)
             look.push({
                 icon: "photos",
@@ -500,7 +506,8 @@ FocusScope {
             screenshots: "ScreenshotsPage",
             recordings: "RecordingsPage",
             journal: "JournalPage",
-            sessions: "SessionsPage"
+            sessions: "SessionsPage",
+            achievements: "AchievementsPage"
         };
         var openPage = function (action) {
             root.restoreFocus();
@@ -550,6 +557,8 @@ FocusScope {
                 root.stopSession();
             else if (action === "resume")
                 root.resumeSession();
+            else if (action === "achievements")
+                openPage(action);
         });
     }
 
@@ -1253,7 +1262,8 @@ FocusScope {
                 journal: "JournalPage",
                 recordings: "RecordingsPage",
                 screenshots: "ScreenshotsPage",
-                sessions: "SessionsPage"
+                sessions: "SessionsPage",
+                achievements: "AchievementsPage"
             }[landing] + ".qml", {
                 game: game
             });

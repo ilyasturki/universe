@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick.Window
+import "core"
 import "ui"
 
 Window {
@@ -16,6 +17,122 @@ Window {
         anchors.fill: parent
         source: api.theme.overlay
         focus: true
+    }
+
+    // An unlock over the game, whichever look: Home keeps the window painted (and the game's input) while it shows.
+    Column {
+        id: unlocks
+
+        readonly property real s: overlay.height > 0 ? overlay.height / 1080 : 1
+
+        anchors.top: parent.top
+        anchors.topMargin: 36 * s
+        anchors.horizontalCenter: parent.horizontalCenter
+        spacing: 12 * s
+        z: 5
+
+        Repeater {
+            model: ListModel {
+                id: shown
+            }
+
+            Rectangle {
+                id: card
+
+                width: 560 * unlocks.s
+                height: 104 * unlocks.s
+                radius: 20 * unlocks.s
+                color: "#1b1d24"
+                border.width: 1
+                border.color: Qt.rgba(1, 1, 1, 0.16)
+                opacity: 0
+
+                Component.onCompleted: life.start()
+
+                SequentialAnimation {
+                    id: life
+                    NumberAnimation {
+                        target: card
+                        property: "opacity"
+                        to: 1
+                        duration: 220
+                        easing.type: Easing.OutCubic
+                    }
+                    PauseAnimation {
+                        duration: 4300
+                    }
+                    NumberAnimation {
+                        target: card
+                        property: "opacity"
+                        to: 0
+                        duration: 300
+                    }
+                    ScriptAction {
+                        script: shown.remove(0)
+                    }
+                }
+
+                AchievementBadge {
+                    id: badge
+                    anchors.left: parent.left
+                    anchors.leftMargin: 18 * unlocks.s
+                    anchors.verticalCenter: parent.verticalCenter
+                    width: 68 * unlocks.s
+                    height: width
+                    icon: model.icon
+                }
+
+                Column {
+                    anchors.left: badge.right
+                    anchors.leftMargin: 18 * unlocks.s
+                    anchors.right: parent.right
+                    anchors.rightMargin: 22 * unlocks.s
+                    anchors.verticalCenter: parent.verticalCenter
+                    spacing: 4 * unlocks.s
+
+                    Text {
+                        text: "ACHIEVEMENT UNLOCKED" + (model.rarityText !== "" ? "  ·  " + model.rarityText : "")
+                        color: Qt.rgba(0.949, 0.953, 0.961, 0.6)
+                        font.family: Theme.sans
+                        font.weight: Font.DemiBold
+                        font.letterSpacing: 1.5 * unlocks.s
+                        font.pixelSize: 15 * unlocks.s
+                    }
+
+                    Text {
+                        width: parent.width
+                        text: model.name
+                        color: "#f2f3f5"
+                        font.family: Theme.sans
+                        font.weight: Font.DemiBold
+                        font.pixelSize: 26 * unlocks.s
+                        elide: Text.ElideRight
+                    }
+
+                    Text {
+                        width: parent.width
+                        visible: text !== ""
+                        text: model.description
+                        color: Qt.rgba(0.949, 0.953, 0.961, 0.66)
+                        font.family: Theme.sans
+                        font.pixelSize: 18 * unlocks.s
+                        elide: Text.ElideRight
+                    }
+                }
+            }
+        }
+
+        Connections {
+            target: api.home
+            function onAchievementUnlocked(item) {
+                shown.append({
+                    name: item.name,
+                    description: item.description,
+                    icon: item.icon,
+                    rarityText: item.rarityText
+                });
+            }
+        }
     }
 
     Rectangle {

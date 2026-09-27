@@ -3,6 +3,7 @@ from collections.abc import Callable
 from PySide6.QtCore import QObject
 
 from ..qt import Property
+from .achievements import AchievementsList
 from .add import AddGameForm
 from .artwork import ArtworkForm, ArtworkOverview
 from .controller import ControllerScreen
@@ -36,6 +37,7 @@ class Screens(QObject):
         self._media = MediaTimeline(client, self._recordings, self._thumbs, self)
         self._pendingJournals = PendingJournals(client, self)
         self._sessions = SessionsList(client, self)
+        self._achievements = AchievementsList(client, self)
         self._paths = PathBrowser(client, self)
         self._controller = ControllerScreen(client, memory, power, self)
         self._runners = RunnersForm(client, self)
@@ -67,6 +69,7 @@ class Screens(QObject):
     thumbs = Property(QObject, lambda self: self._thumbs, constant=True)
     pendingJournals = Property(QObject, lambda self: self._pendingJournals, constant=True)
     sessions = Property(QObject, lambda self: self._sessions, constant=True)
+    achievements = Property(QObject, lambda self: self._achievements, constant=True)
     album = Property(QObject, lambda self: self._recordings, constant=True)
     news = Property(QObject, lambda self: self._journal, constant=True)
     paths = Property(QObject, lambda self: self._paths, constant=True)

@@ -1,0 +1,60 @@
+from conftest import pump, wait_for
+
+
+def test_the_store_orders_unlocks_first_and_masks_a_hidden_one(api, fake):
+    store = api.screens.achievements
+    store.load("batman-arkham-origins")
+    assert store.loading
+    assert wait_for(store.rowsChanged, 3000) is not None, "the read runs off the UI thread"
+    rows = store.rows
+    assert (store.total, store.unlocked, store.loading) == (6, 3, False)
+    assert [r["key"] for r in rows] == ["detective", "blackgate", "rooftops", "combo", "iam", "secret"], "newest unlock first, then the most common locked one"
+    assert rows[0]["dateText"] == "11 Sep 2026 · 22:18" and rows[0]["rarityText"] == "19% of players"
+    assert rows[4]["rarityText"] == "2.1% of players"
+    hidden = rows[-1]
+    assert hidden["masked"] and hidden["name"] == "Hidden achievement" and "Freeze" not in hidden["description"]
+    assert store.fetchedText == "20 Sep 2026 · 21:14"
+
+    store.refresh()
+    assert store.loading
+    assert wait_for(store.rowsChanged, 5000) is not None
+    assert store.fetchedText != "20 Sep 2026 · 21:14", "asked the store again"
+
+
+def test_a_game_no_source_lists_says_so(api, fake):
+    store = api.screens.achievements
+    store.load("dishonored")
+    assert wait_for(store.stateChanged, 3000) is not None
+    assert not store.loading and store.count == 0 and "no source lists" in store.error
+
+
+def test_the_game_model_carries_the_counts(api, fake):
+    batman, metro = api.allGames.byId("batman-arkham-origins"), api.allGames.byId("mini-metro")
+    assert (batman.achievementsTotal, batman.achievementsUnlocked) == (6, 3)
+    assert metro.achievementsTotal == 0
+
+
+def test_an_unlock_mid_session_reaches_home_once(api, fake):
+    seen = []
+    api.home.achievementUnlocked.connect(seen.append)
+    fake.launch("batman-arkham-origins", "DP-1")
+    got = wait_for(api.home.achievementUnlocked, 5000)
+    assert got is not None, "the fake source files one a second in"
+    item = got[0]
+    assert item["gameId"] == "batman-arkham-origins" and item["key"] == "combo" and item["name"] == "Unbreakable"
+    assert item["rarityText"] == "9.4% of players"
+    pump(600)
+    assert [i["key"] for i in seen] == ["combo"], "the unlocks from before the session are no news, and this one comes once"
+    assert api.allGames.byId("batman-arkham-origins").achievementsUnlocked == 4
+
+
+def test_game_settings_carry_the_sources_own_switch(api, fake):
+    form = api.screens.gameSettings
+    form.load("batman-arkham-origins")
+    row = next(r for r in form.rows if r.get("key") == "sources.gog.achievements")
+    assert row["section"] == "GOG" and row["value"] is True and row["origin"] == "default"
+    fake.set("batman-arkham-origins", "sources.gog.achievements", "false")
+    assert fake.core.source_settings("gog", "batman-arkham-origins")["achievements"] is False
+    assert fake.core.source_settings("gog")["achievements"] is True, "the global value stands"
+    form.load("dishonored")
+    assert not any(str(r.get("key", "")).startswith("sources.") for r in form.rows), "a Lutris game has no GOG switch"

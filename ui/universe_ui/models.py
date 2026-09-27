@@ -44,6 +44,8 @@ GAME_ROLES = [
     "summary",
     "source",
     "platform",
+    "achievementsTotal",
+    "achievementsUnlocked",
     "tags",
     "assets",
     "collections",
@@ -177,6 +179,9 @@ class Game(QObject):
         self._description = str(meta.get("description") or "")
         self._summary = str(meta.get("summary") or "")
         self._source = _source_kind(raw.get("source"))
+        achievements = raw.get("achievements") or {}
+        self._achievementsTotal = int(achievements.get("total") or 0)
+        self._achievementsUnlocked = int(achievements.get("unlocked") or 0)
         self._platform = str(raw.get("platform") or "")
         effective = raw.get("effective") or {}
         self._runner = str(effective.get("runner") or "")
@@ -237,6 +242,8 @@ class Game(QObject):
     summary = Property(str, lambda self: self._summary, notify=changed)
     source = Property(str, lambda self: self._source, notify=changed)
     platform = Property(str, lambda self: self._platform, notify=changed)
+    achievementsTotal = Property(int, lambda self: self._achievementsTotal, notify=changed)
+    achievementsUnlocked = Property(int, lambda self: self._achievementsUnlocked, notify=changed)
     runner = Property(str, lambda self: self._runner, notify=changed)
     runnerName = Property(str, lambda self: self._runnerName, notify=changed)
     tags = Property(list, lambda self: list(self._tags), notify=changed)

@@ -636,7 +636,36 @@ def build_game(client, game_id, screen_mode):
                 ),
                 meta=_meta(module),
             )
+    kind = _source_kind(game.get("source"))
+    source = next((s for s in client.sources() if s["id"] == kind and s.get("enabled")), None) if kind not in ("", "manual") else None
+    game_settings = [s for s in (source or {}).get("settings") or [] if s.get("scope") == "game"]
+    if source and game_settings:
+        name = source.get("name", kind)
+        values = client.sourceSettingsOf(kind, game_id)
+        own, global_set = (game.get("sources") or {}).get(kind) or {}, (config_set.get("sources") or {}).get(kind) or {}
+        for setting in game_settings:
+            key = setting["key"]
+            _add(
+                rows,
+                groups,
+                name,
+                _row(
+                    name,
+                    f"sources.{kind}.{key}",
+                    setting.get("label", key),
+                    setting.get("type", "string"),
+                    values.get(key, setting.get("default")),
+                    setting.get("choices"),
+                    advanced=bool(setting.get("advanced")),
+                    origin="game" if key in own else "global" if key in global_set else "default",
+                ),
+                meta=_meta(source),
+            )
     return rows, groups, title
+
+
+def _source_kind(value):
+    return str(value.get("kind") or "") if isinstance(value, dict) else str(value or "")
 
 
 class GameSettingsForm(RowsForm):

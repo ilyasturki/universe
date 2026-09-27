@@ -5,6 +5,7 @@ from collections.abc import Callable
 from PySide6.QtCore import QObject, QTimer, QUrl, Signal, Slot
 
 from .qt import QVARIANT, Property
+from .screens.achievements import UnlockWatch
 
 OPAQUE = 0xFFFFFFFF
 POLL_MS = 250
@@ -12,6 +13,8 @@ HOLD_MS = 600
 # The overlay stays painted over the game this long for the flash the theme draws on a shot.
 CUE_MS = 450
 OSD_MS = 1500
+# And this long for an unlock's banner.
+BANNER_MS = 5000
 SHUTTER = os.path.join(os.path.dirname(os.path.abspath(__file__)), "qml", "assets", "sounds", "shutter.wav")
 # How long the swap waits for the theme to say the frame is painted (`covered`) before going ahead anyway: a 4K png decodes slowly.
 COVER_MS = 700
@@ -26,6 +29,7 @@ class Home(QObject):
     osdChanged = Signal()
     outputsChanged = Signal()
     screenshotTaken = Signal(str)
+    achievementUnlocked = Signal(QVARIANT)
     stopping = Signal(str)
 
     def __init__(self, client, controller, screen_mode: Callable[[], dict] = dict, parent=None, frames=lambda: True):
@@ -93,6 +97,8 @@ class Home(QObject):
         controller.buttonPressed.connect(self._on_button)
         controller.screenshotTaken.connect(self._shot_taken)
         controller.volumeReported.connect(self._volume_reported)
+        self._unlocks = UnlockWatch(client, self)
+        self._unlocks.unlocked.connect(self._unlocked)
         self._on_session()
 
     def attachOverlay(self, window):
@@ -424,10 +430,19 @@ class Home(QObject):
     def _shot_taken(self, path):
         if path:
             self._play_shutter()
-            if not self._open and not self._closing and self._shown == "game":
-                self._overlay_state(False, OPAQUE)
-                self._cue.start()
+            self._lift(CUE_MS)
         self.screenshotTaken.emit(path)
+
+    def _unlocked(self, item):
+        self._lift(BANNER_MS)
+        self.achievementUnlocked.emit(item)
+
+    # Painted over the game for `ms`, its input left alone; a longer cue already running stands.
+    def _lift(self, ms):
+        if self._open or self._closing or self._shown != "game":
+            return
+        self._overlay_state(False, OPAQUE)
+        self._cue.start(max(ms, self._cue.remainingTime()))
 
     def _cue_done(self):
         self._release_overlay()

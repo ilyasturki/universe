@@ -65,6 +65,8 @@ FocusScope {
     onGameChanged: reset()
 
     function reset() {
+        if (game)
+            api.screens.achievements.prime(game.id, game.source, game.achievementsTotal);
         section = 0;
         actionIndex = 0;
         shotIndex = 0;

@@ -444,13 +444,15 @@
       "user": "yasso",
       "games_dir": "/mnt/games/PC",
       "library_at": "2026-09-11T19:03:00+02:00",
+      "capabilities": ["achievements"],
       "settings": [
         {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder (empty: paths.games_root)", "scope": "global", "choices": [], "dynamic": false, "advanced": false},
         {"key": "scan_dirs", "type": "string", "default": "", "label": "Scanned folders (comma-separated, empty: the install folder)", "scope": "global", "choices": [], "dynamic": false, "advanced": true},
         {"key": "platform", "type": "enum", "default": "windows", "label": "Depot platform", "scope": "global", "choices": ["windows", "linux"], "dynamic": false, "advanced": false},
         {"key": "with_dlcs", "type": "bool", "default": true, "label": "Install owned DLCs", "scope": "global", "choices": [], "dynamic": false, "advanced": false},
         {"key": "auth_path", "type": "path", "default": "~/.config/gogdl/auth.json", "label": "gogdl token file", "scope": "global", "choices": [], "dynamic": false, "advanced": true},
-        {"key": "install_timeout_s", "type": "int", "default": 7200, "label": "Maximum install or update time (s)", "scope": "global", "choices": [], "dynamic": false, "advanced": true}
+        {"key": "install_timeout_s", "type": "int", "default": 7200, "label": "Maximum install or update time (s)", "scope": "global", "choices": [], "dynamic": false, "advanced": true},
+        {"key": "achievements", "type": "bool", "default": true, "label": "Achievements (comet stands in for GOG Galaxy)", "scope": "game", "choices": [], "dynamic": false, "advanced": false}
       ]
     }
   ],
@@ -951,5 +953,30 @@
       ]
     }
   ],
-  "screen": {"screen": "DP-1", "width": 2560, "height": 1440, "refresh": 144, "vrr": true}
+  "screen": {"screen": "DP-1", "width": 2560, "height": 1440, "refresh": 144, "vrr": true},
+  "achievements": {
+    "batman-arkham-origins": {
+      "source": "gog",
+      "fetched_at": "2026-09-20T21:14:00+02:00",
+      "items": [
+        {"key": "rooftops", "name": "Rooftop Runner", "description": "Glide across Gotham for the first time.", "unlocked_at": "2026-08-02T20:41:10+02:00", "hidden": false, "icon": "", "icon_locked": "", "rarity": 88.2},
+        {"key": "blackgate", "name": "Gate Crasher", "description": "Break into Blackgate Prison.", "unlocked_at": "2026-08-02T21:05:44+02:00", "hidden": false, "icon": "", "icon_locked": "", "rarity": 41.7},
+        {"key": "detective", "name": "World's Greatest Detective", "description": "Solve every crime scene.", "unlocked_at": "2026-09-11T22:18:03+02:00", "hidden": false, "icon": "", "icon_locked": "", "rarity": 18.9},
+        {"key": "combo", "name": "Unbreakable", "description": "Land a 100-hit combo.", "unlocked_at": "", "hidden": false, "icon": "", "icon_locked": "", "rarity": 9.4},
+        {"key": "iam", "name": "I Am the Night", "description": "Finish the story without upgrades.", "unlocked_at": "", "hidden": false, "icon": "", "icon_locked": "", "rarity": 2.1},
+        {"key": "secret", "name": "Cold, Cold Heart", "description": "Defeat Mr. Freeze.", "unlocked_at": "", "hidden": true, "icon": "", "icon_locked": "", "rarity": 0.8}
+      ]
+    },
+    "dead-cells": {
+      "source": "gog",
+      "fetched_at": "2026-09-18T19:02:00+02:00",
+      "items": [
+        {"key": "prisoner", "name": "Prisoner's Awakening", "description": "Leave the Prisoners' Quarters.", "unlocked_at": "2026-09-18T19:30:00+02:00", "hidden": false, "icon": "", "icon_locked": "", "rarity": 91.0},
+        {"key": "concierge", "name": "Brutal Brute", "description": "Kill the Concierge.", "unlocked_at": "", "hidden": false, "icon": "", "icon_locked": "", "rarity": 47.5},
+        {"key": "hand", "name": "Hand of the King", "description": "Kill the Hand of the King.", "unlocked_at": "", "hidden": false, "icon": "", "icon_locked": "", "rarity": 6.3},
+        {"key": "bsc5", "name": "It's a Walk in the Park", "description": "Defeat the final boss with 5 Boss Cells active.", "unlocked_at": "", "hidden": false, "icon": "", "icon_locked": "", "rarity": 0.6},
+        {"key": "hidden_room", "name": "Hidden Room", "description": "Find the room behind the throne.", "unlocked_at": "", "hidden": true, "icon": "", "icon_locked": "", "rarity": 3.3}
+      ]
+    }
+  }
 }

@@ -34,6 +34,7 @@ START_S = 0.0
 WINDOW_S = 0.4
 FRAME_S = 0.0
 JOURNAL_S = 8.0
+UNLOCK_S = 1.0
 CLIP_S = 20
 
 SLOTS = ("box_front", "square", "banner", "background", "logo")
@@ -550,7 +551,36 @@ class FakeCore:
         prefixes = str(self._config.get("paths", {}).get("prefixes_root") or "~/.local/share/universe/prefixes")
         effective["prefix"] = (launch.get("prefix") or os.path.join(prefixes, game["id"])) if spec.get("kind") in ("proton", "wine") else ""
         effective["modules"] = {m["id"]: self.module_settings(m["id"], game["id"]) for m in self._data.get("modules", []) if m.get("enabled")}
+        items = self._data.get("achievements", {}).get(game["id"], {}).get("items") or []
+        out["achievements"] = {"total": len(items), "unlocked": sum(1 for a in items if a.get("unlocked_at"))}
         return out
+
+    def achievements(self, ident, refresh=False):
+        game = self._game(ident)
+        cache = self._data.get("achievements", {}).get(game["id"])
+        if cache is None:
+            raise UniverseError("Unavailable", f"{game['title']}: no source lists its achievements")
+        if refresh:
+            self._tick(None, "Asking the store", 3)
+            cache["fetched_at"] = _now()
+        items = copy.deepcopy(cache.get("items") or [])
+        return {
+            **{k: v for k, v in cache.items() if k != "items"},
+            "total": len(items),
+            "unlocked": sum(1 for a in items if a.get("unlocked_at")),
+            "items": items,
+        }
+
+    # What the source's watcher files mid-session: the first locked one, written as the core does (a rename the watch sees).
+    def _unlock_one(self, ident):
+        items = self._data.get("achievements", {}).get(ident, {}).get("items") or []
+        locked = next((a for a in items if not a.get("unlocked_at")), None)
+        if locked is None or self._closed:
+            return
+        locked["unlocked_at"] = _now()
+        path = self._game_dir(ident) / "achievements.json"
+        path.with_suffix(".tmp").write_text(json.dumps(self._data["achievements"][ident]))
+        os.replace(path.with_suffix(".tmp"), path)
 
     def _runner_of(self, launch):
         runner = str(launch.get("runner") or "") or "proton"
@@ -749,6 +779,7 @@ class FakeCore:
             self._stopped = False
             self.hud_shown = bool(self._resolved(game)["effective"].get("mangohud"))
             self._marker().write_text(json.dumps({**current, "hook_env": [], "undo": []}))
+        self._later(UNLOCK_S, lambda: self._unlock_one(ident))
         if self._fake_launch and shutil.which("sleep"):
             self._process = subprocess.Popen(["sleep", str(int(SESSION_S))])
             process = self._process
@@ -1014,10 +1045,13 @@ class FakeCore:
     def enable_source(self, ident, enabled):
         self._source(ident)["enabled"] = bool(enabled)
 
-    def source_settings(self, ident):
+    def source_settings(self, ident, game_id=""):
         source = self._source(ident)
         merged = {s["key"]: s.get("default") for s in source.get("settings", [])}
         merged.update(self._config.get("sources", {}).get(ident, {}))
+        if game_id:
+            game_keys = {s["key"] for s in source.get("settings", []) if s.get("scope") == "game"}
+            merged.update({k: v for k, v in (self._game(game_id).get("sources") or {}).get(ident, {}).items() if k in game_keys})
         return merged
 
     def source_setting_choices(self, ident, key):
@@ -1026,9 +1060,16 @@ class FakeCore:
                 return list(setting.get("dynamic_choices") or setting.get("choices") or [])
         raise UniverseError("Invalid", f"{ident} has no setting '{key}'")
 
-    def set_source_setting(self, ident, key, value):
+    def set_source_setting(self, ident, key, value, game_id=""):
         schema = {s["key"]: s for s in self._source(ident).get("settings", [])}
-        self._config.setdefault("sources", {}).setdefault(ident, {})[key] = _coerce(schema, ident, key, value)
+        if not game_id:
+            self._config.setdefault("sources", {}).setdefault(ident, {})[key] = _coerce(schema, ident, key, value)
+            return
+        if (schema.get(key) or {}).get("scope") != "game":
+            raise UniverseError("Invalid", f"{ident}.{key} is a global setting")
+        game = self._game(game_id)
+        game.setdefault("sources", {}).setdefault(ident, {})[key] = _coerce(schema, ident, key, value)
+        self._write_game(game)
 
     def login_url(self, source):
         return self._data.get("login_url", "https://example.invalid/login")
