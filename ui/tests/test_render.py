@@ -79,6 +79,8 @@ def test_themes_render_and_switch_live(api):
     assert lit_fraction(image, api.theme.ground) > 0.05
     api.theme.set("switch2")
     settle(window)
+    # Switch 2's Themes page fades in only once HOME has cleared: 250 ms, past settle's 200.
+    pump(100)
     image = window.grabWindow()
     assert lit_fraction(image, api.theme.ground) > 0.01
     assert image.pixelColor(4, 4).name() == api.theme.ground
