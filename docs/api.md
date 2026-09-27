@@ -125,9 +125,45 @@ re-stamps it; what was parked under `.archive/` stays parked.
 `achievements` counts the game's cached list (see Achievements); both are 0 until its source has
 given one.
 
-There is no change notification: the files are the truth, so a frontend watches `games/`,
-`games/<id>/{,journal,journal/attachments,media,media/picked,media/picked/screenshots,screenshots}` and `state/` and rereads. Everything the CLI, `session-end` and the
-hooks write shows up that way, with no other channel.
+No method notifies a change: the files are the truth, and what the CLI, `session-end` and the hooks
+write shows up only there. See Changes.
+
+## Changes
+
+| Rust | Python | CLI | Role |
+|---|---|---|---|
+| `changes::watch(core, options)` | — | — | watches the files and hands back a `Watch` and a channel of `Event`s; `Watch::check()` reads the session marker at once. It lives until the `Watch` or the receiver is dropped |
+| `changes::sweep_wake(next, now)` | — | — | how long until the sweep runs again for the `next` instant `sweep_journals()` answered: a minute at least, half an hour at most, `None` for `""` |
+
+`core` is an `Arc<Core>`, and the call must run inside the tokio runtime the watch then runs on.
+Only what changes after it returns is reported, so a frontend starts it before reading the library.
+The Python host derives the same events itself (`docs/frontends.md` § Changes).
+
+| Event | When |
+|---|---|
+| `Library(ids)` | a game's directory, `game.toml` or `sessions.jsonl` moved, or anything the rows below name: those games are reloaded (`reload_game`) before the event, a new or a removed one among them. Empty when `games/` itself went, after `reload_all` |
+| `Media(id)`, `Journal(id)`, `Screenshots(id)` | after that game's `Library`: its `media/`, the picks in `media/picked/` included; its `journal/` or `journal/attachments/`; its `screenshots/` |
+| `SessionStarted(Current)` | the marker's session is active (`current()`); first of all when one already runs as the watch starts |
+| `SessionEnded(Ended)` | the marker went: `{session_id, id, title, duration_s, end, exit, recording}` from the line `session-end` filed (`end` as `sessions::end_of`: `quit`, `stopped`, `crashed`, `killed`, `ended`; empty, the rest zero, when no line was filed), then the game's `Library` |
+| `JournalWriting {id, session, title}` | an entry turned `pending` (`title` is the game's); once per session |
+| `JournalDone {id, session, state, text}` | a pending entry is no longer: `written` (`text` its title), `deferred` or `failed` (`text` the reason, `timed out` included) |
+
+The watched directories are `games/`,
+`games/<id>/{,journal,journal/attachments,media,media/picked,media/picked/screenshots,screenshots}`
+and `state/`. Writes are debounced (`Options.debounce`, 300 ms) into one reload per burst, and a directory
+that appears (a new game, its first `journal/` or pick) is watched then and reported as
+changed: what landed in it before the watch was not seen. The marker is polled (`Options.poll`,
+2 s) for as long as one exists — the game is a systemd unit, not a child, and `launch` writes the
+marker before the unit starts. A unit gone while its marker stays is a session still ending
+(`session-end` files the line, then removes the marker); five seconds on, it is reported ended all
+the same.
+
+With `Options.journal_sweep` (the default) the watch also keeps the owed entries moving, the retry
+loop the frontends would otherwise run: whenever nothing is being written it calls
+`sweep_journals()`, waits for the entry that started to turn pending before it starts another (a
+minute at most), and sweeps again at `sweep_wake(next)`. A session's end holds the sweep ten seconds
+for the entry the session's own `post-process` may be starting, and pending entries are reread
+every 10 s, since the 30-minute timeout writes no file.
 
 ## Sessions
 
@@ -785,7 +821,7 @@ prose paragraph as plain text (emphasis dropped, links reduced to their text), f
 | `pending_journals()` | `pending_journals()` | `universe status` (a `journal: writing <title>…` line; `pending_journals` in `--json`) | `[{game, title, session, started_at}]` for every `pending` entry across the library; `title` is the game's |
 | `remove_journal_entry(id, session_id)` | `remove_journal_entry(id, session_id)` | `universe journal <name> --remove <session> [-y]` | trashes `journal/<session>.json` and the frames it lists — the player's own shots stay, they are the game's, not the entry's; a `pending` entry has its `universe-journal-post-process-<session>` unit stopped, and every state file of the session goes |
 | `journal_write(id, session_id, rewrite)` | `journal_write(id, session_id, rewrite=False)` | `universe journal <name> --write <session> [--force]` | starts the journal module's `post-process` hook for that one session and returns its unit name: another try at a `deferred` or `failed` entry, a first entry for a session that never had one, or, with `rewrite`, a new entry over a written one (`JOURNAL_REWRITE=1` in the hook's environment). The game's own "write an entry after each session" switch does not hold it back. `Invalid` for a session id that is not a timestamp or an entry already written without `rewrite`, `NotFound` for an unknown session, `Busy` while that session's unit runs, `Unavailable` when the module is off, missing a binary or still waiting on a setting |
-| `sweep_journals()`, `retry_journals(id)` | `sweep_journals(id="")` | `universe journal [<name>] --retry` | starts the oldest owed entry — `deferred` past its instant, or `pending` with no unit behind it — and answers `{started: {game, session} or null, due, next, held?, error?}`: `due` is what is still waiting, `next` the nearest instant a deferred entry falls due (the frontends arm their timer on it), `held` why nothing started. One entry at a time, and none while a game runs |
+| `sweep_journals()`, `retry_journals(id)` | `sweep_journals(id="")` | `universe journal [<name>] --retry` | starts the oldest owed entry — `deferred` past its instant, or `pending` with no unit behind it — and answers `{started: {game, session} or null, due, next, held?, error?}`: `due` is what is still waiting, `next` the nearest instant a deferred entry falls due (the frontends arm their timer on it; `changes::watch` does), `held` why nothing started. One entry at a time, and none while a game runs |
 | `due_journals()`, `next_journal_retry()` | — | — | the sessions the sweep would take, and that nearest instant |
 
 `Entry` = `{"session", "game", "written_at", "started_at", "ended_at", "duration_s", "lang",

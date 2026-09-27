@@ -473,19 +473,19 @@ impl Core {
 
 #[cfg(test)]
 #[allow(clippy::await_holding_lock)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use crate::game::Game;
     use crate::host::{Host, Memory};
     use std::sync::Arc;
 
     /// A library of one Dolphin game on a fake emulator, every Universe home under one tempdir.
-    struct Sandbox {
+    pub(crate) struct Sandbox {
         _dir: tempfile::TempDir,
         post_ran: std::path::PathBuf,
     }
 
-    fn sandbox() -> Sandbox {
+    pub(crate) fn sandbox() -> Sandbox {
         let dir = tempfile::tempdir().unwrap();
         for (var, sub) in [
             ("UNIVERSE_DATA_HOME", "data"),
@@ -515,7 +515,7 @@ mod tests {
         Sandbox { _dir: dir, post_ran }
     }
 
-    async fn open() -> (Core, Arc<Memory>) {
+    pub(crate) async fn open() -> (Core, Arc<Memory>) {
         let (host, memory) = Host::memory();
         (Core::open_with(crate::config::Config::load().unwrap(), host).await.unwrap(), memory)
     }

@@ -1,4 +1,5 @@
 pub mod achievements;
+pub mod changes;
 pub mod cli;
 pub mod components;
 pub mod config;

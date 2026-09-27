@@ -9,7 +9,8 @@ The shipped frontend, `universe-ui`, lives in `ui/`: a PySide6 host around two Q
 [Reprise](https://github.com/ilyasturki/pegasus-theme-reprise) theme and the Switch 2 HOME menu
 (`qml/switch2/`, see its README). What follows is its
 contract and the parts of it that were expensive to get right; a GTK or Windows frontend owes none
-of it except the "Changes" section, which is a property of the core.
+of it except the "Changes" section, which is a property of the core: a Rust frontend takes it from
+`universe::changes` (`api.md` § Changes).
 
 ## What QML sees
 
@@ -156,7 +157,8 @@ narrowing it to screenshots or videos, A on a shot opening it full-screen (◀ �
 ## Changes
 
 The core pushes nothing — the files are the truth, and anything may write them: the CLI, systemd's
-`session-end`, a hook. A frontend therefore derives its own change notifications. `CoreClient`
+`session-end`, a hook. A frontend therefore derives its own change notifications — a Rust one takes
+the file-derived ones (session start and end, library, media, journal) from `universe::changes`. `CoreClient`
 (`ui/universe_ui/universe_client.py`) is one client over one core object — `universe_core.Core`
 in production, `FakeCore` (`fake_core.py`, the same methods over `fixtures/library.json`, laying
 out `games/` and `state/` under a temporary root and writing them the way
