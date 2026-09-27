@@ -105,3 +105,69 @@ game-card overlay > menubutton.hidden > button {
 cover.thumb > stack.card {
   border-radius: 6px;
 }
+
+#media-grid {
+  padding: 12px 18px 24px;
+}
+
+#media-grid > child {
+  padding: 10px;
+  background: none;
+  box-shadow: none;
+  outline: none;
+}
+
+#media-grid > child:focus-visible cover > stack {
+  outline: 4px solid rgb(from var(--accent-color) r g b / 55%);
+  outline-offset: 2px;
+}
+
+.media-title {
+  font-weight: 500;
+}
+
+.media-badge {
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: white;
+  background-color: rgb(0 0 0 / 55%);
+  font-size: 0.8em;
+  font-weight: bold;
+}
+
+.lightbox {
+  background-color: black;
+  color: white;
+}
+
+.lightbox headerbar {
+  background: linear-gradient(to bottom, rgb(0 0 0 / 55%), transparent);
+  box-shadow: none;
+  color: white;
+}
+
+.lightbox-step {
+  min-width: 48px;
+  min-height: 48px;
+}
+
+.frame-button {
+  padding: 0;
+}
+
+.journal-text {
+  font-size: 1.05em;
+  line-height: 1.5;
+}
+
+.journal-next {
+  padding: 12px 16px;
+}
+
+cover.locked {
+  filter: grayscale(100%) opacity(60%);
+}
+
+.log-view {
+  background: none;
+}

@@ -21,6 +21,7 @@ mod imp {
         pub art_height: Cell<i32>,
         pub frame: gtk::Stack,
         pub picture: gtk::Picture,
+        pub placeholder: gtk::Image,
         /// Bumped on every path: a decode that lands after another path was set is dropped.
         pub generation: Cell<u64>,
     }
@@ -33,6 +34,7 @@ mod imp {
                 art_height: Cell::new(300),
                 frame: gtk::Stack::builder().transition_type(gtk::StackTransitionType::Crossfade).build(),
                 picture: gtk::Picture::builder().content_fit(gtk::ContentFit::Cover).can_shrink(true).build(),
+                placeholder: gtk::Image::builder().icon_name(format!("{}-symbolic", config::APP_ID)).css_classes(["dimmed"]).build(),
                 generation: Cell::new(0),
             }
         }
@@ -54,8 +56,8 @@ mod imp {
         fn constructed(&self) {
             self.parent_constructed();
             let size = self.art_width.get().min(self.art_height.get()) * 9 / 25;
-            let placeholder = gtk::Image::builder().icon_name(format!("{}-symbolic", config::APP_ID)).pixel_size(size).css_classes(["dimmed"]).build();
-            self.frame.add_named(&placeholder, Some("placeholder"));
+            self.placeholder.set_pixel_size(size);
+            self.frame.add_named(&self.placeholder, Some("placeholder"));
             self.frame.add_named(&self.picture, Some("art"));
             self.frame.set_visible_child_name("placeholder");
             self.frame.add_css_class("card");
@@ -140,6 +142,11 @@ glib::wrapper! {
 impl Cover {
     pub fn new(width: i32, height: i32) -> Self {
         glib::Object::builder().property("art-width", width).property("art-height", height).build()
+    }
+
+    /// What shows while there is no picture, the app's mark unless told otherwise.
+    pub fn set_placeholder(&self, icon: &str) {
+        self.imp().placeholder.set_icon_name(Some(icon));
     }
 
     /// Decodes the file again: the art under the same path was replaced.

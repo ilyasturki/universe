@@ -187,6 +187,131 @@ template $UniverseGamePage: Adw.NavigationPage {
                 }
               }
 
+              Adw.PreferencesGroup play_group {
+                title: _("Your Play");
+                visible: false;
+
+                Adw.ActionRow achievements_row {
+                  title: _("Achievements");
+                  activatable: true;
+                  action-name: "page.achievements";
+                  visible: false;
+
+                  [prefix]
+                  Image {
+                    icon-name: "trophy-symbolic";
+                  }
+
+                  [suffix]
+                  Label achievements_count {
+                    styles [
+                      "dimmed",
+                    ]
+                  }
+
+                  [suffix]
+                  Image {
+                    icon-name: "go-next-symbolic";
+                  }
+                }
+
+                Adw.ActionRow shots_row {
+                  title: _("Screenshots");
+                  activatable: true;
+                  action-name: "page.screenshots";
+                  visible: false;
+
+                  [prefix]
+                  Image {
+                    icon-name: "camera-photo-symbolic";
+                  }
+
+                  [suffix]
+                  Label shots_count {
+                    styles [
+                      "dimmed",
+                    ]
+                  }
+
+                  [suffix]
+                  Image {
+                    icon-name: "go-next-symbolic";
+                  }
+                }
+
+                Adw.ActionRow recordings_row {
+                  title: _("Recordings");
+                  activatable: true;
+                  action-name: "page.recordings";
+                  visible: false;
+
+                  [prefix]
+                  Image {
+                    icon-name: "camera-video-symbolic";
+                  }
+
+                  [suffix]
+                  Label recordings_count {
+                    styles [
+                      "dimmed",
+                    ]
+                  }
+
+                  [suffix]
+                  Image {
+                    icon-name: "go-next-symbolic";
+                  }
+                }
+
+                Adw.ActionRow journal_row {
+                  title: _("Journal");
+                  activatable: true;
+                  action-name: "page.journal";
+                  visible: false;
+
+                  [prefix]
+                  Image {
+                    icon-name: "text-x-generic-symbolic";
+                  }
+
+                  [suffix]
+                  Label journal_count {
+                    styles [
+                      "dimmed",
+                    ]
+                  }
+
+                  [suffix]
+                  Image {
+                    icon-name: "go-next-symbolic";
+                  }
+                }
+
+                Adw.ActionRow sessions_row {
+                  title: _("Sessions and Logs");
+                  activatable: true;
+                  action-name: "page.sessions";
+                  visible: false;
+
+                  [prefix]
+                  Image {
+                    icon-name: "document-open-recent-symbolic";
+                  }
+
+                  [suffix]
+                  Label sessions_count {
+                    styles [
+                      "dimmed",
+                    ]
+                  }
+
+                  [suffix]
+                  Image {
+                    icon-name: "go-next-symbolic";
+                  }
+                }
+              }
+
               Adw.PreferencesGroup about {
                 title: _("About");
                 visible: false;

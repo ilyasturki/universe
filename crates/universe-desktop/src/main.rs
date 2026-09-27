@@ -9,6 +9,7 @@ mod format;
 mod game;
 mod jobs;
 mod library;
+mod media;
 mod pages;
 mod play;
 mod qr;

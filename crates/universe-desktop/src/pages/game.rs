@@ -11,7 +11,11 @@ use crate::covers;
 use crate::format;
 use crate::game::GameObject;
 use crate::library;
+use crate::media::Kind;
 use crate::widgets::Cover;
+use crate::window::Window;
+
+type Opener = fn(&Window, &str);
 
 /// What the page shows past the library row, read once it opens.
 #[derive(Debug, Clone, Default)]
@@ -23,10 +27,16 @@ pub struct Details {
     screenshots: Vec<String>,
     runner_name: String,
     achievements: (usize, usize),
+    /// The game's source lists achievements for it, whether or not it has yet.
+    achievable: bool,
+    shots: usize,
+    recordings: usize,
+    journal: usize,
+    sessions: usize,
 }
 
 impl Details {
-    fn of(r: &universe::library::Resolved) -> Details {
+    fn of(r: &universe::library::Resolved, shots: usize, achievable: bool) -> Details {
         let m = &r.game.metadata;
         Details {
             description: if m.description.trim().is_empty() { m.summary.trim().to_string() } else { m.description.trim().to_string() },
@@ -36,6 +46,11 @@ impl Details {
             screenshots: r.screenshots.clone(),
             runner_name: r.effective.runner_name.clone(),
             achievements: (r.achievements.unlocked, r.achievements.total),
+            achievable,
+            shots,
+            recordings: r.sessions.iter().filter(|s| s.recording.as_deref().is_some_and(|p| !p.is_empty())).count(),
+            journal: r.journal_count,
+            sessions: r.sessions.iter().filter(|s| !s.unit.is_empty()).count(),
         }
     }
 }
@@ -70,6 +85,28 @@ mod imp {
         pub shots_group: TemplateChild<adw::PreferencesGroup>,
         #[template_child]
         pub shots: TemplateChild<gtk::Box>,
+        #[template_child]
+        pub play_group: TemplateChild<adw::PreferencesGroup>,
+        #[template_child]
+        pub achievements_row: TemplateChild<adw::ActionRow>,
+        #[template_child]
+        pub achievements_count: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub shots_row: TemplateChild<adw::ActionRow>,
+        #[template_child]
+        pub shots_count: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub recordings_row: TemplateChild<adw::ActionRow>,
+        #[template_child]
+        pub recordings_count: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub journal_row: TemplateChild<adw::ActionRow>,
+        #[template_child]
+        pub journal_count: TemplateChild<gtk::Label>,
+        #[template_child]
+        pub sessions_row: TemplateChild<adw::ActionRow>,
+        #[template_child]
+        pub sessions_count: TemplateChild<gtk::Label>,
         pub game: RefCell<Option<GameObject>>,
         pub details: RefCell<Details>,
         pub handlers: RefCell<Vec<glib::SignalHandlerId>>,
@@ -98,6 +135,7 @@ mod imp {
             let obj = self.obj();
             let weak = obj.downgrade();
             self.actions.replace(Some(actions::install_game(&*obj, move || weak.upgrade().and_then(|page| page.game()))));
+            obj.setup_page_actions();
         }
 
         fn dispose(&self) {
@@ -215,6 +253,30 @@ impl GamePage {
         imp.stop.set_visible(game.playing());
     }
 
+    /// The rows under "Your Play" open their pages over this one.
+    fn setup_page_actions(&self) {
+        let group = gio::SimpleActionGroup::new();
+        let open: [(&str, Opener); 5] = [
+            ("achievements", |win, id| crate::pages::achievements::open(win, id)),
+            ("screenshots", |win, id| crate::pages::media::open_game(win, id, Kind::Shot)),
+            ("recordings", |win, id| crate::pages::media::open_game(win, id, Kind::Recording)),
+            ("journal", |win, id| crate::pages::journal::open_list(win, id)),
+            ("sessions", |win, id| crate::pages::sessions::open(win, id)),
+        ];
+        for (name, act) in open {
+            let action = gio::SimpleAction::new(name, None);
+            let page = self.downgrade();
+            action.connect_activate(move |_, _| {
+                let Some(page) = page.upgrade() else { return };
+                if let (Some(game), Some(win)) = (page.game(), page.root().and_downcast::<Window>()) {
+                    act(&win, &game.id());
+                }
+            });
+            group.add_action(&action);
+        }
+        self.insert_action_group("page", Some(&group));
+    }
+
     fn load_details(&self) {
         let Some(game) = self.game() else { return };
         let (id, backdrop) = (game.id(), {
@@ -227,7 +289,17 @@ impl GamePage {
         });
         let page = self.downgrade();
         glib::spawn_future_local(async move {
-            let details = backend::run(async move { backend::core().get(&id).await.map(|r| Details::of(&r)) }).await;
+            let details = backend::pinned(move |core| async move {
+                let r = core.get(&id).await?;
+                let shots = core.screenshots(&id).await.map(|s| s.len()).unwrap_or(0);
+                let listed =
+                    !r.game.source.gog_id.is_empty()
+                        && core.sources().await.iter().any(|s| {
+                            s["id"] == r.game.source.kind.as_str() && s["capabilities"].as_array().is_some_and(|c| c.iter().any(|c| c == "achievements"))
+                        });
+                Ok::<_, universe::Error>(Details::of(&r, shots, listed))
+            })
+            .await;
             let texture = covers::texture(&backdrop, 64, 36).await;
             let Some(page) = page.upgrade() else { return };
             let imp = page.imp();
@@ -257,5 +329,27 @@ impl GamePage {
             imp.shots.append(&shot);
         }
         imp.shots_group.set_visible(!details.screenshots.is_empty());
+
+        let count = |n: usize| n.to_string();
+        let (unlocked, total) = details.achievements;
+        let rows: [(&adw::ActionRow, &gtk::Label, bool, String); 5] = [
+            (
+                &imp.achievements_row,
+                &imp.achievements_count,
+                total > 0 || details.achievable,
+                if total > 0 { gettext("{} of {}").replacen("{}", &unlocked.to_string(), 1).replacen("{}", &total.to_string(), 1) } else { String::new() },
+            ),
+            (&imp.shots_row, &imp.shots_count, details.shots > 0, count(details.shots)),
+            (&imp.recordings_row, &imp.recordings_count, details.recordings > 0, count(details.recordings)),
+            (&imp.journal_row, &imp.journal_count, details.journal > 0 || details.sessions > 0, count(details.journal)),
+            (&imp.sessions_row, &imp.sessions_count, details.sessions > 0, count(details.sessions)),
+        ];
+        let mut any = false;
+        for (row, label, shown, text) in rows {
+            row.set_visible(shown);
+            label.set_label(&text);
+            any |= shown;
+        }
+        imp.play_group.set_visible(any);
     }
 }

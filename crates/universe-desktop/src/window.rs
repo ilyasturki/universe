@@ -11,7 +11,7 @@ use crate::backend;
 use crate::game::GameObject;
 use crate::jobs::Kind;
 use crate::library::{self, Sort, View};
-use crate::pages::{GamePage, LibraryPage, StorePage};
+use crate::pages::{GamePage, LibraryPage, MediaPage, StorePage};
 use crate::script;
 use crate::state::State;
 use crate::widgets::NowPlaying;
@@ -47,6 +47,8 @@ mod imp {
         #[template_child]
         pub library_page: TemplateChild<LibraryPage>,
         #[template_child]
+        pub media_page: TemplateChild<MediaPage>,
+        #[template_child]
         pub store_page: TemplateChild<StorePage>,
         #[template_child]
         pub now_playing: TemplateChild<NowPlaying>,
@@ -69,6 +71,7 @@ mod imp {
 
         fn class_init(klass: &mut Self::Class) {
             LibraryPage::ensure_type();
+            MediaPage::ensure_type();
             StorePage::ensure_type();
             NowPlaying::ensure_type();
             klass.bind_template();
@@ -89,7 +92,7 @@ mod imp {
             self.library_page.set_sort(Sort::parse(&state.sort));
             self.state.replace(state);
             self.library_page.search_entry().set_key_capture_widget(Some(&*obj));
-            for button in [self.library_page.sidebar_button(), self.store_page.sidebar_button()] {
+            for button in [self.library_page.sidebar_button(), self.media_page.sidebar_button(), self.store_page.sidebar_button()] {
                 self.split_view.bind_property("show-sidebar", &button, "visible").invert_boolean().sync_create().build();
             }
             obj.setup_actions();
@@ -109,7 +112,7 @@ mod imp {
                     obj.confirm_close();
                     return glib::Propagation::Stop;
                 }
-                if job.is_some() {
+                if job.is_some() || app.has_deferred() {
                     obj.leave();
                     return glib::Propagation::Stop;
                 }
@@ -152,7 +155,9 @@ impl Window {
             .build();
         let search = gio::ActionEntry::builder("search")
             .activate(|win: &Self, _, _| {
-                win.search_entry().grab_focus();
+                if let Some(entry) = win.search_entry() {
+                    entry.grab_focus();
+                }
             })
             .build();
         let sort = gio::ActionEntry::builder("sort")
@@ -187,7 +192,16 @@ impl Window {
         let add_game = gio::ActionEntry::builder("add-game").activate(|win: &Self, _, _| crate::dialogs::add_game::present(win)).build();
         let onboarding = gio::ActionEntry::builder("onboarding").activate(|win: &Self, _, _| crate::dialogs::onboarding::present(win)).build();
         let rescan = gio::ActionEntry::builder("rescan").activate(|win: &Self, _, _| win.rescan()).build();
-        self.add_action_entries([show_sidebar, search, sort, show_hidden, view, add_game, onboarding, rescan]);
+        let entry = gio::ActionEntry::builder("open-journal-entry")
+            .parameter_type(Some(glib::VariantTy::STRING))
+            .activate(|win: &Self, _, param| {
+                let target = param.and_then(|p| p.get::<String>()).unwrap_or_default();
+                if let Some((game, session)) = target.split_once('/') {
+                    crate::pages::journal::open_entry(win, game, session);
+                }
+            })
+            .build();
+        self.add_action_entries([show_sidebar, search, sort, show_hidden, view, add_game, onboarding, rescan, entry]);
         self.imp().library_page.set_show_hidden(state.show_hidden);
     }
 
@@ -233,14 +247,25 @@ impl Window {
         state.save();
     }
 
-    /// The search of the page in view.
-    fn search_entry(&self) -> gtk::SearchEntry {
+    /// The search of the page in view; the media page has none.
+    fn search_entry(&self) -> Option<gtk::SearchEntry> {
         let imp = self.imp();
-        if imp.stack.visible_child_name().as_deref() == Some("store") {
-            imp.store_page.search_entry()
-        } else {
-            imp.library_page.search_entry()
+        match imp.stack.visible_child_name().as_deref() {
+            Some("store") => Some(imp.store_page.search_entry()),
+            Some("library") => Some(imp.library_page.search_entry()),
+            _ => None,
         }
+    }
+
+    /// Pushes a page over the rest; one already open under the same tag closes first, with what was over it.
+    pub fn push_page(&self, page: &adw::NavigationPage) {
+        let navigation = &self.imp().navigation;
+        if let Some(open) = page.tag().and_then(|tag| navigation.find_page(&tag)) {
+            if let Some(below) = navigation.previous_page(&open) {
+                navigation.pop_to_page(&below);
+            }
+        }
+        navigation.push(page);
     }
 
     pub fn toast(&self, toast: adw::Toast) {
@@ -256,6 +281,7 @@ impl Window {
         }
         self.imp().library_page.set_library(app.library());
         self.imp().store_page.follow(&app);
+        self.imp().media_page.follow(&app);
         self.setup_play_actions();
         let win = self.downgrade();
         app.library().connect_updated(move || {
@@ -362,6 +388,8 @@ impl Window {
             main.append(item("starred-symbolic", &gettext("Favourites")));
             keys.push(("favorites".into(), gettext("Favourites")));
         }
+        main.append(item("camera-photo-symbolic", &gettext("Media")));
+        keys.push(("media".into(), gettext("Media")));
         let store = item("system-software-install-symbolic", &gettext("Store"));
         let badge = gtk::Label::builder().valign(gtk::Align::Center).css_classes(["count-badge", "numeric"]).build();
         store.set_suffix(Some(&badge));
@@ -414,14 +442,16 @@ impl Window {
         let imp = self.imp();
         let Some((key, title)) = imp.keys.borrow().get(index as usize).cloned() else { return };
         imp.content_page.set_title(&title);
-        let (page, shown, hidden) = if key == "store" {
-            ("store", imp.store_page.search_entry(), imp.library_page.search_entry())
-        } else {
-            imp.library_page.set_view(View::parse(&key));
-            ("library", imp.library_page.search_entry(), imp.store_page.search_entry())
+        let page = match key.as_str() {
+            "store" | "media" => key.as_str(),
+            _ => {
+                imp.library_page.set_view(View::parse(&key));
+                "library"
+            }
         };
-        hidden.set_key_capture_widget(gtk::Widget::NONE);
-        shown.set_key_capture_widget(Some(self));
+        for (name, entry) in [("library", imp.library_page.search_entry()), ("store", imp.store_page.search_entry())] {
+            entry.set_key_capture_widget(if name == page { Some(self.upcast_ref::<gtk::Widget>()) } else { None });
+        }
         if imp.stack.visible_child_name().as_deref() != Some(page) {
             imp.stack.set_visible_child_name(page);
         }
@@ -494,6 +524,7 @@ impl Window {
         self.set_visible(false);
         let win = self.clone();
         glib::spawn_future_local(async move {
+            win.app().flush_deferred().await;
             win.app().end_session().await;
             win.app().end_job().await;
             win.close();

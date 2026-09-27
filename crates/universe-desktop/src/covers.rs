@@ -71,6 +71,12 @@ pub async fn texture(path: &str, width: u32, height: u32) -> Option<gdk::Texture
     Some(texture)
 }
 
+/// A picture at the size a viewer shows it, decoded off the main loop and kept out of the cache, which is for small ones.
+pub async fn full(path: &str, width: u32, height: u32) -> Option<gdk::Texture> {
+    let file = path.to_string();
+    backend::run(async move { tokio::task::spawn_blocking(move || decode(&file, width, height)).await.ok().flatten() }).await
+}
+
 /// A web picture's copy in the cache, downloaded the first time.
 async fn fetched(url: &str) -> Option<String> {
     let name = glib::compute_checksum_for_string(glib::ChecksumType::Sha1, url)?;

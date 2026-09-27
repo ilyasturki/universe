@@ -1,4 +1,7 @@
 use std::cell::{Cell, RefCell};
+use std::future::Future;
+use std::path::Path;
+use std::pin::Pin;
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
@@ -8,6 +11,7 @@ use gettextrs::gettext;
 use gtk::glib::subclass::Signal;
 use gtk::{gio, glib};
 use universe::changes::{self, Ended, Event};
+use universe::frames::Frames;
 use universe::session::Current;
 
 use crate::backend;
@@ -17,10 +21,22 @@ use crate::library::Library;
 use crate::script::{self, Step};
 use crate::window::Window;
 
+/// The running game's unlocks as its source files them: each announced once, none from before the session.
+#[derive(Debug, Default)]
+pub struct Unlocks {
+    game: String,
+    title: String,
+    since: i64,
+    known: std::collections::HashSet<String>,
+}
+
+/// A delete held back while its toast offers Undo: what runs once the toast goes.
+pub type Commit = Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = ()>>>>;
+
 mod imp {
     use super::*;
 
-    #[derive(Debug, Default)]
+    #[derive(Default)]
     pub struct Application {
         pub ready: Cell<bool>,
         pub failure: RefCell<Option<String>>,
@@ -36,6 +52,17 @@ mod imp {
         pub updates: RefCell<Vec<serde_json::Value>>,
         pub updates_at: Cell<Option<Instant>>,
         pub checking: Cell<bool>,
+        /// Samples the recordings' frames for the pictures that stand for them.
+        pub frames: RefCell<Option<Frames>>,
+        /// Deletes waiting on their Undo, by what they delete.
+        pub deferred: RefCell<Vec<(String, Commit)>>,
+        pub unlocks: RefCell<Unlocks>,
+    }
+
+    impl std::fmt::Debug for Application {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            f.debug_struct("Application").field("ready", &self.ready).field("current", &self.current).finish_non_exhaustive()
+        }
     }
 
     #[glib::object_subclass]
@@ -56,6 +83,8 @@ mod imp {
                     Signal::builder("session-changed").build(),
                     Signal::builder("job-changed").build(),
                     Signal::builder("updates-changed").build(),
+                    Signal::builder("frame-landed").param_types([String::static_type(), u32::static_type()]).build(),
+                    Signal::builder("deferred-changed").build(),
                 ]
             })
         }
@@ -140,6 +169,65 @@ impl Application {
         }
         self.imp().current.replace(Some(current.clone()));
         self.emit_by_name::<()>("session-changed", &[]);
+        let since = chrono::DateTime::parse_from_rfc3339(&current.started_at).map(|t| t.timestamp()).unwrap_or(0);
+        self.imp().unlocks.replace(Unlocks { game: current.id.clone(), title: current.title.clone(), since, known: Default::default() });
+        self.look_for_unlocks();
+    }
+
+    /// A game with no list yet is not asked: the ask would reach its store on every library write.
+    fn look_for_unlocks(&self) {
+        let id = self.imp().unlocks.borrow().game.clone();
+        if id.is_empty() {
+            return;
+        }
+        let app = self.downgrade();
+        glib::spawn_future_local(async move {
+            let asked = id.clone();
+            let listing = backend::pinned(move |core| async move {
+                let listed = core.get(&asked).await.is_ok_and(|r| r.achievements.total > 0);
+                if listed {
+                    core.achievements(&asked, false).await.ok()
+                } else {
+                    None
+                }
+            })
+            .await;
+            let (Some(app), Some(listing)) = (app.upgrade(), listing) else { return };
+            let fresh: Vec<serde_json::Value> = {
+                let mut unlocks = app.imp().unlocks.borrow_mut();
+                if unlocks.game != id {
+                    return;
+                }
+                let items: Vec<serde_json::Value> = listing["items"].as_array().cloned().unwrap_or_default();
+                let mut fresh = Vec::new();
+                for item in items {
+                    let Some(at) = item["unlocked_at"].as_str().filter(|at| !at.is_empty()) else { continue };
+                    let key = item["key"].as_str().unwrap_or_default().to_string();
+                    let when = chrono::DateTime::parse_from_rfc3339(at).map(|t| t.timestamp()).unwrap_or(0);
+                    if unlocks.known.insert(key) && when >= unlocks.since {
+                        fresh.push(item);
+                    }
+                }
+                fresh
+            };
+            let title = app.imp().unlocks.borrow().title.clone();
+            for item in fresh {
+                app.unlocked(&id, &title, &item);
+            }
+        });
+    }
+
+    fn unlocked(&self, id: &str, game: &str, item: &serde_json::Value) {
+        let text = |key: &str| item[key].as_str().unwrap_or_default().to_string();
+        let name = if text("name").is_empty() { text("key") } else { text("name") };
+        let notification = gio::Notification::new(&gettext("Achievement Unlocked: {}").replace("{}", &name));
+        let description = text("description");
+        notification.set_body(Some(&if description.is_empty() { game.to_string() } else { format!("{game} · {description}") }));
+        notification.set_icon(&gio::ThemedIcon::new(config::APP_ID));
+        self.send_notification(Some(&format!("unlock-{id}-{}", text("key"))), &notification);
+        if let Some(win) = self.active_window().and_downcast::<Window>().filter(|w| w.is_active()) {
+            win.toast(adw::Toast::new(&gettext("Achievement unlocked: {}").replace("{}", &name)));
+        }
     }
 
     fn session_ended(&self, ended: &Ended) {
@@ -148,6 +236,7 @@ impl Application {
             game.set_launching(false);
         }
         self.imp().current.replace(None);
+        self.imp().unlocks.replace(Unlocks::default());
         self.emit_by_name::<()>("session-changed", &[]);
         let length = crate::format::duration(ended.duration_s);
         let failure = match ended.end.as_str() {
@@ -199,6 +288,7 @@ impl Application {
                 return;
             }
             let Some(app) = app.upgrade() else { return };
+            app.flush_deferred().await;
             app.end_session().await;
             app.end_job().await;
             app.quit();
@@ -331,6 +421,106 @@ impl Application {
         });
     }
 
+    /// The recording's frame `index` when it is cached; asks for the thumbnail frame otherwise, which `frame-landed` announces.
+    pub fn frame(&self, recording: &str, index: usize, duration_s: u64) -> Option<String> {
+        let file = universe::frames::file(Path::new(recording), index);
+        if file.is_file() {
+            return Some(file.to_string_lossy().into_owned());
+        }
+        if let Some(frames) = self.imp().frames.borrow().as_ref() {
+            if index == universe::frames::THUMB {
+                frames.thumbnail(Path::new(recording), duration_s as f64);
+            } else {
+                frames.select(Path::new(recording), duration_s as f64);
+            }
+        }
+        None
+    }
+
+    /// Every frame of the recording ahead of the rest.
+    pub fn select_frames(&self, recording: &str, duration_s: u64) {
+        if let Some(frames) = self.imp().frames.borrow().as_ref() {
+            frames.select(Path::new(recording), duration_s as f64);
+        }
+    }
+
+    pub fn forget_frames(&self, recording: &str) {
+        if let Some(frames) = self.imp().frames.borrow().as_ref() {
+            frames.forget(Path::new(recording));
+        }
+    }
+
+    pub fn connect_frame_landed<F: Fn(&str, usize) + 'static>(&self, f: F) -> glib::SignalHandlerId {
+        self.connect_local("frame-landed", false, move |args| {
+            let recording: String = args[1].get().unwrap_or_default();
+            let index: u32 = args[2].get().unwrap_or_default();
+            f(&recording, index as usize);
+            None
+        })
+    }
+
+    /// Takes `key` out of what the pages show and commits the delete once the toast goes, unless Undo brings it back.
+    pub fn defer<F: Future<Output = ()> + 'static>(&self, key: &str, text: &str, commit: impl FnOnce() -> F + 'static) {
+        self.imp().deferred.borrow_mut().push((key.to_string(), Box::new(move || Box::pin(commit()))));
+        self.emit_by_name::<()>("deferred-changed", &[]);
+        let toast = adw::Toast::builder().title(text).button_label(gettext("_Undo")).priority(adw::ToastPriority::High).build();
+        let (app, undone) = (self.downgrade(), key.to_string());
+        toast.connect_button_clicked(move |_| {
+            let Some(app) = app.upgrade() else { return };
+            app.imp().deferred.borrow_mut().retain(|(k, _)| *k != undone);
+            app.emit_by_name::<()>("deferred-changed", &[]);
+        });
+        let (app, due) = (self.downgrade(), key.to_string());
+        toast.connect_dismissed(move |_| {
+            let Some(app) = app.upgrade() else { return };
+            let commit = app.take_deferred(&due);
+            if let Some(commit) = commit {
+                let app = app.clone();
+                glib::spawn_future_local(async move {
+                    commit().await;
+                    app.emit_by_name::<()>("deferred-changed", &[]);
+                });
+            }
+        });
+        match self.active_window().and_downcast::<Window>() {
+            Some(win) => win.toast(toast),
+            None => drop(glib::spawn_future_local(self.clone().flush_deferred_owned())),
+        }
+    }
+
+    fn take_deferred(&self, key: &str) -> Option<Commit> {
+        let mut deferred = self.imp().deferred.borrow_mut();
+        let at = deferred.iter().position(|(k, _)| k == key)?;
+        Some(deferred.remove(at).1)
+    }
+
+    pub fn has_deferred(&self) -> bool {
+        !self.imp().deferred.borrow().is_empty()
+    }
+
+    pub fn is_deferred(&self, key: &str) -> bool {
+        self.imp().deferred.borrow().iter().any(|(k, _)| k == key)
+    }
+
+    pub fn connect_deferred_changed<F: Fn() + 'static>(&self, f: F) -> glib::SignalHandlerId {
+        self.connect_local("deferred-changed", false, move |_| {
+            f();
+            None
+        })
+    }
+
+    /// Commits every delete still offering Undo: the app is going.
+    pub async fn flush_deferred(&self) {
+        let deferred = self.imp().deferred.take();
+        for (_, commit) in deferred {
+            commit().await;
+        }
+    }
+
+    async fn flush_deferred_owned(self) {
+        self.flush_deferred().await;
+    }
+
     pub fn is_ready(&self) -> bool {
         self.imp().ready.get()
     }
@@ -371,6 +561,7 @@ impl Application {
                 }
             };
             app.library().refresh(&[]).await;
+            app.start_frames().await;
             app.imp().ready.set(true);
             app.emit_by_name::<()>("core-ready", &[]);
             if let Some(events) = events {
@@ -381,20 +572,75 @@ impl Application {
         });
     }
 
+    /// The frame sampler runs on the core's runtime; what it lands is announced on the main loop.
+    async fn start_frames(&self) {
+        let (frames, mut landed) = backend::run(async { Frames::start() }).await;
+        self.imp().frames.replace(Some(frames));
+        let app = self.downgrade();
+        glib::spawn_future_local(async move {
+            while let Some(frame) = landed.recv().await {
+                let Some(app) = app.upgrade() else { return };
+                let recording = frame.recording.to_string_lossy().into_owned();
+                app.emit_by_name::<()>("frame-landed", &[&recording, &(frame.index as u32)]);
+            }
+        });
+    }
+
     fn follow(&self, mut events: tokio::sync::mpsc::UnboundedReceiver<Event>) {
         let app = self.downgrade();
         glib::spawn_future_local(async move {
             while let Some(event) = events.recv().await {
                 let Some(app) = app.upgrade() else { return };
                 match &event {
-                    Event::Library(ids) => app.library().refresh(ids).await,
+                    Event::Library(ids) => {
+                        app.library().refresh(ids).await;
+                        let watched = app.imp().unlocks.borrow().game.clone();
+                        if !watched.is_empty() && (ids.is_empty() || ids.contains(&watched)) {
+                            app.look_for_unlocks();
+                        }
+                    }
                     Event::SessionStarted(current) => app.session_started(current),
                     Event::SessionEnded(ended) => app.session_ended(ended),
+                    Event::JournalWriting { title, .. } => app.say(&gettext("Writing the journal entry for {}…").replace("{}", title)),
+                    Event::JournalDone { id, session, state, text } => app.journal_done(id, session, state, text),
                     _ => {}
                 }
                 app.emit_by_name::<()>("changed", &[&glib::BoxedAnyObject::new(event)]);
             }
         });
+    }
+
+    fn say(&self, text: &str) {
+        if let Some(win) = self.active_window().and_downcast::<Window>() {
+            win.toast(adw::Toast::new(text));
+        }
+    }
+
+    /// An entry left `pending`: read it, or why it was put off or failed.
+    fn journal_done(&self, id: &str, session: &str, state: &str, text: &str) {
+        let title = self.library().get(id).map(|g| g.title()).unwrap_or_else(|| id.to_string());
+        let (line, read) = match state {
+            "written" => (gettext("Journal entry written: “{}”").replace("{}", text), true),
+            "deferred" => (gettext("The journal entry for {} is put off: {}").replacen("{}", &title, 1).replacen("{}", text, 1), false),
+            _ => (gettext("The journal entry for {} could not be written: {}").replacen("{}", &title, 1).replacen("{}", text, 1), false),
+        };
+        let window = self.active_window().and_downcast::<Window>();
+        let toast = adw::Toast::new(&line);
+        if read {
+            toast.set_button_label(Some(&gettext("_Read")));
+            toast.set_action_name(Some("win.open-journal-entry"));
+            toast.set_action_target_value(Some(&format!("{id}/{session}").to_variant()));
+        }
+        if read && window.as_ref().is_none_or(|win| !win.is_active()) {
+            let notification = gio::Notification::new(&gettext("Journal entry written"));
+            notification.set_body(Some(&format!("{title}: {text}")));
+            notification.set_icon(&gio::ThemedIcon::new(config::APP_ID));
+            notification.set_default_action_and_target_value("app.open-journal-entry", Some(&format!("{id}/{session}").to_variant()));
+            self.send_notification(Some("journal"), &notification);
+        }
+        if let Some(win) = window {
+            win.toast(toast);
+        }
     }
 
     pub fn connect_changed<F: Fn(&Event) + 'static>(&self, f: F) -> glib::SignalHandlerId {
@@ -430,7 +676,15 @@ impl Application {
                 }
             })
             .build();
-        self.add_action_entries([quit, about, preferences, preferences_page]);
+        let entry = gio::ActionEntry::builder("open-journal-entry")
+            .parameter_type(Some(glib::VariantTy::STRING))
+            .activate(|app: &Self, _, param| {
+                let win = app.window();
+                win.present();
+                let _ = WidgetExt::activate_action(&win, "win.open-journal-entry", param);
+            })
+            .build();
+        self.add_action_entries([quit, about, preferences, preferences_page, entry]);
     }
 
     fn setup_accels(&self) {

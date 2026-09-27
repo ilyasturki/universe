@@ -76,6 +76,12 @@ template $UniverseWindow: Adw.ApplicationWindow {
               }
 
               Adw.ViewStackPage {
+                name: "media";
+
+                child: $UniverseMediaPage media_page {};
+              }
+
+              Adw.ViewStackPage {
                 name: "store";
 
                 child: $UniverseStorePage store_page {};
