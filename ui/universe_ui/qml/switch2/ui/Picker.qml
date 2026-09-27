@@ -11,6 +11,9 @@ Modal {
     property var icons: []
     property int index: 0
     property int current: -1
+    // The row (a rect in the picker's space) the values open beside, as a popover; null: a centred card
+    property var anchor: null
+    readonly property bool anchored: anchor !== null
     readonly property bool hasIcons: icons.some(function (i) {
         return i !== undefined && i !== "";
     })
@@ -25,12 +28,15 @@ Modal {
             label: "OK"
         }
     ]
-    readonly property real rowHeight: Theme.dp(100)
+    readonly property real rowHeight: anchored ? Theme.dp(94) : Theme.dp(100)
+    readonly property real inset: anchored ? Theme.dp(18) : Theme.dp(40)
+    readonly property real pad: Theme.dp(22)
     readonly property real room: Theme.dp(Theme.ringRoom)
     readonly property int shownRows: Math.min(7, Math.max(1, choices.length))
 
     function show(spec, done) {
-        title = spec.title || "";
+        anchor = spec.anchor || null;
+        title = anchored ? "" : spec.title || "";
         choices = spec.choices || [];
         icons = spec.icons || [];
         current = spec.index !== undefined ? spec.index : -1;
@@ -39,8 +45,14 @@ Modal {
         list.contentY = list.originY + Math.max(0, index - shownRows + 1) * rowHeight;
     }
 
-    card.width: Theme.dp(1000)
-    card.height: heading.height + Theme.dp(20) + list.height - picker.room * 2 + Theme.dp(40)
+    scrimColor: anchored ? "transparent" : Theme.scrim
+    card.anchors.centerIn: anchored ? undefined : picker
+    card.x: anchored ? anchor.x + anchor.width / 2 : 0
+    card.y: anchored ? Math.max(Theme.dp(Theme.headerHeight), Math.min(anchor.y - Theme.dp(12), picker.height - Theme.dp(Theme.hintBarHeight) - card.height - Theme.dp(12))) : 0
+    card.width: anchored ? anchor.width / 2 + Theme.dp(14) : Theme.dp(1000)
+    card.height: list.height - picker.room * 2 + (anchored ? picker.pad * 2 : heading.height + Theme.dp(60))
+    card.radius: anchored ? Theme.dp(22) : Theme.dp(16)
+    card.color: anchored ? "#f4f4f2" : Theme.dialog
 
     Keys.onPressed: function (event) {
         event.accepted = true;
@@ -56,6 +68,19 @@ Modal {
             index = Sound.stepped(index, event.key === Qt.Key_Up ? -1 : 1, choices.length);
         } else if (event.key === Qt.Key_Left || event.key === Qt.Key_Right) {
             Sound.play("edge");
+        }
+    }
+
+    Repeater {
+        model: picker.anchored ? 4 : 0
+
+        Rectangle {
+            z: -1
+            anchors.fill: parent
+            anchors.margins: -Theme.dp(3 + index * 4)
+            anchors.topMargin: -Theme.dp(index * 3)
+            radius: picker.card.radius + Theme.dp(3 + index * 4)
+            color: Qt.rgba(0, 0, 0, 0.035)
         }
     }
 
@@ -76,9 +101,9 @@ Modal {
     ListView {
         id: list
 
-        x: Theme.dp(40) - picker.room
-        y: heading.y + heading.height + Theme.dp(10) - picker.room
-        width: parent.width - Theme.dp(80) + picker.room * 2
+        x: picker.inset - picker.room
+        y: picker.anchored ? picker.pad - picker.room : heading.y + heading.height + Theme.dp(10) - picker.room
+        width: parent.width - picker.inset * 2 + picker.room * 2
         height: picker.rowHeight * picker.shownRows + picker.room * 2
         model: picker.choices
         currentIndex: picker.index
@@ -113,7 +138,7 @@ Modal {
                 }
 
                 Hairline {
-                    visible: !parent.focused && index < picker.choices.length - 1
+                    visible: !picker.anchored && !parent.focused && index < picker.choices.length - 1
                 }
 
                 Image {
@@ -132,11 +157,11 @@ Modal {
                 }
 
                 Label {
-                    x: Theme.dp(30) + (picker.hasIcons ? mark.width + Theme.dp(22) : 0)
+                    x: (picker.anchored ? Theme.dp(36) : Theme.dp(30)) + (picker.hasIcons ? mark.width + Theme.dp(22) : 0)
                     anchors.verticalCenter: parent.verticalCenter
                     width: parent.width - Theme.dp(120) - (x - Theme.dp(30))
                     text: modelData
-                    color: parent.chosen ? Theme.accent : Theme.text
+                    color: (picker.anchored ? parent.focused : parent.chosen) ? Theme.accent : Theme.text
                     elide: Text.ElideRight
                 }
 
@@ -147,18 +172,18 @@ Modal {
 
                 Rectangle {
                     anchors.right: parent.right
-                    anchors.rightMargin: Theme.dp(30)
+                    anchors.rightMargin: picker.anchored ? Theme.dp(37) : Theme.dp(30)
                     anchors.verticalCenter: parent.verticalCenter
-                    width: Theme.dp(40)
+                    width: picker.anchored ? Theme.dp(46) : Theme.dp(40)
                     height: width
                     radius: width / 2
-                    color: parent.chosen ? Theme.accentStrong : "transparent"
+                    color: parent.chosen ? "#0a5fd6" : "transparent"
                     border.width: Theme.dp(2)
-                    border.color: parent.chosen ? Theme.accentStrong : Theme.hairline
+                    border.color: parent.chosen ? "#0a5fd6" : Theme.hairline
 
                     Rectangle {
                         anchors.centerIn: parent
-                        width: Theme.dp(14)
+                        width: parent.width * 0.33
                         height: width
                         radius: width / 2
                         color: "#ffffff"

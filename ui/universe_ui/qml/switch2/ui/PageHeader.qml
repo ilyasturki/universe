@@ -65,6 +65,7 @@ Item {
         text: header.trailing
         color: Theme.textSecondary
         elide: Text.ElideMiddle
+        font.pixelSize: Theme.dp(26)
     }
 
     Hairline {

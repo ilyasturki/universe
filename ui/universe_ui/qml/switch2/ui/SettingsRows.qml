@@ -11,6 +11,11 @@ FocusScope {
     property var shell: null
     readonly property bool cursorShown: activeFocus
     readonly property var currentRow: index >= 0 && index < model.length ? model[index] : null
+    // The row whose values are open beside it: it keeps a pale ring until one is picked.
+    property int held: -1
+    // How far right of the rows their scrollbar sits
+    // The console's bar hugs the screen's edge, 34 in.
+    property real scrollbarRoom: Theme.dp(Theme.columnRight) - Theme.dp(34)
 
     signal activated(int index, var row)
     signal escapedLeft
@@ -69,12 +74,15 @@ FocusScope {
             if (row.type !== "enum")
                 opts.push("Type a value…");
             var current = opts.indexOf(String(row.value));
+            held = index;
             shell.pick({
                 title: row.label,
                 choices: opts,
                 icons: row.icons || [],
-                index: current >= 0 ? current : 0
+                index: current >= 0 ? current : 0,
+                anchor: rows.mapToItem(null, 0, yOf(index) - view.contentY, width, rowHeight)
             }, function (i) {
+                rows.held = -1;
                 if (i < 0)
                     return;
                 if (i < choices.length) {
@@ -307,6 +315,16 @@ FocusScope {
                     visible: !row.heading
                     anchors.fill: parent
 
+                    Rectangle {
+                        width: parent.width
+                        height: rows.rowHeight
+                        visible: rows.held === index && !row.focused
+                        radius: Theme.dp(Theme.radiusRow)
+                        color: Theme.focusFill
+                        border.width: Theme.dp(4)
+                        border.color: "#c7d2f4"
+                    }
+
                     FocusPill {
                         width: parent.width
                         height: rows.rowHeight
@@ -314,7 +332,7 @@ FocusScope {
                     }
 
                     Hairline {
-                        visible: !row.focused
+                        visible: !row.focused && rows.held !== index
                     }
 
                     Rectangle {
@@ -573,7 +591,7 @@ FocusScope {
 
     Scrollbar {
         anchors.right: parent.right
-        anchors.rightMargin: -Theme.dp(40)
+        anchors.rightMargin: -rows.scrollbarRoom
         anchors.top: parent.top
         anchors.bottom: parent.bottom
         flickable: view

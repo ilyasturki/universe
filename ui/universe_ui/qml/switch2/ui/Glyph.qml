@@ -85,12 +85,13 @@ Canvas {
             line(12, 13.8, 12, 16.2);
             ctx.restore();
         } else if (kind === "settings") {
-            dot(12, 12, 3.2);
             ctx.beginPath();
-            ctx.arc(12 * s, 12 * s, 3.2 * s, 0, Math.PI * 2);
+            ctx.arc(12 * s, 12 * s, 5.8 * s, 0, Math.PI * 2);
             ctx.stroke();
+            ctx.lineCap = "butt";
+            ctx.lineWidth = stroke * 1.3 * s;
             for (var i = 0; i < 8; i++) {
-                var a = i * Math.PI / 4, r0 = 6.2, r1 = 9.5;
+                var a = i * Math.PI / 4, r0 = 5.8, r1 = 9.8;
                 line(12 + Math.cos(a) * r0, 12 + Math.sin(a) * r0, 12 + Math.cos(a) * r1, 12 + Math.sin(a) * r1);
             }
         } else if (kind === "power") {

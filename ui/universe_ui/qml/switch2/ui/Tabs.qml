@@ -10,7 +10,7 @@ Item {
 
     signal changed(int index)
 
-    implicitHeight: Theme.dp(110)
+    implicitHeight: Theme.dp(112)
 
     function step(d) {
         var next = index + d;
@@ -24,15 +24,14 @@ Item {
     }
 
     component Bumper: HintGlyph {
-        anchors.verticalCenter: parent.verticalCenter
+        y: Theme.dp(63) - height / 2
         unit: Theme.dp(38)
         fill: "transparent"
         ink: Theme.textMuted
     }
 
     Row {
-        anchors.centerIn: parent
-        anchors.verticalCenterOffset: -Theme.dp(6)
+        anchors.horizontalCenter: parent.horizontalCenter
         spacing: Theme.dp(100)
 
         Bumper {
@@ -52,16 +51,19 @@ Item {
                 readonly property bool open: index === tabs.index
 
                 width: Theme.dp(330)
-                height: Theme.dp(60)
+                height: Theme.dp(92)
 
                 Label {
-                    anchors.centerIn: parent
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    anchors.baseline: parent.top
+                    anchors.baselineOffset: Theme.dp(78)
                     text: modelData
                     color: parent.open ? Theme.accent : Theme.text
+                    font.pixelSize: Theme.dp(27)
                 }
 
                 Rectangle {
-                    anchors.bottom: parent.bottom
+                    y: Theme.dp(88)
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: parent.width
                     height: Theme.dp(4)

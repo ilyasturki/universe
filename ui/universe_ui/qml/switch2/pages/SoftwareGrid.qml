@@ -36,6 +36,8 @@ FocusScope {
     readonly property real inset: Theme.dp(Theme.ringRoom)
     readonly property real cornerRadius: Math.round(Theme.dp(Theme.radiusTile) * tile / Theme.dp(Theme.tileSize))
     readonly property real cellHeight: groups ? pitch + inset + Theme.dp(64) : pitch
+    // Below a focused tile: its name bubble's gap, height and shadow
+    readonly property real bubbleRoom: groups ? 0 : Theme.dp(26 + 84 + 6)
     readonly property int lastRow: cells > 0 ? Math.floor((cells - 1) / columns) : 0
 
     implicitWidth: columns * pitch
@@ -165,12 +167,16 @@ FocusScope {
         leftMargin: grid.inset
         rightMargin: grid.inset
         topMargin: grid.inset
-        bottomMargin: grid.groups ? grid.inset : Theme.dp(120)
+        bottomMargin: grid.groups ? grid.inset : grid.bubbleRoom
         interactive: false
         keyNavigationEnabled: false
         highlightFollowsCurrentItem: false
         clip: true
         cacheBuffer: grid.cellHeight * 2
+
+        function rowBottom() {
+            return Math.max(cellHeight + grid.inset, grid.tile + grid.bubbleRoom);
+        }
 
         function scrollToCurrent() {
             if (height <= 0 || grid.cells === 0)
@@ -183,8 +189,8 @@ FocusScope {
             var target = contentY;
             if (rowTop - grid.inset < contentY)
                 target = rowTop - grid.inset;
-            else if (rowTop + cellHeight + grid.inset > contentY + height)
-                target = rowTop + cellHeight + grid.inset - height;
+            else if (rowTop + rowBottom() > contentY + height)
+                target = rowTop + rowBottom() - height;
             contentY = Math.max(-topMargin, Math.min(target, contentHeight - height + bottomMargin));
         }
 
@@ -344,54 +350,18 @@ FocusScope {
         ease: scrollEase
     }
 
-    Item {
-        id: card
+    NameBubble {
+        id: bubble
 
-        readonly property bool shown: !grid.groups && grid.cursorShown && (grid.current !== null || grid.atAddTile) && grid.index + grid.columns >= grid.cells
         readonly property real cellX: (grid.index % grid.columns) * grid.pitch
         readonly property real cellY: Math.floor(grid.index / grid.columns) * grid.cellHeight - view.contentY - grid.inset
 
-        visible: shown
+        visible: !grid.groups && grid.cursorShown && (grid.current !== null || grid.atAddTile)
         x: Math.max(-Theme.dp(80), Math.min(cellX - Theme.dp(42), grid.width - width))
-        y: cellY + grid.tile + grid.inset + Theme.dp(4)
-        width: cardText.implicitWidth + Theme.dp(84)
-        height: Theme.dp(82)
+        y: cellY + grid.tile + Theme.dp(26)
         z: 3
-
-        Rectangle {
-            anchors.fill: parent
-            radius: Theme.dp(8)
-            color: Theme.card
-            border.width: 1
-            border.color: "#e0e0e0"
-        }
-
-        Canvas {
-            x: card.cellX - card.x + grid.tile / 2 - width / 2
-            y: -height + 1
-            width: Theme.dp(28)
-            height: Theme.dp(14)
-            onPaint: {
-                var ctx = getContext("2d");
-                ctx.reset();
-                ctx.fillStyle = String(Theme.card);
-                ctx.beginPath();
-                ctx.moveTo(0, height);
-                ctx.lineTo(width / 2, 0);
-                ctx.lineTo(width, height);
-                ctx.closePath();
-                ctx.fill();
-            }
-        }
-
-        Label {
-            id: cardText
-            anchors.centerIn: parent
-            width: Math.min(implicitWidth, Theme.dp(760))
-            text: grid.atAddTile ? "Add a game" : grid.current && !grid.groups ? grid.current.title : ""
-            color: Theme.accent
-            elide: Text.ElideRight
-        }
+        tipX: cellX - x + grid.tile / 2
+        text: grid.atAddTile ? "Add a game" : grid.current && !grid.groups ? grid.current.title : ""
     }
 
     Scrollbar {

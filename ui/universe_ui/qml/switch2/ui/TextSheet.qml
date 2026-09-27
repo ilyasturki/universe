@@ -21,32 +21,23 @@ Modal {
     readonly property alias colIndex: panel.colIndex
     readonly property alias sideIndex: panel.sideIndex
 
+    // Y, B and + wear their badges on Space, ⌫ and Done.
     readonly property var hints: [
-        {
-            glyph: "Y",
-            label: "Space"
-        },
         {
             glyph: "X",
             label: "Cancel"
-        },
-        {
-            glyph: "B",
-            label: "Delete"
-        },
-        {
-            glyph: "Start",
-            label: !pair ? "OK" : typing === 0 ? "Next" : "Save"
         },
         {
             glyph: "A",
             label: "Select"
         }
     ]
+    readonly property color ink: "#ffffff"
+    readonly property color inkIdle: "#9a9a9c"
 
     carded: false
-    scrimColor: Theme.ground
-    scrimOpacity: 0.96
+    scrimColor: "#3e3e40"
+    scrimOpacity: 0.97
     onOpenChanged: if (open)
         panel.built = true
 
@@ -164,8 +155,10 @@ Modal {
         height: Theme.dp(280)
 
         Label {
-            y: Theme.dp(20)
+            y: Theme.dp(10)
             text: sheet.title
+            color: sheet.ink
+            font.pixelSize: Theme.dp(40)
         }
 
         // The pair's second field takes the line the count sat on; the count moves under it.
@@ -175,7 +168,7 @@ Modal {
             y: Theme.dp(150)
             visible: sheet.pair
             text: sheet.pair ? sheet.labels[0] : ""
-            color: sheet.typing === 0 ? Theme.textSecondary : Theme.textDisabled
+            color: sheet.typing === 0 ? sheet.ink : sheet.inkIdle
             font.pixelSize: Theme.dp(Theme.fontTiny)
             font.letterSpacing: Theme.dp(2)
         }
@@ -183,28 +176,29 @@ Modal {
         Label {
             id: valueText
             x: Theme.dp(8)
-            y: sheet.pair ? Theme.dp(90) : Theme.dp(190)
+            y: sheet.pair ? Theme.dp(90) : Theme.dp(185)
             width: parent.width - Theme.dp(140)
             text: sheet.pair ? (sheet.typing === 0 ? sheet.text : sheet.values[0]) : sheet.text
-            color: !sheet.pair || sheet.typing === 0 ? Theme.text : Theme.textSecondary
+            color: !sheet.pair || sheet.typing === 0 ? sheet.ink : sheet.inkIdle
             elide: Text.ElideLeft
-            font.pixelSize: Theme.dp(42)
+            font.pixelSize: Theme.dp(48)
+            font.letterSpacing: Theme.dp(1)
         }
 
         Rectangle {
             x: valueText.x + Math.min(valueText.implicitWidth, valueText.width)
-            y: valueText.y + Theme.dp(2)
-            width: Theme.dp(3)
-            height: Theme.dp(50)
-            color: Theme.accent
+            y: valueText.y + Theme.dp(4)
+            width: Theme.dp(4)
+            height: Theme.dp(54)
+            color: Theme.ringDeep
             visible: caret.on && (!sheet.pair || sheet.typing === 0)
         }
 
         Rectangle {
-            y: valueText.y + Theme.dp(62)
+            y: valueText.y + Theme.dp(68)
             width: parent.width
             height: Theme.dp(3)
-            color: !sheet.pair || sheet.typing === 0 ? Theme.text : Theme.hairline
+            color: !sheet.pair || sheet.typing === 0 ? sheet.ink : sheet.inkIdle
         }
 
         Label {
@@ -213,7 +207,7 @@ Modal {
             y: Theme.dp(270)
             visible: sheet.pair
             text: sheet.pair ? sheet.labels[1] : ""
-            color: sheet.typing === 1 ? Theme.textSecondary : Theme.textDisabled
+            color: sheet.typing === 1 ? sheet.ink : sheet.inkIdle
             font.pixelSize: Theme.dp(Theme.fontTiny)
             font.letterSpacing: Theme.dp(2)
         }
@@ -225,34 +219,35 @@ Modal {
             width: parent.width - Theme.dp(140)
             visible: sheet.pair
             text: sheet.typing === 1 ? sheet.text : sheet.values[1]
-            color: sheet.typing === 1 ? Theme.text : Theme.textSecondary
+            color: sheet.typing === 1 ? sheet.ink : sheet.inkIdle
             elide: Text.ElideLeft
-            font.pixelSize: Theme.dp(42)
+            font.pixelSize: Theme.dp(48)
+            font.letterSpacing: Theme.dp(1)
         }
 
         Rectangle {
             x: secondText.x + Math.min(secondText.implicitWidth, secondText.width)
-            y: secondText.y + Theme.dp(2)
-            width: Theme.dp(3)
-            height: Theme.dp(50)
-            color: Theme.accent
+            y: secondText.y + Theme.dp(4)
+            width: Theme.dp(4)
+            height: Theme.dp(54)
+            color: Theme.ringDeep
             visible: caret.on && sheet.pair && sheet.typing === 1
         }
 
         Rectangle {
-            y: secondText.y + Theme.dp(62)
+            y: secondText.y + Theme.dp(68)
             width: parent.width
             height: Theme.dp(3)
             visible: sheet.pair
-            color: sheet.typing === 1 ? Theme.text : Theme.hairline
+            color: sheet.typing === 1 ? sheet.ink : sheet.inkIdle
         }
 
         Label {
             anchors.right: parent.right
-            y: (sheet.pair ? secondText.y : valueText.y) + Theme.dp(74)
+            y: (sheet.pair ? secondText.y : valueText.y) + Theme.dp(80)
             text: sheet.text.length + "/" + sheet.max
-            color: Theme.textSecondary
-            font.pixelSize: Theme.dp(Theme.fontSmall)
+            color: sheet.ink
+            font.pixelSize: Theme.dp(30)
         }
     }
 
@@ -271,6 +266,7 @@ Modal {
         anchors.left: parent.left
         anchors.right: parent.right
         y: sheet.open ? parent.height - height : parent.height
+        doneLabel: sheet.pair && sheet.typing === 0 ? "Next" : "Done"
 
         Behavior on y {
             Ease {}

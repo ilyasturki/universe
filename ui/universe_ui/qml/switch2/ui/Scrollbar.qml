@@ -9,7 +9,7 @@ Item {
     readonly property real span: flickable ? flickable.contentHeight : 0
     readonly property bool needed: flickable && span > flickable.height + 1
 
-    width: Theme.dp(6)
+    width: Theme.dp(4)
     visible: needed
 
     Rectangle {
@@ -18,7 +18,7 @@ Item {
         y: bar.needed ? bar.height * flickable.contentY / bar.span : 0
         height: bar.needed ? Math.max(Theme.dp(40), bar.height * flickable.height / bar.span) : 0
         radius: width / 2
-        color: Theme.thumb
+        color: Theme.scrollbar
 
         Behavior on y {
             Ease {}

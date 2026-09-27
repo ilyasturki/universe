@@ -2,8 +2,8 @@ import QtQuick
 import "../core"
 import "../sound"
 
-// The Switch's keyboard panel: rows of keys with a side column (⌫, OK). Emits what it types; the owner keeps the text.
-Rectangle {
+// The Switch's keyboard panel: rows of keys with a side column (⌫, Done). Emits what it types; the owner keeps the text.
+Item {
     id: panel
 
     property bool numeric: false
@@ -12,6 +12,7 @@ Rectangle {
     property bool built: false
     property bool cursorShown: true
     property real scale: 1.0
+    property string doneLabel: "Done"
 
     property string zone: "keys"
     property int rowIndex: 1
@@ -26,15 +27,15 @@ Rectangle {
 
     readonly property real keyGap: Theme.dp(6)
     readonly property real keysLeft: Theme.dp(134)
-    // Eleven keys and the side column keep a 120dp right margin: a narrower screen narrows the keys.
-    readonly property real keyW: Math.min(Theme.dp(128 * scale), width > 0 ? Math.floor((width - keysLeft - Theme.dp(12 + 120) - Theme.dp(180)) / 11 - keyGap) : Theme.dp(128 * scale))
-    readonly property real keyH: Theme.dp(72 * scale)
-    readonly property real keysTop: Theme.dp(46 * scale)
+    readonly property real sideW: Theme.dp(170)
+    // Eleven keys and the side column keep a 125dp right margin: a narrower screen narrows the keys.
+    readonly property real keyW: Math.min(Theme.dp(128 * scale), width > 0 ? Math.floor((width - keysLeft - Theme.dp(12 + 125) - sideW) / 11 - keyGap) : Theme.dp(128 * scale))
+    readonly property real keyH: Theme.dp(70 * scale)
+    readonly property real keysTop: Theme.dp(40 * scale)
     readonly property real sideX: keysLeft + 11 * (keyW + keyGap) + Theme.dp(12)
-    readonly property real sideW: Theme.dp(180)
+    readonly property real radius: Theme.dp(40)
 
-    height: keysTop + keyH * 5 + keyGap * 4 + Theme.dp(110) * scale
-    color: Theme.ground
+    height: keysTop + keyH * 5 + keyGap * 4 + Theme.dp(20) * scale
 
     function reset() {
         zone = "keys";
@@ -74,17 +75,20 @@ Rectangle {
         {
             label: "Space",
             action: "space",
-            value: " "
+            value: " ",
+            badge: "Y"
         }
     ]
     readonly property var side: [
         {
             label: "⌫",
-            action: "backspace"
+            action: "backspace",
+            badge: "B"
         },
         {
-            label: "OK",
-            action: "ok"
+            label: panel.doneLabel,
+            action: "ok",
+            badge: "Start"
         }
     ]
     readonly property var symbolRows: [chars("~`!@#$%^&*("), chars(")_+={}[]|\\;"), chars("\"<>/?,.-:'"), chars("¿¡€£¥•…—–")]
@@ -171,7 +175,8 @@ Rectangle {
         var nc = colIndex + dc;
         if (nc >= rowLength(rowIndex)) {
             zone = "side";
-            sideIndex = Math.min(side.length - 1, Math.round(rowIndex / Math.max(1, rowCount - 1) * (side.length - 1)));
+            // ⌫ beside the top row, Done beside the rest: Return between them takes no cursor.
+            sideIndex = rowIndex === 0 ? 0 : 1;
             Sound.play("tick");
             return;
         }
@@ -181,6 +186,18 @@ Rectangle {
         }
         colIndex = nc;
         Sound.play("tick");
+    }
+
+    component Badge: HintGlyph {
+        unit: Theme.dp(26 * panel.scale)
+    }
+
+    Rectangle {
+        width: parent.width
+        // The top corners round; the bottom ones run on under the hint bar.
+        height: parent.height + panel.radius
+        radius: panel.radius
+        color: Theme.ground
     }
 
     Column {
@@ -203,33 +220,95 @@ Rectangle {
 
                         readonly property var spec: panel.keyAt(r, index)
                         readonly property bool wide: spec.action === "space"
+                        readonly property bool mode: spec.action === "abc" || spec.action === "symbols"
                         readonly property bool focused: panel.cursorShown && panel.zone === "keys" && panel.rowIndex === r && panel.colIndex === index
                         readonly property bool latched: (spec.action === "shift" && panel.shift) || (spec.action === "abc" && !panel.symbols && !panel.numeric) || (spec.action === "symbols" && panel.symbols)
 
-                        width: wide ? panel.keyW * 5 + panel.keyGap * 4 : panel.keyW
+                        width: wide ? panel.keyW * 8 + panel.keyGap * 7 : panel.keyW
                         height: panel.keyH
+
+                        // ABC and #+= sit on one strip, a rule between them, as the console's mode switch.
+                        Rectangle {
+                            anchors.fill: parent
+                            anchors.rightMargin: key.spec.action === "abc" ? -panel.keyGap : 0
+                            radius: Theme.dp(4)
+                            color: Theme.card
+                            visible: key.mode
+                        }
+
+                        Rectangle {
+                            visible: key.spec.action === "abc"
+                            x: parent.width + panel.keyGap / 2
+                            anchors.verticalCenter: parent.verticalCenter
+                            width: 1
+                            height: parent.height * 0.6
+                            color: Theme.hairline
+                        }
 
                         FocusPill {
                             anchors.fill: parent
                             radius: Theme.dp(4)
-                            color: key.focused ? Theme.focusFill : Theme.card
+                            color: key.focused ? Theme.focusFill : key.mode ? "transparent" : Theme.card
                             visible: true
                             focused: key.focused
                         }
 
-                        Label {
+                        Row {
                             anchors.centerIn: parent
-                            text: key.spec.label !== undefined ? key.spec.label : panel.valueOf(key.spec)
-                            color: key.latched ? Theme.accent : Theme.text
-                            font.pixelSize: Theme.dp((key.spec.label !== undefined && key.spec.label.length > 1 ? 28 : 34) * panel.scale)
+                            spacing: Theme.dp(2)
+
+                            Canvas {
+                                id: arrow
+
+                                readonly property color ink: key.latched ? Theme.accent : Theme.text
+
+                                visible: key.spec.action === "shift"
+                                width: Theme.dp(44 * panel.scale)
+                                height: width
+                                onInkChanged: requestPaint()
+                                onWidthChanged: requestPaint()
+                                onPaint: {
+                                    var ctx = getContext("2d");
+                                    ctx.reset();
+                                    var s = width / 24;
+                                    ctx.strokeStyle = ink;
+                                    ctx.fillStyle = ink;
+                                    ctx.lineWidth = 1.8 * s;
+                                    ctx.lineJoin = "round";
+                                    ctx.beginPath();
+                                    ctx.moveTo(12 * s, 2.5 * s);
+                                    ctx.lineTo(22 * s, 12.5 * s);
+                                    ctx.lineTo(16.5 * s, 12.5 * s);
+                                    ctx.lineTo(16.5 * s, 21 * s);
+                                    ctx.lineTo(7.5 * s, 21 * s);
+                                    ctx.lineTo(7.5 * s, 12.5 * s);
+                                    ctx.lineTo(2 * s, 12.5 * s);
+                                    ctx.closePath();
+                                    if (key.latched)
+                                        ctx.fill();
+                                    ctx.stroke();
+                                }
+                            }
+
+                            Label {
+                                visible: !arrow.visible
+                                text: key.spec.label !== undefined ? key.spec.label : panel.valueOf(key.spec)
+                                color: key.latched ? Theme.accent : Theme.text
+                                font.pixelSize: Theme.dp((key.spec.label !== undefined && key.spec.label.length > 1 ? 32 : 40) * panel.scale)
+                            }
+
+                            Badge {
+                                visible: key.spec.badge !== undefined
+                                glyph: key.spec.badge || "Y"
+                            }
                         }
 
                         Rectangle {
-                            visible: key.latched
+                            visible: key.latched && key.mode
                             anchors.bottom: parent.bottom
-                            anchors.bottomMargin: Theme.dp(8)
+                            anchors.bottomMargin: Theme.dp(10 * panel.scale)
                             anchors.horizontalCenter: parent.horizontalCenter
-                            width: Theme.dp(52)
+                            width: Theme.dp(64 * panel.scale)
                             height: Theme.dp(3)
                             color: Theme.accent
                         }
@@ -239,10 +318,10 @@ Rectangle {
         }
     }
 
-    Column {
+    Item {
         x: panel.sideX
         y: panel.keysTop
-        spacing: panel.keyGap
+        visible: panel.built
 
         Repeater {
             model: panel.built ? panel.side : []
@@ -252,14 +331,16 @@ Rectangle {
 
                 readonly property bool focused: panel.cursorShown && panel.zone === "side" && panel.sideIndex === index
                 readonly property bool ok: modelData.action === "ok"
+                readonly property int slot: ok ? (panel.numeric ? 1 : 3) : 0
 
+                y: slot * (panel.keyH + panel.keyGap)
                 width: panel.sideW
                 height: ok ? panel.keyH * 2 + panel.keyGap : panel.keyH
 
                 FocusPill {
                     anchors.fill: parent
                     radius: Theme.dp(4)
-                    color: sideKey.ok ? Theme.barBlue : sideKey.focused ? Theme.focusFill : Theme.card
+                    color: sideKey.focused ? Theme.focusFill : Theme.card
                     visible: true
                     focused: sideKey.focused
                 }
@@ -267,9 +348,31 @@ Rectangle {
                 Label {
                     anchors.centerIn: parent
                     text: modelData.label
-                    color: sideKey.ok ? Theme.accentInk : Theme.text
-                    font.pixelSize: Theme.dp((modelData.label.length > 1 ? 30 : 38) * panel.scale)
+                    font.pixelSize: Theme.dp((modelData.label.length > 1 ? 34 : 40) * panel.scale)
                 }
+
+                Badge {
+                    anchors.right: parent.right
+                    anchors.top: parent.top
+                    anchors.margins: Theme.dp(8 * panel.scale)
+                    glyph: modelData.badge
+                }
+            }
+        }
+
+        Rectangle {
+            y: panel.keyH + panel.keyGap
+            width: panel.sideW
+            height: panel.keyH * 2 + panel.keyGap
+            radius: Theme.dp(4)
+            visible: !panel.numeric
+            color: "#e3e3e3"
+
+            Label {
+                anchors.centerIn: parent
+                text: "Return"
+                color: Theme.textDisabled
+                font.pixelSize: Theme.dp(34 * panel.scale)
             }
         }
     }

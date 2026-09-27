@@ -245,7 +245,7 @@ FocusScope {
         anchors.right: parent.right
         icon: "album"
         title: "Album"
-        trailing: (page.oldestFirst ? "Oldest First" : "Newest First") + "  |  " + (page.kindFilter === "" ? "Everything" : page.kindFilter === "shot" ? "Screenshots" : "Videos") + "  |  " + page.filterName + " (" + page.shown.length + ")"
+        trailing: (page.oldestFirst ? "Oldest First" : "Newest First") + " | " + (page.kindFilter === "" ? "Everything" : page.kindFilter === "shot" ? "Screenshots" : "Videos") + " | " + page.filterName + " (" + page.shown.length + ")"
     }
 
     Rail {
@@ -355,19 +355,18 @@ FocusScope {
             Rectangle {
                 anchors.right: parent.right
                 anchors.bottom: parent.bottom
-                anchors.margins: Theme.dp(6)
                 visible: entry.kind === "recording"
-                width: durationText.implicitWidth + Theme.dp(18)
-                height: Theme.dp(34)
-                radius: Theme.dp(3)
-                color: Qt.rgba(0, 0, 0, 0.55)
+                width: durationText.implicitWidth + Theme.dp(20)
+                height: Theme.dp(38)
+                color: Qt.rgba(0, 0, 0, 0.6)
 
                 Label {
                     id: durationText
                     anchors.centerIn: parent
-                    text: entry.durationText || ""
+                    // The console's run-together units: 30sec, 5min, 1h10min
+                    text: String(entry.durationText || "").replace(/^(\d+) h (\d+)$/, "$1h$2min").replace(/ min$/, "min").replace(/ s$/, "sec")
                     color: "#ffffff"
-                    font.pixelSize: Theme.dp(Theme.fontTiny)
+                    font.pixelSize: Theme.dp(Theme.fontSmall)
                 }
             }
         }
