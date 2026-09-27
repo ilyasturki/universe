@@ -13,9 +13,14 @@ description: Run, drive or screenshot the Universe UI to see a change working. U
 just ui-shot <dir> [keys…]
 ```
 
-Qt's `offscreen` platform, audio unreachable (`PIPEWIRE_REMOTE=/nonexistent`), keys posted after load, `Shot:name.png` saved under `<dir>`, then it quits. `UNIVERSE_UI_SIZE=1280x800` is the Steam Deck's screen (the default is 1920x1080); `UNIVERSE_DECK=oled` plays one to the fake core (its System controls, its glyphs). Use the scratchpad as `<dir>` and Read the PNGs. Keys are Pegasus names (`Right`, `Return`, `Escape`, `I`, `F1`, `Wait:5`…): `--help` on `.venv/bin/universe-ui` lists the script phases, `universe-ui.1.scd` the bindings. `UNIVERSE_UI_ARGS` replaces the default `--fake --no-gamepad` (`UNIVERSE_UI_ARGS="--no-gamepad"` runs the real core on `.dev/`, where `Return` on a game launches it for real — a visible run, see below; `--fake-launch` a fake session; `--theme switch2` the other look).
+Qt's `offscreen` platform, audio unreachable (`PIPEWIRE_REMOTE=/nonexistent`), keys posted after load, `Shot:name.png` saved under `<dir>`, then it quits. `UNIVERSE_UI_SIZE=1280x800` is the Steam Deck's screen (the default is 1920x1080); `UNIVERSE_DECK=oled` plays one to the fake core (its System controls, its glyphs). Use the scratchpad as `<dir>` and Read the PNGs. `UNIVERSE_UI_ARGS` replaces the default `--fake --no-gamepad` (`--no-gamepad` alone runs the real core on `.dev/`; `--fake-launch` a fake session; `--theme switch2` the other look).
 
-Offscreen covers everything drawn in the main window, both themes, the fake and real core, key-driven navigation, and with `UNIVERSE_UI_ARGS="--fake"` the controller screens' fake watcher (`Press:`, `Axis:`) and pad sticks (`Stick:`).
+Offscreen covers everything drawn in the main window, both themes, the fake and real core, key-driven navigation, and with `UNIVERSE_UI_ARGS="--fake"` the controller screens' fake watcher (`Press:`, `Axis:`) and pad sticks (`Stick:`). It draws with the software scenegraph (`Theme.software`): every ShaderEffect is dropped, so covers come out square and masks, blurs and glows are missing.
+## Keys
+
+The names are `KEY_NAMES` in `ui/universe_ui/gamepad.py` (`Right`, `Return`, `Esc`, `I`, `F1`…), and `--help` on `.venv/bin/universe-ui` lists the script phases (`Wait:5`, `Shot:`, `Hold:`…). An unknown name is skipped with an `unknown key` log line while the rest of the script runs on, so after one wrong name every later key lands on a screen the script never planned for.
+
+On the real core, `Return` on a game launches it for real, fullscreen on the user's screen. Send it only onto a focus a `Shot:` from an earlier run confirmed, with the same keys before it.
 
 ## Visible run
 
