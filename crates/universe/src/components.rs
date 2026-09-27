@@ -1242,6 +1242,40 @@ impl Core {
         Ok(())
     }
 
+    /// Returns the versions removed, oldest first.
+    pub async fn component_uninstall(&self, id: &str) -> Result<Vec<String>> {
+        let builds = installed(id);
+        let newest = builds.last().cloned().ok_or_else(|| Error::NotFound(format!("Universe holds no build of {id}")))?;
+        let mut config = self.config.read().await.clone();
+        let chosen = match newest.kind {
+            Kind::Emulator | Kind::Wine => config.runners.get_mut(id).and_then(|t| t.remove("build")).is_some(),
+            Kind::Proton if builds.iter().any(|b| b.version == config.launch.proton) => {
+                config.launch.proton = newest.family.clone();
+                true
+            }
+            _ => false,
+        };
+        let running = self.current().await;
+        if let Some(c) = running.as_ref().filter(|_| newest.kind == Kind::Tool) {
+            return Err(Error::Busy(format!("{} is running: uninstalling {} waits until it ends", c.title, newest.name)));
+        }
+        let pinned = pins(id, newest.kind, &config, &self.games.read().await, running.map(|c| c.id).as_deref());
+        if let Some(v) = pinned.first() {
+            return Err(Error::Busy(format!("{id} {v} is in use: pick another build for what names it first")));
+        }
+        let _job = self.component_job(id)?;
+        if chosen {
+            self.component_use(id, "").await?;
+        }
+        for b in &builds {
+            remove_build(b)?;
+        }
+        std::fs::remove_dir_all(root().join(id))?;
+        relink(id, newest.kind, &newest.bin)?;
+        self.reload_all().await;
+        Ok(builds.into_iter().map(|b| b.version).collect())
+    }
+
     pub async fn component_update(&self, id: &str, mut progress: Option<Progress<'_, '_>>) -> Result<Vec<serde_json::Value>> {
         if let Some(c) = self.current().await {
             return Err(Error::Busy(format!("{} is running: updates wait until it ends", c.title)));
@@ -1610,6 +1644,55 @@ mod tests {
         assert_eq!(installed("eden").iter().map(|b| b.version.as_str()).collect::<Vec<_>>(), ["0.2.1", "0.3.0"]);
         let rolling_only = entry("RPCS3", Kind::Emulator, vec![Build { channel: Channel::Rolling, ..build("0.0.38-1", "2026-09-26", vec![any("r")]) }]);
         assert_eq!(rolling_only.latest().unwrap().version, "0.0.38-1", "rolling where upstream ships nothing else");
+    }
+
+    #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
+    async fn an_uninstall_takes_every_build_and_the_folder_unless_a_game_names_one() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        for (var, sub) in [
+            ("UNIVERSE_DATA_HOME", "data"),
+            ("UNIVERSE_CACHE_HOME", "cache"),
+            ("UNIVERSE_STATE_HOME", "state"),
+            ("UNIVERSE_CONFIG_HOME", "config"),
+            ("UNIVERSE_MODULES_PATH", "modules"),
+            ("UNIVERSE_SOURCES_PATH", "sources"),
+        ] {
+            std::fs::create_dir_all(dir.path().join(sub)).unwrap();
+            std::env::set_var(var, dir.path().join(sub));
+        }
+        std::fs::write(dir.path().join("config/config.toml"), "[runners.xemu]\nbuild = \"0.8.1\"\n[modules]\nenabled = []\n").unwrap();
+        fake_build("xemu", Kind::Emulator, "0.8.1", "2026-05-01");
+        fake_build("xemu", Kind::Emulator, "0.8.136", "2026-06-08");
+        set_skipped("xemu", "0.9.0", true).unwrap();
+        let mut g = crate::game::Game::new("Halo");
+        g.launch.runner = "xemu".into();
+        g.launch.runner_build = "0.8.136".into();
+        g.save().unwrap();
+        let core = crate::core::Core::open_with(Config::load().unwrap(), crate::host::Host::memory().0).await.unwrap();
+        assert!(matches!(core.component_uninstall("xemu").await, Err(Error::Busy(_))), "a game runs on 0.8.136");
+        assert_eq!(installed("xemu").len(), 2, "refused before anything goes");
+        assert_eq!(build_setting(&Config::load().unwrap(), "xemu"), "0.8.1");
+
+        g.launch.runner_build = String::new();
+        g.save().unwrap();
+        core.reload_all().await;
+        assert_eq!(core.component_uninstall("xemu").await.unwrap(), ["0.8.1", "0.8.136"], "the global setting's 0.8.1 goes too");
+        assert!(!root().join("xemu").exists(), "the folder goes, its skipped versions with it");
+        assert_eq!(build_setting(&Config::load().unwrap(), "xemu"), "", "back on the system's program");
+        assert!(matches!(core.component_uninstall("xemu").await, Err(Error::NotFound(_))));
+
+        fake_build("gogdl", Kind::Tool, "1.3.0", "");
+        let sidecar = root().join("gogdl/1.3.0.json");
+        let mut tool: serde_json::Value = serde_json::from_slice(&std::fs::read(&sidecar).unwrap()).unwrap();
+        tool["bin"] = "gogdl".into();
+        std::fs::write(&sidecar, serde_json::to_vec(&tool).unwrap()).unwrap();
+        relink("gogdl", Kind::Tool, "gogdl").unwrap();
+        let link = crate::tools::dir().join("gogdl");
+        assert!(link.symlink_metadata().is_ok());
+        core.component_uninstall("gogdl").await.unwrap();
+        assert!(link.symlink_metadata().is_err(), "a tool's link in <data>/bin goes with it");
     }
 
     #[test]

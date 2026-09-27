@@ -167,6 +167,9 @@ impl Core {
     fn component_remove(&self, py: Python<'_>, id: String, version: String) -> PyResult<()> {
         self.run(py, |c| async move { c.component_remove(&id, &version).await })
     }
+    fn component_uninstall(&self, py: Python<'_>, id: String) -> PyResult<Vec<String>> {
+        self.run(py, |c| async move { c.component_uninstall(&id).await })
+    }
     #[pyo3(signature = (id=String::new(), progress=None))]
     fn component_update(&self, py: Python<'_>, id: String, progress: Option<Py<PyAny>>) -> PyResult<Py<PyAny>> {
         self.value(py, |c| async move {

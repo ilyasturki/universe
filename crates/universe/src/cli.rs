@@ -462,6 +462,8 @@ pub enum ComponentCmd {
     },
     /// Remove a build Universe installed
     Remove { id: String, version: String },
+    /// Remove every build Universe installed of a component
+    Uninstall { id: String },
     /// Install what is newer than Universe's builds, keeping the previous one; every component when no id is given
     Update { id: Option<String> },
     /// Remove Universe's newest build and never take its version again
@@ -1811,6 +1813,10 @@ async fn component(core: Core, action: ComponentCmd, json: bool) -> anyhow::Resu
         ComponentCmd::Remove { id, version } => {
             core.component_remove(&id, &version).await?;
             report(json, true, &format!("{id} {version} removed"));
+        }
+        ComponentCmd::Uninstall { id } => {
+            let gone = core.component_uninstall(&id).await?;
+            report(json, true, &format!("{id} uninstalled: {} removed", gone.join(", ")));
         }
         ComponentCmd::Update { id } => {
             let mut p = progress_printer(json);
