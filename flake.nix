@@ -149,7 +149,16 @@
           '';
         };
       modulesPkg = treePkg "modules" ./modules;
-      sourcesPkg = treePkg "sources" ./sources;
+      # comet's release, not nixpkgs' comet-gog: that package ships no Windows side
+      galaxyServiceStub = pkgs.fetchurl {
+        url = "https://github.com/imLinguin/comet/releases/download/v0.3.2/GalaxyCommunication-dummy.exe";
+        hash = "sha256-x2lSZ9o2OoYa+Z25XK/mi3Mq50PlgwtP7qG8fudF+Z0=";
+      };
+      sourcesPkg = (treePkg "sources" ./sources).overrideAttrs (old: {
+        installPhase = old.installPhase + ''
+          install -Dm644 ${galaxyServiceStub} $out/share/universe/sources/gog/GalaxyCommunication.exe
+        '';
+      });
 
       universe-shell-extension = pkgs.stdenvNoCC.mkDerivation (finalAttrs: {
         pname = "universe-shell-extension";
@@ -170,7 +179,10 @@
         trash-cli
         util-linux
       ];
-      sourceRuntime = with pkgs; [ gogdl ];
+      sourceRuntime = with pkgs; [
+        gogdl
+        comet-gog
+      ];
       runtimePath = lib.makeBinPath (
         moduleRuntime
         ++ sourceRuntime

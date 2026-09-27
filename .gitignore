@@ -8,3 +8,4 @@ __pycache__/
 /.dev
 /.dev-*
 /.claude/settings.local.json
+/sources/gog/GalaxyCommunication.exe

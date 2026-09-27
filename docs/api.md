@@ -450,6 +450,29 @@ store's "withheld until unlocked": a frontend masks the name and description of 
 cache is rewritten by a rename, so the `games/<id>/` watch sees every unlock; the game's
 `achievements` summary follows it.
 
+The **gog** source fills it. Its `achievements <gog id>` verb asks GOG's gameplay API with a token
+for the game's own Galaxy client (its id and secret are read once from the build manifest and kept
+in `clients.json`; gogdl issues the token), paging through the list. For a game with the Galaxy SDK
+(`Galaxy.dll`, `Galaxy64.dll`, `libGalaxy.so` or `libGalaxy64.so` in its folder or up to three folders down) and its
+game-scope `achievements` setting on (the default), its session hooks run **comet**, the open
+implementation of GOG Galaxy's communication service, so the SDK in the game has something to talk
+to: `pre-launch` stops any `universe-comet.service` left over and starts one (`systemd-run --user`,
+`comet --from-heroic`, its config pointed at a folder whose `heroic/gog_store/auth.json` links to
+gogdl's token file, so no token rides on a command line), then waits up to 5 s for its port. comet
+listens on 127.0.0.1:9977 alone, so there is one at a time. `post-launch`, bound to the game's unit,
+reads comet's store (`$XDG_DATA_HOME/comet/gameplay/<client>/<user>/gameplay.db`) every 2 s and
+files each unlock of this session with `achievement-unlocked`; `session-end` stops comet;
+`post-process` refreshes the cache from the store. comet syncs an unlock to GOG as it happens, or on
+the next run when offline. Without comet installed, or without the SDK in the game, the hooks do
+nothing; `doctor`'s `gog-comet` check says when the setting is on and comet is missing. Some SDKs
+(Cuphead's) talk only once a `GalaxyCommunication` Windows service is registered, so for a Proton or
+Wine game `pre-launch` first copies comet's do-nothing stand-in (`GalaxyCommunication.exe` in the
+source's folder, fetched from comet's release by the flake) to
+`C:\ProgramData\GOG.com\Galaxy\redists\` in the prefix, then runs `sc create GalaxyCommunication`
+and sets `HKLM\SOFTWARE\WOW6432Node\GOG.com\GalaxyClient\paths` through the game's runner
+(`PROTON_VERB=run`), each at most 10 s and only while `system.reg` lacks it. A prefix not made yet
+gets it on the next launch.
+
 ## Runners
 
 A runner is what starts a game: `proton` (through umu-run), `wine`, `linux` (the program itself),

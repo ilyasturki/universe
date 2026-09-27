@@ -1,0 +1,6 @@
+#!/usr/bin/env python3
+import os
+import sys
+
+source = os.path.join(os.path.dirname(os.path.abspath(__file__)), "source")
+os.execv(sys.executable, [sys.executable, source, "post-launch"])
