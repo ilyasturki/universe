@@ -1,6 +1,6 @@
 import re
 
-from _common import COLONS, JOURNAL_LANGUAGES, LANG_ENGLISH, fmt_duration, fmt_time, journal_lang, label_alt, log
+from _common import COLONS, JOURNAL_LANGUAGES, LANG_ENGLISH, fmt_duration, fmt_time, journal_lang, log, next_label_alt
 
 LOCATING_WEB = (
     "Locating: if the game has an identifiable progression, use the web search (guide, wiki, walkthrough) to place precisely where the player stands, "
@@ -190,7 +190,7 @@ def build_user_prompt(title, start, end, duration_s, session_number, total_sec, 
     )
 
 
-NEXT_UP_RE = re.compile(rf"^\*\*(?:{label_alt('next')}){COLONS}\*\*\s*(.+?)\s*$", re.MULTILINE)
+NEXT_UP_RE = re.compile(rf"^\*\*(?:{next_label_alt()}){COLONS}\*\*\s*(.+?)\s*$", re.MULTILINE)
 STALL_OPENER = re.compile(
     r"^\s*(?:je\s+(?:vais|commence|dois|vérifie|verifie)|i(?:'|’)?(?:ll|m going to|m about to| will| am going to| need to)|i\s+will|let me|first,? let me)\b",
     re.IGNORECASE,

@@ -35,7 +35,6 @@ from _common import (
     validate_entry,
     write_json,
 )
-from note import write_note
 
 EX_TEMPFAIL = 75
 QUOTA_FILE = "quota.json"
@@ -481,15 +480,6 @@ def journal_session(settings, sid, start_id, game_id, provider, journal_dir, dat
     remove(state_path(journal_dir, sid, "pending"))
     if merged:
         write_json(memory_path(data_dir, game_id), merged)
-    if setting_bool(settings, "markdown_export", True):
-        entries = [e for e in entries if e["session"] != sid] + [entry]
-        try:
-            path, changed = write_note(
-                entries, sessions, title, journal_dir, env("SCREENSHOTS_DIR"), os.path.join(os.path.expanduser(os.environ["UNIVERSE_JOURNAL_ROOT"]), game_id)
-            )
-            log(f"markdown note {'updated' if changed else 'unchanged'}: {path}")
-        except OSError as e:
-            log(f"markdown render failed: {e}")
 
 
 def ask(opts, data_dir, *, title, system, brief, images, work_dir, forced_lang, pending):

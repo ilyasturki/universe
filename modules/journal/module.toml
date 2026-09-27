@@ -70,13 +70,6 @@ label = "File holding the API key, read instead of the key above"
 scope = "global"
 
 [[settings]]
-key = "markdown_export"
-type = "bool"
-default = true
-label = "Render the Markdown note for Obsidian"
-scope = "global"
-
-[[settings]]
 key = "web_search"
 type = "bool"
 default = true

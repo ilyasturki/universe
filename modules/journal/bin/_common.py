@@ -6,7 +6,7 @@ import re
 import subprocess
 import sys
 import time
-from datetime import datetime, timedelta
+from datetime import datetime
 
 SESSION_ID_RE = re.compile(r"^(\d{4})(\d{2})(\d{2})-(\d{2})(\d{2})(\d{2})$")
 
@@ -115,22 +115,8 @@ def fmt_duration(total_sec):
     return f"{m} min"
 
 
-def game_note_name(title):
-    safe = re.sub(r"[\\/:#^\[\]|]", " ", str(title or ""))
-    safe = re.sub(r"\s+", " ", safe).strip()
-    return safe or "Journal"
-
-
-LABELS = {
-    "fr": {"journal": "Journal", "recording": "Enregistrement", "next": "Reprise", "frames": "Images extraites de l'enregistrement", "colon": " :"},
-    "en": {"journal": "Journal", "recording": "Recording", "next": "Next up", "frames": "Frames from the recording", "colon": ":"},
-    "es": {"journal": "Diario", "recording": "Grabación", "next": "Retomar", "frames": "Imágenes extraídas de la grabación", "colon": ":"},
-    "de": {"journal": "Journal", "recording": "Aufnahme", "next": "Weiter", "frames": "Bilder aus der Aufnahme", "colon": ":"},
-    "it": {"journal": "Diario", "recording": "Registrazione", "next": "Ripresa", "frames": "Immagini estratte dalla registrazione", "colon": ":"},
-    "pt": {"journal": "Diário", "recording": "Gravação", "next": "Retomar", "frames": "Imagens extraídas da gravação", "colon": ":"},
-    "ja": {"journal": "日誌", "recording": "録画", "next": "次回", "frames": "録画から抽出した画像", "colon": "："},
-}
-JOURNAL_LANGUAGES = list(LABELS)
+NEXT_LABELS = {"fr": "Reprise", "en": "Next up", "es": "Retomar", "de": "Weiter", "it": "Ripresa", "pt": "Retomar", "ja": "次回"}
+JOURNAL_LANGUAGES = list(NEXT_LABELS)
 COLONS = r"[   ]?[:：]"
 
 LANG_NAMES = {
@@ -149,13 +135,13 @@ LANG_ENGLISH = {"en": "English", "fr": "French", "es": "Spanish", "de": "German"
 
 def journal_lang(lang):
     raw = str(lang or "").strip().lower()
-    if raw in LABELS:
+    if raw in NEXT_LABELS:
         return raw
     return LANG_BY_NAME.get(raw, "en")
 
 
-def label_alt(key):
-    return "|".join(re.escape(v) for v in dict.fromkeys(labels[key] for labels in LABELS.values()))
+def next_label_alt():
+    return "|".join(re.escape(v) for v in dict.fromkeys(NEXT_LABELS.values()))
 
 
 def read_jsonl(path):
@@ -182,19 +168,6 @@ def read_sessions(journal_dir):
         if sid and sid not in sessions:
             sessions[sid] = s
     return sessions
-
-
-def session_span(session, sid):
-    start = parse_rfc3339((session or {}).get("started_at")) or parse_session_id(sid)
-    duration = (session or {}).get("duration_s")
-    end = parse_rfc3339((session or {}).get("ended_at"))
-    if start is None:
-        return None, None, 0
-    if duration is None:
-        duration = int((end - start).total_seconds()) if end else 0
-    if end is None:
-        end = start + timedelta(seconds=int(duration or 0))
-    return start, end, int(duration or 0)
 
 
 ENTRY_KEYS = ("session", "game", "written_at", "lang", "title", "provider", "paragraphs", "next_up", "images")

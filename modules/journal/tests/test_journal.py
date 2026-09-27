@@ -19,7 +19,6 @@ BIN_DIR = MODULE_DIR / "bin"
 sys.path.insert(0, str(BIN_DIR))
 
 import images as img  # noqa: E402
-import note  # noqa: E402
 import prompt as pr  # noqa: E402
 import providers  # noqa: E402
 from _common import validate_entry  # noqa: E402
@@ -176,7 +175,6 @@ def run_process(tmp_path, fakebin, settings, extra_env=None, recording=None):
             "JOURNAL_DIR": str(journal_dir),
             "SCREENSHOTS_DIR": str(tmp_path / "games" / "testgame" / "screenshots"),
             "MODULE_DATA_DIR": str(tmp_path / "data"),
-            "UNIVERSE_JOURNAL_ROOT": str(tmp_path / "root"),
             "MODULE_SETTINGS_JSON": json.dumps({"provider": "stub", "max_images": 40, **settings}),
         }
     )
@@ -256,8 +254,8 @@ def test_stub_pipeline_writes_entry_note_and_memory(tmp_path, fakebin):
     assert entry["written_at"][:10] == datetime.now().strftime("%Y-%m-%d") and entry["written_at"][19] in "+-"
     assert datetime.fromisoformat(entry["started_at"]) == datetime.fromisoformat("2026-09-11T12:00:00+02:00")
     assert datetime.fromisoformat(entry["ended_at"]) == datetime.fromisoformat("2026-09-11T12:03:20+02:00") and entry["duration_s"] == 200
-    shots = [i for i in entry["images"] if note.SHOT_IMAGE_RE.search(i)]
-    frames = [i for i in entry["images"] if not note.SHOT_IMAGE_RE.search(i)]
+    shots = [i for i in entry["images"] if "/" not in i]
+    frames = [i for i in entry["images"] if "/" in i]
     assert shots == ["20260911-120130.png", "20260911-120245.png"]
     assert 1 <= len(frames) <= img.GALLERY_FRAME_TARGET - 2
     assert frames == [f"attachments/{SID}-{n}.png" for n in range(1, len(frames) + 1)]
@@ -273,28 +271,19 @@ def test_stub_pipeline_writes_entry_note_and_memory(tmp_path, fakebin):
     memory = json.loads((tmp_path / "data" / "memory" / "testgame.json").read_text())
     assert memory["profile"] == "arcade" and memory["language"] == "en" and "Stub Hero" in memory["entities"]["characters"]
 
-    note_path = tmp_path / "root" / "testgame" / "Test Game Redux.md"
-    text = note_path.read_text()
-    assert text.startswith(
-        '---\ngame: "Test Game: Redux"\nsessions: 1\nfirst_played: 2026-09-11\nlast_played: 2026-09-11\ncover: 20260911-120130.png\n---\n\n# Journal: Test Game: Redux\n\n'
-    )
-    assert f"## #1 · Stub session of Test Game: Redux\n*09/11/26 · 12:00–12:03 · 3 min*\n<!-- session: {SID} -->\n\n" in text
-    assert "\n\n**Next up:** Resume at the first checkpoint and keep going.\n\n**Recording:** [rec.mkv](file://" in text
-    assert "\n\n*Frames from the recording*\n\n![](attachments/" in text
-    assert all((note_path.parent / f).exists() for f in entry["images"])
     assert list((tmp_path / "data" / "work").iterdir()) == []
 
     res2, _ = run_process(tmp_path, fakebin, {}, {"FAKE_UNIVERSE_EXIT": "1"}, recording=rec)
     assert res2.returncode == 0 and "already exists" in res2.stderr
-    assert note_path.read_text() == text and state_files(journal_dir) == []
+    assert state_files(journal_dir) == []
 
 
 def test_stub_pipeline_hands_off_to_the_core(tmp_path, fakebin):
     add_shot(tmp_path)
-    res, journal_dir = run_process(tmp_path, fakebin, {"markdown_export": False})
+    res, journal_dir = run_process(tmp_path, fakebin, {})
     assert res.returncode == 0, res.stderr
     assert not (journal_dir / f"{SID}.json").exists()
-    assert "journal-add" in res.stderr and not (tmp_path / "root").exists()
+    assert "journal-add" in res.stderr
     entry = json.loads((fakebin / "universe.args").read_text().splitlines()[2])
     assert entry["provider"] == "stub" and entry["images"] == [SHOT]
     pending_seen_by_core(fakebin)
@@ -305,7 +294,7 @@ def test_no_recording_and_no_screenshot_writes_nothing(tmp_path, fakebin):
     res, journal_dir = run_process(tmp_path, fakebin, {})
     assert res.returncode == 0, res.stderr
     assert "nothing to journal" in res.stderr
-    assert not (fakebin / "universe.args").exists() and not (tmp_path / "root").exists()
+    assert not (fakebin / "universe.args").exists()
     assert list(journal_dir.iterdir()) == []
 
 
@@ -313,7 +302,7 @@ def test_core_rejection_marks_the_session_failed(tmp_path, fakebin):
     add_shot(tmp_path)
     res, journal_dir = run_process(tmp_path, fakebin, {}, {"FAKE_UNIVERSE_EXIT": "1", "FAKE_UNIVERSE_STDERR": "universe: invalid: bad"})
     assert res.returncode == 1 and not (journal_dir / f"{SID}.json").exists()
-    assert not (tmp_path / "data" / "memory").exists() and not (tmp_path / "root").exists()
+    assert not (tmp_path / "data" / "memory").exists()
     assert failed_file(journal_dir) == "the core rejected the entry"
 
 
@@ -372,132 +361,6 @@ def test_disabled_and_forced_language(tmp_path, fakebin):
     assert res.returncode == 0, res.stderr
     entry = json.loads((journal_dir / f"{SID}.json").read_text())
     assert entry["lang"] == "fr" and entry["images"] == [SHOT]
-    text = (tmp_path / "root" / "testgame" / "Test Game Redux.md").read_text()
-    assert "# Journal : Test Game: Redux\n\n## Stub session of Test Game: Redux\n*09/11/26 · 12:00–12:03 · 3 min*\n<!-- session:" in text
-    assert "\n**Reprise :** Resume at the first checkpoint and keep going.\n" in text
-
-
-def sample_entries():
-    return [
-        {
-            "session": "20260301-210000",
-            "game": "sample",
-            "written_at": "2026-03-01T22:30:00+01:00",
-            "lang": "en",
-            "title": "Into the Dome",
-            "provider": "import",
-            "paragraphs": [
-                "Zachariah reached the Source after three failed runs.",
-                "- **Main quest:** Cleared the gate.",
-                "- **Side quest:** Talked to Amelia.",
-                "Then the patrol reset.",
-            ],
-            "next_up": "Return to the Exchange and talk to Amelia.",
-            "images": ["20260301-211500.png", "attachments/20260301-210000-1.png", "attachments/frames/frame-20260301-210000-02.jpg"],
-        },
-        {
-            "session": "20260215-183000",
-            "game": "sample",
-            "written_at": "2026-02-15T19:45:00+01:00",
-            "lang": "fr",
-            "title": "Trois contrats et Port-péril",
-            "provider": "import",
-            "paragraphs": ["Le duo a enchaîné les sauvetages.", "- **Boss :** Tu as vaincu Corbin Claquebec."],
-            "next_up": "Tu reprendras dans le Mausolée III.",
-            "images": ["attachments/frames/frame-20260215-183000-01.jpg"],
-        },
-        {
-            "session": "20260110-000500",
-            "game": "sample",
-            "written_at": "2026-01-10T00:07:00+01:00",
-            "lang": "en",
-            "title": "",
-            "provider": "import",
-            "paragraphs": [],
-            "next_up": "",
-            "images": [],
-        },
-        {
-            "session": "20251220-120000",
-            "game": "sample",
-            "written_at": "2025-12-20T12:01:00+01:00",
-            "lang": "en",
-            "title": "",
-            "provider": "none",
-            "paragraphs": ["This session’s recording holds no picture and no screenshot covers it, so there is nothing to summarize."],
-            "next_up": "",
-            "images": [],
-        },
-        {
-            "session": "20251201-230000",
-            "game": "sample",
-            "written_at": "2025-12-02T00:10:00+01:00",
-            "lang": "en",
-            "title": "First Glimpse",
-            "provider": "import",
-            "paragraphs": ["You reached the title screen."],
-            "next_up": "Press any key.",
-            "images": ["20251201-230100.png"],
-        },
-    ]
-
-
-def sample_sessions():
-    def s(sid, started, ended, dur, rec):
-        return {"session": sid, "game": "sample", "started_at": started, "ended_at": ended, "duration_s": dur, "source": "import-journal", "recording": rec}
-
-    return [
-        s("20260301-210000", "2026-03-01T21:00:00+01:00", "2026-03-01T22:30:00+01:00", 5400, "/mnt/recordings/games/sample/20260301-210000.mkv"),
-        s("20260215-183000", "2026-02-15T18:30:00+01:00", "2026-02-15T19:45:00+01:00", 4500, "/mnt/recordings/games/sample/003-20260215-183000-1h15m.mkv"),
-        s("20260110-000500", "2026-01-10T00:05:00+01:00", "2026-01-10T00:07:00+01:00", 120, "/mnt/recordings/games/sample/002-20260110-000500-2m.mkv"),
-        s("20251220-120000", "2025-12-20T12:00:00+01:00", "2025-12-20T12:01:00+01:00", 60, "/mnt/recordings/games/sample/001-20251220-120000-1m.mkv"),
-        s("20251201-230000", "2025-12-01T23:00:00+01:00", "2025-12-02T00:10:00+01:00", 4200, None),
-    ]
-
-
-def test_yaml_and_uri_helpers_match_the_core():
-    # The same table as journal.rs's helpers_match_python: the two renderers must agree byte for byte.
-    for typed in [
-        "#DRIVE",
-        "0x1F",
-        "0o17",
-        "0b101",
-        "1_000",
-        ".5",
-        "1e3",
-        "1:30",
-        "2024-05-01",
-        "2024-5-1 10:00",
-        ".inf",
-        ".NaN",
-        "On",
-        "y",
-        "N",
-        "1979",
-        "- x",
-        "Sample: The Game",
-    ]:
-        assert note.yaml_str(typed) == json.dumps(typed, ensure_ascii=False), typed
-    for plain in ["Cuphead", "Cuphead 2", "Half-Life 2", "1979 Revolution", "F.E.A.R.", "v1.0", "2024 Game", "Portal 2", "2001-a-space"]:
-        assert note.yaml_str(plain) == plain
-    assert note.file_uri("/mnt/rec (1)/é.mkv") == "file:///mnt/rec%20%281%29/%C3%A9.mkv"
-    assert note.file_uri("/mnt/#DRIVE/What? A Game/x.mkv") == "file:///mnt/%23DRIVE/What%3F%20A%20Game/x.mkv"
-
-
-def test_render_note():
-    text = note.render_note(sample_entries(), {s["session"]: s for s in sample_sessions()}, "Sample: The Game")
-    assert text.startswith(
-        '---\ngame: "Sample: The Game"\nsessions: 5\nfirst_played: 2025-12-01\nlast_played: 2026-03-01\ncover: 20260301-211500.png\n---\n\n# Journal: Sample: The Game\n\n'
-    )
-    assert "\n## #4 · Into the Dome\n*03/01/26 · 21:00–22:30 · 1 h 30 min*\n" in text
-    assert "\n## #3 · Trois contrats et Port-péril\n" in text and "\n**Reprise :** Tu reprendras" in text and "\n**Enregistrement :** [003-" in text
-    assert "\n## #2 · 01/10/26 · 00:05–00:07 · 2 min\n<!-- session: 20260110-000500 -->\n\n**Recording:** [002-" in text
-    assert "\n## #1 · 12/20/25 · 12:00–12:01 · 1 min\n<!-- session: 20251220-120000 -->\n\n*This session’s recording" in text
-    assert "\n## First Glimpse\n*12/01/25 · 23:00–00:10 · 1 h 10 min*\n" in text
-    assert (
-        "![](20260301-211500.png)\n\n*Frames from the recording*\n\n![](attachments/20260301-210000-1.png)\n![](attachments/frames/frame-20260301-210000-02.jpg)\n"
-        in text
-    )
 
 
 def test_codex_exec_arguments(tmp_path, monkeypatch):
@@ -718,7 +581,7 @@ def test_a_rejected_entry_is_kept_for_the_next_run(tmp_path, fakebin):
     """The answer the model gave outlives a failed handoff: the next run delivers it without asking again."""
     add_shot(tmp_path)
     answering_codex(fakebin)
-    settings = {"provider": "codex", "markdown_export": False}
+    settings = {"provider": "codex"}
     res, journal_dir = run_process(tmp_path, fakebin, settings, {"FAKE_UNIVERSE_EXIT": "1", "FAKE_UNIVERSE_STDERR": "universe: invalid: bad"})
     assert res.returncode == 1 and failed_file(journal_dir) == "the core rejected the entry"
     saved = json.loads((tmp_path / "data" / "work" / SID / "answer.json").read_text())
@@ -736,13 +599,13 @@ def test_a_rejected_entry_is_kept_for_the_next_run(tmp_path, fakebin):
 
 def test_a_rewrite_replaces_the_entry_and_asks_again(tmp_path, fakebin):
     add_shot(tmp_path)
-    res, journal_dir = run_process(tmp_path, fakebin, {"markdown_export": False}, {"FAKE_UNIVERSE_EXIT": "1"})
+    res, journal_dir = run_process(tmp_path, fakebin, {}, {"FAKE_UNIVERSE_EXIT": "1"})
     assert res.returncode == 0 and (journal_dir / f"{SID}.json").exists()
     first = json.loads((journal_dir / f"{SID}.json").read_text())
 
-    res, _ = run_process(tmp_path, fakebin, {"markdown_export": False}, {"FAKE_UNIVERSE_EXIT": "1"})
+    res, _ = run_process(tmp_path, fakebin, {}, {"FAKE_UNIVERSE_EXIT": "1"})
     assert "already exists" in res.stderr
-    res, _ = run_process(tmp_path, fakebin, {"markdown_export": False}, {"FAKE_UNIVERSE_EXIT": "1", "JOURNAL_REWRITE": "1"})
+    res, _ = run_process(tmp_path, fakebin, {}, {"FAKE_UNIVERSE_EXIT": "1", "JOURNAL_REWRITE": "1"})
     assert res.returncode == 0, res.stderr
     again = json.loads((journal_dir / f"{SID}.json").read_text())
     assert again["written_at"] >= first["written_at"] and again["title"] == first["title"]
