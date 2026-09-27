@@ -639,16 +639,25 @@ def test_the_dock_renders_over_a_running_game(api, fake, tmp_path, monkeypatch):
     assert 0.3 < covered_fraction(image) < 0.6, "the band covers the lower part of the frame"
     assert image.pixelColor(4, 4).alpha() == 0, "the top of the frame stays clear"
     assert lit_fraction(image, "#000000") > 0.01, "the card and the buttons are drawn on it"
+    ids = [b["id"] for b in dock.property("buttons").toVariant()]
+    assert ids[:4] == ["resume", "home", "quit", "game"], "Quit a button of its own, by Home"
     key(overlay, Qt.Key.Key_Right)
     key(overlay, Qt.Key.Key_Right)
-    assert dock.property("index") == 2
+    key(overlay, Qt.Key.Key_Right)
+    assert dock.property("index") == 3
     key(overlay, Qt.Key.Key_Return)
     assert dock.property("opened") is True, "Game opens its card"
-    assert api.home.pauseOnHome is True
-    assert [c["id"] for c in dock.property("current").toVariant()["children"]] == ["details", "pause", "quit"]
-    key(overlay, Qt.Key.Key_Down)
+    assert [c["id"] for c in dock.property("current").toVariant()["children"]] == ["details", "journal", "recordings", "sessions"]
+    key(overlay, Qt.Key.Key_Escape)
+    dock.setProperty("index", ids.index("perf"))
     key(overlay, Qt.Key.Key_Return)
-    assert api.home.pauseOnHome is False, "past Details sits Pause on HOME, on by default: A turns it off"
+    perf = [c["id"] for c in dock.property("current").toVariant()["children"]]
+    assert perf[-1] == "pause", "Pause on HOME closes the Performance card"
+    assert api.home.pauseOnHome is True
+    for _ in perf[:-1]:
+        key(overlay, Qt.Key.Key_Down)
+    key(overlay, Qt.Key.Key_Return)
+    assert api.home.pauseOnHome is False, "on by default: A turns it off"
     key(overlay, Qt.Key.Key_Escape)
     assert dock.property("opened") is False
     key(overlay, Qt.Key.Key_Escape)
@@ -671,14 +680,24 @@ def test_the_dock_renders_over_a_running_game(api, fake, tmp_path, monkeypatch):
     api.home.openDock()
     overlay.requestActivate()
     pump(300)
-    key(overlay, Qt.Key.Key_Right)
-    key(overlay, Qt.Key.Key_Right)
+    dock.setProperty("index", 3)
     key(overlay, Qt.Key.Key_Return)
     key(overlay, Qt.Key.Key_Return)
     pump(600)
     assert api.home.shown == "launcher" and api.home.open is False, "Details in the Game card goes home"
     assert root.property("tabIndex") == 0 and root.property("detailOpen") is True, "…lands on Home and opens the playing game's details there"
     assert api.home.takeLanding() == "", "taken once"
+    api.home.toGame()
+    pump(400)
+    api.home.openDock()
+    overlay.requestActivate()
+    pump(300)
+    dock.setProperty("index", 3)
+    key(overlay, Qt.Key.Key_Return)
+    key(overlay, Qt.Key.Key_Down)
+    key(overlay, Qt.Key.Key_Return)
+    pump(600)
+    assert api.home.shown == "launcher" and root.property("subOpen") is True, "Journal lands on the playing game's journal"
     api.home.toGame()
     pump(400)
     stop(api)
@@ -706,7 +725,7 @@ def test_the_docks_achievements_open_in_its_tray_while_the_source_tracks_them(ap
     ids = [b["id"] for b in dock.property("buttons").toVariant()]
     assert ids[ids.index("shot") + 1] == "achievements", "a button of its own, by the camera"
     game = next(b for b in dock.property("buttons").toVariant() if b["id"] == "game")
-    assert [c["id"] for c in game["children"]] == ["details", "pause", "quit"]
+    assert [c["id"] for c in game["children"]] == ["details", "journal", "recordings", "sessions"]
     dock.setProperty("index", ids.index("achievements"))
     key(overlay, Qt.Key.Key_Return)
     pump(600)
@@ -865,7 +884,7 @@ def test_home_over_the_poster_raises_home_and_quit_and_home_drops_the_poster(api
     api.home.openDock()
     overlay.requestActivate()
     pump(300)
-    assert [b["id"] for b in dock.property("buttons").toVariant()][:3] == ["resume", "home", "game"], "the full dock once the game is up"
+    assert [b["id"] for b in dock.property("buttons").toVariant()][:4] == ["resume", "home", "quit", "game"], "the full dock once the game is up"
     assert dock.property("index") == 0
     key(overlay, Qt.Key.Key_Escape)
     pump(400)

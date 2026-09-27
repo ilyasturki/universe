@@ -261,10 +261,10 @@ home as the console's does. With no session, Reprise treats it as Start (the gam
 
 The dock is `ui/Dock.qml` in the overlay window: the game's card at the left (its art, PLAYING or
 PAUSED, the title), a row of round buttons at the right (`row` in `Dock.qml`), a group's settings
-in a card above its button — Resume, Home, Game (Details, Pause on HOME, Quit), then Screenshot,
+in a card above its button — Resume, Home, Quit, then Game (Details, Journal, Recordings, Sessions), Screenshot,
 Achievements (while the game's `achievementsTotal` is not 0 and its source's `achievements` switch,
-read through `sourceSettingsOf` on opening, is not off), Performance (MangoHud, FPS limit, Filter, and Sharpness while the filter is FSR or NIS, the two
-gamescope sharpens) and Sound (Volume, where A mutes, and Output). A recording shows as REC by the
+read through `sourceSettingsOf` on opening, is not off), Performance (MangoHud, FPS limit, Filter, Sharpness while the filter is FSR or NIS, the two
+gamescope sharpens, and Pause on HOME) and Sound (Volume, where A mutes, and Output). A recording shows as REC by the
 clock; what it records is the game's Video capture settings. ◀ ▶ move
 along the row or change the focused value, ▲ ▼ the rows of a card, A acts, flips or opens, B closes
 the card or the dock, X takes a screenshot with the band faded out so the shell grabs the game alone.
@@ -279,10 +279,9 @@ the launcher's page (`ui/AchievementList.qml`) with `pane: false` — *n / m* an
 column of rows, each with its description and, once unlocked, its date and a tick on the icon — over
 `api.screens.dockAchievements`, a store of its own so the page left open in the launcher keeps its
 game; ▲ ▼ move, ▲ past the first lowers it. A shot taken meanwhile lands through the screenshots watcher. The
-Game card's Details row calls `toLauncher("details")`: the launcher comes up as for Home, and the
-theme's `landHome` takes the landing (`takeLanding()`, once) and opens the detail on the playing
-game over Home, the frame fading rather than shrinking into the tile; its More › Media holds the
-journal and the recordings.
+Game card's rows call `toLauncher` with their id (`details`, `journal`, `recordings`, `sessions`): the
+launcher comes up as for Home, and the theme's `landHome` takes the landing (`takeLanding()`, once)
+and opens that page on the playing game over Home, the frame fading rather than shrinking into the tile.
 
 The shutter is the launcher's, not the shell's, so it is the same for the dock's camera, a pad
 macro and `universe screenshot`: `api.home` plays `qml/assets/sounds/shutter.wav` and emits

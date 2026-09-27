@@ -45,7 +45,7 @@ FocusScope {
             label: "Resume",
             kind: "action"
         },
-        home,
+        home, quit, "|",
         {
             id: "game",
             icon: "gamepad",
@@ -59,14 +59,25 @@ FocusScope {
                     kind: "action"
                 },
                 {
-                    id: "pause",
-                    icon: "snowflake",
-                    label: "Pause on HOME",
-                    kind: "toggle"
+                    id: "journal",
+                    icon: "book",
+                    label: "Journal",
+                    kind: "action"
                 },
-                quit]
+                {
+                    id: "recordings",
+                    icon: "film",
+                    label: "Recordings",
+                    kind: "action"
+                },
+                {
+                    id: "sessions",
+                    icon: "terminal",
+                    label: "Sessions",
+                    kind: "action"
+                }
+            ]
         },
-        "|",
         {
             id: "shot",
             icon: "camera",
@@ -105,7 +116,14 @@ FocusScope {
                     options: ["", "linear", "nearest", "fsr", "nis", "pixel"],
                     names: ["Default", "Linear", "Nearest", "FSR", "NIS", "Pixel"]
                 }
-            ].concat(sharpens ? [sharpness] : [])
+            ].concat(sharpens ? [sharpness] : []).concat([
+                {
+                    id: "pause",
+                    icon: "snowflake",
+                    label: "Pause on HOME",
+                    kind: "toggle"
+                }
+            ])
         },
         {
             id: "sound",
@@ -326,6 +344,9 @@ FocusScope {
             api.home.toLauncher();
             break;
         case "details":
+        case "journal":
+        case "recordings":
+        case "sessions":
             Sound.enter();
             api.home.toLauncher(item.id);
             break;
@@ -855,7 +876,7 @@ FocusScope {
 
                         readonly property bool focused: dock.opened && index === dock.sub
                         readonly property bool checked: modelData.kind === "toggle" && dock.isOn(modelData)
-                        readonly property color ink: focused ? Theme.onLight : modelData.id === "quit" ? Qt.rgba(0.949, 0.953, 0.961, 0.7) : Theme.text
+                        readonly property color ink: focused ? Theme.onLight : Theme.text
 
                         width: rows.width
                         height: Theme.dp(58)
