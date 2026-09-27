@@ -1,5 +1,6 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
+use std::sync::{Arc, LazyLock, Mutex};
 
 use gtk::prelude::*;
 use gtk::{gdk, glib};
@@ -49,7 +50,13 @@ pub fn forget(path: &str) {
     CACHE.with_borrow_mut(|c| c.textures.retain(|(p, _, _), _| p != path));
 }
 
-/// The picture at `path` scaled down to cover `width`×`height` pixels, decoded off the main loop; `None` when there is none.
+/// The picture when it is decoded already at that size.
+pub fn ready(path: &str, width: u32, height: u32) -> Option<gdk::Texture> {
+    cached(&(path.to_string(), width, height))
+}
+
+/// The picture at `path`, a file or a web address, scaled down to cover `width`×`height` pixels, decoded off the main loop;
+/// `None` when there is none.
 pub async fn texture(path: &str, width: u32, height: u32) -> Option<gdk::Texture> {
     if path.is_empty() {
         return None;
@@ -58,10 +65,72 @@ pub async fn texture(path: &str, width: u32, height: u32) -> Option<gdk::Texture
     if let Some(t) = cached(&key) {
         return Some(t);
     }
-    let file = path.to_string();
+    let file = if path.starts_with("https://") || path.starts_with("http://") { fetched(path).await? } else { path.to_string() };
     let texture = backend::run(async move { tokio::task::spawn_blocking(move || decode(&file, width, height)).await.ok().flatten() }).await?;
     keep(key, texture.clone());
     Some(texture)
+}
+
+/// A web picture's copy in the cache, downloaded the first time.
+async fn fetched(url: &str) -> Option<String> {
+    let name = glib::compute_checksum_for_string(glib::ChecksumType::Sha1, url)?;
+    let path = universe::paths::cache_home().join("remote").join(name.as_str());
+    let file = path.to_string_lossy().into_owned();
+    if path.is_file() {
+        return Some(file);
+    }
+    let url = url.to_string();
+    let result = backend::run(async move {
+        let one = FETCHING.lock().ok()?.entry(url.clone()).or_default().clone();
+        let _only = one.lock().await;
+        if path.is_file() {
+            return Some(());
+        }
+        let _turn = FETCHES.acquire().await.ok()?;
+        let fetched = download(&url, &path).await.map_err(|e| tracing::debug!("{url}: {e}")).ok();
+        FETCHING.lock().ok()?.remove(&url);
+        fetched
+    })
+    .await;
+    result.map(|_| file)
+}
+
+// A store listing asks for every row's picture at once; the rest wait their turn.
+static FETCHES: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(4);
+
+/// One download per address: a row built again while its picture comes waits for that one.
+static FETCHING: LazyLock<Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>> = LazyLock::new(Mutex::default);
+
+async fn download(url: &str, path: &std::path::Path) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
+    let client = CLIENT.get_or_init(|| reqwest::Client::builder().timeout(std::time::Duration::from_secs(20)).build().unwrap_or_default());
+    let bytes = client.get(url).send().await?.error_for_status()?.bytes().await?;
+    let kept = tokio::task::spawn_blocking(move || shrink(&bytes)).await??;
+    let dir = path.parent().ok_or("no folder")?;
+    tokio::fs::create_dir_all(dir).await?;
+    let part = path.with_extension("part");
+    tokio::fs::write(&part, &kept).await?;
+    tokio::fs::rename(&part, path).await?;
+    Ok(())
+}
+
+// Web pictures show as thumbnails; a store's originals run to 1600 px and 400 KB each.
+const KEPT_WIDTH: u32 = 480;
+
+/// The picture no wider than `KEPT_WIDTH`, as a PNG when it has transparency, else a JPEG.
+fn shrink(bytes: &[u8]) -> Result<Vec<u8>, image::ImageError> {
+    let img = image::load_from_memory(bytes)?;
+    if img.width() <= KEPT_WIDTH {
+        return Ok(bytes.to_vec());
+    }
+    let img = img.resize(KEPT_WIDTH, u32::MAX, image::imageops::FilterType::Triangle);
+    let mut out = std::io::Cursor::new(Vec::new());
+    if img.color().has_alpha() {
+        img.write_to(&mut out, image::ImageFormat::Png)?;
+    } else {
+        image::DynamicImage::ImageRgb8(img.to_rgb8()).write_to(&mut out, image::ImageFormat::Jpeg)?;
+    }
+    Ok(out.into_inner())
 }
 
 fn decode(path: &str, width: u32, height: u32) -> Option<gdk::Texture> {

@@ -2912,6 +2912,7 @@ dependencies = [
  "image",
  "libadwaita",
  "qrcode",
+ "reqwest",
  "serde",
  "serde_json",
  "tokio",

@@ -61,6 +61,7 @@ mod imp {
             self.frame.add_css_class("card");
             self.frame.set_overflow(gtk::Overflow::Hidden);
             self.frame.set_parent(&*self.obj());
+            self.obj().connect_scale_factor_notify(|cover| cover.imp().load());
         }
 
         fn dispose(&self) {
@@ -99,12 +100,14 @@ mod imp {
                 self.show(None);
                 return;
             }
+            let scale = self.obj().scale_factor().max(1) as u32;
+            let (w, h) = (self.art_width.get() as u32 * scale, self.art_height.get() as u32 * scale);
+            if let Some(texture) = covers::ready(&path, w, h) {
+                self.show(Some(texture));
+                return;
+            }
             let obj = self.obj().downgrade();
             glib::spawn_future_local(async move {
-                let Some(cover) = obj.upgrade() else { return };
-                let scale = cover.scale_factor().max(1) as u32;
-                let (w, h) = (cover.art_width() as u32 * scale, cover.art_height() as u32 * scale);
-                drop(cover);
                 let texture = covers::texture(&path, w, h).await;
                 if let Some(cover) = obj.upgrade().filter(|c| c.imp().generation.get() == generation) {
                     cover.imp().show(texture);
