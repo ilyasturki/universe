@@ -1,3 +1,4 @@
+import functools
 import logging
 import threading
 import time
@@ -344,6 +345,29 @@ def post_mouse(window, kind, x, y, button=Qt.MouseButton.NoButton):
     QCoreApplication.postEvent(window, QMouseEvent(kind, pos, pos, window.mapToGlobal(pos.toPoint()), button, held, Qt.KeyboardModifier.NoModifier))
 
 
+@functools.cache
+def _touch_device():
+    from PySide6.QtTest import QTest
+
+    return QTest.createTouchDevice()
+
+
+def touch(window, points, hold_ms=0):
+    """One finger down at the first point, through the others, up at the last: a tap, a press held `hold_ms`, or a swipe."""
+    from PySide6.QtCore import QPoint
+    from PySide6.QtTest import QTest
+
+    device = _touch_device()
+    (x, y), *rest = points
+    QTest.touchEvent(window, device).press(0, QPoint(round(x), round(y)), window).commit()
+    QTest.qWait(hold_ms)
+    for x, y in rest:
+        QTest.qWait(16)
+        QTest.touchEvent(window, device).move(0, QPoint(round(x), round(y)), window).commit()
+    x, y = points[-1]
+    QTest.touchEvent(window, device).release(0, QPoint(round(x), round(y)), window).commit()
+
+
 def post_wheel(window, x, y, steps, sideways=False, pixels=False):
     from PySide6.QtCore import QPoint, QPointF
 
@@ -369,8 +393,9 @@ def post_wheel(window, x, y, steps, sideways=False, pixels=False):
 
 
 # `--keys`, one name per gap: `Wait`, `Wait:N`, `Hold:A`/`Release:A`, `Stick:rightX=0.6`, `Shot:path.png`, `Guide`; with a fake watcher `Press:slot`/`Unpress:slot`, `Axis:lx=0.6`;
-# the mouse: `Mouse:x,y` moves it, `Click:x,y` / `RightClick:x,y` press and release there, `MouseDown:x,y` / `MouseUp:x,y` one or the other,
-# `Wheel:x,y,N` rolls N notches (up positive), `HWheel:x,y,N` sideways (right positive), `Scroll:x,y,N` N pixels as a touchpad; `Type:text` types it from the keyboard (`_` a space).
+# the mouse, at 1080p design units (dp, so 1728 wide at 16:10): `Mouse:x,y` moves it, `Click:x,y` / `RightClick:x,y` press and release there, `MouseDown:x,y` / `MouseUp:x,y` one or the other,
+# `Wheel:x,y,N` rolls N notches (up positive), `HWheel:x,y,N` sideways (right positive), `Scroll:x,y,N` N pixels as a touchpad; `Type:text` types it from the keyboard (`_` a space);
+# a finger: `Tap:x,y`, `LongTap:x,y,ms` held that long, `Swipe:x1,y1,x2,y2` dragged across in eight moves.
 class KeyScript(QObject):
     def __init__(self, script, gap_ms, window, pad=None, watcher=None, home=None, parent=None):
         super().__init__(parent)
@@ -409,9 +434,19 @@ class KeyScript(QObject):
             if self._watcher is not None:
                 self._watcher.press(bare, phase == "Press")
             return
+        if phase in ("Tap", "LongTap", "Swipe"):
+            parts = [float(v) * self._window.height() / 1080 for v in bare.split(",")]
+            if phase == "Swipe":
+                (x1, y1, x2, y2) = parts[:4]
+                touch(self._window, [(x1 + (x2 - x1) * k / 8, y1 + (y2 - y1) * k / 8) for k in range(9)])
+            else:
+                hold = int(float(bare.split(",")[2])) if phase == "LongTap" else 0
+                touch(self._window, [(parts[0], parts[1])], hold)
+            return
         if phase in ("Mouse", "Click", "RightClick", "MouseDown", "MouseUp", "Wheel", "HWheel", "Scroll"):
             parts = [float(v) for v in bare.split(",")]
-            x, y = parts[0] * self._window.width() / 1920, parts[1] * self._window.height() / 1080
+            scale = self._window.height() / 1080
+            x, y = parts[0] * scale, parts[1] * scale
             if phase in ("Wheel", "HWheel", "Scroll"):
                 post_wheel(self._window, x, y, int(parts[2]) if len(parts) > 2 else 1, phase == "HWheel", phase == "Scroll")
                 return

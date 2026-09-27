@@ -53,7 +53,7 @@ ui *args: build develop env
 ui-fake *args: develop
     @{{ nix }} {{ ui_bin }} --fake {{ args }}
 
-# The UI offscreen and silent: no window, no focus change, no audio. Keys run then it quits; every `Shot:` lands under DIR. just ui-shot DIR [keys…] (UNIVERSE_UI_ARGS="--fake --theme switch2" replaces the default --fake --no-gamepad)
+# The UI offscreen and silent: no window, no focus change, no audio. Keys run then it quits; every `Shot:` lands under DIR. just ui-shot DIR [keys…] (UNIVERSE_UI_ARGS="--fake --theme switch2" replaces the default --fake --no-gamepad; UNIVERSE_UI_SIZE=1280x800 the 1920x1080 window)
 ui-shot dir *keys: build develop env
     #!/usr/bin/env -S nix develop --quiet --command bash
     set -euo pipefail
@@ -73,7 +73,7 @@ ui-shot dir *keys: build develop env
     [[ "$script" == *Shot:* ]] || { script="$script Shot:{{ dir }}/shot.png"; gaps=$((gaps + 1)); }
     gap=${UNIVERSE_UI_GAP:-120}
     export QT_QPA_PLATFORM=offscreen PIPEWIRE_REMOTE=/nonexistent
-    "{{ ui_bin }}" ${UNIVERSE_UI_ARGS---fake --no-gamepad} --size 1920x1080 --key-gap "$gap" --keys "$script" --quit-after $((1200 + gap * (gaps + 8)))
+    "{{ ui_bin }}" ${UNIVERSE_UI_ARGS---fake --no-gamepad} --size "${UNIVERSE_UI_SIZE:-1920x1080}" --key-gap "$gap" --keys "$script" --quit-after $((1200 + gap * (gaps + 8)))
 
 # Follow the units of games, hooks and session ends
 logs:

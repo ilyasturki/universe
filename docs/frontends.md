@@ -956,4 +956,4 @@ named by `UNIVERSE_FAKE_PAD` (a family id, or `none` for the empty state), with 
 
 ## Running and testing the shipped host
 
-`man universe-ui` lists the options, `KeyScript` in `universe_ui/gamepad.py` the `--keys` names (the mouse among them: `Mouse:x,y`, `Click:x,y`, `Wheel:x,y,N`, `HWheel:x,y,N` and `Scroll:x,y,N` (a touchpad's pixels), at 1080p, and `Type:text` from the keyboard), `just --list` the dev recipes.
+`man universe-ui` lists the options, `KeyScript` in `universe_ui/gamepad.py` the `--keys` names (the mouse among them: `Mouse:x,y`, `Click:x,y`, `Wheel:x,y,N`, `HWheel:x,y,N` and `Scroll:x,y,N` (a touchpad's pixels), a finger: `Tap:x,y`, `LongTap:x,y,ms` and `Swipe:x1,y1,x2,y2`, all in 1080p design units — 1728 wide in a 16:10 window —, and `Type:text` from the keyboard), `just --list` the dev recipes.
