@@ -414,11 +414,25 @@ impl Application {
                 Ok(updates) => {
                     imp.updates_at.set(Some(Instant::now()));
                     imp.updates.replace(updates);
+                    app.mark_updatable();
                     app.emit_by_name::<()>("updates-changed", &[]);
                 }
                 Err(e) => tracing::warn!("updates: {e}"),
             }
         });
+    }
+
+    fn mark_updatable(&self) {
+        let updates = self.imp().updates.borrow();
+        for game in self.library().games() {
+            let wanted = {
+                let row = game.row();
+                !row.store_id.is_empty() && updates.iter().any(|u| u["source"] == row.source.as_str() && u["id"] == row.store_id.as_str())
+            };
+            if game.updatable() != wanted {
+                game.set_updatable(wanted);
+            }
+        }
     }
 
     /// The recording's frame `index` when it is cached; asks for the thumbnail frame otherwise, which `frame-landed` announces.
@@ -483,7 +497,7 @@ impl Application {
             }
         });
         match self.active_window().and_downcast::<Window>() {
-            Some(win) => win.toast(toast),
+            Some(win) => win.toast_undoable(toast),
             None => drop(glib::spawn_future_local(self.clone().flush_deferred_owned())),
         }
     }
@@ -560,6 +574,10 @@ impl Application {
                     None
                 }
             };
+            let weak = app.downgrade();
+            app.library().connect_updated(move || {
+                weak.upgrade().inspect(|app| app.mark_updatable());
+            });
             app.library().refresh(&[]).await;
             app.start_frames().await;
             app.imp().ready.set(true);
@@ -615,7 +633,7 @@ impl Application {
         });
     }
 
-    fn say(&self, text: &str) {
+    pub fn say(&self, text: &str) {
         if let Some(win) = self.active_window().and_downcast::<Window>() {
             win.toast(adw::Toast::new(text));
         }

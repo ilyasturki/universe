@@ -4,8 +4,9 @@ use adw::prelude::*;
 use adw::subclass::prelude::*;
 use gtk::glib;
 
-use crate::game::GameObject;
-use crate::library::{self, Library, Sort, View};
+use crate::app::Application;
+use crate::game::{removal_key, GameObject};
+use crate::library::{self, Sort, View};
 use crate::widgets::GameCard;
 
 mod imp {
@@ -115,14 +116,23 @@ impl LibraryPage {
         self.imp().sidebar_button.get()
     }
 
-    pub fn set_library(&self, library: &Library) {
+    /// Shows `app`'s library, less the games whose removal waits on its Undo.
+    pub fn set_library(&self, app: &Application) {
         let imp = self.imp();
-        let page = self.downgrade();
+        let library = app.library();
+        let (page, weak_app) = (self.downgrade(), app.downgrade());
         let filter = gtk::CustomFilter::new(move |item| {
-            let (Some(page), Some(game)) = (page.upgrade(), item.downcast_ref::<GameObject>()) else { return false };
+            let (Some(page), Some(app), Some(game)) = (page.upgrade(), weak_app.upgrade(), item.downcast_ref::<GameObject>()) else { return false };
             let imp = page.imp();
             let row = game.row();
-            row.hidden == imp.show_hidden.get() && imp.view.borrow().holds(&row) && library::matches(&row, &imp.words.borrow())
+            row.hidden == imp.show_hidden.get()
+                && imp.view.borrow().holds(&row)
+                && library::matches(&row, &imp.words.borrow())
+                && !app.is_deferred(&removal_key(&row.id))
+        });
+        let page = self.downgrade();
+        app.connect_deferred_changed(move || {
+            page.upgrade().inspect(|page| page.refilter());
         });
         let page = self.downgrade();
         let sorter = gtk::CustomSorter::new(move |a, b| {

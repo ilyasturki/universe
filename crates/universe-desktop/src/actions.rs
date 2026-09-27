@@ -5,7 +5,8 @@ use crate::game::GameObject;
 use crate::window::Window;
 
 /// The `game.*` actions of a card or a page, run by the window on the game in hand at activation.
-pub const GAME: [&str; 10] = ["play", "details", "settings", "artwork", "open-folder", "favorite", "unfavorite", "hide", "unhide", "remove"];
+pub const GAME: [&str; 13] =
+    ["play", "details", "settings", "artwork", "open-folder", "favorite", "unfavorite", "hide", "unhide", "update", "uninstall", "remove", "remove-purge"];
 
 pub fn install_game(widget: &impl IsA<gtk::Widget>, game: impl Fn() -> Option<GameObject> + Clone + 'static) -> gio::SimpleActionGroup {
     let group = gio::SimpleActionGroup::new();
@@ -27,7 +28,8 @@ pub fn install_game(widget: &impl IsA<gtk::Widget>, game: impl Fn() -> Option<Ga
 /// Which of the actions apply to `game` as it is now.
 pub fn sync_game(group: &gio::SimpleActionGroup, game: Option<&GameObject>) {
     let (hidden, favorite) = game.map(|g| (g.hidden(), g.favorite())).unwrap_or_default();
-    let playable = game.is_some_and(|g| g.installed() && !g.playing() && !g.launching());
+    let idle = game.is_some_and(|g| !g.playing() && !g.launching());
+    let playable = idle && game.is_some_and(|g| g.installed());
     let folder = game.is_some_and(|g| !g.row().folder.is_empty());
     let known = game.is_some();
     for (name, on) in [
@@ -36,7 +38,10 @@ pub fn sync_game(group: &gio::SimpleActionGroup, game: Option<&GameObject>) {
         ("settings", known),
         ("artwork", known),
         ("open-folder", folder),
-        ("remove", false),
+        ("update", idle && game.is_some_and(|g| g.updatable())),
+        ("uninstall", idle && game.is_some_and(|g| g.has_install())),
+        ("remove", idle),
+        ("remove-purge", idle && game.is_some_and(|g| g.has_prefix())),
         ("favorite", known && !favorite),
         ("unfavorite", known && favorite),
         ("hide", known && !hidden),
@@ -51,7 +56,7 @@ pub fn sync_game(group: &gio::SimpleActionGroup, game: Option<&GameObject>) {
 /// Keeps `sync_game` current while `game` is bound; the handlers go with `unbind`.
 pub fn follow_game(group: &gio::SimpleActionGroup, game: &GameObject) -> Vec<glib::SignalHandlerId> {
     sync_game(group, Some(game));
-    ["hidden", "favorite", "installed", "playing", "launching"]
+    ["hidden", "favorite", "installed", "playing", "launching", "updatable", "has-install", "has-prefix"]
         .into_iter()
         .map(|prop| {
             let group = group.clone();

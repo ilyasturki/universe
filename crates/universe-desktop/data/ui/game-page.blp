@@ -366,7 +366,27 @@ menu more_menu {
       action: "game.unhide";
       hidden-when: "action-disabled";
     }
+  }
 
-    item (_("_Remove From Library…"), "game.remove")
+  section {
+    item {
+      label: _("_Update");
+      action: "game.update";
+      hidden-when: "action-disabled";
+    }
+
+    item {
+      label: _("U_ninstall…");
+      action: "game.uninstall";
+      hidden-when: "action-disabled";
+    }
+
+    item (_("_Remove From Library"), "game.remove")
+
+    item {
+      label: _("Remove With Wine _Prefix…");
+      action: "game.remove-purge";
+      hidden-when: "action-disabled";
+    }
   }
 }

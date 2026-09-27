@@ -33,6 +33,15 @@ pub struct Row {
     pub logo: String,
     /// Where the game's files are: its install folder, else the folder of its program or ROM.
     pub folder: String,
+    pub store_id: String,
+    /// The prefix it names or the one its launch made, on disk.
+    pub has_prefix: bool,
+    pub has_install: bool,
+}
+
+/// What `Application::defer` holds a removal from the library under.
+pub fn removal_key(id: &str) -> String {
+    format!("game:{id}")
 }
 
 fn unix(rfc3339: &str) -> i64 {
@@ -71,6 +80,9 @@ impl Row {
             } else {
                 universe::paths::expand(&g.source.dir).to_string_lossy().into_owned()
             },
+            store_id: g.source.gog_id.clone(),
+            has_prefix: !r.effective.prefix.is_empty() && std::path::Path::new(&r.effective.prefix).is_dir(),
+            has_install: !g.source.dir.is_empty() && universe::paths::expand(&g.source.dir).is_dir(),
         }
     }
 }
@@ -99,6 +111,13 @@ mod imp {
         pub favorite: Cell<bool>,
         #[property(get)]
         pub cover: RefCell<String>,
+        #[property(get)]
+        pub has_prefix: Cell<bool>,
+        #[property(get)]
+        pub has_install: Cell<bool>,
+        /// Its store has a newer build of it.
+        #[property(get, set)]
+        pub updatable: Cell<bool>,
         #[property(get, set)]
         pub playing: Cell<bool>,
         #[property(get, set)]
@@ -183,5 +202,7 @@ impl GameObject {
         flag(&imp.installed, row.installed, "installed");
         flag(&imp.hidden, row.hidden, "hidden");
         flag(&imp.favorite, row.favorite, "favorite");
+        flag(&imp.has_prefix, row.has_prefix, "has-prefix");
+        flag(&imp.has_install, row.has_install, "has-install");
     }
 }

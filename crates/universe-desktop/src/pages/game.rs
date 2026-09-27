@@ -136,6 +136,12 @@ mod imp {
             let weak = obj.downgrade();
             self.actions.replace(Some(actions::install_game(&*obj, move || weak.upgrade().and_then(|page| page.game()))));
             obj.setup_page_actions();
+            let shortcuts = gtk::ShortcutController::new();
+            shortcuts.add_shortcut(gtk::Shortcut::new(
+                Some(gtk::KeyvalTrigger::new(gtk::gdk::Key::Delete, gtk::gdk::ModifierType::empty())),
+                Some(gtk::NamedAction::new("game.remove")),
+            ));
+            obj.add_controller(shortcuts);
         }
 
         fn dispose(&self) {

@@ -61,6 +61,8 @@ mod imp {
         pub rebuilding: Cell<bool>,
         /// The Store item's count of updates, in the sidebar built last.
         pub store_badge: RefCell<Option<gtk::Label>>,
+        /// The toasts on screen whose Undo Ctrl+Z runs, the newest last.
+        pub undoable: RefCell<Vec<glib::WeakRef<adw::Toast>>>,
     }
 
     #[glib::object_subclass]
@@ -201,7 +203,8 @@ impl Window {
                 }
             })
             .build();
-        self.add_action_entries([show_sidebar, search, sort, show_hidden, view, add_game, onboarding, rescan, entry]);
+        let undo = gio::ActionEntry::builder("undo").activate(|win: &Self, _, _| win.undo()).build();
+        self.add_action_entries([show_sidebar, search, sort, show_hidden, view, add_game, onboarding, rescan, entry, undo]);
         self.imp().library_page.set_show_hidden(state.show_hidden);
     }
 
@@ -273,13 +276,34 @@ impl Window {
         self.imp().toasts.add_toast(toast);
     }
 
+    /// A toast whose button undoes what it tells, which Ctrl+Z presses too while it shows.
+    pub fn toast_undoable(&self, toast: adw::Toast) {
+        let win = self.downgrade();
+        toast.connect_dismissed(move |toast| {
+            if let Some(win) = win.upgrade() {
+                win.imp().undoable.borrow_mut().retain(|t| t.upgrade().is_some_and(|t| t != *toast));
+            }
+        });
+        self.imp().undoable.borrow_mut().push(toast.downgrade());
+        self.toast(toast);
+    }
+
+    /// Presses the newest Undo on screen, as its button does: the undo runs before the toast goes.
+    fn undo(&self) {
+        let toast = std::iter::from_fn(|| self.imp().undoable.borrow_mut().pop()).find_map(|t| t.upgrade());
+        if let Some(toast) = toast {
+            toast.emit_by_name::<()>("button-clicked", &[]);
+            toast.dismiss();
+        }
+    }
+
     fn follow_core(&self) {
         let app = self.app();
         if app.scripted() {
             self.set_maximized(false);
             self.set_default_size(1280, 800);
         }
-        self.imp().library_page.set_library(app.library());
+        self.imp().library_page.set_library(&app);
         self.imp().store_page.follow(&app);
         self.imp().media_page.follow(&app);
         self.setup_play_actions();
@@ -543,7 +567,105 @@ impl Window {
             "unhide" => self.set_flag(game, "hidden", false),
             "favorite" => self.set_flag(game, "favorite", true),
             "unfavorite" => self.set_flag(game, "favorite", false),
-            _ => tracing::debug!("game.{name}: not wired yet"),
+            "update" => self.update(game),
+            "uninstall" => self.confirm_uninstall(game),
+            "remove" => self.remove(game),
+            "remove-purge" => self.confirm_purge(game),
+            _ => tracing::warn!("game.{name}: no such action"),
+        }
+    }
+
+    fn update(&self, game: &GameObject) {
+        let row = game.row().clone();
+        if self.app().start_job(Kind::Update, &row.source, vec![(row.store_id, row.title.clone())], false) {
+            let toast = adw::Toast::builder().title(gettext("Updating {}").replace("{}", &row.title)).button_label(gettext("_Show")).build();
+            toast.set_action_name(Some("win.view"));
+            toast.set_action_target_value(Some(&"store".to_variant()));
+            self.toast(toast);
+        }
+    }
+
+    /// Out of sight at once; the core removes it once the toast goes, unless Undo brings it back.
+    fn remove(&self, game: &GameObject) {
+        let (id, title) = (game.id(), game.title());
+        self.close_game_pages(&id);
+        let app = self.app();
+        let weak = app.downgrade();
+        app.defer(&crate::game::removal_key(&id), &gettext("“{}” removed from the library").replace("{}", &title), move || async move {
+            let target = id.clone();
+            let result = backend::call(move |core| async move { core.remove(&target, false).await }).await;
+            let Some(app) = weak.upgrade() else { return };
+            if let Err(e) = result {
+                app.say(&e.to_string());
+            }
+            app.library().refresh(&[id]).await;
+        });
+    }
+
+    fn confirm_purge(&self, game: &GameObject) {
+        let (id, title) = (game.id(), game.title());
+        let dialog = adw::AlertDialog::new(
+            Some(&gettext("Remove {} and Its Wine Prefix?").replace("{}", &title)),
+            Some(&gettext("The prefix goes to the trash with the saves and settings the game keeps there. Its hours, journal and recordings are kept.")),
+        );
+        dialog.add_responses(&[("cancel", &gettext("_Cancel")), ("remove", &gettext("_Remove"))]);
+        dialog.set_response_appearance("remove", adw::ResponseAppearance::Destructive);
+        dialog.set_default_response(Some("cancel"));
+        dialog.set_close_response("cancel");
+        let win = self.downgrade();
+        dialog.connect_response(Some("remove"), move |_, _| {
+            let Some(win) = win.upgrade() else { return };
+            win.close_game_pages(&id);
+            let (id, title, win) = (id.clone(), title.clone(), win.downgrade());
+            glib::spawn_future_local(async move {
+                let target = id.clone();
+                let result = backend::call(move |core| async move { core.remove(&target, true).await }).await;
+                let Some(win) = win.upgrade() else { return };
+                win.app().library().refresh(std::slice::from_ref(&id)).await;
+                win.toast(adw::Toast::new(&match result {
+                    Ok(()) => gettext("“{}” removed with its Wine prefix").replace("{}", &title),
+                    Err(e) => e.to_string(),
+                }));
+            });
+        });
+        dialog.present(Some(self));
+    }
+
+    fn confirm_uninstall(&self, game: &GameObject) {
+        let (id, title) = (game.id(), game.title());
+        let dialog = adw::AlertDialog::new(
+            Some(&gettext("Uninstall {}?").replace("{}", &title)),
+            Some(&gettext("Its install folder goes to the trash. The game stays in the library with its hours, journal and recordings.")),
+        );
+        dialog.add_responses(&[("cancel", &gettext("_Cancel")), ("uninstall", &gettext("_Uninstall"))]);
+        dialog.set_response_appearance("uninstall", adw::ResponseAppearance::Destructive);
+        dialog.set_default_response(Some("cancel"));
+        dialog.set_close_response("cancel");
+        let win = self.downgrade();
+        dialog.connect_response(Some("uninstall"), move |_, _| {
+            let (id, title, win) = (id.clone(), title.clone(), win.clone());
+            glib::spawn_future_local(async move {
+                let target = id.clone();
+                let result = backend::call(move |core| async move { core.uninstall(&target).await }).await;
+                let Some(win) = win.upgrade() else { return };
+                win.app().library().refresh(std::slice::from_ref(&id)).await;
+                win.toast(adw::Toast::new(&match result {
+                    Ok(()) => gettext("{} is uninstalled").replace("{}", &title),
+                    Err(e) => e.to_string(),
+                }));
+            });
+        });
+        dialog.present(Some(self));
+    }
+
+    /// The first page over the game closes, with every page above it.
+    fn close_game_pages(&self, id: &str) {
+        let navigation = &self.imp().navigation;
+        let stack = navigation.navigation_stack();
+        let first =
+            stack.iter::<glib::Object>().flatten().position(|page| page.downcast_ref::<GamePage>().and_then(|p| p.game()).is_some_and(|g| g.id() == id));
+        if let Some(below) = first.and_then(|at| at.checked_sub(1)).and_then(|at| stack.item(at as u32)).and_downcast::<adw::NavigationPage>() {
+            navigation.pop_to_page(&below);
         }
     }
 
@@ -563,14 +685,14 @@ impl Window {
                 ("favorite", true) => gettext("“{}” added to your favourites"),
                 _ => gettext("“{}” removed from your favourites"),
             };
-            let toast = adw::Toast::builder().title(text.replace("{}", &title)).button_label(gettext("Undo")).priority(adw::ToastPriority::High).build();
+            let toast = adw::Toast::builder().title(text.replace("{}", &title)).button_label(gettext("_Undo")).priority(adw::ToastPriority::High).build();
             let back = win.downgrade();
             toast.connect_button_clicked(move |_| {
                 if let Some(win) = back.upgrade() {
                     glib::spawn_future_local(win.write_flag(&id, key, !on));
                 }
             });
-            win.toast(toast);
+            win.toast_undoable(toast);
         });
     }
 
