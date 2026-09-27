@@ -911,6 +911,8 @@ FocusScope {
     }
 
     Item {
+        id: journalBox
+
         anchors.top: pane.bottom
         anchors.topMargin: Theme.dp(72)
         anchors.left: pane.left
@@ -964,7 +966,15 @@ FocusScope {
             }
 
             Text {
+                id: paragraph
+
+                // Markdown ignores maximumLineCount and reports one line: the pitch comes from the font instead.
+                readonly property real pitch: implicitHeight / Math.max(1, Math.round(implicitHeight / (paragraphFont.height * lineHeight)))
+                readonly property real room: hintBar.y - Theme.dp(14) - journalBox.y - y
+
                 width: parent.width
+                height: Math.min(implicitHeight, Math.max(1, Math.floor(room / pitch)) * pitch)
+                clip: true
                 text: page.entry ? (page.entryPending ? "The journal module is writing this entry." : page.entry.paragraphs[0] || "") : ""
                 textFormat: Text.MarkdownText
                 color: page.journalFocused ? Theme.text : Theme.textSecondary
@@ -972,6 +982,11 @@ FocusScope {
                 font.pixelSize: Theme.dp(22)
                 lineHeight: 1.4
                 wrapMode: Text.WordWrap
+
+                FontMetrics {
+                    id: paragraphFont
+                    font: paragraph.font
+                }
 
                 Behavior on color {
                     ColorEase {

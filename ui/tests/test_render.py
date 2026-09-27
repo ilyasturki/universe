@@ -776,6 +776,31 @@ def test_a_reprise_list_that_fits_shows_every_row_without_scrolling(api):
     pump(50)
 
 
+def test_a_long_journal_paragraph_stops_above_the_hint_bar(api):
+    _engine, window = render(api, 1280, 800, activate=True)
+    root = window.property("contentItem").childItems()[0].property("item")
+    root.openSub("pages/RecordingsPage.qml", {"game": root.property("activePage").property("currentGame"), "session": ""})
+    settle(window)
+    pump(1000)
+
+    def walk(item):
+        yield item
+        for child in item.childItems():
+            yield from walk(child)
+
+    paragraph = next(o for o in walk(window.contentItem()) if o.property("pitch") is not None and o.property("room") is not None)
+    assert paragraph.property("text"), "the fixture recording has an entry"
+    paragraph.setProperty("text", "A paragraph that keeps going. " * 60)
+    pump(100)
+    bottom = paragraph.mapToItem(window.contentItem(), 0, paragraph.property("height")).y()
+    hint = next(o for o in walk(window.contentItem()) if o.metaObject().className().startswith("HintBar"))
+    assert bottom <= hint.mapToItem(window.contentItem(), 0, 0).y()
+    root.closeSub()
+    settle(window)
+    window.close()
+    pump(50)
+
+
 def test_the_power_menu_lists_what_logind_would_do(fake):
     from universe_ui.api import System
 
