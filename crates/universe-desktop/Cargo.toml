@@ -16,6 +16,7 @@ chrono = "0.4"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp"] }
 gettext-rs = { version = "0.7", features = ["gettext-system"] }
 tracing = "0.1"
+unicode-normalization = "0.1"
 
 [build-dependencies]
 glib-build-tools = "0.22"

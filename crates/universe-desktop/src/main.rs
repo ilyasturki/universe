@@ -1,8 +1,14 @@
+mod actions;
 mod app;
 mod backend;
 mod config;
+mod covers;
+mod game;
+mod library;
+mod pages;
 mod script;
 mod state;
+mod widgets;
 mod window;
 
 use gettextrs::LocaleCategory;

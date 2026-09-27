@@ -10,6 +10,7 @@ use universe::changes::{self, Event};
 
 use crate::backend;
 use crate::config;
+use crate::library::Library;
 use crate::script::{self, Step};
 use crate::window::Window;
 
@@ -22,6 +23,7 @@ mod imp {
         pub failure: RefCell<Option<String>>,
         pub watch: RefCell<Option<changes::Watch>>,
         pub script: RefCell<Option<Vec<Step>>>,
+        pub library: Library,
     }
 
     #[glib::object_subclass]
@@ -96,6 +98,10 @@ impl Application {
         self.imp().script.take()
     }
 
+    pub fn library(&self) -> &Library {
+        &self.imp().library
+    }
+
     pub fn is_ready(&self) -> bool {
         self.imp().ready.get()
     }
@@ -125,15 +131,22 @@ impl Application {
             }
             let options = changes::Options { journal_sweep: !scripted, ..changes::Options::default() };
             let core = backend::core();
-            match backend::run(changes::watch(core, options)).await {
+            let events = match backend::run(changes::watch(core, options)).await {
                 Ok((watch, events)) => {
                     app.imp().watch.replace(Some(watch));
-                    app.follow(events);
+                    Some(events)
                 }
-                Err(e) => tracing::warn!("change watch: {e}"),
-            }
+                Err(e) => {
+                    tracing::warn!("change watch: {e}");
+                    None
+                }
+            };
+            app.library().refresh(&[]).await;
             app.imp().ready.set(true);
             app.emit_by_name::<()>("core-ready", &[]);
+            if let Some(events) = events {
+                app.follow(events);
+            }
         });
     }
 
@@ -142,6 +155,9 @@ impl Application {
         glib::spawn_future_local(async move {
             while let Some(event) = events.recv().await {
                 let Some(app) = app.upgrade() else { return };
+                if let Event::Library(ids) = &event {
+                    app.library().refresh(ids).await;
+                }
                 app.emit_by_name::<()>("changed", &[&glib::BoxedAnyObject::new(event)]);
             }
         });

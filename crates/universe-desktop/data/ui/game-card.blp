@@ -1,0 +1,104 @@
+using Gtk 4.0;
+
+template $UniverseGameCard: Box {
+  orientation: vertical;
+  spacing: 10;
+
+  EventControllerMotion motion {}
+
+  Overlay {
+    halign: center;
+
+    child: $UniverseCover cover {};
+
+    [overlay]
+    MenuButton options {
+      icon-name: "view-more-symbolic";
+      tooltip-text: _("Options");
+      halign: end;
+      valign: start;
+      margin-top: 8;
+      margin-end: 8;
+      menu-model: game_menu;
+
+      styles [
+        "circular",
+        "hidden",
+      ]
+    }
+
+    [overlay]
+    Button play {
+      label: _("Play");
+      action-name: "game.play";
+      halign: center;
+      valign: end;
+      margin-bottom: 14;
+
+      styles [
+        "pill",
+        "hidden",
+      ]
+    }
+
+    [overlay]
+    Label playing {
+      label: _("Playing");
+      halign: start;
+      valign: start;
+      margin-top: 10;
+      margin-start: 10;
+      visible: false;
+
+      styles [
+        "playing-badge",
+      ]
+    }
+  }
+
+  Label title {
+    ellipsize: end;
+    max-width-chars: 20;
+    halign: center;
+  }
+}
+
+menu game_menu {
+  section {
+    item (_("_Play"), "game.play")
+    item (_("_Details"), "game.details")
+  }
+
+  section {
+    item (_("Game _Settings"), "game.settings")
+    item (_("_Artwork"), "game.artwork")
+  }
+
+  section {
+    item {
+      label: _("Add to _Favourites");
+      action: "game.favorite";
+      hidden-when: "action-disabled";
+    }
+
+    item {
+      label: _("Remove From _Favourites");
+      action: "game.unfavorite";
+      hidden-when: "action-disabled";
+    }
+
+    item {
+      label: _("_Hide");
+      action: "game.hide";
+      hidden-when: "action-disabled";
+    }
+
+    item {
+      label: _("_Unhide");
+      action: "game.unhide";
+      hidden-when: "action-disabled";
+    }
+
+    item (_("_Remove From Library…"), "game.remove")
+  }
+}

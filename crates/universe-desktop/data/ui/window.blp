@@ -40,32 +40,7 @@ template $UniverseWindow: Adw.ApplicationWindow {
                 }
               }
 
-              content: Adw.Sidebar sidebar {
-                Adw.SidebarSection {
-                  Adw.SidebarItem {
-                    icon-name: "view-grid-symbolic";
-                    title: _("All Games");
-                  }
-
-                  Adw.SidebarItem {
-                    icon-name: "folder-pictures-symbolic";
-                    title: _("Media");
-                  }
-
-                  Adw.SidebarItem store_item {
-                    icon-name: "system-software-install-symbolic";
-                    title: _("Store");
-                  }
-                }
-
-                Adw.SidebarSection sources {
-                  title: _("Sources");
-                }
-
-                Adw.SidebarSection platforms {
-                  title: _("Platforms");
-                }
-              };
+              content: Adw.Sidebar sidebar {};
             };
           };
 
@@ -74,24 +49,6 @@ template $UniverseWindow: Adw.ApplicationWindow {
 
             child: Adw.ViewStack stack {
               enable-transitions: true;
-
-              Adw.ViewStackPage {
-                name: "loading";
-
-                child: Adw.ToolbarView {
-                  [top]
-                  Adw.HeaderBar {
-                    show-title: false;
-                  }
-
-                  content: Adw.Spinner {
-                    width-request: 32;
-                    height-request: 32;
-                    halign: center;
-                    valign: center;
-                  };
-                };
-              }
 
               Adw.ViewStackPage {
                 name: "failed";
@@ -112,59 +69,7 @@ template $UniverseWindow: Adw.ApplicationWindow {
               Adw.ViewStackPage {
                 name: "library";
 
-                child: Adw.ToolbarView {
-                  [top]
-                  Adw.HeaderBar {
-                    [start]
-                    Button {
-                      visible: bind split_view.show-sidebar inverted;
-                      action-name: "win.show-sidebar";
-                      icon-name: "sidebar-show-symbolic";
-                      tooltip-text: _("Show Sidebar");
-                    }
-
-                    [start]
-                    Button {
-                      icon-name: "list-add-symbolic";
-                      tooltip-text: _("Add Game");
-                      action-name: "win.add-game";
-                    }
-
-                    title-widget: Adw.Clamp {
-                      maximum-size: 420;
-                      tightening-threshold: 420;
-
-                      child: CenterBox {
-                        hexpand: true;
-
-                        center-widget: SearchEntry search {
-                          hexpand: true;
-                          placeholder-text: _("Search");
-                        };
-
-                        end-widget: MenuButton {
-                          icon-name: "view-sort-descending-symbolic";
-                          tooltip-text: _("Sort and Filter");
-                          margin-start: 6;
-                          menu-model: sort_menu;
-                        };
-                      };
-                    };
-
-                    [end]
-                    MenuButton {
-                      icon-name: "open-menu-symbolic";
-                      tooltip-text: _("Main Menu");
-                      primary: true;
-                      menu-model: main_menu;
-                    }
-                  }
-
-                  content: Adw.StatusPage {
-                    icon-name: "io.github.ilyasturki.UniverseDesktop-symbolic";
-                    title: _("No Games");
-                  };
-                };
+                child: $UniverseLibraryPage library_page {};
               }
             };
           };
@@ -172,58 +77,4 @@ template $UniverseWindow: Adw.ApplicationWindow {
       }
     };
   };
-}
-
-menu main_menu {
-  section {
-    item (_("_Preferences"), "app.preferences")
-    item (_("_Keyboard Shortcuts"), "app.shortcuts")
-    item (_("_About Universe Desktop"), "app.about")
-  }
-}
-
-menu sort_menu {
-  section {
-    label: _("Sort");
-
-    item {
-      label: _("Last Played");
-      action: "win.sort";
-      target: "last-played";
-    }
-
-    item {
-      label: _("A–Z");
-      action: "win.sort";
-      target: "a-z";
-    }
-
-    item {
-      label: _("Z–A");
-      action: "win.sort";
-      target: "z-a";
-    }
-
-    item {
-      label: _("Newest");
-      action: "win.sort";
-      target: "newest";
-    }
-
-    item {
-      label: _("Oldest");
-      action: "win.sort";
-      target: "oldest";
-    }
-
-    item {
-      label: _("Most Played");
-      action: "win.sort";
-      target: "most-played";
-    }
-  }
-
-  section {
-    item (_("Show _Hidden Games"), "win.show-hidden")
-  }
 }

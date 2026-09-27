@@ -4,8 +4,8 @@ use std::time::Duration;
 use adw::prelude::*;
 use gtk::{gdk, gio, glib};
 
-/// `UNIVERSE_DESKTOP_SCRIPT`: steps run once the library is up, then the app quits. The app runs
-/// apart from a running one then, adopts no scope and sweeps no journal.
+/// `UNIVERSE_DESKTOP_SCRIPT`: steps run once the library is up, then the app quits; `~` in an action stands for a
+/// space. The app runs apart from a running one then, adopts no scope and sweeps no journal.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Step {
     Wait(Duration),
@@ -26,7 +26,7 @@ fn parse(text: &str) -> Vec<Step> {
             match kind {
                 "wait" => arg.parse().ok().map(|ms| Step::Wait(Duration::from_millis(ms))),
                 "shot" => Some(Step::Shot(arg.into())),
-                "action" => Some(Step::Action(arg.into())),
+                "action" => Some(Step::Action(arg.replace('~', " "))),
                 "size" => arg.split_once('x').and_then(|(w, h)| Some(Step::Size(w.parse().ok()?, h.parse().ok()?))),
                 _ => None,
             }
@@ -76,10 +76,15 @@ mod tests {
 
     #[test]
     fn a_script_reads_its_steps_and_skips_what_it_cannot() {
-        let steps = parse("size:1280x800 wait:300 action:win.sort::a-z shot:/tmp/a.png bogus nope:1 wait:x");
+        let steps = parse("size:1280x800 wait:300 action:win.view::platform:Nintendo~Switch shot:/tmp/a.png bogus nope:1 wait:x");
         assert_eq!(
             steps,
-            [Step::Size(1280, 800), Step::Wait(Duration::from_millis(300)), Step::Action("win.sort::a-z".into()), Step::Shot("/tmp/a.png".into())]
+            [
+                Step::Size(1280, 800),
+                Step::Wait(Duration::from_millis(300)),
+                Step::Action("win.view::platform:Nintendo Switch".into()),
+                Step::Shot("/tmp/a.png".into())
+            ]
         );
     }
 }
