@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="128" height="128" viewBox="0 0 128 128">
+<defs>
+<linearGradient id="b4a-sh" x1="59" x2="69" y1="0" y2="0" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#9a9996"/><stop offset="0.4" stop-color="#f6f5f4"/><stop offset="1" stop-color="#9a9996"/></linearGradient>
+<radialGradient id="b4a-pl" gradientUnits="userSpaceOnUse" cx="58.4" cy="26.6" r="42"><stop offset="0" stop-color="#f66151"/><stop offset="0.5" stop-color="#e01b24"/><stop offset="1" stop-color="#a51d2d"/></radialGradient>
+<clipPath id="b4a-front"><rect x="-80" y="0" width="160" height="80"/></clipPath>
+<clipPath id="b4a-planet"><circle cx="64" cy="42" r="28"/></clipPath>
+</defs>
+<rect x="14" y="82" width="100" height="32" rx="10" fill="#3d3846"/>
+<rect x="14" y="78" width="100" height="32" rx="10" fill="#5e5c64"/>
+<path d="M14 88a10 10 0 0 1 10 -10h80a10 10 0 0 1 10 10v10h-100Z" fill="#77767b"/>
+<ellipse cx="64" cy="88" rx="14" ry="4.5" fill="#241f31"/>
+<path d="M88 88v3a8 3.5 0 0 0 16 0v-3Z" fill="#a51d2d"/><ellipse cx="96" cy="88" rx="8" ry="3.5" fill="#ed333b"/>
+<rect x="59" y="56" width="10" height="32" fill="url(#b4a-sh)"/>
+<g transform="translate(0 4)"><g transform="translate(64 42) rotate(-16)"><path d="M-46 0a46 13 0 1 1 92 0a46 13 0 1 1 -92 0ZM-36 0a36 6 0 1 0 72 0a36 6 0 1 0 -72 0Z" fill="#c0bfbc" fill-rule="evenodd"/></g></g>
+<g transform="translate(64 42) rotate(-16)"><path d="M-46 0a46 13 0 1 1 92 0a46 13 0 1 1 -92 0ZM-36 0a36 6 0 1 0 72 0a36 6 0 1 0 -72 0Z" fill="#f6f5f4" fill-rule="evenodd"/></g>
+<circle cx="64" cy="42" r="28" fill="url(#b4a-pl)"/>
+<g transform="translate(0 4)"><g transform="translate(64 42) rotate(-16)" clip-path="url(#b4a-front)"><path d="M-46 0a46 13 0 1 1 92 0a46 13 0 1 1 -92 0ZM-36 0a36 6 0 1 0 72 0a36 6 0 1 0 -72 0Z" fill="#c0bfbc" fill-rule="evenodd"/></g></g>
+<g transform="translate(64 42) rotate(-16)" clip-path="url(#b4a-front)"><path d="M-46 0a46 13 0 1 1 92 0a46 13 0 1 1 -92 0ZM-36 0a36 6 0 1 0 72 0a36 6 0 1 0 -72 0Z" fill="#f6f5f4" fill-rule="evenodd"/></g>
+</svg>
