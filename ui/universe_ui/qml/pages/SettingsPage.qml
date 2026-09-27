@@ -3,6 +3,7 @@ import "../core"
 import "../core/Format.js" as Format
 import "../sound"
 import "../ui"
+import "../ui/Controls.js" as Controls
 import "../ui/Macros.js" as Macros
 import "../ui/Sections.js" as Sections
 
@@ -32,7 +33,7 @@ FocusScope {
     readonly property Item menuAnchor: null
     readonly property bool modal: editor.open || menu.open || dialog.open || testing || learning || walking
 
-    readonly property var sections: Sections.list
+    readonly property var sections: Sections.shown(api.system)
     property int section: 0
     readonly property string sectionId: sections[section].id
 
@@ -200,7 +201,7 @@ FocusScope {
     }
 
     readonly property bool refreshable: sectionId === "install"
-    readonly property bool canRefresh: refreshable || sectionId === "doctor" || sectionId === "controller" || sectionId === "sound"
+    readonly property bool canRefresh: refreshable || sectionId === "doctor" || sectionId === "controller" || sectionId === "sound" || sectionId === "system"
 
     readonly property real sideMargin: Theme.dp(80)
     readonly property real sideWidth: Theme.dp(300)
@@ -383,6 +384,36 @@ FocusScope {
                 groups: groups
             };
         }
+        if (sectionId === "system") {
+            var controls = api.system.controls;
+            for (var c = 0; c < controls.length; c++) {
+                var control = controls[c];
+                var toggle = control.kind === "toggle";
+                rows.push({
+                    section: "System",
+                    key: control.id,
+                    label: control.label,
+                    type: toggle ? "bool" : "enum",
+                    value: toggle ? control.value === "on" : Controls.label(control),
+                    display: Controls.label(control),
+                    choices: toggle ? [] : Controls.labels(control),
+                    detail: control.detail,
+                    icon: Controls.icon(control),
+                    control: control
+                });
+            }
+            groups.push({
+                title: "Performance and display",
+                meta: api.system.deck ? (api.system.deck === "oled" ? "Steam Deck OLED" : "Steam Deck") : "",
+                rows: rows.map(function (r, i) {
+                    return i;
+                })
+            });
+            return {
+                rows: rows,
+                groups: groups
+            };
+        }
         if (sectionId === "about") {
             rows.push({
                 section: "About",
@@ -464,6 +495,8 @@ FocusScope {
             modulesForm.loadDoctor();
         else if (sectionId === "sound")
             api.home.loadOutputs();
+        else if (sectionId === "system")
+            api.system.reload();
     }
 
     function refreshNow() {
@@ -563,6 +596,18 @@ FocusScope {
                 api.home.setOutput(row.output);
             } else
                 Sound.edge();
+        } else if (sectionId === "system") {
+            if (row.type === "bool") {
+                Sound.favourite(!row.value);
+                api.system.set(row.key, row.value ? "off" : "on");
+            } else {
+                Sound.panel();
+                editor.edit(row, function (label) {
+                    var at = row.choices.indexOf(label);
+                    if (at >= 0)
+                        api.system.set(row.key, Controls.values(row.control)[at]);
+                });
+            }
         } else if (sectionId === "about" && row.key === "setup") {
             Sound.enter();
             page.setupRequested();

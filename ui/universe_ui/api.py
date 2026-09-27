@@ -394,7 +394,12 @@ class System(QObject):
         super().__init__(parent)
         self._client = client
         self._actions = []
+        self._steam = bool(client.underSteam)
+        self._deck = str(client.deck)
+        self._controls = []
         client.powerActionsAsync(self._set_actions)
+        # What `[system]` kept goes back first: the power limit and the clocks do not outlive a reboot.
+        client.applySystemAsync(self.reload)
 
     def _set_actions(self, ids):
         self._actions = ids
@@ -405,7 +410,39 @@ class System(QObject):
     def run(self, action):
         self._client.powerAsync(action, lambda e: self.failed.emit(action, e.message or e.kind))
 
+    @Slot()
+    def reload(self):
+        self._client.systemControlsAsync(self._set_controls)
+
+    def _set_controls(self, rows):
+        self._controls = rows
+        self.controlsChanged.emit()
+
+    # The row shows the value at once; a refusal puts the machine's own back and says why.
+    @Slot(str, str)
+    def set(self, ident, value):
+        self._controls = [{**c, "value": value} if c["id"] == ident else c for c in self._controls]
+        self.controlsChanged.emit()
+
+        def refused(e):
+            self.controlFailed.emit(ident, e.message or e.kind)
+            self.reload()
+
+        self._client.setSystemAsync(ident, value, lambda: None, refused)
+
+    @Slot(str, result="QVariant")
+    def control(self, ident):
+        return next((c for c in self._controls if c["id"] == ident), None)
+
+    controlsChanged = Signal()
+    controlFailed = Signal(str, str)
     actions = Property("QStringList", lambda self: self._actions, notify=changed)
+    # [{id, label, detail, kind: range | choice | toggle, value, min, max, step, unit, choices}]: see the core's `hardware::Control`.
+    controls = Property("QVariantList", lambda self: self._controls, notify=controlsChanged)
+    # Inside Steam's Game Mode: power, sound, screenshots and the HUD are Steam's, and no HOME reaches the launcher over a game.
+    steam = Property(bool, lambda self: self._steam, constant=True)
+    # "lcd" | "oled" on a Steam Deck, else "".
+    deck = Property(str, lambda self: self._deck, constant=True)
 
 
 class Api(QObject):

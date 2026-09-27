@@ -181,6 +181,21 @@ impl Core {
     fn nested(&self) -> bool {
         self.core.nest().is_some()
     }
+    fn under_steam(&self) -> bool {
+        self.core.under_steam()
+    }
+    fn system_controls(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        self.value_infallible(py, |c| c.system_controls())
+    }
+    fn set_system(&self, py: Python<'_>, id: String, value: String) -> PyResult<()> {
+        self.run(py, |c| async move { c.set_system(&id, &value).await })
+    }
+    fn apply_system(&self, py: Python<'_>) {
+        self.run_infallible(py, |c| c.apply_system())
+    }
+    fn deck_model(&self) -> &'static str {
+        universe::deck::model().map_or("", |m| m.id())
+    }
     fn nest_game_shown(&self) -> PyResult<bool> {
         self.core.nest_game_shown().map_err(err)
     }

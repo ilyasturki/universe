@@ -743,6 +743,9 @@ impl Watcher {
 
     fn fire(&mut self, f: Fire) {
         let (id, slot, m) = (f.device, f.slot, f.action);
+        if matches!(m.action.as_str(), "volume_up" | "volume_down" | "mute" | "mangohud" | "screenshot") && self.core.under_steam() {
+            return;
+        }
         self.out.emit(
             serde_json::json!({"event": "macro", "id": id, "slot": slot, "trigger": f.trigger, "action": m.action, "keys": m.keys, "command": m.command}),
         );

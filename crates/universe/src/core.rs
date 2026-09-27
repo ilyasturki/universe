@@ -64,6 +64,7 @@ pub(crate) fn passthrough_env() -> BTreeMap<String, String> {
         "UNIVERSE_SOURCES_PATH",
         "RUST_LOG",
         "GAMESCOPE_WAYLAND_DISPLAY",
+        crate::nest::OWN_ENV,
         "STEAM_GAME_DISPLAY_0",
         "SDL_VIDEODRIVER",
         "SDL_VIDEO_MINIMIZE_ON_FOCUS_LOSS",
@@ -486,6 +487,18 @@ impl Core {
         self.nest().ok_or_else(|| Error::Unavailable("not inside gamescope".into()))
     }
 
+    /// Inside Steam's gamescope (Game Mode): Steam owns the HUD, the frame limit, volume, screenshots and power.
+    pub fn under_steam(&self) -> bool {
+        self.nest().is_some_and(|n| n.steam)
+    }
+
+    fn steam_owns(&self, what: &str) -> Result<()> {
+        match self.under_steam() {
+            true => Err(Error::Unavailable(format!("{what} belongs to Steam in Game Mode"))),
+            false => Ok(()),
+        }
+    }
+
     pub async fn desktop(&self) -> crate::desktop::Profile {
         crate::desktop::detect(&*self.config.read().await)
     }
@@ -611,6 +624,7 @@ impl Core {
 
     /// MangoHud rereads its conf on inotify's `IN_MODIFY`, and a frozen game's on the thaw: the write is the reload.
     pub async fn set_fps_limit(&self) -> Result<()> {
+        self.steam_owns("The frame rate limit")?;
         let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
         self.write_layer_conf(&c, &self.get(&c.id).await?).await
     }
@@ -628,6 +642,7 @@ impl Core {
 
     /// `None` flips it; returns the new state.
     pub async fn set_mangohud(&self, on: Option<bool>) -> Result<bool> {
+        self.steam_owns("The performance overlay")?;
         let Some(c) = self.current().await else { return Err(Error::NotFound("no session running".into())) };
         // The dock and the watcher each hold a library: the other may have written the key since this one loaded.
         self.reload_game(&c.id).await?;
@@ -666,6 +681,9 @@ impl Core {
             "get" => Change::Get,
             other => return Err(Error::Invalid(format!("volume: up, down, mute, set or get, not '{other}'"))),
         };
+        if change != Change::Get {
+            self.steam_owns("Volume")?;
+        }
         let step = self.config.read().await.controller.volume_step;
         let level = crate::controller::volume::change(change, step, self.desktop().await).await.map_err(Error::Unavailable)?;
         Ok(serde_json::json!({"percent": level.percent, "muted": level.muted, "output": level.output}))
@@ -677,6 +695,7 @@ impl Core {
 
     /// The new sink's level, as `volume("get")` reads it.
     pub async fn set_output(&self, id: &str) -> Result<serde_json::Value> {
+        self.steam_owns("The sound output")?;
         if !self.outputs().await?.iter().any(|o| o.id == id) {
             return Err(Error::Invalid(format!("output: no '{id}' (universe output lists them)")));
         }
@@ -688,6 +707,9 @@ impl Core {
     /// What logind would carry out now: `inhibited` and `challenge` stay listed, the call itself says why or asks for a password.
     pub async fn power_actions(&self) -> Vec<&'static str> {
         let mut ids = Vec::new();
+        if self.under_steam() {
+            return ids;
+        }
         for action in crate::logind::PowerAction::ALL {
             if crate::logind::can(action).await.is_some_and(|answer| answer != "no" && answer != "na") {
                 ids.push(action.id());
@@ -697,6 +719,7 @@ impl Core {
     }
 
     pub async fn power(&self, action: &str) -> Result<()> {
+        self.steam_owns("Power")?;
         let Some(action) = crate::logind::PowerAction::parse(action) else {
             return Err(Error::Invalid(format!("power: suspend, reboot or power_off, not '{action}'")));
         };
@@ -708,11 +731,79 @@ impl Core {
         crate::launcher::host_gamescope_for(&cfg, screen).await
     }
 
+    /// A Deck's panel, on the launcher's own gamescope straight on it: gamescope changes the panel's mode on the fly.
+    fn refresh_control(&self) -> Option<crate::hardware::Control> {
+        let model = crate::deck::model()?;
+        if crate::nest::own() != Some(crate::nest::Own::Drm) {
+            return None;
+        }
+        let (min, max) = model.refresh_range();
+        let now = self.nest()?.refresh().ok().flatten().unwrap_or(max).clamp(min, max);
+        Some(crate::hardware::Control::range("refresh", "Refresh rate", "The panel's refresh: lower saves battery.", now, (min, max, 1), "Hz"))
+    }
+
+    /// Outside Steam's Game Mode: the backlight, a Deck panel's refresh, the APU's power limit and GPU clock, SteamOS's fan curve.
+    pub async fn system_controls(&self) -> Vec<crate::hardware::Control> {
+        if self.under_steam() {
+            return vec![];
+        }
+        let m = crate::hardware::Machine::default();
+        let mut out: Vec<crate::hardware::Control> = [m.brightness(), self.refresh_control(), m.tdp(), m.gpu_clock()].into_iter().flatten().collect();
+        out.extend(m.fan().await);
+        out
+    }
+
+    async fn apply_system_one(&self, id: &str, value: &str) -> Result<()> {
+        let m = crate::hardware::Machine::default();
+        let number = || value.parse::<u32>().map_err(|_| Error::Invalid(format!("{id}: a number, not '{value}'")));
+        match id {
+            "brightness" => m.set_brightness(number()?).await,
+            "tdp" => m.set_tdp(number()?).await,
+            "gpu" => m.set_gpu_clock(value).await,
+            "refresh" => {
+                let c = self.refresh_control().ok_or_else(|| Error::Unavailable("no refresh rate to set here".into()))?;
+                self.nest_or()?.set_refresh(number()?.clamp(c.min, c.max))
+            }
+            "fan" => match value {
+                "on" | "off" => m.set_fan(value == "on").await,
+                _ => Err(Error::Invalid(format!("fan: on or off, not '{value}'"))),
+            },
+            other => Err(Error::Invalid(format!("no system control '{other}'"))),
+        }
+    }
+
+    /// Applied now; kept in `[system]` to be put back at the next start, but for the backlight, which the system keeps.
+    pub async fn set_system(&self, id: &str, value: &str) -> Result<()> {
+        self.steam_owns("The system's controls")?;
+        self.apply_system_one(id, value).await?;
+        if id == "brightness" {
+            return Ok(());
+        }
+        Config::set_key(&paths::config_file(), &format!("system.{id}"), value)?;
+        self.reload_config().await
+    }
+
+    /// `[system]` put back: the power limit and the clocks do not outlive a reboot.
+    pub async fn apply_system(&self) {
+        if self.under_steam() {
+            return;
+        }
+        let saved = self.config.read().await.system.clone();
+        for (id, value) in [("tdp", &saved.tdp), ("gpu", &saved.gpu), ("refresh", &saved.refresh), ("fan", &saved.fan)] {
+            if !value.is_empty() {
+                if let Err(e) = self.apply_system_one(id, value).await {
+                    tracing::warn!("system.{id} = {value}: {e}");
+                }
+            }
+        }
+    }
+
     pub fn keyboard_layout(&self) -> crate::keyboard::Layout {
         crate::keyboard::probe()
     }
 
     pub async fn screenshot(&self) -> Result<String> {
+        self.steam_owns("Screenshots")?;
         let cfg = self.config.read().await.clone();
         let (game, env) = match self.current().await {
             Some(c) => {
@@ -1266,8 +1357,13 @@ impl Core {
         serde_json::json!({ "screen": screen, "width": mode.width, "height": mode.height, "refresh": mode.refresh, "vrr": mode.vrr })
     }
 
+    /// Under Steam the HUD and the frame limit are its Quick Access menu's, and no HOME reaches a game to pause it.
     pub fn launch_keys(&self, scope: &str, screen: Option<crate::gamescope::Mode>) -> Result<Vec<crate::launch_keys::Row>> {
-        Ok(crate::launch_keys::rows(crate::launch_keys::Scope::parse(scope)?, screen))
+        let mut rows = crate::launch_keys::rows(crate::launch_keys::Scope::parse(scope)?, screen);
+        if self.under_steam() {
+            rows.retain(|r| !["mangohud", "fps_limit", "pause_on_home"].contains(&r.key));
+        }
+        Ok(rows)
     }
 
     pub async fn gpu(&self) -> serde_json::Value {

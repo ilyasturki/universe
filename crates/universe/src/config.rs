@@ -88,6 +88,21 @@ pub struct Config {
     pub keys: Keys,
     pub lutris: LutrisConfig,
     pub controller: crate::controller::ControllerConfig,
+    pub system: SystemConfig,
+}
+
+/// The machine's controls as last set, put back when the launcher starts outside Steam; "" leaves one as the system has it.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct SystemConfig {
+    /// Watts.
+    pub tdp: String,
+    /// "auto" or MHz.
+    pub gpu: String,
+    /// Hz.
+    pub refresh: String,
+    /// "on" or "off".
+    pub fan: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -188,6 +203,7 @@ impl Default for Config {
             keys: Keys::default(),
             lutris: LutrisConfig::default(),
             controller: crate::controller::ControllerConfig::default(),
+            system: SystemConfig::default(),
         }
     }
 }

@@ -103,13 +103,25 @@ FocusScope {
     readonly property real cardHeight: Math.max(Theme.dp(150), Math.min(Theme.dp(300), gamesZone.height - Theme.dp(96)))
     readonly property real cardWidth: cardHeight / 1.5
 
-    Component.onCompleted: search.sections = Sections.list.map(function (s) {
-        return {
-            id: s.id,
-            label: s.name,
-            icon: s.icon
-        };
-    })
+    function listSections() {
+        search.sections = Sections.shown(api.system).map(function (s) {
+            return {
+                id: s.id,
+                label: s.name,
+                icon: s.icon
+            };
+        });
+    }
+
+    Component.onCompleted: listSections()
+
+    // The System section comes with the machine's controls, read after the launcher starts.
+    Connections {
+        target: api.system
+        function onControlsChanged() {
+            overlay.listSections();
+        }
+    }
 
     function goTo(next) {
         Sound.panel();

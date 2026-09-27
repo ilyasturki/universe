@@ -1304,7 +1304,8 @@ FocusScope {
             action: "",
             gap: true
         });
-        confirm.choose("Power", session ? "Suspend keeps " + session.title + " running. The others close it." : "", items, function (action) {
+        var detail = api.system.steam ? "Back to Steam, whose menu has the power options." : session && can.length > 0 ? "Suspend keeps " + session.title + " running. The others close it." : "";
+        confirm.choose("Power", detail, items, function (action) {
             if (action === "quit")
                 Qt.quit();
             else if (action === "suspend")
@@ -1347,6 +1348,9 @@ FocusScope {
                     reboot: "reboot",
                     power_off: "power off"
                 })[action] + ": " + message, "power");
+        }
+        function onControlFailed(id, message) {
+            Notices.fail(message, "bolt");
         }
     }
 

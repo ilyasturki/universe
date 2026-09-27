@@ -144,6 +144,7 @@ hooks write shows up that way, with no other channel.
 | `set_fps_limit()` | `set_fps_limit()` | — | rewrites the running game's `<state>/MangoHud.conf` from its `fps_limit` as launch resolves it: the layer watches that file (inotify) and rereads it by itself, a frozen game on the thaw, so no key is typed and no uinput is needed |
 | `set_mangohud(on)` | `set_mangohud(on=None)` | — | the running game's HUD: `None` flips it. Written as the game's `launch.mangohud` (reread from disk first: the dock and the watcher each hold a library), then applied in the game — mangoapp told over its control queue where one draws (see MangoHud), the layer over its control socket elsewhere, each also through its conf, which it rereads — and the new state returned. `NotFound` without a session; `Unavailable`, nothing written, when nothing can draw the HUD (no mangoapp where one would, no `mangohud` for the layer) |
 | `nest()` / `nest_game_shown()` / `nest_overlay(window, input, opacity)` / `nest_frame()` / `nest_filter(filter, sharpness)` | `nested()` / `nest_game_shown()` / … | — | the gamescope this process runs in (see Gamescope): whether there is one; whether it shows a window of another process; `STEAM_OVERLAY` on a window of this process, with its `STEAM_INPUT_FOCUS` and `_NET_WM_WINDOW_OPACITY`; the game's last painted frame into `<state>/frame.png` (`None` when no paint came within 5 s); `GAMESCOPE_SCALING_FILTER` and `GAMESCOPE_FSR_SHARPNESS` (no sharpness deletes the card: gamescope reads its default, 2, back). `Unavailable` on the desktop |
+| `under_steam()` | `under_steam()` | — | inside Steam's gamescope (Game Mode, see Gamescope): Steam owns power, sound, screenshots and the HUD there |
 | `power_actions()` / `power(action)` | `power_actions()` / `power(action)` | — | logind on the system bus. `power_actions()` lists which of `suspend`, `reboot` and `power_off` its `Can*` does not answer `no` or `na` (`inhibited` and `challenge` stay: the call says why, or polkit asks); empty when logind cannot be asked. `power(action)` calls `Suspend` / `Reboot` / `PowerOff` interactive, so a desktop's polkit agent may ask for a password; logind's refusal is `Unavailable` with its message, an unknown action `Invalid` |
 | `host_gamescope(screen)` | `host_gamescope(screen)` | — | the gamescope a launcher starts itself in: `[env, MANGOHUD_CONFIGFILE=<state>/mangoapp.conf, XKB_DEFAULT_LAYOUT=…, XKB_DEFAULT_VARIANT=…, gamescope, args…]` from `launch.gamescope_bin`, the global `gamescope_*` fields at the screen's mode, `launch.gamescope_args`, `--mangoapp` whenever mangoapp is installed and `--hdr-enabled` when `launch.hdr` is, the keyboard layout (see below); writes that conf with the HUD hidden (a game shows it). `None` when the binary is not installed |
 | `keyboard_layout()` | `keyboard_layout()` | — | `{layout, variant}`, the session's xkb keyboard layout (`fr` / `bepo`, `us` / `intl`…): `XKB_DEFAULT_LAYOUT` and `XKB_DEFAULT_VARIANT` when set, else what the desktop keeps — GNOME's `org.gnome.desktop.input-sources` (the most recently used source, else the first), Cinnamon's `org.cinnamon.desktop.input-sources`, Hyprland's `input:kb_layout`, KDE's `kxkbrc`, the active layout sway (`swaymsg -t get_inputs`) and niri (`niri msg keyboard-layouts`) name, turned back into its code through xkeyboard-config's `rules/evdev.lst` (`XKB_CONFIG_ROOT`, else `X11/xkb` or `xkeyboard-config-2` under `XDG_DATA_DIRS`) — else `localectl`'s X11 layout or the console keymap up to its charset, else `us`. gamescope builds a US keymap of its own whatever the session's, so both the launcher's gamescope and a game's own get it as `XKB_DEFAULT_LAYOUT` / `XKB_DEFAULT_VARIANT` (which libxkbcommon reads), and a frontend draws its on-screen keyboard from it |
@@ -230,6 +231,33 @@ limit still applies) since mangoapp draws the HUD, `PROTON_ENABLE_WAYLAND` dropp
 `gamescope_pid` and `launcher_pid` — whose windows are the one set that is not the game's, whichever
 process asks — so `session_window` from a hook's process returns the gamescope's toplevel (what
 shows the game) and `wait_session_window` waits until gamescope shows the game's window inside.
+
+The gamescope the launcher starts for itself carries `UNIVERSE_OWN_GAMESCOPE` to its children:
+`drm` when it drives the screen (a session of its own: no `WAYLAND_DISPLAY` or `DISPLAY` above it),
+`nested` in a desktop's window. Any other gamescope the launcher finds itself in is someone else's.
+
+#### Steam's Game Mode
+
+Added to Steam as a non-Steam game, the launcher runs inside Steam's gamescope, which Steam starts
+with `--steam`: `under_steam()` is a foreign gamescope (no `UNIVERSE_OWN_GAMESCOPE`) whose root
+carries `GAMESCOPECTRL_BASELAYER_APPID`, or whose launcher Steam handed a `SteamGameId`. Steam keeps
+the Steam and … buttons, its overlay, the HUD, the frame limit, volume, screenshots and power there,
+so the core steps aside:
+
+- Focus: under `--steam` gamescope shows the windows of the app Steam focuses. A game started as a
+  transient unit has no Steam reaper above it and no app id, so `focus_session` stamps the
+  launcher's own (`STEAM_GAME` of the launcher's window, else its `SteamGameId`) on the game's
+  windows — the ones no app claims yet, never Steam's own UI — and gamescope shows the newer one;
+  `focus_pid` puts 0 back, and `nest_game_shown()` counts only those windows.
+- The plan: no MangoHud layer and no limit (`mangohud` false, `fps_limit` none), and the launcher's
+  mangoapp is not told a thing, since the SysV queue would reach Steam's.
+- `set_mangohud`, `set_fps_limit`, `volume` (all but `get`), `set_output`, `screenshot`,
+  `power(action)` and `set_system` are `Unavailable` ("… belongs to Steam in Game Mode");
+  `power_actions()` and `system_controls()` are empty; `launch_keys` leaves out `mangohud`,
+  `fps_limit` and `pause_on_home`. The watcher drops the volume, mute, MangoHud and screenshot
+  macros.
+- Steam's Exit Game ends the shortcut, the launcher with it; the game's unit is `BindsTo=` the
+  launcher's scope and goes down after it, `session-end` included.
 
 gamescope gives every keyboard the US layout: its keymap comes from `XKB_DEFAULT_LAYOUT` and
 `XKB_DEFAULT_VARIANT` alone, which no session sets, so an AZERTY typist gets QWERTY inside it. Both
@@ -883,6 +911,18 @@ bind from a terminal or from a launcher whose own watcher is waiting reaches the
 pads. Either reload rereads config.toml and the module list only, never the library, so pad
 events are not held up behind a rescan.
 
+## System
+
+The machine's own controls, for a frontend running outside Steam (in Game Mode Steam's Quick
+Access menu has them).
+
+| Rust | Python | CLI | Role |
+|---|---|---|---|
+| `deck::model()` | `deck_model()` | — | `lcd` or `oled` on a Steam Deck (DMI: Valve's Jupiter or Galileo board), else none; `UNIVERSE_DECK=lcd\|oled\|none` stands in for the read |
+| `system_controls()` | `system_controls()` | — | `[{id, label, detail, kind, value, min, max, step, unit, choices}]`, each only where this machine has it and this user can set it: `brightness` (range, %: the first `/sys/class/backlight`, amdgpu's first), `refresh` (range, Hz: a Deck's panel, 40–60 LCD or 45–90 OLED, on the launcher's own gamescope straight on the screen only), `tdp` (range, W: amdgpu's hwmon `power1_cap`, bounded by `power1_cap_min`/`_max`), `gpu` (choice: `auto` or a clock in 100 MHz steps over `pp_od_clk_voltage`'s `OD_RANGE`), `fan` (toggle: SteamOS's `jupiter-fan-control` service, off leaving the fan to the firmware); empty under Steam |
+| `set_system(id, value)` | `set_system(id, value)` | — | applies it and, but for `brightness`, keeps it in `[system]`. The backlight goes through logind's `Session.SetBrightness` (no polkit), else the file; the power cap and the clock through the file when it is writable, else SteamOS's `steamos-priv-write` (which leaves the file writable after its first write); a pinned clock writes `manual`, then `s 0 N`, `s 1 N` and `c`; the refresh through gamescope's `GAMESCOPE_DYNAMIC_REFRESH`; the fan through `jupiter-fan-control --enable\|--disable`. `Invalid` on an unknown id or value, `Unavailable` where the machine has no such control or the helper refuses |
+| `apply_system()` | `apply_system()` | — | `[system]` put back, a failure logged: the power limit and the clocks do not outlive a reboot. The UI calls it at startup |
+
 ## config.toml
 
 Defaults as the core ships them:
@@ -928,6 +968,12 @@ profile = "auto"                     # auto | gnome | kde | cinnamon | sway | hy
 hide_cursor = true
 cursor_extension = ""                # empty: the Universe extension hides the pointer after 5 s at rest; another extension's uuid is enabled for the session instead, restored to its prior state after
 keep_awake = true                    # the desktop's idle inhibitors held for the session (see universe keep-awake): a pad is no activity to it, and the screen would blank and suspend mid-game
+
+[system]                             # the machine's controls as last set (see System), put back at the launcher's start outside Steam; "" leaves one as the system has it
+tdp = ""                             # watts
+gpu = ""                             # auto, or MHz
+refresh = ""                         # Hz, a Deck's panel on the launcher's own gamescope
+fan = ""                             # on | off: SteamOS's fan curve
 
 [proton]                             # name → path, none by default; a name with no path here is looked for as a family (GE-Proton10-4 for proton-ge) under Lutris, Steam, umu and Heroic
 # proton-em = "~/.local/share/lutris/runners/wine/proton-em"

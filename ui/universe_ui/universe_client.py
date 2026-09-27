@@ -270,6 +270,10 @@ class CoreClient(QObject):
         self._call_async(lambda: self._core.freeze(on), on_reply)
 
     nested = property(lambda self: bool(self._core.nested()))
+    # Inside Steam's gamescope (Game Mode), where Steam owns power, sound, screenshots and the HUD.
+    underSteam = property(lambda self: bool(self._core.under_steam()))
+    # "lcd" or "oled" on a Steam Deck, else "".
+    deck = property(lambda self: str(self._core.deck_model()))
 
     def gameShown(self):
         return self._guarded(False, self._core.nest_game_shown)
@@ -306,6 +310,15 @@ class CoreClient(QObject):
 
     def setOutputAsync(self, ident, on_reply, on_error=None):
         self._call_async(lambda: self._core.set_output(ident), on_reply, on_error)
+
+    def systemControlsAsync(self, on_reply):
+        self._call_async(self._core.system_controls, lambda rows: on_reply(list(rows or [])), on_error=lambda e: on_reply([]))
+
+    def setSystemAsync(self, ident, value, on_reply, on_error):
+        self._call_async(lambda: self._core.set_system(ident, value), lambda _: on_reply(), on_error=on_error)
+
+    def applySystemAsync(self, on_done):
+        self._call_async(self._core.apply_system, lambda _: on_done(), on_error=lambda e: on_done())
 
     def powerActionsAsync(self, on_reply):
         self._call_async(self._core.power_actions, lambda ids: on_reply(list(ids or [])), on_error=lambda e: on_reply([]))

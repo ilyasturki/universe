@@ -11,6 +11,7 @@ pub mod doctor;
 pub mod game;
 pub mod gamescope;
 pub mod gpu;
+pub mod hardware;
 pub mod host;
 pub mod inputplumber;
 pub mod journal;

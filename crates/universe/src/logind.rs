@@ -63,3 +63,18 @@ pub async fn request(action: PowerAction) -> Result<(), String> {
         Err(_) => Err("logind did not answer".into()),
     }
 }
+
+/// No polkit: a session may set its own seat's backlight. `auto` is the session the caller runs in.
+pub async fn set_brightness(device: &str, raw: u32) -> Result<(), String> {
+    let call = async {
+        let conn = zbus::Connection::system().await?;
+        let session = zbus::Proxy::new(&conn, "org.freedesktop.login1", "/org/freedesktop/login1/session/auto", "org.freedesktop.login1.Session").await?;
+        session.call::<_, _, ()>("SetBrightness", &("backlight", device, raw)).await
+    };
+    match tokio::time::timeout(Duration::from_secs(5), call).await {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(zbus::Error::MethodError(_, Some(message), _))) => Err(message),
+        Ok(Err(e)) => Err(e.to_string()),
+        Err(_) => Err("logind did not answer".into()),
+    }
+}

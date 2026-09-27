@@ -2,6 +2,7 @@ import QtQuick
 import "../core"
 import "../sound"
 import "../ui"
+import "../../ui/Controls.js" as Controls
 import "Details.js" as Details
 import "Forms.js" as Forms
 
@@ -78,6 +79,13 @@ FocusScope {
             groupLabel: "System"
         },
         {
+            id: "performance",
+            label: "Performance",
+            group: 4,
+            groupLabel: "System",
+            detail: "Brightness, refresh, power limit, GPU clock and fan"
+        },
+        {
             id: "doctor",
             label: "Doctor",
             group: 4,
@@ -89,7 +97,10 @@ FocusScope {
             group: 4,
             groupLabel: "System"
         }
-    ]
+    ].filter(function (s) {
+        // Steam's Game Mode keeps the sound; Performance needs a control this machine has.
+        return !(s.id === "sound" && api.system.steam) && !(s.id === "performance" && api.system.controls.length === 0);
+    })
     property int section: 1
     readonly property string sectionId: sections[section].id
     property string zone: "list"
@@ -113,11 +124,17 @@ FocusScope {
             },
             sound: function () {
                 api.home.loadOutputs();
+            },
+            performance: function () {
+                api.system.reload();
             }
         })
     readonly property var refreshers: ({
             sound: function () {
                 api.home.loadOutputs();
+            },
+            performance: function () {
+                api.system.reload();
             },
             updates: function () {
                 sources.refresh();
@@ -358,6 +375,21 @@ FocusScope {
                     detail: ""
                 }
             ];
+        if (sectionId === "performance")
+            return api.system.controls.map(function (c) {
+                var toggle = c.kind === "toggle";
+                return {
+                    key: c.id,
+                    label: c.label,
+                    type: toggle ? "bool" : "enum",
+                    value: toggle ? c.value === "on" : Controls.label(c),
+                    display: Controls.label(c),
+                    choices: toggle ? [] : Controls.labels(c),
+                    action: "system",
+                    control: c,
+                    detail: c.detail
+                };
+            });
         if (sectionId === "sound") {
             var outs = api.home.outputs.map(function (o) {
                 return {
@@ -499,6 +531,17 @@ FocusScope {
         } else if (sectionId === "controllers") {
             Sound.play("ok");
             shell.push("pages/ControllersPage.qml", {});
+        } else if (row.action === "system") {
+            if (row.type === "bool") {
+                Sound.play("select");
+                api.system.set(row.key, row.value ? "off" : "on");
+            } else {
+                rows.edit(row, function (label) {
+                    var at = row.choices.indexOf(label);
+                    if (at >= 0)
+                        api.system.set(row.key, Controls.values(row.control)[at]);
+                });
+            }
         } else if (row.action === "output") {
             Sound.play(row.value ? "edge" : "select");
             if (!row.value)

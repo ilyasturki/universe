@@ -188,7 +188,15 @@ impl Core {
         let splash = (!splash.is_empty()).then(|| std::path::PathBuf::from(splash));
         let gamescope_pid = self.nest().map_or(0, |n| n.pid);
         let launcher_pid = if gamescope_pid != 0 { std::process::id() } else { 0 };
-        let mut plan = launcher::plan(&r, &cfg, &extra_env, mode, splash.as_deref(), gamescope_pid != 0, launcher::mangoapp_installed())?;
+        let mut plan = if self.under_steam() {
+            // Steam's mangoapp draws its HUD and Steam limits the frame rate: no MangoHud layer, no limit of Universe's.
+            let mut steam = r.clone();
+            steam.effective.mangohud = false;
+            steam.effective.fps_limit = "none".into();
+            launcher::plan(&steam, &cfg, &extra_env, mode, splash.as_deref(), true, true)?
+        } else {
+            launcher::plan(&r, &cfg, &extra_env, mode, splash.as_deref(), gamescope_pid != 0, launcher::mangoapp_installed())?
+        };
         for (path, text) in plan.mangohud_conf.iter().chain(&plan.mangoapp_conf) {
             std::fs::write(path, text)?;
         }
@@ -257,7 +265,7 @@ impl Core {
             let restore = self.host.shell.cursor_enable().await;
             undo.push(Undo::Cursor { restore });
         }
-        if current.gamescope_pid != 0 && launcher::mangoapp_installed() {
+        if current.gamescope_pid != 0 && !self.under_steam() && launcher::mangoapp_installed() {
             self.apply_mangoapp(r.effective.mangohud, true)?;
             undo.push(Undo::Hud);
         }

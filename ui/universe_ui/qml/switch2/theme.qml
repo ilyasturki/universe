@@ -573,6 +573,9 @@ FocusScope {
                     power_off: "turn off"
                 })[action] + ": " + message, "power");
         }
+        function onControlFailed(id, message) {
+            Base.Notices.fail(message, "bolt");
+        }
     }
 
     Connections {

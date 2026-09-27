@@ -320,9 +320,11 @@ pub fn set_dotted(doc: &mut toml_edit::DocumentMut, key: &str, value: &str) -> c
         && parts[0] == "launch"
         && parts[1] != "options"
         && crate::launch_keys::find(parts[1]).is_some_and(|k| k.kind == crate::launch_keys::Kind::Map);
+    // [system] holds text too: a GPU clock is `auto` or `800`.
+    let is_system = parts[0] == "system";
     let v = if is_list && !value.starts_with('[') {
         parse_value(&format!("[{value}]"))
-    } else if is_rate || is_text_map {
+    } else if is_rate || is_text_map || is_system {
         value.into()
     } else {
         parse_value(value)

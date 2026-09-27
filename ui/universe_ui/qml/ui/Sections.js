@@ -48,6 +48,11 @@ var list = [
         icon: "volume-up"
     },
     {
+        id: "system",
+        name: "System",
+        icon: "bolt"
+    },
+    {
         id: "doctor",
         name: "Doctor",
         icon: "pulse"
@@ -65,3 +70,10 @@ var aliases = {
     quit: "about",
     power: "about"
 };
+
+// The sections `api.system` leaves: under Steam's Game Mode sound is Steam's, and System needs a control to show.
+function shown(system) {
+    return list.filter(function (s) {
+        return !(s.id === "sound" && system.steam) && !(s.id === "system" && system.controls.length === 0);
+    });
+}

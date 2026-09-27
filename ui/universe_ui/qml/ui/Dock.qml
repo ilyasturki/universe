@@ -2,6 +2,7 @@ import QtQuick
 import "../core"
 import "../core/Format.js" as Format
 import "../sound"
+import "Controls.js" as Controls
 
 FocusScope {
     id: dock
@@ -126,7 +127,7 @@ FocusScope {
                 }
             ]
         }
-    ])
+    ]).concat(system ? [system] : [])
     // The source's switch (GOG's `achievements`), read on open: off, the game keeps its list but the dock shows none.
     property bool tracksAchievements: true
     readonly property bool listsAchievements: tracksAchievements && (game ? game.achievementsTotal > 0 : false)
@@ -136,6 +137,27 @@ FocusScope {
             label: "Achievements",
             kind: "action"
         })
+    // The machine's own controls (`api.system.controls`): a Deck's brightness, refresh, power limit, GPU clock and fan.
+    readonly property var system: {
+        var controls = api.system.controls;
+        if (controls.length === 0)
+            return null;
+        return {
+            id: "system",
+            icon: "bolt",
+            label: "System",
+            kind: "group",
+            children: controls.map(function (c) {
+                return {
+                    id: "sys_" + c.id,
+                    sys: c.id,
+                    icon: Controls.icon(c),
+                    label: c.label,
+                    kind: c.kind === "toggle" ? "toggle" : "value"
+                };
+            })
+        };
+    }
     // Gamescope sharpens only through FSR and NIS: the row comes with them. A bool, so a step elsewhere rebuilds no list.
     readonly property bool sharpens: vals.filter === "fsr" || vals.filter === "nis"
     readonly property var sharpness: ({
@@ -160,7 +182,7 @@ FocusScope {
         var on = api.universe.modules().some(function (m) {
             return m.id === "capture" && m.enabled;
         });
-        vals = {
+        var v = {
             pause: api.home.pauseOnHome,
             rec: on && cap.enabled !== false,
             hud: api.home.launchValue("mangohud") === "true",
@@ -173,6 +195,10 @@ FocusScope {
             mute: api.home.muted,
             output: outputApply.running ? vals.output : currentOutput()
         };
+        api.system.controls.forEach(function (c) {
+            v["sys_" + c.id] = systemApply.running ? vals["sys_" + c.id] : c.value;
+        });
+        vals = v;
     }
 
     function currentOutput() {
@@ -204,6 +230,8 @@ FocusScope {
     }
 
     function options(item) {
+        if (item.sys)
+            return Controls.values(api.system.control(item.sys));
         if (item.id === "output")
             return api.home.outputs.map(function (o) {
                 return o.id;
@@ -213,6 +241,10 @@ FocusScope {
 
     function shows(item) {
         var v = vals;
+        if (item.sys) {
+            var control = api.system.control(item.sys);
+            return control ? Controls.label(control, v[item.id]) : "";
+        }
         switch (item.id) {
         case "pause":
             return v.pause ? "On" : "Off";
@@ -232,7 +264,7 @@ FocusScope {
     }
 
     function isOn(item) {
-        return vals[item.id] === true;
+        return item.sys ? vals[item.id] === "on" : vals[item.id] === true;
     }
 
     function step(item, dir) {
@@ -243,6 +275,19 @@ FocusScope {
         }
         if (item.kind !== "value")
             return;
+        // Held at either end, not wrapped: from the highest power limit a step up is no jump to the lowest.
+        if (item.sys) {
+            var was = vals[item.id];
+            var to = Controls.stepped(api.system.control(item.sys), was, dir);
+            if (to === was) {
+                Sound.edge();
+                return;
+            }
+            Sound.tick();
+            patch(item.id, to);
+            systemApply.restart();
+            return;
+        }
         var opts = options(item);
         if (!opts.length)
             return;
@@ -257,7 +302,11 @@ FocusScope {
 
     function flip(item) {
         Sound.enter();
-        if (item.id === "pause")
+        if (item.sys) {
+            var on = vals[item.id] !== "on";
+            patch(item.id, on ? "on" : "off");
+            api.system.set(item.sys, on ? "on" : "off");
+        } else if (item.id === "pause")
             api.home.setPauseOnHome(!vals.pause);
         else if (item.id === "hud") {
             api.home.setLaunchValue("mangohud", vals.hud ? "false" : "true");
@@ -396,6 +445,19 @@ FocusScope {
         onTriggered: {
             if (dock.vals.output !== dock.currentOutput())
                 api.home.setOutput(dock.vals.output);
+        }
+    }
+
+    // A power limit or a clock is written once the cursor rests: each write may go through SteamOS's helper.
+    Timer {
+        id: systemApply
+        interval: 400
+        onTriggered: {
+            api.system.controls.forEach(function (c) {
+                var want = dock.vals["sys_" + c.id];
+                if (want !== undefined && want !== c.value)
+                    api.system.set(c.id, want);
+            });
         }
     }
 

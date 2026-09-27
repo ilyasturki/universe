@@ -33,10 +33,67 @@ pub fn inside() -> bool {
     std::env::var_os("GAMESCOPE_WAYLAND_DISPLAY").is_some_and(|v| !v.is_empty())
 }
 
+/// Set by the launcher on the gamescope it starts for itself: `drm` straight on the screen, `nested` in a desktop's window.
+pub const OWN_ENV: &str = "UNIVERSE_OWN_GAMESCOPE";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Own {
+    Drm,
+    Nested,
+}
+
+pub fn own() -> Option<Own> {
+    match std::env::var(OWN_ENV).as_deref() {
+        Ok("drm") => Some(Own::Drm),
+        Ok("nested") => Some(Own::Nested),
+        _ => None,
+    }
+}
+
+/// Steam drives a gamescope it runs with --steam (Game Mode): it sets the base layer's app id on the root, and hands its
+/// games (this launcher among them, as a non-Steam shortcut) a SteamGameId.
+pub fn steam_driven(own: Option<Own>, baselayer: bool, steam_game_id: bool) -> bool {
+    own.is_none() && (baselayer || steam_game_id)
+}
+
+/// The app id gamescope gave the launcher's own window, else the one Steam handed the launcher.
+fn launcher_app(windows: &[Focusable], launcher: u32) -> Option<u32> {
+    windows
+        .iter()
+        .find(|w| w.pid == launcher && w.app_id != 0)
+        .map(|w| w.app_id)
+        .or_else(|| std::env::var("SteamGameId").ok()?.parse().ok().filter(|id| *id != 0))
+}
+
+/// The game's windows: every one not the launcher's; under Steam (`steam_app`, the launcher's id) only those no app claims
+/// yet or the launcher's id already stamped, since Steam's own UI is on the list too.
+pub fn game_windows(windows: &[Focusable], launcher: u32, steam_app: Option<u32>) -> impl Iterator<Item = &Focusable> {
+    windows.iter().filter(move |w| w.pid != launcher && steam_app.is_none_or(|app| w.app_id == 0 || w.app_id == app))
+}
+
+/// The STEAM_GAME each game window takes: the game shown, each its own id or, under Steam, the launcher's; the launcher
+/// shown, 0.
+pub fn stamps(windows: &[Focusable], launcher: u32, steam_app: Option<u32>, game: bool) -> Vec<(u32, u32)> {
+    game_windows(windows, launcher, steam_app)
+        .filter_map(|w| {
+            let want = match (game, steam_app) {
+                (false, _) => 0,
+                (true, Some(app)) => app,
+                // An id already set stays: the game may have set its own.
+                (true, None) if w.app_id != 0 => w.app_id,
+                (true, None) => w.window,
+            };
+            (w.app_id != want).then_some((w.window, want))
+        })
+        .collect()
+}
+
 pub struct Nest {
     conn: RustConnection,
     root: u32,
     pub pid: u32,
+    /// Steam's gamescope, not the launcher's: see `steam_driven`.
+    pub steam: bool,
 }
 
 impl Nest {
@@ -46,9 +103,11 @@ impl Nest {
         }
         let (conn, screen) = x11rb::connect(None).map_err(|e| Error::Unavailable(format!("gamescope's display: {e}")))?;
         let root = conn.setup().roots[screen].root;
-        let nest = Nest { conn, root, pid: 0 };
+        let nest = Nest { conn, root, pid: 0, steam: false };
         let pid = nest.cards(root, "GAMESCOPE_PID")?.first().copied().ok_or_else(|| Error::Unavailable("the display is not gamescope's".into()))?;
-        Ok(Nest { pid, ..nest })
+        let baselayer = !nest.cards(root, "GAMESCOPECTRL_BASELAYER_APPID")?.is_empty();
+        let steam = steam_driven(own(), baselayer, std::env::var_os("SteamGameId").is_some_and(|v| !v.is_empty()));
+        Ok(Nest { pid, steam, ..nest })
     }
 
     fn atom(&self, name: &str) -> Result<u32> {
@@ -81,21 +140,29 @@ impl Nest {
         Ok(self.cards(self.root, "GAMESCOPE_FOCUSED_WINDOW")?.first().copied().filter(|w| *w != 0))
     }
 
-    pub fn foreign(&self, launcher: u32) -> Result<Vec<Focusable>> {
-        Ok(self.windows()?.into_iter().filter(|w| w.pid != launcher).collect())
+    /// The launcher's app id under Steam, `None` on any other gamescope.
+    fn steam_app(&self, windows: &[Focusable], launcher: u32) -> Result<Option<u32>> {
+        match self.steam {
+            true => Ok(Some(launcher_app(windows, launcher).ok_or_else(|| Error::Unavailable("Steam gave the launcher no app id".into()))?)),
+            false => Ok(None),
+        }
     }
 
     pub fn game_shown(&self, launcher: u32) -> Result<bool> {
         let Some(focused) = self.focused()? else { return Ok(false) };
-        Ok(self.foreign(launcher)?.iter().any(|w| w.window == focused))
+        let windows = self.windows()?;
+        let steam_app = self.steam_app(&windows, launcher)?;
+        let shown = game_windows(&windows, launcher, steam_app).any(|w| w.window == focused);
+        Ok(shown)
     }
 
     // Without --steam gamescope shows the newest mapped window whose STEAM_GAME is not 0; the BASELAYER atoms act only under --steam.
+    // Under --steam a game started as a unit has no app id (no Steam reaper above it): it takes the launcher's, and the newer window shows.
     pub fn show(&self, launcher: u32, game: bool) -> Result<()> {
-        for w in self.foreign(launcher)? {
-            if (w.app_id == 0) == game {
-                self.set_card(w.window, "STEAM_GAME", if game { w.window } else { 0 })?;
-            }
+        let windows = self.windows()?;
+        let steam_app = self.steam_app(&windows, launcher)?;
+        for (window, value) in stamps(&windows, launcher, steam_app, game) {
+            self.set_card(window, "STEAM_GAME", value)?;
         }
         Ok(())
     }
@@ -118,6 +185,16 @@ impl Nest {
             }
             std::thread::sleep(Duration::from_millis(20));
         }
+    }
+
+    /// The panel's refresh as gamescope drives it now.
+    pub fn refresh(&self) -> Result<Option<u32>> {
+        Ok(self.cards(self.root, "GAMESCOPE_DISPLAY_REFRESH_RATE_FEEDBACK")?.first().copied().filter(|hz| *hz != 0))
+    }
+
+    /// The internal panel's target refresh, within the range gamescope's display script gives it (as Steam's slider sets it).
+    pub fn set_refresh(&self, hz: u32) -> Result<()> {
+        self.set_card(self.root, "GAMESCOPE_DYNAMIC_REFRESH", hz)
     }
 
     pub fn set_filter(&self, filter: &str, sharpness: Option<u32>) -> Result<()> {
@@ -154,5 +231,31 @@ mod tests {
             [Focusable { window: 0xa00007, app_id: 0xa00007, pid: 2913226 }, Focusable { window: 0x600007, app_id: 0, pid: 2913200 }]
         );
         assert!(parse_focusable(&[]).is_empty());
+    }
+
+    #[test]
+    fn a_game_window_takes_its_own_id_on_the_launchers_gamescope_and_the_launchers_under_steam() {
+        let launcher = Focusable { window: 0x100, app_id: 7_000_000, pid: 10 };
+        let fresh = Focusable { window: 0x200, app_id: 0, pid: 20 };
+        let tagged = Focusable { window: 0x300, app_id: 0x300, pid: 20 };
+        let windows = [launcher, fresh, tagged];
+        assert_eq!(stamps(&windows, 10, None, true), [(0x200, 0x200)], "a tagged window stays as it is");
+        assert_eq!(stamps(&windows, 10, None, false), [(0x300, 0)]);
+        assert_eq!(launcher_app(&windows, 10), Some(7_000_000));
+        let stamped = Focusable { window: 0x300, app_id: 7_000_000, pid: 20 };
+        let steam_ui = Focusable { window: 0x400, app_id: 769, pid: 30 };
+        let game_mode = [launcher, fresh, stamped, steam_ui];
+        assert_eq!(stamps(&game_mode, 10, Some(7_000_000), true), [(0x200, 7_000_000)], "Steam's own UI keeps its id");
+        assert_eq!(stamps(&game_mode, 10, Some(7_000_000), false), [(0x300, 0)], "nor is it hidden, nor the launcher's window touched");
+        let shown: Vec<u32> = game_windows(&game_mode, 10, Some(7_000_000)).map(|w| w.window).collect();
+        assert_eq!(shown, [0x200, 0x300], "Steam's UI focused is no game shown");
+    }
+
+    #[test]
+    fn steam_drives_a_gamescope_the_launcher_did_not_start() {
+        assert!(steam_driven(None, true, false), "Game Mode: the base layer is set");
+        assert!(steam_driven(None, false, true), "a shortcut before Steam set the base layer");
+        assert!(!steam_driven(None, false, false), "a bare gamescope someone else started");
+        assert!(!steam_driven(Some(Own::Nested), false, true), "the launcher's own gamescope, started from Steam's desktop client");
     }
 }

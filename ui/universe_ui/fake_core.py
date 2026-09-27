@@ -323,6 +323,71 @@ class FakeCore:
         self.power_list = ["suspend", "reboot", "power_off"]
         self.powered = []
         self.power_error = ""
+        # An OLED Deck's, as the core lists them on its own gamescope; listed under UNIVERSE_DECK only.
+        self.system = [
+            {
+                "id": "brightness",
+                "label": "Brightness",
+                "detail": "The screen's backlight.",
+                "kind": "range",
+                "value": "60",
+                "min": 5,
+                "max": 100,
+                "step": 5,
+                "unit": "%",
+                "choices": [],
+            },
+            {
+                "id": "refresh",
+                "label": "Refresh rate",
+                "detail": "The panel's refresh: lower saves battery.",
+                "kind": "range",
+                "value": "90",
+                "min": 45,
+                "max": 90,
+                "step": 1,
+                "unit": "Hz",
+                "choices": [],
+            },
+            {
+                "id": "tdp",
+                "label": "Power limit",
+                "detail": "The most the APU may draw, sustained: lower runs cooler and longer.",
+                "kind": "range",
+                "value": "15",
+                "min": 3,
+                "max": 15,
+                "step": 1,
+                "unit": "W",
+                "choices": [],
+            },
+            {
+                "id": "gpu",
+                "label": "GPU clock",
+                "detail": "Auto lets the driver choose; a fixed clock trades power for steady frame times.",
+                "kind": "choice",
+                "value": "auto",
+                "min": 200,
+                "max": 1600,
+                "step": 100,
+                "unit": "MHz",
+                "choices": ["auto", *[str(m) for m in range(200, 1700, 100)]],
+            },
+            {
+                "id": "fan",
+                "label": "SteamOS fan curve",
+                "detail": "Off leaves the fan to the firmware.",
+                "kind": "toggle",
+                "value": "on",
+                "min": 0,
+                "max": 0,
+                "step": 0,
+                "unit": "",
+                "choices": [],
+            },
+        ]
+        self.system_error = ""
+        self.system_applied = 0
         self._cards = X11Cards()
         self._config.setdefault("paths", {})["overrides"] = str(self._root / "overrides")
         self._lay_out()
@@ -877,6 +942,14 @@ class FakeCore:
     def nested(self):
         return bool(os.environ.get("GAMESCOPE_WAYLAND_DISPLAY"))
 
+    # `UNIVERSE_FAKE_STEAM=1` plays Game Mode.
+    def under_steam(self):
+        return self.nested() and os.environ.get("UNIVERSE_FAKE_STEAM") == "1"
+
+    def deck_model(self):
+        model = os.environ.get("UNIVERSE_DECK", "")
+        return model if model in ("lcd", "oled") else ""
+
     def nest_game_shown(self):
         return bool(self.current()) and self.game_shown
 
@@ -940,7 +1013,21 @@ class FakeCore:
         return self.volume("get")
 
     def power_actions(self):
-        return list(self.power_list)
+        return [] if self.under_steam() else list(self.power_list)
+
+    def system_controls(self):
+        return [dict(c) for c in self.system] if self.deck_model() and not self.under_steam() else []
+
+    def set_system(self, ident, value):
+        control = next((c for c in self.system if c["id"] == ident), None)
+        if control is None:
+            raise UniverseError("Invalid", f"no system control '{ident}'")
+        if self.system_error:
+            raise UniverseError("Unavailable", self.system_error)
+        control["value"] = value
+
+    def apply_system(self):
+        self.system_applied += 1
 
     def power(self, action):
         if action not in ("suspend", "reboot", "power_off"):
@@ -1559,6 +1646,8 @@ class FakeCore:
         out = []
         for spec in self._launch_keys:
             if scope != "both" and spec["scope"] not in ("both", scope):
+                continue
+            if self.under_steam() and spec["key"] in ("mangohud", "fps_limit", "pause_on_home"):
                 continue
             row = copy.deepcopy(spec)
             row["choices"] = choices.get(spec["type"], row["choices"])

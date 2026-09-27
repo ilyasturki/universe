@@ -47,7 +47,8 @@ def gamescope(monkeypatch, tmp_path, launcher):
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(tmp_path))
     script = tmp_path / "gamescope"
     script.write_text(
-        '#!/bin/sh\ncase "$FAKE_GAMESCOPE" in\n  up) touch "$UNIVERSE_HOST_READY"; sleep 0.3; exit 7;;\n  dies) exit 1;;\n  hangs) exec sleep 30;;\nesac\n'
+        '#!/bin/sh\necho "$UNIVERSE_OWN_GAMESCOPE" > "$XDG_RUNTIME_DIR/own"\n'
+        'case "$FAKE_GAMESCOPE" in\n  up) touch "$UNIVERSE_HOST_READY"; sleep 0.3; exit 7;;\n  dies) exit 1;;\n  hangs) exec sleep 30;;\nesac\n'
     )
     script.chmod(0o755)
     return [str(script)]
@@ -56,6 +57,15 @@ def gamescope(monkeypatch, tmp_path, launcher):
 def test_the_exit_code_of_a_gamescope_that_came_up_is_the_launchers(monkeypatch, gamescope):
     monkeypatch.setenv("FAKE_GAMESCOPE", "up")
     assert host.run_in_gamescope(gamescope, []) == 7, "quitting gamescope after the launcher came up quits, not a restart on the desktop"
+
+
+@pytest.mark.parametrize(("display", "own"), [("wayland-0", "nested"), ("", "drm")])
+def test_the_launchers_own_gamescope_is_marked_so_steams_is_told_apart(monkeypatch, gamescope, tmp_path, display, own):
+    monkeypatch.setenv("FAKE_GAMESCOPE", "up")
+    monkeypatch.delenv("DISPLAY", raising=False)
+    monkeypatch.setenv("WAYLAND_DISPLAY", display)
+    host.run_in_gamescope(gamescope, [])
+    assert (tmp_path / "own").read_text().strip() == own, "straight on the screen (a session of its own) or in a desktop's window"
 
 
 def test_a_gamescope_that_dies_at_start_leaves_the_launcher_on_the_desktop(monkeypatch, gamescope, tmp_path):

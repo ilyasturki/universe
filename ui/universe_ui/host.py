@@ -17,6 +17,8 @@ if TYPE_CHECKING:
 
 QML_DIR = Path(__file__).parent / "qml"
 READY_ENV = "UNIVERSE_HOST_READY"
+# The core's nest::OWN_ENV: the gamescope started here is the launcher's, not Steam's.
+OWN_ENV = "UNIVERSE_OWN_GAMESCOPE"
 # A gamescope that fails to start mostly exits at once; one that hangs (NVIDIA) shows nothing at all.
 READY_S = 30
 
@@ -113,7 +115,8 @@ def run_in_gamescope(command, argv, ready_s=READY_S):
     # gamescope closes every inherited fd in its child: the launcher inside says it is up through a file.
     ready = Path(os.environ.get("XDG_RUNTIME_DIR") or tempfile.gettempdir()) / f"universe-ui-ready-{os.getpid()}"
     ready.unlink(missing_ok=True)
-    proc = subprocess.Popen(gamescope_argv(command, argv), env={**os.environ, READY_ENV: str(ready)})
+    own = "nested" if os.environ.get("WAYLAND_DISPLAY") or os.environ.get("DISPLAY") else "drm"
+    proc = subprocess.Popen(gamescope_argv(command, argv), env={**os.environ, READY_ENV: str(ready), OWN_ENV: own})
     stopping = []
 
     def forward(signum, frame):
@@ -235,7 +238,8 @@ def run(argv=None):
             window.setHeight(h)
         except ValueError:
             pass
-    if client.nested:
+    # Under Steam nothing opens the dock over a game: Steam keeps the Steam button and its overlay.
+    if client.nested and not client.underSteam:
         overlay = create_overlay(engine, window.screen().size())
         if overlay is not None:
             api.keys.watch(overlay)
