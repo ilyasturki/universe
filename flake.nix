@@ -188,12 +188,20 @@
         gogdl
         comet-gog
       ];
+      universeFhs = pkgs.buildFHSEnv (
+        pkgs.appimageTools.defaultFhsEnvArgs
+        // {
+          name = "universe-fhs";
+          runScript = pkgs.writeShellScript "universe-fhs-run" ''exec "$@"'';
+        }
+      );
       runtimePath = lib.makeBinPath (
         moduleRuntime
         ++ sourceRuntime
         ++ [
           pkgs.umu-launcher
           pkgs.systemd
+          universeFhs
         ]
       );
       modulesDir = "${modulesPkg}/share/universe/modules";
@@ -414,6 +422,7 @@
         modules = modulesPkg;
         sources = sourcesPkg;
         universe-ui = ui;
+        universe-fhs = universeFhs;
         default = universe;
       };
 
