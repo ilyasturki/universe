@@ -446,6 +446,8 @@ FocusScope {
         }
 
         delegate: SessionRow {
+            id: recording
+
             readonly property var frames: page.store.frameMap[modelData.session] || null
 
             width: list.width
@@ -459,7 +461,7 @@ FocusScope {
             leadWidth: (height - Theme.dp(20)) * 16 / 9
 
             Pointer {
-                current: entry.lit
+                current: recording.lit
                 radius: Theme.dp(14)
                 onPicked: {
                     page.videoFocused = false;
@@ -517,7 +519,7 @@ FocusScope {
         // A click on the player takes it as Right does; another is A, play or pause.
         Pointer {
             current: page.videoFocused
-            radius: parent.radius
+            radius: pane.radius
             onPicked: page.focusVideo(false, true)
         }
 
