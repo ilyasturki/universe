@@ -32,7 +32,9 @@ fn main() {
     let mut entries = String::new();
     for blp in &blueprints {
         let name = blp.file_stem().unwrap().to_string_lossy();
-        entries += &format!("    <file preprocess=\"xml-stripblanks\">ui/{name}.ui</file>\n");
+        // AdwApplication opens it from the base path for app.shortcuts.
+        let alias = if name == "shortcuts-dialog" { " alias=\"shortcuts-dialog.ui\"" } else { "" };
+        entries += &format!("    <file preprocess=\"xml-stripblanks\"{alias}>ui/{name}.ui</file>\n");
     }
     entries += "    <file>style.css</file>\n";
     for icon in files(&data.join("icons"), "svg") {

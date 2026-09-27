@@ -1,0 +1,78 @@
+using Gtk 4.0;
+using Adw 1;
+
+Adw.ShortcutsDialog shortcuts_dialog {
+  Adw.ShortcutsSection {
+    title: _("General");
+
+    Adw.ShortcutsItem {
+      title: _("Search");
+      action-name: "win.search";
+    }
+
+    Adw.ShortcutsItem {
+      title: _("Show Hidden Games");
+      action-name: "win.show-hidden";
+    }
+
+    Adw.ShortcutsItem {
+      title: _("Add a Game");
+      action-name: "win.add-game";
+    }
+
+    Adw.ShortcutsItem {
+      title: _("Undo");
+      action-name: "win.undo";
+    }
+
+    Adw.ShortcutsItem {
+      title: _("Toggle Sidebar");
+      action-name: "win.show-sidebar";
+    }
+
+    Adw.ShortcutsItem {
+      title: _("Main Menu");
+      accelerator: "F10";
+    }
+
+    Adw.ShortcutsItem {
+      title: _("Preferences");
+      action-name: "app.preferences";
+    }
+
+    Adw.ShortcutsItem {
+      title: _("Keyboard Shortcuts");
+      action-name: "app.shortcuts";
+    }
+
+    Adw.ShortcutsItem {
+      title: _("Close Window");
+      action-name: "window.close";
+    }
+
+    Adw.ShortcutsItem {
+      title: _("Quit");
+      action-name: "app.quit";
+    }
+  }
+
+  Adw.ShortcutsSection {
+    title: _("Games");
+
+    Adw.ShortcutsItem {
+      title: _("Open the Game");
+      accelerator: "Return";
+    }
+
+    Adw.ShortcutsItem {
+      title: _("Go Back");
+      accelerator: "Escape <Alt>Left";
+    }
+
+    Adw.ShortcutsItem {
+      title: _("Remove From Library");
+      subtitle: _("On a game’s page");
+      accelerator: "Delete";
+    }
+  }
+}

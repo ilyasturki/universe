@@ -714,7 +714,6 @@ impl Application {
         for (action, accels) in [
             ("app.quit", &["<Control>q"][..]),
             ("app.preferences", &["<Control>comma"]),
-            ("app.shortcuts", &["<Control>question"]),
             ("win.search", &["<Control>f"]),
             ("win.add-game", &["<Control>n"]),
             ("win.show-hidden", &["<Control>h"]),
