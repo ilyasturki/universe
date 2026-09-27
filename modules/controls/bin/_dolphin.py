@@ -16,6 +16,7 @@ SDL_HINTS = {
     "SDL_JOYSTICK_HIDAPI_VERTICAL_JOY_CONS": "0",
 }
 FACE_NAME = {SOUTH: "`Button S`", EAST: "`Button E`", WEST: "`Button W`", NORTH: "`Button N`"}
+EXTENSION = {"nunchuk": "Nunchuk", "sideways": "None", "classic": "Classic"}
 CALIBRATION = "100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42"
 OWN_PROFILE = "universe-"
 # A setting's value is a number or a flag; anything else is a binding expression the module replaces.
@@ -98,6 +99,17 @@ def devices(pads):
     return [f"SDL/{n}/{p.name}" for n, p in zip(ordinals([p.name for p in pads]), pads, strict=True)]
 
 
+def _sideways(ctx: Context):
+    face = {k: FACE_NAME[b] for k, b in ctx.face.items()}
+    dpad, stick = _dpad("D-Pad"), _stick("D-Pad", "Left")
+    return {
+        "Buttons/A": face["x"],
+        "Buttons/1": face["b"],
+        "Buttons/2": face["a"],
+        **{k: f"{dpad[k]} | {stick[k]}" for k in dpad},
+    }
+
+
 def wiimote(ctx: Context, pad):
     keys = {
         "Buttons/A": "`Button S`",
@@ -126,8 +138,11 @@ def wiimote(ctx: Context, pad):
         "Classic/Triggers/L": "`Shoulder L`",
         "Classic/Triggers/R": "`Shoulder R`",
         **_dpad("Classic/D-Pad"),
+        **(_sideways(ctx) if ctx.wiimote == "sideways" else {}),
+        "Extension": EXTENSION[ctx.wiimote],
+        "Options/Sideways Wiimote": str(ctx.wiimote == "sideways"),
     }
-    defaults = {"Extension": "Nunchuk", "Nunchuk/Stick/Calibration": CALIBRATION}
+    defaults = {"Nunchuk/Stick/Calibration": CALIBRATION}
     if pad.gyro:
         keys.update(IMU)
     else:
@@ -138,7 +153,7 @@ def wiimote(ctx: Context, pad):
 
 def _section(text, name, device, keys, defaults):
     existing = ini_section(text, name)
-    kept = {k: v for k, v in existing.items() if k in ("Extension", "Source") or SETTING.match(v)}
+    kept = {k: v for k, v in existing.items() if k == "Source" or SETTING.match(v)}
     values = {"Device": device, **kept, **keys, **{k: v for k, v in defaults.items() if k not in existing}}
     lines = {k: f"{k} = {v}" for k, v in values.items()}
     return ini_rewrite(text, name, lines, drop=set(existing) - set(values))

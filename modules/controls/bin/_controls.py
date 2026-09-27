@@ -14,6 +14,7 @@ FACE = {
     "positional": {"a": EAST, "b": SOUTH, "x": NORTH, "y": WEST},
     "xbox": {"a": SOUTH, "b": EAST, "x": WEST, "y": NORTH},
 }
+WIIMOTE = ("nunchuk", "sideways", "classic")
 
 # SDL3 gamepad outputs Universe keeps: guide, misc1, the four paddles, misc2-6.
 TAKEN = (GUIDE, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25)
@@ -29,6 +30,7 @@ class Context:
     guide: bool = False
     runner_path: str = ""
     platform: str = ""
+    wiimote: str = "nunchuk"
 
     @property
     def face(self):

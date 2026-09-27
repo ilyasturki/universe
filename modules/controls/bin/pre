@@ -11,7 +11,7 @@ from pathlib import Path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import _gamepads
 import _mapping
-from _controls import FACE, Context, Skip
+from _controls import FACE, WIIMOTE, Context, Skip
 
 WRITERS = (
     "eden",
@@ -112,6 +112,7 @@ def main():
     ctx = Context(
         pads=pads,
         layout=settings.get("layout") if settings.get("layout") in FACE else "positional",
+        wiimote=settings.get("wiimote") if settings.get("wiimote") in WIIMOTE else "nunchuk",
         guide=bool(settings.get("guide")),
         runner_path=effective.get("runner_path") or "",
         platform=effective.get("platform") or "",

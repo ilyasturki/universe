@@ -81,10 +81,11 @@ def test_gamecube_takes_dolphins_preset_and_keeps_the_users_settings(dolphin):
     assert not any("Guide" in v or "Misc" in v or "Paddle" in v for v in gc.values())
 
 
-def test_wiimote_keeps_its_extension_and_classic_follows_the_layout(dolphin):
+def test_wiimote_holds_a_nunchuk_and_classic_follows_the_layout(dolphin):
     text = run(Context([EDGE], "xbox"))["WiimoteNew.ini"]
     wm = ini_section(text, "Wiimote1")
-    assert wm["Extension"] == "Classic" and wm["IMUIR/Total Yaw"] == "50." and wm["Source"] == "1"
+    assert wm["Extension"] == "Nunchuk" and wm["Options/Sideways Wiimote"] == "False"
+    assert wm["IMUIR/Total Yaw"] == "50." and wm["Source"] == "1"
     assert wm["Buttons/A"] == "`Button S`" and wm["Buttons/B"] == "`Trigger R`"
     assert wm["Classic/Buttons/A"] == "`Button S`" and wm["Classic/Buttons/B"] == "`Button E`"
     assert wm["IMUGyroscope/Yaw Left"] == "`Gyro Yaw Left`" and "IR/Up" not in wm
@@ -92,6 +93,19 @@ def test_wiimote_keeps_its_extension_and_classic_follows_the_layout(dolphin):
     assert ini_section(text, "BalanceBoard") == {"Source": "0"}
     positional = ini_section(run(Context([EDGE], "positional"))["WiimoteNew.ini"], "Wiimote1")
     assert positional["Classic/Buttons/A"] == "`Button E`" and positional["Classic/Buttons/Y"] == "`Button W`"
+
+
+def test_the_games_scheme_picks_the_extension_and_how_the_remote_is_held(dolphin):
+    classic = ini_section(run(Context([EDGE], wiimote="classic"))["WiimoteNew.ini"], "Wiimote1")
+    assert classic["Extension"] == "Classic" and classic["Buttons/1"] == "`Button W`"
+    text = run(Context([EDGE, XBOX], "positional", wiimote="sideways"))["WiimoteNew.ini"]
+    for n in (1, 2):
+        wm = ini_section(text, f"Wiimote{n}")
+        assert wm["Extension"] == "None" and wm["Options/Sideways Wiimote"] == "True"
+        assert (wm["Buttons/1"], wm["Buttons/2"], wm["Buttons/A"]) == ("`Button S`", "`Button E`", "`Button N`")
+        assert wm["D-Pad/Up"] == "`Pad N` | `Left Y+`" and wm["Shake/Z"] == "`Shoulder R`"
+    xbox = ini_section(run(Context([EDGE], "xbox", wiimote="sideways"))["WiimoteNew.ini"], "Wiimote1")
+    assert (xbox["Buttons/1"], xbox["Buttons/2"]) == ("`Button E`", "`Button S`")
 
 
 def test_a_pad_without_gyro_points_with_the_right_stick(dolphin):
