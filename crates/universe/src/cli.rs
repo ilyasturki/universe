@@ -1062,9 +1062,15 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             } else {
                 println!("{} {} · {} · {}", "added".green(), id, g.effective.runner_name, g.effective.platform);
                 if g.effective.runner_path.is_empty() && g.effective.runner_kind != "linux" {
+                    let offer = crate::components::cached(&crate::config::Config::load().unwrap_or_default())
+                        .components
+                        .get(&g.effective.runner)
+                        .and_then(|e| e.latest())
+                        .map(|b| format!("`universe component install {}` ({}), or ", g.effective.runner, b.version))
+                        .unwrap_or_default();
                     println!(
                         "{}",
-                        format!("{} was not found: install it or `universe runner set {} exe=…`", g.effective.runner_name, g.effective.runner).yellow()
+                        format!("{} was not found: {offer}install it, or `universe runner set {} exe=…`", g.effective.runner_name, g.effective.runner).yellow()
                     );
                 }
             }

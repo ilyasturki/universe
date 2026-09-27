@@ -462,7 +462,8 @@ fn appimage_extract(image: &Path, work: &Path) -> Result<PathBuf> {
         let why = String::from_utf8_lossy(&out.stderr).lines().last().unwrap_or("").to_string();
         return Err(Error::Io(format!("{} did not unpack ({}): {why}", image.display(), out.status)));
     }
-    Ok(root)
+    // uruntime (Eden's, the anylinux builds) unpacks into AppDir: squashfs-root only links to it.
+    Ok(root.canonicalize()?)
 }
 
 fn single_child(dir: &Path) -> PathBuf {
@@ -1382,6 +1383,7 @@ mod tests {
     }
 
     const FAKE_APPIMAGE: &[u8] = b"#!/bin/sh\n[ \"$1\" = --appimage-extract ] || exit 2\nmkdir -p squashfs-root\nprintf '#!/bin/sh\\n' > squashfs-root/AppRun\nchmod +x squashfs-root/AppRun\n";
+    const URUNTIME_APPIMAGE: &[u8] = b"#!/bin/sh\n[ \"$1\" = --appimage-extract ] || exit 2\nmkdir -p AppDir\nprintf '#!/bin/sh\\n' > AppDir/AppRun\nchmod +x AppDir/AppRun\nln -s ./AppDir squashfs-root\n";
 
     fn asset(format: Format, url: &str, bytes: &[u8]) -> Asset {
         Asset {
@@ -1475,6 +1477,7 @@ mod tests {
             ("/proton.tar.gz", proton_tar.clone()),
             ("/umu.tar", umu_tar.clone()),
             ("/app.AppImage", FAKE_APPIMAGE.to_vec()),
+            ("/eden.AppImage", URUNTIME_APPIMAGE.to_vec()),
             ("/melon.zip", zipped.clone()),
             ("/gogdl", b"#!/bin/sh\n".to_vec()),
         ]);
@@ -1506,6 +1509,12 @@ mod tests {
                 build("0.8.136", "", vec![asset(Format::AppImage, &url("/app.AppImage"), FAKE_APPIMAGE)]),
                 "AppRun",
             ),
+            (
+                "eden",
+                entry("Eden", Kind::Emulator, vec![]),
+                build("0.2.1", "", vec![asset(Format::AppImage, &url("/eden.AppImage"), URUNTIME_APPIMAGE)]),
+                "AppRun",
+            ),
             ("melonds", entry("melonDS", Kind::Emulator, vec![]), build("1.1", "", vec![melon]), "AppRun"),
             ("gogdl", gogdl, build("1.3.0", "", vec![asset(Format::Binary, &url("/gogdl"), b"#!/bin/sh\n")]), "gogdl"),
         ];
@@ -1517,6 +1526,7 @@ mod tests {
             assert!(seen > 0, "{id}: progress reached the caller");
             assert_eq!(i.program, program, "{id}");
             assert!(i.program_path().exists(), "{id}: {}", i.program_path().display());
+            assert!(i.dir.symlink_metadata().is_ok_and(|m| m.is_dir()), "{id}: the build is a folder, not a link into the staging area");
             assert_eq!(i.dir, root().join(id).join(slot(&b.version).unwrap()), "{id}: the top folder is stripped into the version's");
             assert_eq!(installed(id).len(), 1, "{id}: the sidecar lists it");
         }
