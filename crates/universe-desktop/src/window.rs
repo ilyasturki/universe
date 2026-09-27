@@ -168,8 +168,41 @@ impl Window {
                 }
             })
             .build();
-        self.add_action_entries([show_sidebar, search, sort, show_hidden, view]);
+        let add_game = gio::ActionEntry::builder("add-game").activate(|win: &Self, _, _| crate::dialogs::add_game::present(win)).build();
+        let onboarding = gio::ActionEntry::builder("onboarding").activate(|win: &Self, _, _| crate::dialogs::onboarding::present(win)).build();
+        let rescan = gio::ActionEntry::builder("rescan").activate(|win: &Self, _, _| win.rescan()).build();
+        self.add_action_entries([show_sidebar, search, sort, show_hidden, view, add_game, onboarding, rescan]);
         self.imp().library_page.set_show_hidden(state.show_hidden);
+    }
+
+    /// The first-run flow is behind the player: it opens again only from the empty library's button.
+    pub fn set_onboarded(&self) {
+        let mut state = self.imp().state.borrow_mut();
+        if !state.onboarded {
+            state.onboarded = true;
+            if !self.app().scripted() {
+                state.save();
+            }
+        }
+    }
+
+    /// The library read again and the emulators' folders searched for games new to it.
+    fn rescan(&self) {
+        let win = self.downgrade();
+        glib::spawn_future_local(async move {
+            let result = backend::pinned(|core| async move { core.rescan().await }).await;
+            let Some(win) = win.upgrade() else { return };
+            win.app().library().refresh(&[]).await;
+            let text = match result {
+                Ok(report) if report.imported.is_empty() => gettext("The library is up to date"),
+                Ok(report) => {
+                    gettextrs::ngettext("{} game added from the emulator folders", "{} games added from the emulator folders", report.imported.len() as u32)
+                        .replace("{}", &report.imported.len().to_string())
+                }
+                Err(e) => e.to_string(),
+            };
+            win.toast(adw::Toast::new(&text));
+        });
     }
 
     fn save_state(&self) {
@@ -232,6 +265,14 @@ impl Window {
 
     fn core_ready(&self) {
         self.rebuild_sidebar();
+        let onboarded = self.imp().state.borrow().onboarded;
+        if !onboarded && !self.app().scripted() {
+            if self.app().library().is_empty() {
+                crate::dialogs::onboarding::present(self);
+            } else {
+                self.set_onboarded();
+            }
+        }
         if let Some(steps) = self.app().take_script() {
             glib::spawn_future_local(script::run(self.clone().upcast(), steps));
         }

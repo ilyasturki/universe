@@ -4,13 +4,13 @@ use std::rc::Rc;
 
 use adw::prelude::*;
 use gettextrs::{gettext, ngettext};
-use gtk::{gio, glib};
+use gtk::glib;
 use serde_json::Value;
 use universe::forms::Form;
 
 use crate::backend;
+use crate::dialogs::signin;
 use crate::form_view::FormView;
-use crate::qr;
 use crate::window::Window;
 
 fn text(v: &Value, key: &str) -> String {
@@ -195,21 +195,6 @@ fn open_runner(dialog: &adw::PreferencesDialog, runner: &Value, games: &[(String
     push_form(dialog, &text(runner, "name"), view);
 }
 
-fn source_status(source: &Value) -> String {
-    let missing = list(source, "missing");
-    if source["available"].as_bool() == Some(false) {
-        return gettext("Missing {}").replace("{}", &missing.join(", "));
-    }
-    if source["enabled"].as_bool() != Some(true) {
-        return gettext("Off");
-    }
-    match (source["logged_in"].as_bool() == Some(true), text(source, "user")) {
-        (true, user) if !user.is_empty() => gettext("Signed in as {}").replace("{}", &user),
-        (true, _) => gettext("Signed in"),
-        (false, _) => gettext("Not signed in"),
-    }
-}
-
 fn load_stores(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, connector: &str) {
     page.loading();
     let (dialog, page, connector) = (dialog.downgrade(), page.clone(), connector.to_string());
@@ -220,7 +205,7 @@ fn load_stores(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, connector: 
         let group = page.group("", &gettext("Where your games come from: sign in to list them and install them from Store"));
         for source in sources {
             let id = text(&source, "id");
-            let row = adw::ActionRow::builder().title(text(&source, "name")).subtitle(source_status(&source)).use_markup(false).activatable(true).build();
+            let row = adw::ActionRow::builder().title(text(&source, "name")).subtitle(signin::status(&source)).use_markup(false).activatable(true).build();
             let switch = gtk::Switch::builder().valign(gtk::Align::Center).active(source["enabled"].as_bool() == Some(true)).build();
             switch.set_sensitive(source["available"].as_bool() != Some(false) || switch.is_active());
             let (weak_dialog, weak_page, sid, conn) = (dialog.downgrade(), Rc::downgrade(&page), id.clone(), connector.clone());
@@ -253,87 +238,21 @@ fn open_store(dialog: &adw::PreferencesDialog, stores: &Rc<ListPage>, source: &V
     let view = FormView::new(Form::Source(id.clone()), dialog, connector.to_string());
     view.page.set_description(&text(source, "description"));
     if source["enabled"].as_bool() == Some(true) {
-        view.add_tail(&account_group(dialog, stores, source, connector));
+        let weak = dialog.downgrade();
+        let say: signin::Say = Rc::new(move |text: &str| {
+            if let Some(dialog) = weak.upgrade() {
+                dialog.add_toast(adw::Toast::new(text));
+            }
+        });
+        let (weak, stores, connector_owned) = (dialog.downgrade(), Rc::downgrade(stores), connector.to_string());
+        let reload: signin::Say = Rc::new(move |_: &str| {
+            if let (Some(dialog), Some(stores)) = (weak.upgrade(), stores.upgrade()) {
+                load_stores(&dialog, &stores, &connector_owned);
+            }
+        });
+        view.add_tail(&signin::account_group(source, say, reload));
     }
     push_form(dialog, &text(source, "name"), view);
-}
-
-/// Sign-in: the store's link to open here or on a phone, and the code it shows after.
-fn account_group(dialog: &adw::PreferencesDialog, stores: &Rc<ListPage>, source: &Value, connector: &str) -> adw::PreferencesGroup {
-    let id = text(source, "id");
-    let group = adw::PreferencesGroup::builder().title(gettext("Account")).build();
-    let status = adw::ActionRow::builder().title(source_status(source)).use_markup(false).build();
-    status.add_prefix(&gtk::Image::from_icon_name("avatar-default-symbolic"));
-    group.add(&status);
-    let get_link = adw::ButtonRow::builder().title(gettext("Get a Sign-In Link")).start_icon_name("web-browser-symbolic").build();
-    group.add(&get_link);
-    let link = adw::ActionRow::builder().title(gettext("Open the link, sign in, then enter the code it shows")).use_markup(false).visible(false).build();
-    let open = gtk::Button::builder().label(gettext("Open")).valign(gtk::Align::Center).build();
-    link.add_suffix(&open);
-    group.add(&link);
-    let qr = gtk::Picture::builder().can_shrink(false).halign(gtk::Align::Center).margin_top(12).margin_bottom(12).visible(false).build();
-    qr.set_tooltip_text(Some(&gettext("Scan it to sign in from a phone")));
-    group.add(&qr);
-    let code = adw::EntryRow::builder().title(gettext("Code")).show_apply_button(true).visible(false).build();
-    group.add(&code);
-
-    let url = Rc::new(RefCell::new(String::new()));
-    let (weak_dialog, sid) = (dialog.downgrade(), id.clone());
-    let (link_row, qr_pic, code_row, url_cell) = (link.clone(), qr.clone(), code.clone(), url.clone());
-    get_link.connect_activated(move |row| {
-        row.set_sensitive(false);
-        let (dialog, sid, row) = (weak_dialog.clone(), sid.clone(), row.clone());
-        let (link_row, qr_pic, code_row, url_cell) = (link_row.clone(), qr_pic.clone(), code_row.clone(), url_cell.clone());
-        glib::spawn_future_local(async move {
-            let result = backend::pinned(move |core| async move { core.source_login_url(&sid).await }).await;
-            row.set_sensitive(true);
-            match result {
-                Ok(url) => {
-                    link_row.set_subtitle(&url);
-                    link_row.set_visible(true);
-                    qr_pic.set_paintable(qr::texture(&url, 4).as_ref());
-                    qr_pic.set_visible(true);
-                    code_row.set_visible(true);
-                    url_cell.replace(url);
-                }
-                Err(e) => {
-                    if let Some(dialog) = dialog.upgrade() {
-                        dialog.add_toast(adw::Toast::new(&e.to_string()));
-                    }
-                }
-            }
-        });
-    });
-    open.connect_clicked(move |button| {
-        let launcher = gtk::UriLauncher::new(&url.borrow());
-        launcher.launch(button.root().and_downcast::<gtk::Window>().as_ref(), gio::Cancellable::NONE, |_| {});
-    });
-    let (weak_dialog, weak_stores, conn) = (dialog.downgrade(), Rc::downgrade(stores), connector.to_string());
-    code.connect_apply(move |row| {
-        let (entered, sid) = (row.text().trim().to_string(), id.clone());
-        if entered.is_empty() {
-            return;
-        }
-        row.set_sensitive(false);
-        let (dialog, stores, row, status, conn) = (weak_dialog.clone(), weak_stores.clone(), row.clone(), status.clone(), conn.clone());
-        glib::spawn_future_local(async move {
-            let result = backend::pinned(move |core| async move { core.source_login(&sid, &entered).await }).await;
-            row.set_sensitive(true);
-            let Some(dialog) = dialog.upgrade() else { return };
-            match result {
-                Ok(user) => {
-                    let title = if user.is_empty() { gettext("Signed in") } else { gettext("Signed in as {}").replace("{}", &user) };
-                    status.set_title(&title);
-                    dialog.add_toast(adw::Toast::new(&title));
-                    if let Some(stores) = stores.upgrade() {
-                        load_stores(&dialog, &stores, &conn);
-                    }
-                }
-                Err(e) => dialog.add_toast(adw::Toast::new(&e.to_string())),
-            }
-        });
-    });
-    group
 }
 
 fn module_status(module: &Value) -> String {

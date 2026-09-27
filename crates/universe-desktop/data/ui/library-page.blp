@@ -15,7 +15,7 @@ template $UniverseLibraryPage: Adw.Bin {
       [start]
       Button {
         icon-name: "list-add-symbolic";
-        tooltip-text: _("Add Game");
+        tooltip-text: _("Add Games");
         action-name: "win.add-game";
       }
 
@@ -83,7 +83,34 @@ template $UniverseLibraryPage: Adw.Bin {
         child: Adw.StatusPage {
           icon-name: "io.github.ilyasturki.UniverseDesktop-symbolic";
           title: _("No Games");
-          description: _("Add a game with the + button, or bring in your Lutris and store games");
+          description: _("Add a game file, or bring in your Lutris, emulator and store games");
+
+          child: Box {
+            orientation: vertical;
+            spacing: 12;
+            halign: center;
+
+            Button {
+              label: _("_Add Games…");
+              use-underline: true;
+              action-name: "win.add-game";
+
+              styles [
+                "pill",
+                "suggested-action",
+              ]
+            }
+
+            Button {
+              label: _("_Get Started");
+              use-underline: true;
+              action-name: "win.onboarding";
+
+              styles [
+                "pill",
+              ]
+            }
+          };
         };
       }
 
@@ -121,6 +148,10 @@ template $UniverseLibraryPage: Adw.Bin {
 }
 
 menu main_menu {
+  section {
+    item (_("_Rescan Library"), "win.rescan")
+  }
+
   section {
     item (_("_Preferences"), "app.preferences")
     item (_("_Keyboard Shortcuts"), "app.shortcuts")

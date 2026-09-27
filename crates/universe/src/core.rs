@@ -25,7 +25,7 @@ fn trash(path: &Path) -> Result<()> {
     trash::delete(path).map_err(|e| Error::Io(format!("trash {}: {e}", path.display())))
 }
 
-pub(crate) fn title_of(path: &Path) -> String {
+pub fn title_of(path: &Path) -> String {
     let stem = if path.is_dir() { path.file_name() } else { path.file_stem() }.map(|s| s.to_string_lossy().to_string()).unwrap_or_default();
     let mut s = stem.replace('_', " ");
     for (open, close) in [('[', ']'), ('(', ')')] {
