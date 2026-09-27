@@ -1,7 +1,7 @@
 pragma Singleton
 import QtQuick
 
-// One message at a time, the rest wait their turn; a message with a key takes the place of the one it follows up, on screen or waiting.
+// One message on screen, at most one waiting: a newer one takes the waiting place unless an info would bury an error; a keyed one replaces its follow-up anywhere.
 QtObject {
     id: n
 
@@ -49,13 +49,15 @@ QtObject {
                 waiting = w;
                 return;
             }
-        var last = waiting.length ? waiting[waiting.length - 1] : current;
+        var last = waiting.length ? waiting[0] : current;
         if (last && last.text === msg.text && last.error === msg.error) {
             if (last === current)
                 hold();
             return;
         }
-        waiting = waiting.concat([msg]);
+        if (waiting.length && waiting[0].error && !msg.error)
+            return;
+        waiting = [msg];
         if (!current && !n.gap.running)
             next();
     }

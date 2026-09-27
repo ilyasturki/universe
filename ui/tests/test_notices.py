@@ -64,7 +64,29 @@ def test_a_follow_up_takes_its_own_place(notices):
     call(obj, "show", "Journal: writing Hades…", "journal:2")
     call(obj, "show", "Journal: Control, 2 h", "journal:1")
     call(obj, "fail", "Journal failed: quota", "journal:2")
-    assert state(obj) == {"current": "Journal: Control, 2 h", "waiting": ["Screenshot saved", "!Journal failed: quota"]}
+    assert state(obj) == {"current": "Journal: Control, 2 h", "waiting": ["!Journal failed: quota"]}
+
+
+def test_a_burst_keeps_only_the_newest_waiting(notices):
+    obj, _ = notices
+    call(obj, "show", "That button was A: it is B now", "")
+    call(obj, "show", "That button was X: it is Y now", "")
+    call(obj, "show", "That button was L1: it is R1 now", "")
+    call(obj, "show", "8BitDo Pro 2: 14 set up", "")
+    assert state(obj) == {"current": "That button was A: it is B now", "waiting": ["8BitDo Pro 2: 14 set up"]}
+    pump(150 + 320 + 60)
+    pump(150 + 60)
+    assert state(obj) == {"current": None, "waiting": []}
+
+
+def test_an_info_does_not_bury_a_waiting_error(notices):
+    obj, _ = notices
+    call(obj, "show", "Screenshot saved", "")
+    call(obj, "fail", "Could not launch Control", "")
+    call(obj, "show", "MangoHud hidden", "")
+    assert state(obj) == {"current": "Screenshot saved", "waiting": ["!Could not launch Control"]}
+    call(obj, "fail", "Could not launch Hades", "")
+    assert state(obj) == {"current": "Screenshot saved", "waiting": ["!Could not launch Hades"]}
 
 
 def test_a_repeat_is_said_once(notices):

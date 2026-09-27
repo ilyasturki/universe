@@ -22,6 +22,7 @@ FocusScope {
     // Newest first: { slot, label, dt }.
     property var inputs: []
     property var log: History.fresh()
+    property string unknownCode: ""
 
     readonly property var hints: testing ? [
         {
@@ -374,6 +375,14 @@ FocusScope {
         rows.forceActiveFocus();
     }
 
+    onLearningChanged: unknownCode = ""
+
+    Timer {
+        id: unknownOut
+        interval: 4000
+        onTriggered: page.unknownCode = ""
+    }
+
     Timer {
         id: holdOut
         interval: 1000
@@ -403,8 +412,10 @@ FocusScope {
                 page.axis(axis, value);
         }
         function onUnknownPressed(id, code) {
-            if (!page.learning && id === page.controller.current)
-                page.shell.showToast(code + " is not one of the pad's buttons yet: learn it from a row");
+            if (page.learning || id !== page.controller.current)
+                return;
+            page.unknownCode = code;
+            unknownOut.restart();
         }
         function onLearned(family, slot, code) {
             page.shell.showToast(page.labelOf(slot) + " is now " + code);
@@ -638,7 +649,18 @@ FocusScope {
 
         Label {
             anchors.horizontalCenter: parent.horizontalCenter
-            visible: page.controller.connected && !page.learning && page.controller.unboundSlots.length > 0
+            width: panel.width
+            horizontalAlignment: Text.AlignHCenter
+            wrapMode: Text.Wrap
+            visible: page.controller.connected && !page.learning && page.unknownCode !== ""
+            text: page.unknownCode + " is not one of the pad's buttons yet: learn it from a row"
+            color: Theme.accent
+            font.pixelSize: Theme.dp(Theme.fontSmall)
+        }
+
+        Label {
+            anchors.horizontalCenter: parent.horizontalCenter
+            visible: page.controller.connected && !page.learning && page.unknownCode === "" && page.controller.unboundSlots.length > 0
             text: "Dashed buttons have no code on this connection: learn them"
             color: Theme.textMuted
             font.pixelSize: Theme.dp(Theme.fontSmall)

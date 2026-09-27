@@ -93,6 +93,7 @@ FocusScope {
     // The art fills the section while the buttons are tested or walked through.
     readonly property bool artShown: testing || walking
     property string pendingSlot: ""
+    property string unknownCode: ""
     property string pendingTrigger: ""
     property string openedRunner: ""
     property string openedModule: ""
@@ -314,7 +315,11 @@ FocusScope {
             if (!learning)
                 return {
                     rows: controller.rows,
-                    groups: controller.groups
+                    groups: unknownCode === "" ? controller.groups : controller.groups.map(function (g, i) {
+                        return i > 0 ? g : Object.assign({}, g, {
+                            meta: unknownCode + " is not one of the pad's buttons yet: learn it from a row"
+                        });
+                    })
                 };
             var bound = controller.rows;
             var listening = bound.map(function (r) {
@@ -793,6 +798,15 @@ FocusScope {
         cards.forceActiveFocus();
     }
 
+    onLearningChanged: unknownCode = ""
+    onSectionIdChanged: unknownCode = ""
+
+    Timer {
+        id: unknownOut
+        interval: 4000
+        onTriggered: page.unknownCode = ""
+    }
+
     Timer {
         id: holdOut
         interval: 1000
@@ -981,8 +995,10 @@ FocusScope {
                 art.item.axis(axis, value);
         }
         function onUnknownPressed(id, code) {
-            if (page.sectionId === "controller" && !page.learning && id === page.controller.current)
-                page.message(code + " is not one of the pad's buttons yet: learn it from a row");
+            if (page.sectionId !== "controller" || page.learning || id !== page.controller.current)
+                return;
+            page.unknownCode = code;
+            unknownOut.restart();
         }
         function onLearned(family, slot, code) {
             var bound = page.controller.rows;
