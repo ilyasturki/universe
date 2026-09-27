@@ -7,7 +7,7 @@ use crate::config::Config;
 use crate::game::Game;
 use crate::host::Host;
 use crate::library::{self, Resolved};
-use crate::modules::{self, HookEnv, Module};
+use crate::modules::{self, HookEnv, Hooker, Module};
 use crate::paths;
 use crate::sources::{self, Source, SourceEvent};
 use crate::{Error, Result};
@@ -231,6 +231,13 @@ impl Core {
                 m.validate_setting(skey, value, true)?;
             }
         }
+        if let Some(rest) = real_key.strip_prefix("sources.") {
+            let (sid, skey) = rest.split_once('.').ok_or_else(|| Error::Invalid(format!("bad key {key}")))?;
+            let s = self.source_or_hint(sid).await?;
+            if !value.is_empty() {
+                s.validate_setting(skey, value, true)?;
+            }
+        }
         let mut value = value.to_string();
         if real_key == "launch.runner" && !value.is_empty() {
             value = crate::runners::spec(&value).ok_or_else(|| Error::Invalid(format!("unknown runner {value}")))?.id.into();
@@ -432,15 +439,31 @@ impl Core {
         env
     }
 
-    pub(crate) fn module_env(&self, m: &Module, game: Option<&Game>, cfg: &Config, base: &HookEnv) -> HookEnv {
+    pub(crate) fn module_env(&self, h: &Hooker, game: Option<&Game>, cfg: &Config, base: &HookEnv) -> HookEnv {
         let mut env = base.clone();
-        env.set("MODULE_SETTINGS_JSON", serde_json::Value::Object(m.merged_settings(cfg, game)).to_string());
+        match h {
+            Hooker::Module(m) => env.set("MODULE_SETTINGS_JSON", serde_json::Value::Object(m.merged_settings(cfg, game)).to_string()),
+            Hooker::Source(s) => {
+                env.set("SOURCE_SETTINGS_JSON", serde_json::Value::Object(s.merged_settings(cfg, game)).to_string());
+                env.set("SOURCE_GAME_ID", game.map(|g| g.source.gog_id.clone()).unwrap_or_default());
+            }
+        }
         env
     }
 
-    pub(crate) async fn hook_modules(&self, r: &Resolved, hook: &str) -> Vec<Module> {
+    /// The modules on for the game, then the source it came from when that declares the hook.
+    pub(crate) async fn hook_modules(&self, r: &Resolved, hook: &str) -> Vec<Hooker> {
         let cfg = self.config.read().await.clone();
-        self.modules_with_hook(&cfg, Some(&r.game), hook).await
+        let mut out: Vec<Hooker> = self.modules_with_hook(&cfg, Some(&r.game), hook).await.into_iter().map(Hooker::Module).collect();
+        if let Some(s) = self.game_source(&r.game).await.filter(|s| s.hook(hook).is_some()) {
+            out.push(Hooker::Source(s));
+        }
+        out
+    }
+
+    /// The active source the game was installed or found by.
+    async fn game_source(&self, game: &Game) -> Option<Source> {
+        self.sources.read().await.iter().find(|s| s.active() && s.id() == game.source.kind).cloned()
     }
 
     /// The active modules declaring `hook` and switched on for `game`, or globally without one.
@@ -715,7 +738,7 @@ impl Core {
             return Err(Error::Unavailable("no enabled module takes screenshots".into()));
         }
         let mut failures = Vec::new();
-        for m in shooters {
+        for m in shooters.into_iter().map(Hooker::Module) {
             let menv = self.module_env(&m, game.as_ref(), &cfg, &env);
             let out = modules::run_blocking(&m, "screenshot", &menv).await?;
             let path = out.stdout.trim().to_string();
@@ -987,7 +1010,7 @@ impl Core {
         if rewrite {
             env.set("JOURNAL_REWRITE", "1");
         }
-        let started = modules::run_async(&self.host.units, &m, "post-process", &env, session_id, None).await?;
+        let started = modules::run_async(&self.host.units, &Hooker::Module(m), "post-process", &env, session_id, None).await?;
         Ok(started.unwrap_or_default())
     }
 
@@ -1202,25 +1225,34 @@ impl Core {
         }
     }
 
-    pub async fn source_settings(&self, source: &str) -> Result<serde_json::Value> {
+    /// `game_id=""` is global only.
+    pub async fn source_settings(&self, source: &str, game_id: &str) -> Result<serde_json::Value> {
         let cfg = self.config.read().await.clone();
-        Ok(serde_json::Value::Object(self.source_or_hint(source).await?.merged_settings(&cfg)))
+        let game = if game_id.is_empty() { None } else { Some(self.get(game_id).await?.game) };
+        Ok(serde_json::Value::Object(self.source_or_hint(source).await?.merged_settings(&cfg, game.as_ref())))
     }
 
     pub async fn source_setting_choices(&self, source: &str, key: &str) -> Result<Vec<String>> {
         let cfg = self.config.read().await.clone();
         let m = self.source_or_hint(source).await?;
-        let settings = m.merged_settings(&cfg);
+        let settings = m.merged_settings(&cfg, None);
         sources::setting_choices(&m, &settings, key).await
     }
 
-    pub async fn set_source_setting(&self, source: &str, key: &str, value: &str) -> Result<()> {
+    /// `game_id=""` writes `config.toml [sources.<id>]`, otherwise a game-scope key into `game.toml [sources.<id>]`.
+    pub async fn set_source_setting(&self, source: &str, game_id: &str, key: &str, value: &str) -> Result<()> {
         let m = self.source_or_hint(source).await?;
         if !value.is_empty() {
-            m.validate_setting(key, value)?;
+            m.validate_setting(key, value, !game_id.is_empty())?;
         }
-        Config::set_key(&paths::config_file(), &format!("sources.{source}.{key}"), value)?;
-        self.reload_config().await
+        if game_id.is_empty() {
+            Config::set_key(&paths::config_file(), &format!("sources.{source}.{key}"), value)?;
+            self.reload_config().await
+        } else {
+            let r = self.get(game_id).await?;
+            crate::game::set_key(&r.game.toml_path(), &format!("sources.{source}.{key}"), value)?;
+            self.reload_game(game_id).await
+        }
     }
 
     pub async fn settings(&self) -> serde_json::Value {
@@ -1332,7 +1364,7 @@ impl Core {
         sources
             .iter()
             .map(|m| {
-                let s = m.merged_settings(&cfg);
+                let s = m.merged_settings(&cfg, None);
                 let mut j = m.to_json();
                 j["games_dir"] = s.get("games_dir").cloned().unwrap_or(serde_json::Value::Null);
                 j["library_cached"] = serde_json::json!(caches.get(m.id()).map(|v| v.len()).unwrap_or(0));
@@ -1354,7 +1386,7 @@ impl Core {
 
     async fn run_verb(&self, m: &Source, verb: &str, args: &[String], mut progress: Option<Progress<'_, '_>>) -> Result<Vec<SourceEvent>> {
         let cfg = self.config.read().await.clone();
-        let settings = m.merged_settings(&cfg);
+        let settings = m.merged_settings(&cfg, None);
         let mut events = Vec::new();
         let key = (matches!(verb, "install" | "update") && !args.is_empty()).then(|| format!("{}:{}", m.id(), args[0]));
         let result = sources::run(
@@ -1667,6 +1699,58 @@ impl Core {
             n += 1;
         }
         Ok(n)
+    }
+
+    /// `{source, fetched_at, total, unlocked, items}` from the game's cache; through its source's `achievements`
+    /// verb when `refresh`, or when there is no cache yet.
+    pub async fn achievements(&self, id: &str, refresh: bool) -> Result<serde_json::Value> {
+        use crate::achievements::{self as ach, Achievement, Cache};
+        let r = self.get(id).await?;
+        let path = ach::path(&r.game);
+        let cached = ach::read(&path);
+        if let (Some(c), false) = (&cached, refresh) {
+            return Ok(c.to_json());
+        }
+        let capable = self.sources.read().await.iter().any(|s| s.id() == r.game.source.kind && s.can("achievements"));
+        if !capable || r.game.source.gog_id.is_empty() {
+            return match cached {
+                Some(c) if !refresh => Ok(c.to_json()),
+                _ => Err(Error::Unavailable(format!("{}: no source lists its achievements", r.game.title))),
+            };
+        }
+        let m = self.source(&r.game.source.kind).await?;
+        let events = self.run_verb(&m, "achievements", std::slice::from_ref(&r.game.source.gog_id), None).await?;
+        let items = events
+            .into_iter()
+            .filter_map(|e| if let SourceEvent::Achievement(a) = e { serde_json::from_value::<Achievement>(serde_json::Value::Object(a)).ok() } else { None })
+            .filter(|a| !a.key.is_empty())
+            .map(|a| Achievement { unlocked_at: ach::normalized_time(&a.unlocked_at), ..a })
+            .collect();
+        let fresh = Cache { source: m.id().into(), fetched_at: chrono::Local::now().to_rfc3339(), items };
+        // Read again: an unlock a hook filed while the store answered must not be lost.
+        let cache = ach::read(&path).map(|c| c.refreshed(fresh.clone())).unwrap_or(fresh);
+        ach::write(&path, &cache)?;
+        self.reload_game(&r.game.id).await?;
+        Ok(cache.to_json())
+    }
+
+    /// An unlock a session saw, filed ahead of the store's own list; false when the cache had it already.
+    pub async fn achievement_unlocked(&self, id: &str, item: serde_json::Value) -> Result<bool> {
+        use crate::achievements::{self as ach, Achievement, Cache};
+        let r = self.get(id).await?;
+        let mut item: Achievement = serde_json::from_value(item)?;
+        if item.key.is_empty() {
+            return Err(Error::Invalid("an achievement needs a key".into()));
+        }
+        item.unlocked_at = if item.unlocked_at.is_empty() { chrono::Local::now().to_rfc3339() } else { ach::normalized_time(&item.unlocked_at) };
+        let path = ach::path(&r.game);
+        let mut cache = ach::read(&path).unwrap_or_else(|| Cache { source: r.game.source.kind.clone(), ..Default::default() });
+        if !cache.unlock(item) {
+            return Ok(false);
+        }
+        ach::write(&path, &cache)?;
+        self.reload_game(&r.game.id).await?;
+        Ok(true)
     }
 
     /// The whole library when `id` is empty; returns (changed, total). `media_cancel` stops a library run between games.
@@ -2117,6 +2201,76 @@ install) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":t
         assert!(core.list().await.iter().any(|g| g["id"] == "new"), "back from the archive");
         assert_eq!((back["removed"].as_bool(), back["hidden"].as_bool()), (Some(false), Some(false)));
         assert!(back["added_at"].as_str().unwrap() >= first.as_str(), "re-stamped");
+    }
+
+    #[tokio::test]
+    async fn achievements_come_from_the_source_once_and_a_session_unlock_outlives_a_refresh() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let _dir = fake_source(
+            r#"scan) echo '{"event":"game","id":"1","title":"Old","owned":true,"installed":true,"dir":"/g/Old","exe":"old.exe"}' ;;
+achievements) [ "$2" = 1 ] || exit 3; echo "$2" >> "$SOURCE_DATA_DIR/asked"; echo '{"event":"achievement","key":"a","name":"A","unlocked_at":"2024-05-01T20:11:04+0000","rarity":3.5}'; echo '{"event":"achievement","key":"b","name":"B","hidden":true}'; echo '{"event":"achievement","name":"no key"}' ;;"#,
+        );
+        let toml = PathBuf::from(std::env::var_os("UNIVERSE_SOURCES_PATH").unwrap()).join("fake/source.toml");
+        let text = std::fs::read_to_string(&toml).unwrap();
+        std::fs::write(&toml, format!("{text}capabilities = [\"achievements\"]\n")).unwrap();
+        let core = open().await;
+        core.source_scan("fake", None).await.unwrap();
+        assert_eq!(core.get("old").await.unwrap().to_json()["achievements"], serde_json::json!({"total": 0, "unlocked": 0}));
+        let asked = || std::fs::read_to_string(paths::sources_data_dir("fake").join("asked")).unwrap_or_default().lines().count();
+
+        let list = core.achievements("old", false).await.unwrap();
+        assert_eq!((list["total"].as_u64(), list["unlocked"].as_u64(), list["source"].as_str()), (Some(2), Some(1), Some("fake")), "a keyless one is dropped");
+        assert_eq!(list["items"][0]["unlocked_at"], "2024-05-01T20:11:04+00:00");
+        assert_eq!((list["items"][0]["rarity"].as_f64(), list["items"][1]["hidden"].as_bool()), (Some(3.5), Some(true)));
+        assert_eq!(core.get("old").await.unwrap().to_json()["achievements"], serde_json::json!({"total": 2, "unlocked": 1}));
+        core.achievements("old", false).await.unwrap();
+        assert_eq!(asked(), 1, "the cache answers");
+
+        let b = serde_json::json!({"key": "b", "name": "B", "unlocked_at": "2026-09-24T20:30:00+02:00"});
+        assert!(core.achievement_unlocked("old", b.clone()).await.unwrap());
+        assert!(!core.achievement_unlocked("old", b).await.unwrap(), "once");
+        assert!(core.achievement_unlocked("old", serde_json::json!({"name": "x"})).await.is_err());
+        assert_eq!(core.get("old").await.unwrap().to_json()["achievements"]["unlocked"], 2);
+
+        let list = core.achievements("old", true).await.unwrap();
+        assert_eq!(asked(), 2);
+        assert_eq!(list["items"][1]["unlocked_at"], "2026-09-24T20:30:00+02:00", "the store has not synced it yet");
+    }
+
+    #[tokio::test]
+    async fn a_game_whose_source_lists_no_achievements_says_so() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let _dir = fake_source(r#"scan) echo '{"event":"game","id":"1","title":"Old","owned":true,"installed":true,"dir":"/g/Old","exe":"old.exe"}' ;;"#);
+        let core = open().await;
+        core.source_scan("fake", None).await.unwrap();
+        assert!(matches!(core.achievements("old", false).await, Err(Error::Unavailable(_))));
+        core.achievement_unlocked("old", serde_json::json!({"key": "k"})).await.unwrap();
+        assert_eq!(core.achievements("old", false).await.unwrap()["unlocked"], 1, "a cache stands on its own");
+        assert!(matches!(core.achievements("old", true).await, Err(Error::Unavailable(_))), "a refresh has nowhere to go");
+    }
+
+    #[tokio::test]
+    async fn a_game_scope_source_setting_lands_in_game_toml() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let _dir = fake_source(r#"scan) echo '{"event":"game","id":"1","title":"Old","owned":true,"installed":true,"dir":"/g/Old","exe":"old.exe"}' ;;"#);
+        let toml = PathBuf::from(std::env::var_os("UNIVERSE_SOURCES_PATH").unwrap()).join("fake/source.toml");
+        let text = std::fs::read_to_string(&toml).unwrap();
+        std::fs::write(
+            &toml,
+            format!("{text}[[settings]]\nkey = \"extras\"\ntype = \"bool\"\ndefault = true\nscope = \"game\"\n[[settings]]\nkey = \"region\"\ntype = \"string\"\ndefault = \"eu\"\n"),
+        )
+        .unwrap();
+        let core = open().await;
+        core.source_scan("fake", None).await.unwrap();
+        core.set_source_setting("fake", "old", "extras", "false").await.unwrap();
+        assert!(core.set_source_setting("fake", "old", "region", "us").await.is_err(), "a global key stays global");
+        assert!(core.set_source_setting("fake", "old", "extras", "maybe").await.is_err());
+        assert_eq!(core.source_settings("fake", "old").await.unwrap()["extras"], false);
+        assert_eq!(core.source_settings("fake", "").await.unwrap()["extras"], true);
+        assert!(std::fs::read_to_string(core.get("old").await.unwrap().game.toml_path()).unwrap().contains("[sources.fake]"));
+        core.set("old", "sources.fake.extras", "true").await.unwrap();
+        assert_eq!(core.source_settings("fake", "old").await.unwrap()["extras"], true);
+        assert!(core.set("old", "sources.fake.region", "us").await.is_err());
     }
 
     #[test]

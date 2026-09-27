@@ -24,6 +24,9 @@ pub struct Game {
     pub desktop: Desktop,
     pub metadata: Metadata,
     pub modules: BTreeMap<String, toml::Table>,
+    /// The game-scope settings of the source it came from, by source id.
+    #[serde(skip_serializing_if = "BTreeMap::is_empty")]
+    pub sources: BTreeMap<String, toml::Table>,
     /// Parked data (lutris, repack pins…): kept verbatim so nothing is lost.
     #[serde(flatten)]
     pub extra: BTreeMap<String, toml::Value>,
@@ -125,6 +128,7 @@ impl Default for Game {
             desktop: Desktop::default(),
             metadata: Metadata::default(),
             modules: BTreeMap::new(),
+            sources: BTreeMap::new(),
             extra: BTreeMap::new(),
         }
     }
@@ -331,7 +335,8 @@ pub fn set_key(game_toml: &Path, key: &str, value: &str) -> crate::Result<Game> 
     let text = std::fs::read_to_string(game_toml)?;
     let mut doc: toml_edit::DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| crate::Error::Invalid(e.to_string()))?;
     let top = key.split('.').next().unwrap_or("");
-    let allowed = ["title", "sort_title", "platform", "release_year", "hidden", "favorite", "tags", "source", "launch", "desktop", "metadata", "modules"];
+    let allowed =
+        ["title", "sort_title", "platform", "release_year", "hidden", "favorite", "tags", "source", "launch", "desktop", "metadata", "modules", "sources"];
     if !allowed.contains(&top) {
         return Err(crate::Error::Invalid(format!("unknown key {key}")));
     }

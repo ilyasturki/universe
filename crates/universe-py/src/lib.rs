@@ -232,6 +232,10 @@ impl Core {
     fn remove_screenshot(&self, py: Python<'_>, id: String, name: String) -> PyResult<()> {
         self.run(py, |c| async move { c.remove_screenshot(&id, &name).await })
     }
+    #[pyo3(signature = (id, refresh=false))]
+    fn achievements(&self, py: Python<'_>, id: String, refresh: bool) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| async move { c.achievements(&id, refresh).await })
+    }
     fn sessions(&self, py: Python<'_>, id: String) -> PyResult<Py<PyAny>> {
         self.value(py, |c| async move { c.sessions(&id).await })
     }
@@ -377,14 +381,16 @@ impl Core {
     fn enable_source(&self, py: Python<'_>, id: String, enabled: bool) -> PyResult<()> {
         self.run(py, |c| async move { c.enable_source(&id, enabled).await })
     }
-    fn source_settings(&self, py: Python<'_>, source: String) -> PyResult<Py<PyAny>> {
-        self.value(py, |c| async move { c.source_settings(&source).await })
+    #[pyo3(signature = (source, game_id=String::new()))]
+    fn source_settings(&self, py: Python<'_>, source: String, game_id: String) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| async move { c.source_settings(&source, &game_id).await })
     }
     fn source_setting_choices(&self, py: Python<'_>, source: String, key: String) -> PyResult<Vec<String>> {
         self.run(py, |c| async move { c.source_setting_choices(&source, &key).await })
     }
-    fn set_source_setting(&self, py: Python<'_>, source: String, key: String, value: String) -> PyResult<()> {
-        self.run(py, |c| async move { c.set_source_setting(&source, &key, &value).await })
+    #[pyo3(signature = (source, key, value, game_id=String::new()))]
+    fn set_source_setting(&self, py: Python<'_>, source: String, key: String, value: String, game_id: String) -> PyResult<()> {
+        self.run(py, |c| async move { c.set_source_setting(&source, &game_id, &key, &value).await })
     }
     fn settings(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| c.settings())

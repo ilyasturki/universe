@@ -19,6 +19,7 @@ pub struct Resolved {
     pub media: Vec<(String, String)>,
     pub screenshots: Vec<String>,
     pub journal_count: usize,
+    pub achievements: crate::achievements::Summary,
     pub effective: Effective,
 }
 
@@ -76,6 +77,7 @@ impl Resolved {
         v["platform"] = serde_json::Value::String(self.effective.platform.clone());
         v["removed"] = serde_json::Value::Bool(!self.game.removed_at.is_empty());
         v["journal_count"] = serde_json::json!(self.journal_count);
+        v["achievements"] = serde_json::to_value(self.achievements).unwrap();
         v["recording_count"] = serde_json::json!(self.sessions.iter().filter(|s| s.recording.is_some()).count());
         v["dir"] = serde_json::json!(self.game.dir());
         v
@@ -192,6 +194,7 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
     let stats = sessions::stats(&sessions);
     let (media, screenshots) = media_of(&game, &config.overrides_dir());
     let journal_count = crate::journal::count_written(&game.journal_dir());
+    let achievements = crate::achievements::read(&crate::achievements::path(&game)).map(|c| c.summary()).unwrap_or_default();
     let mut mods = BTreeMap::new();
     for m in modules.iter().filter(|m| m.active()) {
         mods.insert(m.id().to_string(), m.merged_settings(config, Some(&game)));
@@ -256,7 +259,7 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
         },
         modules: mods,
     };
-    Resolved { game, stats, sessions, media, screenshots, journal_count, effective }
+    Resolved { game, stats, sessions, media, screenshots, journal_count, achievements, effective }
 }
 
 pub fn load_all(config: &Config, modules: &[crate::modules::Module]) -> Vec<Resolved> {

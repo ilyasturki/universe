@@ -454,7 +454,7 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
             push(b, b, ok, detail, format!("install {b}, or turn the {} source off", m.manifest.name), m.id());
         }
         if m.id() == "gog" {
-            let auth = crate::paths::expand(m.merged_settings(config).get("auth_path").and_then(|v| v.as_str()).unwrap_or("~/.config/gogdl/auth.json"));
+            let auth = crate::paths::expand(m.merged_settings(config, None).get("auth_path").and_then(|v| v.as_str()).unwrap_or("~/.config/gogdl/auth.json"));
             let logged = std::fs::read_to_string(&auth).map(|s| s.contains("refresh_token")).unwrap_or(false);
             push(
                 "gog-auth",
@@ -464,6 +464,10 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
                 "run universe login gog".into(),
                 "gog",
             );
+            if m.merged_settings(config, None).get("achievements").and_then(|v| v.as_bool()).unwrap_or(false) {
+                let (ok, detail) = bin("comet");
+                push("gog-comet", "GOG achievements (comet)", ok, detail, "install comet-gog, or universe source set gog achievements=false".into(), "gog");
+            }
         }
     }
     if config.controller.enabled {

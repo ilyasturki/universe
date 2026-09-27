@@ -319,19 +319,68 @@ pub(crate) fn command(exe: &Path, dir: &Path, data_dir: &Path, prefix: &str) -> 
     Ok(cmd)
 }
 
-fn module_cmd(module: &Module, exe: &Path) -> crate::Result<tokio::process::Command> {
-    command(exe, &module.dir, &module.data_dir(), "MODULE")
+/// What runs hooks around a session: an active module, or the source the game came from.
+#[derive(Debug, Clone)]
+pub enum Hooker {
+    Module(Module),
+    Source(crate::sources::Source),
 }
 
-pub async fn run_blocking(module: &Module, hook: &str, env: &HookEnv) -> crate::Result<HookOutcome> {
-    let Some(exe) = module.hook(hook) else {
+impl Hooker {
+    pub fn id(&self) -> &str {
+        match self {
+            Hooker::Module(m) => m.id(),
+            Hooker::Source(s) => s.id(),
+        }
+    }
+    pub fn hook(&self, name: &str) -> Option<PathBuf> {
+        match self {
+            Hooker::Module(m) => m.hook(name),
+            Hooker::Source(s) => s.hook(name),
+        }
+    }
+    pub fn timeout(&self) -> Duration {
+        match self {
+            Hooker::Module(m) => m.timeout(),
+            Hooker::Source(s) => s.timeout(),
+        }
+    }
+    fn dir(&self) -> &Path {
+        match self {
+            Hooker::Module(m) => &m.dir,
+            Hooker::Source(s) => &s.dir,
+        }
+    }
+    fn data_dir(&self) -> PathBuf {
+        match self {
+            Hooker::Module(m) => m.data_dir(),
+            Hooker::Source(s) => s.data_dir(),
+        }
+    }
+    /// `MODULE_DIR` or `SOURCE_DIR`…: the names the hook's environment uses.
+    fn prefix(&self) -> &'static str {
+        match self {
+            Hooker::Module(_) => "MODULE",
+            Hooker::Source(_) => "SOURCE",
+        }
+    }
+    fn limits(&self) -> &Limits {
+        match self {
+            Hooker::Module(m) => &m.manifest.limits,
+            Hooker::Source(s) => &s.manifest.limits,
+        }
+    }
+}
+
+pub async fn run_blocking(hooker: &Hooker, hook: &str, env: &HookEnv) -> crate::Result<HookOutcome> {
+    let Some(exe) = hooker.hook(hook) else {
         return Ok(HookOutcome { status: 0, stdout: String::new(), stderr: String::new() });
     };
-    let child = module_cmd(module, &exe)?
+    let child = command(&exe, hooker.dir(), &hooker.data_dir(), hooker.prefix())?
         .envs(env.vars.iter().map(|(k, v)| (k.as_str(), v.as_str())))
         .spawn()
         .map_err(|e| crate::Error::Io(format!("{}: {e}", exe.display())))?;
-    let timeout = module.timeout();
+    let timeout = hooker.timeout();
     match tokio::time::timeout(timeout, child.wait_with_output()).await {
         Ok(Ok(out)) => {
             let o = HookOutcome {
@@ -340,40 +389,43 @@ pub async fn run_blocking(module: &Module, hook: &str, env: &HookEnv) -> crate::
                 stderr: String::from_utf8_lossy(&out.stderr).into(),
             };
             if o.status != 0 {
-                tracing::warn!("hook {}:{hook} exited {}: {}", module.id(), o.status, o.stderr.trim());
+                tracing::warn!("hook {}:{hook} exited {}: {}", hooker.id(), o.status, o.stderr.trim());
             }
             Ok(o)
         }
         Ok(Err(e)) => Err(e.into()),
-        Err(_) => Err(crate::Error::Io(format!("{}:{hook} timed out after {timeout:?}", module.id()))),
+        Err(_) => Err(crate::Error::Io(format!("{}:{hook} timed out after {timeout:?}", hooker.id()))),
     }
 }
 
 /// A transient unit under the manifest limits, bound to the game's unit when `bind_to` names it; returns its name.
 pub async fn run_async(
     units: &crate::host::Units,
-    module: &Module,
+    hooker: &Hooker,
     hook: &str,
     env: &HookEnv,
     session_id: &str,
     bind_to: Option<&str>,
 ) -> crate::Result<Option<String>> {
-    let Some(exe) = module.hook(hook) else { return Ok(None) };
-    std::fs::create_dir_all(module.data_dir())?;
+    let Some(exe) = hooker.hook(hook) else { return Ok(None) };
+    let data_dir = hooker.data_dir();
+    std::fs::create_dir_all(&data_dir)?;
+    let prefix = hooker.prefix();
     let mut unit_env: BTreeMap<String, String> = env.vars.iter().cloned().collect();
-    unit_env.insert("MODULE_DIR".into(), module.dir.to_string_lossy().into());
-    unit_env.insert("MODULE_DATA_DIR".into(), module.data_dir().to_string_lossy().into());
+    unit_env.insert(format!("{prefix}_DIR"), hooker.dir().to_string_lossy().into());
+    unit_env.insert(format!("{prefix}_DATA_DIR"), data_dir.to_string_lossy().into());
+    let limits = hooker.limits();
     let spec = crate::host::UnitSpec {
-        name: format!("universe-{}-{}-{}", module.id(), hook, session_id),
-        description: format!("Universe {} {hook}", module.id()),
+        name: format!("universe-{}-{}-{}", hooker.id(), hook, session_id),
+        description: format!("Universe {} {hook}", hooker.id()),
         program: exe.to_string_lossy().into(),
         args: vec![],
         env: unit_env,
         unset_env: vec![],
-        cwd: Some(module.dir.clone()),
+        cwd: Some(hooker.dir().to_path_buf()),
         properties: vec![
-            ("CPUWeight".into(), crate::host::Prop::U64(module.manifest.limits.cpu_weight.into())),
-            ("MemoryHigh".into(), crate::host::Prop::U64(parse_bytes(&module.manifest.limits.memory_high)?)),
+            ("CPUWeight".into(), crate::host::Prop::U64(limits.cpu_weight.into())),
+            ("MemoryHigh".into(), crate::host::Prop::U64(parse_bytes(&limits.memory_high)?)),
         ],
         bind_to: bind_to.map(String::from),
         stop_post: vec![],

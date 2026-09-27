@@ -171,6 +171,9 @@ impl Core {
                 let _ = std::fs::remove_file(&env_file);
                 return Err(Error::Io(format!("pre-launch {} refused the launch: {}", m.id(), out.stderr.trim())));
             }
+            for line in out.stderr.lines() {
+                tracing::info!("pre-launch {}: {line}", m.id());
+            }
         }
         let extra_env: BTreeMap<String, String> = std::fs::read_to_string(&env_file)
             .unwrap_or_default()
@@ -809,6 +812,54 @@ mod tests {
         let lines: Vec<String> = std::fs::read_to_string(&log).unwrap().lines().map(String::from).collect();
         assert_eq!(lines.len(), 2, "{lines:?}");
         assert!(lines[0].starts_with(&format!("freeze {sid} {{")) && lines[1].starts_with(&format!("thaw {sid} {{")), "{lines:?}");
+    }
+
+    #[tokio::test]
+    async fn the_games_own_source_runs_its_hooks_around_the_session() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let _sb = sandbox();
+        let store = std::path::PathBuf::from(std::env::var_os("UNIVERSE_SOURCES_PATH").unwrap()).join("store");
+        std::fs::create_dir_all(store.join("bin")).unwrap();
+        std::fs::write(
+            store.join("source.toml"),
+            "api = 2\nid = \"store\"\nexe = \"bin/run\"\n[hooks]\npre-launch = \"bin/pre\"\npost-launch = \"bin/watch\"\nsession-end = \"bin/end\"\ntimeout_s = 7\n\
+             [[settings]]\nkey = \"extras\"\ntype = \"bool\"\ndefault = true\nscope = \"game\"\n",
+        )
+        .unwrap();
+        let log = paths::state_home().join("hooks.log");
+        use std::os::unix::fs::PermissionsExt;
+        for hook in ["run", "pre", "watch", "end"] {
+            let exe = store.join("bin").join(hook);
+            std::fs::write(&exe, format!("#!/bin/sh\necho {hook} $SESSION_ID $SOURCE_GAME_ID $SOURCE_SETTINGS_JSON >> {}\n", log.display())).unwrap();
+            std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).unwrap();
+        }
+        std::fs::write(
+            paths::config_home().join("config.toml"),
+            "[launch]\ngamescope = false\nmangohud = false\nfps_limit = \"none\"\n[modules]\nenabled = []\n[sources]\nenabled = [\"store\"]\n",
+        )
+        .unwrap();
+        let mut g = Game::load(&paths::game_dir("sample").join("game.toml")).unwrap();
+        let (core, memory) = open().await;
+        assert!(core.hook_modules(&core.get("sample").await.unwrap(), "pre-launch").await.is_empty(), "a manual game runs no source's hooks");
+
+        g.source.kind = "store".into();
+        g.source.gog_id = "77".into();
+        g.sources.insert("store".into(), toml::from_str("extras = false").unwrap());
+        g.save().unwrap();
+        core.reload_game("sample").await.unwrap();
+        let sid = core.launch("sample", "", "").await.unwrap();
+        let unit = format!("universe-game-sample-{sid}.service");
+        assert!(memory.spec(&unit).unwrap().properties.contains(&("TimeoutStopUSec".to_string(), Prop::U64(67_000_000))), "its session-end counts");
+        let watch = memory.spec(&format!("universe-store-post-launch-{sid}")).expect("the post-launch unit");
+        assert_eq!(watch.bind_to.as_deref(), Some(unit.as_str()));
+        assert_eq!(watch.env["SOURCE_DIR"], store.to_string_lossy());
+        assert_eq!(watch.env["SOURCE_GAME_ID"], "77");
+        memory.finish(&unit, 0);
+        core.session_end("sample", &sid, None, None).await.unwrap();
+        let lines: Vec<String> = std::fs::read_to_string(&log).unwrap().lines().map(String::from).collect();
+        assert_eq!(lines.len(), 2, "{lines:?}");
+        assert!(lines[0].starts_with(&format!("pre {sid} 77 {{")) && lines[1].starts_with(&format!("end {sid} 77 {{")), "{lines:?}");
+        assert!(lines[0].contains("\"extras\":false"), "the game's own setting: {}", lines[0]);
     }
 
     #[tokio::test]

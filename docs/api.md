@@ -105,6 +105,7 @@ comma-separated for lists, `""` deletes the key. A runner is written under its s
                "wayland": true, "hdr": false, "discrete_gpu": true, "dlss_upgrade": false, "fsr4_upgrade": false, "xess_upgrade": false,
                "optiscaler": false, "mangohud": false, "gamescope": true, "gamescope_args": "", "gamescope_resolution": "auto", "gamescope_refresh": "auto", "gamescope_scaler": "", "gamescope_filter": "", "gamescope_sharpness": null, "gamescope_adaptive_sync": "auto", "fps_limit": "auto", "hide_cursor": true, "env": {},
                "working_dir": "/…/games/melee", "prefix": "", "modules": {"capture": {"enabled": true, "cursor": false}}},
+ "achievements": {"total": 40, "unlocked": 12},
  "removed": false}
 ```
 
@@ -121,6 +122,8 @@ overrides, then under `media/`. The player's own are `screenshots(id)` (see Scre
 frontend's "recently added"; a Lutris import, a ROM import or a source scan leaves it empty, since
 those games were already there. A store install of a game `remove`d earlier clears `removed_at` and `hidden` and
 re-stamps it; what was parked under `.archive/` stays parked.
+`achievements` counts the game's cached list (see Achievements); both are 0 until its source has
+given one.
 
 There is no change notification: the files are the truth, so a frontend watches `games/`,
 `games/<id>/{,journal,journal/attachments,media,screenshots}`, `state/` and the overrides directory and rereads. Everything the CLI, `session-end` and the
@@ -406,10 +409,10 @@ a source unavailable, and `doctor` reports it as fetched on first use.
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `sources()` | `sources()` | `universe sources`, `universe source ls` | `[{id, name, version, description, dir, enabled, available, missing: [bin], settings: [Setting], logged_in, user, games_dir, library_cached, library_at}]`; `library_at` is when the store was last listed (RFC 3339, empty before the first); the login probe reaches the network once per process, on the first call |
+| `sources()` | `sources()` | `universe sources`, `universe source ls` | `[{id, name, version, description, dir, enabled, available, missing: [bin], capabilities: [name], hooks: {}, settings: [Setting], logged_in, user, games_dir, library_cached, library_at}]`; `library_at` is when the store was last listed (RFC 3339, empty before the first); the login probe reaches the network once per process, on the first call |
 | `enable_source(id, enabled)` | `enable_source(id, enabled)` | `universe source enable\|disable <id>` | writes `[sources] enabled` in `config.toml` |
-| `source_settings(source)` | `source_settings(source)` | `universe source settings <id>` | the source's settings, defaults under `config.toml [sources.<id>]`; an empty `games_dir` default reads `paths.games_root` |
-| `set_source_setting(source, key, value)` | `set_source_setting(…)` | `universe source set <id> k=v` | validated against `[[settings]]`; writes `config.toml [sources.<id>]` |
+| `source_settings(source, game_id)` | `source_settings(source, game_id="")` | `universe source settings <id> [game]` | the source's settings, defaults under `config.toml [sources.<id>]`, then a game's own game-scope keys (`game.toml [sources.<id>]`) when `game_id` names one; an empty `games_dir` default reads `paths.games_root` |
+| `set_source_setting(source, game_id, key, value)` | `set_source_setting(source, key, value, game_id="")` | `universe source set <id> k=v [--game g]` | validated against `[[settings]]`; `game_id=""` writes `config.toml [sources.<id>]`, otherwise a game-scope key into `game.toml [sources.<id>]` (`set(id, "sources.<id>.<key>", value)` is the same write) |
 | `source_setting_choices(source, key)` | `source_setting_choices(…)` | — | the setting's choices, live through `choices_exec` (as for modules) |
 | `source_login_url(source)` | `login_url(source)` | `universe login <source>` | URL to open |
 | `source_login(source, code)` | `login(source, code)` | `universe login <source> <code>` | returns the user name |
@@ -430,8 +433,22 @@ a source unavailable, and `doctor` reports it as fetched on first use.
 the install takes (measured) or would take (from `info`); `partial_*` name a download stopped by `cancel`
 that `install` resumes.
 
-A source's `Setting` is a module's, every one `scope: global`: a source has no per-game settings. A module
+A source's `Setting` is a module's, `scope: global` unless the manifest says `game`: a game-scope key
+holds for the games the source installed or found, each of which can set its own. A module
 named to a source call (or the reverse) is refused with the command that does take it.
+
+### Achievements
+
+| Rust | Python | CLI | Role |
+|---|---|---|---|
+| `achievements(id, refresh)` | `achievements(id, refresh=False)` | `universe achievements <name> [--refresh] [--json]` | `{source, fetched_at, total, unlocked, items: [Achievement]}` from `games/<id>/achievements.json`; through the game's source (its `achievements` verb, when the source declares that capability) when `refresh` or when there is no cache yet. A refresh keeps an unlock the store has not heard of yet. `Unavailable` when no source lists the game's: a manual game, a Lutris one, a source without the capability |
+| `achievement_unlocked(id, item)` | — | `universe achievement-unlocked <id> '<json>'` (hidden) | files one unlock a session saw into the cache at once, ahead of the store's list: sets `unlocked_at` (now when empty) on the item with that `key`, or adds the item. Prints whether it is new; the first unlock stands |
+
+`Achievement` = `{"key", "name", "description", "unlocked_at": "RFC 3339, empty while locked",
+"hidden": bool, "icon": "url", "icon_locked": "url", "rarity": percent|null}`. `hidden` is the
+store's "withheld until unlocked": a frontend masks the name and description of a locked one. The
+cache is rewritten by a rename, so the `games/<id>/` watch sees every unlock; the game's
+`achievements` summary follows it.
 
 ## Runners
 
@@ -994,10 +1011,17 @@ version = "0.0.6"
 description = "Installs GOG games."   # optional, as a module's
 exe = "bin/source"                # run as: bin/source <verb> [args]
 
+capabilities = ["achievements"]   # optional verbs it answers, past the required ones
+
 [requires]
 bins = ["gogdl"]                  # a missing binary makes the source "unavailable" and it is never run, unless Universe fetches it (see Fetched tools)
 
-[[settings]]                      # as a module's, without `scope`: every setting is global, in config.toml [sources.<id>]
+[hooks]                           # optional, as a module's (every session hook but `screenshot`); they run for the games whose source is this one
+pre-launch  = "bin/pre-launch"
+session-end = "bin/session-end"
+timeout_s   = 20
+
+[[settings]]                      # as a module's; `scope` is global (config.toml [sources.<id>]) or game (game.toml [sources.<id>] over it)
 key = "platform"
 type = "enum"
 default = "windows"
@@ -1006,7 +1030,12 @@ label = "Depot platform"
 ```
 
 `<exe> <verb> [args]` runs in the source's directory with `SOURCE_SETTINGS_JSON`, `SOURCE_DIR`,
-`SOURCE_DATA_DIR` and `UNIVERSE_BIN` in the environment (a `choices_exec` gets the same).
+`SOURCE_DATA_DIR` and `UNIVERSE_BIN` in the environment (a `choices_exec` gets the same). A source's
+hooks run as a module's do — the same environment, with `SOURCE_SETTINGS_JSON` (merged with the
+game's own keys), `SOURCE_DIR`, `SOURCE_DATA_DIR` and `SOURCE_GAME_ID` (the store's id of the game)
+in place of the `MODULE_*` names — for the games whose `source.kind` is the source's id, after the
+modules' hooks of the same name; a source's `session-end` timeout counts in the game unit's stop
+budget.
 A `games_dir` setting whose manifest default is empty arrives filled with `paths.games_root`.
 One JSON object per line on stdout, human-readable logs on stderr, meaningful exit code.
 **Every verb ends with `{"event":"done"}`**, `login` included.
@@ -1021,6 +1050,7 @@ One JSON object per line on stdout, human-readable logs on stderr, meaningful ex
 | `install` | `<id>` | `progress` lines (`done`/`total` in bytes when the source knows them), then the installed `game`. On SIGTERM the source stops its downloader, keeps the files and exits non-zero; a later `install` of the same id resumes |
 | `update` | `[id]` | without an id: `{"event":"update","id","title","local_build","remote_build","version","date"}` per pending update; with one: `progress` then `game` |
 | `scan` | | `{"event":"game", …}` per installation found (`disk_size` measured) and per stopped download (`installed: false`, `partial_dir`, `partial_bytes`), `owned` crossed with the cached library |
+| `achievements` | `<id>` | `{"event":"achievement", …}` per achievement of the game, an `Achievement` (see Achievements); only asked of a source whose `capabilities` names it |
 
 ```json
 {"event":"game","id":"1434554947","title":"Mini Metro","dir":"/mnt/games/PC/Mini Metro",

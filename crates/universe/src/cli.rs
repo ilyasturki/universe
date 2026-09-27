@@ -274,6 +274,14 @@ pub enum Cmd {
         #[arg(short, long)]
         yes: bool,
     },
+    /// A game's achievements, as its store last listed them
+    Achievements {
+        /// Game: exact id, then whole word, substring or path
+        name: String,
+        /// Ask the store again instead of reading the cache
+        #[arg(long)]
+        refresh: bool,
+    },
     /// Controller macros: paddles and spare buttons bound to actions
     Controller {
         #[command(subcommand)]
@@ -296,6 +304,13 @@ pub enum Cmd {
     /// Add a journal entry to the session (journal module's post-process hook)
     #[command(name = "journal-add", hide = true)]
     JournalAdd { session: String, entry: String },
+    /// Mark an achievement unlocked in the game's cache (a source's post-launch hook); prints whether it is new
+    #[command(name = "achievement-unlocked", hide = true)]
+    AchievementUnlocked {
+        id: String,
+        /// JSON `{"key", "name", "description", "unlocked_at", "icon", …}`
+        achievement: String,
+    },
     /// The running game's window as the shell extension lists it (capture module's post-launch hook)
     #[command(name = "session-window", hide = true)]
     SessionWindow {
@@ -440,17 +455,22 @@ pub enum SourceCmd {
         /// Source id
         id: String,
     },
-    /// Settings of a source
+    /// Settings of a source, global or merged with a game's
     Settings {
         /// Source id
         id: String,
+        /// Game: exact id, then whole word, substring or path: merge its overrides
+        game: Option<String>,
     },
-    /// Set source settings: key=value…
+    /// Set source settings: key=value…, globally or for --game
     Set {
         /// Source id
         id: String,
         /// key=value, validated against the source's settings
         pairs: Vec<String>,
+        /// Write a game-scope key into this game's game.toml instead of config.toml
+        #[arg(long)]
+        game: Option<String>,
     },
 }
 
@@ -746,6 +766,9 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             println!("{}", core.file_recording(&session, &path, timeline.as_ref()).await?)
         }
         Cmd::JournalAdd { session, entry } => core.add_entry(&session, serde_json::from_str(&entry).map_err(crate::Error::from)?).await?,
+        Cmd::AchievementUnlocked { id, achievement } => {
+            println!("{}", core.achievement_unlocked(&id, serde_json::from_str(&achievement).map_err(crate::Error::from)?).await?)
+        }
         Cmd::SessionWindow { wait } => {
             let window = match wait {
                 Some(secs) => {
@@ -1302,14 +1325,22 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 core.enable_source(&id, false).await?;
                 println!("{id} disabled");
             }
-            SourceCmd::Settings { id } => {
-                print_json(&core.source_settings(&id).await?)?;
+            SourceCmd::Settings { id, game } => {
+                let gid = match game {
+                    Some(g) => pick(&core, &g).await?,
+                    None => String::new(),
+                };
+                print_json(&core.source_settings(&id, &gid).await?)?;
             }
-            SourceCmd::Set { id, pairs } => {
+            SourceCmd::Set { id, pairs, game } => {
+                let gid = match game {
+                    Some(g) => pick(&core, &g).await?,
+                    None => String::new(),
+                };
                 for p in &pairs {
                     let (k, v) = p.split_once('=').ok_or_else(|| anyhow::anyhow!("expected key=value"))?;
-                    core.set_source_setting(&id, k, v).await?;
-                    println!("{id}.{k} = {v}");
+                    core.set_source_setting(&id, &gid, k, v).await?;
+                    println!("{id}.{k} = {v}{}", if gid.is_empty() { String::new() } else { format!(" ({gid})") });
                 }
             }
         },
@@ -1511,6 +1542,25 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             let mut t = table(&["Taken", "Game", "Session", "Path"]);
             for r in rows(&list) {
                 t.add_row(vec![when(&s(&r, "taken_at"), &loc), s(&r, "title"), s(&r, "session"), s(&r, "path")]);
+            }
+            println!("{t}");
+        }
+        Cmd::Achievements { name, refresh } => {
+            let id = pick(&core, &name).await?;
+            let list = core.achievements(&id, refresh).await?;
+            if json {
+                return print_json(&list);
+            }
+            println!("{} of {} unlocked", list["unlocked"], list["total"]);
+            let mut t = table(&["Unlocked", "Achievement", "Description"]);
+            for r in list["items"].as_array().into_iter().flatten() {
+                let at = s(r, "unlocked_at");
+                let (name, what) = if at.is_empty() && r["hidden"].as_bool().unwrap_or(false) {
+                    ("Hidden".to_string(), String::new())
+                } else {
+                    (s(r, "name"), s(r, "description"))
+                };
+                t.add_row(vec![if at.is_empty() { "—".into() } else { when(&at, &loc) }, name, what]);
             }
             println!("{t}");
         }
@@ -1859,6 +1909,7 @@ const POSITIONALS: &[(&str, usize, &str)] = &[
     ("uninstall", 1, "games"),
     ("sessions", 1, "games"),
     ("screenshots", 1, "games"),
+    ("achievements", 1, "games"),
     ("output", 1, "outputs"),
     ("journal", 1, "games"),
     ("recordings", 1, "games"),
@@ -1877,6 +1928,7 @@ const POSITIONALS: &[(&str, usize, &str)] = &[
     ("source enable", 1, "sources"),
     ("source disable", 1, "sources"),
     ("source settings", 1, "sources"),
+    ("source settings", 2, "games"),
     ("source set", 1, "sources"),
     ("login", 1, "sources"),
     ("library", 1, "sources"),

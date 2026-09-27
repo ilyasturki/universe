@@ -1,9 +1,15 @@
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 use std::path::PathBuf;
+use std::time::Duration;
 
 use crate::config::Config;
-use crate::modules::{self, Requires, Setting};
+use crate::game::Game;
+use crate::modules::{self, Limits, Requires, Setting};
 use crate::paths;
+
+/// The session hooks a source may declare; they run for the games it installed or found.
+pub const HOOKS: [&str; 6] = ["pre-launch", "post-launch", "freeze", "thaw", "session-end", "post-process"];
 
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(default)]
@@ -15,6 +21,10 @@ pub struct Manifest {
     pub description: String,
     pub exe: String,
     pub requires: Requires,
+    /// Optional verbs past the required ones: `achievements`.
+    pub capabilities: Vec<String>,
+    pub hooks: BTreeMap<String, toml::Value>,
+    pub limits: Limits,
     pub settings: Vec<Setting>,
 }
 
@@ -44,8 +54,19 @@ impl Source {
     pub fn active(&self) -> bool {
         self.enabled && self.available
     }
+    pub fn can(&self, capability: &str) -> bool {
+        self.manifest.capabilities.iter().any(|c| c == capability)
+    }
+    pub fn hook(&self, name: &str) -> Option<PathBuf> {
+        HOOKS.contains(&name).then(|| self.manifest.hooks.get(name).and_then(|v| v.as_str()).map(|p| self.dir.join(p))).flatten()
+    }
+    pub fn timeout(&self) -> Duration {
+        Duration::from_secs(self.manifest.hooks.get("timeout_s").and_then(|v| v.as_integer()).unwrap_or(20).max(1) as u64)
+    }
 
     pub fn to_json(&self) -> serde_json::Value {
+        let hooks: BTreeMap<&str, &str> =
+            self.manifest.hooks.iter().filter(|(k, _)| HOOKS.contains(&k.as_str())).map(|(k, v)| (k.as_str(), v.as_str().unwrap_or(""))).collect();
         serde_json::json!({
             "id": self.id(),
             "name": self.name(),
@@ -55,11 +76,14 @@ impl Source {
             "enabled": self.enabled,
             "available": self.available,
             "missing": self.missing,
+            "capabilities": self.manifest.capabilities,
+            "hooks": hooks,
             "settings": self.manifest.settings.iter().map(modules::setting_json).collect::<Vec<_>>(),
         })
     }
 
-    pub fn merged_settings(&self, config: &Config) -> serde_json::Map<String, serde_json::Value> {
+    /// Defaults ← config.toml [sources.<id>] ← game.toml [sources.<id>] (game-scope keys only).
+    pub fn merged_settings(&self, config: &Config, game: Option<&Game>) -> serde_json::Map<String, serde_json::Value> {
         let mut out = serde_json::Map::new();
         for s in &self.manifest.settings {
             out.insert(s.key.clone(), modules::toml_to_json(&s.default));
@@ -70,11 +94,18 @@ impl Source {
         for (k, v) in config.sources.settings.get(self.id()).into_iter().flatten() {
             out.insert(k.clone(), modules::toml_to_json(v));
         }
+        let game_keys = self.manifest.settings.iter().filter(|s| s.scope == "game").map(|s| s.key.as_str()).collect::<Vec<_>>();
+        for (k, v) in game.and_then(|g| g.sources.get(self.id())).into_iter().flatten().filter(|(k, _)| game_keys.contains(&k.as_str())) {
+            out.insert(k.clone(), modules::toml_to_json(v));
+        }
         out
     }
 
-    pub fn validate_setting(&self, key: &str, value: &str) -> crate::Result<()> {
+    pub fn validate_setting(&self, key: &str, value: &str, scope_game: bool) -> crate::Result<()> {
         let s = self.manifest.settings.iter().find(|s| s.key == key).ok_or_else(|| crate::Error::Invalid(format!("{}: unknown setting {key}", self.id())))?;
+        if scope_game && s.scope != "game" {
+            return Err(crate::Error::Invalid(format!("{}.{key} is a global setting", self.id())));
+        }
         modules::validate_value(key, &s.kind, &s.choices, value)
     }
 }
@@ -125,6 +156,7 @@ pub enum SourceEvent {
         disk_size: Option<u64>,
     },
     Update(serde_json::Map<String, serde_json::Value>),
+    Achievement(serde_json::Map<String, serde_json::Value>),
     Done,
     #[serde(other)]
     Unknown,
@@ -219,12 +251,12 @@ choices = ["windows", "linux"]
         .unwrap();
         let source = Source { available: false, missing: vec!["x".into()], enabled: true, dir: PathBuf::from("/s"), manifest: m };
         let cfg: Config = toml::from_str("[paths]\ngames_root = \"/mnt/games\"\n[sources.gog]\nplatform = \"linux\"").unwrap();
-        let merged = source.merged_settings(&cfg);
+        let merged = source.merged_settings(&cfg, None);
         assert_eq!(merged["games_dir"], "/mnt/games", "an empty games_dir is paths.games_root");
         assert_eq!(merged["platform"], "linux");
-        assert!(source.validate_setting("platform", "mac").is_err());
-        assert!(source.validate_setting("platform", "linux").is_ok());
-        assert!(source.validate_setting("nope", "1").is_err());
+        assert!(source.validate_setting("platform", "mac", false).is_err());
+        assert!(source.validate_setting("platform", "linux", false).is_ok());
+        assert!(source.validate_setting("nope", "1", false).is_err());
         let j = source.to_json();
         assert_eq!(j["name"], "GOG");
         assert_eq!(j["settings"][1]["choices"][1], "linux");
