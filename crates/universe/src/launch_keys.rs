@@ -115,6 +115,7 @@ macro_rules! advanced {
 pub static LAUNCH_KEYS: &[LaunchKey] = &[
     key!("runner", Kind::Str, "", "Runner", "", Game, &[], "What starts the game: proton, wine, linux or an emulator."),
     key!("runner_exe", Kind::Path, "", "Runner program", "", Game, &[], "The runner's program, when not the detected one."),
+    key!("runner_build", Kind::Str, "", "Runner build", "", Game, &[], "A build of the runner Universe installed, by version, when not the runner's own."),
     key!("exe", Kind::Path, "", "Program", "", Game, &[], "The program, or for an emulator the ROM, image or folder."),
     key!("gamescope", Kind::Bool, "true", "Gamescope", "Display", Both, &[], "Run the game in a window of its own, at the resolution and refresh rate below; a launcher already inside gamescope puts it on that one instead."),
     key!("gamescope_resolution", Kind::Resolution, "auto", "Resolution", "Display", Both, &[], "What the game renders at; auto is the screen's own. A lower one is upscaled to the screen, lighter on the GPU."),

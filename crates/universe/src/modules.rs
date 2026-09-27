@@ -248,7 +248,6 @@ pub fn read_manifests<M: serde::de::DeserializeOwned>(
     found
 }
 
-/// A tool Universe fetches on first use (`tools::TOOLS`) is never missing.
 pub fn missing_bins(requires: &Requires) -> Vec<String> {
     requires.bins.iter().filter(|b| crate::runners::on_path(b).is_none() && crate::tools::find(b).is_none()).cloned().collect()
 }

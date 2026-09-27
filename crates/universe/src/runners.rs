@@ -510,8 +510,10 @@ fn coerce(o: &OptionSpec, v: &toml::Value) -> serde_json::Value {
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
 pub struct Located {
     pub program: String,
-    /// `config`, `path`, or empty when nothing was found
+    /// `config`, `path`, `universe`, or empty when nothing was found
     pub source: String,
+    /// The version of Universe's build, when that is what runs.
+    pub build: String,
 }
 
 pub(crate) fn on_path(bin: &str) -> Option<PathBuf> {
@@ -519,29 +521,43 @@ pub(crate) fn on_path(bin: &str) -> Option<PathBuf> {
         let p = paths::expand(bin);
         return p.is_file().then_some(p);
     }
+    on_system_path(bin).or_else(|| Some(crate::tools::dir().join(bin)).filter(|p| p.is_file()))
+}
+
+/// PATH without the tools Universe fetched.
+pub(crate) fn on_system_path(bin: &str) -> Option<PathBuf> {
+    if bin.is_empty() || bin.contains('/') {
+        return None;
+    }
     let mut dirs: Vec<PathBuf> = std::env::var_os("PATH").map(|p| std::env::split_paths(&p).collect()).unwrap_or_default();
     dirs.push("/run/wrappers/bin".into());
-    dirs.push(crate::tools::dir());
     dirs.iter().map(|d| d.join(bin)).find(|p| p.is_file())
 }
 
+pub fn system_program(spec: &RunnerSpec) -> Option<PathBuf> {
+    spec.binaries.iter().find_map(|b| on_system_path(b))
+}
+
 pub fn locate(spec: &RunnerSpec, config: &Config) -> Located {
+    let at = |p: PathBuf, source: &str| Located { program: p.to_string_lossy().into(), source: source.into(), build: String::new() };
     if spec.kind == Kind::Linux {
-        return Located { program: String::new(), source: "path".into() };
+        return Located { source: "path".into(), ..Located::default() };
     }
     if let Some(exe) = config.runners.get(spec.id).and_then(|t| t.get("exe")).and_then(|v| v.as_str()).filter(|s| !s.is_empty()) {
-        let program = on_path(exe).unwrap_or_else(|| paths::expand(exe));
-        return Located { program: program.to_string_lossy().into(), source: "config".into() };
+        return at(on_path(exe).unwrap_or_else(|| paths::expand(exe)), "config");
     }
     if spec.kind == Kind::Proton {
-        return Located { program: on_path(&config.launch.umu_run).map(|p| p.to_string_lossy().into()).unwrap_or_default(), source: "path".into() };
+        return at(on_path(&config.launch.umu_run).unwrap_or_default(), "path");
     }
-    for b in spec.binaries {
-        if let Some(p) = on_path(b) {
-            return Located { program: p.to_string_lossy().into(), source: "path".into() };
-        }
+    let system = || system_program(spec).map(|p| at(p, "path"));
+    let ours =
+        |version: &str| crate::components::find_build(spec.id, version).map(|b| Located { build: b.version.clone(), ..at(b.program_path(), "universe") });
+    match crate::components::build_setting(config, spec.id).as_str() {
+        "" => system().or_else(|| ours("")),
+        "latest" => ours("").or_else(system),
+        v => ours(v).or_else(|| ours("")).or_else(system),
     }
-    Located::default()
+    .unwrap_or_default()
 }
 
 pub fn global_args(spec: &RunnerSpec, config: &Config) -> Vec<String> {
@@ -576,6 +592,8 @@ pub fn to_json(spec: &RunnerSpec, config: &Config) -> serde_json::Value {
         "id": spec.id, "name": spec.name, "kind": spec.kind.as_str(), "aliases": spec.aliases,
         "binaries": spec.binaries, "platforms": spec.platforms, "extensions": spec.extensions,
         "exe": configured.and_then(|t| t.get("exe")).and_then(|v| v.as_str()).unwrap_or(""),
+        "build": crate::components::build_setting(config, spec.id), "version": located.build,
+        "builds": crate::components::installed(spec.id).into_iter().rev().map(|b| b.version).collect::<Vec<_>>(),
         "args": shell_words::join(global_args(spec, config)),
         "gamescope": configured.and_then(|t| t.get("gamescope")).and_then(|v| v.as_bool()),
         "path": located.program, "source": located.source, "available": available,

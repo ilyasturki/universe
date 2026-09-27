@@ -75,7 +75,7 @@ fn from_desktop() -> Option<Layout> {
     None
 }
 
-fn output(program: &str, args: &[&str]) -> Option<String> {
+pub(crate) fn output<S: AsRef<std::ffi::OsStr>>(program: &str, args: &[S]) -> Option<String> {
     let out = Command::new(program).args(args).output().ok()?;
     out.status.success().then(|| String::from_utf8_lossy(&out.stdout).into_owned())
 }

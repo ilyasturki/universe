@@ -80,7 +80,7 @@ pub(crate) fn passthrough_env() -> BTreeMap<String, String> {
 }
 
 /// The media providers block on the network; a worker thread keeps the runtime free.
-async fn blocking<T: Send + 'static>(f: impl FnOnce() -> Result<T> + Send + 'static) -> Result<T> {
+pub(crate) async fn blocking<T: Send + 'static>(f: impl FnOnce() -> Result<T> + Send + 'static) -> Result<T> {
     tokio::task::spawn_blocking(f).await.map_err(|e| Error::Io(e.to_string()))?
 }
 
@@ -111,6 +111,7 @@ pub struct Core {
     media_stop: std::sync::atomic::AtomicBool,
     thumbs: crate::thumbs::Maker,
     pub(crate) host: Host,
+    pub(crate) component_jobs: std::sync::Mutex<BTreeMap<String, std::sync::Arc<std::sync::atomic::AtomicBool>>>,
 }
 
 impl Core {
@@ -134,6 +135,7 @@ impl Core {
             media_stop: std::sync::atomic::AtomicBool::new(false),
             thumbs: crate::thumbs::Maker::default(),
             host,
+            component_jobs: std::sync::Mutex::new(BTreeMap::new()),
         }
     }
 
@@ -313,7 +315,10 @@ impl Core {
         if key == "gamescope" && !matches!(value, "" | "true" | "false") {
             return Err(Error::Invalid("gamescope must be true or false".into()));
         }
-        if !matches!(key, "exe" | "args" | "gamescope") && !value.is_empty() {
+        if key == "build" && !matches!(value, "" | "latest") && crate::components::find_build(spec.id, value).is_none_or(|b| b.version != value) {
+            return Err(Error::NotFound(format!("{} {value} is not installed: build takes latest, a version Universe installed, or nothing", spec.id)));
+        }
+        if !matches!(key, "exe" | "args" | "gamescope" | "build") && !value.is_empty() {
             spec.validate_option(key, value)?;
         }
         Config::set_key(&paths::config_file(), &format!("runners.{}.{key}", spec.id), value)?;

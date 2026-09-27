@@ -400,7 +400,8 @@ upset a game or an anti-cheat; `auto` is on where the upgrade is a plain win —
 FSR 4 on RDNA 4, XeSS on Intel — and off elsewhere and when no GPU is known.
 
 `launch.proton` names a build: `proton/<name>` under the data home, then `[proton]`'s path, then a
-path as given, then `<name>` under each Proton directory — Lutris's `runners/wine`, Steam's
+path as given, then `<name>` under each Proton directory — the builds Universe installed
+(`components/<id>/`, see Components), Lutris's `runners/wine`, Steam's
 `compatibilitytools.d` (native and Flatpak), umu's `umu/compatibilitytools`, Heroic's `tools/proton`
 (native and Flatpak) — then the newest build of the name's family in any of them: `proton-ge` is
 `GE-Proton10-12` over `GE-Proton9-27`, `proton-cachyos` is `proton-cachyos-10.0-…`. None found is
@@ -427,14 +428,15 @@ none of those variables).
 
 ### Fetched tools
 
-Two programs most distributions do not package are fetched by Universe itself when they are not on
-PATH: `umu-run` (umu-launcher 1.4.4's zipapp, which needs python3 3.10 or later) before a Proton
-launch that uses `launch.umu_run`, and `gogdl` (heroic-gogdl 1.3.0's x86_64 build) before any command
-of a source that requires it. Each is pinned to one GitHub release asset and its sha256: a download
-that does not match is refused, nothing written. They land in `<data>/bin`, which every lookup of a
-program searches after PATH (an installed one wins) and which is appended to the `PATH` of the
-modules, the sources and the units Universe starts. A required binary Universe fetches never makes
-a source unavailable, and `doctor` reports it as fetched on first use.
+Programs most distributions do not package are fetched by Universe itself when they are not on
+PATH: `umu-run` (umu-launcher's zipapp, which needs python3 3.10 or later) before a Proton
+launch that uses `launch.umu_run`, and `gogdl` (heroic-gogdl's x86_64 build) before any command
+of a source that requires it. They are components (see Components): the catalogue's newest build,
+else the one Universe pins (umu-launcher 1.4.4, heroic-gogdl 1.3.0) when the catalogue cannot be
+reached. `<data>/bin` holds a link to each tool's newest build; every lookup of a program searches
+it after PATH (an installed one wins), and it is appended to the `PATH` of the modules, the sources
+and the units Universe starts. A required binary Universe fetches never makes a source unavailable,
+and `doctor` reports it as fetched on first use.
 
 ## Sources
 
@@ -517,12 +519,14 @@ quit with the game, whether a stop repeats its SIGTERM (`term_twice`, see Sessio
 | Rust | Python | CLI | Role |
 |---|---|---|---|
 | `runners()` | `runners()` | `universe runner ls` · `runner options <id>` | `[Runner]`, see below |
-| `set_runner_setting(id, key, value)` | `set_runner_setting(…)` | `universe runner set <id> k=v …` | writes `config.toml [runners.<id>] <key>`: `exe`, `args`, `gamescope`, or an option, validated by type; `""` resets it |
+| `set_runner_setting(id, key, value)` | `set_runner_setting(…)` | `universe runner set <id> k=v …` | writes `config.toml [runners.<id>] <key>`: `exe`, `args`, `gamescope`, `build` (`latest` or a version Universe installed), or an option, validated by type; `""` resets it |
 
 `Runner` = `{"id": "dolphin", "name": "Dolphin", "kind": "proton|wine|linux|emulator", "aliases": ["…"],
 "binaries": ["dolphin-emu"], "platforms": ["Nintendo GameCube", "Nintendo Wii"],
 "extensions": ["iso", …], "exe": "the configured program or empty", "args": "extra arguments, shell-quoted",
-"gamescope": true | false | null (the global default), "path": "the program that will run, empty when none was found", "source": "config|path|",
+"build": "[runners.<id>] build", "version": "the version of Universe's build that runs, empty for another program",
+"builds": ["the versions Universe installed, newest first"],
+"gamescope": true | false | null (the global default), "path": "the program that will run, empty when none was found", "source": "config|path|universe|",
 "available": true, "options": [{"key", "type": "bool|path", "default", "label", "choices": [],
 "value": the global value}]}`.
 
@@ -530,14 +534,100 @@ A few runners spell the file their own way: `xenia` is a Windows build run throu
 gets `-rompath <dir> <name>`, `dosbox` takes a program or a `.conf` (`-conf`), `scummvm` the game's
 folder. Ids, aliases and platforms: `universe runner ls`.
 
-The program: `[runners.<id>] exe` if set (a path, or a name on PATH), else the spec's binaries on
-PATH in order. A game may name its own with `launch.runner_exe`.
-Flatpak installs are not looked for: `flatpak run` moves the app into its own scope, which the
-session's `ExitType=cgroup` would take for the game ending.
+The program: `[runners.<id>] exe` if set (a path, or a name on PATH), else by `[runners.<id>] build`.
+Unset, the system's program — the spec's binaries on PATH in order — then the newest build Universe
+installed (see Components); `latest`, Universe's newest build before the system's program; a
+version, that build. A game may name its own with `launch.runner_exe`, or one of Universe's builds
+by version with `launch.runner_build`. Flatpak installs are not looked for: `flatpak run` moves the
+app into its own scope, which the session's `ExitType=cgroup` would take for the game ending.
 
 The command line of an emulator: `[runners.<id>] args`, the option flags in the spec's order, the
 file flag and the game file (`launch.exe`: a ROM, an image, an EBOOT.BIN, a folder), then
 `launch.args`. `MANGOHUD=1` and `launch.env` apply as for Proton.
+
+## Components
+
+What runs a game or a source and can be installed: Proton builds, Wine builds, emulators, the
+tools Universe fetches, and the system tools only the distribution installs well. An id is the
+runner's for an emulator and Wine (`eden`, `wine`), the build's own for Proton (`ge-proton`,
+`proton-cachyos`, `proton-em`, `umu-proton`), the program's for a tool (`umu-run`, `gogdl`, `comet`)
+and for a system tool (`gamescope`, `mangohud`, `gpu-screen-recorder`).
+
+| Rust | Python | CLI | Role |
+|---|---|---|---|
+| `components(refresh)` | `components(refresh=False)` | `universe component ls [--refresh]` | `{catalogue: {url, fetched_at, generated_at, error}, auto_update, components: [Component]}` |
+| `component_install(id, version, progress)` | `component_install(id, version="", progress=None)` | `universe component install <id> [version]` | installs the build, the latest this machine runs for `""`; returns its version |
+| `component_remove(id, version)` | `component_remove(…)` | `universe component remove <id> <version>` | removes one of Universe's builds; `Busy` while something names it (see Updates) |
+| `component_update(id, progress)` | `component_update(id="", progress=None)` | `universe component update [id]` | installs what is newer than Universe's builds, of `id` or of every component it holds builds of, then prunes; `[{id, name, version, error?}]`; `Busy` while a game runs |
+| `component_rollback(id)` | `component_rollback(id)` | `universe component rollback <id>` | removes Universe's newest build and skips its version for good; returns the version now newest, `""` when the system's program takes over |
+| `component_use(id, build)` | `component_use(id, build)` | `universe component use <id> <latest\|system\|version>` | a runner writes `[runners.<id>] build`, a Proton build `launch.proton` (its family for `latest`) |
+| `component_cancel(id)` | `component_cancel(id)` | — | stops an install or update at the next chunk; it fails `Busy` |
+
+**Catalogue.** JSON at `components.catalogue` (a URL or a file; empty: the project's `catalogue`
+branch, which a daily CI job bumps), cached in `<cache>/catalogue.json`, fetched again once a day
+old or on `refresh`; unreachable, the cache stands in, then the built-in entries (the Proton families
+and the tools Universe pins). `{schema: 1, generated_at, components: {<id>: {name, kind:
+proton|wine|emulator|tool, family?, bin?, homepage?, builds: [{version, date, channel: stable|rolling,
+assets: [{arch: x86_64|aarch64|any, variant?: x86_64_v3, url, sha256, size, format:
+appimage|tar|tar.gz|tar.xz|zip|binary, member?, appimage?, program?}]}]}}}`. A build's asset here:
+its arch (or `any`), the `x86_64_v3` variant where the CPU has that level, else the plain one. The
+latest build is the newest stable one (by date, then version) this machine runs, the newest rolling
+one where upstream publishes nothing else.
+
+**Installs.** `<data>/components/<id>/<version>/`, beside its sidecar `<version>.json` (`{id, name,
+kind, version, date, channel, family, bin, program, url, sha256, size, disk, installed_at, auto}`)
+written last: a folder without one is an install that did not finish. The download streams into
+`<data>/components/.tmp/` after a check for room, and a digest other than the pinned sha256 leaves
+nothing. An AppImage is unpacked by its own runtime
+(`--appimage-extract`: no FUSE; on NixOS inside `universe-fhs` when it is on PATH); a tarball or zip
+whose files share one top folder loses it; `member` takes one file out of a tar, `appimage` unpacks
+the AppImage inside the archive in turn. The program: `program`, else `AppRun` for an AppImage,
+`bin/wine` for Wine, the build's folder for Proton (its `proton` script), the tool's name for a tool.
+
+**NixOS.** A downloaded build expects an FHS: on NixOS the launch runs it as `universe-fhs <program>
+…`, a bubblewrap environment of appimage-run's libraries the flake puts on Universe's PATH (and an
+AppImage is unpacked inside it), so nothing is asked of the system's configuration — no nix-ld, no
+binfmt, no steam-run. `doctor`'s `components-fhs` fails when Universe holds such a build and
+`universe-fhs` is not on PATH. A stop leaves its shell and its bwrap alone: signalled, bwrap's
+`--die-with-parent` would kill the game before it saves; they end with it.
+
+**System tools.** gamescope, MangoHud (its 32-bit layer included) and gpu-screen-recorder
+come from the distribution's packages, installed through PackageKit on the system bus
+(its password prompt is the desktop's polkit agent): `component_install` resolves the family's
+package names (Arch `lib32-mangohud`, Fedora `mangohud.i686`, Debian `mangohud:i386`) and installs
+the ones missing. What needs root beyond the package — a setcap outside Arch —
+stays a doctor fix. With no PackageKit (NixOS, image-based systems) or no
+package for the family, the row carries the fix instead: on NixOS the module's option. A missing one
+is proposed when the configuration uses it: gamescope with `launch.gamescope`, MangoHud with a frame
+rate limit or the HUD, gpu-screen-recorder with the capture module.
+
+**What runs.** An emulator or Wine as `[runners.<id>] build` says (see Runners). A Proton build
+through `launch.proton`: `components/<id>/` is one of the Proton directories, so a family name
+takes the newest build of the family in any of them, Universe's included, and a build's version is
+a name `launch.proton` takes. A tool: PATH first, then `<data>/bin`.
+
+**Updates.** Of a component Universe holds a build of: the latest, when it is newer than Universe's
+newest and not skipped. Every build but the newest two then goes, except the ones named — by
+`[runners.<id>] build`, a game's `launch.runner_build`, a `runner_exe` or `[runners.<id>] exe`
+inside the build, `launch.proton` (global or a game's), a `[proton]` path inside it — and the one the
+running game runs on. `components.auto_update` (default true) is for a frontend to run
+`component_update("")` itself: daily while it runs, never during a game. A rollback's version is
+written to `components/<id>/.skipped`; installing that version by name takes it off.
+
+`Component` = `{id, name, kind, family, bin, homepage, runner (the id, when a runner ships under
+it), builds: [{version, origin: universe|nix|system|lutris|steam|heroic|umu|local|config, program,
+managed, in_use, pinned, disk, size, date, installed_at, auto}] (Universe's newest first, then the
+system's), in_use (the build that runs, null when none), latest ({version, date, channel, size}, null
+when there is none for this machine), available ([{version, date, channel, size, installed,
+skipped}], newest first), update (the version an update would install, or ""), proposal, used_by
+(the games on it), setting ([runners.<id>] build, or launch.proton when it names this family),
+recent ({version, at} of an update in the last 7 days, or null), skipped}`, and for a system tool
+`packages`, `installable` (PackageKit can install them here) and `fix`. `proposal` is `install`
+when nothing is installed and the library needs it (a runner a game uses; the default Proton's
+family once a game runs on Proton; umu-run), `newer` when what runs is the system's and the latest
+is surely newer, `""` otherwise. A system program's version comes from its Nix store path, else an
+AppImage's file name, else the distribution's package (pacman, dpkg, rpm); a snapshot (`unstable`,
+`git`) or two numbering schemes propose nothing.
 
 ## Media
 
@@ -829,7 +919,7 @@ written whole, missing or not.
 | `module_settings(module, game_id)` | `module_settings(…)` | `universe module settings <id> [game]` | global settings merged with the game's; `game_id=""` is global only |
 | `set_module_setting(module, game_id, key, value)` | `set_module_setting(…)` | `universe module set <id> k=v [--game g]` | validated against `[[settings]]`. `game_id=""` writes `config.toml [modules.<id>]`, otherwise `game.toml [modules.<id>]` |
 | `module_setting_choices(module, key)` | `module_setting_choices(…)` | — | the global setting's choices; a setting with `choices_exec` gets them from the module, live (see below) |
-| `doctor()` | `doctor()` | `universe doctor` | `[{check, label, ok, detail, fix, module}]` (`check` a stable id, `label` its plain name, `detail` the problem when not `ok`, `fix` what to do about it, empty when `ok`, worded for the distribution: NixOS options on NixOS, the Arch, Fedora or Debian package names elsewhere): the config file (absent: defaults; read-only), the systemd user manager (250 or later, for `ExitType=cgroup`) and cgroup v2, umu-run (or python3 for the one Universe would fetch), MangoHud and its 32-bit layer, gamescope and mangoapp, required binaries of the enabled modules and sources (`module` names the one, or `core`, `runners`, `media`, `controller`; a tool Universe fetches is fine missing), one line per `required` setting an enabled module is still waiting on, `gsr-kms-server`, Proton, the desktop (`desktop`, then per profile the programs it drives, `desktop-<program>`, a notification daemon where the OSD is a notification, `cursor` where the profile cannot hide it), the cursor and Universe extensions on GNOME, tokens, one `runner-<id>` check per runner a library game uses (its program resolved), `runner-eden-stop` when Eden is one (its `[UI] confirmStop` at `2`, else a stop shows its "close?" question); `modules` and `sources` say what `config.toml` enables that is not found |
+| `doctor()` | `doctor()` | `universe doctor` | `[{check, label, ok, detail, fix, module, component}]` (`component` the component whose install fixes it — a runner not found, a fetched tool, the default Proton's family when the catalogue has a build for it, a system tool PackageKit can install — else empty; `components-fhs` on NixOS once Universe holds a downloaded runner; `check` a stable id, `label` its plain name, `detail` the problem when not `ok`, `fix` what to do about it, empty when `ok`, worded for the distribution: NixOS options on NixOS, the Arch, Fedora or Debian package names elsewhere): the config file (absent: defaults; read-only), the systemd user manager (250 or later, for `ExitType=cgroup`) and cgroup v2, umu-run (or python3 for the one Universe would fetch), MangoHud and its 32-bit layer, gamescope and mangoapp, required binaries of the enabled modules and sources (`module` names the one, or `core`, `runners`, `media`, `controller`; a tool Universe fetches is fine missing), one line per `required` setting an enabled module is still waiting on, `gsr-kms-server`, Proton, the desktop (`desktop`, then per profile the programs it drives, `desktop-<program>`, a notification daemon where the OSD is a notification, `cursor` where the profile cannot hide it), the cursor and Universe extensions on GNOME, tokens, one `runner-<id>` check per runner a library game uses (its program resolved), `runner-eden-stop` when Eden is one (its `[UI] confirmStop` at `2`, else a stop shows its "close?" question); `modules` and `sources` say what `config.toml` enables that is not found |
 | — | — | `universe setup` | after an install: on GNOME, writes the `universe@ilyasturki.github.io` extension the binary carries into `~/.local/share/gnome-shell/extensions/` (rewritten when stale; left to a system copy when there is none there) and adds it to `org.gnome.shell enabled-extensions` (out of `disabled-extensions`, which overrides it), read by the shell at the next login; then prints `doctor` |
 
 A module entry is `{id, name, version, description, dir, enabled, available, missing: [bin],
@@ -1026,7 +1116,11 @@ fan = ""                             # on | off: SteamOS's fan curve
 [proton]                             # name → path, none by default; a name with no path here is looked for as a family (GE-Proton10-4 for proton-ge) under Lutris, Steam, umu and Heroic
 # proton-em = "~/opt/proton-em"
 
-# [runners.<id>]                     # per runner (`universe runner set`): exe (absent: detected), args, gamescope, its options
+# [runners.<id>]                     # per runner (`universe runner set`): exe (absent: detected), build ("" the system's program first, latest, or a version Universe installed), args, gamescope, its options
+
+[components]
+auto_update = true                   # Universe's own builds follow the catalogue, the previous one kept (see Components)
+catalogue = ""                       # a URL or a file; empty: the project's catalogue branch
 
 [modules]
 enabled = []                         # a module is opt-in: `universe module enable capture`, or Settings › Modules

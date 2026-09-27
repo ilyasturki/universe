@@ -449,7 +449,11 @@ fn game_pids(procs: &[Proc]) -> Vec<u32> {
         }
         false
     };
-    procs.iter().filter(|p| !splashes.contains(&p.pid) && under_splash(p.pid)).map(|p| p.pid).collect()
+    // Signalled, bwrap's --die-with-parent SIGKILLs the game before it saves: the universe-fhs wrapper ends with it.
+    let fhs_wrapper = |p: &Proc| {
+        matches!(p.argv.first().and_then(|a| a.rsplit('/').next()), Some("bash" | "sh" | "bwrap")) && p.argv.iter().any(|a| a.contains("universe-fhs"))
+    };
+    procs.iter().filter(|p| !splashes.contains(&p.pid) && !fhs_wrapper(p) && under_splash(p.pid)).map(|p| p.pid).collect()
 }
 
 /// One journal entry: `source` is the writing process's identifier (`gamescope`, `umu-run`, `systemd`), `priority` syslog's (3 error, 4 warning, 6 info).
@@ -671,6 +675,13 @@ mod tests {
             proc(22, 21, &["wineserver"]),
         ];
         assert_eq!(game_pids(&tree), [21, 22]);
+        let fhs = [
+            proc(20, 10, &["/nix/store/x/bin/universe", "splash", "--", "universe-fhs", "AppRun"]),
+            proc(21, 20, &["/bin/bash", "/nix/store/a-universe-fhs/bin/universe-fhs", "/data/components/xemu/0.8.136/AppRun"]),
+            proc(22, 21, &["/nix/store/b-bubblewrap/bin/bwrap", "--ro-bind", "/nix/store/c-universe-fhs-fhsenv-rootfs/etc", "/etc"]),
+            proc(23, 22, &["/data/components/xemu/0.8.136/usr/bin/xemu"]),
+        ];
+        assert_eq!(game_pids(&fhs), [23], "the FHS wrapper ends with the game, never before it");
         let bare = [proc(30, 1, &["umu-run", "game.exe"]), proc(31, 30, &["wine", "game.exe"])];
         assert_eq!(game_pids(&bare), [30, 31]);
         assert!(game_pids(&[]).is_empty());

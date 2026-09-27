@@ -1,5 +1,6 @@
 pub mod achievements;
 pub mod cli;
+pub mod components;
 pub mod config;
 pub mod controller;
 pub mod core;

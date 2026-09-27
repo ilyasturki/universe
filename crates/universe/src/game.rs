@@ -48,6 +48,7 @@ pub struct Source {
 pub struct Launch {
     pub runner: String,
     pub runner_exe: String,
+    pub runner_build: String,
     /// For an emulator, the ROM, image or folder.
     pub exe: String,
     pub args: Vec<String>,
@@ -145,6 +146,7 @@ impl Default for Launch {
         Launch {
             runner: String::new(),
             runner_exe: String::new(),
+            runner_build: String::new(),
             exe: String::new(),
             args: vec![],
             working_dir: String::new(),
@@ -325,9 +327,11 @@ pub fn set_dotted(doc: &mut toml_edit::DocumentMut, key: &str, value: &str) -> c
         && crate::launch_keys::find(parts[1]).is_some_and(|k| k.kind == crate::launch_keys::Kind::Map);
     // [system] holds text too: a GPU clock is `auto` or `800`.
     let is_system = parts[0] == "system";
+    // A build is a version, which `2606` or `2.8` would otherwise turn into a number.
+    let is_build = key == "launch.runner_build" || (parts.len() == 3 && parts[0] == "runners" && last == "build");
     let v = if is_list && !value.starts_with('[') {
         parse_value(&format!("[{value}]"))
-    } else if is_rate || is_text_map || is_system {
+    } else if is_rate || is_text_map || is_system || is_build {
         value.into()
     } else {
         parse_value(value)

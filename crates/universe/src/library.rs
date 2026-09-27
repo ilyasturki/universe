@@ -198,8 +198,13 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
     env.extend(game.launch.env.clone());
     let runner = game.runner_id();
     let spec = crate::runners::spec(&runner);
+    let own_build = spec
+        .filter(|_| !game.launch.runner_build.is_empty())
+        .and_then(|s| crate::components::find_build(s.id, &game.launch.runner_build).filter(|b| b.version == game.launch.runner_build));
     let runner_path = if !game.launch.runner_exe.is_empty() {
         paths::expand(&game.launch.runner_exe).to_string_lossy().into()
+    } else if let Some(b) = own_build {
+        b.program_path().to_string_lossy().into()
     } else {
         spec.map(|s| located.entry(s.id.into()).or_insert_with(|| crate::runners::locate(s, config).program).clone()).unwrap_or_default()
     };

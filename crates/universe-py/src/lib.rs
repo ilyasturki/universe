@@ -150,6 +150,37 @@ impl Core {
         self.run(py, |c| async move { c.set_runner_setting(&runner, &key, &value).await })
     }
 
+    #[pyo3(signature = (refresh=false))]
+    fn components(&self, py: Python<'_>, refresh: bool) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| c.components(refresh))
+    }
+    #[pyo3(signature = (id, version=String::new(), progress=None))]
+    fn component_install(&self, py: Python<'_>, id: String, version: String, progress: Option<Py<PyAny>>) -> PyResult<String> {
+        self.run(py, |c| async move {
+            let mut p = progress_of(&progress);
+            c.component_install(&id, &version, p.as_deref_mut()).await
+        })
+    }
+    fn component_remove(&self, py: Python<'_>, id: String, version: String) -> PyResult<()> {
+        self.run(py, |c| async move { c.component_remove(&id, &version).await })
+    }
+    #[pyo3(signature = (id=String::new(), progress=None))]
+    fn component_update(&self, py: Python<'_>, id: String, progress: Option<Py<PyAny>>) -> PyResult<Py<PyAny>> {
+        self.value(py, |c| async move {
+            let mut p = progress_of(&progress);
+            c.component_update(&id, p.as_deref_mut()).await
+        })
+    }
+    fn component_rollback(&self, py: Python<'_>, id: String) -> PyResult<String> {
+        self.run(py, |c| async move { c.component_rollback(&id).await })
+    }
+    fn component_use(&self, py: Python<'_>, id: String, build: String) -> PyResult<()> {
+        self.run(py, |c| async move { c.component_use(&id, &build).await })
+    }
+    fn component_cancel(&self, id: String) -> bool {
+        self.core.component_cancel(&id)
+    }
+
     fn current(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| c.current())
     }

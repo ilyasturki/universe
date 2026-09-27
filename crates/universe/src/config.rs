@@ -88,6 +88,21 @@ pub struct Config {
     pub keys: Keys,
     pub controller: crate::controller::ControllerConfig,
     pub system: SystemConfig,
+    pub components: ComponentsConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
+pub struct ComponentsConfig {
+    pub auto_update: bool,
+    /// A URL or a file; empty is the project's `catalogue` branch.
+    pub catalogue: String,
+}
+
+impl Default for ComponentsConfig {
+    fn default() -> Self {
+        ComponentsConfig { auto_update: true, catalogue: String::new() }
+    }
 }
 
 /// The machine's controls as last set, put back when the launcher starts outside Steam; "" leaves one as the system has it.
@@ -191,6 +206,7 @@ impl Default for Config {
             keys: Keys::default(),
             controller: crate::controller::ControllerConfig::default(),
             system: SystemConfig::default(),
+            components: ComponentsConfig::default(),
         }
     }
 }
@@ -262,32 +278,33 @@ pub fn umu_codename(name: &str) -> Option<&'static str> {
     matches!(flat.as_str(), "protonge" | "geproton" | "gelatest").then_some("GE-Proton")
 }
 
-/// The newest directory across `dirs` whose name is a build of `name`'s family: the name's words in either
-/// order, letters only, followed by a version (`proton-ge` ↔ `GE-Proton10-4`, `proton-cachyos-10.0-20250101`).
-fn newest_of_family(dirs: &[PathBuf], name: &str) -> Option<PathBuf> {
-    let words: Vec<String> = name.split(['-', '_']).map(|w| w.to_ascii_lowercase()).filter(|w| !w.is_empty()).collect();
+/// Words in either order, letters only, then a version: `proton-ge` ↔ `GE-Proton10-4`.
+pub(crate) fn of_family(dir: &str, family: &str) -> bool {
+    let words: Vec<String> = family.split(['-', '_']).map(|w| w.to_ascii_lowercase()).filter(|w| !w.is_empty()).collect();
     if words.is_empty() || words.iter().any(|w| w.chars().any(|c| !c.is_ascii_alphabetic())) {
-        return None;
+        return false;
     }
-    let mut prefixes = vec![words.concat()];
-    prefixes.push(words.iter().rev().map(String::as_str).collect());
-    let is_build = |dir: &str| {
-        let flat: String = dir.chars().filter(|c| c.is_ascii_alphanumeric()).collect::<String>().to_ascii_lowercase();
-        prefixes.iter().any(|p| flat.strip_prefix(p.as_str()).is_some_and(|rest| rest.chars().next().is_none_or(|c| c.is_ascii_digit())))
-    };
+    let flat: String = dir.chars().filter(|c| c.is_ascii_alphanumeric()).collect::<String>().to_ascii_lowercase();
+    [words.concat(), words.iter().rev().map(String::as_str).collect()]
+        .iter()
+        .any(|p| flat.strip_prefix(p.as_str()).is_some_and(|rest| rest.chars().next().is_none_or(|c| c.is_ascii_digit())))
+}
+
+fn newest_of_family(dirs: &[PathBuf], name: &str) -> Option<PathBuf> {
+    let name_of = |p: &PathBuf| p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_default();
     dirs.iter()
         .filter_map(|d| std::fs::read_dir(d).ok())
         .flatten()
         .flatten()
         .filter(|e| e.path().is_dir())
         .map(|e| e.path())
-        .filter(|p| p.file_name().is_some_and(|n| is_build(&n.to_string_lossy())))
-        .max_by(|a, b| version_key(a).cmp(&version_key(b)))
+        .filter(|p| of_family(&name_of(p), name))
+        .max_by(|a, b| version_key(&name_of(a)).cmp(&version_key(&name_of(b))))
 }
 
 /// A name split into text and number runs, so `GE-Proton10-4` sorts above `GE-Proton9-27`.
-fn version_key(p: &Path) -> Vec<(u64, String)> {
-    let name = p.file_name().map(|n| n.to_string_lossy().to_ascii_lowercase()).unwrap_or_default();
+pub(crate) fn version_key(name: &str) -> Vec<(u64, String)> {
+    let name = name.to_ascii_lowercase();
     let mut out = Vec::new();
     let mut chars = name.chars().peekable();
     while let Some(&c) = chars.peek() {
@@ -340,20 +357,26 @@ impl Config {
         Some(std::fs::canonicalize(&p).unwrap_or(p))
     }
 
-    /// Where Lutris, Steam, Heroic and umu keep their Proton builds, plus Universe's own.
-    fn proton_dirs(&self) -> Vec<PathBuf> {
+    pub(crate) fn proton_homes(&self) -> Vec<(PathBuf, &'static str)> {
         let home = paths::home();
         let data = paths::xdg("XDG_DATA_HOME", ".local/share");
         vec![
-            paths::data_home().join("proton"),
-            data.join("lutris/runners/wine"),
-            home.join(".local/share/Steam/compatibilitytools.d"),
-            data.join("Steam/compatibilitytools.d"),
-            data.join("umu/compatibilitytools"),
-            home.join(".var/app/com.valvesoftware.Steam/data/Steam/compatibilitytools.d"),
-            home.join(".config/heroic/tools/proton"),
-            home.join(".var/app/com.heroicgameslauncher.hgl/config/heroic/tools/proton"),
+            (paths::data_home().join("proton"), "local"),
+            (data.join("lutris/runners/wine"), "lutris"),
+            (home.join(".local/share/Steam/compatibilitytools.d"), "steam"),
+            (data.join("Steam/compatibilitytools.d"), "steam"),
+            (data.join("umu/compatibilitytools"), "umu"),
+            (home.join(".var/app/com.valvesoftware.Steam/data/Steam/compatibilitytools.d"), "steam"),
+            (home.join(".config/heroic/tools/proton"), "heroic"),
+            (home.join(".var/app/com.heroicgameslauncher.hgl/config/heroic/tools/proton"), "heroic"),
         ]
+    }
+
+    /// Universe's builds rank right after `proton/`.
+    fn proton_dirs(&self) -> Vec<PathBuf> {
+        let mut dirs: Vec<PathBuf> = self.proton_homes().into_iter().map(|(d, _)| d).collect();
+        dirs.splice(1..1, crate::components::proton_dirs());
+        dirs
     }
 
     /// The names a game's `proton` can take here: `[proton]`'s, then every build in the tool directories (a folder holding a `proton` script).

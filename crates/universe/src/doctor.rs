@@ -19,6 +19,40 @@ pub struct Check {
     pub detail: String,
     pub fix: String,
     pub module: String,
+    pub component: String,
+}
+
+fn attach_components(out: &mut [Check], config: &Config, packagekit: bool) {
+    let catalogue = crate::components::cached(config);
+    let installable = |id: &str| catalogue.components.get(id).and_then(|e| e.latest()).is_some();
+    let proton = catalogue
+        .components
+        .iter()
+        .find(|(_, e)| e.kind == crate::components::Kind::Proton && crate::config::of_family(&config.launch.proton, &e.family))
+        .map(|(id, _)| id.clone());
+    for c in out.iter_mut() {
+        let id = match c.check.as_str() {
+            "proton" if c.detail.starts_with("not installed") || !c.ok => proton.clone().unwrap_or_default(),
+            "gog-comet" if !c.ok => "comet".into(),
+            "umu-run" | "gogdl" if c.detail.starts_with("not installed") || !c.ok => c.check.clone(),
+            "gamescope" | "mangohud" | "mangohud-32bit" | "gpu-screen-recorder" | "gsr-kms-server" if !c.ok && packagekit => {
+                let tool = match c.check.as_str() {
+                    "mangohud-32bit" => "mangohud",
+                    "gsr-kms-server" => "gpu-screen-recorder",
+                    other => other,
+                };
+                let family = crate::distro::detect();
+                crate::components::system_tool(tool).filter(|t| !t.packages(family).is_empty()).map(|t| t.id.to_string()).unwrap_or_default()
+            }
+            check => check.strip_prefix("runner-").filter(|_| !c.ok).unwrap_or_default().to_string(),
+        };
+        if !id.is_empty() && (installable(&id) || crate::components::system_tool(&id).is_some()) {
+            if !c.ok {
+                c.fix = format!("universe component install {id} (Settings › Components), or {}", c.fix);
+            }
+            c.component = id;
+        }
+    }
 }
 
 fn which(bin: &str) -> Option<String> {
@@ -78,7 +112,15 @@ fn eden_quits_on_stop() -> (bool, String, String) {
 pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell: Option<&zbus::Connection>, game_runners: &[String]) -> Vec<Check> {
     let mut out = Vec::new();
     let mut push = |check: &str, label: &str, ok: bool, detail: String, fix: String, module: &str| {
-        out.push(Check { check: check.into(), label: label.into(), ok, detail, fix: if ok { String::new() } else { fix }, module: module.into() })
+        out.push(Check {
+            check: check.into(),
+            label: label.into(),
+            ok,
+            detail,
+            fix: if ok { String::new() } else { fix },
+            module: module.into(),
+            component: String::new(),
+        })
     };
     let bin = |bin: &str| (which(bin).is_some(), which(bin).unwrap_or_else(|| format!("{bin} is not on PATH")));
     let family = crate::distro::detect();
@@ -135,16 +177,16 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
     );
     match (which("umu-run"), crate::tools::find("umu-run")) {
         (Some(path), _) => push("umu-run", "Proton launcher (umu-run)", true, path, String::new(), "core"),
-        (None, Some(t)) => {
+        (None, Some((package, version))) => {
             let python = which("python3").is_some();
             push(
                 "umu-run",
                 "Proton launcher (umu-run)",
                 python,
                 if python {
-                    format!("not installed: Universe fetches {} {} into {} at the first Proton launch", t.package, t.version, crate::tools::dir().display())
+                    format!("not installed: Universe fetches {package} {version} into {} at the first Proton launch", crate::components::root().display())
                 } else {
-                    format!("not installed, and the {} {} Universe would fetch is a Python zipapp: no python3 on PATH", t.package, t.version)
+                    format!("not installed, and the {package} {version} Universe would fetch is a Python zipapp: no python3 on PATH")
                 },
                 "install python3 (3.10 or later), or umu-launcher".into(),
                 "core",
@@ -347,6 +389,22 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         "create it, or set paths.recordings_root to a folder that exists".into(),
         "core",
     );
+    if nixos
+        && crate::components::ids()
+            .iter()
+            .any(|id| crate::components::installed(id).iter().any(|b| matches!(b.kind, crate::components::Kind::Emulator | crate::components::Kind::Wine)))
+    {
+        let fhs = crate::components::fhs();
+        push(
+            "components-fhs",
+            "Downloaded runners on NixOS (universe-fhs)",
+            fhs.is_some(),
+            fhs.map(|p| p.to_string_lossy().into_owned())
+                .unwrap_or_else(|| "universe-fhs is not on PATH: the builds Universe downloaded cannot find their libraries".into()),
+            "install Universe from its flake, which puts universe-fhs next to it".into(),
+            "runners",
+        );
+    }
     let used: std::collections::BTreeSet<&String> = game_runners.iter().chain(config.runners.keys()).collect();
     for id in used {
         let Some(spec) = crate::runners::spec(id) else {
@@ -424,8 +482,8 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         for b in &m.manifest.requires.bins {
             let (ok, detail) = match (which(b), crate::tools::find(b)) {
                 (Some(path), _) => (true, path),
-                (None, Some(t)) => {
-                    (true, format!("not installed: Universe fetches {} {} into {} on first use", t.package, t.version, crate::tools::dir().display()))
+                (None, Some((package, version))) => {
+                    (true, format!("not installed: Universe fetches {package} {version} into {} on first use", crate::components::root().display()))
                 }
                 (None, None) => (false, format!("{b} is not on PATH")),
             };
@@ -516,5 +574,6 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         "remove them from [sources] enabled in config.toml, or install them".into(),
         "core",
     );
+    attach_components(&mut out, config, crate::packagekit::available().await);
     out
 }

@@ -265,6 +265,10 @@ pub fn plan(
     };
     args.extend(g.launch.args.iter().cloned());
     env.extend(g.launch.env.clone());
+    let (program, args) = match Path::new(&program).starts_with(crate::components::root()).then(crate::components::fhs).flatten() {
+        Some(fhs) => (fhs.to_string_lossy().into_owned(), std::iter::once(program).chain(args).collect()),
+        None => (program, args),
+    };
     let (program, args) = wrap(&g.launch.wrapper, program, args);
     let offload = r.effective.discrete_gpu.then(crate::gpu::offload).flatten();
     for (k, v) in offload.map(|o| o.env.as_slice()).unwrap_or_default() {
@@ -595,6 +599,35 @@ mod tests {
         );
         assert!(!p.env.contains_key("WINEPREFIX"));
         assert_eq!(p.cwd, dir.path());
+    }
+
+    #[test]
+    fn a_downloaded_build_runs_inside_universe_fhs_on_nixos() {
+        let _lock = crate::paths::ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        let path_was = std::env::var_os("PATH").unwrap_or_default();
+        std::env::set_var("UNIVERSE_DATA_HOME", dir.path().join("data"));
+        let bin = dir.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        std::fs::write(bin.join("universe-fhs"), b"#!/bin/sh\nexec \"$@\"\n").unwrap();
+        let joined = std::env::join_paths(std::iter::once(bin.clone()).chain(std::env::split_paths(&path_was))).unwrap();
+        std::env::set_var("PATH", joined);
+        let program = crate::components::root().join("xemu/0.8.136/AppRun");
+        std::fs::create_dir_all(program.parent().unwrap()).unwrap();
+        std::fs::write(&program, b"#!/bin/sh\n").unwrap();
+        let mut g = game(dir.path(), "Halo.iso", "xemu");
+        g.launch.runner_exe = program.to_string_lossy().into();
+        g.launch.gamescope = Some(false);
+        let r = crate::library::resolve(g, &Config::default(), &[]);
+        let p = plan(&r, &Config::default(), &BTreeMap::new(), None, None, false, true).unwrap();
+        std::env::set_var("PATH", path_was);
+        std::env::remove_var("UNIVERSE_DATA_HOME");
+        if crate::distro::detect() == crate::distro::Family::NixOs {
+            assert_eq!(p.program, bin.join("universe-fhs").to_string_lossy(), "the libraries it was built against");
+            assert_eq!(p.args[0], program.to_string_lossy());
+        } else {
+            assert_eq!(p.program, program.to_string_lossy(), "elsewhere the system is the FHS it expects");
+        }
     }
 
     #[test]

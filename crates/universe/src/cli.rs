@@ -134,6 +134,12 @@ pub enum Cmd {
         #[command(subcommand)]
         action: RunnerCmd,
     },
+    /// Components: the Proton and Wine builds, emulators and tools, those on the system and those Universe installs and updates
+    #[command(alias = "components")]
+    Component {
+        #[command(subcommand)]
+        action: ComponentCmd,
+    },
     /// Set game keys: runner=dolphin proton=proton-em options.fullscreen=false capture.cursor=true hidden=true
     Set {
         /// Game: exact id, then whole word, substring or path
@@ -438,6 +444,31 @@ pub enum RunnerCmd {
         /// key=value, validated against the runner's options
         pairs: Vec<String>,
     },
+}
+
+#[derive(Subcommand, Debug)]
+pub enum ComponentCmd {
+    /// Every component: what runs, what Universe installed, what the catalogue offers
+    #[command(alias = "list")]
+    Ls {
+        /// Fetch the catalogue even when the cached one is less than a day old
+        #[arg(long)]
+        refresh: bool,
+    },
+    /// Install a build: the newest this machine runs when no version is given
+    Install {
+        /// Component id (universe component ls)
+        id: String,
+        version: Option<String>,
+    },
+    /// Remove a build Universe installed
+    Remove { id: String, version: String },
+    /// Install what is newer than Universe's builds, keeping the previous one; every component when no id is given
+    Update { id: Option<String> },
+    /// Remove Universe's newest build and never take its version again
+    Rollback { id: String },
+    /// What runs: latest (Universe's newest build), system (a runner's own program) or a version
+    Use { id: String, build: String },
 }
 
 #[derive(Subcommand, Debug)]
@@ -1039,6 +1070,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
         }
         Cmd::Runner { action } => return runner(core, action, json).await,
+        Cmd::Component { action } => return component(core, action, json).await,
         Cmd::Set { name, pairs } => {
             let id = pick(&core, &name).await?;
             for p in pairs {
@@ -1727,6 +1759,71 @@ async fn runner(core: Core, action: RunnerCmd, json: bool) -> anyhow::Result<()>
             if pairs.is_empty() {
                 anyhow::bail!("nothing to set: key=value…");
             }
+        }
+    }
+    Ok(())
+}
+
+async fn component(core: Core, action: ComponentCmd, json: bool) -> anyhow::Result<()> {
+    match action {
+        ComponentCmd::Ls { refresh } => {
+            let v = core.components(refresh).await?;
+            if json {
+                return print_json(&v);
+            }
+            let error = s(&v["catalogue"], "error");
+            if !error.is_empty() {
+                eprintln!("{}", format!("catalogue: {error}").yellow());
+            }
+            let mut t = table(&["Id", "Name", "Kind", "In use", "Latest", ""]);
+            for c in v["components"].as_array().cloned().unwrap_or_default() {
+                let used = &c["in_use"];
+                let in_use = if used.is_null() {
+                    "—".to_string()
+                } else {
+                    let version = s(used, "version");
+                    format!("{} · {}", if version.is_empty() { "?".into() } else { version }, s(used, "origin"))
+                };
+                let note = match (s(&c, "update"), s(&c, "proposal").as_str()) {
+                    (update, _) if !update.is_empty() => format!("update {update}"),
+                    (_, "install") => "missing: install it".into(),
+                    (_, "newer") => "a newer build".into(),
+                    _ => String::new(),
+                };
+                t.add_row(vec![s(&c, "id"), s(&c, "name"), s(&c, "kind"), in_use, s(&c["latest"], "version"), note]);
+            }
+            println!("{t}");
+        }
+        ComponentCmd::Install { id, version } => {
+            let mut p = progress_printer(json);
+            finish(json, core.component_install(&id, version.as_deref().unwrap_or(""), Some(&mut p)).await.map(|v| format!("{id} {v} installed")));
+        }
+        ComponentCmd::Remove { id, version } => {
+            core.component_remove(&id, &version).await?;
+            report(json, true, &format!("{id} {version} removed"));
+        }
+        ComponentCmd::Update { id } => {
+            let mut p = progress_printer(json);
+            let list = core.component_update(id.as_deref().unwrap_or(""), Some(&mut p)).await?;
+            if json {
+                return print_json(&list);
+            }
+            if list.is_empty() {
+                println!("everything is current");
+            }
+            for u in &list {
+                let error = s(u, "error");
+                let tail = if error.is_empty() { String::new() } else { format!(": {error}") };
+                report(false, error.is_empty(), &format!("{} {}{tail}", s(u, "name"), s(u, "version")));
+            }
+        }
+        ComponentCmd::Rollback { id } => {
+            let now = core.component_rollback(&id).await?;
+            report(json, true, &if now.is_empty() { format!("{id}: back on the system's build") } else { format!("{id}: back on {now}") });
+        }
+        ComponentCmd::Use { id, build } => {
+            core.component_use(&id, &build).await?;
+            report(json, true, &format!("{id}: {build}"));
         }
     }
     Ok(())
