@@ -161,17 +161,42 @@ Modal {
         trailing: sheet.browser.display(sheet.browser.path)
     }
 
-    Row {
+    // At least PillButton's ring offset, or the clip cuts the focused chip's ring.
+    readonly property real chipRoom: Theme.dp(8)
+
+    ListView {
         id: chips
 
-        x: Theme.dp(Theme.edge)
-        y: header.height + Theme.dp(10)
+        x: Theme.dp(Theme.edge) - sheet.chipRoom
+        y: header.height + Theme.dp(10) - sheet.chipRoom
+        width: parent.width - Theme.dp(Theme.edge) - Theme.dp(Theme.columnRight) + sheet.chipRoom * 2
+        height: count > 0 ? Theme.dp(58) + sheet.chipRoom * 2 : 0
+        orientation: ListView.Horizontal
         spacing: Theme.dp(20)
+        model: sheet.browser.shortcuts
+        currentIndex: sheet.chipIndex
+        interactive: false
+        clip: true
+        highlightFollowsCurrentItem: true
+        preferredHighlightBegin: sheet.chipRoom
+        preferredHighlightEnd: width - sheet.chipRoom
+        highlightRangeMode: ListView.ApplyRange
+        highlightMoveDuration: Theme.durMove
+        highlightMoveVelocity: -1
+        header: Item {
+            width: sheet.chipRoom
+        }
+        footer: Item {
+            width: sheet.chipRoom
+        }
 
-        Repeater {
-            model: sheet.browser.shortcuts
+        delegate: Item {
+            width: chip.width
+            height: chips.height
 
             PillButton {
+                id: chip
+                y: sheet.chipRoom
                 text: modelData.label
                 height: Theme.dp(58)
                 fontSize: Theme.dp(Theme.fontSmall)
@@ -189,7 +214,7 @@ Modal {
         id: list
 
         x: Theme.dp(Theme.edge)
-        y: chips.y + chips.height + Theme.dp(34)
+        y: header.height + Theme.dp(10) + (chips.count > 0 ? Theme.dp(58) : 0) + Theme.dp(34)
         width: parent.width - x - Theme.dp(Theme.columnRight)
         height: parent.height - y - Theme.dp(96)
         model: sheet.rowCount

@@ -98,3 +98,66 @@ def test_back_from_a_game_the_home_builds_itself_up_again(api, fake, monkeypatch
     assert home.property("currentGame").property("id") == "dead-cells", "the game just played, focused"
     window.close()
     pump(50)
+
+
+def test_a_dialog_taller_than_the_screen_scrolls_its_text(ps5):
+    window, root = ps5
+    dialog = root.findChild(QObject, "dialog")
+    flick = next(o for o in dialog.findChildren(QObject) if o.metaObject().className().startswith("QQuickFlickable"))
+
+    def ask(spec):
+        QMetaObject.invokeMethod(dialog, "show", Q_ARG("QVariant", spec), Q_ARG("QVariant", None))
+        pump(400)
+
+    def down(times):
+        for _ in range(times):
+            QTest.keyClick(window, Qt.Key.Key_Down)
+            pump(30)
+        pump(400)
+
+    ask({"message": "Delete the save?", "buttons": ["Cancel", "Delete"]})
+    down(1)
+    assert flick.property("contentY") == 0, "a short question does not move"
+    QTest.keyClick(window, Qt.Key.Key_Escape)
+    pump(300)
+    ask({"message": "A question", "detail": "A detail that goes on and on. " * 300, "buttons": ["Cancel", "OK"]})
+    card = flick.parentItem()
+    assert card.property("height") <= window.height(), "the card stays on the screen"
+    assert flick.property("contentHeight") > flick.property("height")
+    down(1)
+    assert flick.property("contentY") > 0, "Down reads on"
+    down(80)
+    assert flick.property("contentY") == flick.property("contentHeight") - flick.property("height"), "Down reaches the end"
+    QTest.keyClick(window, Qt.Key.Key_Escape)
+    pump(300)
+    ask({"message": "Again", "buttons": ["OK"]})
+    assert flick.property("contentY") == 0, "a new question starts at its top"
+
+
+def test_the_folder_sheet_follows_the_chip_past_the_screen_edge(ps5, tmp_path, monkeypatch):
+    from universe_ui.screens import paths
+
+    base = tmp_path / " ".join(["a folder with a long name"] * 6)
+    drives = [base / f"Drive {i:02}" for i in range(30)]
+    for d in drives:
+        d.mkdir(parents=True)
+    monkeypatch.setattr(paths, "_mounts", lambda: [str(d) for d in drives])
+    window, root = ps5
+    QMetaObject.invokeMethod(root, "browse", Q_ARG("QVariant", {"path": str(drives[0])}), Q_ARG("QVariant", None))
+    pump(400)
+    folder = root.findChild(QObject, "folder")
+    chips = next(o for o in folder.findChildren(QObject) if o.metaObject().className().startswith("QQuickListView") and (o.property("count") or 0) >= 30)
+    texts = [o for o in folder.findChildren(QObject) if o.inherits("QQuickText") and o.property("visible")]
+    title = next(t for t in texts if t.property("text") == "Choose a folder")
+    path = next(t for t in texts if str(t.property("text")).endswith("Drive 00"))
+    right = title.mapToItem(window.contentItem(), 0, 0).x() + title.property("implicitWidth")
+    assert path.mapToItem(window.contentItem(), 0, 0).x() >= right, "the whole title shows, the path beside it"
+    assert path.property("truncated") is True, "a path longer than the room gives way"
+    QTest.keyClick(window, Qt.Key.Key_Up)
+    for _ in range(chips.property("count")):
+        QTest.keyClick(window, Qt.Key.Key_Right)
+        pump(30)
+    pump(600)
+    chip = chips.property("currentItem")
+    assert chips.property("currentIndex") == chips.property("count") - 1
+    assert chip.property("x") + chip.property("width") <= chips.property("contentX") + chips.property("width"), "the last chip is in view"

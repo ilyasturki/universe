@@ -9,7 +9,7 @@ Item {
     property string source: ""
     readonly property var login: api.screens.login
 
-    height: Theme.dp(300)
+    height: Math.max(tile.visible ? tile.y + tile.height : 0, info.y + info.height) + Theme.dp(22)
     visible: source !== "" && login.source === source && (login.url !== "" || login.status !== "")
 
     Rectangle {
@@ -41,6 +41,7 @@ Item {
     }
 
     Column {
+        id: info
         x: tile.visible ? tile.x + tile.width + Theme.dp(30) : Theme.dp(30)
         y: Theme.dp(30)
         width: parent.width - x - Theme.dp(30)

@@ -41,6 +41,7 @@ Item {
     }
 
     Label {
+        id: titleText
         x: header.badged ? Theme.dp(Theme.edge) : Theme.dp(96)
         anchors.verticalCenter: header.badged ? slot.verticalCenter : undefined
         y: header.badged ? 0 : Theme.dp(72)
@@ -56,7 +57,9 @@ Item {
         anchors.right: parent.right
         anchors.rightMargin: Theme.dp(Theme.columnRight)
         y: header.badged ? slot.y + (slot.height - height) / 2 : Theme.dp(84)
+        width: Math.max(0, Math.min(implicitWidth, header.width - anchors.rightMargin - titleText.x - Math.min(titleText.implicitWidth, header.width / 2) - Theme.dp(40)))
         text: header.trailing
+        elide: Text.ElideMiddle
         color: Theme.textSecondary
         font.pixelSize: Theme.dp(Theme.fontSmall)
     }

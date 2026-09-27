@@ -418,6 +418,7 @@ FocusScope {
 
     FolderSheet {
         id: folder
+        objectName: "folder"
         shell: root
         anchors.bottomMargin: hintBar.height
         z: 11

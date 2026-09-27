@@ -103,10 +103,12 @@ Modal {
         Label {
             id: heading
             x: Theme.dp(26)
+            width: parent.width - x * 2
             height: menu.title !== "" ? Theme.dp(78) : Theme.dp(10)
             verticalAlignment: Text.AlignVCenter
             visible: menu.title !== ""
             text: menu.title
+            elide: Text.ElideRight
             color: Theme.textSecondary
             font.pixelSize: Theme.dp(Theme.fontSmall)
         }
