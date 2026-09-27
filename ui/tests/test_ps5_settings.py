@@ -6,7 +6,7 @@ from test_onboarding import empty, empty_api, signed_out  # noqa: F401  (fixture
 from test_render import render
 from test_render import settle as settle_window
 
-from conftest import pump, wait_for
+from conftest import pump, settle, wait_for
 from universe_ui.screens.controller import FakeWatcher
 
 
@@ -171,6 +171,66 @@ def test_enter_keeps_what_the_walk_set_up_and_escape_undoes_it(ps5, api):
     click(window, Qt.Key.Key_Escape)
     assert not screen.walking and messages[-1] == "Setup canceled, nothing changed"
     assert focused_row(page)["key"] == "walk"
+    assert warnings == []
+
+
+def test_a_launch_missing_its_runner_asks_to_install_then_plays(ps5, api, fake):
+    window, root, warnings = ps5
+    game = fake.addGame("rpcs3", "/games/Demons Souls/PS3_GAME/USRDIR/EBOOT.BIN", "Demons Souls")
+    components = api.screens.components
+    components.load()
+    settle(components)
+    fake.launchFailed.emit(game, f"{game}: RPCS3 not found (install it or set runners.rpcs3.exe)")
+    pump(300)
+    dialog = root.findChild(QObject, "dialog")
+    assert dialog.property("open") is True and dialog.property("message") == "Install RPCS3 0.0.42-20069-3fa07db7 to play Demons Souls?"
+    click(window, Qt.Key.Key_Return)
+    assert components.job is not None, "Install and Play is the default"
+    wait_for(fake.jobFinished, 5000)
+    pump(300)
+    assert root.property("launching") is True, "in, the game starts again"
+    assert warnings == []
+
+
+def test_settings_components_part_by_kind_and_a_opens_the_options(ps5, api):
+    window, root, warnings = ps5
+    page = push(window, root, "pages/SettingsPage.qml", {"section": "components"})
+    settle(api.screens.components)
+    pump(100)
+    assert page.property("sectionId") == "components" and page.property("level") == "section"
+    parts = {p["label"]: p["detail"] for p in value(page, "parts")}
+    assert parts["Emulators"].endswith("installed") and "Proton" in parts and "No download" in parts
+    click(window, Qt.Key.Key_Right)
+    row = focused_row(page)
+    form = api.screens.components
+    assert row["action"] == "component" and form.rows[row["form"]]["label"] == row["label"]
+    click(window, Qt.Key.Key_Return)
+    popup = root.findChild(QObject, "popup")
+    assert popup.property("open") is True
+    assert [i["label"] for i in value(popup, "items")] == [a["label"] for a in form.actions(row["form"])]
+    assert warnings == []
+
+
+def test_a_doctor_check_an_install_fixes_asks_then_installs(ps5, api, fake):
+    window, root, warnings = ps5
+    fake.addGame("rpcs3", "/games/Demons Souls/PS3_GAME/USRDIR/EBOOT.BIN", "Demons Souls")
+    page = push(window, root, "pages/SettingsPage.qml", {"section": "doctor"})
+    wait_for(api.screens.modules.doctorChanged, 3000)
+    settle(api.screens.components)
+    pump(100)
+    rows = value(page, "content")
+    row = next(r for r in rows if r.get("label") == "RPCS3")
+    assert row["type"] == "action" and row["component"] == "rpcs3" and row["display"] == "Install"
+    assert all(r.get("type") != "action" for r in rows if r.get("label") != "RPCS3"), "a check no install fixes stays a check"
+    QMetaObject.invokeMethod(page, "activate", Q_ARG("QVariant", rows.index(row)), Q_ARG("QVariant", row))
+    pump(300)
+    dialog = root.findChild(QObject, "dialog")
+    assert dialog.property("open") is True and dialog.property("message") == "Install RPCS3 0.0.42-20069-3fa07db7?", (
+        "the listing is in: the question names the build"
+    )
+    click(window, Qt.Key.Key_Return)
+    assert api.screens.components.job is not None, "the first press installs"
+    wait_for(fake.jobFinished, 5000)
     assert warnings == []
 
 

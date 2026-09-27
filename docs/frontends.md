@@ -783,7 +783,7 @@ through `set_runner_setting`.
 
 ## The components section
 
-`api.screens.components` (`ComponentsForm`) is Settings › Components in both looks, over the core's
+`api.screens.components` (`ComponentsForm`) is Settings › Components in every look, over the core's
 `components()` (see api.md, Components): `load()` reads it off the UI thread (the cached catalogue),
 `refresh()` fetches the catalogue first (Y). `rows`/`groups` in the settings forms' shape: a
 "Recently updated" card when an update landed in the last 7 days, then one card per kind (Proton,
@@ -792,7 +792,7 @@ update or a newer build, then by the games on it; the runners with no build to d
 installed close in a dimmed "No download" card. A row is the component's name and icon, the build
 that runs as `display`, a `tag` for what to do with `accent`, the download's `size`, a `detail`
 sentence and `progress` while its job runs. A is its options: `actions(index)` — `{icon, label,
-action, danger}`, the look's menu (Reprise `menu.show`, Switch 2 `shell.menu`); `versions` opens
+action, danger}`, the look's menu (Reprise `menu.show`, Switch 2 and PS5 `shell.menu`); `versions` opens
 `versionActions(index)` as a second menu, `runner` emits `runnerRequested(id)`, which opens the
 runner's page.
 `confirm(index, action)` is what to ask first or null — an install's size and the room left, a
@@ -800,13 +800,13 @@ removal, a rollback — and `act(index, action)` does it: an install or an updat
 (`componentInstall`, `componentUpdate`, `job` the running one like the Install page's, drawn by
 the same bar), an install from a proposal over a system build switches to it (`use:latest`) once
 in, a finished job toasts through `message`. `pending` counts the updates and proposals: Reprise's
-sidebar badge, Switch 2's section detail. `busyOn(id)` and `needed()` (the missing runners the
+sidebar badge, the section's detail in Switch 2 and PS5. `busyOn(id)` and `needed()` (the missing runners the
 library needs) serve the first-run page. A failed launch whose runner is missing and offered
-(`launchFailed`) emits `installProposed(gameId, id, name, version)`: both roots ask "Install … to
+(`launchFailed`) emits `installProposed(gameId, id, name, version)`: every root asks "Install … to
 play?" (`question(id)` the size and room), `installFor(gameId, id)` installs, and
 `readyToLaunch(gameId)` launches the game again once it is in. A doctor row carries `component`
-when an install fixes it: Reprise's A reads Install, Switch 2 turns the row into an action; both
-ask, then `installById(id)`. Once a day while the UI runs (the first check 90 s after start), with
+when an install fixes it: Reprise's A reads Install, Switch 2 and PS5 turn the row into an action
+(PS5 loads the listing with its Doctor, so the first press installs); each asks, then `installById(id)`. Once a day while the UI runs (the first check 90 s after start), with
 `components.auto_update` on, no session running and no job of the user's, the form runs
 `componentUpdate("")` quietly — no bar — and toasts "Updated …" when something was.
 

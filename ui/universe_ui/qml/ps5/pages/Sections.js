@@ -5,6 +5,7 @@ var list = [
     { id: "search", label: "Search Settings", icon: "search", first: "Search" },
     { id: "launch", label: "Launch", icon: "rocket" },
     { id: "runners", label: "Runners", icon: "chip" },
+    { id: "components", label: "Components", icon: "cube" },
     { id: "controllers", label: "Controllers", icon: "gamepad" },
     { id: "sources", label: "Sources", icon: "cloud" },
     { id: "updates", label: "Updates", icon: "download" },
