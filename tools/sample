@@ -128,7 +128,7 @@ GAME
             metadata.summary='A stand-in for a real game.' \
             metadata.description='Sleeps like a game loading, then holds a fullscreen Vulkan window until the launcher quits it — or sooner on Q or Escape. Installed by tools/sample; --delay and --length go on its Arguments.'
     fi
-    # The default art layer, never a pick: the profile's overrides may point outside it.
+    # The default art layer, never a pick.
     mkdir -p "$game_dir/media"
     cp -r "$media/." "$game_dir/media/"
 

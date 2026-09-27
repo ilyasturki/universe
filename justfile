@@ -186,7 +186,6 @@ env:
     [paths]
     games_root = "{{ dev }}/data/games"
     recordings_root = "{{ dev }}/recordings"
-    overrides = "~/Dotfiles/home/config/pegasus-art"   # hand-picked art; drop the line to test without
     [modules]
     enabled = ["capture", "journal", "screenshot"]
     [modules.capture]

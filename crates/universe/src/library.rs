@@ -100,14 +100,9 @@ pub fn slot_of_stem(stem: &str) -> Option<&'static str> {
     MEDIA_SLOTS.into_iter().find(|s| stems_of(s).contains(&stem))
 }
 
-/// First match wins: the overrides by id, then by the Lutris slug, then the game's own media directory.
-pub fn media_dirs(game: &Game, overrides: &Path) -> Vec<PathBuf> {
-    let mut dirs = vec![overrides.join(&game.id)];
-    if !game.source.lutris_slug.is_empty() && game.source.lutris_slug != game.id {
-        dirs.push(overrides.join(&game.source.lutris_slug));
-    }
-    dirs.push(game.media_dir());
-    dirs
+/// First match wins: the player's picks, then the fetched media.
+pub fn media_dirs(game: &Game) -> [PathBuf; 2] {
+    [game.picked_dir(), game.media_dir()]
 }
 
 pub fn scan_media_dir(dir: &Path) -> (Vec<(String, String)>, Vec<String>) {
@@ -141,10 +136,10 @@ pub fn scan_media_dir(dir: &Path) -> (Vec<(String, String)>, Vec<String>) {
     (media.into_iter().map(|(s, p, _)| (s, p)).collect(), shots)
 }
 
-pub fn media_of(game: &Game, overrides: &Path) -> (Vec<(String, String)>, Vec<String>) {
+pub fn media_of(game: &Game) -> (Vec<(String, String)>, Vec<String>) {
     let mut media: Vec<(String, String)> = Vec::new();
     let mut shots: Vec<String> = Vec::new();
-    for dir in media_dirs(game, overrides) {
+    for dir in media_dirs(game) {
         let (m, s) = scan_media_dir(&dir);
         for (slot, path) in m {
             if !media.iter().any(|(have, _)| *have == slot) {
@@ -192,7 +187,7 @@ pub fn resolve(game: Game, config: &Config, modules: &[crate::modules::Module]) 
 pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Module], located: &mut HashMap<String, String>) -> Resolved {
     let sessions = sessions::read(&game.sessions_path()).unwrap_or_default();
     let stats = sessions::stats(&sessions);
-    let (media, screenshots) = media_of(&game, &config.overrides_dir());
+    let (media, screenshots) = media_of(&game);
     let journal_count = crate::journal::count_written(&game.journal_dir());
     let achievements = crate::achievements::read(&crate::achievements::path(&game)).map(|c| c.summary()).unwrap_or_default();
     let mut mods = BTreeMap::new();

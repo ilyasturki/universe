@@ -212,6 +212,9 @@ impl Game {
     pub fn media_dir(&self) -> PathBuf {
         self.dir().join("media")
     }
+    pub fn picked_dir(&self) -> PathBuf {
+        self.media_dir().join("picked")
+    }
     pub fn screenshots_dir(&self) -> PathBuf {
         self.dir().join("screenshots")
     }

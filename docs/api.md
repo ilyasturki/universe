@@ -116,8 +116,8 @@ the game sets none, `working_dir` and `prefix` as the launch would make them (th
 for this game under `modules` — its defaults, then `config.toml`'s, then the game's own. The game's
 own `modules` table stays what `game.toml` holds, like `launch`. The upscaler upgrades are the bools their `auto` came to on this GPU (see
 `gpu()`); `gamescope_adaptive_sync` stays `auto`, `on` or `off`, since the screen is only known
-at launch. `media.screenshots` is the store's promotional shots: `screenshots/` under the
-overrides, then under `media/`. The player's own are `screenshots(id)` (see Screenshots).
+at launch. `media.screenshots` is the store's promotional shots: `screenshots/` under
+`media/picked/`, then under `media/`. The player's own are `screenshots(id)` (see Screenshots).
 `added_at` (RFC 3339, in `game.toml`) is when a store install or `add_game` brought the game in — a
 frontend's "recently added"; a Lutris import, a ROM import or a source scan leaves it empty, since
 those games were already there. A store install of a game `remove`d earlier clears `removed_at` and `hidden` and
@@ -126,7 +126,7 @@ re-stamps it; what was parked under `.archive/` stays parked.
 given one.
 
 There is no change notification: the files are the truth, so a frontend watches `games/`,
-`games/<id>/{,journal,journal/attachments,media,screenshots}`, `state/` and the overrides directory and rereads. Everything the CLI, `session-end` and the
+`games/<id>/{,journal,journal/attachments,media,media/picked,media/picked/screenshots,screenshots}` and `state/` and rereads. Everything the CLI, `session-end` and the
 hooks write shows up that way, with no other channel.
 
 ## Sessions
@@ -552,19 +552,19 @@ daemon on the system bus the option is skipped and doctor says so.
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `media_refresh(id, force, progress)` | `media_refresh(id, force, progress)` | `universe media <name> refresh` | `(changed, total)`: fills the empty slots of `media/` from SteamGridDB, RAWG and Steam screenshots (`force` refetches the filled ones); an override does not stop its slot's default from being fetched; `id=""` does every game |
+| `media_refresh(id, force, progress)` | `media_refresh(id, force, progress)` | `universe media <name> refresh` | `(changed, total)`: fills the empty slots of `media/` from SteamGridDB, RAWG and Steam screenshots (`force` refetches the filled ones); a pick does not stop its slot's default from being fetched; `id=""` does every game |
 | `media_cancel()` | `media_cancel()` | — | stops a running library-wide `media_refresh` after the game in hand; it returns normally with what it got to. A single game's refresh is not touched |
-| `media_status(id)` | `media_status(id)` | `universe media <name> status` | `[{id, title, sgdb_id, sgdb_name, sgdb_year, slots: [{slot, path, default, override, origin, default_origin, kind}]}]`; `path` is what shows, `default` the fetched file under `media/`, `override` the pick under the overrides directory; `kind ∈ picked, default, missing`; `origin` is `picked` or the provider that wrote the default (`sgdb`, `steam`, `pegasus`; empty when nobody recorded it), `default_origin` that provider whatever sits over it; `sgdb_name` is the SteamGridDB entry the art comes from, as the last refresh or candidates call cached it (offline: empty until then); `id=""` does every game |
-| `media_set_slot(id, slot, path)` | `media_set_slot(…)` | `universe media <name> set <slot> <path>` | copies the file to `<overrides>/<id>/<slot>.<ext>` (a screenshot into `<overrides>/<id>/screenshots/`), replacing any file of that slot there, and returns the path; the default under `media/` stays |
+| `media_status(id)` | `media_status(id)` | `universe media <name> status` | `[{id, title, sgdb_id, sgdb_name, sgdb_year, slots: [{slot, path, default, override, origin, default_origin, kind}]}]`; `path` is what shows, `default` the fetched file under `media/`, `override` the pick under `media/picked/`; `kind ∈ picked, default, missing`; `origin` is `picked` or the provider that wrote the default (`sgdb`, `steam`; empty when nobody recorded it), `default_origin` that provider whatever sits over it; `sgdb_name` is the SteamGridDB entry the art comes from, as the last refresh or candidates call cached it (offline: empty until then); `id=""` does every game |
+| `media_set_slot(id, slot, path)` | `media_set_slot(…)` | `universe media <name> set <slot> <path>` | copies the file to `games/<id>/media/picked/<slot>.<ext>` (a screenshot into `media/picked/screenshots/`), replacing any file of that slot there, and returns the path; the default under `media/` stays |
 | `media_set_url(id, slot, url)` | `media_set_url(…)` | `universe media <name> set <slot> <url>` | the same from an http(s) URL, a candidate's |
-| `media_unset(id, slot)` | `media_unset(id, slot)` | `universe media <name> unset <slot>` | removes the override, so the slot shows its default again; `true` when there was one |
-| `media_candidates(id, slot, page)` | `media_candidates(id, slot, page=0)` | `universe media <name> candidates <slot> [--page N]` | `{items: [{provider, id, url, thumb, score, slot}], page, more, entry: {id, name, year}}`: one page of SteamGridDB's art for the slot, best first, English and non-NSFW only, and the entry it belongs to; the entry is the pin (`metadata.sgdb_id`, else pegasus-sync's `<overrides>/<id>/sgdb_id` file), else `.sync.json`'s, else a search by title — the hit named like the title, else autocomplete's first |
+| `media_unset(id, slot)` | `media_unset(id, slot)` | `universe media <name> unset <slot>` | removes the pick, so the slot shows its default again; `true` when there was one |
+| `media_candidates(id, slot, page)` | `media_candidates(id, slot, page=0)` | `universe media <name> candidates <slot> [--page N]` | `{items: [{provider, id, url, thumb, score, slot}], page, more, entry: {id, name, year}}`: one page of SteamGridDB's art for the slot, best first, English and non-NSFW only, and the entry it belongs to; the entry is the pin (`metadata.sgdb_id`), else `.sync.json`'s, else a search by title — the hit named like the title, else autocomplete's first |
 | `media_search(id, query)` | `media_search(id, query)` | `universe media <name> search [query…]` | `[{provider, id, name, year, verified, current}]`: SteamGridDB's games for the query (the title when empty), `current` on the one the slots come from — to find the id to pin when the match is wrong |
 | `media_pin(id, provider, provider_id)` | `media_pin(…)` | `universe media <name> pin <provider> <id>` | `provider ∈ sgdb, rawg, steam` → `metadata.<provider>_id`; candidates and refresh follow it |
 
 `slot ∈ box_front, square, banner, background, logo, screenshot`. `square` is the 1:1 grid (SteamGridDB 1024×1024, then 512×512): Reprise's home rail and the Switch 2 tiles; `banner` the 920×430 grid: the Switch 2 news card and info pane when they have no picture, and the backdrops and launch poster when the game has no background (after its screenshots). On disk a slot is read under its own stem or Pegasus's and Lutris's, own stem first: `boxFront`, `cover`; `tile`, `icon` (Pegasus's square); `steam`, `grid` (Pegasus's banner); `hero`, `fanart`.
 
-Two layers per slot: the **default** under `games/<id>/media/`, which `refresh` fills and `.sync.json`'s `sources` attributes to its provider, and the **override** under `<paths.overrides>/<id>/`, which a pick writes and always shows first (`media_of`: overrides by id, then by the Lutris slug, then `media/`; a slot is read under its own stem or Pegasus's and Lutris's — `boxFront`, `cover`, `banner`, `hero`…). Removing the override falls back to the default, so a pick never loses what was fetched.
+Two layers per slot: the **default** under `games/<id>/media/`, which `refresh` fills and `.sync.json`'s `sources` attributes to its provider, and the **pick** under `games/<id>/media/picked/`, which `media_set_slot` writes and always shows first (`media_of`: `media/picked/`, then `media/`). Removing the pick falls back to the default, so a pick never loses what was fetched.
 
 ## Recordings
 
@@ -987,7 +987,6 @@ schema = 1
 games_root = "~/Games"               # $XDG_GAMES_DIR: where sources install
 prefixes_root = "~/.local/share/universe/prefixes"
 recordings_root = "~/Videos/universe"            # $XDG_VIDEOS_DIR/universe
-overrides = "~/.config/universe/overrides"       # picked art, shown over media/: <id>/{box_front,square,banner,background,logo}.*, <id>/screenshots/
 
 [launch]
 proton = "proton-ge"                 # a name under [proton], a path, or a family found under Lutris, Steam or Heroic (see Proton and Wine)

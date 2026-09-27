@@ -110,7 +110,6 @@ pub struct Paths {
     pub games_root: String,
     pub prefixes_root: String,
     pub recordings_root: String,
-    pub overrides: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -202,7 +201,6 @@ impl Default for Paths {
             games_root: paths::user_dir("GAMES", "Games").to_string_lossy().into(),
             prefixes_root: paths::data_home().join("prefixes").to_string_lossy().into(),
             recordings_root: paths::user_dir("VIDEOS", "Videos").join("universe").to_string_lossy().into(),
-            overrides: paths::config_home().join("overrides").to_string_lossy().into(),
         }
     }
 }
@@ -322,9 +320,6 @@ impl Config {
 
     pub fn recordings_root(&self) -> PathBuf {
         paths::expand(&self.paths.recordings_root)
-    }
-    pub fn overrides_dir(&self) -> PathBuf {
-        paths::expand(&self.paths.overrides)
     }
     pub fn games_root(&self) -> PathBuf {
         paths::expand(&self.paths.games_root)

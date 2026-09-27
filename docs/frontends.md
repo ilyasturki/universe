@@ -159,7 +159,7 @@ The core pushes nothing — the files are the truth, and anything may write them
 `session-end`, a hook. A frontend therefore derives its own change notifications. `CoreClient`
 (`ui/universe_ui/universe_client.py`) is one client over one core object — `universe_core.Core`
 in production, `FakeCore` (`fake_core.py`, the same methods over `fixtures/library.json`, laying
-out `games/`, `state/` and the overrides directory under a temporary root and writing them the way
+out `games/` and `state/` under a temporary root and writing them the way
 the core does) under `--fake` and in the tests — and its slots call the core's methods directly.
 What it derives is derived this way, and any frontend needs the equivalent:
 
@@ -168,7 +168,7 @@ What it derives is derived this way, and any frontend needs the equivalent:
 | `sessionStarted` | a successful `launch` |
 | `sessionShown` | `(session_id, ok)`: the game's window is on screen and has the focus — `wait_session_window` on a host thread, waited again for as long as the session lives (a runtime download, a launcher before the game). Inside gamescope `ok` is true once gamescope shows the game's window (a stand-in toplevel carrying the gamescope's pid when no extension lists it); on the desktop, false when nobody can tell: no GNOME, no shell extension, or the session ended first |
 | `sessionEnded` | `(session_id, id, duration_s, end)`, `end` the session row's (`quit`, `stopped`, `crashed`, `killed`): the current-session marker going empty — the `state/` watch sees `session-end` remove it (debounced 300 ms), a 2 s poll stands behind it, since the game is a systemd unit, not a child. `currentSessionChanged` fires first; the pinned tile and the badge follow that property, and only the toast, the stats refresh and a pending launch follow the signal |
-| `libraryChanged`, `mediaChanged`, `entryWritten`, `recordingFiled` | a `QFileSystemWatcher` on `games/`, `games/<id>/{,journal,journal/attachments,media,screenshots}`, `state/` and the overrides directory with its `<id>/` subdirectories (a pick made from the CLI shows up), debounced 300 ms; `mediaChanged` also follows a pick or its removal made through the client |
+| `libraryChanged`, `mediaChanged`, `entryWritten`, `recordingFiled` | a `QFileSystemWatcher` on `games/`, `games/<id>/{,journal,journal/attachments,media,media/picked,media/picked/screenshots,screenshots}` and `state/` (a pick made from the CLI shows up), debounced 300 ms; `mediaChanged` also follows a pick or its removal made through the client |
 | `progress`, `jobFinished` | the job's own callback — install, update, scan and media refresh run on a host thread; `cancel(job)` stops an install or update (SIGTERM, the job fails) or a media refresh (`media_cancel`, it ends ok after the game in hand), `cancelled` set on the job either way |
 | `launched`, `launchFailed`, `error` | the call's result |
 

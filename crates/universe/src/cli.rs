@@ -394,10 +394,10 @@ pub enum MediaCmd {
     Set {
         #[arg(value_parser = MEDIA_SLOTS)]
         slot: String,
-        /// Image file or http(s) URL, placed under paths.overrides/<id>/
+        /// Image file or http(s) URL, placed under the game's media/picked/
         source: String,
     },
-    /// Remove a slot's override, so it shows the fetched default again
+    /// Remove a slot's pick, so it shows the fetched default again
     Unset {
         #[arg(value_parser = MEDIA_SLOTS)]
         slot: String,
@@ -1867,7 +1867,7 @@ fn game_keys() -> Vec<String> {
 
 fn config_keys() -> Vec<String> {
     use crate::launch_keys::{Kind, Scope, LAUNCH_KEYS};
-    let mut keys: Vec<String> = ["paths.games_root", "paths.prefixes_root", "paths.recordings_root", "paths.overrides"].map(String::from).to_vec();
+    let mut keys: Vec<String> = ["paths.games_root", "paths.prefixes_root", "paths.recordings_root"].map(String::from).to_vec();
     keys.extend(LAUNCH_KEYS.iter().filter(|k| k.scope != Scope::Game).map(|k| {
         if k.kind == Kind::Map {
             format!("launch.{}.", k.key)

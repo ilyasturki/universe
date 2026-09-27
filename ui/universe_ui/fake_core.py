@@ -389,7 +389,6 @@ class FakeCore:
         self.system_error = ""
         self.system_applied = 0
         self._cards = X11Cards()
-        self._config.setdefault("paths", {})["overrides"] = str(self._root / "overrides")
         self._lay_out()
 
     def data_home(self):
@@ -408,7 +407,6 @@ class FakeCore:
         from .fixtures.art import paint_library
 
         (self._root / "state").mkdir(parents=True, exist_ok=True)
-        (self._root / "overrides").mkdir(parents=True, exist_ok=True)
         paint_library(self._data["games"], self._cache)
         for game in self._data["games"]:
             self._write_game(game)
@@ -1335,7 +1333,7 @@ class FakeCore:
 
     def media_set_slot(self, ident, slot, path):
         game = self._game(ident)
-        placed = _place(path, str(self._root / "overrides" / ident / f"{slot}.png"))
+        placed = _place(path, str(self._game_dir(ident) / "media" / "picked" / f"{slot}.png"))
         game.setdefault("overrides", {})[slot] = placed
         return placed
 

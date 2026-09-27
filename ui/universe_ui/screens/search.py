@@ -61,7 +61,6 @@ SYNONYMS = {
     "games_root": ["install folder", "library folder", "games directory"],
     "prefixes_root": ["wineprefix", "pfx", "bottles"],
     "recordings_root": ["videos", "captures", "clips"],
-    "overrides": ["artwork", "picks", "custom art"],
     "sgdb": ["steamgriddb", "api key", "token", "artwork"],
     "sgdb_file": ["steamgriddb", "api key", "token"],
     "rawg": ["api key", "token", "metadata"],

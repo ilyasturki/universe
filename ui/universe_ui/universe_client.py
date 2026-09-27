@@ -81,8 +81,6 @@ class CoreClient(QObject):
         self._current = None
         self._data = Path(core.data_home())
         self._state = Path(core.state_home())
-        overrides = (self.config().get("paths") or {}).get("overrides")
-        self._overrides = Path(os.path.expanduser(overrides)) if overrides else None
         self._job_seq = 0
         self._jobs = {}
         self._closed = False
@@ -699,10 +697,9 @@ class CoreClient(QObject):
         wanted = {str(games), str(self._state)}
         for d in games.iterdir():
             if d.is_dir():
-                wanted.update(str(p) for p in (d, d / "journal", d / "journal" / "attachments", d / "media", d / "screenshots") if p.is_dir())
-        if self._overrides and self._overrides.is_dir():
-            wanted.add(str(self._overrides))
-            wanted.update(str(p) for d in self._overrides.iterdir() if d.is_dir() for p in (d, d / "screenshots") if p.is_dir())
+                picked = d / "media" / "picked"
+                dirs = (d, d / "journal", d / "journal" / "attachments", d / "media", picked, picked / "screenshots", d / "screenshots")
+                wanted.update(str(p) for p in dirs if p.is_dir())
         new = sorted(wanted - set(self._watcher.directories()))
         if new:
             self._watcher.addPaths(new)
@@ -723,15 +720,8 @@ class CoreClient(QObject):
                 state = True
             elif path == games:
                 whole = True
-            elif self._overrides and path == self._overrides:
-                # A game's first pick creates its directory, already filled before it can be watched.
-                watched = set(self._watcher.directories())
-                ids.update(d.name for d in self._overrides.iterdir() if d.is_dir() and str(d) not in watched)
-            else:
-                for root in (games, self._overrides):
-                    if root and path.is_relative_to(root):
-                        ids.add(path.relative_to(root).parts[0])
-                        break
+            elif path.is_relative_to(games):
+                ids.add(path.relative_to(games).parts[0])
         self._rewatch()
         if whole:
             self._guarded(None, self._core.reload)

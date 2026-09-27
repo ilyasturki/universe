@@ -1874,26 +1874,23 @@ impl Core {
 
     pub async fn media_set_slot(&self, id: &str, slot: &str, path: &str) -> Result<String> {
         let r = self.get(id).await?;
-        let cfg = self.config.read().await.clone();
-        let placed = crate::media::set_slot(&cfg, &r.game, slot, Path::new(path))?;
+        let placed = crate::media::set_slot(&r.game, slot, Path::new(path))?;
         self.reload_game(id).await?;
         Ok(placed.to_string_lossy().into())
     }
 
     pub async fn media_set_url(&self, id: &str, slot: &str, url: &str) -> Result<String> {
         let r = self.get(id).await?;
-        let cfg = self.config.read().await.clone();
         let game = r.game.clone();
         let (slot, url) = (slot.to_string(), url.to_string());
-        let placed = crate::media::set_slot_url(&cfg, &game, &slot, &url).await?;
+        let placed = crate::media::set_slot_url(&game, &slot, &url).await?;
         self.reload_game(id).await?;
         Ok(placed.to_string_lossy().into())
     }
 
     pub async fn media_unset(&self, id: &str, slot: &str) -> Result<bool> {
         let r = self.get(id).await?;
-        let cfg = self.config.read().await.clone();
-        let gone = crate::media::unset(&cfg, &r.game, slot)?;
+        let gone = crate::media::unset(&r.game, slot)?;
         self.reload_game(id).await?;
         Ok(gone)
     }
@@ -1915,13 +1912,12 @@ impl Core {
     }
 
     pub async fn media_status(&self, id: &str) -> Result<Vec<crate::media::MediaStatus>> {
-        let cfg = self.config.read().await.clone();
         let games: Vec<crate::game::Game> = if id.is_empty() {
             self.games.read().await.iter().filter(|g| g.game.removed_at.is_empty()).map(|g| g.game.clone()).collect()
         } else {
             vec![self.get(id).await?.game]
         };
-        Ok(games.iter().map(|g| crate::media::status(&cfg, g)).collect())
+        Ok(games.iter().map(crate::media::status).collect())
     }
 
     pub async fn media_pin(&self, id: &str, provider: &str, provider_id: &str) -> Result<()> {

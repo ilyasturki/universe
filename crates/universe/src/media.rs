@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
 use crate::game::Game;
-use crate::library::{is_image, media_dirs, scan_media_dir, stems_of, IMAGE_EXTS, MEDIA_SLOTS};
+use crate::library::{is_image, scan_media_dir, stems_of, IMAGE_EXTS, MEDIA_SLOTS};
 
 const SGDB: &str = "https://www.steamgriddb.com/api/v2";
 const RAWG: &str = "https://api.rawg.io/api";
@@ -48,7 +48,7 @@ pub struct Hit {
     pub current: bool,
 }
 
-/// The file the UI shows, the fetched default under it, the override over it.
+/// The file the UI shows, the fetched default under it, the pick over it.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct SlotStatus {
     pub slot: String,
@@ -56,7 +56,7 @@ pub struct SlotStatus {
     pub default: String,
     #[serde(rename = "override")]
     pub override_path: String,
-    /// `picked` for an override, else the provider that wrote the default (`sgdb`, `pegasus`), or empty.
+    /// `picked` for a pick, else the provider that wrote the default (`sgdb`, `steam`), or empty.
     pub origin: String,
     /// The provider that wrote the default, whether or not an override sits over it.
     pub default_origin: String,
@@ -278,23 +278,9 @@ fn clear_slot(dir: &Path, slot: &str) -> bool {
     gone
 }
 
-fn override_dirs(config: &Config, game: &Game) -> Vec<PathBuf> {
-    let mut dirs = media_dirs(game, &config.overrides_dir());
-    dirs.pop();
-    dirs
-}
-
-/// `metadata.sgdb_id`, else pegasus-sync's `<overrides>/<id>/sgdb_id` file; zero when unpinned.
-fn pinned_sgdb_id(config: &Config, game: &Game) -> u64 {
-    if game.metadata.sgdb_id > 0 {
-        return game.metadata.sgdb_id;
-    }
-    override_dirs(config, game).iter().find_map(|d| std::fs::read_to_string(d.join("sgdb_id")).ok()?.trim().parse().ok()).unwrap_or(0)
-}
-
 /// The pin, else the cached or searched match; zero when SteamGridDB has nothing under the title.
-async fn resolve_sgdb(config: &Config, game: &Game, cache: &mut SyncCache, key: &str) -> crate::Result<u64> {
-    let pinned = pinned_sgdb_id(config, game);
+async fn resolve_sgdb(game: &Game, cache: &mut SyncCache, key: &str) -> crate::Result<u64> {
+    let pinned = game.metadata.sgdb_id;
     let mut found = None;
     let id = if pinned > 0 {
         pinned
@@ -328,14 +314,14 @@ async fn resolve_sgdb(config: &Config, game: &Game, cache: &mut SyncCache, key: 
     Ok(id)
 }
 
-/// An override over a slot does not stop its default from being fetched; pins in game.toml win.
+/// A pick over a slot does not stop its default from being fetched; pins in game.toml win.
 pub async fn refresh(config: &Config, game: &Game, force: bool) -> crate::Result<bool> {
     let mut changed = false;
     let mut cache = read_cache_in(&game.media_dir());
     let mut g = Game::load(&game.toml_path())?;
 
     if let Some(key) = &config.api_key("sgdb") {
-        let sgdb_id = resolve_sgdb(config, &g, &mut cache, key).await?;
+        let sgdb_id = resolve_sgdb(&g, &mut cache, key).await?;
         if sgdb_id > 0 {
             let (have, _) = scan_media_dir(&g.media_dir());
             for (slot, endpoint, dims) in SGDB_PLAN {
@@ -420,7 +406,7 @@ pub async fn candidates(config: &Config, game: &Game, slot: &str, page: u32) -> 
     };
     let mut cache = read_cache_in(&game.media_dir());
     let before = (cache.sgdb_id, cache.sgdb_name.clone(), cache.sgdb_miss);
-    let id = resolve_sgdb(config, game, &mut cache, &key).await?;
+    let id = resolve_sgdb(game, &mut cache, &key).await?;
     if before != (cache.sgdb_id, cache.sgdb_name.clone(), cache.sgdb_miss) {
         let _ = write_cache_in(&game.media_dir(), &cache);
     }
@@ -438,7 +424,7 @@ pub async fn candidates(config: &Config, game: &Game, slot: &str, page: u32) -> 
 pub async fn search(config: &Config, game: &Game, query: &str) -> crate::Result<Vec<Hit>> {
     let key = sgdb_key(config)?;
     let query = if query.trim().is_empty() { game.title.as_str() } else { query.trim() };
-    let pinned = pinned_sgdb_id(config, game);
+    let pinned = game.metadata.sgdb_id;
     let current = if pinned > 0 { pinned } else { read_cache_in(&game.media_dir()).sgdb_id };
     let mut hits = sgdb_hits(&key, query).await?;
     for h in hits.iter_mut() {
@@ -454,9 +440,9 @@ fn check_slot(slot: &str) -> crate::Result<()> {
     Ok(())
 }
 
-/// `<overrides>/<id>/<slot>.<ext>`, any other file of the slot there gone; a screenshot joins `screenshots/`.
-fn place_override(config: &Config, game: &Game, slot: &str, src: &Path, name: &str) -> crate::Result<PathBuf> {
-    let dir = config.overrides_dir().join(&game.id);
+/// `media/picked/<slot>.<ext>`, any other file of the slot there gone; a screenshot joins `screenshots/`.
+fn place_pick(game: &Game, slot: &str, src: &Path, name: &str) -> crate::Result<PathBuf> {
+    let dir = game.picked_dir();
     if slot == "screenshot" {
         let dir = dir.join("screenshots");
         std::fs::create_dir_all(&dir)?;
@@ -467,66 +453,53 @@ fn place_override(config: &Config, game: &Game, slot: &str, src: &Path, name: &s
     let ext = src.extension().and_then(|s| s.to_str()).unwrap_or("png").to_lowercase();
     let ext = if ext == "jpeg" { "jpg".to_string() } else { ext };
     std::fs::create_dir_all(&dir)?;
-    for d in override_dirs(config, game) {
-        clear_slot(&d, slot);
-    }
+    clear_slot(&dir, slot);
     let dest = dir.join(format!("{slot}.{ext}"));
     std::fs::copy(src, &dest)?;
     Ok(dest)
 }
 
-pub fn set_slot(config: &Config, game: &Game, slot: &str, src: &Path) -> crate::Result<PathBuf> {
+pub fn set_slot(game: &Game, slot: &str, src: &Path) -> crate::Result<PathBuf> {
     check_slot(slot)?;
     if !src.is_file() || !is_image(src) {
         return Err(crate::Error::NotFound(src.display().to_string()));
     }
     let name = src.file_name().map(|s| s.to_string_lossy().to_string()).unwrap_or_else(|| "shot.png".into());
-    place_override(config, game, slot, src, &name)
+    place_pick(game, slot, src, &name)
 }
 
-pub async fn set_slot_url(config: &Config, game: &Game, slot: &str, url: &str) -> crate::Result<PathBuf> {
+pub async fn set_slot_url(game: &Game, slot: &str, url: &str) -> crate::Result<PathBuf> {
     check_slot(slot)?;
     if !url.starts_with("http://") && !url.starts_with("https://") {
-        return set_slot(config, game, slot, Path::new(url.strip_prefix("file://").unwrap_or(url)));
+        return set_slot(game, slot, Path::new(url.strip_prefix("file://").unwrap_or(url)));
     }
     let ext = ext_of(url);
     let tmp = std::env::temp_dir().join(format!("universe-{}-{}-{}.{ext}", game.id, slot, std::process::id()));
     download(url, &tmp).await?;
     let name =
         url.rsplit('/').next().and_then(|n| n.split('?').next()).filter(|n| !n.is_empty()).map(|n| n.to_string()).unwrap_or_else(|| format!("shot.{ext}"));
-    let placed = place_override(config, game, slot, &tmp, &name);
+    let placed = place_pick(game, slot, &tmp, &name);
     let _ = std::fs::remove_file(&tmp);
     placed
 }
 
-pub fn unset(config: &Config, game: &Game, slot: &str) -> crate::Result<bool> {
+pub fn unset(game: &Game, slot: &str) -> crate::Result<bool> {
     check_slot(slot)?;
-    let mut gone = false;
-    for dir in override_dirs(config, game) {
-        if slot == "screenshot" {
-            let shots = dir.join("screenshots");
-            if shots.is_dir() {
-                std::fs::remove_dir_all(&shots)?;
-                gone = true;
-            }
-        } else if clear_slot(&dir, slot) {
-            gone = true;
-        }
+    if slot != "screenshot" {
+        return Ok(clear_slot(&game.picked_dir(), slot));
     }
-    Ok(gone)
+    let shots = game.picked_dir().join("screenshots");
+    if !shots.is_dir() {
+        return Ok(false);
+    }
+    std::fs::remove_dir_all(&shots)?;
+    Ok(true)
 }
 
-pub fn status(config: &Config, game: &Game) -> MediaStatus {
+pub fn status(game: &Game) -> MediaStatus {
     let cache = read_cache_in(&game.media_dir());
     let (default, _) = scan_media_dir(&game.media_dir());
-    let mut picked: Vec<(String, String)> = Vec::new();
-    for dir in override_dirs(config, game) {
-        for (slot, path) in scan_media_dir(&dir).0 {
-            if !picked.iter().any(|(have, _)| *have == slot) {
-                picked.push((slot, path));
-            }
-        }
-    }
+    let (picked, _) = scan_media_dir(&game.picked_dir());
     let slots = MEDIA_SLOTS
         .iter()
         .map(|slot| {
@@ -551,7 +524,7 @@ pub fn status(config: &Config, game: &Game) -> MediaStatus {
             }
         })
         .collect();
-    let pinned = pinned_sgdb_id(config, game);
+    let pinned = game.metadata.sgdb_id;
     let sgdb_id = if pinned > 0 { pinned } else { cache.sgdb_id };
     let known = sgdb_id > 0 && cache.sgdb_id == sgdb_id;
     MediaStatus {
@@ -568,15 +541,11 @@ pub fn status(config: &Config, game: &Game) -> MediaStatus {
 mod tests {
     use super::*;
 
-    fn setup(id: &str) -> (std::sync::MutexGuard<'static, ()>, tempfile::TempDir, Config, Game) {
+    fn setup(id: &str) -> (std::sync::MutexGuard<'static, ()>, tempfile::TempDir, Game) {
         let env = crate::paths::ENV_LOCK.lock().unwrap();
         let dir = tempfile::tempdir().unwrap();
         std::env::set_var("UNIVERSE_DATA_HOME", dir.path().join("data"));
-        let mut c = Config::default();
-        c.paths.overrides = dir.path().join("overrides").to_string_lossy().into();
-        let mut g = Game::new(id);
-        g.source.lutris_slug = format!("{id}-lutris");
-        (env, dir, c, g)
+        (env, dir, Game::new(id))
     }
 
     fn touch(p: &Path) {
@@ -592,83 +561,60 @@ mod tests {
     }
 
     #[test]
-    fn overrides_sit_over_defaults_and_come_off() {
-        let (_env, dir, config, game) = setup("g");
+    fn picks_sit_over_defaults_and_come_off() {
+        let (_env, dir, game) = setup("g");
         touch(&game.media_dir().join("boxFront.png"));
-        note_source(&game.media_dir(), "box_front", "pegasus").unwrap();
+        note_source(&game.media_dir(), "box_front", "sgdb").unwrap();
         touch(&game.media_dir().join("logo.png"));
 
-        let st = status(&config, &game);
+        let st = status(&game);
         let slot = |s: &str| st.slots.iter().find(|x| x.slot == s).unwrap().clone();
         assert_eq!(slot("box_front").kind, "default");
-        assert_eq!(slot("box_front").origin, "pegasus");
+        assert_eq!(slot("box_front").origin, "sgdb");
         assert_eq!(slot("logo").kind, "default");
         assert_eq!(slot("logo").origin, "");
         assert_eq!(slot("banner").kind, "missing");
 
         let src = dir.path().join("pick.jpg");
         touch(&src);
-        let placed = set_slot(&config, &game, "box_front", &src).unwrap();
-        assert_eq!(placed, dir.path().join("overrides/g/box_front.jpg"));
-        let st = status(&config, &game);
+        let placed = set_slot(&game, "box_front", &src).unwrap();
+        assert_eq!(placed, game.media_dir().join("picked/box_front.jpg"));
+        let st = status(&game);
         let bf = st.slots.iter().find(|x| x.slot == "box_front").unwrap();
         assert_eq!(bf.kind, "picked");
         assert_eq!(bf.path, placed.to_string_lossy());
-        assert!(bf.default.ends_with("boxFront.png"));
+        assert!(bf.default.ends_with("media/boxFront.png"));
+        let shown = crate::library::media_of(&game).0;
+        assert_eq!(shown.iter().find(|(s, _)| s == "box_front").unwrap().1, placed.to_string_lossy());
 
-        touch(&dir.path().join("overrides/g-lutris/cover.png"));
+        touch(&game.picked_dir().join("cover.png"));
         let src2 = dir.path().join("pick2.png");
         touch(&src2);
-        set_slot(&config, &game, "box_front", &src2).unwrap();
+        set_slot(&game, "box_front", &src2).unwrap();
         assert!(!placed.exists());
-        assert!(!dir.path().join("overrides/g-lutris/cover.png").exists());
-        assert!(dir.path().join("overrides/g/box_front.png").exists());
+        assert!(!game.picked_dir().join("cover.png").exists());
+        assert!(game.picked_dir().join("box_front.png").exists());
 
-        assert!(unset(&config, &game, "box_front").unwrap());
-        assert!(!unset(&config, &game, "box_front").unwrap());
-        let st = status(&config, &game);
+        assert!(unset(&game, "box_front").unwrap());
+        assert!(!unset(&game, "box_front").unwrap());
+        let st = status(&game);
         let bf = st.slots.iter().find(|x| x.slot == "box_front").unwrap();
         assert_eq!(bf.kind, "default");
-        assert!(bf.path.ends_with("boxFront.png"));
-        assert!(game.media_dir().join("boxFront.png").exists());
+        assert!(bf.path.ends_with("media/boxFront.png"));
+        assert!(set_slot(&game, "cover", &src).is_err());
     }
 
     #[test]
-    fn pegasus_stems_and_pin_file_are_read() {
-        let (_env, dir, config, game) = setup("p");
-        touch(&game.media_dir().join("tile.jpg"));
-        touch(&dir.path().join("overrides/p-lutris/steam.png"));
-        touch(&dir.path().join("overrides/p-lutris/tile.png"));
-        std::fs::write(dir.path().join("overrides/p-lutris/sgdb_id"), "5332120\n").unwrap();
-
-        let st = status(&config, &game);
-        let slot = |s: &str| st.slots.iter().find(|x| x.slot == s).unwrap().clone();
-        assert_eq!(slot("square").kind, "picked");
-        assert!(slot("square").default.ends_with("tile.jpg"));
-        assert_eq!(slot("banner").kind, "picked");
-        assert!(slot("banner").path.ends_with("steam.png"));
-        assert_eq!(st.sgdb_id, 5332120);
-        assert_eq!(st.sgdb_name, "");
-
-        let src = dir.path().join("wide.png");
-        touch(&src);
-        set_slot(&config, &game, "banner", &src).unwrap();
-        assert!(!dir.path().join("overrides/p-lutris/steam.png").exists());
-        assert!(unset(&config, &game, "banner").unwrap());
-        assert_eq!(status(&config, &game).slots.iter().find(|x| x.slot == "banner").unwrap().kind, "missing");
-        touch(&game.media_dir().join("square.png"));
-        assert!(status(&config, &game).slots.iter().find(|x| x.slot == "square").unwrap().default.ends_with("square.png"));
-        assert!(set_slot(&config, &game, "cover", &src).is_err());
-    }
-
-    #[test]
-    fn screenshots_join_the_override_dir() {
-        let (_env, dir, config, game) = setup("s");
+    fn screenshots_join_the_pick_dir() {
+        let (_env, dir, game) = setup("s");
+        touch(&game.media_dir().join("screenshots/steam-01.png"));
         let src = dir.path().join("mine.png");
         touch(&src);
-        set_slot(&config, &game, "screenshot", &src).unwrap();
-        assert!(dir.path().join("overrides/s/screenshots/mine.png").exists());
-        assert!(unset(&config, &game, "screenshot").unwrap());
-        assert!(!dir.path().join("overrides/s/screenshots").exists());
+        set_slot(&game, "screenshot", &src).unwrap();
+        assert!(game.picked_dir().join("screenshots/mine.png").exists());
+        assert_eq!(crate::library::media_of(&game).1.len(), 2);
+        assert!(unset(&game, "screenshot").unwrap());
+        assert!(!game.picked_dir().join("screenshots").exists());
+        assert!(game.media_dir().join("screenshots/steam-01.png").exists(), "the fetched shots stay");
     }
 }

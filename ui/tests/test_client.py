@@ -119,7 +119,7 @@ def test_files_written_by_others_reach_the_screens(fake):
 
     assert fake.mediaSetSlot("control", "banner", fake.game("control")["media"]["logo"])
     assert media == [("control",)]
-    assert fake.game("control")["media"]["banner"].startswith(str(core._root / "overrides" / "control"))
+    assert fake.game("control")["media"]["banner"].startswith(str(core._root / "data" / "games" / "control" / "media" / "picked"))
     assert fake.mediaUnset("control", "banner") is True and fake.mediaUnset("control", "banner") is False
     assert media == [("control",), ("control",)]
 
