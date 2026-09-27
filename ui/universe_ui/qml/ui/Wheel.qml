@@ -5,6 +5,7 @@ import "../core"
 // the view eases after it every frame, so notches in a row run into one motion; a touchpad's pixels move it as they come.
 // A vertical view takes the wheel's y; a `horizontal` one takes x, Shift+y and — unless `nested` in a page that scrolls,
 // which then keeps it — plain y too. A view with a Behavior on its contentX/Y hands it over as `ease`, held off while rolling.
+// A finger, or a pressed mouse, drags the view along its axis and flings it on the way out; the press under it is no click.
 Item {
     id: wheel
 
@@ -96,12 +97,49 @@ Item {
         }
     }
 
+    DragHandler {
+        id: drag
+
+        property real last: 0
+
+        target: null
+        acceptedDevices: PointerDevice.TouchScreen | PointerDevice.Mouse
+        acceptedButtons: Qt.LeftButton
+        xAxis.enabled: wheel.horizontal
+        yAxis.enabled: !wheel.horizontal
+        // Scene coordinates: the view's content, this handler's parent among it, moves under the finger.
+        readonly property real along: wheel.horizontal ? centroid.scenePosition.x : centroid.scenePosition.y
+
+        onActiveChanged: {
+            if (active) {
+                wheel.halt();
+                if (wheel.ease)
+                    wheel.ease.enabled = false;
+                last = along;
+                return;
+            }
+            // Where the release's speed would carry the view, eased out over longer than a notch.
+            var speed = wheel.horizontal ? centroid.velocity.x : centroid.velocity.y;
+            wheel.goal = wheel.clamp(wheel.at() - speed * 0.3);
+            mover.tau = 0.22;
+            mover.start();
+        }
+        onAlongChanged: {
+            if (!active)
+                return;
+            wheel.put(wheel.clamp(wheel.at() - (along - last)));
+            last = along;
+        }
+    }
+
     // Closes a fixed share of what is left each frame: quick off the mark, settling without a stop-start between notches.
     FrameAnimation {
         id: mover
 
-        readonly property real tau: 0.09
+        property real tau: 0.09
 
+        onRunningChanged: if (!running)
+            tau = 0.09
         onTriggered: {
             var left = wheel.goal - wheel.at();
             if (Math.abs(left) < 0.5) {

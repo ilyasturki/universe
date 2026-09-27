@@ -461,13 +461,18 @@ Under a keyboard or a mouse (`api.keys.mode` not `pad`) `ui/ButtonGlyph.qml` dra
 with the key's name (`api.keys.labels`) in place of the pad button, the d-pad as arrows; a chord
 (`Start+Select`) and a stick stay the pad's, they have no key.
 
-## The mouse
+## The mouse and the touchscreen
 
-Reprise takes a mouse on top of the pad without a second path. Hovering only brightens what is
-under the cursor; a click picks it — the focus ring lands where the pad would have moved it — and
-a click on the item that already holds the ring is A, held as long as the button is (so a long
-click opens the game menu as a held A does). A button, a menu row, a tab, a settings row, a key
-of the on-screen keyboard is `direct`: one click picks and presses. A right click is B. The wheel
+Reprise takes a mouse or a finger on top of the pad without a second path. Hovering only brightens
+what is under the cursor; a click or a tap picks it — the focus ring lands where the pad would have
+moved it — and one on the item that already holds the ring is A, pressed at the release (so a
+second tap on a cover launches it, as on the Deck's own UI). Held past 180 ms it is A held until the
+release, so a long press opens the game menu as a held A does. A button, a menu row, a tab, a
+settings row, a key of the on-screen keyboard is `direct`: one tap picks and presses. The pick
+waits for the release (or for the press to be held): a finger that lands to scroll moves no ring.
+A drag, the finger's or a pressed mouse's, moves the view under it along its axis and flings it on
+the release, and the press it started is no tap; under gamescope a touch may come as an emulated
+left click, and scrolls the same. A right click is B. The wheel
 scrolls the view under it, the ring staying where it is — a notch adds a fixed step to where the
 view is heading and it eases after, so notches run into one motion, and a touchpad's pixels move
 it as they come — a strip that scrolls sideways (the Home rail, a screenshot strip) by a card from the wheel's y, its x or Shift+y; the next key brings the view back to the
@@ -484,7 +489,9 @@ it). Every pick also raises `Theme.pointed(item)`: `theme.qml` hands the focus b
 bar and the page by it.
 `ui/Wheel.qml` scrolls its parent `Flickable` (`horizontal` for a strip, `nested` for a strip
 inside a page that scrolls — plain y then goes to the page — `ease` the view's own Behavior on
-its contentX/Y, held off while the wheel drives it, `halt()` from a move of the view's own);
+its contentX/Y, held off while the wheel or a drag drives it, `halt()` from a move of the view's own),
+its `DragHandler` taking the axis the view scrolls on, so a vertical drag on a sideways strip goes
+to the page;
 `CoverCard` and `LibraryTile` carry their own Pointer inside the scaled art (`pointable`,
 `current`, `picked`), hovering lifting the idle dimming rather than washing the card;
 `ui/WheelKeys.qml` is the wheel as keys, for a surface with nothing to scroll (the dock's value

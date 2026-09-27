@@ -50,6 +50,14 @@ GLYPH_ACTIONS = {
 KEY_LABELS = {Qt.Key.Key_Return: "Enter", Qt.Key.Key_Escape: "Esc", Qt.Key.Key_PageUp: "PgUp", Qt.Key.Key_PageDown: "PgDn"}
 
 
+def from_touch(event):
+    """Qt's mouse press or move made from an unhandled touch: no mouse moved."""
+    from PySide6.QtGui import QInputDevice
+
+    device = event.device() if hasattr(event, "device") else None
+    return device is not None and device.type() == QInputDevice.DeviceType.TouchScreen
+
+
 def describe_event(event):
     if event is None:
         return "?"
@@ -213,11 +221,14 @@ class Keys(QObject):
                     self._hold.start()
                 else:
                     self._hold.stop()
-        elif kind in (QEvent.Type.MouseMove, QEvent.Type.MouseButtonPress, QEvent.Type.Wheel):
+        elif kind in (QEvent.Type.TouchBegin, QEvent.Type.TouchUpdate):
+            # A finger on a Deck's screen: the pad's glyphs in the hints, no cursor, no hover.
+            self._set_mode("pad", event)
+        elif kind in (QEvent.Type.MouseMove, QEvent.Type.MouseButtonPress, QEvent.Type.Wheel) and not from_touch(event):
             self._set_mode("mouse", event)
         return False
 
-    # "pad" | "keyboard" | "mouse": whatever was used last. The hints read it; a hover counts only under a mouse.
+    # "pad" | "keyboard" | "mouse": whatever was used last, a touch counting as the pad. The hints read it; a hover counts only under a mouse.
     mode = Property(str, lambda self: self._mode, notify=modeChanged)
     # Pad glyph → key label ("A" → "Enter"), for the hints under a keyboard.
     labels = Property("QVariantMap", lambda self: {glyph: key_label(KEYS[action][0]) for glyph, action in GLYPH_ACTIONS.items()}, constant=True)
