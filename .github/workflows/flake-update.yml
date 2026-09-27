@@ -13,6 +13,8 @@ jobs:
       - uses: actions/checkout@v7
       - uses: DeterminateSystems/nix-installer-action@v23
       - uses: DeterminateSystems/magic-nix-cache-action@v15
+        with:
+          use-flakehub: disabled
       - run: nix flake update
       # A pull request opened with the workflow token starts no ci run, so the checks run here first
       - run: nix build .#universe .#universe-ui --no-link -L

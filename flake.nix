@@ -344,6 +344,11 @@
         dirs = [
           "modules"
           "extension"
+          "crates/universe/src/desktop/gnome.rs"
+        ];
+        tests = [
+          "modules"
+          "extension"
         ];
         runtime = moduleRuntime;
       };

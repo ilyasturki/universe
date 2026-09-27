@@ -10,6 +10,8 @@ jobs:
       - uses: actions/checkout@v7
       - uses: DeterminateSystems/nix-installer-action@v23
       - uses: DeterminateSystems/magic-nix-cache-action@v15
+        with:
+          use-flakehub: disabled
       - run: nix build .#checks.x86_64-linux.lint .#checks.x86_64-linux.rust-lint --no-link -L
   build:
     runs-on: ubuntu-latest
@@ -18,6 +20,8 @@ jobs:
       - uses: DeterminateSystems/nix-installer-action@v23
       # The two Rust derivations take ~9 min cold; a push that touches no Rust substitutes them from the cache
       - uses: DeterminateSystems/magic-nix-cache-action@v15
+        with:
+          use-flakehub: disabled
       - run: nix build .#universe .#universe-ui --no-link -L
       # The lint job builds the two lint checks; listing the rest keeps this job from compiling the Rust tree twice
       - run: nix build .#checks.x86_64-linux.pytest-ui .#checks.x86_64-linux.pytest-modules .#checks.x86_64-linux.pytest-sources .#checks.x86_64-linux.pytest-core-py --no-link -L
