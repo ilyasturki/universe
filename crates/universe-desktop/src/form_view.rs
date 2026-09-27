@@ -113,6 +113,7 @@ struct RowView {
     control: Control,
     origin: gtk::Label,
     reset: gtk::Button,
+    promote: gtk::Button,
     group: adw::PreferencesGroup,
 }
 
@@ -313,12 +314,14 @@ impl FormView {
         reset.connect_clicked(move |_| {
             view.upgrade().inspect(|v| v.set(&key, ""));
         });
+        let promote = self.promote_button(&field.key, &field.label);
         let control = match field.kind.as_str() {
             "bool" => {
                 let row = adw::SwitchRow::builder().use_markup(false).title(field.label.clone()).build();
                 row.set_subtitle(&field.description);
                 row.add_suffix(&origin);
                 row.add_suffix(&reset);
+                row.add_suffix(&promote);
                 let (view, key) = (self.weak(), field.key.clone());
                 row.connect_active_notify(move |row| {
                     let Some(v) = view.upgrade().filter(|v| !v.syncing.get()) else { return };
@@ -332,6 +335,7 @@ impl FormView {
                 let row = adw::PasswordEntryRow::builder().use_markup(false).title(field.label.clone()).show_apply_button(true).build();
                 row.set_tooltip_text(Some(&field.description));
                 row.add_suffix(&reset);
+                row.add_suffix(&promote);
                 let (view, key) = (self.weak(), field.key.clone());
                 row.connect_apply(move |row| {
                     view.upgrade().inspect(|v| v.set(&key, &row.text()));
@@ -344,6 +348,7 @@ impl FormView {
                 row.set_subtitle(&first_clause(&field.description));
                 row.set_tooltip_text(Some(field.description.as_str()).filter(|d| !d.is_empty()));
                 row.add_suffix(&reset);
+                row.add_suffix(&promote);
                 let (view, key) = (self.weak(), field.key.clone());
                 row.connect_selected_notify(move |row| {
                     let Some(v) = view.upgrade().filter(|v| !v.syncing.get()) else { return };
@@ -366,6 +371,7 @@ impl FormView {
                 }
                 row.add_suffix(&origin);
                 row.add_suffix(&reset);
+                row.add_suffix(&promote);
                 if kind == "path" {
                     let pick = gtk::Button::builder()
                         .icon_name(if wants_folder(&field.key) { "folder-open-symbolic" } else { "document-open-symbolic" })
@@ -387,12 +393,13 @@ impl FormView {
                 Control::Entry(row)
             }
         };
-        RowView { key: field.key.clone(), control, origin, reset, group: group.clone() }
+        RowView { key: field.key.clone(), control, origin, reset, promote, group: group.clone() }
     }
 
     fn update(&self, row: &RowView, field: &Field) {
         let inheriting = field.origin.is_some() && field.own.is_empty();
         row.reset.set_visible(field.resettable);
+        row.promote.set_visible(field.promotable);
         row.reset.set_tooltip_text(Some(&gettext("Back to {}").replace("{}", &inherit_label(field))));
         row.origin.set_visible(inheriting && field.origin != Some(Origin::Default));
         row.origin.set_label(&field.origin.map(origin_word).unwrap_or_default());
@@ -446,6 +453,9 @@ impl FormView {
                             view.upgrade().inspect(|v| v.set(&key, ""));
                         });
                         r.add_suffix(&remove);
+                    }
+                    if entry.promotable {
+                        r.add_suffix(&self.promote_button(&key, &entry.name));
                     }
                     let view = self.weak();
                     r.connect_apply(move |r| {
@@ -509,6 +519,33 @@ impl FormView {
             let Some(view) = view.upgrade() else { return };
             if let Err(e) = result {
                 view.toast(&e.to_string());
+            }
+            view.load();
+        });
+    }
+
+    fn promote_button(&self, key: &str, label: &str) -> gtk::Button {
+        let button = gtk::Button::builder()
+            .icon_name("send-to-symbolic")
+            .tooltip_text(gettext("Apply to All Games"))
+            .valign(gtk::Align::Center)
+            .css_classes(["flat", "circular"])
+            .build();
+        let (view, key, label) = (self.weak(), key.to_string(), label.to_string());
+        button.connect_clicked(move |_| {
+            view.upgrade().inspect(|v| v.promote(&key, &label));
+        });
+        button
+    }
+
+    fn promote(&self, key: &str, label: &str) {
+        let (form, key, label, view) = (self.form.clone(), key.to_string(), label.to_string(), self.weak());
+        glib::spawn_future_local(async move {
+            let result = backend::call(move |core| async move { core.promote_field(&form, &key).await }).await;
+            let Some(view) = view.upgrade() else { return };
+            match result {
+                Ok(()) => view.toast(&gettext("{} now applies to every game").replace("{}", &label)),
+                Err(e) => view.toast(&e.to_string()),
             }
             view.load();
         });

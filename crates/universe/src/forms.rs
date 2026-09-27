@@ -54,6 +54,7 @@ pub struct Entry {
     pub value: String,
     pub origin: Origin,
     pub resettable: bool,
+    pub promotable: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Default, Serialize)]
@@ -76,6 +77,8 @@ pub struct Field {
     /// Where `inherited` comes from, whether or not `own` hides it.
     pub fallback: Option<Origin>,
     pub resettable: bool,
+    /// A game's own value with a global twin: `promote_field` makes it every game's.
+    pub promotable: bool,
     pub choices: Vec<Choice>,
     /// A value outside `choices` may be typed.
     pub free: bool,
@@ -244,7 +247,7 @@ fn entries(map: &Value, origin: impl Fn(&str) -> Origin) -> Vec<Entry> {
         .flatten()
         .map(|(name, v)| {
             let origin = origin(name);
-            Entry { name: name.clone(), value: render(v), origin, resettable: origin != Origin::Global }
+            Entry { name: name.clone(), value: render(v), origin, resettable: origin != Origin::Global, promotable: false }
         })
         .collect()
 }
@@ -290,6 +293,26 @@ fn with_enabled(settings: &[Setting]) -> Vec<Setting> {
     out
 }
 
+/// Where a game's key is set for every game.
+enum Twin<'a> {
+    Config,
+    Runner(&'a str),
+    Module(&'a str, &'a str),
+    Source(&'a str, &'a str),
+}
+
+fn twin(key: &str) -> Option<Twin<'_>> {
+    match key.splitn(3, '.').collect::<Vec<_>>().as_slice() {
+        ["desktop", "hide_cursor"] => Some(Twin::Config),
+        ["launch", "options", option] => Some(Twin::Runner(option)),
+        ["launch", head, ..] => launch_keys::find(head).filter(|k| k.scope == Scope::Both).map(|_| Twin::Config),
+        // A game's `enabled` is not the module's own switch.
+        ["modules", module, setting] if *setting != "enabled" => Some(Twin::Module(module, setting)),
+        ["sources", source, setting] => Some(Twin::Source(source, setting)),
+        _ => None,
+    }
+}
+
 fn table_value(table: Option<&toml::Table>, key: &str) -> String {
     table.and_then(|t| t.get(key)).map(|v| render(&toml_to_json(v))).unwrap_or_default()
 }
@@ -322,6 +345,25 @@ impl Core {
             Form::Source(id) if key == "enabled" => self.enable_source(id, value == "true").await,
             Form::Source(id) => self.set_source_setting(id, "", key, value).await,
         }
+    }
+
+    /// A game's own value of `key` becomes the global one, then leaves the game, which follows it; other games keep theirs.
+    /// Global first: a failed clear leaves the game a redundant value, never a lost one.
+    pub async fn promote_field(&self, form: &Form, key: &str) -> Result<()> {
+        let Form::Game(id) = form else { return Err(Error::Invalid(format!("{key} is not a game's"))) };
+        let twin = twin(key).ok_or_else(|| Error::Invalid(format!("{key} has no global setting")))?;
+        let r = self.get(id).await?;
+        let value = render(dig(&serde_json::to_value(&r.game)?, key));
+        if value.is_empty() {
+            return Err(Error::Invalid(format!("{id} sets no {key} of its own")));
+        }
+        match twin {
+            Twin::Config => self.set_setting(key, &value).await?,
+            Twin::Runner(option) => self.set_runner_setting(&r.effective.runner, option, &value).await?,
+            Twin::Module(module, setting) => self.set_module_setting(module, "", setting, &value).await?,
+            Twin::Source(source, setting) => self.set_source_setting(source, "", setting, &value).await?,
+        }
+        self.set(id, key, "").await
     }
 
     fn launch_form(&self, config: &Config, set: &Value, machine: &Machine) -> Vec<Field> {
@@ -470,6 +512,12 @@ impl Core {
                 out.push(setting_field(s, format!("sources.{kind}.{}", s.key), source.name()).inherits(own, Origin::Game, inherited, fallback));
             }
         }
+        for f in &mut out {
+            f.promotable = f.origin == Some(Origin::Game) && !f.own.is_empty() && twin(&f.key).is_some();
+            for e in &mut f.entries {
+                e.promotable = e.origin == Origin::Game && twin(&format!("{}.{}", f.key, e.name)).is_some();
+            }
+        }
         Ok(out)
     }
 
@@ -554,6 +602,37 @@ mod tests {
         assert_eq!((pause.own.as_str(), pause.value.as_str(), pause.origin), ("", "true", Some(Origin::Default)));
         core.set_field(&form, &entry_key("launch.env", "NEW VAR!").unwrap(), "x").await.unwrap();
         assert_eq!(core.get("sample").await.unwrap().game.launch.env.get("NEWVAR").map(String::as_str), Some("x"), "the name is cleaned to one key");
+    }
+
+    #[tokio::test]
+    async fn a_game_value_promoted_becomes_the_global_one_and_leaves_the_game() {
+        let _env = paths::ENV_LOCK.lock().unwrap();
+        let _sb = sandbox();
+        let mut g = Game::load(&Game::new("Sample").toml_path()).unwrap();
+        g.launch.pause_on_home = Some(false);
+        g.launch.env.insert("FROM_GAME".into(), "2".into());
+        g.launch.options.insert("batch".into(), toml::Value::Boolean(false));
+        g.save().unwrap();
+        let (core, _) = open().await;
+        let form = Form::Game("sample".into());
+        let fields = core.form(&form, None).await.unwrap();
+        assert!(field(&fields, "launch.pause_on_home").promotable && field(&fields, "launch.options.batch").promotable);
+        assert!(!field(&fields, "launch.mangohud").promotable, "nothing of the game's own");
+        assert!(!field(&fields, "launch.runner_exe").promotable && !field(&fields, "launch.exe").promotable, "a game's alone");
+        assert!(field(&fields, "launch.env").entries.iter().all(|e| e.promotable == (e.name == "FROM_GAME")));
+
+        core.promote_field(&form, "launch.pause_on_home").await.unwrap();
+        core.promote_field(&form, "launch.env.FROM_GAME").await.unwrap();
+        core.promote_field(&form, "launch.options.batch").await.unwrap();
+        let fields = core.form(&form, None).await.unwrap();
+        let pause = field(&fields, "launch.pause_on_home");
+        assert_eq!((pause.own.as_str(), pause.value.as_str(), pause.origin), ("", "false", Some(Origin::Global)));
+        let env = field(&fields, "launch.env");
+        assert_eq!(env.entries.iter().map(|e| (e.name.as_str(), e.origin)).collect::<Vec<_>>(), [("FROM_GAME", Origin::Global)]);
+        let batch = field(&fields, "launch.options.batch");
+        assert_eq!((batch.own.as_str(), batch.value.as_str(), batch.origin), ("", "false", Some(Origin::Runner)));
+        assert!(core.promote_field(&form, "launch.pause_on_home").await.is_err(), "the game no longer sets it");
+        assert!(core.promote_field(&form, "launch.exe").await.is_err(), "no global program");
     }
 
     #[tokio::test]
