@@ -76,7 +76,7 @@ fn chevron() -> gtk::Image {
     gtk::Image::from_icon_name("go-next-symbolic")
 }
 
-/// `page`: `launch`, `runners`, `stores`, `modules` or `artwork`; empty for the first.
+/// `page`: `launch`, `runners`, `stores`, `modules`, `controller` or `artwork`; empty for the first.
 pub fn present(win: &Window, page: &str) {
     let dialog = adw::PreferencesDialog::builder().search_enabled(true).content_height(720).build();
     let connector = win.connector();
@@ -100,6 +100,9 @@ pub fn present(win: &Window, page: &str) {
     dialog.add(&modules.page);
     load_modules(&dialog, &modules, &connector);
 
+    let controller = crate::dialogs::controller::page(&dialog);
+    dialog.add(&controller.page);
+
     let artwork = ListPage::new("artwork", &gettext("Artwork"), "image-x-generic-symbolic");
     dialog.add(&artwork.page);
     load_artwork(&artwork, win);
@@ -113,7 +116,7 @@ pub fn present(win: &Window, page: &str) {
 
     let (app, job) = (win.app().downgrade(), RefCell::new(Some(job)));
     dialog.connect_closed(move |_| {
-        let _ = (&launch, &runners, &stores, &modules, &artwork);
+        let _ = (&launch, &runners, &stores, &modules, &controller, &artwork);
         if let (Some(app), Some(job)) = (app.upgrade(), job.take()) {
             app.disconnect(job);
         }

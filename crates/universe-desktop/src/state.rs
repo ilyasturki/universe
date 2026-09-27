@@ -14,11 +14,22 @@ pub struct State {
     pub sort: String,
     pub show_hidden: bool,
     pub onboarded: bool,
+    /// The pad whose buttons Preferences › Controller shows while none is connected.
+    pub controller_family: String,
 }
 
 impl Default for State {
     fn default() -> State {
-        State { width: 1180, height: 760, maximized: false, view: "all".into(), sort: "last-played".into(), show_hidden: false, onboarded: false }
+        State {
+            width: 1180,
+            height: 760,
+            maximized: false,
+            view: "all".into(),
+            sort: "last-played".into(),
+            show_hidden: false,
+            onboarded: false,
+            controller_family: String::new(),
+        }
     }
 }
 
