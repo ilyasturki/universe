@@ -1,6 +1,6 @@
 pkgbase = universe-git
 	pkgdesc = Gamepad-first game launcher: a Rust core, a PySide6 UI, games inside gamescope (latest commit)
-	pkgver = 0.0.6.r86.gd7c4d19
+	pkgver = 0.0.6.r160.g030024d
 	pkgrel = 1
 	url = https://github.com/ilyasturki/universe
 	arch = x86_64
@@ -18,11 +18,14 @@ pkgbase = universe-git
 	makedepends = python-setuptools
 	makedepends = scdoc
 	options = !lto
+	options = !debug
 	source = universe::git+https://github.com/ilyasturki/universe.git
+	source = GalaxyCommunication-comet-0.3.2.exe::https://github.com/imLinguin/comet/releases/download/v0.3.2/GalaxyCommunication-dummy.exe
 	sha256sums = SKIP
+	sha256sums = c7695267da363a861af99db95cafe68b732ae743e5830b4feea1bc7ee745f99d
 
 pkgname = universe-git
-	depends = gcc-libs
+	depends = libgcc
 	depends = glibc
 	depends = hicolor-icon-theme
 	depends = python
@@ -53,12 +56,12 @@ pkgname = universe-git
 	optdepends = grim: screenshots on sway, hyprland and niri
 	optdepends = spectacle: screenshots on KDE Plasma
 	optdepends = universe-desktop-git: the library in a GTK app for mouse and keyboard
-	provides = universe
+	provides = universe=0.0.6.r160.g030024d
 	conflicts = universe
 
 pkgname = universe-desktop-git
 	pkgdesc = The Universe game library for mouse and keyboard: a GTK 4 and libadwaita app (latest commit)
-	depends = gcc-libs
+	depends = libgcc
 	depends = glibc
 	depends = gst-plugins-base
 	depends = gst-plugins-good
@@ -68,5 +71,5 @@ pkgname = universe-desktop-git
 	depends = universe
 	optdepends = gst-libav: recordings played in the app (H.264, HEVC)
 	optdepends = gst-plugins-bad: recordings played in the app (AV1, VA-API)
-	provides = universe-desktop
+	provides = universe-desktop=0.0.6.r160.g030024d
 	conflicts = universe-desktop

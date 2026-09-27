@@ -8,6 +8,8 @@ arch=('x86_64')
 url='https://github.com/ilyasturki/universe'
 license=('MIT')
 makedepends=('python-installer')
+# the release binaries come stripped
+options=('!debug' '!strip')
 # the release asset's name carries no version
 source=(
   "$pkgbase-$pkgver.tar.gz::$url/releases/download/v$pkgver/universe-x86_64-linux.tar.gz"
@@ -28,7 +30,7 @@ _desktop=(
 
 package_universe-bin() {
   depends=(
-    'gcc-libs'
+    'libgcc'
     'glibc'
     'hicolor-icon-theme'
     'python'
@@ -62,7 +64,7 @@ package_universe-bin() {
     'spectacle: screenshots on KDE Plasma'
     'universe-desktop-bin: the library in a GTK app for mouse and keyboard'
   )
-  provides=('universe')
+  provides=("universe=$pkgver")
   conflicts=('universe')
   cd "universe-$pkgver"
   for wheel in wheels/*.whl; do
@@ -85,7 +87,7 @@ package_universe-bin() {
 package_universe-desktop-bin() {
   pkgdesc='The Universe game library for mouse and keyboard: a GTK 4 and libadwaita app (prebuilt release)'
   depends=(
-    'gcc-libs'
+    'libgcc'
     'glibc'
     'gst-plugins-base'
     'gst-plugins-good'
@@ -98,7 +100,7 @@ package_universe-desktop-bin() {
     'gst-libav: recordings played in the app (H.264, HEVC)'
     'gst-plugins-bad: recordings played in the app (AV1, VA-API)'
   )
-  provides=('universe-desktop')
+  provides=("universe-desktop=$pkgver")
   conflicts=('universe-desktop')
   cd "universe-$pkgver"
   install -Dm755 bin/universe-desktop -t "$pkgdir/usr/bin"

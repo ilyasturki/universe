@@ -1,7 +1,7 @@
 # Maintainer: Ilyas Turki <turki.ilyass@gmail.com>
 pkgbase=universe-git
 pkgname=(universe-git universe-desktop-git)
-pkgver=0.0.6.r86.gd7c4d19
+pkgver=0.0.6.r160.g030024d
 pkgrel=1
 pkgdesc='Gamepad-first game launcher: a Rust core, a PySide6 UI, games inside gamescope (latest commit)'
 arch=('x86_64')
@@ -21,10 +21,15 @@ makedepends=(
   'scdoc'
 )
 checkdepends=('tzdata')
-# makepkg's -flto C objects (ring's) are GCC bitcode that rust-lld cannot link
-options=('!lto')
-source=("universe::git+$url.git")
-sha256sums=('SKIP')
+# makepkg's -flto C objects (ring's) are GCC bitcode that rust-lld cannot link; Cargo.toml strips, so a debug package would be empty
+options=('!lto' '!debug')
+# the stub is the flake's galaxyServiceStub
+source=(
+  "universe::git+$url.git"
+  'GalaxyCommunication-comet-0.3.2.exe::https://github.com/imLinguin/comet/releases/download/v0.3.2/GalaxyCommunication-dummy.exe'
+)
+sha256sums=('SKIP'
+            'c7695267da363a861af99db95cafe68b732ae743e5830b4feea1bc7ee745f99d')
 
 pkgver() {
   cd universe
@@ -58,7 +63,7 @@ check() {
 
 package_universe-git() {
   depends=(
-    'gcc-libs'
+    'libgcc'
     'glibc'
     'hicolor-icon-theme'
     'python'
@@ -92,7 +97,7 @@ package_universe-git() {
     'spectacle: screenshots on KDE Plasma'
     'universe-desktop-git: the library in a GTK app for mouse and keyboard'
   )
-  provides=('universe')
+  provides=("universe=$pkgver")
   conflicts=('universe')
   cd universe
   python -m installer --destdir="$pkgdir" dist/*.whl
@@ -102,6 +107,7 @@ package_universe-git() {
     cp -r "$kind/." "$pkgdir/usr/share/universe/$kind"
     rm -rf "$pkgdir/usr/share/universe/$kind"/*/tests
   done
+  install -Dm644 "$srcdir/GalaxyCommunication-comet-0.3.2.exe" "$pkgdir/usr/share/universe/sources/gog/GalaxyCommunication.exe"
   install -Dm644 extension/metadata.json extension/extension.js -t "$pkgdir/usr/share/gnome-shell/extensions/universe@ilyasturki.github.io"
   install -Dm644 gen/man/*.1 -t "$pkgdir/usr/share/man/man1"
   install -Dm644 gen/universe.fish "$pkgdir/usr/share/fish/vendor_completions.d/universe.fish"
@@ -116,7 +122,7 @@ package_universe-git() {
 package_universe-desktop-git() {
   pkgdesc='The Universe game library for mouse and keyboard: a GTK 4 and libadwaita app (latest commit)'
   depends=(
-    'gcc-libs'
+    'libgcc'
     'glibc'
     'gst-plugins-base'
     'gst-plugins-good'
@@ -129,7 +135,7 @@ package_universe-desktop-git() {
     'gst-libav: recordings played in the app (H.264, HEVC)'
     'gst-plugins-bad: recordings played in the app (AV1, VA-API)'
   )
-  provides=('universe-desktop')
+  provides=("universe-desktop=$pkgver")
   conflicts=('universe-desktop')
   cd universe
   install -Dm755 target/release/universe-desktop -t "$pkgdir/usr/bin"

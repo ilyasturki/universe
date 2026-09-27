@@ -20,10 +20,15 @@ makedepends=(
   'scdoc'
 )
 checkdepends=('tzdata')
-# makepkg's -flto C objects (ring's) are GCC bitcode that rust-lld cannot link
-options=('!lto')
-source=("$pkgbase-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz")
-sha256sums=('SKIP')
+# makepkg's -flto C objects (ring's) are GCC bitcode that rust-lld cannot link; Cargo.toml strips, so a debug package would be empty
+options=('!lto' '!debug')
+# the stub is the flake's galaxyServiceStub
+source=(
+  "$pkgbase-$pkgver.tar.gz::$url/archive/v$pkgver.tar.gz"
+  'GalaxyCommunication-comet-0.3.2.exe::https://github.com/imLinguin/comet/releases/download/v0.3.2/GalaxyCommunication-dummy.exe'
+)
+sha256sums=('SKIP'
+            'c7695267da363a861af99db95cafe68b732ae743e5830b4feea1bc7ee745f99d')
 
 prepare() {
   cd "$pkgbase-$pkgver"
@@ -52,7 +57,7 @@ check() {
 
 package_universe() {
   depends=(
-    'gcc-libs'
+    'libgcc'
     'glibc'
     'hicolor-icon-theme'
     'python'
@@ -94,6 +99,7 @@ package_universe() {
     cp -r "$kind/." "$pkgdir/usr/share/universe/$kind"
     rm -rf "$pkgdir/usr/share/universe/$kind"/*/tests
   done
+  install -Dm644 "$srcdir/GalaxyCommunication-comet-0.3.2.exe" "$pkgdir/usr/share/universe/sources/gog/GalaxyCommunication.exe"
   install -Dm644 extension/metadata.json extension/extension.js -t "$pkgdir/usr/share/gnome-shell/extensions/universe@ilyasturki.github.io"
   install -Dm644 gen/man/*.1 -t "$pkgdir/usr/share/man/man1"
   install -Dm644 gen/universe.fish "$pkgdir/usr/share/fish/vendor_completions.d/universe.fish"
@@ -108,7 +114,7 @@ package_universe() {
 package_universe-desktop() {
   pkgdesc='The Universe game library for mouse and keyboard: a GTK 4 and libadwaita app'
   depends=(
-    'gcc-libs'
+    'libgcc'
     'glibc'
     'gst-plugins-base'
     'gst-plugins-good'
