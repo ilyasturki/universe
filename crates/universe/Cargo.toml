@@ -32,7 +32,7 @@ x11rb = "0.14.0"
 trash = "5"
 yaml-rust2 = "0.13"
 rustix = { version = "1", features = ["fs", "process"] }
-futures-util = { version = "0.3", default-features = false }
+futures-util = { version = "0.3", default-features = false, features = ["alloc"] }
 percent-encoding = "2"
 anstream = "1"
 drm = "0.15"

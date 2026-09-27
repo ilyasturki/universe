@@ -29,6 +29,8 @@ class Pick:
     variant: str = ""
     member: str = ""
     program: str = ""
+    # A zip unpacked whole, not one holding an AppImage.
+    whole: bool = False
 
 
 @dataclass(frozen=True)
@@ -36,7 +38,7 @@ class Upstream:
     id: str
     name: str
     kind: str
-    # github:owner/repo or forgejo:host/owner/repo
+    # github:owner/repo, forgejo:host/owner/repo or broth:package/channel (itch.io's, whose LATEST names the version)
     repo: str
     picks: tuple[Pick, ...]
     family: str = ""
@@ -47,6 +49,7 @@ class Upstream:
     # tag, asset (name less extension and arch), date (upload day), or re:<pattern> whose group 1 is read off the asset name
     version: str = "tag"
     latest_only: bool = False
+    homepage: str = ""
 
 
 UPSTREAMS = (
@@ -156,6 +159,16 @@ UPSTREAMS = (
         bin="umu-run",
     ),
     Upstream("gogdl", "heroic-gogdl", "tool", "github:Heroic-Games-Launcher/heroic-gogdl", (Pick(r"^gogdl_linux_x86_64$"),), bin="gogdl"),
+    Upstream("legendary", "legendary-gl", "tool", "github:legendary-gl/legendary", (Pick(r"^legendary_linux_x64$"),), bin="legendary"),
+    Upstream(
+        "butler",
+        "butler",
+        "tool",
+        "broth:butler/linux-amd64",
+        (Pick(r"^butler\.zip$", whole=True),),
+        bin="butler",
+        homepage="https://itch.io/docs/butler/",
+    ),
     Upstream(
         "comet",
         "comet",
@@ -194,6 +207,11 @@ def fetch(url: str) -> tuple[str, int, bytes]:
 
 def releases(up: Upstream) -> list[dict]:
     source, _, where = up.repo.partition(":")
+    if source == "broth":
+        with urllib.request.urlopen(request(f"https://broth.itch.zone/{where}/LATEST"), timeout=60) as r:
+            version = r.read().decode().strip()
+        url = f"https://broth.itch.zone/{where}/{version}/archive/default"
+        return [{"tag_name": version, "assets": [{"name": f"{up.bin}.zip", "browser_download_url": url}]}]
     if source == "github":
         base = f"https://api.github.com/repos/{where}/releases"
         found = [get_json(f"{base}/latest")] if up.latest_only else get_json(f"{base}?per_page=30")
@@ -239,7 +257,7 @@ def build_of(up: Upstream, release: dict, known: dict[str, dict]) -> dict | None
         url = asset["browser_download_url"]
         version = version or version_of(up, release, asset)
         entry: dict = {"arch": pick.arch, "url": url, "format": fmt(asset["name"])}
-        zipped = entry["format"] == "zip"
+        zipped = entry["format"] == "zip" and not pick.whole
         for key in ("variant", "member", "program"):
             if getattr(pick, key):
                 entry[key] = getattr(pick, key)
@@ -288,7 +306,7 @@ def component(up: Upstream, previous: dict | None) -> dict:
         if getattr(up, key):
             entry[key] = getattr(up, key)
     source, _, where = up.repo.partition(":")
-    entry["homepage"] = f"https://github.com/{where}" if source == "github" else f"https://{where}"
+    entry["homepage"] = up.homepage or (f"https://github.com/{where}" if source == "github" else f"https://{where}")
     return entry
 
 

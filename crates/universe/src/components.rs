@@ -128,6 +128,12 @@ pub fn builtin() -> Catalogue {
         "gogdl": tool("heroic-gogdl", "gogdl", "1.3.0", serde_json::json!({"format": "binary",
             "url": "https://github.com/Heroic-Games-Launcher/heroic-gogdl/releases/download/v1.3.0/gogdl_linux_x86_64",
             "sha256": "cba013d42767c808237c437335ab1d56f58405d07e8f37b3324d264ea5c49655"})),
+        "legendary": tool("legendary-gl", "legendary", "0.21.1", serde_json::json!({"format": "binary",
+            "url": "https://github.com/legendary-gl/legendary/releases/download/0.21.1/legendary_linux_x64",
+            "sha256": "dbed33bbe96031e65858233e4badf0a1d401bb6cb0cc995d1237cf3a0c826a45"})),
+        "butler": tool("butler", "butler", "15.31.0", serde_json::json!({"format": "zip",
+            "url": "https://broth.itch.zone/butler/linux-amd64/15.31.0/archive/default",
+            "sha256": "4f2a3f22b12f870923504d4b6935535cad377b45859f5fe9419e3adc0611a48c"})),
     }}))
     .expect("the built-in catalogue")
 }

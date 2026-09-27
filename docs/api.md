@@ -466,13 +466,15 @@ none of those variables).
 
 Programs most distributions do not package are fetched by Universe itself when they are not on
 PATH: `umu-run` (umu-launcher's zipapp, which needs python3 3.10 or later) before a Proton
-launch that uses `launch.umu_run`, and `gogdl` (heroic-gogdl's x86_64 build) before any command
-of a source that requires it. They are components (see Components): the catalogue's newest build,
-else the one Universe pins (umu-launcher 1.4.4, heroic-gogdl 1.3.0) when the catalogue cannot be
-reached. `<data>/bin` holds a link to each tool's newest build; every lookup of a program searches
-it after PATH (an installed one wins), and it is appended to the `PATH` of the modules, the sources
-and the units Universe starts. A required binary Universe fetches never makes a source unavailable,
-and `doctor` reports it as fetched on first use.
+launch that uses `launch.umu_run`, and before any command of a source that requires one of them
+`gogdl` (heroic-gogdl's x86_64 build), `legendary` (legendary-gl's Linux build, a python3 zipapp)
+and `butler` (itch.io's archive from broth.itch.zone, a zip kept whole: the program loads the 7-Zip
+libraries beside it). They are components (see Components): the catalogue's newest build, else the
+one Universe pins (umu-launcher 1.4.4, heroic-gogdl 1.3.0, legendary-gl 0.21.1, butler 15.31.0) when
+the catalogue cannot be reached. `<data>/bin` holds a link to each tool's newest build; every lookup
+of a program searches it after PATH (an installed one wins), and it is appended to the `PATH` of the
+modules, the sources and the units Universe starts. A required binary Universe fetches never makes a
+source unavailable, and `doctor` reports it as fetched on first use.
 
 ## Sources
 
@@ -586,7 +588,8 @@ file flag and the game file (`launch.exe`: a ROM, an image, an EBOOT.BIN, a fold
 What runs a game or a source and can be installed: Proton builds, Wine builds, emulators, the
 tools Universe fetches, and the system tools only the distribution installs well. An id is the
 runner's for an emulator and Wine (`eden`, `wine`), the build's own for Proton (`ge-proton`,
-`proton-cachyos`, `proton-em`, `umu-proton`), the program's for a tool (`umu-run`, `gogdl`, `comet`)
+`proton-cachyos`, `proton-em`, `umu-proton`), the program's for a tool (`umu-run`, `gogdl`, `comet`,
+`legendary`, `butler`)
 and for a system tool (`gamescope`, `mangohud`, `gpu-screen-recorder`).
 
 | Rust | Python | CLI | Role |

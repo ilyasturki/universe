@@ -34,7 +34,7 @@ fn attach_components(out: &mut [Check], config: &Config, packagekit: bool) {
         let id = match c.check.as_str() {
             "proton" if c.detail.starts_with("not installed") || !c.ok => proton.clone().unwrap_or_default(),
             "gog-comet" if !c.ok => "comet".into(),
-            "umu-run" | "gogdl" if c.detail.starts_with("not installed") || !c.ok => c.check.clone(),
+            "umu-run" | "gogdl" | "legendary" | "butler" if c.detail.starts_with("not installed") || !c.ok => c.check.clone(),
             "gamescope" | "mangohud" | "mangohud-32bit" | "gpu-screen-recorder" | "gsr-kms-server" if !c.ok && packagekit => {
                 let tool = match c.check.as_str() {
                     "mangohud-32bit" => "mangohud",

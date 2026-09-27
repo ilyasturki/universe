@@ -70,7 +70,7 @@ mod tests {
     #[test]
     fn fetched_tools_are_searched_after_path() {
         let _lock = crate::paths::ENV_LOCK.lock().unwrap();
-        assert!(find("umu-run").is_some() && find("wine").is_none());
+        assert!(["umu-run", "gogdl", "legendary", "butler"].into_iter().all(|bin| find(bin).is_some()) && find("wine").is_none());
         let path = search_path();
         let dirs: Vec<PathBuf> = std::env::split_paths(&path).collect();
         assert_eq!(dirs.last(), Some(&dir()), "an installed tool wins over a fetched one");
