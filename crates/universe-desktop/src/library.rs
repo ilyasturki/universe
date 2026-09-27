@@ -184,6 +184,32 @@ pub fn search_words(text: &str) -> Vec<String> {
     fold(text).split_whitespace().map(String::from).collect()
 }
 
+/// The ids a search finds, best first: a title that starts with the words, then one with a word starting with each, then
+/// the rest; the last played first among equals. None for no words.
+pub fn rank(rows: &[Row], words: &[String]) -> Vec<String> {
+    if words.is_empty() {
+        return Vec::new();
+    }
+    let whole = words.join(" ");
+    let mut hits: Vec<(u8, &Row)> = rows
+        .iter()
+        .filter(|r| matches(r, words))
+        .map(|r| {
+            let title = fold(&r.title);
+            let tier = if title.starts_with(&whole) {
+                0
+            } else if words.iter().all(|w| title.split_whitespace().any(|t| t.starts_with(w.as_str()))) {
+                1
+            } else {
+                2
+            };
+            (tier, r)
+        })
+        .collect();
+    hits.sort_by(|(ta, a), (tb, b)| ta.cmp(tb).then(b.last_played.cmp(&a.last_played)).then_with(|| fold(&a.sort_title).cmp(&fold(&b.sort_title))));
+    hits.into_iter().map(|(_, r)| r.id.clone()).collect()
+}
+
 pub fn platform_name(platform: &str) -> String {
     match platform {
         "windows" => "Windows".into(),
@@ -251,6 +277,17 @@ mod tests {
         assert!(matches(&hades, &search_words("  WINDOWS ")));
         assert!(!matches(&hades, &search_words("hades nintendo")));
         assert!(matches(&row("Ōkami", 0, 0, 0.0), &search_words("okami")));
+    }
+
+    #[test]
+    fn a_search_ranks_titles_that_start_with_it_first() {
+        let mut xeno = row("Xenoblade Chronicles X", 50, 0, 0.0);
+        xeno.developer = "Monolith Soft".into();
+        let rows = [row("Super Mario Odyssey", 300, 0, 0.0), row("Mario Kart 8 Deluxe", 100, 0, 0.0), row("Paper Mario", 200, 0, 0.0), xeno];
+        assert_eq!(rank(&rows, &search_words("mario")), ["mario kart 8 deluxe", "super mario odyssey", "paper mario"]);
+        assert_eq!(rank(&rows, &search_words("mar kart")), ["mario kart 8 deluxe"]);
+        assert_eq!(rank(&rows, &search_words("monolith")), ["xenoblade chronicles x"], "the developer counts, last");
+        assert!(rank(&rows, &[]).is_empty());
     }
 
     #[test]

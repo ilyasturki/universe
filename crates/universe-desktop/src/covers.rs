@@ -65,7 +65,7 @@ pub async fn texture(path: &str, width: u32, height: u32) -> Option<gdk::Texture
     if let Some(t) = cached(&key) {
         return Some(t);
     }
-    let file = if path.starts_with("https://") || path.starts_with("http://") { fetched(path).await? } else { path.to_string() };
+    let file = if is_web(path) { fetched(path).await? } else { path.to_string() };
     let texture = backend::run(async move { tokio::task::spawn_blocking(move || decode(&file, width, height)).await.ok().flatten() }).await?;
     keep(key, texture.clone());
     Some(texture)
@@ -77,10 +77,24 @@ pub async fn full(path: &str, width: u32, height: u32) -> Option<gdk::Texture> {
     backend::run(async move { tokio::task::spawn_blocking(move || decode(&file, width, height)).await.ok().flatten() }).await
 }
 
+fn is_web(path: &str) -> bool {
+    path.starts_with("https://") || path.starts_with("http://")
+}
+
+fn cache_path(url: &str) -> Option<std::path::PathBuf> {
+    let name = glib::compute_checksum_for_string(glib::ChecksumType::Sha1, url)?;
+    Some(universe::paths::cache_home().join("remote").join(name.as_str()))
+}
+
+/// The picture as a file on this machine: the path itself, a web picture's copy once it was downloaded.
+pub fn on_disk(path: &str) -> Option<std::path::PathBuf> {
+    let file = if is_web(path) { cache_path(path)? } else { std::path::PathBuf::from(path) };
+    file.is_file().then_some(file)
+}
+
 /// A web picture's copy in the cache, downloaded the first time.
 async fn fetched(url: &str) -> Option<String> {
-    let name = glib::compute_checksum_for_string(glib::ChecksumType::Sha1, url)?;
-    let path = universe::paths::cache_home().join("remote").join(name.as_str());
+    let path = cache_path(url)?;
     let file = path.to_string_lossy().into_owned();
     if path.is_file() {
         return Some(file);

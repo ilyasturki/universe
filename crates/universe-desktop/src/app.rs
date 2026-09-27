@@ -32,6 +32,9 @@ pub struct Unlocks {
 
 const BIG_SCREEN: &str = "universe-ui";
 
+// Started by the shell for a search, the app stays up between keystrokes rather than open the core for each.
+const SEARCH_LINGER_MS: u32 = 60_000;
+
 /// A delete held back while its toast offers Undo: what runs once the toast goes.
 pub type Commit = Box<dyn FnOnce() -> Pin<Box<dyn Future<Output = ()>>>>;
 
@@ -61,6 +64,7 @@ mod imp {
         pub unlocks: RefCell<Unlocks>,
         /// Universe Big Screen, while the one started from here runs.
         pub big_screen: RefCell<Option<gio::Subprocess>>,
+        pub search: RefCell<Option<gio::RegistrationId>>,
     }
 
     impl std::fmt::Debug for Application {
@@ -98,6 +102,9 @@ mod imp {
         fn startup(&self) {
             self.parent_startup();
             let app = self.obj();
+            if app.flags().contains(gio::ApplicationFlags::IS_SERVICE) {
+                app.set_inactivity_timeout(SEARCH_LINGER_MS);
+            }
             app.setup_actions();
             app.setup_accels();
             app.open_core();
@@ -106,7 +113,27 @@ mod imp {
 
         fn activate(&self) {
             self.parent_activate();
-            self.obj().window().present();
+            let app = self.obj();
+            app.window().present();
+            if app.is_ready() && self.updates_at.get().is_none() {
+                app.check_updates(None);
+            }
+        }
+
+        fn dbus_register(&self, connection: &gio::DBusConnection, object_path: &str) -> Result<(), glib::Error> {
+            self.parent_dbus_register(connection, object_path)?;
+            match crate::search::register(&self.obj(), connection) {
+                Ok(id) => drop(self.search.replace(Some(id))),
+                Err(e) => tracing::warn!("search provider: {e}"),
+            }
+            Ok(())
+        }
+
+        fn dbus_unregister(&self, connection: &gio::DBusConnection, object_path: &str) {
+            if let Some(id) = self.search.take() {
+                let _ = connection.unregister_object(id);
+            }
+            self.parent_dbus_unregister(connection, object_path);
         }
     }
 
@@ -592,8 +619,54 @@ impl Application {
                 app.follow(events);
             }
             glib::timeout_future_seconds(5).await;
-            app.check_updates(None);
+            if !app.windows().is_empty() {
+                app.check_updates(None);
+            }
         });
+    }
+
+    /// Once the core has opened, or failed to.
+    pub async fn opened(&self) {
+        if self.is_ready() || self.failure().is_some() {
+            return;
+        }
+        let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+        let tx = std::rc::Rc::new(RefCell::new(Some(tx)));
+        let handlers: Vec<glib::SignalHandlerId> = ["core-ready", "core-failed"]
+            .into_iter()
+            .map(|signal| {
+                let tx = tx.clone();
+                self.connect_local(signal, false, move |_| {
+                    if let Some(tx) = tx.borrow_mut().take() {
+                        let _ = tx.send(());
+                    }
+                    None
+                })
+            })
+            .collect();
+        let _ = rx.await;
+        for handler in handlers {
+            self.disconnect(handler);
+        }
+    }
+
+    /// A game picked in the shell's search: its page in the window, and the game started when it can be.
+    pub fn play_from_search(&self, id: &str) {
+        let win = self.window();
+        win.present();
+        if let Some(game) = self.library().get(id) {
+            win.open_game(&game);
+            if game.installed() {
+                win.play(&game);
+            }
+        }
+    }
+
+    /// The shell's search carried over to the library's.
+    pub fn search_from_shell(&self, text: &str) {
+        let win = self.window();
+        win.present();
+        win.search_for(text);
     }
 
     /// The frame sampler runs on the core's runtime; what it lands is announced on the main loop.

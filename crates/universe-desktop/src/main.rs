@@ -15,6 +15,7 @@ mod play;
 mod qr;
 mod rows;
 mod script;
+mod search;
 mod state;
 mod watcher;
 mod widgets;

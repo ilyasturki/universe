@@ -260,6 +260,20 @@ impl Window {
         }
     }
 
+    /// The library's search over every game, set to `text`.
+    pub fn search_for(&self, text: &str) {
+        let imp = self.imp();
+        imp.navigation.pop_to_tag("home");
+        let all = imp.keys.borrow().iter().position(|(key, _)| key == "all");
+        if let Some(index) = all {
+            imp.sidebar.set_selected(index as u32);
+        }
+        let entry = imp.library_page.search_entry();
+        entry.set_text(text);
+        entry.grab_focus();
+        entry.set_position(-1);
+    }
+
     /// Pushes a page over the rest; one already open under the same tag closes first, with what was over it.
     pub fn push_page(&self, page: &adw::NavigationPage) {
         let navigation = &self.imp().navigation;
