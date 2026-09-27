@@ -43,3 +43,22 @@ def test_each_look_keeps_its_own_font(app, tmp_path):
     assert memory.get("ps5Font") == "/fonts/sst.ttf" and memory.get("switch2Font") == "/fonts/udsg.ttf"
     selector.set("switch2")
     assert selector.fontPath == "/fonts/udsg.ttf"
+
+
+def test_a_sound_folder_replaces_the_wavs_it_holds(app, tmp_path):
+    memory = Memory(str(tmp_path / "memory.json"))
+    selector = ThemeSelector(memory, "switch2")
+    folder = tmp_path / "sounds"
+    folder.mkdir()
+    (folder / "ok.wav").write_bytes(b"")
+    (folder / "Tick.WAV").write_bytes(b"")
+    (folder / "notes.txt").write_text("")
+    assert selector.soundFiles == {}
+    selector.soundsPath = str(folder)
+    assert memory.get("switch2Sounds") == str(folder)
+    assert selector.soundFiles == {"tick": f"file://{folder}/Tick.WAV", "ok": f"file://{folder}/ok.wav"}
+    selector.set("ps5")
+    assert selector.soundsPath == "" and selector.soundFiles == {}
+    selector.set("switch2")
+    selector.soundsPath = str(tmp_path / "gone")
+    assert selector.soundFiles == {}

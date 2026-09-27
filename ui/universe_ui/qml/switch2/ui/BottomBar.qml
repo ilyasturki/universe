@@ -52,7 +52,8 @@ FocusScope {
         if (api.keys.isAccept(event)) {
             event.accepted = true;
             if (items.length > 0) {
-                Sound.play("ok");
+                var cue = "icon-" + items[index].icon;
+                Sound.play(Sound.poolSizes[cue] ? cue : "ok");
                 bar.activated(items[index]);
             }
         }

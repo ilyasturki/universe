@@ -18,7 +18,7 @@ Item {
             Sound.play("edge");
             return;
         }
-        Sound.play("select");
+        Sound.play("tab");
         index = next;
         tabs.changed(index);
     }

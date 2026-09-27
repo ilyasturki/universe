@@ -32,7 +32,7 @@ FocusScope {
     }
 
     function step(d) {
-        var next = Sound.stepped(index, d, sections.length);
+        var next = Sound.stepped(index, d, sections.length, "tick-side");
         if (next === index)
             return;
         index = next;
@@ -40,7 +40,7 @@ FocusScope {
     }
 
     function point(i) {
-        Sound.play("tick");
+        Sound.play("tick-side");
         if (i !== index) {
             index = i;
             list.activated(index);
@@ -61,7 +61,7 @@ FocusScope {
     Keys.onUpPressed: step(-1)
     Keys.onDownPressed: step(1)
     Keys.onRightPressed: {
-        Sound.play("tick");
+        Sound.play("tick-side");
         list.escapedRight();
     }
     Keys.onLeftPressed: Sound.play("edge")

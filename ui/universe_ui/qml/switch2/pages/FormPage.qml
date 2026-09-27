@@ -188,8 +188,8 @@ FocusScope {
                 form.setMapEntry(row.form, name, value);
             });
         } else if (row.type === "bool") {
+            Sound.play(row.value ? "deselect" : "select");
             form.toggle(row.form);
-            Sound.play("select");
         } else if (row.key === "link" && source) {
             Sound.play("ok");
             login.begin(args.source);

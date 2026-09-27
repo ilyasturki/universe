@@ -96,11 +96,11 @@ FocusScope {
     }
 
     function step(d) {
-        index = Sound.stepped(index, d, last + 1);
+        index = Sound.stepped(index, d, last + 1, "tick-tile");
     }
 
     function point(i) {
-        Sound.play("tick");
+        Sound.play("tick-tile");
         index = i;
         if (!activeFocus)
             page.pointed();

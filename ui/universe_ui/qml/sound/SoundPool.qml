@@ -12,6 +12,21 @@ QtObject {
     readonly property var voices: ({})
     readonly property var lastPlayed: ({})
 
+    // {name: url} played in place of dir's name.wav
+    property var overrides: ({})
+
+    onOverridesChanged: {
+        if (Object.keys(voices).length === 0)
+            return;
+        for (var name in voices) {
+            voices[name].forEach(function (v) {
+                v.fx.destroy();
+            });
+            delete voices[name];
+        }
+        preload();
+    }
+
     function preload() {
         // The singleton outlives the tree: a theme switch back calls this again.
         if (Object.keys(voices).length > 0)
@@ -21,7 +36,7 @@ QtObject {
             for (var i = 0; i < poolSizes[name]; i++)
                 pool.push({
                     fx: voice.createObject(s, {
-                        source: dir + name + ".wav"
+                        source: overrides[name] || dir + name + ".wav"
                     }),
                     at: 0
                 });
@@ -29,9 +44,9 @@ QtObject {
         }
     }
 
-    function stepped(i, d, n) {
+    function stepped(i, d, n, tick) {
         var next = Math.max(0, Math.min(n - 1, i + d));
-        play(next === i ? "edge" : "tick");
+        play(next === i ? "edge" : tick || "tick");
         return next;
     }
 

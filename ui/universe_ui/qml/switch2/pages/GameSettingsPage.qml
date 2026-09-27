@@ -118,8 +118,8 @@ FocusScope {
 
     function activate(index, row) {
         if (row.type === "bool") {
+            Sound.play(row.value ? "deselect" : "select");
             form.toggle(row.form);
-            Sound.play("select");
         } else if (row.map === true) {
             Sound.play("ok");
             Forms.addEntry(shell, row, function (name, value) {

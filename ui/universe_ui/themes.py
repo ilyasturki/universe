@@ -1,3 +1,5 @@
+import os
+
 from PySide6.QtCore import QObject, Signal, Slot
 
 from .qt import Property
@@ -42,6 +44,7 @@ def theme_by_id(ident):
 class ThemeSelector(QObject):
     changed = Signal()
     fontChanged = Signal()
+    soundsChanged = Signal()
 
     def __init__(self, memory, initial="", parent=None):
         super().__init__(parent)
@@ -61,6 +64,7 @@ class ThemeSelector(QObject):
             self._landing = "themes"
             self.changed.emit()
             self.fontChanged.emit()
+            self.soundsChanged.emit()
         return True
 
     @Slot(result=str)
@@ -68,21 +72,38 @@ class ThemeSelector(QObject):
         landing, self._landing = self._landing, ""
         return landing
 
-    # Stored in ui-memory.json: renaming a look's id orphans its font.
-    def _font_key(self):
-        return self._current["id"] + "Font"
+    # Stored in ui-memory.json as <id>Font and <id>Sounds: renaming a look's id orphans them.
+    def _own(self, suffix):
+        return self._memory.get(self._current["id"] + suffix) or ""
+
+    def _set_own(self, suffix, value, signal):
+        if value == self._own(suffix):
+            return
+        if value:
+            self._memory.set(self._current["id"] + suffix, value)
+        else:
+            self._memory.unset(self._current["id"] + suffix)
+        signal.emit()
 
     def _font(self):
-        return self._memory.get(self._font_key()) or ""
+        return self._own("Font")
 
     def _set_font(self, path):
-        if path == self._font():
-            return
-        if path:
-            self._memory.set(self._font_key(), path)
-        else:
-            self._memory.unset(self._font_key())
-        self.fontChanged.emit()
+        self._set_own("Font", path, self.fontChanged)
+
+    def _sounds(self):
+        return self._own("Sounds")
+
+    def _set_sounds(self, path):
+        self._set_own("Sounds", path, self.soundsChanged)
+
+    def _sound_files(self):
+        folder = self._sounds()
+        try:
+            names = sorted(os.listdir(folder)) if folder else []
+        except OSError:
+            return {}
+        return {n[:-4].lower(): "file://" + os.path.join(folder, n) for n in names if n.lower().endswith(".wav")}
 
     themes = Property(list, lambda self: [dict(t) for t in THEMES], constant=True)
     current = Property(str, lambda self: self._current["id"], notify=changed)
@@ -94,3 +115,7 @@ class ThemeSelector(QObject):
     frame = Property(bool, lambda self: bool(self._current["frame"]), notify=changed)
     ground = Property(str, lambda self: self._current["ground"], notify=changed)
     fontPath = Property(str, _font, _set_font, notify=fontChanged)
+    # A folder of WAVs named as the look's sounds (ok.wav, tick.wav…): each one there replaces the bundled one.
+    soundsPath = Property(str, _sounds, _set_sounds, notify=soundsChanged)
+    # {name: file URL} of the WAVs in soundsPath
+    soundFiles = Property("QVariantMap", _sound_files, notify=soundsChanged)

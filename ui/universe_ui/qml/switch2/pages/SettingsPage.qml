@@ -469,6 +469,20 @@ FocusScope {
                     value: api.theme.fontPath,
                     display: api.theme.fontPath ? api.theme.fontPath.split("/").pop() : "Bundled (BIZ UDPGothic)",
                     detail: "A .ttf you own, such as the Switch's own; applies at once."
+                },
+                {
+                    heading: true,
+                    label: "Sounds",
+                    display: ""
+                },
+                {
+                    label: "Sound folder",
+                    key: "sound_dir",
+                    type: "path",
+                    action: "sounds",
+                    value: api.theme.soundsPath,
+                    display: api.theme.soundsPath ? api.theme.soundsPath.split("/").pop() + " · " + Object.keys(api.theme.soundFiles).length + " sounds" : "Bundled",
+                    detail: "WAVs named ok.wav, tick.wav… replace the bundled ones."
                 }
             ]);
         if (sectionId === "about")
@@ -602,6 +616,10 @@ FocusScope {
             rows.edit(row, function (path) {
                 api.theme.fontPath = path;
             });
+        } else if (row.action === "sounds") {
+            rows.edit(row, function (path) {
+                api.theme.soundsPath = path;
+            });
         }
     }
 
@@ -645,7 +663,7 @@ FocusScope {
             Sound.play("edge");
             return;
         }
-        Sound.play("select");
+        Sound.play(row.value ? "deselect" : "select");
         listForm.toggle(row.form);
     }
 

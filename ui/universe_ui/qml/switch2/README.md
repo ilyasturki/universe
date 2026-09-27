@@ -13,6 +13,12 @@ Touch and the mouse go through `ui/Touch.qml` (a tap picks, a tap on what holds 
 a card that keeps a tap or a drag from what is beneath). Each surface's `point(i)` moves the cursor
 as its keys would and raises `pointed`, on which the page sets its zone.
 
+The sounds are synthesized by `assets/sounds/generate.py` (run it to rewrite the WAVs), each recipe
+modelled on the console's own sound for that action: `tick` for lists, `tick-tile` on the HOME row,
+`tick-side` in a sidebar, `edge`, `ok`, `back`, `tab`, `select` / `deselect` for a toggle,
+`open`, `type`, `home` (reaching HOME, by the button or B), `launch`, and `icon-<icon>` for each
+bottom-bar icon on A. Settings › Themes › Sound folder swaps any of them for a WAV of the same name.
+
 The focus ring's shader ships as `assets/shaders/ring.frag.qsb`, rebuilt from `ring.frag` with
 `qsb --glsl "100 es,120,150" --hlsl 50 --msl 12 -o ring.frag.qsb ring.frag`.
 

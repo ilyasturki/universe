@@ -392,7 +392,7 @@ FocusScope {
                 target: pageLoader.item
                 ignoreUnknownSignals: true
                 function onCloseRequested() {
-                    Sound.play("back");
+                    Sound.play(root.depth === 1 ? "home" : "back");
                     root.pop();
                 }
             }
@@ -633,7 +633,7 @@ FocusScope {
         if (api.keys.isCancel(event)) {
             event.accepted = true;
             if (!root.onHome) {
-                Sound.play("back");
+                Sound.play(root.depth === 1 ? "home" : "back");
                 root.pop();
             } else if (root.homeFocus === "bar") {
                 Sound.play("back");
