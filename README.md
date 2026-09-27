@@ -44,7 +44,7 @@ Reprise, a port of my [Pegasus theme](https://github.com/ilyasturki/pegasus-them
 
 x86_64 Linux with a systemd user session and Python 3.11 to 3.14. gamescope is optional but on by default.
 
-**Arch Linux** (AUR): `universe` builds the latest release, `universe-bin` installs its prebuilt build, `universe-git` builds `main`.
+**Arch Linux** (AUR): `universe` builds the latest release, `universe-bin` installs its prebuilt build, `universe-git` builds `main`. `universe-desktop`, `universe-desktop-bin` and `universe-desktop-git` add Universe Desktop, the GTK app for mouse and keyboard, to each.
 
 ```sh
 paru -S universe
