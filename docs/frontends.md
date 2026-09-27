@@ -5,12 +5,13 @@ speak, no schema to negotiate, and no second implementation to keep in step — 
 links the Rust crate, or imports `universe_core` (the PyO3 module) and calls the same methods the
 CLI calls. [`api.md`](api.md) is the full surface.
 
-The shipped frontend, `universe-ui`, lives in `ui/`: a PySide6 host around two QML looks, the
-[Reprise](https://github.com/ilyasturki/pegasus-theme-reprise) theme and the Switch 2 HOME menu
-(`qml/switch2/`, see its README). What follows is its
-contract and the parts of it that were expensive to get right; a GTK or Windows frontend owes none
-of it except the "Changes" section, which is a property of the core: a Rust frontend takes it from
-`universe::changes` (`api.md` § Changes).
+Two frontends ship. `universe-ui` (Universe Big Screen) lives in `ui/`: a PySide6 host around two
+QML looks, the [Reprise](https://github.com/ilyasturki/pegasus-theme-reprise) theme and the
+Switch 2 HOME menu (`qml/switch2/`, see its README). `universe-desktop` (Universe Desktop) lives in
+`crates/universe-desktop/`: a GTK 4 and libadwaita app for mouse and keyboard, § Universe Desktop.
+Most of what follows is the Qt host's contract and the parts of it that were expensive to get
+right; another frontend owes none of it except the "Changes" section, which is a property of the
+core: a Rust frontend takes it from `universe::changes` (`api.md` § Changes).
 
 ## What QML sees
 
@@ -1004,3 +1005,64 @@ named by `UNIVERSE_FAKE_PAD` (a family id, or `none` for the empty state), with 
 ## Running and testing the shipped host
 
 `man universe-ui` lists the options, `KeyScript` in `universe_ui/gamepad.py` the `--keys` names (the mouse among them: `Mouse:x,y`, `Click:x,y`, `Wheel:x,y,N`, `HWheel:x,y,N` and `Scroll:x,y,N` (a touchpad's pixels), a finger: `Tap:x,y`, `LongTap:x,y,ms` and `Swipe:x1,y1,x2,y2`, all in 1080p design units — 1728 wide in a 16:10 window —, and `Type:text` from the keyboard), `just --list` the dev recipes.
+
+## Universe Desktop
+
+`universe-desktop` (app ID `io.github.ilyasturki.UniverseDesktop`) links the Rust crate: GTK 4.22
+and libadwaita 1.9 over the same core, in the same process. Its pages follow Reprise's, less what
+belongs to the couch (the HOME dock, the hint bar, the on-screen keyboard, the pad driving the
+screens), plus what the CLI gives a desktop: the hidden games, removal that trashes the Wine prefix,
+rescans, the art fetched again, the store's catalogue search and the GNOME Shell extension's setup.
+
+- **The bridge** (`backend.rs`): the core runs on a tokio runtime of its own, which the main loop
+  awaits through `run` (a future), `call` (a core method) and `pinned` (a core future that is not
+  `Send` — `launch`, the source verbs, `sources()`, `media_*`, `achievements` — on a blocking
+  thread). Nothing blocks the main loop, `launch` and its pre-launch hooks included.
+- **Changes**: `universe::changes::watch` with the journal sweep on, each event re-emitted on the
+  application (`changed`). The library keeps one `GameObject` per game across refreshes, so a bound
+  card follows its game.
+- **Ownership**: `adopt_scope()` at startup, as `universe-ui` does. Closing with a game running or
+  a job that can stop asks first; then the game is stopped and its `session-end` waited for, an
+  install or update pauses (the Store resumes it) and the window goes. SIGINT and SIGTERM take the
+  same way out.
+- **One job at a time** (`jobs.rs`): an install, an update, a scan or an art refresh. A store's
+  "update all" steps through its games, so each can be cancelled. The Store page shows the job; its
+  end is a toast, and a notification for an install or update when the window is not focused.
+- **Undo, not confirmation**, for what can come back: hiding, favourites, removing a game, a
+  screenshot, a recording, a journal entry. A removal is held (`Application::defer`) while its toast
+  shows and done when the toast goes, or on quit; Undo, or Ctrl+Z for the newest toast, drops it.
+  Uninstalling and removing with the Wine prefix ask instead.
+- **Search provider**: `org.gnome.Shell.SearchProvider2` at
+  `/io/github/ilyasturki/UniverseDesktop/SearchProvider`, registered with the application on the
+  bus and answered once the core has opened; a result opens the game's page and starts it, "search
+  in the app" carries the terms to the library's search. The shell finds it through
+  `gnome-shell/search-providers/io.github.ilyasturki.UniverseDesktop.search-provider.ini` in a
+  directory of `XDG_DATA_DIRS` only — a distro package or a Nix profile, not install.sh's
+  `~/.local/share` — and starts the app for it through the D-Bus service file
+  (`--gapplication-service`, which stays up a minute between searches), whose `Exec` must name
+  the wrapper by its absolute path: the bus runs it in its own environment. The desktop entry is
+  `DBusActivatable`, so the app grid starts it that way too.
+- **Big Screen**: *Open Big Screen*, in the main menus when `universe-ui` is on PATH, runs it and
+  leaves the window open; not while a game runs, nor twice.
+- **State**: `$XDG_STATE_HOME/universe/desktop.json` holds the window size, the sidebar's pick, the
+  sort, whether hidden games show and whether the first run was seen. A recording's frames come
+  from `universe::frames`, the Qt host's cache.
+
+What cost time:
+
+- A builder's `use_markup(false)` on an `AdwActionRow` or `AdwExpanderRow` reaches the labels after
+  its `title` and `subtitle`, so a title with `&` or `<` fails to parse: rows are made through
+  `rows::plain`, which sets it first, and every toast goes through `Window::toast`, which turns it off.
+- A drawing whose height follows its width trips GTK's measure check inside a scrolled preferences
+  page: the pad art keeps one height.
+- `AdwApplication` loads `shortcuts-dialog.ui` from the resource base path, not from `ui/`: the build
+  script aliases it there, and libadwaita adds `app.shortcuts` and Ctrl+? itself.
+- Ctrl+Z presses a toast's Undo as its button does, `button-clicked` then `dismiss()`: the other
+  order would commit the removal it undoes.
+
+`just desktop` runs it against `.dev/`. `just desktop-shot DIR [steps…]` runs it in a headless
+weston and saves shots: `size:WxH`, `wait:MS`, `action:NAME[::TARGET]` (`~` for a space, looked up
+on the widgets on screen, so a page's own group answers) and `shot:NAME.png`, with
+`GDK_DISABLE=offload,dmabuf` so a playing video is part of the window's render node. A scripted run
+is `NON_UNIQUE`, adopts no scope, sweeps no journal, checks no updates and saves no state; it cannot
+open a popover or answer a dialog. `man universe-desktop` has the options and keys.
