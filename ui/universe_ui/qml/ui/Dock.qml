@@ -56,15 +56,14 @@ FocusScope {
                     icon: "info",
                     label: "Details",
                     kind: "action"
-                }
-            ].concat(listsAchievements ? [achievements] : []).concat([
+                },
                 {
                     id: "pause",
                     icon: "snowflake",
                     label: "Pause on HOME",
                     kind: "toggle"
                 },
-                quit])
+                quit]
         },
         "|",
         {
@@ -72,7 +71,8 @@ FocusScope {
             icon: "camera",
             label: "Screenshot",
             kind: "action"
-        },
+        }
+    ].concat(listsAchievements ? [achievements] : []).concat([
         {
             id: "perf",
             icon: "pulse",
@@ -126,8 +126,10 @@ FocusScope {
                 }
             ]
         }
-    ]
-    readonly property bool listsAchievements: game ? game.achievementsTotal > 0 : false
+    ])
+    // The source's switch (GOG's `achievements`), read on open: off, the game keeps its list but the dock shows none.
+    property bool tracksAchievements: true
+    readonly property bool listsAchievements: tracksAchievements && (game ? game.achievementsTotal > 0 : false)
     readonly property var achievements: ({
             id: "achievements",
             icon: "trophy",
@@ -153,6 +155,7 @@ FocusScope {
 
     // Slot results are not bindings: reread on open, then patched by the change that was just made.
     function refresh() {
+        tracksAchievements = !game || (api.universe.sourceSettingsOf(game.source, game.id) || {}).achievements !== false;
         var cap = api.universe.getSettings("capture", session.id) || {};
         var on = api.universe.modules().some(function (m) {
             return m.id === "capture" && m.enabled;
@@ -274,9 +277,11 @@ FocusScope {
             api.home.toLauncher();
             break;
         case "details":
-        case "achievements":
             Sound.enter();
             api.home.toLauncher(item.id);
+            break;
+        case "achievements":
+            openTray("achievements");
             break;
         case "shot":
             Sound.enter();
@@ -329,11 +334,12 @@ FocusScope {
             api.home.closeDock();
     }
 
-    function openShots() {
+    function openTray(tab) {
         if (hidden || loading)
             return;
         Sound.enter();
         opened = false;
+        shots.tab = tab;
         shots.open = true;
     }
 
@@ -899,6 +905,7 @@ FocusScope {
         height: parent.height
         z: 2
         session: dock.session
+        achievements: dock.listsAchievements
         onCloseRequested: {
             open = false;
             dock.forceActiveFocus();
@@ -931,7 +938,7 @@ FocusScope {
             if (opened && current.kind === "group")
                 sub = Sound.stepped(sub, event.key === Qt.Key_Up ? -1 : 1, current.children.length);
             else if (event.key === Qt.Key_Down)
-                openShots();
+                openTray("shots");
             else
                 Sound.edge();
         } else if (api.keys.isAccept(event)) {

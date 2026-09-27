@@ -12,9 +12,6 @@ FocusScope {
     property var args: ({})
     readonly property var game: args.game || null
     readonly property var store: api.screens.achievements
-    readonly property var rows: store.rows
-    property int index: 0
-    readonly property var current: index >= 0 && index < rows.length ? rows[index] : null
 
     signal closeRequested
 
@@ -31,29 +28,13 @@ FocusScope {
     ]
 
     readonly property real sideMargin: Theme.dp(90)
-    readonly property real listWidth: Theme.dp(760)
 
     Component.onDestruction: store.unload()
 
     onGameChanged: {
-        index = 0;
+        list.index = 0;
         if (game)
             store.load(game.id);
-    }
-
-    onRowsChanged: {
-        if (index >= rows.length)
-            index = Math.max(0, rows.length - 1);
-    }
-
-    function step(d) {
-        var next = Math.max(0, Math.min(rows.length - 1, index + d));
-        if (rows.length === 0 || next === index) {
-            Sound.edge();
-            return;
-        }
-        Sound.tick();
-        index = next;
     }
 
     Keys.onPressed: function (event) {
@@ -72,11 +53,11 @@ FocusScope {
                 store.refresh();
             }
         } else if (vertical) {
-            step(event.key === Qt.Key_Up ? -1 : 1);
+            list.step(event.key === Qt.Key_Up ? -1 : 1);
         } else if (screen) {
-            step(screen * 5);
+            list.step(screen * 5);
         } else if (api.keys.isFirst(event) || api.keys.isLast(event)) {
-            step((api.keys.isFirst(event) ? -1 : 1) * rows.length);
+            list.step((api.keys.isFirst(event) ? -1 : 1) * list.rows.length);
         } else {
             event.accepted = false;
         }
@@ -102,163 +83,16 @@ FocusScope {
         label: "ACHIEVEMENTS"
     }
 
-    Text {
-        anchors.centerIn: parent
-        visible: page.rows.length === 0
-        text: page.store.loading ? "Asking the store…" : page.store.error !== "" ? page.store.error : "This game lists no achievements."
-        color: Theme.textMuted
-        font.family: Theme.sans
-        font.pixelSize: Theme.dp(26)
-    }
-
-    ListView {
+    AchievementList {
         id: list
-
-        Wheel {
-            step: Theme.dp(104) + list.spacing
-        }
 
         anchors.top: header.bottom
         anchors.topMargin: Theme.dp(32)
         anchors.bottom: hintBar.top
         anchors.left: parent.left
-        anchors.leftMargin: page.sideMargin
-        width: page.listWidth
-        model: page.rows
-        currentIndex: page.index
-        interactive: false
-        clip: true
-        spacing: Theme.dp(12)
-        highlightFollowsCurrentItem: true
-        preferredHighlightBegin: 0
-        preferredHighlightEnd: height
-        highlightRangeMode: ListView.ApplyRange
-
-        delegate: SessionRow {
-            id: entry
-
-            width: list.width
-            height: Theme.dp(104)
-            lit: index === page.index
-            muted: !modelData.unlocked
-            title: modelData.name
-            subtitle: modelData.unlocked ? modelData.dateText : modelData.rarityText !== "" ? modelData.rarityText : "Locked"
-            leadWidth: Theme.dp(72)
-            gap: Theme.dp(20)
-
-            Pointer {
-                current: entry.lit
-                radius: Theme.dp(14)
-                onPicked: page.index = index
-            }
-
-            AchievementBadge {
-                anchors.verticalCenter: parent.verticalCenter
-                width: Theme.dp(72)
-                height: width
-                icon: modelData.icon
-                unlocked: modelData.unlocked
-                tint: entry.lit ? Theme.onLight : Theme.text
-            }
-        }
-    }
-
-    Column {
-        id: pane
-
-        anchors.top: list.top
-        anchors.left: list.right
-        anchors.leftMargin: Theme.dp(64)
         anchors.right: parent.right
-        anchors.rightMargin: page.sideMargin
-        spacing: Theme.dp(18)
-        visible: page.rows.length > 0
-
-        Text {
-            text: page.store.unlocked + " of " + page.store.total + " unlocked"
-            color: Theme.text
-            font.family: Theme.sans
-            font.weight: Font.DemiBold
-            font.pixelSize: Theme.dp(34)
-        }
-
-        Rectangle {
-            width: parent.width
-            height: Theme.dp(10)
-            radius: height / 2
-            color: Theme.surface
-
-            Rectangle {
-                width: page.store.total > 0 ? parent.width * page.store.unlocked / page.store.total : 0
-                height: parent.height
-                radius: parent.radius
-                color: Theme.text
-
-                Behavior on width {
-                    Ease {
-                        duration: Theme.durView
-                    }
-                }
-            }
-        }
-
-        Text {
-            width: parent.width
-            text: page.store.loading ? "Asking the store…" : page.store.error !== "" ? page.store.error : page.store.fetchedText !== "" ? "From the store on " + page.store.fetchedText : ""
-            color: page.store.error !== "" ? "#f0757a" : Theme.textMuted
-            font.family: Theme.sans
-            font.pixelSize: Theme.dp(20)
-            elide: Text.ElideRight
-        }
-
-        Item {
-            width: parent.width
-            height: Theme.dp(24)
-        }
-
-        AchievementBadge {
-            width: Theme.dp(160)
-            height: width
-            icon: page.current ? page.current.icon : ""
-            unlocked: page.current ? page.current.unlocked : false
-        }
-
-        Text {
-            width: parent.width
-            text: page.current ? page.current.name : ""
-            color: Theme.text
-            font.family: Theme.sans
-            font.weight: Font.DemiBold
-            font.pixelSize: Theme.dp(32)
-            wrapMode: Text.WordWrap
-        }
-
-        Text {
-            width: parent.width
-            visible: text !== ""
-            text: page.current ? page.current.description : ""
-            color: Theme.textSecondary
-            font.family: Theme.sans
-            font.pixelSize: Theme.dp(24)
-            wrapMode: Text.WordWrap
-        }
-
-        Text {
-            width: parent.width
-            text: !page.current ? "" : page.current.unlocked ? "Unlocked " + page.current.dateText : "Locked"
-            color: page.current && page.current.unlocked ? Theme.text : Theme.textMuted
-            font.family: Theme.sans
-            font.pixelSize: Theme.dp(22)
-        }
-
-        Text {
-            width: parent.width
-            visible: text !== ""
-            text: page.current ? page.current.rarityText : ""
-            color: Theme.textMuted
-            font.family: Theme.sans
-            font.pixelSize: Theme.dp(22)
-        }
+        store: page.store
+        sideMargin: page.sideMargin
     }
 
     HintBar {

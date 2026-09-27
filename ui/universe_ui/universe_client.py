@@ -616,6 +616,7 @@ class CoreClient(QObject):
     def getSourceSettings(self, source):
         return self._guarded({}, self._core.source_settings, source)
 
+    @Slot(str, str, result="QVariant")
     def sourceSettingsOf(self, source, ident):
         return self._guarded({}, self._core.source_settings, source, ident)
 

@@ -38,6 +38,8 @@ class Screens(QObject):
         self._pendingJournals = PendingJournals(client, self)
         self._sessions = SessionsList(client, self)
         self._achievements = AchievementsList(client, self)
+        # The dock's own: the launcher's page may still hold the other, open behind the game.
+        self._dockAchievements = AchievementsList(client, self)
         self._paths = PathBrowser(client, self)
         self._controller = ControllerScreen(client, memory, power, self)
         self._runners = RunnersForm(client, self)
@@ -70,6 +72,7 @@ class Screens(QObject):
     pendingJournals = Property(QObject, lambda self: self._pendingJournals, constant=True)
     sessions = Property(QObject, lambda self: self._sessions, constant=True)
     achievements = Property(QObject, lambda self: self._achievements, constant=True)
+    dockAchievements = Property(QObject, lambda self: self._dockAchievements, constant=True)
     album = Property(QObject, lambda self: self._recordings, constant=True)
     news = Property(QObject, lambda self: self._journal, constant=True)
     paths = Property(QObject, lambda self: self._paths, constant=True)

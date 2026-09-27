@@ -687,7 +687,7 @@ def test_the_dock_renders_over_a_running_game(api, fake, tmp_path, monkeypatch):
     pump(50)
 
 
-def test_the_dock_opens_the_playing_games_achievements(api, fake, monkeypatch):
+def test_the_docks_achievements_open_in_its_tray_while_the_source_tracks_them(api, fake, monkeypatch, tmp_path):
     from universe_ui import fake_core
 
     monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
@@ -703,14 +703,40 @@ def test_the_dock_opens_the_playing_games_achievements(api, fake, monkeypatch):
     overlay.requestActivate()
     pump(300)
     dock = overlay.property("contentItem").childItems()[0].property("item")
-    dock.setProperty("index", [b["id"] for b in dock.property("buttons").toVariant()].index("game"))
-    key(overlay, Qt.Key.Key_Return)
-    assert [c["id"] for c in dock.property("current").toVariant()["children"]] == ["details", "achievements", "pause", "quit"], "a game with a list"
-    key(overlay, Qt.Key.Key_Down)
+    ids = [b["id"] for b in dock.property("buttons").toVariant()]
+    assert ids[ids.index("shot") + 1] == "achievements", "a button of its own, by the camera"
+    game = next(b for b in dock.property("buttons").toVariant() if b["id"] == "game")
+    assert [c["id"] for c in game["children"]] == ["details", "pause", "quit"]
+    dock.setProperty("index", ids.index("achievements"))
     key(overlay, Qt.Key.Key_Return)
     pump(600)
-    root = window.property("contentItem").childItems()[0].property("item")
-    assert api.home.shown == "launcher" and root.property("subOpen") is True, "the launcher, on the game's achievements"
+    tray, trophies = overlay.findChild(QObject, "dockShots"), overlay.findChild(QObject, "dockAchievements")
+    assert tray.property("open") is True and tray.property("showsAchievements") is True
+    assert api.home.shown != "launcher", "over the game, not the launcher"
+    assert len(trophies.property("rows")) == 6 and api.screens.dockAchievements.gameId == "batman-arkham-origins"
+    key(overlay, Qt.Key.Key_Down)
+    assert trophies.property("index") == 1
+    if os.environ.get("UNIVERSE_TEST_SHOTS"):
+        overlay.grabWindow().save(str(tmp_path / "dock-achievements.png"))
+    key(overlay, Qt.Key.Key_Q)
+    assert tray.property("showsAchievements") is False, "LB back to the screenshots"
+    key(overlay, Qt.Key.Key_E)
+    key(overlay, Qt.Key.Key_Up)
+    key(overlay, Qt.Key.Key_Up)
+    pump(600)
+    assert tray.property("open") is False, "Up past the first closes the tray"
+
+    fake.set("batman-arkham-origins", "sources.gog.achievements", "false")
+    api.home.closeDock()
+    pump(400)
+    api.home.openDock()
+    overlay.requestActivate()
+    pump(300)
+    assert "achievements" not in [b["id"] for b in dock.property("buttons").toVariant()], "the source's switch off: no button"
+    key(overlay, Qt.Key.Key_Down)
+    pump(600)
+    key(overlay, Qt.Key.Key_E)
+    assert tray.property("open") is True and tray.property("showsAchievements") is False, "…and no tab"
     stop(api)
     window.close()
     overlay.close()

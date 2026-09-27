@@ -2,20 +2,36 @@ import QtQuick
 import "../core"
 import "../sound"
 
-// ▼ from the dock's row: the playing game's screenshots over the whole frame, this session's first.
+// ▼ from the dock's row: the playing game's screenshots over the whole frame, this session's first; LB RB its achievements.
 FocusScope {
     id: panel
 
     property var session: null
     property bool open: false
     property bool lightbox: false
+    // "shots" or "achievements"; the second only while `achievements` holds.
+    property string tab: "shots"
+    property bool achievements: false
 
+    readonly property bool showsAchievements: achievements && tab === "achievements"
     readonly property var store: api.screens.shots
+    readonly property var trophies: api.screens.dockAchievements
     readonly property var current: grid.current
     readonly property int count: grid.ordered.length
     readonly property int mine: grid.mine
     readonly property bool busy: confirm.open
-    readonly property var hints: lightbox ? [
+    readonly property var tabHint: achievements ? [
+        {
+            glyph: "LB RB",
+            label: showsAchievements ? "Screenshots" : "Achievements"
+        }
+    ] : []
+    readonly property var hints: showsAchievements ? tabHint.concat([
+        {
+            glyph: "B",
+            label: "Dock"
+        }
+    ]) : lightbox ? [
         {
             glyph: "dpad",
             label: "Previous / next"
@@ -39,13 +55,28 @@ FocusScope {
             glyph: "B",
             label: "Dock"
         }
-    ]
+    ].concat(tabHint)
 
     signal closeRequested
 
     function load() {
-        if (session && session.id)
+        if (!session || !session.id)
+            return;
+        if (showsAchievements)
+            trophies.load(session.id);
+        else
             store.load(session.id);
+    }
+
+    function switchTab() {
+        if (!achievements) {
+            Sound.edge();
+            return;
+        }
+        Sound.space();
+        tab = showsAchievements ? "shots" : "achievements";
+        list.index = 0;
+        load();
     }
 
     function view() {
@@ -84,11 +115,16 @@ FocusScope {
     onOpenChanged: {
         if (open) {
             grid.index = 0;
+            list.index = 0;
             lightbox = false;
             load();
             forceActiveFocus();
-        }
+        } else
+            trophies.unload();
     }
+
+    onAchievementsChanged: if (!achievements && tab === "achievements")
+        tab = "shots"
 
     onSessionChanged: if (open)
         load()
@@ -133,7 +169,8 @@ FocusScope {
         Text {
             id: title
             anchors.left: parent.left
-            anchors.right: parent.right
+            anchors.right: tabs.left
+            anchors.rightMargin: Theme.dp(40)
             text: panel.session ? panel.session.title : ""
             color: Theme.text
             font.family: Theme.sans
@@ -141,6 +178,71 @@ FocusScope {
             font.pixelSize: Theme.dp(46)
             elide: Text.ElideRight
         }
+
+        Row {
+            id: tabs
+
+            anchors.right: parent.right
+            anchors.verticalCenter: title.verticalCenter
+            spacing: Theme.dp(40)
+            visible: panel.achievements
+
+            Repeater {
+                model: [
+                    {
+                        id: "shots",
+                        label: "Screenshots"
+                    },
+                    {
+                        id: "achievements",
+                        label: "Achievements"
+                    }
+                ]
+
+                delegate: Text {
+                    readonly property bool active: (modelData.id === "achievements") === panel.showsAchievements
+
+                    text: modelData.label
+                    color: active ? Theme.text : Theme.textTab
+                    font.family: Theme.sans
+                    font.weight: active ? Font.DemiBold : Font.Medium
+                    font.pixelSize: Theme.dp(25)
+
+                    Rectangle {
+                        anchors.top: parent.bottom
+                        anchors.topMargin: Theme.dp(8)
+                        width: parent.width
+                        height: Math.max(2, Theme.dp(3))
+                        color: Theme.text
+                        visible: parent.active
+                    }
+
+                    Pointer {
+                        anchors.margins: -Theme.dp(12)
+                        direct: true
+                        radius: height / 2
+                        onPicked: if (!parent.active)
+                            panel.switchTab()
+                    }
+                }
+            }
+        }
+    }
+
+    AchievementList {
+        id: list
+
+        objectName: "dockAchievements"
+        anchors.top: header.bottom
+        anchors.topMargin: Theme.dp(34)
+        anchors.bottom: parent.bottom
+        anchors.bottomMargin: Theme.dp(Theme.hintBarHeight)
+        anchors.left: parent.left
+        anchors.right: parent.right
+        sideMargin: grid.sideMargin
+        store: panel.trophies
+        pane: false
+        visible: panel.showsAchievements
     }
 
     ShotGrid {
@@ -154,7 +256,8 @@ FocusScope {
         topPadding: Theme.dp(34)
         rows: panel.store.rows
         since: panel.session && panel.session.started_at ? panel.session.started_at : ""
-        active: panel.open && !panel.lightbox
+        active: panel.open && !panel.lightbox && !panel.showsAchievements
+        visible: !panel.showsAchievements
     }
 
     Lightbox {
@@ -193,6 +296,27 @@ FocusScope {
         event.accepted = true;
         if (event.isAutoRepeat && !arrow && !vertical)
             return;
+        if (api.keys.isPrevPage(event) || api.keys.isNextPage(event)) {
+            if (!lightbox)
+                switchTab();
+            return;
+        }
+        if (showsAchievements) {
+            var screen = api.keys.isScreenUp(event) ? -1 : api.keys.isScreenDown(event) ? 1 : 0;
+            if (api.keys.isCancel(event))
+                close();
+            else if (event.key === Qt.Key_Up && list.index === 0 && !event.isAutoRepeat)
+                close();
+            else if (event.key === Qt.Key_Up)
+                list.step(-1);
+            else if (event.key === Qt.Key_Down)
+                list.step(1);
+            else if (screen)
+                list.step(screen * 5);
+            else
+                Sound.edge();
+            return;
+        }
         if (lightbox) {
             if (api.keys.isCancel(event) || api.keys.isAccept(event)) {
                 Sound.cancel();

@@ -10,6 +10,7 @@ Rectangle {
     property bool muted: false
     property string mark: ""
     property bool showMark: false
+    property string trailing: ""
     property real leadWidth: 0
     property real leadMargin: Theme.dp(22)
     property real gap: Theme.dp(20)
@@ -34,7 +35,7 @@ Rectangle {
     Column {
         anchors.left: leadSlot.right
         anchors.leftMargin: row.leadWidth > 0 ? row.gap : 0
-        anchors.right: markGlyph.visible ? markGlyph.left : parent.right
+        anchors.right: trailingText.visible ? trailingText.left : markGlyph.visible ? markGlyph.left : parent.right
         anchors.rightMargin: Theme.dp(20)
         anchors.verticalCenter: parent.verticalCenter
         spacing: Theme.dp(6)
@@ -57,6 +58,18 @@ Rectangle {
             font.pixelSize: Theme.dp(20)
             elide: Text.ElideRight
         }
+    }
+
+    Text {
+        id: trailingText
+        anchors.right: markGlyph.visible ? markGlyph.left : parent.right
+        anchors.rightMargin: Theme.dp(22)
+        anchors.verticalCenter: parent.verticalCenter
+        visible: row.trailing !== ""
+        text: row.trailing
+        color: row.lit ? Qt.rgba(0.063, 0.067, 0.086, 0.6) : Theme.textSecondary
+        font.family: Theme.sans
+        font.pixelSize: Theme.dp(19)
     }
 
     MenuGlyph {
