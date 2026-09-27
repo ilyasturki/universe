@@ -150,7 +150,7 @@
         };
       modulesPkg = (treePkg "modules" ./modules).overrideAttrs {
         postFixup = ''
-          substituteInPlace $out/share/universe/modules/pads/bin/_sdl.py \
+          substituteInPlace $out/share/universe/modules/{pads,controls}/bin/_sdl.py \
             --replace-fail '"@libSDL3@"' '"${lib.getLib pkgs.sdl3}/lib/libSDL3.so.0"'
         '';
       };

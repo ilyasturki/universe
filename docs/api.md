@@ -773,6 +773,26 @@ virtual pads' hidraw nodes) or without SDL3, the hook logs why and the game gets
 product, pad}]}` while the forwarder runs; it stops with the session, or by itself once the game's
 unit is gone.
 
+## Emulator controls
+
+The `controls` module writes an emulator's controls for the physical pads held, before each launch
+(Eden for now; its forks' config directories — citron, sudachi, suyu, yuzu — in the core's order).
+Its `pre-launch` hook lists the gamepads through SDL3 under the joystick hints the emulator's own SDL
+sets (Eden: `SDL_JOYSTICK_HIDAPI_XBOX=0`, the Switch drivers per its `enable_joycon_driver` and
+`enable_procon_driver`, the game's `launch.env` `SDL_*` over them), so each pad gets the GUID and
+joystick indices the emulator will see, and maps them as the emulator's auto-mapping would: player
+`n` is the `n`th pad in SDL's order (at most 8), a second pad with the same GUID takes the next
+`port`, players past the last pad are disconnected, and gyro binds to the same pad's motion when
+it has one. `layout` picks the Nintendo face buttons, `positional` (A on the right, as on a Switch
+and as the emulator maps by itself) or `xbox` (A at the bottom), per game over a global default.
+HOME, capture and the paddles stay unbound, so the emulator's `Home+…` hotkeys never fire and
+Universe's macros own them; `guide` binds HOME too. The keys it owns (`player_<0-7>_{type,
+connected, button_*, lstick, rstick, motionleft, motionright}` in `[Controls]`, each with
+`\default=false`) are rewritten on every launch; every other line is left as it is, and the first
+write copies the file to `qt-config.ini.before-universe`. It writes nothing when no pad is held, for
+a runner's `inputplumber` option on, or when the `pads` module serves the game (its virtual pads
+hide the physical ones from the emulator).
+
 ## Modules
 
 | Rust | Python | CLI | Role |

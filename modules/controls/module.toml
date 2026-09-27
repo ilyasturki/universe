@@ -1,0 +1,31 @@
+api = 2
+id = "controls"
+name = "Emulator controls"
+version = "0.0.6"
+description = "Sets up the emulator's controllers for you at every launch: each pad you hold becomes a player, mapped like the emulator would map it. It replaces the controller settings made inside the emulator, so a change made there lasts one session; to keep your own mapping, turn this off for that game. Eden only for now."
+
+[hooks]
+pre-launch = "bin/pre"
+timeout_s  = 10
+
+[[settings]]
+key = "enabled"
+type = "bool"
+default = true
+label = "Set up the emulator's controllers at launch (off: the emulator keeps its own)"
+scope = "game"
+
+[[settings]]
+key = "layout"
+type = "enum"
+default = "positional"
+label = "Nintendo face buttons (positional: A on the right, as on a Switch; xbox: A at the bottom)"
+scope = "game"
+choices = ["positional", "xbox"]
+
+[[settings]]
+key = "guide"
+type = "bool"
+default = false
+label = "Give HOME to the emulator too (capture and paddles always stay Universe's)"
+scope = "global"

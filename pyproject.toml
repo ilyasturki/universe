@@ -37,6 +37,7 @@ include = [
   "modules/screenshot/bin",
   "modules/journal/bin",
   "modules/pads/bin",
+  "modules/controls/bin",
   "sources/gog/bin",
   "crates/universe-py/typings",
   "tools/release-notes",
