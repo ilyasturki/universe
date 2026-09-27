@@ -29,7 +29,7 @@ REFRESH_RATES = [240, 165, 144, 120, 100, 90, 75, 60, 50, 48, 40, 30]
 RESOLUTION_HEIGHTS = [2160, 1800, 1440, 1080, 720]
 STEP_S = 0.15
 SESSION_S = 2.0
-# Before the session exists, as the real core's InputPlumber takeover for an emulator.
+# Before the session exists, as the real core's pre-launch hooks.
 START_S = 0.0
 WINDOW_S = 0.4
 FRAME_S = 0.0
@@ -605,7 +605,6 @@ class FakeCore:
                 "runner_path": launch.get("runner_exe") or spec.get("path") or "",
                 "platform": out.get("platform") or (spec.get("platforms") or [""])[0],
                 "options": options,
-                "inputplumber": bool(options.get("inputplumber")),
             }
         )
         out.setdefault("platform", effective["platform"])

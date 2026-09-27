@@ -148,7 +148,7 @@ def hook(tmp_path, monkeypatch):
     return run, monkeypatch
 
 
-EDEN = {"runner": "eden", "runner_kind": "emulator", "inputplumber": False}
+EDEN = {"runner": "eden", "runner_kind": "emulator"}
 
 
 def test_an_emulator_gets_the_virtual_pads_and_the_forwarder_the_users_sdl_env(hook):
@@ -162,16 +162,9 @@ def test_an_emulator_gets_the_virtual_pads_and_the_forwarder_the_users_sdl_env(h
     assert args[-1].endswith("/forward")
 
 
-@pytest.mark.parametrize(
-    "effective",
-    [
-        {"runner": "proton", "runner_kind": "proton", "inputplumber": False},
-        {**EDEN, "inputplumber": True},
-    ],
-)
-def test_proton_and_inputplumber_games_keep_their_pads(hook, effective):
+def test_a_proton_game_keeps_its_pads(hook):
     run, _ = hook
-    env, args = run(effective)
+    env, args = run({"runner": "proton", "runner_kind": "proton"})
     assert env == ""
     assert args is None
 

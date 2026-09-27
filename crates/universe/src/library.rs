@@ -31,7 +31,6 @@ pub struct Effective {
     pub runner_path: String,
     pub platform: String,
     pub options: serde_json::Map<String, serde_json::Value>,
-    pub inputplumber: bool,
     pub proton: String,
     pub proton_path: String,
     pub esync: bool,
@@ -215,7 +214,6 @@ pub fn resolve_with(game: Game, config: &Config, modules: &[crate::modules::Modu
         runner_kind: spec.map(|s| s.kind.as_str().to_string()).unwrap_or_default(),
         runner_path,
         platform: if game.platform.is_empty() { spec.map(|s| s.default_platform().to_string()).unwrap_or_default() } else { game.platform.clone() },
-        inputplumber: options.get("inputplumber").and_then(|v| v.as_bool()).unwrap_or(false),
         options,
         runner,
         proton_path: located

@@ -22,8 +22,8 @@ operation; a dash means the surface doesn't expose it.
   `ExitType=cgroup` — it lives as long as any process of the game lives. Its
   `ExecStopPost=universe session-end <id> <session>` runs when the cgroup empties, whatever became
   of the launcher: it appends the `sessions.jsonl` line, undoes what the launch began in reverse
-  order (the cursor hiding, InputPlumber, `post_command` for `pre_command`) as the marker lists
-  them, then runs the `session-end` hooks, then the `post-process` hooks.
+  order (the cursor hiding, `post_command` for `pre_command`) as the marker lists them, then runs
+  the `session-end` hooks, then the `post-process` hooks.
 - **Who owns the game's lifetime** depends on the launcher. One that called `adopt_scope()` — the UI,
   and `universe play` without `--no-wait` — was moved into `universe-launcher-<pid>.scope`, and every
   game it launches carries `BindsTo=` + `After=` that scope: the game goes down with the launcher
@@ -100,7 +100,7 @@ comma-separated for lists, `""` deletes the key. A runner is written under its s
            "screenshots": ["path"]},
  "effective": {"runner": "dolphin", "runner_name": "Dolphin", "runner_kind": "emulator",
                "runner_path": "/…/bin/dolphin-emu", "platform": "Nintendo GameCube",
-               "options": {"batch": true, "user_directory": "", "inputplumber": true}, "inputplumber": true,
+               "options": {"batch": true, "user_directory": ""},
                "proton": "proton-ge", "proton_path": "…", "esync": true, "fsync": true, "ntsync": true,
                "wayland": true, "hdr": false, "discrete_gpu": true, "dlss_upgrade": false, "fsr4_upgrade": false, "xess_upgrade": false,
                "optiscaler": false, "mangohud": false, "gamescope": true, "gamescope_args": "", "gamescope_resolution": "auto", "gamescope_refresh": "auto", "gamescope_scaler": "", "gamescope_filter": "", "gamescope_sharpness": null, "gamescope_adaptive_sync": "auto", "fps_limit": "auto", "hide_cursor": true, "env": {},
@@ -539,15 +539,6 @@ The command line of an emulator: `[runners.<id>] args`, the option flags in the 
 file flag and the game file (`launch.exe`: a ROM, an image, an EBOOT.BIN, a folder), then
 `launch.args`. `MANGOHUD=1` and `launch.env` apply as for Proton.
 
-Every emulator carries the `inputplumber` option (default true): before the game unit starts, the
-core restarts the InputPlumber system unit over the system bus (a refusal is logged and the
-session goes on), sets its `ManageAllDevices` property and waits for the first composite device
-(7-9 s on a fresh daemon), so the emulator sees one composite pad and the raw nodes are hidden;
-`session-end` gives the pads back (`ManageAllDevices` off, then a wait for `/dev/inputplumber/
-by-hidden` to empty). The marker remembers that it was engaged, so a `session-end` run by systemd
-alone releases it. The controller watcher reads the composite device like any pad. Without the
-daemon on the system bus the option is skipped and doctor says so.
-
 ## Media
 
 | Rust | Python | CLI | Role |
@@ -763,10 +754,10 @@ pad. Each virtual pad's SDL GUID stays the same from session to session. HOME st
 unless `guide` is on. While the game is frozen the pads report nothing held, so what is pressed
 under the launcher is not queued for the game.
 
-Only an emulator runner with its `inputplumber` option off is served; a Proton, Wine or native
-game keeps the physical pads (Wine's winebus reads hidraw and evdev past SDL's hints). Without
-`/dev/uhid` open to the user (on NixOS `programs.universe.controller.enable`, which also opens the
-virtual pads' hidraw nodes) or without SDL3, the hook logs why and the game gets the physical pads.
+Only an emulator runner is served; a Proton, Wine or native game keeps the physical pads (Wine's
+winebus reads hidraw and evdev past SDL's hints). Without `/dev/uhid` open to the user (on NixOS
+`programs.universe.controller.enable`, which also opens the virtual pads' hidraw nodes) or without
+SDL3, the hook logs why and the game gets the physical pads.
 `$XDG_RUNTIME_DIR/universe/pads-<session>.json` holds `{ready, pid, players: [{player, name, vendor,
 product, pad}]}` while the forwarder runs; it stops with the session, or by itself once the game's
 unit is gone.
@@ -774,9 +765,8 @@ unit is gone.
 ## Emulator controls
 
 The `controls` module sets up an emulator's controllers for the physical pads held, before each
-launch of an emulator runner whose `inputplumber` option is off (nothing when no pad is held, or
-when the `pads` module serves the game: its virtual pads hide the physical ones). Its `pre-launch`
-hook lists the gamepads through SDL3 under the joystick hints the emulator's own SDL sets (they pick
+launch of an emulator runner (nothing when no pad is held, or when the `pads` module serves the
+game: its virtual pads hide the physical ones). Its `pre-launch` hook lists the gamepads through SDL3 under the joystick hints the emulator's own SDL sets (they pick
 the driver that claims a pad, and with it the GUID and indices the emulator sees; the game's
 `launch.env` `SDL_*` go over them), then does two things.
 
@@ -832,7 +822,7 @@ written whole, missing or not.
 | `module_settings(module, game_id)` | `module_settings(…)` | `universe module settings <id> [game]` | global settings merged with the game's; `game_id=""` is global only |
 | `set_module_setting(module, game_id, key, value)` | `set_module_setting(…)` | `universe module set <id> k=v [--game g]` | validated against `[[settings]]`. `game_id=""` writes `config.toml [modules.<id>]`, otherwise `game.toml [modules.<id>]` |
 | `module_setting_choices(module, key)` | `module_setting_choices(…)` | — | the global setting's choices; a setting with `choices_exec` gets them from the module, live (see below) |
-| `doctor()` | `doctor()` | `universe doctor` | `[{check, label, ok, detail, fix, module}]` (`check` a stable id, `label` its plain name, `detail` the problem when not `ok`, `fix` what to do about it, empty when `ok`, worded for the distribution: NixOS options on NixOS, the Arch, Fedora or Debian package names elsewhere): the config file (absent: defaults; read-only), the systemd user manager (250 or later, for `ExitType=cgroup`) and cgroup v2, umu-run (or python3 for the one Universe would fetch), MangoHud and its 32-bit layer, gamescope and mangoapp, required binaries of the enabled modules and sources (`module` names the one, or `core`, `runners`, `media`, `controller`; a tool Universe fetches is fine missing), one line per `required` setting an enabled module is still waiting on, `gsr-kms-server`, Proton, the desktop (`desktop`, then per profile the programs it drives, `desktop-<program>`, a notification daemon where the OSD is a notification, `cursor` where the profile cannot hide it), the cursor and Universe extensions on GNOME, tokens, one `runner-<id>` check per runner a library game uses (its program resolved), `runner-eden-stop` when Eden is one (its `[UI] confirmStop` at `2`, else a stop shows its "close?" question), `inputplumber` when an emulator wants it; `modules` and `sources` say what `config.toml` enables that is not found |
+| `doctor()` | `doctor()` | `universe doctor` | `[{check, label, ok, detail, fix, module}]` (`check` a stable id, `label` its plain name, `detail` the problem when not `ok`, `fix` what to do about it, empty when `ok`, worded for the distribution: NixOS options on NixOS, the Arch, Fedora or Debian package names elsewhere): the config file (absent: defaults; read-only), the systemd user manager (250 or later, for `ExitType=cgroup`) and cgroup v2, umu-run (or python3 for the one Universe would fetch), MangoHud and its 32-bit layer, gamescope and mangoapp, required binaries of the enabled modules and sources (`module` names the one, or `core`, `runners`, `media`, `controller`; a tool Universe fetches is fine missing), one line per `required` setting an enabled module is still waiting on, `gsr-kms-server`, Proton, the desktop (`desktop`, then per profile the programs it drives, `desktop-<program>`, a notification daemon where the OSD is a notification, `cursor` where the profile cannot hide it), the cursor and Universe extensions on GNOME, tokens, one `runner-<id>` check per runner a library game uses (its program resolved), `runner-eden-stop` when Eden is one (its `[UI] confirmStop` at `2`, else a stop shows its "close?" question); `modules` and `sources` say what `config.toml` enables that is not found |
 | — | — | `universe setup` | after an install: on GNOME, writes the `universe@ilyasturki.github.io` extension the binary carries into `~/.local/share/gnome-shell/extensions/` (rewritten when stale; left to a system copy when there is none there) and adds it to `org.gnome.shell enabled-extensions` (out of `disabled-extensions`, which overrides it), read by the shell at the next login; then prints `doctor` |
 
 A module entry is `{id, name, version, description, dir, enabled, available, missing: [bin],

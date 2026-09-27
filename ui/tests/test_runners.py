@@ -32,7 +32,7 @@ def test_runner_form_cards(api, fake):
     assert form.info["meta"] == "Nintendo GameCube, Nintendo Wii · /run/current-system/sw/bin/dolphin-emu"
     assert cards(form) == [
         ("Runner", ["exe", "args", "gamescope"]),
-        ("Options", ["batch", "user_directory", "inputplumber"]),
+        ("Options", ["batch", "user_directory"]),
         ("Games", ["game", "add_file"]),
     ], "every card named, for the sidebar"
     rows = rows_by_key(form)
@@ -197,7 +197,6 @@ def test_game_settings_launch_group_by_runner(api, fake):
         "launch.exe",
         "launch.runner_exe",
         "launch.options.fullscreen",
-        "launch.options.inputplumber",
         "launch.wrapper",
         "launch.args",
         "launch.working_dir",
@@ -211,7 +210,6 @@ def test_game_settings_launch_group_by_runner(api, fake):
     assert rows["launch.exe"]["label"] == "File" and rows["launch.exe"]["value"].endswith("Mini Metro.nsp")
     assert rows["launch.runner_exe"]["inherited"] is True and rows["launch.runner_exe"]["value"].endswith("/eden")
     assert rows["launch.options.fullscreen"]["value"] is False and rows["launch.options.fullscreen"]["inherited"] is False
-    assert rows["launch.options.inputplumber"]["value"] is True and rows["launch.options.inputplumber"]["inherited"] is True
     assert "launch.proton" not in rows and "platform" not in rows, "one platform: no Platform row"
 
     form.load("lego-batman")

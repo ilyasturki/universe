@@ -41,8 +41,6 @@ const fn path_opt(key: &'static str, label: &'static str, argument: &'static str
     OptionSpec { key, kind: "path", default: "", label, argument, off_argument: "" }
 }
 
-pub const INPUTPLUMBER: OptionSpec = bool_opt("inputplumber", true, "Manage pads with InputPlumber", "", "");
-
 #[derive(Debug, Clone)]
 pub struct RunnerSpec {
     pub id: &'static str,
@@ -113,7 +111,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         platforms: &["Nintendo GameCube", "Nintendo Wii"],
         extensions: &["iso", "gcm", "gcz", "ciso", "wbfs", "rvz", "wia", "dol", "elf", "m3u", "wad"],
         file_flag: &["-e"],
-        options: &[bool_opt("batch", true, "Batch mode (quit with the game)", "--batch", ""), path_opt("user_directory", "User directory", "-u"), INPUTPLUMBER],
+        options: &[bool_opt("batch", true, "Batch mode (quit with the game)", "--batch", ""), path_opt("user_directory", "User directory", "-u")],
         via_proton: false,
         file_required: true,
         term_twice: true,
@@ -127,7 +125,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         platforms: &["Nintendo Switch"],
         extensions: &["nsp", "xci", "nca", "nro", "nso", "nsz", "xcz"],
         file_flag: &["-g"],
-        options: &[bool_opt("fullscreen", true, "Fullscreen", "-f", ""), INPUTPLUMBER],
+        options: &[bool_opt("fullscreen", true, "Fullscreen", "-f", "")],
         via_proton: false,
         file_required: true,
         term_twice: false,
@@ -141,7 +139,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         platforms: &["Nintendo Switch"],
         extensions: &["nsp", "xci", "nca", "nro", "nso"],
         file_flag: &[],
-        options: &[bool_opt("fullscreen", true, "Fullscreen", "--fullscreen", ""), INPUTPLUMBER],
+        options: &[bool_opt("fullscreen", true, "Fullscreen", "--fullscreen", "")],
         via_proton: false,
         file_required: true,
         term_twice: true,
@@ -155,7 +153,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         platforms: &["Sony PlayStation 3"],
         extensions: &["bin", "self", "elf", "pkg"],
         file_flag: &[],
-        options: &[bool_opt("nogui", true, "No GUI (quit with the game)", "--no-gui", ""), INPUTPLUMBER],
+        options: &[bool_opt("nogui", true, "No GUI (quit with the game)", "--no-gui", "")],
         via_proton: false,
         file_required: true,
         term_twice: true,
@@ -173,7 +171,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
             bool_opt("fullscreen", true, "Fullscreen", "-fullscreen", ""),
             bool_opt("nogui", true, "No GUI (quit with the game)", "-nogui", ""),
             bool_opt("full_boot", false, "Full boot (BIOS screen)", "-slowboot", ""),
-            INPUTPLUMBER,
         ],
         via_proton: false,
         file_required: true,
@@ -188,11 +185,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         platforms: &["Sony PlayStation"],
         extensions: &["cue", "bin", "chd", "iso", "img", "pbp", "ecm", "mds", "m3u", "psexe", "exe"],
         file_flag: &["--"],
-        options: &[
-            bool_opt("fullscreen", true, "Fullscreen", "-fullscreen", ""),
-            bool_opt("nogui", true, "No GUI (quit with the game)", "-nogui", ""),
-            INPUTPLUMBER,
-        ],
+        options: &[bool_opt("fullscreen", true, "Fullscreen", "-fullscreen", ""), bool_opt("nogui", true, "No GUI (quit with the game)", "-nogui", "")],
         via_proton: false,
         file_required: true,
         term_twice: true,
@@ -206,7 +199,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         platforms: &["Nintendo Wii U"],
         extensions: &["wud", "wux", "wua", "rpx", "iso", "elf"],
         file_flag: &["-g"],
-        options: &[bool_opt("fullscreen", true, "Fullscreen", "-f", ""), path_opt("mlc", "MLC folder", "-m"), INPUTPLUMBER],
+        options: &[bool_opt("fullscreen", true, "Fullscreen", "-f", ""), path_opt("mlc", "MLC folder", "-m")],
         via_proton: false,
         file_required: true,
         term_twice: true,
@@ -220,7 +213,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         platforms: &["Nintendo 3DS"],
         extensions: &["3ds", "3dsx", "cci", "cxi", "cia", "app", "elf", "axf"],
         file_flag: &[],
-        options: &[bool_opt("fullscreen", true, "Fullscreen", "-f", ""), INPUTPLUMBER],
+        options: &[bool_opt("fullscreen", true, "Fullscreen", "-f", "")],
         via_proton: false,
         file_required: true,
         term_twice: true,
@@ -234,7 +227,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         platforms: &["Nintendo DS"],
         extensions: &["nds", "dsi", "ids", "srl"],
         file_flag: &[],
-        options: &[bool_opt("fullscreen", true, "Fullscreen", "--fullscreen", ""), INPUTPLUMBER],
+        options: &[bool_opt("fullscreen", true, "Fullscreen", "--fullscreen", "")],
         via_proton: false,
         file_required: true,
         term_twice: true,
@@ -248,7 +241,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         platforms: &["Nintendo Game Boy Advance", "Nintendo Game Boy"],
         extensions: &["gba", "gb", "gbc", "agb", "mb"],
         file_flag: &[],
-        options: &[bool_opt("fullscreen", true, "Fullscreen", "-f", ""), INPUTPLUMBER],
+        options: &[bool_opt("fullscreen", true, "Fullscreen", "-f", "")],
         via_proton: false,
         file_required: true,
         term_twice: true,
@@ -265,7 +258,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
         options: &[
             bool_opt("fullscreen", true, "Fullscreen", "--fullscreen", ""),
             bool_opt("pause_exit", true, "Quit from the pause menu", "--pause-menu-exit", ""),
-            INPUTPLUMBER,
         ],
         via_proton: false,
         file_required: true,
@@ -280,7 +272,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         platforms: &["Microsoft Xbox"],
         extensions: &["iso", "xiso"],
         file_flag: &["-dvd_path"],
-        options: &[bool_opt("fullscreen", true, "Fullscreen", "-full-screen", ""), INPUTPLUMBER],
+        options: &[bool_opt("fullscreen", true, "Fullscreen", "-full-screen", "")],
         via_proton: false,
         file_required: true,
         term_twice: true,
@@ -294,7 +286,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         platforms: &["Microsoft Xbox 360"],
         extensions: &["iso", "xex", "zar", "xcp"],
         file_flag: &[],
-        options: &[bool_opt("fullscreen", true, "Fullscreen", "--fullscreen", ""), INPUTPLUMBER],
+        options: &[bool_opt("fullscreen", true, "Fullscreen", "--fullscreen", "")],
         via_proton: true,
         file_required: true,
         term_twice: true,
@@ -308,7 +300,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         platforms: &["Sony PlayStation 4"],
         extensions: &["bin", "elf", "self", "pkg"],
         file_flag: &["-g"],
-        options: &[bool_opt("fullscreen", true, "Fullscreen", "-f true", "-f false"), INPUTPLUMBER],
+        options: &[bool_opt("fullscreen", true, "Fullscreen", "-f true", "-f false")],
         via_proton: false,
         file_required: true,
         term_twice: true,
@@ -322,7 +314,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         platforms: &["Sony PlayStation Vita"],
         extensions: &["vpk"],
         file_flag: &["-r"],
-        options: &[bool_opt("fullscreen", true, "Fullscreen", "-F", ""), INPUTPLUMBER],
+        options: &[bool_opt("fullscreen", true, "Fullscreen", "-F", "")],
         via_proton: false,
         file_required: false, // -r takes a title id, not a path
         term_twice: true,
@@ -339,7 +331,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
         options: &[
             bool_opt("fullscreen", true, "Fullscreen", "--fullscreen", "--windowed"),
             bool_opt("hide_osd", true, "Hide the on-screen display", "--noosd", "--osd"),
-            INPUTPLUMBER,
         ],
         via_proton: false,
         file_required: true,
@@ -354,7 +345,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         platforms: &["Nintendo SNES"],
         extensions: &["sfc", "smc", "fig", "swc", "bs"],
         file_flag: &[],
-        options: &[INPUTPLUMBER],
+        options: &[],
         via_proton: false,
         file_required: true,
         term_twice: true,
@@ -368,7 +359,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         platforms: &["Sega Dreamcast"],
         extensions: &["gdi", "cdi", "chd", "cue", "elf", "bin"],
         file_flag: &[],
-        options: &[bool_opt("fullscreen", true, "Fullscreen", "-config window:fullscreen=yes", "-config window:fullscreen=no"), INPUTPLUMBER],
+        options: &[bool_opt("fullscreen", true, "Fullscreen", "-config window:fullscreen=yes", "-config window:fullscreen=no")],
         via_proton: false,
         file_required: true,
         term_twice: true,
@@ -382,7 +373,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         platforms: &["ScummVM"],
         extensions: &[],
         file_flag: &["--auto-detect", "-p"],
-        options: &[bool_opt("fullscreen", true, "Fullscreen", "-f", ""), bool_opt("subtitles", false, "Subtitles", "-n", ""), INPUTPLUMBER],
+        options: &[bool_opt("fullscreen", true, "Fullscreen", "-f", ""), bool_opt("subtitles", false, "Subtitles", "-n", "")],
         via_proton: false,
         file_required: true,
         term_twice: true,
@@ -396,7 +387,7 @@ pub const RUNNERS: &[RunnerSpec] = &[
         platforms: &["MS-DOS"],
         extensions: &["exe", "com", "bat", "conf"],
         file_flag: &[],
-        options: &[bool_opt("fullscreen", true, "Fullscreen", "-fullscreen", ""), bool_opt("exit", true, "Quit with the program", "-exit", ""), INPUTPLUMBER],
+        options: &[bool_opt("fullscreen", true, "Fullscreen", "-fullscreen", ""), bool_opt("exit", true, "Quit with the program", "-exit", "")],
         via_proton: false,
         file_required: true,
         term_twice: true,
@@ -413,7 +404,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
         options: &[
             bool_opt("fullscreen", true, "Fullscreen", "", "-window"),
             bool_opt("skip_gameinfo", true, "Skip the game info screen", "-skip_gameinfo", ""),
-            INPUTPLUMBER,
         ],
         via_proton: false,
         file_required: true,
@@ -618,7 +608,6 @@ mod tests {
         cfg.runners.insert("dolphin".into(), t);
         let merged = s.merged_options(&cfg, None);
         assert_eq!(merged["batch"], false);
-        assert_eq!(merged["inputplumber"], true);
         let args = s.option_args(&merged);
         assert_eq!(args[0], "-u");
         assert!(args[1].ends_with("/dolphin"));

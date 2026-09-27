@@ -47,7 +47,6 @@ pub struct Marker {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "step", rename_all = "snake_case")]
 pub enum Undo {
-    Pads,
     Cursor {
         #[serde(default)]
         restore: crate::desktop::CursorUndo,
@@ -253,13 +252,6 @@ impl Core {
             undo.push(Undo::PostCommand { command: plan.post_command.clone(), cwd: plan.cwd.to_string_lossy().to_string(), env: plan.env.clone() });
         }
         launcher::run_shell(&plan.pre_command, &plan.env, &plan.cwd).await?;
-        if r.effective.inputplumber {
-            if self.host.pads.engage().await {
-                undo.push(Undo::Pads);
-            }
-        } else {
-            self.host.pads.ensure_free().await;
-        }
         if r.effective.hide_cursor {
             let restore = self.host.shell.cursor_enable().await;
             undo.push(Undo::Cursor { restore });
@@ -300,7 +292,6 @@ impl Core {
         for step in undo.iter().rev() {
             match step {
                 Undo::Cursor { restore } => self.host.shell.cursor_restore(restore).await,
-                Undo::Pads => self.host.pads.release().await,
                 // From ExecStopPost the launcher's gamescope may be gone already: told only while it is there.
                 Undo::Hud => {
                     if let Err(e) = self.apply_mangoapp(false, self.nest().is_some()) {
@@ -534,7 +525,6 @@ mod tests {
             .iter()
             .map(|u| match u {
                 Undo::PostCommand { .. } => "post_command",
-                Undo::Pads => "pads",
                 Undo::Cursor { .. } => "cursor",
                 Undo::Hud => "hud",
             })
@@ -558,8 +548,8 @@ mod tests {
         assert_eq!(memory.spec(&format!("universe-controller-{sid}")).expect("the watcher").bind_to.as_deref(), Some(unit.as_str()));
         let marker = read_marker().expect("a marker");
         assert_eq!((marker.current.session_id.as_str(), marker.current.unit.as_str()), (sid.as_str(), unit.as_str()));
-        assert_eq!(undo_steps(&marker), ["post_command", "pads", "cursor"]);
-        assert_eq!(marker.undo[2], Undo::Cursor { restore: crate::desktop::CursorUndo::Nothing });
+        assert_eq!(undo_steps(&marker), ["post_command", "cursor"]);
+        assert_eq!(marker.undo[1], Undo::Cursor { restore: crate::desktop::CursorUndo::Nothing });
         assert_eq!(core.current().await.map(|c| c.id).as_deref(), Some("sample"));
         assert!(!sb.post_ran.exists());
 
@@ -573,8 +563,8 @@ mod tests {
         assert!(read_marker().is_none(), "the marker is gone");
         assert!(sb.post_ran.exists(), "post_command ran");
         let calls = memory.calls();
-        assert_eq!(calls[..3], ["pads:engage".to_string(), "cursor:enable".into(), format!("unit:start {unit}")]);
-        assert_eq!(calls[calls.len() - 2..], ["cursor:restore", "pads:release"], "{calls:?}");
+        assert_eq!(calls[..2], ["cursor:enable".to_string(), format!("unit:start {unit}")]);
+        assert_eq!(calls.last().map(String::as_str), Some("cursor:restore"), "{calls:?}");
 
         core.session_end("sample", &sid, None, None).await.unwrap();
         assert_eq!(sessions::read(&core.get("sample").await.unwrap().game.sessions_path()).unwrap().len(), 1, "idempotent");
@@ -601,27 +591,6 @@ mod tests {
         let (core, memory) = open().await;
         let sid = core.launch("sample", "", "").await.unwrap();
         assert!(memory.spec(&format!("universe-awake-{sid}")).is_none(), "off, nothing holds the desktop awake");
-    }
-
-    #[tokio::test]
-    async fn a_game_that_reads_the_raw_pads_frees_inputplumber_rather_than_engaging() {
-        let _env = crate::paths::ENV_LOCK.lock().unwrap();
-        let _sb = sandbox();
-        // Opting the emulator out of the composite is the same path a Proton or native game takes.
-        let mut g = Game::load(&Game::new("Sample").toml_path()).unwrap();
-        g.launch.options.insert("inputplumber".into(), toml::Value::Boolean(false));
-        g.save().unwrap();
-        let (core, memory) = open().await;
-        let sid = core.launch("sample", "", "").await.unwrap();
-        let unit = format!("universe-game-sample-{sid}.service");
-        let calls = memory.calls();
-        assert!(calls.contains(&"pads:ensure_free".to_string()), "the raw pads are freed before launch: {calls:?}");
-        assert!(!calls.contains(&"pads:engage".to_string()), "no composite is taken: {calls:?}");
-        assert!(!undo_steps(&read_marker().unwrap()).contains(&"pads"), "nothing engaged, so nothing to hand back");
-
-        memory.finish(&unit, 0);
-        core.session_end("sample", &sid, None, None).await.unwrap();
-        assert!(!memory.calls().contains(&"pads:release".to_string()), "release only undoes an engage");
     }
 
     #[tokio::test]
@@ -670,7 +639,7 @@ mod tests {
         assert!(read_marker().is_none());
         assert!(sb.post_ran.exists());
         let calls = memory.calls();
-        assert_eq!(calls[calls.len() - 2..], ["cursor:restore", "pads:release"]);
+        assert_eq!(calls.last().map(String::as_str), Some("cursor:restore"));
         assert!(core.launch("sample", "", "").await.is_ok(), "the next launch is not Busy");
     }
 
@@ -685,9 +654,9 @@ mod tests {
         assert!(read_marker().is_none(), "no marker left");
         assert!(sb.post_ran.exists(), "post_command undoes pre_command");
         let calls = memory.calls();
-        assert_eq!(calls[..2], ["pads:engage", "cursor:enable"]);
-        assert!(calls[2].starts_with("unit:start universe-game-sample-"), "{calls:?}");
-        assert_eq!(calls[3..], ["cursor:restore", "pads:release"]);
+        assert_eq!(calls[0], "cursor:enable");
+        assert!(calls[1].starts_with("unit:start universe-game-sample-"), "{calls:?}");
+        assert_eq!(calls[2..], ["cursor:restore"]);
         memory.refuse_starts(false);
         assert!(core.launch("sample", "", "").await.is_ok());
     }

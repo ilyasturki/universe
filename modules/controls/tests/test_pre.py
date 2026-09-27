@@ -50,7 +50,7 @@ def hook(tmp_path, monkeypatch):
     return run
 
 
-EDEN = {"runner": "eden", "runner_kind": "emulator", "inputplumber": False}
+EDEN = {"runner": "eden", "runner_kind": "emulator"}
 
 
 def test_pre_writes_edens_controls_and_backs_the_file_up_once(hook):
@@ -95,7 +95,6 @@ def test_writes_follow_a_symlink_to_its_target(hook, tmp_path):
     [
         {**EDEN, "runner": "proton", "runner_kind": "proton"},
         {**EDEN, "runner": "xenia"},
-        {**EDEN, "inputplumber": True},
     ],
 )
 def test_pre_leaves_everything_alone_where_it_does_not_apply(hook, effective):

@@ -924,8 +924,7 @@
       "available": true,
       "options": [
         {"key": "batch", "type": "bool", "default": true, "label": "Batch mode (quit with the game)", "value": true, "advanced": false},
-        {"key": "user_directory", "type": "path", "default": "", "label": "User directory", "value": "", "advanced": false},
-        {"key": "inputplumber", "type": "bool", "default": true, "label": "Manage pads with InputPlumber", "value": true, "advanced": false}
+        {"key": "user_directory", "type": "path", "default": "", "label": "User directory", "value": "", "advanced": false}
       ]
     },
     {
@@ -942,8 +941,7 @@
       "source": "path",
       "available": true,
       "options": [
-        {"key": "fullscreen", "type": "bool", "default": true, "label": "Fullscreen", "value": true, "advanced": false},
-        {"key": "inputplumber", "type": "bool", "default": true, "label": "Manage pads with InputPlumber", "value": true, "advanced": false}
+        {"key": "fullscreen", "type": "bool", "default": true, "label": "Fullscreen", "value": true, "advanced": false}
       ]
     },
     {
@@ -959,8 +957,7 @@
       "source": "",
       "available": false,
       "options": [
-        {"key": "nogui", "type": "bool", "default": true, "label": "No GUI (quit with the game)", "value": true, "advanced": false},
-        {"key": "inputplumber", "type": "bool", "default": true, "label": "Manage pads with InputPlumber", "value": true, "advanced": false}
+        {"key": "nogui", "type": "bool", "default": true, "label": "No GUI (quit with the game)", "value": true, "advanced": false}
       ]
     },
     {
@@ -976,8 +973,7 @@
       "source": "config",
       "available": true,
       "options": [
-        {"key": "fullscreen", "type": "bool", "default": true, "label": "Fullscreen", "value": false, "advanced": false},
-        {"key": "inputplumber", "type": "bool", "default": true, "label": "Manage pads with InputPlumber", "value": true, "advanced": false}
+        {"key": "fullscreen", "type": "bool", "default": true, "label": "Fullscreen", "value": false, "advanced": false}
       ]
     }
   ],

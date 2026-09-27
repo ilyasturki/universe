@@ -583,7 +583,6 @@ mod tests {
         assert_eq!(r.effective.runner, "dolphin");
         assert_eq!(r.effective.runner_path, emu.to_string_lossy());
         assert_eq!(r.effective.platform, "Nintendo GameCube");
-        assert!(r.effective.inputplumber);
         assert_eq!(r.effective.working_dir, dir.path().to_string_lossy(), "an empty working directory is the program's folder");
         assert!(r.effective.prefix.is_empty(), "no prefix outside Proton and Wine");
         let p = plan(&r, &cfg, &BTreeMap::new(), None, None, false, true).unwrap();

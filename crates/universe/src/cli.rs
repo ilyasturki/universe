@@ -431,7 +431,7 @@ pub enum RunnerCmd {
         /// Runner id
         id: String,
     },
-    /// Set a runner's global keys: exe=/path args="--flag" fullscreen=false inputplumber=false (an empty value resets)
+    /// Set a runner's global keys: exe=/path args="--flag" fullscreen=false gamescope=false (an empty value resets)
     Set {
         /// Runner id
         id: String,

@@ -42,7 +42,6 @@ optdepends=(
   "gpu-screen-recorder: the capture module's recordings"
   "ffmpeg: the capture module's thumbnails and cuts"
   'trash-cli: recordings deleted to the trash'
-  'inputplumber: one composite pad handed to an emulator'
   "game-devices-udev: /dev/uinput for the controller's key macros"
   'grim: screenshots on sway, hyprland and niri'
   'spectacle: screenshots on KDE Plasma'

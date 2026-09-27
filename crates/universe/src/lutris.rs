@@ -132,7 +132,7 @@ fn see_through(exe: &Path) -> (String, Vec<String>, bool) {
     let Some(line) = text.lines().find(|l| l.trim_start().starts_with("exec ")) else { return itself };
     let Ok(words) = shell_words::split(line.trim_start().trim_start_matches("exec ")) else { return itself };
     let mut words: Vec<String> = words.into_iter().filter(|w| w != "\"$@\"" && w != "$@").collect();
-    // emu-pad: the user's InputPlumber wrapper; the core does that itself now.
+    // emu-pad: the user's InputPlumber wrapper; the controls module stands in for it.
     let wrapped = words.first().map(|w| w.ends_with("emu-pad")).unwrap_or(false);
     if wrapped {
         words.remove(0);

@@ -91,9 +91,6 @@ def main():
     if runner in PROTON_RUNNERS:
         log(f"{runner} runs through Proton, whose SDL reads the pads: controls left as they are")
         return 0
-    if effective.get("inputplumber"):
-        log("InputPlumber has this game's pads (its runner's inputplumber option is on): controls left as they are")
-        return 0
     if pads_module_runs(os.environ.get("GAME_ID", "")):
         log("the pads module serves this game its virtual pads: controls left as they are")
         return 0

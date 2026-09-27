@@ -348,7 +348,6 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         "core",
     );
     let used: std::collections::BTreeSet<&String> = game_runners.iter().chain(config.runners.keys()).collect();
-    let mut inputplumber_wanted = false;
     for id in used {
         let Some(spec) = crate::runners::spec(id) else {
             push(
@@ -374,27 +373,10 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
             format!("install it, or set runners.{}.exe", spec.id),
             "runners",
         );
-        inputplumber_wanted |=
-            spec.kind == crate::runners::Kind::Emulator && spec.merged_options(config, None).get("inputplumber").and_then(|v| v.as_bool()).unwrap_or(false);
         if spec.id == "eden" && ok {
             let (quits, detail, fix) = eden_quits_on_stop();
             push("runner-eden-stop", "Eden quits on stop", quits, detail, fix, "runners");
         }
-    }
-    if inputplumber_wanted {
-        let reachable = crate::inputplumber::reachable().await;
-        push(
-            "inputplumber",
-            "InputPlumber",
-            reachable,
-            if reachable { "daemon reachable".into() } else { "daemon not on the system bus: emulators get the raw pads".into() },
-            match family {
-                Family::NixOs => "enable services.inputplumber, or set runners.<id>.inputplumber = false to stop asking".into(),
-                Family::Arch => "install inputplumber and run systemctl enable --now inputplumber, or set runners.<id>.inputplumber = false to stop asking".into(),
-                _ => "install InputPlumber (packaged on Arch, SteamOS and Bazzite) and enable its service, or set runners.<id>.inputplumber = false to stop asking".into(),
-            },
-            "runners",
-        );
     }
     for (check, label, which_key, file) in
         [("key-sgdb", "SteamGridDB API key", "sgdb", &config.keys.sgdb_file), ("key-rawg", "RAWG API key", "rawg", &config.keys.rawg_file)]

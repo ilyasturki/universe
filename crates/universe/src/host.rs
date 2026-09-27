@@ -14,7 +14,6 @@ use crate::{Error, Result};
 pub struct Host {
     pub units: Units,
     pub shell: Shell,
-    pub pads: Pads,
 }
 
 impl Host {
@@ -22,14 +21,13 @@ impl Host {
         Host {
             units: Units::Systemd(Systemd::default()),
             shell: Shell::Live { profile: crate::desktop::detect(cfg), extension: cfg.desktop.cursor_extension.clone() },
-            pads: Pads::Inputplumber,
         }
     }
 
     #[cfg(test)]
     pub fn memory() -> (Host, Arc<Memory>) {
         let m = Arc::new(Memory::default());
-        (Host { units: Units::Memory(m.clone()), shell: Shell::Memory(m.clone()), pads: Pads::Memory(m.clone()) }, m)
+        (Host { units: Units::Memory(m.clone()), shell: Shell::Memory(m.clone()) }, m)
     }
 }
 
@@ -567,43 +565,6 @@ impl Shell {
 
 pub(crate) async fn session_bus() -> Option<zbus::Connection> {
     zbus::Connection::session().await.inspect_err(|e| tracing::warn!("session bus: {e}")).ok()
-}
-
-pub enum Pads {
-    Inputplumber,
-    #[cfg(test)]
-    Memory(Arc<Memory>),
-}
-
-impl Pads {
-    /// Returns whether the pads were taken, so only then are they given back.
-    pub async fn engage(&self) -> bool {
-        match self {
-            Pads::Inputplumber => crate::inputplumber::engage().await,
-            #[cfg(test)]
-            Pads::Memory(m) => {
-                m.record("pads:engage".into());
-                true
-            }
-        }
-    }
-
-    pub async fn release(&self) {
-        match self {
-            Pads::Inputplumber => crate::inputplumber::release().await,
-            #[cfg(test)]
-            Pads::Memory(m) => m.record("pads:release".into()),
-        }
-    }
-
-    /// Hand the raw pads back before a game that reads them directly, in case a prior session left them held.
-    pub async fn ensure_free(&self) {
-        match self {
-            Pads::Inputplumber => crate::inputplumber::ensure_free().await,
-            #[cfg(test)]
-            Pads::Memory(m) => m.record("pads:ensure_free".into()),
-        }
-    }
 }
 
 #[cfg(test)]

@@ -14,8 +14,13 @@ let
   '';
 in
 {
+  imports = [
+    (lib.mkRemovedOptionModule [ "programs" "universe" "inputplumber" "enable" ]
+      "Universe no longer drives InputPlumber: the controls module sets each emulator's pads up itself."
+    )
+  ];
   options.programs.universe = {
-    enable = lib.mkEnableOption "Universe game launcher (system side: gsr-kms-server, uinput, uhid, InputPlumber, gamescope)";
+    enable = lib.mkEnableOption "Universe game launcher (system side: gsr-kms-server, uinput, uhid, gamescope)";
     capture.enable = lib.mkOption {
       type = lib.types.bool;
       default = true;
@@ -25,11 +30,6 @@ in
       type = lib.types.bool;
       default = true;
       description = "What the controller macros and the pads module need from the system: /dev/uinput (key macros type through it; add your user to the uinput group), the game-devices udev rules that make pads readable by the logged-in user, and /dev/uhid with the virtual pads' hidraw nodes opened to that user (the pads module creates one virtual pad per player there).";
-    };
-    inputplumber.enable = lib.mkOption {
-      type = lib.types.bool;
-      default = true;
-      description = "The InputPlumber daemon, which the emulators' `inputplumber` option uses to hand the pads to the emulator as one composite device for the session.";
     };
     gamescope.enable = lib.mkOption {
       type = lib.types.bool;
@@ -49,7 +49,6 @@ in
       }
     ];
     hardware.uinput.enable = lib.mkIf cfg.controller.enable true;
-    services.inputplumber.enable = lib.mkIf cfg.inputplumber.enable true;
     services.udev.packages = lib.mkIf cfg.controller.enable [
       pkgs.game-devices-udev-rules
       padsRules

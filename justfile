@@ -107,7 +107,7 @@ lint *args:
 # Every local gate, lint then every suite: what the pre-push hook runs (`just check` is the sandboxed version)
 verify: lint test
 
-# Against this machine: transient units on the user systemd, a scope around the test process, the InputPlumber daemon (pads hidden ~10 s), the DRM cards
+# Against this machine: transient units on the user systemd, a scope around the test process, the DRM cards
 test-live: build
     @{{ nix }} cargo test -- --ignored live
 
