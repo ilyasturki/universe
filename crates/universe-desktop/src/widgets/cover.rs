@@ -53,7 +53,8 @@ mod imp {
     impl ObjectImpl for Cover {
         fn constructed(&self) {
             self.parent_constructed();
-            let placeholder = gtk::Image::builder().icon_name(format!("{}-symbolic", config::APP_ID)).pixel_size(72).css_classes(["dimmed"]).build();
+            let size = self.art_width.get().min(self.art_height.get()) * 9 / 25;
+            let placeholder = gtk::Image::builder().icon_name(format!("{}-symbolic", config::APP_ID)).pixel_size(size).css_classes(["dimmed"]).build();
             self.frame.add_named(&placeholder, Some("placeholder"));
             self.frame.add_named(&self.picture, Some("art"));
             self.frame.set_visible_child_name("placeholder");
@@ -134,6 +135,10 @@ glib::wrapper! {
 }
 
 impl Cover {
+    pub fn new(width: i32, height: i32) -> Self {
+        glib::Object::builder().property("art-width", width).property("art-height", height).build()
+    }
+
     /// Decodes the file again: the art under the same path was replaced.
     pub fn reload(&self) {
         covers::forget(&self.path());

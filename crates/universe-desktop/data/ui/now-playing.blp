@@ -1,0 +1,137 @@
+using Gtk 4.0;
+using Adw 1;
+
+template $UniverseNowPlaying: Adw.Bin {
+  child: MenuButton button {
+    direction: up;
+    margin-start: 6;
+    margin-end: 6;
+    margin-top: 6;
+    margin-bottom: 6;
+    tooltip-text: _("Now Playing");
+
+    child: Box {
+      spacing: 10;
+
+      $UniverseCover thumb {
+        art-width: 32;
+        art-height: 48;
+      }
+
+      Box {
+        orientation: vertical;
+        valign: center;
+        spacing: 2;
+
+        Label title {
+          ellipsize: end;
+          xalign: 0;
+
+          styles [
+            "heading",
+          ]
+        }
+
+        Box {
+          spacing: 6;
+
+          Label rec {
+            label: _("REC");
+            visible: false;
+            tooltip-text: _("This session is being recorded");
+
+            styles [
+              "rec",
+            ]
+          }
+
+          Label clock {
+            xalign: 0;
+
+            styles [
+              "dimmed",
+              "caption",
+              "numeric",
+            ]
+          }
+        }
+      }
+    };
+
+    popover: Popover popover {
+      child: Box {
+        orientation: vertical;
+        spacing: 12;
+        margin-top: 12;
+        margin-bottom: 12;
+        margin-start: 12;
+        margin-end: 12;
+        width-request: 280;
+
+        Label popover_title {
+          wrap: true;
+          xalign: 0;
+
+          styles [
+            "title-4",
+          ]
+        }
+
+        Box {
+          spacing: 6;
+          homogeneous: true;
+
+          Button {
+            action-name: "win.focus-game";
+
+            child: Adw.ButtonContent {
+              icon-name: "window-restore-symbolic";
+              label: _("Show Game");
+            };
+          }
+
+          Button {
+            action-name: "win.screenshot";
+
+            child: Adw.ButtonContent {
+              icon-name: "applets-screenshooter-symbolic";
+              label: _("Screenshot");
+            };
+          }
+        }
+
+        ListBox {
+          selection-mode: none;
+
+          styles [
+            "boxed-list",
+          ]
+
+          Adw.SwitchRow hud {
+            title: _("MangoHud");
+            subtitle: _("Frame rate and load over the game");
+          }
+
+          Adw.ComboRow fps {
+            title: _("Frame Rate Limit");
+          }
+        }
+
+        Button {
+          action-name: "win.stop";
+          label: _("Quit Game");
+
+          styles [
+            "pill",
+            "destructive-action",
+          ]
+        }
+      };
+    };
+
+    styles [
+      "flat",
+      "now-playing",
+    ]
+  };
+}

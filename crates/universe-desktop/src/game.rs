@@ -31,6 +31,8 @@ pub struct Row {
     pub banner: String,
     pub background: String,
     pub logo: String,
+    /// Where the game's files are: its install folder, else the folder of its program or ROM.
+    pub folder: String,
 }
 
 fn unix(rfc3339: &str) -> i64 {
@@ -64,6 +66,11 @@ impl Row {
             banner: slot("banner"),
             background: slot("background"),
             logo: slot("logo"),
+            folder: if g.source.dir.is_empty() {
+                g.exe_path().parent().filter(|_| !g.launch.exe.is_empty()).map(|p| p.to_string_lossy().into_owned()).unwrap_or_default()
+            } else {
+                universe::paths::expand(&g.source.dir).to_string_lossy().into_owned()
+            },
         }
     }
 }
@@ -94,6 +101,8 @@ mod imp {
         pub cover: RefCell<String>,
         #[property(get, set)]
         pub playing: Cell<bool>,
+        #[property(get, set)]
+        pub launching: Cell<bool>,
         pub row: RefCell<Row>,
     }
 

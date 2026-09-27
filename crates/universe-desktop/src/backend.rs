@@ -37,6 +37,22 @@ where
     run(async move { f(core).await }).await
 }
 
+/// `call` for a core future the compiler cannot prove `Send` (`launch`): polled to the end on a blocking thread of the runtime.
+pub async fn call_pinned<T, F, Fut>(f: F) -> universe::Result<T>
+where
+    T: Send + 'static,
+    F: FnOnce(Arc<Core>) -> Fut + Send + 'static,
+    Fut: Future<Output = universe::Result<T>> + 'static,
+{
+    let core = core();
+    let handle = runtime().handle().clone();
+    let (tx, rx) = tokio::sync::oneshot::channel();
+    runtime().spawn_blocking(move || {
+        let _ = tx.send(handle.block_on(f(core)));
+    });
+    rx.await.expect("a core task panicked")
+}
+
 pub async fn open() -> universe::Result<()> {
     let core = run(Core::open()).await?;
     let _ = CORE.set(Arc::new(core));

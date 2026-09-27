@@ -10,9 +10,10 @@ use crate::app::Application;
 use crate::backend;
 use crate::game::GameObject;
 use crate::library::{self, Sort, View};
-use crate::pages::LibraryPage;
+use crate::pages::{GamePage, LibraryPage};
 use crate::script;
 use crate::state::State;
+use crate::widgets::NowPlaying;
 
 /// What the sidebar lists besides the fixed items; rebuilt only when it changes, so the selection stays put.
 #[derive(Debug, Default, Clone, PartialEq)]
@@ -44,7 +45,11 @@ mod imp {
         pub failed_page: TemplateChild<adw::StatusPage>,
         #[template_child]
         pub library_page: TemplateChild<LibraryPage>,
+        #[template_child]
+        pub now_playing: TemplateChild<NowPlaying>,
         pub state: RefCell<State>,
+        /// The player said to quit the running game: the next close goes through.
+        pub closing: Cell<bool>,
         pub shape: RefCell<Option<Shape>>,
         /// The sidebar's items in index order: view key and title.
         pub keys: RefCell<Vec<(String, String)>>,
@@ -59,6 +64,7 @@ mod imp {
 
         fn class_init(klass: &mut Self::Class) {
             LibraryPage::ensure_type();
+            NowPlaying::ensure_type();
             klass.bind_template();
         }
 
@@ -88,6 +94,10 @@ mod imp {
     impl WindowImpl for Window {
         fn close_request(&self) -> glib::Propagation {
             let obj = self.obj();
+            if obj.app().current().is_some() && !self.closing.get() {
+                obj.confirm_close();
+                return glib::Propagation::Stop;
+            }
             if !obj.app().scripted() {
                 obj.save_state();
             }
@@ -185,9 +195,21 @@ impl Window {
             self.set_default_size(1280, 800);
         }
         self.imp().library_page.set_library(app.library());
+        self.setup_play_actions();
         let win = self.downgrade();
         app.library().connect_updated(move || {
             win.upgrade().inspect(|win| win.rebuild_sidebar());
+        });
+        let win = self.downgrade();
+        app.connect_local("session-changed", false, move |_| {
+            win.upgrade().inspect(|win| win.session_changed());
+            None
+        });
+        let win = self.downgrade();
+        app.connect_changed(move |event| {
+            if let (Some(win), universe::changes::Event::Library(ids)) = (win.upgrade(), event) {
+                win.games_changed(ids);
+            }
         });
         if app.is_ready() {
             self.core_ready();
@@ -309,9 +331,50 @@ impl Window {
         imp.state.borrow_mut().view = key;
     }
 
+    fn session_changed(&self) {
+        let current = self.app().current();
+        let cover = current.as_ref().and_then(|c| self.app().library().get(&c.id)).map(|g| g.cover()).unwrap_or_default();
+        self.imp().now_playing.set_session(current.as_ref(), &cover);
+        self.sync_play_actions();
+    }
+
+    /// A page showing one of these games reads it again.
+    fn games_changed(&self, ids: &[String]) {
+        let navigation = &self.imp().navigation;
+        for page in navigation.navigation_stack().iter::<glib::Object>().flatten() {
+            if let Some(page) = page.downcast_ref::<GamePage>() {
+                if ids.is_empty() || page.game().is_some_and(|g| ids.contains(&g.id())) {
+                    page.reload();
+                }
+            }
+        }
+    }
+
+    fn confirm_close(&self) {
+        let Some(current) = self.app().current() else { return };
+        let dialog =
+            adw::AlertDialog::new(Some(&gettext("Quit {}?").replace("{}", &current.title)), Some(&gettext("Games started here close with Universe Desktop.")));
+        dialog.add_responses(&[("cancel", &gettext("_Keep Playing")), ("quit", &gettext("_Quit Game"))]);
+        dialog.set_response_appearance("quit", adw::ResponseAppearance::Destructive);
+        dialog.set_default_response(Some("cancel"));
+        let win = self.downgrade();
+        dialog.connect_response(None, move |_, response| {
+            let Some(win) = win.upgrade().filter(|_| response == "quit") else { return };
+            win.imp().closing.set(true);
+            glib::spawn_future_local(async move {
+                win.app().end_session().await;
+                win.close();
+            });
+        });
+        dialog.present(Some(self));
+    }
+
     /// A `game.*` action from a card, a page or a menu.
     pub fn game_action(&self, name: &str, game: &GameObject) {
         match name {
+            "play" => self.play(game),
+            "details" => self.open_game(game),
+            "open-folder" => self.open_folder(game),
             "hide" => self.set_flag(game, "hidden", true),
             "unhide" => self.set_flag(game, "hidden", false),
             "favorite" => self.set_flag(game, "favorite", true),

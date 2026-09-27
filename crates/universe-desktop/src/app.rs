@@ -6,7 +6,8 @@ use adw::subclass::prelude::*;
 use gettextrs::gettext;
 use gtk::glib::subclass::Signal;
 use gtk::{gio, glib};
-use universe::changes::{self, Event};
+use universe::changes::{self, Ended, Event};
+use universe::session::Current;
 
 use crate::backend;
 use crate::config;
@@ -24,6 +25,9 @@ mod imp {
         pub watch: RefCell<Option<changes::Watch>>,
         pub script: RefCell<Option<Vec<Step>>>,
         pub library: Library,
+        pub current: RefCell<Option<Current>>,
+        /// A game asked for while another ran: it starts once that one has ended.
+        pub pending: RefCell<Option<String>>,
     }
 
     #[glib::object_subclass]
@@ -41,6 +45,7 @@ mod imp {
                     Signal::builder("core-ready").build(),
                     Signal::builder("core-failed").param_types([String::static_type()]).build(),
                     Signal::builder("changed").param_types([glib::BoxedAnyObject::static_type()]).build(),
+                    Signal::builder("session-changed").build(),
                 ]
             })
         }
@@ -53,6 +58,7 @@ mod imp {
             app.setup_actions();
             app.setup_accels();
             app.open_core();
+            app.quit_on_signals();
         }
 
         fn activate(&self) {
@@ -100,6 +106,112 @@ impl Application {
 
     pub fn library(&self) -> &Library {
         &self.imp().library
+    }
+
+    pub fn current(&self) -> Option<Current> {
+        self.imp().current.borrow().clone()
+    }
+
+    pub fn set_pending(&self, id: Option<String>) {
+        self.imp().pending.replace(id);
+    }
+
+    /// Reads the session marker now: a launch or a stop from here just returned.
+    pub fn check_session(&self) {
+        if let Some(watch) = self.imp().watch.borrow().as_ref() {
+            watch.check();
+        }
+    }
+
+    fn session_started(&self, current: &Current) {
+        if let Some(game) = self.library().get(&current.id) {
+            game.set_launching(false);
+            game.set_playing(true);
+        }
+        self.imp().current.replace(Some(current.clone()));
+        self.emit_by_name::<()>("session-changed", &[]);
+    }
+
+    fn session_ended(&self, ended: &Ended) {
+        if let Some(game) = self.library().get(&ended.id) {
+            game.set_playing(false);
+            game.set_launching(false);
+        }
+        self.imp().current.replace(None);
+        self.emit_by_name::<()>("session-changed", &[]);
+        let length = crate::format::duration(ended.duration_s);
+        let failure = match ended.end.as_str() {
+            "crashed" => Some(gettext("{} crashed after {}")),
+            "killed" => Some(gettext("{} was killed after {}")),
+            _ => None,
+        };
+        let window = self.active_window().and_downcast::<Window>();
+        match failure {
+            Some(text) => {
+                let title = text.replacen("{}", &ended.title, 1).replacen("{}", &length, 1);
+                let notification = gio::Notification::new(&title);
+                notification.set_body(Some(&gettext("Its log is under Sessions and Logs, on the game's page.")));
+                notification.set_priority(gio::NotificationPriority::High);
+                notification.set_icon(&gio::ThemedIcon::new(config::APP_ID));
+                self.send_notification(Some("session-end"), &notification);
+                if let Some(win) = &window {
+                    win.toast(adw::Toast::builder().title(title).priority(adw::ToastPriority::High).build());
+                }
+            }
+            None if ended.duration_s > 0 => {
+                if let Some(win) = &window {
+                    win.toast(adw::Toast::new(&format!("{} · {}", ended.title, length)));
+                }
+            }
+            None => {}
+        }
+        let pending = self.imp().pending.take().and_then(|id| self.library().get(&id));
+        if let (Some(game), Some(win)) = (pending, window) {
+            win.play(&game);
+        }
+    }
+
+    /// SIGINT and SIGTERM quit as the window's close does, the game stopped and its end run first.
+    fn quit_on_signals(&self) {
+        let (tx, rx) = tokio::sync::oneshot::channel::<()>();
+        backend::runtime().spawn(async move {
+            use tokio::signal::unix::{signal, SignalKind};
+            let (Ok(mut term), Ok(mut int)) = (signal(SignalKind::terminate()), signal(SignalKind::interrupt())) else { return };
+            tokio::select! {
+                _ = term.recv() => {}
+                _ = int.recv() => {}
+            }
+            let _ = tx.send(());
+        });
+        let app = self.downgrade();
+        glib::spawn_future_local(async move {
+            if rx.await.is_err() {
+                return;
+            }
+            let Some(app) = app.upgrade() else { return };
+            app.end_session().await;
+            app.quit();
+        });
+    }
+
+    /// Stops the running game and waits for its end, `session-end` included, before the window goes.
+    pub async fn end_session(&self) {
+        if self.current().is_none() {
+            return;
+        }
+        if let Err(e) = backend::call(|core| async move { core.stop("").await }).await {
+            tracing::warn!("stop: {e}");
+        }
+        for tick in 0..300 {
+            if self.current().is_none() {
+                return;
+            }
+            if tick % 10 == 0 {
+                self.check_session();
+            }
+            glib::timeout_future(std::time::Duration::from_millis(100)).await;
+        }
+        tracing::warn!("the session did not end within 30 s");
     }
 
     pub fn is_ready(&self) -> bool {
@@ -155,8 +267,11 @@ impl Application {
         glib::spawn_future_local(async move {
             while let Some(event) = events.recv().await {
                 let Some(app) = app.upgrade() else { return };
-                if let Event::Library(ids) = &event {
-                    app.library().refresh(ids).await;
+                match &event {
+                    Event::Library(ids) => app.library().refresh(ids).await,
+                    Event::SessionStarted(current) => app.session_started(current),
+                    Event::SessionEnded(ended) => app.session_ended(ended),
+                    _ => {}
                 }
                 app.emit_by_name::<()>("changed", &[&glib::BoxedAnyObject::new(event)]);
             }

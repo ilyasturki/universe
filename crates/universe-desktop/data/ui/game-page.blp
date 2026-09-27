@@ -1,0 +1,247 @@
+using Gtk 4.0;
+using Adw 1;
+
+template $UniverseGamePage: Adw.NavigationPage {
+  child: Adw.BreakpointBin {
+    width-request: 360;
+    height-request: 294;
+
+    Adw.Breakpoint {
+      condition ("max-width: 700px")
+
+      setters {
+        hero.orientation: vertical;
+        hero.spacing: 24;
+        heading.halign: center;
+        title.halign: center;
+        title.justify: center;
+        byline.halign: center;
+        byline.justify: center;
+        facts.halign: center;
+        facts.justify: center;
+        actions.halign: center;
+      }
+    }
+
+    child: Overlay {
+      child: Picture backdrop {
+        name: "backdrop";
+        content-fit: cover;
+        can-shrink: true;
+      };
+
+      [overlay]
+      Adw.ToolbarView {
+        extend-content-to-top-edge: true;
+
+        [top]
+        Adw.HeaderBar {
+          show-title: false;
+        }
+
+        content: ScrolledWindow {
+          hscrollbar-policy: never;
+
+          child: Adw.Clamp {
+            maximum-size: 1000;
+            tightening-threshold: 800;
+
+            child: Box {
+              orientation: vertical;
+              spacing: 36;
+              margin-top: 60;
+              margin-bottom: 36;
+              margin-start: 24;
+              margin-end: 24;
+
+              Box hero {
+                spacing: 40;
+
+                $UniverseCover cover {
+                  art-width: 240;
+                  art-height: 360;
+                  valign: start;
+                }
+
+                Box heading {
+                  orientation: vertical;
+                  valign: center;
+                  spacing: 6;
+                  hexpand: true;
+
+                  Label title {
+                    halign: start;
+                    wrap: true;
+                    wrap-mode: word_char;
+                    xalign: 0;
+
+                    styles [
+                      "title-1",
+                    ]
+                  }
+
+                  Label byline {
+                    halign: start;
+                    wrap: true;
+                    xalign: 0;
+
+                    styles [
+                      "heading",
+                      "dimmed",
+                    ]
+                  }
+
+                  Label facts {
+                    halign: start;
+                    wrap: true;
+                    xalign: 0;
+                    margin-top: 6;
+
+                    styles [
+                      "dimmed",
+                    ]
+                  }
+
+                  Box actions {
+                    halign: start;
+                    spacing: 10;
+                    margin-top: 18;
+
+                    Button play {
+                      action-name: "game.play";
+                      valign: center;
+
+                      child: Adw.ButtonContent play_content {
+                        icon-name: "media-playback-start-symbolic";
+                        label: _("Play");
+                      };
+
+                      styles [
+                        "pill",
+                        "suggested-action",
+                      ]
+                    }
+
+                    Button stop {
+                      action-name: "win.stop";
+                      valign: center;
+                      visible: false;
+
+                      child: Adw.ButtonContent {
+                        icon-name: "media-playback-stop-symbolic";
+                        label: _("Quit");
+                      };
+
+                      styles [
+                        "pill",
+                        "destructive-action",
+                      ]
+                    }
+
+                    Button favorite {
+                      visible: bind favorite.sensitive;
+                      action-name: "game.favorite";
+                      icon-name: "non-starred-symbolic";
+                      tooltip-text: _("Add to Favourites");
+                      valign: center;
+
+                      styles [
+                        "circular",
+                      ]
+                    }
+
+                    Button unfavorite {
+                      visible: bind unfavorite.sensitive;
+                      action-name: "game.unfavorite";
+                      icon-name: "starred-symbolic";
+                      tooltip-text: _("Remove From Favourites");
+                      valign: center;
+
+                      styles [
+                        "circular",
+                      ]
+                    }
+
+                    Button {
+                      action-name: "game.settings";
+                      icon-name: "applications-system-symbolic";
+                      tooltip-text: _("Game Settings");
+                      valign: center;
+
+                      styles [
+                        "circular",
+                      ]
+                    }
+
+                    MenuButton {
+                      icon-name: "view-more-symbolic";
+                      tooltip-text: _("More");
+                      valign: center;
+                      menu-model: more_menu;
+
+                      styles [
+                        "circular",
+                      ]
+                    }
+                  }
+                }
+              }
+
+              Adw.PreferencesGroup about {
+                title: _("About");
+                visible: false;
+
+                Label description {
+                  wrap: true;
+                  xalign: 0;
+                  selectable: true;
+
+                  styles [
+                    "body",
+                  ]
+                }
+              }
+
+              Adw.PreferencesGroup shots_group {
+                title: _("Screenshots");
+                visible: false;
+
+                ScrolledWindow {
+                  vscrollbar-policy: never;
+
+                  child: Box shots {
+                    spacing: 12;
+                    margin-bottom: 12;
+                  };
+                }
+              }
+            };
+          };
+        };
+      }
+    };
+  };
+}
+
+menu more_menu {
+  section {
+    item (_("_Artwork"), "game.artwork")
+    item (_("Open Install _Folder"), "game.open-folder")
+  }
+
+  section {
+    item {
+      label: _("_Hide");
+      action: "game.hide";
+      hidden-when: "action-disabled";
+    }
+
+    item {
+      label: _("_Unhide");
+      action: "game.unhide";
+      hidden-when: "action-disabled";
+    }
+
+    item (_("_Remove From Library…"), "game.remove")
+  }
+}
