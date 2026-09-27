@@ -1,0 +1,63 @@
+# Maintainer: Ilyas Turki <turki.ilyass@gmail.com>
+pkgname=universe-bin
+pkgver=0.0.6
+pkgrel=1
+pkgdesc='Gamepad-first game launcher: a Rust core, a PySide6 UI, games inside gamescope (prebuilt release)'
+arch=('x86_64')
+url='https://github.com/ilyasturki/universe'
+license=('MIT')
+depends=(
+  'gcc-libs'
+  'glibc'
+  'hicolor-icon-theme'
+  'python'
+  'pyside6'
+  'python-pysdl2'
+  'python-qrcode'
+  'python-xkbcommon'
+  'qt6-5compat'
+  'qt6-declarative'
+  'qt6-imageformats'
+  'qt6-multimedia'
+  'qt6-svg'
+  'qt6-wayland'
+  'sdl2'
+  'systemd'
+)
+makedepends=('python-installer')
+optdepends=(
+  'gamescope: games run inside it'
+  'mangohud: the frame rate limit and the in-game HUD'
+  "lib32-mangohud: the HUD in 32-bit games, Proton's included"
+  'umu-launcher: Proton launches; fetched on first use when missing'
+  'heroic-gogdl: the GOG source; fetched on first use when missing'
+  "gpu-screen-recorder: the capture module's recordings"
+  "ffmpeg: the capture module's thumbnails and cuts"
+  'trash-cli: recordings deleted to the trash'
+  "game-devices-udev: /dev/uinput for the controller's key macros"
+  'grim: screenshots on sway, hyprland and niri'
+  'spectacle: screenshots on KDE Plasma'
+)
+provides=('universe')
+conflicts=('universe')
+# the release asset's name carries no version
+source=(
+  "$pkgname-$pkgver.tar.gz::$url/releases/download/v$pkgver/universe-x86_64-linux.tar.gz"
+  "metadata-$pkgver.json::$url/raw/v$pkgver/extension/metadata.json"
+  "extension-$pkgver.js::$url/raw/v$pkgver/extension/extension.js"
+)
+sha256sums=('SKIP' 'SKIP' 'SKIP')
+
+package() {
+  cd "universe-$pkgver"
+  for wheel in wheels/*.whl; do
+    python -m installer --destdir="$pkgdir" "$wheel"
+  done
+  install -Dm755 bin/universe -t "$pkgdir/usr/bin"
+  install -d "$pkgdir/usr/share"
+  cp -r share/. "$pkgdir/usr/share"
+  local ext="$pkgdir/usr/share/gnome-shell/extensions/universe@ilyasturki.github.io"
+  install -Dm644 "$srcdir/metadata-$pkgver.json" "$ext/metadata.json"
+  install -Dm644 "$srcdir/extension-$pkgver.js" "$ext/extension.js"
+  install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname"
+}
