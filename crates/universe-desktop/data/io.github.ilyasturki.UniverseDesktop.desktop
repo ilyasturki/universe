@@ -9,3 +9,6 @@ Terminal=false
 Categories=Game;
 Keywords=games;launcher;library;gog;lutris;proton;emulator;
 StartupNotify=true
+DBusActivatable=true
+SingleMainWindow=true
+X-GNOME-UsesNotifications=true

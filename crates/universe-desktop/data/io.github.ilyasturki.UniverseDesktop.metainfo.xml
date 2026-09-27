@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.ilyasturki.UniverseDesktop</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Universe Desktop</name>
+  <summary>Play every game you own, from any store or emulator</summary>
+  <developer id="io.github.ilyasturki">
+    <name>Ilyas Turki</name>
+  </developer>
+  <description>
+    <p>
+      Universe Desktop is the mouse and keyboard face of Universe: one library for your GOG games, the ones Lutris knows,
+      the games in your emulators’ folders and anything added by hand. Each game runs with the settings you give it, its
+      runner’s or everyone’s, inside gamescope when you want it there.
+    </p>
+    <ul>
+      <li>A grid of covers with every source and platform in the sidebar, search, sorting and hidden games</li>
+      <li>GOG installs, updates and resumed downloads from the Store</li>
+      <li>Screenshots, recordings played in the app, and the journal written after each session</li>
+      <li>Achievements, every session with its log, and word when a game crashes</li>
+      <li>Artwork from SteamGridDB or your own pictures, and the controller set up on a live drawing of the pad</li>
+      <li>Games found and started from the GNOME Shell search</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">io.github.ilyasturki.UniverseDesktop.desktop</launchable>
+  <url type="homepage">https://github.com/ilyasturki/universe</url>
+  <url type="bugtracker">https://github.com/ilyasturki/universe/issues</url>
+  <url type="vcs-browser">https://github.com/ilyasturki/universe</url>
+  <provides>
+    <binary>universe-desktop</binary>
+    <dbus type="user">io.github.ilyasturki.UniverseDesktop</dbus>
+  </provides>
+  <requires>
+    <display_length compare="ge">360</display_length>
+  </requires>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+  </supports>
+  <content_rating type="oars-1.1"/>
+  <branding>
+    <color type="primary" scheme_preference="light">#f8e45c</color>
+    <color type="primary" scheme_preference="dark">#c64600</color>
+  </branding>
+  <releases>
+    <release version="0.0.6" date="2026-09-24"/>
+  </releases>
+</component>

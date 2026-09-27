@@ -334,13 +334,27 @@
           UNIVERSE_GIT_REV = gitRev;
           UNIVERSE_DESKTOP_LOCALEDIR = "${placeholder "out"}/share/locale";
         };
-        nativeBuildInputs = desktopTools ++ [ pkgs.wrapGAppsHook4 ];
+        nativeBuildInputs = desktopTools ++ [
+          pkgs.wrapGAppsHook4
+          pkgs.scdoc
+        ];
         buildInputs = desktopLibs ++ gstPlugins;
+        # D-Bus activation runs the .service's Exec with the bus's environment: it has to be the wrapper, by its path.
         postInstall = ''
           data=crates/universe-desktop/data
-          install -Dm644 $data/io.github.ilyasturki.UniverseDesktop.desktop -t $out/share/applications
-          install -Dm644 $data/icons/apps/io.github.ilyasturki.UniverseDesktop.svg -t $out/share/icons/hicolor/scalable/apps
-          install -Dm644 $data/icons/apps/io.github.ilyasturki.UniverseDesktop-symbolic.svg -t $out/share/icons/hicolor/symbolic/apps
+          id=io.github.ilyasturki.UniverseDesktop
+          install -Dm644 $data/$id.desktop -t $out/share/applications
+          install -Dm644 $data/$id.service -t $out/share/dbus-1/services
+          substituteInPlace $out/share/applications/$id.desktop $out/share/dbus-1/services/$id.service \
+            --replace-fail 'Exec=universe-desktop' "Exec=$out/bin/universe-desktop"
+          install -Dm644 $data/$id.search-provider.ini -t $out/share/gnome-shell/search-providers
+          install -Dm644 $data/$id.metainfo.xml -t $out/share/metainfo
+          install -Dm644 $data/icons/apps/$id.svg -t $out/share/icons/hicolor/scalable/apps
+          install -Dm644 $data/icons/apps/$id-symbolic.svg -t $out/share/icons/hicolor/symbolic/apps
+          mkdir -p $out/share/man/man1
+          scdoc < crates/universe-desktop/universe-desktop.1.scd > $out/share/man/man1/universe-desktop.1
+          desktop-file-validate $out/share/applications/$id.desktop
+          appstreamcli validate --no-net $out/share/metainfo/$id.metainfo.xml
         '';
         # The hooks and systemd's ExecStopPost call the CLI back; the games run the runtime tools off PATH.
         preFixup = ''

@@ -251,8 +251,10 @@ bump level: check
     sed -i "/^\[workspace.package\]/,/^\[/s/^version = \"$cur\"$/version = \"$new\"/" Cargo.toml
     sed -i "s/^version = \"$cur\"$/version = \"$new\"/" "${copies[@]}"
     sed -i "s/^pkgver=$cur$/pkgver=$new/" "${pkgbuilds[@]}"
+    metainfo=crates/universe-desktop/data/io.github.ilyasturki.UniverseDesktop.metainfo.xml
+    sed -i "s|<releases>|<releases>\n    <release version=\"$new\" date=\"$(date +%F)\"/>|" "$metainfo"
     cargo update --workspace --offline --quiet
-    git add Cargo.toml Cargo.lock "${pkgbuilds[@]}" "${copies[@]}" "${notes[@]}"
+    git add Cargo.toml Cargo.lock "${pkgbuilds[@]}" "$metainfo" "${copies[@]}" "${notes[@]}"
     git commit --quiet -m "chore(release): v$new"
     git tag -a "v$new" -m "v$new"
     echo "$cur -> $new: committed and tagged v$new (not pushed)"
