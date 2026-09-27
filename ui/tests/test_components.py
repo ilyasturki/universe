@@ -39,11 +39,17 @@ def test_components_list_by_kind_with_what_needs_doing_first(api, fake):
 
 def test_the_options_put_the_useful_one_first_and_ask_before_what_costs(api, fake):
     form = loaded(api)
-    assert labels(form.actions(row_of(form, "xemu"))) == ["Update to 0.8.136", "Runner settings"]
+    assert labels(form.actions(row_of(form, "xemu"))) == ["Update to 0.8.136", "Uninstall · 61.0 MB", "Runner settings"]
     assert labels(form.actions(row_of(form, "wine")))[:2] == ["Install 11.18 and use it", "Install another version…"]
     assert labels(form.versionActions(row_of(form, "wine")))[0].startswith("11.17 · 58")
     ge = row_of(form, "ge-proton")
-    assert labels(form.actions(ge)) == ["Use GE-Proton11-6 · Universe", "Install another version…", "Roll back GE-Proton11-7", "Remove GE-Proton11-6 · 1.1 GB"]
+    assert labels(form.actions(ge)) == [
+        "Use GE-Proton11-6 · Universe",
+        "Install another version…",
+        "Roll back GE-Proton11-7",
+        "Remove GE-Proton11-6 · 1.1 GB",
+        "Uninstall · 2.2 GB",
+    ]
     assert form.actions(row_of(form, "umu-run"))[0]["label"] == "Install 1.4.4", "a tool: no build to switch to, the system's always wins"
     ask = form.confirm(row_of(form, "rpcs3"), "install")
     assert ask["message"] == "Install RPCS3 0.0.42-20069-3fa07db7?" and "to download" in ask["detail"] and ask["yes"] == "Install"
@@ -83,6 +89,25 @@ def test_a_rollback_removes_the_update_and_skips_it(api, fake):
     assert messages[-1] == "Rolled back GE-Proton"
     assert form.rows[row_of(form, "ge-proton")]["display"] == "GE-Proton11-6 · Universe"
     assert form.groups[0]["title"] == "Proton", "the update rolled back is no longer recent"
+
+
+def test_an_uninstall_takes_every_build_the_one_in_use_too(api, fake):
+    form = loaded(api)
+    messages = []
+    form.message.connect(messages.append)
+    xemu = row_of(form, "xemu")
+    ask = form.confirm(xemu, "uninstall")
+    assert (ask["message"], ask["yes"], ask["no"]) == ("Uninstall xemu?", "Uninstall", "Keep it")
+    assert ask["detail"] == "Universe removes 0.8.135 (61.0 MB). Universe can install it again later.", "its one build, in use"
+    ge = form.confirm(row_of(form, "ge-proton"), "uninstall")["detail"]
+    assert ge == "Universe removes GE-Proton11-7 and GE-Proton11-6 (2.2 GB). 3 games on it won't start until it is installed again."
+    assert form.act(xemu, "uninstall") is True
+    settle(form)
+    settle(form)
+    assert messages[-1] == "Uninstalled xemu"
+    assert form.rows[row_of(form, "xemu")]["display"] == "Not installed"
+    assert not [a for a in form.actions(row_of(form, "xemu")) if a["action"] == "uninstall"], "nothing of Universe's left"
+    assert not [a for a in form.actions(row_of(form, "eden")) if a["action"] == "uninstall"], "the system's build is not Universe's to take"
 
 
 def test_a_launch_missing_its_runner_offers_the_install_then_launches(api, fake):

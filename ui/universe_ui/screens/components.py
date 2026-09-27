@@ -191,6 +191,9 @@ def actions(component, busy):
         if not b.get("pinned") and not b.get("in_use"):
             size = f" · {_size(b['disk'])}" if b.get("disk") else ""
             out.append({"icon": "trash", "label": f"Remove {b['version']}{size}", "action": "remove:" + b["version"], "danger": True})
+    if managed:
+        disk = sum(int(b.get("disk") or 0) for b in managed)
+        out.append({"icon": "trash", "label": "Uninstall" + (f" · {_size(disk)}" if disk else ""), "action": "uninstall", "danger": True})
     if runner:
         out.append({"icon": "sliders", "label": "Runner settings", "action": "runner"})
     return out
@@ -204,6 +207,26 @@ def version_actions(component):
         parts = [a["version"], _size(a["size"]) if a.get("size") else "", (a.get("date") or "")[:10], "rolled back" if a.get("skipped") else ""]
         out.append({"icon": "download", "label": " · ".join(p for p in parts if p), "action": "install:" + a["version"]})
     return out
+
+
+def _uninstall_detail(component):
+    managed, found = _managed(component), _found(component)
+    versions = [b["version"] for b in managed]
+    disk = sum(int(b.get("disk") or 0) for b in managed)
+    gone = " and ".join(versions) if len(versions) < 3 else f"its {len(versions)} builds"
+    text = f"Universe removes {gone}" + (f" ({_size(disk)})" if disk else "") + "."
+    used = int(component.get("used_by") or 0)
+    if not any(b.get("in_use") for b in managed):
+        return f"{text} Universe can install it again later."
+    if len(found) > 1:
+        return f"{text} The newest of the other {len(found)} builds runs in its place."
+    if found:
+        name = "" if component["kind"] == "proton" else component["name"]
+        instead = " ".join(p for p in (name, found[0].get("version") or "", f"from {_origin(found[0])}") if p)
+        return f"{text} {instead} runs in its place."
+    if used:
+        return f"{text} {_plural(used, 'game')} on it won't start until it is installed again."
+    return f"{text} Universe can install it again later."
 
 
 class ComponentsForm(RowsForm):
@@ -284,6 +307,8 @@ class ComponentsForm(RowsForm):
             return self._install_question(c, version, build.get("size", 0))
         if action.startswith("remove:"):
             return _ask(f"Remove {c['name']} {action.partition(':')[2]}?", "Universe can install it again later.", "Remove", "Keep it")
+        if action == "uninstall":
+            return _ask(f"Uninstall {c['name']}?", _uninstall_detail(c), "Uninstall", "Keep it")
         if action == "rollback":
             message = f"Roll back {c['name']} {_managed(c)[0]['version']}?"
             return _ask(message, "Universe removes it and skips that version; the next one updates as usual.", "Roll back", "Keep it")
@@ -323,6 +348,8 @@ class ComponentsForm(RowsForm):
             return ok
         if verb == "remove":
             return self._after_call(lambda: self._client.componentRemove(ident, arg), f"Removed {c['name']} {arg}")
+        if verb == "uninstall":
+            return self._after_call(lambda: self._client.componentUninstall(ident), f"Uninstalled {c['name']}")
         if verb == "rollback":
             return self._after_call(lambda: self._client.componentRollback(ident), f"Rolled back {c['name']}")
         return False

@@ -807,8 +807,11 @@ sentence and `progress` while its job runs. A is its options: `actions(index)` �
 action, danger}`, the look's menu (Reprise `menu.show`, Switch 2 and PS5 `shell.menu`); `versions` opens
 `versionActions(index)` as a second menu, `runner` emits `runnerRequested(id)`, which opens the
 runner's page.
+Uninstall (`uninstall`, with the size of Universe's builds) is there whenever Universe holds one,
+the one in use included.
 `confirm(index, action)` is what to ask first or null — an install's size and the room left, a
-removal, a rollback — and `act(index, action)` does it: an install or an update is a client job
+removal, an uninstall (what goes and what runs in its place), a rollback — and `act(index, action)`
+does it: an install or an update is a client job
 (`componentInstall`, `componentUpdate`, `job` the running one like the Install page's, drawn by
 the same bar), an install from a proposal over a system build switches to it (`use:latest`) once
 in, a finished job toasts through `message`. `pending` counts the updates and proposals: Reprise's

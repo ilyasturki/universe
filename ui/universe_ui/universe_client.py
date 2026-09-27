@@ -255,6 +255,9 @@ class CoreClient(QObject):
     def componentRemove(self, ident, version):
         return self._call(self._core.component_remove, ident, version)
 
+    def componentUninstall(self, ident):
+        return self._call(self._core.component_uninstall, ident)
+
     def componentRollback(self, ident):
         return self._call(self._core.component_rollback, ident)
 

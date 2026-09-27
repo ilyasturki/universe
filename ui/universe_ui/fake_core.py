@@ -1708,6 +1708,25 @@ class FakeCore:
             c["builds"].remove(b)
             self._settle(c)
 
+    def component_uninstall(self, ident):
+        with self._lock:
+            c = self._component(ident)
+            self._settle(c)
+            managed = [b for b in c["builds"] if b["managed"]]
+            if not managed:
+                raise UniverseError("NotFound", f"Universe holds no build of {ident}")
+            pinned = next((b for b in managed if b.get("pinned")), None)
+            if pinned is not None:
+                raise UniverseError("Busy", f"{ident} {pinned['version']} is in use: pick another build for what names it first")
+            found = [b for b in c["builds"] if not b["managed"]]
+            if found and not any(b["in_use"] for b in found):
+                found[0]["in_use"] = True
+            if c["kind"] in ("emulator", "wine") or c["setting"] in {b["version"] for b in managed}:
+                c["setting"] = c["family"] if c["kind"] == "proton" else ""
+            c.update(builds=found, skipped=[], recent=None)
+            self._settle(c)
+            return [b["version"] for b in reversed(managed)]
+
     def component_rollback(self, ident):
         with self._lock:
             c = self._component(ident)
