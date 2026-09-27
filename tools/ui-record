@@ -1,0 +1,107 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+    cat <<'USAGE'
+usage: tools/ui-record OUT.mp4 [KEY…]
+
+Plays KEYs to the UI inside a headless sway rendering on the GPU and records it:
+no window on the desktop, no sound. OUT is H.264 yuv420p at 60 fps, the leading
+black trimmed. KEYs are the `--keys` phases (Wait, Wait:N, Right, Return…).
+
+  UNIVERSE_UI_ARGS      the UI's flags (default --fake --no-gamepad)
+  UNIVERSE_UI_SIZE      the window (default 1920x1080)
+  UNIVERSE_UI_GAP       ms between keys (default 500)
+  UNIVERSE_RECORD_SCALE rendered at N times the size, OUT scaled back (default 2)
+  UNIVERSE_RECORD_NODE  the render node (default the boot GPU's)
+USAGE
+}
+
+[ $# -ge 1 ] || { usage >&2; exit 2; }
+case "$1" in -h | --help) usage; exit 0 ;; esac
+out=$1
+shift
+
+ui_bin=${UI_BIN:-${VIRTUAL_ENV:?run through just}/bin/universe-ui}
+size=${UNIVERSE_UI_SIZE:-1920x1080}
+gap=${UNIVERSE_UI_GAP:-500}
+scale=${UNIVERSE_RECORD_SCALE:-2}
+node=${UNIVERSE_RECORD_NODE:-}
+if [ -z "$node" ]; then
+    for card in /sys/class/drm/card[0-9]*; do
+        [ "$(cat "$card/device/boot_vga" 2>/dev/null)" = 1 ] || continue
+        for render in "$card"/device/drm/renderD*; do node=/dev/dri/${render##*/}; done
+    done
+fi
+[ -n "$node" ] || { echo "ui-record: no boot GPU found; set UNIVERSE_RECORD_NODE" >&2; exit 1; }
+w=${size%x*}
+h=${size#*x}
+
+script="Wait"
+gaps=1
+for k in "$@"; do
+    case "$k" in
+        Wait:[0-9]*) gaps=$((gaps + ${k#Wait:})) ;;
+        *) gaps=$((gaps + 1)) ;;
+    esac
+    script="$script $k"
+done
+script="$script Wait:2"
+gaps=$((gaps + 2))
+
+tmp=$(mktemp -d)
+sway_pid=
+rec_pid=
+cleanup() {
+    [ -n "$rec_pid" ] && kill "$rec_pid" 2>/dev/null
+    [ -n "$sway_pid" ] && kill "$sway_pid" 2>/dev/null
+    rm -rf "$tmp"
+}
+trap cleanup EXIT
+
+cat >"$tmp/sway.cfg" <<EOF
+output HEADLESS-1 resolution $((w * scale))x$((h * scale)) scale $scale bg #000000 solid_color
+default_border none
+seat * hide_cursor 1
+exec printf '%s %s\\n' "\$WAYLAND_DISPLAY" "\$SWAYSOCK" > $tmp/ready
+EOF
+
+env -u WAYLAND_DISPLAY -u DISPLAY -u SWAYSOCK \
+    WLR_BACKENDS=headless WLR_LIBINPUT_NO_DEVICES=1 WLR_RENDER_DRM_DEVICE="$node" \
+    sway -c "$tmp/sway.cfg" >"$tmp/sway.log" 2>&1 &
+sway_pid=$!
+for _ in $(seq 100); do
+    [ -s "$tmp/ready" ] && break
+    kill -0 "$sway_pid" 2>/dev/null || { cat "$tmp/sway.log" >&2; exit 1; }
+    sleep 0.1
+done
+[ -s "$tmp/ready" ] || { echo "ui-record: sway never came up" >&2; cat "$tmp/sway.log" >&2; exit 1; }
+read -r display sock <"$tmp/ready"
+export WAYLAND_DISPLAY=$display SWAYSOCK=$sock
+
+# Lossless while recording: x264 at a real encode setting falls behind 60 fps and drops frames.
+# -D: without it wf-recorder only sees SIGINT on the next damaged frame, and a quit UI sends none.
+wf-recorder -y -D -o HEADLESS-1 -r 60 -c libx264rgb -x bgr0 -p preset=ultrafast -p qp=0 -f "$tmp/raw.mkv" >"$tmp/rec.log" 2>&1 &
+rec_pid=$!
+
+status=0
+# shellcheck disable=SC2086
+QT_QPA_PLATFORM=wayland PIPEWIRE_REMOTE=/nonexistent "$ui_bin" ${UNIVERSE_UI_ARGS---fake --no-gamepad} \
+    --size "$size" --key-gap "$gap" --keys "$script" --quit-after $((1200 + gap * (gaps + 8))) || status=$?
+
+kill -INT "$rec_pid"
+wait "$rec_pid" || true
+rec_pid=
+swaymsg exit >/dev/null 2>&1 || true
+wait "$sway_pid" 2>/dev/null || true
+sway_pid=
+[ "$status" = 0 ] || echo "ui-record: the UI exited $status" >&2
+[ -s "$tmp/raw.mkv" ] || { echo "ui-record: nothing recorded" >&2; cat "$tmp/rec.log" >&2; exit 1; }
+
+start=$(ffmpeg -hide_banner -i "$tmp/raw.mkv" -t 20 -vf blackdetect=d=0.05:pix_th=0.02 -an -f null - 2>&1 |
+    sed -n 's/.*black_start:0 black_end:\([0-9.]*\).*/\1/p' | head -1)
+ffmpeg -hide_banner -loglevel error -y -ss "${start:-0}" -i "$tmp/raw.mkv" \
+    -vf "scale=${w}:${h}:flags=lanczos:out_color_matrix=bt709:out_range=tv,format=yuv420p" \
+    -c:v libx264 -preset slow -crf 14 -profile:v high -colorspace bt709 -color_primaries bt709 -color_trc bt709 -color_range tv \
+    -movflags +faststart -an "$out"
+echo "$out"

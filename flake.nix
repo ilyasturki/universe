@@ -454,6 +454,8 @@
               ]
             ))
             SDL2
+            sway
+            wf-recorder
           ]
           ++ qtRuntime
           ++ moduleRuntime

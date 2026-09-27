@@ -75,6 +75,10 @@ ui-shot dir *keys: build develop env
     export QT_QPA_PLATFORM=offscreen PIPEWIRE_REMOTE=/nonexistent
     "{{ ui_bin }}" ${UNIVERSE_UI_ARGS---fake --no-gamepad} --size "${UNIVERSE_UI_SIZE:-1920x1080}" --key-gap "$gap" --keys "$script" --quit-after $((1200 + gap * (gaps + 8)))
 
+# The UI recorded to OUT (H.264, 60 fps) in a headless sway on the GPU: no window, no audio. just ui-record OUT.mp4 [keys…] (UNIVERSE_UI_ARGS, UNIVERSE_UI_SIZE and UNIVERSE_UI_GAP as for ui-shot; `tools/ui-record --help`)
+ui-record out *keys: build develop env
+    @{{ nix }} tools/ui-record "{{ out }}" {{ keys }}
+
 # Follow the units of games, hooks and session ends
 logs:
     journalctl --user -f -u 'universe-*'
