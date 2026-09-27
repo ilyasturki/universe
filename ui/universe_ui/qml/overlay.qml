@@ -97,7 +97,7 @@ Window {
                     spacing: 4 * unlocks.s
 
                     Text {
-                        text: "ACHIEVEMENT UNLOCKED" + (model.rarityText !== "" ? "  ·  " + model.rarityText : "")
+                        text: (api.theme.current === "ps5" ? "TROPHY EARNED" : "ACHIEVEMENT UNLOCKED") + (model.rarityText !== "" ? "  ·  " + model.rarityText : "")
                         color: Qt.rgba(0.949, 0.953, 0.961, 0.6)
                         font.family: Theme.sans
                         font.weight: Font.DemiBold

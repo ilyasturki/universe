@@ -20,14 +20,14 @@ One context property, `api`:
 
 | Member | What it is |
 |---|---|
-| `api.keys` | `is{Accept,Cancel,Details,Filters,PageUp,PageDown,PrevPage,NextPage,Menu}(event)` — the Pegasus key-action contract (Backspace is a Cancel too) — plus `isScreenUp` / `isScreenDown` (`[` / `]`, the right stick up and down): a screenful in a long list, and `isFirst` / `isLast` (Home / End): the ends of one; `cancelHeld()` fires when B (Escape, not Backspace) is held 450 ms on the window, whatever has the focus (an event filter, so the press still lands): both looks open their power menu on it; `dropHold()` from a question B just closed keeps the hold from asking again. `mode` is the last device used, `pad`, `keyboard` or `mouse` (the pad's presses are told from the keyboard's by `gamepad.POSTED`, which every posted key goes through; a finger on a touchscreen counts as the pad, and the mouse events Qt makes from an unhandled touch count as nothing; the cursor is shown under a mouse only), `labels` maps a pad glyph to its key (`A` → `Enter`), `press` / `hold` / `release(action)` post an action's key as the pad would, for a click or the wheel, and `layout` is the physical keyboard's rows for the on-screen ones (`keyboard.rows` over the core's `keyboard_layout()`): `name` (`fr`, `fr:bepo`) and `rows` — `AE` (the number row), `AD`, `AC`, `AB` (the letter rows), each a list of `{value, shift}` left to right, dead keys left out, the digits leading the number row whichever level the layout keeps them on; `us` when libxkbcommon or the layout is missing. Reprise's `ui/VirtualKeyboard.qml` shows eleven keys of the first three rows and ten of the last, staggered, ⌫ closing the last; the Switch 2 `ui/KeyPanel.qml` eleven of each |
+| `api.keys` | `is{Accept,Cancel,Details,Filters,PageUp,PageDown,PrevPage,NextPage,Menu}(event)` — the Pegasus key-action contract (Backspace is a Cancel too) — plus `isScreenUp` / `isScreenDown` (`[` / `]`, the right stick up and down): a screenful in a long list, and `isFirst` / `isLast` (Home / End): the ends of one; `cancelHeld()` fires when B (Escape, not Backspace) is held 450 ms on the window, whatever has the focus (an event filter, so the press still lands): every look opens its power menu on it; `dropHold()` from a question B just closed keeps the hold from asking again. `mode` is the last device used, `pad`, `keyboard` or `mouse` (the pad's presses are told from the keyboard's by `gamepad.POSTED`, which every posted key goes through; a finger on a touchscreen counts as the pad, and the mouse events Qt makes from an unhandled touch count as nothing; the cursor is shown under a mouse only), `labels` maps a pad glyph to its key (`A` → `Enter`), `press` / `hold` / `release(action)` post an action's key as the pad would, for a click or the wheel, and `layout` is the physical keyboard's rows for the on-screen ones (`keyboard.rows` over the core's `keyboard_layout()`): `name` (`fr`, `fr:bepo`) and `rows` — `AE` (the number row), `AD`, `AC`, `AB` (the letter rows), each a list of `{value, shift}` left to right, dead keys left out, the digits leading the number row whichever level the layout keeps them on; `us` when libxkbcommon or the layout is missing. Reprise's `ui/VirtualKeyboard.qml` shows eleven keys of the first three rows and ten of the last, staggered, ⌫ closing the last; the Switch 2 `ui/KeyPanel.qml` eleven of each, the PS5 `ps5/ui/KeyPanel.qml` eleven of each over a row of wide keys (⇧, symbols, Space, ⌫, Done) |
 | `api.allGames` | the library model |
 | `api.collections` | collections, one per platform |
 | `api.memory` | `get`/`set`/`has`/`unset`, persisted to `$XDG_STATE_HOME/universe/ui-memory.json` |
 | `api.universe` | the client: every core call, plus the signals below. `adoptScope()` and `pendingJournals()` wrap `adopt_scope` and `pending_journals`; their failures get a log line, not a toast. `recordings(id)` is the client's own: `sessions(id)` kept to the rows with a `recording` |
 | `api.pad` | `rightX`: the right stick as a value, 0 without a controller |
-| `api.power` | the batteries the kernel lists under `/sys/class/power_supply`: `sources` (`kind` `system` or `pad`, `percent`, `charging`, `inputs` — the pad's evdev nodes), `count`; polled every 10 s, plus what the controller watcher reads off a pad the kernel keeps no supply for (an 8BitDo's HID report, BlueZ's `Battery1` for a pad in BLE mode), reported through `report(event, name, battery)` and dropped with the pad; the kernel's reading wins where both exist. Both looks draw them next to every clock (`ui/PowerBadge.qml`: one glyph and percent per source, the pad the controller page has current in green, one at 15 % or under in red), the Switch 2 controller page next to the pad it belongs to; `--fake` reads `fixtures/power_supply` |
-| `api.system` | what logind will do with the machine: `actions`, the ones of `suspend`, `reboot` and `power_off` it would carry out (the core's `power_actions()`, read once at startup), `run(action)` (`power(action)` off the UI thread; `reboot` and `power_off` stop a running session first, so its `session-end` runs before the machine goes down), `failed(action, message)` when logind refuses. `--fake` records the call and does nothing. `steam`: the launcher runs in Steam's Game Mode (the core's `under_steam()`): no power actions (the menu keeps Quit Universe alone, and says Steam's menu has the rest), no Sound section, no dock over a game, no MangoHud, frame limit or Pause on HOME rows. `deck`: `lcd` or `oled` on a Steam Deck. `controls`: the core's `system_controls()`, read after `apply_system()` at startup and on `reload()`; `set(id, value)` shows the value at once and writes it off the UI thread, a refusal raising `controlFailed(id, message)` and reading the machine back; `control(id)` one of them. Reprise lists them under Settings › System and in the dock's System group (a step writes once the cursor rests, 400 ms), Switch 2 under System Settings › Performance; `ui/Controls.js` turns one into rows either look uses. `--fake` lists an OLED Deck's under `UNIVERSE_DECK`, and plays Game Mode under `GAMESCOPE_WAYLAND_DISPLAY` with `UNIVERSE_FAKE_STEAM=1` |
+| `api.power` | the batteries the kernel lists under `/sys/class/power_supply`: `sources` (`kind` `system` or `pad`, `percent`, `charging`, `inputs` — the pad's evdev nodes), `count`; polled every 10 s, plus what the controller watcher reads off a pad the kernel keeps no supply for (an 8BitDo's HID report, BlueZ's `Battery1` for a pad in BLE mode), reported through `report(event, name, battery)` and dropped with the pad; the kernel's reading wins where both exist. Every look draws them next to every clock (`ui/PowerBadge.qml`: one glyph and percent per source, the pad the controller page has current in green, one at 15 % or under in red), the Switch 2 controller page next to the pad it belongs to; `--fake` reads `fixtures/power_supply` |
+| `api.system` | what logind will do with the machine: `actions`, the ones of `suspend`, `reboot` and `power_off` it would carry out (the core's `power_actions()`, read once at startup), `run(action)` (`power(action)` off the UI thread; `reboot` and `power_off` stop a running session first, so its `session-end` runs before the machine goes down), `failed(action, message)` when logind refuses. `--fake` records the call and does nothing. `steam`: the launcher runs in Steam's Game Mode (the core's `under_steam()`): no power actions (the menu keeps Quit Universe alone, and says Steam's menu has the rest), no Sound section, no dock over a game, no MangoHud, frame limit or Pause on HOME rows. `deck`: `lcd` or `oled` on a Steam Deck. `controls`: the core's `system_controls()`, read after `apply_system()` at startup and on `reload()`; `set(id, value)` shows the value at once and writes it off the UI thread, a refusal raising `controlFailed(id, message)` and reading the machine back; `control(id)` one of them. Reprise lists them under Settings › System and in the dock's System group (a step writes once the cursor rests, 400 ms), Switch 2 under System Settings › Performance, the PS5 look under Settings › Performance and in the Control Center's System panel; `ui/Controls.js` turns one into rows any look uses. `--fake` lists an OLED Deck's under `UNIVERSE_DECK`, and plays Game Mode under `GAMESCOPE_WAYLAND_DISPLAY` with `UNIVERSE_FAKE_STEAM=1` |
 | `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written, a game's sessions and their logs) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed` and `--size` turn it off) |
 | `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `frame`, `ground`, `detail`), `current`, `frame`, `set(id)`, `landing` / `takeLanding()`, `fontPath` (the current look's own font file, stored under `<id>Font`: `switch2Font`, `ps5Font`) |
@@ -457,7 +457,7 @@ right now (More on a settings row with nothing to list, a media grid with nothin
 dimmed (`dim: true`), never dropped; hints for what the pad makes obvious — moving with the d-pad
 — are not written, only a d-pad with a specific meaning is (`Seek 10 s`, `Previous / next`).
 
-Toasts are `core/Notices.qml`, a singleton both looks and the dock share: `show(text, key)`,
+Toasts are `core/Notices.qml`, a singleton the looks, the dock and the Control Center share: `show(text, key)`,
 `fail(text, key)` for a failure (a red mark, 8 s on screen instead of 4 s). One shows at a time,
 the rest wait their turn, and a message repeating the last one is dropped. A message with a key
 takes the place of the one with the same key, on screen or waiting: "Journal: writing …" becomes
@@ -633,7 +633,8 @@ when the game has a store source and no list yet; the cache it writes brings the
 While a game runs, `Home`'s `UnlockWatch` rereads its list on every change to the game's folder and
 emits `achievementUnlocked({gameId, gameTitle, key, name, description, icon, rarityText})` for each
 unlock newer than the session's start, once. `overlay.qml` draws it, outside the theme's loader so
-both looks get it: a card in the top right corner for 4.8 s, three at most. Home queues the rest
+every look gets it: a card in the top right corner for 4.8 s, three at most (*TROPHY EARNED* under
+the PS5 look, *ACHIEVEMENT UNLOCKED* under the others). Home queues the rest
 (a game that files a save's worth at once) and sends the next as a card calls `bannerDone()`; a
 pill under the cards counts the queue (`bannersWaiting`), *+n more unlocked*. Home lifts the
 overlay window to opaque without taking the game's input for 5 s on every card it sends (the same
@@ -748,7 +749,7 @@ logins once per process, on the network, so the sources list and page load off t
 announce `rowsChanged` when they land. Doctor's checks stay on `api.screens.modules`
 (`loadDoctor`, `doctor`, `doctorGroups`), grouped by module or source name and run off the UI thread too. The failing
 checks leave their card for a "Needs attention" one on top, each row carrying its card as `path` and its `fix`; a row
-with a `fix` wraps its problem and fix under the label in both looks, and a card keeps counting the checks that left it.
+with a `fix` wraps its problem and fix under the label in every look, and a card keeps counting the checks that left it.
 
 ## The runners section
 
@@ -846,11 +847,12 @@ CLI's `universe add` and `universe migrate` are the same calls.
 
 `api.screens.onboarding` is the setup shown once: `needed` is true while `api.memory` has no
 `onboarded` and the library is empty (a library with games sets the flag on the first read, so an
-emptied library never brings it up later), and both looks open it from their root's
+emptied library never brings it up later), and every look opens it from its root's
 `Component.onCompleted` as a dialog over what is on screen — Reprise as `pages/OnboardingPage.qml`
 (`openSetup()`, `openSub` with `{ setup: true }`, which keeps the tabs visible under it), the
 Switch 2 look as `switch2/pages/OnboardingPage.qml` on its stack (a page whose `overlay` is true
-leaves the layer under it in view); Settings › About › "First-run setup" opens it again, and so
+leaves the layer under it in view), the PS5 look as `ps5/pages/OnboardingPage.qml` on its stack, and
+on an empty library its home row leads with Set Up and Add a Game; Settings › About › "First-run setup" opens it again, and so
 does the empty Home's "Set up" — a second pill beside "Add a game" in Reprise's hero band, a second
 disc beside the plus in the Switch 2 HOME row — shown while the library is empty, whatever the
 flag says. `load()`
@@ -908,7 +910,7 @@ and `candidatesBusy`; `moreCandidates()` takes the next page. `apply(slot, url)`
 cell or the options menu on the Switch 2); `refresh()` fetches the missing art. All report
 through `message`. The wrong-match flow is `search(query)` → `hits` (`name`, `year`, `verified`,
 `current`) → `pin(id)`, which writes `metadata.sgdb_id` through `media_pin` and reloads the
-candidates; both looks search the game's own title first — Reprise's Y opens the hits in a sheet
+candidates; every look searches the game's own title first — Reprise's Y opens the hits in a sheet
 whose Y takes another name, the Switch 2 look runs it through the shell's `pick` with "Another
 name…" as the last choice, then `prompt` (`switch2/pages/Artwork.js`). Local URLs carry the file's mtime as a query
 (`models.file_url`), so a pick that replaces a file at the same path repaints instead of showing
@@ -942,7 +944,7 @@ reads one itself. The screen hands `sdl`/`sdl_axes` to the SDL mapper (`GamepadT
 button maps to its letter — the A on the right of a Nintendo-style pad confirms — the rest by
 position. The hint glyphs follow the same rule (`PadNames.hintSlot`). The screen exposes `devices`,
 `current`, `family` (the current pad's, else the last one seen or the one `setFamily(id)` chose, kept in `api.memory` as
-`controllerFamily`, `xbox` until then: the button glyphs of both looks follow it), `families` (`{id, name}`), `connected`, `status` (`off`, `waiting`, `ready`), `passive`, `learning`,
+`controllerFamily`, `xbox` until then: the button glyphs of every look follow it), `families` (`{id, name}`), `connected`, `status` (`off`, `waiting`, `ready`), `passive`, `learning`,
 `testing`, the `rows`/`groups` of one card, titled with the pad's name and nothing under it (a Controller picker row when two pads are connected,
 a "Test the buttons" and a "Set up the buttons" row while the watcher is `ready`, then a row per button of the family — each
 with its `slot` and `family`, so the row draws the button's glyph, and its `press` and `hold`
