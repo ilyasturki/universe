@@ -966,7 +966,8 @@ FocusScope {
             return;
         } else if (action === "uninstall") {
             Sound.panel();
-            menu.confirm("Keep it", "trash", "Trash the install folder", "Uninstall " + row.label + "?", cards, cards.focusRect, function () {
+            var via = api.universe.uninstallVia(row.gameId);
+            menu.confirm("Keep it", "trash", via ? "Uninstall through " + via : "Trash the install folder", "Uninstall " + row.label + "?", cards, cards.focusRect, function () {
                 Sound.enter();
                 sources.uninstall(row.gameId);
             });

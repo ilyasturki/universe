@@ -342,21 +342,45 @@ impl Core {
         self.reload_config().await
     }
 
+    async fn uninstaller(&self, game: &Game) -> Option<Source> {
+        if game.source.id.is_empty() {
+            return None;
+        }
+        self.game_source(game).await.filter(|s| s.can("uninstall"))
+    }
+
+    /// The store that removes the game's files itself; `None` when `uninstall` trashes its folder.
+    pub async fn uninstall_via(&self, id: &str) -> Result<Option<String>> {
+        let r = self.get(id).await?;
+        Ok(self.uninstaller(&r.game).await.map(|s| s.name().to_string()))
+    }
+
     /// The game stays in the library with its hours, journal and recordings, not installed.
     pub async fn uninstall(&self, id: &str) -> Result<()> {
         let r = self.get(id).await?;
-        let dir = paths::expand(&r.game.source.dir);
-        if r.game.source.dir.is_empty() || !dir.is_dir() {
-            return Err(Error::Invalid(format!("{id} has no install folder")));
+        match self.uninstaller(&r.game).await {
+            Some(m) => {
+                self.run_verb(&m, "uninstall", std::slice::from_ref(&r.game.source.id), None).await?;
+            }
+            None => {
+                let dir = paths::expand(&r.game.source.dir);
+                if r.game.source.dir.is_empty() || !dir.is_dir() {
+                    return Err(Error::Invalid(format!("{id} has no install folder")));
+                }
+                let config = self.config.read().await.clone();
+                let home = paths::home();
+                let shared = self
+                    .games
+                    .read()
+                    .await
+                    .iter()
+                    .any(|x| x.game.id != id && !x.game.source.dir.is_empty() && paths::expand(&x.game.source.dir).starts_with(&dir));
+                if dir.parent().is_none() || dir == home || dir == config.games_root() || home.starts_with(&dir) || shared {
+                    return Err(Error::Invalid(format!("refusing to trash {}", dir.display())));
+                }
+                trash(&dir)?;
+            }
         }
-        let config = self.config.read().await.clone();
-        let home = paths::home();
-        let shared =
-            self.games.read().await.iter().any(|x| x.game.id != id && !x.game.source.dir.is_empty() && paths::expand(&x.game.source.dir).starts_with(&dir));
-        if dir.parent().is_none() || dir == home || dir == config.games_root() || home.starts_with(&dir) || shared {
-            return Err(Error::Invalid(format!("refusing to trash {}", dir.display())));
-        }
-        trash(&dir)?;
         let toml = r.game.toml_path();
         for key in ["source.dir", "source.build_id", "launch.exe"] {
             crate::game::set_key(&toml, key, "")?;
@@ -2362,6 +2386,136 @@ install) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":t
         assert!(core.list().await.iter().any(|g| g["id"] == "new"), "back from the archive");
         assert_eq!((back["removed"].as_bool(), back["hidden"].as_bool()), (Some(false), Some(false)));
         assert!(back["added_at"].as_str().unwrap() >= first.as_str(), "re-stamped");
+    }
+
+    #[tokio::test]
+    async fn a_title_two_stores_sell_is_two_games_and_one_added_by_hand_is_taken_over() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let _dir = fake_source(
+            r#"scan) echo '{"event":"game","id":"1","title":"Control","owned":true,"installed":true,"dir":"/g/Control","exe":"c.sh","umu_id":"umu-870780","store":"egs","runner":"linux"}'; echo '{"event":"game","id":"2","title":"Manual","owned":true,"installed":true,"dir":"/g/Manual","exe":"m.exe"}'; echo '{"event":"game","id":"3","title":"Loose","owned":null,"installed":true,"dir":"/g/Loose","exe":"l.exe"}' ;;"#,
+        );
+        let mut other = Game::new("Control");
+        other.source.kind = "gog".into();
+        other.source.id = "9".into();
+        other.save().unwrap();
+        Game::new("Manual").save().unwrap();
+        Game::new("Loose").save().unwrap();
+        let core = open().await;
+        assert_eq!(core.source_scan("fake", None).await.unwrap(), 2);
+        let gog = core.get("control").await.unwrap().game;
+        assert_eq!((gog.source.kind.as_str(), gog.source.id.as_str(), gog.source.dir.as_str()), ("gog", "9", ""), "the other store's game is left alone");
+        let fake = core.get("control-fake").await.unwrap().game;
+        assert_eq!((fake.source.kind.as_str(), fake.source.id.as_str(), fake.source.dir.as_str()), ("fake", "1", "/g/Control"));
+        assert_eq!((fake.launch.umu_id.as_str(), fake.launch.store.as_str()), ("umu-870780", "egs"));
+        assert_eq!((fake.launch.runner.as_str(), fake.platform.as_str(), fake.launch.arch.as_str()), ("linux", "linux", ""), "a native build runs as one");
+        let manual = core.get("manual").await.unwrap().game;
+        assert_eq!(
+            (manual.source.kind.as_str(), manual.source.id.as_str()),
+            ("fake", "2"),
+            "a game added by hand is the store's once found installed and owned"
+        );
+        let loose = core.get("loose").await.unwrap().game;
+        assert_eq!((loose.source.kind.as_str(), loose.source.id.as_str()), ("manual", ""), "ownership unknown: nothing is claimed");
+
+        assert_eq!(core.source_scan("fake", None).await.unwrap(), 2);
+        assert_eq!(core.list().await.len(), 4, "a second scan finds the same entries");
+        core.set("control-fake", "launch.umu_id", "umu-1").await.unwrap();
+        core.source_scan("fake", None).await.unwrap();
+        assert_eq!(core.get("control-fake").await.unwrap().game.launch.umu_id, "umu-1", "a value set by hand stays");
+    }
+
+    #[tokio::test]
+    async fn a_new_game_takes_the_stores_prefix_and_a_purge_trashes_only_universes_own() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let dir = fake_source("");
+        let store = dir.path().join("steamapps/compatdata/1");
+        std::fs::create_dir_all(&store).unwrap();
+        let scan = format!(
+            r#"scan) echo '{{"event":"game","id":"1","title":"Shared","owned":true,"installed":true,"dir":"/g/Shared","exe":"s.exe","prefix":"{}","proton":"/p/Proton 10.0"}}'; echo '{{"event":"game","id":"2","title":"Own","owned":true,"installed":true,"dir":"/g/Own","exe":"o.exe","prefix":"pfx"}}' ;;"#,
+            store.display()
+        );
+        std::fs::write(dir.path().join("sources/fake/run"), format!("#!/bin/sh\ncase \"$1\" in\n{scan}\nesac\necho '{{\"event\":\"done\"}}'\n")).unwrap();
+        let prefixes = dir.path().join("prefixes");
+        std::fs::write(
+            dir.path().join("config/config.toml"),
+            format!("[paths]\nprefixes_root = \"{}\"\n[modules]\nenabled = []\n[sources]\nenabled = [\"fake\"]\n", prefixes.display()),
+        )
+        .unwrap();
+        std::env::set_var("XDG_DATA_HOME", dir.path().join("share"));
+        let core = open().await;
+        assert_eq!(core.source_scan("fake", None).await.unwrap(), 2);
+        let shared = core.get("shared").await.unwrap().game;
+        assert_eq!(
+            (shared.launch.prefix.as_str(), shared.launch.proton.as_str()),
+            (&*store.to_string_lossy(), "/p/Proton 10.0"),
+            "the store's prefix and Proton"
+        );
+        let own = core.get("own").await.unwrap().game;
+        assert_eq!((own.launch.prefix.as_str(), own.launch.proton.as_str()), (&*prefixes.join("own").to_string_lossy(), ""), "a relative path is no prefix");
+        core.set("shared", "launch.proton", "").await.unwrap();
+        core.source_scan("fake", None).await.unwrap();
+        assert_eq!(core.get("shared").await.unwrap().game.launch.proton, "", "only a game entering the library takes it");
+        std::fs::create_dir_all(prefixes.join("own")).unwrap();
+        core.remove("shared", true).await.unwrap();
+        core.remove("own", true).await.unwrap();
+        assert!(store.is_dir(), "the store's prefix stays");
+        assert!(!prefixes.join("own").exists(), "Universe's own goes to the trash");
+    }
+
+    #[tokio::test]
+    async fn an_uninstall_goes_through_a_store_that_does_them_and_trashes_the_folder_otherwise() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let dir = fake_source("");
+        let (one, two, asked) = (dir.path().join("g/One"), dir.path().join("g/Two"), dir.path().join("asked"));
+        for d in [&one, &two] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        let script = format!(
+            r#"scan) echo '{{"event":"game","id":"1","title":"One","owned":true,"installed":true,"dir":"{}","exe":"o.exe"}}'; echo '{{"event":"game","id":"2","title":"Two","owned":true,"installed":true,"dir":"{}","exe":"t.exe"}}' ;;
+uninstall) echo '{{"event":"window","class":"steam","title":""}}'; echo "$2" >> '{}' ;;"#,
+            one.display(),
+            two.display(),
+            asked.display()
+        );
+        std::fs::write(dir.path().join("sources/fake/run"), format!("#!/bin/sh\ncase \"$1\" in\n{script}\nesac\necho '{{\"event\":\"done\"}}'\n")).unwrap();
+        let manifest = dir.path().join("sources/fake/source.toml");
+        std::fs::write(&manifest, "api = 2\nid = \"fake\"\nname = \"Fake\"\nexe = \"run\"\ncapabilities = [\"uninstall\"]\n").unwrap();
+        std::env::set_var("XDG_DATA_HOME", dir.path().join("share"));
+        let core = open().await;
+        assert_eq!(core.source_scan("fake", None).await.unwrap(), 2);
+        assert_eq!(core.uninstall_via("one").await.unwrap().as_deref(), Some("Fake"));
+        core.uninstall("one").await.unwrap();
+        assert_eq!(std::fs::read_to_string(&asked).unwrap(), "1\n", "the store was asked");
+        assert!(one.is_dir(), "the store removes its own files");
+        let g = core.get("one").await.unwrap().game;
+        assert_eq!((g.source.dir.as_str(), g.launch.exe.as_str()), ("", ""), "not installed any more");
+        std::fs::write(&manifest, "api = 2\nid = \"fake\"\nname = \"Fake\"\nexe = \"run\"\n").unwrap();
+        let core = open().await;
+        assert_eq!(core.uninstall_via("two").await.unwrap(), None);
+        core.uninstall("two").await.unwrap();
+        assert!(!two.exists(), "without the capability the folder goes to the trash");
+        assert_eq!(std::fs::read_to_string(&asked).unwrap(), "1\n");
+    }
+
+    #[tokio::test]
+    async fn a_failing_source_leaves_the_others_scanned_and_listed() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let dir = fake_source(
+            r#"scan) echo '{"event":"game","id":"1","title":"Old","owned":true,"installed":true,"dir":"/g/Old","exe":"old.exe"}' ;;
+update) echo '{"event":"update","id":"1","title":"Old","local_build":"1","remote_build":"2","version":"2","date":""}' ;;"#,
+        );
+        let bad = dir.path().join("sources/bad");
+        std::fs::create_dir_all(&bad).unwrap();
+        std::fs::write(bad.join("source.toml"), "api = 2\nid = \"bad\"\nexe = \"run\"\n").unwrap();
+        std::fs::write(bad.join("run"), "#!/bin/sh\necho 'store down' >&2\nexit 1\n").unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(bad.join("run"), std::fs::Permissions::from_mode(0o755)).unwrap();
+        std::fs::write(dir.path().join("config/config.toml"), "[modules]\nenabled = []\n[sources]\nenabled = [\"bad\", \"fake\"]\n").unwrap();
+        let core = open().await;
+        assert_eq!(core.source_scan("", None).await.unwrap(), 1, "the failing store is skipped");
+        assert!(core.source_scan("bad", None).await.unwrap_err().to_string().contains("store down"), "named, its failure is the answer");
+        let updates = core.source_updates().await.unwrap();
+        assert_eq!(updates.iter().map(|u| (u["id"].as_str(), u["source"].as_str())).collect::<Vec<_>>(), [(Some("1"), Some("fake"))]);
     }
 
     #[tokio::test]

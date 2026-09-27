@@ -872,7 +872,7 @@ impl StorePage {
         let (page, game_id, title) = (self.downgrade(), entry.game_id.clone(), entry.title.clone());
         glib::spawn_future_local(async move {
             let id = game_id.clone();
-            let result = backend::call(move |core| async move { core.uninstall(&id).await }).await;
+            let result = backend::pinned(move |core| async move { core.uninstall(&id).await }).await;
             let Some(page) = page.upgrade() else { return };
             match result {
                 Ok(()) => {

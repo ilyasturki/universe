@@ -119,6 +119,9 @@ impl Core {
     fn uninstall(&self, py: Python<'_>, id: String) -> PyResult<()> {
         self.run(py, |c| async move { c.uninstall(&id).await })
     }
+    fn uninstall_via(&self, py: Python<'_>, id: String) -> PyResult<Option<String>> {
+        self.run(py, |c| async move { c.uninstall_via(&id).await })
+    }
     fn reload(&self, py: Python<'_>) -> PyResult<()> {
         self.run(py, |c| c.reload_config())
     }

@@ -1043,7 +1043,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         }
         Cmd::Uninstall { name, yes } => {
             let id = pick(&core, &name).await?;
-            if yes || confirm(&format!("trash the install folder of {id}?")) {
+            if yes || confirm(&format!("uninstall {id} and remove its files?")) {
                 core.uninstall(&id).await?;
                 println!("uninstalled {id}");
             }

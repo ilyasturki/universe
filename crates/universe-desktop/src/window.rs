@@ -660,7 +660,7 @@ impl Window {
             let (id, title, win) = (id.clone(), title.clone(), win.clone());
             glib::spawn_future_local(async move {
                 let target = id.clone();
-                let result = backend::call(move |core| async move { core.uninstall(&target).await }).await;
+                let result = backend::pinned(move |core| async move { core.uninstall(&target).await }).await;
                 let Some(win) = win.upgrade() else { return };
                 win.app().library().refresh(std::slice::from_ref(&id)).await;
                 win.toast(adw::Toast::new(&match result {

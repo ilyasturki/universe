@@ -201,6 +201,11 @@ class CoreClient(QObject):
     def uninstall(self, ident):
         return self._done(self._core.uninstall, ident)
 
+    # The store's name when it removes the game's files itself; "" when its folder goes to the trash.
+    @Slot(str, result=str)
+    def uninstallVia(self, ident):
+        return self._guarded(None, self._core.uninstall_via, ident) or ""
+
     @Slot()
     def rescan(self):
         self._guarded(None, self._core.reload)

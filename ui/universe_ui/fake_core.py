@@ -704,6 +704,12 @@ class FakeCore:
         else:
             self._write_game(game)
 
+    def uninstall_via(self, ident):
+        source = self._game(ident).get("source")
+        kind = str(source.get("kind") or "") if isinstance(source, dict) else str(source or "")
+        store = next((s for s in self._data.get("sources", []) if s["id"] == kind), None)
+        return store["name"] if store and store.get("enabled") and store.get("available") and "uninstall" in store.get("capabilities", []) else None
+
     def uninstall(self, ident):
         self._game(ident)
         entries = [e for entries in self._data.get("source_library", {}).values() for e in entries if e.get("game_id") == ident]

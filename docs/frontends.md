@@ -772,7 +772,9 @@ an "Add a game…" action. `setValue(index, value)` writes through `set_runner_s
 `addGame(title)` sends to `add_game`. A game row opens the Install page's options: Game settings
 (Reprise: `settingsRequested(game)`, which `theme.qml` `pushSub`s over the runner page, B coming
 back to the row; Switch 2: its GameSettingsPage), Uninstall… when installed, Remove from library…,
-through `uninstall(id)` / `remove(id)` on the form (a `message` when done). Both lists follow
+through `uninstall(id)` / `remove(id)` on the form (a `message` when done); Uninstall's confirmation
+names the store when `api.universe.uninstallVia(id)` does ("Uninstall through Steam", "Steam removes
+the files"), the trash otherwise. Both lists follow
 `libraryChanged` — the counts, the Games card — so neither has a Refresh. Back on the tab, the cursor finds
 the runner again. The Switch 2 look has the same list as System Settings › Runners and the same
 page as `switch2/pages/FormPage.qml`, pushed on its stack. The game settings page's Launch group follows the runner: a Runner picker (names

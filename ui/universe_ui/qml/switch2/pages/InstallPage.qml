@@ -258,7 +258,8 @@ FocusScope {
                 Sound.play("ok");
                 shell.push("pages/GameSettingsPage.qml", { gameId: gameId });
             } else if (a === "uninstall") {
-                shell.dialogAsk({ message: "Uninstall " + title + "?", detail: "The install folder goes to the trash; the hours and the journal stay.",
+                var via = api.universe.uninstallVia(gameId);
+                shell.dialogAsk({ message: "Uninstall " + title + "?", detail: (via ? via + " removes the files" : "The install folder goes to the trash") + "; the hours and the journal stay.",
                                   buttons: ["Cancel", "Uninstall"], danger: 1 }, function(k) { if (k === 1) sources.uninstall(gameId); });
             } else if (a === "remove") {
                 shell.dialogAsk({ message: "Remove " + title + " from the library?", detail: "The entry is archived; the files are left where they are.",
