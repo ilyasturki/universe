@@ -13,7 +13,7 @@ use tokio::sync::{mpsc, Mutex};
 
 use super::engine::{Binding, Engine, Fire};
 use super::keys::{self, Source};
-use super::{axis_roles, detect_family, detect_family_on, resolve_slots, sdl_axis, sdl_element, ControllerConfig, Family};
+use super::{axis_roles, detect_family, detect_family_on, resolve_slots, sdl_axis, sdl_element, shown_pads, steam_copy, ControllerConfig, Family};
 use crate::core::Core;
 use crate::paths;
 
@@ -423,9 +423,12 @@ fn readable(path: &Path) -> bool {
 }
 
 pub fn enumerate_json(cfg: &ControllerConfig) -> Vec<serde_json::Value> {
+    let pads: Vec<(PathBuf, Device)> = evdev::enumerate().filter(|(_, dev)| is_pad(dev)).collect();
+    let ids: Vec<(u16, u16)> = pads.iter().map(|(_, d)| (d.input_id().vendor(), d.input_id().product())).collect();
+    let shown = shown_pads(crate::deck::model().is_some(), &ids);
     let mut out = vec![];
-    for (path, dev) in evdev::enumerate() {
-        if !is_pad(&dev) {
+    for ((path, dev), shown) in pads.into_iter().zip(shown) {
+        if !shown {
             continue;
         }
         let bus = bus_name(&dev);
@@ -538,6 +541,8 @@ struct Watcher {
     engine: Engine,
     pads: BTreeMap<String, Pad>,
     ignored: BTreeSet<PathBuf>,
+    /// Steam's copies of a real pad, left closed while one is here
+    copies: BTreeSet<PathBuf>,
     tx: mpsc::Sender<DevEvent>,
     typist: Arc<Mutex<Typist>>,
     suspended: bool,
@@ -567,8 +572,14 @@ impl Watcher {
         for id in gone {
             self.drop_pad(&id);
         }
+        let deck = crate::deck::model().is_some();
+        if !self.pads.values().any(|p| !steam_copy(deck, (p.vendor, p.product))) {
+            self.copies.clear();
+        }
+        self.copies.retain(|p| present.contains(p));
+        let mut fresh = vec![];
         for path in present {
-            if self.ignored.contains(&path) || self.pads.values().any(|p| p.path == path) {
+            if self.ignored.contains(&path) || self.copies.contains(&path) || self.pads.values().any(|p| p.path == path) {
                 continue;
             }
             let dev = match Device::open(&path) {
@@ -581,6 +592,24 @@ impl Watcher {
             };
             if !is_pad(&dev) {
                 self.ignored.insert(path);
+                continue;
+            }
+            fresh.push((path, dev));
+        }
+        // Steam's copy may come first, even in the same scan as its pad: the pads held and the new ones are weighed together.
+        let held: Vec<String> = self.pads.keys().cloned().collect();
+        let ids: Vec<(u16, u16)> =
+            self.pads.values().map(|p| (p.vendor, p.product)).chain(fresh.iter().map(|(_, d)| (d.input_id().vendor(), d.input_id().product()))).collect();
+        let shown = shown_pads(deck, &ids);
+        for (id, _) in held.iter().zip(&shown).filter(|(_, s)| !**s) {
+            if let Some(path) = self.pads.get(id).map(|p| p.path.clone()) {
+                self.drop_pad(id);
+                self.copies.insert(path);
+            }
+        }
+        for ((path, dev), shown) in fresh.into_iter().zip(&shown[held.len()..]) {
+            if !shown {
+                self.copies.insert(path);
                 continue;
             }
             let id = path.file_name().map(|f| f.to_string_lossy().to_string()).unwrap_or_default();
@@ -922,6 +951,7 @@ pub async fn watch(core: Arc<Core>, opts: WatchOptions) -> crate::Result<()> {
         out,
         pads: BTreeMap::new(),
         ignored: BTreeSet::new(),
+        copies: BTreeSet::new(),
         tx,
         typist: Arc::new(Mutex::new(Typist { dev: None })),
         suspended: false,

@@ -1023,6 +1023,8 @@ built-in controls: under Steam that is all the watcher sees of them. A frontend 
 yet shows the Deck's glyphs there, since SDL's hidraw driver may also take the controls from
 hid-steam's evdev node. Without Steam and without InputPlumber, hid-steam starts the Deck in its
 mouse-and-keyboard mode, and holding Menu for about half a second switches it to a gamepad.
+Off a Deck the same pad is Steam's copy of a real one: `watch` and `ls` leave it out while any
+real pad is connected, so the pad shown is the one with its own family and extra buttons.
 
 `watch` reads every `/dev/input/event*` that advertises `BTN_GAMEPAD` **without grabbing it** (a
 game, SDL or Proton reads the same node untouched), rescans every 2 s (hotplug, and pads

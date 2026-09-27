@@ -340,6 +340,17 @@ pub fn detect_family_on(deck: bool, vendor: u16, product: u16, name: &str, keys:
     detect_family(vendor, product, name, keys)
 }
 
+/// Off a Deck, Steam's virtual pad is a copy of a real one.
+pub fn steam_copy(deck: bool, id: (u16, u16)) -> bool {
+    !deck && id == STEAM_VIRTUAL
+}
+
+/// Which pads, by (vendor, product), are shown: Steam's copies only while no real pad is here.
+pub fn shown_pads(deck: bool, pads: &[(u16, u16)]) -> Vec<bool> {
+    let real = pads.iter().any(|id| !steam_copy(deck, *id));
+    pads.iter().map(|id| !real || !steam_copy(deck, *id)).collect()
+}
+
 /// xpadneo presents an Elite as a plain "Xbox Wireless Controller" 045e:028e: grip or paddle codes make it an Elite whatever it says.
 pub fn detect_family(vendor: u16, product: u16, name: &str, keys: &[u16]) -> &'static Family {
     let lname = name.to_lowercase();
@@ -567,6 +578,15 @@ mod tests {
         assert_eq!(detect_family(0x2dc8, 0x6009, "8BitDo Pro 3", &[]).id, "8bitdo-pro-3");
         assert_eq!(detect_family(0x1234, 0x0001, "Some Pad", &[]).id, "generic");
         assert_eq!(detect_family(0x054c, 0x0df2, "DualSense Edge Wireless Controller", &[]).slots().filter(|s| s.extra).count(), 4);
+    }
+
+    #[test]
+    fn steams_copy_of_a_pad_stays_hidden_while_a_real_pad_is_here() {
+        let (copy, elite) = (STEAM_VIRTUAL, (0x045e, 0x028e));
+        assert_eq!(shown_pads(false, &[copy, elite]), [false, true]);
+        assert_eq!(shown_pads(false, &[elite, copy]), [true, false]);
+        assert_eq!(shown_pads(false, &[copy]), [true], "a pad only Steam passes on");
+        assert_eq!(shown_pads(true, &[copy, elite]), [true, true], "a Deck's own controls");
     }
 
     #[test]
