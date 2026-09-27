@@ -4,6 +4,7 @@ import "../core"
 import "../sound"
 import "../ui"
 import "../../core/Format.js" as Format
+import "../../ui" as Base
 import "Home.js" as Home
 
 // The console's home: Games and Media, a row of tiles over the focused one's world, its hero, and under it the Game Hub.
@@ -1138,6 +1139,60 @@ FocusScope {
                 });
             else
                 event.accepted = false;
+        }
+    }
+
+    // ---- The wheel and the finger ----
+
+    // A notch or a swipe up or down is the key it stands for: into the hero, the hub, back up to the row.
+    Base.WheelKeys {
+        z: -1
+    }
+
+    DragHandler {
+        id: pageDrag
+        property int taken: 0
+        target: null
+        xAxis.enabled: false
+        acceptedDevices: PointerDevice.TouchScreen
+        grabPermissions: PointerHandler.CanTakeOverFromItems | PointerHandler.CanTakeOverFromHandlersOfDifferentType
+        onActiveChanged: taken = 0
+        onTranslationChanged: {
+            var steps = Math.trunc(-translation.y / Theme.dp(140));
+            while (taken !== steps) {
+                api.keys.press(steps > taken ? "Down" : "Up");
+                taken += steps > taken ? 1 : -1;
+            }
+        }
+    }
+
+    // The row takes the wheel and a sideways swipe tile by tile.
+    Item {
+        x: 0
+        y: Theme.dp(Theme.railY)
+        width: parent.width
+        height: Theme.dp(Theme.tileFocus)
+        visible: !page.deep
+        z: 20
+
+        Base.WheelKeys {
+            horizontal: true
+        }
+
+        DragHandler {
+            property int taken: 0
+            target: null
+            yAxis.enabled: false
+            acceptedDevices: PointerDevice.TouchScreen | PointerDevice.Mouse
+            grabPermissions: PointerHandler.CanTakeOverFromItems | PointerHandler.CanTakeOverFromHandlersOfDifferentType
+            onActiveChanged: taken = 0
+            onTranslationChanged: {
+                var steps = Math.trunc(-translation.x / Theme.dp(Theme.tileSize + Theme.tileGap));
+                while (taken !== steps) {
+                    api.keys.press(steps > taken ? "Right" : "Left");
+                    taken += steps > taken ? 1 : -1;
+                }
+            }
         }
     }
 
