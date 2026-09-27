@@ -7,6 +7,7 @@ mod dialogs;
 mod form_view;
 mod format;
 mod game;
+mod jobs;
 mod library;
 mod pages;
 mod play;

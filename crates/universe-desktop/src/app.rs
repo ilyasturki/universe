@@ -1,5 +1,6 @@
 use std::cell::{Cell, RefCell};
 use std::sync::OnceLock;
+use std::time::{Duration, Instant};
 
 use adw::prelude::*;
 use adw::subclass::prelude::*;
@@ -11,6 +12,7 @@ use universe::session::Current;
 
 use crate::backend;
 use crate::config;
+use crate::jobs::{self, Job, Kind, Outcome};
 use crate::library::Library;
 use crate::script::{self, Step};
 use crate::window::Window;
@@ -28,6 +30,12 @@ mod imp {
         pub current: RefCell<Option<Current>>,
         /// A game asked for while another ran: it starts once that one has ended.
         pub pending: RefCell<Option<String>>,
+        /// One install, update, scan or art refresh at a time, as a source runs one downloader.
+        pub job: RefCell<Option<Job>>,
+        /// What the signed-in stores have newer builds of, each with its `source`.
+        pub updates: RefCell<Vec<serde_json::Value>>,
+        pub updates_at: Cell<Option<Instant>>,
+        pub checking: Cell<bool>,
     }
 
     #[glib::object_subclass]
@@ -46,6 +54,8 @@ mod imp {
                     Signal::builder("core-failed").param_types([String::static_type()]).build(),
                     Signal::builder("changed").param_types([glib::BoxedAnyObject::static_type()]).build(),
                     Signal::builder("session-changed").build(),
+                    Signal::builder("job-changed").build(),
+                    Signal::builder("updates-changed").build(),
                 ]
             })
         }
@@ -190,6 +200,7 @@ impl Application {
             }
             let Some(app) = app.upgrade() else { return };
             app.end_session().await;
+            app.end_job().await;
             app.quit();
         });
     }
@@ -212,6 +223,112 @@ impl Application {
             glib::timeout_future(std::time::Duration::from_millis(100)).await;
         }
         tracing::warn!("the session did not end within 30 s");
+    }
+
+    pub fn job(&self) -> Option<Job> {
+        self.imp().job.borrow().clone()
+    }
+
+    /// Starts a job over `targets` (see `jobs::start`) unless one runs; false, and a word to the player, when it does.
+    pub fn start_job(&self, kind: Kind, source: &str, targets: Vec<(String, String)>, force: bool) -> bool {
+        let window = self.active_window().and_downcast::<Window>();
+        if let Some(job) = self.job() {
+            if let Some(win) = &window {
+                win.toast(adw::Toast::new(&gettext("{} first: stop it or let it end").replace("{}", &job.label())));
+            }
+            return false;
+        }
+        let (job, outcome) = jobs::start(kind, source, targets, force);
+        self.imp().job.replace(Some(job.clone()));
+        self.emit_by_name::<()>("job-changed", &[]);
+        let app = self.downgrade();
+        glib::spawn_future_local(async move {
+            let outcome = outcome.await;
+            let Some(app) = app.upgrade() else { return };
+            app.library().refresh(&[]).await;
+            app.imp().job.replace(None);
+            app.emit_by_name::<()>("job-changed", &[]);
+            app.job_ended(&job, &outcome);
+            if job.pauses() && outcome.ok {
+                app.check_updates(None);
+            }
+        });
+        true
+    }
+
+    fn job_ended(&self, job: &Job, outcome: &Outcome) {
+        let window = self.active_window().and_downcast::<Window>();
+        let toast = adw::Toast::builder()
+            .title(&outcome.text)
+            .priority(if outcome.ok || job.cancelled() { adw::ToastPriority::Normal } else { adw::ToastPriority::High })
+            .build();
+        if !outcome.game.is_empty() {
+            toast.set_button_label(Some(&gettext("_Play")));
+            toast.set_action_name(Some("win.play-game"));
+            toast.set_action_target_value(Some(&outcome.game.to_variant()));
+        }
+        let unseen = window.as_ref().is_none_or(|win| !win.is_active());
+        if let Some(win) = &window {
+            win.toast(toast);
+        }
+        if unseen && job.pauses() && !job.cancelled() {
+            let notification = gio::Notification::new(&outcome.text);
+            notification.set_icon(&gio::ThemedIcon::new(config::APP_ID));
+            if !outcome.ok {
+                notification.set_priority(gio::NotificationPriority::High);
+            }
+            self.send_notification(Some("job"), &notification);
+        }
+    }
+
+    /// Stops the running job and waits for its end: an install or an update keeps its download for next time.
+    pub async fn end_job(&self) {
+        let Some(job) = self.job() else { return };
+        job.cancel();
+        for _ in 0..300 {
+            if !job.running() {
+                return;
+            }
+            glib::timeout_future(Duration::from_millis(100)).await;
+        }
+        tracing::warn!("{} did not end within 30 s", job.label());
+    }
+
+    pub fn updates(&self) -> Vec<serde_json::Value> {
+        self.imp().updates.borrow().clone()
+    }
+
+    /// Asks the signed-in stores what they have newer builds of, unless they were asked within `max_age`; never in a
+    /// scripted run, which stays off the network.
+    pub fn check_updates(&self, max_age: Option<Duration>) {
+        let imp = self.imp();
+        if self.scripted() || imp.checking.get() || imp.updates_at.get().zip(max_age).is_some_and(|(at, age)| at.elapsed() < age) {
+            return;
+        }
+        imp.checking.set(true);
+        let app = self.downgrade();
+        glib::spawn_future_local(async move {
+            let result = backend::pinned(|core| async move {
+                let signed_in = core.sources().await.iter().any(|s| s["enabled"].as_bool() == Some(true) && s["logged_in"].as_bool() == Some(true));
+                if signed_in {
+                    core.source_updates().await
+                } else {
+                    Ok(Vec::new())
+                }
+            })
+            .await;
+            let Some(app) = app.upgrade() else { return };
+            let imp = app.imp();
+            imp.checking.set(false);
+            match result {
+                Ok(updates) => {
+                    imp.updates_at.set(Some(Instant::now()));
+                    imp.updates.replace(updates);
+                    app.emit_by_name::<()>("updates-changed", &[]);
+                }
+                Err(e) => tracing::warn!("updates: {e}"),
+            }
+        });
     }
 
     pub fn is_ready(&self) -> bool {
@@ -259,6 +376,8 @@ impl Application {
             if let Some(events) = events {
                 app.follow(events);
             }
+            glib::timeout_future_seconds(5).await;
+            app.check_updates(None);
         });
     }
 

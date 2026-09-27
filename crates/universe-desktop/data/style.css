@@ -91,3 +91,17 @@ game-card overlay > menubutton.hidden > button {
   padding: 6px;
   border-radius: 10px;
 }
+
+.count-badge {
+  min-width: 12px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background-color: var(--accent-bg-color);
+  color: var(--accent-fg-color);
+  font-size: 0.8em;
+  font-weight: bold;
+}
+
+cover.thumb > stack.card {
+  border-radius: 6px;
+}

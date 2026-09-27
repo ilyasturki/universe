@@ -74,6 +74,12 @@ template $UniverseWindow: Adw.ApplicationWindow {
 
                 child: $UniverseLibraryPage library_page {};
               }
+
+              Adw.ViewStackPage {
+                name: "store";
+
+                child: $UniverseStorePage store_page {};
+              }
             };
           };
         };

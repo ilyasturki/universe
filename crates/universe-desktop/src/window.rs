@@ -9,8 +9,9 @@ use gtk::{gio, glib};
 use crate::app::Application;
 use crate::backend;
 use crate::game::GameObject;
+use crate::jobs::Kind;
 use crate::library::{self, Sort, View};
-use crate::pages::{GamePage, LibraryPage};
+use crate::pages::{GamePage, LibraryPage, StorePage};
 use crate::script;
 use crate::state::State;
 use crate::widgets::NowPlaying;
@@ -46,6 +47,8 @@ mod imp {
         #[template_child]
         pub library_page: TemplateChild<LibraryPage>,
         #[template_child]
+        pub store_page: TemplateChild<StorePage>,
+        #[template_child]
         pub now_playing: TemplateChild<NowPlaying>,
         pub state: RefCell<State>,
         /// The player said to quit the running game: the next close goes through.
@@ -54,6 +57,8 @@ mod imp {
         /// The sidebar's items in index order: view key and title.
         pub keys: RefCell<Vec<(String, String)>>,
         pub rebuilding: Cell<bool>,
+        /// The Store item's count of updates, in the sidebar built last.
+        pub store_badge: RefCell<Option<gtk::Label>>,
     }
 
     #[glib::object_subclass]
@@ -64,6 +69,7 @@ mod imp {
 
         fn class_init(klass: &mut Self::Class) {
             LibraryPage::ensure_type();
+            StorePage::ensure_type();
             NowPlaying::ensure_type();
             klass.bind_template();
         }
@@ -83,7 +89,9 @@ mod imp {
             self.library_page.set_sort(Sort::parse(&state.sort));
             self.state.replace(state);
             self.library_page.search_entry().set_key_capture_widget(Some(&*obj));
-            self.split_view.bind_property("show-sidebar", &self.library_page.sidebar_button(), "visible").invert_boolean().sync_create().build();
+            for button in [self.library_page.sidebar_button(), self.store_page.sidebar_button()] {
+                self.split_view.bind_property("show-sidebar", &button, "visible").invert_boolean().sync_create().build();
+            }
             obj.setup_actions();
             obj.setup_sidebar();
         }
@@ -94,12 +102,20 @@ mod imp {
     impl WindowImpl for Window {
         fn close_request(&self) -> glib::Propagation {
             let obj = self.obj();
-            if obj.app().current().is_some() && !self.closing.get() {
-                obj.confirm_close();
-                return glib::Propagation::Stop;
-            }
-            if !obj.app().scripted() {
-                obj.save_state();
+            if !self.closing.get() {
+                let app = obj.app();
+                let job = app.job();
+                if app.current().is_some() || job.as_ref().is_some_and(|j| j.cancellable()) {
+                    obj.confirm_close();
+                    return glib::Propagation::Stop;
+                }
+                if job.is_some() {
+                    obj.leave();
+                    return glib::Propagation::Stop;
+                }
+                if !app.scripted() {
+                    obj.save_state();
+                }
             }
             self.parent_close_request()
         }
@@ -136,7 +152,7 @@ impl Window {
             .build();
         let search = gio::ActionEntry::builder("search")
             .activate(|win: &Self, _, _| {
-                win.imp().library_page.search_entry().grab_focus();
+                win.search_entry().grab_focus();
             })
             .build();
         let sort = gio::ActionEntry::builder("sort")
@@ -217,6 +233,16 @@ impl Window {
         state.save();
     }
 
+    /// The search of the page in view.
+    fn search_entry(&self) -> gtk::SearchEntry {
+        let imp = self.imp();
+        if imp.stack.visible_child_name().as_deref() == Some("store") {
+            imp.store_page.search_entry()
+        } else {
+            imp.library_page.search_entry()
+        }
+    }
+
     pub fn toast(&self, toast: adw::Toast) {
         toast.set_use_markup(false);
         self.imp().toasts.add_toast(toast);
@@ -229,10 +255,16 @@ impl Window {
             self.set_default_size(1280, 800);
         }
         self.imp().library_page.set_library(app.library());
+        self.imp().store_page.follow(&app);
         self.setup_play_actions();
         let win = self.downgrade();
         app.library().connect_updated(move || {
             win.upgrade().inspect(|win| win.rebuild_sidebar());
+        });
+        let win = self.downgrade();
+        app.connect_local("updates-changed", false, move |_| {
+            win.upgrade().inspect(|win| win.sync_badge());
+            None
         });
         let win = self.downgrade();
         app.connect_local("session-changed", false, move |_| {
@@ -330,6 +362,12 @@ impl Window {
             main.append(item("starred-symbolic", &gettext("Favourites")));
             keys.push(("favorites".into(), gettext("Favourites")));
         }
+        let store = item("system-software-install-symbolic", &gettext("Store"));
+        let badge = gtk::Label::builder().valign(gtk::Align::Center).css_classes(["count-badge", "numeric"]).build();
+        store.set_suffix(Some(&badge));
+        imp.store_badge.replace(Some(badge));
+        main.append(store);
+        keys.push(("store".into(), gettext("Store")));
         sidebar.append(main);
         if !shape.sources.is_empty() {
             let section = adw::SidebarSection::new();
@@ -359,16 +397,36 @@ impl Window {
         imp.shape.replace(Some(shape));
         sidebar.set_selected(index as u32);
         imp.rebuilding.set(false);
+        self.sync_badge();
         self.select(index as u32);
+    }
+
+    fn sync_badge(&self) {
+        let count = self.app().updates().len();
+        if let Some(badge) = self.imp().store_badge.borrow().as_ref() {
+            badge.set_label(&count.to_string());
+            badge.set_visible(count > 0);
+            badge.set_tooltip_text(Some(&gettextrs::ngettext("{} update", "{} updates", count as u32).replace("{}", &count.to_string())));
+        }
     }
 
     fn select(&self, index: u32) {
         let imp = self.imp();
         let Some((key, title)) = imp.keys.borrow().get(index as usize).cloned() else { return };
         imp.content_page.set_title(&title);
-        imp.library_page.set_view(View::parse(&key));
-        if imp.stack.visible_child_name().as_deref() != Some("library") {
-            imp.stack.set_visible_child_name("library");
+        let (page, shown, hidden) = if key == "store" {
+            ("store", imp.store_page.search_entry(), imp.library_page.search_entry())
+        } else {
+            imp.library_page.set_view(View::parse(&key));
+            ("library", imp.library_page.search_entry(), imp.store_page.search_entry())
+        };
+        hidden.set_key_capture_widget(gtk::Widget::NONE);
+        shown.set_key_capture_widget(Some(self));
+        if imp.stack.visible_child_name().as_deref() != Some(page) {
+            imp.stack.set_visible_child_name(page);
+        }
+        if page == "store" {
+            imp.store_page.load(false);
         }
         imp.state.borrow_mut().view = key;
     }
@@ -392,23 +450,54 @@ impl Window {
         }
     }
 
+    /// Asks before a close ends the game started here or stops the running job.
     fn confirm_close(&self) {
-        let Some(current) = self.app().current() else { return };
-        let dialog =
-            adw::AlertDialog::new(Some(&gettext("Quit {}?").replace("{}", &current.title)), Some(&gettext("Games started here close with Universe Desktop.")));
-        dialog.add_responses(&[("cancel", &gettext("_Keep Playing")), ("quit", &gettext("_Quit Game"))]);
+        let (current, job) = (self.app().current(), self.app().job().filter(|j| j.cancellable()));
+        let mut body = Vec::new();
+        if current.is_some() {
+            body.push(gettext("Games started here close with Universe Desktop."));
+        }
+        if let Some(job) = &job {
+            body.push(match job.kind() {
+                Kind::Install | Kind::Update => gettext("{} pauses, and resumes from the Store.").replace("{}", &job.title()),
+                _ => gettext("Fetching artwork stops; the art fetched so far is kept."),
+            });
+        }
+        let dialog = match &current {
+            Some(current) => {
+                let dialog = adw::AlertDialog::new(Some(&gettext("Quit {}?").replace("{}", &current.title)), Some(&body.join(" ")));
+                dialog.add_responses(&[("cancel", &gettext("_Keep Playing")), ("quit", &gettext("_Quit Game"))]);
+                dialog
+            }
+            None => {
+                let dialog = adw::AlertDialog::new(Some(&gettext("Quit Universe Desktop?")), Some(&body.join(" ")));
+                dialog.add_responses(&[("cancel", &gettext("_Cancel")), ("quit", &gettext("_Quit"))]);
+                dialog
+            }
+        };
         dialog.set_response_appearance("quit", adw::ResponseAppearance::Destructive);
         dialog.set_default_response(Some("cancel"));
+        dialog.set_close_response("cancel");
         let win = self.downgrade();
-        dialog.connect_response(None, move |_, response| {
-            let Some(win) = win.upgrade().filter(|_| response == "quit") else { return };
-            win.imp().closing.set(true);
-            glib::spawn_future_local(async move {
-                win.app().end_session().await;
-                win.close();
-            });
+        dialog.connect_response(Some("quit"), move |_, _| {
+            win.upgrade().inspect(|win| win.leave());
         });
         dialog.present(Some(self));
+    }
+
+    /// Out of sight at once; the game ends and the job stops before the window goes.
+    fn leave(&self) {
+        self.imp().closing.set(true);
+        if !self.app().scripted() {
+            self.save_state();
+        }
+        self.set_visible(false);
+        let win = self.clone();
+        glib::spawn_future_local(async move {
+            win.app().end_session().await;
+            win.app().end_job().await;
+            win.close();
+        });
     }
 
     /// A `game.*` action from a card, a page or a menu.

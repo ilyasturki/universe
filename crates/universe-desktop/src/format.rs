@@ -29,6 +29,17 @@ pub fn relative(unix: i64, now: chrono::DateTime<chrono::Local>) -> String {
     }
 }
 
+/// `just now`, `12 min ago`, `3 h ago`, then as `relative` says it.
+pub fn ago(unix: i64, now: chrono::DateTime<chrono::Local>) -> String {
+    let secs = now.timestamp() - unix;
+    match secs {
+        ..90 => gettext("just now"),
+        90..3600 => gettext("{} min ago").replace("{}", &(secs / 60).to_string()),
+        3600..86400 => gettext("{} h ago").replace("{}", &(secs / 3600).to_string()),
+        _ => relative(unix, now),
+    }
+}
+
 /// A running clock: `4:05`, `1:02:03`.
 pub fn clock(secs: i64) -> String {
     let secs = secs.max(0);
@@ -74,6 +85,14 @@ mod tests {
         assert_eq!(relative(ago(14), now), "2 weeks ago");
         assert_eq!(relative(ago(60), now), "29 July");
         assert_eq!(relative(ago(400), now), "23 August 2025");
+    }
+
+    #[test]
+    fn ages_count_minutes_and_hours_within_a_day() {
+        let now = chrono::Local.with_ymd_and_hms(2026, 9, 27, 18, 0, 0).unwrap();
+        let ago_s = |secs: i64| ago(now.timestamp() - secs, now);
+        assert_eq!((ago_s(30), ago_s(600), ago_s(3 * 3600)), ("just now".to_string(), "10 min ago".to_string(), "3 h ago".to_string()));
+        assert_eq!(ago_s(2 * 86400), "2 days ago");
     }
 
     #[test]

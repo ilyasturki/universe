@@ -1,0 +1,257 @@
+using Gtk 4.0;
+using Adw 1;
+
+template $UniverseStorePage: Adw.Bin {
+  child: Adw.ToolbarView {
+    [top]
+    Adw.HeaderBar {
+      [start]
+      Button sidebar_button {
+        action-name: "win.show-sidebar";
+        icon-name: "sidebar-show-symbolic";
+        tooltip-text: _("Show Sidebar");
+      }
+
+      title-widget: Adw.Clamp {
+        maximum-size: 420;
+        tightening-threshold: 420;
+
+        child: SearchEntry search {
+          hexpand: true;
+          placeholder-text: _("Search the Store");
+          search-delay: 400;
+        };
+      };
+
+      [end]
+      MenuButton {
+        icon-name: "open-menu-symbolic";
+        tooltip-text: _("Main Menu");
+        primary: true;
+        menu-model: store_menu;
+      }
+
+      [end]
+      Adw.Bin {
+        width-request: 34;
+
+        child: Stack refresh_stack {
+          transition-type: crossfade;
+
+          Button refresh {
+            icon-name: "view-refresh-symbolic";
+            tooltip-text: _("Refresh the Listing");
+            action-name: "store.refresh";
+          }
+
+          Adw.Spinner refresh_spinner {
+            halign: center;
+            valign: center;
+          }
+        };
+      }
+
+      [end]
+      DropDown sources {
+        visible: false;
+        tooltip-text: _("Store");
+      }
+    }
+
+    content: Adw.ViewStack stack {
+      enable-transitions: true;
+
+      Adw.ViewStackPage {
+        name: "loading";
+
+        child: Adw.Spinner {
+          width-request: 32;
+          height-request: 32;
+          halign: center;
+          valign: center;
+        };
+      }
+
+      Adw.ViewStackPage {
+        name: "signin";
+
+        child: Adw.StatusPage {
+          icon-name: "system-software-install-symbolic";
+          title: _("No Store Signed In");
+          description: _("Sign in to a store to list the games you own and install them here");
+
+          child: Button {
+            label: _("_Set Up Stores");
+            use-underline: true;
+            halign: center;
+            action-name: "app.preferences-page";
+            action-target: "'stores'";
+
+            styles [
+              "pill",
+              "suggested-action",
+            ]
+          };
+        };
+      }
+
+      Adw.ViewStackPage {
+        name: "list";
+
+        child: ScrolledWindow {
+          hscrollbar-policy: never;
+
+          child: Adw.Clamp {
+            maximum-size: 860;
+            tightening-threshold: 700;
+
+            child: Box {
+              orientation: vertical;
+              spacing: 24;
+              margin-top: 24;
+              margin-bottom: 36;
+              margin-start: 12;
+              margin-end: 12;
+
+              Adw.PreferencesGroup job_group {
+                title: _("In Progress");
+                visible: false;
+
+                Adw.ActionRow job_row {
+                  use-markup: false;
+                  title-lines: 1;
+                  subtitle-lines: 1;
+
+                  [prefix]
+                  $UniverseCover job_art {
+                    art-width: 80;
+                    art-height: 45;
+                    valign: center;
+
+                    styles [
+                      "thumb",
+                    ]
+                  }
+
+                  [suffix]
+                  ProgressBar job_progress {
+                    valign: center;
+                    width-request: 120;
+                  }
+
+                  [suffix]
+                  Adw.Spinner job_spinner {
+                    valign: center;
+                  }
+
+                  [suffix]
+                  Button job_cancel {
+                    label: _("_Stop");
+                    use-underline: true;
+                    valign: center;
+                    action-name: "store.cancel";
+                  }
+                }
+              }
+
+              Adw.PreferencesGroup updates_group {
+                title: _("Updates");
+                visible: false;
+
+                [header-suffix]
+                Button {
+                  label: _("Update _All");
+                  use-underline: true;
+                  action-name: "store.update-all";
+
+                  styles [
+                    "suggested-action",
+                  ]
+                }
+              }
+
+              Adw.PreferencesGroup installed_group {
+                title: _("Installed");
+                visible: false;
+              }
+
+              Adw.PreferencesGroup owned_group {
+                title: _("Not Installed");
+                visible: false;
+              }
+
+              Adw.PreferencesGroup results_group {
+                title: _("Not in Your Library");
+                visible: false;
+              }
+            };
+          };
+        };
+      }
+
+      Adw.ViewStackPage {
+        name: "empty";
+
+        child: Adw.StatusPage empty_page {
+          icon-name: "system-software-install-symbolic";
+          title: _("No Games Owned");
+          description: _("Games bought on the store show up here once the listing is refreshed");
+
+          child: Button {
+            label: _("_Refresh the Listing");
+            use-underline: true;
+            halign: center;
+            action-name: "store.refresh";
+
+            styles [
+              "pill",
+            ]
+          };
+        };
+      }
+
+      Adw.ViewStackPage {
+        name: "no-results";
+
+        child: Adw.StatusPage {
+          icon-name: "edit-find-symbolic";
+          title: _("No Results Found");
+          description: _("Try a different search");
+        };
+      }
+
+      Adw.ViewStackPage {
+        name: "failed";
+
+        child: Adw.StatusPage failed_page {
+          icon-name: "network-error-symbolic";
+          title: _("The Store Could Not Be Listed");
+
+          child: Button {
+            label: _("_Try Again");
+            use-underline: true;
+            halign: center;
+            action-name: "store.refresh";
+
+            styles [
+              "pill",
+            ]
+          };
+        };
+      }
+    };
+  };
+}
+
+menu store_menu {
+  section {
+    item (_("_Refresh the Listing"), "store.refresh")
+    item (_("_Find Installed Games"), "store.scan")
+  }
+
+  section {
+    item (_("_Preferences"), "app.preferences")
+    item (_("_Keyboard Shortcuts"), "app.shortcuts")
+    item (_("_About Universe Desktop"), "app.about")
+  }
+}
