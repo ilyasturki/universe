@@ -7,7 +7,8 @@ usage: tools/distro-check
 
 What a user of a distro other than NixOS goes through, on this one: the core's
 tests, tools/dist, install.sh into a fresh HOME, the CLI finding the shipped
-modules and sources, doctor, the UI offscreen on the fake library and on the
+modules and sources, doctor, Universe Desktop where the distro's GTK is new
+enough for it, the UI offscreen on the fake library and on the
 real core (shots in DISTRO_OUT, default target/distro-check), then
 install.sh --uninstall leaving nothing behind.
 
@@ -59,6 +60,14 @@ for c in checks:
     print("ok  " if c["ok"] else "--  ", c["label"], "" if c["ok"] else f"({c['detail']})")
 PY
 
+echo "── desktop"
+if [ -x "$HOME/.local/bin/universe-desktop" ]; then
+    universe-desktop --help > /dev/null
+    echo "universe-desktop: installed"
+else
+    echo "universe-desktop: left out, no GTK 4.22 and libadwaita 1.9 here"
+fi
+
 echo "── ui"
 ui() {
     local name=$1; shift
@@ -73,6 +82,7 @@ ui ui-core
 
 echo "── uninstall"
 "$work/dist/install.sh" --uninstall
-left="$(find "$HOME/.local/bin" "$HOME/.local/lib" "$HOME/.local/share/applications" -mindepth 1 2> /dev/null || true)"
+left="$(find "$HOME/.local/bin" "$HOME/.local/lib" "$HOME/.local/share/applications" "$HOME/.local/share/dbus-1/services" \
+    "$HOME/.local/share/gnome-shell/search-providers" "$HOME/.local/share/metainfo" -mindepth 1 2> /dev/null || true)"
 [ -z "$left" ] || { echo "distro-check: left behind:"$'\n'"$left" >&2; exit 1; }
 echo "distro-check: ok"

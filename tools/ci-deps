@@ -7,7 +7,8 @@ usage: tools/ci-deps [desktops]
 
 As root in a fresh Arch, Ubuntu or Fedora container: the packages that
 tools/distro-check needs (a Rust toolchain, Python, scdoc, the libraries
-the pip-installed Qt loads), and a user `ci` to run it as, since root
+the pip-installed Qt loads, GTK 4 and libadwaita to build Universe Desktop
+on Arch and Fedora), and a user `ci` to run it as, since root
 writes through the read-only files the tests make. `desktops` adds what
 tools/desktop-smoke starts (Arch only: Ubuntu has no niri).
 USAGE
@@ -24,7 +25,8 @@ case "$ID" in
     arch)
         pacman -Sy --noconfirm archlinux-keyring > /dev/null
         pacman -Su --noconfirm --needed base-devel rust python git scdoc tzdata \
-            libxkbcommon libxkbcommon-x11 sdl2 fontconfig libglvnd nss libpulse xcb-util-cursor ttf-dejavu dbus > /dev/null
+            libxkbcommon libxkbcommon-x11 sdl2 fontconfig libglvnd nss libpulse xcb-util-cursor ttf-dejavu dbus \
+            gtk4 libadwaita blueprint-compiler > /dev/null
         [ "${1:-}" != desktops ] || pacman -S --noconfirm --needed mesa sway foot grim mako xorg-server-xvfb openbox xterm dunst \
             kwin kconfig niri > /dev/null
         # cap_sys_nice on the file, which exec refuses where the container's bounding set lacks it
@@ -41,7 +43,8 @@ case "$ID" in
         ;;
     fedora)
         dnf install -y -q gcc rust cargo python3 python3-devel git scdoc tzdata libxkbcommon-devel libxkbcommon-x11 \
-            mesa-libGL mesa-libEGL fontconfig dbus-libs pulseaudio-libs glib2 krb5-libs xcb-util-cursor dejavu-sans-fonts dbus-daemon > /dev/null
+            mesa-libGL mesa-libEGL fontconfig dbus-libs pulseaudio-libs glib2 krb5-libs xcb-util-cursor dejavu-sans-fonts dbus-daemon \
+            gtk4-devel libadwaita-devel blueprint-compiler > /dev/null
         ;;
     *) echo "ci-deps: no package list for $ID" >&2; exit 2 ;;
 esac
