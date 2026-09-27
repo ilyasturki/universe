@@ -38,7 +38,7 @@ Item {
         x: Theme.dp(8) + 1 + Theme.dp(16)
         y: head.y + head.height
         width: parent.width - x * 2
-        height: Math.max(qr.height, text.height) + Theme.dp(36)
+        height: Math.max(qr.visible ? qr.height : 0, text.height) + Theme.dp(36)
         spacing: Theme.dp(28)
 
         QrCode {
