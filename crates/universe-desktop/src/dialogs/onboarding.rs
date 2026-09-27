@@ -29,7 +29,7 @@ struct Onboarding {
 
 impl Onboarding {
     fn say(&self, text: &str) {
-        self.toasts.add_toast(adw::Toast::new(text));
+        self.toasts.add_toast(crate::dialogs::toast(text));
     }
 }
 

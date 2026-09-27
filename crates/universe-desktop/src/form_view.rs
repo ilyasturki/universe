@@ -172,7 +172,7 @@ impl FormView {
 
     fn toast(&self, text: &str) {
         if let Some(dialog) = self.dialog.upgrade() {
-            dialog.add_toast(adw::Toast::new(text));
+            dialog.add_toast(crate::dialogs::toast(text));
         }
     }
 

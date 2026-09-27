@@ -218,6 +218,7 @@ impl Window {
     }
 
     pub fn toast(&self, toast: adw::Toast) {
+        toast.set_use_markup(false);
         self.imp().toasts.add_toast(toast);
     }
 

@@ -216,7 +216,7 @@ fn load_stores(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, connector: 
                     let result = backend::call(move |core| async move { core.enable_source(&sid, on).await }).await;
                     let (Some(dialog), Some(page)) = (dialog.upgrade(), page.upgrade()) else { return };
                     if let Err(e) = result {
-                        dialog.add_toast(adw::Toast::new(&e.to_string()));
+                        dialog.add_toast(crate::dialogs::toast(&e.to_string()));
                     }
                     load_stores(&dialog, &page, &conn);
                 });
@@ -241,7 +241,7 @@ fn open_store(dialog: &adw::PreferencesDialog, stores: &Rc<ListPage>, source: &V
         let weak = dialog.downgrade();
         let say: signin::Say = Rc::new(move |text: &str| {
             if let Some(dialog) = weak.upgrade() {
-                dialog.add_toast(adw::Toast::new(text));
+                dialog.add_toast(crate::dialogs::toast(text));
             }
         });
         let (weak, stores, connector_owned) = (dialog.downgrade(), Rc::downgrade(stores), connector.to_string());
@@ -296,7 +296,7 @@ fn load_modules(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, connector:
                     let result = backend::call(move |core| async move { core.enable_module(&mid, on).await }).await;
                     let (Some(dialog), Some(page)) = (dialog.upgrade(), page.upgrade()) else { return };
                     if let Err(e) = result {
-                        dialog.add_toast(adw::Toast::new(&e.to_string()));
+                        dialog.add_toast(crate::dialogs::toast(&e.to_string()));
                     }
                     load_modules(&dialog, &page, &conn);
                 });

@@ -54,7 +54,7 @@ struct AddGame {
 
 impl AddGame {
     fn say(&self, text: &str) {
-        self.toasts.add_toast(adw::Toast::new(text));
+        self.toasts.add_toast(crate::dialogs::toast(text));
     }
 }
 
@@ -294,7 +294,7 @@ fn file_page(this: &Rc<AddGame>, path: PathBuf, runners: Vec<Value>) -> adw::Nav
                     let Some(win) = this.win.upgrade() else { return };
                     win.app().library().refresh(std::slice::from_ref(&id)).await;
                     if let Some(game) = win.app().library().get(&id) {
-                        win.toast(adw::Toast::new(&gettext("Added “{}”").replace("{}", &game.title())));
+                        win.toast(crate::dialogs::toast(&gettext("Added “{}”").replace("{}", &game.title())));
                         win.open_game(&game);
                     }
                 }
