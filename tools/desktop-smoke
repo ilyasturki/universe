@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+    cat <<'USAGE'
+usage: tools/desktop-smoke [PROFILE...]
+
+Starts each desktop without a GPU, opens a terminal in it, and checks the
+core's part there: the windows listed and focused and the cursor hidden then
+put back (the ignored test desktop::live), `universe osd`, and
+`universe desktop-shot` of the screen and of the focused window.
+Profiles: sway x11 kde niri (default: all). Logs and shots land in
+OUT/<profile> (SMOKE_OUT, default target/desktop-smoke). A step a bare
+compositor cannot answer reads `skip` with the reason.
+
+For a container (tools/container, CI): it refuses to run where /dev/dri
+exists, so no compositor it starts reaches a real GPU. Needs cargo,
+dbus-run-session, foot, grim and mako, then per profile:
+  sway      sway (headless, pixman)
+  x11       Xvfb openbox xterm dunst
+  kde       kwin_wayland (virtual) kwriteconfig6
+  niri      niri, nested in a headless sway
+Hyprland has none: aquamarine allocates through a GPU render node.
+USAGE
+}
+
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+self="$repo/tools/desktop-smoke"
+all=(sway x11 kde niri)
+live_test=desktop::live::the_desktops_windows_are_listed_and_focused_and_its_cursor_put_back
+
+# What a bare compositor in a container cannot answer, left to a real session.
+beyond() {
+    case "$1 $2" in
+        "kde osd") echo "plasmashell draws it, and a bare kwin runs none" ;;
+        "kde shot-"*) echo "spectacle never answers under a virtual kwin" ;;
+    esac
+}
+
+# In the desktop, as its startup program: the checks, a line each in $dir/result, then the desktop told to quit.
+check() {
+    local profile=$1
+    local dir=$SMOKE_DIR
+    : > "$dir/result"
+    step() {
+        local name=$1; shift
+        local why
+        why="$(beyond "$profile" "$name")"
+        if [ -n "$why" ]; then
+            echo "skip $name: $why" >> "$dir/result"
+        elif "$@" >> "$dir/$name.log" 2>&1; then echo "ok   $name" >> "$dir/result"; else echo "FAIL $name" >> "$dir/result"; fi
+    }
+    if [ "$profile" = x11 ]; then
+        xterm -fa Monospace -T smoke-a -geometry 60x10+40+40 &
+        xterm -fa Monospace -T smoke-b -geometry 60x10+400+300 &
+        dunst > "$dir/notifier.log" 2>&1 &
+    else
+        foot -T smoke-a > "$dir/foot.log" 2>&1 &
+        mako > "$dir/notifier.log" 2>&1 &
+    fi
+    sleep "${SMOKE_SETTLE:-3}"
+    step live "$SMOKE_TEST" --ignored --exact --nocapture "$live_test"
+    step osd "$SMOKE_BIN" osd audio-volume-high-symbolic Smoke --level 0.4
+    step shot-screen "$SMOKE_BIN" desktop-shot "$dir/screen.png"
+    step shot-window "$SMOKE_BIN" desktop-shot "$dir/window.png" --window
+    case "$profile" in
+        sway) swaymsg exit ;;
+        niri) niri msg action quit --skip-confirmation ;;
+        x11) openbox --exit ;;
+    esac > /dev/null 2>&1 || true
+}
+
+# Inside dbus-run-session: the desktop, which runs `check` and ends with it.
+session() {
+    local profile=$1
+    local dir=$SMOKE_DIR
+    local run="$self --check $profile"
+    export WLR_BACKENDS=headless WLR_RENDERER=pixman WLR_LIBINPUT_NO_DEVICES=1
+    case "$profile" in
+        sway)
+            printf 'output HEADLESS-1 resolution 1280x720\nexec %s\n' "$run" > "$dir/sway.conf"
+            sway -c "$dir/sway.conf" > "$dir/compositor.log" 2>&1
+            ;;
+        x11)
+            export DISPLAY=:77 XDG_SESSION_TYPE=x11
+            Xvfb :77 -screen 0 1280x720x24 > "$dir/xvfb.log" 2>&1 &
+            for _ in $(seq 50); do [ -S /tmp/.X11-unix/X77 ] && break; sleep 0.2; done
+            openbox --startup "$run" > "$dir/compositor.log" 2>&1
+            jobs -p | xargs -r kill 2> /dev/null || true
+            ;;
+        kde)
+            export XDG_CURRENT_DESKTOP=KDE KDE_SESSION_VERSION=6
+            kwin_wayland --virtual --no-lockscreen --width 1280 --height 720 --socket wayland-smoke --exit-with-session "$run" > "$dir/compositor.log" 2>&1
+            ;;
+        niri)
+            printf 'spawn-at-startup "sh" "-c" "%s"\nhotkey-overlay { skip-at-startup; }\n' "$run" > "$dir/niri.kdl"
+            printf 'output HEADLESS-1 resolution 1280x720\nexec sh -c "niri -c %s > %s 2>&1; swaymsg exit"\n' "$dir/niri.kdl" "$dir/compositor.log" > "$dir/sway.conf"
+            sway -c "$dir/sway.conf" > "$dir/parent.log" 2>&1
+            ;;
+    esac
+}
+
+case "${1:-}" in
+    -h | --help) usage; exit 0 ;;
+    --check) check "$2"; exit 0 ;;
+    --session) session "$2"; exit 0 ;;
+esac
+
+if [ -e /dev/dri ]; then
+    echo "desktop-smoke: /dev/dri is here; run it where no compositor can reach a GPU (tools/container)" >&2
+    exit 2
+fi
+profiles=("$@")
+[ ${#profiles[@]} -gt 0 ] || profiles=("${all[@]}")
+for p in "${profiles[@]}"; do
+    [[ " ${all[*]} " == *" $p "* ]] || { echo "desktop-smoke: unknown profile '$p'" >&2; exit 2; }
+done
+
+cargo build --quiet -p universe --manifest-path "$repo/Cargo.toml"
+test_bin=$(cargo test --quiet -p universe --lib --no-run --message-format=json --manifest-path "$repo/Cargo.toml" \
+    | grep '"kind":\["lib"\]' | grep -o '"executable":"[^"]*"' | cut -d'"' -f4)
+export SMOKE_BIN="${CARGO_TARGET_DIR:-$repo/target}/debug/universe" SMOKE_TEST="$test_bin"
+out="${SMOKE_OUT:-${CARGO_TARGET_DIR:-$repo/target}/desktop-smoke}"
+export LIBGL_ALWAYS_SOFTWARE=1
+
+failed=()
+for p in "${profiles[@]}"; do
+    dir="$out/$p"
+    rm -rf "$dir"
+    mkdir -p "$dir/home" "$dir/run"
+    chmod 700 "$dir/run"
+    env -u WAYLAND_DISPLAY -u DISPLAY -u SWAYSOCK -u HYPRLAND_INSTANCE_SIGNATURE -u NIRI_SOCKET -u XDG_CURRENT_DESKTOP \
+        -u GAMESCOPE_WAYLAND_DISPLAY -u DBUS_SESSION_BUS_ADDRESS \
+        HOME="$dir/home" XDG_RUNTIME_DIR="$dir/run" XDG_CONFIG_HOME="$dir/home/.config" XDG_CACHE_HOME="$dir/home/.cache" \
+        XDG_DATA_HOME="$dir/home/.local/share" XDG_STATE_HOME="$dir/home/.local/state" SMOKE_DIR="$dir" \
+        timeout "${SMOKE_TIMEOUT:-120}" dbus-run-session -- "$self" --session "$p" || true
+    [ "$(wc -l < "$dir/result" 2> /dev/null || echo 0)" -eq 4 ] || echo "FAIL desktop: the checks did not all run (compositor.log)" >> "$dir/result"
+    echo "── $p"
+    cat "$dir/result"
+    grep -q '^FAIL' "$dir/result" && failed+=("$p")
+done
+if [ ${#failed[@]} -gt 0 ]; then
+    echo "desktop-smoke: failed: ${failed[*]} (logs under $out)" >&2
+    exit 1
+fi
+echo "desktop-smoke: ok"

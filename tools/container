@@ -1,0 +1,65 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+    cat <<'USAGE'
+usage: tools/container [--rebuild] DISTRO [COMMAND...]
+
+Runs COMMAND (default: a shell) as the user `ci` in a podman container of
+DISTRO (arch, arch-desktops, ubuntu, fedora), on a copy of the checkout, the
+way CI does: `tools/container arch-desktops tools/desktop-smoke sway`,
+`tools/container fedora tools/distro-check`.
+
+  - the image, the distro plus tools/ci-deps, is built on first use
+    (localhost/universe-ci-DISTRO; --rebuild refreshes it)
+  - no /dev/dri, nor the host's session bus, display or runtime dir
+  - nice 19 and idle IO priority, so the desktop and its games come first
+  - cargo's registry and target dir persist in the volume universe-ci-DISTRO
+  - target/container/DISTRO is the container's /out (SMOKE_OUT, DISTRO_OUT)
+USAGE
+}
+
+rebuild=
+case "${1:-}" in
+    "" | -h | --help) usage; exit 0 ;;
+    --rebuild) rebuild=1; shift ;;
+esac
+distro=$1; shift
+case "$distro" in
+    arch) base=docker.io/library/archlinux:latest deps= ;;
+    arch-desktops) base=docker.io/library/archlinux:latest deps=desktops ;;
+    ubuntu) base=docker.io/library/ubuntu:24.04 deps= ;;
+    fedora) base=docker.io/library/fedora:latest deps= ;;
+    *) echo "container: unknown distro '$distro'" >&2; exit 2 ;;
+esac
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+image="localhost/universe-ci-$distro"
+low=(nice -n 19 ionice -c3)
+
+if [ -n "$rebuild" ] || ! podman image exists "$image"; then
+    podman pull --quiet "$base" > /dev/null
+    podman rm --force --ignore "universe-ci-build-$distro" > /dev/null
+    "${low[@]}" podman run --name "universe-ci-build-$distro" -v "$repo/tools/ci-deps:/ci-deps:ro" "$base" /ci-deps $deps
+    podman commit --quiet "universe-ci-build-$distro" "$image" > /dev/null
+    podman rm "universe-ci-build-$distro" > /dev/null
+fi
+
+out="$repo/target/container/$distro"
+mkdir -p "$out"
+[ $# -gt 0 ] || set -- bash
+tty=()
+[ -t 0 ] && tty=(-it)
+# Root copies the checkout and hands the volume to ci, runs the command as ci, then gives /out back to root: the host user under rootless podman.
+"${low[@]}" podman run --rm "${tty[@]}" \
+    -v "$repo:/repo:ro" -v "universe-ci-$distro:/cache" -v "$out:/out" \
+    -e CARGO_HOME=/cache/cargo -e CARGO_TARGET_DIR=/cache/target -e SMOKE_OUT=/out/desktop-smoke -e DISTRO_OUT=/out \
+    "$image" bash -c '
+        mkdir -p /src /cache/cargo /cache/target
+        tar -C /repo --exclude=./target --exclude=./.venv --exclude="./.dev*" --exclude=./.git --exclude=./.claude -cf - . | tar -C /src -xf -
+        chown -R ci /src /cache /out
+        cd /src
+        runuser -u ci -- env HOME=/home/ci "$@"
+        rc=$?
+        chown -R 0:0 /out
+        exit $rc
+    ' container "$@"

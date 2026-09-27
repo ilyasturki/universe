@@ -40,7 +40,7 @@ lint_python() {
 }
 lint_fmt() { tools/fmt --check python qml js nix; }
 lint_js() { biome lint --no-errors-on-unmatched; }
-lint_shell() { shellcheck -S warning install.sh tools/dist tools/fmt tools/lint tools/sample .githooks/* .claude/hooks/*; }
+lint_shell() { shellcheck -S warning install.sh tools/ci-deps tools/container tools/desktop-smoke tools/dist tools/distro-check tools/fmt tools/lint tools/sample .githooks/* .claude/hooks/*; }
 lint_actions() { actionlint .github/workflows/*.yml; }
 
 for s in "${sections[@]}"; do run "$s" "lint_$s"; done

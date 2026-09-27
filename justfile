@@ -116,6 +116,14 @@ check:
     nix build .#universe .#universe-ui --no-link
     nix flake check
 
+# Each desktop profile started in an Arch container, no GPU: windows, cursor, OSD and shots. just smoke [sway x11 kde niri]
+smoke *profiles:
+    tools/container arch-desktops tools/desktop-smoke {{ profiles }}
+
+# Test, dist, install.sh, CLI and UI on another distro, in a container: just distro-check arch|ubuntu|fedora
+distro-check distro:
+    tools/container {{ distro }} tools/distro-check
+
 # Copy real games into .dev/ to test the recording player and the journal: just seed [id…]
 seed *ids: env
     #!/usr/bin/env bash

@@ -22,3 +22,25 @@ jobs:
       # The lint job builds the two lint checks; listing the rest keeps this job from compiling the Rust tree twice
       - run: nix build .#checks.x86_64-linux.pytest-ui .#checks.x86_64-linux.pytest-modules .#checks.x86_64-linux.pytest-sources .#checks.x86_64-linux.pytest-core-py --no-link -L
       - run: nix flake check --no-build
+  # Off NixOS: the core's tests, tools/dist, install.sh, the CLI and the UI offscreen, as a user other than root
+  distros:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        image: ["archlinux:latest", "ubuntu:24.04", "fedora:latest"]
+    container: ${{ matrix.image }}
+    steps:
+      - uses: actions/checkout@v7
+      - run: tools/ci-deps
+      - run: chown -R ci .
+      - run: runuser -u ci -- env HOME=/home/ci tools/distro-check
+  # Each desktop profile started without a GPU: windows, cursor, OSD and shots
+  desktops:
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: tools/ci-deps desktops
+      - run: chown -R ci .
+      - run: runuser -u ci -- env HOME=/home/ci tools/desktop-smoke
