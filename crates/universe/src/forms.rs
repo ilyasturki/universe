@@ -73,6 +73,8 @@ pub struct Field {
     pub inherited: String,
     /// Where `value` comes from; none when the key has nothing to fall back to.
     pub origin: Option<Origin>,
+    /// Where `inherited` comes from, whether or not `own` hides it.
+    pub fallback: Option<Origin>,
     pub resettable: bool,
     pub choices: Vec<Choice>,
     /// A value outside `choices` may be typed.
@@ -106,6 +108,7 @@ impl Field {
 
     fn inherits(mut self, own: String, own_origin: Origin, inherited: String, fallback: Origin) -> Field {
         self.origin = Some(if own.is_empty() { fallback } else { own_origin });
+        self.fallback = Some(fallback);
         self.resettable = !own.is_empty();
         self.value = if own.is_empty() { inherited.clone() } else { own.clone() };
         self.own = own;
@@ -530,6 +533,7 @@ mod tests {
 
         let pause = field(&fields, "launch.pause_on_home");
         assert_eq!((pause.own.as_str(), pause.value.as_str(), pause.inherited.as_str(), pause.origin), ("false", "false", "true", Some(Origin::Game)));
+        assert_eq!(pause.fallback, Some(Origin::Default), "what a reset would show");
         assert!(pause.resettable);
         let hud = field(&fields, "launch.mangohud");
         assert_eq!((hud.own.as_str(), hud.value.as_str(), hud.origin, hud.resettable), ("", "false", Some(Origin::Global), false), "config.toml sets it");

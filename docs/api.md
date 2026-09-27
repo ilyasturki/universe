@@ -1026,16 +1026,16 @@ nothing more: swayidle waits on logind's idle lock.
 | — | `version()`, `data_home()`, `state_home()` | `universe --version` | `version()` is the build: the semver with the short git rev behind it (`0.0.2 (410391a)`, `-dirty` when the tree was; the flake passes its rev, a checkout asks git) |
 
 A `Field` is `{key, label, type, section, advanced, description, own, value, inherited, origin,
-resettable, choices, free, dynamic, required, resolved, fits, entries}`. `type` is a launch key's
+fallback, resettable, choices, free, dynamic, required, resolved, fits, entries}`. `type` is a launch key's
 (bool, toggle, int, string, path, list, enum, resolution, refresh, fps, proton, map), a module's or
 source's setting type, or `secret` for an API key; `section` is the card it sits in and `advanced`
 puts it behind the settings pages' Advanced toggle. `own` is what the form's own scope sets
 (`game.toml` for a game, `[runners.<id>]` for a runner, `config.toml` for the others), as
 `set_field` writes it, empty when it sets nothing; `value` is what applies, `own` or else
 `inherited`. `origin` says where `value` comes from — `game`, `runner`, `global` (`config.toml`
-sets it), `default` (nothing does), `found` (a runner's program found on PATH or among Lutris's
-runners) — and is absent for a key with nothing to fall back to (the runner, the program, a
-wrapper); `resettable` is `own` set on a field that has an `origin`. `choices` are
+sets it), `default` (nothing does), `found` (a runner's program found on PATH) — and is absent for a key with nothing to fall back to (the runner, the program, a
+wrapper); `fallback` is where `inherited` comes from, `own` set or not (what a reset would show);
+`resettable` is `own` set on a field that has an `origin`. `choices` are
 `[{value, label}]` (a runner's label is its name), `free` lets a value outside them be typed (a
 resolution, a refresh or frame rate, a number, a Proton path), `dynamic` says the module or source
 lists them at run time (`module_setting_choices`), and `required` that it does nothing until the
