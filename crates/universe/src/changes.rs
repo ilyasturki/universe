@@ -75,6 +75,7 @@ impl Default for Options {
     }
 }
 
+#[derive(Debug)]
 pub struct Watch {
     commands: mpsc::UnboundedSender<Command>,
     task: tokio::task::JoinHandle<()>,

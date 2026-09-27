@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=Universe Desktop
+GenericName=Game Launcher
+Comment=Play every game you own, from any store or emulator
+Exec=universe-desktop
+Icon=io.github.ilyasturki.UniverseDesktop
+Terminal=false
+Categories=Game;
+Keywords=games;launcher;library;gog;lutris;proton;emulator;
+StartupNotify=true

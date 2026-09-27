@@ -63,6 +63,7 @@ enum Command {
 }
 
 /// Frames sampled from the recordings with ffmpeg, two at a time; each lands in the cache once and is announced then.
+#[derive(Debug)]
 pub struct Frames {
     commands: mpsc::UnboundedSender<Command>,
     task: tokio::task::JoinHandle<()>,

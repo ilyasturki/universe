@@ -206,6 +206,26 @@
       );
       modulesDir = "${modulesPkg}/share/universe/modules";
       sourcesDir = "${sourcesPkg}/share/universe/sources";
+      # The GTK frontend: what its build script runs, what it links, and what plays its recordings.
+      desktopTools = with pkgs; [
+        pkg-config
+        blueprint-compiler
+        glib
+        gettext
+        desktop-file-utils
+        appstream
+      ];
+      desktopLibs = with pkgs; [
+        gtk4
+        libadwaita
+      ];
+      gstPlugins = with pkgs.gst_all_1; [
+        gstreamer
+        gst-plugins-base
+        gst-plugins-good
+        gst-plugins-bad
+        gst-libav
+      ];
       qtRuntime = with pkgs.qt6; [
         qtdeclarative
         qt5compat
@@ -297,6 +317,41 @@
         meta.mainProgram = "universe-ui";
       };
 
+      desktop = pkgs.rustPlatform.buildRustPackage {
+        pname = "universe-desktop";
+        inherit version;
+        src = rustSrc;
+        cargoLock.lockFile = ./Cargo.lock;
+        cargoBuildFlags = [
+          "-p"
+          "universe-desktop"
+        ];
+        cargoTestFlags = [
+          "-p"
+          "universe-desktop"
+        ];
+        env = {
+          UNIVERSE_GIT_REV = gitRev;
+          UNIVERSE_DESKTOP_LOCALEDIR = "${placeholder "out"}/share/locale";
+        };
+        nativeBuildInputs = desktopTools ++ [ pkgs.wrapGAppsHook4 ];
+        buildInputs = desktopLibs ++ gstPlugins;
+        postInstall = ''
+          data=crates/universe-desktop/data
+          install -Dm644 $data/io.github.ilyasturki.UniverseDesktop.desktop -t $out/share/applications
+          install -Dm644 $data/icons/apps/io.github.ilyasturki.UniverseDesktop.svg -t $out/share/icons/hicolor/scalable/apps
+          install -Dm644 $data/icons/apps/io.github.ilyasturki.UniverseDesktop-symbolic.svg -t $out/share/icons/hicolor/symbolic/apps
+        '';
+        # The hooks and systemd's ExecStopPost call the CLI back; the games run the runtime tools off PATH.
+        preFixup = ''
+          gappsWrapperArgs+=(--set UNIVERSE_BIN ${universe}/bin/universe)
+          gappsWrapperArgs+=(--set UNIVERSE_MODULES_PATH ${modulesDir})
+          gappsWrapperArgs+=(--set UNIVERSE_SOURCES_PATH ${sourcesDir})
+          gappsWrapperArgs+=(--prefix PATH : ${runtimePath})
+        '';
+        meta.mainProgram = "universe-desktop";
+      };
+
       universe = pkgs.symlinkJoin {
         name = "universe-${version}";
         paths = [
@@ -378,11 +433,15 @@
       # The package's vendored tree, linted instead of built: a lint failure leaves `nix build .#universe` alone
       rustLint = core.overrideAttrs (prev: {
         pname = "universe-rust-lint";
-        nativeBuildInputs = prev.nativeBuildInputs ++ [
-          pkgs.clippy
-          pkgs.rustfmt
-          pkgs.python3
-        ];
+        nativeBuildInputs =
+          prev.nativeBuildInputs
+          ++ desktopTools
+          ++ [
+            pkgs.clippy
+            pkgs.rustfmt
+            pkgs.python3
+          ];
+        buildInputs = desktopLibs ++ gstPlugins;
         # The two lines are `tools/lint rust`
         buildPhase = ''
           cargo fmt --check
@@ -423,6 +482,7 @@
         sources = sourcesPkg;
         universe-ui = ui;
         universe-fhs = universeFhs;
+        universe-desktop = desktop;
         default = universe;
       };
 
@@ -459,7 +519,11 @@
           ]
           ++ qtRuntime
           ++ moduleRuntime
-          ++ sourceRuntime;
+          ++ sourceRuntime
+          ++ desktopTools
+          # a headless compositor for `just desktop-shot`
+          ++ [ weston ];
+        buildInputs = desktopLibs ++ gstPlugins;
         env = checkEnv;
         shellHook = ''
           export UNIVERSE_MODULES_PATH="$PWD/modules"
@@ -472,11 +536,13 @@
           }''${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
           export QT_FORCE_STDERR_LOGGING=1
           export RUSTC_WRAPPER=sccache
+          export XDG_DATA_DIRS="${pkgs.gsettings-desktop-schemas}/share/gsettings-schemas/${pkgs.gsettings-desktop-schemas.name}:${pkgs.gtk4}/share/gsettings-schemas/${pkgs.gtk4.name}''${XDG_DATA_DIRS:+:$XDG_DATA_DIRS}"
         '';
       };
 
       checks.${system} = {
         core = core;
+        desktop = desktop;
         lint = lint;
         rust-lint = rustLint;
         pytest-ui = pytestUi;
