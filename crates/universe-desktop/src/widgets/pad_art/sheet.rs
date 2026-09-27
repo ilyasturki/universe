@@ -5,6 +5,8 @@ pub const DUALSENSE_BODY: &str = "M 466 100 L 444 101 L 422 101 L 402 102 L 382 
 
 pub const XBOX_BODY: &str = "M 473 100 L 419 101 L 378 102 L 349 105 L 315 110 L 275 119 L 244 126 L 224 134 L 208 139 L 200 142 L 190 151 L 182 165 L 172 182 L 164 203 L 150 236 L 133 283 L 117 326 L 104 367 L 92 402 L 84 432 L 76 459 L 71 483 L 66 506 L 64 528 L 62 548 L 60 564 L 60 580 L 62 592 L 63 604 L 66 615 L 69 626 L 74 636 L 79 648 L 86 659 L 92 669 L 97 676 L 105 682 L 115 688 L 126 691 L 139 692 L 150 692 L 160 689 L 169 685 L 176 678 L 184 671 L 191 664 L 198 656 L 206 649 L 224 627 L 253 592 L 274 568 L 284 558 L 295 548 L 305 542 L 315 536 L 325 532 L 337 529 L 352 526 L 394 525 L 465 525 L 535 525 L 606 525 L 648 526 L 663 529 L 675 532 L 685 536 L 695 542 L 705 548 L 716 558 L 726 568 L 747 592 L 776 627 L 794 649 L 802 656 L 809 664 L 816 671 L 824 678 L 831 685 L 840 689 L 850 692 L 861 692 L 874 691 L 885 688 L 895 682 L 903 676 L 908 669 L 914 659 L 921 648 L 926 636 L 931 626 L 934 615 L 937 604 L 938 592 L 940 580 L 940 564 L 938 548 L 936 528 L 934 506 L 929 483 L 924 459 L 916 432 L 908 402 L 896 367 L 883 326 L 867 283 L 850 236 L 836 203 L 828 182 L 818 165 L 810 151 L 800 142 L 792 139 L 776 134 L 756 126 L 725 119 L 685 110 L 651 105 L 622 102 L 581 101 L 527 100 Z";
 
+pub const DECK_BODY: &str = "M 500 188 L 514 188 L 529 188 L 543 188 L 558 188 L 572 188 L 587 188 L 601 188 L 616 188 L 630 188 L 644 188 L 658 188 L 672 188 L 686 188 L 700 188 L 716 188 L 733 188 L 749 188 L 766 188 L 783 188 L 799 188 L 815 189 L 830 189 L 844 189 L 857 189 L 869 190 L 880 190 L 909 192 L 923 194 L 935 198 L 951 208 L 962 222 L 968 235 L 972 250 L 975 270 L 976 283 L 978 297 L 978 312 L 979 328 L 980 345 L 980 360 L 980 375 L 980 390 L 980 405 L 979 420 L 979 435 L 978 450 L 977 465 L 976 481 L 975 496 L 973 511 L 972 526 L 970 540 L 968 556 L 965 571 L 962 585 L 959 598 L 955 610 L 946 626 L 936 639 L 925 648 L 905 655 L 885 655 L 873 650 L 861 641 L 850 630 L 839 617 L 827 602 L 815 590 L 804 582 L 792 576 L 770 572 L 759 571 L 747 570 L 733 570 L 719 570 L 703 570 L 687 570 L 671 570 L 655 570 L 640 570 L 626 570 L 613 570 L 599 570 L 585 570 L 571 570 L 556 570 L 542 570 L 528 570 L 514 570 L 500 570 L 486 570 L 472 570 L 458 570 L 444 570 L 429 570 L 415 570 L 401 570 L 387 570 L 374 570 L 360 570 L 345 570 L 329 570 L 313 570 L 297 570 L 281 570 L 267 570 L 253 570 L 241 571 L 230 572 L 208 576 L 196 582 L 185 590 L 173 602 L 161 617 L 150 630 L 139 641 L 127 650 L 115 655 L 95 655 L 75 648 L 64 639 L 54 626 L 45 610 L 41 598 L 38 585 L 35 571 L 32 556 L 30 540 L 28 526 L 27 511 L 25 496 L 24 481 L 23 465 L 22 450 L 21 435 L 21 420 L 20 405 L 20 390 L 20 375 L 20 360 L 20 345 L 21 328 L 22 312 L 22 297 L 24 283 L 25 270 L 28 250 L 32 235 L 38 222 L 49 208 L 65 198 L 77 194 L 91 192 L 120 190 L 131 190 L 143 189 L 156 189 L 170 189 L 185 189 L 201 188 L 217 188 L 234 188 L 251 188 L 267 188 L 284 188 L 300 188 L 314 188 L 328 188 L 342 188 L 356 188 L 370 188 L 384 188 L 399 188 L 413 188 L 428 188 L 442 188 L 457 188 L 471 188 L 486 188 Z";
+
 pub const GENERIC_BODY: &str = "M 500 106 L 530 106 L 560 107 L 589 108 L 618 109 L 646 111 L 673 114 L 699 117 L 724 121 L 747 125 L 768 130 L 791 137 L 811 146 L 830 157 L 848 170 L 863 185 L 877 201 L 889 219 L 898 238 L 906 258 L 912 280 L 916 300 L 919 321 L 922 343 L 924 365 L 926 388 L 926 410 L 927 434 L 926 457 L 926 481 L 924 504 L 922 526 L 918 548 L 913 568 L 906 586 L 898 603 L 889 617 L 878 630 L 865 640 L 851 647 L 836 652 L 823 653 L 810 652 L 799 648 L 789 642 L 779 634 L 770 625 L 762 614 L 755 602 L 748 590 L 742 576 L 735 562 L 728 549 L 721 537 L 713 526 L 704 517 L 695 509 L 684 503 L 673 497 L 661 493 L 648 490 L 633 488 L 619 487 L 604 486 L 589 485 L 574 485 L 559 485 L 544 485 L 529 486 L 515 486 L 500 486 L 485 486 L 471 486 L 456 485 L 441 485 L 426 485 L 411 485 L 396 486 L 381 487 L 367 488 L 352 490 L 339 493 L 327 497 L 316 503 L 305 509 L 296 517 L 287 526 L 279 537 L 272 549 L 265 562 L 258 576 L 252 590 L 245 602 L 238 614 L 230 625 L 221 634 L 211 642 L 201 648 L 190 652 L 177 653 L 164 652 L 149 647 L 135 640 L 122 630 L 111 617 L 102 603 L 94 586 L 87 568 L 82 548 L 78 526 L 76 504 L 75 481 L 74 457 L 73 434 L 74 410 L 74 388 L 76 365 L 78 343 L 81 321 L 84 300 L 88 280 L 94 258 L 102 238 L 111 219 L 123 201 L 137 185 L 152 170 L 170 157 L 189 146 L 209 137 L 232 130 L 253 125 L 276 121 L 301 117 L 327 114 L 354 111 L 382 109 L 411 108 L 440 107 L 470 106 L 500 106 Z";
 
 pub const DUALSENSE_SHOULDERS: [Spec; 4] = [
@@ -19,6 +21,29 @@ pub const XBOX_SHOULDERS: [Spec; 4] = [
     Spec { slot: "rt", shape: Shape::Trigger { path: "M 786 111 L 784 103 L 782 100 L 780 97 L 778 95 L 776 94 L 774 93 L 772 92 L 770 91 L 768 91 L 766 90 L 764 89 L 762 89 L 760 88 L 758 87 L 756 87 L 754 86 L 752 86 L 750 85 L 748 85 L 746 84 L 744 84 L 742 83 L 740 83 L 738 82 L 736 82 L 734 81 L 732 81 L 730 80 L 728 80 L 726 79 L 724 79 L 722 78 L 720 78 L 718 77 L 716 77 L 714 76 L 712 76 L 710 76 L 708 75 L 706 75 L 704 74 L 702 74 L 700 73 L 698 73 L 696 73 L 694 72 L 692 72 L 690 71 L 688 71 L 686 70 L 684 70 L 682 70 L 680 69 L 678 69 L 676 69 L 674 68 L 672 68 L 670 68 L 668 68 L 666 68 L 664 68 L 662 69 L 660 70 L 658 73 L 656 80 L 656 110 L 658 110 L 660 110 L 662 111 L 664 111 L 666 111 L 668 112 L 670 112 L 672 112 L 674 112 L 676 113 L 678 113 L 680 113 L 682 114 L 684 114 L 686 114 L 688 115 L 690 115 L 692 116 L 694 116 L 696 117 L 698 117 L 700 117 L 702 118 L 704 118 L 706 119 L 708 119 L 710 120 L 712 120 L 714 120 L 716 121 L 718 121 L 720 122 L 722 122 L 724 123 L 726 123 L 728 124 L 730 124 L 732 125 L 734 125 L 736 126 L 738 126 L 740 127 L 742 127 L 744 128 L 746 128 L 748 129 L 750 129 L 752 130 L 754 130 L 756 131 L 758 131 L 760 132 L 762 133 L 764 133 L 766 134 L 768 135 L 770 135 L 772 136 L 774 137 L 776 137 L 778 138 L 780 139 L 782 139 L 784 140 L 786 141 Z", b: [656.0, 68.0, 786.0, 141.0] }, ghost: false },
     Spec { slot: "lb", shape: Shape::Bumper { path: "M 206 160 L 202 156 L 200 150 L 202 144 L 206 139 L 212 138 L 216 136 L 220 135 L 224 133 L 228 132 L 232 131 L 236 129 L 240 128 L 244 127 L 248 126 L 252 125 L 256 124 L 260 123 L 264 122 L 268 121 L 272 120 L 276 119 L 280 118 L 284 117 L 288 116 L 292 115 L 296 114 L 300 113 L 304 113 L 308 112 L 312 111 L 316 110 L 320 109 L 324 109 L 328 108 L 332 108 L 336 107 L 340 106 L 344 106 L 348 105 L 352 105 L 356 104 L 360 104 L 364 103 L 368 103 L 372 103 L 378 104 L 382 109 L 384 115 L 382 121 L 378 125 L 372 127 L 368 127 L 364 127 L 360 128 L 356 128 L 352 129 L 348 129 L 344 130 L 340 130 L 336 131 L 332 132 L 328 132 L 324 133 L 320 133 L 316 134 L 312 135 L 308 136 L 304 137 L 300 137 L 296 138 L 292 139 L 288 140 L 284 141 L 280 142 L 276 143 L 272 144 L 268 145 L 264 146 L 260 147 L 256 148 L 252 149 L 248 150 L 244 151 L 240 152 L 236 153 L 232 155 L 228 156 L 224 157 L 220 159 L 216 160 L 212 162 Z", b: [200.0, 103.0, 384.0, 162.0] }, ghost: false },
     Spec { slot: "rb", shape: Shape::Bumper { path: "M 794 160 L 798 156 L 800 150 L 798 144 L 794 139 L 788 138 L 784 136 L 780 135 L 776 133 L 772 132 L 768 131 L 764 129 L 760 128 L 756 127 L 752 126 L 748 125 L 744 124 L 740 123 L 736 122 L 732 121 L 728 120 L 724 119 L 720 118 L 716 117 L 712 116 L 708 115 L 704 114 L 700 113 L 696 113 L 692 112 L 688 111 L 684 110 L 680 109 L 676 109 L 672 108 L 668 108 L 664 107 L 660 106 L 656 106 L 652 105 L 648 105 L 644 104 L 640 104 L 636 103 L 632 103 L 628 103 L 622 104 L 618 109 L 616 115 L 618 121 L 622 125 L 628 127 L 632 127 L 636 127 L 640 128 L 644 128 L 648 129 L 652 129 L 656 130 L 660 130 L 664 131 L 668 132 L 672 132 L 676 133 L 680 133 L 684 134 L 688 135 L 692 136 L 696 137 L 700 137 L 704 138 L 708 139 L 712 140 L 716 141 L 720 142 L 724 143 L 728 144 L 732 145 L 736 146 L 740 147 L 744 148 L 748 149 L 752 150 L 756 151 L 760 152 L 764 153 L 768 155 L 772 156 L 776 157 L 780 159 L 784 160 L 788 162 Z", b: [616.0, 103.0, 800.0, 162.0] }, ghost: false },
+];
+
+pub const DECK_SHOULDERS: [Spec; 4] = [
+    Spec {
+        slot: "lt",
+        shape: Shape::Trigger { path: "M 54 160 L 156 160 L 170 174 L 170 182 L 156 196 L 54 196 L 40 182 L 40 174 Z", b: [40.0, 160.0, 170.0, 196.0] },
+        ghost: false,
+    },
+    Spec {
+        slot: "rt",
+        shape: Shape::Trigger { path: "M 844 160 L 946 160 L 960 174 L 960 182 L 946 196 L 844 196 L 830 182 L 830 174 Z", b: [830.0, 160.0, 960.0, 196.0] },
+        ghost: false,
+    },
+    Spec {
+        slot: "lb",
+        shape: Shape::Bumper { path: "M 68 184 L 222 184 L 230 192 L 230 196 L 222 204 L 68 204 L 60 196 L 60 192 Z", b: [60.0, 184.0, 230.0, 204.0] },
+        ghost: false,
+    },
+    Spec {
+        slot: "rb",
+        shape: Shape::Bumper { path: "M 778 184 L 932 184 L 940 192 L 940 196 L 932 204 L 778 204 L 770 196 L 770 192 Z", b: [770.0, 184.0, 940.0, 204.0] },
+        ghost: false,
+    },
 ];
 
 pub const GENERIC_SHOULDERS: [Spec; 4] = [
@@ -37,6 +62,12 @@ pub const DUALSENSE_DETAILS: &[Detail] = &[
 pub const XBOX_DETAILS: &[Detail] =
     &[Detail::Dish { x: 385.0, y: 395.0, r: 66.0, alpha: 0.06, ring: true }, Detail::Cross { x: 385.0, y: 395.0, l: 54.0, a: 34.0 }];
 
+pub const DECK_DETAILS: &[Detail] = &[
+    Detail::Shape { path: "M 262 214 L 738 214 L 748 224 L 748 534 L 738 544 L 262 544 L 252 534 L 252 224 Z", alpha: 0.07 },
+    Detail::Line { path: "M 262 214 L 738 214 L 748 224 L 748 534 L 738 544 L 262 544 L 252 534 L 252 224 Z", alpha: 0.35, width: 2.0, glow: false },
+    Detail::Dish { x: 95.0, y: 300.0, r: 48.0, alpha: 0.05, ring: false },
+];
+
 pub const GENERIC_DETAILS: &[Detail] =
     &[Detail::Dish { x: 370.0, y: 400.0, r: 74.0, alpha: 0.05, ring: false }, Detail::Cross { x: 370.0, y: 400.0, l: 60.0, a: 36.0 }];
 
@@ -51,8 +82,8 @@ pub const DUALSENSE_LAYOUT: &[Spec] = &[
     Spec { slot: "south", shape: Shape::Face { x: 775.0, y: 320.0, r: 28.0 }, ghost: false },
     Spec { slot: "west", shape: Shape::Face { x: 713.0, y: 258.0, r: 28.0 }, ghost: false },
     Spec { slot: "east", shape: Shape::Face { x: 837.0, y: 258.0, r: 28.0 }, ghost: false },
-    Spec { slot: "ls", shape: Shape::Stick { x: 357.0, y: 385.0, r: 52.0, axes: ["lx", "ly"] }, ghost: false },
-    Spec { slot: "rs", shape: Shape::Stick { x: 643.0, y: 385.0, r: 52.0, axes: ["rx", "ry"] }, ghost: false },
+    Spec { slot: "ls", shape: Shape::Stick { x: 357.0, y: 385.0, r: 52.0, axes: ["lx", "ly"], readout_below: false }, ghost: false },
+    Spec { slot: "rs", shape: Shape::Stick { x: 643.0, y: 385.0, r: 52.0, axes: ["rx", "ry"], readout_below: false }, ghost: false },
     Spec { slot: "guide", shape: Shape::Face { x: 500.0, y: 383.0, r: 22.0 }, ghost: false },
     Spec { slot: "mute", shape: Shape::Small { x: 500.0, y: 432.0, w: 38.0, h: 11.0, angle: 0.0, round: false }, ghost: false },
 ];
@@ -62,8 +93,8 @@ pub const XBOX_LAYOUT: &[Spec] = &[
     Spec { slot: "select", shape: Shape::Small { x: 438.0, y: 253.0, w: 34.0, h: 34.0, angle: 0.0, round: true }, ghost: false },
     Spec { slot: "start", shape: Shape::Small { x: 562.0, y: 253.0, w: 34.0, h: 34.0, angle: 0.0, round: true }, ghost: false },
     Spec { slot: "share", shape: Shape::Small { x: 500.0, y: 300.0, w: 40.0, h: 23.0, angle: 0.0, round: false }, ghost: false },
-    Spec { slot: "ls", shape: Shape::Stick { x: 270.0, y: 255.0, r: 54.0, axes: ["lx", "ly"] }, ghost: false },
-    Spec { slot: "rs", shape: Shape::Stick { x: 612.0, y: 385.0, r: 54.0, axes: ["rx", "ry"] }, ghost: false },
+    Spec { slot: "ls", shape: Shape::Stick { x: 270.0, y: 255.0, r: 54.0, axes: ["lx", "ly"], readout_below: false }, ghost: false },
+    Spec { slot: "rs", shape: Shape::Stick { x: 612.0, y: 385.0, r: 54.0, axes: ["rx", "ry"], readout_below: false }, ghost: false },
     Spec { slot: "north", shape: Shape::Face { x: 726.0, y: 192.0, r: 29.0 }, ghost: false },
     Spec { slot: "south", shape: Shape::Face { x: 726.0, y: 314.0, r: 29.0 }, ghost: false },
     Spec { slot: "west", shape: Shape::Face { x: 665.0, y: 253.0, r: 29.0 }, ghost: false },
@@ -74,12 +105,35 @@ pub const XBOX_LAYOUT: &[Spec] = &[
     Spec { slot: "dpad_right", shape: Shape::Arm { cx: 385.0, cy: 395.0, l: 54.0, a: 34.0, dir: Dir::Right, split: false }, ghost: false },
 ];
 
+pub const DECK_LAYOUT: &[Spec] = &[
+    Spec { slot: "select", shape: Shape::Small { x: 218.0, y: 232.0, w: 26.0, h: 16.0, angle: 0.0, round: false }, ghost: false },
+    Spec { slot: "start", shape: Shape::Small { x: 782.0, y: 232.0, w: 26.0, h: 16.0, angle: 0.0, round: false }, ghost: false },
+    Spec { slot: "guide", shape: Shape::Small { x: 218.0, y: 540.0, w: 34.0, h: 18.0, angle: 0.0, round: false }, ghost: false },
+    Spec { slot: "quick", shape: Shape::Small { x: 782.0, y: 540.0, w: 34.0, h: 18.0, angle: 0.0, round: true }, ghost: false },
+    Spec { slot: "dpad_up", shape: Shape::Arm { cx: 95.0, cy: 300.0, l: 42.0, a: 26.0, dir: Dir::Up, split: true }, ghost: false },
+    Spec { slot: "dpad_down", shape: Shape::Arm { cx: 95.0, cy: 300.0, l: 42.0, a: 26.0, dir: Dir::Down, split: true }, ghost: false },
+    Spec { slot: "dpad_left", shape: Shape::Arm { cx: 95.0, cy: 300.0, l: 42.0, a: 26.0, dir: Dir::Left, split: true }, ghost: false },
+    Spec { slot: "dpad_right", shape: Shape::Arm { cx: 95.0, cy: 300.0, l: 42.0, a: 26.0, dir: Dir::Right, split: true }, ghost: false },
+    Spec { slot: "ls", shape: Shape::Stick { x: 190.0, y: 300.0, r: 38.0, axes: ["lx", "ly"], readout_below: true }, ghost: false },
+    Spec { slot: "rs", shape: Shape::Stick { x: 810.0, y: 300.0, r: 38.0, axes: ["rx", "ry"], readout_below: true }, ghost: false },
+    Spec { slot: "north", shape: Shape::Face { x: 905.0, y: 258.0, r: 20.0 }, ghost: false },
+    Spec { slot: "south", shape: Shape::Face { x: 905.0, y: 342.0, r: 20.0 }, ghost: false },
+    Spec { slot: "west", shape: Shape::Face { x: 863.0, y: 300.0, r: 20.0 }, ghost: false },
+    Spec { slot: "east", shape: Shape::Face { x: 947.0, y: 300.0, r: 20.0 }, ghost: false },
+    Spec { slot: "pad_left", shape: Shape::Small { x: 160.0, y: 445.0, w: 92.0, h: 92.0, angle: 0.0, round: false }, ghost: false },
+    Spec { slot: "pad_right", shape: Shape::Small { x: 840.0, y: 445.0, w: 92.0, h: 92.0, angle: 0.0, round: false }, ghost: false },
+    Spec { slot: "grip_l4", shape: Shape::Paddle { x: 58.0, y: 360.0, w: 34.0, h: 70.0 }, ghost: true },
+    Spec { slot: "grip_l5", shape: Shape::Paddle { x: 70.0, y: 450.0, w: 34.0, h: 90.0 }, ghost: true },
+    Spec { slot: "grip_r4", shape: Shape::Paddle { x: 942.0, y: 360.0, w: 34.0, h: 70.0 }, ghost: true },
+    Spec { slot: "grip_r5", shape: Shape::Paddle { x: 930.0, y: 450.0, w: 34.0, h: 90.0 }, ghost: true },
+];
+
 pub const GENERIC_LAYOUT: &[Spec] = &[
     Spec { slot: "guide", shape: Shape::Face { x: 500.0, y: 170.0, r: 24.0 }, ghost: false },
     Spec { slot: "select", shape: Shape::Small { x: 430.0, y: 250.0, w: 36.0, h: 16.0, angle: 0.0, round: false }, ghost: false },
     Spec { slot: "start", shape: Shape::Small { x: 570.0, y: 250.0, w: 36.0, h: 16.0, angle: 0.0, round: false }, ghost: false },
-    Spec { slot: "ls", shape: Shape::Stick { x: 250.0, y: 250.0, r: 52.0, axes: ["lx", "ly"] }, ghost: false },
-    Spec { slot: "rs", shape: Shape::Stick { x: 630.0, y: 400.0, r: 52.0, axes: ["rx", "ry"] }, ghost: false },
+    Spec { slot: "ls", shape: Shape::Stick { x: 250.0, y: 250.0, r: 52.0, axes: ["lx", "ly"], readout_below: false }, ghost: false },
+    Spec { slot: "rs", shape: Shape::Stick { x: 630.0, y: 400.0, r: 52.0, axes: ["rx", "ry"], readout_below: false }, ghost: false },
     Spec { slot: "north", shape: Shape::Face { x: 750.0, y: 192.0, r: 28.0 }, ghost: false },
     Spec { slot: "south", shape: Shape::Face { x: 750.0, y: 308.0, r: 28.0 }, ghost: false },
     Spec { slot: "west", shape: Shape::Face { x: 692.0, y: 250.0, r: 28.0 }, ghost: false },

@@ -32,7 +32,7 @@ impl Dir {
 #[derive(Debug, Clone, Copy)]
 pub enum Shape {
     Face { x: f32, y: f32, r: f32 },
-    Stick { x: f32, y: f32, r: f32, axes: [&'static str; 2] },
+    Stick { x: f32, y: f32, r: f32, axes: [&'static str; 2], readout_below: bool },
     Arm { cx: f32, cy: f32, l: f32, a: f32, dir: Dir, split: bool },
     Small { x: f32, y: f32, w: f32, h: f32, angle: f32, round: bool },
     Tab { x: f32, y: f32, w: f32, h: f32 },
@@ -81,9 +81,15 @@ pub struct Geometry {
     buttons: Vec<Spec>,
 }
 
-/// A family's pad: the Sony ones on the DualSense's body, the Xbox ones on the Xbox's, the rest on the generic one.
+/// A family's pad: the Sony ones on the DualSense's body, the Xbox ones on the Xbox's, the Deck on its own, the rest on the
+/// generic one.
 pub fn geometry(family: &str) -> Geometry {
     let extra = |slot, shape, ghost| Spec { slot, shape, ghost };
+    if family == "steam-deck" {
+        let mut buttons = sheet::DECK_SHOULDERS.to_vec();
+        buttons.extend_from_slice(sheet::DECK_LAYOUT);
+        return Geometry { body: sheet::DECK_BODY, details: sheet::DECK_DETAILS, buttons };
+    }
     if matches!(family, "dualsense-edge" | "dualsense" | "dualshock4") {
         let mut buttons = sheet::DUALSENSE_SHOULDERS.to_vec();
         buttons.extend(sheet::DUALSENSE_LAYOUT.iter().filter(|s| s.slot != "mute" || family != "dualshock4").copied());
@@ -129,6 +135,7 @@ fn glyph(family: &str, slot: &str) -> (&'static str, &'static str) {
         "dualsense-edge" | "dualsense" | "dualshock4" => "sony",
         "switch-pro" => "nintendo",
         "8bitdo-pro-3" => "eightbitdo",
+        "steam-deck" => "deck",
         _ => "xbox",
     };
     let face: Option<(&str, &str)> = match (style, slot) {
@@ -145,16 +152,23 @@ fn glyph(family: &str, slot: &str) -> (&'static str, &'static str) {
         ("sony", "guide") => Some(("PS", "")),
         ("sony", "ls") => Some(("L3", "")),
         ("sony", "rs") => Some(("R3", "")),
-        ("xbox", "south") => Some(("A", "")),
-        ("xbox", "east") => Some(("B", "")),
-        ("xbox", "north") => Some(("Y", "")),
-        ("xbox", "west") => Some(("X", "")),
+        ("xbox" | "deck", "south") => Some(("A", "")),
+        ("xbox" | "deck", "east") => Some(("B", "")),
+        ("xbox" | "deck", "north") => Some(("Y", "")),
+        ("xbox" | "deck", "west") => Some(("X", "")),
+        ("xbox" | "deck", "select") => Some(("", "view")),
+        ("xbox" | "deck", "start") => Some(("", "menu")),
+        ("deck", "lb") => Some(("L1", "")),
+        ("deck", "rb") => Some(("R1", "")),
+        ("deck", "lt") => Some(("L2", "")),
+        ("deck", "rt") => Some(("R2", "")),
+        ("deck", "guide") => Some(("", "steam")),
+        ("deck", "ls") => Some(("L3", "")),
+        ("deck", "rs") => Some(("R3", "")),
         ("xbox", "lb") => Some(("LB", "")),
         ("xbox", "rb") => Some(("RB", "")),
         ("xbox", "lt") => Some(("LT", "")),
         ("xbox", "rt") => Some(("RT", "")),
-        ("xbox", "select") => Some(("", "view")),
-        ("xbox", "start") => Some(("", "menu")),
         ("xbox", "guide") => Some(("", "xbox")),
         ("xbox", "ls") => Some(("LS", "")),
         ("xbox", "rs") => Some(("RS", "")),
@@ -195,12 +209,18 @@ fn glyph(family: &str, slot: &str) -> (&'static str, &'static str) {
         "capture" => ("", "capture"),
         "mute" => ("", "mic"),
         "star" => ("", "star"),
+        "grip_l4" => ("L4", ""),
+        "grip_l5" => ("L5", ""),
+        "grip_r4" => ("R4", ""),
+        "grip_r5" => ("R5", ""),
+        "quick" => ("", "more"),
+        "pad_left" | "pad_right" => ("", "pad"),
         _ => ("", ""),
     };
     face.unwrap_or(extra)
 }
 
-/// The marks printed on buttons, on a unit radius about the origin; all stroked.
+/// The marks printed on buttons, on a unit radius about the origin; stroked but for `FILLED_SYMBOLS`.
 fn symbol_path(name: &str) -> Option<&'static str> {
     Some(match name {
         "cross" => "M-1 -1L1 1M1 -1L-1 1",
@@ -217,9 +237,14 @@ fn symbol_path(name: &str) -> Option<&'static str> {
         "share" => "M0 0.5V-1M-0.55 -0.45L0 -1L0.55 -0.45M-0.9 0V1H0.9V0",
         "capture" => "M-1 -1H1V1H-1ZM0.4 0A0.4 0.4 0 1 1 -0.4 0A0.4 0.4 0 1 1 0.4 0",
         "mic" => "M-0.35 -0.65A0.35 0.35 0 0 1 0.35 -0.65V-0.05A0.35 0.35 0 0 1 -0.35 -0.05ZM0.6237 0.3178A0.7 0.7 0 0 1 -0.6237 0.3178M0 0.7V1.05",
+        "steam" => "M1.1 0A1.1 1.1 0 1 1 -1.1 0A1.1 1.1 0 1 1 1.1 0M0.72 -0.28A0.3 0.3 0 1 1 0.12 -0.28A0.3 0.3 0 1 1 0.72 -0.28M0.2 -0.08L-0.52 0.42M-0.35 0.42A0.17 0.17 0 1 1 -0.69 0.42A0.17 0.17 0 1 1 -0.35 0.42",
+        "more" => "M-0.5 0A0.22 0.22 0 1 1 -0.94 0A0.22 0.22 0 1 1 -0.5 0M0.22 0A0.22 0.22 0 1 1 -0.22 0A0.22 0.22 0 1 1 0.22 0M0.94 0A0.22 0.22 0 1 1 0.5 0A0.22 0.22 0 1 1 0.94 0",
+        "pad" => "M-0.9 -0.9H0.9V0.9H-0.9ZM-0.3 0H0.3M0 -0.3V0.3",
         _ => return None,
     })
 }
+
+const FILLED_SYMBOLS: [&str; 1] = ["more"];
 
 fn star() -> gsk::Path {
     let builder = gsk::PathBuilder::new();
@@ -558,7 +583,7 @@ impl PadArt {
                 symbol_radius = r;
                 text_size = r * 1.05;
             }
-            Shape::Stick { x, y, r, axes: [ax, ay] } => {
+            Shape::Stick { x, y, r, axes: [ax, ay], readout_below } => {
                 let (lx, ly) = (axes.get(ax).copied().unwrap_or(0.0), axes.get(ay).copied().unwrap_or(0.0));
                 (cx, cy) = (x + lx * r * 0.45, y + ly * r * 0.45);
                 paint(&circle(cx, cy, r));
@@ -566,7 +591,7 @@ impl PadArt {
                 if imp.readouts.get() {
                     let sign = |v: f32| if v >= 0.0 { "+" } else { "−" };
                     let lines = format!("x {}{} %\ny {}{} %", sign(lx), (lx.abs() * 100.0).round(), sign(ly), (ly.abs() * 100.0).round());
-                    self.readout(snapshot, &lines, x, y, r, x < VIEW.0 / 2.0, fg);
+                    self.readout(snapshot, &lines, x, y, r, x < VIEW.0 / 2.0, fg, readout_below);
                 }
             }
             Shape::Arm { cx: ax, cy: ay, l, a, dir, split } => {
@@ -627,7 +652,7 @@ impl PadArt {
                     mark = ground;
                 }
                 if imp.readouts.get() {
-                    self.readout(snapshot, &format!("{} %", (pull * 100.0).round()), cx, cy, (b[2] - b[0]) / 2.0, cx < VIEW.0 / 2.0, fg);
+                    self.readout(snapshot, &format!("{} %", (pull * 100.0).round()), cx, cy, (b[2] - b[0]) / 2.0, cx < VIEW.0 / 2.0, fg, false);
                 }
             }
             Shape::Bumper { path, .. } => {
@@ -690,7 +715,11 @@ impl PadArt {
         snapshot.save();
         snapshot.translate(&graphene::Point::new(cx, cy));
         snapshot.scale(scale, scale);
-        snapshot.append_stroke(&path, &stroke(1.8 / k / scale), &color);
+        if FILLED_SYMBOLS.contains(&name) {
+            snapshot.append_fill(&path, gsk::FillRule::Winding, &color);
+        } else {
+            snapshot.append_stroke(&path, &stroke(1.8 / k / scale), &color);
+        }
         snapshot.restore();
     }
 
@@ -707,19 +736,29 @@ impl PadArt {
         snapshot.restore();
     }
 
-    /// Numbers beside a stick or a trigger, on the side away from the pad's middle.
+    /// Numbers beside a stick or a trigger, on the side away from the pad's middle, or under it.
     #[allow(clippy::too_many_arguments)]
-    fn readout(&self, snapshot: &gtk::Snapshot, text: &str, cx: f32, cy: f32, reach: f32, left: bool, color: gdk::RGBA) {
+    fn readout(&self, snapshot: &gtk::Snapshot, text: &str, cx: f32, cy: f32, reach: f32, left: bool, color: gdk::RGBA, below: bool) {
         let layout = self.create_pango_layout(Some(text));
         let mut font = pango::FontDescription::new();
         font.set_weight(pango::Weight::Semibold);
         font.set_absolute_size(22.0 * f64::from(pango::SCALE));
         layout.set_font_description(Some(&font));
-        layout.set_alignment(if left { pango::Alignment::Right } else { pango::Alignment::Left });
+        layout.set_alignment(if below {
+            pango::Alignment::Center
+        } else if left {
+            pango::Alignment::Right
+        } else {
+            pango::Alignment::Left
+        });
         let (w, h) = layout.pixel_size();
-        let x = if left { cx - reach - 24.0 - w as f32 } else { cx + reach + 24.0 };
+        let at = if below {
+            graphene::Point::new(cx - w as f32 / 2.0, cy + reach + 4.0)
+        } else {
+            graphene::Point::new(if left { cx - reach - 24.0 - w as f32 } else { cx + reach + 24.0 }, cy - h as f32 / 2.0)
+        };
         snapshot.save();
-        snapshot.translate(&graphene::Point::new(x, cy - h as f32 / 2.0));
+        snapshot.translate(&at);
         snapshot.append_layout(&layout, &color);
         snapshot.restore();
     }
@@ -731,15 +770,15 @@ mod tests {
 
     #[test]
     fn every_sheet_path_and_mark_parses() {
-        let mut texts: Vec<&str> = vec![sheet::DUALSENSE_BODY, sheet::XBOX_BODY, sheet::GENERIC_BODY];
-        for details in [sheet::DUALSENSE_DETAILS, sheet::XBOX_DETAILS, sheet::GENERIC_DETAILS] {
+        let mut texts: Vec<&str> = vec![sheet::DUALSENSE_BODY, sheet::XBOX_BODY, sheet::DECK_BODY, sheet::GENERIC_BODY];
+        for details in [sheet::DUALSENSE_DETAILS, sheet::XBOX_DETAILS, sheet::DECK_DETAILS, sheet::GENERIC_DETAILS] {
             for d in details {
                 if let Detail::Shape { path, .. } | Detail::Line { path, .. } = d {
                     texts.push(*path);
                 }
             }
         }
-        for family in ["dualsense-edge", "dualsense", "dualshock4", "xbox", "xbox-elite", "switch-pro", "8bitdo-pro-3", "generic"] {
+        for family in ["steam-deck", "dualsense-edge", "dualsense", "dualshock4", "xbox", "xbox-elite", "switch-pro", "8bitdo-pro-3", "generic"] {
             for spec in geometry(family).buttons {
                 if let Shape::Trigger { path, .. } | Shape::Bumper { path, .. } = spec.shape {
                     texts.push(path);
@@ -765,5 +804,12 @@ mod tests {
         assert!(slots("8bitdo-pro-3").contains(&"paddle_l4") && slots("8bitdo-pro-3").contains(&"star"));
         assert_eq!(glyph("switch-pro", "east"), ("A", ""));
         assert_eq!(glyph("dualsense", "south"), ("", "cross"));
+        let deck = slots("steam-deck");
+        assert!(["grip_l5", "grip_r4", "quick", "pad_left", "pad_right"].iter().all(|s| deck.contains(s)), "{deck:?}");
+        assert_eq!((glyph("steam-deck", "guide"), glyph("steam-deck", "lb"), glyph("steam-deck", "quick")), (("", "steam"), ("L1", ""), ("", "more")));
+        assert!(
+            geometry("steam-deck").buttons.iter().any(|s| matches!(s.shape, Shape::Stick { readout_below: true, .. })),
+            "the Deck's numbers go under its sticks"
+        );
     }
 }
