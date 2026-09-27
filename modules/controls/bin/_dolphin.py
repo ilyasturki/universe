@@ -17,7 +17,7 @@ SDL_HINTS = {
 }
 FACE_NAME = {SOUTH: "`Button S`", EAST: "`Button E`", WEST: "`Button W`", NORTH: "`Button N`"}
 CALIBRATION = "100.00 141.42 100.00 141.42 100.00 141.42 100.00 141.42"
-OWN_PROFILE = "universe-player-{}"
+OWN_PROFILE = "universe-"
 # A setting's value is a number or a flag; anything else is a binding expression the module replaces.
 SETTING = re.compile(r"^(-?[0-9.]+( -?[0-9.]+)*|True|False)$")
 
@@ -148,32 +148,42 @@ def _own_profile(section):
     return "".join(["[Profile]\n", *(f"{k} = {v}\n" for k, v in section.items() if k != "Source")])
 
 
+def _on_pad(out, path, device):
+    profile = out.get(path) or _read(path)
+    if not ini_section(profile, "Profile").get("Device", "").startswith("SDL/"):
+        return None
+    return ini_rewrite(profile, "Profile", {"Device": f"Device = {device}"})
+
+
 def _profiles(config, games, pads, device_names, sections):
     out = {}
     for game in sorted(games.glob("*.ini")) if games.is_dir() else ():
         text = _read(game)
         controls = ini_section(text, "Controls")
-        added = {}
+        lines, drop = {}, set()
         for kind, folder in (("PadProfile", "GCPad"), ("WiimoteProfile", "Wiimote")):
-            profiled = [n for n in range(1, PORTS + 1) if controls.get(f"{kind}{n}")]
+            theirs = {n: name for n in range(1, PORTS + 1) if (name := controls.get(f"{kind}{n}")) and not name.startswith(OWN_PROFILE)}
             for n in range(1, min(len(pads), PORTS) + 1):
-                name = controls.get(f"{kind}{n}")
+                key, name = f"{kind}{n}", controls.get(f"{kind}{n}")
+                if n in theirs:
+                    path = config / "Profiles" / folder / f"{name}.ini"
+                    if (profile := _on_pad(out, path, device_names[n - 1])) is not None:
+                        out[path] = profile
+                    continue
                 # Dolphin's InputConfig::LoadConfig reads every port after a profiled one from that profile's file, so it gets no bindings.
-                if not name and profiled and n > profiled[0]:
-                    name = OWN_PROFILE.format(n)
-                    added[f"{kind}{n}"] = f"{kind}{n} = {name}"
-                if not name:
+                source = max((k for k in theirs if k < n), default=None)
+                if source is None:
+                    if name:
+                        drop.add(key)
                     continue
-                path = config / "Profiles" / folder / f"{name}.ini"
-                if name == OWN_PROFILE.format(n):
-                    out[path] = _own_profile(sections[folder][n])
-                    continue
-                profile = out.get(path) or _read(path)
-                if not ini_section(profile, "Profile").get("Device", "").startswith("SDL/"):
-                    continue
-                out[path] = ini_rewrite(profile, "Profile", {"Device": f"Device = {device_names[n - 1]}"})
-        if added:
-            out[game] = ini_rewrite(text, "Controls", added)
+                own = f"{OWN_PROFILE}{theirs[source]}-{n}"
+                if name != own:
+                    lines[key] = f"{key} = {own}"
+                path = config / "Profiles" / folder / f"{theirs[source]}.ini"
+                profile = _on_pad(out, path, device_names[n - 1])
+                out[path.with_name(f"{own}.ini")] = _own_profile(sections[folder][n]) if profile is None else profile
+        if lines or drop:
+            out[game] = ini_rewrite(text, "Controls", lines, drop=drop)
     return out
 
 

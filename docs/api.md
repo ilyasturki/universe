@@ -805,15 +805,16 @@ emulator's own auto-mapping would, player `n` being the `n`th pad in SDL's order
 `layout` picks the face buttons of a Nintendo diamond (Switch, 3DS, Wii U, DS, GBA, SNES, the
 Wii's Classic Controller): `positional` (A on the right, as on a Switch and as these emulators map
 by themselves) or `xbox` (A at the bottom), per game over a global default; GameCube keeps
-Dolphin's own preset and N64 mupen64plus's (A bottom, B left). A game's own input profile keeps its
-scheme and only follows the held pad (Dolphin `PadProfileN`/`WiimoteProfileN`, Cemu
+Dolphin's own preset and N64 mupen64plus's (A bottom, B left). A game's own input profile
+keeps its scheme and only follows the held pad (Dolphin `PadProfileN`/`WiimoteProfileN`, Cemu
 `gameProfiles` `controllerN`, RPCS3's other and per-title configs). Dolphin reads every port after
 a game's profiled one from that profile's file, so each held port past it gets
-`Profiles/<GCPad|Wiimote>/universe-player-N.ini`, a copy of its section as written, named in the
-game's `[Controls]`. Everything else in a file is left as it is; a file is written only when it
-changes, through a symlink to its target, and the first write copies it to
-`<file>.before-universe`. A file the emulator makes on its first start is
-never created, the hook logging "start X once" instead; mupen64plus, snes9x and ScummVM files are
+`Profiles/<GCPad|Wiimote>/universe-<profile>-N.ini`, the nearest profile before it on pad `N`
+(on a keyboard, or missing: a copy of the port's section), named in the game's `[Controls]`; such a
+name goes once no profile of the user's is left before it. Everything else in a file is left as it
+is; a file is written only when it changes, through a symlink to its target, and the first write
+copies it to `<file>.before-universe`. A file the emulator makes on its first start is never
+created, the hook logging "start X once" instead; mupen64plus, snes9x and ScummVM files are
 written whole, missing or not.
 
 ## Modules
