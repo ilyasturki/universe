@@ -74,7 +74,11 @@ FocusScope {
         })[0] || null;
     }
 
+    // When the widgets were last read: the row's rest reads them, the hub shown a moment later reuses that.
+    property double readAt: 0
+
     function refresh() {
+        readAt = Date.now();
         var games = [];
         var total = 0;
         for (var i = 0; i < api.allGames.count; i++) {
@@ -131,7 +135,8 @@ FocusScope {
     onShownChanged: {
         if (!shown)
             return;
-        refresh();
+        if (Date.now() - readAt > 2000)
+            refresh();
         api.screens.media.load();
         if (api.screens.modules.doctor.length === 0)
             api.screens.modules.loadDoctor();

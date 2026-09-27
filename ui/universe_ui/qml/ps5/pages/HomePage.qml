@@ -292,6 +292,11 @@ FocusScope {
         onTriggered: {
             page.backdrop = page.targetFor(page.entry);
             page.titleShown = true;
+            // Read now, while the world fades: the hero's own fade then waits on nothing.
+            if (page.tab === 0 && page.currentGame)
+                page.hubOf(page.currentGame);
+            else if (page.entry && page.entry.kind === "welcome")
+                welcome.refresh();
         }
     }
 
@@ -300,7 +305,7 @@ FocusScope {
         interval: Theme.heroRest
         onTriggered: {
             page.rested = page.entry;
-            page.strips = page.tab === 0 && page.restedGame ? page.hubFor(page.restedGame) : [];
+            page.strips = page.tab === 0 && page.restedGame ? page.hubOf(page.restedGame) : [];
             page.heroShown = true;
             sideTimer.restart();
         }
@@ -326,13 +331,56 @@ FocusScope {
         heroTimer.stop();
         page.backdrop = targetFor(entry);
         page.rested = entry;
-        page.strips = restedGame ? hubFor(restedGame) : [];
+        page.strips = restedGame ? hubOf(restedGame) : [];
         page.titleShown = true;
         page.heroShown = true;
         page.sideShown = true;
     }
 
     // ---- The Game Hub ----
+
+    // The strips by game id: read once, dropped when the game's sessions, captures or journal change.
+    property var hubCache: ({})
+
+    function hubOf(game) {
+        var hit = hubCache[game.id];
+        if (hit)
+            return hit;
+        hit = hubFor(game);
+        hubCache[game.id] = hit;
+        return hit;
+    }
+
+    // An empty list is the whole library.
+    function forget(ids) {
+        if (!ids || ids.length === 0)
+            hubCache = {};
+        else
+            ids.forEach(function (id) {
+                delete hubCache[id];
+            });
+        if (restedGame && heroShown && (!ids || ids.length === 0 || ids.indexOf(restedGame.id) >= 0))
+            strips = tab === 0 ? hubOf(restedGame) : [];
+    }
+
+    Connections {
+        target: api.universe
+        function onLibraryChanged(ids) {
+            page.forget(ids);
+        }
+        function onRecordingFiled(session, ident, path) {
+            page.forget([ident]);
+        }
+        function onEntryWritten(session, ident) {
+            page.forget([ident]);
+        }
+        function onMediaChanged(ident) {
+            page.forget([ident]);
+        }
+        function onSessionEnded(sessionId, ident, duration, end) {
+            page.forget([ident]);
+        }
+    }
 
     function hubFor(game) {
         var out = [];
@@ -717,7 +765,7 @@ FocusScope {
             restTimer.stop();
             backdrop = targetFor(entry);
             rested = entry;
-            strips = tab === 0 && restedGame ? hubFor(restedGame) : [];
+            strips = tab === 0 && restedGame ? hubOf(restedGame) : [];
             titleShown = true;
             heroShown = true;
             sideShown = true;
@@ -956,7 +1004,7 @@ FocusScope {
         blank();
         backdrop = targetFor(entry);
         rested = entry;
-        strips = tab === 0 && restedGame ? hubFor(restedGame) : [];
+        strips = tab === 0 && restedGame ? hubOf(restedGame) : [];
         rebuildAnim.restart();
     }
 
@@ -1009,7 +1057,7 @@ FocusScope {
                 script: {
                     page.backdrop = page.targetFor(page.entry);
                     page.rested = page.entry;
-                    page.strips = page.tab === 0 && page.restedGame ? page.hubFor(page.restedGame) : [];
+                    page.strips = page.tab === 0 && page.restedGame ? page.hubOf(page.restedGame) : [];
                     page.heroShown = true;
                 }
             }
