@@ -54,7 +54,8 @@ sha256sums=('SKIP')
 prepare() {
   cd "$pkgname-$pkgver"
   export RUSTUP_TOOLCHAIN=stable
-  cargo fetch --locked --target "$(rustc -vV | sed -n 's/host: //p')"
+  # maturin's cargo metadata resolves every platform's crates, not only the host's
+  cargo fetch --locked
 }
 
 build() {
