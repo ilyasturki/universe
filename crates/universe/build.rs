@@ -1,3 +1,4 @@
+use std::path::Path;
 use std::process::Command;
 
 // The short rev behind the semver: `UNIVERSE_GIT_REV` from the flake (no .git under nix), else git; plain semver when neither answers.
@@ -10,11 +11,15 @@ fn main() {
 }
 
 fn git_rev() -> Option<String> {
-    let root = concat!(env!("CARGO_MANIFEST_DIR"), "/../..");
+    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..").canonicalize().ok()?;
     let git = |args: &[&str]| {
-        let out = Command::new("git").arg("-C").arg(root).args(args).output().ok()?;
+        let out = Command::new("git").arg("-C").arg(&root).args(args).output().ok()?;
         out.status.success().then(|| String::from_utf8_lossy(&out.stdout).trim().to_string())
     };
+    // A source tarball unpacked inside another repo (an AUR package's clone) would take that repo's rev
+    if Path::new(&git(&["rev-parse", "--show-toplevel"])?).canonicalize().ok()? != root {
+        return None;
+    }
     for path in ["HEAD", "index"] {
         if let Some(p) = git(&["rev-parse", "--git-path", path]) {
             println!("cargo:rerun-if-changed={p}");
