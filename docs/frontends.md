@@ -619,6 +619,11 @@ overlay window to opaque without taking the game's input for 5 s (the same lift 
 flash, the longer of the two standing), unless the dock is already holding it up. On the desktop
 there is no window over the game, so the unlock shows on the Achievements page alone.
 
+A replay (`universe achievements <name> --replay`, see api.md § Achievements) comes the same way:
+a `replay` stamp newer than the one the first look of the session found is emitted key by key,
+whether or not the keys were news. The first look swallows its stamp, so a UI restarted mid-session
+does not show an old replay again.
+
 ## The Media tab
 
 `pages/MediaPage.qml`, the second tab, is `api.screens.media` on one four-wide grid of

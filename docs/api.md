@@ -442,6 +442,7 @@ named to a source call (or the reverse) is refused with the command that does ta
 | Rust | Python | CLI | Role |
 |---|---|---|---|
 | `achievements(id, refresh)` | `achievements(id, refresh=False)` | `universe achievements <name> [--refresh] [--json]` | `{source, fetched_at, total, unlocked, items: [Achievement]}` from `games/<id>/achievements.json`; through the game's source (its `achievements` verb, when the source declares that capability) when `refresh` or when there is no cache yet. A refresh keeps an unlock the store has not heard of yet. `Unavailable` when no source lists the game's: a manual game, a Lutris one, a source without the capability |
+| `achievements_replay(id, count)` | — | `universe achievements <name> --replay [--count N] [--json]` | stamps `replay: {at, keys}` into the cache: the `count` latest unlocks (all by default), oldest first, for the UI's `UnlockWatch` to show again as banners over the running game. Nothing reaches the store or comet: a way to see the banners without a fresh unlock. `Invalid` when the game is not the one running, or has nothing unlocked. A store refresh drops the stamp |
 | `achievement_unlocked(id, item)` | — | `universe achievement-unlocked <id> '<json>'` (hidden) | files one unlock a session saw into the cache at once, ahead of the store's list: sets `unlocked_at` (now when empty) on the item with that `key`, or adds the item. Prints whether it is new; the first unlock stands |
 
 `Achievement` = `{"key", "name", "description", "unlocked_at": "RFC 3339, empty while locked",

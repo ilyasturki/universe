@@ -10,6 +10,15 @@ pub struct Cache {
     pub source: String,
     pub fetched_at: String,
     pub items: Vec<Achievement>,
+    /// `universe achievements --replay`: unlocks to show again over the running game, from `at` on.
+    pub replay: Option<Replay>,
+}
+
+#[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
+#[serde(default)]
+pub struct Replay {
+    pub at: String,
+    pub keys: Vec<String>,
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize, PartialEq)]
@@ -47,6 +56,7 @@ impl Cache {
             "total": s.total,
             "unlocked": s.unlocked,
             "items": self.items,
+            "replay": self.replay,
         })
     }
 
@@ -63,6 +73,19 @@ impl Cache {
                 true
             }
         }
+    }
+
+    /// The `count` latest unlocks (all when `None`), oldest first as they would have come; `None` when nothing is unlocked.
+    pub fn stamp_replay(&mut self, count: Option<usize>, at: String) -> Option<&Replay> {
+        let mut unlocked: Vec<&Achievement> = self.items.iter().filter(|a| !a.unlocked_at.is_empty()).collect();
+        unlocked.sort_by_key(|a| std::cmp::Reverse(chrono::DateTime::parse_from_rfc3339(&a.unlocked_at).ok()));
+        unlocked.truncate(count.unwrap_or(usize::MAX));
+        if unlocked.is_empty() {
+            return None;
+        }
+        let keys = unlocked.iter().rev().map(|a| a.key.clone()).collect();
+        self.replay = Some(Replay { at, keys });
+        self.replay.as_ref()
     }
 
     /// A fresh list keeps an unlock the store has not heard of yet: a session offline, a sync that failed.
@@ -116,6 +139,7 @@ mod tests {
 
         let fresh = Cache { source: "gog".into(), items: vec![item("a", ""), item("b", "2026-09-20T10:00:00+00:00")], ..Default::default() };
         let merged = c.refreshed(fresh);
+        assert_eq!(merged.replay, None);
         assert_eq!(merged.items[0].unlocked_at, "2026-09-24T20:00:00+02:00", "the store has not synced it yet");
         assert_eq!(merged.items[1].unlocked_at, "2026-09-20T10:00:00+00:00");
         assert_eq!(merged.items.len(), 2, "the store's list is the list");
@@ -129,10 +153,22 @@ mod tests {
     }
 
     #[test]
+    fn a_replay_takes_the_latest_unlocks_oldest_first() {
+        let mut c = Cache {
+            items: vec![item("a", "2026-09-24T20:00:00+02:00"), item("b", ""), item("c", "2026-09-24T19:30:00+00:00"), item("d", "2026-09-20T10:00:00+00:00")],
+            ..Default::default()
+        };
+        assert_eq!(c.stamp_replay(Some(2), "now".into()).unwrap().keys, ["a", "c"], "19:30Z is after 20:00+02");
+        assert_eq!(c.stamp_replay(None, "later".into()).unwrap().keys, ["d", "a", "c"]);
+        assert_eq!(c.replay.as_ref().unwrap().at, "later");
+        assert!(Cache::default().stamp_replay(None, "now".into()).is_none(), "nothing unlocked, nothing to show");
+    }
+
+    #[test]
     fn the_cache_round_trips_and_a_bad_file_reads_as_none() {
         let dir = tempfile::tempdir().unwrap();
         let p = dir.path().join("achievements.json");
-        let c = Cache { source: "gog".into(), fetched_at: "t".into(), items: vec![Achievement { rarity: Some(12.5), ..item("a", "") }] };
+        let c = Cache { source: "gog".into(), fetched_at: "t".into(), items: vec![Achievement { rarity: Some(12.5), ..item("a", "") }], ..Default::default() };
         write(&p, &c).unwrap();
         assert_eq!(read(&p), Some(c));
         std::fs::write(&p, "{").unwrap();

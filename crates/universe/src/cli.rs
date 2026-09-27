@@ -281,6 +281,12 @@ pub enum Cmd {
         /// Ask the store again instead of reading the cache
         #[arg(long)]
         refresh: bool,
+        /// Show the latest unlocks again over the running game, as banners; nothing reaches the store
+        #[arg(long, conflicts_with = "refresh")]
+        replay: bool,
+        /// With --replay: only the N latest
+        #[arg(long, value_name = "N", requires = "replay")]
+        count: Option<usize>,
     },
     /// Controller macros: paddles and spare buttons bound to actions
     Controller {
@@ -1545,7 +1551,15 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
             println!("{t}");
         }
-        Cmd::Achievements { name, refresh } => {
+        Cmd::Achievements { name, replay: true, count, .. } => {
+            let id = pick(&core, &name).await?;
+            let keys = core.achievements_replay(&id, count).await?;
+            if json {
+                return print_json(&keys);
+            }
+            println!("Replaying {}: {}", keys.len(), keys.join(", "));
+        }
+        Cmd::Achievements { name, refresh, .. } => {
             let id = pick(&core, &name).await?;
             let list = core.achievements(&id, refresh).await?;
             if json {

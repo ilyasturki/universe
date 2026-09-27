@@ -1726,7 +1726,7 @@ impl Core {
             .filter(|a| !a.key.is_empty())
             .map(|a| Achievement { unlocked_at: ach::normalized_time(&a.unlocked_at), ..a })
             .collect();
-        let fresh = Cache { source: m.id().into(), fetched_at: chrono::Local::now().to_rfc3339(), items };
+        let fresh = Cache { source: m.id().into(), fetched_at: chrono::Local::now().to_rfc3339(), items, ..Default::default() };
         // Read again: an unlock a hook filed while the store answered must not be lost.
         let cache = ach::read(&path).map(|c| c.refreshed(fresh.clone())).unwrap_or(fresh);
         ach::write(&path, &cache)?;
@@ -1751,6 +1751,24 @@ impl Core {
         ach::write(&path, &cache)?;
         self.reload_game(&r.game.id).await?;
         Ok(true)
+    }
+
+    /// Stamps the game's latest unlocks for the UI to show again; the keys stamped. Only the running game has a UI watching it.
+    pub async fn achievements_replay(&self, id: &str, count: Option<usize>) -> Result<Vec<String>> {
+        use crate::achievements as ach;
+        let r = self.get(id).await?;
+        if self.current().await.is_none_or(|c| c.id != r.game.id) {
+            return Err(Error::Invalid(format!("{} is not running: a replay shows over the running game", r.game.title)));
+        }
+        let path = ach::path(&r.game);
+        let mut cache = ach::read(&path).unwrap_or_default();
+        let keys = cache
+            .stamp_replay(count, chrono::Local::now().to_rfc3339())
+            .map(|p| p.keys.clone())
+            .ok_or_else(|| Error::Invalid(format!("{}: nothing unlocked to replay", r.game.title)))?;
+        ach::write(&path, &cache)?;
+        self.reload_game(&r.game.id).await?;
+        Ok(keys)
     }
 
     /// The whole library when `id` is empty; returns (changed, total). `media_cancel` stops a library run between games.
@@ -2247,6 +2265,7 @@ achievements) [ "$2" = 1 ] || exit 3; echo "$2" >> "$SOURCE_DATA_DIR/asked"; ech
         core.achievement_unlocked("old", serde_json::json!({"key": "k"})).await.unwrap();
         assert_eq!(core.achievements("old", false).await.unwrap()["unlocked"], 1, "a cache stands on its own");
         assert!(matches!(core.achievements("old", true).await, Err(Error::Unavailable(_))), "a refresh has nowhere to go");
+        assert!(matches!(core.achievements_replay("old", None).await, Err(Error::Invalid(_))), "no game running, no one to show it");
     }
 
     #[tokio::test]

@@ -1,3 +1,6 @@
+import json
+import os
+
 from conftest import pump, wait_for
 
 
@@ -58,3 +61,28 @@ def test_game_settings_carry_the_sources_own_switch(api, fake):
     assert fake.core.source_settings("gog")["achievements"] is True, "the global value stands"
     form.load("dishonored")
     assert not any(str(r.get("key", "")).startswith("sources.") for r in form.rows), "a Lutris game has no GOG switch"
+
+
+def test_a_replay_shows_the_stamped_unlocks_again_and_a_stale_one_is_no_news(api, fake, monkeypatch):
+    from universe_ui import fake_core
+
+    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+    cache = fake.core._data["achievements"]["batman-arkham-origins"]
+    path = fake.core._game_dir("batman-arkham-origins") / "achievements.json"
+
+    def stamp(at, keys):
+        cache["replay"] = {"at": at, "keys": keys}
+        path.with_suffix(".tmp").write_text(json.dumps(cache))
+        os.replace(path.with_suffix(".tmp"), path)
+
+    stamp("2026-09-01T10:00:00+00:00", ["detective"])
+    seen = []
+    api.home.achievementUnlocked.connect(seen.append)
+    fake.launch("batman-arkham-origins", "DP-1")
+    wait_for(api.home.achievementUnlocked, 5000)
+    pump(600)
+    assert [i["key"] for i in seen] == ["combo"], "the stamp from before this run of the UI stays quiet"
+    stamp("2026-09-27T12:00:00+00:00", ["rooftops", "detective"])
+    pump(900)
+    assert [i["key"] for i in seen] == ["combo", "rooftops", "detective"], "each stamped key, known or not, in the stamp's order"
+    assert seen[-1]["name"] and seen[-1]["gameId"] == "batman-arkham-origins"

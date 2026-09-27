@@ -147,6 +147,7 @@ class UnlockWatch(QObject):
         self._title = ""
         self._since = None
         self._known = set()
+        self._replayed = None
         client.currentSessionChanged.connect(self._on_session)
         client.libraryChanged.connect(self._on_library)
         self._on_session()
@@ -156,7 +157,7 @@ class UnlockWatch(QObject):
         ident = str(current.get("id") or "") if current.get("session_id") else ""
         if ident == self._game:
             return
-        self._game, self._title, self._known = ident, str(current.get("title") or ""), set()
+        self._game, self._title, self._known, self._replayed = ident, str(current.get("title") or ""), set(), None
         self._since = _moment(current.get("started_at"))
         if ident:
             self._look()
@@ -179,17 +180,29 @@ class UnlockWatch(QObject):
                 at = _moment(item.get("unlocked_at"))
                 if item.get("key") in self._known or (self._since is not None and (at is None or at < self._since)):
                     continue
-                self.unlocked.emit(
-                    {
-                        "gameId": game,
-                        "gameTitle": self._title,
-                        "key": str(item.get("key") or ""),
-                        "name": str(item.get("name") or item.get("key") or ""),
-                        "description": str(item.get("description") or ""),
-                        "icon": str(item.get("icon") or ""),
-                        "rarityText": _rarity(item.get("rarity")),
-                    }
-                )
+                self._emit(game, item)
             self._known.update(str(a.get("key") or "") for a in items)
+            # The stamp found on the first look was for an earlier run of the UI.
+            replay = (listing or {}).get("replay") or {}
+            stamp = str(replay.get("at") or "")
+            if self._replayed is not None and stamp and stamp != self._replayed:
+                by_key = {str(a.get("key") or ""): a for a in items}
+                for key in replay.get("keys") or []:
+                    if key in by_key:
+                        self._emit(game, by_key[key])
+            self._replayed = stamp
 
         self._client.achievementsAsync(game, False, landed, lambda e: None)
+
+    def _emit(self, game, item):
+        self.unlocked.emit(
+            {
+                "gameId": game,
+                "gameTitle": self._title,
+                "key": str(item.get("key") or ""),
+                "name": str(item.get("name") or item.get("key") or ""),
+                "description": str(item.get("description") or ""),
+                "icon": str(item.get("icon") or ""),
+                "rarityText": _rarity(item.get("rarity")),
+            }
+        )
