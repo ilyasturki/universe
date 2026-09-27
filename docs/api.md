@@ -691,9 +691,17 @@ Two layers per slot: the **default** under `games/<id>/media/`, which `refresh` 
 | `file_recording(session_id, path, timeline)` | `file_recording(session_id, path)` | `universe recording-file <session> <path> [--timeline <json>]` | files the mkv as `<recordings_root>/<id>/<session>.mkv` (rename within a filesystem, copy across), writes `recording`, the probed `recording_duration_s` and the timeline's `recording_started_at` / `recording_pauses` into the session line, prints the final path. The timeline is `{"started_at": RFC3339, "pauses": [[from, to]]}`, a file path on the CLI, `None` for none |
 | — | `recordings(id)` (a filter on the client) | `universe recordings <name>` | the `SessionRow`s of `sessions(id)` that have a `recording` |
 | `remove_recording(id, session_id)` | `remove_recording(id, session_id)` | `universe recordings <name> --remove <session> [-y]` | trashes the mkv (`trash`), clears `recording` on the session line; the hours stay |
+| `frames::Frames::start()` | — | — | a frame sampler on the caller's tokio runtime and the channel its frames land on (`Landed {recording, index, file}`, each once). `thumbnail(path, duration_s)` queues a recording's `THUMB` frame (3, about a fifth in), `select(path, duration_s)` puts all `COUNT` (16) of its frames first and drops the frames another recording was still waiting for, its thumbnail kept, `forget(path)` drops its jobs and its cached frames |
+| `frames::file(path, index)`, `frames::dir(path)`, `frames::at(index, duration_s)` | — | — | where a frame is cached, `$XDG_CACHE_HOME/universe/frames/<sha1 of the path>/NN.jpg` — the Qt host's cache, so the two share it — and the instant it is taken at, the middle of its sixteenth of the recording |
 
 `recording-file` is called by the capture module's `session-end` hook, so it lands before any
 `post-process` hook runs.
+
+The frames are 640 px wide JPEGs taken by ffmpeg, two at a time, through VAAPI on
+`/dev/dri/renderD128` (a 4K AV1 frame takes 0.4 s and 180 MB there, against 1 s, 2.4 s of CPU and
+630 MB in software); the first one that fails there before any has come through turns the sampler
+to software, and the job runs again. A frame is written under a dot name and renamed into place,
+so an extraction cut short leaves nothing that looks whole. Without ffmpeg nothing is sampled.
 
 The recording **pauses with the game**: the module's `freeze` hook tells gpu-screen-recorder
 `set-paused true` over its command socket (`-ipc`, through `gsr-cli`) and `thaw` `set-paused false`,

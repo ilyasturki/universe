@@ -40,7 +40,7 @@ A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `p
 `api.screens.recordings` maps the session rows that carry a `recording` (`sessions(id)`, see
 `api.md`) to rows — `session`, `path`, `url`, `size`, `sizeText`, `duration_s`, `durationText`,
 `dateText`, `created_at`, `hasJournal`, `gameId`, `gameTitle` — and samples 16 frames per recording
-with ffmpeg into `$XDG_CACHE_HOME/universe/frames/<sha1 of the path>/NN.jpg`; the seeks are spread
+with ffmpeg into `$XDG_CACHE_HOME/universe/frames/<sha1 of the path>/NN.jpg` (`universe::frames` samples the same cache for a Rust frontend); the seeks are spread
 over the row's `recording.duration_s` (the media's length the core probed when the file was filed),
 or the session's span for a line filed before the core kept lengths. Two extractions run at a time,
 through VAAPI (a 4K AV1 frame takes 0.4 s and 180 MB against 1 s, 2.4 s of CPU and 630 MB in

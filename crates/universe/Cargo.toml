@@ -37,6 +37,7 @@ percent-encoding = "2"
 anstream = "1"
 drm = "0.15"
 image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+sha1 = "0.10"
 sha2 = "0.10"
 tar = { version = "0.4", default-features = false }
 flate2 = "1"

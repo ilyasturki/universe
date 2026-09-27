@@ -11,6 +11,7 @@ pub mod discover;
 pub mod distro;
 pub mod doctor;
 pub mod forms;
+pub mod frames;
 pub mod game;
 pub mod gamescope;
 pub mod gpu;
