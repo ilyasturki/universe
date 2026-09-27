@@ -7,7 +7,8 @@
 # "global" (config.toml sets it), "default" (neither does); empty when the row has no such story. `inherited` is true for
 # the last two; the first two are a change made on this page, and a shown group's `changed` says it holds one, its hidden
 # advanced rows counted. A map key (launch.env) is one row per entry, `entry` naming the map, then an `action` row with `map` set
-# that adds one; an entry's empty value removes it.
+# that adds one; an entry's empty value removes it. A game's row with a global twin carries it as `global`: `{key}` in config.toml,
+# or `{module, key}`, `{source, key}`, `{runner, key}` for those tables.
 import json
 import os
 import re
@@ -530,6 +531,7 @@ def game_launch_rows(game, effective, runners, config_set):
                     origin="game" if key in own else "global" if key in runner_set else "default",
                 )
             )
+            rows[-1]["global"] = {"runner": runner_id, "key": key}
     return rows, spec["name"], kind
 
 
@@ -563,6 +565,8 @@ def build_game(client, game_id, screen_mode):
             own = dict(own) if isinstance(own, dict) else {}
             merged = {**(_dig(config, "launch." + key) or {}), **own} if spec["scope"] == "both" else own
             for row in map_rows(section, spec, merged, own):
+                if spec["scope"] == "both" and row.get("entry"):
+                    row["global"] = {"key": row["key"]}
                 _add(rows, groups, section, row, **card)
             continue
         value, origin, global_label = own, "", ""
@@ -584,6 +588,8 @@ def build_game(client, game_id, screen_mode):
             if origin != "game":
                 value = effective.get(key) or ""
         row = launch_row(section, spec, value, protons=protons, auto_hz=hz, gpu=gpu, mode=mode, origin=origin, global_label=global_label)
+        if spec["scope"] == "both":
+            row["global"] = {"key": row["key"]}
         if section == "Launch":
             launch.append(row)
             continue
@@ -599,14 +605,10 @@ def build_game(client, game_id, screen_mode):
                 value = effective.get("hide_cursor")
         if kind == "bool":
             value = bool(value)
-        _add(
-            rows,
-            groups,
-            section,
-            _row(section, key, label, kind, value, origin=origin, detail=HIDE_CURSOR if key == "desktop.hide_cursor" else "", advanced=advanced),
-            caps=True,
-            home=HOMES.get(section, ""),
-        )
+        row = _row(section, key, label, kind, value, origin=origin, detail=HIDE_CURSOR if key == "desktop.hide_cursor" else "", advanced=advanced)
+        if origin:
+            row["global"] = {"key": key}
+        _add(rows, groups, section, row, caps=True, home=HOMES.get(section, ""))
     modules = {m["id"]: m for m in client.modules()}
     own_modules = game.get("modules") or {}
     set_modules = config_set.get("modules") or {}
@@ -619,23 +621,21 @@ def build_game(client, game_id, screen_mode):
                 continue
             key = setting["key"]
             value = values.get(key, setting.get("default"))
-            _add(
-                rows,
-                groups,
+            row = _row(
                 name,
-                _row(
-                    name,
-                    key,
-                    setting.get("label", key),
-                    setting.get("type", "string"),
-                    value,
-                    setting.get("choices"),
-                    module_id,
-                    advanced=bool(setting.get("advanced")),
-                    origin="game" if key in own else "global" if key in global_set else "default",
-                ),
-                meta=_meta(module),
+                key,
+                setting.get("label", key),
+                setting.get("type", "string"),
+                value,
+                setting.get("choices"),
+                module_id,
+                advanced=bool(setting.get("advanced")),
+                origin="game" if key in own else "global" if key in global_set else "default",
             )
+            # A game's `enabled` has no global twin: the module's own switch is another thing.
+            if key != "enabled":
+                row["global"] = {"module": module_id, "key": key}
+            _add(rows, groups, name, row, meta=_meta(module))
     kind = _source_kind(game.get("source"))
     source = next((s for s in client.sources() if s["id"] == kind and s.get("enabled")), None) if kind not in ("", "manual") else None
     game_settings = [s for s in (source or {}).get("settings") or [] if s.get("scope") == "game"]
@@ -645,22 +645,18 @@ def build_game(client, game_id, screen_mode):
         own, global_set = (game.get("sources") or {}).get(kind) or {}, (config_set.get("sources") or {}).get(kind) or {}
         for setting in game_settings:
             key = setting["key"]
-            _add(
-                rows,
-                groups,
+            row = _row(
                 name,
-                _row(
-                    name,
-                    f"sources.{kind}.{key}",
-                    setting.get("label", key),
-                    setting.get("type", "string"),
-                    values.get(key, setting.get("default")),
-                    setting.get("choices"),
-                    advanced=bool(setting.get("advanced")),
-                    origin="game" if key in own else "global" if key in global_set else "default",
-                ),
-                meta=_meta(source),
+                f"sources.{kind}.{key}",
+                setting.get("label", key),
+                setting.get("type", "string"),
+                values.get(key, setting.get("default")),
+                setting.get("choices"),
+                advanced=bool(setting.get("advanced")),
+                origin="game" if key in own else "global" if key in global_set else "default",
             )
+            row["global"] = {"source": kind, "key": key}
+            _add(rows, groups, name, row, meta=_meta(source))
     return rows, groups, title
 
 
@@ -697,6 +693,31 @@ class GameSettingsForm(RowsForm):
 
     def _reload(self, row):
         self._refresh()
+
+    @Slot("QVariant", result=bool)
+    def promotable(self, row):
+        row = (row.toVariant() if hasattr(row, "toVariant") else row) or {}
+        return row.get("origin") == "game" and bool(row.get("global"))
+
+    # The game's value becomes the global one and the game's own goes; other games keep theirs. Global first: a failed
+    # clear leaves the game a redundant value, never a lost one.
+    @Slot(int, result=bool)
+    def promote(self, index):
+        row = self.row(index)
+        if not self.promotable(row):
+            return False
+        ok = self._write_global(row["global"], _to_bus(row, row["value"])) and self._write(row, "")
+        self._reload(row)
+        return bool(ok)
+
+    def _write_global(self, twin, payload):
+        if twin.get("module"):
+            return self._client.setSetting(twin["module"], "", twin["key"], payload)
+        if twin.get("source"):
+            return self._client.setSourceSetting(twin["source"], twin["key"], payload)
+        if twin.get("runner"):
+            return self._client.setRunnerSetting(twin["runner"], twin["key"], payload)
+        return self._client.setConfig(twin["key"], payload)
 
     gameId = Property(str, lambda self: self._game_id, notify=gameIdChanged)
     title = Property(str, lambda self: self._title, notify=titleChanged)

@@ -1160,7 +1160,8 @@ class FakeCore:
     def set_source_setting(self, ident, key, value, game_id=""):
         schema = {s["key"]: s for s in self._source(ident).get("settings", [])}
         if not game_id:
-            self._config.setdefault("sources", {}).setdefault(ident, {})[key] = _coerce(schema, ident, key, value)
+            for root in (self._config, self._set):
+                root.setdefault("sources", {}).setdefault(ident, {})[key] = _coerce(schema, ident, key, value)
             return
         if (schema.get(key) or {}).get("scope") != "game":
             raise UniverseError("Invalid", f"{ident}.{key} is a global setting")
@@ -1579,12 +1580,12 @@ class FakeCore:
         schema = {s["key"]: s for s in module.get("settings", [])}
         if key not in schema:
             raise UniverseError("Invalid", f"{module_id} has no setting '{key}'")
-        owner = self._game(game_id) if game_id else self._config
-        table = owner.setdefault("modules", {}).setdefault(module_id, {})
-        if value == "":
-            table.pop(key, None)
-        else:
-            table[key] = _coerce(schema, module_id, key, value)
+        for owner in [self._game(game_id)] if game_id else [self._config, self._set]:
+            table = owner.setdefault("modules", {}).setdefault(module_id, {})
+            if value == "":
+                table.pop(key, None)
+            else:
+                table[key] = _coerce(schema, module_id, key, value)
         if game_id:
             self._write_game(owner)
 

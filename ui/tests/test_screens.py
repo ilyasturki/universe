@@ -427,6 +427,46 @@ def test_game_settings_reset(api, fake):
     assert not hasattr(form, "override"), "an inherited value is overridden by changing it, not from a button"
 
 
+def test_game_settings_promote(api, fake):
+    form = api.screens.gameSettings
+    form.load("the-technomancer")
+
+    def game():
+        return fake.game("the-technomancer")
+
+    proton = index_of(form, "launch.proton")
+    assert form.setValue(proton, "proton-cachyos") is True
+    assert form.promotable(form.rows[proton]) is True and form.promote(proton) is True
+    assert fake.config()["set"]["launch"]["proton"] == "proton-cachyos" and "proton" not in game()["launch"]
+    assert rows_by_key(form, "")["launch.proton"]["origin"] == "global", "the game follows the value it handed on"
+    assert form.promote(index_of(form, "launch.proton")) is False, "nothing of the game's own left"
+
+    assert form.setMapEntry(index_of(form, "launch.env"), "DXVK_HUD", "fps") is True
+    assert form.promote(index_of(form, "launch.env.DXVK_HUD")) is True
+    assert fake.config()["set"]["launch"]["env"]["DXVK_HUD"] == "fps" and "DXVK_HUD" not in game()["launch"].get("env", {})
+
+    cursor = next(i for i, r in enumerate(form.rows) if r["module"] == "capture" and r["key"] == "cursor")
+    assert form.promote(cursor) is True and fake.config()["set"]["modules"]["capture"]["cursor"] is False
+    assert "cursor" not in game()["modules"]["capture"] and form.rows[cursor]["origin"] == "global"
+    capture = next(i for i, r in enumerate(form.rows) if r["module"] == "capture" and r["key"] == "enabled")
+    assert form.rows[capture]["origin"] == "game" and form.promotable(form.rows[capture]) is False, "the module's own switch is another thing"
+
+    assert form.setValue(index_of(form, "sources.gog.achievements"), False) is True
+    assert form.promote(index_of(form, "sources.gog.achievements")) is True
+    assert fake.config()["set"]["sources"]["gog"]["achievements"] is False and "achievements" not in game().get("sources", {}).get("gog", {})
+
+    assert form.setValue(index_of(form, "launch.working_dir"), "/tmp") is True
+    for key in ("launch.runner", "launch.exe", "launch.working_dir", "launch.dll_overrides.d3d11"):
+        row = rows_by_key(form).get(key)
+        assert row is None or form.promotable(row) is False, f"{key} is the game's alone"
+
+    form.load("mini-metro")
+    fullscreen = index_of(form, "launch.options.fullscreen")
+    assert form.promote(fullscreen) is True and "fullscreen" not in fake.game("mini-metro")["launch"].get("options", {})
+    eden = next(r for r in fake.runners() if r["id"] == "eden")
+    assert next(o for o in eden["options"] if o["key"] == "fullscreen")["value"] is False, "a runner option goes to the runner"
+
+
 def test_game_settings_marks_changed_cards(api, fake):
     form = api.screens.gameSettings
     form.load("the-technomancer")

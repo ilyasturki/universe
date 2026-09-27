@@ -121,6 +121,11 @@ FocusScope {
         Sound.play(form.reset(row.form) ? "select" : "edge");
     }
 
+    function promoteRow() {
+        var row = rows.currentRow;
+        Sound.play(row && form.promote(row.form) ? "select" : "edge");
+    }
+
     function toggleAdvanced() {
         if (!form.hasAdvanced) {
             Sound.play("edge");
@@ -155,6 +160,12 @@ FocusScope {
                 glyph: "refresh",
                 act: "reset"
             });
+        if (zone === "rows" && currentRow !== null && !currentRow.heading && form.promotable(currentRow))
+            items.push({
+                label: "Apply to All Games",
+                glyph: "globe",
+                act: "promote"
+            });
         if (form.hasAdvanced)
             items.push({
                 label: form.showAdvanced ? "Hide Advanced Settings" : "Show Advanced Settings",
@@ -169,6 +180,8 @@ FocusScope {
         shell.menu(game ? game.title : "Game Settings", items, function (act) {
             if (act === "reset")
                 page.resetRow();
+            else if (act === "promote")
+                page.promoteRow();
             else if (act === "advanced")
                 page.toggleAdvanced();
         });

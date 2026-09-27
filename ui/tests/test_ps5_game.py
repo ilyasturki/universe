@@ -77,7 +77,11 @@ def test_game_settings_land_a_hit_behind_advanced_and_edit_it(ps5, api, fake):
     assert page.property("canReset") is True
     click(window, Qt.Key.Key_F1)
     popup = root.findChild(QObject, "popup")
-    assert popup.property("open") is True and [i["label"] for i in value(popup, "items")] == ["Reset to Default", "Hide Advanced Settings"]
+    assert popup.property("open") is True and [i["label"] for i in value(popup, "items")] == [
+        "Reset to Default",
+        "Apply to All Games",
+        "Hide Advanced Settings",
+    ]
     click(window, Qt.Key.Key_Escape)
     assert popup.property("open") is False
     click(window, Qt.Key.Key_I)

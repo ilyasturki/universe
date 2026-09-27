@@ -126,7 +126,12 @@ shown bare, and a default, most rows, reads plain; `inherited` is true for the l
 inherited with no `origin` (a runner's found program) is only that, chipped INHERITED. A value is overridden by changing it; X is
 `reset(index)` where `resettable(row)` says so — a `game` or `runner` row, whose own value goes
 (an empty write, the key leaves the file) so the row inherits again, or a map's entry, which goes
-out of the map. A runner picker's `valueIcon` is the picked runner's logo, drawn by the value;
+out of the map. On a game's page a row with a global twin carries it as `global` (`{key}` in
+`config.toml`, `{module, key}`, `{source, key}` or `{runner, key}`); where `promotable(row)` says
+so — a `game` row with one — `promote(index)` writes the game's value there and clears the game's,
+which follows it from then on, other games keeping theirs: Reprise's More menu lists it as Apply to
+all games, PS5's as Apply to All Games, the GTK dialog as a button beside the reset one
+(`Field.promotable`, `Entry.promotable`, `Core::promote_field`). A runner picker's `valueIcon` is the picked runner's logo, drawn by the value;
 `icons` are the choices'. A `path` row under a pad opens the folder sheet (`ui/PathSheet.qml`,
 Switch 2 `FolderSheet`, over `api.screens.paths`: the value's nearest folder, Y to type the path
 instead; Switch 2 shows the shortcuts as chips, Reprise's Start opens a menu of Use this folder,

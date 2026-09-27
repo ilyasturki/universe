@@ -1041,6 +1041,33 @@ def test_the_reprise_game_menu_groups_its_rows_and_hides_the_media_a_game_has_no
     pump(50)
 
 
+def test_the_game_settings_page_applies_a_value_to_all_games(api, fake):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    def click(key):
+        QTest.keyClick(window, key)
+        pump(80)
+
+    _engine, window = render(api, activate=True)
+    root = window.property("contentItem").childItems()[0].property("item")
+    root.openSub("pages/GameSettingsPage.qml", {"game": api.allGames.byId("the-technomancer"), "key": "launch.ntsync"})
+    settle(window)
+    pump(300)
+    page = window.findChild(QObject, "gameSettingsPage")
+    messages = []
+    page.message.connect(messages.append)
+    click(Qt.Key.Key_Return)
+    assert fake.game("the-technomancer")["launch"]["ntsync"] is False and page.property("canPromote") is True
+    click(Qt.Key.Key_F1)
+    click(Qt.Key.Key_Down)
+    click(Qt.Key.Key_Return)
+    assert fake.config()["set"]["launch"]["ntsync"] is False and "ntsync" not in fake.game("the-technomancer")["launch"]
+    assert page.property("row")["origin"] == "global" and page.property("canPromote") is False
+    assert messages == ["NTSync now applies to every game"]
+    window.close()
+
+
 def test_the_game_settings_page_lands_a_search_hit_behind_advanced(api, fake):
     from PySide6.QtCore import Qt
     from PySide6.QtTest import QTest
@@ -1077,7 +1104,7 @@ def test_the_game_settings_page_lands_a_search_hit_behind_advanced(api, fake):
     assert page.property("canReset") is True
     click(Qt.Key.Key_F1)
     menu = next(c for c in page.findChildren(QObject) if c.property("stack") is not None and c.property("open"))
-    assert menu.property("open") is True and [i["action"] for i in menu.property("items").toVariant()] == ["reset", "advanced"]
+    assert menu.property("open") is True and [i["action"] for i in menu.property("items").toVariant()] == ["reset", "promote", "advanced"]
     click(Qt.Key.Key_Escape)
     assert menu.property("open") is False
     click(Qt.Key.Key_I)

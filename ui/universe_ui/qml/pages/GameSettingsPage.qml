@@ -42,6 +42,7 @@ FocusScope {
     // X on a row: a value of the game's own goes, a variable the game set goes out of its map.
     readonly property string rowAction: row && row.entry ? "Remove" : "Reset"
     readonly property bool canReset: inRows && row !== null && form.resettable(row)
+    readonly property bool canPromote: inRows && row !== null && form.promotable(row)
 
     readonly property var hints: editor.open ? editor.hints : menu.open ? menu.hints : [
         {
@@ -69,7 +70,13 @@ FocusScope {
                 label: rowAction,
                 action: "reset"
             }
-        ] : []).concat(form.hasAdvanced ? [
+        ] : []).concat(canPromote ? [
+        {
+            icon: "library",
+            label: "Apply to all games",
+            action: "promote"
+        }
+    ] : []).concat(form.hasAdvanced ? [
         {
             icon: "sliders",
             label: form.showAdvanced ? "Hide advanced" : "Show advanced",
@@ -122,6 +129,16 @@ FocusScope {
         form.reset(body.cards.index) ? Sound.enter() : Sound.edge();
     }
 
+    function promoteRow() {
+        var label = row.label;
+        if (form.promote(body.cards.index)) {
+            Sound.enter();
+            page.message(label + " now applies to every game");
+        } else {
+            Sound.edge();
+        }
+    }
+
     function openMenu() {
         if (!inRows || moreItems.length === 0) {
             Sound.edge();
@@ -132,6 +149,8 @@ FocusScope {
             body.cards.forceActiveFocus();
             if (action === "reset")
                 page.resetRow();
+            else if (action === "promote")
+                page.promoteRow();
             else if (action === "advanced")
                 page.toggleAdvanced();
         });
