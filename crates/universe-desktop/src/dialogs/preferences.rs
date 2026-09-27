@@ -76,7 +76,8 @@ fn chevron() -> gtk::Image {
     gtk::Image::from_icon_name("go-next-symbolic")
 }
 
-/// `page`: `launch`, `runners`, `stores`, `modules`, `controller`, `artwork` or `doctor`; empty for the first.
+/// `page`: `launch`, `runners`, `stores`, `modules`, `controller`, `system` (a Steam Deck's), `artwork` or `doctor`; empty
+/// for the first.
 pub fn present(win: &Window, page: &str) {
     let dialog = adw::PreferencesDialog::builder().search_enabled(true).content_height(720).build();
     let connector = win.connector();
@@ -103,6 +104,13 @@ pub fn present(win: &Window, page: &str) {
     let controller = crate::dialogs::controller::page(&dialog);
     dialog.add(&controller.page);
 
+    let system = universe::deck::model().is_some().then(|| {
+        let page = ListPage::new("system", &gettext("System"), "computer-symbolic");
+        dialog.add(&page.page);
+        load_system(&dialog, &page);
+        page
+    });
+
     let artwork = ListPage::new("artwork", &gettext("Artwork"), "image-x-generic-symbolic");
     dialog.add(&artwork.page);
     load_artwork(&artwork, win);
@@ -120,7 +128,7 @@ pub fn present(win: &Window, page: &str) {
 
     let (app, job) = (win.app().downgrade(), RefCell::new(Some(job)));
     dialog.connect_closed(move |_| {
-        let _ = (&launch, &runners, &stores, &modules, &controller, &artwork, &doctor);
+        let _ = (&launch, &runners, &stores, &modules, &controller, &system, &artwork, &doctor);
         if let (Some(app), Some(job)) = (app.upgrade(), job.take()) {
             app.disconnect(job);
         }
@@ -129,6 +137,79 @@ pub fn present(win: &Window, page: &str) {
         dialog.set_visible_page_name(page);
     }
     dialog.present(Some(win));
+}
+
+/// The Deck's own controls but the backlight, which the desktop sets.
+fn load_system(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>) {
+    page.loading();
+    let (weak_dialog, weak) = (dialog.downgrade(), Rc::downgrade(page));
+    glib::spawn_future_local(async move {
+        let controls = backend::pinned(|core| async move { core.system_controls().await }).await;
+        let (Some(dialog), Some(page)) = (weak_dialog.upgrade(), weak.upgrade()) else { return };
+        page.clear();
+        let controls: Vec<_> = controls.into_iter().filter(|c| c.id != "brightness").collect();
+        let about = if controls.is_empty() {
+            gettext("None of its controls can be set from here")
+        } else {
+            gettext("Set at once, and set again each time Universe starts: the power limit and the clocks do not outlive a reboot")
+        };
+        let group = page.group(&gettext("Steam Deck"), &about);
+        for control in controls {
+            group.add(&system_row(&dialog, control));
+        }
+    });
+}
+
+fn system_row(dialog: &adw::PreferencesDialog, control: universe::hardware::Control) -> adw::ActionRow {
+    let (id, weak) = (control.id, dialog.downgrade());
+    let set = move |value: String| {
+        let weak = weak.clone();
+        glib::spawn_future_local(async move {
+            let result = backend::call(move |core| async move { core.set_system(id, &value).await }).await;
+            if let (Err(e), Some(dialog)) = (result, weak.upgrade()) {
+                dialog.add_toast(crate::dialogs::toast(&e.to_string()));
+            }
+        });
+    };
+    let shown = |value: &str| if value == "auto" { gettext("Auto") } else { format!("{value} {}", control.unit).trim_end().to_string() };
+    let row: adw::ActionRow = match control.kind {
+        "choice" => {
+            let names: Vec<String> = control.choices.iter().map(|c| shown(c)).collect();
+            let row = adw::ComboRow::builder().model(&gtk::StringList::new(&names.iter().map(String::as_str).collect::<Vec<_>>())).build();
+            row.set_selected(control.choices.iter().position(|c| *c == control.value).unwrap_or(0) as u32);
+            let choices = control.choices.clone();
+            row.connect_selected_notify(move |row| {
+                if let Some(value) = choices.get(row.selected() as usize) {
+                    set(value.clone());
+                }
+            });
+            row.upcast()
+        }
+        "toggle" => {
+            let row = adw::SwitchRow::builder().active(control.value == "on").build();
+            row.connect_active_notify(move |row| set(if row.is_active() { "on" } else { "off" }.into()));
+            row.upcast()
+        }
+        _ => {
+            let row = adw::SpinRow::with_range(f64::from(control.min), f64::from(control.max), f64::from(control.step.max(1)));
+            row.set_value(control.value.parse().unwrap_or(f64::from(control.min)));
+            row.add_suffix(&gtk::Label::builder().label(control.unit).css_classes(["dimmed"]).build());
+            // A held button steps many times a second: the value is written once it rests.
+            let pending: Rc<RefCell<Option<glib::SourceId>>> = Rc::default();
+            row.connect_value_notify(move |row| {
+                if let Some(source) = pending.take() {
+                    source.remove();
+                }
+                let (value, set, done) = ((row.value().round() as u32).to_string(), set.clone(), pending.clone());
+                pending.replace(Some(glib::timeout_add_local_once(std::time::Duration::from_millis(400), move || {
+                    done.replace(None);
+                    set(value);
+                })));
+            });
+            row.upcast()
+        }
+    };
+    crate::rows::plain(row, control.label, control.detail)
 }
 
 fn load_runners(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, win: &Window, connector: &str) {

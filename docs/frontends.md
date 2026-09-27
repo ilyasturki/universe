@@ -1044,6 +1044,9 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   `DBusActivatable`, so the app grid starts it that way too.
 - **Big Screen**: *Open Big Screen*, in the main menus when `universe-ui` is on PATH, runs it and
   leaves the window open; not while a game runs, nor twice.
+- **Steam Deck**: on a Deck (`deck::model()`), Preferences › System sets what `system_controls()`
+  lists but the backlight, which the desktop sets, through `set_system`; like `universe-ui`, the app
+  calls `apply_system()` at startup.
 - **State**: `$XDG_STATE_HOME/universe/desktop.json` holds the window size, the sidebar's pick, the
   sort, whether hidden games show and whether the first run was seen. A recording's frames come
   from `universe::frames`, the Qt host's cache.

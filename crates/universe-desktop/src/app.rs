@@ -594,6 +594,7 @@ impl Application {
                 if let Err(e) = backend::call(|core| async move { core.adopt_scope().await }).await {
                     tracing::warn!("adopt_scope: {e}");
                 }
+                glib::spawn_future_local(backend::pinned(|core| async move { core.apply_system().await }));
             }
             let options = changes::Options { journal_sweep: !scripted, ..changes::Options::default() };
             let core = backend::core();
