@@ -37,6 +37,12 @@ Reprise, a port of my [Pegasus theme](https://github.com/ilyasturki/pegasus-them
 
 x86_64 Linux with a systemd user session and Python 3.11 to 3.14. gamescope is optional but on by default.
 
+**Arch Linux** (AUR): `universe` builds the latest release, `universe-bin` installs its prebuilt build, `universe-git` builds `main`.
+
+```sh
+paru -S universe
+```
+
 **From a checkout** (needs cargo), installed for your user under `~/.local`, no root:
 
 ```sh
