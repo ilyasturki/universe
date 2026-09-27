@@ -581,6 +581,7 @@
       homeModules.default = import ./nix/home-manager.nix {
         universePkg = universe;
         uiPkg = ui;
+        desktopPkg = desktop;
         extensionPkg = universe-shell-extension;
       };
     };

@@ -1,6 +1,7 @@
 {
   universePkg,
   uiPkg,
+  desktopPkg,
   extensionPkg,
 }:
 {
@@ -23,6 +24,11 @@ in
     ui = lib.mkOption {
       type = lib.types.package;
       default = uiPkg;
+    };
+    desktop = lib.mkOption {
+      type = lib.types.nullOr lib.types.package;
+      default = desktopPkg;
+      description = "Universe Desktop, the GTK app for mouse and keyboard, with the GNOME Shell search provider for the library. null leaves it out.";
     };
     shellExtension = lib.mkOption {
       type = lib.types.package;
@@ -51,7 +57,8 @@ in
       cfg.package
       cfg.ui
       cfg.shellExtension
-    ];
+    ]
+    ++ lib.optional (cfg.desktop != null) cfg.desktop;
     xdg.configFile."universe/config.toml" = lib.mkIf (cfg.settings != null) {
       source = tomlFormat.generate "universe-config.toml" ({ schema = 1; } // cfg.settings);
     };
