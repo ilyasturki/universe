@@ -253,7 +253,8 @@ resumes. With no session, Reprise treats it as Start (the game menu).
 
 The dock is `ui/Dock.qml` in the overlay window: the game's card at the left (its art, PLAYING or
 PAUSED, the title), a row of round buttons at the right (`row` in `Dock.qml`), a group's settings
-in a card above its button — Resume, Home, Game (Details, Pause on HOME, Quit), then Screenshot,
+in a card above its button — Resume, Home, Game (Details, Achievements while the game's
+`achievementsTotal` is not 0, Pause on HOME, Quit), then Screenshot,
 Performance (MangoHud, FPS limit, Filter, and Sharpness while the filter is FSR or NIS, the two
 gamescope sharpens) and Sound (Volume, where A mutes, and Output). A recording shows as REC by the
 clock; what it records is the game's Video capture settings. ◀ ▶ move
@@ -268,7 +269,7 @@ row lowers it onto the dock. A shot taken meanwhile lands through the screenshot
 Game card's Details row calls `toLauncher("details")`: the launcher comes up as for Home, and the
 theme's `landHome` takes the landing (`takeLanding()`, once) and opens the detail on the playing
 game over Home, the frame fading rather than shrinking into the tile; its More › Media holds the
-journal and the recordings.
+journal and the recordings. Its Achievements row lands the same way on `pages/AchievementsPage.qml`.
 
 The shutter is the launcher's, not the shell's, so it is the same for the dock's camera, a pad
 macro and `universe screenshot`: `api.home` plays `qml/assets/sounds/shutter.wav` and emits

@@ -687,6 +687,36 @@ def test_the_dock_renders_over_a_running_game(api, fake, tmp_path, monkeypatch):
     pump(50)
 
 
+def test_the_dock_opens_the_playing_games_achievements(api, fake, monkeypatch):
+    from universe_ui import fake_core
+
+    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+    engine, window = render(api)
+    overlay = host.create_overlay(engine, window.size())
+    api.home.attachOverlay(overlay)
+    overlay.show()
+    pump(200)
+    fake.launch("batman-arkham-origins", "")
+    wait_for(fake.sessionShown, 3000)
+    pump(300)
+    api.home.openDock()
+    overlay.requestActivate()
+    pump(300)
+    dock = overlay.property("contentItem").childItems()[0].property("item")
+    dock.setProperty("index", [b["id"] for b in dock.property("buttons").toVariant()].index("game"))
+    key(overlay, Qt.Key.Key_Return)
+    assert [c["id"] for c in dock.property("current").toVariant()["children"]] == ["details", "achievements", "pause", "quit"], "a game with a list"
+    key(overlay, Qt.Key.Key_Down)
+    key(overlay, Qt.Key.Key_Return)
+    pump(600)
+    root = window.property("contentItem").childItems()[0].property("item")
+    assert api.home.shown == "launcher" and root.property("subOpen") is True, "the launcher, on the game's achievements"
+    stop(api)
+    window.close()
+    overlay.close()
+    pump(50)
+
+
 def test_the_docks_output_row_switches_once_the_cursor_rests(api, fake, tmp_path, monkeypatch):
     from universe_ui import fake_core
 

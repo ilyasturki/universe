@@ -56,14 +56,15 @@ FocusScope {
                     icon: "info",
                     label: "Details",
                     kind: "action"
-                },
+                }
+            ].concat(listsAchievements ? [achievements] : []).concat([
                 {
                     id: "pause",
                     icon: "snowflake",
                     label: "Pause on HOME",
                     kind: "toggle"
                 },
-                quit]
+                quit])
         },
         "|",
         {
@@ -126,6 +127,13 @@ FocusScope {
             ]
         }
     ]
+    readonly property bool listsAchievements: game ? game.achievementsTotal > 0 : false
+    readonly property var achievements: ({
+            id: "achievements",
+            icon: "trophy",
+            label: "Achievements",
+            kind: "action"
+        })
     // Gamescope sharpens only through FSR and NIS: the row comes with them. A bool, so a step elsewhere rebuilds no list.
     readonly property bool sharpens: vals.filter === "fsr" || vals.filter === "nis"
     readonly property var sharpness: ({
@@ -266,6 +274,7 @@ FocusScope {
             api.home.toLauncher();
             break;
         case "details":
+        case "achievements":
             Sound.enter();
             api.home.toLauncher(item.id);
             break;
