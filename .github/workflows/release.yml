@@ -27,7 +27,7 @@ jobs:
     container: archlinux:latest
     steps:
       - uses: actions/checkout@v7
-      - run: pacman -Sy --noconfirm archlinux-keyring > /dev/null && pacman -Su --noconfirm --needed base-devel rust gtk4 libadwaita blueprint-compiler > /dev/null
+      - run: pacman -Sy --noconfirm archlinux-keyring > /dev/null && pacman -Su --noconfirm --needed base-devel rust glib2-devel gtk4 libadwaita blueprint-compiler > /dev/null
       - run: UNIVERSE_GIT_REV="${GITHUB_SHA::7}" cargo build --release --locked -p universe-desktop
       - uses: actions/upload-artifact@v7
         with:

@@ -26,7 +26,7 @@ case "$ID" in
         pacman -Sy --noconfirm archlinux-keyring > /dev/null
         pacman -Su --noconfirm --needed base-devel rust python git scdoc tzdata \
             libxkbcommon libxkbcommon-x11 sdl2 fontconfig libglvnd nss libpulse xcb-util-cursor ttf-dejavu dbus \
-            gtk4 libadwaita blueprint-compiler > /dev/null
+            glib2-devel gtk4 libadwaita blueprint-compiler > /dev/null
         [ "${1:-}" != desktops ] || pacman -S --noconfirm --needed mesa sway foot grim mako xorg-server-xvfb openbox xterm dunst \
             kwin kconfig niri > /dev/null
         # cap_sys_nice on the file, which exec refuses where the container's bounding set lacks it

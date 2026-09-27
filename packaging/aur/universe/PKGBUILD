@@ -30,6 +30,7 @@ depends=(
 )
 makedepends=(
   'blueprint-compiler'
+  'glib2-devel'
   'cargo'
   'maturin'
   'python-build'

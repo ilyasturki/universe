@@ -56,7 +56,7 @@ if command -v scdoc >/dev/null; then
 fi
 
 desktop_bin="${UNIVERSE_DESKTOP_BIN:-}"
-if [ -z "$desktop_bin" ] && command -v blueprint-compiler > /dev/null \
+if [ -z "$desktop_bin" ] && command -v blueprint-compiler > /dev/null && command -v glib-compile-resources > /dev/null \
     && pkg-config --atleast-version=4.22 gtk4 && pkg-config --atleast-version=1.9 libadwaita-1; then
     cargo build --release --locked -p universe-desktop --manifest-path "$repo/Cargo.toml"
     desktop_bin="${CARGO_TARGET_DIR:-$repo/target}/release/universe-desktop"
@@ -75,7 +75,7 @@ if [ -n "$desktop_bin" ]; then
         scdoc < "$repo/crates/universe-desktop/universe-desktop.1.scd" > "$out/share/man/man1/universe-desktop.1"
     fi
 else
-    echo "dist: no GTK 4.22 and libadwaita 1.9 here (nor UNIVERSE_DESKTOP_BIN): Universe Desktop is left out" >&2
+    echo "dist: Universe Desktop is left out: it builds against GTK 4.22 and libadwaita 1.9 with blueprint-compiler and glib-compile-resources (or ships UNIVERSE_DESKTOP_BIN)" >&2
 fi
 
 install -Dm644 "$repo/ui/universe-ui.desktop" -t "$out/share/applications"
