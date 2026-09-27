@@ -14,7 +14,7 @@ SLOTS = [
 SLOT_LABELS = {slot: label for slot, label, _, _ in SLOTS}
 SLOT_ASPECTS = {slot: aspect for slot, _, aspect, _ in SLOTS}
 SLOT_USES = {slot: use for slot, _, _, use in SLOTS}
-ORIGIN_LABELS = {"picked": "your pick", "sgdb": "SteamGridDB", "steam": "Steam", "pegasus": "Pegasus", "lutris": "Lutris"}
+ORIGIN_LABELS = {"picked": "your pick", "sgdb": "SteamGridDB", "steam": "Steam"}
 RELOAD_MS = 300
 
 

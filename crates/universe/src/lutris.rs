@@ -1,5 +1,5 @@
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 use yaml_rust2::{Yaml, YamlLoader};
@@ -23,6 +23,18 @@ pub struct PgaGame {
     pub configpath: String,
     pub directory: String,
     pub year: i64,
+}
+
+fn config_dir() -> PathBuf {
+    paths::xdg("XDG_CONFIG_HOME", ".config").join("lutris")
+}
+
+fn data_dir() -> PathBuf {
+    paths::xdg("XDG_DATA_HOME", ".local/share").join("lutris")
+}
+
+pub fn pga_db() -> PathBuf {
+    data_dir().join("pga.db")
 }
 
 pub fn read_pga(pga: &Path) -> crate::Result<Vec<PgaGame>> {
@@ -188,7 +200,6 @@ pub struct Report {
     pub skipped: Vec<String>,
     pub updated: Vec<String>,
     pub hours_imported: BTreeMap<String, f64>,
-    pub media_imported: Vec<String>,
     pub env_diffs: Vec<EnvDiff>,
     pub applied: bool,
 }
@@ -371,13 +382,13 @@ fn diff(id: &str, title: &str, lutris_env: &BTreeMap<String, String>, universe_e
 
 /// Hours become one `import-lutris` session covering what recordings do not.
 /// Titles of Lutris's installed games that are not in the library yet: what `import` would add.
-pub fn pending(config: &Config) -> crate::Result<Vec<String>> {
-    let lutris_dir = paths::expand(&config.lutris.config_dir);
-    let pga = paths::expand(&config.lutris.pga_db);
+pub fn pending() -> crate::Result<Vec<String>> {
+    let lutris_dir = config_dir();
+    let pga = pga_db();
     if !pga.exists() {
         return Err(crate::Error::NotFound(format!("{}", pga.display())));
     }
-    let runners_dir = paths::expand(&config.lutris.runners_dir);
+    let runners_dir = data_dir().join("runners/wine");
     let global_env = lutris_global_env(&lutris_dir);
     Ok(read_pga(&pga)?
         .iter()
@@ -389,12 +400,12 @@ pub fn pending(config: &Config) -> crate::Result<Vec<String>> {
 }
 
 pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
-    let lutris_dir = paths::expand(&config.lutris.config_dir);
-    let pga = paths::expand(&config.lutris.pga_db);
+    let lutris_dir = config_dir();
+    let pga = pga_db();
     if !pga.exists() {
         return Err(crate::Error::NotFound(format!("{}", pga.display())));
     }
-    let runners_dir = paths::expand(&config.lutris.runners_dir);
+    let runners_dir = data_dir().join("runners/wine");
     let global_env = lutris_global_env(&lutris_dir);
     let mut report = Report { applied: apply, ..Default::default() };
     let mut located = std::collections::HashMap::new();
@@ -431,9 +442,6 @@ pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
             game.save()?;
         }
         crate::recording::import_existing(&game, &config.recordings_root())?;
-        if !config.lutris.pegasus_library.is_empty() && import_pegasus_media(&game.media_dir(), &game, &paths::expand(&config.lutris.pegasus_library))? {
-            report.media_imported.push(game.id.clone());
-        }
         let sessions = sessions::read(&game.sessions_path())?;
         if !sessions.iter().any(|s| s.source == "import-lutris") && imp.playtime_h > 0.0 {
             let covered: u64 = sessions.iter().filter(|s| s.source == "import-recording").map(|s| s.duration_s).sum();
@@ -480,41 +488,6 @@ pub fn import(config: &Config, apply: bool) -> crate::Result<Report> {
         }
     }
     Ok(report)
-}
-
-/// `<root>/<platform>/media/<slug>/` into `games/<id>/media/`, once: an existing media dir is left alone.
-fn import_pegasus_media(dest: &Path, game: &Game, root: &Path) -> crate::Result<bool> {
-    if dest.exists() {
-        return Ok(false);
-    }
-    let mut slugs = vec![game.id.as_str()];
-    if !game.source.lutris_slug.is_empty() && game.source.lutris_slug != game.id {
-        slugs.push(game.source.lutris_slug.as_str());
-    }
-    let Ok(platforms) = std::fs::read_dir(root) else { return Ok(false) };
-    let Some(src) =
-        platforms.flatten().map(|e| e.path().join("media")).flat_map(|m| slugs.iter().map(move |s| m.join(s)).collect::<Vec<_>>()).find(|p| p.is_dir())
-    else {
-        return Ok(false);
-    };
-    let mut copied = false;
-    for e in std::fs::read_dir(&src)?.flatten() {
-        let p = e.path();
-        let Some(stem) = p.file_stem().and_then(|s| s.to_str()).filter(|_| crate::library::is_image(&p)) else { continue };
-        let target = match stem {
-            "boxFront" | "square" | "tile" | "steam" | "banner" | "background" | "logo" => dest.join(e.file_name()),
-            s if s.starts_with("screenshot") => dest.join("screenshots").join(e.file_name()),
-            _ => continue,
-        };
-        if let Some(parent) = target.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
-        std::fs::copy(&p, &target)?;
-        copied = true;
-        let slot = crate::library::slot_of_stem(stem).unwrap_or("screenshots");
-        crate::media::note_source(dest, slot, "pegasus")?;
-    }
-    Ok(copied)
 }
 
 #[cfg(test)]
@@ -598,26 +571,6 @@ mod tests {
         let sys = game("sys", "game:\n  exe: /g/a.exe\nwine:\n  version: system\n");
         assert_eq!(sys.runner_id(), "wine");
         assert!(sys.launch.runner_exe.is_empty());
-    }
-
-    #[test]
-    fn pegasus_media_lands_in_slots_and_screenshots() {
-        let dir = tempfile::tempdir().unwrap();
-        let src = dir.path().join("pegasus/windows/media/old-slug");
-        std::fs::create_dir_all(&src).unwrap();
-        for f in ["boxFront.png", "tile.jpg", "steam.png", "marquee.png", "screenshot01.png", "video.mp4"] {
-            std::fs::write(src.join(f), b"x").unwrap();
-        }
-        let mut g = Game::new("New");
-        g.source.lutris_slug = "old-slug".into();
-        let media = dir.path().join("games/new/media");
-        assert!(import_pegasus_media(&media, &g, &dir.path().join("pegasus")).unwrap());
-        assert!(media.join("boxFront.png").exists());
-        assert!(media.join("tile.jpg").exists());
-        assert!(media.join("steam.png").exists());
-        assert!(media.join("screenshots/screenshot01.png").exists());
-        assert!(!media.join("marquee.png").exists());
-        assert!(!import_pegasus_media(&media, &g, &dir.path().join("pegasus")).unwrap());
     }
 
     #[test]

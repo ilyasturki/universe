@@ -77,7 +77,7 @@ operation; a dash means the surface doesn't expose it.
 | `reload_all()` | `reload()` | — | rereads config and `games/*/game.toml` |
 | `rescan()` | `rescan()` | `universe rescan` | `reload_all`, then `import_roms(true)`: its report |
 | `reload_game(id)` | `reload_game(id)` | — | rereads one game |
-| `import_lutris(apply)` | `import_lutris(apply)` | `universe migrate [--apply]` | a report: imported games, per-game env diff (`{id, lutris_env, universe_env, added, removed, changed}`), imported hours, games whose art was copied from `[lutris] pegasus_library` (`<platform>/media/<slug>/`, once, never over an existing `media/`) and `runners` (what Lutris's runner configs say: a wrapper script is seen through, the program is written to `[runners.<id>] exe` when it is not on PATH, its extra arguments to `args`). Without `apply` it only reports |
+| `import_lutris(apply)` | `import_lutris(apply)` | `universe migrate [--apply]` | a report of what it read from Lutris's own folders (`~/.config/lutris`, `~/.local/share/lutris/pga.db`, under the XDG homes): imported games, per-game env diff (`{id, lutris_env, universe_env, added, removed, changed}`), imported hours and `runners` (what Lutris's runner configs say: a wrapper script is seen through, the program is written to `[runners.<id>] exe` when it is not on PATH, its extra arguments to `args`). Without `apply` it only reports |
 | `discover()` | `discover()` | `universe discover [--json]` | what other launchers hold on this machine, nothing written: `{launchers: [{id, name, found, dir, games, titles, importable, via, detail}], gog_dirs}`. `lutris` (`via: "lutris"`: the installed games `import_lutris` would add), `steam` (the `appmanifest_*.acf` of every library in `libraryfolders.vdf`, Proton and the runtimes left out), `heroic-gog` (`via: "gog"`: `goggame-*.info` installs one level under `gog_dirs` and `paths.games_root`), `heroic-epic` and `heroic-amazon` (legendary's and nile's `installed.json`), `roms` (`via: "roms"`: the games `import_roms` would add, `dir` the folders it read). `importable` names what Universe launches itself; `titles` holds the first six. `gog_dirs` are Heroic's GOG install folders (its `gog_store/installed.json` and default install path), for the gog source's `scan_dirs` before a `scan` |
 | `import_roms(apply)` | `import_roms(apply)` | — (`universe rescan` applies; `universe discover` reports) | the games under the folders the installed emulators list in their own configuration — Eden and its forks' `Paths\gamedirs` (with `deep_scan`), Dolphin's `ISOPath*` (`RecursiveISOPaths`), Ryujinx's `game_dirs`, RPCS3's `games.yml` entries and `dev_hdd0/game`, PCSX2's and DuckStation's `[GameList]` paths, Cemu's `GamePaths`, shadPS4's `installDirs`, Flycast's `ContentPath`; melonDS and mGBA keep no list — as `{folders: [{runner, dir, recursive}], imported: [{id, title, runner, path}], skipped: [{path, reason}], applied}`. A file is a game by the runner's extensions; RPCS3 and shadPS4 games are folders (`PS3_GAME/USRDIR/EBOOT.BIN`, `<id>/eboot.bin`, titled from `PARAM.SFO`), Cemu's `code/*.rpx` from `meta/meta.xml`. `updates`, `dlc`, `mods`, `firmware`, `amiibo`, `backups`, `downloads`, `prefixes`, `saves`, `textures`, `shaders` and hidden folders are not entered, a `.bin` beside a `.cue`/`.gdi`/`.m3u` is a track, a shadPS4 `-UPDATE` folder a patch. A file already in the library (same inode: a bind mount counts once) is left out, and so is one whose title is taken by another file or by a library game (`skipped` says which); a plain name beats a tagged one for the same title. With `apply`, each is `add_game`d and its art fetched |
 | `add_game(spec)` | `add_game(spec)` | `universe add <file> --runner <id> [--title T] [--platform P] [--media]` | `{"runner", "exe", "title"?, "platform"?}` → the new id. The title defaults to the file's name cleaned of release tags; the platform to the runner's first. Refuses an id already in the library |
@@ -400,7 +400,7 @@ upset a game or an anti-cheat; `auto` is on where the upgrade is a plain win —
 FSR 4 on RDNA 4, XeSS on Intel — and off elsewhere and when no GPU is known.
 
 `launch.proton` names a build: `proton/<name>` under the data home, then `[proton]`'s path, then a
-path as given, then `<name>` under each Proton directory — Lutris's `runners_dir`, Steam's
+path as given, then `<name>` under each Proton directory — Lutris's `runners/wine`, Steam's
 `compatibilitytools.d` (native and Flatpak), umu's `umu/compatibilitytools`, Heroic's `tools/proton`
 (native and Flatpak) — then the newest build of the name's family in any of them: `proton-ge` is
 `GE-Proton10-12` over `GE-Proton9-27`, `proton-cachyos` is `proton-cachyos-10.0-…`. None found is
@@ -417,7 +417,7 @@ without `.dll`) is `WINEDLLOVERRIDES`. `wine` runs `<launch.runner_exe or wine> 
 the program, inside gamescope and setpriv.
 
 `migrate` maps Lutris's wine runner onto these: `wine.version` is `wine` with `launch.runner_exe`
-when `<runners_dir>/<version>/bin/wine` exists with no `proton` script beside it, `wine` for
+when `~/.local/share/lutris/runners/wine/<version>/bin/wine` exists with no `proton` script beside it, `wine` for
 `system`, `proton` otherwise; `wine.proton_hdr` is `hdr`;
 `system.prefix_command`'s leading `VAR=val` words become `launch.env` (`WINEDLLOVERRIDES` its
 `dll_overrides`) and the rest `launch.wrapper`; a `PROTON_*` entry in `system.env` that has a switch
@@ -520,9 +520,9 @@ quit with the game, whether a stop repeats its SIGTERM (`term_twice`, see Sessio
 | `set_runner_setting(id, key, value)` | `set_runner_setting(…)` | `universe runner set <id> k=v …` | writes `config.toml [runners.<id>] <key>`: `exe`, `args`, `gamescope`, or an option, validated by type; `""` resets it |
 
 `Runner` = `{"id": "dolphin", "name": "Dolphin", "kind": "proton|wine|linux|emulator", "aliases": ["…"],
-"lutris": "dolphin", "binaries": ["dolphin-emu"], "platforms": ["Nintendo GameCube", "Nintendo Wii"],
+"binaries": ["dolphin-emu"], "platforms": ["Nintendo GameCube", "Nintendo Wii"],
 "extensions": ["iso", …], "exe": "the configured program or empty", "args": "extra arguments, shell-quoted",
-"gamescope": true | false | null (the global default), "path": "the program that will run, empty when none was found", "source": "config|path|lutris|",
+"gamescope": true | false | null (the global default), "path": "the program that will run, empty when none was found", "source": "config|path|",
 "available": true, "options": [{"key", "type": "bool|path", "default", "label", "choices": [],
 "value": the global value}]}`.
 
@@ -531,8 +531,7 @@ gets `-rompath <dir> <name>`, `dosbox` takes a program or a `.conf` (`-conf`), `
 folder. Ids, aliases and platforms: `universe runner ls`.
 
 The program: `[runners.<id>] exe` if set (a path, or a name on PATH), else the spec's binaries on
-PATH in order, else an executable of that name or an AppImage under
-`~/.local/share/lutris/runners/<lutris id>/`. A game may name its own with `launch.runner_exe`.
+PATH in order. A game may name its own with `launch.runner_exe`.
 Flatpak installs are not looked for: `flatpak run` moves the app into its own scope, which the
 session's `ExitType=cgroup` would take for the game ending.
 
@@ -1029,7 +1028,7 @@ refresh = ""                         # Hz, a Deck's panel on the launcher's own 
 fan = ""                             # on | off: SteamOS's fan curve
 
 [proton]                             # name → path, none by default; a name with no path here is looked for as a family (GE-Proton10-4 for proton-ge) under Lutris, Steam, umu and Heroic
-# proton-em = "~/.local/share/lutris/runners/wine/proton-em"
+# proton-em = "~/opt/proton-em"
 
 # [runners.<id>]                     # per runner (`universe runner set`): exe (absent: detected), args, gamescope, its options
 
@@ -1045,12 +1044,6 @@ enabled = ["gog"]
 
 [sources.gog]                        # the settings rows: `universe source settings gog`
 # platform = "linux"
-
-[lutris]                             # what `universe migrate` reads
-config_dir = "~/.config/lutris"
-pga_db = "~/.local/share/lutris/pga.db"
-runners_dir = "~/.local/share/lutris/runners/wine"
-pegasus_library = ""                 # a Pegasus library's folder (<platform>/media/<slug>/): its art is copied into media/ on migrate; empty: none
 
 [keys]
 sgdb = ""                            # or sgdb_file, pointing at a file holding the key

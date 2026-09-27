@@ -35,7 +35,7 @@ pub fn run(config: &Config) -> Report {
     let steam = first_dir(&[home.join(".local/share/Steam"), home.join(".steam/steam"), home.join(".var/app/com.valvesoftware.Steam/.local/share/Steam")]);
     let mut gog_dirs = heroic.as_deref().map(heroic_gog_dirs).unwrap_or_default();
     gog_dirs.retain(|d| d != &config.games_root());
-    let mut launchers = vec![lutris(config)];
+    let mut launchers = vec![lutris()];
     launchers.push(steam.as_deref().map(steam_launcher).unwrap_or_else(|| Launcher { id: "steam".into(), name: "Steam".into(), ..Default::default() }));
     launchers.extend(heroic_launchers(heroic.as_deref(), &gog_dirs, &config.games_root()));
     launchers.push(roms_launcher(config, library_files()));
@@ -74,8 +74,8 @@ fn first_dir(candidates: &[PathBuf]) -> Option<PathBuf> {
     candidates.iter().find(|p| p.is_dir()).cloned()
 }
 
-fn lutris(config: &Config) -> Launcher {
-    let pga = paths::expand(&config.lutris.pga_db);
+fn lutris() -> Launcher {
+    let pga = crate::lutris::pga_db();
     let mut l = Launcher {
         id: "lutris".into(),
         name: "Lutris".into(),
@@ -88,7 +88,7 @@ fn lutris(config: &Config) -> Launcher {
     if !l.found {
         return l;
     }
-    match crate::lutris::pending(config) {
+    match crate::lutris::pending() {
         Ok(mut titles) => {
             titles.sort();
             l.games = titles.len();

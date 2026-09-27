@@ -86,7 +86,6 @@ pub struct Config {
     pub modules: ModulesConfig,
     pub sources: SourcesConfig,
     pub keys: Keys,
-    pub lutris: LutrisConfig,
     pub controller: crate::controller::ControllerConfig,
     pub system: SystemConfig,
 }
@@ -179,15 +178,6 @@ pub struct Keys {
     pub rawg_file: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(default)]
-pub struct LutrisConfig {
-    pub config_dir: String,
-    pub pga_db: String,
-    pub runners_dir: String,
-    pub pegasus_library: String,
-}
-
 impl Default for Config {
     fn default() -> Self {
         Config {
@@ -200,7 +190,6 @@ impl Default for Config {
             modules: ModulesConfig::default(),
             sources: SourcesConfig::default(),
             keys: Keys::default(),
-            lutris: LutrisConfig::default(),
             controller: crate::controller::ControllerConfig::default(),
             system: SystemConfig::default(),
         }
@@ -266,17 +255,6 @@ impl Default for SourcesConfig {
 impl Default for Keys {
     fn default() -> Self {
         Keys { sgdb: String::new(), rawg: String::new(), sgdb_file: "~/.config/steamgriddb/api_key".into(), rawg_file: "~/.config/rawg/api_key".into() }
-    }
-}
-
-impl Default for LutrisConfig {
-    fn default() -> Self {
-        LutrisConfig {
-            config_dir: "~/.config/lutris".into(),
-            pga_db: "~/.local/share/lutris/pga.db".into(),
-            runners_dir: "~/.local/share/lutris/runners/wine".into(),
-            pegasus_library: String::new(),
-        }
     }
 }
 
@@ -373,7 +351,7 @@ impl Config {
         let data = paths::xdg("XDG_DATA_HOME", ".local/share");
         vec![
             paths::data_home().join("proton"),
-            paths::expand(&self.lutris.runners_dir),
+            data.join("lutris/runners/wine"),
             home.join(".local/share/Steam/compatibilitytools.d"),
             data.join("Steam/compatibilitytools.d"),
             data.join("umu/compatibilitytools"),
@@ -521,15 +499,17 @@ mod tests {
 
     #[test]
     fn proton_names_list_the_builds_found_and_the_configs() {
+        let _env = paths::ENV_LOCK.lock().unwrap();
         let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("UNIVERSE_DATA_HOME", dir.path());
         for d in ["GE-Proton10-4", "wine-ge-8-26"] {
-            std::fs::create_dir(dir.path().join(d)).unwrap();
+            std::fs::create_dir_all(dir.path().join("proton").join(d)).unwrap();
         }
-        std::fs::write(dir.path().join("GE-Proton10-4/proton"), b"#!/usr/bin/env python3\n").unwrap();
+        std::fs::write(dir.path().join("proton/GE-Proton10-4/proton"), b"#!/usr/bin/env python3\n").unwrap();
         let mut c = Config::default();
-        c.lutris.runners_dir = dir.path().to_string_lossy().into();
         c.proton.insert("mine".into(), "/opt/mine".into());
         let names = c.proton_names();
+        std::env::remove_var("UNIVERSE_DATA_HOME");
         assert!(names.contains(&"GE-Proton10-4".to_string()) && names.contains(&"mine".to_string()), "{names:?}");
         assert!(!names.contains(&"wine-ge-8-26".to_string()), "a Wine build is no Proton");
     }

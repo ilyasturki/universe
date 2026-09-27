@@ -1395,12 +1395,11 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
             let n = |k: &str| report[k].as_array().map(|a| a.len()).unwrap_or(0);
             println!(
-                "{} imported {}, skipped (already present) {}, updated {}, media from pegasus-library {}",
+                "{} imported {}, skipped (already present) {}, updated {}",
                 if apply { "applied:" } else { "dry run:" },
                 n("imported"),
                 n("skipped"),
-                n("updated"),
-                n("media_imported")
+                n("updated")
             );
             if let Some(h) = report["hours_imported"].as_object() {
                 for (k, v) in h {

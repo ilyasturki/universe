@@ -50,7 +50,6 @@ pub struct RunnerSpec {
     pub kind: Kind,
     /// Lutris ids and forks sharing the CLI.
     pub aliases: &'static [&'static str],
-    pub lutris: &'static str,
     pub binaries: &'static [&'static str],
     pub platforms: &'static [&'static str],
     pub extensions: &'static [&'static str],
@@ -68,7 +67,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
         name: "Proton",
         kind: Kind::Proton,
         aliases: &["umu"],
-        lutris: "wine",
         binaries: &["umu-run"],
         platforms: &["windows"],
         extensions: &["exe", "bat", "msi"],
@@ -83,7 +81,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
         name: "Wine",
         kind: Kind::Wine,
         aliases: &[],
-        lutris: "wine",
         binaries: &["wine"],
         platforms: &["windows"],
         extensions: &["exe", "bat", "msi"],
@@ -98,7 +95,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
         name: "Linux",
         kind: Kind::Linux,
         aliases: &["native"],
-        lutris: "linux",
         binaries: &[],
         platforms: &["linux"],
         extensions: &[],
@@ -113,7 +109,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
         name: "Dolphin",
         kind: Kind::Emulator,
         aliases: &[],
-        lutris: "dolphin",
         binaries: &["dolphin-emu"],
         platforms: &["Nintendo GameCube", "Nintendo Wii"],
         extensions: &["iso", "gcm", "gcz", "ciso", "wbfs", "rvz", "wia", "dol", "elf", "m3u", "wad"],
@@ -128,7 +123,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
         name: "Eden",
         kind: Kind::Emulator,
         aliases: &["yuzu", "citron", "sudachi", "suyu"],
-        lutris: "yuzu",
         binaries: &["eden", "citron", "sudachi", "suyu", "yuzu"],
         platforms: &["Nintendo Switch"],
         extensions: &["nsp", "xci", "nca", "nro", "nso", "nsz", "xcz"],
@@ -143,7 +137,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
         name: "Ryujinx",
         kind: Kind::Emulator,
         aliases: &["ryubing"],
-        lutris: "ryujinx",
         binaries: &["Ryujinx", "ryujinx", "Ryujinx.Headless.SDL2"],
         platforms: &["Nintendo Switch"],
         extensions: &["nsp", "xci", "nca", "nro", "nso"],
@@ -158,7 +151,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
         name: "RPCS3",
         kind: Kind::Emulator,
         aliases: &[],
-        lutris: "rpcs3",
         binaries: &["rpcs3"],
         platforms: &["Sony PlayStation 3"],
         extensions: &["bin", "self", "elf", "pkg"],
@@ -173,7 +165,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
         name: "PCSX2",
         kind: Kind::Emulator,
         aliases: &[],
-        lutris: "pcsx2",
         binaries: &["pcsx2-qt", "pcsx2", "PCSX2"],
         platforms: &["Sony PlayStation 2"],
         extensions: &["iso", "chd", "cso", "zso", "gz", "bin", "elf", "irx"],
@@ -193,7 +184,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
         name: "DuckStation",
         kind: Kind::Emulator,
         aliases: &[],
-        lutris: "duckstation",
         binaries: &["duckstation-qt", "duckstation-nogui", "DuckStation", "duckstation"],
         platforms: &["Sony PlayStation"],
         extensions: &["cue", "bin", "chd", "iso", "img", "pbp", "ecm", "mds", "m3u", "psexe", "exe"],
@@ -212,7 +202,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
         name: "Cemu",
         kind: Kind::Emulator,
         aliases: &[],
-        lutris: "cemu",
         binaries: &["Cemu", "cemu"],
         platforms: &["Nintendo Wii U"],
         extensions: &["wud", "wux", "wua", "rpx", "iso", "elf"],
@@ -227,7 +216,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
         name: "Azahar",
         kind: Kind::Emulator,
         aliases: &["citra", "lime3ds"],
-        lutris: "azahar",
         binaries: &["azahar", "azahar-qt", "lime3ds", "citra-qt", "citra"],
         platforms: &["Nintendo 3DS"],
         extensions: &["3ds", "3dsx", "cci", "cxi", "cia", "app", "elf", "axf"],
@@ -242,7 +230,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
         name: "melonDS",
         kind: Kind::Emulator,
         aliases: &[],
-        lutris: "melonds",
         binaries: &["melonDS", "melonds"],
         platforms: &["Nintendo DS"],
         extensions: &["nds", "dsi", "ids", "srl"],
@@ -257,7 +244,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
         name: "mGBA",
         kind: Kind::Emulator,
         aliases: &[],
-        lutris: "mgba",
         binaries: &["mgba-qt", "mgba"],
         platforms: &["Nintendo Game Boy Advance", "Nintendo Game Boy"],
         extensions: &["gba", "gb", "gbc", "agb", "mb"],
@@ -272,7 +258,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
         name: "PPSSPP",
         kind: Kind::Emulator,
         aliases: &[],
-        lutris: "ppsspp",
         binaries: &["PPSSPPSDL", "PPSSPPQt", "ppsspp", "ppsspp-sdl", "ppsspp-qt"],
         platforms: &["Sony PlayStation Portable"],
         extensions: &["iso", "cso", "chd", "pbp", "elf", "prx"],
@@ -291,7 +276,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
         name: "xemu",
         kind: Kind::Emulator,
         aliases: &[],
-        lutris: "xemu",
         binaries: &["xemu"],
         platforms: &["Microsoft Xbox"],
         extensions: &["iso", "xiso"],
@@ -306,7 +290,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
         name: "Xenia",
         kind: Kind::Emulator,
         aliases: &["xenia-canary"],
-        lutris: "xenia",
         binaries: &["xenia_canary.exe", "xenia.exe"],
         platforms: &["Microsoft Xbox 360"],
         extensions: &["iso", "xex", "zar", "xcp"],
@@ -321,7 +304,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
         name: "shadPS4",
         kind: Kind::Emulator,
         aliases: &[],
-        lutris: "shadps4",
         binaries: &["shadps4", "shadPS4", "shadps4-qt"],
         platforms: &["Sony PlayStation 4"],
         extensions: &["bin", "elf", "self", "pkg"],
@@ -336,7 +318,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
         name: "Vita3K",
         kind: Kind::Emulator,
         aliases: &[],
-        lutris: "vita3k",
         binaries: &["Vita3K", "vita3k"],
         platforms: &["Sony PlayStation Vita"],
         extensions: &["vpk"],
@@ -351,7 +332,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
         name: "Mupen64Plus",
         kind: Kind::Emulator,
         aliases: &["m64p"],
-        lutris: "mupen64plus",
         binaries: &["mupen64plus", "m64p"],
         platforms: &["Nintendo 64"],
         extensions: &["n64", "z64", "v64", "rom"],
@@ -370,7 +350,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
         name: "Snes9x",
         kind: Kind::Emulator,
         aliases: &[],
-        lutris: "snes9x",
         binaries: &["snes9x-gtk", "snes9x"],
         platforms: &["Nintendo SNES"],
         extensions: &["sfc", "smc", "fig", "swc", "bs"],
@@ -385,7 +364,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
         name: "Flycast",
         kind: Kind::Emulator,
         aliases: &["reicast"],
-        lutris: "reicast",
         binaries: &["flycast", "reicast"],
         platforms: &["Sega Dreamcast"],
         extensions: &["gdi", "cdi", "chd", "cue", "elf", "bin"],
@@ -400,7 +378,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
         name: "ScummVM",
         kind: Kind::Emulator,
         aliases: &[],
-        lutris: "scummvm",
         binaries: &["scummvm"],
         platforms: &["ScummVM"],
         extensions: &[],
@@ -415,7 +392,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
         name: "DOSBox",
         kind: Kind::Emulator,
         aliases: &["dosbox-staging", "dosbox-x"],
-        lutris: "dosbox",
         binaries: &["dosbox-staging", "dosbox-x", "dosbox"],
         platforms: &["MS-DOS"],
         extensions: &["exe", "com", "bat", "conf"],
@@ -430,7 +406,6 @@ pub const RUNNERS: &[RunnerSpec] = &[
         name: "MAME",
         kind: Kind::Emulator,
         aliases: &[],
-        lutris: "mame",
         binaries: &["mame"],
         platforms: &["Arcade"],
         extensions: &["zip", "7z", "chd"],
@@ -545,7 +520,7 @@ fn coerce(o: &OptionSpec, v: &toml::Value) -> serde_json::Value {
 #[derive(Debug, Clone, Default, PartialEq, serde::Serialize)]
 pub struct Located {
     pub program: String,
-    /// `config`, `path`, `lutris`, or empty when nothing was found
+    /// `config`, `path`, or empty when nothing was found
     pub source: String,
 }
 
@@ -558,35 +533,6 @@ pub(crate) fn on_path(bin: &str) -> Option<PathBuf> {
     dirs.push("/run/wrappers/bin".into());
     dirs.push(crate::tools::dir());
     dirs.iter().map(|d| d.join(bin)).find(|p| p.is_file())
-}
-
-fn executable(p: &Path) -> bool {
-    use std::os::unix::fs::PermissionsExt;
-    p.is_file() && std::fs::metadata(p).map(|m| m.permissions().mode() & 0o111 != 0).unwrap_or(false)
-}
-
-fn in_lutris_dir(config: &Config, spec: &RunnerSpec) -> Option<PathBuf> {
-    let root = paths::expand(&config.lutris.runners_dir).parent()?.join(spec.lutris);
-    let mut stack = vec![(root, 0u8)];
-    while let Some((dir, depth)) = stack.pop() {
-        let Ok(rd) = std::fs::read_dir(&dir) else { continue };
-        let mut entries: Vec<PathBuf> = rd.flatten().map(|e| e.path()).collect();
-        entries.sort();
-        for p in entries {
-            if p.is_dir() {
-                if depth < 2 {
-                    stack.push((p, depth + 1));
-                }
-                continue;
-            }
-            let name = p.file_name().and_then(|n| n.to_str()).unwrap_or("");
-            let appimage = name.to_lowercase().ends_with(".appimage");
-            if (spec.binaries.contains(&name) || appimage) && executable(&p) {
-                return Some(p);
-            }
-        }
-    }
-    None
 }
 
 pub fn locate(spec: &RunnerSpec, config: &Config) -> Located {
@@ -604,9 +550,6 @@ pub fn locate(spec: &RunnerSpec, config: &Config) -> Located {
         if let Some(p) = on_path(b) {
             return Located { program: p.to_string_lossy().into(), source: "path".into() };
         }
-    }
-    if let Some(p) = in_lutris_dir(config, spec) {
-        return Located { program: p.to_string_lossy().into(), source: "lutris".into() };
     }
     Located::default()
 }
@@ -640,7 +583,7 @@ pub fn to_json(spec: &RunnerSpec, config: &Config) -> serde_json::Value {
     };
     let configured = config.runners.get(spec.id);
     serde_json::json!({
-        "id": spec.id, "name": spec.name, "kind": spec.kind.as_str(), "aliases": spec.aliases, "lutris": spec.lutris,
+        "id": spec.id, "name": spec.name, "kind": spec.kind.as_str(), "aliases": spec.aliases,
         "binaries": spec.binaries, "platforms": spec.platforms, "extensions": spec.extensions,
         "exe": configured.and_then(|t| t.get("exe")).and_then(|v| v.as_str()).unwrap_or(""),
         "args": shell_words::join(global_args(spec, config)),

@@ -91,7 +91,7 @@ def build_runner(client, ident, screen_mode):
     rows, groups = [], []
     if runner.get("kind") != "linux":
         own = runner.get("exe") or ""
-        where = {"path": "Found on PATH", "lutris": "Found in Lutris's runners"}.get(source, "Found") if found and not own else ""
+        where = {"path": "Found on PATH"}.get(source, "Found") if found and not own else ""
         rows.append(
             _row(name, "exe", "Program", "path", own or found, module=ident, detail=where, inherited=not own and bool(found), origin="runner" if own else "")
         )
