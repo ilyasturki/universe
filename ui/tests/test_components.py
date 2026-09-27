@@ -110,6 +110,27 @@ def test_an_uninstall_takes_every_build_the_one_in_use_too(api, fake):
     assert not [a for a in form.actions(row_of(form, "eden")) if a["action"] == "uninstall"], "the system's build is not Universe's to take"
 
 
+def test_hiding_the_bar_leaves_the_job_its_row_and_its_toast(api, fake):
+    form = loaded(api)
+    messages, progress = [], []
+    form.message.connect(messages.append)
+    form.rowsChanged.connect(lambda: progress.append(form.rows[row_of(form, "wine")]["progress"]))
+    form.act(row_of(form, "wine"), "install")
+    form.hideJob()
+    assert form.job is None, "the bar goes"
+    assert form.rows[row_of(form, "wine")]["tag"] == "Installing…" and labels(form.actions(row_of(form, "wine"))) == ["Cancel"]
+    wait_for(fake.jobFinished, 5000)
+    assert messages[-1] == "Installed Wine (staging) 11.18" and form.job is None, "the end still toasts, the bar stays away"
+    assert [p for p in progress if p] == [0.25, 0.5, 0.75, 1.0], "the row's own progress moves meanwhile"
+    settle(form)
+    form.act(row_of(form, "rpcs3"), "install")
+    assert form.job["label"] == "Installing RPCS3 0.0.42-20069-3fa07db7", "the next job has its bar"
+    wait_for(fake.jobFinished, 5000)
+    assert form.job["ok"] is True
+    form.hideJob()
+    assert form.job is None, "a finished bar goes the same way"
+
+
 def test_a_launch_missing_its_runner_offers_the_install_then_launches(api, fake):
     game = needs_rpcs3(fake)
     form = loaded(api)

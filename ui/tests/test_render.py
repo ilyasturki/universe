@@ -495,6 +495,77 @@ def test_the_install_pages_render_a_running_install_in_both_looks(api, fake):
     pump(50)
 
 
+def test_the_component_bar_hides_in_both_looks_and_the_job_goes_on(api, fake):
+    from PySide6.QtCore import QPoint, QPointF
+    from PySide6.QtQuick import QQuickItem
+    from PySide6.QtTest import QTest
+
+    from universe_ui import gamepad
+
+    form = api.screens.components
+    _engine, window = render(api, activate=True)
+    root = window.property("contentItem").childItems()[0].property("item")
+
+    def js(obj, name):
+        value = obj.property(name)
+        return value.toVariant() if hasattr(value, "toVariant") else value
+
+    def install(ident):
+        if not form.rows:
+            wait_for(form.listingChanged, 3000)
+        assert form.act(next(i for i, r in enumerate(form.rows) if r.get("component") == ident and r["key"] == "component"), "install")
+        pump(50)
+
+    def hidden(page):
+        return form.job is None and page.property("componentsBar") is False
+
+    def centre(item):
+        p = item.mapToScene(QPointF(item.width() / 2, item.height() / 2))
+        return p.x(), p.y()
+
+    root.setProperty("tabIndex", root.property("settingsTab"))
+    pump(100)
+    page = root.property("activePage")
+    QMetaObject.invokeMethod(page, "land", Q_ARG("QVariant", "components"))
+    pump(400)
+    install("wine")
+    assert page.property("componentsBar") is True
+    assert "Hide progress" in [i["label"] for i in js(page, "moreItems")]
+    QTest.keyClick(window, Qt.Key.Key_F)  # Y
+    pump(50)
+    assert hidden(page), "Y hides it"
+    wait_for(fake.jobFinished, 5000)
+    pump(300)
+    install("umu-run")
+    x, y = centre(page.findChild(QQuickItem, "hideJob"))
+    QTest.mouseClick(window, Qt.MouseButton.LeftButton, Qt.KeyboardModifier.NoModifier, QPoint(int(x), int(y)))
+    pump(50)
+    assert hidden(page), "so does its ×"
+    wait_for(fake.jobFinished, 5000)
+    pump(300)
+
+    api.theme.set("switch2")
+    settle(window)
+    root = window.property("contentItem").childItems()[0].property("item")
+    QMetaObject.invokeMethod(root, "push", Q_ARG("QVariant", "pages/SettingsPage.qml"), Q_ARG("QVariant", {"section": "components"}))
+    pump(500)
+    page = root.property("topPage")
+    install("rpcs3")
+    assert {"glyph": "X", "label": "Hide progress"} in js(page, "hints")
+    QTest.keyClick(window, Qt.Key.Key_I)  # X
+    pump(50)
+    assert hidden(page), "X hides it"
+    wait_for(fake.jobFinished, 5000)
+    pump(300)
+    install("proton-cachyos")
+    gamepad.touch(window, [centre(page.findChild(QQuickItem, "hideJob"))], 0)
+    pump(150)
+    assert hidden(page), "so does a tap on its ×"
+    wait_for(fake.jobFinished, 5000)
+    window.close()
+    pump(50)
+
+
 def test_the_reprise_library_leads_with_hearts_and_y_hearts_the_game_under_the_cursor(api):
     from PySide6.QtCore import Qt
     from PySide6.QtTest import QTest

@@ -21,6 +21,9 @@ FocusScope {
     readonly property var components: api.screens.components
     readonly property var sources: api.screens.sources
     readonly property var listForm: sectionId === "modules" ? modulesForm : sectionId === "sources" ? sourceList : null
+    readonly property bool componentsBar: components.job != null && (sectionId === "components" || sources.job == null)
+    // X on a section where it has no other use.
+    readonly property bool canHideJob: componentsBar && listForm === null && sectionId !== "launch"
 
     // Search first, then the sections in four named groups.
     readonly property var sections: [
@@ -182,6 +185,11 @@ FocusScope {
             out.push({
                 glyph: "X",
                 label: "Remove"
+            });
+        else if (canHideJob)
+            out.push({
+                glyph: "X",
+                label: "Hide progress"
             });
         out.push({
             glyph: "B",
@@ -728,7 +736,15 @@ FocusScope {
         } else if (api.keys.isDetails(event) && page.sectionId === "launch") {
             event.accepted = true;
             page.removeEntry();
+        } else if (api.keys.isDetails(event) && page.canHideJob) {
+            event.accepted = true;
+            page.hideJob();
         }
+    }
+
+    function hideJob() {
+        Sound.play("select");
+        components.hideJob();
     }
 
     PageHeader {
@@ -777,7 +793,9 @@ FocusScope {
         x: Theme.dp(705)
         y: header.height + Theme.dp(40)
         width: parent.width - x - Theme.dp(Theme.columnRight)
-        job: page.sectionId === "components" && page.components.job ? page.components.job : page.sources.job || page.components.job
+        job: page.componentsBar ? page.components.job : page.sources.job
+        closable: page.componentsBar
+        onCloseRequested: page.hideJob()
     }
 
     SettingsRows {

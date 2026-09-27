@@ -86,6 +86,7 @@ FocusScope {
     readonly property var components: api.screens.components
     readonly property var sources: api.screens.sources
     readonly property var controller: api.screens.controller
+    readonly property bool componentsBar: components.job != null && (sectionId === "components" || sources.job == null)
 
     readonly property bool controllerOpen: sectionId === "controller" && activeFocus
     readonly property bool learning: sectionId === "controller" && controller.learning !== ""
@@ -168,6 +169,12 @@ FocusScope {
                 label: launch.showAdvanced ? "Hide advanced" : "Show advanced",
                 action: "advanced"
             });
+        if (componentsBar)
+            out.push({
+                icon: "eye-off",
+                label: "Hide progress",
+                action: "hide"
+            });
         return out;
     }
 
@@ -185,7 +192,14 @@ FocusScope {
                 page.refreshNow();
             else if (action === "advanced")
                 page.toggleAdvanced();
+            else if (action === "hide")
+                page.hideJob();
         });
+    }
+
+    function hideJob() {
+        Sound.panel();
+        components.hideJob();
     }
 
     // X on the Launch section: a variable's row goes out of its map.
@@ -1197,14 +1211,14 @@ FocusScope {
             color: Theme.surface
             visible: job != null
 
-            readonly property var job: page.sectionId === "components" && page.components.job ? page.components.job : page.sources.job || page.components.job
+            readonly property var job: page.componentsBar ? page.components.job : page.sources.job
             readonly property real fraction: job && job.total > 0 ? job.done / job.total : 0
 
             Text {
                 anchors.left: parent.left
                 anchors.leftMargin: Theme.dp(22)
-                anchors.right: parent.right
-                anchors.rightMargin: Theme.dp(22)
+                anchors.right: hideButton.visible ? hideButton.left : parent.right
+                anchors.rightMargin: hideButton.visible ? Theme.dp(8) : Theme.dp(22)
                 anchors.verticalCenter: parent.verticalCenter
                 anchors.verticalCenterOffset: -Theme.dp(6)
                 text: jobBar.job ? jobBar.job.message + (jobBar.job.ok === true ? " ✓" : jobBar.job.ok === false && !jobBar.job.cancelled ? " ✗" : "") : ""
@@ -1213,6 +1227,34 @@ FocusScope {
                 font.weight: Font.Medium
                 font.pixelSize: Theme.dp(21)
                 elide: Text.ElideRight
+            }
+
+            Item {
+                id: hideButton
+                objectName: "hideJob"
+
+                anchors.right: parent.right
+                anchors.rightMargin: Theme.dp(12)
+                anchors.verticalCenter: parent.verticalCenter
+                anchors.verticalCenterOffset: -Theme.dp(6)
+                width: Theme.dp(40)
+                height: width
+                visible: page.componentsBar
+
+                MenuGlyph {
+                    anchors.centerIn: parent
+                    width: Theme.dp(22)
+                    height: width
+                    kind: "close"
+                    tint: Theme.text
+                }
+
+                Pointer {
+                    direct: true
+                    accept: false
+                    radius: width / 2
+                    onPicked: page.hideJob()
+                }
             }
 
             Rectangle {
@@ -1337,6 +1379,9 @@ FocusScope {
             } else if (api.keys.isFilters(event) && page.sectionId === "launch") {
                 event.accepted = true;
                 page.toggleAdvanced();
+            } else if (api.keys.isFilters(event) && page.componentsBar) {
+                event.accepted = true;
+                page.hideJob();
             }
         }
     }

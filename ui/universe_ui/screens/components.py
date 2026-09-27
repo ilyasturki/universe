@@ -244,6 +244,7 @@ class ComponentsForm(RowsForm):
         self._job = None
         self._after = None
         self._launch = ""
+        self._row_step = 0
         client.progress.connect(self._on_progress)
         client.jobFinished.connect(self._on_job_finished)
         client.launchFailed.connect(self._on_launch_failed)
@@ -379,6 +380,7 @@ class ComponentsForm(RowsForm):
             "ok": None,
         }
         self._after = follow
+        self._row_step = 0
         self.jobChanged.emit()
         self._show()
         return True
@@ -412,6 +414,11 @@ class ComponentsForm(RowsForm):
             return
         self._job.update({"done": int(done), "total": int(total), "message": message or self._job["label"]})
         self.jobChanged.emit()
+        # The row's hairline in twentieths: every rebuild resets the view's model.
+        step = int(done) * 20 // int(total) if int(total) > 0 else 0
+        if step != self._row_step and not self._job.get("quiet"):
+            self._row_step = step
+            self._show()
 
     def _finished_text(self, ok, text):
         job = self._job or {}
@@ -459,8 +466,14 @@ class ComponentsForm(RowsForm):
         if job:
             self._job = {"id": job, "component": "", "title": "", "label": "Updating", "message": "", "done": 0, "total": 0, "ok": None, "quiet": True}
 
+    @Slot()
+    def hideJob(self):
+        if self._job:
+            self._job["hidden"] = True
+            self.jobChanged.emit()
+
     def shutdown(self):
         self._timer.stop()
 
-    job = Property(QVARIANT, lambda self: dict(self._job) if self._job and not self._job.get("quiet") else None, notify=jobChanged)
+    job = Property(QVARIANT, lambda self: dict(self._job) if self._job and not (self._job.get("quiet") or self._job.get("hidden")) else None, notify=jobChanged)
     pending = Property(int, lambda self: sum(1 for c in self._listing.get("components") or [] if c.get("update") or c.get("proposal")), notify=listingChanged)
