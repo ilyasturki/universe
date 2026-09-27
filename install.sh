@@ -1,5 +1,5 @@
 #!/bin/sh
-# Universe for one user, no root: PREFIX/lib/universe holds the CLI, the modules and the UI's Python venv; PREFIX/bin gets universe and universe-ui.
+# Universe for one user, no root: PREFIX/lib/universe holds the CLI, the modules and the UI's Python venv; PREFIX/bin gets universe, universe-ui and, where GTK is new enough, universe-desktop.
 set -eu
 
 usage() {
@@ -109,6 +109,16 @@ fi
 remove_installed
 rm -rf "${lib:?}/bin" "$lib/modules" "$lib/sources"
 install -Dm755 "$dist/bin/universe" "$lib/bin/universe"
+desktop=0
+if [ -x "$dist/bin/universe-desktop" ]; then
+    install -Dm755 "$dist/bin/universe-desktop" "$lib/bin/universe-desktop"
+    if "$lib/bin/universe-desktop" --help >/dev/null 2>&1; then
+        desktop=1
+    else
+        rm -f "$lib/bin/universe-desktop"
+        say "note: Universe Desktop needs GTK 4.22 and libadwaita 1.9, older here: it is left out"
+    fi
+fi
 cp -r "$dist/share/universe/modules" "$lib/modules"
 cp -r "$dist/share/universe/sources" "$lib/sources"
 
@@ -124,16 +134,36 @@ export UNIVERSE_BIN="$prefix/bin/universe" UNIVERSE_MODULES_PATH="$lib/modules" 
 exec "$venv/bin/universe-ui" "\$@"
 EOF
 chmod 755 "$prefix/bin/universe" "$prefix/bin/universe-ui"
+if [ "$desktop" = 1 ]; then
+    cat > "$prefix/bin/universe-desktop" <<EOF
+#!/bin/sh
+export UNIVERSE_BIN="$prefix/bin/universe" UNIVERSE_MODULES_PATH="$lib/modules" UNIVERSE_SOURCES_PATH="$lib/sources"
+exec "$lib/bin/universe-desktop" "\$@"
+EOF
+    chmod 755 "$prefix/bin/universe-desktop"
+fi
 
 : > "$manifest"
 (cd "$dist" && find share -type f ! -path 'share/universe/*') | while IFS= read -r f; do
+    case "$f" in
+        *io.github.ilyasturki.UniverseDesktop* | */universe-desktop.1) [ "$desktop" = 1 ] || continue ;;
+    esac
     install -Dm644 "$dist/$f" "$prefix/$f"
     printf '%s\n' "$f" >> "$manifest"
 done
 printf '%s\n%s\n' bin/universe bin/universe-ui >> "$manifest"
 sed -i "s|^Exec=universe-ui|Exec=$prefix/bin/universe-ui|" "$prefix/share/applications/universe-ui.desktop"
+if [ "$desktop" = 1 ]; then
+    printf '%s\n' bin/universe-desktop >> "$manifest"
+    sed -i "s|^Exec=universe-desktop|Exec=$prefix/bin/universe-desktop|" \
+        "$prefix/share/applications/io.github.ilyasturki.UniverseDesktop.desktop" \
+        "$prefix/share/dbus-1/services/io.github.ilyasturki.UniverseDesktop.service"
+fi
 
 say "installed Universe under $prefix"
+if [ "$desktop" = 1 ]; then
+    say "note: GNOME Shell reads search providers from XDG_DATA_DIRS only, which $prefix/share is not on by default: its search does not list Universe Desktop's games"
+fi
 case ":$PATH:" in
     *":$prefix/bin:"*) ;;
     *) say "note: $prefix/bin is not on PATH; add it to run universe from a terminal" ;;

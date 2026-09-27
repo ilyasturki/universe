@@ -20,9 +20,22 @@ jobs:
       - run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file notes.md
         env:
           GH_TOKEN: ${{ github.token }}
+  # GTK 4.22 and libadwaita 1.9 are no older distro's: Universe Desktop is built on Arch, for the systems that have them
+  desktop:
+    needs: notes
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    steps:
+      - uses: actions/checkout@v7
+      - run: pacman -Sy --noconfirm archlinux-keyring > /dev/null && pacman -Su --noconfirm --needed base-devel rust gtk4 libadwaita blueprint-compiler > /dev/null
+      - run: UNIVERSE_GIT_REV="${GITHUB_SHA::7}" cargo build --release --locked -p universe-desktop
+      - uses: actions/upload-artifact@v7
+        with:
+          name: universe-desktop
+          path: target/release/universe-desktop
   # Outside Nix, whose outputs are not relocatable; 22.04's glibc 2.35 is the oldest the binary then asks for
   dist:
-    needs: notes
+    needs: [notes, desktop]
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v7
@@ -31,7 +44,12 @@ jobs:
           python-version: "3.11"
       - run: rustup update stable --no-self-update && rustup default stable
       - run: sudo apt-get install -y scdoc
-      - run: tools/dist "dist/universe-${GITHUB_REF_NAME#v}"
+      - uses: actions/download-artifact@v8
+        with:
+          name: universe-desktop
+          path: desktop
+      - run: chmod +x desktop/universe-desktop
+      - run: UNIVERSE_DESKTOP_BIN=desktop/universe-desktop tools/dist "dist/universe-${GITHUB_REF_NAME#v}"
       - run: tar -C dist -czf universe-x86_64-linux.tar.gz "universe-${GITHUB_REF_NAME#v}"
       - run: gh release upload "$GITHUB_REF_NAME" universe-x86_64-linux.tar.gz install.sh
         env:

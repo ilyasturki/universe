@@ -7,13 +7,18 @@ usage: tools/dist OUT
 
 Builds the release tree that install.sh installs from, outside Nix:
   OUT/bin/universe                    the CLI (release, sqlite bundled)
+  OUT/bin/universe-desktop            the GTK app, where GTK 4.22 and libadwaita 1.9
+                                      are to build it against
   OUT/wheels/                         universe_core (abi3) and universe_ui
   OUT/share/universe/{modules,sources}
   OUT/share/{applications,icons,man,fish,bash-completion,zsh}
+  OUT/share/{dbus-1,gnome-shell,metainfo}   the GTK app's
   OUT/install.sh
 
 Needs cargo and python3 (3.11+) with pip; pip fetches maturin and
-setuptools for the wheel builds. scdoc, when found, adds universe-ui.1.
+setuptools for the wheel builds. scdoc, when found, adds universe-ui.1 and
+universe-desktop.1. UNIVERSE_DESKTOP_BIN names a universe-desktop built
+elsewhere to ship instead; without it or the libraries the GTK app is left out.
 USAGE
 }
 
@@ -48,6 +53,29 @@ install -Dm644 "$gen/universe.bash" "$out/share/bash-completion/completions/univ
 install -Dm644 "$gen/_universe" "$out/share/zsh/site-functions/_universe"
 if command -v scdoc >/dev/null; then
     scdoc < "$repo/ui/universe-ui.1.scd" > "$out/share/man/man1/universe-ui.1"
+fi
+
+desktop_bin="${UNIVERSE_DESKTOP_BIN:-}"
+if [ -z "$desktop_bin" ] && command -v blueprint-compiler > /dev/null \
+    && pkg-config --atleast-version=4.22 gtk4 && pkg-config --atleast-version=1.9 libadwaita-1; then
+    cargo build --release --locked -p universe-desktop --manifest-path "$repo/Cargo.toml"
+    desktop_bin="${CARGO_TARGET_DIR:-$repo/target}/release/universe-desktop"
+fi
+if [ -n "$desktop_bin" ]; then
+    data="$repo/crates/universe-desktop/data"
+    id=io.github.ilyasturki.UniverseDesktop
+    install -Dm755 "$desktop_bin" "$out/bin/universe-desktop"
+    install -Dm644 "$data/$id.desktop" -t "$out/share/applications"
+    install -Dm644 "$data/$id.service" -t "$out/share/dbus-1/services"
+    install -Dm644 "$data/$id.search-provider.ini" -t "$out/share/gnome-shell/search-providers"
+    install -Dm644 "$data/$id.metainfo.xml" -t "$out/share/metainfo"
+    install -Dm644 "$data/icons/apps/$id.svg" -t "$out/share/icons/hicolor/scalable/apps"
+    install -Dm644 "$data/icons/apps/$id-symbolic.svg" -t "$out/share/icons/hicolor/symbolic/apps"
+    if command -v scdoc > /dev/null; then
+        scdoc < "$repo/crates/universe-desktop/universe-desktop.1.scd" > "$out/share/man/man1/universe-desktop.1"
+    fi
+else
+    echo "dist: no GTK 4.22 and libadwaita 1.9 here (nor UNIVERSE_DESKTOP_BIN): Universe Desktop is left out" >&2
 fi
 
 install -Dm644 "$repo/ui/universe-ui.desktop" -t "$out/share/applications"
