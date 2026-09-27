@@ -113,7 +113,12 @@ mod imp {
     }
 
     #[glib::derived_properties]
-    impl ObjectImpl for GameObject {}
+    impl ObjectImpl for GameObject {
+        fn signals() -> &'static [glib::subclass::Signal] {
+            static SIGNALS: std::sync::OnceLock<Vec<glib::subclass::Signal>> = std::sync::OnceLock::new();
+            SIGNALS.get_or_init(|| vec![glib::subclass::Signal::builder("art-changed").build()])
+        }
+    }
 }
 
 glib::wrapper! {
@@ -129,6 +134,26 @@ impl GameObject {
 
     pub fn row(&self) -> std::cell::Ref<'_, Row> {
         self.imp().row.borrow()
+    }
+
+    /// The game's pictures were replaced, maybe under the same paths: what shows them decodes them again.
+    pub fn art_changed(&self) {
+        for path in {
+            let row = self.row();
+            [row.cover.clone(), row.square.clone(), row.banner.clone(), row.background.clone(), row.logo.clone()]
+        } {
+            crate::covers::forget(&path);
+        }
+        self.emit_by_name::<()>("art-changed", &[]);
+    }
+
+    pub fn connect_art_changed<F: Fn(&Self) + 'static>(&self, f: F) -> glib::SignalHandlerId {
+        self.connect_local("art-changed", false, move |args| {
+            if let Ok(game) = args[0].get::<GameObject>() {
+                f(&game);
+            }
+            None
+        })
     }
 
     /// Takes the row and notifies what changed, so a bound widget repaints only then.

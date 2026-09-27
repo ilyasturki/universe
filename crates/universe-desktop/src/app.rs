@@ -601,6 +601,11 @@ impl Application {
                     }
                     Event::SessionStarted(current) => app.session_started(current),
                     Event::SessionEnded(ended) => app.session_ended(ended),
+                    Event::Media(id) => {
+                        if let Some(game) = app.library().get(id) {
+                            game.art_changed();
+                        }
+                    }
                     Event::JournalWriting { title, .. } => app.say(&gettext("Writing the journal entry for {}…").replace("{}", title)),
                     Event::JournalDone { id, session, state, text } => app.journal_done(id, session, state, text),
                     _ => {}

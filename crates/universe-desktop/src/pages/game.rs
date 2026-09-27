@@ -179,6 +179,12 @@ impl GamePage {
         for prop in ["title", "cover", "playing", "launching", "installed", "favorite"] {
             handlers.push(game.connect_notify_local(Some(prop), refresh.clone()));
         }
+        let page = self.downgrade();
+        handlers.push(game.connect_art_changed(move |_| {
+            let Some(page) = page.upgrade() else { return };
+            page.imp().cover.reload();
+            page.load_details();
+        }));
         imp.handlers.replace(handlers);
         self.refresh();
         self.load_details();

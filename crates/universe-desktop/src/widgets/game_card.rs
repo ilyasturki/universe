@@ -103,6 +103,11 @@ impl GameCard {
         if let Some(group) = imp.actions.borrow().as_ref() {
             imp.handlers.replace(actions::follow_game(group, game));
         }
+        let cover = imp.cover.downgrade();
+        let art = game.connect_art_changed(move |_| {
+            cover.upgrade().inspect(|cover| cover.reload());
+        });
+        imp.handlers.borrow_mut().push(art);
         self.update_property(&[gtk::accessible::Property::Label(&game.title())]);
     }
 

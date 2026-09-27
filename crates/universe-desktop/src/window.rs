@@ -538,6 +538,7 @@ impl Window {
             "details" => self.open_game(game),
             "open-folder" => self.open_folder(game),
             "settings" => crate::dialogs::game_settings::present(self, game),
+            "artwork" => crate::dialogs::artwork::present(self, game),
             "hide" => self.set_flag(game, "hidden", true),
             "unhide" => self.set_flag(game, "hidden", false),
             "favorite" => self.set_flag(game, "favorite", true),

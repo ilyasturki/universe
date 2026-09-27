@@ -1,4 +1,5 @@
 pub mod add_game;
+pub mod artwork;
 pub mod game_settings;
 pub mod onboarding;
 pub mod preferences;
