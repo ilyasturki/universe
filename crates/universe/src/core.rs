@@ -367,11 +367,9 @@ impl Core {
             if logs.is_dir() && trash(&logs).is_err() {
                 tracing::warn!("trash {} failed; left in place", logs.display());
             }
-            if !r.game.launch.prefix.is_empty() {
-                let prefix = paths::expand(&r.game.launch.prefix);
-                if prefix.is_dir() && trash(&prefix).is_err() {
-                    tracing::warn!("trash {} failed; left in place", prefix.display());
-                }
+            let prefix = crate::launcher::prefix_of(&r.game, &config);
+            if prefix.is_dir() && trash(&prefix).is_err() {
+                tracing::warn!("trash {} failed; left in place", prefix.display());
             }
         }
         crate::game::set_key(&r.game.toml_path(), "hidden", "true")?;

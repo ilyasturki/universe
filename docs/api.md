@@ -72,7 +72,7 @@ operation; a dash means the surface doesn't expose it.
 | `get(id)` | `get(id)` | `universe info <name> --json` | resolved `Game`: global defaults merged in, session stats, media, active modules |
 | `resolve(query)` | `resolve(query)` | — | candidate ids: exact › whole word › substring › path › every word a prefix of a title word or genre. Empty means unknown, more than one means ambiguous |
 | `set(id, key, value)` | `set(id, key, value)` | `universe set <name> k=v …` | writes one `game.toml` key |
-| `remove(id, purge)` | `remove(id, purge)` | `universe rm <name> [--purge]` | parks recordings under `.archive/` (the journal stays in `games/<id>/journal/`), marks `removed_at`; `purge` also trashes the prefix |
+| `remove(id, purge)` | `remove(id, purge)` | `universe rm <name> [--purge]` | parks recordings under `.archive/` (the journal stays in `games/<id>/journal/`), marks `removed_at`; `purge` also trashes the game's logs and its Wine prefix (`launch.prefix`, else its folder under `paths.prefixes_root`) |
 | `uninstall(id)` | `uninstall(id)` | `universe uninstall <name>` | trashes `source.dir` and clears `source.dir`, `source.build_id` and `launch.exe`; the game stays in the library, not installed. Refuses a root, a home or the games root |
 | `reload_all()` | `reload()` | — | rereads config and `games/*/game.toml` |
 | `rescan()` | `rescan()` | `universe rescan` | `reload_all`, then `import_roms(true)`: its report |
