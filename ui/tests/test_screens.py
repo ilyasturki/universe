@@ -324,7 +324,7 @@ def test_launch_form(api, fake):
         ("Display", [*expected[0][1], *expected[2][1]]),
         expected[1],
         *expected[3:],
-        ("Folders", ["paths.games_root", "paths.prefixes_root", "paths.recordings_root", "paths.journal_root", "paths.overrides"]),
+        ("Folders", ["paths.games_root", "paths.prefixes_root", "paths.recordings_root", "paths.overrides"]),
         ("API keys", ["keys.sgdb", "keys.sgdb_file", "keys.rawg", "keys.rawg_file"]),
         ("Desktop", ["desktop.profile", "desktop.cursor_extension"]),
     ], "with Advanced on: the scaling flags fold into Display, the environment, the programs and config.toml's own sections follow"

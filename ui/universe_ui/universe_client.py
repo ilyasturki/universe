@@ -565,10 +565,6 @@ class CoreClient(QObject):
         self.entryWritten.emit("", ident)
         return True
 
-    @Slot(str, result=str)
-    def renderJournal(self, ident):
-        return self._guarded("", self._core.render_journal, ident)
-
     @Slot(str, "QVariant")
     def addEntry(self, session_id, entry):
         entry = json.loads(entry) if isinstance(entry, str) else dict(entry or {})

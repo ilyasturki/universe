@@ -1524,9 +1524,6 @@ class FakeCore:
         for old in (self._game_dir(ident) / "journal").glob(f"{session_id}*.json"):
             old.unlink()
 
-    def render_journal(self, ident):
-        return os.path.join(self._cache, f"{ident}.md")
-
     def add_entry(self, session_id, entry):
         entry = dict(entry)
         entry.setdefault("session", session_id)

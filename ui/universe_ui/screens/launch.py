@@ -10,7 +10,6 @@ CONFIG_ROWS = [
     ("Folders", "paths.games_root", "Games", "path", (), "Where sources install games."),
     ("Folders", "paths.prefixes_root", "Wine prefixes", "path", (), "Where a game's prefix is made when it names none."),
     ("Folders", "paths.recordings_root", "Recordings", "path", (), "Where the capture module files its videos."),
-    ("Folders", "paths.journal_root", "Journal notes", "path", (), "Where the journal module renders its Markdown notes."),
     ("Folders", "paths.overrides", "Picked artwork", "path", (), "Where your own art picks live, shown over the fetched media."),
     ("API keys", "keys.sgdb", "SteamGridDB key", "secret", (), "Artwork comes from SteamGridDB with a key from steamgriddb.com."),
     ("API keys", "keys.sgdb_file", "SteamGridDB key file", "path", (), "A file holding the key, read when the key above is empty."),

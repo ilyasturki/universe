@@ -411,9 +411,7 @@
           "dynamic": true,
           "dynamic_choices": ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.5"],
           "advanced": false
-        },
-        {"key": "markdown_export", "type": "bool", "default": true, "label": "Render Markdown notes", "scope": "global", "advanced": false},
-        {"key": "journal_root", "type": "path", "default": "~/Documents/notes/games/journal", "label": "Notes folder", "scope": "global", "advanced": false}
+        }
       ]
     },
     {
