@@ -195,7 +195,7 @@ env:
     EOF
     echo "wrote $cfg"
 
-# Release: rewrite every copy of the version, commit `chore(release): vX.Y.Z`, tag vX.Y.Z (no push).
+# Release, after /release wrote CHANGELOG.md's `## [X.Y.Z]`: rewrite every copy of the version, commit it with the changelog as `chore(release): vX.Y.Z`, tag vX.Y.Z (no push).
 bump level: check
     #!/usr/bin/env -S nix develop --quiet --command bash
     set -euo pipefail
@@ -210,14 +210,17 @@ bump level: check
     esac
     [[ "$new" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "bump: '{{ level }}' is not patch|minor|major|X.Y.Z" >&2; exit 1; }
     [[ "$new" != "$cur" ]] || { echo "bump: already at $cur" >&2; exit 1; }
-    git diff --quiet && git diff --cached --quiet || { echo "bump: working tree is not clean" >&2; exit 1; }
+    notes=(CHANGELOG.md README.md)
+    git diff --quiet -- . "${notes[@]/#/:!}" && git diff --cached --quiet -- . "${notes[@]/#/:!}" || { echo "bump: working tree is not clean beyond ${notes[*]}" >&2; exit 1; }
+    grep -qxF "## [$new]" CHANGELOG.md || { echo "bump: CHANGELOG.md has no '## [$new]' section, the release notes come from it (/release writes it)" >&2; exit 1; }
     ! git rev-parse -q --verify "refs/tags/v$new" >/dev/null || { echo "bump: tag v$new exists" >&2; exit 1; }
     copies=(ui/pyproject.toml modules/*/module.toml sources/*/source.toml docs/api.md)
+    pkgbuilds=(packaging/aur/universe/PKGBUILD packaging/aur/universe-bin/PKGBUILD)
     sed -i "/^\[workspace.package\]/,/^\[/s/^version = \"$cur\"$/version = \"$new\"/" Cargo.toml
     sed -i "s/^version = \"$cur\"$/version = \"$new\"/" "${copies[@]}"
-    sed -i "s/^pkgver=$cur$/pkgver=$new/" packaging/aur/PKGBUILD
+    sed -i "s/^pkgver=$cur$/pkgver=$new/" "${pkgbuilds[@]}"
     cargo update --workspace --offline --quiet
-    git add Cargo.toml Cargo.lock packaging/aur/PKGBUILD "${copies[@]}"
+    git add Cargo.toml Cargo.lock "${pkgbuilds[@]}" "${copies[@]}" "${notes[@]}"
     git commit --quiet -m "chore(release): v$new"
     git tag -a "v$new" -m "v$new"
     echo "$cur -> $new: committed and tagged v$new (not pushed)"
