@@ -1,0 +1,337 @@
+#!/usr/bin/env python3
+"""tools/catalogue [--previous FILE] [--out FILE] [--only ID,...]: the components catalogue (docs/api.md, Components)
+from each upstream's releases, every download pinned by its sha256. GITHUB_TOKEN lifts GitHub's rate limit."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import io
+import json
+import os
+import re
+import sys
+import urllib.request
+import zipfile
+from dataclasses import dataclass
+from datetime import UTC, datetime
+
+SCHEMA = 1
+BUILDS_KEPT = 6
+RELEASES_READ = 3
+ARCH_SUFFIX = re.compile(r"[-_.](x86_64_v3|x86_64|amd64|x64|aarch64|arm64)$")
+
+
+@dataclass(frozen=True)
+class Pick:
+    pattern: str
+    arch: str = "x86_64"
+    variant: str = ""
+    member: str = ""
+    program: str = ""
+
+
+@dataclass(frozen=True)
+class Upstream:
+    id: str
+    name: str
+    kind: str
+    # github:owner/repo or forgejo:host/owner/repo
+    repo: str
+    picks: tuple[Pick, ...]
+    family: str = ""
+    bin: str = ""
+    rolling: bool = False
+    # The release's tag must match it.
+    tags: str = ""
+    # tag, asset (name less extension and arch), date (upload day), or re:<pattern> whose group 1 is read off the asset name
+    version: str = "tag"
+    latest_only: bool = False
+
+
+UPSTREAMS = (
+    Upstream(
+        "ge-proton",
+        "GE-Proton",
+        "proton",
+        "github:GloriousEggroll/proton-ge-custom",
+        (Pick(r"^GE-Proton[\d-]+(-x86_64)?\.tar\.gz$"), Pick(r"^GE-Proton[\d-]+-(aarch64|arm64)\.tar\.gz$", arch="aarch64")),
+        family="proton-ge",
+        version="asset",
+    ),
+    Upstream(
+        "proton-cachyos",
+        "Proton-CachyOS",
+        "proton",
+        "github:CachyOS/proton-cachyos",
+        (
+            Pick(r"^proton-cachyos-.*-x86_64\.tar\.xz$"),
+            Pick(r"^proton-cachyos-.*-x86_64_v3\.tar\.xz$", variant="x86_64_v3"),
+            Pick(r"^proton-cachyos-.*-arm64\.tar\.xz$", arch="aarch64"),
+        ),
+        family="proton-cachyos",
+        version="asset",
+    ),
+    Upstream("proton-em", "Proton-EM", "proton", "github:Etaash-mathamsetty/Proton", (Pick(r"^proton-EM-.*\.tar\.xz$"),), family="proton-em", version="asset"),
+    Upstream(
+        "umu-proton",
+        "UMU-Proton",
+        "proton",
+        "github:Open-Wine-Components/umu-proton",
+        (Pick(r"^UMU-Proton-.*\.tar\.gz$"),),
+        family="umu-proton",
+        version="asset",
+    ),
+    Upstream(
+        "wine", "Wine (staging)", "wine", "github:Kron4ek/Wine-Builds", (Pick(r"^wine-[\d.]+-staging-amd64-wow64\.tar\.xz$"),), tags=r"^\d+\.\d+(\.\d+)?$"
+    ),
+    Upstream(
+        "eden",
+        "Eden",
+        "emulator",
+        "forgejo:git.eden-emu.dev/eden-emu/eden",
+        (Pick(r"^Eden-Linux-v[\w.]+-amd64-clang-pgo\.AppImage$"), Pick(r"^Eden-Linux-v[\w.]+-aarch64-clang-pgo\.AppImage$", arch="aarch64")),
+        tags=r"^v\d+\.\d+\.\d+$",
+    ),
+    Upstream(
+        "rpcs3",
+        "RPCS3",
+        "emulator",
+        "github:RPCS3/rpcs3-binaries-linux",
+        (Pick(r"_linux64\.AppImage$"),),
+        rolling=True,
+        version=r"re:^rpcs3-v([\w.-]+)_linux64\.AppImage$",
+        latest_only=True,
+    ),
+    Upstream("pcsx2", "PCSX2", "emulator", "github:PCSX2/pcsx2", (Pick(r"-linux-appimage-x64-Qt\.AppImage$"),), latest_only=True),
+    Upstream(
+        "duckstation", "DuckStation", "emulator", "github:stenzek/duckstation", (Pick(r"^DuckStation-x64\.AppImage$"),), rolling=True, tags=r"^v0\.1-\d+$"
+    ),
+    Upstream("cemu", "Cemu", "emulator", "github:cemu-project/Cemu", (Pick(r"^Cemu-[\w.]+-x86_64\.AppImage$"),)),
+    Upstream("azahar", "Azahar", "emulator", "github:azahar-emu/azahar", (Pick(r"^azahar\.AppImage$"),)),
+    Upstream(
+        "melonds",
+        "melonDS",
+        "emulator",
+        "github:melonDS-emu/melonDS",
+        (Pick(r"-appimage-x86_64\.zip$"), Pick(r"-appimage-aarch64\.zip$", arch="aarch64")),
+    ),
+    Upstream("mgba", "mGBA", "emulator", "github:mgba-emu/mgba", (Pick(r"-appimage-x64\.appimage$"), Pick(r"-appimage-arm64\.appimage$", arch="aarch64"))),
+    Upstream(
+        "ppsspp", "PPSSPP", "emulator", "github:hrydgard/ppsspp", (Pick(r"-anylinux-x86_64\.AppImage$"), Pick(r"-anylinux-aarch64\.AppImage$", arch="aarch64"))
+    ),
+    Upstream(
+        "xemu",
+        "xemu",
+        "emulator",
+        "github:xemu-project/xemu",
+        (Pick(r"^xemu-[\d.]+-x86_64\.AppImage$"), Pick(r"^xemu-[\d.]+-aarch64\.AppImage$", arch="aarch64")),
+        tags=r"^v\d",
+    ),
+    Upstream("shadps4", "shadPS4", "emulator", "github:shadps4-emu/shadPS4", (Pick(r"^shadps4-linux-sdl-[\w.]+\.zip$"),)),
+    Upstream(
+        "vita3k",
+        "Vita3K",
+        "emulator",
+        "github:Vita3K/Vita3K",
+        (Pick(r"^Vita3K-x86_64\.AppImage$"), Pick(r"^Vita3K-aarch64\.AppImage$", arch="aarch64")),
+        rolling=True,
+        version="date",
+    ),
+    Upstream("snes9x", "Snes9x", "emulator", "github:snes9xgit/snes9x", (Pick(r"^Snes9x-[\d.]+-x86_64\.AppImage$"),)),
+    Upstream("flycast", "Flycast", "emulator", "github:flyinghead/flycast", (Pick(r"^flycast-x86_64.*\.AppImage$"),)),
+    Upstream(
+        "dosbox",
+        "DOSBox Staging",
+        "emulator",
+        "github:dosbox-staging/dosbox-staging",
+        (Pick(r"^dosbox-staging-linux-x86_64-v[\d.]+\.tar\.xz$", program="dosbox"),),
+    ),
+    Upstream(
+        "umu-run",
+        "umu-launcher",
+        "tool",
+        "github:Open-Wine-Components/umu-launcher",
+        (Pick(r"-zipapp\.tar$", arch="any", member="umu/umu-run"),),
+        bin="umu-run",
+    ),
+    Upstream("gogdl", "heroic-gogdl", "tool", "github:Heroic-Games-Launcher/heroic-gogdl", (Pick(r"^gogdl_linux_x86_64$"),), bin="gogdl"),
+    Upstream(
+        "comet",
+        "comet",
+        "tool",
+        "github:imLinguin/comet",
+        (Pick(r"^comet-x86_64-unknown-linux-gnu$"), Pick(r"^comet-aarch64-unknown-linux-gnu$", arch="aarch64")),
+        bin="comet",
+    ),
+)
+
+
+def request(url: str) -> urllib.request.Request:
+    headers = {"User-Agent": "universe-catalogue", "Accept": "application/vnd.github+json"}
+    token = os.environ.get("GITHUB_TOKEN", "")
+    if token and url.startswith("https://api.github.com/"):
+        headers["Authorization"] = f"Bearer {token}"
+    return urllib.request.Request(url, headers=headers)
+
+
+def get_json(url: str):
+    with urllib.request.urlopen(request(url), timeout=60) as r:
+        return json.load(r)
+
+
+def fetch(url: str) -> tuple[str, int, bytes]:
+    """sha256, size and, for a .zip only, the bytes."""
+    digest, size, kept = hashlib.sha256(), 0, io.BytesIO()
+    with urllib.request.urlopen(request(url), timeout=120) as r:
+        while chunk := r.read(1 << 20):
+            digest.update(chunk)
+            size += len(chunk)
+            if url.endswith(".zip"):
+                kept.write(chunk)
+    return digest.hexdigest(), size, kept.getvalue()
+
+
+def releases(up: Upstream) -> list[dict]:
+    source, _, where = up.repo.partition(":")
+    if source == "github":
+        base = f"https://api.github.com/repos/{where}/releases"
+        found = [get_json(f"{base}/latest")] if up.latest_only else get_json(f"{base}?per_page=30")
+    else:
+        host, _, repo = where.partition("/")
+        found = get_json(f"https://{host}/api/v1/repos/{repo}/releases?limit=20")
+    found = [r for r in found if not r.get("draft") and (up.rolling or not r.get("prerelease")) and re.search(up.tags, r.get("tag_name", ""))]
+    found.sort(key=lambda r: r.get("published_at") or "", reverse=True)
+    return found[:RELEASES_READ]
+
+
+def fmt(name: str) -> str:
+    lower = name.lower()
+    for ext, kind in ((".appimage", "appimage"), (".tar.gz", "tar.gz"), (".tgz", "tar.gz"), (".tar.xz", "tar.xz"), (".tar", "tar"), (".zip", "zip")):
+        if lower.endswith(ext):
+            return kind
+    return "binary"
+
+
+def stem(name: str) -> str:
+    for ext in (".AppImage", ".appimage", ".tar.gz", ".tgz", ".tar.xz", ".tar", ".zip"):
+        name = name.removesuffix(ext)
+    return ARCH_SUFFIX.sub("", name)
+
+
+def version_of(up: Upstream, release: dict, asset: dict) -> str:
+    if up.version == "asset":
+        return stem(asset["name"])
+    if up.version == "date":
+        return (asset.get("updated_at") or release.get("published_at") or "")[:10].replace("-", ".")
+    if up.version.startswith("re:"):
+        found = re.search(up.version.removeprefix("re:"), asset["name"])
+        return found.group(1) if found else release["tag_name"]
+    return re.sub(r"^v\.?(?=\d)", "", release["tag_name"])
+
+
+def build_of(up: Upstream, release: dict, known: dict[str, dict]) -> dict | None:
+    assets, version = [], ""
+    for pick in up.picks:
+        asset = next((a for a in release.get("assets", []) if re.search(pick.pattern, a["name"])), None)
+        if asset is None:
+            continue
+        url = asset["browser_download_url"]
+        version = version or version_of(up, release, asset)
+        entry: dict = {"arch": pick.arch, "url": url, "format": fmt(asset["name"])}
+        zipped = entry["format"] == "zip"
+        for key in ("variant", "member", "program"):
+            if getattr(pick, key):
+                entry[key] = getattr(pick, key)
+        previous = known.get(url)
+        digest = (asset.get("digest") or "").removeprefix("sha256:")
+        if previous and (not digest or previous["sha256"] == digest):
+            entry.update({k: previous[k] for k in ("sha256", "size", "appimage") if k in previous})
+        elif digest and not zipped:
+            entry.update(sha256=digest, size=asset.get("size") or 0)
+        else:
+            print(f"  hashing {asset['name']}", file=sys.stderr)
+            sha, size, body = fetch(url)
+            entry.update(sha256=sha, size=size)
+            if zipped:
+                inner = next((n for n in zipfile.ZipFile(io.BytesIO(body)).namelist() if n.endswith(".AppImage")), None)
+                if inner is None:
+                    print(f"  {asset['name']}: no AppImage inside", file=sys.stderr)
+                entry["appimage"] = inner
+        if zipped and not entry.get("appimage"):
+            continue
+        assets.append(entry)
+    if not assets:
+        return None
+    channel = "rolling" if up.rolling or release.get("prerelease") else "stable"
+    return {"version": version, "date": release.get("published_at") or "", "channel": channel, "assets": assets}
+
+
+def component(up: Upstream, previous: dict | None) -> dict:
+    old = (previous or {}).get("builds", [])
+    known = {a["url"]: a for b in old for a in b.get("assets", [])}
+    fresh = [b for r in releases(up) if (b := build_of(up, r, known))]
+    by_version = {b["version"]: b for b in old}
+    by_version.update({b["version"]: b for b in fresh})
+    builds = sorted(by_version.values(), key=lambda b: (b.get("date", ""), b["version"]), reverse=True)
+    # A rolling tag's asset is replaced in place: only its newest build can still match its digest.
+    seen: set[str] = set()
+    kept = []
+    for b in builds:
+        urls = {a["url"] for a in b["assets"]}
+        if urls & seen:
+            continue
+        seen |= urls
+        kept.append(b)
+    entry: dict = {"name": up.name, "kind": up.kind, "builds": kept[:BUILDS_KEPT]}
+    for key in ("family", "bin"):
+        if getattr(up, key):
+            entry[key] = getattr(up, key)
+    source, _, where = up.repo.partition(":")
+    entry["homepage"] = f"https://github.com/{where}" if source == "github" else f"https://{where}"
+    return entry
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=(__doc__ or "").split("\n", 1)[0])
+    parser.add_argument("--previous", help="the catalogue to extend: its pinned builds stay, up to the newest few")
+    parser.add_argument("--out", default="-", help="where to write it; - for stdout")
+    parser.add_argument("--only", default="", help="comma-separated ids; the others are copied from --previous")
+    args = parser.parse_args()
+    previous = {"components": {}}
+    if args.previous and os.path.exists(args.previous):
+        with open(args.previous) as f:
+            previous = json.load(f)
+    only = {s for s in args.only.split(",") if s}
+    components = dict(previous.get("components", {}))
+    failed = []
+    for up in UPSTREAMS:
+        if only and up.id not in only:
+            continue
+        print(f"{up.id}", file=sys.stderr)
+        try:
+            entry = component(up, components.get(up.id))
+        except Exception as e:  # noqa: BLE001
+            print(f"  {up.id}: {e}", file=sys.stderr)
+            failed.append(up.id)
+            continue
+        if entry["builds"]:
+            components[up.id] = entry
+        else:
+            print(f"  {up.id}: no build found", file=sys.stderr)
+            failed.append(up.id)
+    unchanged = components == previous.get("components") and previous.get("schema") == SCHEMA
+    generated_at = previous.get("generated_at") if unchanged else datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
+    catalogue = {"schema": SCHEMA, "generated_at": generated_at, "components": dict(sorted(components.items()))}
+    text = json.dumps(catalogue, indent=1, sort_keys=True) + "\n"
+    if args.out == "-":
+        sys.stdout.write(text)
+    else:
+        with open(args.out, "w") as f:
+            f.write(text)
+    if failed:
+        print(f"kept the previous entries of: {', '.join(failed)}", file=sys.stderr)
+
+
+if __name__ == "__main__":
+    main()

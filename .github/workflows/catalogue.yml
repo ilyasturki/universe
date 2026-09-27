@@ -1,0 +1,32 @@
+name: catalogue
+on:
+  schedule:
+    - cron: "23 5 * * *"
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: catalogue
+jobs:
+  bump:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Check out the catalogue branch, created on the first run
+        run: |
+          if git fetch --quiet --depth 1 origin catalogue; then
+            git worktree add --quiet -B catalogue "$RUNNER_TEMP/catalogue" FETCH_HEAD
+          else
+            git worktree add --quiet --orphan -b catalogue "$RUNNER_TEMP/catalogue"
+          fi
+      - run: tools/catalogue --previous "$RUNNER_TEMP/catalogue/catalogue.json" --out "$RUNNER_TEMP/catalogue/catalogue.json"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Commit and push when a build changed
+        working-directory: ${{ runner.temp }}/catalogue
+        run: |
+          git add catalogue.json
+          git diff --cached --quiet && exit 0
+          git -c user.name="github-actions[bot]" -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit --quiet -m "catalogue: $(date -u +%F)"
+          git push --quiet origin catalogue
