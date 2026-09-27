@@ -99,6 +99,7 @@ FocusScope {
         visible: page.log.length > 0 && !page.store.logLoading
 
         Behavior on contentY {
+            id: scrollEase
             Ease {}
         }
 
@@ -143,6 +144,11 @@ FocusScope {
                 }
             }
         }
+    }
+
+    Swipe {
+        flickable: flick
+        ease: scrollEase
     }
 
     Scrollbar {

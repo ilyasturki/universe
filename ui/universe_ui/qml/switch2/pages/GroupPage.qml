@@ -105,6 +105,7 @@ FocusScope {
             page.zone = "grid";
             grid.forceActiveFocus();
         }
+        onPointed: page.zone = "rail"
     }
 
     Label {
@@ -129,6 +130,7 @@ FocusScope {
             page.zone = "rail";
             rail.forceActiveFocus();
         }
+        onPointed: page.zone = "grid"
         onActivated: page.shell.launch(current)
         onOptionsRequested: page.shell.push("pages/SoftwareOptionsPage.qml", {
             gameId: current.id

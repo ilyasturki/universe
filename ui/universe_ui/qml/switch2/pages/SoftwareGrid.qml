@@ -46,6 +46,13 @@ FocusScope {
     function stepScreen(d) {
         index = Sound.paged(index, d, columns, Math.floor(grid.height / cellHeight), cells);
     }
+    function point(i) {
+        Sound.play("tick");
+        index = i;
+        if (!activeFocus)
+            grid.pointed();
+        forceActiveFocus();
+    }
 
     Keys.onRightPressed: index % columns === columns - 1 || index === cells - 1 ? Sound.play("edge") : go(index + 1)
     Keys.onLeftPressed: {
@@ -182,6 +189,7 @@ FocusScope {
         }
 
         Behavior on contentY {
+            id: scrollEase
             Ease {}
         }
 
@@ -223,6 +231,11 @@ FocusScope {
                 target: addFace
                 cornerRadius: addFace.radius
                 shown: addCell.focused
+            }
+
+            Touch {
+                current: addCell.focused
+                onPicked: grid.point(grid.count)
             }
         }
 
@@ -313,7 +326,22 @@ FocusScope {
                     font.pixelSize: Theme.dp(Theme.fontTiny)
                 }
             }
+
+            Touch {
+                anchors.fill: undefined
+                width: grid.tile
+                height: view.cellHeight - grid.gap
+                current: cell.focused
+                // Groups have no options: + there is HOME.
+                menu: !grid.groups
+                onPicked: grid.point(index)
+            }
         }
+    }
+
+    Swipe {
+        flickable: view
+        ease: scrollEase
     }
 
     Item {

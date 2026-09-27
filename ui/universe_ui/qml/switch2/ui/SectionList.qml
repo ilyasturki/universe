@@ -13,6 +13,7 @@ FocusScope {
 
     signal activated(int index)
     signal escapedRight
+    signal pointed
 
     readonly property real rowHeight: Theme.dp(123)
     readonly property real labelHeight: Theme.dp(44)
@@ -36,6 +37,17 @@ FocusScope {
             return;
         index = next;
         list.activated(index);
+    }
+
+    function point(i) {
+        Sound.play("tick");
+        if (i !== index) {
+            index = i;
+            list.activated(index);
+        }
+        if (!activeFocus)
+            list.pointed();
+        forceActiveFocus();
     }
 
     function stepScreen(d) {
@@ -96,6 +108,7 @@ FocusScope {
         }
 
         Behavior on contentY {
+            id: scrollEase
             Ease {}
         }
 
@@ -185,7 +198,17 @@ FocusScope {
                         font.pixelSize: Theme.dp(Theme.fontSmall)
                     }
                 }
+
+                Touch {
+                    current: line.focused
+                    onPicked: list.point(index)
+                }
             }
         }
+    }
+
+    Swipe {
+        flickable: view
+        ease: scrollEase
     }
 }

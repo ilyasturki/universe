@@ -274,6 +274,7 @@ FocusScope {
         onActivated: function (id) {
             page.railAction(id);
         }
+        onPointed: page.zone = "rail"
         onEscapedRight: {
             if (page.shown.length > 0)
                 page.zone = "grid";
@@ -303,6 +304,7 @@ FocusScope {
         gap: Theme.dp(12)
 
         onEscapedLeft: page.zone = "rail"
+        onPointed: page.zone = "grid"
         onActivated: page.play()
         onOptionsRequested: page.options()
 
@@ -401,6 +403,11 @@ FocusScope {
             anchors.horizontalCenter: parent.horizontalCenter
             text: page.current ? page.current.gameTitle + " · " + page.current.dateText : ""
             color: "#ffffff"
+        }
+
+        Block {
+            onTapped: if (page.viewing)
+                api.keys.press("Accept")
         }
     }
 }

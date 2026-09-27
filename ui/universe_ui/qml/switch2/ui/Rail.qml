@@ -10,11 +10,19 @@ FocusScope {
 
     signal activated(string id)
     signal escapedRight
+    signal pointed
 
     width: Theme.dp(110)
 
     function step(d) {
         index = Sound.stepped(index, d, items.length);
+    }
+
+    function point(i) {
+        index = i;
+        if (!activeFocus)
+            rail.pointed();
+        forceActiveFocus();
     }
 
     Keys.onUpPressed: step(-1)
@@ -70,6 +78,11 @@ FocusScope {
                     visible: parent.focused && modelData.label !== undefined
                     text: modelData.label || ""
                     color: Theme.accent
+                }
+
+                Touch {
+                    direct: true
+                    onPicked: rail.point(index)
                 }
             }
         }

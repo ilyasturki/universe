@@ -10,6 +10,7 @@ FocusScope {
 
     signal activated(var item)
     signal escapedUp
+    signal pointed
 
     readonly property var hints: [
         {
@@ -28,6 +29,13 @@ FocusScope {
 
     function step(d) {
         index = Sound.stepped(index, d, items.length);
+    }
+
+    function point(i) {
+        index = i;
+        if (!activeFocus)
+            bar.pointed();
+        forceActiveFocus();
     }
 
     Keys.onLeftPressed: step(-1)
@@ -99,6 +107,11 @@ FocusScope {
                 visible: cell.focused
                 text: modelData.label
                 color: Theme.accent
+            }
+
+            Touch {
+                direct: true
+                onPicked: bar.point(index)
             }
         }
     }

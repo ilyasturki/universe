@@ -648,6 +648,7 @@ FocusScope {
         onActivated: function (i) {
             page.section = i;
         }
+        onPointed: page.zone = "list"
         onEscapedRight: {
             if (page.sectionId === "search") {
                 page.openSearch();
@@ -689,6 +690,7 @@ FocusScope {
             page.activate(index, row);
         }
         onEscapedDown: Sound.play("edge")
+        onPointed: page.zone = "rows"
         onEscapedLeft: {
             page.zone = "list";
             list.forceActiveFocus();

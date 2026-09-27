@@ -247,6 +247,7 @@ FocusScope {
         }
         onEscapedLeft: Sound.play("edge")
         onEscapedDown: Sound.play("edge")
+        onPointed: page.typing = false
 
         Keys.onPressed: function (event) {
             if (event.isAutoRepeat)

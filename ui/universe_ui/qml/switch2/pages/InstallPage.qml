@@ -352,6 +352,7 @@ FocusScope {
 
         onActivated: function(id) { page.railAction(id); }
         onEscapedRight: page.focusMain()
+        onPointed: page.zone = "rail"
     }
 
     JobLine {

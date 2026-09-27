@@ -43,6 +43,11 @@ FocusScope {
                 duration: Theme.durQuick
             }
         }
+
+        Block {
+            onTapped: if (modal.carded && modal.open)
+                api.keys.press("Cancel")
+        }
     }
 
     Rectangle {
@@ -52,6 +57,8 @@ FocusScope {
         anchors.fill: modal.carded ? undefined : parent
         radius: Theme.dp(6)
         color: modal.carded ? Theme.card : "transparent"
+        // Fading out, it takes no finger: an A it sent would land on the page.
+        enabled: modal.open
         opacity: modal.open ? 1.0 : 0.0
         scale: modal.open || !modal.carded ? 1.0 : 0.98
 
@@ -65,5 +72,7 @@ FocusScope {
                 duration: Theme.durQuick
             }
         }
+
+        Block {}
     }
 }

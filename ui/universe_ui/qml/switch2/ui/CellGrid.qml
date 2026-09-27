@@ -20,6 +20,7 @@ FocusScope {
     signal escapedLeft
     signal activated
     signal optionsRequested
+    signal pointed
 
     width: columns * cellWidth + (columns - 1) * gap
 
@@ -28,6 +29,13 @@ FocusScope {
     }
     function stepScreen(d) {
         index = Sound.paged(index, d, columns, Math.floor(grid.height / pitchY), count);
+    }
+    function point(i) {
+        Sound.play("tick");
+        index = i;
+        if (!activeFocus)
+            grid.pointed();
+        forceActiveFocus();
     }
 
     function scrollToCurrent() {
@@ -85,6 +93,7 @@ FocusScope {
         clip: true
 
         Behavior on contentY {
+            id: scrollEase
             Ease {}
         }
 
@@ -101,8 +110,19 @@ FocusScope {
                 height: grid.cellHeight
                 z: focused ? 2 : 1
                 sourceComponent: grid.delegate
+
+                Touch {
+                    current: parent.focused
+                    menu: true
+                    onPicked: grid.point(index)
+                }
             }
         }
+    }
+
+    Swipe {
+        flickable: view
+        ease: scrollEase
     }
 
     Scrollbar {

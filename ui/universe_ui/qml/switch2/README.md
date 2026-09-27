@@ -2,7 +2,16 @@
 
 A second look on the same host; how looks load and switch is `docs/frontends.md` › Themes.
 Everything is authored at 1080p and scaled by the window height through `Theme.dp()`; the sizes
-in `core/Theme.qml` are measured from captures of the real HOME menu.
+in `core/Theme.qml` are measured from captures of the real HOME menu. A 16:10 screen (a Steam
+Deck's 1280×800) is 1728 wide in those units, not 1920: a column or a grid takes its width from the
+page's and keeps the right margin it has at 1920 (`Theme.columnRight`), its tiles narrowing rather
+than running off the edge.
+
+Touch and the mouse go through `ui/Touch.qml` (a tap picks, a tap on what holds the cursor or on a
+`direct` item presses `action`, a long press on one with `menu` picks and presses +),
+`ui/Swipe.qml` (a drag scrolls the view it sits over, with a fling) and `ui/Block.qml` (a scrim or
+a card that keeps a tap or a drag from what is beneath). Each surface's `point(i)` moves the cursor
+as its keys would and raises `pointed`, on which the page sets its zone.
 
 The focus ring's shader ships as `assets/shaders/ring.frag.qsb`, rebuilt from `ring.frag` with
 `qsb --glsl "100 es,120,150" --hlsl 50 --msl 12 -o ring.frag.qsb ring.frag`.

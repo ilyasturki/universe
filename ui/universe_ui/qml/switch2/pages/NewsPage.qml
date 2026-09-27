@@ -168,6 +168,7 @@ FocusScope {
         onActivated: function (id) {
             page.railAction(id);
         }
+        onPointed: page.zone = "rail"
         onEscapedRight: {
             if (page.articles.length > 0)
                 page.zone = "grid";
@@ -197,6 +198,7 @@ FocusScope {
         gap: Theme.dp(18)
 
         onEscapedLeft: page.zone = "rail"
+        onPointed: page.zone = "grid"
         onActivated: page.activate()
         onOptionsRequested: page.options()
 

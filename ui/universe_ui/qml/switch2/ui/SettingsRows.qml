@@ -15,6 +15,7 @@ FocusScope {
     signal activated(int index, var row)
     signal escapedLeft
     signal escapedDown
+    signal pointed
 
     readonly property real rowHeight: Theme.dp(113)
     readonly property real headingHeight: Theme.dp(96)
@@ -138,6 +139,14 @@ FocusScope {
         index = s[next];
     }
 
+    function point(i) {
+        Sound.play("tick");
+        index = i;
+        if (!activeFocus)
+            rows.pointed();
+        forceActiveFocus();
+    }
+
     function stepScreen(d) {
         var s = stops();
         if (s.indexOf(index) < 0) {
@@ -219,6 +228,7 @@ FocusScope {
         }
 
         Behavior on contentY {
+            id: scrollEase
             Ease {}
         }
 
@@ -546,9 +556,19 @@ FocusScope {
                             font.pixelSize: Theme.dp(Theme.fontSmall)
                         }
                     }
+
+                    Touch {
+                        current: row.focused
+                        onPicked: rows.point(index)
+                    }
                 }
             }
         }
+    }
+
+    Swipe {
+        flickable: view
+        ease: scrollEase
     }
 
     Scrollbar {

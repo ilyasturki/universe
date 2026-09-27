@@ -123,6 +123,9 @@ FocusScope {
     Rectangle {
         anchors.fill: parent
         color: Theme.scrim
+
+        // HOME stays drawn under the overlay, and live to a finger but for this.
+        Block {}
     }
 
     Rectangle {

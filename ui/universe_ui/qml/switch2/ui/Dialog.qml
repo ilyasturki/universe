@@ -125,6 +125,11 @@ Modal {
                     text: modelData
                     color: button.danger ? Theme.danger : Theme.accent
                 }
+
+                Touch {
+                    direct: true
+                    onPicked: dialog.index = index
+                }
             }
         }
     }

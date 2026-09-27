@@ -37,6 +37,12 @@ Item {
 
         Bumper {
             glyph: "LB"
+
+            Touch {
+                anchors.margins: -Theme.dp(24)
+                direct: true
+                action: "PrevPage"
+            }
         }
 
         Repeater {
@@ -62,11 +68,23 @@ Item {
                     color: Theme.accent
                     visible: parent.open
                 }
+
+                Touch {
+                    current: parent.open
+                    action: ""
+                    onPicked: tabs.step(index - tabs.index)
+                }
             }
         }
 
         Bumper {
             glyph: "RB"
+
+            Touch {
+                anchors.margins: -Theme.dp(24)
+                direct: true
+                action: "NextPage"
+            }
         }
     }
 

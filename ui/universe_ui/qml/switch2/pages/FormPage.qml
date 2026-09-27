@@ -320,6 +320,7 @@ FocusScope {
         onActivated: function (i) {
             page.section = i;
         }
+        onPointed: page.zone = "list"
         onEscapedRight: {
             page.zone = "rows";
             rows.forceActiveFocus();
@@ -349,6 +350,7 @@ FocusScope {
             page.activate(index, row);
         }
         onEscapedDown: Sound.play("edge")
+        onPointed: page.zone = "rows"
         onEscapedLeft: {
             page.zone = "list";
             list.forceActiveFocus();

@@ -327,10 +327,12 @@ FocusScope {
                 root.homeFocus = "bar";
                 bottomBar.forceActiveFocus();
             }
+            onPointed: root.homeFocus = "home"
         }
 
         BottomBar {
             id: bottomBar
+            objectName: "bottomBar"
             x: (parent.width - width) / 2
             y: Theme.dp(Theme.barY)
             items: root.barItems
@@ -342,6 +344,7 @@ FocusScope {
                 root.homeFocus = "home";
                 home.forceActiveFocus();
             }
+            onPointed: root.homeFocus = "bar"
         }
     }
 

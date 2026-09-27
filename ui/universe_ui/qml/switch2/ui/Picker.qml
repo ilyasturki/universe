@@ -137,6 +137,11 @@ Modal {
                     elide: Text.ElideRight
                 }
 
+                Touch {
+                    direct: true
+                    onPicked: picker.index = index
+                }
+
                 Rectangle {
                     anchors.right: parent.right
                     anchors.rightMargin: Theme.dp(30)
@@ -159,5 +164,9 @@ Modal {
                 }
             }
         }
+    }
+
+    Swipe {
+        flickable: list
     }
 }

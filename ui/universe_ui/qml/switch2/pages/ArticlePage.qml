@@ -207,6 +207,7 @@ FocusScope {
         visible: page.row !== null
 
         Behavior on contentY {
+            id: scrollEase
             Ease {}
         }
 
@@ -375,6 +376,11 @@ FocusScope {
         }
     }
 
+    Swipe {
+        flickable: flick
+        ease: scrollEase
+    }
+
     Scrollbar {
         anchors.right: parent.right
         anchors.rightMargin: Theme.dp(60)
@@ -411,6 +417,11 @@ FocusScope {
             text: (page.shotIndex + 1) + " / " + page.images.length
             color: "#ffffff"
             font.pixelSize: Theme.dp(Theme.fontSmall)
+        }
+
+        Block {
+            onTapped: if (page.lightbox)
+                api.keys.press("Accept")
         }
     }
 }

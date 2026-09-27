@@ -63,6 +63,7 @@ FocusScope {
     readonly property real rowX: Theme.dp(Theme.tileRowX)
 
     signal escapedDown
+    signal pointed
 
     RecentGames {
         id: played
@@ -96,6 +97,14 @@ FocusScope {
 
     function step(d) {
         index = Sound.stepped(index, d, last + 1);
+    }
+
+    function point(i) {
+        Sound.play("tick");
+        index = i;
+        if (!activeFocus)
+            page.pointed();
+        forceActiveFocus();
     }
 
     function activate() {
@@ -210,6 +219,7 @@ FocusScope {
         }
 
         Behavior on contentX {
+            id: rowEase
             Ease {
                 duration: Theme.durFocus
             }
@@ -233,6 +243,12 @@ FocusScope {
                 game: modelData
                 focused: cell.focused
                 dimmed: modelData.installing
+
+                Touch {
+                    current: cell.focused
+                    menu: !modelData.installing
+                    onPicked: page.point(index)
+                }
             }
 
             Label {
@@ -283,9 +299,20 @@ FocusScope {
                         tint: Theme.barGrey
                         stroke: 1.6
                     }
+
+                    Touch {
+                        current: parent.focused
+                        onPicked: page.point(page.allIndex + index)
+                    }
                 }
             }
         }
+    }
+
+    Swipe {
+        flickable: row
+        horizontal: true
+        ease: rowEase
     }
 
     Label {
