@@ -183,14 +183,12 @@ def run(argv=None):
 
     nested = bool(os.environ.get("GAMESCOPE_WAYLAND_DISPLAY"))
     # Before the core opens, the library is loaded once, inside gamescope; before the app, no display is held while it runs.
-    client = build_client(args) if args.fake else None
     if args.fullscreen and not nested:
-        if client is not None:
-            command = client.hostGamescope("")
+        if args.fake:
+            from .fake_core import host_gamescope
         else:
-            import universe_core
-
-            command = universe_core.host_gamescope("")
+            from universe_core import host_gamescope
+        command = host_gamescope("")
         code = run_in_gamescope(command, argv)
         if code is not None:
             return code
@@ -214,8 +212,8 @@ def run(argv=None):
     from .api import Api
     from .screens.power import FAKE as FAKE_POWER
 
-    if client is None:
-        client = build_client(args)
+    # The fake library paints its art with fonts, which need the app.
+    client = build_client(args)
     if not args.fake:
         client.adoptScope()
     api = Api(client, fullscreen=args.fullscreen, theme=args.theme, power_root=FAKE_POWER if args.fake else None, parent=app)

@@ -254,6 +254,30 @@ def _coerce(schema, owner, key, value):
     return value
 
 
+# The environment's, `us` bare: the core probes the desktop.
+def keyboard_layout():
+    return {"layout": os.environ.get("XKB_DEFAULT_LAYOUT", "").split(",")[0] or "us", "variant": os.environ.get("XKB_DEFAULT_VARIANT", "").split(",")[0]}
+
+
+def host_gamescope(screen):
+    gamescope = shutil.which("gamescope")
+    if not gamescope:
+        return None
+    mode = screen_mode(screen or next(iter(connected_outputs()), ""))
+    size = ["-W", str(mode[0]), "-H", str(mode[1]), "-w", str(mode[0]), "-h", str(mode[1]), "-r", str(mode[2])] if mode else []
+    layout = keyboard_layout()
+    return [
+        shutil.which("env") or "env",
+        f"XKB_DEFAULT_LAYOUT={layout['layout']}",
+        f"XKB_DEFAULT_VARIANT={layout['variant']}",
+        gamescope,
+        "-f",
+        "--force-composition",
+        *size,
+        "--mangoapp",
+    ]
+
+
 class FakeCore:
     def __init__(self, fixture=FIXTURE, root=None, fake_launch=False):
         with open(fixture) as f:
@@ -836,26 +860,10 @@ class FakeCore:
         return os.path.join(self._cache, "screenshot.png")
 
     def host_gamescope(self, screen):
-        gamescope = shutil.which("gamescope")
-        if not gamescope:
-            return None
-        mode = screen_mode(screen or next(iter(connected_outputs()), ""))
-        size = ["-W", str(mode[0]), "-H", str(mode[1]), "-w", str(mode[0]), "-h", str(mode[1]), "-r", str(mode[2])] if mode else []
-        layout = self.keyboard_layout()
-        return [
-            shutil.which("env") or "env",
-            f"XKB_DEFAULT_LAYOUT={layout['layout']}",
-            f"XKB_DEFAULT_VARIANT={layout['variant']}",
-            gamescope,
-            "-f",
-            "--force-composition",
-            *size,
-            "--mangoapp",
-        ]
+        return host_gamescope(screen)
 
-    # The environment's, `us` bare: the core probes the desktop.
     def keyboard_layout(self):
-        return {"layout": os.environ.get("XKB_DEFAULT_LAYOUT", "").split(",")[0] or "us", "variant": os.environ.get("XKB_DEFAULT_VARIANT", "").split(",")[0]}
+        return keyboard_layout()
 
     def set_fps_limit(self):
         if not self.current():
