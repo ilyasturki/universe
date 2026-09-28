@@ -21,6 +21,12 @@ READY_ENV = "UNIVERSE_HOST_READY"
 OWN_ENV = "UNIVERSE_OWN_GAMESCOPE"
 # A gamescope that fails to start mostly exits at once; one that hangs (NVIDIA) shows nothing at all.
 READY_S = 30
+# Qt's dispatcher polling a closed fd: its notifier can no longer be unregistered, so the loop spins for good.
+DEAD_NOTIFIER = "QSocketNotifier: Invalid socket"
+# Logged by the thread that frees a notifier it does not own, just before its fd closes.
+OFF_THREAD_NOTIFIER = "Socket notifiers cannot be enabled or disabled from another thread"
+RESTARTS_ENV = "UNIVERSE_UI_RESTARTS"
+MAX_RESTARTS = 3
 
 
 def parse_args(argv):
@@ -95,7 +101,83 @@ def exit_with_the_display():
     ctypes.CDLL("libX11.so.6").XSetIOErrorHandler(_io_error_handlers[0])
 
 
-def gamescope_argv(command, argv):
+_message_handlers = []
+
+
+def restart_when_wedged(argv):
+    from PySide6.QtCore import qFormatLogMessage, qInstallMessageHandler
+
+    if _message_handlers:
+        return
+
+    dead = {}
+
+    # A notifier its thread still owns is disabled on the first warning: only a repeat is a wedge.
+    def handle(mode, context, message):
+        with contextlib.suppress(OSError, ValueError):
+            sys.stderr.write(qFormatLogMessage(mode, context, message) + "\n")
+        if message.startswith(DEAD_NOTIFIER):
+            dead[message] = dead.get(message, 0) + 1
+            if dead[message] > 1:
+                relaunch(argv)
+        elif OFF_THREAD_NOTIFIER in message:
+            print_native_stack()
+
+    _message_handlers.append(handle)
+    qInstallMessageHandler(handle)
+
+
+def print_native_stack():
+    import ctypes
+
+    sys.stderr.flush()
+    libc = ctypes.CDLL(None)
+    frames = (ctypes.c_void_p * 64)()
+    libc.backtrace_symbols_fd(frames, libc.backtrace(frames, 64), sys.stderr.fileno())
+
+
+def relaunch(argv):
+    log = logging.getLogger("universe.host")
+    try:
+        restarts = int(os.environ.get(RESTARTS_ENV) or 0)
+        if restarts < MAX_RESTARTS:
+            log.error("event loop wedged on a dead socket notifier: restarting in place")
+            os.environ[RESTARTS_ENV] = str(restarts + 1)
+            stop_children()
+            with contextlib.suppress(OSError, ValueError):
+                sys.stderr.flush()
+            command = launcher_argv(argv)
+            os.execvp(command[0], command)
+        else:
+            log.error("event loop wedged on a dead socket notifier, %d restarts already: quitting", restarts)
+    finally:
+        with contextlib.suppress(OSError, ValueError):
+            sys.stderr.flush()
+        os._exit(1)
+
+
+def stop_children(wait_s=1.0):
+    pids = set()
+    with contextlib.suppress(OSError):
+        for task in Path("/proc/self/task").iterdir():
+            with contextlib.suppress(OSError):
+                pids.update(int(pid) for pid in (task / "children").read_text().split())
+    for pid in pids:
+        with contextlib.suppress(OSError):
+            os.kill(pid, signal.SIGKILL)
+    deadline = time.monotonic() + wait_s
+    while pids and time.monotonic() < deadline:
+        for pid in list(pids):
+            try:
+                done, _ = os.waitpid(pid, os.WNOHANG)
+            except ChildProcessError:
+                done = pid
+            if done:
+                pids.discard(pid)
+        time.sleep(0.01)
+
+
+def launcher_argv(argv):
     # argv[0] is the installed launcher: on Nix a compiled wrapper, not a script for the interpreter.
     launcher = shutil.which(sys.argv[0])
     launcher = [launcher] if launcher else [sys.executable, sys.argv[0]]
@@ -103,7 +185,11 @@ def gamescope_argv(command, argv):
     libs = os.environ.get("LD_LIBRARY_PATH")
     if libs:
         launcher = [shutil.which("env") or "env", f"LD_LIBRARY_PATH={libs}", *launcher]
-    return [*command, "--", *launcher, *argv]
+    return [*launcher, *argv]
+
+
+def gamescope_argv(command, argv):
+    return [*command, "--", *launcher_argv(argv)]
 
 
 def run_in_gamescope(command, argv, ready_s=READY_S):
@@ -204,6 +290,7 @@ def run(argv=None):
     if nested:
         # gamescope unsets WAYLAND_DISPLAY; a platform list naming wayland first would still try it.
         os.environ["QT_QPA_PLATFORM"] = "xcb"
+    restart_when_wedged(argv)
     app = QGuiApplication(sys.argv[:1])
     if app.platformName() == "xcb":
         exit_with_the_display()

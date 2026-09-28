@@ -1,5 +1,6 @@
 import os
 import sys
+from pathlib import Path
 
 import pytest
 from PySide6 import QtGui
@@ -144,3 +145,68 @@ def test_a_lost_display_ends_the_process_at_once_from_any_thread(monkeypatch):
     assert installed == host._io_error_handlers and len(installed) == 1, "set once, the callback kept alive by the module"
     installed[0](None)
     assert exits == [0], "no exit(): no destructors run on the thread that hit the error"
+
+
+WEDGE = """
+import os, subprocess, sys
+sys.argv[0] = {relaunch!r}
+from universe_ui import host
+from PySide6.QtCore import QCoreApplication, QSocketNotifier, QThread, QTimer
+host.restart_when_wedged(["--theme", "switch2"])
+app = QCoreApplication([])
+child = subprocess.Popen(["sleep", "30"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+print("child", child.pid, flush=True)
+reader, writer = os.pipe()
+notifier = QSocketNotifier(reader, QSocketNotifier.Type.Read)
+
+class Stale(QThread):
+    def run(self):
+        notifier.setEnabled(False)
+        os.close(reader)
+
+stale = Stale()
+QTimer.singleShot(0, stale.start)
+QTimer.singleShot(5000, lambda: (print("still here", flush=True), app.quit()))
+app.exec()
+"""
+
+
+def run_script(tmp_path, script):
+    import subprocess
+
+    relaunch = tmp_path / "universe-ui"
+    relaunch.write_text('#!/bin/sh\necho "relaunched $$ $* $UNIVERSE_UI_RESTARTS"\n')
+    relaunch.chmod(0o755)
+    env = {**os.environ, "QT_QPA_PLATFORM": "offscreen", "PYTHONPATH": os.pathsep.join(sys.path)}
+    env.pop(host.RESTARTS_ENV, None)
+    proc = subprocess.Popen([sys.executable, "-c", script.format(relaunch=str(relaunch))], env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    out, err = proc.communicate(timeout=20)
+    return proc.pid, out, err, int(out.split()[out.split().index("child") + 1])
+
+
+def test_a_loop_wedged_on_a_dead_notifier_restarts_in_place(tmp_path):
+    pid, out, err, child = run_script(tmp_path, WEDGE)
+    assert out.rstrip().endswith(f"relaunched {pid} --theme switch2 1"), "the same process, the same arguments, one restart counted\n" + out + err
+    assert "Socket notifiers cannot be enabled or disabled from another thread" in err and "libQt6Core" in err, (
+        "the thread that left the notifier behind is logged with its native stack"
+    )
+    assert not Path(f"/proc/{child}").exists(), "the old image's children are killed and reaped, not left as zombies of the new one"
+
+
+def test_a_dead_socket_its_notifier_still_owns_is_no_wedge(tmp_path):
+    healed = WEDGE.replace("QTimer.singleShot(0, stale.start)", "QTimer.singleShot(0, lambda: os.close(reader))").replace("5000", "500")
+    _, out, err, child = run_script(tmp_path, healed)
+    os.kill(child, 9)
+    assert err.count("QSocketNotifier: Invalid socket") == 1 and "still here" in out and "relaunched" not in out, (
+        "Qt disables it on the owning thread and the loop carries on\n" + out + err
+    )
+
+
+def test_a_loop_that_keeps_wedging_quits_instead_of_restarting(monkeypatch):
+    monkeypatch.setenv(host.RESTARTS_ENV, str(host.MAX_RESTARTS))
+    exits, execs = [], []
+    monkeypatch.setattr(os, "_exit", exits.append)
+    monkeypatch.setattr(os, "execvp", lambda *a: execs.append(a))
+    monkeypatch.setattr(host, "stop_children", lambda: pytest.fail("a run that quits kills nothing on the way"))
+    host.relaunch([])
+    assert exits == [1] and execs == []
