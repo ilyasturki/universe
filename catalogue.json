@@ -49,6 +49,28 @@
    "kind": "emulator",
    "name": "Azahar"
   },
+  "butler": {
+   "bin": "butler",
+   "builds": [
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "zip",
+       "sha256": "4f2a3f22b12f870923504d4b6935535cad377b45859f5fe9419e3adc0611a48c",
+       "size": 10229769,
+       "url": "https://broth.itch.zone/butler/linux-amd64/15.31.0/archive/default"
+      }
+     ],
+     "channel": "stable",
+     "date": "",
+     "version": "15.31.0"
+    }
+   ],
+   "homepage": "https://itch.io/docs/butler/",
+   "kind": "tool",
+   "name": "butler"
+  },
   "cemu": {
    "builds": [
     {
@@ -510,6 +532,42 @@
    "kind": "tool",
    "name": "heroic-gogdl"
   },
+  "legendary": {
+   "bin": "legendary",
+   "builds": [
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "binary",
+       "sha256": "dbed33bbe96031e65858233e4badf0a1d401bb6cb0cc995d1237cf3a0c826a45",
+       "size": 3093622,
+       "url": "https://github.com/legendary-gl/legendary/releases/download/0.21.1/legendary_linux_x64"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-09-08T21:07:05Z",
+     "version": "0.21.1"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "binary",
+       "sha256": "c83d1595a9e2cbae4e66b69ecaa1f8649da99b617a72f93312d342e6a5a799c7",
+       "size": 14022624,
+       "url": "https://github.com/legendary-gl/legendary/releases/download/0.21.0/legendary_linux_x64"
+      }
+     ],
+     "channel": "stable",
+     "date": "2026-08-04T17:29:09Z",
+     "version": "0.21.0"
+    }
+   ],
+   "homepage": "https://github.com/legendary-gl/legendary",
+   "kind": "tool",
+   "name": "legendary-gl"
+  },
   "melonds": {
    "builds": [
     {
@@ -884,6 +942,20 @@
       {
        "arch": "x86_64",
        "format": "appimage",
+       "sha256": "3c4a963a2502bd3bc312518177a4f3570fe4d68efb55322da8c7eac44477c766",
+       "size": 94038511,
+       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-105c4988f02d0845aacb25e7b06d026130a76dee/rpcs3-v0.0.42-20073-105c4988_linux64.AppImage"
+      }
+     ],
+     "channel": "rolling",
+     "date": "2026-09-28T10:37:48Z",
+     "version": "0.0.42-20073-105c4988"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "appimage",
        "sha256": "e4cfefe4c6cbc7e44b523cfa2d181236449d5664ffd0c1786a68d81054a5e02e",
        "size": 93989924,
        "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-3fa07db78b44f8705d1ee8cd3f41b42bad725bf7/rpcs3-v0.0.42-20069-3fa07db7_linux64.AppImage"
@@ -1250,6 +1322,6 @@
    "name": "xemu"
   }
  },
- "generated_at": "2026-09-27T18:57:28Z",
+ "generated_at": "2026-09-28T11:49:27Z",
  "schema": 1
 }
