@@ -659,7 +659,7 @@ FocusScope {
             message: ask.message,
             detail: ask.detail,
             buttons: [ask.no, ask.yes],
-            danger: action === "rollback" || action.indexOf("remove:") === 0 ? 1 : -1
+            danger: action === "rollback" || action === "uninstall" || action.indexOf("remove:") === 0 ? 1 : -1
         }, function (i) {
             if (i === 1)
                 Sound.play(components.act(index, action) ? "ok" : "edge");

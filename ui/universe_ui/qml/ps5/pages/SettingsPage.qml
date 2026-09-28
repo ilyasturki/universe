@@ -24,6 +24,9 @@ FocusScope {
     readonly property var components: api.screens.components
     readonly property var sources: api.screens.sources
     readonly property var listForm: sectionId === "modules" ? modulesForm : sectionId === "sources" ? sourceList : null
+    readonly property bool componentsBar: sectionId !== "artwork" && components.job != null && (sectionId === "components" || sources.job == null)
+    // X on a section where it has no other use.
+    readonly property bool canHideJob: componentsBar && listForm === null && sectionId !== "launch"
 
     readonly property var artworkOverview: api.screens.artworkOverview
     readonly property var artJob: artworkOverview.job
@@ -126,6 +129,11 @@ FocusScope {
             out.push({
                 glyph: "X",
                 label: "Remove"
+            });
+        else if (canHideJob)
+            out.push({
+                glyph: "X",
+                label: "Hide progress"
             });
         out.push({
             glyph: "B",
@@ -694,7 +702,7 @@ FocusScope {
             message: ask.message,
             detail: ask.detail,
             buttons: [ask.no, ask.yes],
-            danger: action === "rollback" || action.indexOf("remove:") === 0 ? 1 : -1
+            danger: action === "rollback" || action === "uninstall" || action.indexOf("remove:") === 0 ? 1 : -1
         }, function (i) {
             if (i === 1)
                 Sound.play(components.act(index, action) ? "ok" : "edge");
@@ -787,7 +795,15 @@ FocusScope {
         } else if (api.keys.isDetails(event) && page.sectionId === "launch") {
             event.accepted = true;
             page.removeEntry();
+        } else if (api.keys.isDetails(event) && page.canHideJob) {
+            event.accepted = true;
+            page.hideJob();
         }
+    }
+
+    function hideJob() {
+        Sound.play("select");
+        components.hideJob();
     }
 
     Backdrop {
@@ -901,7 +917,9 @@ FocusScope {
             x: rows.x
             y: sectionTitle.height + Theme.dp(24)
             width: rows.width
-            job: page.sectionId === "artwork" ? page.artJob : page.sectionId === "components" && page.components.job ? page.components.job : page.sources.job || page.components.job
+            job: page.sectionId === "artwork" ? page.artJob : page.componentsBar ? page.components.job : page.sources.job
+            closable: page.componentsBar
+            onCloseRequested: page.hideJob()
         }
 
         SettingsRows {

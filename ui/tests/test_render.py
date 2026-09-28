@@ -562,6 +562,12 @@ def test_the_component_bar_hides_in_both_looks_and_the_job_goes_on(api, fake):
     pump(150)
     assert hidden(page), "so does a tap on its ×"
     wait_for(fake.jobFinished, 5000)
+    pump(300)
+    xemu = next(i for i, r in enumerate(form.rows) if r.get("component") == "xemu" and r["key"] == "component")
+    QMetaObject.invokeMethod(page, "componentAction", Q_ARG("QVariant", xemu), Q_ARG("QVariant", "uninstall"))
+    pump(300)
+    dialog = root.findChild(QObject, "dialog")
+    assert dialog.property("message") == "Uninstall xemu?" and dialog.property("dangerIndex") == 1, "Uninstall is the red button"
     window.close()
     pump(50)
 

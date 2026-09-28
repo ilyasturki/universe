@@ -816,8 +816,9 @@ does it: an install or an update is a client job
 the same bar), an install from a proposal over a system build switches to it (`use:latest`) once
 in, a finished job toasts through `message`. `hideJob()` takes the bar away, running or finished,
 until the next job: the row keeps its progress and Cancel, the end still toasts. Reprise hides it
-with the bar's × or More's Hide progress, Switch 2 with its ×; Y (Reprise) and X (Switch 2) do it
-straight away on a section that gives them nothing else to do. `pending` counts the updates and proposals: Reprise's
+with the bar's × or More's Hide progress, Switch 2 and PS5 with theirs; Y (Reprise) and X (Switch
+2, PS5) do it straight away on a section that gives them nothing else to do.
+`pending` counts the updates and proposals: Reprise's
 sidebar badge, the section's detail in Switch 2 and PS5. `busyOn(id)` and `needed()` (the missing runners the
 library needs) serve the first-run page. A failed launch whose runner is missing and offered
 (`launchFailed`) emits `installProposed(gameId, id, name, version)`: every root asks "Install … to

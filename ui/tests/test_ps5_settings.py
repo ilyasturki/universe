@@ -211,6 +211,46 @@ def test_settings_components_part_by_kind_and_a_opens_the_options(ps5, api):
     assert warnings == []
 
 
+def test_the_component_bar_hides_by_x_or_its_cross_and_uninstall_asks_in_red(ps5, api, fake):
+    from PySide6.QtCore import QPointF
+
+    from universe_ui import gamepad
+
+    window, root, warnings = ps5
+    page = push(window, root, "pages/SettingsPage.qml", {"section": "components"})
+    form = api.screens.components
+    settle(form)
+    pump(100)
+
+    def row_of(ident):
+        return next(i for i, r in enumerate(form.rows) if r.get("component") == ident and r["key"] == "component")
+
+    def hidden():
+        return form.job is None and page.property("componentsBar") is False
+
+    assert form.act(row_of("wine"), "install")
+    pump(50)
+    assert {"glyph": "X", "label": "Hide progress"} in value(page, "hints")
+    click(window, Qt.Key.Key_I)  # X
+    assert hidden(), "X hides it"
+    wait_for(fake.jobFinished, 5000)
+    pump(300)
+    assert form.act(row_of("rpcs3"), "install")
+    pump(50)
+    closer = page.findChild(QQuickItem, "hideJob")
+    p = closer.mapToScene(QPointF(closer.width() / 2, closer.height() / 2))
+    gamepad.touch(window, [(p.x(), p.y())], 0)
+    pump(150)
+    assert hidden(), "so does a tap on its ×"
+    wait_for(fake.jobFinished, 5000)
+    pump(300)
+    QMetaObject.invokeMethod(page, "componentAction", Q_ARG("QVariant", row_of("xemu")), Q_ARG("QVariant", "uninstall"))
+    pump(300)
+    dialog = root.findChild(QObject, "dialog")
+    assert dialog.property("message") == "Uninstall xemu?" and dialog.property("dangerIndex") == 1, "Uninstall is the red button"
+    assert warnings == []
+
+
 def test_a_doctor_check_an_install_fixes_asks_then_installs(ps5, api, fake):
     window, root, warnings = ps5
     fake.addGame("rpcs3", "/games/Demons Souls/PS3_GAME/USRDIR/EBOOT.BIN", "Demons Souls")
