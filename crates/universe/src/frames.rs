@@ -15,7 +15,6 @@ pub const THUMB: usize = 3;
 const WIDTH: u32 = 640;
 // A 4K AV1 frame takes 0.4 s and 180 MB through VAAPI, 1 s, 2.4 s of CPU and 630 MB in software.
 const WORKERS: usize = 2;
-const VAAPI_DEVICE: &str = "/dev/dri/renderD128";
 
 /// `$XDG_CACHE_HOME/universe/frames/<sha1 of the path>/`: the Qt host keeps its frames there too.
 pub fn dir(recording: &Path) -> PathBuf {
@@ -32,12 +31,12 @@ pub fn at(index: usize, duration_s: f64) -> f64 {
     (index as f64 + 0.5) / COUNT as f64 * duration_s
 }
 
-fn ffmpeg_args(recording: &Path, seconds: f64, out: &Path, hw: bool) -> Vec<String> {
+fn ffmpeg_args(recording: &Path, seconds: f64, out: &Path, vaapi: Option<&str>) -> Vec<String> {
     let mut args: Vec<String> = ["-loglevel", "error", "-y"].map(String::from).into();
-    if hw {
-        args.extend(["-hwaccel", "vaapi", "-hwaccel_device", VAAPI_DEVICE, "-hwaccel_output_format", "vaapi"].map(String::from));
+    if let Some(device) = vaapi {
+        args.extend(["-hwaccel", "vaapi", "-hwaccel_device", device, "-hwaccel_output_format", "vaapi"].map(String::from));
     }
-    let scale = if hw { format!("scale_vaapi=w={WIDTH}:h=-2:format=nv12,hwdownload,format=nv12") } else { format!("scale={WIDTH}:-2") };
+    let scale = if vaapi.is_some() { format!("scale_vaapi=w={WIDTH}:h=-2:format=nv12,hwdownload,format=nv12") } else { format!("scale={WIDTH}:-2") };
     args.extend(["-ss".into(), format!("{seconds:.3}"), "-i".into(), recording.to_string_lossy().into_owned()]);
     args.extend(["-frames:v".into(), "1".into(), "-vf".into(), scale, "-q:v".into(), "4".into(), out.to_string_lossy().into_owned()]);
     args
@@ -80,6 +79,7 @@ impl Frames {
             set: JoinSet::new(),
             durations: HashMap::new(),
             hw: None,
+            vaapi: crate::gpu::detected().and_then(|g| g.vaapi.clone()),
             ffmpeg: crate::runners::on_path("ffmpeg"),
             landed,
         };
@@ -115,6 +115,7 @@ struct Worker {
     durations: HashMap<PathBuf, f64>,
     /// Whether VAAPI decodes here: unknown until a frame comes through it or the first one fails.
     hw: Option<bool>,
+    vaapi: Option<String>,
     ffmpeg: Option<PathBuf>,
     landed: mpsc::UnboundedSender<Landed>,
 }
@@ -192,8 +193,8 @@ impl Worker {
             if self.running.contains_key(&job) || duration <= 0.0 || !job.recording.is_file() || file(&job.recording, job.index).is_file() {
                 continue;
             }
-            let hw = self.hw != Some(false);
-            let handle = self.set.spawn(extract(ffmpeg.clone(), job.clone(), at(job.index, duration), hw));
+            let vaapi = self.vaapi.clone().filter(|_| self.hw != Some(false));
+            let handle = self.set.spawn(extract(ffmpeg.clone(), job.clone(), at(job.index, duration), vaapi));
             self.running.insert(job, handle);
         }
     }
@@ -216,14 +217,14 @@ impl Worker {
 }
 
 /// Written under a dot name and renamed into place: a killed extraction leaves no frame that looks whole.
-async fn extract(ffmpeg: PathBuf, job: Job, seconds: f64, hw: bool) -> (Job, bool, bool) {
+async fn extract(ffmpeg: PathBuf, job: Job, seconds: f64, vaapi: Option<String>) -> (Job, bool, bool) {
     let out = file(&job.recording, job.index);
     let part = out.with_file_name(format!(".{:02}.jpg", job.index));
     if let Some(parent) = out.parent() {
         let _ = std::fs::create_dir_all(parent);
     }
     let status = tokio::process::Command::new(ffmpeg)
-        .args(ffmpeg_args(&job.recording, seconds, &part, hw))
+        .args(ffmpeg_args(&job.recording, seconds, &part, vaapi.as_deref()))
         .stdin(Stdio::null())
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -234,7 +235,7 @@ async fn extract(ffmpeg: PathBuf, job: Job, seconds: f64, hw: bool) -> (Job, boo
     if !ok {
         let _ = std::fs::remove_file(&part);
     }
-    (job, ok, hw)
+    (job, ok, vaapi.is_some())
 }
 
 #[cfg(test)]

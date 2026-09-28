@@ -47,6 +47,8 @@ pub struct Gpu {
     pub name: String,
     pub rdna: Option<u8>,
     pub label: String,
+    /// The render node VAAPI decodes on: the strongest card not on NVIDIA's own driver, which ships no VAAPI.
+    pub vaapi: Option<String>,
 }
 
 impl Gpu {
@@ -56,7 +58,7 @@ impl Gpu {
             Some(r) => format!("{name} · RDNA {r}"),
             None => name.clone(),
         };
-        Gpu { vendor, name, rdna, label }
+        Gpu { vendor, name, rdna, label, vaapi: None }
     }
 
     /// `None` for a key that is not an upscaler upgrade.
@@ -110,6 +112,8 @@ struct Card {
     slot: String,
     driver: String,
     boot_vga: bool,
+    /// `renderD129`
+    render: String,
 }
 
 impl Card {
@@ -160,22 +164,34 @@ fn cards(drm: &Path) -> Vec<Card> {
                 slot: link_name(&dev),
                 driver: link_name(&dev.join("driver")),
                 boot_vga: read_u64(&dev.join("boot_vga")) == Some(1),
+                render: std::fs::read_dir(dev.join("drm"))
+                    .into_iter()
+                    .flatten()
+                    .flatten()
+                    .map(|e| e.file_name().to_string_lossy().into_owned())
+                    .find(|n| n.starts_with("renderD"))
+                    .unwrap_or_default(),
             })
         })
         .collect()
 }
 
+fn strongest<'a>(cards: impl Iterator<Item = &'a Card>) -> Option<&'a Card> {
+    cards.filter(|c| c.vendor.is_some()).min_by_key(|c| std::cmp::Reverse(c.rank()))
+}
+
 fn pick(cards: Vec<Card>) -> Option<Gpu> {
-    let card = cards.into_iter().filter(|c| c.vendor.is_some()).min_by_key(|c| std::cmp::Reverse(c.rank()))?;
+    let card = strongest(cards.iter())?;
     let vendor = card.vendor?;
     let rdna = if vendor == Vendor::Amd { card.gc.and_then(|(a, b)| rdna_of(a, b)) } else { None };
-    Some(Gpu::new(vendor, rdna))
+    let decoder = strongest(cards.iter().filter(|c| c.driver != "nvidia" && !c.render.is_empty()));
+    Some(Gpu { vaapi: decoder.map(|c| format!("/dev/dri/{}", c.render)), ..Gpu::new(vendor, rdna) })
 }
 
 /// Mesa and NVIDIA's own driver render on the firmware's display GPU (`boot_vga`) unless told otherwise.
 fn offload_of(cards: &[Card]) -> Option<Offload> {
     let display = cards.iter().find(|c| c.boot_vga)?;
-    let best = cards.iter().filter(|c| c.vendor.is_some()).min_by_key(|c| std::cmp::Reverse(c.rank()))?;
+    let best = strongest(cards.iter())?;
     if best.rank() <= display.rank() || best.slot.is_empty() {
         return None;
     }
@@ -224,9 +240,13 @@ mod tests {
         card(dir.path(), "card0", "0x1002", Some("536870912"), Some(("10", "3")));
         card(dir.path(), "card1", "0x1002", Some("17163091968"), Some(("11", "0")));
         std::fs::create_dir_all(dir.path().join("card1-DP-1")).unwrap();
+        for (n, render) in [("card0", "renderD128"), ("card1", "renderD129")] {
+            std::fs::create_dir_all(dir.path().join(n).join("device/drm").join(render)).unwrap();
+        }
         let cards = cards(dir.path());
         assert_eq!(cards.len(), 2, "connectors are not cards");
         let g = pick(cards).unwrap();
+        assert_eq!(g.vaapi.as_deref(), Some("/dev/dri/renderD129"), "the strongest card decodes, whatever renderD128 is this boot");
         assert_eq!((g.vendor, g.rdna), (Vendor::Amd, Some(3)));
         assert_eq!(g.label, "AMD · RDNA 3");
         assert_eq!(g.to_json()["fits"], serde_json::json!({ "dlss_upgrade": false, "fsr4_upgrade": true, "xess_upgrade": true, "optiscaler": true }));
@@ -239,7 +259,13 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         card(dir.path(), "card0", "0x8086", None, None);
         card(dir.path(), "card1", "0x10de", None, None);
+        assert_eq!(pick(cards(dir.path())).unwrap().vaapi, None, "no render node, no VAAPI");
+        for (n, render) in [("card0", "renderD129"), ("card1", "renderD128")] {
+            std::fs::create_dir_all(dir.path().join(n).join("device/drm").join(render)).unwrap();
+        }
+        std::os::unix::fs::symlink(dir.path().join("nvidia"), dir.path().join("card1/device/driver")).unwrap();
         let g = pick(cards(dir.path())).unwrap();
+        assert_eq!(g.vaapi.as_deref(), Some("/dev/dri/renderD129"), "NVIDIA's own driver has no VAAPI: the iGPU decodes");
         assert_eq!((g.vendor, g.rdna, g.label.as_str()), (Vendor::Nvidia, None, "NVIDIA"));
         assert_eq!(g.to_json()["fits"], serde_json::json!({ "dlss_upgrade": true, "fsr4_upgrade": false, "xess_upgrade": true, "optiscaler": false }));
         let rdna4 = Gpu::new(Vendor::Amd, Some(4));

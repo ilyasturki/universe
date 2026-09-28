@@ -47,7 +47,6 @@ FRAME_WIDTH = 640
 # The frame standing for the recording: about a fifth in, past the launch and the menus.
 THUMB = 3
 WORKERS = 2
-VAAPI_DEVICE = "/dev/dri/renderD128"
 # The core makes thumbnails in the background; the lists look for them this often while any is missing.
 THUMB_POLL_MS = 400
 # One watch event emits libraryChanged, recordingFiled and entryWritten in a row: one reload serves them.
@@ -131,6 +130,7 @@ class RecordingsList(QObject):
         self._all = False
         # None until the first frame says whether the GPU decodes: VAAPI takes a quarter of the time and memory.
         self._hw = None
+        self._vaapi = (client.gpu() or {}).get("vaapi")
         client.recordingFiled.connect(lambda session, ident, path: self.loadAll() if self._all else ident == self._game_id and self.load(ident))
 
     @Slot(str)
@@ -248,9 +248,9 @@ class RecordingsList(QObject):
             frames = self._frames.get(job[0])
             if job in self._running or frames is None or frames.duration <= 0 or not os.path.exists(frames.path):
                 continue
-            self._extract(job, frames, self._hw is not False)
+            self._extract(job, frames, self._vaapi if self._hw is not False else None)
 
-    def _extract(self, job, frames, hw):
+    def _extract(self, job, frames, vaapi):
         ffmpeg = shutil.which("ffmpeg")
         if not ffmpeg:
             return
@@ -258,8 +258,8 @@ class RecordingsList(QObject):
         os.makedirs(frames.dir, exist_ok=True)
         proc = QProcess(self)
         self._running[job] = proc
-        proc.finished.connect(lambda code, status: self._extracted(job, proc, code, hw))
-        proc.start(ffmpeg, _ffmpeg_args(frames.path, frames.seconds(index), frames.file(index), hw))
+        proc.finished.connect(lambda code, status: self._extracted(job, proc, code, vaapi is not None))
+        proc.start(ffmpeg, _ffmpeg_args(frames.path, frames.seconds(index), frames.file(index), vaapi))
 
     def _extracted(self, job, proc, code, hw):
         self._finish(job, proc)
@@ -324,14 +324,14 @@ class RecordingsList(QObject):
     count = Property(int, lambda self: len(self._rows), notify=rowsChanged)
     frameMap = Property(dict, _frame_map, notify=framesChanged)
     gameId = Property(str, lambda self: self._game_id, notify=gameIdChanged)
-    hardware = Property(bool, lambda self: self._hw is not False, notify=framesChanged)
+    hardware = Property(bool, lambda self: self._vaapi is not None and self._hw is not False, notify=framesChanged)
 
 
-def _ffmpeg_args(path, seconds, out, hw):
+def _ffmpeg_args(path, seconds, out, vaapi):
     head = ["-loglevel", "error", "-y"]
-    if hw:
-        head += ["-hwaccel", "vaapi", "-hwaccel_device", VAAPI_DEVICE, "-hwaccel_output_format", "vaapi"]
-    scale = f"scale_vaapi=w={FRAME_WIDTH}:h=-2:format=nv12,hwdownload,format=nv12" if hw else f"scale={FRAME_WIDTH}:-2"
+    if vaapi:
+        head += ["-hwaccel", "vaapi", "-hwaccel_device", vaapi, "-hwaccel_output_format", "vaapi"]
+    scale = f"scale_vaapi=w={FRAME_WIDTH}:h=-2:format=nv12,hwdownload,format=nv12" if vaapi else f"scale={FRAME_WIDTH}:-2"
     return [*head, "-ss", f"{seconds:.3f}", "-i", path, "-frames:v", "1", "-vf", scale, "-q:v", "4", out]
 
 

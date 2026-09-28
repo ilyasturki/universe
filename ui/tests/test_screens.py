@@ -955,7 +955,7 @@ def test_selecting_a_recording_drops_the_frames_another_was_waiting_for(api, mon
     recordings = api.screens.recordings
     started = []
 
-    def extract(self, job, frames, hw):
+    def extract(self, job, frames, vaapi):
         started.append(job)
         self._running[job] = None
 
@@ -976,15 +976,15 @@ def test_selecting_a_recording_drops_the_frames_another_was_waiting_for(api, mon
     assert started == [(second, 0), (second, 1), (first, 0), (first, 1)], "the other session's running frames are stopped, the picked one starts at once"
     others = [j for j in recordings._queue if j[0] != first]
     assert others == [(second, media.THUMB)], "the other session's frames are dropped, its thumbnail stays"
-    assert media._ffmpeg_args("/r.mkv", 1.5, "/out.jpg", True)[3:9] == [
+    assert media._ffmpeg_args("/r.mkv", 1.5, "/out.jpg", "/dev/dri/renderD129")[3:9] == [
         "-hwaccel",
         "vaapi",
         "-hwaccel_device",
-        media.VAAPI_DEVICE,
+        "/dev/dri/renderD129",
         "-hwaccel_output_format",
         "vaapi",
     ]
-    assert "scale=640:-2" in media._ffmpeg_args("/r.mkv", 1.5, "/out.jpg", False)
+    assert "scale=640:-2" in media._ffmpeg_args("/r.mkv", 1.5, "/out.jpg", None)
     recordings._running.clear()
     recordings._queue.clear()
 
