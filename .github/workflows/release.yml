@@ -38,6 +38,10 @@ jobs:
     needs: [notes, desktop]
     runs-on: ubuntu-latest
     container: ubuntu:22.04
+    # a container's default shell is sh, dash on ubuntu
+    defaults:
+      run:
+        shell: bash
     steps:
       - run: apt-get update -q && apt-get install -qy --no-install-recommends build-essential ca-certificates curl git scdoc > /dev/null
       - uses: actions/checkout@v7
