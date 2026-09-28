@@ -7,7 +7,7 @@
 
 <p align="center">A game launcher for Linux you drive with a controller, from the couch or on a Steam Deck.</p>
 
-<p align="center"><img src="docs/images/home.webp" alt="Browsing the home row with a controller" width="100%"></p>
+<p align="center"><img src="docs/images/home.avif" alt="Browsing the home row with a controller" width="100%"></p>
 
 Your GOG, Steam, Epic, itch.io, Lutris and emulated games in one library, each launched in gamescope with the runner it needs.
 
