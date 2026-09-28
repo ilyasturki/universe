@@ -9,14 +9,14 @@
 
 <p align="center"><img src="docs/images/home.webp" alt="Browsing the home row with a controller" width="100%"></p>
 
-Your GOG, Lutris and emulated games in one library, each launched in gamescope with the runner it needs.
+Your GOG, Steam, Epic, itch.io, Lutris and emulated games in one library, each launched in gamescope with the runner it needs.
 
 > [!WARNING]
 > Early days (0.0.x). I use it every day, but expect rough edges. Issues are welcome.
 
 ## Your whole library
 
-GOG installs and updates, your Lutris games with their play time, the ROM folders your emulators already know.
+GOG, Steam, Epic and itch.io installs and updates, your Lutris games with their play time, the ROM folders your emulators already know.
 
 ![The library grid](docs/images/library.jpg)
 
@@ -26,9 +26,9 @@ Art, screenshots, play time, achievements.
 
 ![A game page](docs/images/game.jpg)
 
-## Two looks
+## Three looks
 
-Reprise, a port of my [Pegasus theme](https://github.com/ilyasturki/pegasus-theme-reprise), or a Switch 2 style HOME menu. Switch live from the settings.
+Reprise, a port of my [Pegasus theme](https://github.com/ilyasturki/pegasus-theme-reprise), a Switch 2 style HOME menu, or a PS5 style home. Switch live from the settings.
 
 ![The Switch 2 look](docs/images/switch2.jpg)
 
@@ -36,8 +36,13 @@ Reprise, a port of my [Pegasus theme](https://github.com/ilyasturki/pegasus-them
 
 - HOME over a running game: pause, screenshot, MangoHud, volume, quit.
 - Opt-in session recording; recordings and screenshots land in the Media tab.
-- Pad, keyboard, mouse or touch, with a guided button setup.
+- Pad, keyboard, mouse or touch, with a guided button setup; each emulator gets its own pad per player.
+- Achievements, with unlock banners in game.
+- Runner builds and tools installed, updated and rolled back from the settings.
 - Steam Deck controls, and it runs inside Steam's Game Mode.
+- Hold B for the power menu: suspend, reboot, power off.
+- Runs on GNOME, KDE, Cinnamon, Sway, Hyprland, Niri or X11.
+- Universe Desktop, a GTK app for mouse and keyboard, with a GNOME search provider for your games.
 - A `universe` CLI for everything the UI does.
 
 ## Install
@@ -60,7 +65,7 @@ cd universe
 
 `./install.sh --uninstall` removes it and keeps your config, library and recordings.
 
-**Nix** (flake): the Home Manager module installs the CLI, the UI and the GNOME Shell extension; the NixOS module sets up the system side (gpu-screen-recorder, uinput and udev rules for pads, gamescope).
+**Nix** (flake): the Home Manager module installs the CLI, the UI, Universe Desktop and the GNOME Shell extension; the NixOS module sets up the system side (gpu-screen-recorder, uinput and udev rules for pads, gamescope).
 
 ```nix
 # flake.nix
@@ -77,7 +82,7 @@ programs.universe.enable = true;
 
 ## First run
 
-Open **Universe** from your app menu. With an empty library it imports what it finds, installs the runners it needs and signs you in to GOG.
+Open **Universe** from your app menu. With an empty library it imports what it finds, adopts your Steam, Epic and itch.io installs, installs the runners it needs and signs you in to your stores.
 
 ## Docs
 

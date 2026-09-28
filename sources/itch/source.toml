@@ -1,7 +1,7 @@
 api = 2
 id = "itch"
 name = "itch.io"
-version = "0.0.6"
+version = "0.0.7"
 description = "Installs and updates the games you own on itch.io through butler, and adopts the itch app's installs."
 exe = "bin/source"
 capabilities = ["uninstall"]
