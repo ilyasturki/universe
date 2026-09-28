@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.0.8]
+
+### Fixed
+
+- The prebuilt release (`universe-x86_64-linux.tar.gz`) and the `universe-bin` AUR package, both missing from 0.0.7.
+
 ## [0.0.7]
 
 ### Breaking
