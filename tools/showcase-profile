@@ -23,12 +23,12 @@ def library(src: Path) -> list[dict]:
     return json.loads(out.stdout)
 
 
-def refusal(game: dict) -> str | None:
+def refusal(game: dict, emulated: bool) -> str | None:
     if game.get("hidden") or game.get("removed"):
         return "hidden"
     if (game.get("source") or {}).get("kind") == "manual":
         return "added by hand"
-    if (game.get("effective") or {}).get("runner_kind") == "emulator":
+    if not emulated and (game.get("effective") or {}).get("runner_kind") == "emulator":
         return "emulated"
     media = game.get("media") or {}
     missing = [k for k in ART if not (media.get(k) and Path(media[k]).is_file())]
@@ -52,11 +52,12 @@ def copy_game(src_dir: Path, dest_dir: Path) -> None:
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Build DEST, a dev profile for screenshots and recordings, from SRC's games: "
-        "PC games with every artwork (box, tile, background, logo), none hidden, emulated or added by hand. "
+        "PC games with every artwork (box, tile, background, logo), none hidden or added by hand, emulated ones only with --emulated. "
         "DEST is rebuilt from scratch."
     )
     parser.add_argument("src", type=Path)
     parser.add_argument("dest", type=Path)
+    parser.add_argument("--emulated", action="store_true", help="keep emulated games that have every artwork")
     args = parser.parse_args()
     src, dest = args.src.resolve(), args.dest.resolve()
     if not dest.name.startswith(".dev-") or dest == src or dest.is_relative_to(src) or src.is_relative_to(dest):
@@ -64,7 +65,7 @@ def main() -> int:
 
     kept, dropped = [], []
     for game in library(src):
-        reason = refusal(game)
+        reason = refusal(game, args.emulated)
         (dropped if reason else kept).append((game, reason))
 
     if dest.exists():
