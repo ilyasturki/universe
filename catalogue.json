@@ -942,6 +942,20 @@
       {
        "arch": "x86_64",
        "format": "appimage",
+       "sha256": "252156a9c4f6d35d040b095bbad119371584f9cca3fc064eecf81ad6f91ff320",
+       "size": 94048176,
+       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-d9a72d6ca7537e798a9d822ed4ef9f90567a3708/rpcs3-v0.0.42-20081-d9a72d6c_linux64.AppImage"
+      }
+     ],
+     "channel": "rolling",
+     "date": "2026-09-29T10:41:29Z",
+     "version": "0.0.42-20081-d9a72d6c"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "appimage",
        "sha256": "3c4a963a2502bd3bc312518177a4f3570fe4d68efb55322da8c7eac44477c766",
        "size": 94038511,
        "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-105c4988f02d0845aacb25e7b06d026130a76dee/rpcs3-v0.0.42-20073-105c4988_linux64.AppImage"
@@ -1322,6 +1336,6 @@
    "name": "xemu"
   }
  },
- "generated_at": "2026-09-28T11:49:27Z",
+ "generated_at": "2026-09-29T11:26:59Z",
  "schema": 1
 }
