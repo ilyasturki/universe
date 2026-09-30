@@ -1,7 +1,7 @@
 api = 2
 id = "gog"
 name = "GOG"
-version = "0.0.8"
+version = "0.0.9"
 description = "Installs and updates the games of your GOG account through gogdl; unlocks their achievements through comet."
 exe = "bin/source"
 capabilities = ["achievements"]

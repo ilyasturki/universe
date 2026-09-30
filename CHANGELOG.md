@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.0.9]
+
+### Added
+
+- `universe doctor` runs the checks a module brings through its new `check` hook. The journal's checks that Codex is signed in when it writes with Codex.
+
+### Changed
+
+- With Advanced hidden, a settings card still shows the advanced settings you changed on it.
+
+### Fixed
+
+- A journal entry that finds Codex signed out waits for `codex login` and is tried again every 15 minutes, without using up one of its tries.
+- Dolphin: a port past your connected pads that was left bound to one is unplugged, so one pad no longer drives two players.
+- Recording thumbnails are decoded on the strongest GPU that has a hardware decoder, not always the first render node, and in software when there is none.
+
 ## [0.0.8]
 
 ### Fixed

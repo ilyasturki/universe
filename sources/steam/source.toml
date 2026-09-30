@@ -1,7 +1,7 @@
 api = 2
 id = "steam"
 name = "Steam"
-version = "0.0.8"
+version = "0.0.9"
 description = "Runs the games of your Steam library itself, with the Steam client in the background; installs them through Steam's window and reads their achievements."
 exe = "bin/source"
 capabilities = ["achievements", "uninstall"]
