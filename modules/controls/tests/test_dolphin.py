@@ -123,6 +123,30 @@ def test_ports_open_for_the_held_pads_only(dolphin):
     assert "[GCPad3]" not in files["GCPadNew.ini"]
 
 
+def test_ports_past_the_held_pads_left_on_a_pad_are_unplugged(dolphin):
+    config, _ = dolphin
+    (config / "Dolphin.ini").write_text(DOLPHIN_INI.replace("SIDevice1 = 0", "SIDevice1 = 6"))
+    (config / "GCPadNew.ini").write_text(GCPAD_INI.replace("XInput2/0/Virtual core pointer", "SDL/0/Xbox Wireless Controller"))
+    (config / "WiimoteNew.ini").write_text(
+        WIIMOTE_INI + "[Wiimote3]\nDevice = SDL/0/Xbox Wireless Controller\nSource = 1\n[Wiimote4]\nDevice = SDL/0/Xbox Wireless Controller\nSource = 2\n"
+    )
+    for platform in ("Nintendo GameCube", "Nintendo Wii"):
+        files = run(Context([XBOX], platform=platform))
+        core = ini_section(files["Dolphin.ini"], "Core")
+        assert [core[f"SIDevice{n}"] for n in range(4)] == ["6", "0", "0", "0"]
+        assert [ini_section(files["WiimoteNew.ini"], f"Wiimote{n}")["Source"] for n in range(1, 5)] == ["1", "0", "0", "2"]
+        assert ini_section(files["GCPadNew.ini"], "GCPad2")["Device"] == "SDL/0/Xbox Wireless Controller", "the bindings wait for a second pad"
+
+
+def test_ports_past_the_held_pads_on_a_keyboard_stay(dolphin):
+    config, _ = dolphin
+    (config / "Dolphin.ini").write_text(DOLPHIN_INI.replace("SIDevice1 = 0", "SIDevice1 = 6"))
+    (config / "WiimoteNew.ini").write_text(WIIMOTE_INI.replace("Source = 0\n[BalanceBoard]", "Source = 1\n[BalanceBoard]"))
+    files = run(Context([XBOX]))
+    assert ini_section(files["Dolphin.ini"], "Core")["SIDevice1"] == "6"
+    assert ini_section(files["WiimoteNew.ini"], "Wiimote2")["Source"] == "1"
+
+
 def test_a_wii_game_leaves_the_gamecube_ports(dolphin):
     files = run(Context([EDGE, XBOX], platform="Nintendo Wii"))
     assert ini_section(files["Dolphin.ini"], "Core")["SIDevice1"] == "0"

@@ -1100,7 +1100,7 @@ emulator's own auto-mapping would, player `n` being the `n`th pad in SDL's order
 |---|---|---|
 | `eden` (and citron, sudachi, suyu, yuzu dirs) | `qt-config.ini [Controls]` | `player_0-7_*`, each with `\default=false`; players past the pads disconnected |
 | `ryujinx` | `Config.json`, `games/*/Config.json` | `input_config` + `player_input_assignments`; a game's own config too unless `use_input_global_config` |
-| `dolphin` | `GCPadNew.ini`, `WiimoteNew.ini`, `Dolphin.ini` | `[GCPadN]`/`[WiimoteN]` on `SDL/<n>/<name>` (calibration and options kept, the extension and `Sideways Wiimote` from `wiimote`), `SIDeviceN`/`Source` 0→on for held pads |
+| `dolphin` | `GCPadNew.ini`, `WiimoteNew.ini`, `Dolphin.ini` | `[GCPadN]`/`[WiimoteN]` on `SDL/<n>/<name>` (calibration and options kept, the extension and `Sideways Wiimote` from `wiimote`), `SIDeviceN`/`Source` 0→on for held pads; a port past them left on an `SDL/` pad (GameCube controller, emulated Wii remote) off, Dolphin binding by pad name |
 | `cemu` | `controllerProfiles/controllerN.xml` | `SDLController` uuid `<n>_<guid>`, Cemu's default mapping; type, rumble and deadzones kept |
 | `azahar` | `azahar-emu/qt-config.ini [Controls]` | the active profile's buttons, sticks and motion |
 | `melonds` | `melonDS.toml` | `Instance0 JoystickID`, `[Instance0.Joystick]`; hotkeys on HOME lose that button |

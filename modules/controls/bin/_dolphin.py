@@ -167,9 +167,13 @@ def _own_profile(section):
     return "".join(["[Profile]\n", *(f"{k} = {v}\n" for k, v in section.items() if k != "Source")])
 
 
+def _bound_to_a_pad(text, section):
+    return ini_section(text, section).get("Device", "").startswith("SDL/")
+
+
 def _on_pad(out, path, device):
     profile = out.get(path) or _read(path)
-    if not ini_section(profile, "Profile").get("Device", "").startswith("SDL/"):
+    if not _bound_to_a_pad(profile, "Profile"):
         return None
     return ini_rewrite(profile, "Profile", {"Device": f"Device = {device}"})
 
@@ -228,6 +232,13 @@ def plan(ctx: Context):
         wiimotes = _section(wiimotes, section, device, keys, defaults)
         if gamecube and core.get(f"SIDevice{n}", GC_CONTROLLER if n == 0 else "0") == "0":
             dolphin = ini_rewrite(dolphin, "Core", {f"SIDevice{n}": f"SIDevice{n} = {GC_CONTROLLER}"})
+    # Dolphin binds by pad name: a port past the held pads still on one is a held pad's second player.
+    for n in range(len(pads), PORTS):
+        section = f"Wiimote{n + 1}"
+        if ini_section(wiimotes, section).get("Source", "1" if n == 0 else "0") == "1" and _bound_to_a_pad(wiimotes, section):
+            wiimotes = ini_rewrite(wiimotes, section, {"Source": "Source = 0"})
+        if core.get(f"SIDevice{n}", GC_CONTROLLER if n == 0 else "0") == GC_CONTROLLER and _bound_to_a_pad(gcpad, f"GCPad{n + 1}"):
+            dolphin = ini_rewrite(dolphin, "Core", {f"SIDevice{n}": f"SIDevice{n} = 0"})
 
     out = {config / "GCPadNew.ini": gcpad, config / "WiimoteNew.ini": wiimotes, config / "Dolphin.ini": dolphin}
     sections = {
