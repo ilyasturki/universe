@@ -9,6 +9,7 @@ bins = ["ffmpeg"]
 
 [hooks]
 post-process = "bin/process"
+check        = "bin/check"
 timeout_s    = 20
 
 [limits]

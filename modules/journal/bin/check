@@ -1,0 +1,30 @@
+#!/usr/bin/env python3
+import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import providers
+from _common import load_settings, setting_str
+
+# doctor waits on this; module.toml's timeout_s is the hard stop.
+PROBE_TIMEOUT_S = 10
+
+
+def main():
+    if setting_str(load_settings(), "provider") != "codex":
+        return 0
+    signed_in, detail = providers.codex_signed_in(PROBE_TIMEOUT_S)
+    line = {
+        "check": "codex-signin",
+        "label": "Codex sign-in",
+        "ok": signed_in is not False,
+        "detail": detail if signed_in is not None else f"not checked: {detail}",
+        "fix": "run codex login in a terminal",
+    }
+    print(json.dumps(line))
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

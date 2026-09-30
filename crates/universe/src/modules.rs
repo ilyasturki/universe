@@ -104,7 +104,7 @@ pub struct Module {
     pub unset: Vec<String>,
 }
 
-pub const HOOKS: [&str; 7] = ["pre-launch", "post-launch", "freeze", "thaw", "session-end", "post-process", "screenshot"];
+pub const HOOKS: [&str; 8] = ["pre-launch", "post-launch", "freeze", "thaw", "session-end", "post-process", "screenshot", "check"];
 
 impl Module {
     pub fn id(&self) -> &str {

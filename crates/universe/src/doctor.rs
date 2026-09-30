@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::config::Config;
 use crate::desktop::Profile;
@@ -20,6 +20,50 @@ pub struct Check {
     pub fix: String,
     pub module: String,
     pub component: String,
+}
+
+/// A line of a module's `check` hook.
+#[derive(Deserialize)]
+struct Reported {
+    check: String,
+    #[serde(default)]
+    label: String,
+    ok: bool,
+    #[serde(default)]
+    detail: String,
+    #[serde(default)]
+    fix: String,
+}
+
+/// What an active module's `check` hook finds, under the module's global settings; a hook that prints none and fails is one failed check.
+async fn module_checks(m: &Module, config: &Config) -> Vec<Check> {
+    let Some(exe) = m.hook("check") else { return Vec::new() };
+    let mut env = crate::modules::HookEnv::default();
+    for (k, v) in crate::core::passthrough_env() {
+        env.set(&k, v);
+    }
+    env.set("MODULE_SETTINGS_JSON", serde_json::Value::Object(m.merged_settings(config, None)).to_string());
+    let check = |check: String, label: String, ok: bool, detail: String, fix: String| Check {
+        label: if label.is_empty() { check.clone() } else { label },
+        check,
+        ok,
+        detail,
+        fix: if ok { String::new() } else { fix },
+        module: m.id().into(),
+        component: String::new(),
+    };
+    let name = if m.manifest.name.is_empty() { m.id() } else { m.manifest.name.as_str() };
+    let failed = |detail: String| vec![check("check".into(), format!("{name} check"), false, detail, format!("run {} by hand to see why", exe.display()))];
+    let out = match crate::modules::run_blocking(&crate::modules::Hooker::Module(m.clone()), "check", &env).await {
+        Ok(out) => out,
+        Err(e) => return failed(e.to_string()),
+    };
+    let found: Vec<Check> =
+        out.stdout.lines().filter_map(|line| serde_json::from_str::<Reported>(line).ok()).map(|r| check(r.check, r.label, r.ok, r.detail, r.fix)).collect();
+    if found.is_empty() && out.status != 0 {
+        return failed(format!("exited {}: {}", out.status, out.stderr.trim().lines().last().unwrap_or("")));
+    }
+    found
 }
 
 fn attach_components(out: &mut [Check], config: &Config, packagekit: bool) {
@@ -449,9 +493,13 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
             "media",
         );
     }
+    let mut reported = Vec::new();
     for m in modules {
         if !m.enabled {
             continue;
+        }
+        if m.active() && !m.needs_setup() {
+            reported.extend(module_checks(m, config).await);
         }
         for b in m.manifest.requires.bins.iter().chain(m.missing.iter()).collect::<std::collections::BTreeSet<_>>() {
             let (ok, detail) = bin(b);
@@ -574,6 +622,69 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         "remove them from [sources] enabled in config.toml, or install them".into(),
         "core",
     );
+    out.extend(reported);
     attach_components(&mut out, config, crate::packagekit::available().await);
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    fn module_with_check(dir: &std::path::Path, script: &str) -> Module {
+        std::fs::create_dir_all(dir.join("bin")).unwrap();
+        let exe = dir.join("bin/check");
+        std::fs::write(&exe, script).unwrap();
+        std::fs::set_permissions(&exe, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let manifest = toml::from_str(
+            r#"
+id = "journal"
+name = "Play journal"
+[hooks]
+check = "bin/check"
+timeout_s = 5
+[[settings]]
+key = "provider"
+type = "enum"
+default = "codex"
+choices = ["codex"]
+"#,
+        )
+        .unwrap();
+        Module { available: true, missing: vec![], unset: vec![], enabled: true, dir: dir.to_path_buf(), manifest }
+    }
+
+    #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
+    async fn a_modules_check_hook_reports_its_lines_or_its_failure() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let dir = tempfile::tempdir().unwrap();
+        std::env::set_var("UNIVERSE_DATA_HOME", dir.path().join("data"));
+        let config: Config = toml::from_str("").unwrap();
+        let m = module_with_check(
+            dir.path(),
+            r#"#!/bin/sh
+echo probing >&2
+printf '%s' "$MODULE_SETTINGS_JSON" | grep -q '"provider":"codex"' || exit 3
+echo '{"check":"codex-signin","label":"Codex sign-in","ok":false,"detail":"refused","fix":"run codex login"}'
+echo 'not a check'
+echo '{"check":"quota","ok":true,"detail":"28 % used","fix":"never shown"}'
+exit 1
+"#,
+        );
+        let checks = module_checks(&m, &config).await;
+        let seen: Vec<_> = checks.iter().map(|c| (c.check.as_str(), c.label.as_str(), c.ok, c.detail.as_str(), c.fix.as_str(), c.module.as_str())).collect();
+        assert_eq!(
+            seen,
+            [("codex-signin", "Codex sign-in", false, "refused", "run codex login", "journal"), ("quota", "quota", true, "28 % used", "", "journal"),],
+            "each JSON line is a check of the module's, under its global settings; its exit status goes with lines printed"
+        );
+
+        let m = module_with_check(dir.path(), "#!/bin/sh\necho 'codex went away' >&2\nexit 2\n");
+        let checks = module_checks(&m, &config).await;
+        assert_eq!(checks.len(), 1);
+        assert_eq!((checks[0].check.as_str(), checks[0].label.as_str(), checks[0].ok), ("check", "Play journal check", false));
+        assert!(checks[0].detail.contains("codex went away") && checks[0].fix.contains("bin/check"), "{:?}", checks[0]);
+    }
 }

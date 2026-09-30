@@ -378,6 +378,22 @@ def test_a_codex_refused_mid_run_puts_the_session_off_without_spending_a_try(tmp
     assert (fakebin / "codex.calls").read_text() == "app-server\nexec\n" * 4, "an account codex could not vouch for is asked once per run"
 
 
+def test_the_check_hook_says_whether_codex_is_signed_in(tmp_path, fakebin):
+    def check(provider):
+        env = {**os.environ, "PATH": f"{fakebin}:{os.environ.get('PATH', '')}", "MODULE_SETTINGS_JSON": json.dumps({"provider": provider})}
+        res = subprocess.run([sys.executable, str(BIN_DIR / "check")], env=env, capture_output=True, text=True, check=False)
+        assert res.returncode == 0, res.stderr
+        return [json.loads(line) for line in res.stdout.splitlines()]
+
+    fake_codex(fakebin, "never run", account_error="failed to fetch codex rate limits: GET https://chatgpt.com/backend-api/wham/usage failed: 401 Unauthorized")
+    assert check("codex") == [{"check": "codex-signin", "label": "Codex sign-in", "ok": False, "detail": "signed out", "fix": "run codex login in a terminal"}]
+    fake_codex(fakebin, "never run", resets_at=int(datetime.now().timestamp()) + 3600)
+    assert [(c["ok"], c["detail"]) for c in check("codex")] == [(True, "signed in")]
+    fake_codex(fakebin, "never run")
+    assert [(c["ok"], c["detail"]) for c in check("codex")] == [(True, "not checked: codex gave no answer")], "no answer is no alarm"
+    assert check("openai") == [] and check("") == []
+
+
 def test_codex_tells_a_refused_account_from_a_dropped_stream(tmp_path, monkeypatch):
     calls = []
 
