@@ -1,4 +1,4 @@
-"""The writing models. Each run returns the raw object of prompt.OUTPUT_SCHEMA, or raises Quota/Transient/Permanent."""
+"""The writing models. Each run returns the raw object of prompt.OUTPUT_SCHEMA, or raises Quota/SignedOut/Transient/Permanent."""
 
 import base64
 import json
@@ -21,6 +21,9 @@ ATTEMPTS = 2
 # The quota wall lasts days; transient failures ("Reconnecting") must stay on the retry path.
 LIMIT_RE = re.compile(r"hit your usage limit", re.IGNORECASE)
 LIMIT_FALLBACK_HOURS = 6
+# Signed out and a spent refresh token both fail the turn or the account read this way; only `codex login` ends it.
+SIGNED_OUT_RE = re.compile(r"\b401\b|unauthori[sz]ed|authentication required", re.IGNORECASE)
+SIGNED_OUT = "codex is signed out: run codex login"
 PROVIDERS = ("codex", "openai", "stub")
 
 
@@ -31,6 +34,10 @@ class QuotaExceeded(Exception):
         super().__init__(f"{provider} usage limit until {until}")
         self.until = until
         self.provider = provider
+
+
+class SignedOut(Exception):
+    """The account refused the request: nothing to try until the user signs in again."""
 
 
 class Transient(Exception):
@@ -64,6 +71,26 @@ APP_SERVER_TIMEOUT_S = 15
 
 def read_limit_reset(timeout_s=APP_SERVER_TIMEOUT_S):
     """When the exhausted window resets, from `account/rateLimits/read`; None when codex cannot say."""
+    reply = app_server("account/rateLimits/read", timeout_s)
+    return limit_reset_from(reply.get("result")) if reply else None
+
+
+def codex_signed_in(timeout_s=APP_SERVER_TIMEOUT_S):
+    """(signed in, detail), None when codex cannot say. The rate limits ask the account; `account/read` passes a spent token."""
+    reply = app_server("account/rateLimits/read", timeout_s)
+    if not reply:
+        return None, "codex gave no answer"
+    if "result" in reply:
+        return True, "signed in"
+    message = str((reply.get("error") or {}).get("message") or "")
+    log(f"codex account: {message}")
+    if SIGNED_OUT_RE.search(message):
+        return False, "signed out"
+    return None, (message.splitlines() or ["codex gave no answer"])[0][:160]
+
+
+def app_server(method, timeout_s=APP_SERVER_TIMEOUT_S):
+    """codex's reply to one account request, or None."""
     try:
         proc = subprocess.Popen(
             ["codex", "app-server", "--listen", "stdio://"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, bufsize=0
@@ -81,7 +108,7 @@ def read_limit_reset(timeout_s=APP_SERVER_TIMEOUT_S):
                 "params": {"clientInfo": {"name": "universe-journal", "title": "Universe", "version": "0.0.2"}},
             },
             {"jsonrpc": "2.0", "method": "initialized", "params": {}},
-            {"jsonrpc": "2.0", "id": 2, "method": "account/rateLimits/read", "params": {}},
+            {"jsonrpc": "2.0", "id": 2, "method": method, "params": {}},
         ):
             proc.stdin.write((json.dumps(msg) + "\n").encode())
         proc.stdin.flush()
@@ -102,14 +129,19 @@ def read_limit_reset(timeout_s=APP_SERVER_TIMEOUT_S):
                 except ValueError:
                     continue
                 if isinstance(reply, dict) and reply.get("id") == 2:
-                    return limit_reset_from(reply.get("result"))
-        log("codex app-server gave no rate limits in time")
+                    return reply
+        log(f"codex app-server gave no {method} in time")
         return None
     except (OSError, ValueError) as e:
         log(f"codex app-server: {e}")
         return None
     finally:
-        proc.kill()
+        # End of input stops it cleanly: a kill in the middle of a token refresh could leave auth.json a spent token.
+        try:
+            proc.stdin.close()
+            proc.wait(timeout=2)
+        except (OSError, subprocess.TimeoutExpired):
+            proc.kill()
 
 
 def limit_reset_from(result):
@@ -222,6 +254,9 @@ def run_codex(opts, system, brief, images, work_dir, heartbeat=None):
             output = "\n".join(failures) if failures else f"{res.stdout or ''}\n{res.stderr or ''}"
             if LIMIT_RE.search(output):
                 raise QuotaExceeded(read_limit_reset() or parse_limit_reset(output) or datetime.now() + timedelta(hours=LIMIT_FALLBACK_HOURS))
+            if SIGNED_OUT_RE.search(output):
+                log(f"codex refused the account: {output.strip()[-400:]}")
+                raise SignedOut(SIGNED_OUT)
             last = f"codex exited {res.returncode}: {output.strip()[-200:]}"
             log(f"codex attempt {attempt}/{attempts} returned exit={res.returncode}: {output.strip()[-400:]}")
             continue
@@ -494,6 +529,14 @@ def run_stub(title, images, forced_lang=None):
             "profile": "arcade",
         },
     }
+
+
+def check_signed_in(opts):
+    """Raises SignedOut before any work when codex's account refuses; nothing when it cannot say, the run will."""
+    if opts.provider != "codex":
+        return
+    if codex_signed_in()[0] is False:
+        raise SignedOut(SIGNED_OUT)
 
 
 def generate(opts, *, title, system, brief, images, work_dir, forced_lang=None, heartbeat=None):

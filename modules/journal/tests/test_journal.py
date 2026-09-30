@@ -145,9 +145,13 @@ exit 0''',
     return bindir
 
 
-def fake_codex(fakebin, stderr, resets_at=None):
-    """`exec` fails with `stderr`; `app-server` answers the rate-limit read with `resets_at` (Unix seconds) at 100 %, or nothing."""
+def fake_codex(fakebin, stderr, resets_at=None, account_error=None):
+    """`exec` fails with `stderr`; `app-server` answers the rate-limit read with `resets_at` (Unix seconds) at 100 %, with
+    `account_error`, or nothing."""
     app_server = "exit 1"
+    if account_error is not None:
+        reply = json.dumps({"id": 2, "error": {"code": -32600, "message": account_error}})
+        app_server = f"read -r _init; echo '{{\"id\":1,\"result\":{{}}}}'; read -r _initialized; read -r _req\necho '{reply}'\nexit 0"
     if resets_at is not None:
         app_server = (
             'read -r _init; echo \'{"id":1,"result":{}}\'; read -r _initialized; read -r _req\n'
@@ -312,7 +316,7 @@ def test_codex_quota_defers_the_session_until_the_wall_lifts(tmp_path, fakebin):
     fake_codex(fakebin, "You have hit your usage limit.", resets_at=resets_at)
     res, journal_dir = run_process(tmp_path, fakebin, {"provider": "codex"})
     assert res.returncode == 75 and "usage limit reached" in res.stderr
-    assert not (fakebin / "universe.args").exists() and (fakebin / "codex.calls").read_text() == "exec\napp-server\n"
+    assert not (fakebin / "universe.args").exists() and (fakebin / "codex.calls").read_text() == "app-server\nexec\napp-server\n"
     entry = deferred_file(journal_dir)
     assert entry["reason"] == "codex quota reached" and entry["provider"] == "codex"
     assert datetime.fromisoformat(entry["until"]).timestamp() == resets_at, "the entry waits for codex's own reset instant"
@@ -322,7 +326,7 @@ def test_codex_quota_defers_the_session_until_the_wall_lifts(tmp_path, fakebin):
 
     res, _ = run_process(tmp_path, fakebin, {"provider": "codex"})
     assert res.returncode == 75 and "deferring" in res.stderr
-    assert (fakebin / "codex.calls").read_text() == "exec\napp-server\n", "the wall is read from the file, codex is not asked again"
+    assert (fakebin / "codex.calls").read_text() == "app-server\nexec\napp-server\n", "the wall is read from the file, codex is not asked again"
     assert deferred_file(journal_dir)["reason"] == "codex quota reached"
 
 
@@ -341,7 +345,58 @@ def test_a_failing_model_defers_then_gives_up(tmp_path, fakebin):
     assert seen == [75, 75, 1], "two tries put the session off, the third gives up"
     assert "gave up after 3 tries" in failed_file(journal_dir)
     assert not (fakebin / "universe.args").exists()
-    assert len((fakebin / "codex.calls").read_text().splitlines()) == 3 * providers.ATTEMPTS
+    assert (fakebin / "codex.calls").read_text().splitlines().count("exec") == 3 * providers.ATTEMPTS
+
+
+def signed_out_entry(journal_dir):
+    entry = deferred_file(journal_dir)
+    assert entry["reason"] == "codex is signed out: run codex login" and entry["attempts"] == 0, "signing in again is the user's, not a try"
+    wait = datetime.fromisoformat(entry["until"]) - datetime.now().astimezone()
+    assert timedelta(minutes=14) < wait <= timedelta(minutes=15), "a check costs a second: soon after the sign-in, the entry follows"
+    (journal_dir / f"{SID}.deferred.json").write_text(json.dumps({**entry, "until": "2020-01-01T00:00:00+01:00"}))
+
+
+def test_a_signed_out_codex_puts_the_session_off_before_any_work(tmp_path, fakebin):
+    add_shot(tmp_path)
+    fake_codex(fakebin, "never run", account_error="codex account authentication required to read rate limits")
+    for _ in range(4):
+        res, journal_dir = run_process(tmp_path, fakebin, {"provider": "codex"})
+        assert res.returncode == 75, res.stderr
+        signed_out_entry(journal_dir)
+    assert (fakebin / "codex.calls").read_text() == "app-server\n" * 4, "the account says no: the model is never asked"
+    assert not (tmp_path / "data" / "work" / SID).exists(), "and no frame is taken for it"
+
+
+def test_a_codex_refused_mid_run_puts_the_session_off_without_spending_a_try(tmp_path, fakebin):
+    add_shot(tmp_path)
+    event = '{"type":"turn.failed","error":{"message":"workspace routing discovery unauthorized (401)"}}'
+    write_shim(fakebin / "codex", f'echo "$1" >> "{fakebin}/codex.calls"\n[ "$1" = exec ] || exit 1\necho \'{event}\'\nexit 1')
+    for _ in range(4):
+        res, journal_dir = run_process(tmp_path, fakebin, {"provider": "codex"})
+        assert res.returncode == 75, res.stderr
+        signed_out_entry(journal_dir)
+    assert (fakebin / "codex.calls").read_text() == "app-server\nexec\n" * 4, "an account codex could not vouch for is asked once per run"
+
+
+def test_codex_tells_a_refused_account_from_a_dropped_stream(tmp_path, monkeypatch):
+    calls = []
+
+    def refused(args, **kw):
+        calls.append(1)
+        stdout = '{"type":"turn.failed","error":{"message":"unexpected status 401 Unauthorized: Missing bearer or basic authentication in header"}}\n'
+        return subprocess.CompletedProcess(args, 1, stdout, "")
+
+    monkeypatch.setattr(providers.subprocess, "run", refused)
+    with pytest.raises(providers.SignedOut):
+        providers.run_codex(providers.Options(model="m"), "system", "brief", [], str(tmp_path))
+    assert len(calls) == 1
+
+    def dropped(args, **kw):
+        return subprocess.CompletedProcess(args, 1, '{"type":"turn.failed","error":{"message":"stream disconnected"}}\n', "tool output: HTTP 401")
+
+    monkeypatch.setattr(providers.subprocess, "run", dropped)
+    with pytest.raises(providers.Transient):
+        providers.run_codex(providers.Options(model="m"), "system", "brief", [], str(tmp_path))
 
 
 def test_blank_recording_marks_the_session_failed(tmp_path, fakebin):
@@ -593,7 +648,7 @@ def test_a_rejected_entry_is_kept_for_the_next_run(tmp_path, fakebin):
     assert "reusing the answer" in res.stderr
     entry = json.loads((fakebin / "universe.args").read_text().splitlines()[2])
     assert entry["title"] == "Into the Dome" and entry["paragraphs"] == ["You walked in."]
-    assert (fakebin / "codex.calls").read_text().splitlines() == ["exec"], "the model is asked once, not twice"
+    assert (fakebin / "codex.calls").read_text().splitlines() == ["app-server", "exec"], "the model is asked once, and a kept answer needs no account"
     assert not (tmp_path / "data" / "work" / SID).exists(), "a delivered entry takes its work with it"
 
 

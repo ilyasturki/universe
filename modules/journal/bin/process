@@ -41,6 +41,7 @@ QUOTA_FILE = "quota.json"
 # A try that failed for a reason of its own; past this the session stops asking and waits for a hand.
 MAX_ATTEMPTS = 3
 BACKOFF_MIN = (15, 60, 240)
+SIGNED_OUT_WAIT = timedelta(minutes=15)
 # Work older than this is nobody's resume material any more.
 WORK_KEEP_DAYS = 7
 
@@ -56,6 +57,10 @@ class Deferred(Exception):
         super().__init__(reason)
         self.until = until
         self.counts = counts
+
+
+def signed_out(e):
+    return Deferred(str(e), datetime.now() + SIGNED_OUT_WAIT, counts=False)
 
 
 def env(name, default=""):
@@ -401,6 +406,13 @@ def journal_session(settings, sid, start_id, game_id, provider, journal_dir, dat
     if until:
         log(f"{provider} usage limit in effect until {fmt_date(until)} {fmt_time(until)}; deferring, no work done")
         raise Deferred(f"{provider} quota reached", until, counts=False)
+    work_dir = os.path.join(data_dir, "work", sid)
+    # An answer an earlier run already had needs no account.
+    if rewrite or not os.path.exists(os.path.join(work_dir, "answer.json")):
+        try:
+            providers.check_signed_in(opts)
+        except providers.SignedOut as e:
+            raise signed_out(e) from e
 
     sessions = read_sessions(journal_dir)
     sessions.setdefault(
@@ -419,7 +431,6 @@ def journal_session(settings, sid, start_id, game_id, provider, journal_dir, dat
     memory = read_json(memory_path(data_dir, game_id))
     memory = memory if isinstance(memory, dict) else None
 
-    work_dir = os.path.join(data_dir, "work", sid)
     prune_work(os.path.join(data_dir, "work"))
     os.makedirs(work_dir, exist_ok=True)
     keep_work = True
@@ -496,6 +507,8 @@ def ask(opts, data_dir, *, title, system, brief, images, work_dir, forced_lang, 
         write_json(quota_path(data_dir), {"provider": opts.provider, "until": rfc3339_local(e.until)})
         log(f"{opts.provider} usage limit reached; journal paused until {fmt_date(e.until)} {fmt_time(e.until)}")
         raise Deferred(f"{opts.provider} quota reached", e.until, counts=False) from e
+    except providers.SignedOut as e:
+        raise signed_out(e) from e
     except providers.Permanent as e:
         raise Failed(str(e)) from e
     except providers.Transient as e:

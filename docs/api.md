@@ -1022,11 +1022,13 @@ module refreshes before every try. The file is removed once the entry is in, or 
 run ends without one:
 
 - `<session>.deferred.json` (`{"session", "game", "provider", "written_at", "until", "reason",
-  "attempts"}`) for a failure worth another run — a quota wall, an endpoint that timed out or
-  answered 5xx, a model that gave nothing usable, a recording on a filesystem that is not mounted,
-  a hook killed by a signal. `until` is the wall's own reset instant when the provider gives one,
-  else a backoff on `attempts` (15 min, 1 h, 4 h); a quota wall does not count as a try, and the
-  third counted try writes a failed file instead ("… (gave up after 3 tries)").
+  "attempts"}`) for a failure worth another run — a quota wall, codex signed out (its account is
+  asked before any work, and a turn refused with a 401 says the same: "codex is signed out: run
+  codex login", tried again every 15 minutes), an endpoint that timed out or answered 5xx, a model
+  that gave nothing usable, a recording on a filesystem that is not mounted, a hook killed by a
+  signal. `until` is the wall's own reset instant when the provider gives one, else a backoff on
+  `attempts` (15 min, 1 h, 4 h); a quota wall and a sign-out do not count as a try, and the third
+  counted try writes a failed file instead ("… (gave up after 3 tries)").
 - `<session>.failed.json` (`{"session", "game", "written_at", "reason"}`) when nothing will ever
   come of it: the core refused the entry, the recording is gone, it holds no picture, or the
   provider is set up wrong (no key, unknown model, missing binary).
