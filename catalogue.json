@@ -942,6 +942,20 @@
       {
        "arch": "x86_64",
        "format": "appimage",
+       "sha256": "5114c10bfcca3570cf01f3feebf13e90e54fb7838a5a4723b3e6c342e5754058",
+       "size": 94057910,
+       "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-fb4a09215a10d7e04b3b6edcc4141b46d45d86d6/rpcs3-v0.0.42-20113-fb4a0921_linux64.AppImage"
+      }
+     ],
+     "channel": "rolling",
+     "date": "2026-09-30T09:17:25Z",
+     "version": "0.0.42-20113-fb4a0921"
+    },
+    {
+     "assets": [
+      {
+       "arch": "x86_64",
+       "format": "appimage",
        "sha256": "252156a9c4f6d35d040b095bbad119371584f9cca3fc064eecf81ad6f91ff320",
        "size": 94048176,
        "url": "https://github.com/RPCS3/rpcs3-binaries-linux/releases/download/build-d9a72d6ca7537e798a9d822ed4ef9f90567a3708/rpcs3-v0.0.42-20081-d9a72d6c_linux64.AppImage"
@@ -1195,21 +1209,21 @@
       {
        "arch": "x86_64",
        "format": "appimage",
-       "sha256": "9209350cb0ac97394cce69a622c60eef6f71dbf8e744f900a2b2ae3d6b3403d3",
-       "size": 66804216,
+       "sha256": "71a4f5e83d7ddc6a1a8f784d0e62812668bdc2c00710a8706bda0b112922174a",
+       "size": 66824696,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-x86_64.AppImage"
       },
       {
        "arch": "aarch64",
        "format": "appimage",
-       "sha256": "cdce5478685c35e5c360ecad3206b7bb111c8350e3ff4836a5af365eaf124ff8",
+       "sha256": "6cb0cc11088eb32becbe2bf5df10c5189d4478f52bc1532cefcc1fb6d9f92557",
        "size": 67045896,
        "url": "https://github.com/Vita3K/Vita3K/releases/download/continuous/Vita3K-aarch64.AppImage"
       }
      ],
      "channel": "rolling",
-     "date": "2026-09-27T14:47:36Z",
-     "version": "2026.09.27"
+     "date": "2026-09-30T11:05:45Z",
+     "version": "2026.09.30"
     }
    ],
    "homepage": "https://github.com/Vita3K/Vita3K",
@@ -1336,6 +1350,6 @@
    "name": "xemu"
   }
  },
- "generated_at": "2026-09-29T11:26:59Z",
+ "generated_at": "2026-09-30T11:14:31Z",
  "schema": 1
 }
