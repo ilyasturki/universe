@@ -478,7 +478,17 @@ def test_game_settings_marks_changed_cards(api, fake):
     assert changed()[proton] is True and changed()["Display"] is False, "a card holding a value of the game's own is marked"
     assert not form.showAdvanced and form.setValue(index_of(form, "launch.gamescope_scaler"), "fsr") is True
     assert changed()["Display"] is True, "a change behind Advanced marks its card while Advanced is off"
+    display = next(g for g in form.groups if g["title"] == "Display")
+    assert [form.rows[i]["key"] for i in display["rows"][display["divider"] :]] == ["launch.gamescope_scaler"], "and the card shows it, alone of its kind"
+    assert display["dividers"] == [{"at": display["divider"], "label": "Advanced · Scaling"}]
+    cards = {g["title"]: [form.rows[i]["key"] for i in g["rows"]] for g in form.groups}
+    assert "launch.prefix" in cards[proton] and "launch.umu_id" not in cards[proton], "the game's own prefix shows, the untouched rows stay behind Advanced"
     assert form.reset(index_of(form, "launch.gamescope_scaler")) is True and changed()["Display"] is False
+    assert next(g for g in form.groups if g["title"] == "Display")["divider"] == -1
+    assert form.setMapEntry(index_of(form, "launch.env"), "PROTON_SONY_HIDRAW_XINPUT", "1") is True
+    launch = next(g for g in form.groups if g["title"] == "Launch")
+    assert launch["changed"] is True and "launch.env.PROTON_SONY_HIDRAW_XINPUT" in [form.rows[i]["key"] for i in launch["rows"]]
+    assert "launch.env" not in [form.rows[i]["key"] for i in launch["rows"]], "adding a variable stays behind Advanced"
 
 
 def test_game_settings_mirrors_the_cards(api, fake):

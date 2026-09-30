@@ -5,10 +5,11 @@
 # appends an Advanced action row that opens them; the other pages flip `showAdvanced` from a button.
 # `origin` is where a value comes from when the row can inherit: "game" (set on the game), "runner" (set on the runner),
 # "global" (config.toml sets it), "default" (neither does); empty when the row has no such story. `inherited` is true for
-# the last two; the first two are a change made on this page, and a shown group's `changed` says it holds one, its hidden
-# advanced rows counted. A map key (launch.env) is one row per entry, `entry` naming the map, then an `action` row with `map` set
-# that adds one; an entry's empty value removes it. A game's row with a global twin carries it as `global`: `{key}` in config.toml,
-# or `{module, key}`, `{source, key}`, `{runner, key}` for those tables.
+# the last two; the first two are a change made on this page, and a shown group's `changed` says it holds one, its advanced
+# rows counted: with `showAdvanced` off, the advanced rows holding one still fold in. A map key (launch.env) is one row per
+# entry, `entry` naming the map, then an `action` row with `map` set that adds one; an entry's empty value removes it. A game's
+# row with a global twin carries it as `global`: `{key}` in config.toml, or `{module, key}`, `{source, key}`, `{runner, key}`
+# for those tables.
 import json
 import os
 import re
@@ -350,7 +351,10 @@ class AdvancedRows(QObject if TYPE_CHECKING else object):
         for group, home in zip(every, homes, strict=True):
             if home is not None and self._changed(group):
                 home["changed"] = True
-        advanced = list(zip(every, homes, strict=True)) if self._show_advanced else []
+        advanced = list(zip(every, homes, strict=True))
+        if not self._show_advanced:
+            changes = [({**g, "rows": [i for i in g["rows"] if self._row_at(i).get("origin") in CHANGED]}, home) for g, home in advanced]
+            advanced = [(g, home) for g, home in changes if g["rows"]]
         more = [{**g, "changed": self._changed(g)} for g, home in advanced if home is None]
         folded = [(g, home) for g, home in advanced if home is not None]
         # A card's own advanced rows come first, the cards homed in it after them, each under a rule of its own.

@@ -1207,6 +1207,34 @@ def test_the_game_settings_page_lands_a_search_hit_behind_advanced(api, fake):
     pump(50)
 
 
+def test_the_game_settings_page_shows_an_advanced_change_with_advanced_off(api, fake):
+    from PySide6.QtCore import Qt
+    from PySide6.QtTest import QTest
+
+    def click(key, times=1):
+        for _ in range(times):
+            QTest.keyClick(window, key)
+        pump(80)
+
+    _engine, window = render(api, activate=True)
+    root = window.property("contentItem").childItems()[0].property("item")
+    root.openSub("pages/GameSettingsPage.qml", {"game": api.allGames.byId("the-technomancer"), "key": "launch.proton"})
+    settle(window)
+    pump(300)
+    page = window.findChild(QObject, "gameSettingsPage")
+    body = page.findChild(QObject, "cardSections")
+    form = api.screens.gameSettings
+    click(Qt.Key.Key_Down, 3)
+    assert form.showAdvanced is False and page.property("row")["key"] == "launch.prefix", "the game's own prefix sits under the Proton card's rows"
+    click(Qt.Key.Key_I)
+    assert "prefix" not in fake.game("the-technomancer")["launch"] and form.showAdvanced is False
+    assert form.groups[body.property("section")]["title"] == "Proton" and page.property("row")["key"] == "launch.proton", (
+        "reset, the row goes back behind Advanced and the cursor to the card's first row"
+    )
+    window.close()
+    pump(50)
+
+
 def test_the_game_settings_page_adds_a_variable_from_one_sheet(api, fake):
     from PySide6.QtCore import Qt
     from PySide6.QtTest import QTest

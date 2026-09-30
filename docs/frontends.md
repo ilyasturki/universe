@@ -108,8 +108,9 @@ runs, and the frontend is what keeps time.
 
 The settings forms (`api.screens.launch`, `runner`, `module`, `source`, `gameSettings`, `controller`)
 hand QML a flat `rows` list and `groups` that index it; a row's `advanced` puts it in an `advanced`
-group. `groups` holds the basic groups and — only while `showAdvanced` is set (`load` clears it:
-a page opens with Advanced hidden, however it was left) — the advanced rows: an advanced group
+group. `groups` holds the basic groups and — while `showAdvanced` is set (`load` clears it: a
+page opens with Advanced hidden, however it was left), else only those holding a `game` or `runner`
+value, so a marked card always shows its change — the advanced rows: an advanced group
 titled like a basic one, or naming one as its `home` (`HOMES`: Scaling in Display, Environment in
 Launch, Sync / Upscaling / Logs in the runner's card, Artwork in Desktop and library), folds into it
 after the group's `divider` (an index into `rows`, −1 when nothing is folded), the card's own
