@@ -1,5 +1,5 @@
 use std::cell::{Cell, RefCell};
-use std::rc::Rc;
+use std::rc::{Rc, Weak};
 
 use adw::prelude::*;
 use gettextrs::{gettext, ngettext};
@@ -8,8 +8,10 @@ use serde_json::Value;
 use universe::discover::{InstallDir, Launcher};
 
 use crate::backend;
+use crate::components;
 use crate::config;
 use crate::dialogs::signin;
+use crate::jobs::Kind;
 use crate::state::State;
 use crate::window::Window;
 
@@ -88,6 +90,14 @@ fn install_choices(first: &str, dirs: &[InstallDir], current: &str) -> Vec<(Stri
     choices
 }
 
+/// A load that reads itself again, held weakly by what it hands out.
+type Again = RefCell<Option<Weak<dyn Fn()>>>;
+
+/// The runners the library's games need that Universe installs: what the big screen's setup offers too.
+fn needed(listed: &[Value]) -> Vec<Value> {
+    listed.iter().filter(|c| c["proposal"] == "install" && matches!(text(c, "kind").as_str(), "proton" | "wine" | "emulator")).cloned().collect()
+}
+
 /// What discovery and the core said, once the first page has looked.
 #[derive(Default)]
 struct Look {
@@ -121,6 +131,8 @@ struct Onboarding {
     importer: Rc<tokio::sync::Mutex<()>>,
     done: RefCell<Option<(gtk::Label, gtk::Label, adw::PreferencesGroup)>>,
     done_rows: RefCell<Vec<adw::ActionRow>>,
+    /// Reads the runners group again: an import that brought games may need one.
+    runners: RefCell<Option<Rc<dyn Fn()>>>,
 }
 
 impl Onboarding {
@@ -227,6 +239,7 @@ pub fn present(win: &Window) {
         importer: Rc::default(),
         done: RefCell::default(),
         done_rows: RefCell::default(),
+        runners: RefCell::default(),
     });
     nav.add(&found_page(&this));
     let (weak, held) = (win.downgrade(), RefCell::new(Some(this)));
@@ -281,6 +294,7 @@ fn found_page(this: &Rc<Onboarding>) -> adw::NavigationPage {
     looking.add_suffix(&adw::Spinner::new());
     group.add(&looking);
     content.append(&group);
+    content.append(&runners_group(this));
     let weak = Rc::downgrade(this);
     let step = step(
         &gettext("Welcome"),
@@ -422,6 +436,10 @@ fn launcher_row(this: &Rc<Onboarding>, launcher: &Launcher, gog_scan: &str) -> a
                         win.app().library().refresh(&[]).await;
                         win.app().fetch_art(art);
                     }
+                    if n > 0 {
+                        let runners = this.runners.borrow().clone();
+                        runners.inspect(|load| load());
+                    }
                 }
                 Err(e) => {
                     button.set_sensitive(true);
@@ -433,6 +451,65 @@ fn launcher_row(this: &Rc<Onboarding>, launcher: &Launcher, gog_scan: &str) -> a
         });
     });
     row
+}
+
+/// The runners the games need, each with Install (`components::act`, which asks first); read again as a component's job
+/// starts or ends and after an import brought games. Hidden while none is needed.
+fn runners_group(this: &Rc<Onboarding>) -> adw::PreferencesGroup {
+    let group = adw::PreferencesGroup::builder().title(gettext("Runners Your Games Need")).visible(false).build();
+    let rows: Rc<RefCell<Vec<adw::ActionRow>>> = Rc::default();
+    let me: Rc<Again> = Rc::default();
+    let (weak, again, win) = (group.downgrade(), me.clone(), this.win.clone());
+    let load: Rc<dyn Fn()> = Rc::new(move || {
+        let (weak, rows, again, win) = (weak.clone(), rows.clone(), again.clone(), win.clone());
+        glib::spawn_future_local(async move {
+            let listed = components::listing(false).await.unwrap_or_default();
+            let Some(group) = weak.upgrade() else { return };
+            let changed: Rc<dyn Fn()> = Rc::new(move || {
+                let load = again.borrow().as_ref().and_then(Weak::upgrade);
+                load.inspect(|load| load());
+            });
+            for row in rows.take() {
+                group.remove(&row);
+            }
+            let picked = needed(&listed);
+            group.set_visible(!picked.is_empty());
+            let installing = win.upgrade().and_then(|win| win.app().job()).filter(|job| job.kind() == Kind::Component).map(|job| job.target());
+            for c in picked {
+                let used = c["used_by"].as_u64().unwrap_or(0) as u32;
+                let line = ngettext("{} game needs it", "{} games need it", used).replace("{}", &used.to_string());
+                let row = crate::rows::plain(adw::ActionRow::builder().build(), text(&c, "name"), line);
+                if installing.as_deref() == Some(text(&c, "id").as_str()) {
+                    row.set_subtitle(&gettext("Installing…"));
+                    row.add_suffix(&adw::Spinner::new());
+                } else {
+                    let button = gtk::Button::builder().label(gettext("Install")).valign(gtk::Align::Center).css_classes(["suggested-action"]).build();
+                    let changed = changed.clone();
+                    button.connect_clicked(move |button| components::act(button, &c, "install", changed.clone()));
+                    row.add_suffix(&button);
+                }
+                group.add(&row);
+                rows.borrow_mut().push(row);
+            }
+        });
+    });
+    me.replace(Some(Rc::downgrade(&load)));
+    this.runners.replace(Some(load.clone()));
+    let handler = this.win.upgrade().map(|win| {
+        let (app, load) = (win.app(), Rc::downgrade(&load));
+        let handler = components::on_jobs(&app, move || {
+            load.upgrade().inspect(|load| load());
+        });
+        (app.downgrade(), handler)
+    });
+    load();
+    let held = RefCell::new(handler);
+    group.connect_destroy(move |_| {
+        if let Some((app, handler)) = held.take() {
+            app.upgrade().inspect(|app| app.disconnect(handler));
+        }
+    });
+    group
 }
 
 /// Lutris and the emulators' folders are imported; another launcher's installs are adopted by the scan of the store `via`
@@ -758,6 +835,16 @@ mod tests {
     fn the_install_folder_and_preferences_need_a_config_that_takes_writes() {
         assert_eq!(steps(true, true), ["stores", "install", "preferences", "done"]);
         assert_eq!(steps(false, false), ["done"]);
+    }
+
+    #[test]
+    fn the_runners_offered_are_the_ones_a_game_waits_on() {
+        let listed = [
+            serde_json::json!({"id": "eden", "kind": "emulator", "proposal": "install"}),
+            serde_json::json!({"id": "ge-proton", "kind": "proton", "proposal": "newer"}),
+            serde_json::json!({"id": "gogdl", "kind": "tool", "proposal": "install"}),
+        ];
+        assert_eq!(needed(&listed).iter().map(|c| text(c, "id")).collect::<Vec<_>>(), ["eden"], "a runner to install, not a newer build nor a tool");
     }
 
     #[test]

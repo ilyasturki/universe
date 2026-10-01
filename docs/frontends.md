@@ -1011,7 +1011,10 @@ page's Continue, in a bar of its own under the content, waits for the look to en
 an Add button and Add Everything presses them all, the two importers taking turns; the stores page
 offers a source that is off but has its launcher here behind a "Use" switch; under a read-only
 config a launcher says what to write instead of failing; the done page follows the imports still
-running.
+running. Under the launchers, "Runners Your Games Need" lists the components the big screen's
+`needed()` would (a proton, wine or emulator build whose `proposal` is `install`), each with an
+Install button that goes through `components::act`, asking first; the group reads the listing again
+when a component's job starts or ends, and after an import brought games.
 
 ## The artwork pages and section
 

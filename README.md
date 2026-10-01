@@ -99,7 +99,7 @@ programs.universe.enable = true;
 
 ## First run
 
-Open **Universe** from your app menu. With an empty library a short setup runs once per machine, in either app: it adds the games other launchers already installed (Lutris, Steam, Heroic, itch.io, your emulators' folders), signs you in to your stores, asks where new games install, and sets your controller and HDR. On the big screen it also installs the runners your games need.
+Open **Universe** from your app menu. With an empty library a short setup runs once per machine, in either app: it adds the games other launchers already installed (Lutris, Steam, Heroic, itch.io, your emulators' folders), signs you in to your stores, asks where new games install, sets your controller and HDR, and installs the runners your games need.
 
 ## Docs
 
