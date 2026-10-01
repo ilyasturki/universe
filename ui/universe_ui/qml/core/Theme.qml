@@ -8,7 +8,7 @@ QtObject {
     property real vscale: 1.0
     // The software scenegraph (offscreen tests) drops every ShaderEffect; set by the root.
     property bool software: false
-    // A game is on screen over the launcher, inside gamescope (`api.home.underGame`, set by the root): every loop and clock holds, so nothing repaints behind it.
+    // A game is on screen over the launcher inside gamescope (`api.home.underGame`), or another app has the focus (`api.focus.active`), set by the root: every loop and clock holds, so nothing repaints behind it.
     property bool covered: false
     onCoveredChanged: {
         if (!covered)

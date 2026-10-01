@@ -99,7 +99,7 @@ Item {
                     to: -band.stripe * 2
                     duration: 900
                     loops: Animation.Infinite
-                    running: band.visible
+                    running: band.visible && !Theme.covered
                 }
             }
 

@@ -103,6 +103,17 @@ FocusScope {
         idleTimer.restart();
     }
 
+    // Another app has the focus: the video stops where it is, until A plays it again.
+    Connections {
+        target: api.focus
+        function onChanged() {
+            if (!api.focus.active && page.playing) {
+                player.pause();
+                page.wake();
+            }
+        }
+    }
+
     function leave() {
         player.stop();
         page.closeRequested();

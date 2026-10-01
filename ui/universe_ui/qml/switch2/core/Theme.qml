@@ -8,6 +8,11 @@ QtObject {
 
     property real vscale: 1.0
     readonly property bool software: Base.Theme.software
+    readonly property bool covered: Base.Theme.covered
+    onCoveredChanged: {
+        if (!covered)
+            clock = Format.clock();
+    }
     function dp(v) {
         return Math.round(v * t.vscale);
     }
@@ -105,13 +110,13 @@ QtObject {
         to: 1
         duration: 6500
         loops: Animation.Infinite
-        running: Qt.application.state === Qt.ApplicationActive
+        running: !t.covered
     }
 
     property string clock: Format.clock()
     readonly property Timer clockTimer: Timer {
         interval: 20000
-        running: true
+        running: !t.covered
         repeat: true
         triggeredOnStart: true
         onTriggered: t.clock = Format.clock()

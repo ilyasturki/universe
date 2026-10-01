@@ -75,7 +75,7 @@ FocusScope {
     Binding {
         target: Theme
         property: "covered"
-        value: api.home.underGame
+        value: api.home.underGame || !api.focus.active
     }
 
     function goToTab(index) {

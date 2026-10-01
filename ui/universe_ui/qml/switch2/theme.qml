@@ -32,6 +32,12 @@ FocusScope {
         value: root.GraphicsInfo.api === GraphicsInfo.Software
     }
 
+    Binding {
+        target: Base.Theme
+        property: "covered"
+        value: api.home.underGame || !api.focus.active
+    }
+
     // args travel as JSON: a library reload can delete a Game under a page, so pages carry ids.
     readonly property ListModel stack: ListModel {}
     readonly property int depth: stack.count

@@ -23,7 +23,7 @@ Item {
         scroll.stop();
         offset = 0;
         label.opacity = 1;
-        if (overflows && running && visible)
+        if (overflows && running && visible && !Theme.covered)
             scroll.start();
     }
 
@@ -34,6 +34,13 @@ Item {
     onTravelChanged: reset()
     onRunningChanged: reset()
     onVisibleChanged: reset()
+
+    Connections {
+        target: Theme
+        function onCoveredChanged() {
+            marquee.reset();
+        }
+    }
 
     Label {
         id: label

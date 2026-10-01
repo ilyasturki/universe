@@ -7,7 +7,7 @@ QtObject {
     id: t
 
     property real vscale: 1.0
-    property bool covered: false
+    readonly property bool covered: Base.Theme.covered
     readonly property bool software: Base.Theme.software
     function dp(v) {
         return Math.round(v * t.vscale);
