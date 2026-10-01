@@ -34,6 +34,7 @@ class Focus(QObject):
         self._qt_active = True
         # The desktop's last answer, (launcher, session); None while it cannot tell.
         self._host = None
+        self._why = ""
         self._polling = False
         self._generation = 0
         self._timer = QTimer(self)
@@ -76,10 +77,13 @@ class Focus(QObject):
         self._polling = True
         generation = self._generation
 
-        def landed(focus):
+        def landed(focus, why):
             if generation != self._generation:
                 return
             self._polling = False
+            if why and why != self._why:
+                log.info("focus: the desktop cannot tell (%s): the pad acts whoever has the focus", why)
+            self._why = why
             self._land(None if focus is None else (bool(focus.get("launcher")), bool(focus.get("session"))))
 
         self._client.hostFocusAsync(landed)

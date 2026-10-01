@@ -298,9 +298,9 @@ class CoreClient(QObject):
     def focusLauncher(self):
         self._call_async(lambda: self._core.focus_pid(os.getpid()), on_error=lambda e: log.info("focus launcher: %s", e.message))
 
-    # `on_reply(None)` when the desktop cannot tell.
+    # `on_reply(None, why)` when the desktop cannot tell.
     def hostFocusAsync(self, on_reply):
-        self._call_async(self._core.host_focus, lambda focus: on_reply(dict(focus or {})), on_error=lambda e: on_reply(None))
+        self._call_async(self._core.host_focus, lambda focus: on_reply(dict(focus or {}), ""), on_error=lambda e: on_reply(None, e.message or e.kind))
 
     def summon(self, on_done):
         self._call_async(self._core.summon, lambda _: on_done(), on_error=lambda e: log.info("summon: %s", e.message))
