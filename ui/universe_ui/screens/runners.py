@@ -6,12 +6,18 @@ from PySide6.QtCore import Signal, Slot
 
 from ..models import file_url
 from ..qt import QVARIANT, Property
-from .settings import HOMES, RowsForm, _group, _row, _to_bus, global_launch_rows, runner_logo
+from .components import NO_BUILD, NO_BUILD_META, build_text, catalogue_warning
+from .settings import HOMES, RowsForm, _group, _plural, _row, _to_bus, global_launch_rows, runner_logo
 
 FOUND = {"path": "Found on PATH"}
-SYSTEM_FIRST = "The system's, else Universe's"
-NEWEST = "Universe's newest"
-BUILD_DETAIL = "Which program runs: the one installed on the system before Universe's builds, Universe's newest, or one build of it."
+PROTON_TOOL = "umu-run"
+NOT_INSTALLED = "Not installed"
+NOT_INSTALLED_META = "Universe downloads and updates these"
+NOT_FOUND = "Not found"
+TOOLS = "Tools"
+BUILDS = "Builds"
+# Launch keys the Builds card sets instead.
+BUILD_KEYS = ("proton",)
 
 
 def suggested_title(path):
@@ -39,53 +45,131 @@ def _play_time(hours):
     return f"{seconds / 3600:.1f} h"
 
 
+def runner_components(ident, kind, components):
+    """What a runner's page installs: Proton's builds and umu-run, which starts them; another runner its own."""
+    if kind == "proton":
+        return [c for c in components if c["kind"] == "proton"] + [c for c in components if c["id"] == PROTON_TOOL]
+    return [c for c in components if c.get("runner") == ident]
+
+
+def _in_use_first(components):
+    return sorted(components, key=lambda c: (not c.get("in_use"), c["kind"] != "proton", not c.get("builds"), c["name"].lower()))
+
+
+def _state(components, row_of):
+    """A runner's row: the build in use, and what to do about its components, the ones in use first."""
+    ordered = _in_use_first(components)
+    rows = [row_of(c) for c in ordered]
+    lead = next((r for r in rows if r["tag"]), rows[0] if rows else None)
+    if lead is None:
+        return {}
+    in_use = next((c["in_use"] for c in ordered if c.get("in_use")), None)
+    return {
+        "tag": lead["tag"],
+        "accent": any(c.get("update") or c.get("proposal") for c in ordered),
+        "size": lead["size"],
+        "progress": max(r["progress"] for r in rows),
+        "detail": build_text(in_use) if in_use else "",
+        "component": lead["component"],
+    }
+
+
+def _usage(games):
+    usage = {}
+    for game in games:
+        ident = _runner_of(game)
+        if ident:
+            count, hours = usage.get(ident, (0, 0.0))
+            usage[ident] = (count + 1, hours + float((game.get("stats") or {}).get("hours") or 0))
+    return usage
+
+
+def _needs_doing(c):
+    return (c.get("proposal") != "install", not (c.get("update") or c.get("proposal")), not c.get("in_use"), c["name"].lower())
+
+
+def build_runners(runners, games, listing, row_of):
+    """Settings › Runners: the runners found, by the games on them; those Universe can install, the ones a game waits on first;
+    those it cannot, dimmed; the tools last."""
+    usage = _usage(games)
+    components = listing.get("components") or []
+    loaded = bool(components)
+    runners = sorted(runners, key=lambda r: (-usage.get(r["id"], (0, 0.0))[0], -usage.get(r["id"], (0, 0.0))[1], r.get("name", r["id"]).lower()))
+    found, offered, none = [], [], []
+    for runner in runners:
+        ident = runner["id"]
+        own = runner_components(ident, runner.get("kind"), components)
+        count = usage.get(ident, (0, 0.0))[0]
+        row = _row("Runners", "runner", runner.get("name", ident), "action", "", module=ident)
+        row.update(display=_plural(count, "game") if count else "", icon=runner_logo(ident), iconSlot=True, runner=ident, action="Open")
+        row.update({"tag": "", "accent": False, "size": "", "progress": 0, "component": "", **_state(own, row_of)})
+        if _found(runner):
+            found.append(row)
+        elif any(c.get("latest") for c in own):
+            offered.append((not any(c.get("proposal") == "install" for c in own), row))
+        else:
+            none.append(row)
+    tools = sorted((c for c in components if c["kind"] in ("tool", "system") and c["id"] != PROTON_TOOL), key=_needs_doing)
+    rows, groups = [], []
+
+    def card(title, members, **group):
+        if members:
+            at = len(rows)
+            rows.extend(members)
+            groups.append(_group(title, range(at, len(rows)), **group))
+
+    card("", found)
+    card(NOT_INSTALLED, [row for _, row in sorted(offered, key=lambda o: o[0])], meta=NOT_INSTALLED_META)
+    card(NO_BUILD if loaded else NOT_FOUND, none, meta=NO_BUILD_META if loaded else "", off=True)
+    card(TOOLS, [{**row_of(c), "section": TOOLS} for c in tools], meta=f"{sum(1 for c in tools if c.get('in_use'))} of {len(tools)} installed")
+    if groups:
+        groups[0]["warning"] = catalogue_warning(listing)
+    return rows, groups
+
+
 class RunnersForm(RowsForm):
-    def __init__(self, client, parent=None):
+    def __init__(self, client, components, parent=None):
         super().__init__(client, parent)
-        client.libraryChanged.connect(lambda ids: self.load() if self._rows else None)
+        self._components = components
+        client.libraryChanged.connect(lambda ids: self._build() if self._rows else None)
+        components.listingChanged.connect(lambda: self._build() if self._rows else None)
 
     @Slot()
     def load(self):
-        usage = {}
-        for game in self._client.list():
-            ident = _runner_of(game)
-            if not ident:
-                continue
-            count, hours = usage.get(ident, (0, 0.0))
-            usage[ident] = (count + 1, hours + float((game.get("stats") or {}).get("hours") or 0))
-        runners = sorted(
-            self._client.runners(),
-            key=lambda r: (not _found(r), -usage.get(r["id"], (0, 0.0))[0], -usage.get(r["id"], (0, 0.0))[1], r.get("name", r["id"]).lower()),
-        )
-        rows, found, missing = [], [], []
-        for runner in runners:
-            ident = runner["id"]
-            count = usage.get(ident, (0, 0.0))[0]
-            row = _row("Runners", "runner", runner.get("name", ident), "action", "", module=ident)
-            row.update(display=f"{count} game{'' if count == 1 else 's'}" if count else "", icon=runner_logo(ident), iconSlot=True, runner=ident, action="Open")
-            (found if _found(runner) else missing).append(len(rows))
-            rows.append(row)
-        groups = [_group("", found)]
-        if missing:
-            groups.append(_group("Not found", missing, caps=True, off=True))
+        self._build()
+        self._components.load()
+
+    # Y: the catalogue fetched again.
+    @Slot()
+    def refresh(self):
+        self._components.refresh()
+
+    def _build(self):
+        rows, groups = build_runners(self._client.runners(), self._client.list(), self._components.listing(), self._components.row)
         self._set_rows(rows, groups)
 
     @Slot(str, result=str)
     def logo(self, ident):
         return runner_logo(ident)
 
+    @Slot(str, result=int)
+    def indexOf(self, ident):
+        return next((i for i, r in enumerate(self._rows) if (r.get("runner") or r.get("component")) == ident), -1)
 
-def build_runner(client, ident, screen_mode):
-    """A runner's page: its program and gamescope, the global launch keys of its kind (the advanced ones folded into the Proton card,
-    else the runner's), its options, its games."""
+
+def build_runner(client, ident, screen_mode, listing=None, row_of: Callable[[dict], dict] = dict):
+    """A runner's page: its program and gamescope, the builds Universe installs of it, the global launch keys of its kind (the
+    advanced ones folded into the Proton card, else the runner's), its options, its games. Without `listing` (the search) no
+    Builds card."""
     runner = next((r for r in client.runners() if r["id"] == ident), None)
     if runner is None:
         return {}, [], []
     name = runner.get("name", ident)
     found = runner.get("path") or ""
     source = runner.get("source") or ""
+    kind = runner.get("kind") or ""
     platforms = ", ".join(runner.get("platforms") or [])
-    if runner.get("kind") == "linux":
+    if kind == "linux":
         meta, warning = platforms, ""
     elif found:
         meta = f"{platforms} · {found}" + (f" ({source})" if source and source != "path" else "")
@@ -93,41 +177,39 @@ def build_runner(client, ident, screen_mode):
     else:
         meta, warning = platforms, "not found"
     info = {"id": ident, "name": name, "meta": meta, "warning": warning, "icon": runner_logo(ident)}
+    own = runner_components(ident, kind, listing.get("components") or []) if listing else []
     rows, groups = [], []
-    if runner.get("kind") != "linux":
-        own = runner.get("exe") or ""
-        where = (f"Installed by Universe ({runner.get('version')})" if source == "universe" else FOUND.get(source, "Found")) if found and not own else ""
+    if kind != "linux":
+        exe = runner.get("exe") or ""
+        where = (f"Installed by Universe ({runner.get('version')})" if source == "universe" else FOUND.get(source, "Found")) if found and not exe else ""
         rows.append(
-            _row(name, "exe", "Program", "path", own or found, module=ident, detail=where, inherited=not own and bool(found), origin="runner" if own else "")
+            _row(name, "exe", "Program", "path", exe or found, module=ident, detail=where, inherited=not exe and bool(found), origin="runner" if exe else "")
         )
+        rows.extend({**row_of(c), "section": name} for c in own if c["id"] == PROTON_TOOL)
         rows.append(_row(name, "args", "Arguments", "string", runner.get("args") or "", module=ident))
-        builds = runner.get("builds") or []
-        if builds:
-            values, labels = ["", "latest", *builds], [SYSTEM_FIRST, NEWEST, *builds]
-            current = str(runner.get("build") or "")
-            shown = labels[values.index(current)] if current in values else current
-            row = _row(name, "build", "Build", "enum", shown, labels, module=ident, detail=BUILD_DETAIL, origin="runner" if current else "")
-            row["choiceValues"] = values
-            rows.append(row)
     config = client.config()
     launch = config.get("launch") or {}
-    own = runner.get("gamescope")
+    gamescope = runner.get("gamescope")
     rows.append(
         _row(
             name,
             "gamescope",
             "Gamescope",
             "bool",
-            bool(launch.get("gamescope", True)) if own is None else bool(own),
+            bool(launch.get("gamescope", True)) if gamescope is None else bool(gamescope),
             module=ident,
-            origin="global" if own is None else "runner",
+            origin="global" if gamescope is None else "runner",
         )
     )
     groups.append(_group("Runner", list(range(len(rows))), caps=True))
-    kind = runner.get("kind") or ""
+    builds = [c for c in _in_use_first(own) if c["id"] != PROTON_TOOL]
+    if builds:
+        first = len(rows)
+        rows.extend({**row_of(c), "section": name} for c in builds)
+        groups.append(_group(BUILDS, list(range(first, len(rows))), caps=True, warning=catalogue_warning(listing or {})))
     home = "Proton" if kind == "proton" else "Runner"
     homes = {**HOMES, "Sync": home, "Upscaling": home, "Logs": home}
-    global_launch_rows(rows, groups, client, config, screen_mode(), lambda spec: kind in spec["runners"], client.gpu(), homes)
+    global_launch_rows(rows, groups, client, config, screen_mode(), lambda spec: kind in spec["runners"] and spec["key"] not in BUILD_KEYS, client.gpu(), homes)
     options = runner.get("options") or []
     if options:
         first = len(rows)
@@ -160,7 +242,7 @@ def build_runner(client, ident, screen_mode):
             }
         )
     rows.append({**_row(name, "add_file", "Add a game…", "action", "", module=ident), "display": "", "action": "Pick a file", "runner": ident})
-    groups.append(_group("Games", list(range(first, len(rows))), caps=True, meta=f"{len(games)} game{'' if len(games) == 1 else 's'}" if games else ""))
+    groups.append(_group("Games", list(range(first, len(rows))), caps=True, meta=_plural(len(games), "game") if games else ""))
     return info, rows, groups
 
 
@@ -168,21 +250,25 @@ class RunnerForm(RowsForm):
     message = Signal(str)
     runnerChanged = Signal()
 
-    def __init__(self, client, screen_mode: Callable[[], dict] = dict, parent=None):
+    def __init__(self, client, components, screen_mode: Callable[[], dict] = dict, parent=None):
         super().__init__(client, parent)
+        self._components = components
         self._screen_mode = screen_mode
         self._runner = {}
         self._pending = None
         client.libraryChanged.connect(lambda ids: self._refresh() if self._runner else None)
+        components.listingChanged.connect(lambda: self._refresh() if self._runner else None)
 
     @Slot(str)
     def load(self, ident):
         self._set_show_advanced(False)
         self._runner = {"id": ident}
         self._refresh()
+        if ident and not self._components.listing():
+            self._components.load()
 
     def _refresh(self):
-        self._runner, rows, groups = build_runner(self._client, self._runner["id"], self._screen_mode)
+        self._runner, rows, groups = build_runner(self._client, self._runner["id"], self._screen_mode, self._components.listing(), self._components.row)
         self._set_rows(rows, groups)
         self.runnerChanged.emit()
 

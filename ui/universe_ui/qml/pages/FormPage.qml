@@ -40,6 +40,7 @@ FocusScope {
     })
     readonly property var icons: ({
             "Runner": "play",
+            "Builds": "download",
             "Options": "sliders",
             "Games": "library",
             "Settings": "sliders",
@@ -51,7 +52,7 @@ FocusScope {
     readonly property string rowAction: row && row.entry ? "Remove" : "Reset"
     readonly property bool canReset: inRows && row !== null && form.resettable(row)
 
-    readonly property var hints: editor.open ? editor.hints : menu.open ? menu.hints : [
+    readonly property var hints: editor.open ? editor.hints : menu.open ? menu.hints : dialog.open ? dialog.hints : [
         {
             glyph: "A",
             label: !inRows ? "Open" : row && row.type === "bool" ? "Toggle" : row && row.key === "add_file" ? "Pick a file" : row && row.type === "action" ? row.action || "Select" : "Change",
@@ -202,6 +203,36 @@ FocusScope {
         }
     }
 
+    function componentMenu(ident, items, title) {
+        if (items.length === 0) {
+            Sound.edge();
+            return;
+        }
+        Sound.panel();
+        menu.show(items, body.cards, body.cards.focusRect, title, function (action) {
+            page.componentAction(ident, action);
+        });
+    }
+
+    function componentAction(ident, action) {
+        var components = api.screens.components;
+        if (action === "versions") {
+            componentMenu(ident, components.versionActions(ident), "Another version");
+            return;
+        }
+        var ask = components.confirm(ident, action);
+        if (ask) {
+            dialog.ask(ask, function (yes) {
+                if (yes)
+                    components.act(ident, action) ? Sound.enter() : Sound.edge();
+                body.cards.forceActiveFocus();
+            });
+            return;
+        }
+        components.act(ident, action) ? Sound.enter() : Sound.edge();
+        body.cards.forceActiveFocus();
+    }
+
     function activate(index, row) {
         var cards = body.cards;
         if (row.disabled === true || row.type === "info") {
@@ -216,6 +247,8 @@ FocusScope {
             menu.show(gameActions(row), cards, cards.focusRect, row.label, function (action) {
                 page.gameAction(row, action);
             });
+        } else if (row.key === "component") {
+            componentMenu(row.component, api.screens.components.actions(row.component), row.label);
         } else if (row.type === "bool") {
             form.toggle(index);
             Sound.favourite(!row.value);
@@ -356,7 +389,7 @@ FocusScope {
         rows: page.form.rows
         groups: page.groups
         sections: page.sections
-        dimmed: editor.open || menu.open
+        dimmed: editor.open || menu.open || dialog.open
 
         onActivated: function (index, row) {
             page.activate(index, row);
@@ -398,6 +431,7 @@ FocusScope {
 
     ActionMenu {
         id: menu
+        objectName: "menu"
 
         anchors.fill: parent
         z: 4
@@ -405,8 +439,16 @@ FocusScope {
         onDismissed: body.cards.forceActiveFocus()
     }
 
+    ConfirmDialog {
+        id: dialog
+        objectName: "dialog"
+
+        anchors.fill: parent
+        z: 4
+    }
+
     Keys.onPressed: function (event) {
-        if (event.isAutoRepeat || editor.open || menu.open)
+        if (event.isAutoRepeat || editor.open || menu.open || dialog.open)
             return;
         if (api.keys.isMenu(event)) {
             event.accepted = true;

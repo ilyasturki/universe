@@ -96,7 +96,7 @@ SYNONYMS = {
 # The sidebar sections, by id.
 SECTION_SYNONYMS = {
     "launch": ["display", "resolution", "overlay", "general", "global"],
-    "runners": ["proton", "wine", "emulators", "dolphin", "ryujinx", "rpcs3", "pcsx2"],
+    "runners": ["proton", "wine", "emulators", "dolphin", "ryujinx", "rpcs3", "pcsx2", "components", "builds", "versions", "tools", "umu"],
     "controller": ["gamepad", "pad", "macros", "buttons", "paddles", "dualsense", "xbox"],
     "controllers": ["gamepad", "pad", "macros", "buttons", "paddles", "dualsense", "xbox"],
     "sources": ["gog", "store", "shop", "login", "sign in"],

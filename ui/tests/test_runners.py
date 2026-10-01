@@ -1,4 +1,4 @@
-from conftest import index_of, record, rows_by_key, until
+from conftest import index_of, record, rows_by_key, settle, until
 from universe_ui.screens.runners import suggested_title
 
 
@@ -11,30 +11,75 @@ def cards(form):
     return [(g["title"], [form.rows[i]["key"] for i in g["rows"]]) for g in form.groups]
 
 
-def test_runners_list_by_usage(api, fake):
+def card_of(form, key):
+    return [form.rows[i].get(key) for g in form.groups for i in g["rows"] if form.rows[i]["key"] == "component"]
+
+
+def ids(form, group):
+    return [form.rows[i].get("runner") or form.rows[i]["component"] for i in group["rows"]]
+
+
+def with_builds(api):
+    api.screens.components.load()
+    settle(api.screens.components)
+
+
+def test_runners_list_each_runner_with_its_builds_and_the_tools_last(api, fake):
+    fake.addGame("rpcs3", "/games/Demons Souls/PS3_GAME/USRDIR/EBOOT.BIN", "Demons Souls")
     form = api.screens.runners
     form.load()
-    assert [r["runner"] for r in form.rows] == ["proton", "eden", "dolphin", "linux", "melonds", "wine", "rpcs3"], (
-        "games linked, then hours, then the name; the ones not found last"
+    assert [ids(form, g) for g in form.groups] == [["proton", "eden", "dolphin", "linux", "melonds", "wine", "xemu"], ["rpcs3", "mame"]], (
+        "before the catalogue: the runners found by the games on them, then their hours, then the name; the others"
     )
-    assert [r["display"] for r in form.rows][:4] == ["7 games", "1 game", "1 game", ""]
-    assert form.rows[0]["type"] == "action" and form.rows[0]["action"] == "Open" and form.rows[0]["label"] == "Proton"
-    assert form.rows[2]["icon"] == "assets/runners/dolphin.svg"
-    assert [g["title"] for g in form.groups] == ["", "Not found"]
-    assert form.groups[0]["rows"] == [0, 1, 2, 3, 4, 5] and form.groups[1]["rows"] == [6] and form.groups[1]["off"] is True
-    assert form.indexOf("dolphin") == 2 and form.indexOf("nope") == -1
+    assert form.groups[1]["off"] is True
+    settle(api.screens.components)
+    found, offered, none, tools = until(lambda: len(form.groups) == 4 and form.groups)
+    assert ids(form, found) == ["proton", "eden", "dolphin", "linux", "melonds", "wine", "xemu"]
+    assert ids(form, offered) == ["rpcs3"] and offered["off"] is False, "Universe can install it, and a game waits on it"
+    assert ids(form, none) == ["mame"] and none["off"] is True, "no build to download"
+    assert ids(form, tools) == ["gpu-screen-recorder", "gamescope"], "what to install first; umu-run sits on Proton's page"
+    rows = {r.get("runner") or r["component"]: r for r in form.rows}
+    assert [rows[i]["display"] for i in ("proton", "eden", "dolphin", "linux")] == ["7 games", "1 game", "1 game", ""]
+    assert rows["proton"]["action"] == "Open" and rows["proton"]["icon"] == "assets/runners/proton.svg"
+    assert rows["proton"]["component"] == "ge-proton" and rows["proton"]["detail"].startswith("GE-Proton11-7"), "the Proton build in use"
+    assert rows["xemu"]["component"] == "xemu" and rows["xemu"]["accent"] is True and rows["xemu"]["size"], "an update waits"
+    assert rows["rpcs3"]["accent"] is True and rows["rpcs3"]["size"]
+    assert rows["linux"]["component"] == "" and rows["linux"]["accent"] is False, "nothing to install"
+    assert rows["gamescope"]["key"] == "component" and "runner" not in rows["gamescope"], "a tool has no page"
+    assert form.indexOf("dolphin") == 2 and form.indexOf("gamescope") == tools["rows"][1] and form.indexOf("nope") == -1
+
+
+def test_an_install_moves_its_runner_up_and_the_row_shows_its_progress(api, fake):
+    fake.addGame("rpcs3", "/games/Demons Souls/PS3_GAME/USRDIR/EBOOT.BIN", "Demons Souls")
+    form = api.screens.runners
+    form.load()
+    components = api.screens.components
+    settle(components)
+    until(lambda: len(form.groups) == 4)
+    progress = []
+    form.rowsChanged.connect(lambda: progress.append(form.rows[form.indexOf("rpcs3")]["progress"]))
+    finished = record(fake.jobFinished)
+    assert components.act("rpcs3", "install") is True
+    until(lambda: finished)
+    settle(components)
+    until(lambda: form.indexOf("rpcs3") in form.groups[0]["rows"], "found once installed")
+    assert [p for p in progress if p] == [0.25, 0.5, 0.75, 1.0]
+    assert form.rows[form.indexOf("rpcs3")]["accent"] is False
 
 
 def test_runner_form_cards(api, fake):
+    with_builds(api)
     form = api.screens.runner
     form.load("dolphin")
     assert form.info["name"] == "Dolphin" and form.info["warning"] == "" and form.info["icon"] == "assets/runners/dolphin.svg"
     assert form.info["meta"] == "Nintendo GameCube, Nintendo Wii · /run/current-system/sw/bin/dolphin-emu"
     assert cards(form) == [
         ("Runner", ["exe", "args", "gamescope"]),
+        ("Builds", ["component"]),
         ("Options", ["batch", "user_directory"]),
         ("Games", ["game", "add_file"]),
     ], "every card named, for the sidebar"
+    assert card_of(form, "component") == ["dolphin"] and "build" not in rows_by_key(form), "the Builds card picks the build"
     rows = rows_by_key(form)
     game = rows["game"]
     assert game["type"] == "action" and game["action"] == "Options" and game["gameId"] == "lego-batman" and game["label"] == "LEGO Batman: The Videogame"
@@ -62,10 +107,35 @@ def test_runner_form_cards(api, fake):
         "X drops the configured program; nothing was detected to fall back on"
     )
     form.load("linux")
-    assert cards(form) == [("Runner", ["gamescope"]), ("Games", ["add_file"])], "the program is the game itself; no games yet, the row that adds one"
+    assert cards(form) == [("Runner", ["gamescope"]), ("Games", ["add_file"])], (
+        "the program is the game itself, nothing to install; no games yet, the row that adds one"
+    )
     assert form.groups[1]["meta"] == ""
     form.load("nope")
     assert form.rows == [] and form.info == {}
+
+
+def test_the_builds_card_installs_and_switches_builds(api, fake):
+    with_builds(api)
+    form = api.screens.runner
+    components = api.screens.components
+    form.load("proton")
+    assert cards(form)[:2] == [("Runner", ["exe", "component", "args", "gamescope"]), ("Builds", ["component", "component"])]
+    assert card_of(form, "component") == ["umu-run", "ge-proton", "proton-cachyos"], "umu-run starts Proton's builds: beside its program"
+    assert "launch.proton" not in rows_by_key(form), "the Builds card picks the Proton build"
+    finished = record(fake.jobFinished)
+    assert components.act("proton-cachyos", "install") is True
+    until(lambda: form.rows[next(i for i, r in enumerate(form.rows) if r.get("component") == "proton-cachyos")]["action"] == "Cancel")
+    until(lambda: finished)
+    settle(components)
+    cachy = until(lambda: next(r for r in form.rows if r.get("component") == "proton-cachyos" and r["accent"] is False and r["display"] != "Not installed"))
+    assert cachy["key"] == "component"
+    form.load("xemu")
+    assert card_of(form, "component") == ["xemu"]
+    assert components.act("xemu", "update") is True
+    until(lambda: len(finished) == 2)
+    settle(components)
+    until(lambda: "0.8.136" in next(r for r in form.rows if r.get("component") == "xemu")["display"], "the build in use, updated")
 
 
 def test_runner_form_carries_its_launch_keys(api, fake):
@@ -73,7 +143,7 @@ def test_runner_form_carries_its_launch_keys(api, fake):
     form.load("proton")
     assert cards(form) == [
         ("Runner", ["exe", "args", "gamescope"]),
-        ("Proton", ["launch.proton", "launch.wayland", "launch.hdr"]),
+        ("Proton", ["launch.wayland", "launch.hdr"]),
         ("Games", ["game"] * 7 + ["add_file"]),
     ], "config.toml's [launch] keys tied to Proton, the global values, its games; no Advanced row"
     assert not form.showAdvanced and form.hasAdvanced and "advanced" not in [r["key"] for r in form.rows]
@@ -81,7 +151,6 @@ def test_runner_form_carries_its_launch_keys(api, fake):
     assert cards(form)[1] == (
         "Proton",
         [
-            "launch.proton",
             "launch.wayland",
             "launch.hdr",
             "launch.esync",
@@ -94,12 +163,11 @@ def test_runner_form_carries_its_launch_keys(api, fake):
             "launch.debug_log",
         ],
     ), "the switches fold into the Proton card"
-    assert form.groups[1]["dividers"] == [{"at": 3, "label": "Advanced · Sync"}, {"at": 6, "label": "Upscaling"}, {"at": 10, "label": "Logs"}]
+    assert form.groups[1]["dividers"] == [{"at": 2, "label": "Advanced · Sync"}, {"at": 5, "label": "Upscaling"}, {"at": 9, "label": "Logs"}]
     assert [g["title"] for g in form.groups] == ["Runner", "Proton", "Games"], "the sidebar does not move with Advanced"
     assert all(form.rows[i]["advanced"] for g in form.advancedGroups for i in g["rows"]) and all(g["advanced"] for g in form.advancedGroups)
     assert {g["title"]: g["meta"] for g in form.advancedGroups}["Upscaling"] == "AMD Radeon RX 7900 GRE · RDNA 3"
     rows = rows_by_key(form)
-    assert rows["launch.proton"]["value"] == "proton-ge" and rows["launch.proton"]["choices"] == ["proton-cachyos", "proton-em", "proton-ge"]
     assert rows["launch.esync"]["value"] is True and rows["launch.esync"]["inherited"] is False
     assert rows["launch.dlss_upgrade"]["detail"].endswith("an anti-cheat. Not for your GPU.")
     assert rows["launch.fsr4_upgrade"]["detail"].endswith("Works on your GPU.") and rows["launch.optiscaler"]["detail"].endswith("Works on your GPU.")
@@ -111,7 +179,6 @@ def test_runner_form_carries_its_launch_keys(api, fake):
     )
     assert form.setValue(index_of(form, "launch.fsr4_upgrade"), "on") is True
     assert fake.config()["launch"]["fsr4_upgrade"] == "on" and rows_by_key(form)["launch.fsr4_upgrade"]["value"] == "on"
-    assert form.setValue(index_of(form, "launch.proton"), "proton-em") is True and fake.config()["launch"]["proton"] == "proton-em"
     form.load("wine")
     assert not form.showAdvanced, "another runner opens collapsed"
     assert form.reveal("launch.fsync", "") == index_of(form, "launch.fsync") and form.showAdvanced, "revealing an advanced row opens Advanced"

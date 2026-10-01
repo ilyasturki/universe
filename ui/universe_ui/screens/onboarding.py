@@ -2,7 +2,7 @@ from PySide6.QtCore import Signal, Slot
 
 from ..qt import Property
 from .add import _source_status
-from .settings import RowsForm, _add, _row, launch_row
+from .settings import RowsForm, _add, _plural, _row, launch_row
 
 MEMORY_KEY = "onboarded"
 PREFERENCE_KEYS = ("hdr",)
@@ -19,10 +19,6 @@ SUBTITLES = {"done": "Everything here can be changed later under Settings."}
 
 def _step(ident):
     return {"id": ident, "title": TITLES[ident], "subtitle": SUBTITLES.get(ident, "")}
-
-
-def _plural(n, word):
-    return f"{n} {word}{'' if n == 1 else 's'}"
 
 
 def preference_rows(client, controller):

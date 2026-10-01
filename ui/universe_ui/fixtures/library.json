@@ -1032,6 +1032,35 @@
       "options": [
         {"key": "fullscreen", "type": "bool", "default": true, "label": "Fullscreen", "value": false, "advanced": false}
       ]
+    },
+    {
+      "id": "xemu",
+      "name": "xemu",
+      "kind": "emulator",
+      "extensions": ["xiso"],
+      "platforms": ["Microsoft Xbox"],
+      "exe": "",
+      "args": "",
+      "path": "/fake/components/xemu/0.8.135/AppRun",
+      "detected": "/fake/components/xemu/0.8.135/AppRun",
+      "source": "universe",
+      "version": "0.8.135",
+      "available": true,
+      "options": []
+    },
+    {
+      "id": "mame",
+      "name": "MAME",
+      "kind": "emulator",
+      "extensions": ["chd"],
+      "platforms": ["Arcade"],
+      "exe": "",
+      "args": "",
+      "path": "",
+      "detected": "",
+      "source": "",
+      "available": false,
+      "options": []
     }
   ],
   "screen": {"screen": "DP-1", "width": 2560, "height": 1440, "refresh": 144, "vrr": true},

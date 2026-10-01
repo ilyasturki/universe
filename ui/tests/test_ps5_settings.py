@@ -57,13 +57,13 @@ def test_a_runner_form_keeps_its_cards_when_y_shows_the_advanced_rows(ps5, api):
     window, root, warnings = ps5
     form = api.screens.runner
     page = push(root, "pages/FormPage.qml", {"runner": "proton"})
-    until(lambda: sections(page) == ["Runner", "Proton", "Games"])
+    until(lambda: sections(page) == ["Runner", "Builds", "Proton", "Games"])
     assert form.showAdvanced is False
     assert page.property("strip") is True, "a form is no screen of the console's: the hints strip shows"
     click(window, Qt.Key.Key_F)
-    until(lambda: form.showAdvanced is True and sections(page) == ["Runner", "Proton", "Games"], "Y: the cards stay")
+    until(lambda: form.showAdvanced is True and sections(page) == ["Runner", "Builds", "Proton", "Games"], "Y: the cards stay")
     click(window, Qt.Key.Key_Right)
-    click(window, Qt.Key.Key_Down, 2)
+    click(window, Qt.Key.Key_Down, 3)
     row = until(lambda: (r := value(page, "currentRow")) and r["key"] == "gamescope" and r)
     assert row["origin"] == "global" and labels(page) == ["Hide advanced", "Reset", "Back", "Toggle"]
     click(window, Qt.Key.Key_Return)
@@ -177,21 +177,23 @@ def test_a_launch_missing_its_runner_asks_to_install_then_plays(ps5, api, fake):
     assert warnings == []
 
 
-def test_settings_components_part_by_kind_and_a_opens_the_options(ps5, api):
+def test_a_landing_on_components_opens_runners_whose_tools_open_their_options(ps5, api):
     window, root, warnings = ps5
     page = push(root, "pages/SettingsPage.qml", {"section": "components"})
     settle(api.screens.components)
-    until(lambda: page.property("sectionId") == "components" and page.property("level") == "section")
-    parts = until(lambda: {p["label"]: p["detail"] for p in value(page, "parts")})
-    assert parts["Emulators"].endswith("installed") and "Proton" in parts and "No download" in parts
+    until(lambda: page.property("sectionId") == "runners" and page.property("level") == "section")
+    parts = until(lambda: (p := value(page, "parts")) and len(p) == 4 and p)
+    tools = parts[-1]
+    assert [r["component"] for r in tools["rows"]] == ["gpu-screen-recorder", "gamescope"] and all(r["action"] == "component" for r in tools["rows"])
+    assert value(page, "sections")[page.property("section")]["detail"].endswith(" to look at"), "the updates and installs waiting"
+    page.setProperty("part", len(parts) - 1)
     click(window, Qt.Key.Key_Right)
-    row = until(lambda: focused_row(page))
-    form = api.screens.components
-    assert row["action"] == "component" and form.rows[row["form"]]["label"] == row["label"]
+    row = until(lambda: (r := focused_row(page)) and r.get("component") == "gpu-screen-recorder" and r)
+    assert labels(page)[-1] == "Options"
     click(window, Qt.Key.Key_Return)
     popup = root.findChild(QObject, "popup")
     until(lambda: popup.property("open") is True)
-    assert [i["label"] for i in value(popup, "items")] == [a["label"] for a in form.actions(row["component"])]
+    assert len(value(popup, "items")) == len(api.screens.components.actions(row["component"]))
     assert warnings == []
 
 
@@ -204,7 +206,7 @@ def test_the_component_bar_hides_by_x_or_its_cross_and_uninstall_asks_in_red(ps5
     page = push(root, "pages/SettingsPage.qml", {"section": "components"})
     form = api.screens.components
     settle(form)
-    until(lambda: page.property("sectionId") == "components" and page.property("level") == "section")
+    until(lambda: page.property("sectionId") == "runners" and page.property("level") == "section")
     finished = record(fake.jobFinished)
 
     def hidden():
@@ -222,7 +224,7 @@ def test_the_component_bar_hides_by_x_or_its_cross_and_uninstall_asks_in_red(ps5
     gamepad.touch(window, [(p.x(), p.y())], 0)
     until(hidden, "so does a tap on its ×")
     until(lambda: len(finished) == 2)
-    QMetaObject.invokeMethod(page, "componentAction", Q_ARG("QVariant", "xemu"), Q_ARG("QVariant", "uninstall"))
+    QMetaObject.invokeMethod(root, "componentAction", Q_ARG("QVariant", "xemu"), Q_ARG("QVariant", "uninstall"))
     dialog = root.findChild(QObject, "dialog")
     until(lambda: dialog.property("open") is True)
     assert dialog.property("message") == "Uninstall xemu?" and dialog.property("dangerIndex") == 1, "Uninstall is the red button"

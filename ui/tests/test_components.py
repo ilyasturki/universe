@@ -8,53 +8,53 @@ def loaded(api):
     return form
 
 
-def row_of(form, ident, key="component"):
-    return next(i for i, r in enumerate(form.rows) if r.get("component") == ident and r["key"] == key)
+def component(form, ident):
+    return next(c for c in form.listing()["components"] if c["id"] == ident)
 
 
-def labels(items):
-    return [i["label"] for i in items]
+def row_of(form, ident):
+    return form.row(component(form, ident))
+
+
+def acts(items):
+    return [i["action"] for i in items]
 
 
 def needs_rpcs3(fake):
     return fake.addGame("rpcs3", "/games/Demons Souls/PS3_GAME/USRDIR/EBOOT.BIN", "Demons Souls")
 
 
-def test_components_list_by_kind_with_what_needs_doing_first(api, fake):
+def test_a_component_row_says_what_to_do_about_it(api, fake):
     needs_rpcs3(fake)
     form = loaded(api)
-    assert [g["title"] for g in form.groups] == ["Recently updated", "Proton", "Wine", "Emulators", "Tools", "System", "No download"]
-    emulators = next(g for g in form.groups if g["title"] == "Emulators")
-    assert [form.rows[i]["component"] for i in emulators["rows"]] == ["rpcs3", "xemu", "dolphin", "eden"], "what needs doing, then by the games on it"
-    assert emulators["meta"] == "3 of 4 installed"
-    rows = {r["component"]: r for r in form.rows if r["key"] == "component"}
-    assert rows["xemu"]["tag"] == "Update 0.8.136" and rows["xemu"]["accent"] is True and rows["xemu"]["display"] == "0.8.135 · Universe"
-    assert rows["wine"]["tag"] == "11.18 available" and rows["wine"]["display"] == "11.8 · Nix" and rows["wine"]["size"]
-    assert rows["rpcs3"]["tag"] == "Needed" and rows["rpcs3"]["display"] == "Not installed"
-    assert rows["dolphin"]["display"] == "2606a · Nix" and rows["dolphin"]["tag"] == "", "no build to offer: nothing to do"
-    assert rows["mame"]["display"] == "No download" and next(g for g in form.groups if g["title"] == "No download")["off"] is True
-    assert rows["eden"]["icon"] == "assets/runners/eden.svg" and rows["umu-run"]["icon"] == "terminal"
-    assert form.pending == 4, "the update and the three proposals: the sidebar's badge"
+    xemu, wine, rpcs3, dolphin = (row_of(form, ident) for ident in ("xemu", "wine", "rpcs3", "dolphin"))
+    assert (xemu["key"], xemu["component"], xemu["action"], xemu["accent"]) == ("component", "xemu", "Options", True), "an update waits"
+    assert wine["accent"] is True and wine["size"], "a newer build than the system's, with its download's size"
+    assert rpcs3["accent"] is True and rpcs3["size"], "a game waits on it"
+    assert dolphin["accent"] is False and dolphin["size"] == "", "no build to offer: nothing to do"
+    assert row_of(form, "eden")["icon"] == "assets/runners/eden.svg" and row_of(form, "umu-run")["icon"] == "terminal"
+    assert form.pending == 4, "the update and the three proposals: Runners' badge"
 
 
 def test_the_options_put_the_useful_one_first_and_ask_before_what_costs(api, fake):
     form = loaded(api)
-    assert labels(form.actions("xemu")) == ["Update to 0.8.136", "Uninstall · 61.0 MB", "Runner settings"]
-    assert labels(form.actions("wine"))[:2] == ["Install 11.18 and use it", "Install another version…"]
-    assert labels(form.versionActions("wine"))[0].startswith("11.17 · 58")
+    assert acts(form.actions("xemu")) == ["update", "uninstall"]
+    assert acts(form.actions("wine"))[:2] == ["install", "versions"]
+    assert acts(form.versionActions("wine")) == ["install:11.17"]
     ge = "ge-proton"
-    assert labels(form.actions(ge)) == [
-        "Use GE-Proton11-6 · Universe",
-        "Install another version…",
-        "Roll back GE-Proton11-7",
-        "Remove GE-Proton11-6 · 1.1 GB",
-        "Uninstall · 2.2 GB",
-    ]
-    assert form.actions("umu-run")[0]["label"] == "Install 1.4.4", "a tool: no build to switch to, the system's always wins"
+    assert acts(form.actions(ge)) == ["use:GE-Proton11-6", "versions", "rollback", "remove:GE-Proton11-6", "uninstall"]
+    assert acts(form.actions("umu-run")) == ["install"], "a tool: no build to switch to, the system's always wins"
     ask = form.confirm("rpcs3", "install")
     assert ask["message"] == "Install RPCS3 0.0.42-20069-3fa07db7?" and "to download" in ask["detail"] and ask["yes"] == "Install"
     assert form.confirm(ge, "rollback")["yes"] == "Roll back"
     assert form.confirm(ge, "use:GE-Proton11-6") is None, "a switch is undone as easily: nothing to ask"
+    assert form.act(ge, "use:GE-Proton11-6") is True
+    settle(form)
+    assert "use:latest" in acts(form.actions(ge)), "held on one build: the newest is a pick away"
+    fake.componentUse("xemu", "0.8.135")
+    form.load()
+    settle(form)
+    assert "use:latest" in acts(form.actions("xemu")), "an emulator held on one build too"
 
 
 def test_an_install_runs_as_a_job_and_a_proposed_newer_build_becomes_the_one_used(api, fake):
@@ -62,12 +62,12 @@ def test_an_install_runs_as_a_job_and_a_proposed_newer_build_becomes_the_one_use
     finished = record(fake.jobFinished)
     assert form.act("wine", "install") is True
     assert form.job["label"] == "Installing Wine (staging) 11.18"
-    assert form.rows[row_of(form, "wine")]["tag"] == "Installing…"
+    assert row_of(form, "wine")["action"] == "Cancel"
     job, ok, _text = until(lambda: finished)[0]
     assert ok is True and job == form.job["id"]
     settle(form)
-    rows = {r["component"]: r for r in form.rows if r["key"] == "component"}
-    assert rows["wine"]["display"] == "11.18 · Universe" and rows["wine"]["tag"] == "", "accepted from its proposal: Universe's build runs"
+    wine = component(form, "wine")
+    assert wine["in_use"]["version"] == "11.18" and not row_of(form, "wine")["accent"], "accepted from its proposal: Universe's build runs"
     assert form.job["ok"] is True and form.job["message"] == "Installed Wine (staging) 11.18"
 
 
@@ -75,7 +75,7 @@ def test_a_cancel_stops_the_job(api, fake):
     form = loaded(api)
     finished = record(fake.jobFinished)
     form.act("rpcs3", "install")
-    assert labels(form.actions("rpcs3")) == ["Cancel"]
+    assert acts(form.actions("rpcs3")) == ["cancel"]
     assert form.act("rpcs3", "cancel") is True
     _job, ok, _text = until(lambda: finished)[0]
     assert ok is False and form.job["message"] == "Stopped installing RPCS3 0.0.42-20069-3fa07db7"
@@ -89,8 +89,8 @@ def test_a_rollback_removes_the_update_and_skips_it(api, fake):
     settle(form)
     settle(form)
     assert messages[-1] == "Rolled back GE-Proton"
-    assert form.rows[row_of(form, "ge-proton")]["display"] == "GE-Proton11-6 · Universe"
-    assert form.groups[0]["title"] == "Proton", "the update rolled back is no longer recent"
+    assert component(form, "ge-proton")["in_use"]["version"] == "GE-Proton11-6"
+    assert component(form, "ge-proton")["recent"] is None, "the update rolled back is no longer recent"
 
 
 def test_an_uninstall_takes_every_build_the_one_in_use_too(api, fake):
@@ -107,7 +107,7 @@ def test_an_uninstall_takes_every_build_the_one_in_use_too(api, fake):
     settle(form)
     settle(form)
     assert messages[-1] == "Uninstalled xemu"
-    assert form.rows[row_of(form, "xemu")]["display"] == "Not installed"
+    assert component(form, "xemu")["in_use"] is None
     assert not [a for a in form.actions("xemu") if a["action"] == "uninstall"], "nothing of Universe's left"
     assert not [a for a in form.actions("eden") if a["action"] == "uninstall"], "the system's build is not Universe's to take"
 
@@ -116,12 +116,12 @@ def test_hiding_the_bar_leaves_the_job_its_row_and_its_toast(api, fake):
     form = loaded(api)
     messages, progress = [], []
     form.message.connect(messages.append)
-    form.rowsChanged.connect(lambda: progress.append(form.rows[row_of(form, "wine")]["progress"]))
+    form.listingChanged.connect(lambda: progress.append(row_of(form, "wine")["progress"]))
     finished = record(fake.jobFinished)
     form.act("wine", "install")
     form.hideJob()
     assert form.job is None, "the bar goes"
-    assert form.rows[row_of(form, "wine")]["tag"] == "Installing…" and labels(form.actions("wine")) == ["Cancel"]
+    assert row_of(form, "wine")["action"] == "Cancel" and acts(form.actions("wine")) == ["cancel"]
     until(lambda: finished)
     assert messages[-1] == "Installed Wine (staging) 11.18" and form.job is None, "the end still toasts, the bar stays away"
     assert [p for p in progress if p] == [0.25, 0.5, 0.75, 1.0], "the row's own progress moves meanwhile"
@@ -178,11 +178,9 @@ def test_the_daily_update_runs_quietly_and_says_what_it_updated(api, fake):
 
 def test_a_system_tool_installs_from_the_distribution_through_packagekit(api, fake):
     form = loaded(api)
-    system = next(g for g in form.groups if g["title"] == "System")
-    assert [form.rows[i]["component"] for i in system["rows"]] == ["gpu-screen-recorder", "gamescope"]
-    row = form.rows[row_of(form, "gpu-screen-recorder")]
-    assert row["tag"] == "Needed" and row["display"] == "Not installed" and "gpu-screen-recorder from your distribution" in row["detail"]
-    assert labels(form.actions("gpu-screen-recorder")) == ["Install from the distribution"]
+    row = row_of(form, "gpu-screen-recorder")
+    assert row["accent"] is True and "gpu-screen-recorder from your distribution" in row["detail"]
+    assert acts(form.actions("gpu-screen-recorder")) == ["install"]
     assert form.actions("gamescope") == [], "installed by the distribution: nothing for Universe to do"
     ask = form.confirm("gpu-screen-recorder", "install")
     assert ask["detail"] == "gpu-screen-recorder from your distribution's packages. It asks for your password."
@@ -190,7 +188,7 @@ def test_a_system_tool_installs_from_the_distribution_through_packagekit(api, fa
     assert form.act("gpu-screen-recorder", "install") is True
     until(lambda: finished)
     settle(form)
-    assert form.rows[row_of(form, "gpu-screen-recorder")]["display"] == "1.0 · system"
+    assert component(form, "gpu-screen-recorder")["in_use"]["version"] == "1.0"
 
 
 def test_setup_offers_the_runners_the_library_needs(api, fake):
@@ -213,7 +211,7 @@ def test_a_notice_is_put_to_the_user_before_every_install_of_its_component(api, 
     fake._core._component("eden")["builds"] = []
     notice = fake._core._component("eden")["notice"]
     form = loaded(api)
-    assert form.confirm("eden", "install")["notice"] == notice, "the Components page"
+    assert form.confirm("eden", "install")["notice"] == notice, "Eden's page"
     assert form.question("eden")["notice"] == notice, "the launch offer and the doctor's install"
     assert form.confirm("rpcs3", "install")["notice"] == ""
     proposed = []

@@ -178,7 +178,7 @@ def test_the_tab_bar_search_finds_the_settings_under_the_games(api, fake):
     overlay = page_as(root, "SearchOverlay", "focusTarget")
     search = api.screens.search
     until(lambda: search.ready)
-    assert [s["id"] for s in search.sections][:3] == ["launch", "runners", "components"], "indexed with Reprise's sections before Settings ever opened"
+    assert [s["id"] for s in search.sections][:3] == ["launch", "runners", "controller"], "indexed with Reprise's sections before Settings ever opened"
     overlay.setProperty("query", "techno")
     until(lambda: overlay.property("hasGames") is True and overlay.property("hasSettings") is False, "a title alone: the cover, not the game's every setting")
     overlay.setProperty("query", "quit")
@@ -493,7 +493,7 @@ def test_the_component_bar_hides_in_both_looks_and_the_job_goes_on(api, fake):
         return value.toVariant() if hasattr(value, "toVariant") else value
 
     def install(ident):
-        until(lambda: form.rows)
+        until(form.listing)
         assert form.act(ident, "install")
         until(lambda: page.property("componentsBar") is True)
         settle(window)
@@ -508,7 +508,7 @@ def test_the_component_bar_hides_in_both_looks_and_the_job_goes_on(api, fake):
     root.setProperty("tabIndex", root.property("settingsTab"))
     page = page_as(root, "SettingsPage")
     QMetaObject.invokeMethod(page, "land", Q_ARG("QVariant", "components"))
-    until(lambda: page.property("sectionId") == "components")
+    until(lambda: page.property("sectionId") == "runners", "a landing on Components opens Runners")
     install("wine")
     assert "Hide progress" in [i["label"] for i in js(page, "moreItems")]
     QTest.keyClick(window, Qt.Key.Key_F)  # Y
@@ -534,7 +534,7 @@ def test_the_component_bar_hides_in_both_looks_and_the_job_goes_on(api, fake):
     gamepad.touch(window, [centre(until(lambda: page.findChild(QQuickItem, "hideJob")))], 0)
     until(lambda: hidden(page), "so does a tap on its ×")
     until(lambda: len(finished) == 4)
-    QMetaObject.invokeMethod(page, "componentAction", Q_ARG("QVariant", "xemu"), Q_ARG("QVariant", "uninstall"))
+    QMetaObject.invokeMethod(root, "componentAction", Q_ARG("QVariant", "xemu"), Q_ARG("QVariant", "uninstall"))
     dialog = root.findChild(QObject, "dialog")
     until(lambda: dialog.property("message") == "Uninstall xemu?", "the uninstall asks first")
     assert dialog.property("dangerIndex") == 1, "Uninstall is the red button"
@@ -1360,13 +1360,13 @@ def test_the_switch2_forms_share_the_sidebar_and_y(api, fake):
     root = window.property("contentItem").childItems()[0].property("item")
     form = api.screens.runner
     page = push("pages/FormPage.qml", {"runner": "proton"})
-    until(lambda: sections(page) == ["Runner", "Proton", "Games"])
+    until(lambda: sections(page) == ["Runner", "Builds", "Proton", "Games"])
     assert form.showAdvanced is False
     click(Qt.Key.Key_F)
     until(lambda: form.showAdvanced is True)
-    assert sections(page) == ["Runner", "Proton", "Games"], "Y: the sidebar stays"
+    assert sections(page) == ["Runner", "Builds", "Proton", "Games"], "Y: the sidebar stays"
     click(Qt.Key.Key_Right)
-    click(Qt.Key.Key_Down, 2)
+    click(Qt.Key.Key_Down, 3)
     row = until(lambda: (row := page.property("currentRow").toVariant()) and row["key"] == "gamescope" and row)
     assert row["origin"] == "global" and labels(page) == ["Hide advanced", "Reset", "Back", "Toggle"]
     click(Qt.Key.Key_Return)
@@ -1483,5 +1483,43 @@ def test_each_looks_themes_page_says_it_is_not_affiliated(api, look):
     content = js(page, "content")
     rows = content["rows"] if isinstance(content, dict) else content
     assert any(r.get("key") == "affiliation" for r in rows)
+    settle(window)
+    window.close()
+
+
+@pytest.mark.parametrize(("look", "menu"), [("reprise", "menu"), ("switch2", "picker"), ("ps5", "popup")])
+def test_a_runner_pages_builds_card_installs_after_asking(api, fake, look, menu):
+    from PySide6.QtTest import QTest
+
+    components = api.screens.components
+    components.load()
+    until(lambda: not components.busy)
+    if look != "reprise":
+        api.theme.set(look)
+        api.theme.takeLanding()
+    _engine, window = render(api, activate=True)
+    root = window.property("contentItem").childItems()[0].property("item")
+    if look == "reprise":
+        root.openSub("pages/FormPage.qml", {"runner": "rpcs3"})
+        page = until(lambda: next((i for i in root.findChildren(QQuickItem) if i.metaObject().className().startswith("FormPage")), None))
+    else:
+        QMetaObject.invokeMethod(root, "push", Q_ARG("QVariant", "pages/FormPage.qml"), Q_ARG("QVariant", {"runner": "rpcs3"}))
+        page = page_as(root, "FormPage", "topPage")
+    form = api.screens.runner
+    index = until(lambda: next((i for i, r in enumerate(form.rows) if r.get("component") == "rpcs3"), None), "the Builds card")
+    assert next(g for g in form.groups if index in g["rows"])["title"] == "Builds"
+    settle(window)
+    finished = record(fake.jobFinished)
+    QMetaObject.invokeMethod(page, "activate", Q_ARG("QVariant", index), Q_ARG("QVariant", form.rows[index]))
+    owner = page if look == "reprise" else root
+    until(lambda: owner.findChild(QObject, menu).property("open") is True, "A opens the build's options")
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    until(lambda: owner.findChild(QObject, "dialog").property("open") is True, "the install asks first: its size, the room left")
+    assert components.job is None
+    QTest.keyClick(window, Qt.Key.Key_Return)
+    until(lambda: components.job is not None and components.job["component"] == "rpcs3", "Install is the default")
+    until(lambda: finished)
+    until(lambda: not components.busy)
+    until(lambda: not next(r for r in form.rows if r.get("component") == "rpcs3")["accent"], "in: nothing left to do")
     settle(window)
     window.close()

@@ -230,6 +230,49 @@ FocusScope {
         });
     }
 
+    function componentOptions(ident, title) {
+        var items = api.screens.components.actions(ident);
+        if (items.length === 0) {
+            Sound.play("edge");
+            return;
+        }
+        Sound.play("ok");
+        componentMenu(ident, items, title);
+    }
+    function componentMenu(ident, items, title) {
+        menu(title, items.map(function (i) {
+            return {
+                label: i.label,
+                glyph: i.icon || "",
+                danger: i.danger === true,
+                act: i.action
+            };
+        }), function (action) {
+            root.componentAction(ident, action);
+        });
+    }
+    function componentAction(ident, action) {
+        var components = api.screens.components;
+        if (action === "versions") {
+            componentMenu(ident, components.versionActions(ident), "Another version");
+            return;
+        }
+        var ask = components.confirm(ident, action);
+        if (!ask) {
+            Sound.play(components.act(ident, action) ? "ok" : "edge");
+            return;
+        }
+        dialogAsk({
+            message: ask.message,
+            detail: ask.detail,
+            buttons: [ask.no, ask.yes],
+            danger: action === "rollback" || action === "uninstall" || action.indexOf("remove:") === 0 ? 1 : -1
+        }, function (i) {
+            if (i === 1)
+                Sound.play(components.act(ident, action) ? "ok" : "edge");
+        });
+    }
+
     function launch(game) {
         if (!game || splash.running)
             return;

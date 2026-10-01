@@ -21,7 +21,7 @@ FocusScope {
     readonly property var components: api.screens.components
     readonly property var sources: api.screens.sources
     readonly property var listForm: sectionId === "modules" ? modulesForm : sectionId === "sources" ? sourceList : null
-    readonly property bool componentsBar: components.job != null && (sectionId === "components" || sources.job == null)
+    readonly property bool componentsBar: components.job != null && (sectionId === "runners" || sources.job == null)
     // X on a section where it has no other use.
     readonly property bool canHideJob: componentsBar && listForm === null && sectionId !== "launch"
 
@@ -42,12 +42,6 @@ FocusScope {
         {
             id: "runners",
             label: "Runners",
-            group: 1,
-            groupLabel: "Play"
-        },
-        {
-            id: "components",
-            label: "Components",
             detail: components.pending > 0 ? components.pending + " to look at" : "",
             group: 1,
             groupLabel: "Play"
@@ -121,9 +115,6 @@ FocusScope {
             runners: function () {
                 runners.load();
             },
-            components: function () {
-                components.load();
-            },
             launch: function () {
                 launch.load();
             },
@@ -144,8 +135,8 @@ FocusScope {
             }
         })
     readonly property var refreshers: ({
-            components: function () {
-                components.refresh();
+            runners: function () {
+                runners.refresh();
             },
             sound: function () {
                 api.home.loadOutputs();
@@ -203,10 +194,15 @@ FocusScope {
         return out;
     }
 
+    // Sections folded into another: a landing on one opens the other.
+    readonly property var aliases: ({
+            components: "runners"
+        })
+
     function sectionIndex(id) {
         return Math.max(0, sections.map(function (s) {
             return s.id;
-        }).indexOf(id));
+        }).indexOf(aliases[id] || id));
     }
 
     // A search hit on this page: its section, the row revealed (the Advanced row opened when it sits behind it).
@@ -302,27 +298,13 @@ FocusScope {
                 return {
                     label: run.label,
                     type: "action",
-                    action: "runner",
-                    runner: run.runner,
+                    action: run.runner ? "runner" : "component",
+                    runner: run.runner || "",
+                    component: run.component,
                     icon: run.icon,
                     iconSlot: true,
-                    display: run.display,
-                    detail: "",
-                    dim: g.off === true
-                };
-            });
-        if (sectionId === "components")
-            return Forms.grouped(components.groups, components.rows, function (c, i, g) {
-                return {
-                    label: c.label,
-                    type: "action",
-                    action: "component",
-                    form: i,
-                    component: c.component,
-                    icon: c.icon,
-                    iconSlot: true,
-                    display: c.tag && c.tag !== "Updated" ? c.tag : c.display,
-                    detail: c.detail,
+                    display: run.tag && run.tag !== "Updated" ? run.tag : run.display,
+                    detail: run.detail,
                     dim: g.off === true
                 };
             });
@@ -545,9 +527,8 @@ FocusScope {
             Forms.addEntry(shell, row, function (name, value) {
                 launch.setMapEntry(row.form, name, value);
             });
-        } else if (sectionId === "components") {
-            Sound.play("ok");
-            componentMenu(row.component, components.actions(row.component), row.label);
+        } else if (sectionId === "runners" && !row.runner) {
+            shell.componentOptions(row.component, row.label);
         } else if (sectionId === "doctor" && row.component) {
             Sound.play("ok");
             var ask = components.question(row.component);
@@ -640,40 +621,6 @@ FocusScope {
         }
     }
 
-    function componentMenu(ident, items, title) {
-        if (items.length === 0) {
-            Sound.play("edge");
-            return;
-        }
-        shell.menu(title, items.map(function (i) {
-            return {
-                label: i.label,
-                act: i.action
-            };
-        }), function (action) {
-            page.componentAction(ident, action);
-        });
-    }
-    function componentAction(ident, action) {
-        if (action === "versions") {
-            componentMenu(ident, components.versionActions(ident), "Another version");
-            return;
-        }
-        var ask = components.confirm(ident, action);
-        if (!ask) {
-            Sound.play(components.act(ident, action) ? "ok" : "edge");
-            return;
-        }
-        shell.dialogAsk({
-            message: ask.message,
-            detail: ask.detail,
-            buttons: [ask.no, ask.yes],
-            danger: action === "rollback" || action === "uninstall" || action.indexOf("remove:") === 0 ? 1 : -1
-        }, function (i) {
-            if (i === 1)
-                Sound.play(components.act(ident, action) ? "ok" : "edge");
-        });
-    }
     function toggleModule() {
         var row = rows.currentRow;
         if (listForm === null || zone !== "rows" || !row || row.heading || row.dim === true) {
@@ -717,14 +664,6 @@ FocusScope {
         target: page.sources
         function onMessage(text) {
             page.shell.showToast(text);
-        }
-    }
-    Connections {
-        target: page.components
-        function onRunnerRequested(id) {
-            page.shell.push("pages/FormPage.qml", {
-                runner: id
-            });
         }
     }
 

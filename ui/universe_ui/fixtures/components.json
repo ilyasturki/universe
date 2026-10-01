@@ -63,6 +63,10 @@
       "builds": [], "in_use": null, "latest": null, "available": [], "update": "", "proposal": "", "used_by": 0, "setting": "", "recent": null, "skipped": []
     },
     {
+      "id": "melonds", "name": "melonDS", "kind": "emulator", "family": "", "bin": "", "homepage": "", "runner": "melonds",
+      "builds": [], "in_use": null, "latest": null, "available": [], "update": "", "proposal": "", "used_by": 0, "setting": "", "recent": null, "skipped": []
+    },
+    {
       "id": "umu-run", "name": "umu-launcher", "kind": "tool", "family": "", "bin": "umu-run", "homepage": "https://github.com/Open-Wine-Components/umu-launcher", "runner": "",
       "builds": [{"version": "1.4.0-bwrap", "origin": "nix", "program": "/nix/store/fake-umu-launcher-1.4.0-bwrap/bin/umu-run", "managed": false, "in_use": true, "pinned": false, "disk": 0, "size": 0, "date": "", "installed_at": "", "auto": false}],
       "latest": {"version": "1.4.4", "date": "2025-09-01T00:00:00Z", "channel": "stable", "size": 32000000},

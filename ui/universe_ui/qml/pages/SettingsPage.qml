@@ -86,7 +86,7 @@ FocusScope {
     readonly property var components: api.screens.components
     readonly property var sources: api.screens.sources
     readonly property var controller: api.screens.controller
-    readonly property bool componentsBar: components.job != null && (sectionId === "components" || sources.job == null)
+    readonly property bool componentsBar: components.job != null && (sectionId === "runners" || sources.job == null)
 
     readonly property bool controllerOpen: sectionId === "controller" && activeFocus
     readonly property bool learning: sectionId === "controller" && controller.learning !== ""
@@ -219,7 +219,7 @@ FocusScope {
     }
 
     readonly property bool refreshable: sectionId === "install"
-    readonly property bool canRefresh: refreshable || sectionId === "components" || sectionId === "doctor" || sectionId === "controller" || sectionId === "sound" || sectionId === "system"
+    readonly property bool canRefresh: refreshable || sectionId === "runners" || sectionId === "doctor" || sectionId === "controller" || sectionId === "sound" || sectionId === "system"
 
     readonly property real sideMargin: Theme.dp(80)
     readonly property real sideWidth: Theme.dp(300)
@@ -252,11 +252,6 @@ FocusScope {
             return {
                 rows: runners.rows,
                 groups: runners.groups
-            };
-        if (sectionId === "components")
-            return {
-                rows: components.rows,
-                groups: components.groups
             };
         if (sectionId === "install") {
             var jobs = [], installed = [], owned = [], running = 0, paused = 0, onDisk = 0;
@@ -534,8 +529,6 @@ FocusScope {
             launch.load();
         else if (sectionId === "runners")
             runners.load();
-        else if (sectionId === "components")
-            components.load();
         else if (refreshable)
             sources.load();
         else if (sectionId === "controller")
@@ -563,8 +556,8 @@ FocusScope {
         Sound.enter();
         if (refreshable)
             sources.refresh();
-        else if (sectionId === "components")
-            components.refresh();
+        else if (sectionId === "runners")
+            runners.refresh();
         else
             refresh();
     }
@@ -648,11 +641,11 @@ FocusScope {
                     launch.setValue(index, value);
                 });
             }
-        } else if (sectionId === "runners") {
+        } else if (sectionId === "runners" && row.runner) {
             cards.forceActiveFocus();
             openedRunner = row.runner;
             page.runnerRequested(row.runner);
-        } else if (sectionId === "components") {
+        } else if (sectionId === "runners") {
             Sound.panel();
             componentMenu(row.component, components.actions(row.component), row.label);
         } else if (sectionId === "doctor" && row.component) {
@@ -1040,7 +1033,6 @@ FocusScope {
         modulesForm.load();
         sourceList.load();
         runners.load();
-        components.load();
         sources.load();
         if (api.theme.takeLanding() === "themes")
             section = sectionIndex("themes");
@@ -1059,8 +1051,6 @@ FocusScope {
             api.home.loadOutputs();
         else if (sections[section].id === "doctor")
             modulesForm.loadDoctor();
-        else if (sections[section].id === "components")
-            components.load();
         Qt.callLater(function () {
             cards.reset();
             if (mainHad)
@@ -1081,12 +1071,6 @@ FocusScope {
         }
     }
 
-    Connections {
-        target: page.components
-        function onRunnerRequested(id) {
-            page.runnerRequested(id);
-        }
-    }
     Connections {
         target: page.modulesForm
         function onDoctorChanged() {
@@ -1140,7 +1124,7 @@ FocusScope {
         focus: true
         sections: page.sections
         badges: page.sections.map(function (s, i) {
-            if (i === page.sectionIndex("components"))
+            if (i === page.sectionIndex("runners"))
                 return page.components.pending > 0 ? page.components.pending.toString() : "";
             return i === page.sectionIndex("install") && page.sources.updates.length > 0 ? page.sources.updates.length.toString() : "";
         })

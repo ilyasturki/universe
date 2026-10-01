@@ -101,6 +101,8 @@ FocusScope {
         });
         if (runner && src.key === "exe")
             r.detail = "";
+        else if (src.key === "component")
+            r.display = src.tag && src.tag !== "Updated" ? src.tag : src.display;
         else if (src.key === "game")
             r.icon = src.image, r.iconSlot = true;
         else if (src.key === "enabled")
@@ -204,6 +206,8 @@ FocusScope {
         } else if (row.key === "game") {
             Sound.play("ok");
             gameMenu(row);
+        } else if (row.key === "component") {
+            shell.componentOptions(row.component, row.label);
         } else if (row.key === "add_file") {
             Sound.play("ok");
             shell.browse({

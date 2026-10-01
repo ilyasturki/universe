@@ -5,7 +5,6 @@ var list = [
     { id: "search", label: "Search Settings", icon: "search", first: "Search" },
     { id: "launch", label: "Launch", icon: "rocket" },
     { id: "runners", label: "Runners", icon: "chip" },
-    { id: "components", label: "Components", icon: "cube" },
     { id: "controllers", label: "Controllers", icon: "gamepad" },
     { id: "sources", label: "Sources", icon: "cloud" },
     { id: "updates", label: "Updates", icon: "download" },
@@ -17,6 +16,9 @@ var list = [
     { id: "doctor", label: "Doctor", icon: "doctor", first: "Checks" },
     { id: "about", label: "About", icon: "info", first: "System Information" }
 ];
+
+// Sections folded into another: a landing on one opens the other.
+var aliases = { components: "runners" };
 
 // The sections `api.system` leaves: under Steam's Game Mode sound is Steam's, and Performance needs a control.
 function shown(system) {

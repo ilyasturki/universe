@@ -24,7 +24,7 @@ FocusScope {
     readonly property var components: api.screens.components
     readonly property var sources: api.screens.sources
     readonly property var listForm: sectionId === "modules" ? modulesForm : sectionId === "sources" ? sourceList : null
-    readonly property bool componentsBar: sectionId !== "artwork" && components.job != null && (sectionId === "components" || sources.job == null)
+    readonly property bool componentsBar: sectionId !== "artwork" && components.job != null && (sectionId === "runners" || sources.job == null)
     // X on a section where it has no other use.
     readonly property bool canHideJob: componentsBar && listForm === null && sectionId !== "launch"
 
@@ -36,7 +36,7 @@ FocusScope {
         var out = Object.assign({}, s);
         if (s.id === "updates")
             out.detail = sources.updates.length > 0 ? sources.updates.length + " pending" : "";
-        else if (s.id === "components")
+        else if (s.id === "runners")
             out.detail = components.pending > 0 ? components.pending + " to look at" : "";
         else if (s.id === "artwork")
             out.detail = artworkOverview.missingGames > 0 ? artworkOverview.missingGames + (artworkOverview.missingGames === 1 ? " game misses art" : " games miss art") : "";
@@ -55,9 +55,6 @@ FocusScope {
     readonly property var loaders: ({
             runners: function () {
                 runners.load();
-            },
-            components: function () {
-                components.load();
             },
             launch: function () {
                 launch.load();
@@ -83,8 +80,8 @@ FocusScope {
             }
         })
     readonly property var refreshers: ({
-            components: function () {
-                components.refresh();
+            runners: function () {
+                runners.refresh();
             },
             artwork: function () {
                 artworkOverview.load();
@@ -139,7 +136,7 @@ FocusScope {
             glyph: "B",
             label: "Back"
         });
-        var label = zone !== "rows" ? "OK" : !row || row.heading || row.type === "info" || row.type === "static" || row.disabled ? "OK" : row.type === "bool" ? "Toggle" : row.type === "radio" ? "Select" : row.type === "action" ? (sectionId === "doctor" && row.component ? "Install" : sectionId === "components" ? "Options" : listForm !== null ? "Open" : "Select") : "Change";
+        var label = zone !== "rows" ? "OK" : !row || row.heading || row.type === "info" || row.type === "static" || row.disabled ? "OK" : row.type === "bool" ? "Toggle" : row.type === "radio" ? "Select" : row.type === "action" ? (sectionId === "doctor" && row.component ? "Install" : sectionId === "runners" && !row.runner ? "Options" : listForm !== null ? "Open" : "Select") : "Change";
         out.push({
             glyph: "A",
             label: label
@@ -150,7 +147,7 @@ FocusScope {
     function sectionIndex(id) {
         return Math.max(0, sections.map(function (s) {
             return s.id;
-        }).indexOf(id));
+        }).indexOf(Sections.aliases[id] || id));
     }
 
     function openSection(i) {
@@ -267,27 +264,13 @@ FocusScope {
                 return {
                     label: run.label,
                     type: "action",
-                    action: "runner",
-                    runner: run.runner,
+                    action: run.runner ? "runner" : "component",
+                    runner: run.runner || "",
+                    component: run.component,
                     icon: run.icon,
                     iconSlot: true,
-                    display: run.display,
-                    detail: "",
-                    dim: g.off === true
-                };
-            });
-        if (sectionId === "components")
-            return Forms.grouped(components.groups, components.rows, function (c, i, g) {
-                return {
-                    label: c.label,
-                    type: "action",
-                    action: "component",
-                    form: i,
-                    component: c.component,
-                    icon: c.icon,
-                    iconSlot: true,
-                    display: c.tag && c.tag !== "Updated" ? c.tag : c.display,
-                    detail: c.detail,
+                    display: run.tag && run.tag !== "Updated" ? run.tag : run.display,
+                    detail: run.detail,
                     dim: g.off === true
                 };
             });
@@ -577,9 +560,8 @@ FocusScope {
             Forms.addEntry(shell, row, function (name, value) {
                 launch.setMapEntry(row.form, name, value);
             });
-        } else if (sectionId === "components") {
-            Sound.play("ok");
-            componentMenu(row.component, components.actions(row.component), row.label);
+        } else if (sectionId === "runners" && !row.runner) {
+            shell.componentOptions(row.component, row.label);
         } else if (sectionId === "doctor" && row.component) {
             Sound.play("ok");
             var ask = components.question(row.component);
@@ -680,44 +662,6 @@ FocusScope {
         }
     }
 
-    function componentMenu(ident, items, title) {
-        if (items.length === 0) {
-            Sound.play("edge");
-            return;
-        }
-        shell.menu(title, items.map(function (i) {
-            return {
-                label: i.label,
-                glyph: i.icon || "",
-                danger: i.danger === true,
-                act: i.action
-            };
-        }), function (action) {
-            page.componentAction(ident, action);
-        });
-    }
-
-    function componentAction(ident, action) {
-        if (action === "versions") {
-            componentMenu(ident, components.versionActions(ident), "Another version");
-            return;
-        }
-        var ask = components.confirm(ident, action);
-        if (!ask) {
-            Sound.play(components.act(ident, action) ? "ok" : "edge");
-            return;
-        }
-        shell.dialogAsk({
-            message: ask.message,
-            detail: ask.detail,
-            buttons: [ask.no, ask.yes],
-            danger: action === "rollback" || action === "uninstall" || action.indexOf("remove:") === 0 ? 1 : -1
-        }, function (i) {
-            if (i === 1)
-                Sound.play(components.act(ident, action) ? "ok" : "edge");
-        });
-    }
-
     function toggleModule() {
         var row = rows.currentRow;
         if (listForm === null || zone !== "rows" || !row || row.heading || row.dim === true) {
@@ -768,15 +712,6 @@ FocusScope {
         target: page.artworkOverview
         function onMessage(text) {
             page.shell.showToast(text);
-        }
-    }
-
-    Connections {
-        target: page.components
-        function onRunnerRequested(id) {
-            page.shell.push("pages/FormPage.qml", {
-                runner: id
-            });
         }
     }
 

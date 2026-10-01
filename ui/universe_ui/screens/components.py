@@ -2,11 +2,9 @@ from PySide6.QtCore import QTimer, Signal, Slot
 
 from ..qt import QVARIANT, Property
 from .media import _size
-from .onboarding import _plural
-from .settings import RowsForm, _group, _row, runner_logo
+from .settings import AsyncScreen, _plural, _row, runner_logo
 from .sources import _age, _free_space
 
-KINDS = (("proton", "Proton"), ("wine", "Wine"), ("emulator", "Emulators"), ("tool", "Tools"), ("system", "System"))
 ORIGINS = {
     "universe": "Universe",
     "nix": "Nix",
@@ -117,44 +115,12 @@ def component_row(component, job):
     return row
 
 
-def build_components(listing, job):
-    components = listing.get("components") or []
+def catalogue_warning(listing):
     catalogue = listing.get("catalogue") or {}
-    rows, groups = [], []
-    recent = [c for c in components if c.get("recent")]
-    if recent:
-        at = len(rows)
-        for c in recent:
-            row = _row("Recently updated", "recent", c["name"], "action", c["recent"]["version"], module=c["id"])
-            row.update(display=f"{c['recent']['version']} · {_age(c['recent']['at'])}", icon=_icon(c), iconSlot=True, action="Options", component=c["id"])
-            rows.append(row)
-        groups.append(_group("Recently updated", range(at, len(rows)), meta="Roll one back from its options"))
-    idle = []
-    for kind, title in KINDS:
-        members = [c for c in components if c["kind"] == kind]
-        live = [c for c in members if kind == "system" or c.get("in_use") or c.get("latest") or c.get("builds")]
-        idle.extend(c for c in members if c not in live)
-        if not live:
-            continue
-
-        def rank(c):
-            urgency = 0 if c.get("proposal") == "install" else 1 if c.get("proposal") or c.get("update") else 2
-            return (urgency, not c.get("in_use"), -int(c.get("used_by") or 0), c["name"].lower())
-
-        at = len(rows)
-        rows.extend(component_row(c, job) for c in sorted(live, key=rank))
-        installed = sum(1 for c in live if c.get("in_use"))
-        groups.append(_group(title, range(at, len(rows)), meta=f"{installed} of {len(live)} installed"))
-    if catalogue.get("error"):
-        age = _age(catalogue.get("fetched_at") or "")
-        warning = "The catalogue could not be reached" + (f" · listing from {age}" if age else "")
-        if groups:
-            groups[0]["warning"] = warning
-    if idle:
-        at = len(rows)
-        rows.extend(component_row(c, job) for c in sorted(idle, key=lambda c: c["name"].lower()))
-        groups.append(_group(NO_BUILD, range(at, len(rows)), meta=NO_BUILD_META, off=True))
-    return rows, groups
+    if not catalogue.get("error"):
+        return ""
+    age = _age(catalogue.get("fetched_at") or "")
+    return "The catalogue could not be reached" + (f" · listing from {age}" if age else "")
 
 
 def actions(component, busy):
@@ -179,7 +145,8 @@ def actions(component, busy):
                 continue
             target = b["version"] if b.get("managed") else ("system" if runner else b.get("name") or b["version"])
             out.append({"icon": "play", "label": f"Use {build_text(b)}", "action": "use:" + target})
-    if component["kind"] == "proton" and component.get("family") and component.get("setting") not in ("", component["family"]) and managed:
+    follows = component.get("family", "") if component["kind"] == "proton" else "latest" if runner else ""
+    if follows and component.get("setting") not in ("", follows) and managed:
         out.append({"icon": "play", "label": f"Follow the newest {component['name']}", "action": "use:latest"})
     others = [a for a in component.get("available") or [] if not a.get("installed") and a.get("version") != latest.get("version")]
     if others:
@@ -194,8 +161,6 @@ def actions(component, busy):
     if managed:
         disk = sum(int(b.get("disk") or 0) for b in managed)
         out.append({"icon": "trash", "label": "Uninstall" + (f" · {_size(disk)}" if disk else ""), "action": "uninstall", "danger": True})
-    if runner:
-        out.append({"icon": "sliders", "label": "Runner settings", "action": "runner"})
     return out
 
 
@@ -229,11 +194,10 @@ def _uninstall_detail(component):
     return f"{text} Universe can install it again later."
 
 
-class ComponentsForm(RowsForm):
+class ComponentsForm(AsyncScreen):
     message = Signal(str)
     jobChanged = Signal()
     listingChanged = Signal()
-    runnerRequested = Signal(str)
     # gameId (empty: nothing launches after), component id, name, version
     installProposed = Signal(str, str, str, str)
     readyToLaunch = Signal(str)
@@ -254,9 +218,13 @@ class ComponentsForm(RowsForm):
         self._timer.start(FIRST_CHECK_MS)
 
     def _show(self):
-        rows, groups = build_components(self._listing, self._job)
-        self._set_rows(rows, groups)
         self.listingChanged.emit()
+
+    def listing(self):
+        return self._listing
+
+    def row(self, component):
+        return component_row(component, self._job)
 
     def _fetch(self, refresh):
         def done(listing, error):
@@ -331,9 +299,6 @@ class ComponentsForm(RowsForm):
                 return False
             self._job.update({"cancelled": True, "message": f"Stopping {self._job['title']}…"})
             self.jobChanged.emit()
-            return True
-        if verb == "runner":
-            self.runnerRequested.emit(ident)
             return True
         if verb in ("install", "update"):
             follow = verb == "install" and c["kind"] != "tool" and c.get("in_use") is not None and not arg

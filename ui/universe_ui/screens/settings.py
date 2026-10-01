@@ -60,6 +60,10 @@ def _row(section, key, label, kind, value, choices=None, module="", detail="", i
     }
 
 
+def _plural(n, word):
+    return f"{n} {word}{'' if n == 1 else 's'}"
+
+
 def _group(title, rows, meta="", warning="", caps=False, control=-1, off=False, advanced=False):
     return {
         "title": title,

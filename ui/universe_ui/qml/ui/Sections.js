@@ -13,11 +13,6 @@ var list = [
         icon: "play"
     },
     {
-        id: "components",
-        name: "Components",
-        icon: "bolt"
-    },
-    {
         id: "controller",
         name: "Controller",
         icon: "gamepad"
@@ -71,6 +66,7 @@ var list = [
 
 // Sections folded into another: a landing on one opens the other.
 var aliases = {
+    components: "runners",
     updates: "install",
     quit: "about",
     power: "about"

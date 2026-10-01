@@ -568,15 +568,16 @@ polkit) is a notice with logind's own message.
 ## The Settings tab
 
 `pages/SettingsPage.qml` is a sidebar (`ui/SectionList.qml` over `ui/Sections.js`: Launch, Runners,
-Components, Controller, Sources, Install, Modules, Artwork, Themes, Sound, Doctor, About; no title, the tab
+Controller, Sources, Install, Modules, Artwork, Themes, Sound, Doctor, About; no title, the tab
 says it, and no group captions) beside one column of `ui/SettingsCards.qml` (`columns: 1`). A
-landing on a section folded into another opens that one (`Sections.aliases`: `updates` → Install,
-`quit` and `power` → About). Sound is one row per `api.home.outputs` entry, the device as its value and the one
+landing on a section folded into another opens that one (`Sections.aliases`: `components` → Runners,
+`updates` → Install, `quit` and `power` → About; Switch 2's `aliases` and PS5's `Sections.aliases`
+fold `components` the same way). Sound is one row per `api.home.outputs` entry, the device as its value and the one
 in use tagged; A on another plays through it (`setOutput`). About is its Version (`static`:
 `api.universe.version()`, the version with the short git rev behind it), First-run setup (Run again)
 and Power, which opens the power menu B held opens (see "Power"). Up and Down in the sidebar switch the section as they go, Right or A enter the cards, Left or
 B come back, L2/R2 cycle the section from anywhere. In the cards the hints are A, More and Back:
-Start lists what X and Y do there (Refresh the sections that fetch — Install, Sound, Doctor —
+Start lists what X and Y do there (Refresh the sections that fetch — Runners, Install, Sound, Doctor —
 Remove a Launch variable, Enable or Disable a module or a source, Show or Hide advanced), and X and
 Y still do it straight away. Game settings and a runner's, module's or source's page do the same
 with Reset to default and the advanced rows. The tab bar's search glass is on every tab and finds
@@ -817,71 +818,87 @@ with a `fix` wraps its problem and fix under the label in every look, and a card
 
 ## The runners section
 
-`api.screens.runners` is the Runners section of the Settings tab: one row per runner, its logo
-(`assets/runners/<id>.svg|png`, `logo(id)` says which exists), its name and how many library
-games run through it (`effective.runner`), sorted by that count, then by those games' hours, then
-by name; the runners whose program was not found come last, in a dimmed "Not found" card.
-`indexOf(id)` finds a runner's row. A runner's row opens `pages/FormPage.qml` with `{ runner }` over the
-tab (`theme.qml` `openSub`, the same loader as the game's sub pages), on `api.screens.runner`:
-`load(id)` builds its head (`info`: name, platforms and where its program was found, a warning)
-and a Runner card for the program (`exe`, a path; the detected one shown as the value, inherited,
-where it was found as the detail; `origin: "runner"` once set here, X clearing it back), arguments
-and the gamescope switch (`origin` `global` or `runner`, X likewise), then — for Proton and Wine —
-the launch keys tied to its kind (`launchKeys("global")` filtered by `runners`: the Proton card,
-with Sync, Upscaling and Logs folded in behind Y, or into the Runner card on plain Wine; the global
-`[launch]` values written through `set_setting`), each option by its type in an Options card, and a
-Games card — one `game` row per library game running through it (`gameId`, its square or box art as
-`image`, its hours as the display, `installed` when it has an install folder), by title — ending in
-an "Add a game…" action. `setValue(index, value)` writes through `set_runner_setting`
-(a `launch.*` row through `set_setting`); on the add row it keeps the picked file and `pendingTitle()` proposes a title from it, which
-`addGame(title)` sends to `add_game`. A game row opens the Install page's options: Game settings
-(Reprise: `settingsRequested(game)`, which `theme.qml` `pushSub`s over the runner page, B coming
-back to the row; Switch 2: its GameSettingsPage), Uninstall… when installed, Remove from library…,
-through `uninstall(id)` / `remove(id)` on the form (a `message` when done); Uninstall's confirmation
-names the store when `api.universe.uninstallVia(id)` does ("Uninstall through Steam", "Steam removes
-the files"), the trash otherwise. Both lists follow
-`libraryChanged` — the counts, the Games card — so neither has a Refresh. Back on the tab, the cursor finds
-the runner again. The Switch 2 look has the same list as System Settings › Runners and the same
-page as `switch2/pages/FormPage.qml`, pushed on its stack. The game settings page's Launch group follows the runner: a Runner picker (names
-shown, ids written), then the rows the runner takes. Once Universe holds builds of a runner its
-Runner card gains a Build row (`build`, an enum over `""`, `latest` and the versions), written
-through `set_runner_setting`.
+`api.screens.runners` is the Runners section of the Settings tab, in every look: the runners and
+what Universe installs for them, over the core's `runners()` and `components()` (see api.md, Runners
+and Components). One row per runner, its logo (`assets/runners/<id>.svg|png`, `logo(id)` says which
+exists), its name and how many library games run through it (`effective.runner`) as `display`,
+sorted by that count, then by those games' hours, then by name. The row carries the state of the
+components its page installs — the runner's own (`runner` in the listing: Wine and every emulator),
+or for Proton its builds and umu-run — read from `api.screens.components`: the build in use as
+`detail`, a `tag` for what to do (an update, a newer build than the system's, Needed when a game
+waits on it, Installing…, Updated) with `accent`, the download's `size`, `progress` while its job
+runs, and `component`, the one the tag is about. The cards: the runners found; "Not installed",
+those Universe can download, a runner a game waits on first; a dimmed "No download" for the others
+(before the listing is in, a dimmed "Not found" holds both); and a "Tools" card at the foot for the
+components that are no runner — gogdl, legendary, comet, butler, and the system's gamescope, MangoHud
+and gpu-screen-recorder (`meta` "N of M installed"), whose row is the component's (`key:
+"component"`, no `runner`) and whose A opens its options. `load()` builds the list at once and asks
+the components again, which rebuild it when they land, as does `libraryChanged`; `refresh()` (Y)
+fetches the catalogue first. `indexOf(id)` finds a runner's row, or a tool's by its component id.
+Settings' `components` section id lands here in every look.
 
-## The components section
+A runner's row opens `pages/FormPage.qml` with `{ runner }` over the tab (`theme.qml` `openSub`, the
+same loader as the game's sub pages), on `api.screens.runner`: `load(id)` builds its head (`info`:
+name, platforms and where its program was found, a warning) and a Runner card for the program
+(`exe`, a path; the detected one shown as the value, inherited, where it was found as the detail;
+`origin: "runner"` once set here, X clearing it back) — on Proton's page umu-run's component row
+right under it — arguments and the gamescope switch (`origin` `global` or `runner`, X likewise);
+then a Builds card, one component row per build family: the runner's own, or Proton's (GE-Proton,
+Proton-CachyOS, Proton-EM, umu-proton; the one in use first). The Builds card is where the build is
+picked: there is no Build row, and Proton's card leaves out the `proton` launch key. Then — for
+Proton and Wine — the launch keys tied to its kind (`launchKeys("global")` filtered by `runners`:
+the Proton card, with Sync, Upscaling and Logs folded in behind Y, or into the Runner card on plain
+Wine; the global `[launch]` values written through `set_setting`), each option by its type in an
+Options card, and a Games card — one `game` row per library game running through it (`gameId`, its
+square or box art as `image`, its hours as the display, `installed` when it has an install folder),
+by title — ending in an "Add a game…" action. `setValue(index, value)` writes through
+`set_runner_setting` (a `launch.*` row through `set_setting`); on the add row it keeps the picked
+file and `pendingTitle()` proposes a title from it, which `addGame(title)` sends to `add_game`. A
+game row opens the Install page's options: Game settings (Reprise: `settingsRequested(game)`, which
+`theme.qml` `pushSub`s over the runner page, B coming back to the row; Switch 2: its
+GameSettingsPage), Uninstall… when installed, Remove from library…, through `uninstall(id)` /
+`remove(id)` on the form (a `message` when done); Uninstall's confirmation names the store when
+`api.universe.uninstallVia(id)` does ("Uninstall through Steam", "Steam removes the files"), the
+trash otherwise. The page follows `libraryChanged` and the components' listing. Back on the tab,
+the cursor finds the runner again. The Switch 2 look has the same list as System Settings › Runners
+and the same page as `switch2/pages/FormPage.qml`, pushed on its stack, PS5 likewise. The game
+settings page's Launch group follows the runner: a Runner picker (names shown, ids written), then
+the rows the runner takes.
 
-`api.screens.components` (`ComponentsForm`) is Settings › Components in every look, over the core's
-`components()` (see api.md, Components): `load()` reads it off the UI thread (the cached catalogue),
-`refresh()` fetches the catalogue first (Y). `rows`/`groups` in the settings forms' shape: a
-"Recently updated" card when an update landed in the last 7 days, then one card per kind (Proton,
-Wine, Emulators, Tools, System; `meta` "N of M installed"), a runner a game waits on first, then an
-update or a newer build, then by the games on it; the runners with no build to download and none
-installed close in a dimmed "No download" card. A row is the component's name and icon, the build
-that runs as `display`, a `tag` for what to do with `accent`, the download's `size`, a `detail`
-sentence and `progress` while its job runs. A is its options: `actions(index)` — `{icon, label,
-action, danger}`, the look's menu (Reprise `menu.show`, Switch 2 and PS5 `shell.menu`); `versions` opens
-`versionActions(index)` as a second menu, `runner` emits `runnerRequested(id)`, which opens the
-runner's page.
-Uninstall (`uninstall`, with the size of Universe's builds) is there whenever Universe holds one,
-the one in use included.
-`confirm(index, action)` is what to ask first or null — an install's size and the room left, a
-removal, an uninstall (what goes and what runs in its place), a rollback — and `act(index, action)`
-does it: an install or an update is a client job
-(`componentInstall`, `componentUpdate`, `job` the running one like the Install page's, drawn by
-the same bar), an install from a proposal over a system build switches to it (`use:latest`) once
-in, a finished job toasts through `message`. `hideJob()` takes the bar away, running or finished,
-until the next job: the row keeps its progress and Cancel, the end still toasts. Reprise hides it
-with the bar's × or More's Hide progress, Switch 2 and PS5 with theirs; Y (Reprise) and X (Switch
-2, PS5) do it straight away on a section that gives them nothing else to do.
-`pending` counts the updates and proposals: Reprise's
-sidebar badge, the section's detail in Switch 2 and PS5. `busyOn(id)` and `needed()` (the missing runners the
-library needs) serve the first-run page. A failed launch whose runner is missing and offered
+A component row's A is its options, on a runner's page and in Tools alike: Reprise's page and
+section `componentMenu(id, …)` over their `menu.show` and `ConfirmDialog`, Switch 2's and PS5's
+`componentOptions(id, title)` on the shell, over `shell.menu` and `dialogAsk`. The rows' tags in Switch
+2 and PS5 stand in for the value, Updated aside.
+
+`api.screens.components` (`ComponentsForm`) is the engine behind them, with no section of its own:
+`load()` reads the listing off the UI thread (the cached catalogue), `refresh()` fetches the
+catalogue first; `listing()` and `row(component)` (the component's row: name and icon, the build
+that runs as `display`, `tag`, `accent`, `size`, a `detail` sentence, `progress`, `action` Options
+or Cancel) are for the forms above, which rebuild on `listingChanged`. `actions(id)` — `{icon,
+label, action, danger}`: install, update, `use:<build>` (`use:latest` follows the newest again once
+one build is held), `versions` (which opens `versionActions(id)` as a second menu), rollback,
+`remove:<version>`, uninstall (with the size of Universe's builds, there whenever Universe holds
+one, the one in use included), cancel while its job runs. `confirm(id, action)` is what to ask
+first or null — an install's size and the room left, the notice an install must show, a removal,
+an uninstall (what goes and what runs in its place), a rollback — and `act(id, action)` does it: an
+install or an update is a client job (`componentInstall`, `componentUpdate`, `job` the running one
+like the Install page's, drawn by the same bar on Settings › Runners), an install from a proposal
+over a system build switches to it (`use:latest`) once in, a finished job toasts through `message`
+(every root shows it, a runner's page included, where the row's tag and hairline follow the job).
+`hideJob()` takes the bar away, running or finished, until the next job: the row keeps its progress
+and Cancel, the end still toasts. Reprise hides it with the bar's × or More's Hide progress, Switch
+2 and PS5 with theirs; Y (Reprise) and X (Switch 2, PS5) do it straight away on a section that
+gives them nothing else to do. `pending` counts the updates and proposals: Reprise's Runners badge,
+Runners' detail in Switch 2 and PS5. `busyOn(id)` and `needed()` (the missing runners the library
+needs) serve the first-run page. A failed launch whose runner is missing and offered
 (`launchFailed`) emits `installProposed(gameId, id, name, version)`: every root asks "Install … to
 play?" (`question(id)` the size and room), `installFor(gameId, id)` installs, and
 `readyToLaunch(gameId)` launches the game again once it is in. A doctor row carries `component`
-when an install fixes it: Reprise's A reads Install, Switch 2 and PS5 turn the row into an action
-(PS5 loads the listing with its Doctor, so the first press installs); each asks, then `installById(id)`. Once a day while the UI runs (the first check 90 s after start), with
-`components.auto_update` on, no session running and no job of the user's, the form runs
-`componentUpdate("")` quietly — no bar — and toasts "Updated …" when something was.
+when an install fixes it, its fix naming Settings › Runners: Reprise's A reads Install, Switch 2
+and PS5 turn the row into an action (PS5 loads the listing with its Doctor, so the first press
+installs); each asks, then `installById(id)`. Once a day while the UI runs (the first check 90 s
+after start), with `components.auto_update` on, no session running and no job of the user's, the
+form runs `componentUpdate("")` quietly — no bar — and toasts "Updated …" when something was.
 
 ## Adding a game
 

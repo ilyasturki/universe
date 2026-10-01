@@ -796,7 +796,14 @@ class FakeCore:
         return ident
 
     def runners(self):
-        return copy.deepcopy(self._data.get("runners", []))
+        out = copy.deepcopy(self._data.get("runners", []))
+        with self._lock:
+            used = {c["id"]: next((b for b in c["builds"] if b.get("in_use")), None) for c in self._components["components"]}
+        for runner in out:
+            build = used.get(runner["id"])
+            if not runner.get("path") and build:
+                runner.update(path=build["program"], source="universe" if build["managed"] else "path", version=build["version"], available=True)
+        return out
 
     def set_runner_setting(self, runner, key, value):
         spec = self._runner(self._runner_of({"runner": runner}))
@@ -1614,7 +1621,7 @@ class FakeCore:
         checks = copy.deepcopy(self._data.get("doctor", []))
         for c in self.components()["components"]:
             if c["proposal"] == "install" and c["kind"] in ("emulator", "wine"):
-                fix = f"universe component install {c['id']} (Settings › Components), or install it, or set runners.{c['id']}.exe"
+                fix = f"universe component install {c['id']} (Settings › Runners), or install it, or set runners.{c['id']}.exe"
                 if c.get("notice"):
                     fix = f"{fix}. {c['notice']}"
                 checks.append(
@@ -1787,7 +1794,7 @@ class FakeCore:
                 raise UniverseError("NotFound", f"{ident} {build} is not installed")
             for b in c["builds"]:
                 b["in_use"] = b is pick
-            c["setting"] = "" if build == "system" else build
+            c["setting"] = "" if build == "system" else c["family"] if build == "latest" and c["kind"] == "proton" else build
             self._settle(c)
 
     def component_cancel(self, ident):
