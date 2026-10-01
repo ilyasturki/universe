@@ -87,6 +87,8 @@ def test_synonyms_descriptions_values_and_typos(api, fake):
     )
     search.query = "switch 2"
     assert search.results[0]["target"] == {"page": "themes", "id": "switch2", "key": "theme", "module": ""}
+    search.query = "intro"
+    assert search.results[0]["target"] == {"page": "themes", "id": "", "key": "boot_intro", "module": ""}
     search.query = "zzzz"
     assert search.count == 0
 

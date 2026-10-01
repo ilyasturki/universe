@@ -87,6 +87,7 @@ SYNONYMS = {
     "games_dir": ["install folder", "directory"],
     "scan_dirs": ["scan", "folders", "detect"],
     "theme": ["look", "skin", "appearance", "dark", "switch", "reprise"],
+    "boot_intro": ["intro", "boot", "splash", "logo", "startup", "animation", "movie"],
     "enabled": ["on", "off", "enable", "disable", "toggle"],
     "test": ["buttons", "sticks", "triggers", "pad", "input"],
     "device": ["pad", "gamepad", "joypad"],
@@ -394,6 +395,15 @@ class SettingsSearch(QObject):
                 display=current,
                 key="theme",
                 detail="The look of the launcher, switched live.",
+            )
+        )
+        entries.append(
+            Entry(
+                "Startup animation",
+                ["Themes"],
+                {"page": "themes", "id": "", "key": "boot_intro", "module": ""},
+                key="boot_intro",
+                detail="The Universe mark when the launcher starts full screen.",
             )
         )
         for theme in themes:

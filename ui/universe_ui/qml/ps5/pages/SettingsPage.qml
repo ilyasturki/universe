@@ -206,10 +206,10 @@ FocusScope {
                     return r.form === i;
                 });
             });
-        } else if (target.page === "themes" && target.id) {
+        } else if (target.page === "themes" && (target.id || target.key)) {
             Qt.callLater(function () {
                 focusWhere(function (r) {
-                    return r.theme === target.id;
+                    return target.id ? r.theme === target.id : r.key === target.key;
                 });
             });
         }
@@ -497,6 +497,21 @@ FocusScope {
                     value: api.theme.fontPath,
                     display: api.theme.fontPath ? api.theme.fontPath.split("/").pop() : "Bundled (Source Sans 3)",
                     detail: "A .ttf you own, such as the console's SST; applies at once."
+                },
+                {
+                    heading: true,
+                    part: true,
+                    label: "Startup",
+                    display: ""
+                },
+                {
+                    label: "Startup animation",
+                    key: "boot_intro",
+                    type: "bool",
+                    action: "boot",
+                    value: api.theme.bootIntro,
+                    display: "",
+                    detail: "The Universe mark when the launcher starts full screen; any button skips it."
                 }
             ]);
         if (sectionId === "about")
@@ -659,6 +674,9 @@ FocusScope {
             rows.edit(row, function (path) {
                 api.theme.fontPath = path;
             });
+        } else if (row.action === "boot") {
+            Sound.play("select");
+            api.theme.bootIntro = !row.value;
         }
     }
 

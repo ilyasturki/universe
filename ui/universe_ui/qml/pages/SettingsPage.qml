@@ -68,11 +68,11 @@ FocusScope {
             section = index;
             var form = target.page === "launch" ? launch : target.page === "controller" ? controller : null;
             Qt.callLater(function () {
-                if (form && target.key) {
-                    var i = form.reveal(target.key, "");
-                    if (i >= 0)
-                        cards.index = i;
-                }
+                var i = !target.key ? -1 : form ? form.reveal(target.key, "") : page.content.rows.findIndex(function (r) {
+                    return r.key === target.key;
+                });
+                if (i >= 0)
+                    cards.index = i;
                 page.focusMain();
             });
         }
@@ -385,9 +385,21 @@ FocusScope {
                 wraps: true,
                 detail: api.theme.trademarks
             });
+            rows.push({
+                section: "Themes",
+                key: "boot_intro",
+                label: "Startup animation",
+                type: "bool",
+                value: api.theme.bootIntro,
+                detail: "The Universe mark when the launcher starts full screen; any button skips it."
+            });
             groups.push({
                 title: "Look",
                 rows: [0, 1]
+            });
+            groups.push({
+                title: "Startup",
+                rows: [2]
             });
             return {
                 rows: rows,
@@ -681,6 +693,9 @@ FocusScope {
             menu.show(page.gameActions(row), cards, cards.focusRect, "", function (action) {
                 page.gameAction(row, action);
             });
+        } else if (sectionId === "themes" && row.key === "boot_intro") {
+            Sound.favourite(!row.value);
+            api.theme.bootIntro = !row.value;
         } else if (sectionId === "themes") {
             Sound.panel();
             editor.edit(row, function (value) {

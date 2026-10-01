@@ -225,10 +225,10 @@ FocusScope {
                 if (at >= 0)
                     rows.index = at;
             });
-        } else if (target.page === "themes" && target.id) {
+        } else if (target.page === "themes" && (target.id || target.key)) {
             Qt.callLater(function () {
                 var at = content.findIndex(function (r) {
-                    return r.theme === target.id;
+                    return target.id ? r.theme === target.id : r.key === target.key;
                 });
                 if (at >= 0)
                     rows.index = at;
@@ -481,7 +481,21 @@ FocusScope {
                     action: "sounds",
                     value: api.theme.soundsPath,
                     display: api.theme.soundsPath ? api.theme.soundsPath.split("/").pop() + " · " + Object.keys(api.theme.soundFiles).length + " sounds" : "Bundled",
-                    detail: "WAVs named ok.wav, tick.wav… replace the bundled ones."
+                    detail: "WAVs named ok.wav, tick.wav, boot.wav… replace the bundled ones."
+                },
+                {
+                    heading: true,
+                    label: "Startup",
+                    display: ""
+                },
+                {
+                    label: "Startup animation",
+                    key: "boot_intro",
+                    type: "bool",
+                    action: "boot",
+                    value: api.theme.bootIntro,
+                    display: "",
+                    detail: "The Universe mark when the launcher starts full screen; any button skips it."
                 }
             ]);
         if (sectionId === "about")
@@ -618,6 +632,9 @@ FocusScope {
             rows.edit(row, function (path) {
                 api.theme.soundsPath = path;
             });
+        } else if (row.action === "boot") {
+            Sound.play("select");
+            api.theme.bootIntro = !row.value;
         }
     }
 
