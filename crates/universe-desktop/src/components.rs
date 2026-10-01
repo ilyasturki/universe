@@ -1,4 +1,4 @@
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::{Rc, Weak};
 
 use adw::prelude::*;
@@ -348,6 +348,59 @@ fn run(anchor: &gtk::Widget, c: &Value, action: &str, changed: Rc<dyn Fn()>) {
     });
 }
 
+/// A row and the key a rebuild finds it again by.
+pub type Keyed = (String, gtk::Widget);
+
+/// The key of the row among `rows` that holds the focus, let go of first: a dialog whose focused row is taken away takes no
+/// focus again.
+pub fn take_focus(rows: &[Keyed]) -> Option<String> {
+    let (_, first) = rows.first()?;
+    let dialog = first.ancestor(adw::Dialog::static_type()).and_downcast::<adw::Dialog>();
+    let focus = match &dialog {
+        Some(dialog) => dialog.focus(),
+        None => first.root().and_then(|root| root.focus()),
+    }?;
+    let (key, _) = rows.iter().find(|(_, row)| focus == *row || focus.is_ancestor(row))?;
+    match (dialog, first.root()) {
+        (Some(dialog), _) => dialog.set_focus(None::<&gtk::Widget>),
+        (None, Some(root)) => root.set_focus(None::<&gtk::Widget>),
+        (None, None) => {}
+    }
+    Some(key.clone())
+}
+
+/// The focus back on the row of `key`, once rebuilt.
+pub fn refocus(rows: &[Keyed], key: Option<String>) {
+    if let Some((_, row)) = key.and_then(|key| rows.iter().find(|(k, _)| *k == key)) {
+        row.grab_focus();
+    }
+}
+
+/// Whether a `job-changed` started or ended a component's job: a store's or the art's leaves the components as they were.
+#[derive(Default)]
+pub struct JobWatch {
+    running: Cell<bool>,
+}
+
+impl JobWatch {
+    pub fn changed(&self, job: Option<Kind>) -> bool {
+        let now = job == Some(Kind::Component);
+        self.running.replace(now) || now
+    }
+}
+
+/// `f` when a component's job starts or ends.
+pub fn on_jobs(app: &Application, f: impl Fn() + 'static) -> glib::SignalHandlerId {
+    let watch = JobWatch::default();
+    app.connect_local("job-changed", false, move |values| {
+        let job = values[0].get::<Application>().ok().and_then(|app| app.job()).map(|j| j.kind());
+        if watch.changed(job) {
+            f();
+        }
+        None
+    })
+}
+
 fn running(id: &str) -> Option<Job> {
     app()?.job().filter(|j| j.kind() == Kind::Component && j.target() == id)
 }
@@ -438,7 +491,7 @@ fn follow(row: &adw::ActionRow, job: &Job) {
 /// A group of component rows, `pick` choosing them from the listing: read again when a job starts or ends and after an action.
 pub fn group(title: &str, pick: impl Fn(&[Value]) -> Vec<Value> + 'static) -> adw::PreferencesGroup {
     let group = adw::PreferencesGroup::builder().title(title).visible(false).build();
-    let rows: Rc<RefCell<Vec<adw::ActionRow>>> = Rc::default();
+    let rows: Rc<RefCell<Vec<Keyed>>> = Rc::default();
     let me: Rc<Again> = Rc::default();
     let (weak, pick, again) = (group.downgrade(), Rc::new(pick), me.clone());
     let load: Rc<dyn Fn()> = Rc::new(move || {
@@ -450,7 +503,8 @@ pub fn group(title: &str, pick: impl Fn(&[Value]) -> Vec<Value> + 'static) -> ad
                 let load = again.borrow().as_ref().and_then(Weak::upgrade);
                 load.inspect(|load| load());
             });
-            for row in rows.take() {
+            let focus = take_focus(&rows.borrow());
+            for (_, row) in rows.take() {
                 group.remove(&row);
             }
             let picked = listed.map(|listed| pick(&listed)).unwrap_or_else(|e| {
@@ -461,16 +515,16 @@ pub fn group(title: &str, pick: impl Fn(&[Value]) -> Vec<Value> + 'static) -> ad
             for c in &picked {
                 let row = row(c, changed.clone());
                 group.add(&row);
-                rows.borrow_mut().push(row);
+                rows.borrow_mut().push((text(c, "id"), row.upcast()));
             }
+            refocus(&rows.borrow(), focus);
         });
     });
     me.replace(Some(Rc::downgrade(&load)));
     let handler = app().map(|app| {
         let load = Rc::downgrade(&load);
-        let handler = app.connect_local("job-changed", false, move |_| {
+        let handler = on_jobs(&app, move || {
             load.upgrade().inspect(|load| load());
-            None
         });
         (app.downgrade(), handler)
     });
@@ -532,6 +586,16 @@ mod tests {
         tool["packages"] = json!(["gpu-screen-recorder"]);
         assert_eq!(ids(actions(&tool)), ["install"]);
         assert!(ask(&tool, "install").is_some_and(|a| a.body.starts_with("gpu-screen-recorder")));
+    }
+
+    #[test]
+    fn only_a_components_job_reads_the_runners_again() {
+        let watch = JobWatch::default();
+        assert!(!watch.changed(Some(Kind::Install)) && !watch.changed(None), "a store's install starts and ends");
+        assert!(!watch.changed(Some(Kind::Scan)) && !watch.changed(None), "a scan likewise");
+        assert!(watch.changed(Some(Kind::Component)), "a component's starts: its row shows the progress");
+        assert!(watch.changed(None), "and ends: the build it brought");
+        assert!(!watch.changed(None));
     }
 
     #[test]

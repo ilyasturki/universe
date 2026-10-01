@@ -26,17 +26,28 @@ fn list(v: &Value, key: &str) -> Vec<String> {
 struct ListPage {
     page: adw::PreferencesPage,
     groups: RefCell<Vec<adw::PreferencesGroup>>,
+    rows: RefCell<Vec<crate::components::Keyed>>,
 }
 
 impl ListPage {
     fn new(name: &str, title: &str, icon: &str) -> Rc<ListPage> {
-        Rc::new(ListPage { page: adw::PreferencesPage::builder().name(name).title(title).icon_name(icon).build(), groups: RefCell::default() })
+        Rc::new(ListPage {
+            page: adw::PreferencesPage::builder().name(name).title(title).icon_name(icon).build(),
+            groups: RefCell::default(),
+            rows: RefCell::default(),
+        })
     }
 
     fn clear(&self) {
+        self.rows.take();
         for group in self.groups.take() {
             self.page.remove(&group);
         }
+    }
+
+    /// `row` found again by `key` after a rebuild, the focus with it.
+    fn keep(&self, key: &str, row: &impl IsA<gtk::Widget>) {
+        self.rows.borrow_mut().push((key.to_string(), row.clone().upcast()));
     }
 
     fn group(&self, title: &str, description: &str) -> adw::PreferencesGroup {
@@ -91,7 +102,7 @@ pub fn present(win: &Window, page: &str) {
 
     let runners = ListPage::new("runners", &gettext("Runners"), "system-run-symbolic");
     dialog.add(&runners.page);
-    load_runners(&dialog, &runners, win, &connector);
+    load_runners(&dialog, &runners, win, &connector, false);
 
     let stores = ListPage::new("stores", &gettext("Stores"), "system-software-install-symbolic");
     dialog.add(&stores.page);
@@ -119,22 +130,26 @@ pub fn present(win: &Window, page: &str) {
     dialog.add(&doctor.page);
     load_doctor(&dialog, &doctor);
     let (weak_page, weak_win) = (Rc::downgrade(&artwork), win.downgrade());
-    let (weak_dialog, weak_runners, runners_connector) = (dialog.downgrade(), Rc::downgrade(&runners), connector.clone());
     let job = win.app().connect_local("job-changed", false, move |_| {
         if let (Some(page), Some(win)) = (weak_page.upgrade(), weak_win.upgrade()) {
             load_artwork(&page, &win);
-            if let (Some(dialog), Some(runners)) = (weak_dialog.upgrade(), weak_runners.upgrade()) {
-                load_runners(&dialog, &runners, &win, &runners_connector);
-            }
         }
         None
     });
+    let (weak_dialog, weak_runners, weak_win, runners_connector) = (dialog.downgrade(), Rc::downgrade(&runners), win.downgrade(), connector.clone());
+    let component_job = crate::components::on_jobs(&win.app(), move || {
+        if let (Some(dialog), Some(runners), Some(win)) = (weak_dialog.upgrade(), weak_runners.upgrade(), weak_win.upgrade()) {
+            load_runners(&dialog, &runners, &win, &runners_connector, true);
+        }
+    });
 
-    let (app, job) = (win.app().downgrade(), RefCell::new(Some(job)));
+    let (app, jobs) = (win.app().downgrade(), RefCell::new(vec![job, component_job]));
     dialog.connect_closed(move |_| {
         let _ = (&launch, &runners, &stores, &modules, &controller, &system, &artwork, &doctor);
-        if let (Some(app), Some(job)) = (app.upgrade(), job.take()) {
-            app.disconnect(job);
+        if let Some(app) = app.upgrade() {
+            for handler in jobs.take() {
+                app.disconnect(handler);
+            }
         }
     });
     if !page.is_empty() {
@@ -216,8 +231,11 @@ fn system_row(dialog: &adw::PreferencesDialog, control: universe::hardware::Cont
     crate::rows::plain(row, control.label, control.detail)
 }
 
-fn load_runners(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, win: &Window, connector: &str) {
-    page.loading();
+/// `reload`: the rows rebuilt in one go where they were, the focus kept, no spinner.
+fn load_runners(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, win: &Window, connector: &str, reload: bool) {
+    if !reload {
+        page.loading();
+    }
     let mut usage: HashMap<String, (usize, f64)> = HashMap::new();
     let mut games: HashMap<String, Vec<(String, String, f64)>> = HashMap::new();
     for game in win.app().library().games() {
@@ -232,6 +250,7 @@ fn load_runners(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, win: &Wind
         let runners = backend::run(async { backend::core().runners().await }).await;
         let listed = crate::components::listing(false).await;
         let (Some(dialog), Some(win)) = (dialog.upgrade(), win.upgrade()) else { return };
+        let focus = crate::components::take_focus(&page.rows.borrow());
         page.clear();
         let listed = listed.unwrap_or_else(|e| {
             dialog.add_toast(crate::dialogs::toast(&e.to_string()));
@@ -241,7 +260,7 @@ fn load_runners(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, win: &Wind
             let (dialog, page, win, connector) = (dialog.downgrade(), Rc::downgrade(&page), win.downgrade(), connector.clone());
             Rc::new(move || {
                 if let (Some(dialog), Some(page), Some(win)) = (dialog.upgrade(), page.upgrade(), win.upgrade()) {
-                    load_runners(&dialog, &page, &win, &connector);
+                    load_runners(&dialog, &page, &win, &connector, true);
                 }
             })
         };
@@ -284,6 +303,7 @@ fn load_runners(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, win: &Wind
                 );
             }
             row.add_suffix(&chevron());
+            page.keep(&id, &row);
             let (dialog, runner_ref, list, win, connector) =
                 (dialog.downgrade(), runner.clone(), games.remove(&id).unwrap_or_default(), win.downgrade(), connector.clone());
             row.connect_activated(move |_| {
@@ -305,11 +325,14 @@ fn load_runners(dialog: &adw::PreferencesDialog, page: &Rc<ListPage>, win: &Wind
         }
         let tooling = crate::components::tools(&listed);
         for c in &tooling {
-            tools.add(&crate::components::row(c, again.clone()));
+            let row = crate::components::row(c, again.clone());
+            page.keep(&text(c, "id"), &row);
+            tools.add(&row);
         }
         offered.set_visible(!waiting.is_empty());
         missing.set_visible(none > 0);
         tools.set_visible(!tooling.is_empty());
+        crate::components::refocus(&page.rows.borrow(), focus);
     });
 }
 

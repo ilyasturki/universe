@@ -1153,7 +1153,9 @@ rescans, the art fetched again, the store's catalogue search and the GNOME Shell
   build that runs and its tag, and its menu holds `actions()`: install, update, use a build, follow
   the newest, another version, roll back, remove, uninstall; what costs something asks first in an
   `AdwAlertDialog`, an install showing its notice and size. While its job runs the row shows the
-  progress and Stop, and both pages read the listing again when a job starts or ends. A Doctor check
+  progress and Stop, and both pages read the listing again when a component's job starts or ends
+  (`components::on_jobs`; a store's or a scan leaves them be): the rows are rebuilt in one go where
+  they stood, no spinner, the scroll and the focused row kept (`take_focus`, `refocus`). A Doctor check
   that an install fixes gets an Install button that runs the same flow.
 - **Undo, not confirmation**, for what can come back: hiding, favourites, removing a game, a
   screenshot, a recording, a journal entry. A removal is held (`Application::defer`) while its toast
