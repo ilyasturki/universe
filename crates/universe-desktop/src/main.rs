@@ -33,7 +33,8 @@ fn main() -> glib::ExitCode {
         }
     }
     universe::init_tracing();
-    gettextrs::setlocale(LocaleCategory::LcAll, "");
+    // SAFETY: no other thread exists yet to read the locale.
+    unsafe { gettextrs::setlocale(LocaleCategory::LcAll, "") };
     let _ = gettextrs::bindtextdomain(config::GETTEXT_PACKAGE, config::LOCALE_DIR);
     let _ = gettextrs::bind_textdomain_codeset(config::GETTEXT_PACKAGE, "UTF-8");
     let _ = gettextrs::textdomain(config::GETTEXT_PACKAGE);
