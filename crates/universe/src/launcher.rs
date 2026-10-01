@@ -663,6 +663,7 @@ mod tests {
 
     #[test]
     fn plan_wraps_the_game_in_gamescope() {
+        let _env = crate::paths::test_env();
         let dir = tempfile::tempdir().unwrap();
         let mut g = game(dir.path(), "Game.exe", "");
         let exe = g.launch.exe.clone();
