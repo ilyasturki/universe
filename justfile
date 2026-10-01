@@ -160,6 +160,10 @@ smoke *profiles:
 distro-check distro:
     tools/container {{ distro }} tools/distro-check
 
+# The RPM spec built from the checkout, installed and run in a Fedora container
+rpm-check:
+    tools/container fedora tools/rpm-check
+
 # Copy real games into .dev/ to test the recording player and the journal: just seed [id…]
 seed *ids: env
     #!/usr/bin/env bash
@@ -255,10 +259,12 @@ bump level: check
     sed -i "/^\[workspace.package\]/,/^\[/s/^version = \"$cur\"$/version = \"$new\"/" Cargo.toml
     sed -i "s/^version = \"$cur\"$/version = \"$new\"/" "${copies[@]}"
     sed -i "s/^pkgver=$cur$/pkgver=$new/" "${pkgbuilds[@]}"
+    spec=packaging/rpm/universe.spec
+    sed -i "s/^\(Version: *\)$cur$/\1$new/" "$spec"
     metainfo=crates/universe-desktop/data/io.github.ilyasturki.UniverseDesktop.metainfo.xml
     sed -i "s|<releases>|<releases>\n    <release version=\"$new\" date=\"$(date +%F)\"/>|" "$metainfo"
     cargo update --workspace --offline --quiet
-    git add Cargo.toml Cargo.lock "${pkgbuilds[@]}" "$metainfo" "${copies[@]}" "${notes[@]}"
+    git add Cargo.toml Cargo.lock "${pkgbuilds[@]}" "$spec" "$metainfo" "${copies[@]}" "${notes[@]}"
     git commit --quiet -m "chore(release): v$new"
     git tag -a "v$new" -m "v$new"
     echo "$cur -> $new: committed and tagged v$new (not pushed)"

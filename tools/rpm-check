@@ -1,0 +1,78 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+    cat <<'USAGE'
+usage: tools/rpm-check
+
+What a Fedora user of the COPR gets: packaging/rpm/universe.spec built
+here from the checkout (Source0 is a tarball of the working tree, not the
+release's), its RPMs installed with dnf, the files they put in place, the CLI
+finding the packaged modules and sources, Universe Desktop, the UI offscreen
+on Fedora's PySide6 (a shot in DISTRO_OUT, default target/rpm-check), then
+the RPMs removed. The RPMs are kept in DISTRO_OUT/rpm.
+
+As the user ci with sudo, where tools/ci-deps set things up
+(tools/container fedora). Needs the network: dnf fetches the build
+dependencies, cargo the crates, spectool the GOG source's Galaxy service stub.
+USAGE
+}
+
+case "${1:-}" in
+    -h | --help) usage; exit 0 ;;
+esac
+repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+out="${DISTRO_OUT:-${CARGO_TARGET_DIR:-$repo/target}/rpm-check}"
+spec="$repo/packaging/rpm/universe.spec"
+work="$(mktemp -d)"
+trap 'rm -rf "$work"' EXIT
+top="$work/rpmbuild"
+mkdir -p "$top/SOURCES" "$out/rpm"
+
+echo "── build"
+version="$(rpmspec -q --srpm --qf '%{version}' "$spec")"
+tar -C "$repo" --exclude=./target --exclude=./.git --exclude=./.venv --exclude='./.dev*' --exclude=./.claude \
+    --transform "s,^\.,universe-$version," -czf "$top/SOURCES/universe-$version.tar.gz" .
+spectool --get-files --source 1 --directory "$top/SOURCES" "$spec" > /dev/null
+sudo dnf builddep -y -q "$spec" > /dev/null
+rpmbuild --quiet --define "_topdir $top" -ba "$spec"
+rm -f "$out"/rpm/*.rpm
+cp "$top"/RPMS/x86_64/*.rpm "$top"/SRPMS/*.rpm "$out/rpm"
+ls "$out/rpm"
+
+echo "── install"
+# the container's systemd-standalone-tmpfiles stands in for the systemd the package requires
+sudo dnf install -y -q --allowerasing "$top"/RPMS/x86_64/*.rpm > /dev/null
+rpm -q universe universe-desktop
+cmp "$repo/packaging/system/70-universe.rules" /usr/lib/udev/rules.d/70-universe.rules
+cmp "$repo/packaging/system/universe.conf" /usr/lib/modules-load.d/universe.conf
+[ -s /usr/share/universe/sources/gog/GalaxyCommunication.exe ] || { echo "rpm-check: no GOG Galaxy service stub" >&2; exit 1; }
+
+echo "── cli"
+universe --version
+universe module ls --json > "$work/modules.json"
+universe source ls --json > "$work/sources.json"
+python3 - "$work" <<'PY'
+import json, sys
+work = sys.argv[1]
+for kind, want in (("modules", {"capture", "journal", "pads", "screenshot"}), ("sources", {"gog"})):
+    found = {m["id"]: m["dir"] for m in json.load(open(f"{work}/{kind}.json"))}
+    assert want <= set(found), f"{kind}: {sorted(found)}"
+    assert all(d.startswith("/usr/share/universe/") for d in found.values()), f"{kind} outside the package: {found}"
+PY
+
+echo "── desktop"
+universe-desktop --help > /dev/null
+echo "universe-desktop: installed"
+
+echo "── ui"
+rm -f "$out/rpm-ui-fake.png"
+QT_QPA_PLATFORM=offscreen PIPEWIRE_REMOTE=/nonexistent timeout 120 universe-ui --fake --no-gamepad --size 1280x720 --key-gap 300 \
+    --keys "Wait:4 Shot:$out/rpm-ui-fake.png" --quit-after 15000
+[ -s "$out/rpm-ui-fake.png" ] || { echo "rpm-check: the UI saved no rpm-ui-fake.png" >&2; exit 1; }
+echo "$out/rpm-ui-fake.png"
+
+echo "── remove"
+sudo dnf remove -y -q universe universe-desktop > /dev/null
+[ ! -e /usr/lib/udev/rules.d/70-universe.rules ] || { echo "rpm-check: the udev rule stayed" >&2; exit 1; }
+echo "rpm-check: ok"
