@@ -1,6 +1,6 @@
 import pytest
 
-from conftest import index_of, pump, rows_by_key, settle, wait_for
+from conftest import index_of, pump, rows_by_key, settle, until, wait_for
 from universe_ui.screens.media import _size
 
 PENDING = {
@@ -1070,6 +1070,6 @@ def test_the_sessions_store_lists_played_sessions_and_reads_one_log(api, fake):
     store.openLog("")
     assert wait_for(store.logChanged, 3000) is not None
     assert store.log[0]["message"].startswith("launch " + fake.currentSession["session_id"])
-    assert wait_for(fake.sessionEnded, 6000) is not None
-    pump(200)
-    assert not store.rows[0]["live"] and store.rows[0]["end"] == "quit"
+    fake.core.end_session()
+    until(lambda: not store.rows[0]["live"])
+    assert store.rows[0]["end"] == "quit"

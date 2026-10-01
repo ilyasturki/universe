@@ -63,10 +63,7 @@ def test_game_settings_carry_the_sources_own_switch(api, fake):
     assert not any(str(r.get("key", "")).startswith("sources.") for r in form.rows), "a Lutris game has no GOG switch"
 
 
-def test_a_replay_shows_the_stamped_unlocks_again_and_a_stale_one_is_no_news(api, fake, monkeypatch):
-    from universe_ui import fake_core
-
-    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+def test_a_replay_shows_the_stamped_unlocks_again_and_a_stale_one_is_no_news(api, fake):
     cache = fake.core._data["achievements"]["batman-arkham-origins"]
     path = fake.core._game_dir("batman-arkham-origins") / "achievements.json"
 

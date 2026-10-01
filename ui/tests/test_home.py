@@ -57,9 +57,6 @@ def test_a_volume_macro_shows_its_level_on_the_overlay_for_a_moment(api, fake, m
 
 
 def test_home_flips_between_the_game_and_the_launcher(api, fake, monkeypatch):
-    from universe_ui import fake_core
-
-    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
     home = api.home
     assert home.shown == "launcher" and not home.open
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
@@ -97,7 +94,10 @@ def test_home_flips_between_the_game_and_the_launcher(api, fake, monkeypatch):
     assert home.shown == "launcher" and not home.paused
 
 
-def test_on_the_desktop_the_game_is_shown_once_its_window_maps(api, fake):
+def test_on_the_desktop_the_game_is_shown_once_its_window_maps(api, fake, monkeypatch):
+    from universe_ui import fake_core
+
+    monkeypatch.setattr(fake_core, "WINDOW_S", 0.4)
     home = api.home
     errors = []
     fake.error.connect(lambda kind, message: errors.append(kind))
@@ -150,8 +150,6 @@ def test_the_dock_pauses_on_home_and_thaws_on_the_release(api, fake):
 
 
 def test_the_dock_over_the_game_takes_the_pad_back(api, fake, monkeypatch):
-    from universe_ui import fake_core
-
     class Overlay:
         def winId(self):
             return 7
@@ -159,7 +157,6 @@ def test_the_dock_over_the_game_takes_the_pad_back(api, fake, monkeypatch):
         def show(self):
             pass
 
-    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
     home = api.home
     assert home.attachOverlay(Overlay()) is True
@@ -179,9 +176,6 @@ def test_the_dock_over_the_game_takes_the_pad_back(api, fake, monkeypatch):
 
 
 def test_a_guide_hold_from_the_game_goes_home(api, fake, monkeypatch):
-    from universe_ui import fake_core
-
-    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
     home = api.home
     home.changed.connect(home.covered)
@@ -223,7 +217,6 @@ def test_a_guide_hold_from_the_game_goes_home(api, fake, monkeypatch):
 def test_the_press_takes_the_frame_the_flip_waits_on(api, fake, monkeypatch):
     from universe_ui import fake_core
 
-    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
     monkeypatch.setattr(fake_core, "FRAME_S", 0.5)
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
     home = api.home
@@ -267,15 +260,13 @@ def test_the_press_takes_the_frame_the_flip_waits_on(api, fake, monkeypatch):
     assert home.shown == "launcher" and home.frame != frame
     home.toGame()
     pump(300)
-    monkeypatch.setattr(fake.core, "nest_frame", lambda: None)
-    home.toLauncher()
-    pump(300)
-    assert home.shown == "launcher" and home.frame == "" and fake.core.game_shown is False, "no frame in time: the swap goes ahead, nothing to zoom"
-    home.toGame()
-    pump(300)
-    monkeypatch.undo()
-    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
-    monkeypatch.setattr(fake_core, "FRAME_S", 0.5)
+    with monkeypatch.context() as patched:
+        patched.setattr(fake.core, "nest_frame", lambda: None)
+        home.toLauncher()
+        pump(300)
+        assert home.shown == "launcher" and home.frame == "" and fake.core.game_shown is False, "no frame in time: the swap goes ahead, nothing to zoom"
+        home.toGame()
+        pump(300)
     assert api.theme.set("switch2")
     home.guide(True)
     home.toLauncher()
@@ -286,9 +277,6 @@ def test_the_press_takes_the_frame_the_flip_waits_on(api, fake, monkeypatch):
 
 
 def test_a_theme_that_covers_at_once_gets_the_swap_at_once(api, fake, monkeypatch):
-    from universe_ui import fake_core
-
-    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
     home = api.home
     seen = {"shown": home.shown}
@@ -310,9 +298,6 @@ def test_a_theme_that_covers_at_once_gets_the_swap_at_once(api, fake, monkeypatc
 
 
 def test_a_hold_that_flips_leaves_nothing_to_thaw_on_the_release(api, fake, monkeypatch):
-    from universe_ui import fake_core
-
-    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
     home = api.home
     home.changed.connect(home.covered)
@@ -335,9 +320,6 @@ def test_a_hold_that_flips_leaves_nothing_to_thaw_on_the_release(api, fake, monk
 
 
 def test_quitting_from_the_game_brings_the_launcher_up_first(api, fake, monkeypatch):
-    from universe_ui import fake_core
-
-    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
     home = api.home
     home.changed.connect(home.covered)
@@ -412,7 +394,6 @@ def test_the_dock_over_a_loading_game_is_home_and_quit_and_grows_once_the_window
         def show(self):
             pass
 
-    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
     monkeypatch.setattr(fake_core, "WINDOW_S", 1.2)
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
     home = api.home
@@ -449,7 +430,6 @@ def test_home_from_the_dock_over_a_loading_game_takes_no_frame_and_freezes_nothi
         def show(self):
             pass
 
-    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
     monkeypatch.setattr(fake_core, "WINDOW_S", 1.2)
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
     home = api.home
@@ -479,7 +459,6 @@ def test_quit_from_the_dock_over_a_loading_game_stops_it_through_the_launcher(ap
         def show(self):
             pass
 
-    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
     monkeypatch.setattr(fake_core, "WINDOW_S", 2.0)
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
     home = api.home
@@ -512,7 +491,6 @@ def test_the_dock_opens_over_the_poster_before_the_core_has_made_the_session(api
             pass
 
     monkeypatch.setattr(fake_core, "START_S", 1.0)
-    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
     monkeypatch.setattr(fake_core, "WINDOW_S", 1.2)
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
     home = api.home
@@ -546,7 +524,6 @@ def test_quit_before_the_session_is_made_stops_it_once_the_core_hands_it_back(ap
             pass
 
     monkeypatch.setattr(fake_core, "START_S", 1.0)
-    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
     monkeypatch.setattr(fake_core, "WINDOW_S", 2.0)
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
     home = api.home
@@ -617,10 +594,7 @@ def key(window, k):
     pump(50)
 
 
-def test_the_dock_renders_over_a_running_game(api, fake, tmp_path, monkeypatch):
-    from universe_ui import fake_core
-
-    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+def test_the_dock_renders_over_a_running_game(api, fake, tmp_path):
     engine, window = render(api)
     overlay = host.create_overlay(engine, window.size())
     assert overlay is not None
@@ -706,10 +680,7 @@ def test_the_dock_renders_over_a_running_game(api, fake, tmp_path, monkeypatch):
     pump(50)
 
 
-def test_the_docks_achievements_open_in_its_tray_while_the_source_tracks_them(api, fake, monkeypatch, tmp_path):
-    from universe_ui import fake_core
-
-    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+def test_the_docks_achievements_open_in_its_tray_while_the_source_tracks_them(api, fake, tmp_path):
     engine, window = render(api)
     overlay = host.create_overlay(engine, window.size())
     api.home.attachOverlay(overlay)
@@ -788,9 +759,6 @@ def test_a_burst_of_unlocks_waits_its_turn_behind_three_cards(api, fake, tmp_pat
 
 
 def test_the_docks_output_row_switches_once_the_cursor_rests(api, fake, tmp_path, monkeypatch):
-    from universe_ui import fake_core
-
-    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
     switched = []
     real_set = fake.core.set_output
     monkeypatch.setattr(fake.core, "set_output", lambda ident: (switched.append(ident), real_set(ident))[1])
@@ -838,7 +806,6 @@ def test_home_over_the_poster_raises_home_and_quit_and_home_drops_the_poster(api
 
     from universe_ui import fake_core
 
-    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
     monkeypatch.setattr(fake_core, "WINDOW_S", 2.0)
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
     engine, window = render(api, activate=True)
@@ -894,12 +861,9 @@ def test_home_over_the_poster_raises_home_and_quit_and_home_drops_the_poster(api
     pump(50)
 
 
-def test_the_dock_lists_the_sessions_shots_and_trashes_one(api, fake, tmp_path, monkeypatch):
+def test_the_dock_lists_the_sessions_shots_and_trashes_one(api, fake, tmp_path):
     from PySide6.QtCore import QObject
 
-    from universe_ui import fake_core
-
-    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
     engine, window = render(api)
     overlay = host.create_overlay(engine, window.size())
     api.home.attachOverlay(overlay)
@@ -964,9 +928,6 @@ def test_home_from_the_game_zooms_the_frame_into_its_tile(api, fake, monkeypatch
     from PySide6.QtCore import QMetaObject, QObject
     from PySide6.QtGui import QColor, QImage
 
-    from universe_ui import fake_core
-
-    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
     shot = QImage(640, 360, QImage.Format.Format_RGB32)
     shot.fill(QColor("#d02020"))

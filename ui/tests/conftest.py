@@ -1,3 +1,4 @@
+import inspect
 import sys
 import traceback
 
@@ -21,6 +22,15 @@ def pytest_runtest_makereport(item, call):
     outcome = yield
     if call.when == "call":
         item.rep_call_passed = outcome.get_result().passed
+
+
+@pytest.fixture(autouse=True)
+def fast_clock(monkeypatch):
+    """FakeCore's delays in milliseconds, and a session that runs until the test stops it or calls `fake.core.end_session()`."""
+    from universe_ui import fake_core
+
+    for name, seconds in {"STEP_S": 0.01, "WINDOW_S": 0.02, "UNLOCK_S": 0.05, "SESSION_S": None}.items():
+        monkeypatch.setattr(fake_core, name, seconds)
 
 
 @pytest.fixture(scope="session")
@@ -79,13 +89,34 @@ def pump(ms):
     loop.exec()
 
 
-def settle(screen, timeout_ms=5000):
+def until(predicate, message="", timeout_ms=5000):
+    """Runs the event loop until `predicate()` is truthy and returns that value, failing once `timeout_ms` passes without it."""
     from PySide6.QtCore import QDeadlineTimer
 
     deadline = QDeadlineTimer(timeout_ms)
-    while screen.busy and not deadline.hasExpired():
-        pump(10)
-    assert not screen.busy, "still busy"
+    while not (value := predicate()):
+        if deadline.hasExpired():
+            raise AssertionError(message or f"never held within {timeout_ms} ms: {_source(predicate)}")
+        pump(5)
+    return value
+
+
+def _source(fn):
+    try:
+        return inspect.getsource(fn).strip()
+    except (OSError, TypeError):
+        return repr(fn)
+
+
+def record(signal):
+    """Every emission of `signal` from here on, as its argument tuples."""
+    seen = []
+    signal.connect(lambda *args: seen.append(args))
+    return seen
+
+
+def settle(screen, timeout_ms=5000):
+    until(lambda: not screen.busy, "still busy", timeout_ms)
 
 
 def index_of(form, key):

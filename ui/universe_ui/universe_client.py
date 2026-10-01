@@ -26,6 +26,8 @@ def _core_error() -> type[Exception]:
 
 
 CoreError = _core_error()
+# Past the session toast, not over it.
+SKIPPED_NOTICE_MS = 4500
 
 
 log = logging.getLogger("universe.client")
@@ -456,7 +458,7 @@ class CoreClient(QObject):
         def landed(line):
             line = line or {}
             self.sessionEnded.emit(session_id, ident, int(line.get("duration_s") or 0), str(line.get("end") or ""))
-            QTimer.singleShot(4500, self._notice_skipped_modules)
+            QTimer.singleShot(SKIPPED_NOTICE_MS, self._notice_skipped_modules)
             self.libraryChanged.emit([ident])
             if line.get("recording"):
                 self.recordingFiled.emit(session_id, ident, str(line["recording"].get("path") or ""))

@@ -29,6 +29,7 @@ GPU = {
 REFRESH_RATES = [240, 165, 144, 120, 100, 90, 75, 60, 50, 48, 40, 30]
 RESOLUTION_HEIGHTS = [2160, 1800, 1440, 1080, 720]
 STEP_S = 0.15
+# None: the session runs until stopped or `end_session()`.
 SESSION_S = 2.0
 # Before the session exists, as the real core's pre-launch hooks.
 START_S = 0.0
@@ -865,9 +866,16 @@ class FakeCore:
                     self._end_session(code)
 
             threading.Thread(target=wait, daemon=True, name="fake-session").start()
-        else:
+        elif SESSION_S is not None:
             self._later(SESSION_S, lambda: self._end_session(0))
         return session_id
+
+    def end_session(self, exit_code=0):
+        """The game exits by itself: `quit` on 0, where a `stop` is `stopped`."""
+        process = self._process
+        self._end_session(exit_code)
+        if process is not None:
+            process.kill()
 
     # As `session-end`: the session line first, the marker last.
     def _end_session(self, exit_code):

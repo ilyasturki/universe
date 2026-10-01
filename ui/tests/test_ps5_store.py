@@ -87,7 +87,10 @@ def test_a_search_narrows_the_store_to_its_results_and_b_clears_it(ps5, api):
     assert next(c["title"] for c in value(store, "collections")) == "Ready to install"
 
 
-def test_an_install_runs_as_a_job_heads_the_home_row_and_x_stops_it(ps5, api, fake):
+def test_an_install_runs_as_a_job_heads_the_home_row_and_x_stops_it(ps5, api, fake, monkeypatch):
+    from universe_ui import fake_core
+
+    monkeypatch.setattr(fake_core, "STEP_S", 0.15)
     window, root = ps5
     sources = api.screens.sources
     store = open_store(root)

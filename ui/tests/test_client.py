@@ -3,17 +3,11 @@ from pathlib import Path
 
 import pytest
 
-from conftest import pump, wait_for
-
-
-def _collect(signal):
-    seen = []
-    signal.connect(lambda *args: seen.append(args))
-    return seen
+from conftest import pump, record, until
 
 
 def test_errors_are_signalled_not_raised(fake):
-    seen = _collect(fake.error)
+    seen = record(fake.error)
     assert fake.version() == "0.0.0-fake"
     assert fake.game("nope") == {}
     assert seen and seen[0][0] == "NotFound"
@@ -35,38 +29,48 @@ def test_settings_merges_game_scope(fake):
     assert fake.game("control")["tags"] == ["a", "b"]
 
 
-def test_a_session_end_tells_once_about_an_enabled_module_the_core_skipped(fake):
+def test_a_session_end_tells_once_about_an_enabled_module_the_core_skipped(fake, monkeypatch):
+    from universe_ui import universe_client
+
+    monkeypatch.setattr(universe_client, "SKIPPED_NOTICE_MS", 100)
     next(m for m in fake.core._data["modules"] if m["id"] == "capture").update(available=False, missing=["gsr-cli"])
-    notices = _collect(fake.notice)
+    notices, ended = record(fake.notice), record(fake.sessionEnded)
     fake.launch("control", "DP-1")
-    assert wait_for(fake.sessionEnded, 6000) is not None
+    until(lambda: fake.currentSession)
+    fake.core.end_session()
+    until(lambda: ended)
     assert notices == [], "after the session toast, not over it"
-    assert wait_for(fake.notice, 6000) == ("Video capture was on but ran nothing: missing gsr-cli",)
+    assert until(lambda: notices) == [("Video capture was on but ran nothing: missing gsr-cli",)]
     fake.launch("control", "DP-1")
-    assert wait_for(fake.sessionEnded, 6000) is not None
-    assert wait_for(fake.notice, 6000) is None and len(notices) == 1, "said once per run"
+    until(lambda: fake.currentSession)
+    fake.core.end_session()
+    until(lambda: len(ended) == 2)
+    pump(300)
+    assert len(notices) == 1, "said once per run"
 
 
 def test_launch_writes_the_marker_and_the_end_comes_from_the_state_watch(fake):
     core = fake.core
-    started, launched, ended = _collect(fake.sessionStarted), _collect(fake.launched), _collect(fake.sessionEnded)
-    current = _collect(fake.currentSessionChanged)
+    started, launched, ended = record(fake.sessionStarted), record(fake.launched), record(fake.sessionEnded)
+    current = record(fake.currentSessionChanged)
     assert fake.currentSession is None
     fake.launch("control", "DP-1")
-    assert wait_for(fake.launched, 3000) is not None
+    until(lambda: launched)
     marker = json.loads((core._root / "state" / "current-session.json").read_text())
     assert marker["id"] == "control" and marker["screen"] == "DP-1" and marker["session_id"] == launched[0][0]
     assert fake.currentSession["id"] == "control" and fake.currentSession["screen"] == "DP-1"
     assert started == [(launched[0][0], "control")] and len(current) == 1
 
-    busy = _collect(fake.launchFailed)
+    busy = record(fake.launchFailed)
+    shown = record(fake.sessionShown)
     fake.launch("mini-metro", "DP-1")
-    assert wait_for(fake.launchFailed, 3000) is not None
+    until(lambda: busy)
     assert busy[0][0] == "mini-metro" and "running" in busy[0][1]
-    assert wait_for(fake.sessionShown, 3000) == (launched[0][0], True)
+    assert until(lambda: shown) == [(launched[0][0], True)]
 
-    # The fake ends the session after 2 s: the session line lands, then the marker goes.
-    assert wait_for(fake.sessionEnded, 6000) is not None
+    # The game quits: the session line lands, then the marker goes.
+    fake.core.end_session()
+    until(lambda: ended)
     assert ended == [(launched[0][0], "control", ended[0][2], "quit")] and ended[0][2] >= 1
     assert fake.currentSession is None and len(current) == 2
     assert not (core._root / "state" / "current-session.json").exists()
@@ -78,44 +82,40 @@ def test_launch_writes_the_marker_and_the_end_comes_from_the_state_watch(fake):
 
 def test_the_window_wait_holds_while_the_session_lives(fake):
     fake.core.window_misses = 2
-    shown, launched = _collect(fake.sessionShown), _collect(fake.launched)
+    shown, launched = record(fake.sessionShown), record(fake.launched)
     fake.launch("control", "DP-1")
-    assert wait_for(fake.launched, 3000) is not None
-    assert wait_for(fake.sessionShown, 5000) == (launched[0][0], True)
+    until(lambda: launched)
+    until(lambda: shown)
     assert shown == [(launched[0][0], True)] and fake.core.window_misses == 0
 
 
 def test_a_stop_ends_the_session_now(fake):
+    launched, ended = record(fake.launched), record(fake.sessionEnded)
     fake.launch("control", "")
-    assert wait_for(fake.launched, 3000) is not None
+    until(lambda: launched)
     fake.stop("")
-    args = wait_for(fake.sessionEnded, 3000)
-    assert args is not None and args[1] == "control" and args[3] == "stopped", "a stop is not a crash"
+    args = until(lambda: ended)[0]
+    assert args[1] == "control" and args[3] == "stopped", "a stop is not a crash"
     assert fake.currentSession is None
 
 
 def test_files_written_by_others_reach_the_screens(fake):
     core = fake.core
-    changed, media, written, filed = _collect(fake.libraryChanged), _collect(fake.mediaChanged), _collect(fake.entryWritten), _collect(fake.recordingFiled)
+    changed, media, written, filed = record(fake.libraryChanged), record(fake.mediaChanged), record(fake.entryWritten), record(fake.recordingFiled)
     games = core._root / "data" / "games"
     (games / "control" / "media" / "extra.png").write_bytes(b"")
-    for _ in range(30):
-        pump(100)
-        if changed:
-            break
+    until(lambda: changed)
     assert changed == [(["control"],)] and written == [("", "control")] and filed == [("", "control", "")]
     assert media == [], "a file under media/ is a library change; mediaChanged follows the client's own picks"
 
     changed.clear()
     (games / "control" / "journal" / "20260914-120000.json").write_text('{"session": "20260914-120000", "game": "control"}')
-    for _ in range(30):
-        pump(100)
-        if changed:
-            break
+    until(lambda: changed)
     assert changed == [(["control"],)]
 
+    changed.clear()
     (games / "the-technomancer" / "screenshots" / "20260914-120500.png").write_bytes(b"")
-    assert wait_for(fake.libraryChanged, 3000) == (["the-technomancer"],), "a shot taken in-game lands in screenshots/"
+    assert until(lambda: changed) == [(["the-technomancer"],)], "a shot taken in-game lands in screenshots/"
 
     assert fake.mediaSetSlot("control", "banner", fake.game("control")["media"]["logo"])
     assert media == [("control",)]
@@ -125,22 +125,23 @@ def test_files_written_by_others_reach_the_screens(fake):
 
 
 def test_install_job_reports_progress(fake):
-    steps = _collect(fake.progress)
+    steps, finished = record(fake.progress), record(fake.jobFinished)
     job = fake.install("gog", "1207658930")
     assert job.startswith("job-")
     assert fake.jobs()[0]["id"] == job and fake.jobs()[0]["finished"] is False
-    args = wait_for(fake.jobFinished, 10000)
-    assert args is not None and args[0] == job and args[1] is True
+    args = until(lambda: finished)[0]
+    assert args[0] == job and args[1] is True
     assert steps and steps[-1][1:3] == (50000000000, 50000000000), "progress is in bytes of the install"
     assert next(g for g in fake.sourceLibrary("gog", False) if g["id"] == "1207658930")["installed"] is True
 
 
 def test_cancel_reaches_the_running_install_only(fake):
     assert fake.cancel("job-none") is False
+    steps, finished = record(fake.progress), record(fake.jobFinished)
     job = fake.install("gog", "1207658930")
-    wait_for(fake.progress, 5000)
+    until(lambda: steps)
     assert fake.cancel(job) is True
-    args = wait_for(fake.jobFinished, 5000)
+    args = until(lambda: finished)[0]
     assert args[0] == job and args[1] is False and "143" in args[2]
     assert fake.jobs()[0]["cancelled"] is True
     assert fake.cancel(job) is False, "finished"
@@ -162,9 +163,9 @@ def test_a_failing_job_reports_its_end(fake):
         raise RuntimeError("offline")
 
     fake.core.install = broken
+    finished = record(fake.jobFinished)
     job = fake.install("gog", "1")
-    args = wait_for(fake.jobFinished, 3000)
-    assert args == (job, False, "offline")
+    assert until(lambda: finished) == [(job, False, "offline")]
 
 
 def test_the_real_core_reads_writes_and_watches(app):
@@ -180,22 +181,19 @@ def test_the_real_core_reads_writes_and_watches(app):
     assert [g["id"] for g in client.list()] == ["sample"]
     assert client.currentSession is None and client.version() == core.version()
 
-    seen = _collect(client.error)
+    seen = record(client.error)
     assert client.game("nope") == {} and seen == [("NotFound", "nope")]
     assert client.set("sample", "favorite", "true") and client.game("sample")["favorite"] is True
 
-    written = _collect(client.entryWritten)
+    written = record(client.entryWritten)
     (games / "sample" / "journal").mkdir()
-    pump(700)  # the new directory is itself a change; the watch on it starts here
+    until(lambda: written)
     written.clear()
     (games / "sample" / "journal" / "20260911-120000.json").write_text(
         '{"session": "20260911-120000", "game": "sample", "written_at": "2026-09-11T12:10:00+02:00", "lang": "en",'
         ' "title": "First", "provider": "stub", "paragraphs": ["p"], "next_up": "", "images": []}'
     )
-    for _ in range(30):
-        pump(100)
-        if written:
-            break
+    until(lambda: written)
     assert written == [("", "sample")]
     assert [e["title"] for e in client.journal("sample")] == ["First"]
     assert client.removeJournalEntry("sample", "20260912-120000") is False and seen[-1][0] == "NotFound"

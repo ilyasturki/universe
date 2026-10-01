@@ -6,7 +6,7 @@ from PySide6.QtGui import QColor
 from PySide6.QtQml import QQmlApplicationEngine
 from PySide6.QtQuick import QQuickWindow  # noqa: F401  (rootObjects() down-cast, for grabWindow)
 
-from conftest import pump, wait_for
+from conftest import pump, until, wait_for
 from universe_ui import host
 
 
@@ -56,9 +56,6 @@ def js(obj, name):
 
 
 def test_the_scene_holds_still_behind_the_game(api, fake, monkeypatch):
-    from universe_ui import fake_core
-
-    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
     _engine, window = render(api)
     fake.launch("mirrors-edge", "")
@@ -196,12 +193,9 @@ def test_the_tab_bar_search_finds_the_settings_under_the_games(api, fake):
     pump(50)
 
 
-def test_the_screenshots_page_puts_the_running_sessions_shots_first(api, fake, monkeypatch):
+def test_the_screenshots_page_puts_the_running_sessions_shots_first(api, fake):
     from PySide6.QtCore import QObject
 
-    from universe_ui import fake_core
-
-    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
     _engine, window = render(api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
     game = api.allGames.byId("the-technomancer")
@@ -273,20 +267,16 @@ def test_a_session_running_at_startup_is_home_with_the_game_pinned(api, fake):
     home = root.property("activePage")
     assert home is not None and home.property("currentGame").property("id") == "mirrors-edge"
     assert home.property("playLabel") == "Resume"
-    wait_for(fake.sessionEnded, 5000)
-    pump(50)
+    fake.core.end_session()
+    until(lambda: root.property("playingId") == "")
     assert fake.currentSession is None
-    assert root.property("playingId") == ""
     window.close()
     pump(50)
 
 
-def test_the_cursor_follows_the_game_through_its_session(api, fake, monkeypatch):
+def test_the_cursor_follows_the_game_through_its_session(api, fake):
     from PySide6.QtCore import Q_ARG, QMetaObject, QObject
 
-    from universe_ui import fake_core
-
-    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
     _engine, window = render(api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
     home = root.property("activePage")
@@ -309,12 +299,9 @@ def test_the_cursor_follows_the_game_through_its_session(api, fake, monkeypatch)
     pump(50)
 
 
-def test_the_switch2_home_row_follows_the_game_too(api, fake, monkeypatch):
+def test_the_switch2_home_row_follows_the_game_too(api, fake):
     from PySide6.QtCore import Q_ARG, QMetaObject, QObject
 
-    from universe_ui import fake_core
-
-    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
     api.theme.set("switch2")
     _engine, window = render(api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
@@ -440,9 +427,13 @@ def test_a_second_store_switches_the_install_pages_of_both_looks(api, fake):
     pump(50)
 
 
-def test_the_install_pages_render_a_running_install_in_both_looks(api, fake):
+def test_the_install_pages_render_a_running_install_in_both_looks(api, fake, monkeypatch):
     from PySide6.QtCore import Q_ARG, QMetaObject, Qt
     from PySide6.QtTest import QTest
+
+    from universe_ui import fake_core
+
+    monkeypatch.setattr(fake_core, "STEP_S", 0.15)
 
     sources = api.screens.sources
     _engine, window = render(api, activate=True)
@@ -699,9 +690,13 @@ def test_the_artwork_page_opens_on_a_slot_and_lists_its_candidates(api, fake):
     pump(50)
 
 
-def test_the_settings_artwork_button_asks_then_fetches_and_stops(api, fake):
+def test_the_settings_artwork_button_asks_then_fetches_and_stops(api, fake, monkeypatch):
     from PySide6.QtCore import Qt
     from PySide6.QtTest import QTest
+
+    from universe_ui import fake_core
+
+    monkeypatch.setattr(fake_core, "STEP_S", 0.15)
 
     fake.core._game("control")["media"].pop("logo")
     _engine, window = render(api, activate=True)
@@ -822,13 +817,9 @@ def test_b_held_opens_the_power_menu_in_both_looks(api):
     pump(50)
 
 
-def test_reboot_and_power_off_ask_again_and_close_the_game_first(api, fake, monkeypatch):
+def test_reboot_and_power_off_ask_again_and_close_the_game_first(api, fake):
     from PySide6.QtCore import QObject, Qt
     from PySide6.QtTest import QTest
-
-    from universe_ui import fake_core
-
-    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
 
     def pick(downs):
         root.askPower()

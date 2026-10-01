@@ -19,10 +19,7 @@ def covered_fraction(image, rows):
     return covered / (small.width() * len(rows(small.height())))
 
 
-def start(api, fake, monkeypatch, ident):
-    from universe_ui import fake_core
-
-    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+def start(api, fake, ident):
     api.theme.set("ps5")
     api.theme.takeLanding()
     engine, window = render(api)
@@ -58,8 +55,8 @@ def stop(api, window, overlay):
     pump(50)
 
 
-def test_the_control_center_lays_its_cards_over_the_bottom_of_the_game(api, fake, monkeypatch):
-    _engine, window, overlay = start(api, fake, monkeypatch, "batman-arkham-origins")
+def test_the_control_center_lays_its_cards_over_the_bottom_of_the_game(api, fake):
+    _engine, window, overlay = start(api, fake, "batman-arkham-origins")
     cc = open_cc(api, overlay, wait=60)
     shot(overlay, "cc-open-60ms")
     assert cc is not None and cc.property("open") is True and cc.property("zone") == "cards"
@@ -76,8 +73,8 @@ def test_the_control_center_lays_its_cards_over_the_bottom_of_the_game(api, fake
     stop(api, window, overlay)
 
 
-def test_the_bar_opens_a_panel_over_its_icon_and_b_steps_back_out(api, fake, monkeypatch):
-    _engine, window, overlay = start(api, fake, monkeypatch, "mirrors-edge")
+def test_the_bar_opens_a_panel_over_its_icon_and_b_steps_back_out(api, fake):
+    _engine, window, overlay = start(api, fake, "mirrors-edge")
     cc = open_cc(api, overlay)
     key(overlay, Qt.Key.Key_Down)
     assert cc.property("zone") == "bar"
@@ -101,8 +98,8 @@ def test_the_bar_opens_a_panel_over_its_icon_and_b_steps_back_out(api, fake, mon
     stop(api, window, overlay)
 
 
-def test_the_game_hub_card_lands_on_the_games_hero_at_home(api, fake, monkeypatch):
-    _engine, window, overlay = start(api, fake, monkeypatch, "dead-cells")
+def test_the_game_hub_card_lands_on_the_games_hero_at_home(api, fake):
+    _engine, window, overlay = start(api, fake, "dead-cells")
     cc = open_cc(api, overlay)
     key(overlay, Qt.Key.Key_Right)
     assert cc.property("cards").toVariant()[cc.property("card")]["id"] == "hub"
@@ -118,8 +115,8 @@ def test_the_game_hub_card_lands_on_the_games_hero_at_home(api, fake, monkeypatc
     stop(api, window, overlay)
 
 
-def test_the_trophies_card_grows_into_the_games_list(api, fake, monkeypatch):
-    _engine, window, overlay = start(api, fake, monkeypatch, "batman-arkham-origins")
+def test_the_trophies_card_grows_into_the_games_list(api, fake):
+    _engine, window, overlay = start(api, fake, "batman-arkham-origins")
     cc = open_cc(api, overlay)
     ids = [c["id"] for c in cc.property("cards").toVariant()]
     for _ in range(ids.index("trophies")):

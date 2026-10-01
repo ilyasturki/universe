@@ -76,10 +76,7 @@ def test_left_of_the_first_game_is_the_welcome_hub(ps5):
     assert home.property("zone") == "rail"
 
 
-def test_back_from_a_game_the_home_builds_itself_up_again(api, fake, monkeypatch):
-    from universe_ui import fake_core
-
-    monkeypatch.setattr(fake_core, "SESSION_S", 30.0)
+def test_back_from_a_game_the_home_builds_itself_up_again(api, fake):
     api.theme.set("ps5")
     api.theme.takeLanding()
     _engine, window = render(api, activate=True)
