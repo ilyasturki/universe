@@ -727,6 +727,14 @@ class CoreClient(QObject):
     def version(self):
         return self._guarded("", self._core.version)
 
+    @Slot(result=bool)
+    def onboarded(self):
+        return bool(self._guarded(False, self._core.onboarded))
+
+    @Slot()
+    def markOnboarded(self):
+        self._done(self._core.mark_onboarded)
+
     @Slot(result="QVariant")
     def controllerState(self):
         return self._guarded({}, self._core.controller_state)

@@ -100,6 +100,12 @@ impl Core {
     fn state_home(&self) -> String {
         universe::paths::state_home().to_string_lossy().to_string()
     }
+    fn onboarded(&self) -> bool {
+        self.core.onboarded()
+    }
+    fn mark_onboarded(&self) -> PyResult<()> {
+        self.core.mark_onboarded().map_err(err)
+    }
 
     fn list(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
         self.value_infallible(py, |c| c.list())

@@ -407,6 +407,13 @@ class FakeCore:
     def state_home(self):
         return str(self._root / "state")
 
+    def onboarded(self):
+        return (self._root / "state" / "onboarded").exists()
+
+    def mark_onboarded(self):
+        (self._root / "state").mkdir(parents=True, exist_ok=True)
+        (self._root / "state" / "onboarded").touch()
+
     def version(self):
         return "0.0.0-fake"
 

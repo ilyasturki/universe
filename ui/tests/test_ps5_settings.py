@@ -311,7 +311,7 @@ def test_the_wizard_opens_on_first_run_and_runs_again_from_about(empty_api, empt
     press(Qt.Key.Key_Return)
     until(lambda: form.stepId == "found", "the Back button goes back")
     press(Qt.Key.Key_Escape)
-    until(lambda: empty_api.memory.get("onboarded") is True and root.property("depth") == 0, "B on the first step skips the setup")
+    until(lambda: empty.onboarded() is True and root.property("depth") == 0, "B on the first step skips the setup")
     QMetaObject.invokeMethod(root, "push", Q_ARG("QVariant", "pages/SettingsPage.qml"), Q_ARG("QVariant", {"section": "about"}))
     until(lambda: (top := root.property("topPage")) is not None and top.property("sectionId") == "about" and top.property("activeFocus"))
     press(Qt.Key.Key_Down)

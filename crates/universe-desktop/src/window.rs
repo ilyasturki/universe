@@ -208,14 +208,13 @@ impl Window {
         self.imp().library_page.set_show_hidden(state.show_hidden);
     }
 
-    /// The first-run flow is behind the player: it opens again only from the empty library's button.
+    /// The first-run flow is behind the player, in every frontend: it opens again only from the empty library's button.
     pub fn set_onboarded(&self) {
-        let mut state = self.imp().state.borrow_mut();
-        if !state.onboarded {
-            state.onboarded = true;
-            if !self.app().scripted() {
-                state.save();
-            }
+        if self.app().scripted() {
+            return;
+        }
+        if let Err(e) = backend::core().mark_onboarded() {
+            tracing::warn!("first-run flag: {e}");
         }
     }
 
@@ -369,8 +368,10 @@ impl Window {
 
     fn core_ready(&self) {
         self.rebuild_sidebar();
-        let onboarded = self.imp().state.borrow().onboarded;
-        if !onboarded && !self.app().scripted() {
+        if self.imp().state.borrow().onboarded {
+            self.set_onboarded();
+        }
+        if !backend::core().onboarded() && !self.app().scripted() {
             if self.app().library().is_empty() {
                 crate::dialogs::onboarding::present(self);
             } else {

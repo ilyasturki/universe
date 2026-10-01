@@ -41,12 +41,20 @@ def loaded(form):
     return form
 
 
-def test_needed_once_on_an_empty_library(api, empty_api):
+def test_needed_once_on_an_empty_library(empty_api, empty):
     assert empty_api.screens.onboarding.needed is True
-    assert api.screens.onboarding.needed is False, "a library with games never sees the wizard"
-    assert api.memory.get("onboarded") is True, "and is marked so an emptied library does not bring it up later"
     empty_api.screens.onboarding.finish()
-    assert empty_api.memory.get("onboarded") is True and empty_api.screens.onboarding.needed is False
+    assert empty.onboarded() is True and empty_api.screens.onboarding.needed is False, "the core keeps the flag"
+
+
+def test_a_library_with_games_is_marked_so_an_emptied_one_never_asks(api, fake):
+    assert api.screens.onboarding.needed is False
+    assert fake.onboarded() is True
+
+
+def test_the_ui_memory_flag_of_an_earlier_version_carries_over(empty_api, empty):
+    empty_api.memory.set("onboarded", True)
+    assert empty_api.screens.onboarding.needed is False and empty.onboarded() is True
 
 
 def test_steps_and_found_rows(empty_api, empty):
@@ -204,7 +212,7 @@ def test_the_wizard_opens_on_first_run_in_both_looks(empty_api, empty, theme):
     press(Qt.Key.Key_Return)
     until(lambda: form.stepId == "found", "the Back button goes back")
     press(Qt.Key.Key_Escape)
-    until(lambda: empty_api.memory.get("onboarded") is True and not opened(), "B on the first step skips the setup")
+    until(lambda: empty.onboarded() is True and not opened(), "B on the first step skips the setup")
     if theme == "reprise":
         press(Qt.Key.Key_Up)
     press(Qt.Key.Key_Right)

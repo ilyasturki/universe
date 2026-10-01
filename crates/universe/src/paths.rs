@@ -90,6 +90,10 @@ pub fn state_home() -> PathBuf {
     universe_home("UNIVERSE_STATE_HOME", "XDG_STATE_HOME", ".local/state")
 }
 
+pub fn onboarded_file() -> PathBuf {
+    state_home().join("onboarded")
+}
+
 pub fn cache_home() -> PathBuf {
     universe_home("UNIVERSE_CACHE_HOME", "XDG_CACHE_HOME", ".cache")
 }

@@ -98,10 +98,11 @@ class Onboarding(RowsForm):
         components.listingChanged.connect(lambda: self._refresh() if self._step_id() == "found" else None)
 
     def _needed(self):
-        if self._memory.get(MEMORY_KEY):
+        if self._client.onboarded():
             return False
-        if self._games.count > 0:
-            self._memory.set(MEMORY_KEY, True)
+        # ui-memory.json held the flag before the core kept one for every frontend: carried over once.
+        if self._memory.get(MEMORY_KEY) or self._games.count > 0:
+            self._client.markOnboarded()
             return False
         return True
 
@@ -211,7 +212,7 @@ class Onboarding(RowsForm):
 
     @Slot()
     def finish(self):
-        self._memory.set(MEMORY_KEY, True)
+        self._client.markOnboarded()
         self.finished.emit()
 
     def _launcher(self, ident):

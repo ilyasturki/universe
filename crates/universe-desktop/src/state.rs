@@ -13,6 +13,7 @@ pub struct State {
     pub view: String,
     pub sort: String,
     pub show_hidden: bool,
+    /// Only read: the first-run flag from before the core kept one for every frontend, carried over to it.
     pub onboarded: bool,
     /// The pad whose buttons Preferences › Controller shows while none is connected.
     pub controller_family: String,

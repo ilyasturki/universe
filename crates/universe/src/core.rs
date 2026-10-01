@@ -431,6 +431,20 @@ impl Core {
         self.reload_game(id).await
     }
 
+    /// Whether the first-run setup ran on this machine, in any frontend: one flag for all of them.
+    pub fn onboarded(&self) -> bool {
+        paths::onboarded_file().exists()
+    }
+
+    pub fn mark_onboarded(&self) -> Result<()> {
+        let file = paths::onboarded_file();
+        if let Some(parent) = file.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::write(file, "")?;
+        Ok(())
+    }
+
     pub async fn discover(&self) -> crate::discover::Report {
         let config = self.config.read().await.clone();
         blocking(move || Ok(crate::discover::run(&config))).await.unwrap_or_default()
@@ -2127,6 +2141,16 @@ mod tests {
 
     async fn open() -> Core {
         Core::open_with(crate::config::Config::load().unwrap(), Host::memory().0).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn the_first_run_flag_is_one_file_any_frontend_reads() {
+        let _env = fake_source("");
+        let core = open().await;
+        assert!(!core.onboarded());
+        core.mark_onboarded().unwrap();
+        assert!(core.onboarded() && paths::onboarded_file().is_file());
+        assert!(open().await.onboarded(), "another process sees it");
     }
 
     /// A library of one game with two played sessions, and a `journal` module whose post-process hook is a stub.
