@@ -122,8 +122,11 @@ static FETCHES: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(4);
 static FETCHING: LazyLock<Mutex<HashMap<String, Arc<tokio::sync::Mutex<()>>>>> = LazyLock::new(Mutex::default);
 
 async fn download(url: &str, path: &std::path::Path) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
-    let client = CLIENT.get_or_init(|| reqwest::Client::builder().timeout(std::time::Duration::from_secs(20)).build().unwrap_or_default());
+    static CLIENT: std::sync::OnceLock<Result<reqwest::Client, String>> = std::sync::OnceLock::new();
+    let client = CLIENT
+        .get_or_init(|| reqwest::Client::builder().timeout(std::time::Duration::from_secs(20)).build().map_err(|e| e.to_string()))
+        .as_ref()
+        .map_err(Clone::clone)?;
     let bytes = client.get(url).send().await?.error_for_status()?.bytes().await?;
     let kept = tokio::task::spawn_blocking(move || shrink(&bytes)).await??;
     let dir = path.parent().ok_or("no folder")?;

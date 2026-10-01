@@ -89,9 +89,12 @@ struct SyncCache {
     sources: BTreeMap<String, String>,
 }
 
-fn client() -> &'static reqwest::Client {
-    static CLIENT: std::sync::OnceLock<reqwest::Client> = std::sync::OnceLock::new();
-    CLIENT.get_or_init(|| reqwest::Client::builder().timeout(Duration::from_secs(20)).user_agent("universe/0.1").build().expect("client"))
+fn client() -> crate::Result<&'static reqwest::Client> {
+    static CLIENT: std::sync::OnceLock<Result<reqwest::Client, String>> = std::sync::OnceLock::new();
+    CLIENT
+        .get_or_init(|| reqwest::Client::builder().timeout(Duration::from_secs(20)).user_agent("universe/0.1").build().map_err(|e| e.to_string()))
+        .as_ref()
+        .map_err(|e| crate::Error::Io(e.clone()))
 }
 
 /// urlencoding's set: everything but unreserved characters.
@@ -102,7 +105,7 @@ fn encode(s: &str) -> percent_encoding::PercentEncode<'_> {
 }
 
 async fn get_json(url: &str, bearer: Option<&str>) -> crate::Result<serde_json::Value> {
-    let mut req = client().get(url);
+    let mut req = client()?.get(url);
     if let Some(b) = bearer {
         req = req.bearer_auth(b);
     }
@@ -111,7 +114,7 @@ async fn get_json(url: &str, bearer: Option<&str>) -> crate::Result<serde_json::
 }
 
 async fn download(url: &str, dest: &Path) -> crate::Result<()> {
-    let resp = client().get(url).send().await.and_then(|r| r.error_for_status()).map_err(|e| crate::Error::Io(format!("{url}: {e}")))?;
+    let resp = client()?.get(url).send().await.and_then(|r| r.error_for_status()).map_err(|e| crate::Error::Io(format!("{url}: {e}")))?;
     let bytes = resp.bytes().await.map_err(|e| crate::Error::Io(format!("{url}: {e}")))?;
     if bytes.is_empty() {
         return Err(crate::Error::Io(format!("{url}: empty image")));
