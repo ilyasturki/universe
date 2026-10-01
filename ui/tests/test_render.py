@@ -302,8 +302,8 @@ def test_the_switch2_home_row_follows_the_game_too(api, fake):
     home = until(lambda: root.findChild(QObject, "homePage"))
     until(lambda: game_id(home) == "the-technomancer")
     QMetaObject.invokeMethod(root, "launch", Q_ARG("QVariant", api.allGames.byId("dead-cells")), Q_ARG("QVariant", None))
-    until(lambda: fake.currentSession)
-    assert game_id(home) == "the-technomancer" and home.property("index") == 1
+    until(lambda: fake.currentSession and home.property("index") == 1, "the played game moves to the front")
+    assert game_id(home) == "the-technomancer", "the cursor stays on its game"
     fake.stop("")
     until(lambda: game_id(home) == "dead-cells" and home.property("index") == 0)
     settle(window)
