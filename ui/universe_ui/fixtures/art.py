@@ -85,6 +85,8 @@ def paint_candidate(art_dir, ident, slot, url):
 
 def paint_library(games, art_dir):
     os.makedirs(art_dir, exist_ok=True)
+    # The frame the fake's nest and an out-of-game shot hand back.
+    _paint(os.path.join(art_dir, "screenshot.png"), SLOTS["screenshot"], "frame", "Universe", "screenshot")
     for game in games:
         ident, title = game["id"], game.get("title", game["id"])
         media = game.setdefault("media", {})
