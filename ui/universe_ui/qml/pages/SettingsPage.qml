@@ -1051,6 +1051,8 @@ FocusScope {
             api.home.loadOutputs();
         else if (sections[section].id === "doctor")
             modulesForm.loadDoctor();
+        else if (sections[section].id === "runners")
+            runners.load();
         Qt.callLater(function () {
             cards.reset();
             if (mainHad)
