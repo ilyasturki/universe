@@ -92,7 +92,8 @@ pub fn open(win: &Window, game: &str) {
     let clamp = adw::Clamp::builder().maximum_size(760).child(&column).build();
     stack.add_named(&gtk::ScrolledWindow::builder().hscrollbar_policy(gtk::PolicyType::Never).child(&clamp).build(), Some("list"));
     let refresh = gtk::Button::builder().icon_name("view-refresh-symbolic").tooltip_text(gettext("Ask the Store Again")).build();
-    let header = adw::HeaderBar::new();
+    let title = win.app().library().get(game).map(|g| g.title()).unwrap_or_default();
+    let header = adw::HeaderBar::builder().title_widget(&adw::WindowTitle::new(&gettext("Achievements"), &title)).build();
     header.pack_end(&refresh);
     let toolbar = adw::ToolbarView::builder().content(&stack).build();
     toolbar.add_top_bar(&header);
@@ -139,13 +140,10 @@ pub fn open(win: &Window, game: &str) {
                 );
                 let fraction = if total > 0 { unlocked as f64 / total as f64 } else { 0.0 };
                 head.append(&gtk::ProgressBar::builder().fraction(fraction).build());
-                let fetched =
-                    chrono::DateTime::parse_from_rfc3339(&text(&listing, "fetched_at")).map(|t| format::ago(t.timestamp(), chrono::Local::now())).ok();
-                let mut line = vec![format!("{}%", (fraction * 100.0).round())];
-                if let Some(fetched) = fetched {
-                    line.push(gettext("updated {}").replace("{}", &fetched));
+                if let (Some(button), Ok(fetched)) = (refresh.upgrade(), chrono::DateTime::parse_from_rfc3339(&text(&listing, "fetched_at"))) {
+                    let ago = format::ago(fetched.timestamp(), chrono::Local::now());
+                    button.set_tooltip_text(Some(&gettext("Ask the Store Again · updated {}").replace("{}", &ago)));
                 }
-                head.append(&gtk::Label::builder().label(line.join(" · ")).xalign(0.0).css_classes(["dimmed"]).build());
                 column.append(&head);
                 let hidden = order(&mut items);
                 let group = adw::PreferencesGroup::new();
