@@ -812,7 +812,7 @@ class GameAnchor(QObject):
         if self._settling:
             return
         self._settling = True
-        QTimer.singleShot(0, self._resolve)
+        QTimer.singleShot(0, self, self._resolve)
 
     def _resolve(self):
         self._settling = False
