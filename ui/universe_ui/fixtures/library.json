@@ -529,7 +529,8 @@
       {"id": "itch", "name": "itch", "found": false, "dir": "", "games": 0, "titles": [], "importable": true, "via": "itch", "detail": ""},
       {"id": "roms", "name": "Emulator folders", "found": true, "dir": "/mnt/games/wii, /mnt/games/switch", "games": 1, "titles": ["Xenoblade Chronicles 3"], "importable": true, "via": "roms", "detail": ""}
     ],
-    "gog_dirs": ["/mnt/games/PC"]
+    "gog_dirs": ["/mnt/games/PC"],
+    "install_dirs": ["/mnt/games/Heroic", "/home/player/Games"]
   },
   "login_url": "https://auth.gog.com/auth?client_id=46755278331571209&redirect_uri=https%3A%2F%2Fembed.gog.com%2Fon_login_success%3Forigin%3Dclient&response_type=code&layout=client2",
   "source_library": {

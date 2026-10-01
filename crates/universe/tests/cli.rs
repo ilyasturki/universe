@@ -51,7 +51,7 @@ fn discover_on_a_bare_home_finds_nothing() {
     let ids: Vec<&str> = launchers.iter().filter_map(|l| l["id"].as_str()).collect();
     assert_eq!(ids, ["lutris", "steam", "heroic-gog", "heroic-epic", "heroic-amazon", "itch", "roms"]);
     assert!(launchers.iter().all(|l| l["found"] == false && l["games"] == 0), "{launchers:?}");
-    assert_eq!(report["gog_dirs"], serde_json::json!([]));
+    assert_eq!((&report["gog_dirs"], &report["install_dirs"]), (&serde_json::json!([]), &serde_json::json!([])));
     let text = String::from_utf8_lossy(&universe(&dir, &["discover"], &[]).stdout).into_owned();
     assert!(text.contains("not installed"), "{text:?}");
 }

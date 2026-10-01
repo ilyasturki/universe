@@ -19,11 +19,13 @@ pub struct Launcher {
     pub detail: String,
 }
 
-/// `gog_dirs`: folders holding GOG installs made by another launcher, for the gog source's `scan_dirs`.
+/// `gog_dirs`: folders holding GOG installs made by another launcher, for the gog source's `scan_dirs`; `install_dirs`:
+/// the folders other launchers install into (Heroic's, Lutris's), offered for `paths.games_root`.
 #[derive(Debug, Clone, Default, Serialize)]
 pub struct Report {
     pub launchers: Vec<Launcher>,
     pub gog_dirs: Vec<String>,
+    pub install_dirs: Vec<String>,
 }
 
 const TITLES: usize = 6;
@@ -36,12 +38,18 @@ pub fn run(config: &Config) -> Report {
     let itch = first_dir(&[home.join(".config/itch"), home.join(".var/app/io.itch.itch/config/itch")]);
     let mut gog_dirs = heroic.as_deref().map(heroic_gog_dirs).unwrap_or_default();
     gog_dirs.retain(|d| d != &config.games_root());
+    let install_dirs = install_dirs(&gog_dirs, crate::lutris::game_path(), &config.games_root());
     let mut launchers = vec![lutris()];
     launchers.push(steam.as_deref().map(steam_launcher).unwrap_or_else(|| Launcher { id: "steam".into(), name: "Steam".into(), ..Default::default() }));
     launchers.extend(heroic_launchers(heroic.as_deref(), &gog_dirs, &config.games_root()));
     launchers.push(itch_launcher(itch.as_deref()));
     launchers.push(roms_launcher(config, library_files()));
-    Report { launchers, gog_dirs: gog_dirs.iter().map(|d| d.to_string_lossy().into()).collect() }
+    Report { launchers, gog_dirs: gog_dirs.iter().map(|d| d.to_string_lossy().into()).collect(), install_dirs }
+}
+
+fn install_dirs(gog_dirs: &[PathBuf], lutris: Option<PathBuf>, games_root: &Path) -> Vec<String> {
+    let mut seen = std::collections::BTreeSet::new();
+    gog_dirs.iter().cloned().chain(lutris).filter(|d| d.is_dir() && d != games_root && seen.insert(d.clone())).map(|d| d.to_string_lossy().into()).collect()
 }
 
 /// Every library game's file, for the folder scan to leave out.
@@ -388,6 +396,18 @@ mod tests {
         assert!(l.found && l.importable && l.via == "itch");
         assert_eq!((l.games, l.titles.clone()), (1, vec!["Celeste".to_string()]), "a cave whose folder is gone is not counted");
         assert!(!itch_launcher(None).found);
+    }
+
+    #[test]
+    fn the_install_folders_are_the_other_launchers_that_exist_but_the_games_root() {
+        let dir = tempfile::tempdir().unwrap();
+        let (heroic, lutris, root) = (dir.path().join("heroic"), dir.path().join("lutris"), dir.path().join("root"));
+        for d in [&heroic, &lutris, &root] {
+            std::fs::create_dir_all(d).unwrap();
+        }
+        let gog = [heroic.clone(), dir.path().join("gone"), root.clone(), heroic.clone()];
+        let found = install_dirs(&gog, Some(lutris.clone()), &root);
+        assert_eq!(found, vec![heroic.to_string_lossy().to_string(), lutris.to_string_lossy().to_string()]);
     }
 
     #[test]

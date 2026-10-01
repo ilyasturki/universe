@@ -33,6 +33,11 @@ fn data_dir() -> PathBuf {
     paths::xdg("XDG_DATA_HOME", ".local/share").join("lutris")
 }
 
+/// The folder Lutris installs games into (`system.yml`'s `game_path`), when it names one.
+pub fn game_path() -> Option<PathBuf> {
+    yaml_str(&load_yaml(&config_dir().join("system.yml")), &["system", "game_path"]).filter(|p| !p.is_empty()).map(|p| paths::expand(&p))
+}
+
 pub fn pga_db() -> PathBuf {
     data_dir().join("pga.db")
 }
