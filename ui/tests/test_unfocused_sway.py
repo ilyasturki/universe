@@ -48,7 +48,7 @@ class Sway:
         self.env = env
 
     def msg(self, *args):
-        return subprocess.run(["swaymsg", *args], env=self.env, capture_output=True, text=True, timeout=5).stdout
+        return subprocess.run(["swaymsg", *args], env=self.env, capture_output=True, text=True, timeout=5, check=False).stdout
 
     def windows(self):
         found = []
