@@ -60,6 +60,20 @@ def _row(section, key, label, kind, value, choices=None, module="", detail="", i
     }
 
 
+def _setting_row(section, key, setting, value, choices=None, module="", **kw):
+    """A module's or a source's setting: its description under it, each choice shown by its label and sent as its stored value."""
+    choices = [str(c) for c in setting.get("choices") or []] if choices is None else choices
+    label = setting.get("label") or setting["key"]
+    row = _row(section, key, label, setting.get("type", "string"), value, choices, module, detail=str(setting.get("description") or ""), **kw)
+    labels = setting.get("choice_labels") or {}
+    if labels and choices:
+        row["choices"] = [labels.get(c, c) for c in choices]
+        row["choiceValues"] = list(choices)
+        if str(value) in labels:
+            row["value"] = row["display"] = labels[str(value)]
+    return row
+
+
 def _plural(n, word):
     return f"{n} {word}{'' if n == 1 else 's'}"
 
@@ -629,14 +643,12 @@ def build_game(client, game_id, screen_mode):
                 continue
             key = setting["key"]
             value = values.get(key, setting.get("default"))
-            row = _row(
+            row = _setting_row(
                 name,
                 key,
-                setting.get("label", key),
-                setting.get("type", "string"),
+                setting,
                 value,
-                setting.get("choices"),
-                module_id,
+                module=module_id,
                 advanced=bool(setting.get("advanced")),
                 origin="game" if key in own else "global" if key in global_set else "default",
             )
@@ -653,13 +665,11 @@ def build_game(client, game_id, screen_mode):
         own, global_set = (game.get("sources") or {}).get(kind) or {}, (config_set.get("sources") or {}).get(kind) or {}
         for setting in game_settings:
             key = setting["key"]
-            row = _row(
+            row = _setting_row(
                 name,
                 f"sources.{kind}.{key}",
-                setting.get("label", key),
-                setting.get("type", "string"),
+                setting,
                 values.get(key, setting.get("default")),
-                setting.get("choices"),
                 advanced=bool(setting.get("advanced")),
                 origin="game" if key in own else "global" if key in global_set else "default",
             )
@@ -979,11 +989,10 @@ def build_page(api, ident, entries, choices_of=lambda ident, key, values: None):
         choices = [str(c) for c in setting.get("choices") or []]
         if setting.get("dynamic"):
             choices = choices_of(ident, key, values) or choices
-        row = _row(
+        row = _setting_row(
             name,
             key,
-            setting.get("label", key),
-            setting.get("type", "string"),
+            setting,
             values.get(key, setting.get("default")),
             choices,
             ident,

@@ -266,7 +266,18 @@
       "missing": [],
       "settings": [
         {"key": "enabled", "type": "bool", "default": true, "label": "Record the session", "scope": "game", "dynamic": false, "advanced": false},
-        {"key": "source", "type": "enum", "default": "window", "label": "Capture", "scope": "game", "choices": ["window", "screen"], "dynamic": false, "advanced": false},
+        {
+          "key": "source",
+          "type": "enum",
+          "default": "window",
+          "label": "Capture",
+          "description": "A window is picked once, in the desktop's dialog.",
+          "scope": "game",
+          "choices": ["window", "screen"],
+          "choice_labels": {"window": "One window", "screen": "The whole screen"},
+          "dynamic": false,
+          "advanced": false
+        },
         {"key": "cursor", "type": "bool", "default": false, "label": "Show the cursor in the recording", "scope": "game", "dynamic": false, "advanced": false},
         {
           "key": "codec",

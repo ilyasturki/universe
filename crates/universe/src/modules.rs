@@ -67,8 +67,11 @@ pub struct Setting {
     pub kind: String,
     pub default: toml::Value,
     pub label: String,
+    pub description: String,
     pub scope: String,
     pub choices: Vec<String>,
+    /// What a choice reads as, by stored value; a value without one reads as itself.
+    pub choice_labels: BTreeMap<String, String>,
     pub choices_exec: String,
     pub advanced: bool,
     /// No usable default: the module does nothing until the user picks a value.
@@ -83,8 +86,10 @@ impl Default for Setting {
             kind: "string".into(),
             default: toml::Value::String(String::new()),
             label: String::new(),
+            description: String::new(),
             scope: "global".into(),
             choices: vec![],
+            choice_labels: BTreeMap::new(),
             choices_exec: String::new(),
             advanced: false,
             required: false,
@@ -151,7 +156,7 @@ impl Module {
         let mut list: Vec<serde_json::Value> = Vec::new();
         let has_enabled = self.manifest.settings.iter().any(|s| s.key == "enabled");
         if !has_enabled {
-            list.push(serde_json::json!({"key": "enabled", "type": "bool", "default": true, "label": "Enable", "scope": "game", "choices": [], "dynamic": false, "advanced": false}));
+            list.push(setting_json(&Setting::enabled()));
         }
         list.extend(self.manifest.settings.iter().map(setting_json));
         serde_json::Value::Array(list)
@@ -183,14 +188,34 @@ impl Module {
     }
 }
 
+impl Setting {
+    /// The game switch every module takes when its manifest declares none.
+    pub fn enabled() -> Setting {
+        Setting {
+            key: "enabled".into(),
+            kind: "bool".into(),
+            default: toml::Value::Boolean(true),
+            label: "Enable".into(),
+            scope: "game".into(),
+            ..Setting::default()
+        }
+    }
+
+    pub fn choice_label<'a>(&'a self, value: &'a str) -> &'a str {
+        self.choice_labels.get(value).map(String::as_str).unwrap_or(value)
+    }
+}
+
 pub fn setting_json(s: &Setting) -> serde_json::Value {
     serde_json::json!({
         "key": s.key,
         "type": s.kind,
         "default": toml_to_json(&s.default),
         "label": s.label,
+        "description": s.description,
         "scope": s.scope,
         "choices": s.choices,
+        "choice_labels": s.choice_labels,
         "dynamic": !s.choices_exec.is_empty(),
         "advanced": s.advanced || s.scope == "config",
         "required": s.required,

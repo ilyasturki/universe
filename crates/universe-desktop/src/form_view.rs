@@ -521,7 +521,8 @@ impl FormView {
                 .await;
                 let (Some(view), Ok(choices)) = (view.upgrade(), choices) else { return };
                 let field = view.fields.borrow_mut().iter_mut().find(|f| f.key == field_key).map(|f| {
-                    f.choices = choices.iter().map(|c| forms::Choice { value: c.clone(), label: c.clone() }).collect();
+                    let label = |c: &String| f.choices.iter().find(|known| &known.value == c).map_or_else(|| c.clone(), |known| known.label.clone());
+                    f.choices = choices.iter().map(|c| forms::Choice { value: c.clone(), label: label(c) }).collect();
                     f.clone()
                 });
                 if let Some(field) = field {

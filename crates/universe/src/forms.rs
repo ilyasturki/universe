@@ -267,8 +267,8 @@ fn global_launch_field(row: &launch_keys::Row, config: &Config, set: &Value, mac
 }
 
 fn setting_field(s: &Setting, key: String, section: &str) -> Field {
-    let mut f = Field::new(key, if s.label.is_empty() { &s.key } else { &s.label }, &s.kind, section).about("", s.advanced || s.scope == "config");
-    f.choices = s.choices.iter().map(|c| Choice::same(c)).collect();
+    let mut f = Field::new(key, if s.label.is_empty() { &s.key } else { &s.label }, &s.kind, section).about(&s.description, s.advanced || s.scope == "config");
+    f.choices = s.choices.iter().map(|c| Choice { value: c.clone(), label: s.choice_label(c).into() }).collect();
     f.dynamic = !s.choices_exec.is_empty();
     f.required = s.required;
     f
@@ -278,17 +278,7 @@ fn setting_field(s: &Setting, key: String, section: &str) -> Field {
 fn with_enabled(settings: &[Setting]) -> Vec<Setting> {
     let mut out = settings.to_vec();
     if !out.iter().any(|s| s.key == "enabled") {
-        out.insert(
-            0,
-            Setting {
-                key: "enabled".into(),
-                kind: "bool".into(),
-                default: toml::Value::Boolean(true),
-                label: "Enable".into(),
-                scope: "game".into(),
-                ..Setting::default()
-            },
-        );
+        out.insert(0, Setting::enabled());
     }
     out
 }
@@ -674,6 +664,52 @@ mod tests {
         assert_eq!(default.section, "Builds", "the default build sits with the builds");
         assert!(default.choices.iter().any(|c| c.value == "proton-em"), "every Proton found, config.toml's included");
         assert!(proton.iter().any(|f| f.key == "launch.wayland") && proton.iter().any(|f| f.key == "launch.esync"));
+    }
+
+    /// A `controls` module under the sandbox's modules path, enabled in its config.toml.
+    fn controls_module(manifest: &str) {
+        let dir = paths::system_module_dirs()[0].join("controls");
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("module.toml"), format!("api = 2\nid = \"controls\"\nname = \"Emulator controls\"\n{manifest}")).unwrap();
+        let file = paths::config_file();
+        let was = std::fs::read_to_string(&file).unwrap().replace("enabled = []", "enabled = [\"controls\"]");
+        std::fs::write(&file, was).unwrap();
+    }
+
+    #[tokio::test]
+    async fn a_module_setting_carries_its_description_and_choice_labels() {
+        let _sb = sandbox();
+        controls_module(
+            r#"
+[[settings]]
+key = "layout"
+type = "enum"
+default = "positional"
+label = "Nintendo button layout"
+description = "Where A sits."
+scope = "game"
+choices = ["positional", "xbox"]
+choice_labels = { positional = "Switch (A on the right)" }
+
+[[settings]]
+key = "guide"
+type = "bool"
+default = false
+label = "Share HOME with the emulator"
+description = "The emulator also gets HOME."
+"#,
+        );
+        let (core, _) = open().await;
+        let fields = core.form(&Form::Game("sample".into()), None).await.unwrap();
+        let layout = field(&fields, "modules.controls.layout");
+        assert_eq!(layout.description, "Where A sits.");
+        assert_eq!(
+            layout.choices,
+            [Choice { value: "positional".into(), label: "Switch (A on the right)".into() }, Choice::same("xbox")],
+            "a stored value without a label reads as itself"
+        );
+        let guide = field(&core.form(&Form::Module("controls".into()), None).await.unwrap(), "guide").clone();
+        assert_eq!(guide.description, "The emulator also gets HOME.");
     }
 
     #[test]

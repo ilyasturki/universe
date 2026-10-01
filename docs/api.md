@@ -1158,8 +1158,11 @@ written whole, missing or not.
 
 A module entry is `{id, name, version, description, dir, enabled, available, missing: [bin],
 unset: [key], hooks: {}, settings: [Setting]}`, and
-`Setting` = `{"key", "type": "bool|string|int|enum|path", "default", "label",
-"scope": "global|game", "choices": [], "dynamic": bool, "required": bool}`.
+`Setting` = `{"key", "type": "bool|string|int|enum|path", "default", "label", "description",
+"scope": "global|game", "choices": [], "choice_labels": {value: label}, "dynamic": bool, "required": bool}`.
+`label` names the setting in a few words; `description`, empty when the manifest gives none, says what it
+does and shows under it. `choice_labels` is what a choice reads as, by stored value: a frontend shows the
+label and writes the value, and a value without one reads as itself.
 `missing` holds the manifest's absent binaries plus those the chosen value of a `requires_bins`
 setting asks for, so a module is available or not by what it is set to. `unset` lists the
 `required` settings still empty on an enabled module: its hooks run and do nothing, `doctor` says
@@ -1480,7 +1483,9 @@ key = "fps"
 type = "int"
 default = 60
 choices = ["auto", "120", "60"]   # suggestions on an int or a string; a name among them is a value too
-label = "Frame rate"
+label = "Frame rate"              # a few words: the row's name
+description = "Auto follows the screen's refresh rate."   # optional: what it does, under the row
+choice_labels = { auto = "The screen's" }   # optional: what a choice reads as, by stored value; the value is what is written
 
 [[settings]]
 key = "model"

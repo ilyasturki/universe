@@ -147,6 +147,20 @@ def test_game_settings_form(api, fake):
     assert form.rows[index]["value"] is False
 
 
+def test_a_module_row_shows_choice_labels_and_sends_the_stored_value(api, fake):
+    setting = next(s for m in fake.modules() if m["id"] == "capture" for s in m["settings"] if s["key"] == "source")
+    form = api.screens.gameSettings
+    form.load("the-technomancer")
+    row = rows_by_key(form, "capture")["source"]
+    stored = fake.settings("the-technomancer")["capture"]["source"]
+    assert row["detail"] == setting["description"]
+    assert row["choiceValues"] == setting["choices"] and row["choices"] == [setting["choice_labels"][c] for c in setting["choices"]]
+    assert row["value"] == row["display"] == setting["choice_labels"][stored], "the row reads the label of what is stored"
+    other = next(c for c in setting["choices"] if c != stored)
+    assert form.setValue(index_of(form, "source"), setting["choice_labels"][other]) is True
+    assert fake.settings("the-technomancer")["capture"]["source"] == other, "the picked label is written as its stored value"
+
+
 def test_modules_list(api, fake):
     journal_module = next(m for m in fake.core._data["modules"] if m["id"] == "journal")
     journal_module.update(enabled=False, available=False, missing=["ffmpeg"])
