@@ -8,6 +8,7 @@ import "../ui"
 FocusScope {
     id: page
 
+    objectName: "recordingsPage"
     focus: true
 
     property var args: ({})
@@ -968,6 +969,7 @@ FocusScope {
             Text {
                 id: paragraph
 
+                objectName: "journalParagraph"
                 // Markdown ignores maximumLineCount and reports one line: the pitch comes from the font instead.
                 readonly property real pitch: implicitHeight / Math.max(1, Math.round(implicitHeight / (paragraphFont.height * lineHeight)))
                 readonly property real room: hintBar.y - Theme.dp(14) - journalBox.y - y
@@ -1009,6 +1011,7 @@ FocusScope {
 
     HintBar {
         id: hintBar
+        objectName: "hintBar"
         anchors.bottom: parent.bottom
         anchors.left: parent.left
         anchors.right: parent.right

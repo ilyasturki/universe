@@ -4,7 +4,7 @@ import pytest
 from PySide6.QtCore import Q_ARG, Q_RETURN_ARG, QMetaObject, QObject, Qt, QUrl
 from PySide6.QtGui import QColor
 from PySide6.QtQml import QQmlApplicationEngine
-from PySide6.QtQuick import QQuickWindow  # noqa: F401  (rootObjects() down-cast, for grabWindow)
+from PySide6.QtQuick import QQuickItem, QQuickWindow  # noqa: F401  (QQuickWindow: rootObjects() down-cast, for grabWindow)
 
 from conftest import pump, record, until
 from universe_ui import host
@@ -979,27 +979,13 @@ def test_a_long_journal_paragraph_stops_above_the_hint_bar(api):
     game = until(lambda: page_as(root, "HomePage").property("currentGame"))
     root.openSub("pages/RecordingsPage.qml", {"game": game, "session": ""})
 
-    def walk(item):
-        yield item
-        for child in item.childItems():
-            yield from walk(child)
-
-    def loaded_page():
-        item = window.activeFocusItem()
-        while item is not None and not item.metaObject().className().startswith("RecordingsPage"):
-            item = item.parentItem()
-        return item
-
-    # The sub loader is asynchronous: walk the page once it has taken the focus, not the tree it is still building.
-    page = until(loaded_page, "the recordings page loads and takes the focus")
-    paragraph = until(
-        lambda: next((o for o in walk(page) if o.property("pitch") is not None and o.property("room") is not None and o.property("text")), None),
-        "the fixture recording has an entry",
-    )
+    page = until(lambda: root.findChild(QQuickItem, "recordingsPage"))
+    paragraph = page.findChild(QQuickItem, "journalParagraph")
+    until(lambda: paragraph.property("text"), "the fixture recording has an entry")
     paragraph.setProperty("text", "A paragraph that keeps going. " * 60)
     until(lambda: paragraph.property("implicitHeight") > paragraph.property("height"), "the long paragraph is cut")
     bottom = paragraph.mapToItem(window.contentItem(), 0, paragraph.property("height")).y()
-    hint = next(o for o in walk(window.contentItem()) if o.metaObject().className().startswith("HintBar"))
+    hint = page.findChild(QQuickItem, "hintBar")
     assert bottom <= hint.mapToItem(window.contentItem(), 0, 0).y()
     root.closeSub()
     settle(window)
