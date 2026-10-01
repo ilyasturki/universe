@@ -522,7 +522,10 @@ async fn bring_in(via: &str, gog_dirs: Vec<String>, enable: bool) -> Result<(usi
     let via = via.to_string();
     backend::pinned(move |core| async move {
         match via.as_str() {
-            "lutris" => core.import_lutris(true).await.map(|r| (r.imported.len(), Vec::new())),
+            "lutris" => match core.import_lutris(true).await {
+                Ok(r) => Ok((r.imported.len(), crate::jobs::titled(&core, r.imported).await)),
+                Err(e) => Err(e),
+            },
             "roms" => core.import_roms(true).await.map(|r| (r.imported.len(), r.imported.into_iter().map(|f| (f.id, f.title)).collect())),
             store => {
                 if enable {
@@ -538,7 +541,8 @@ async fn bring_in(via: &str, gog_dirs: Vec<String>, enable: bool) -> Result<(usi
                         core.set_source_setting("gog", "", "scan_dirs", &dirs.join(",")).await?;
                     }
                 }
-                core.source_scan(store, None).await.map(|n| (n, Vec::new()))
+                let found = core.source_scan(store, None).await?;
+                Ok((found.len(), crate::jobs::titled(&core, found).await))
             }
         }
     })

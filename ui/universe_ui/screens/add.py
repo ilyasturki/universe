@@ -155,6 +155,8 @@ class AddGameForm(RowsForm):
             imported = list(report.get("imported") or [])
             hours = round(sum(float(h) for h in (report.get("hours_imported") or {}).values()))
             self._client.libraryChanged.emit([])
+            if imported:
+                self._client.mediaRefreshMany(imported)
             self.message.emit(f"Imported {len(imported)} game{'' if len(imported) == 1 else 's'} from Lutris" + (f" · {hours} h of play" if hours else ""))
 
         self._run(lambda: self._client.core.import_lutris(True), done)

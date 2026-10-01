@@ -235,9 +235,21 @@ def test_the_launch_keys_fixture_is_the_cores_table(app):
     assert FakeCore().launch_keys("global", {}) == core.launch_keys("global", {})
 
 
-def test_a_scan_job_hands_its_count_over_as_its_result(fake):
-    fake.core.scan = lambda source, progress=None: 3
+def test_a_scan_job_hands_its_games_over_and_their_art_comes_next(fake):
+    fake.core.scan = lambda source, progress=None: ["dead-cells", "control"]
+    fetched = []
+    fake.core.media_refresh_many = lambda ids, force, progress=None: (fetched.append(list(ids)), (0, len(ids)))[1]
     finished = record(fake.jobFinished)
     job = fake.scan("gog")
     until(lambda: finished)
-    assert fake.jobResult(job) == 3 and fake.jobs()[0]["result"] == 3
+    assert fake.jobResult(job) == ["dead-cells", "control"] and fake.jobs()[0]["result"] == ["dead-cells", "control"]
+    until(lambda: fetched == [["dead-cells", "control"]], "the games the scan brought get their art as a media job")
+    assert [j["kind"] for j in fake.jobs()] == ["scan", "media"]
+
+
+def test_an_install_that_lands_a_game_fetches_its_art(fake):
+    fake.core.install = lambda source, game_id, progress=None: "dead-cells"
+    fetched = []
+    fake.core.media_refresh_many = lambda ids, force, progress=None: (fetched.append(list(ids)), (0, len(ids)))[1]
+    fake.install("gog", "1207658930")
+    until(lambda: fetched == [["dead-cells"]], "the installed game's art comes next")

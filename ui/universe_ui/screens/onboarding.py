@@ -411,7 +411,7 @@ class Onboarding(RowsForm):
                 self._client.libraryChanged.emit([])
                 self._components.load()
                 self._set_state(launcher, "imported", len(imported))
-                art = [f["id"] for f in imported if isinstance(f, dict)]
+                art = [f["id"] if isinstance(f, dict) else str(f) for f in imported]
                 if art:
                     self._client.mediaRefreshMany(art)
             self._next_import()
@@ -468,7 +468,7 @@ class Onboarding(RowsForm):
             self._set_state(launcher, "failed", error=text)
             self.message.emit(f"{name} scan failed: {text}")
             return
-        count = int(self._client.jobResult(job) or 0)
+        count = len(self._client.jobResult(job) or [])
         if not count and not source.get("logged_in", True):
             self._set_state(launcher, "waiting", error=f"Sign in to {name} on the stores step to add them.")
             if all(s["id"] != "stores" for s in self._steps):

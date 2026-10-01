@@ -383,6 +383,7 @@ impl Application {
             if job.pauses() && outcome.ok {
                 app.check_updates(None);
             }
+            app.fetch_art(outcome.arrived);
         });
         true
     }

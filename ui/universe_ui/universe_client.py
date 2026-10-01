@@ -536,7 +536,7 @@ class CoreClient(QObject):
 
     @Slot(str, result=str)
     def scan(self, source):
-        return self._job("scan", source, lambda progress: self._core.scan(source, progress), text=lambda n: f"{n} game(s)")
+        return self._job("scan", source, lambda progress: self._core.scan(source, progress), text=lambda ids: f"{len(ids)} game(s)")
 
     @Slot(result="QVariant")
     def jobs(self):
@@ -848,3 +848,10 @@ class CoreClient(QObject):
         self._jobs[job].update(finished=True, ok=ok, message=message, result=result)
         self.jobFinished.emit(job, ok, message)
         self.libraryChanged.emit([])
+        kind, arrived = self._jobs[job]["kind"], []
+        if ok and kind == "scan":
+            arrived = [str(i) for i in result or []]
+        elif ok and kind == "install" and result:
+            arrived = [str(result)] if any(str(g.get("id")) == str(result) for g in self._guarded([], self._core.list)) else []
+        if arrived:
+            self.mediaRefreshMany(arrived)

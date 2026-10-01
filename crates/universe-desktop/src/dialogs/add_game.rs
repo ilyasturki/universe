@@ -215,7 +215,10 @@ async fn preview(kind: Import) -> Result<usize, String> {
 async fn apply(kind: Import) -> Result<(usize, Vec<(String, String)>), String> {
     backend::pinned(move |core| async move {
         match kind {
-            Import::Lutris => core.import_lutris(true).await.map(|r| (r.imported.len(), Vec::new())),
+            Import::Lutris => match core.import_lutris(true).await {
+                Ok(r) => Ok((r.imported.len(), crate::jobs::titled(&core, r.imported).await)),
+                Err(e) => Err(e),
+            },
             Import::Roms => core.import_roms(true).await.map(|r| (r.imported.len(), r.imported.into_iter().map(|f| (f.id, f.title)).collect())),
         }
     })

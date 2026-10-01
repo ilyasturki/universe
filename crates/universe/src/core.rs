@@ -1852,11 +1852,11 @@ impl Core {
         self.sources.read().await.iter().filter(|m| m.active()).map(|m| m.id().to_string()).collect()
     }
 
-    /// Scans the installed games of one source (all active ones when empty); returns how many became that source's: a game it
-    /// already had is updated and not counted again.
-    pub async fn source_scan(&self, source: &str, mut progress: Option<Progress<'_, '_>>) -> Result<usize> {
+    /// Scans the installed games of one source (all active ones when empty); returns the games that became that source's: one it
+    /// already had is updated and not listed again. Their art is the caller's to fetch after, as `import_roms`'s is.
+    pub async fn source_scan(&self, source: &str, mut progress: Option<Progress<'_, '_>>) -> Result<Vec<String>> {
         let ids: Vec<String> = if source.is_empty() { self.active_source_ids().await } else { vec![self.source(source).await?.id().to_string()] };
-        let mut found = 0;
+        let mut found: Vec<String> = Vec::new();
         for sid in ids {
             let m = self.source(&sid).await?;
             if let Err(e) = self.fetch_source_library(&m, false).await {
@@ -1874,7 +1874,9 @@ impl Core {
                 self.games.read().await.iter().filter(|g| g.game.source.kind == sid).map(|g| g.game.id.clone()).collect();
             for g in Self::game_events(&events) {
                 if let Ok(Some(id)) = self.apply_source_game(&sid, &g, true, false).await {
-                    found += usize::from(!had.contains(&id));
+                    if !had.contains(&id) && !found.contains(&id) {
+                        found.push(id);
+                    }
                 }
             }
         }
@@ -2420,7 +2422,7 @@ scan) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":true
 install) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":true,"dir":"/g/New","exe":"new.exe"}' ;;"#,
         );
         let core = open().await;
-        assert_eq!(core.source_scan("fake", None).await.unwrap(), 1);
+        assert_eq!(core.source_scan("fake", None).await.unwrap(), ["old"]);
         let old = core.get("old").await.unwrap().to_json();
         assert_eq!(old["added_at"], "", "a scan finds what was there all along");
         let id = core.source_install("fake", "2", None).await.unwrap();
@@ -2469,7 +2471,7 @@ install) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":t
         Game::new("Manual").save().unwrap();
         Game::new("Loose").save().unwrap();
         let core = open().await;
-        assert_eq!(core.source_scan("fake", None).await.unwrap(), 2);
+        assert_eq!(core.source_scan("fake", None).await.unwrap().len(), 2);
         let gog = core.get("control").await.unwrap().game;
         assert_eq!((gog.source.kind.as_str(), gog.source.id.as_str(), gog.source.dir.as_str()), ("gog", "9", ""), "the other store's game is left alone");
         let fake = core.get("control-fake").await.unwrap().game;
@@ -2485,7 +2487,7 @@ install) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":t
         let loose = core.get("loose").await.unwrap().game;
         assert_eq!((loose.source.kind.as_str(), loose.source.id.as_str()), ("manual", ""), "ownership unknown: nothing is claimed");
 
-        assert_eq!(core.source_scan("fake", None).await.unwrap(), 0, "a second scan counts nothing it had");
+        assert!(core.source_scan("fake", None).await.unwrap().is_empty(), "a second scan lists nothing it had");
         assert_eq!(core.list().await.len(), 4, "and finds the same entries");
         core.set("control-fake", "launch.umu_id", "umu-1").await.unwrap();
         core.source_scan("fake", None).await.unwrap();
@@ -2509,7 +2511,7 @@ install) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":t
         )
         .unwrap();
         let core = open().await;
-        assert_eq!(core.source_scan("fake", None).await.unwrap(), 2);
+        assert_eq!(core.source_scan("fake", None).await.unwrap().len(), 2);
         let shared = core.get("shared").await.unwrap().game;
         assert_eq!(
             (shared.launch.prefix.as_str(), shared.launch.proton.as_str()),
@@ -2568,7 +2570,7 @@ uninstall) echo '{{"event":"window","class":"steam","title":""}}'; echo "$2" >> 
         let manifest = dir.path().join("sources/fake/source.toml");
         std::fs::write(&manifest, "api = 2\nid = \"fake\"\nname = \"Fake\"\nexe = \"run\"\ncapabilities = [\"uninstall\"]\n").unwrap();
         let core = open().await;
-        assert_eq!(core.source_scan("fake", None).await.unwrap(), 2);
+        assert_eq!(core.source_scan("fake", None).await.unwrap().len(), 2);
         assert_eq!(core.uninstall_via("one").await.unwrap().as_deref(), Some("Fake"));
         core.uninstall("one").await.unwrap();
         assert_eq!(std::fs::read_to_string(&asked).unwrap(), "1\n", "the store was asked");
@@ -2597,7 +2599,7 @@ update) echo '{"event":"update","id":"1","title":"Old","local_build":"1","remote
         std::fs::set_permissions(bad.join("run"), std::fs::Permissions::from_mode(0o755)).unwrap();
         std::fs::write(dir.path().join("config/config.toml"), "[modules]\nenabled = []\n[sources]\nenabled = [\"bad\", \"fake\"]\n").unwrap();
         let core = open().await;
-        assert_eq!(core.source_scan("", None).await.unwrap(), 1, "the failing store is skipped");
+        assert_eq!(core.source_scan("", None).await.unwrap().len(), 1, "the failing store is skipped");
         assert!(core.source_scan("bad", None).await.unwrap_err().to_string().contains("store down"), "named, its failure is the answer");
         let updates = core.source_updates().await.unwrap();
         assert_eq!(updates.iter().map(|u| (u["id"].as_str(), u["source"].as_str())).collect::<Vec<_>>(), [(Some("1"), Some("fake"))]);

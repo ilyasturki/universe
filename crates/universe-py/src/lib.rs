@@ -350,7 +350,7 @@ impl Core {
         self.value(py, |c| c.source_updates())
     }
     #[pyo3(signature = (source, progress=None))]
-    fn scan(&self, py: Python<'_>, source: String, progress: Option<Py<PyAny>>) -> PyResult<usize> {
+    fn scan(&self, py: Python<'_>, source: String, progress: Option<Py<PyAny>>) -> PyResult<Vec<String>> {
         self.run(py, |c| async move {
             let mut p = progress_of(&progress);
             c.source_scan(&source, p.as_deref_mut()).await

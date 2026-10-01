@@ -1308,7 +1308,7 @@ class FakeCore:
 
     def scan(self, source, progress=None):
         self._tick(progress, "Scanning", 4)
-        return 0
+        return []
 
     def media_refresh(self, ident, force, progress=None):
         games = [self._game(ident)] if ident else [g for g in self._data["games"] if not g.get("removed")]

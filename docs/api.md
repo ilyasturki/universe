@@ -501,10 +501,10 @@ source unavailable, and `doctor` reports it as fetched on first use.
 | `source_search(source, query)` | `search(source, query)` | `universe search <query> [--source]` | `[SourceGame]` |
 | `source_info(source, game_id)` | `info(source, game_id)` | — | the source's raw `info` payload, plus the `download_size` and `disk_size` it reports; those two are remembered in the library cache, so a listing carries them from then on |
 | `source_cancel(source, game_id)` | `cancel(source, game_id)` | Ctrl-C | SIGTERMs the source process installing or updating `game_id`; it stops its downloader and keeps the files, so the next `install` resumes. False when nothing was running for it. The interrupted `install`/`update` call fails |
-| `source_install(source, game_id, progress)` | `install(source, game_id, progress)` | `universe install <id> [--source]` | id of the installed game |
+| `source_install(source, game_id, progress)` | `install(source, game_id, progress)` | `universe install <id> [--source]` | id of the installed game, whose art the caller fetches after (the CLI and both apps do) |
 | `source_update(source, game_id, progress)` | `update(source, game_id, progress)` | `universe update [name] [-y]` | how many were updated; `game_id=""` updates everything pending |
 | `source_updates()` | `updates()` | `universe update` | `[{id, title, local_build, remote_build, version, date, source}]`, every enabled source's |
-| `source_scan(source, progress)` | `scan(source, progress)` | `universe scan [source]` | how many games became the source's (one it already had is updated, not counted again); `source=""` scans all |
+| `source_scan(source, progress)` | `scan(source, progress)` | `universe scan [source]` | the ids of the games that became the source's (one it already had is updated, not listed again), whose art the caller fetches after (`media_refresh_many`; the CLI, both apps' jobs and their first run do); `source=""` scans all |
 
 `progress` is called `(done, total, message)` as the job runs. The CLI's `[source]` and `--source`
 may be left out while a single source is enabled.

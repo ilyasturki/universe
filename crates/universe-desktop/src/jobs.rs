@@ -29,12 +29,23 @@ pub struct ComponentJob {
     pub follow: bool,
 }
 
-/// What a long job ends with: its line for the player, whether it went through, the game an install brought in.
+/// What a long job ends with: its line for the player, whether it went through, the game an install brought in, and the
+/// `(id, title)` of the games a scan or an install brought, whose art comes next.
 #[derive(Debug, Clone, PartialEq)]
 pub struct Outcome {
     pub ok: bool,
     pub text: String,
     pub game: String,
+    pub arrived: Vec<(String, String)>,
+}
+
+pub async fn titled(core: &universe::core::Core, ids: Vec<String>) -> Vec<(String, String)> {
+    let mut out = Vec::with_capacity(ids.len());
+    for id in ids {
+        let title = core.get(&id).await.map(|r| r.game.title).unwrap_or_else(|_| id.clone());
+        out.push((id, title));
+    }
+    out
 }
 
 enum Note {
@@ -217,8 +228,14 @@ pub fn start(kind: Kind, source: &str, targets: Vec<(String, String)>, force: bo
         if let Ok(mut c) = current.lock() {
             c.clone_from(&first);
         }
+        let mut arrived = Vec::new();
         let (count, game) = match kind {
-            Kind::Install => core.source_install(&source, &first, Some(&mut progress)).await.map(|id| (1, id)),
+            Kind::Install => core.source_install(&source, &first, Some(&mut progress)).await.map(|id| {
+                if !id.is_empty() {
+                    arrived.push((id.clone(), title.clone()));
+                }
+                (1, id)
+            }),
             Kind::Update => {
                 for (step, (id, title)) in targets.iter().enumerate() {
                     if let Ok(mut c) = current.lock() {
@@ -229,7 +246,13 @@ pub fn start(kind: Kind, source: &str, targets: Vec<(String, String)>, force: bo
                 }
                 Ok((targets.len(), String::new()))
             }
-            Kind::Scan => core.source_scan(&source, Some(&mut progress)).await.map(|n| (n, String::new())),
+            Kind::Scan => match core.source_scan(&source, Some(&mut progress)).await {
+                Ok(ids) => {
+                    arrived = titled(&core, ids).await;
+                    Ok((arrived.len(), String::new()))
+                }
+                Err(e) => Err(e),
+            },
             Kind::Artwork if targets.len() > 1 => {
                 let ids: Vec<String> = targets.iter().map(|(id, _)| id.clone()).collect();
                 core.media_refresh_many(&ids, force, Some(&mut progress)).await.map(|(changed, _)| (changed, String::new()))
@@ -246,7 +269,7 @@ pub fn start(kind: Kind, source: &str, targets: Vec<(String, String)>, force: bo
             (Kind::Artwork, 0, _) => gettext("No new art"),
             (Kind::Artwork, n, text) => ngettext("New art for {} game", "New art for {} games", n).replace("{}", &text),
         };
-        Ok(Outcome { ok: true, text, game })
+        Ok(Outcome { ok: true, text, game, arrived })
     });
     (job, outcome)
 }
@@ -280,7 +303,7 @@ pub fn start_component(component: ComponentJob) -> (Job, impl std::future::Futur
             }
             gettext("{} is installed").replace("{}", format!("{name} {installed}").trim_end())
         };
-        Ok(Outcome { ok: true, text, game: String::new() })
+        Ok(Outcome { ok: true, text, game: String::new(), arrived: Vec::new() })
     });
     (job, outcome)
 }
@@ -301,7 +324,7 @@ where
         let result = backend::pinned(move |core| work(core, tx)).await;
         let cancelled = job.cancelled();
         job.end();
-        let failed = |text: String| Outcome { ok: false, text, game: String::new() };
+        let failed = |text: String| Outcome { ok: false, text, game: String::new(), arrived: Vec::new() };
         match result {
             Ok(outcome) => outcome,
             Err(_) if cancelled && job.pauses() => failed(gettext("{} is paused: it resumes from the Store").replace("{}", &job.title())),

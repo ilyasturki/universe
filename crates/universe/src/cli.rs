@@ -722,6 +722,17 @@ fn progress_printer(json: bool) -> impl FnMut(u64, u64, &str) {
     }
 }
 
+/// The art of games just brought in, the network asked once they are all there.
+async fn fetch_art(core: &Core, json: bool, ids: &[String]) {
+    if ids.is_empty() {
+        return;
+    }
+    let mut p = progress_printer(json);
+    if let Err(e) = core.media_refresh_many(ids, false, Some(&mut p)).await {
+        eprintln!("media: {e}");
+    }
+}
+
 fn finish(json: bool, r: crate::Result<String>) {
     match r {
         Ok(m) => report(json, true, &m),
@@ -1006,7 +1017,11 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                 println!("installing {id} from {source}");
             }
             let mut p = progress_printer(json);
-            finish(json, core.source_install(&source, &id, Some(&mut p)).await);
+            let installed = core.source_install(&source, &id, Some(&mut p)).await;
+            if let Some(game) = installed.as_ref().ok().filter(|g| !g.is_empty()) {
+                fetch_art(&core, json, std::slice::from_ref(game)).await;
+            }
+            finish(json, installed);
         }
         Cmd::Update { name, yes } => match name {
             Some(n) => {
@@ -1419,8 +1434,9 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         }
         Cmd::Scan { source } => {
             let mut p = progress_printer(json);
-            let n = core.source_scan(source.as_deref().unwrap_or(""), Some(&mut p)).await?;
-            report(json, true, &format!("{n} game(s)"));
+            let found = core.source_scan(source.as_deref().unwrap_or(""), Some(&mut p)).await?;
+            fetch_art(&core, json, &found).await;
+            report(json, true, &format!("{} game(s)", found.len()));
             if !json {
                 let active = core.active_source_ids().await;
                 let mut t = table(&["Title", "Source", "Store id", "Id", "Build"]);
@@ -1434,7 +1450,11 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
             }
         }
         Cmd::Migrate { apply } => {
-            let report = serde_json::to_value(core.import_lutris(apply).await?)?;
+            let imported = core.import_lutris(apply).await?;
+            if apply {
+                fetch_art(&core, json, &imported.imported).await;
+            }
+            let report = serde_json::to_value(imported)?;
             if json {
                 return print_json(&report);
             }
@@ -1612,12 +1632,7 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Cmd::Rescan => {
             let report = core.rescan().await?;
             let added: Vec<String> = report.imported.iter().map(|f| f.id.clone()).collect();
-            if !added.is_empty() {
-                let mut p = progress_printer(json);
-                if let Err(e) = core.media_refresh_many(&added, false, Some(&mut p)).await {
-                    eprintln!("media: {e}");
-                }
-            }
+            fetch_art(&core, json, &added).await;
             if json {
                 return print_json(&serde_json::to_value(&report)?);
             }
