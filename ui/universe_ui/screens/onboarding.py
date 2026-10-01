@@ -130,7 +130,7 @@ class Onboarding(RowsForm):
                 launcher["detail"] = why or ("" if launcher["importable"] else NOT_YET)
             config = self._client.config() or {}
             self._writable = bool(config.get("config_writable", True))
-            self._home_manager = config.get("os") == "nixos"
+            self._home_manager = config.get("config_owner") == "home-manager"
             steps = ["found"]
             if any(not s.get("logged_in") for s in self._sources):
                 steps.append("stores")

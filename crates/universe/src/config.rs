@@ -416,6 +416,7 @@ impl Config {
         }
         v["config_file"] = serde_json::Value::String(paths::config_file().to_string_lossy().into());
         v["config_writable"] = serde_json::Value::Bool(Self::writable(&paths::config_file()));
+        v["config_owner"] = Self::owner(&paths::config_file()).into();
         // The keys the file sets itself, as written: what a frontend tells a chosen value from a default by.
         v["set"] = std::fs::read_to_string(paths::config_file())
             .ok()
@@ -436,7 +437,7 @@ impl Config {
             std::fs::create_dir_all(parent)?;
         }
         std::fs::write(path, doc.to_string()).map_err(|e| match e.kind() {
-            std::io::ErrorKind::PermissionDenied if crate::distro::detect() == crate::distro::Family::NixOs => crate::Error::Invalid(format!(
+            std::io::ErrorKind::PermissionDenied if Self::owner(path) == HOME_MANAGER => crate::Error::Invalid(format!(
                 "{} is read-only: home-manager's programs.universe.settings owns it; set it to null to change settings here",
                 path.display()
             )),
@@ -449,11 +450,43 @@ impl Config {
     pub fn writable(path: &Path) -> bool {
         std::fs::metadata(path).map(|m| !m.permissions().readonly()).unwrap_or(true)
     }
+
+    /// Who writes the file when the core may not: `home-manager` for a link into the Nix store, its
+    /// `programs.universe.settings`; empty for a file of the user's own.
+    pub fn owner(path: &Path) -> &'static str {
+        owner_under(path, Path::new("/nix/store"))
+    }
+}
+
+pub const HOME_MANAGER: &str = "home-manager";
+
+fn owner_under(path: &Path, store: &Path) -> &'static str {
+    let linked = std::fs::symlink_metadata(path).is_ok_and(|m| m.file_type().is_symlink());
+    if linked && std::fs::canonicalize(path).is_ok_and(|p| p.starts_with(store)) {
+        HOME_MANAGER
+    } else {
+        ""
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_config_linked_into_the_store_is_home_managers() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = dir.path().join("store");
+        std::fs::create_dir_all(&store).unwrap();
+        std::fs::write(store.join("universe-config.toml"), "schema = 1\n").unwrap();
+        let linked = dir.path().join("linked.toml");
+        std::os::unix::fs::symlink(store.join("universe-config.toml"), &linked).unwrap();
+        let own = dir.path().join("own.toml");
+        std::fs::write(&own, "schema = 1\n").unwrap();
+        assert_eq!(owner_under(&linked, &store), HOME_MANAGER);
+        assert_eq!(owner_under(&own, &store), "", "a file of the user's own, read-only or not");
+        assert_eq!(owner_under(&dir.path().join("absent.toml"), &store), "");
+    }
 
     #[test]
     fn defaults_parse_and_override() {

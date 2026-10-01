@@ -176,7 +176,7 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
         " (absent: defaults)"
     } else if Config::writable(&config_file) {
         ""
-    } else if nixos {
+    } else if Config::owner(&config_file) == crate::config::HOME_MANAGER {
         " read-only: home-manager's programs.universe.settings"
     } else {
         " read-only"

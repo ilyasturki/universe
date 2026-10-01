@@ -140,10 +140,10 @@ def test_preferences_write_the_family_and_hdr(empty_api, empty):
     assert empty.core.settings()["launch"]["hdr"] is True
 
 
-@pytest.mark.parametrize(("os_family", "owner"), [("nixos", "home-manager"), ("arch", "config.toml")])
-def test_read_only_config_skips_preferences(empty_api, empty, os_family, owner):
+@pytest.mark.parametrize(("config_owner", "owner"), [("home-manager", "home-manager"), ("", "config.toml")])
+def test_read_only_config_skips_preferences(empty_api, empty, config_owner, owner):
     empty.core._config["config_writable"] = False
-    empty.core._config["os"] = os_family
+    empty.core._config["config_owner"] = config_owner
     signed_out(empty)
     form = loaded(empty_api.screens.onboarding)
     assert [s["id"] for s in form.steps] == ["found", "stores", "done"]

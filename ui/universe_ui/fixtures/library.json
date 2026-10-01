@@ -651,6 +651,7 @@
   "config": {
     "schema": 1,
     "config_writable": true,
+    "config_owner": "",
     "paths": {"games_root": "/mnt/games/PC", "prefixes_root": "/mnt/games/prefixes"},
     "desktop": {"hide_cursor": true},
     "proton": {"proton-tkg": "/opt/proton-tkg"},

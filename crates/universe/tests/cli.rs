@@ -65,10 +65,9 @@ fn a_read_only_config_is_named_when_a_write_is_refused() {
     std::fs::set_permissions(&config, std::os::unix::fs::PermissionsExt::from_mode(0o444)).unwrap();
     let out = universe(&dir, &["config", "set", "launch.hdr", "true"], &[]);
     let err = String::from_utf8_lossy(&out.stderr).into_owned();
-    let owner = if universe::distro::detect() == universe::distro::Family::NixOs { "programs.universe.settings" } else { "make it writable" };
-    assert!(!out.status.success() && err.contains("read-only") && err.contains(owner), "{err:?}");
+    assert!(!out.status.success() && err.contains("read-only") && err.contains("make it writable"), "a file of the user's own: {err:?}");
     let settings: serde_json::Value = serde_json::from_slice(&universe(&dir, &["config", "get", "--json"], &[]).stdout).unwrap();
-    assert_eq!(settings["config_writable"], false);
+    assert_eq!((&settings["config_writable"], &settings["config_owner"]), (&serde_json::json!(false), &serde_json::json!("")));
     let text = String::from_utf8_lossy(&universe(&dir, &["doctor"], &[]).stdout).into_owned();
     assert!(text.contains("read-only"), "{text:?}");
 }
