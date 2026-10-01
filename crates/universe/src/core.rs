@@ -1832,7 +1832,8 @@ impl Core {
         self.sources.read().await.iter().filter(|m| m.active()).map(|m| m.id().to_string()).collect()
     }
 
-    /// Scans the installed games of one source (all active ones when empty); returns how many entered the library.
+    /// Scans the installed games of one source (all active ones when empty); returns how many became that source's: a game it
+    /// already had is updated and not counted again.
     pub async fn source_scan(&self, source: &str, mut progress: Option<Progress<'_, '_>>) -> Result<usize> {
         let ids: Vec<String> = if source.is_empty() { self.active_source_ids().await } else { vec![self.source(source).await?.id().to_string()] };
         let mut found = 0;
@@ -1849,9 +1850,11 @@ impl Core {
                 }
                 Err(e) => return Err(e),
             };
+            let had: std::collections::HashSet<String> =
+                self.games.read().await.iter().filter(|g| g.game.source.kind == sid).map(|g| g.game.id.clone()).collect();
             for g in Self::game_events(&events) {
-                if let Ok(Some(_)) = self.apply_source_game(&sid, &g, true, false).await {
-                    found += 1;
+                if let Ok(Some(id)) = self.apply_source_game(&sid, &g, true, false).await {
+                    found += usize::from(!had.contains(&id));
                 }
             }
         }
@@ -2433,8 +2436,8 @@ install) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":t
         let loose = core.get("loose").await.unwrap().game;
         assert_eq!((loose.source.kind.as_str(), loose.source.id.as_str()), ("manual", ""), "ownership unknown: nothing is claimed");
 
-        assert_eq!(core.source_scan("fake", None).await.unwrap(), 2);
-        assert_eq!(core.list().await.len(), 4, "a second scan finds the same entries");
+        assert_eq!(core.source_scan("fake", None).await.unwrap(), 0, "a second scan counts nothing it had");
+        assert_eq!(core.list().await.len(), 4, "and finds the same entries");
         core.set("control-fake", "launch.umu_id", "umu-1").await.unwrap();
         core.source_scan("fake", None).await.unwrap();
         assert_eq!(core.get("control-fake").await.unwrap().game.launch.umu_id, "umu-1", "a value set by hand stays");

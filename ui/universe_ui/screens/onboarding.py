@@ -325,7 +325,7 @@ class Onboarding(RowsForm):
             self._set_state(launcher, "failed", error=text)
             self.message.emit(f"{name} scan failed: {text}")
             return
-        count = int(text.split(" ")[0]) if text[:1].isdigit() else 0
+        count = int(self._client.jobResult(job) or 0)
         if not count and not source.get("logged_in", True):
             self._set_state(launcher, "waiting", error=f"Sign in to {name} to adopt them")
             if all(s["id"] != "stores" for s in self._steps):

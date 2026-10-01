@@ -166,6 +166,7 @@ def test_a_failing_job_reports_its_end(fake):
     finished = record(fake.jobFinished)
     job = fake.install("gog", "1")
     assert until(lambda: finished) == [(job, False, "offline")]
+    assert fake.jobResult(job) is None, "a failure has no result"
 
 
 def test_the_real_core_reads_writes_and_watches(app):
@@ -232,3 +233,11 @@ def test_the_launch_keys_fixture_is_the_cores_table(app):
     screen = {"screen": "DP-1", "width": 2560, "height": 1440, "refresh": 144}
     assert FakeCore().launch_keys("game", screen) == core.launch_keys("game", screen), "the fake sizes the choices as the core does"
     assert FakeCore().launch_keys("global", {}) == core.launch_keys("global", {})
+
+
+def test_a_scan_job_hands_its_count_over_as_its_result(fake):
+    fake.core.scan = lambda source, progress=None: 3
+    finished = record(fake.jobFinished)
+    job = fake.scan("gog")
+    until(lambda: finished)
+    assert fake.jobResult(job) == 3 and fake.jobs()[0]["result"] == 3

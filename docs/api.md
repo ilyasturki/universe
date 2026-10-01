@@ -502,7 +502,7 @@ source unavailable, and `doctor` reports it as fetched on first use.
 | `source_install(source, game_id, progress)` | `install(source, game_id, progress)` | `universe install <id> [--source]` | id of the installed game |
 | `source_update(source, game_id, progress)` | `update(source, game_id, progress)` | `universe update [name] [-y]` | how many were updated; `game_id=""` updates everything pending |
 | `source_updates()` | `updates()` | `universe update` | `[{id, title, local_build, remote_build, version, date, source}]`, every enabled source's |
-| `source_scan(source, progress)` | `scan(source, progress)` | `universe scan [source]` | how many games entered the library; `source=""` scans all |
+| `source_scan(source, progress)` | `scan(source, progress)` | `universe scan [source]` | how many games became the source's (one it already had is updated, not counted again); `source=""` scans all |
 
 `progress` is called `(done, total, message)` as the job runs. The CLI's `[source]` and `--source`
 may be left out while a single source is enabled.

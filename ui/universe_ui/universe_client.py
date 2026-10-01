@@ -534,11 +534,16 @@ class CoreClient(QObject):
 
     @Slot(str, result=str)
     def scan(self, source):
-        return self._job("scan", source, lambda progress: f"{self._core.scan(source, progress)} game(s)")
+        return self._job("scan", source, lambda progress: self._core.scan(source, progress), text=lambda n: f"{n} game(s)")
 
     @Slot(result="QVariant")
     def jobs(self):
         return [dict(j) for j in self._jobs.values()]
+
+    @Slot(str, result="QVariant")
+    def jobResult(self, job):
+        """What a finished job's work returned (a scan: how many games it brought), None before its end or after a failure."""
+        return (self._jobs.get(job) or {}).get("result")
 
     @Slot(str, bool, result=str)
     def mediaRefresh(self, ident, force):
@@ -791,7 +796,7 @@ class CoreClient(QObject):
             elif was and not self._current:
                 self._ended(was)
 
-    def _job(self, kind, target, work, source=""):
+    def _job(self, kind, target, work, source="", text=str):
         self._job_seq += 1
         job = f"job-{self._job_seq}"
         self._jobs[job] = {
@@ -805,19 +810,22 @@ class CoreClient(QObject):
             "finished": False,
             "ok": False,
             "cancelled": False,
+            "result": None,
         }
 
         def progress(done, total, message):
             self._deliver.emit(lambda: self._job_progress(job, done, total, message))
 
         def run():
+            result = None
             try:
-                message, ok = str(self._call(work, progress)), True
+                result = self._call(work, progress)
+                message, ok = text(result), True
             except UniverseError as e:
                 message, ok = e.message, False
             except Exception as e:  # noqa: BLE001
                 message, ok = str(e), False
-            self._deliver.emit(lambda: self._job_finished(job, ok, message))
+            self._deliver.emit(lambda: self._job_finished(job, ok, message, result))
 
         threading.Thread(target=run, daemon=True, name=job).start()
         return job
@@ -826,7 +834,7 @@ class CoreClient(QObject):
         self._jobs[job].update(done=int(done), total=int(total), message=message)
         self.progress.emit(job, int(done), int(total), message)
 
-    def _job_finished(self, job, ok, message):
-        self._jobs[job].update(finished=True, ok=ok, message=message)
+    def _job_finished(self, job, ok, message, result=None):
+        self._jobs[job].update(finished=True, ok=ok, message=message, result=result)
         self.jobFinished.emit(job, ok, message)
         self.libraryChanged.emit([])
