@@ -5,8 +5,9 @@ usage() {
     cat <<'USAGE'
 usage: tools/desktop-smoke [PROFILE...]
 
-Starts each desktop without a GPU, opens a terminal in it, and checks the
-core's part there: the windows listed and focused and the cursor hidden then
+Starts each desktop without a GPU, opens two terminals in it, and checks the
+core's part there: the windows listed, each focused in turn and the focus
+read back, and the cursor hidden then
 put back (the ignored test desktop::live), `universe osd`, and
 `universe desktop-shot` of the screen and of the focused window.
 Profiles: sway x11 kde niri (default: all). Logs and shots land in
@@ -56,6 +57,7 @@ check() {
         dunst > "$dir/notifier.log" 2>&1 &
     else
         foot -T smoke-a > "$dir/foot.log" 2>&1 &
+        foot -T smoke-b > "$dir/foot-b.log" 2>&1 &
         mako > "$dir/notifier.log" 2>&1 &
     fi
     sleep "${SMOKE_SETTLE:-3}"

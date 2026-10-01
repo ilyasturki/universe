@@ -721,13 +721,17 @@ mod live {
         let profile = super::from_env(&super::env);
         let windows = rt.block_on(super::list_windows(profile)).unwrap();
         eprintln!("{profile:?}: {windows:#?}");
-        let w = windows.iter().find(|w| w.pid > 0).expect("a window with a pid");
-        assert!(rt.block_on(super::activate_window(profile, &w.id)).unwrap(), "{w:?}");
-        let focused = (0..30).any(|_| {
-            std::thread::sleep(std::time::Duration::from_millis(100));
-            rt.block_on(super::focused_pid(profile)) == Ok(w.pid)
-        });
-        assert!(focused, "{profile:?}: the focus never named pid {}: {:?}", w.pid, rt.block_on(super::focused_pid(profile)));
+        let with_pid: Vec<_> = windows.iter().filter(|w| w.pid > 0).collect();
+        assert!(!with_pid.is_empty(), "a window with a pid");
+        // Each in turn, so a desktop that pushes the focus (KWin's script) is seen to follow it.
+        for w in with_pid.iter().rev().chain(with_pid.last()) {
+            assert!(rt.block_on(super::activate_window(profile, &w.id)).unwrap(), "{w:?}");
+            let focused = (0..30).any(|_| {
+                std::thread::sleep(std::time::Duration::from_millis(100));
+                rt.block_on(super::focused_pid(profile)) == Ok(w.pid)
+            });
+            assert!(focused, "{profile:?}: the focus never named pid {}: {:?}", w.pid, rt.block_on(super::focused_pid(profile)));
+        }
         let gone = if profile == super::Profile::Hyprland { "0xdead" } else { "4000000000" };
         assert!(!rt.block_on(super::activate_window(profile, gone)).unwrap());
         let undo = rt.block_on(super::hide_cursor(profile, ""));
