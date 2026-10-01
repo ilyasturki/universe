@@ -814,7 +814,8 @@ the ones missing. What needs root beyond the package — a setcap outside Arch �
 stays a doctor fix. With no PackageKit (NixOS, image-based systems) or no
 package for the family, the row carries the fix instead: on NixOS the module's option. A missing one
 is proposed when the configuration uses it: gamescope with `launch.gamescope`, MangoHud with a frame
-rate limit or the HUD, gpu-screen-recorder with the capture module.
+rate limit or the HUD, any of them while an enabled module names it in `[requires] system`
+(the capture module names gpu-screen-recorder).
 
 **What runs.** An emulator or Wine as `[runners.<id>] build` says (see Runners). A Proton build
 through `launch.proton`: `components/<id>/` is one of the Proton directories, so a family name
@@ -1461,6 +1462,7 @@ description = "Records each session."   # optional, one or two sentences; the mo
 
 [requires]
 bins = ["gpu-screen-recorder"]    # a missing binary makes the module "unavailable" and it is never run
+system = ["gpu-screen-recorder"]  # system tools (gamescope, mangohud, gpu-screen-recorder) Settings › Runners proposes to install while the module is on
 
 [hooks]                           # paths relative to the module directory
 pre-launch   = "bin/pre"          # blocking, before the game's unit; may write UNIVERSE_ENV_FILE

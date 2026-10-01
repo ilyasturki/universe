@@ -41,6 +41,8 @@ impl Applies {
 pub struct Requires {
     pub core: String,
     pub bins: Vec<String>,
+    /// System tools (`components::SYSTEM` ids) Universe proposes to install while the module is on.
+    pub system: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

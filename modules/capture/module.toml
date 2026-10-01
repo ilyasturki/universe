@@ -6,6 +6,7 @@ description = "Records each session with gpu-screen-recorder; the Play journal d
 
 [requires]
 bins = ["gpu-screen-recorder", "gsr-cli", "ffmpeg", "ffprobe", "trash"]
+system = ["gpu-screen-recorder"]
 
 [hooks]
 pre-launch  = "bin/pre"

@@ -1119,12 +1119,12 @@ impl SystemTool {
         }
     }
 
-    fn wanted(&self, config: &Config) -> bool {
+    /// `asked`: the tools the enabled modules' `[requires] system` names.
+    fn wanted(&self, config: &Config, asked: &[String]) -> bool {
         match self.id {
             "gamescope" => config.launch.gamescope,
             "mangohud" => config.launch.mangohud || config.launch.fps_limit != "none",
-            "gpu-screen-recorder" => config.modules.enabled.iter().any(|m| m == "capture"),
-            _ => false,
+            id => asked.iter().any(|a| a == id),
         }
     }
 }
@@ -1133,7 +1133,7 @@ pub fn system_tool(id: &str) -> Option<&'static SystemTool> {
     SYSTEM.iter().find(|t| t.id == id)
 }
 
-fn system_json(tool: &SystemTool, config: &Config, family: crate::distro::Family, packagekit: bool) -> serde_json::Value {
+fn system_json(tool: &SystemTool, config: &Config, asked: &[String], family: crate::distro::Family, packagekit: bool) -> serde_json::Value {
     let packages = tool.packages(family);
     let installable = packagekit && !packages.is_empty();
     let build = runners::on_system_path(tool.bin).map(|p| found_json(&found_at(&p, "system"), true));
@@ -1146,20 +1146,20 @@ fn system_json(tool: &SystemTool, config: &Config, family: crate::distro::Family
     serde_json::json!({
         "id": tool.id, "name": tool.name, "kind": Kind::System, "family": "", "bin": tool.bin, "homepage": "", "notice": "", "runner": "",
         "builds": build.iter().collect::<Vec<_>>(), "in_use": build, "latest": null, "available": [], "update": "",
-        "proposal": if build.is_none() && installable && tool.wanted(config) { "install" } else { "" },
+        "proposal": if build.is_none() && installable && tool.wanted(config, asked) { "install" } else { "" },
         "used_by": 0, "setting": "", "recent": null, "skipped": [],
         "packages": packages, "installable": installable, "fix": fix,
     })
 }
 
-/// Runs the package manager to read a system program's version: off the runtime.
-pub fn list(config: &Config, catalogue: &Catalogue, games: &[Resolved], running: Option<&str>, packagekit: bool) -> Vec<serde_json::Value> {
+/// Runs the package manager to read a system program's version: off the runtime. `asked`: the system tools the enabled modules require.
+pub fn list(config: &Config, catalogue: &Catalogue, games: &[Resolved], running: Option<&str>, asked: &[String], packagekit: bool) -> Vec<serde_json::Value> {
     let usage = Usage::of(games);
     let protons = proton_found(config);
     let family = crate::distro::detect();
     let mut out: Vec<serde_json::Value> =
         rows(catalogue).iter().map(|(id, entry)| row_json(id, entry, config, &usage, &protons, &pins(id, entry.kind, config, games, running))).collect();
-    out.extend(SYSTEM.iter().map(|tool| system_json(tool, config, family, packagekit)));
+    out.extend(SYSTEM.iter().map(|tool| system_json(tool, config, asked, family, packagekit)));
     out
 }
 
@@ -1194,7 +1194,8 @@ impl Core {
         let games = self.games.read().await.clone();
         let running = self.current().await.map(|c| c.id);
         let packagekit = crate::packagekit::available().await;
-        let listed = crate::core::blocking(move || Ok(list(&config, &catalogue, &games, running.as_deref(), packagekit))).await?;
+        let asked: Vec<String> = self.modules.read().await.iter().filter(|m| m.enabled).flat_map(|m| m.manifest.requires.system.clone()).collect();
+        let listed = crate::core::blocking(move || Ok(list(&config, &catalogue, &games, running.as_deref(), &asked, packagekit))).await?;
         Ok(serde_json::json!({
             "catalogue": {"url": url, "fetched_at": fetched_at, "generated_at": generated_at, "error": error},
             "auto_update": auto_update,
@@ -1746,19 +1747,26 @@ mod tests {
         use crate::distro::Family;
         let config = Config::default();
         let gamescope = system_tool("gamescope").unwrap();
-        let arch = system_json(gamescope, &config, Family::Arch, true);
+        let arch = system_json(gamescope, &config, &[], Family::Arch, true);
         assert_eq!(arch["packages"], serde_json::json!(["gamescope"]));
         assert_eq!(arch["installable"], true);
         if runners::on_system_path("gamescope").is_none() {
             assert_eq!(arch["proposal"], "install", "launch.gamescope is on by default");
         }
-        assert_eq!(system_json(gamescope, &config, Family::Arch, false)["proposal"], "", "no PackageKit, no proposal");
-        let nixos = system_json(gamescope, &config, Family::NixOs, true);
+        assert_eq!(system_json(gamescope, &config, &[], Family::Arch, false)["proposal"], "", "no PackageKit, no proposal");
+        let nixos = system_json(gamescope, &config, &[], Family::NixOs, true);
         assert_eq!(nixos["installable"], false);
         assert!(nixos["fix"].as_str().unwrap().contains("programs.universe.gamescope.enable"));
-        let gsr = system_json(system_tool("gpu-screen-recorder").unwrap(), &config, Family::Fedora, true);
-        assert_eq!(gsr["installable"], false, "not in Fedora's repositories");
-        assert_eq!(gsr["proposal"], "", "the capture module is off by default");
+        let gsr = system_tool("gpu-screen-recorder").unwrap();
+        assert_eq!(system_json(gsr, &config, &[], Family::Fedora, true)["installable"], false, "not in Fedora's repositories");
+        if runners::on_system_path("gpu-screen-recorder").is_none() {
+            assert_eq!(system_json(gsr, &config, &[], Family::Arch, true)["proposal"], "", "no enabled module asks for it");
+            assert_eq!(
+                system_json(gsr, &config, &["gpu-screen-recorder".into()], Family::Arch, true)["proposal"],
+                "install",
+                "the capture module's [requires] system"
+            );
+        }
         let mangohud = system_tool("mangohud").unwrap();
         assert_eq!(mangohud.packages(Family::Debian), ["mangohud", "mangohud:i386"], "the 32-bit layer that 32-bit games load");
     }
