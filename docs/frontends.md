@@ -282,8 +282,9 @@ carry no `session`), a hairline, the rest — A a `Lightbox`, Y "Remove this scr
 dock's `ConfirmDialog` (Keep it focused, Trash the screenshot → `shots.remove`), B or ▲ past the top
 row lowers it onto the dock. While the dock lists achievements, LB RB switch the tray between
 Screenshots and Achievements, and the Achievements button opens it on the second: the list of
-the launcher's page (`ui/AchievementList.qml`) with `pane: false` — *n / m* and a thin bar over one
-column of rows, each with its description and, once unlocked, its date and a tick on the icon — over
+the launcher's page (`ui/AchievementList.qml`) — *n / m* and a thin bar over one column of rows,
+each with its description and its date once unlocked or its rarity while locked, the hidden ones
+folded into one last row — over
 `api.screens.dockAchievements`, a store of its own so the page left open in the launcher keeps its
 game; ▲ ▼ move, ▲ past the first lowers it. A shot taken meanwhile lands through the screenshots watcher. The
 Game card's rows call `toLauncher` with their id (`details`, `journal`, `recordings`, `sessions`): the
@@ -627,15 +628,28 @@ the store's promotional shots only (`assets.screenshotList`).
 ## Achievements
 
 `pages/AchievementsPage.qml` (the game menu's Achievements; Switch 2: `switch2/pages/AchievementsPage.qml`,
-a row of Software Options showing *unlocked / total*) reads `api.screens.achievements`
-(`screens/achievements.py`, `achievements(id)` on a worker): the unlocked ones first, the newest on
-top, then the locked ones from the most to the least common, a hidden locked one last and masked
-("Hidden achievement"). Reprise lists them beside a pane — *n of m unlocked*, a bar, when the store
-last answered, then the highlighted one large; Switch 2 groups them under Unlocked and Locked
-headings, the description and rarity under each. X asks the store again (`refresh()`). The store
-follows the game's `libraryChanged`, so an unlock filed while the page is open shows at once. The
-icons are the store's URLs; one that does not load is drawn as a trophy (a lock while locked),
-`ui/AchievementBadge.qml`.
+a row of Software Options showing *unlocked / total*; PS5: `ps5/pages/AchievementsPage.qml`, the
+game's Trophies) reads `api.screens.achievements` (`screens/achievements.py`, `achievements(id)` on a
+worker): the unlocked ones first, the newest on top, then the locked ones from the most to the least
+common. The hidden locked ones are not rows: their `icon_locked` is a greyed copy of the art, so they
+fold into one last row, key `hidden`, carrying their count in `hidden` (*31 hidden achievements*,
+*Keep playing to find out.*, no icon, no rarity; the PS5 look says *trophies*). Each row says a fact
+once: its name over its description, its date once unlocked or its rarity while locked, the row
+dimmed while locked. Reprise lists them in one column under *n / m* and a thin bar
+(`ui/AchievementList.qml`, 80 dp rows, the dock's tray too); Switch 2 as `SettingsRows` (the
+description as the row's `secondary` line, the store's icon, *n / m* in the header); PS5 as wide
+`ps5/ui/TrophyCard.qml` cards under one *n/m · %* line and a gold bar, the console's grade (Common,
+Rare, Very rare, Ultra rare) beside the rarity, Options sorting them (the folded row stays last). X
+(PS5: Options › Ask the Store Again) asks the store again (`refresh()`); when the store last
+answered (`fetchedText`, *4 days ago*) is said there and nowhere else: *Ask the store again ·
+updated 4 days ago* in the hint. ▲ ▼ step, the right stick a screenful, Home and End the first
+and the last. The store follows the game's `libraryChanged`, so an unlock filed while the page is
+open shows at once. The icons are the store's URLs; one that does not load is drawn as a trophy with
+a tick (a lock while locked), `ui/AchievementBadge.qml`, the tick only then.
+
+The desktop's page (`pages/achievements.rs`) is the same list as one boxed group, titled with the
+game, under *n of m Unlocked* and a bar; its refresh button's tooltip says when the store last
+answered.
 
 A game has the menu row once its cache holds a list. The first time a game's detail page (Switch 2:
 its options) opens in a run, `achievements.prime(id, source, total)` asks for it in the background
