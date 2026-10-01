@@ -1187,9 +1187,9 @@ FocusScope {
             var ask = api.screens.components.question(component);
             var game = api.allGames.byId(gameId);
             confirm.ask({
-                message: "Install " + name + " " + version + " to play" + (game ? " " + game.title : "") + "?",
+                message: gameId ? "Install " + name + " " + version + " to play" + (game ? " " + game.title : "") + "?" : ask.message,
                 detail: ask ? ask.detail : "",
-                yes: "Install and play",
+                yes: gameId ? "Install and play" : "Install",
                 no: "Not now"
             }, function (yes) {
                 if (yes)

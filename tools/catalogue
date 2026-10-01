@@ -50,6 +50,8 @@ class Upstream:
     version: str = "tag"
     latest_only: bool = False
     homepage: str = ""
+    # Shown before an install, which waits for it to be accepted.
+    notice: str = ""
 
 
 UPSTREAMS = (
@@ -95,6 +97,8 @@ UPSTREAMS = (
         "forgejo:git.eden-emu.dev/eden-emu/eden",
         (Pick(r"^Eden-Linux-v[\w.]+-amd64-clang-pgo\.AppImage$"), Pick(r"^Eden-Linux-v[\w.]+-aarch64-clang-pgo\.AppImage$", arch="aarch64")),
         tags=r"^v\d+\.\d+\.\d+$",
+        notice="Eden emulates the Nintendo Switch, and Nintendo named it in a DMCA notice in February 2026. "
+        "Universe ships no keys or firmware: you supply your own.",
     ),
     Upstream(
         "rpcs3",
@@ -338,6 +342,11 @@ def main() -> None:
         else:
             print(f"  {up.id}: no build found", file=sys.stderr)
             failed.append(up.id)
+    # Also on the entries kept from --previous: a notice must not wait for its upstream's next good fetch.
+    for up in UPSTREAMS:
+        if up.id in components:
+            kept = {k: v for k, v in components[up.id].items() if k != "notice"}
+            components[up.id] = kept | ({"notice": up.notice} if up.notice else {})
     unchanged = components == previous.get("components") and previous.get("schema") == SCHEMA
     generated_at = previous.get("generated_at") if unchanged else datetime.now(UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
     catalogue = {"schema": SCHEMA, "generated_at": generated_at, "components": dict(sorted(components.items()))}

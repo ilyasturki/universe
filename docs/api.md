@@ -767,7 +767,7 @@ and for a system tool (`gamescope`, `mangohud`, `gpu-screen-recorder`).
 | Rust | Python | CLI | Role |
 |---|---|---|---|
 | `components(refresh)` | `components(refresh=False)` | `universe component ls [--refresh]` | `{catalogue: {url, fetched_at, generated_at, error}, auto_update, components: [Component]}` |
-| `component_install(id, version, progress)` | `component_install(id, version="", progress=None)` | `universe component install <id> [version]` | installs the build, the latest this machine runs for `""`; returns its version |
+| `component_install(id, version, accepted, progress)` | `component_install(id, version="", accepted=False, progress=None)` | `universe component install <id> [version] [--yes]` | installs the build, the latest this machine runs for `""`; returns its version. An entry with a `notice` is `Invalid` until `accepted`: a frontend shows the notice and asks first; the CLI prints it and asks, `--yes` accepts it, and without a terminal (or with `--json`) it refuses |
 | `component_remove(id, version)` | `component_remove(…)` | `universe component remove <id> <version>` | removes one of Universe's builds; `Busy` while something names it (see Updates) |
 | `component_uninstall(id)` | `component_uninstall(id)` | `universe component uninstall <id>` | removes every build Universe holds and `components/<id>/` with them (its skipped versions too); a runner's `build`, or a `launch.proton` naming one of them, is reset first as `component_use(id, "")` would; `Busy` while anything else names one (see Updates), and for a tool while a game runs; returns the versions removed, oldest first |
 | `component_update(id, progress)` | `component_update(id="", progress=None)` | `universe component update [id]` | installs what is newer than Universe's builds, of `id` or of every component it holds builds of, then prunes; `[{id, name, version, error?}]`; `Busy` while a game runs |
@@ -779,7 +779,7 @@ and for a system tool (`gamescope`, `mangohud`, `gpu-screen-recorder`).
 branch, which a daily CI job bumps), cached in `<cache>/catalogue.json`, fetched again once a day
 old or on `refresh`; unreachable, the cache stands in, then the built-in entries (the Proton families
 and the tools Universe pins). `{schema: 1, generated_at, components: {<id>: {name, kind:
-proton|wine|emulator|tool, family?, bin?, homepage?, builds: [{version, date, channel: stable|rolling,
+proton|wine|emulator|tool, family?, bin?, homepage?, notice?, builds: [{version, date, channel: stable|rolling,
 assets: [{arch: x86_64|aarch64|any, variant?: x86_64_v3, url, sha256, size, format:
 appimage|tar|tar.gz|tar.xz|zip|binary, member?, appimage?, program?}]}]}}}`. A build's asset here:
 its arch (or `any`), the `x86_64_v3` variant where the CPU has that level, else the plain one. The
@@ -827,7 +827,7 @@ running game runs on. `components.auto_update` (default true) is for a frontend 
 `component_update("")` itself: daily while it runs, never during a game. A rollback's version is
 written to `components/<id>/.skipped`; installing that version by name takes it off.
 
-`Component` = `{id, name, kind, family, bin, homepage, runner (the id, when a runner ships under
+`Component` = `{id, name, kind, family, bin, homepage, notice (what an install shows first, or ""), runner (the id, when a runner ships under
 it), builds: [{version, origin: universe|nix|system|lutris|steam|heroic|umu|local|config, program,
 managed, in_use, pinned, disk, size, date, installed_at, auto}] (Universe's newest first, then the
 system's), in_use (the build that runs, null when none), latest ({version, date, channel, size}, null

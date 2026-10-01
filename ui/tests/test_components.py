@@ -199,3 +199,34 @@ def test_setup_offers_the_runners_the_library_needs(api, fake):
     wait_for(fake.jobFinished, 5000)
     settle(api.screens.components)
     assert not [r for r in form.rows if r.get("via") == "component"], "installed: nothing left to offer"
+
+
+def test_a_notice_is_put_to_the_user_before_every_install_of_its_component(api, fake):
+    fake._core._component("eden")["builds"] = []
+    notice = fake._core._component("eden")["notice"]
+    form = loaded(api)
+    assert form.confirm(row_of(form, "eden"), "install")["notice"] == notice, "the Components page"
+    assert form.question("eden")["notice"] == notice, "the launch offer and the doctor's install"
+    assert form.confirm(row_of(form, "rpcs3"), "install")["notice"] == ""
+    proposed = []
+    form.installProposed.connect(lambda *args: proposed.append(args))
+    setup = api.screens.onboarding
+    setup.load()
+    settle(setup)
+    settle(form)
+    index = next(i for i, r in enumerate(setup.rows) if r.get("component") == "eden")
+    assert setup.rows[index]["detail"] == notice
+    assert setup.runImport(index) is True
+    assert proposed == [("", "eden", "Eden", "0.2.1")] and form.job is None, "setup asks first, nothing installs yet"
+    assert form.installFor("", "eden") is True
+    _job, ok, _text = wait_for(fake.jobFinished, 5000)
+    assert ok is True
+
+
+def test_the_core_refuses_an_install_whose_notice_was_not_accepted(api, fake):
+    fake.componentInstall("eden", "")
+    _job, ok, _text = wait_for(fake.jobFinished, 5000)
+    assert ok is False
+    fake.componentInstall("eden", "", True)
+    _job, ok, _text = wait_for(fake.jobFinished, 5000)
+    assert ok is True

@@ -234,7 +234,7 @@ class ComponentsForm(RowsForm):
     jobChanged = Signal()
     listingChanged = Signal()
     runnerRequested = Signal(str)
-    # gameId, component id, name, version
+    # gameId (empty: nothing launches after), component id, name, version
     installProposed = Signal(str, str, str, str)
     readyToLaunch = Signal(str)
 
@@ -318,7 +318,9 @@ class ComponentsForm(RowsForm):
     def _install_question(self, component, version, size):
         free = _free_space(self._client.core.data_home())
         parts = [f"{_size(size)} to download" if size else "", f"{_size(free)} free" if free else ""]
-        return _ask(f"Install {component['name']} {version}?", " · ".join(p for p in parts if p), "Install")
+        notice = component.get("notice") or ""
+        detail = "\n\n".join(p for p in (notice, " · ".join(p for p in parts if p)) if p)
+        return {**_ask(f"Install {component['name']} {version}?", detail, "Install"), "notice": notice}
 
     @Slot(int, str, result=bool)
     def act(self, index, action):
@@ -339,7 +341,8 @@ class ComponentsForm(RowsForm):
         if verb in ("install", "update"):
             follow = verb == "install" and c["kind"] != "tool" and c.get("in_use") is not None and not arg
             label = f"Updating {c['name']}" if verb == "update" else f"Installing {c['name']} {arg or _latest(c).get('version', '')}".strip()
-            job = self._client.componentUpdate(ident) if verb == "update" else self._client.componentInstall(ident, arg)
+            # Accepted: every path here showed _install_question, its notice included, first.
+            job = self._client.componentUpdate(ident) if verb == "update" else self._client.componentInstall(ident, arg, True)
             return self._begin(job, c, label, "latest" if follow else "")
         if verb == "use":
             ok = self._client.componentUse(ident, arg)
@@ -395,6 +398,13 @@ class ComponentsForm(RowsForm):
             self.load()
             return False
         return self._act(c, "install")
+
+    def propose(self, ident):
+        c = self._by_id(ident)
+        if c is None or not c.get("notice"):
+            return False
+        self.installProposed.emit("", ident, c["name"], _latest(c).get("version", ""))
+        return True
 
     @Slot(str, str, result=bool)
     def installFor(self, game_id, ident):

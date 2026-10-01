@@ -477,9 +477,9 @@ FocusScope {
             var ask = api.screens.components.question(component);
             var game = api.allGames.byId(gameId);
             dialogAsk({
-                message: "Install " + name + " " + version + " to play" + (game ? " " + game.title : "") + "?",
+                message: gameId ? "Install " + name + " " + version + " to play" + (game ? " " + game.title : "") + "?" : ask.message,
                 detail: ask ? ask.detail : "",
-                buttons: ["Not Now", "Install and Play"]
+                buttons: ["Not Now", gameId ? "Install and Play" : "Install"]
             }, function (i) {
                 if (i === 1)
                     api.screens.components.installFor(gameId, component);

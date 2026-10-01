@@ -241,8 +241,8 @@ class CoreClient(QObject):
         """Raises on a core error."""
         return self._call(self._core.components, refresh) or {}
 
-    def componentInstall(self, ident, version):
-        return self._job("component", ident, lambda progress: self._core.component_install(ident, version, progress))
+    def componentInstall(self, ident, version, accepted=False):
+        return self._job("component", ident, lambda progress: self._core.component_install(ident, version, accepted, progress))
 
     # The job's text names what was updated, "" when nothing was.
     def componentUpdate(self, ident):

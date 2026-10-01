@@ -1594,6 +1594,8 @@ class FakeCore:
         for c in self.components()["components"]:
             if c["proposal"] == "install" and c["kind"] in ("emulator", "wine"):
                 fix = f"universe component install {c['id']} (Settings › Components), or install it, or set runners.{c['id']}.exe"
+                if c.get("notice"):
+                    fix = f"{fix}. {c['notice']}"
                 checks.append(
                     {
                         "check": f"runner-{c['id']}",
@@ -1637,8 +1639,10 @@ class FakeCore:
         out["auto_update"] = (self._config.get("components") or {}).get("auto_update", True)
         return out
 
-    def component_install(self, ident, version="", progress=None):
+    def component_install(self, ident, version="", accepted=False, progress=None):
         c = self._component(ident)
+        if c.get("notice") and not accepted:
+            raise UniverseError("Invalid", f"{c['name']} waits for its notice to be accepted: {c['notice']}")
         if c["kind"] == "system":
             for step in range(1, 5):
                 if progress is not None:
@@ -1686,7 +1690,7 @@ class FakeCore:
             if (ident and c["id"] != ident) or not c["update"]:
                 continue
             follows = bool(c["in_use"] and c["in_use"]["managed"])
-            version = self.component_install(c["id"], c["update"], progress)
+            version = self.component_install(c["id"], c["update"], True, progress)
             with self._lock:
                 live = self._component(c["id"])
                 if follows:

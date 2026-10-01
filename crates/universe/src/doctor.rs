@@ -92,7 +92,8 @@ fn attach_components(out: &mut [Check], config: &Config, packagekit: bool) {
         };
         if !id.is_empty() && (installable(&id) || crate::components::system_tool(&id).is_some()) {
             if !c.ok {
-                c.fix = format!("universe component install {id} (Settings › Components), or {}", c.fix);
+                let notice = catalogue.components.get(&id).map(|e| e.notice.as_str()).filter(|n| !n.is_empty()).map(|n| format!(". {n}")).unwrap_or_default();
+                c.fix = format!("universe component install {id} (Settings › Components), or {}{notice}", c.fix);
             }
             c.component = id;
         }

@@ -33,6 +33,7 @@
     },
     {
       "id": "eden", "name": "Eden", "kind": "emulator", "family": "", "bin": "", "homepage": "https://git.eden-emu.dev/eden-emu/eden", "runner": "eden",
+      "notice": "Eden emulates the Nintendo Switch, and Nintendo named it in a DMCA notice in February 2026. Universe ships no keys or firmware: you supply your own.",
       "builds": [{"version": "0.2.1", "origin": "nix", "program": "/nix/store/fake-eden-0.2.1/bin/eden", "managed": false, "in_use": true, "pinned": false, "disk": 0, "size": 0, "date": "", "installed_at": "", "auto": false}],
       "latest": {"version": "0.2.1", "date": "2026-06-01T19:57:41+02:00", "channel": "stable", "size": 98000000},
       "available": [{"version": "0.2.1", "date": "2026-06-01T19:57:41+02:00", "channel": "stable", "size": 98000000, "installed": false, "skipped": false}],

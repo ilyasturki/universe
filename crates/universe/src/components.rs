@@ -102,6 +102,9 @@ pub struct Entry {
     pub bin: String,
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub homepage: String,
+    /// Shown before an install, which waits for it to be accepted.
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub notice: String,
     #[serde(default)]
     pub builds: Vec<Build>,
 }
@@ -957,13 +960,14 @@ fn rows(catalogue: &Catalogue) -> Vec<(String, Entry)> {
             family: String::new(),
             bin: String::new(),
             homepage: String::new(),
+            notice: String::new(),
             builds: vec![],
         });
     }
     let held: Vec<String> = ids().into_iter().filter(|id| !all.contains_key(id)).collect();
     for id in held {
         if let Some(b) = installed(&id).pop() {
-            all.insert(id, Entry { name: b.name, kind: b.kind, family: b.family, bin: b.bin, homepage: String::new(), builds: vec![] });
+            all.insert(id, Entry { name: b.name, kind: b.kind, family: b.family, bin: b.bin, homepage: String::new(), notice: String::new(), builds: vec![] });
         }
     }
     let mut rows: Vec<(String, Entry)> = all.into_iter().collect();
@@ -1055,7 +1059,7 @@ fn row_json(id: &str, entry: &Entry, config: &Config, usage: &Usage, protons: &[
         _ => String::new(),
     };
     serde_json::json!({
-        "id": id, "name": entry.name, "kind": entry.kind, "family": entry.family, "bin": entry.bin, "homepage": entry.homepage,
+        "id": id, "name": entry.name, "kind": entry.kind, "family": entry.family, "bin": entry.bin, "homepage": entry.homepage, "notice": entry.notice,
         "runner": if spec.is_some() { id } else { "" },
         "builds": builds, "in_use": in_use, "latest": latest.map(build_json), "available": available,
         "update": update_of(&ours, id, entry).map(|b| b.version.clone()).unwrap_or_default(),
@@ -1140,7 +1144,7 @@ fn system_json(tool: &SystemTool, config: &Config, family: crate::distro::Family
         (_, false) => format!("install {} with your package manager", packages.join(" and ")),
     };
     serde_json::json!({
-        "id": tool.id, "name": tool.name, "kind": Kind::System, "family": "", "bin": tool.bin, "homepage": "", "runner": "",
+        "id": tool.id, "name": tool.name, "kind": Kind::System, "family": "", "bin": tool.bin, "homepage": "", "notice": "", "runner": "",
         "builds": build.iter().collect::<Vec<_>>(), "in_use": build, "latest": null, "available": [], "update": "",
         "proposal": if build.is_none() && installable && tool.wanted(config) { "install" } else { "" },
         "used_by": 0, "setting": "", "recent": null, "skipped": [],
@@ -1205,7 +1209,8 @@ impl Core {
         })
     }
 
-    pub async fn component_install(&self, id: &str, version: &str, progress: Option<Progress<'_, '_>>) -> Result<String> {
+    /// `accepted`: the entry's notice was shown and accepted; an entry with one is refused without it.
+    pub async fn component_install(&self, id: &str, version: &str, accepted: bool, progress: Option<Progress<'_, '_>>) -> Result<String> {
         if let Some(tool) = system_tool(id) {
             let _job = self.component_job(id)?;
             crate::packagekit::install(tool.packages(crate::distro::detect()), tool.name, progress).await?;
@@ -1214,6 +1219,9 @@ impl Core {
         let config = self.config.read().await.clone();
         let loaded = load(&config, false).await;
         let entry = Self::entry_of(&loaded, id)?;
+        if !entry.notice.is_empty() && !accepted {
+            return Err(Error::Invalid(format!("{} waits for its notice to be accepted: {}", entry.name, entry.notice)));
+        }
         let build = if version.is_empty() { entry.latest() } else { entry.build(version) }
             .ok_or_else(|| Error::NotFound(format!("{} {version}: no such build in the catalogue", entry.name)))?;
         let job = self.component_job(id)?;
@@ -1440,7 +1448,7 @@ mod tests {
     }
 
     fn entry(name: &str, kind: Kind, builds: Vec<Build>) -> Entry {
-        Entry { name: name.into(), kind, family: String::new(), bin: String::new(), homepage: String::new(), builds }
+        Entry { name: name.into(), kind, family: String::new(), bin: String::new(), homepage: String::new(), notice: String::new(), builds }
     }
 
     fn build(version: &str, date: &str, assets: Vec<Asset>) -> Build {
@@ -1693,6 +1701,50 @@ mod tests {
         assert!(link.symlink_metadata().is_ok());
         core.component_uninstall("gogdl").await.unwrap();
         assert!(link.symlink_metadata().is_err(), "a tool's link in <data>/bin goes with it");
+    }
+
+    #[tokio::test]
+    #[allow(clippy::await_holding_lock)]
+    async fn an_entry_with_a_notice_installs_only_once_it_is_accepted() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = tempfile::tempdir().unwrap();
+        for (var, sub) in [
+            ("UNIVERSE_DATA_HOME", "data"),
+            ("UNIVERSE_CACHE_HOME", "cache"),
+            ("UNIVERSE_STATE_HOME", "state"),
+            ("UNIVERSE_CONFIG_HOME", "config"),
+            ("UNIVERSE_MODULES_PATH", "modules"),
+            ("UNIVERSE_SOURCES_PATH", "sources"),
+        ] {
+            std::fs::create_dir_all(dir.path().join(sub)).unwrap();
+            std::env::set_var(var, dir.path().join(sub));
+        }
+        std::fs::write(dir.path().join("config/config.toml"), "[modules]\nenabled = []\n").unwrap();
+        let base = serve(vec![("/emu.AppImage", FAKE_APPIMAGE.to_vec())]);
+        let image = |name: &str| {
+            let mut e =
+                entry(name, Kind::Emulator, vec![build("1.0", "2026-06-01", vec![asset(Format::AppImage, &format!("{base}/emu.AppImage"), FAKE_APPIMAGE)])]);
+            e.notice = if name == "Eden" { "Bring your own keys.".into() } else { String::new() };
+            e
+        };
+        let catalogue = Catalogue {
+            schema: SCHEMA,
+            generated_at: String::new(),
+            components: BTreeMap::from([("eden".into(), image("Eden")), ("cemu".into(), image("Cemu"))]),
+        };
+        let file = dir.path().join("catalogue.json");
+        std::fs::write(&file, serde_json::to_vec(&catalogue).unwrap()).unwrap();
+        std::env::set_var("UNIVERSE_CATALOGUE", &file);
+        let core = crate::core::Core::open_with(Config::load().unwrap(), crate::host::Host::memory().0).await.unwrap();
+        let listed = core.components(true).await.unwrap();
+        let eden = listed["components"].as_array().unwrap().iter().find(|c| c["id"] == "eden").unwrap();
+        assert_eq!(eden["notice"], "Bring your own keys.");
+
+        assert!(matches!(core.component_install("eden", "", false, None).await, Err(Error::Invalid(_))));
+        assert!(installed("eden").is_empty(), "nothing is downloaded before the notice is accepted");
+        assert_eq!(core.component_install("eden", "", true, None).await.unwrap(), "1.0");
+        assert_eq!(core.component_install("cemu", "", false, None).await.unwrap(), "1.0", "an entry without a notice asks nothing");
+        std::env::remove_var("UNIVERSE_CATALOGUE");
     }
 
     #[test]

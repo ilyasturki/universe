@@ -157,11 +157,11 @@ impl Core {
     fn components(&self, py: Python<'_>, refresh: bool) -> PyResult<Py<PyAny>> {
         self.value(py, |c| c.components(refresh))
     }
-    #[pyo3(signature = (id, version=String::new(), progress=None))]
-    fn component_install(&self, py: Python<'_>, id: String, version: String, progress: Option<Py<PyAny>>) -> PyResult<String> {
+    #[pyo3(signature = (id, version=String::new(), accepted=false, progress=None))]
+    fn component_install(&self, py: Python<'_>, id: String, version: String, accepted: bool, progress: Option<Py<PyAny>>) -> PyResult<String> {
         self.run(py, |c| async move {
             let mut p = progress_of(&progress);
-            c.component_install(&id, &version, p.as_deref_mut()).await
+            c.component_install(&id, &version, accepted, p.as_deref_mut()).await
         })
     }
     fn component_remove(&self, py: Python<'_>, id: String, version: String) -> PyResult<()> {

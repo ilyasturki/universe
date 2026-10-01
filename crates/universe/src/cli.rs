@@ -459,6 +459,9 @@ pub enum ComponentCmd {
         /// Component id (universe component ls)
         id: String,
         version: Option<String>,
+        /// Accept the component's notice without asking
+        #[arg(long, short)]
+        yes: bool,
     },
     /// Remove a build Universe installed
     Remove { id: String, version: String },
@@ -1806,9 +1809,25 @@ async fn component(core: Core, action: ComponentCmd, json: bool) -> anyhow::Resu
             }
             println!("{t}");
         }
-        ComponentCmd::Install { id, version } => {
+        ComponentCmd::Install { id, version, yes } => {
+            let config = core.config.read().await.clone();
+            let loaded = crate::components::load(&config, false).await;
+            let accepted = yes
+                || match loaded.catalogue.components.get(&id).filter(|e| !e.notice.is_empty()) {
+                    None => false,
+                    Some(e) if json || !std::io::IsTerminal::is_terminal(&std::io::stdin()) => {
+                        anyhow::bail!("{}: {}\npass --yes to accept it and install", e.name, e.notice)
+                    }
+                    Some(e) => {
+                        eprintln!("{}", e.notice.yellow());
+                        if !confirm(&format!("install {}?", e.name)) {
+                            return Ok(());
+                        }
+                        true
+                    }
+                };
             let mut p = progress_printer(json);
-            finish(json, core.component_install(&id, version.as_deref().unwrap_or(""), Some(&mut p)).await.map(|v| format!("{id} {v} installed")));
+            finish(json, core.component_install(&id, version.as_deref().unwrap_or(""), accepted, Some(&mut p)).await.map(|v| format!("{id} {v} installed")));
         }
         ComponentCmd::Remove { id, version } => {
             core.component_remove(&id, &version).await?;

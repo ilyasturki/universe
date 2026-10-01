@@ -174,7 +174,11 @@ class Onboarding(RowsForm):
                 busy = self._components.busyOn(component["id"])
                 used = int(component.get("used_by") or 0)
                 row.update(
-                    via="component", component=component["id"], display="Installing…" if busy else _plural(used, "game"), action="" if busy else "Install"
+                    via="component",
+                    component=component["id"],
+                    display="Installing…" if busy else _plural(used, "game"),
+                    action="" if busy else "Install",
+                    detail=component.get("notice") or "",
                 )
                 _add(rows, groups, NEEDED, row, caps=True)
         elif step == "stores":
@@ -228,7 +232,8 @@ class Onboarding(RowsForm):
     def runImport(self, index):
         row = self.row(index)
         if row.get("via") == "component":
-            return not self._components.busyOn(row["component"]) and self._components.installById(row["component"])
+            ident = row["component"]
+            return not self._components.busyOn(ident) and (self._components.propose(ident) or self._components.installById(ident))
         launcher = self._launcher(row.get("key", ""))
         if launcher is None or launcher["state"] or self._busy or not _importable(launcher):
             return False
