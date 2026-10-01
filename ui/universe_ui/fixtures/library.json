@@ -265,7 +265,7 @@
       "available": true,
       "missing": [],
       "settings": [
-        {"key": "enabled", "type": "bool", "default": true, "label": "Record the session", "scope": "game", "dynamic": false, "advanced": false},
+        {"key": "enabled", "type": "bool", "default": true, "label": "Record the session", "description": "Records every session of this game with gpu-screen-recorder.", "scope": "game", "dynamic": false, "advanced": false},
         {
           "key": "source",
           "type": "enum",
@@ -284,6 +284,8 @@
           "type": "enum",
           "default": "av1_10bit",
           "label": "Video codec",
+          "description": "Auto takes the best the GPU encodes; AV1 keeps files small.",
+          "choice_labels": {"auto": "Auto", "av1_10bit": "AV1 10-bit", "av1": "AV1", "hevc_10bit": "HEVC 10-bit", "hevc": "HEVC", "h264": "H.264"},
           "scope": "global",
           "choices": ["av1_10bit", "av1", "hevc", "h264"],
           "dynamic": false,
@@ -293,7 +295,9 @@
           "key": "quality",
           "type": "enum",
           "default": "very_high",
-          "label": "Quality (constant, up to a size ceiling)",
+          "label": "Quality",
+          "description": "Constant quality, held under a bitrate ceiling.",
+          "choice_labels": {"medium": "Medium", "high": "High", "very_high": "Very high", "ultra": "Ultra"},
           "scope": "global",
           "choices": ["medium", "high", "very_high", "ultra"],
           "dynamic": false,
@@ -303,7 +307,9 @@
           "key": "fps",
           "type": "int",
           "default": 60,
-          "label": "Frame rate (auto: the screen's)",
+          "label": "Frame rate",
+          "description": "Auto follows the screen's refresh rate.",
+          "choice_labels": {"auto": "Auto"},
           "scope": "global",
           "choices": ["auto", "120", "90", "60", "30"],
           "dynamic": true,
@@ -313,7 +319,9 @@
           "key": "size",
           "type": "string",
           "default": "native",
-          "label": "Fit the video in (native: no scaling)",
+          "label": "Video size",
+          "description": "The video is scaled down to fit; native keeps the screen's size.",
+          "choice_labels": {"native": "Native"},
           "scope": "global",
           "choices": ["native", "3840x2160", "2560x1440", "1920x1080"],
           "dynamic": false,
@@ -323,7 +331,9 @@
           "key": "container",
           "type": "enum",
           "default": "mkv",
-          "label": "Container (mkv survives a crash, mp4 plays anywhere)",
+          "label": "Container",
+          "description": "MKV survives a crash; MP4 plays anywhere.",
+          "choice_labels": {"mkv": "MKV", "mp4": "MP4"},
           "scope": "global",
           "choices": ["mkv", "mp4"],
           "dynamic": false,
@@ -333,7 +343,9 @@
           "key": "audio",
           "type": "enum",
           "default": "output+input",
-          "label": "Audio tracks captured",
+          "label": "Audio",
+          "description": "Output is what the speakers play; the microphone gets a track of its own.",
+          "choice_labels": {"output": "Output", "output+input": "Output and microphone", "none": "None"},
           "scope": "global",
           "choices": ["output", "output+input", "none"],
           "dynamic": false,
@@ -344,6 +356,7 @@
           "type": "enum",
           "default": "opus",
           "label": "Audio codec",
+          "choice_labels": {"opus": "Opus", "aac": "AAC", "flac": "FLAC"},
           "scope": "global",
           "choices": ["opus", "aac", "flac"],
           "dynamic": false,
@@ -353,18 +366,21 @@
           "key": "audio_bitrate",
           "type": "int",
           "default": "auto",
-          "label": "Audio bitrate (kbps)",
+          "label": "Audio bitrate",
+          "description": "In kbps; auto leaves it to gpu-screen-recorder.",
+          "choice_labels": {"auto": "Auto"},
           "scope": "global",
           "choices": ["auto", "96", "128", "160", "192", "256", "320"],
           "dynamic": false,
           "advanced": true
         },
-        {"key": "min_duration_s", "type": "int", "default": 240, "label": "Minimum duration kept (s)", "scope": "global", "dynamic": false, "advanced": true},
+        {"key": "min_duration_s", "type": "int", "default": 240, "label": "Shortest recording kept", "description": "In seconds; a shorter recording is thrown away.", "scope": "global", "dynamic": false, "advanced": true},
         {
           "key": "window_wait_s",
           "type": "int",
           "default": 60,
-          "label": "Wait for the game's window (s), then record the screen",
+          "label": "Window wait",
+          "description": "In seconds: how long the game's window may take before the pick. Past it, the screen is recorded.",
           "scope": "global",
           "dynamic": false,
           "advanced": true
@@ -373,7 +389,8 @@
           "key": "ffmpeg_video_opts",
           "type": "string",
           "default": "",
-          "label": "gpu-screen-recorder -ffmpeg-video-opts, replacing the quality preset (screen capture)",
+          "label": "FFmpeg video options",
+          "description": "Passed to gpu-screen-recorder as -ffmpeg-video-opts, in place of the quality preset.",
           "scope": "config",
           "dynamic": false,
           "advanced": true
@@ -382,7 +399,8 @@
           "key": "va_encoder_opts",
           "type": "string",
           "default": "",
-          "label": "VA encoder properties (key=value …), replacing the quality preset (window capture)",
+          "label": "VA encoder properties",
+          "description": "key=value pairs replacing the quality preset, for window capture.",
           "scope": "config",
           "dynamic": false,
           "advanced": true
@@ -391,7 +409,8 @@
           "key": "gsr_extra_args",
           "type": "string",
           "default": "",
-          "label": "Extra gpu-screen-recorder arguments (screen capture)",
+          "label": "Extra gpu-screen-recorder arguments",
+          "description": "Appended to gpu-screen-recorder's command line.",
           "scope": "config",
           "dynamic": false,
           "advanced": true
@@ -407,16 +426,17 @@
       "available": true,
       "missing": [],
       "settings": [
-        {"key": "enabled", "type": "bool", "default": true, "label": "Write a journal entry", "scope": "game", "advanced": false},
-        {"key": "language", "type": "enum", "default": "fr", "label": "Language", "scope": "game", "choices": ["fr", "en"], "advanced": false},
-        {"key": "provider", "type": "enum", "default": "", "label": "Writing model", "scope": "global", "choices": ["codex", "openai", "stub"], "required": true, "advanced": false},
-        {"key": "base_url", "type": "string", "default": "https://api.openai.com/v1", "label": "API endpoint", "scope": "global", "advanced": false},
-        {"key": "api_key", "type": "string", "default": "", "label": "API key", "scope": "global", "advanced": false},
+        {"key": "enabled", "type": "bool", "default": true, "label": "Write a journal entry after each session", "description": "From the session's recording and screenshots.", "scope": "game", "advanced": false},
+        {"key": "language", "type": "enum", "default": "fr", "label": "Entry language", "description": "Auto writes in the game's on-screen language.", "choice_labels": {"auto": "Auto", "fr": "French", "en": "English", "es": "Spanish", "de": "German", "it": "Italian", "pt": "Portuguese", "ja": "Japanese"}, "scope": "game", "choices": ["fr", "en"], "advanced": false},
+        {"key": "provider", "type": "enum", "default": "", "label": "Writing model", "description": "The provider that writes the entries.", "choice_labels": {"codex": "Codex", "openai": "OpenAI-compatible API", "stub": "Stub (no model)"}, "scope": "global", "choices": ["codex", "openai", "stub"], "required": true, "advanced": false},
+        {"key": "base_url", "type": "string", "default": "https://api.openai.com/v1", "label": "API endpoint", "description": "For the OpenAI-compatible API.", "scope": "global", "advanced": false},
+        {"key": "api_key", "type": "string", "default": "", "label": "API key", "description": "For the OpenAI-compatible API.", "scope": "global", "advanced": false},
         {
           "key": "model",
           "type": "string",
           "default": "gpt-5.6-sol",
           "label": "Model",
+          "description": "The model the provider is asked for.",
           "scope": "global",
           "choices": [],
           "dynamic": true,
@@ -517,13 +537,13 @@
       "capabilities": ["achievements"],
       "login": {"kind": "code", "hint": "Sign in at the link. The address it lands on ends in code=…: enter what follows code=, or the whole address.", "purpose": "install games"},
       "settings": [
-        {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder (empty: paths.games_root)", "scope": "global", "choices": [], "dynamic": false, "advanced": false},
-        {"key": "scan_dirs", "type": "string", "default": "", "label": "Scanned folders (comma-separated, empty: the install folder)", "scope": "global", "choices": [], "dynamic": false, "advanced": true},
-        {"key": "platform", "type": "enum", "default": "windows", "label": "Depot platform", "scope": "global", "choices": ["windows", "linux"], "dynamic": false, "advanced": false},
-        {"key": "with_dlcs", "type": "bool", "default": true, "label": "Install owned DLCs", "scope": "global", "choices": [], "dynamic": false, "advanced": false},
-        {"key": "auth_path", "type": "path", "default": "~/.config/gogdl/auth.json", "label": "gogdl token file", "scope": "global", "choices": [], "dynamic": false, "advanced": true},
-        {"key": "install_timeout_s", "type": "int", "default": 7200, "label": "Maximum install or update time (s)", "scope": "global", "choices": [], "dynamic": false, "advanced": true},
-        {"key": "achievements", "type": "bool", "default": true, "label": "Achievements (comet stands in for GOG Galaxy)", "scope": "game", "choices": [], "dynamic": false, "advanced": false}
+        {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder", "description": "Empty installs into the library's games folder.", "scope": "global", "choices": [], "dynamic": false, "advanced": false},
+        {"key": "scan_dirs", "type": "string", "default": "", "label": "Scanned folders", "description": "Comma-separated; empty scans the install folder.", "scope": "global", "choices": [], "dynamic": false, "advanced": true},
+        {"key": "platform", "type": "enum", "default": "windows", "label": "Depot platform", "description": "The depot gogdl downloads; a Windows build runs through Proton.", "choice_labels": {"windows": "Windows", "linux": "Linux"}, "scope": "global", "choices": ["windows", "linux"], "dynamic": false, "advanced": false},
+        {"key": "with_dlcs", "type": "bool", "default": true, "label": "Install owned DLCs", "description": "Installs the DLCs you own along with the game.", "scope": "global", "choices": [], "dynamic": false, "advanced": false},
+        {"key": "auth_path", "type": "path", "default": "~/.config/gogdl/auth.json", "label": "gogdl token file", "description": "The token file gogdl writes at login.", "scope": "global", "choices": [], "dynamic": false, "advanced": true},
+        {"key": "install_timeout_s", "type": "int", "default": 7200, "label": "Install time limit", "description": "In seconds; a longer install or update is stopped.", "scope": "global", "choices": [], "dynamic": false, "advanced": true},
+        {"key": "achievements", "type": "bool", "default": true, "label": "Achievements", "description": "Comet stands in for GOG Galaxy, so games unlock theirs.", "scope": "game", "choices": [], "dynamic": false, "advanced": false}
       ]
     },
     {
@@ -541,9 +561,9 @@
       "capabilities": ["achievements", "uninstall"],
       "login": {"kind": "code", "hint": "Sign in at the link, then enter the authorizationCode the page shows, or the whole page.", "purpose": "install games"},
       "settings": [
-        {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder (empty: paths.games_root)", "scope": "global", "choices": [], "dynamic": false, "advanced": false},
+        {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder", "description": "Empty installs into the library's games folder.", "scope": "global", "choices": [], "dynamic": false, "advanced": false},
         {"key": "with_dlcs", "type": "bool", "default": true, "label": "Install owned DLCs", "scope": "global", "choices": [], "dynamic": false, "advanced": false},
-        {"key": "achievements", "type": "bool", "default": true, "label": "Achievements (fetched after each session)", "scope": "game", "choices": [], "dynamic": false, "advanced": false}
+        {"key": "achievements", "type": "bool", "default": true, "label": "Achievements", "description": "Fetched from Epic after each session.", "scope": "game", "choices": [], "dynamic": false, "advanced": false}
       ]
     },
     {
@@ -561,8 +581,8 @@
       "capabilities": ["uninstall"],
       "login": {"kind": "key", "hint": "Open the link, generate an API key, then enter it.", "purpose": "install games"},
       "settings": [
-        {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder (empty: paths.games_root)", "scope": "global", "choices": [], "dynamic": false, "advanced": false},
-        {"key": "platform", "type": "enum", "default": "linux", "label": "Build to install when a game has both", "scope": "global", "choices": ["linux", "windows"], "dynamic": false, "advanced": false}
+        {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder", "description": "Empty installs into the library's games folder.", "scope": "global", "choices": [], "dynamic": false, "advanced": false},
+        {"key": "platform", "type": "enum", "default": "linux", "label": "Build to install when a game has both", "choice_labels": {"linux": "Linux", "windows": "Windows"}, "scope": "global", "choices": ["linux", "windows"], "dynamic": false, "advanced": false}
       ]
     },
     {
@@ -580,8 +600,8 @@
       "capabilities": ["achievements", "uninstall"],
       "login": {"kind": "key", "hint": "With Steam signed in on this machine, open the link, register a key (any domain name will do), then enter it.", "purpose": "list the games you own"},
       "settings": [
-        {"key": "achievements", "type": "bool", "default": true, "label": "Achievements (read from Steam after each session)", "scope": "game", "choices": [], "dynamic": false, "advanced": false},
-        {"key": "shared_prefix", "type": "bool", "default": true, "label": "Share Steam's prefix, and the saves in it (games added from now on)", "scope": "global", "choices": [], "dynamic": false, "advanced": false}
+        {"key": "achievements", "type": "bool", "default": true, "label": "Achievements", "description": "Read from Steam after each session.", "scope": "game", "choices": [], "dynamic": false, "advanced": false},
+        {"key": "shared_prefix", "type": "bool", "default": true, "label": "Share Steam's prefix", "description": "Games added from now on run in Steam's own prefix, with their saves.", "scope": "global", "choices": [], "dynamic": false, "advanced": false}
       ]
     }
   ],

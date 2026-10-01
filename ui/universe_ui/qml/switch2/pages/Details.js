@@ -1,22 +1,6 @@
 .pragma library
 
 var SENTENCES = {
-    "capture.enabled": "Record every session of this game with gpu-screen-recorder.",
-    "capture.cursor": "Draw the cursor in the recording.",
-    "capture.codec": "The video codec of the recordings; AV1 keeps files small on a GPU that encodes it.",
-    "capture.fps": "Frames per second; auto follows the screen's refresh rate.",
-    "capture.microphone": "Mix the microphone into the recording.",
-    "capture.min_duration_s": "Sessions shorter than this are not kept.",
-    "journal.enabled": "Write a journal entry after each session of this game, from its recording and screenshots.",
-    "journal.language": "The language the entries are written in.",
-    "journal.provider": "The model provider that writes the entries.",
-    "journal.model": "The model asked for the entry.",
-    "gog.games_dir": "Where GOG installs games; empty, the library's games folder.",
-    "gog.scan_dirs": "Folders scanned for GOG installs, comma-separated; empty, the install folder.",
-    "gog.platform": "The depot gogdl downloads: Windows builds run through Proton.",
-    "gog.with_dlcs": "Install the DLCs you own along with the game.",
-    "gog.auth_path": "The token file gogdl writes at login.",
-    "gog.install_timeout_s": "An install or update longer than this is stopped.",
     "desktop.hide_cursor": "Hide the desktop cursor while the game runs.",
     "favorite": "Kept in the Favourites group of All Software.",
     "hidden": "Left out of every list; the CLI still sees it.",
@@ -26,8 +10,9 @@ var SENTENCES = {
     "metadata.rawg_id": "The RAWG game the description comes from."
 };
 
+// A module's or a source's row carries its manifest's description; these are the core's own rows.
 function sentence(module, key) {
-    return SENTENCES[(module ? module + "." : "") + key] || SENTENCES[key] || "";
+    return module ? "" : SENTENCES[key] || "";
 }
 
 function withDetail(row, module) {

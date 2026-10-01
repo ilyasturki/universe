@@ -28,5 +28,6 @@ scope = "game"
 key = "guide"
 type = "bool"
 default = false
-label = "Pass the HOME button to the emulator too"
+label = "Share HOME with the emulator"
+description = "The virtual pads also send HOME, for the console's own HOME or PS button. Universe's menu still opens on it."
 scope = "global"

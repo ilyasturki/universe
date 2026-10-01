@@ -2,7 +2,7 @@ api = 2
 id = "controls"
 name = "Emulator controls"
 version = "0.0.9"
-description = "Sets up the emulator's controllers for you at every launch: each pad you hold becomes a player, mapped like the emulator would map it, and HOME, capture and the paddles stay Universe's. It replaces the controller settings made inside the emulator, so a change made there lasts one session; a game's own control profile is kept and moved to the pad you hold. To keep your own mapping, turn this off for that game."
+description = "Maps the pads you hold to the emulator's players at every launch. HOME, capture and the back paddles stay Universe's."
 
 [applies]
 runner_kinds = ["emulator"]
@@ -16,14 +16,17 @@ timeout_s   = 10
 key = "enabled"
 type = "bool"
 default = true
-label = "Set up the emulator's controllers at launch (off: the emulator keeps its own)"
+label = "Set up controllers"
+description = "Map each pad you hold to a player at every launch. Off keeps the controller settings made in the emulator."
 scope = "game"
 
 [[settings]]
 key = "layout"
 type = "enum"
 default = "positional"
-label = "Nintendo face buttons (positional: A on the right, as on a Switch; xbox: A at the bottom)"
+label = "Nintendo button layout"
+description = "Where A sits in Switch, Wii U, 3DS, DS, GBA and SNES games. GameCube and N64 games keep the emulator's own."
+choice_labels = { positional = "Switch (A on the right)", xbox = "Xbox (A at the bottom)" }
 scope = "game"
 choices = ["positional", "xbox"]
 runners = ["eden", "ryujinx", "dolphin", "cemu", "azahar", "melonds", "mgba", "snes9x"]
@@ -32,7 +35,9 @@ runners = ["eden", "ryujinx", "dolphin", "cemu", "azahar", "melonds", "mgba", "s
 key = "wiimote"
 type = "enum"
 default = "nunchuk"
-label = "Wii remote (nunchuk: upright with a nunchuk; sideways: held flat, D-pad and left stick move; classic: Classic Controller)"
+label = "Wii controller"
+description = "The controller a Wii game expects. Most take the Nunchuk; 2D games like New Super Mario Bros. Wii hold the remote sideways."
+choice_labels = { nunchuk = "Remote and Nunchuk", sideways = "Remote sideways", classic = "Classic Controller" }
 scope = "game"
 choices = ["nunchuk", "sideways", "classic"]
 platforms = ["Nintendo Wii"]
@@ -41,7 +46,9 @@ platforms = ["Nintendo Wii"]
 key = "shoulders"
 type = "enum"
 default = "standard"
-label = "Shoulder buttons (standard: as the emulator maps them; swapped: bumpers and triggers exchanged, e.g. GameCube L/R on the bumpers and Z on the triggers)"
+label = "Bumpers and triggers"
+description = "Swapped exchanges the two. GameCube L and R then sit on the bumpers, Z on the triggers."
+choice_labels = { standard = "As on the console", swapped = "Swapped" }
 scope = "game"
 choices = ["standard", "swapped"]
 runners = ["eden", "ryujinx", "dolphin", "cemu", "azahar", "melonds", "mgba", "snes9x", "mupen64plus", "rpcs3", "pcsx2", "duckstation", "ppsspp"]
@@ -50,5 +57,6 @@ runners = ["eden", "ryujinx", "dolphin", "cemu", "azahar", "melonds", "mgba", "s
 key = "guide"
 type = "bool"
 default = false
-label = "Give HOME to the emulator too (capture and paddles always stay Universe's)"
+label = "Share HOME with the emulator"
+description = "The emulator also gets HOME, for the console's own HOME or PS button. Universe's menu still opens on it."
 scope = "global"

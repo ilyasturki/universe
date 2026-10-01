@@ -24,13 +24,16 @@ key = "enabled"
 type = "bool"
 default = true
 label = "Record the session"
+description = "Records every session of this game with gpu-screen-recorder."
 scope = "game"
 
 [[settings]]
 key = "source"
 type = "enum"
 default = "screen"
-label = "Capture (window: picked once in GNOME's dialog)"
+label = "Capture"
+description = "A window is picked once, in the desktop's dialog."
+choice_labels = { screen = "The whole screen", window = "One window" }
 scope = "game"
 choices = ["screen", "window"]
 
@@ -45,7 +48,9 @@ scope = "game"
 key = "codec"
 type = "enum"
 default = "auto"
-label = "Video codec (auto: the best the GPU encodes)"
+label = "Video codec"
+description = "Auto takes the best the GPU encodes; AV1 keeps files small."
+choice_labels = { auto = "Auto", av1_10bit = "AV1 10-bit", av1 = "AV1", hevc_10bit = "HEVC 10-bit", hevc = "HEVC", h264 = "H.264" }
 scope = "global"
 choices = ["auto", "av1_10bit", "av1", "hevc_10bit", "hevc", "h264"]
 
@@ -53,7 +58,9 @@ choices = ["auto", "av1_10bit", "av1", "hevc_10bit", "hevc", "h264"]
 key = "quality"
 type = "enum"
 default = "very_high"
-label = "Quality (constant, up to a size ceiling)"
+label = "Quality"
+description = "Constant quality, held under a bitrate ceiling."
+choice_labels = { medium = "Medium", high = "High", very_high = "Very high", ultra = "Ultra" }
 scope = "global"
 choices = ["medium", "high", "very_high", "ultra"]
 
@@ -61,7 +68,9 @@ choices = ["medium", "high", "very_high", "ultra"]
 key = "fps"
 type = "int"
 default = 60
-label = "Frame rate (auto: the screen's)"
+label = "Frame rate"
+description = "Auto follows the screen's refresh rate."
+choice_labels = { auto = "Auto" }
 scope = "global"
 choices = ["auto", "120", "90", "60", "30"]
 choices_exec = "bin/choices"
@@ -70,7 +79,9 @@ choices_exec = "bin/choices"
 key = "size"
 type = "string"
 default = "native"
-label = "Fit the video in (native: no scaling)"
+label = "Video size"
+description = "The video is scaled down to fit; native keeps the screen's size."
+choice_labels = { native = "Native" }
 scope = "global"
 choices = ["native", "3840x2160", "2560x1440", "1920x1080"]
 
@@ -78,7 +89,9 @@ choices = ["native", "3840x2160", "2560x1440", "1920x1080"]
 key = "container"
 type = "enum"
 default = "mkv"
-label = "Container (mkv survives a crash, mp4 plays anywhere)"
+label = "Container"
+description = "MKV survives a crash; MP4 plays anywhere."
+choice_labels = { mkv = "MKV", mp4 = "MP4" }
 scope = "global"
 choices = ["mkv", "mp4"]
 advanced = true
@@ -87,7 +100,9 @@ advanced = true
 key = "audio"
 type = "enum"
 default = "output"
-label = "Audio tracks captured (output+input adds the microphone)"
+label = "Audio"
+description = "Output is what the speakers play; the microphone gets a track of its own."
+choice_labels = { output = "Output", "output+input" = "Output and microphone", none = "None" }
 scope = "global"
 choices = ["output", "output+input", "none"]
 
@@ -96,6 +111,7 @@ key = "audio_codec"
 type = "enum"
 default = "opus"
 label = "Audio codec"
+choice_labels = { opus = "Opus", aac = "AAC", flac = "FLAC" }
 scope = "global"
 choices = ["opus", "aac", "flac"]
 advanced = true
@@ -104,7 +120,9 @@ advanced = true
 key = "audio_bitrate"
 type = "int"
 default = "auto"
-label = "Audio bitrate (kbps)"
+label = "Audio bitrate"
+description = "In kbps; auto leaves it to gpu-screen-recorder."
+choice_labels = { auto = "Auto" }
 scope = "global"
 choices = ["auto", "96", "128", "160", "192", "256", "320"]
 advanced = true
@@ -113,7 +131,8 @@ advanced = true
 key = "min_duration_s"
 type = "int"
 default = 240
-label = "Minimum duration kept (s)"
+label = "Shortest recording kept"
+description = "In seconds; a shorter recording is thrown away."
 scope = "global"
 advanced = true
 
@@ -121,7 +140,8 @@ advanced = true
 key = "window_wait_s"
 type = "int"
 default = 60
-label = "Wait for the game's window (s) before the pick, then record the screen"
+label = "Window wait"
+description = "In seconds: how long the game's window may take before the pick. Past it, the screen is recorded."
 scope = "global"
 advanced = true
 
@@ -129,7 +149,8 @@ advanced = true
 key = "ffmpeg_video_opts"
 type = "string"
 default = ""
-label = "gpu-screen-recorder -ffmpeg-video-opts, replacing the quality preset"
+label = "FFmpeg video options"
+description = "Passed to gpu-screen-recorder as -ffmpeg-video-opts, in place of the quality preset."
 scope = "config"
 
 [[settings]]
@@ -137,4 +158,5 @@ key = "gsr_extra_args"
 type = "string"
 default = ""
 label = "Extra gpu-screen-recorder arguments"
+description = "Appended to gpu-screen-recorder's command line."
 scope = "config"

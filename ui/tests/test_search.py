@@ -59,8 +59,8 @@ def test_synonyms_descriptions_values_and_typos(api, fake):
         "a word of the description"
     )
     assert search.results[0]["advanced"] is True and search.results[0]["tag"] == "ADVANCED" and search.results[0]["detail"].startswith("Faster thread")
-    search.query = "av1_10bit"
-    assert labels(search)[0] == ("Modules › Video capture", "Video codec", "av1_10bit"), "the current value"
+    search.query = "av1 10-bit"
+    assert labels(search)[0] == ("Modules › Video capture", "Video codec", "AV1 10-bit"), "the current value, as its label reads"
     search.query = "wyland"
     assert [r["label"] for r in search.results] == ["Wayland", "Wayland"], "a typo"
     search.query = "hud"

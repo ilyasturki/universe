@@ -17,32 +17,37 @@ hint = "Open the link, generate an API key, then enter it."
 key = "games_dir"
 type = "path"
 default = ""
-label = "Install folder (empty: paths.games_root)"
+label = "Install folder"
+description = "Empty installs into the library's games folder."
 
 [[settings]]
 key = "platform"
 type = "enum"
 default = "linux"
 label = "Build to install when a game has both"
+choice_labels = { linux = "Linux", windows = "Windows" }
 choices = ["linux", "windows"]
 
 [[settings]]
 key = "db_path"
 type = "path"
 default = ""
-label = "butler's database (empty: the source's own)"
+label = "butler's database"
+description = "Empty keeps the source's own."
 advanced = true
 
 [[settings]]
 key = "adopt_from"
 type = "path"
 default = "~/.config/itch/db/butler.db"
-label = "The itch app's database, whose install folders a scan adopts"
+label = "Adopt installs from"
+description = "The itch app's database; a scan takes over the install folders it lists."
 advanced = true
 
 [[settings]]
 key = "install_timeout_s"
 type = "int"
 default = 7200
-label = "Maximum install or update time (s)"
+label = "Install time limit"
+description = "In seconds; a longer install or update is stopped."
 advanced = true

@@ -247,9 +247,10 @@ def test_source_form(api, fake):
     )
     assert [rows[i]["key"] for g in form.advancedGroups for i in g["rows"]] == ["scan_dirs", "auth_path", "install_timeout_s"]
     platform = index_of(form, "platform")
-    assert rows[platform]["choices"] == ["windows", "linux"]
-    assert form.setValue(platform, "linux") is True
-    until(lambda: form.rows[index_of(form, "platform")]["value"] == "linux")
+    assert rows[platform]["choiceValues"] == ["windows", "linux"]
+    linux = rows[platform]["choices"][1]
+    assert form.setValue(platform, linux) is True
+    until(lambda: form.rows[index_of(form, "platform")]["value"] == linux)
     assert fake.getSourceSettings("gog")["platform"] == "linux"
     form.toggle(0)
     until(lambda: form.info["enabled"] is False)
@@ -321,7 +322,7 @@ def test_module_form_choices(api, fake):
     form = api.screens.module
     form.load("capture")
     rows = rows_by_key(form, "capture")
-    assert rows["fps"]["type"] == "int" and rows["fps"]["choices"] == ["auto", "120", "90", "60", "30"]
+    assert rows["fps"]["type"] == "int" and rows["fps"]["choiceValues"] == ["auto", "120", "90", "60", "30"]
     form.load("journal")
     until(
         lambda: rows_by_key(form, "journal").get("model", {}).get("choices") == ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.5"],
@@ -329,9 +330,10 @@ def test_module_form_choices(api, fake):
     )
     form.load("capture")
     fps = index_of(form, "fps")
-    assert form.setValue(fps, "auto") is True
+    auto = form.rows[fps]["choices"][0]
+    assert form.setValue(fps, auto) is True
     assert fake.getSettings("capture", "")["fps"] == "auto"
-    assert form.rows[fps]["display"] == "auto"
+    assert form.rows[fps]["display"] == auto, "the stored value reads as its label"
 
 
 def test_launch_form(api, fake):

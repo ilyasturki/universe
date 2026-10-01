@@ -21,14 +21,16 @@ timeout_s    = 40
 key = "achievements"
 type = "bool"
 default = true
-label = "Achievements (fetched after each session)"
+label = "Achievements"
+description = "Fetched from Epic after each session."
 scope = "game"
 
 [[settings]]
 key = "games_dir"
 type = "path"
 default = ""
-label = "Install folder (empty: paths.games_root)"
+label = "Install folder"
+description = "Empty installs into the library's games folder."
 
 [[settings]]
 key = "with_dlcs"
@@ -40,26 +42,30 @@ label = "Install owned DLCs"
 key = "anticheat_runtimes"
 type = "bool"
 default = true
-label = "Easy Anti-Cheat and BattlEye runtimes for Proton (fetched from Lutris)"
+label = "Anti-cheat runtimes"
+description = "Easy Anti-Cheat and BattlEye for Proton, fetched from Lutris."
 advanced = true
 
 [[settings]]
 key = "config_path"
 type = "path"
 default = "~/.config/legendary"
-label = "legendary's folder (login, installed games)"
+label = "legendary's folder"
+description = "Where legendary keeps its login and installed games."
 advanced = true
 
 [[settings]]
 key = "adopt_from"
 type = "path"
 default = "~/.config/heroic/legendaryConfig/legendary"
-label = "Another legendary's folder whose installs a scan adopts (Heroic's)"
+label = "Adopt installs from"
+description = "Another legendary's folder, Heroic's by default, whose installs a scan takes over."
 advanced = true
 
 [[settings]]
 key = "install_timeout_s"
 type = "int"
 default = 7200
-label = "Maximum install or update time (s)"
+label = "Install time limit"
+description = "In seconds; a longer install or update is stopped."
 advanced = true

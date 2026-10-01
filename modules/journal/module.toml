@@ -21,13 +21,16 @@ key = "enabled"
 type = "bool"
 default = true
 label = "Write a journal entry after each session"
+description = "From the session's recording and screenshots."
 scope = "game"
 
 [[settings]]
 key = "language"
 type = "enum"
 default = "auto"
-label = "Entry language (auto = the game's on-screen language)"
+label = "Entry language"
+description = "Auto writes in the game's on-screen language."
+choice_labels = { auto = "Auto", fr = "French", en = "English", es = "Spanish", de = "German", it = "Italian", pt = "Portuguese", ja = "Japanese" }
 scope = "game"
 choices = ["auto", "fr", "en", "es", "de", "it", "pt", "ja"]
 
@@ -36,6 +39,8 @@ key = "provider"
 type = "enum"
 default = ""
 label = "Writing model"
+description = "The provider that writes the entries."
+choice_labels = { codex = "Codex", openai = "OpenAI-compatible API", stub = "Stub (no model)" }
 scope = "global"
 required = true
 choices = ["codex", "openai", "stub"]
@@ -45,7 +50,8 @@ requires_bins = { codex = ["codex"] }
 key = "model"
 type = "string"
 default = ""
-label = "Model name passed to the provider"
+label = "Model"
+description = "The model the provider is asked for."
 scope = "global"
 choices_exec = "bin/choices"
 
@@ -53,21 +59,24 @@ choices_exec = "bin/choices"
 key = "base_url"
 type = "string"
 default = "https://api.openai.com/v1"
-label = "API endpoint (OpenAI-compatible provider)"
+label = "API endpoint"
+description = "For the OpenAI-compatible API."
 scope = "global"
 
 [[settings]]
 key = "api_key"
 type = "string"
 default = ""
-label = "API key (OpenAI-compatible provider)"
+label = "API key"
+description = "For the OpenAI-compatible API."
 scope = "global"
 
 [[settings]]
 key = "api_key_file"
 type = "path"
 default = ""
-label = "File holding the API key, read instead of the key above"
+label = "API key file"
+description = "Read in place of the API key."
 scope = "global"
 
 [[settings]]
@@ -83,6 +92,7 @@ key = "effort"
 type = "enum"
 default = "high"
 label = "Reasoning effort"
+choice_labels = { minimal = "Minimal", low = "Low", medium = "Medium", high = "High" }
 scope = "global"
 advanced = true
 choices = ["minimal", "low", "medium", "high"]
@@ -91,7 +101,8 @@ choices = ["minimal", "low", "medium", "high"]
 key = "attempts"
 type = "int"
 default = 2
-label = "Tries per session before the entry is put off"
+label = "Tries per session"
+description = "Past them, the entry is put off."
 scope = "global"
 advanced = true
 
@@ -115,7 +126,8 @@ advanced = true
 key = "frame_long_edge"
 type = "int"
 default = 1568
-label = "Long edge of the frames extracted from the recording, in pixels"
+label = "Frame size"
+description = "The long edge of the frames taken from the recording, in pixels."
 scope = "global"
 advanced = true
 
@@ -123,6 +135,7 @@ advanced = true
 key = "prompt_file"
 type = "path"
 default = ""
-label = "File whose text replaces the built-in writing prompt"
+label = "Prompt file"
+description = "Its text replaces the built-in writing prompt."
 scope = "global"
 advanced = true
