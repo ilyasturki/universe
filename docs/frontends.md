@@ -32,8 +32,9 @@ One context property, `api`:
 | `api.system` | what logind will do with the machine: `actions`, the ones of `suspend`, `reboot` and `power_off` it would carry out (the core's `power_actions()`, read once at startup), `run(action)` (`power(action)` off the UI thread; `reboot` and `power_off` stop a running session first, so its `session-end` runs before the machine goes down), `failed(action, message)` when logind refuses. `--fake` records the call and does nothing. `steam`: the launcher runs in Steam's Game Mode (the core's `under_steam()`): no power actions (the menu keeps Quit Universe alone, and says Steam's menu has the rest), no Sound section, no dock over a game, no MangoHud, frame limit or Pause on HOME rows. `deck`: `lcd` or `oled` on a Steam Deck. `controls`: the core's `system_controls()`, read after `apply_system()` at startup and on `reload()`; `set(id, value)` shows the value at once and writes it off the UI thread, a refusal raising `controlFailed(id, message)` and reading the machine back; `control(id)` one of them. Reprise lists them under Settings › System and in the dock's System group (a step writes once the cursor rests, 400 ms), Switch 2 under System Settings › Performance, the PS5 look under Settings › Performance and in the Control Center's System panel; `ui/Controls.js` turns one into rows any look uses. `--fake` lists an OLED Deck's under `UNIVERSE_DECK`, and plays Game Mode under `GAMESCOPE_WAYLAND_DISPLAY` with `UNIVERSE_FAKE_STEAM=1` |
 | `api.screens` | data for the added screens (settings, sources, media, the folder picker, the controller, the journals being written, a game's sessions and their logs) |
 | `api.fullscreen` | whether the host runs fullscreen (the default; `--windowed` and `--size` turn it off) |
-| `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `frame`, `ground`, `detail`), `current`, `frame`, `set(id)`, `landing` / `takeLanding()`, `fontPath` (the current look's own font file, stored under `<id>Font`: `switch2Font`, `ps5Font`), `soundsPath` (a folder of WAVs, stored under `<id>Sounds`) and `soundFiles` (`{name: url}` of the WAVs in it, the name lowercased: each replaces the look's bundled sound of that name, `sound/SoundPool.qml`'s `overrides`; Switch 2 offers it in Settings › Themes) |
+| `api.theme` | the looks: `themes` (`id`, `name`, `entry`, `overlay`, `frame`, `ground`, `detail`), `current`, `frame`, `set(id)`, `landing` / `takeLanding()`, `fontPath` (the current look's own font file, stored under `<id>Font`: `switch2Font`, `ps5Font`), `soundsPath` (a folder of WAVs, stored under `<id>Sounds`) and `soundFiles` (`{name: url}` of the WAVs in it, the name lowercased: each replaces the look's bundled sound of that name, `sound/SoundPool.qml`'s `overrides`; Switch 2 offers it in Settings › Themes), `bootIntro` (the startup animation's switch, every look's: on until `ui-memory.json`'s `bootIntro` is false) |
 | `api.home` | the HOME button over a running game (see "HOME and the dock"): `shown` (`game` / `launcher`), `underGame` (the game is on screen over the launcher, inside gamescope), `open`, `loading` (a session this client launched has no window up yet), `paused`, `pauseOnHome`, `flipped`, `frame`, `volumePercent`, `muted`, `outputs` (`loadOutputs()` fills it); `pressed()`, `stopping(title)`; `openDock()`, `closeDock()`, `dockClosed()`, `toGame()`, `toLauncher(landing?)` / `takeLanding()`, `covered()`, `stop()`, `setPauseOnHome(on)`, `screenshot()` (→ `screenshotTaken(path)`), `volume(change, value)`, `setOutput(id)`, `launchValue(key)`, `launchChoices(key)`, `setLaunchValue(key, value)`, `screenRefresh()` |
+| `api.boot` | the startup animation (see "Startup animation"): `running`, `started()` (its first frame is on screen), `skipped()`, `landed(skipped)` (the mark is done: each look builds its home), `land()`, `finish()` |
 
 A `Game` exposes `id`, `title`, `sortTitle`, `favorite` (writable), `hidden`, `playTime`,
 `playCount`, `lastPlayed`, `releaseYear`, `developerList`, `publisherList`, `genreList`, `players`,
@@ -165,6 +166,41 @@ visible game (`loadAll()`, over `sessions("")`), which the Switch 2 look shows a
 and the PS5 look as its Media Gallery and Journal;
 the Album lays `api.screens.shots` (`loadAll()`) on the same grid, newest first, a Show pick
 narrowing it to screenshots or videos, A on a shot opening it full-screen (◀ ▶ step between shots).
+
+## Startup animation
+
+A fullscreen start opens on the Universe mark: `ui/Boot.qml`, in `main.qml` over the theme's
+`Loader` and outside it, so a theme switch never replays it. It lasts about 1.2 s and covers no
+wait: the app is ready in about 250 ms. On `api.theme.ground`, the controller ring
+sweeps in from edge-on, the planet rises inside it and the wordmark settles
+(`qml/assets/brand/`, the icon split into `ring-back`, `planet` and `ring-front` layers, and the
+wordmark for a light or a dark ground); under the software scenegraph (offscreen) the whole mark
+only fades in. Then `api.boot.land()` emits `landed(false)` and the layer fades out over each look
+building its home: PS5 runs its back-from-a-game `home.rebuild()`, Reprise brings in the backdrop,
+the page and the bars in turn (`backdropReveal`, `pageReveal`, `chromeReveal` on its root), Switch 2
+slides its row in and settles its bars (`rowReveal`, `chromeReveal`). Each root blanks those parts
+in `Component.onCompleted` while `api.boot.running`, and only then runs `start()`, its Themes
+landing or the first-run setup, which otherwise runs there at once.
+
+The animation starts on the window's first swapped frame (`started`), not when QML loads, so a
+compositor slow to map the window loses none of it. It plays the look's `boot.wav` (each look's
+`assets/sounds/generate.py` synthesizes it, quieter than the look's other cues;
+`api.theme.soundFiles.boot` from the look's sound folder replaces it), unless the output is muted.
+
+While `running`, the input is the intro's: `api.keys`' window filter swallows every key, click,
+touch and wheel, and `api.home` the HOME button, so focus moves under the layer as usual but nothing
+reaches the look. The first press skips it (`skipped`, then `landed(true)`: each look shows its home
+at once, no reveal), and its release, autorepeats included, is swallowed after `running` ends; a held
+B starts no power-menu hold. `finish()` ends it once the layer is gone, and `CAP_MS` (4 s after the
+first frame) ends it whatever the layer does.
+
+`host.boot_wanted` decides whether a start plays it: fullscreen, not `--fake` or `--keys`, not a
+restart in place after a wedge (`UNIVERSE_UI_RESTARTS`), no session running, not inside Steam's
+Game Mode (Steam played its own). So the tests (`Api(boot=False)` by default), `just ui-shot` and
+`just ui-record` (`--size`, `--keys`) never see it. `--boot` and `--no-boot` force it on or off for
+one run, the hook for a session chain that covers the machine's boot itself (Plymouth hands over to
+gamescope, whose first frame is the intro's). Settings › Themes › Startup animation (`boot_intro`,
+`api.theme.bootIntro`) turns it off in every look, and wins over `--boot`.
 
 ## Changes
 
@@ -947,7 +983,8 @@ as a dialog over what is on screen — Reprise as `pages/OnboardingPage.qml` (`o
 with `{ setup: true }`, which keeps the tabs visible under it), the Switch 2 look as
 `switch2/pages/OnboardingPage.qml` on its stack (a page whose `overlay` is true leaves the layer
 under it in view), the PS5 look as `ps5/pages/OnboardingPage.qml` on its stack, and on an empty
-library its home row leads with Set Up and Add a Game; Settings › About › "First-run setup" opens it
+library its home row leads with Set Up and Add a Game — after the startup animation, when one plays
+(`start()`, on `api.boot.landed`); Settings › About › "First-run setup" opens it
 again, and so does the empty Home's "Set up" — a second pill beside "Add a game" in Reprise's hero
 band, a second disc beside the plus in the Switch 2 HOME row — shown while the library is empty,
 whatever the flag says. `load()` asks the core everything in one call off the UI thread —

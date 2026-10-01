@@ -18,6 +18,8 @@ closes the session when its cgroup empties. While a game runs the launcher
 stays home with the game pinned first: A resumes it, its menu quits it.
 B held opens the power menu: quit the launcher, suspend, reboot or power off
 the machine; Settings › About shows its build and opens the same menu.
+A fullscreen start opens on the Universe mark for about a second; any button
+skips it, and Settings › Themes › Startup animation turns it off.
 
 The gamepad acts only while the launcher has the desktop's focus: with another
 app in front its presses are dropped, and HOME brings the launcher up instead
@@ -38,6 +40,12 @@ whatever has the focus.
 
 *--no-gamepad*
 	Do not open the SDL2 gamepad; keyboard only.
+
+*--boot*, *--no-boot*
+	Open on the startup animation, or not, for this run. By default only a
+	fullscreen start plays it: not windowed, under *--fake* or *--keys*, after a
+	restart in place, with a game already running or inside Steam's Game Mode.
+	Settings › Themes › Startup animation, when off, wins over *--boot*.
 
 *--fake*
 	A fixture library instead of the core, for UI work.
