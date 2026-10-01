@@ -611,6 +611,14 @@ fn clear_slot(dir: &Path, slot: &str) -> bool {
     gone
 }
 
+/// A logo sits over the background: GamesDB's is at times an opaque poster. A file the decoder cannot read passes.
+fn see_through(path: &Path) -> bool {
+    match image::ImageReader::open(path).ok().and_then(|r| r.with_guessed_format().ok()).map(|r| r.decode()) {
+        Some(Ok(img)) => img.color().has_alpha() && img.to_rgba8().pixels().any(|p| p.0[3] < 255),
+        _ => true,
+    }
+}
+
 /// A square from the cover: the cover whole over a blurred, darkened fill of itself.
 fn compose_square(cover: &Path, dest: &Path) -> crate::Result<()> {
     use image::imageops::{self, FilterType};
@@ -853,18 +861,26 @@ impl<'a> Lookup<'a> {
                 if appid == 0 {
                     return vec![];
                 }
-                let (key, file) = match slot {
-                    "box_front" => ("library_capsule", "library_600x900.jpg"),
-                    "background" => ("library_hero", "library_hero.jpg"),
-                    "banner" => ("header_2x", "header.jpg"),
-                    _ => return vec![steam_file(appid, "logo.png")],
+                // The unhashed library_600x900.jpg is 300×450: its _2x is the 600×900.
+                let (keys, files): (&[&str], &[&str]) = match slot {
+                    "box_front" => (&["library_capsule_2x", "library_capsule"], &["library_600x900_2x.jpg", "library_600x900.jpg"]),
+                    "background" => (&["library_hero"], &["library_hero.jpg"]),
+                    "banner" => (&["header_2x", "header"], &["header.jpg"]),
+                    _ => (&[], &["logo.png"]),
                 };
-                if slot != "banner" && !all {
-                    return vec![steam_file(appid, file)];
+                let mut list = Vec::new();
+                if slot == "banner" || (all && !keys.is_empty()) {
+                    if let Some(items) = self.items(appid).await {
+                        list.extend(keys.iter().find_map(|k| steam_asset(&items, k)));
+                    }
                 }
-                let items = self.items(appid).await;
-                let found = items.as_ref().and_then(|i| steam_asset(i, key).or_else(|| if slot == "banner" { steam_asset(i, "header") } else { None }));
-                vec![found.unwrap_or_else(|| steam_file(appid, file))]
+                let unhashed = files.iter().map(|f| steam_file(appid, f));
+                if !all {
+                    list.extend(unhashed);
+                } else if list.is_empty() {
+                    list.extend(unhashed.take(1));
+                }
+                list
             }
             "gamesdb" if STORE_SLOTS.contains(&slot) => {
                 let Some(g) = self.gamesdb().await else { return vec![] };
@@ -892,6 +908,10 @@ impl<'a> Lookup<'a> {
             for url in self.urls(provider, slot, false).await {
                 let part = dir.join(format!(".{slot}.part"));
                 match self.net.download(&url, &part).await {
+                    Ok(()) if slot == "logo" && !see_through(&part) => {
+                        let _ = std::fs::remove_file(&part);
+                        tracing::debug!("{} logo from {provider}: opaque, a picture rather than a logo", self.game.id);
+                    }
                     Ok(()) => {
                         clear_slot(dir, slot);
                         if std::fs::rename(&part, dir.join(format!("{slot}.{}", ext_of(&url)))).is_ok() {
@@ -1288,6 +1308,13 @@ mod tests {
         std::fs::write(p, b"\x89PNG").unwrap();
     }
 
+    fn logo() -> Vec<u8> {
+        let img = image::RgbaImage::from_fn(64, 30, |x, _| image::Rgba([200, 40, 40, if x < 8 { 0 } else { 255 }]));
+        let mut out = std::io::Cursor::new(Vec::new());
+        img.write_to(&mut out, image::ImageFormat::Png).unwrap();
+        out.into_inner()
+    }
+
     fn png(w: u32, h: u32) -> Vec<u8> {
         let img = image::RgbImage::from_fn(w, h, |x, y| image::Rgb([(x % 251) as u8, (y % 251) as u8, 90]));
         let mut out = std::io::Cursor::new(Vec::new());
@@ -1331,9 +1358,9 @@ mod tests {
         vec![
             (steam_items_url(appid), fixture(&format!("steam-getitems-{appid}.json"))),
             (steam_details_url(appid), fixture(&format!("steam-appdetails-{appid}.json"))),
-            (steam_file(appid, "library_600x900.jpg"), png(60, 90)),
+            (steam_file(appid, "library_600x900_2x.jpg"), png(60, 90)),
             (steam_file(appid, "library_hero.jpg"), png(192, 62)),
-            (steam_file(appid, "logo.png"), png(64, 30)),
+            (steam_file(appid, "logo.png"), logo()),
             (header, png(92, 43)),
         ]
     }
@@ -1458,7 +1485,8 @@ mod tests {
         note_source_art(&game.media_dir(), &art, 0).unwrap();
         let mut answers = steam_answers(1145360);
         answers.push((format!("{GAMESDB}/platforms/epic/external_releases/Min"), fixture("gamesdb-epic-Min.json")));
-        answers.extend(art.values().map(|u| (u.clone(), png(40, 60))));
+        answers.push((art["box_front"].clone(), png(40, 60)));
+        answers.push((art["logo"].clone(), logo()));
         let net = saved(answers);
 
         refresh_with(&net, &keyless(), &game, false).await.unwrap();
@@ -1466,7 +1494,7 @@ mod tests {
         assert_eq!((got["box_front"].as_str(), got["logo"].as_str()), ("epic", "epic"));
         assert_eq!((got["banner"].as_str(), got["background"].as_str()), ("steam", "steam"));
         assert!(game.media_dir().join("box_front.jpg").is_file());
-        assert!(!asked(&net).contains(&steam_file(1145360, "library_600x900.jpg")), "the store's cover came first");
+        assert!(!asked(&net).iter().any(|u| u.contains("library_600x900")), "the store's cover came first");
     }
 
     #[tokio::test]
@@ -1480,15 +1508,14 @@ mod tests {
         let search = format!("{GAMESDB}/games?title={}", encode("The Legend of Zelda - A Link to the Past"));
         let mut item = json_of("gamesdb-search-super-mario-world.json")["items"][1].clone();
         item["title"] = serde_json::json!({"*": "The Legend of Zelda: A Link to the Past"});
-        item["logo"] = Value::Null;
         let mut answers = gamesdb_answers(&item);
         answers.push((search, serde_json::to_vec(&serde_json::json!({"items": [item]})).unwrap()));
-        let logo = libretro_url(&game, "logo").unwrap();
+        let retro_logo = libretro_url(&game, "logo").unwrap();
         assert_eq!(
-            logo,
+            retro_logo,
             "https://thumbnails.libretro.com/Nintendo%20-%20Super%20Nintendo%20Entertainment%20System/Named_Logos/Legend%20of%20Zelda%2C%20The%20-%20A%20Link%20to%20the%20Past%20%28USA%29.png"
         );
-        answers.push((logo, png(64, 30)));
+        answers.push((retro_logo, logo()));
         let net = saved(answers);
 
         refresh_with(&net, &keyless(), &game, false).await.unwrap();
@@ -1496,7 +1523,7 @@ mod tests {
         for slot in ["box_front", "banner", "background", "description", "screenshots"] {
             assert_eq!(got.get(slot).map(String::as_str), Some("gamesdb"), "{slot}");
         }
-        assert_eq!(got["logo"], "libretro");
+        assert_eq!(got["logo"], "libretro", "GamesDB's opaque poster is no logo");
         assert_eq!(Game::load(&game.toml_path()).unwrap().title, "The Legend of Zelda: A Link to the Past");
     }
 
