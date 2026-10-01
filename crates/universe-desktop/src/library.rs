@@ -1,11 +1,13 @@
 use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap};
+use std::path::PathBuf;
 
 use adw::prelude::*;
 use gtk::gio;
 
 use crate::backend;
 use crate::game::{GameObject, Row};
+use universe::library::Resolved;
 
 /// Every game the window shows, one object per game for as long as it stays, so a bound widget follows it.
 pub struct Library {
@@ -44,15 +46,21 @@ impl Library {
         self.listeners.borrow_mut().push(Box::new(f));
     }
 
-    /// `ids` empty reads the whole library again; otherwise those games only, a missing one leaving.
+    /// `ids` empty reads the whole library again; otherwise those games and the ones on their prefix, a missing one leaving.
     pub async fn refresh(&self, ids: &[String]) {
         let whole = ids.is_empty();
         let wanted: Vec<String> = ids.to_vec();
         let rows = backend::run(async move {
             let core = backend::core();
-            let prefixes = core.config.read().await.prefixes_root();
+            let config = core.config.read().await.clone();
             let games = core.games.read().await;
-            games.iter().filter(|r| r.game.removed_at.is_empty() && (whole || wanted.contains(&r.game.id))).map(|r| Row::of(r, &prefixes)).collect::<Vec<Row>>()
+            let prefix = |r: &Resolved| universe::launcher::prefix_of(&r.game, &config);
+            let touched: Vec<PathBuf> = games.iter().filter(|r| wanted.contains(&r.game.id)).map(prefix).collect();
+            games
+                .iter()
+                .filter(|r| r.game.removed_at.is_empty() && (whole || wanted.contains(&r.game.id) || touched.contains(&prefix(r))))
+                .map(|r| Row::of(r, &games, &config))
+                .collect::<Vec<Row>>()
         })
         .await;
         let present: BTreeSet<String> = rows.iter().map(|r| r.id.clone()).collect();

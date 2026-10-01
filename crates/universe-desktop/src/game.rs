@@ -35,7 +35,7 @@ pub struct Row {
     /// Where the game's files are: its install folder, else the folder of its program or ROM.
     pub folder: String,
     pub store_id: String,
-    /// The prefix it names or the one its launch made, on disk and under `prefixes_root`: a store's is not Universe's to trash.
+    /// The prefix it names or the one its launch made, on disk, under `prefixes_root` and no other library game's: a store's is not Universe's to trash.
     pub has_prefix: bool,
     pub has_install: bool,
 }
@@ -58,7 +58,7 @@ fn unix(rfc3339: &str) -> i64 {
 }
 
 impl Row {
-    pub fn of(r: &Resolved, prefixes_root: &std::path::Path) -> Row {
+    pub fn of(r: &Resolved, games: &[Resolved], config: &universe::config::Config) -> Row {
         let slot = |name: &str| r.media.iter().find(|(s, _)| s == name).map(|(_, p)| p.clone()).unwrap_or_default();
         let g = &r.game;
         Row {
@@ -91,8 +91,9 @@ impl Row {
             },
             store_id: g.source.id.clone(),
             has_prefix: !r.effective.prefix.is_empty()
-                && std::path::Path::new(&r.effective.prefix).starts_with(prefixes_root)
-                && std::path::Path::new(&r.effective.prefix).is_dir(),
+                && std::path::Path::new(&r.effective.prefix).starts_with(config.prefixes_root())
+                && std::path::Path::new(&r.effective.prefix).is_dir()
+                && universe::launcher::prefix_sharer(g, games, config).is_none(),
             has_install: !g.source.dir.is_empty() && universe::paths::expand(&g.source.dir).is_dir(),
         }
     }
@@ -226,5 +227,26 @@ mod tests {
     fn an_uninstall_names_the_store_that_removes_the_files() {
         assert!(uninstall_body(Some("Steam")).starts_with("Steam removes its files."));
         assert!(uninstall_body(None).starts_with("Its install folder goes to the trash."));
+    }
+
+    #[test]
+    fn a_prefix_another_library_game_shares_is_not_offered_to_purge() {
+        let root = tempfile::tempdir().unwrap();
+        let config = universe::config::Config {
+            paths: universe::config::Paths { prefixes_root: root.path().to_string_lossy().into(), ..Default::default() },
+            ..Default::default()
+        };
+        let game = |id: &str, prefix: &str| {
+            std::fs::create_dir_all(root.path().join(prefix)).unwrap();
+            let mut game = universe::game::Game::new(id);
+            game.launch.prefix = root.path().join(prefix).to_string_lossy().into();
+            let effective = universe::library::Effective { prefix: game.launch.prefix.clone(), ..Default::default() };
+            Resolved { game, effective, ..Default::default() }
+        };
+        let mut games = [game("one", "kh"), game("two", "kh"), game("own", "own")];
+        let offered = |games: &[Resolved]| games.iter().filter(|r| Row::of(r, games, &config).has_prefix).map(|r| r.game.id.clone()).collect::<Vec<_>>();
+        assert_eq!(offered(&games), ["own"]);
+        games[0].game.removed_at = "2026-10-01T00:00:00+02:00".into();
+        assert_eq!(offered(&games), ["two", "own"], "a removed game no longer holds it");
     }
 }

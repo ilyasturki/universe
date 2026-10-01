@@ -110,12 +110,18 @@ fn env_bin() -> String {
     crate::runners::on_path("env").map(|p| p.to_string_lossy().to_string()).unwrap_or_else(|| "env".into())
 }
 
-pub(crate) fn prefix_of(g: &crate::game::Game, config: &Config) -> PathBuf {
+pub fn prefix_of(g: &crate::game::Game, config: &Config) -> PathBuf {
     if g.launch.prefix.is_empty() {
         config.prefixes_root().join(&g.id)
     } else {
         crate::paths::expand(&g.launch.prefix)
     }
+}
+
+/// Another game in the library whose prefix is `g`'s too: a removed one no longer holds it.
+pub fn prefix_sharer<'a>(g: &crate::game::Game, games: &'a [crate::library::Resolved], config: &Config) -> Option<&'a crate::game::Game> {
+    let prefix = prefix_of(g, config);
+    games.iter().map(|r| &r.game).find(|x| x.id != g.id && x.removed_at.is_empty() && prefix_of(x, config) == prefix)
 }
 
 fn dll_overrides_env(g: &crate::game::Game, env: &mut BTreeMap<String, String>) {

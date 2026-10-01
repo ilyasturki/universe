@@ -391,6 +391,12 @@ impl Core {
     pub async fn remove(&self, id: &str, purge: bool) -> Result<()> {
         let r = self.get(id).await?;
         let config = self.config.read().await.clone();
+        let prefix = crate::launcher::prefix_of(&r.game, &config);
+        if purge && prefix.starts_with(config.prefixes_root()) {
+            if let Some(other) = crate::launcher::prefix_sharer(&r.game, &self.games.read().await, &config) {
+                return Err(Error::Invalid(format!("refusing to trash {}: {} uses it too", prefix.display(), other.id)));
+            }
+        }
         let root = config.recordings_root();
         let from = root.join(id);
         if from.is_dir() {
@@ -408,7 +414,6 @@ impl Core {
             if logs.is_dir() && trash(&logs).is_err() {
                 tracing::warn!("trash {} failed; left in place", logs.display());
             }
-            let prefix = crate::launcher::prefix_of(&r.game, &config);
             // Only a prefix under prefixes_root is Universe's: a store's (Steam's compatdata) or an imported one stays.
             if prefix.starts_with(config.prefixes_root()) && prefix.is_dir() && trash(&prefix).is_err() {
                 tracing::warn!("trash {} failed; left in place", prefix.display());
@@ -2460,6 +2465,30 @@ install) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":t
         core.remove("own", true).await.unwrap();
         assert!(store.is_dir(), "the store's prefix stays");
         assert!(!prefixes.join("own").exists(), "Universe's own goes to the trash");
+    }
+
+    #[tokio::test]
+    async fn a_purge_keeps_a_prefix_another_library_game_shares() {
+        let _env = crate::paths::ENV_LOCK.lock().unwrap();
+        let dir = fake_source("");
+        let prefixes = dir.path().join("prefixes");
+        std::fs::write(dir.path().join("config/config.toml"), format!("[paths]\nprefixes_root = \"{}\"\n[modules]\nenabled = []\n", prefixes.display()))
+            .unwrap();
+        std::env::set_var("XDG_DATA_HOME", dir.path().join("share"));
+        let both = prefixes.join("kh");
+        std::fs::create_dir_all(&both).unwrap();
+        for title in ["One", "Two"] {
+            let mut g = Game::new(title);
+            g.launch.prefix = both.to_string_lossy().into();
+            g.save().unwrap();
+        }
+        let core = open().await;
+        assert!(matches!(core.remove("one", true).await, Err(Error::Invalid(_))));
+        assert!(both.is_dir(), "the shared prefix stays");
+        assert!(core.list().await.iter().any(|g| g["id"] == "one"), "a refused purge removes nothing");
+        core.remove("one", false).await.unwrap();
+        core.remove("two", true).await.unwrap();
+        assert!(!both.exists(), "a removed game no longer holds it");
     }
 
     #[tokio::test]

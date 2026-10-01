@@ -22,3 +22,6 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 
 [build-dependencies]
 glib-build-tools = "0.22"
+
+[dev-dependencies]
+tempfile = "3"
