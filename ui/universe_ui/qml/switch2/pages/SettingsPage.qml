@@ -468,6 +468,7 @@ FocusScope {
                     label: api.theme.affiliation,
                     key: "affiliation",
                     type: "info",
+                    wraps: true,
                     display: "",
                     detail: api.theme.trademarks
                 },

@@ -387,6 +387,7 @@ FocusScope {
                 key: "affiliation",
                 label: api.theme.affiliation,
                 type: "info",
+                wraps: true,
                 detail: api.theme.trademarks
             });
             groups.push({

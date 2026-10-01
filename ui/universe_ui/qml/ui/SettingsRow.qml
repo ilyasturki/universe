@@ -11,8 +11,9 @@ Item {
     property real baseHeight: Theme.dp(66)
 
     readonly property bool info: entry.type === "info"
-    // A failed check reads whole: what is wrong and what to do wrap under the label, and the row grows to hold them.
-    readonly property bool explains: info && entry.fix !== undefined && entry.fix !== ""
+    // A failed check reads whole: what is wrong and what to do wrap under the label, and the row grows to hold them; a `wraps` notice too.
+    readonly property bool hasFix: entry.fix !== undefined && entry.fix !== ""
+    readonly property bool explains: info && (hasFix || entry.wraps === true)
     readonly property real naturalHeight: explains ? notes.y + notes.height + Theme.dp(20) : baseHeight
     readonly property bool hasSwitch: entry.switch === true
     // A pad button reads its macros by name, the hold one marked, and nothing without one; with no code it keeps "Unbound".
@@ -369,6 +370,7 @@ Item {
 
             Rectangle {
                 anchors.verticalCenter: parent.verticalCenter
+                visible: row.entry.wraps !== true
                 width: Theme.dp(14)
                 height: width
                 radius: width / 2
@@ -397,6 +399,7 @@ Item {
 
         Text {
             width: parent.width
+            visible: row.hasFix
             text: "<b>To fix:</b> " + row.esc(row.entry.fix || "")
             textFormat: Text.StyledText
             wrapMode: Text.Wrap

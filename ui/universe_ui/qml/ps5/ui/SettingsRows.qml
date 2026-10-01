@@ -39,7 +39,7 @@ FocusScope {
             return 0;
         if (r.heading)
             return headingHeight;
-        if (r.fix)
+        if (r.fix || r.wraps)
             return rowHeight + (fixHeights[i] !== undefined ? fixHeights[i] : detailLine);
         return rowHeight + (r.detail ? detailLine : 0);
     }
@@ -260,7 +260,8 @@ FocusScope {
                 readonly property bool disabled: entry.disabled === true
                 readonly property bool info: entry.type === "info"
                 readonly property bool hasDetail: entry.detail !== undefined && entry.detail !== ""
-                readonly property bool explains: entry.fix !== undefined && entry.fix !== ""
+                readonly property bool hasFix: entry.fix !== undefined && entry.fix !== ""
+                readonly property bool explains: hasFix || entry.wraps === true
                 readonly property bool hasGlyph: entry.slot !== undefined && String(entry.slot) !== "" && entry.family !== undefined
                 // An icon naming a file (a runner's logo) is drawn whole; a bare name is a Glyph kind.
                 readonly property bool iconIsFile: entry.icon !== undefined && entry.icon !== null && String(entry.icon).indexOf("/") >= 0
@@ -503,6 +504,7 @@ FocusScope {
 
                             Rectangle {
                                 anchors.verticalCenter: parent.verticalCenter
+                                visible: row.entry.wraps !== true
                                 width: Theme.dp(34)
                                 height: width
                                 radius: width / 2
@@ -560,6 +562,7 @@ FocusScope {
 
                         Label {
                             width: parent.width
+                            visible: row.hasFix
                             text: "<b>To fix:</b> " + row.esc(row.entry.fix || "")
                             textFormat: Text.StyledText
                             wrapMode: Text.Wrap
