@@ -81,6 +81,9 @@ pub struct Controller {
     rows: RefCell<Vec<adw::ActionRow>>,
     hold: adw::ComboRow,
     step: adw::ComboRow,
+    home: adw::SwitchRow,
+    /// The window this page shows in, watched while the page is open: losing the focus stops what reads the pad.
+    active_watch: RefCell<Option<(gtk::Window, glib::SignalHandlerId)>>,
     watcher: RefCell<Option<Watcher>>,
     state: RefCell<Value>,
     devices: RefCell<Vec<Value>>,
@@ -293,6 +296,7 @@ impl Controller {
         if let Some(index) = STEPS.iter().position(|s| state["volume_step"].as_f64().map(|v| v.round() as u64) == Some(*s)) {
             self.step.set_selected(index as u32);
         }
+        self.home.set_active(state["home_summons"].as_bool() != Some(false));
         self.syncing.set(false);
     }
 
@@ -337,6 +341,17 @@ impl Controller {
 
     fn start(self: &Rc<Self>) {
         self.open.set(true);
+        if self.active_watch.borrow().is_none() {
+            if let Some(window) = self.page.root().and_downcast::<gtk::Window>() {
+                let this = Rc::downgrade(self);
+                let id = window.connect_is_active_notify(move |window| {
+                    if !window.is_active() {
+                        this.upgrade().inspect(|t| t.focus_lost());
+                    }
+                });
+                self.active_watch.replace(Some((window, id)));
+            }
+        }
         if self.watcher.borrow().is_some() {
             return;
         }
@@ -355,6 +370,9 @@ impl Controller {
 
     fn stop(&self) {
         self.open.set(false);
+        if let Some((window, id)) = self.active_watch.take() {
+            window.disconnect(id);
+        }
         self.stop_walk();
         self.stop_learning();
         self.test.set_active(false);
@@ -468,6 +486,17 @@ impl Controller {
         }
     }
 
+    /// Another window has the focus: a press made there is not for the test, a learn or the walk.
+    fn focus_lost(&self) {
+        if self.walk.borrow().is_some() || !self.learning.borrow().is_empty() {
+            self.send(json!({"cmd": "cancel"}));
+        }
+        self.stop_walk();
+        self.stop_learning();
+        self.test.set_active(false);
+        self.each_art(|art| art.clear_input());
+    }
+
     fn stop_learning(&self) -> bool {
         if self.learning.borrow().is_empty() {
             return false;
@@ -550,10 +579,10 @@ impl Controller {
         });
     }
 
-    fn set_timing(self: &Rc<Self>, key: &str, value: u64) {
+    fn set_config(self: &Rc<Self>, key: &str, value: String) {
         let (this, key) = (Rc::downgrade(self), key.to_string());
         glib::spawn_future_local(async move {
-            let result = backend::call(move |core| async move { core.set_setting(&key, &value.to_string()).await }).await;
+            let result = backend::call(move |core| async move { core.set_setting(&key, &value).await }).await;
             let Some(this) = this.upgrade() else { return };
             match result {
                 Ok(()) => this.changed(),
@@ -1029,6 +1058,10 @@ pub fn page(dialog: &adw::PreferencesDialog) -> Rc<Controller> {
     let timing = adw::PreferencesGroup::builder().title(gettext("Timing")).build();
     timing.add(&hold);
     timing.add(&step);
+    let home =
+        adw::SwitchRow::builder().title(gettext("HOME Opens Universe")).subtitle(gettext("HOME pressed in another app brings Big Screen to the front")).build();
+    let big_screen = adw::PreferencesGroup::builder().title(gettext("Big Screen")).build();
+    big_screen.add(&home);
 
     let remembered = {
         let family = State::load().controller_family;
@@ -1051,6 +1084,8 @@ pub fn page(dialog: &adw::PreferencesDialog) -> Rc<Controller> {
         rows: RefCell::default(),
         hold: hold.clone(),
         step: step.clone(),
+        home: home.clone(),
+        active_watch: RefCell::default(),
         watcher: RefCell::default(),
         state: RefCell::new(Value::Null),
         devices: RefCell::default(),
@@ -1072,6 +1107,7 @@ pub fn page(dialog: &adw::PreferencesDialog) -> Rc<Controller> {
     page.add(&pad);
     page.add(&buttons);
     page.add(&timing);
+    page.add(&big_screen);
 
     let weak: Weak<Controller> = Rc::downgrade(&this);
     test.connect_active_notify(move |row| {
@@ -1106,13 +1142,19 @@ pub fn page(dialog: &adw::PreferencesDialog) -> Rc<Controller> {
     let weak = Rc::downgrade(&this);
     hold.connect_selected_notify(move |row| {
         if let Some(this) = weak.upgrade().filter(|t| !t.syncing.get()) {
-            this.set_timing("controller.hold_ms", HOLDS[row.selected() as usize % HOLDS.len()]);
+            this.set_config("controller.hold_ms", HOLDS[row.selected() as usize % HOLDS.len()].to_string());
         }
     });
     let weak = Rc::downgrade(&this);
     step.connect_selected_notify(move |row| {
         if let Some(this) = weak.upgrade().filter(|t| !t.syncing.get()) {
-            this.set_timing("controller.volume_step", STEPS[row.selected() as usize % STEPS.len()]);
+            this.set_config("controller.volume_step", STEPS[row.selected() as usize % STEPS.len()].to_string());
+        }
+    });
+    let weak = Rc::downgrade(&this);
+    home.connect_active_notify(move |row| {
+        if let Some(this) = weak.upgrade().filter(|t| !t.syncing.get()) {
+            this.set_config("controller.home_summons", row.is_active().to_string());
         }
     });
     let weak = Rc::downgrade(&this);
