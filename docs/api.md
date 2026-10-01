@@ -1648,7 +1648,15 @@ One JSON object per line on stdout, human-readable logs on stderr, meaningful ex
 `launch.runner` and the platform while the game has no runner of its own; without one the game runs
 through Proton. A `game` may also carry `prefix` and `proton`, the absolute paths of the prefix the
 store keeps for it and of the Proton the store runs it with, which a game entering the library takes
-as its own. The core writes `library.json` (the last `library` run's games) in the source's data dir after every listing; a source reads it for ownership and writes nothing there itself.
+as its own. A `game` may carry `steam_appid` (the game's Steam app id, a number or its digits:
+Steam's CDN art, store page and screenshots for it, whatever the store) and `art`, slot (`box_front`,
+`square`, `banner`, `background`, `logo`) → the URL of the store's own picture for it, which the
+next `media_refresh` takes before any other provider; both land in the game's `media/.sync.json`
+(`source_appid`, `source_art`), not in `game.toml`. `image` is the store listing's picture and no
+more. The **steam** source hands `steam_appid`; **epic** its `keyImages` as `art` (`DieselGameBoxTall`
+the box front, `DieselGameBox` the background, `DieselGameBoxLogo` the logo); **gog** a catalogue
+hit's `coverVertical` as the box front — its library has only a wide picture, so a GOG game's art
+comes from GOG GamesDB by its id. The core writes `library.json` (the last `library` run's games) in the source's data dir after every listing; a source reads it for ownership and writes nothing there itself.
 
 Any verb may emit `{"event":"window","class":"steam","title":"Install"}` before it waits on the
 user in another program's window: the one whose `WM_CLASS` class is `class`, titled `title`, else

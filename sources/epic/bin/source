@@ -39,6 +39,11 @@ ADOPT_RETRY_S = 3600
 ANTICHEAT_DEPTH = 3
 ANTICHEATS = (("easyanticheat", "eac_runtime", "PROTON_EAC_RUNTIME"), ("battleye", "battleye_runtime", "PROTON_BATTLEYE_RUNTIME"))
 IMAGE_TYPES = ("DieselGameBoxTall", "DieselGameBox", "OfferImageTall", "Thumbnail")
+ART_TYPES = {
+    "box_front": ("DieselGameBoxTall", "OfferImageTall"),
+    "background": ("DieselGameBox", "OfferImageWide", "DieselStoreFrontWide"),
+    "logo": ("DieselGameBoxLogo", "ProductLogo"),
+}
 
 _child = None
 
@@ -245,8 +250,10 @@ def attribute(game, key):
 
 def facts(game):
     images = {i.get("type"): i.get("url") for i in (game.get("metadata") or {}).get("keyImages") or [] if isinstance(i, dict)}
+    art = {slot: url for slot, types in ART_TYPES.items() if (url := next((images[t] for t in types if images.get(t)), None))}
     return {
         "image": next((images[t] for t in IMAGE_TYPES if images.get(t)), None),
+        "art": art,
         "folder": attribute(game, "FolderName") or game.get("app_name"),
         "owned_dlcs": [d["app_name"] for d in game.get("dlcs") or [] if isinstance(d, dict) and d.get("app_name")],
     }
@@ -349,6 +356,7 @@ def game_event(settings, app, title, owned, install=None, known=None, installs=N
         image=known.get("image"),
         folder=known.get("folder"),
         owned_dlcs=known.get("owned_dlcs") or [],
+        **({"art": known["art"]} if known.get("art") else {}),
         **fields,
     )
 

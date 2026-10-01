@@ -330,6 +330,11 @@ def product_image(product):
     return (product or {}).get("coverVertical") or image or None
 
 
+def product_art(product):
+    product = product or {}
+    return product.get("art") or ({"box_front": product["coverVertical"]} if product.get("coverVertical") else None)
+
+
 def fetch_build(settings, game_id):
     data = fetch(BUILDS_URL.format(id=game_id, platform=settings["platform"]))
     items = [b for b in data.get("items") or [] if b.get("branch") is None]
@@ -468,6 +473,7 @@ def game_event(game_id, title, owned, install=None, product=None, partials=None)
         dlcs=install["dlcs"] if install else [],
         release_year=product_year(product),
         image=product_image(product),
+        **({"art": art} if (art := product_art(product)) else {}),
         **fields,
     )
 

@@ -1838,6 +1838,12 @@ impl Core {
             game.launch.exe = p.to_string_lossy().into();
         }
         game.save()?;
+        let art: BTreeMap<String, String> =
+            g.get("art").and_then(|v| v.as_object()).into_iter().flatten().filter_map(|(slot, url)| Some((slot.clone(), url.as_str()?.to_string()))).collect();
+        let steam_appid = g.get("steam_appid").and_then(|v| v.as_u64().or_else(|| v.as_str()?.parse().ok())).unwrap_or(0);
+        if let Err(e) = crate::media::note_source_art(&game.media_dir(), &art, steam_appid) {
+            tracing::warn!("{}: art from {source} not kept: {e}", game.id);
+        }
         self.reload_game(&game.id).await?;
         Ok(Some(game.id))
     }
@@ -2431,6 +2437,24 @@ install) echo '{"event":"game","id":"2","title":"New","owned":true,"installed":t
         assert!(core.list().await.iter().any(|g| g["id"] == "new"), "back from the archive");
         assert_eq!((back["removed"].as_bool(), back["hidden"].as_bool()), (Some(false), Some(false)));
         assert!(back["added_at"].as_str().unwrap() >= first.as_str(), "re-stamped");
+    }
+
+    #[tokio::test]
+    async fn a_games_art_and_steam_app_id_from_its_store_wait_for_the_next_refresh() {
+        let _dir = fake_source(
+            r#"scan) echo '{"event":"game","id":"9","title":"Art","owned":true,"installed":true,"dir":"/g/Art","exe":"a.exe","steam_appid":"367520","art":{"box_front":"https://x/tall.jpg","logo":"https://x/logo.png","cover":"https://x/no.png"}}' ;;"#,
+        );
+        let core = open().await;
+        core.source_scan("fake", None).await.unwrap();
+        let game = core.get("art").await.unwrap().game;
+        let sync: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(game.media_dir().join(".sync.json")).unwrap()).unwrap();
+        assert_eq!(sync["source_appid"], 367520);
+        assert_eq!(
+            sync["source_art"],
+            serde_json::json!({"box_front": "https://x/tall.jpg", "logo": "https://x/logo.png"}),
+            "a slot the core has not is dropped"
+        );
+        assert_eq!(game.metadata.steam_appid, 0, "the store's word is not a pin");
     }
 
     #[tokio::test]

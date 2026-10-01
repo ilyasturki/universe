@@ -616,6 +616,7 @@ def installed_event(settings, root, appinfo, appid, lib, manifest, owned, title)
         dlcs=[],
         release_year=release_year(app),
         image=IMAGE_URL.format(id=appid),
+        steam_appid=int(appid),
         disk_size=number(manifest, "SizeOnDisk") or None,
         store="steam",
         umu_id=f"umu-{appid}",
@@ -646,6 +647,7 @@ def listed_event(appid, title, owned, partial=None):
         dlcs=[],
         release_year=None,
         image=IMAGE_URL.format(id=appid),
+        steam_appid=int(appid),
         **(partial or {}),
     )
 

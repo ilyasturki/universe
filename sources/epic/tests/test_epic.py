@@ -280,11 +280,13 @@ def test_library_lists_what_installs_and_leaves_the_rest_out(src, env, capsys):
         "image": "https://x/tall.jpg",
         "folder": "Hades",
         "owned_dlcs": ["MinDlc"],
+        "art": {"box_front": "https://x/tall.jpg"},
         "disk_size": 4194304,
         "store": "egs",
         "umu_id": "umu-1145360",
     }
     assert events[1]["installed"] is False and events[1]["image"] is None and events[1]["folder"] == "Cat"
+    assert "art" not in events[1], "a title without key images hands no art"
     assert ["list", "--json"] in calls(env)
 
 

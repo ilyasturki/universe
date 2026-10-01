@@ -335,7 +335,7 @@ def test_search(src, env, capsys, monkeypatch):
     assert seen == [(f"{src.CATALOG_URL}?query=like%3Amini%20metro&productType=in%3Agame&limit=20", None)]
     assert [e["event"] for e in events] == ["game", "game", "done"]
     assert events[0]["owned"] is True and events[0]["installed"] is True and events[0]["release_year"] == 2015
-    assert events[0]["image"] == "https://x/mm.jpg"
+    assert events[0]["image"] == "https://x/mm.jpg" and events[0]["art"] == {"box_front": "https://x/mm.jpg"}
     assert events[1]["owned"] is False and events[1]["installed"] is False
 
 

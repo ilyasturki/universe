@@ -383,6 +383,7 @@ def test_scan_reports_the_games_of_every_library_and_leaves_the_tools_out(src, e
         "dlcs": [],
         "release_year": None,
         "image": src.IMAGE_URL.format(id=480),
+        "steam_appid": 480,
         "disk_size": 1906055,
         "store": "steam",
         "umu_id": "umu-480",
@@ -427,7 +428,7 @@ def test_library_lists_the_owned_games_with_the_installed_ones(src, env, capsys,
     code, events, _ = run(src, capsys, "library")
     assert code == 0 and [e["id"] for e in events[:-1]] == ["620", "480"]
     portal, spacewar = events[0], events[1]
-    assert (portal["installed"], portal["owned"], portal["image"]) == (False, True, src.IMAGE_URL.format(id=620))
+    assert (portal["installed"], portal["owned"], portal["image"], portal["steam_appid"]) == (False, True, src.IMAGE_URL.format(id=620), 620)
     assert (spacewar["installed"], spacewar["exe"]) == (True, "SteamworksExample.exe")
     monkeypatch.setattr(src, "fetch", lambda url: {"response": {}})
     code, events, err = run(src, capsys, "library")
