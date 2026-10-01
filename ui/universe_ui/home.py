@@ -588,4 +588,5 @@ class Home(QObject):
     volumeOutput = Property(str, lambda self: str(self._volume.get("output") or ""), notify=volumeChanged)
     osd = Property(bool, lambda self: self._osd, notify=osdChanged)
     bannersWaiting = Property(int, lambda self: len(self._waiting), notify=bannersWaitingChanged)
+    bannerMs = Property(int, lambda self: BANNER_MS, constant=True)
     outputs = Property(list, lambda self: list(self._outputs), notify=outputsChanged)

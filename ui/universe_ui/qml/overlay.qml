@@ -60,8 +60,9 @@ Window {
                         duration: 220
                         easing.type: Easing.OutCubic
                     }
+                    // The fades and a margin: the whole card sits inside the overlay's lift.
                     PauseAnimation {
-                        duration: 4300
+                        duration: api.home.bannerMs - 700
                     }
                     NumberAnimation {
                         target: card
