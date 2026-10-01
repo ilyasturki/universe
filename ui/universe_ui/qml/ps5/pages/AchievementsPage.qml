@@ -102,6 +102,7 @@ FocusScope {
         }).concat([
             {
                 label: "Ask the Store Again",
+                detail: store.fetchedText !== "" ? "Updated " + store.fetchedText : "",
                 glyph: "refresh",
                 gap: true
             }
@@ -182,7 +183,7 @@ FocusScope {
         anchors.right: parent.right
         game: page.game
         title: "Trophies"
-        trailing: page.store.loading ? "Asking the store…" : page.store.fetchedText !== "" ? "From the store on " + page.store.fetchedText : ""
+        trailing: page.store.loading ? "Asking the store…" : ""
     }
 
     Row {

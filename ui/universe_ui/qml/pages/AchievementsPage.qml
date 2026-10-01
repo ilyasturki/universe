@@ -18,7 +18,7 @@ FocusScope {
     readonly property var hints: [
         {
             glyph: "X",
-            label: "Ask the store again",
+            label: "Ask the store again" + (store.fetchedText !== "" ? " · updated " + store.fetchedText : ""),
             dim: store.loading
         },
         {

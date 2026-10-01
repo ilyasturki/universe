@@ -4,6 +4,7 @@ from PySide6.QtCore import QObject, Signal, Slot
 
 from ..qt import QVARIANT, Property
 from .media import _when
+from .sources import _age
 
 
 def _moment(value):
@@ -145,7 +146,7 @@ class AchievementsList(QObject):
     count = Property(int, lambda self: len(self._rows), notify=rowsChanged)
     total = Property(int, lambda self: self._total, notify=rowsChanged)
     unlocked = Property(int, lambda self: self._unlocked, notify=rowsChanged)
-    fetchedText = Property(str, lambda self: _when(self._fetched_at) if self._fetched_at else "", notify=rowsChanged)
+    fetchedText = Property(str, lambda self: _age(self._fetched_at) if self._fetched_at else "", notify=rowsChanged)
     gameId = Property(str, lambda self: self._game_id, notify=gameIdChanged)
     loading = Property(bool, lambda self: self._loading, notify=stateChanged)
     error = Property(str, lambda self: self._error, notify=stateChanged)

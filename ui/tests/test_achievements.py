@@ -21,12 +21,13 @@ def test_the_store_orders_unlocks_first_and_folds_the_hidden_ones(api, fake):
     assert rows[4]["rarityText"] == "2.1% of players"
     folded = rows[-1]
     assert folded["hidden"] == 1 and folded["icon"] == "" and folded["rarity"] < 0 and "Freeze" not in folded["description"]
-    assert store.fetchedText == "20 Sep 2026 · 21:14"
+    fetched = store.fetchedText
+    assert fetched
 
     store.refresh()
     assert store.loading
     until(lambda: not store.loading)
-    assert store.fetchedText != "20 Sep 2026 · 21:14", "asked the store again"
+    assert store.fetchedText != fetched, "asked the store again"
 
 
 def test_every_hidden_locked_one_folds_into_one_last_row():

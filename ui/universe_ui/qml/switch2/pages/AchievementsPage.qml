@@ -19,7 +19,7 @@ FocusScope {
         },
         {
             glyph: "X",
-            label: "Update"
+            label: "Ask the store again" + (store.fetchedText !== "" ? " · updated " + store.fetchedText : "")
         }
     ]
 
