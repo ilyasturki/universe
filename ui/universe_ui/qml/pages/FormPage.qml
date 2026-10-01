@@ -263,7 +263,7 @@ FocusScope {
             login.begin(source);
         } else if (row.key === "code" && source !== "") {
             Sound.panel();
-            editor.prompt("Code from " + (info ? info.name : source), "", function (code) {
+            editor.prompt(row.prompt, "", function (code) {
                 login.submit(code);
             });
         } else if (row.key === "add_file") {

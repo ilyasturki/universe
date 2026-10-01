@@ -9,6 +9,11 @@ capabilities = ["achievements", "uninstall"]
 [requires]
 bins = ["steam"]
 
+[login]
+kind = "key"
+hint = "With Steam signed in on this machine, open the link, register a key (any domain name will do), then enter it."
+purpose = "list the games you own"
+
 [hooks]
 pre-launch   = "bin/pre-launch"
 post-process = "bin/post-process"

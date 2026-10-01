@@ -9,6 +9,10 @@ capabilities = ["uninstall"]
 [requires]
 bins = ["butler"]
 
+[login]
+kind = "key"
+hint = "Open the link, generate an API key, then enter it."
+
 [[settings]]
 key = "games_dir"
 type = "path"

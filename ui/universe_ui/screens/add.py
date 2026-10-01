@@ -4,7 +4,7 @@ from PySide6.QtCore import Signal, Slot
 
 from ..qt import QVARIANT, Property
 from .runners import _found, suggested_title
-from .settings import RowsForm, _group, _row
+from .settings import RowsForm, _group, _row, login_words
 
 LINUX_EXTENSIONS = {"", "sh", "x86_64", "x86", "appimage"}
 
@@ -26,7 +26,8 @@ def _source_status(source):
     if not source.get("available", True) or not source.get("enabled", True):
         return "Not set up", "Set up"
     if not source.get("logged_in"):
-        return "Sign in to install games", "Sign in"
+        words = login_words(source)
+        return words["signed_out"], words["go"]
     user = source.get("user") or ""
     return f"Signed in as {user}" if user else "Signed in", "Open"
 

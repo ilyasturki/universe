@@ -26,6 +26,29 @@ pub struct Manifest {
     pub hooks: BTreeMap<String, toml::Value>,
     pub limits: Limits,
     pub settings: Vec<Setting>,
+    pub login: Login,
+}
+
+/// How a frontend words the store's sign-in: `kind` is `code` (the page shows a code once signed in) or `key` (the
+/// page makes an API key), `hint` how to get it, `purpose` what signing in is for.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+#[serde(default)]
+pub struct Login {
+    pub kind: String,
+    pub hint: String,
+    pub purpose: String,
+}
+
+impl Login {
+    fn to_json(&self) -> serde_json::Value {
+        let key = self.kind == "key";
+        let or = |own: &str, default: &str| if own.is_empty() { default.to_string() } else { own.to_string() };
+        serde_json::json!({
+            "kind": if key { "key" } else { "code" },
+            "hint": or(&self.hint, if key { "Open the link, make a key, then enter it." } else { "Open the link, sign in, then enter the code it shows." }),
+            "purpose": or(&self.purpose, "install games"),
+        })
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -79,6 +102,7 @@ impl Source {
             "capabilities": self.manifest.capabilities,
             "hooks": hooks,
             "settings": self.manifest.settings.iter().map(modules::setting_json).collect::<Vec<_>>(),
+            "login": self.manifest.login.to_json(),
         })
     }
 
@@ -266,6 +290,16 @@ choices = ["windows", "linux"]
         assert_eq!(j["name"], "GOG");
         assert_eq!(j["settings"][1]["choices"][1], "linux");
         assert_eq!(j["settings"][0]["scope"], "global");
+        assert_eq!((&j["login"]["kind"], &j["login"]["purpose"]), (&serde_json::json!("code"), &serde_json::json!("install games")), "no [login]: a code");
+        assert!(j["login"]["hint"].as_str().unwrap().contains("code"));
+    }
+
+    #[test]
+    fn a_login_table_words_an_api_key() {
+        let m: Manifest = toml::from_str("api = 2\nid = \"steam\"\n[login]\nkind = \"key\"\npurpose = \"list the games you own\"\n").unwrap();
+        let login = m.login.to_json();
+        assert_eq!((&login["kind"], &login["purpose"]), (&serde_json::json!("key"), &serde_json::json!("list the games you own")));
+        assert!(login["hint"].as_str().unwrap().contains("key"), "the key's own default hint");
     }
 
     #[test]

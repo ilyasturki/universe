@@ -916,14 +916,41 @@ def page_info(api, entry, ident):
     }
 
 
+def login_words(source):
+    """How a source's sign-in reads, from its `login` table: an API key as one, a code as a sign-in."""
+    login = source.get("login") or {}
+    key = login.get("kind") == "key"
+    name = source.get("name") or source.get("id", "")
+    return {
+        "kind": "key" if key else "code",
+        "link": "Get an API key" if key else "Get a sign-in link",
+        "go": "Open" if key else "Sign in",
+        "enter": "Enter the key" if key else "Enter the code",
+        "prompt": f"API key from {name}" if key else f"Code from {name}",
+        "checking": "Checking the key…" if key else "Checking the code…",
+        "signed_out": ("Add an API key to " if key else "Sign in to ") + str(login.get("purpose") or "install games"),
+        "hint": str(login.get("hint") or ""),
+    }
+
+
+def login_rows(source, section):
+    """The link and code rows of a source's sign-in, worded by `login_words`; `login` is the kind, for the looks and tests."""
+    words = login_words(source)
+    link = _row(section, "link", words["link"], "action", "", module=source["id"])
+    code = _row(section, "code", words["enter"], "action", "", module=source["id"])
+    return (
+        {**link, "action": words["go"], "display": "", "login": words["kind"]},
+        {**code, "action": "Enter", "display": "", "login": words["kind"], "prompt": words["prompt"]},
+    )
+
+
 def signin_rows(entry, name, rows, groups):
     logged_in = bool(entry.get("logged_in"))
     user = str(entry.get("user") or "")
     signin = _group("Sign-in", [], caps=True)
     for row in (
         _row(name, "logged_in", "Signed in", "info", logged_in, module=entry["id"], detail=user or ("yes" if logged_in else "no")),
-        {**_row(name, "link", "Get a sign-in link", "action", "", module=entry["id"]), "action": "Sign in", "display": ""},
-        {**_row(name, "code", "Enter the code", "action", "", module=entry["id"]), "action": "Enter", "display": ""},
+        *login_rows(entry, name),
     ):
         signin["rows"].append(len(rows))
         rows.append(row)

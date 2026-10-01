@@ -488,7 +488,7 @@ source unavailable, and `doctor` reports it as fetched on first use.
 
 | Rust | Python | CLI | Role |
 |---|---|---|---|
-| `sources()` | `sources()` | `universe sources`, `universe source ls` | `[{id, name, version, description, dir, enabled, available, missing: [bin], capabilities: [name], hooks: {}, settings: [Setting], logged_in, user, games_dir, library_cached, library_at}]`; `library_at` is when the store was last listed (RFC 3339, empty before the first); the login probe reaches the network once per process, on the first call |
+| `sources()` | `sources()` | `universe sources`, `universe source ls` | `[{id, name, version, description, dir, enabled, available, missing: [bin], capabilities: [name], hooks: {}, settings: [Setting], login: {kind, hint, purpose}, logged_in, user, games_dir, library_cached, library_at}]` (`login` with its defaults filled); `library_at` is when the store was last listed (RFC 3339, empty before the first); the login probe reaches the network once per process, on the first call |
 | `enable_source(id, enabled)` | `enable_source(id, enabled)` | `universe source enable\|disable <id>` | writes `[sources] enabled` in `config.toml` |
 | `source_settings(source, game_id)` | `source_settings(source, game_id="")` | `universe source settings <id> [game]` | the source's settings, defaults under `config.toml [sources.<id>]`, then a game's own game-scope keys (`game.toml [sources.<id>]`) when `game_id` names one; an empty `games_dir` default reads `paths.games_root` |
 | `set_source_setting(source, game_id, key, value)` | `set_source_setting(source, key, value, game_id="")` | `universe source set <id> k=v [--game g]` | validated against `[[settings]]`; `game_id=""` writes `config.toml [sources.<id>]`, otherwise a game-scope key into `game.toml [sources.<id>]` (`set(id, "sources.<id>.<key>", value)` is the same write) |
@@ -1543,6 +1543,11 @@ capabilities = ["achievements", "uninstall"]   # optional verbs it answers, past
 
 [requires]
 bins = ["gogdl"]                  # a missing binary makes the source "unavailable" and it is never run, unless Universe fetches it (see Fetched tools)
+
+[login]                           # optional: how frontends word the sign-in
+kind = "code"                     # code: the page shows a code once signed in (the default); key: the page makes an API key
+hint = "Sign in, then enter the code."  # how to get it (a default per kind)
+purpose = "install games"         # what signing in is for, after "Sign in to" (the default)
 
 [hooks]                           # optional, as a module's (every session hook but `screenshot`); they run for the games whose source is this one
 pre-launch  = "bin/pre-launch"

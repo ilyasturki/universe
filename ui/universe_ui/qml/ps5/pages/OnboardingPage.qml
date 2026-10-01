@@ -62,7 +62,7 @@ FocusScope {
         } else if (row.key === "code") {
             page.source = row.module;
             shell.prompt({
-                title: "Code from " + row.section,
+                title: row.prompt,
                 value: ""
             }, function (value) {
                 if (value !== null && value !== "")

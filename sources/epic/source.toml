@@ -9,6 +9,9 @@ capabilities = ["achievements", "uninstall"]
 [requires]
 bins = ["legendary"]
 
+[login]
+hint = "Sign in at the link, then enter the authorizationCode the page shows, or the whole page."
+
 [hooks]
 pre-launch   = "bin/pre-launch"
 post-process = "bin/post-process"

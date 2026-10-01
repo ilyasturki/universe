@@ -9,7 +9,7 @@ from PySide6.QtCore import QObject, Signal, Slot
 from ..models import ArrivingGame
 from ..qt import QVARIANT, Property
 from .media import _month, _size
-from .settings import AsyncScreen
+from .settings import AsyncScreen, login_words
 
 
 def _source_row(game, updates, art, job):
@@ -411,12 +411,15 @@ class LoginFlow(QObject):
         self._status = ""
         client.jobFinished.connect(self._on_job_finished)
 
+    def _words(self):
+        return login_words(next((s for s in self._client.sources() if s["id"] == self._source), {"id": self._source}))
+
     @Slot(str)
     def begin(self, source):
         self._source = source
         self._url = self._client.loginUrl(source)
         self._matrix = qr_matrix(self._url) if self._url else []
-        self._status = "Open the link, sign in, then enter the code it shows." if self._url else "This source has no login."
+        self._status = (self._words()["hint"] or "Open the link, sign in, then enter the code it shows.") if self._url else "This source has no login."
         self.changed.emit()
 
     @Slot(str)
@@ -425,7 +428,7 @@ class LoginFlow(QObject):
         if not code:
             return
         self._job = self._client.login(self._source, code)
-        self._status = "Checking the code…" if self._job else "Login could not start."
+        self._status = self._words()["checking"] if self._job else "Login could not start."
         self.changed.emit()
 
     def _on_job_finished(self, job_id, ok, text):

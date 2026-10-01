@@ -482,12 +482,18 @@ def require_id(args, verb):
     return args[0].strip()
 
 
+# The sign-in lands on embed.gog.com/on_login_success?origin=client&code=…: the code alone or the whole address is taken.
+def authorization_code(text):
+    found = re.search(r"[?&]code=([^&#\s]+)", text)
+    return urllib.parse.unquote(found.group(1)) if found else text.strip()
+
+
 def cmd_login(settings, args):
     if not args:
         emit("login_url", url=AUTH_URL)
         emit("done")
         return
-    creds = gogdl_json(settings, "auth", "--code", args[0])
+    creds = gogdl_json(settings, "auth", "--code", authorization_code(args[0]))
     if not isinstance(creds, dict) or creds.get("error") or not creds.get("access_token"):
         raise SourceError("GOG rejected the authorization code")
     user = fetch(USER_URL, creds["access_token"])

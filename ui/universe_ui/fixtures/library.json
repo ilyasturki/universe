@@ -443,6 +443,7 @@
       "games_dir": "/mnt/games/PC",
       "library_at": "2026-09-11T19:03:00+02:00",
       "capabilities": ["achievements"],
+      "login": {"kind": "code", "hint": "Sign in at the link. The address it lands on ends in code=…: enter what follows code=, or the whole address.", "purpose": "install games"},
       "settings": [
         {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder (empty: paths.games_root)", "scope": "global", "choices": [], "dynamic": false, "advanced": false},
         {"key": "scan_dirs", "type": "string", "default": "", "label": "Scanned folders (comma-separated, empty: the install folder)", "scope": "global", "choices": [], "dynamic": false, "advanced": true},
@@ -466,6 +467,7 @@
       "games_dir": "/mnt/games/PC",
       "library_at": "",
       "capabilities": ["achievements", "uninstall"],
+      "login": {"kind": "code", "hint": "Sign in at the link, then enter the authorizationCode the page shows, or the whole page.", "purpose": "install games"},
       "settings": [
         {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder (empty: paths.games_root)", "scope": "global", "choices": [], "dynamic": false, "advanced": false},
         {"key": "with_dlcs", "type": "bool", "default": true, "label": "Install owned DLCs", "scope": "global", "choices": [], "dynamic": false, "advanced": false},
@@ -485,6 +487,7 @@
       "games_dir": "/mnt/games/PC",
       "library_at": "",
       "capabilities": ["uninstall"],
+      "login": {"kind": "key", "hint": "Open the link, generate an API key, then enter it.", "purpose": "install games"},
       "settings": [
         {"key": "games_dir", "type": "path", "default": "/mnt/games/PC", "label": "Install folder (empty: paths.games_root)", "scope": "global", "choices": [], "dynamic": false, "advanced": false},
         {"key": "platform", "type": "enum", "default": "linux", "label": "Build to install when a game has both", "scope": "global", "choices": ["linux", "windows"], "dynamic": false, "advanced": false}
@@ -503,6 +506,7 @@
       "games_dir": null,
       "library_at": "",
       "capabilities": ["achievements", "uninstall"],
+      "login": {"kind": "key", "hint": "With Steam signed in on this machine, open the link, register a key (any domain name will do), then enter it.", "purpose": "list the games you own"},
       "settings": [
         {"key": "achievements", "type": "bool", "default": true, "label": "Achievements (read from Steam after each session)", "scope": "game", "choices": [], "dynamic": false, "advanced": false},
         {"key": "shared_prefix", "type": "bool", "default": true, "label": "Share Steam's prefix, and the saves in it (games added from now on)", "scope": "global", "choices": [], "dynamic": false, "advanced": false}

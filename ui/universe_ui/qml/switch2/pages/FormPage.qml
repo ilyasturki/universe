@@ -197,7 +197,7 @@ FocusScope {
             login.begin(args.source);
         } else if (row.key === "code" && source) {
             shell.prompt({
-                title: "Code from " + (info.name || args.source),
+                title: row.prompt,
                 value: ""
             }, function (value) {
                 if (value !== null && value !== "")

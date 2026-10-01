@@ -30,24 +30,30 @@ pub fn status(source: &Value) -> String {
     }
 }
 
-/// A store's sign-in: its link, to open here or scan from a phone, then the code the store shows after.
-/// `say` puts a line in front of the player; `signed_in` hears the account's name.
+/// A store's sign-in: its link, to open here or scan from a phone, then the code the store shows after, or the API key
+/// it makes, as the source's `login` says. `say` puts a line in front of the player; `signed_in` hears the account's name.
 pub fn account_group(source: &Value, say: Say, signed_in: Say) -> adw::PreferencesGroup {
     let id = text(source, "id");
+    let key = source["login"]["kind"] == "key";
     let group = adw::PreferencesGroup::builder().title(gettext("Account")).build();
     let state = crate::rows::plain(adw::ActionRow::builder().build(), status(source), "");
     state.add_prefix(&gtk::Image::from_icon_name("avatar-default-symbolic"));
     group.add(&state);
-    let get_link = adw::ButtonRow::builder().title(gettext("Get a Sign-In Link")).start_icon_name("web-browser-symbolic").build();
+    let get_link = adw::ButtonRow::builder()
+        .title(if key { gettext("Get an API Key") } else { gettext("Get a Sign-In Link") })
+        .start_icon_name("web-browser-symbolic")
+        .build();
     group.add(&get_link);
-    let link = crate::rows::plain(adw::ActionRow::builder().visible(false).build(), gettext("Open the link, sign in, then enter the code it shows"), "");
+    let hint =
+        Some(text(&source["login"], "hint")).filter(|h| !h.is_empty()).unwrap_or_else(|| gettext("Open the link, sign in, then enter the code it shows"));
+    let link = crate::rows::plain(adw::ActionRow::builder().visible(false).build(), hint, "");
     let open = gtk::Button::builder().label(gettext("Open")).valign(gtk::Align::Center).build();
     link.add_suffix(&open);
     group.add(&link);
     let qr = gtk::Picture::builder().can_shrink(false).halign(gtk::Align::Center).margin_top(12).margin_bottom(12).visible(false).build();
     qr.set_tooltip_text(Some(&gettext("Scan it to sign in from a phone")));
     group.add(&qr);
-    let code = adw::EntryRow::builder().title(gettext("Code")).show_apply_button(true).visible(false).build();
+    let code = adw::EntryRow::builder().title(if key { gettext("API Key") } else { gettext("Code") }).show_apply_button(true).visible(false).build();
     group.add(&code);
 
     let url = Rc::new(RefCell::new(String::new()));

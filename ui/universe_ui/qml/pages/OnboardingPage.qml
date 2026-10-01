@@ -71,7 +71,7 @@ FocusScope {
         } else if (row.key === "code") {
             Sound.panel();
             page.source = row.module;
-            editor.prompt("Code from " + row.section, "", function (code) {
+            editor.prompt(row.prompt, "", function (code) {
                 login.submit(code);
             });
         } else if (row.via !== undefined) {

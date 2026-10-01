@@ -2,7 +2,7 @@ from PySide6.QtCore import Signal, Slot
 
 from ..qt import Property
 from .add import _source_status
-from .settings import RowsForm, _add, _plural, _row, launch_row
+from .settings import RowsForm, _add, _plural, _row, launch_row, login_rows
 
 MEMORY_KEY = "onboarded"
 PREFERENCE_KEYS = ("hdr",)
@@ -184,10 +184,8 @@ class Onboarding(RowsForm):
                     _add(rows, groups, name, _row(name, "enabled", f"Use {name}", "bool", False, module=source["id"]), caps=True)
                     continue
                 _add(rows, groups, name, {**_static("logged_in", "Account", _source_status(source)[0]), "module": source["id"]}, caps=True)
-                link = _row(name, "link", "Get a sign-in link", "action", "", module=source["id"])
-                _add(rows, groups, name, {**link, "action": "Sign in", "display": "", "quiet": signed_in})
-                code = _row(name, "code", "Enter the code", "action", "", module=source["id"])
-                _add(rows, groups, name, {**code, "action": "Enter", "display": "", "quiet": signed_in})
+                for row in login_rows(source, name):
+                    _add(rows, groups, name, {**row, "quiet": signed_in})
         elif step == "preferences":
             rows, groups = preference_rows(self._client, self._controller)
         elif step == "done":

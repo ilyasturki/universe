@@ -223,6 +223,13 @@ def test_status_logged_out(src, env, capsys, monkeypatch):
     assert code == 0 and events == [{"event": "done"}]
 
 
+def test_login_takes_the_whole_address_it_lands_on(src, env, capsys, monkeypatch):
+    fake_fetch(monkeypatch, src, {src.USER_URL: {"username": "Yasso"}})
+    code, events, _ = run(src, capsys, "login", " https://embed.gog.com/on_login_success?origin=client&code=good ")
+    assert code == 0 and events[0] == {"event": "logged_in", "user": "Yasso"}
+    assert calls(env)[0]["args"][-2:] == ["--code", "good"]
+
+
 def test_login_bad_code(src, env, capsys, monkeypatch):
     fake_fetch(monkeypatch, src, {})
     code, events, err = run(src, capsys, "login", "bad")

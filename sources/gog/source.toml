@@ -9,6 +9,9 @@ capabilities = ["achievements"]
 [requires]
 bins = ["gogdl"]
 
+[login]
+hint = "Sign in at the link. The address it lands on ends in code=…: enter what follows code=, or the whole address."
+
 [hooks]
 pre-launch   = "bin/pre-launch"
 post-launch  = "bin/post-launch"

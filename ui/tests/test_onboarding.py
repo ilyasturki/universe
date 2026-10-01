@@ -104,6 +104,18 @@ def test_the_store_switch_turns_a_source_on_and_off(empty_api, empty):
     assert [r["key"] for r in form.rows if r["module"] == "epic"] == ["logged_in", "link", "code"], "its sign-in rows replace the switch"
 
 
+def test_a_store_that_signs_in_with_an_api_key_is_worded_from_its_login_table(empty_api, empty):
+    signed_out(empty)
+    empty.core._source("steam")["enabled"] = True
+    form = loaded(empty_api.screens.onboarding)
+    form.next()
+    kinds = {(r["module"], r["key"]): r["login"] for r in form.rows if r["key"] in ("link", "code")}
+    assert kinds == {("gog", "link"): "code", ("gog", "code"): "code", ("steam", "link"): "key", ("steam", "code"): "key"}
+    login = empty_api.screens.login
+    login.begin("steam")
+    assert login.status == empty.core._source("steam")["login"]["hint"], "the store's own hint under its link"
+
+
 def test_found_rows_run_the_importers(empty_api, empty):
     form = loaded(empty_api.screens.onboarding)
     assert form.runImport(index_of(form, "lutris")) is True
