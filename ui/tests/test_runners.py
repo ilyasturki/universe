@@ -1,4 +1,4 @@
-from conftest import index_of, rows_by_key, wait_for
+from conftest import index_of, record, rows_by_key, until
 from universe_ui.screens.runners import suggested_title
 
 
@@ -174,10 +174,11 @@ def test_runner_form_removes_a_game(api, fake):
     form.load("dolphin")
     messages = []
     form.message.connect(messages.append)
+    changed = record(fake.libraryChanged)
     form.remove("lego-batman")
-    assert wait_for(form.message) is not None
+    until(lambda: messages)
     assert messages == ["Removed LEGO Batman: The Videogame from the library"]
-    assert wait_for(fake.libraryChanged) is not None
+    until(lambda: changed)
     assert not any(r.get("gameId") == "lego-batman" for r in form.rows), "the Games group followed the library change"
     form.uninstall("")
     assert messages[1:] == [], "no game, no call"

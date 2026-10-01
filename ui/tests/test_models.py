@@ -1,6 +1,6 @@
 from PySide6.QtCore import QDateTime, QUrl
 
-from conftest import pump
+from conftest import until
 from universe_ui.models import (
     FavouritesFirstGames,
     Game,
@@ -135,31 +135,30 @@ def test_anchor_follows_the_game_across_a_reorder(api):
     assert anchor.game.id == "dead-cells"
     recent.playingId = "mirrors-edge"
     assert anchor.game.id == "dead-cells"
-    pump(10)
-    assert moves == [4] and anchor.game.id == "dead-cells"
+    until(lambda: moves == [4])
+    assert anchor.game.id == "dead-cells"
     recent.playingId = ""
-    pump(10)
-    assert moves == [4, 3]
+    until(lambda: moves == [4, 3])
     anchor.hold("mini-metro")
     assert moves == [4, 3, 2] and anchor.game.id == "mini-metro"
     anchor.hold("mirrors-edge")
     assert moves == [4, 3, 2] and anchor.game.id == "mini-metro", "not in the rows yet: held until it shows up"
     recent.playingId = "mirrors-edge"
-    pump(10)
-    assert moves == [4, 3, 2, 0] and anchor.game.id == "mirrors-edge"
+    until(lambda: moves == [4, 3, 2, 0])
+    assert anchor.game.id == "mirrors-edge"
     anchor.hold("no-such-game")
     anchor.index = 3
     recent.playingId = ""
-    pump(10)
-    assert moves == [4, 3, 2, 0, 2] and anchor.game.id == "mini-metro", "the cursor's move re-holds"
+    until(lambda: moves == [4, 3, 2, 0, 2], "the cursor's move re-holds")
+    assert anchor.game.id == "mini-metro", "the cursor's move re-holds"
     library = LibraryGames()
     library.setSourceModel(api.allGames)
     anchor.model = library
     anchor.index = 0
     assert anchor.game.id == "the-technomancer"
     library.setSourceModel(api.collections.get(0).games)
-    pump(10)
-    assert moves == [4, 3, 2, 0, 2, 1] and anchor.game is library.get(0), "a reset is another list: the row stands"
+    until(lambda: anchor.game is library.get(0), "a reset is another list: the row stands")
+    assert moves == [4, 3, 2, 0, 2, 1]
 
 
 def test_sorted_and_limited(api):

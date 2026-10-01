@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import pump, rows_by_key, wait_for
+from conftest import pump, rows_by_key, until
 from universe_ui.screens.controller import FakeWatcher, Watcher
 
 
@@ -414,8 +414,7 @@ def test_watcher_restarts_after_it_dies(started, fake):
     first = screen.rows[0]
     assert first["type"] == "info" and first["label"] == "Controller macros stopped"
     assert screen.learn("paddle_left") is False
-    pump(50)
-    assert watcher.started and screen.status == "ready" and screen.connected
+    until(lambda: watcher.started and screen.status == "ready" and screen.connected)
     screen.shutdown()
     assert not watcher.started
     watcher.exit(1)
@@ -482,8 +481,8 @@ def test_a_watcher_restart_ends_testing(started, fake):
     watcher.exit(3)
     assert not screen.testing
     sent = len(watcher.commands)
-    pump(50)
-    assert watcher.started and not screen.testing
+    until(lambda: watcher.started)
+    assert not screen.testing
     assert {"cmd": "axes", "on": True} not in watcher.commands[sent:], "a fresh watcher streams nothing until asked"
 
 
@@ -494,13 +493,12 @@ def test_watcher_process_round_trip(api, monkeypatch):
     echoed = []
     watcher.received.connect(lambda line: echoed.append(line) if line.get("event") == "echo" else None)
     assert screen.start(watcher) is True
-    wait_for(screen.devicesChanged, 5000)
-    assert screen.connected and screen.family == "xbox" and screen.status == "ready"
+    until(lambda: screen.connected and screen.status == "ready")
+    assert screen.family == "xbox"
     assert rows_by_key(screen)["share"]["display"] == "Unbound"
     screen.suspend()
     screen.learn("share")
-    wait_for(watcher.received, 5000)
-    wait_for(watcher.received, 5000)
+    until(lambda: len(echoed) == 2)
     assert [e["command"] for e in echoed] == [{"cmd": "suspend", "dock": False}, {"cmd": "learn", "id": "event9", "slot": "share"}]
     screen.shutdown()
     assert watcher._process is None

@@ -1,6 +1,6 @@
 import pytest
 
-from conftest import pump, wait_for
+from conftest import pump, record, until
 from universe_ui.api import Api
 from universe_ui.screens.network import FAKE as FAKE_NET
 from universe_ui.screens.power import FAKE
@@ -10,7 +10,7 @@ from universe_ui.screens.power import FAKE
 def deck_api(monkeypatch, fake, tmp_path):
     monkeypatch.setenv("UNIVERSE_DECK", "oled")
     api = Api(fake, memory_path=str(tmp_path / "memory.json"), power_root=FAKE, net_root=FAKE_NET)
-    wait_for(api.system.controlsChanged)
+    until(lambda: api.system.controls)
     yield api
     api.shutdown()
 
@@ -24,17 +24,15 @@ def test_a_deck_lists_its_controls_after_putting_back_the_kept_ones(deck_api, fa
 def test_a_set_shows_at_once_and_reaches_the_core(deck_api, fake):
     deck_api.system.set("tdp", "9")
     assert deck_api.system.control("tdp")["value"] == "9", "the row moves before the helper answers"
-    pump(200)
-    assert next(c for c in fake._core.system if c["id"] == "tdp")["value"] == "9"
+    until(lambda: next(c for c in fake._core.system if c["id"] == "tdp")["value"] == "9")
 
 
 def test_a_refused_control_says_why_and_reads_the_machine_back(deck_api, fake):
     fake._core.system_error = "steamos-priv-write refused /sys/class/hwmon/hwmon5/power1_cap"
+    failed = record(deck_api.system.controlFailed)
     deck_api.system.set("tdp", "4")
-    failed = wait_for(deck_api.system.controlFailed)
-    assert failed == ("tdp", "steamos-priv-write refused /sys/class/hwmon/hwmon5/power1_cap")
-    wait_for(deck_api.system.controlsChanged)
-    assert deck_api.system.control("tdp")["value"] == "15"
+    assert until(lambda: failed) == [("tdp", "steamos-priv-write refused /sys/class/hwmon/hwmon5/power1_cap")]
+    until(lambda: deck_api.system.control("tdp")["value"] == "15")
 
 
 def test_a_desktop_has_no_system_controls(api):
@@ -47,7 +45,8 @@ def test_steams_game_mode_keeps_power_and_the_machines_controls(monkeypatch, fak
     monkeypatch.setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
     monkeypatch.setenv("UNIVERSE_FAKE_STEAM", "1")
     api = Api(fake, memory_path=str(tmp_path / "memory.json"), power_root=FAKE, net_root=FAKE_NET)
-    pump(300)
+    acted, loaded = record(api.system.changed), record(api.system.controlsChanged)
+    until(lambda: acted and loaded)
     assert api.system.steam is True
     assert list(api.system.actions) == [] and api.system.controls == [], "Steam's Quick Access menu has them"
     keys = [spec["key"] for spec in fake.launchKeys("global", None)]

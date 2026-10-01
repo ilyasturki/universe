@@ -1,6 +1,6 @@
 import pytest
 
-from conftest import index_of, pump, rows_by_key, settle, until, wait_for
+from conftest import index_of, pump, record, rows_by_key, settle, until
 from universe_ui.screens.media import _size
 
 PENDING = {
@@ -174,8 +174,8 @@ def test_modules_list(api, fake):
     assert form.rows[form.indexOf("capture")]["value"] is False and form.rows[form.indexOf("capture")]["display"] == "Off"
     assert next(m for m in fake.modules() if m["id"] == "capture")["enabled"] is False
     form.loadDoctor()
-    wait_for(form.doctorChanged, 3000)  # the checks run off the UI thread
-    assert form.doctor and all("value" in r for r in form.doctor)
+    until(lambda: form.doctor, "the checks run off the UI thread")
+    assert all("value" in r for r in form.doctor)
     doctor = {g["title"]: g for g in form.doctorGroups}
     assert [g["title"] for g in form.doctorGroups[:2]] == ["Needs attention", "Core"], "the failures come first, then the core's checks"
     attention = [form.doctor[i] for i in doctor["Needs attention"]["rows"]]
@@ -188,7 +188,7 @@ def test_modules_list(api, fake):
 def test_sources_list(api, fake):
     form = api.screens.sourceList
     form.load()
-    wait_for(form.rowsChanged, 3000)  # the listing probes the logins: off the UI thread
+    until(lambda: form.rows, "the listing probes the logins: off the UI thread")
     assert [r["module"] for r in form.rows] == ["gog", "epic", "itch", "steam"], "the running ones first"
     gog = form.rows[0]
     assert gog["section"] == "Sources" and gog["switch"] is True and gog["source"] is True
@@ -196,16 +196,16 @@ def test_sources_list(api, fake):
     assert form.rows[1]["value"] is False and form.rows[1]["display"] == "Off"
     assert [(g["title"], g["rows"]) for g in form.groups] == [("", [0]), ("Off", [1, 2, 3])]
     form.toggle(0)
-    wait_for(form.rowsChanged, 3000)
+    until(lambda: [r["value"] for r in form.rows] == [False, False, False, False])
     assert next(s for s in fake.sources() if s["id"] == "gog")["enabled"] is False
-    assert [r["value"] for r in form.rows] == [False, False, False, False] and form.rows[0]["display"] == "Off"
+    assert form.rows[0]["display"] == "Off"
     assert [g["title"] for g in form.groups] == ["Off"], "no empty card for the running ones"
 
 
 def test_source_form(api, fake):
     form = api.screens.source
     form.load("gog")
-    wait_for(form.rowsChanged, 3000)
+    until(lambda: form.info)
     assert form.info["name"] == "GOG" and form.info["source"] is True and form.info["logged_in"] is True and form.info["user"] == "yasso"
     rows = form.rows
     assert rows[0]["key"] == "enabled" and rows[0]["value"] is True and rows[0]["disabled"] is False
@@ -220,20 +220,18 @@ def test_source_form(api, fake):
     platform = index_of(form, "platform")
     assert rows[platform]["choices"] == ["windows", "linux"]
     assert form.setValue(platform, "linux") is True
-    wait_for(form.rowsChanged, 3000)
+    until(lambda: form.rows[index_of(form, "platform")]["value"] == "linux")
     assert fake.getSourceSettings("gog")["platform"] == "linux"
-    assert form.rows[index_of(form, "platform")]["value"] == "linux"
     form.toggle(0)
-    wait_for(form.rowsChanged, 3000)
-    assert form.info["enabled"] is False and [r["key"] for r in form.rows] == ["enabled"], "off: the switch alone, no Advanced row"
+    until(lambda: form.info["enabled"] is False)
+    assert [r["key"] for r in form.rows] == ["enabled"], "off: the switch alone, no Advanced row"
     gog = next(s for s in fake.core._data["sources"] if s["id"] == "gog")
     gog.update(available=False, missing=["gogdl"])
     form.load("gog")
-    wait_for(form.rowsChanged, 3000)
-    assert "missing gogdl" in form.info["warning"] and form.rows[0]["disabled"] is True
+    until(lambda: "missing gogdl" in form.info.get("warning", ""))
+    assert form.rows[0]["disabled"] is True
     form.load("capture")
-    wait_for(form.rowsChanged, 3000)
-    assert form.rows == [] and form.info == {}, "a module is not a source"
+    until(lambda: form.rows == [] and form.info == {}, "a module is not a source")
 
 
 def test_module_form(api, fake):
@@ -296,9 +294,10 @@ def test_module_form_choices(api, fake):
     rows = rows_by_key(form, "capture")
     assert rows["fps"]["type"] == "int" and rows["fps"]["choices"] == ["auto", "120", "90", "60", "30"]
     form.load("journal")
-    wait_for(form.rowsChanged, 3000)  # the dynamic choices come back from a thread
-    journal = rows_by_key(form, "journal")
-    assert journal["model"]["choices"] == ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.5"]
+    until(
+        lambda: rows_by_key(form, "journal").get("model", {}).get("choices") == ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.5"],
+        "the dynamic choices come back from a thread",
+    )
     form.load("capture")
     fps = index_of(form, "fps")
     assert form.setValue(fps, "auto") is True
@@ -620,16 +619,16 @@ def test_sources_browser_peek_fills_a_size_once(api, fake):
     rows = {r["title"]: i for i, r in enumerate(browser.rows)}
     browser.peek(rows["The Technomancer"])
     assert fake._core._source_game("gog", "1972906591").get("download_size") is None, "installed rows have their size"
-    seen = []
-    browser.rowsChanged.connect(lambda: seen.append(1))
     browser.peek(rows["Stardew Valley"])
-    wait_for(browser.rowsChanged, 5000)
-    row = browser.rows[rows["Stardew Valley"]]
+    row = until(lambda: (r := browser.rows[rows["Stardew Valley"]])["sizeKind"] == "download" and r)
     assert (row["sizeText"], row["sizeKind"], row["disk_size"]) == (_size(500000000), "download", 1100000000)
     assert not browser.busy, "a peek never shows Loading…"
 
 
-def test_sources_browser_cancel_pauses_the_install(api, fake):
+def test_sources_browser_cancel_pauses_the_install(api, fake, monkeypatch):
+    from universe_ui import fake_core
+
+    monkeypatch.setattr(fake_core, "STEP_S", 0.05)
     browser = api.screens.sources
     browser.load()
     settle(browser)
@@ -640,23 +639,24 @@ def test_sources_browser_cancel_pauses_the_install(api, fake):
     assert job and browser.job["game"] == "1207658930"
     rebuilds = []
     browser.rowsChanged.connect(lambda: rebuilds.append(1))
-    wait_for(browser.jobChanged, 5000)
-    wait_for(browser.jobChanged, 5000)
+    until(lambda: f" of {_size(50000000000)}" in browser.job["message"])
     row = browser.rows[index]
     assert row["busy"] and row["action"] == "Cancel" and row["status"] == "Installing…"
-    assert browser.job["message"].startswith("Installing The Witcher 3: Wild Hunt · ") and f" of {_size(50000000000)}" in browser.job["message"]
+    assert browser.job["message"].startswith("Installing The Witcher 3: Wild Hunt · ")
     assert rebuilds == [], "progress moves the job line, not the rows"
     assert browser.install(index) == "", "one job at a time"
     assert browser.cancel() is True
     assert browser.job["cancelled"] and browser.job["message"].startswith("Stopping")
-    assert wait_for(browser.message, 5000)
+    until(lambda: messages[-1].startswith("Stopped installing"))
     settle(browser)
     assert messages[-1].startswith("Stopped installing The Witcher 3: Wild Hunt · ") and messages[-1].endswith("kept, resume any time")
     row = browser.rows[index]
     assert row["partial"] and row["action"] == "Resume" and row["status"].startswith("Paused · ")
     assert browser.cancel() is False, "nothing running"
+    said = len(messages)
     browser.install(index)
-    assert wait_for(browser.message, 10000)[0] == "Installing 1207658930: done"
+    until(lambda: len(messages) > said)
+    assert messages[said] == "Installing 1207658930: done"
     settle(browser)
     row = next(r for r in browser.rows if r["title"] == "The Witcher 3: Wild Hunt")
     assert row["installed"] and row["sizeText"] == _size(50000000000) and row["status"] == "Installed"
@@ -665,9 +665,11 @@ def test_sources_browser_cancel_pauses_the_install(api, fake):
     assert [r["title"] for r in browser.rows] == ["Disco Elysium"]
 
 
-def test_an_install_arrives_on_home_first_and_lands_as_the_game(api, fake):
+def test_an_install_arrives_on_home_first_and_lands_as_the_game(api, fake, monkeypatch):
+    from universe_ui import fake_core
     from universe_ui.models import HeadedGames, RecentGames
 
+    monkeypatch.setattr(fake_core, "STEP_S", 0.05)
     browser = api.screens.sources
     browser.load()
     settle(browser)
@@ -679,19 +681,19 @@ def test_an_install_arrives_on_home_first_and_lands_as_the_game(api, fake):
     heads = []
     row.headChanged.connect(lambda: heads.append(row.head.id if row.head else None))
     index = next(i for i, r in enumerate(browser.rows) if r["title"] == "The Witcher 3: Wild Hunt")
+    said = record(browser.message)
     assert browser.install(index)
     arriving = browser.arriving
     assert arriving.installing and arriving.title == "The Witcher 3: Wild Hunt" and arriving.progress == -1
     assert row.count == recent.count + 1 and row.get(0) is arriving and row.get(1) is recent.get(0)
-    wait_for(browser.jobChanged, 5000)
-    wait_for(browser.jobChanged, 5000)
-    assert 0 < arriving.progress < 1, "the download's bytes"
+    until(lambda: 0 < arriving.progress < 1, "the download's bytes")
     assert browser.cancel() is True
-    assert wait_for(browser.message, 5000)
+    until(lambda: said)
     settle(browser)
     assert browser.arriving is None and row.count == recent.count and heads == ["arriving:1207658930", None], "stopped: nothing arrives"
+    said.clear()
     browser.install(index)
-    assert wait_for(browser.message, 10000)[0] == "Installing 1207658930: done"
+    assert until(lambda: said)[0] == ("Installing 1207658930: done",)
     settle(browser)
     landed = api.allGames.byId("the-witcher-3-wild-hunt")
     assert landed is not None and landed.addedAt is not None and not landed.installing
@@ -785,10 +787,10 @@ def test_login_flow(api):
     login.begin("gog")
     assert login.url.startswith("https://")
     assert login.size >= 21 and all(len(row) == login.size for row in login.matrix)
+    finished = record(login.finished)
     login.submit("abc")
     assert login.busy
-    args = wait_for(login.finished, 10000)
-    assert args is not None and args[0] is True
+    assert until(lambda: finished)[0][0] is True
 
 
 def test_removing_a_recording_or_an_entry_reloads_both_lists(api, fake):
@@ -857,11 +859,8 @@ def test_pending_journals_announce_each_session_once(api, fake):
     entries = fake.core._data["journal"]["the-technomancer"]
     entries.insert(0, dict(PENDING))
     fake.entryWritten.emit("20260912-200000", "the-technomancer")
-    for _ in range(3):
-        assert wait_for(pending.changed, 3000) is not None, "the read runs off the UI thread"
-        if pending.count == 1:
-            break
-    assert pending.count == 1 and pending.rows[0]["title"] == "The Technomancer"
+    until(lambda: pending.count == 1, "the read runs off the UI thread")
+    assert pending.rows[0]["title"] == "The Technomancer"
     fake.entryWritten.emit("", "the-technomancer")
     fake.sessionEnded.emit("20260912-200000", "the-technomancer", 60, "quit")
     pump(300)
@@ -869,8 +868,7 @@ def test_pending_journals_announce_each_session_once(api, fake):
 
     entries[0].update(state="written", title="Back to Noctis", paragraphs=["p"], written_at="2026-09-12T20:50:00+02:00")
     fake.entryWritten.emit("20260912-200000", "the-technomancer")
-    assert wait_for(pending.changed, 3000) is not None
-    assert pending.count == 0
+    until(lambda: pending.count == 0)
     assert seen[-1] == ("resolved", "20260912-200000", "the-technomancer", "written", "Back to Noctis")
 
     entries.insert(
@@ -886,10 +884,10 @@ def test_pending_journals_announce_each_session_once(api, fake):
         },
     )
     fake.sessionEnded.emit("20260913-100000", "the-technomancer", 60, "quit")
-    assert wait_for(pending.changed, 3000) is not None
+    until(lambda: pending.count == 1)
     entries[0].update(state="failed", paragraphs=["codex timed out"])
     fake.entryWritten.emit("20260913-100000", "the-technomancer")
-    assert wait_for(pending.changed, 3000) is not None
+    until(lambda: pending.count == 0)
     assert seen[-2:] == [("appeared", "20260913-100000", "The Technomancer"), ("resolved", "20260913-100000", "the-technomancer", "failed", "codex timed out")]
 
 
@@ -928,8 +926,7 @@ def test_media_timeline_merges_the_three_kinds(api):
     media = api.screens.media
     media.load()
     assert media.loading and media.count == 0, "the core's list is read on a worker"
-    assert wait_for(media.rowsChanged, 5000) is not None
-    assert not media.loading
+    until(lambda: not media.loading)
     kinds = {r["kind"] for r in media.rows}
     assert kinds == {"shot", "recording", "journal"}
     whens = [r["when"] for r in media.rows]
@@ -954,7 +951,7 @@ def test_thumbnails_are_announced_as_they_land(api, tmp_path):
     assert thumbs.pending == 1 and thumbs.url(str(missing)) == ""
     version = thumbs.version
     missing.write_bytes(b"jpg")
-    assert wait_for(thumbs.versionChanged, 3000) is not None
+    until(lambda: thumbs.version != version)
     assert thumbs.version == version + 1 and thumbs.pending == 0 and thumbs.url(str(missing)).startswith("file://")
 
 
@@ -1022,10 +1019,7 @@ def test_recording_frames_are_sampled_from_the_file(api):
     recordings.load("the-technomancer")
     session = recordings.rows[0]["session"]
     recordings.select(session)
-    for _ in range(80):
-        if recordings.frameMap[session]["complete"]:
-            break
-        assert wait_for(recordings.framesChanged, 10000) is not None
+    until(lambda: recordings.frameMap[session]["complete"])
     frames = recordings.frameMap[session]
     assert frames["complete"] and all(f.startswith("file://") for f in frames["frames"])
     # The session lasted 1 h 10; the row carries the clip's 20 s, and the seeks follow the file.
@@ -1049,7 +1043,7 @@ def test_the_sessions_store_lists_played_sessions_and_reads_one_log(api, fake):
 
     store.openLog("20260907-224100")
     assert store.logLoading
-    assert wait_for(store.logChanged, 3000) is not None
+    until(lambda: not store.logLoading)
     log = store.log
     assert store.logSession == "20260907-224100" and not store.logLoading
     assert log[0]["source"] == "universe" and log[0]["message"].startswith("launch 20260907-224100: gamescope")
@@ -1057,18 +1051,19 @@ def test_the_sessions_store_lists_played_sessions_and_reads_one_log(api, fake):
     assert all(r["time"] == "22:41:00" for r in log)
 
     store.openLog("20260905-190000")
-    assert wait_for(store.logChanged, 3000) is not None
+    until(lambda: not store.logLoading)
     assert store.log[0]["message"].startswith("launch 20260905-190000")
 
     store.openLog("19700101-000000")
-    assert wait_for(store.logChanged, 3000) is not None
+    until(lambda: not store.logLoading)
     assert store.log == [] and "19700101-000000" in store.logError
 
+    launched = record(fake.launched)
     fake.launch("the-technomancer", "")
-    assert wait_for(fake.launched, 3000) is not None
+    until(lambda: launched)
     assert store.rows[0]["live"] and store.rows[0]["session"] == "" and store.rows[0]["endText"] == "Playing now"
     store.openLog("")
-    assert wait_for(store.logChanged, 3000) is not None
+    until(lambda: not store.logLoading)
     assert store.log[0]["message"].startswith("launch " + fake.currentSession["session_id"])
     fake.core.end_session()
     until(lambda: not store.rows[0]["live"])

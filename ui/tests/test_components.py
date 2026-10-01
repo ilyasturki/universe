@@ -1,4 +1,4 @@
-from conftest import settle, wait_for
+from conftest import record, settle, until
 
 
 def loaded(api):
@@ -59,10 +59,11 @@ def test_the_options_put_the_useful_one_first_and_ask_before_what_costs(api, fak
 
 def test_an_install_runs_as_a_job_and_a_proposed_newer_build_becomes_the_one_used(api, fake):
     form = loaded(api)
+    finished = record(fake.jobFinished)
     assert form.act(row_of(form, "wine"), "install") is True
     assert form.job["label"] == "Installing Wine (staging) 11.18"
     assert form.rows[row_of(form, "wine")]["tag"] == "Installing…"
-    job, ok, _text = wait_for(fake.jobFinished, 5000)
+    job, ok, _text = until(lambda: finished)[0]
     assert ok is True and job == form.job["id"]
     settle(form)
     rows = {r["component"]: r for r in form.rows if r["key"] == "component"}
@@ -72,10 +73,11 @@ def test_an_install_runs_as_a_job_and_a_proposed_newer_build_becomes_the_one_use
 
 def test_a_cancel_stops_the_job(api, fake):
     form = loaded(api)
+    finished = record(fake.jobFinished)
     form.act(row_of(form, "rpcs3"), "install")
     assert labels(form.actions(row_of(form, "rpcs3"))) == ["Cancel"]
     assert form.act(row_of(form, "rpcs3"), "cancel") is True
-    _job, ok, _text = wait_for(fake.jobFinished, 5000)
+    _job, ok, _text = until(lambda: finished)[0]
     assert ok is False and form.job["message"] == "Stopped installing RPCS3 0.0.42-20069-3fa07db7"
 
 
@@ -115,17 +117,18 @@ def test_hiding_the_bar_leaves_the_job_its_row_and_its_toast(api, fake):
     messages, progress = [], []
     form.message.connect(messages.append)
     form.rowsChanged.connect(lambda: progress.append(form.rows[row_of(form, "wine")]["progress"]))
+    finished = record(fake.jobFinished)
     form.act(row_of(form, "wine"), "install")
     form.hideJob()
     assert form.job is None, "the bar goes"
     assert form.rows[row_of(form, "wine")]["tag"] == "Installing…" and labels(form.actions(row_of(form, "wine"))) == ["Cancel"]
-    wait_for(fake.jobFinished, 5000)
+    until(lambda: finished)
     assert messages[-1] == "Installed Wine (staging) 11.18" and form.job is None, "the end still toasts, the bar stays away"
     assert [p for p in progress if p] == [0.25, 0.5, 0.75, 1.0], "the row's own progress moves meanwhile"
     settle(form)
     form.act(row_of(form, "rpcs3"), "install")
     assert form.job["label"] == "Installing RPCS3 0.0.42-20069-3fa07db7", "the next job has its bar"
-    wait_for(fake.jobFinished, 5000)
+    until(lambda: len(finished) == 2)
     assert form.job["ok"] is True
     form.hideJob()
     assert form.job is None, "a finished bar goes the same way"
@@ -140,8 +143,9 @@ def test_a_launch_missing_its_runner_offers_the_install_then_launches(api, fake)
     fake.launchFailed.emit(game, f"{game}: RPCS3 not found (install it or set runners.rpcs3.exe)")
     assert proposed == [(game, "rpcs3", "RPCS3", "0.0.42-20069-3fa07db7")]
     assert form.question("rpcs3")["message"] == "Install RPCS3 0.0.42-20069-3fa07db7?"
+    finished = record(fake.jobFinished)
     assert form.installFor(game, "rpcs3") is True
-    wait_for(fake.jobFinished, 5000)
+    until(lambda: finished)
     assert ready == [game]
     fake.launchFailed.emit(game, f"{game}: the prefix is locked")
     assert len(proposed) == 1, "another failure proposes nothing"
@@ -150,8 +154,9 @@ def test_a_launch_missing_its_runner_offers_the_install_then_launches(api, fake)
 def test_the_doctor_offers_the_install_that_fixes_a_check(api, fake):
     needs_rpcs3(fake)
     doctor = api.screens.modules
+    changed = record(doctor.doctorChanged)
     doctor.loadDoctor()
-    wait_for(doctor.doctorChanged, 3000)
+    until(lambda: changed)
     row = next(r for r in doctor.doctor if r["label"] == "RPCS3")
     assert row["value"] is False and row["component"] == "rpcs3"
     assert all(r["component"] == "" for r in doctor.doctor if r["label"] != "RPCS3")
@@ -161,9 +166,10 @@ def test_the_daily_update_runs_quietly_and_says_what_it_updated(api, fake):
     form = loaded(api)
     messages = []
     form.message.connect(messages.append)
+    finished = record(fake.jobFinished)
     form._auto_update()
     assert form.job is None, "no bar for the daily run"
-    wait_for(fake.jobFinished, 5000)
+    until(lambda: finished)
     assert messages == ["Updated xemu 0.8.136"]
     fake.setConfig("components.auto_update", "false")
     form._auto_update()
@@ -180,8 +186,9 @@ def test_a_system_tool_installs_from_the_distribution_through_packagekit(api, fa
     assert form.actions(row_of(form, "gamescope")) == [], "installed by the distribution: nothing for Universe to do"
     ask = form.confirm(row_of(form, "gpu-screen-recorder"), "install")
     assert ask["detail"] == "gpu-screen-recorder from your distribution's packages. It asks for your password."
+    finished = record(fake.jobFinished)
     assert form.act(row_of(form, "gpu-screen-recorder"), "install") is True
-    wait_for(fake.jobFinished, 5000)
+    until(lambda: finished)
     settle(form)
     assert form.rows[row_of(form, "gpu-screen-recorder")]["display"] == "1.0 · system"
 
@@ -194,9 +201,10 @@ def test_setup_offers_the_runners_the_library_needs(api, fake):
     settle(api.screens.components)
     needed = [(i, r) for i, r in enumerate(form.rows) if r.get("via") == "component"]
     assert [(r["label"], r["action"], r["section"]) for _, r in needed] == [("RPCS3", "Install", "Runners your games need")]
+    finished = record(fake.jobFinished)
     assert form.runImport(needed[0][0]) is True
     assert next(r for r in form.rows if r.get("via") == "component")["display"] == "Installing…"
-    wait_for(fake.jobFinished, 5000)
+    until(lambda: finished)
     settle(api.screens.components)
     assert not [r for r in form.rows if r.get("via") == "component"], "installed: nothing left to offer"
 

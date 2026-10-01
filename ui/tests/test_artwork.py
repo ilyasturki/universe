@@ -1,4 +1,4 @@
-from conftest import settle, wait_for
+from conftest import settle, until
 
 
 def test_slots_carry_both_layers_and_a_pick_sits_over_the_default(api, fake):
@@ -95,15 +95,11 @@ def test_the_library_fetch_reports_its_progress_and_stops_after_the_game_in_hand
     view.message.connect(messages.append)
     view.refreshAll()
     assert view.job["ok"] is None and view.job["total"] == 0
-    wait_for(view.jobChanged)
-    while view.job["total"] == 0:
-        wait_for(view.jobChanged)
-    total = view.job["total"]
+    total = until(lambda: view.job["total"])
     assert total >= len(view.rows) and view.job["message"] != "", "progress names the game in hand"
     assert view.cancelRefresh() and view.job["cancelled"] and view.job["message"] == "Stopping…"
     assert not view.cancelRefresh(), "a second stop does nothing"
-    while view.job["ok"] is None:
-        wait_for(view.jobChanged)
+    until(lambda: view.job["ok"] is not None)
     assert view.job["ok"] is True
     assert messages[-1] == f"Stopped after {view.job['done'] + 1} of {total} games"
     assert view.job["done"] + 1 < total, "stopped well before the end"

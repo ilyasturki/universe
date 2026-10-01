@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from conftest import pump
+from conftest import pump, until
 
 CORE = Path(__file__).resolve().parents[1] / "universe_ui" / "qml" / "core"
 
@@ -51,10 +51,8 @@ def test_messages_wait_their_turn(notices):
     call(obj, "show", "Removed Control", "")
     call(obj, "show", "Journal: writing Control…", "")
     assert state(obj) == {"current": "Removed Control", "waiting": ["Journal: writing Control…"]}
-    pump(150 + 320 + 60)
-    assert state(obj) == {"current": "Journal: writing Control…", "waiting": []}
-    pump(150 + 60)
-    assert state(obj)["current"] is None
+    until(lambda: state(obj) == {"current": "Journal: writing Control…", "waiting": []})
+    until(lambda: state(obj)["current"] is None)
 
 
 def test_a_follow_up_takes_its_own_place(notices):
@@ -74,9 +72,7 @@ def test_a_burst_keeps_only_the_newest_waiting(notices):
     call(obj, "show", "That button was L1: it is R1 now", "")
     call(obj, "show", "8BitDo Pro 2: 14 set up", "")
     assert state(obj) == {"current": "That button was A: it is B now", "waiting": ["8BitDo Pro 2: 14 set up"]}
-    pump(150 + 320 + 60)
-    pump(150 + 60)
-    assert state(obj) == {"current": None, "waiting": []}
+    until(lambda: state(obj) == {"current": None, "waiting": []})
 
 
 def test_an_info_does_not_bury_a_waiting_error(notices):
@@ -102,6 +98,5 @@ def test_an_error_stays_longer(notices):
     obj, _ = notices
     call(obj, "fail", "Could not launch Control", "")
     pump(150 + 60)
-    assert state(obj)["current"] == "!Could not launch Control"
-    pump(400)
-    assert state(obj)["current"] is None
+    assert state(obj)["current"] == "!Could not launch Control", "past an info's time"
+    until(lambda: state(obj)["current"] is None)

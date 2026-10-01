@@ -1,14 +1,14 @@
 import json
 import os
 
-from conftest import pump, wait_for
+from conftest import pump, until
 
 
 def test_the_store_orders_unlocks_first_and_masks_a_hidden_one(api, fake):
     store = api.screens.achievements
     store.load("batman-arkham-origins")
     assert store.loading
-    assert wait_for(store.rowsChanged, 3000) is not None, "the read runs off the UI thread"
+    until(lambda: not store.loading, "the read runs off the UI thread")
     rows = store.rows
     assert (store.total, store.unlocked, store.loading) == (6, 3, False)
     assert [r["key"] for r in rows] == ["detective", "blackgate", "rooftops", "combo", "iam", "secret"], "newest unlock first, then the most common locked one"
@@ -20,15 +20,15 @@ def test_the_store_orders_unlocks_first_and_masks_a_hidden_one(api, fake):
 
     store.refresh()
     assert store.loading
-    assert wait_for(store.rowsChanged, 5000) is not None
+    until(lambda: not store.loading)
     assert store.fetchedText != "20 Sep 2026 · 21:14", "asked the store again"
 
 
 def test_a_game_no_source_lists_says_so(api, fake):
     store = api.screens.achievements
     store.load("dishonored")
-    assert wait_for(store.stateChanged, 3000) is not None
-    assert not store.loading and store.count == 0 and "no source lists" in store.error
+    until(lambda: not store.loading)
+    assert store.count == 0 and "no source lists" in store.error
 
 
 def test_the_game_model_carries_the_counts(api, fake):
@@ -41,12 +41,10 @@ def test_an_unlock_mid_session_reaches_home_once(api, fake):
     seen = []
     api.home.achievementUnlocked.connect(seen.append)
     fake.launch("batman-arkham-origins", "DP-1")
-    got = wait_for(api.home.achievementUnlocked, 5000)
-    assert got is not None, "the fake source files one a second in"
-    item = got[0]
+    item = until(lambda: seen, "the fake source files one in once the session runs")[0]
     assert item["gameId"] == "batman-arkham-origins" and item["key"] == "combo" and item["name"] == "Unbreakable"
     assert item["rarityText"] == "9.4% of players"
-    pump(600)
+    pump(300)
     assert [i["key"] for i in seen] == ["combo"], "the unlocks from before the session are no news, and this one comes once"
     assert api.allGames.byId("batman-arkham-origins").achievementsUnlocked == 4
 
@@ -76,10 +74,10 @@ def test_a_replay_shows_the_stamped_unlocks_again_and_a_stale_one_is_no_news(api
     seen = []
     api.home.achievementUnlocked.connect(seen.append)
     fake.launch("batman-arkham-origins", "DP-1")
-    wait_for(api.home.achievementUnlocked, 5000)
-    pump(600)
+    until(lambda: seen)
+    pump(300)
     assert [i["key"] for i in seen] == ["combo"], "the stamp from before this run of the UI stays quiet"
     stamp("2026-09-27T12:00:00+00:00", ["rooftops", "detective"])
-    pump(900)
+    until(lambda: len(seen) == 3)
     assert [i["key"] for i in seen] == ["combo", "rooftops", "detective"], "each stamped key, known or not, in the stamp's order"
     assert seen[-1]["name"] and seen[-1]["gameId"] == "batman-arkham-origins"

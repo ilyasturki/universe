@@ -1,9 +1,9 @@
 import pytest
-from PySide6.QtCore import QUrl
+from PySide6.QtCore import QCoreApplication, QEvent, QUrl
 from PySide6.QtQml import QQmlComponent, QQmlEngine, QQmlExpression
 from PySide6.QtQuick import QQuickItem  # noqa: F401  (down-casts created objects, for childItems)
 
-from conftest import pump
+from conftest import pump, until
 from universe_ui import host
 
 FAMILIES = ["steam-deck", "dualsense-edge", "dualsense", "dualshock4", "xbox-elite", "xbox", "switch-pro", "8bitdo-pro-3", "generic"]
@@ -18,9 +18,9 @@ def engine(api):
     # The items go before the api they bind to, or their bindings complain on the way out.
     for item in engine.made:
         item.deleteLater()
-    pump(20)
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
     engine.deleteLater()
-    pump(20)
+    QCoreApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
 
 
 def create(engine, name, **props):
@@ -54,7 +54,6 @@ def slots_of(fake, family):
 @pytest.mark.parametrize("family", FAMILIES)
 def test_pad_art_has_a_button_per_slot(engine, fake, family):
     art = create(engine, "PadArt.qml", family=family, width=900, height=600)
-    pump(50)
     drawn = {c.property("slot") for c in art.childItems() if c.property("slot") is not None}
     expected = set(slots_of(fake, family))
     missing = expected - drawn
@@ -62,7 +61,6 @@ def test_pad_art_has_a_button_per_slot(engine, fake, family):
     assert drawn <= expected | {"mute"}, f"{family} draws slots the core does not list: {sorted(drawn - expected)}"
     art.setProperty("pressed", {"south": True})
     art.setProperty("axes", {"lx": -0.5, "rt": 0.7})
-    pump(50)
 
 
 def test_every_slot_has_a_glyph(engine, fake):
@@ -90,9 +88,8 @@ def test_hint_glyphs_follow_the_pad(engine, fake):
 
 def test_live_view_names_a_pulled_trigger(engine, fake):
     art = create(engine, "ControllerArt.qml", family="dualsense-edge", connected=True, width=1200, height=800)
-    pump(50)
     pad = descendant(art, "geo")
-    before = pad.height()
+    before = until(pad.height)
     call(engine, art, "axis('rt', 0.4)")
     assert art.property("lastSlot") == "", "a trigger logs once it passes half"
     call(engine, art, "axis('rt', 0.6)")
@@ -125,7 +122,6 @@ def test_cards_land_on_the_first_row_and_leave_left(engine, fake):
     ]
     groups = [{"title": "Installed", "rows": [0]}, {"title": "Owned", "rows": [1]}]
     cards = create(engine, "SettingsCards.qml", rows=rows, groups=groups, columns=1, width=1200, height=800)
-    pump(50)
     call(engine, cards, "reset()")
     assert cards.property("index") == 0
     layout = cards.property("layout").toVariant()

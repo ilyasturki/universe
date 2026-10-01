@@ -1,4 +1,4 @@
-from conftest import rows_by_key, settle, wait_for
+from conftest import record, rows_by_key, settle, until
 from universe_ui.screens.add import runner_candidates
 
 
@@ -65,8 +65,9 @@ def test_lutris_preview_then_import(api, fake):
     messages, errors = [], []
     form.message.connect(messages.append)
     fake.error.connect(lambda kind, message: errors.append(kind))
+    changed = record(fake.libraryChanged)
     form.importLutris()
-    assert wait_for(fake.libraryChanged) == ([],), "a full reload: the import may have updated games too"
+    assert until(lambda: changed)[0] == ([],), "a full reload: the import may have updated games too"
     settle(form)
     assert messages == ["Imported 2 games from Lutris · 43 h of play"] and errors == []
     assert form.lutris is None and rows_by_key(form)["lutris"]["display"] == ""

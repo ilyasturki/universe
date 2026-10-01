@@ -1,4 +1,4 @@
-from conftest import wait_for
+from conftest import until
 from universe_ui.screens.search import word_score
 
 SECTIONS = [
@@ -16,8 +16,7 @@ def indexed(api):
     search = api.screens.search
     search.sections = SECTIONS
     search.load()
-    if not search.ready:
-        wait_for(search.readyChanged, 5000)
+    until(lambda: search.ready)
     return search
 
 
@@ -115,5 +114,4 @@ def test_the_index_follows_the_config(api, fake):
     assert search.results[0]["display"] == "On"
     fake.setConfig("launch.wayland", "false")
     search.load()
-    wait_for(search.readyChanged, 5000)
-    assert search.results[0]["display"] == "Off", "a reload reads the values again and keeps the query"
+    until(lambda: search.results[0]["display"] == "Off", "a reload reads the values again and keeps the query")
