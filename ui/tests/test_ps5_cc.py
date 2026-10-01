@@ -2,15 +2,14 @@ import os
 
 from PySide6.QtCore import QObject, Qt
 from PySide6.QtTest import QTest
-from test_render import lit_fraction, render
+from test_render import lit_fraction, render, settle
 
-from conftest import pump, wait_for
+from conftest import until
 from universe_ui import host
 
 
 def key(window, k):
     QTest.keyClick(window, k)
-    pump(60)
 
 
 def covered_fraction(image, rows):
@@ -27,18 +26,19 @@ def start(api, fake, ident):
     assert overlay is not None
     api.home.attachOverlay(overlay)
     overlay.show()
-    pump(200)
+    settle(overlay)
     fake.launch(ident, "")
-    wait_for(fake.sessionShown, 3000)
-    pump(300)
+    until(lambda: api.home.shown == "game")
     return engine, window, overlay
 
 
-def open_cc(api, overlay, wait=600):
+def open_cc(api, overlay):
     api.home.openDock()
     overlay.requestActivate()
-    pump(wait)
-    return overlay.property("contentItem").childItems()[0].property("item")
+    until(overlay.isActive)
+    cc = overlay.property("contentItem").childItems()[0].property("item")
+    until(lambda: cc.property("open") is True)
+    return cc
 
 
 def shot(overlay, name):
@@ -49,20 +49,19 @@ def shot(overlay, name):
 
 def stop(api, window, overlay):
     api.home.stop()
-    pump(200)
+    until(lambda: api.universe.currentSession is None)
     window.close()
     overlay.close()
-    pump(50)
 
 
 def test_the_control_center_lays_its_cards_over_the_bottom_of_the_game(api, fake):
     _engine, window, overlay = start(api, fake, "batman-arkham-origins")
-    cc = open_cc(api, overlay, wait=60)
-    shot(overlay, "cc-open-60ms")
-    assert cc is not None and cc.property("open") is True and cc.property("zone") == "cards"
+    cc = open_cc(api, overlay)
+    assert cc.property("zone") == "cards"
+    until(lambda: cc.appearOf(0) > 0)
+    shot(overlay, "cc-opening")
     assert cc.appearOf(0) == cc.appearOf(1) and cc.appearOf(3) < 1, "the first two cards land together, the rest follow"
-    pump(1400)
-    assert all(cc.appearOf(i) == 1 for i in range(len(cc.property("cards").toVariant())))
+    until(lambda: all(cc.appearOf(i) == 1 for i in range(len(cc.property("cards").toVariant()))))
     ids = [c["id"] for c in cc.property("cards").toVariant()]
     assert ids[:2] == ["game", "hub"] and "trophies" in ids and "captures" in ids
     shot(overlay, "cc-open")
@@ -81,9 +80,8 @@ def test_the_bar_opens_a_panel_over_its_icon_and_b_steps_back_out(api, fake):
     key(overlay, Qt.Key.Key_Right)
     assert cc.property("current").toVariant()["id"] == "game"
     key(overlay, Qt.Key.Key_Return)
-    pump(200)
+    until(lambda: cc.property("zone") == "panel")
     shot(overlay, "cc-panel")
-    assert cc.property("zone") == "panel"
     assert [r["id"] for r in cc.property("panelRows").toVariant()] == ["resume", "details", "pause", "quit"]
     was = api.home.pauseOnHome
     key(overlay, Qt.Key.Key_Down)
@@ -93,8 +91,7 @@ def test_the_bar_opens_a_panel_over_its_icon_and_b_steps_back_out(api, fake):
     key(overlay, Qt.Key.Key_Escape)
     assert cc.property("zone") == "bar"
     key(overlay, Qt.Key.Key_Escape)
-    pump(400)
-    assert api.home.open is False, "B closes the Control Center"
+    until(lambda: api.home.open is False, "B closes the Control Center")
     stop(api, window, overlay)
 
 
@@ -104,14 +101,13 @@ def test_the_game_hub_card_lands_on_the_games_hero_at_home(api, fake):
     key(overlay, Qt.Key.Key_Right)
     assert cc.property("cards").toVariant()[cc.property("card")]["id"] == "hub"
     key(overlay, Qt.Key.Key_Return)
-    pump(600)
-    assert api.home.shown == "launcher" and api.home.open is False
+    until(lambda: api.home.shown == "launcher" and api.home.open is False)
     root = window.property("contentItem").childItems()[0].property("item")
     home = root.findChild(QObject, "homePage")
-    assert home.property("zone") == "hero" and home.property("currentGame").property("id") == "dead-cells"
+    until(lambda: home.property("zone") == "hero" and (game := home.property("currentGame")) is not None and game.property("id") == "dead-cells")
     assert api.home.takeLanding() == "", "taken once"
     api.home.toGame()
-    pump(300)
+    until(lambda: api.home.shown == "game")
     stop(api, window, overlay)
 
 
@@ -122,10 +118,9 @@ def test_the_trophies_card_grows_into_the_games_list(api, fake):
     for _ in range(ids.index("trophies")):
         key(overlay, Qt.Key.Key_Right)
     key(overlay, Qt.Key.Key_Return)
-    pump(400)
+    until(lambda: cc.property("zone") == "sheet" and cc.property("sheet") == "trophies")
+    until(lambda: len(api.screens.dockAchievements.rows) > 0)
     shot(overlay, "cc-trophies")
-    assert cc.property("zone") == "sheet" and cc.property("sheet") == "trophies"
-    assert len(api.screens.dockAchievements.rows) > 0
     key(overlay, Qt.Key.Key_Escape)
     assert cc.property("zone") == "cards"
     stop(api, window, overlay)

@@ -2,9 +2,8 @@ import json
 
 import pytest
 from test_render import render
-from test_render import settle as settle_window
 
-from conftest import index_of, pump, rows_by_key, wait_for
+from conftest import index_of, record, rows_by_key, until
 
 
 @pytest.fixture
@@ -38,9 +37,7 @@ def signed_out(client):
 
 def loaded(form):
     form.load()
-    wait_for(form.busyChanged, 3000)
-    if form.busy:
-        wait_for(form.busyChanged, 3000)
+    until(lambda: not form.busy)
     return form
 
 
@@ -83,20 +80,19 @@ def test_signed_in_stores_skip_their_step(empty_api, empty):
 def test_an_offered_store_turns_on_and_adopts_its_launchers_games_once_signed_in(empty_api, empty):
     form = loaded(empty_api.screens.onboarding)
     assert [s["id"] for s in form.steps] == ["found", "stores", "preferences", "done"], "Epic is off, its launcher is here"
+    finished = record(empty.jobFinished)
     assert form.runImport(index_of(form, "heroic-epic")) is True
-    wait_for(empty.jobFinished, 5000)
-    pump(50)
+    until(lambda: finished)
     assert empty.core._source("epic")["enabled"] is True, "adopting turns the source on"
-    assert rows_by_key(form)["heroic-epic"]["display"] == "Sign in to Epic Games to adopt them"
+    until(lambda: rows_by_key(form)["heroic-epic"]["display"] == "Sign in to Epic Games to adopt them")
     form.next()
     assert form.stepId == "stores" and [r["key"] for r in form.rows if r["module"] == "epic"] == ["logged_in", "link", "code"], "on, it asks for a sign-in"
     empty.core._source("epic")["logged_in"] = True
     empty_api.screens.login._source = "epic"
     form._on_login(True, "Signed in.")
-    wait_for(empty.jobFinished, 5000)
-    pump(50)
+    until(lambda: len(finished) == 2)
     form.back()
-    assert rows_by_key(form)["heroic-epic"]["display"] == "Nothing new", "signed in, the scan runs again"
+    until(lambda: rows_by_key(form)["heroic-epic"]["display"] == "Nothing new", "signed in, the scan runs again")
 
 
 def test_the_store_switch_turns_a_source_on_and_off(empty_api, empty):
@@ -111,22 +107,18 @@ def test_the_store_switch_turns_a_source_on_and_off(empty_api, empty):
 def test_found_rows_run_the_importers(empty_api, empty):
     form = loaded(empty_api.screens.onboarding)
     assert form.runImport(index_of(form, "lutris")) is True
-    wait_for(form.busyChanged, 3000)
-    if form.busy:
-        wait_for(form.busyChanged, 3000)
+    until(lambda: not form.busy)
     assert rows_by_key(form)["lutris"]["display"] == "2 games added" and rows_by_key(form)["lutris"]["type"] == "static"
     assert empty_api.allGames.count == 2
     assert form.runImport(index_of(form, "lutris")) is False, "an import runs once"
     assert form.runImport(index_of(form, "heroic-amazon")) is False, "a launcher Universe cannot take over has nothing to run"
+    finished = record(empty.jobFinished)
     assert form.runImport(index_of(form, "heroic-gog")) is True
-    wait_for(empty.jobFinished, 5000)
-    pump(50)
-    assert rows_by_key(form)["heroic-gog"]["display"] == "Nothing new"
+    until(lambda: finished)
+    until(lambda: rows_by_key(form)["heroic-gog"]["display"] == "Nothing new")
     assert empty.core.source_settings("gog")["scan_dirs"] == "/mnt/games/PC", "the other launcher's folder joined the source's scan_dirs"
     assert form.runImport(index_of(form, "roms")) is True
-    wait_for(form.busyChanged, 3000)
-    if form.busy:
-        wait_for(form.busyChanged, 3000)
+    until(lambda: not form.busy)
     assert rows_by_key(form)["roms"]["display"] == "1 game added"
     assert empty_api.allGames.count == 3 and empty.core.get("xenoblade-chronicles-3")["launch"]["runner"] == "eden"
     while form.stepId != "done":
@@ -179,62 +171,48 @@ def test_the_wizard_opens_on_first_run_in_both_looks(empty_api, empty, theme):
     def press(key, times=1):
         for _ in range(times):
             QTest.keyClick(window, key)
-            pump(150)
 
     signed_out(empty)
     empty_api.theme.set(theme)
     empty_api.theme.takeLanding()
     _engine, window = render(empty_api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
-    home = root.property("activePage") if theme == "reprise" else root.findChild(QObject, "homePage")
+    home = until(lambda: root.property("activePage") if theme == "reprise" else root.findChild(QObject, "homePage"))
     form = empty_api.screens.onboarding
-    if form.busy:
-        wait_for(form.busyChanged, 3000)
-    settle_window(window)
-    assert opened() and form.stepId == "found" and form.count == 6
+    until(lambda: opened() and not form.busy and form.stepId == "found" and form.count == 6)
     press(Qt.Key.Key_I)
-    assert form.stepId == "stores", "X moves on"
+    until(lambda: form.stepId == "stores", "X moves on")
     press(Qt.Key.Key_Escape)
-    assert form.stepId == "found" and opened(), "B goes back a step, the dialog stays"
+    until(lambda: form.stepId == "found" and opened(), "B goes back a step, the dialog stays")
     press(Qt.Key.Key_Down, 6)
     press(Qt.Key.Key_Return)
-    assert form.stepId == "stores", "Down past the last row reaches the buttons, A on Continue moves on"
+    until(lambda: form.stepId == "stores", "Down past the last row reaches the buttons, A on Continue moves on")
     press(Qt.Key.Key_Down, 5)
     press(Qt.Key.Key_Left)
     press(Qt.Key.Key_Return)
-    assert form.stepId == "found", "the Back button goes back"
+    until(lambda: form.stepId == "found", "the Back button goes back")
     press(Qt.Key.Key_Escape)
-    settle_window(window)
-    assert empty_api.memory.get("onboarded") is True and not opened(), "B on the first step skips the setup"
+    until(lambda: empty_api.memory.get("onboarded") is True and not opened(), "B on the first step skips the setup")
     if theme == "reprise":
         press(Qt.Key.Key_Up)
-        press(Qt.Key.Key_Right)
-        assert home.property("onSetup") is True
-    else:
-        press(Qt.Key.Key_Right)
-        assert home.property("onSetup") is True
+    press(Qt.Key.Key_Right)
+    until(lambda: home.property("onSetup") is True)
     press(Qt.Key.Key_Return)
-    settle_window(window)
-    assert opened() and form.stepId == "found", "the empty Home's Set up entry runs it again"
+    until(lambda: opened() and form.stepId == "found", "the empty Home's Set up entry runs it again")
     press(Qt.Key.Key_Return)
-    wait_for(form.busyChanged, 3000)
-    if form.busy:
-        wait_for(form.busyChanged, 3000)
-    settle_window(window)
-    assert empty_api.allGames.count == 2, "A on the Lutris row imports behind the dialog"
+    until(lambda: empty_api.allGames.count == 2, "A on the Lutris row imports behind the dialog")
     press(Qt.Key.Key_Escape)
-    settle_window(window)
-    assert not opened()
+    until(lambda: not opened())
     if theme == "reprise":
-        assert home.property("tileSelected") is False and home.property("currentGame").property("id") is not None, (
-            "the rail that filled behind the dialog lands on a game"
+        until(
+            lambda: home.property("tileSelected") is False and (game := home.property("currentGame")) is not None and game.property("id") is not None,
+            "the rail that filled behind the dialog lands on a game",
         )
         press(Qt.Key.Key_Down)
         press(Qt.Key.Key_Right, 2)
-        assert home.property("tileSelected") is True, "Down leaves the hero pills for the rail, Right past the last game reaches the Library tile"
+        until(lambda: home.property("tileSelected") is True, "Down leaves the hero pills for the rail, Right past the last game reaches the Library tile")
         press(Qt.Key.Key_Left)
-        assert home.property("tileSelected") is False and home.property("currentGame") is not None
+        until(lambda: home.property("tileSelected") is False and home.property("currentGame") is not None)
     else:
-        assert home.property("onSetup") is False and home.property("index") <= home.property("allIndex")
+        until(lambda: home.property("onSetup") is False and home.property("index") <= home.property("allIndex"))
     window.close()
-    pump(50)

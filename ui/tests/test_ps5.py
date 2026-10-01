@@ -3,7 +3,7 @@ from PySide6.QtCore import Q_ARG, QMetaObject, QObject, Qt
 from PySide6.QtTest import QTest
 from test_render import render
 
-from conftest import pump, wait_for
+from conftest import record, until
 
 
 @pytest.fixture
@@ -14,7 +14,6 @@ def ps5(api):
     root = window.property("contentItem").childItems()[0].property("item")
     yield window, root
     window.close()
-    pump(50)
     del engine
 
 
@@ -36,13 +35,11 @@ def test_a_move_drops_the_hero_and_it_comes_back_once_the_row_rests(ps5):
     window, root = ps5
     home = root.findChild(QObject, "homePage")
     QTest.keyClick(window, Qt.Key.Key_Right)
-    pump(20)
     assert home.property("heroShown") is False and home.property("titleShown") is False, "the hero and the name go at once"
     moved = home.property("currentGame").property("id")
-    pump(700)
-    assert home.property("heroShown") is True and home.property("sideShown") is False, "the side tile comes last"
-    pump(600)
-    assert home.property("sideShown") is True
+    until(lambda: home.property("heroShown") is True)
+    assert home.property("sideShown") is False, "the side tile comes last"
+    until(lambda: home.property("sideShown") is True)
     assert value(home, "rested")["game"].property("id") == moved
 
 
@@ -50,30 +47,24 @@ def test_down_goes_into_the_hero_then_the_hub_and_b_goes_back_up(ps5):
     window, root = ps5
     home = root.findChild(QObject, "homePage")
     QTest.keyClick(window, Qt.Key.Key_Down)
-    pump(50)
-    assert home.property("zone") == "hero" and home.property("scroll") > 0
+    until(lambda: home.property("zone") == "hero" and home.property("scroll") > 0)
     strips = [s["title"] for s in value(home, "strips")]
     assert strips[0] == "Continue where you left off" and "Captures" in strips and "About" in strips
     QTest.keyClick(window, Qt.Key.Key_Down)
-    pump(50)
-    assert home.property("zone") == "hub" and home.property("strip") == 0
+    until(lambda: home.property("zone") == "hub" and home.property("strip") == 0)
     QTest.keyClick(window, Qt.Key.Key_Escape)
-    pump(50)
-    assert home.property("zone") == "rail" and home.property("scroll") == 0
+    until(lambda: home.property("zone") == "rail" and home.property("scroll") == 0)
 
 
 def test_left_of_the_first_game_is_the_welcome_hub(ps5):
     window, root = ps5
     home = root.findChild(QObject, "homePage")
     QTest.keyClick(window, Qt.Key.Key_Left)
-    pump(900)
-    assert value(home, "rested")["kind"] == "welcome"
+    until(lambda: value(home, "rested")["kind"] == "welcome")
     QTest.keyClick(window, Qt.Key.Key_Down)
-    pump(50)
-    assert home.property("zone") == "welcome"
+    until(lambda: home.property("zone") == "welcome")
     QTest.keyClick(window, Qt.Key.Key_Escape)
-    pump(50)
-    assert home.property("zone") == "rail"
+    until(lambda: home.property("zone") == "rail")
 
 
 def test_back_from_a_game_the_home_builds_itself_up_again(api, fake):
@@ -82,53 +73,52 @@ def test_back_from_a_game_the_home_builds_itself_up_again(api, fake):
     _engine, window = render(api, activate=True)
     root = window.property("contentItem").childItems()[0].property("item")
     home = root.findChild(QObject, "homePage")
+    ended = record(fake.sessionEnded)
     QMetaObject.invokeMethod(root, "launch", Q_ARG("QVariant", api.allGames.byId("dead-cells")))
-    wait_for(fake.sessionShown, 5000)
-    pump(100)
-    assert api.home.shown == "game" and home.property("railReveal") == 0, "blank under the game: nothing old flashes on the way back"
+    until(lambda: api.home.shown == "game")
+    assert home.property("railReveal") == 0, "blank under the game: nothing old flashes on the way back"
     fake.stop("")
-    wait_for(fake.sessionEnded, 3000)
-    pump(100)
+    until(lambda: ended)
     assert home.property("railReveal") < 1 and home.property("heroShown") is False, "the row first, the hero later"
-    pump(2200)
-    assert home.property("railReveal") == 1 and home.property("chromeReveal") == 1 and home.property("heroShown") is True
+    until(lambda: home.property("railReveal") == 1 and home.property("chromeReveal") == 1 and home.property("heroShown") is True)
     assert home.property("currentGame").property("id") == "dead-cells", "the game just played, focused"
     window.close()
-    pump(50)
 
 
 def test_a_dialog_taller_than_the_screen_scrolls_its_text(ps5):
     window, root = ps5
     dialog = root.findChild(QObject, "dialog")
     flick = next(o for o in dialog.findChildren(QObject) if o.metaObject().className().startswith("QQuickFlickable"))
+    scrolling = next(o for o in flick.findChildren(QObject) if o.metaObject().className() == "QQuickBehavior")
 
     def ask(spec):
         QMetaObject.invokeMethod(dialog, "show", Q_ARG("QVariant", spec), Q_ARG("QVariant", None))
-        pump(400)
+        assert dialog.property("open") is True
 
-    def down(times):
-        for _ in range(times):
-            QTest.keyClick(window, Qt.Key.Key_Down)
-            pump(30)
-        pump(400)
+    def close():
+        QTest.keyClick(window, Qt.Key.Key_Escape)
+        until(lambda: dialog.property("open") is False)
 
     ask({"message": "Delete the save?", "buttons": ["Cancel", "Delete"]})
-    down(1)
-    assert flick.property("contentY") == 0, "a short question does not move"
-    QTest.keyClick(window, Qt.Key.Key_Escape)
-    pump(300)
+    QTest.keyClick(window, Qt.Key.Key_Down)
+    assert scrolling.property("targetValue") == 0 and flick.property("contentY") == 0, "a short question does not move"
+    close()
     ask({"message": "A question", "detail": "A detail that goes on and on. " * 300, "buttons": ["Cancel", "OK"]})
+    until(lambda: flick.property("contentHeight") > flick.property("height"))
     card = flick.parentItem()
     assert card.property("height") <= window.height(), "the card stays on the screen"
-    assert flick.property("contentHeight") > flick.property("height")
-    down(1)
-    assert flick.property("contentY") > 0, "Down reads on"
-    down(80)
-    assert flick.property("contentY") == flick.property("contentHeight") - flick.property("height"), "Down reaches the end"
-    QTest.keyClick(window, Qt.Key.Key_Escape)
-    pump(300)
+    QTest.keyClick(window, Qt.Key.Key_Down)
+    until(lambda: flick.property("contentY") > 0, "Down reads on")
+    end = flick.property("contentHeight") - flick.property("height")
+    # Each Down steps on from where the scroll is, so it waits for a frame of movement first.
+    while scrolling.property("targetValue") < end:
+        at = flick.property("contentY")
+        QTest.keyClick(window, Qt.Key.Key_Down)
+        until(lambda at=at: flick.property("contentY") != at)
+    until(lambda: flick.property("contentY") == end, "Down reaches the end")
+    close()
     ask({"message": "Again", "buttons": ["OK"]})
-    assert flick.property("contentY") == 0, "a new question starts at its top"
+    until(lambda: flick.property("contentY") == 0, "a new question starts at its top")
 
 
 def test_the_folder_sheet_follows_the_chip_past_the_screen_edge(ps5, tmp_path, monkeypatch):
@@ -141,20 +131,24 @@ def test_the_folder_sheet_follows_the_chip_past_the_screen_edge(ps5, tmp_path, m
     monkeypatch.setattr(paths, "_mounts", lambda: [str(d) for d in drives])
     window, root = ps5
     QMetaObject.invokeMethod(root, "browse", Q_ARG("QVariant", {"path": str(drives[0])}), Q_ARG("QVariant", None))
-    pump(400)
     folder = root.findChild(QObject, "folder")
-    chips = next(o for o in folder.findChildren(QObject) if o.metaObject().className().startswith("QQuickListView") and (o.property("count") or 0) >= 30)
-    texts = [o for o in folder.findChildren(QObject) if o.inherits("QQuickText") and o.property("visible")]
-    title = next(t for t in texts if t.property("text") == "Choose a folder")
-    path = next(t for t in texts if str(t.property("text")).endswith("Drive 00"))
+    chips = until(
+        lambda: next(
+            (o for o in folder.findChildren(QObject) if o.metaObject().className().startswith("QQuickListView") and (o.property("count") or 0) >= 30), None
+        )
+    )
+
+    def text(shown):
+        return next((o for o in folder.findChildren(QObject) if o.inherits("QQuickText") and o.property("visible") and shown(str(o.property("text")))), None)
+
+    title = until(lambda: text(lambda t: t == "Choose a folder"))
+    path = until(lambda: text(lambda t: t.endswith("Drive 00")))
     right = title.mapToItem(window.contentItem(), 0, 0).x() + title.property("implicitWidth")
-    assert path.mapToItem(window.contentItem(), 0, 0).x() >= right, "the whole title shows, the path beside it"
-    assert path.property("truncated") is True, "a path longer than the room gives way"
+    until(lambda: path.mapToItem(window.contentItem(), 0, 0).x() >= right, "the whole title shows, the path beside it")
+    until(lambda: path.property("truncated") is True, "a path longer than the room gives way")
     QTest.keyClick(window, Qt.Key.Key_Up)
     for _ in range(chips.property("count")):
         QTest.keyClick(window, Qt.Key.Key_Right)
-        pump(30)
-    pump(600)
-    chip = chips.property("currentItem")
     assert chips.property("currentIndex") == chips.property("count") - 1
-    assert chip.property("x") + chip.property("width") <= chips.property("contentX") + chips.property("width"), "the last chip is in view"
+    chip = chips.property("currentItem")
+    until(lambda: chip.property("x") + chip.property("width") <= chips.property("contentX") + chips.property("width"), "the last chip is in view")

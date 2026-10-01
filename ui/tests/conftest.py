@@ -64,23 +64,6 @@ def api(fake, tmp_path):
     api.shutdown()
 
 
-def wait_for(signal, timeout_ms=5000):
-    from PySide6.QtCore import QEventLoop, QTimer
-
-    loop = QEventLoop()
-    got = []
-
-    def capture(*args):
-        got.append(args)
-        loop.quit()
-
-    signal.connect(capture)
-    QTimer.singleShot(timeout_ms, loop.quit)
-    loop.exec()
-    signal.disconnect(capture)
-    return got[0] if got else None
-
-
 def pump(ms):
     from PySide6.QtCore import QEventLoop, QTimer
 
