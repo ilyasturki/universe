@@ -178,10 +178,15 @@ const CONFIG_KEYS: &[ConfigKey] = &[
     config_key("Folders", "paths.games_root", "path", "Games", "Where sources install games."),
     config_key("Folders", "paths.prefixes_root", "path", "Wine prefixes", "Where a game's prefix is made when it names none."),
     config_key("Folders", "paths.recordings_root", "path", "Recordings", "Where the capture module files its videos."),
-    config_key("API keys", "keys.sgdb", "secret", "SteamGridDB key", "Artwork comes from SteamGridDB with a key from steamgriddb.com."),
+    config_key(
+        "API keys",
+        "keys.sgdb",
+        "secret",
+        "SteamGridDB key (optional)",
+        "Your own key from steamgriddb.com adds its community art to the picker, and square art. Without one, art comes from the stores, GOG GamesDB and libretro.",
+    ),
     config_key("API keys", "keys.sgdb_file", "path", "SteamGridDB key file", "A file holding the key, read when the key above is empty."),
-    config_key("API keys", "keys.rawg", "secret", "RAWG key", "Descriptions and metadata come from RAWG with a key from rawg.io."),
-    config_key("API keys", "keys.rawg_file", "path", "RAWG key file", "A file holding the key, read when the key above is empty."),
+    config_key("API keys", "keys.prefer_sgdb", "bool", "Prefer SteamGridDB art", "With a key, SteamGridDB's art fills a slot before the stores' and GamesDB's."),
     ConfigKey {
         choices: &["auto", "gnome", "kde", "cinnamon", "sway", "hyprland", "niri", "x11", "none"],
         ..config_key(
@@ -480,7 +485,11 @@ impl Core {
         out.push(Field::new("favorite", "Favourite", "bool", section).plain(r.game.favorite.to_string()));
         out.push(Field::new("hidden", "Hidden", "bool", section).plain(r.game.hidden.to_string()));
         out.push(Field::new("tags", "Tags", "list", section).plain(r.game.tags.join(",")));
-        for (key, label, n) in [("metadata.sgdb_id", "SteamGridDB id", r.game.metadata.sgdb_id), ("metadata.rawg_id", "RAWG id", r.game.metadata.rawg_id)] {
+        for (key, label, n) in [
+            ("metadata.steam_appid", "Steam app id", r.game.metadata.steam_appid),
+            ("metadata.gamesdb_id", "GOG GamesDB id", r.game.metadata.gamesdb_id),
+            ("metadata.sgdb_id", "SteamGridDB id", r.game.metadata.sgdb_id),
+        ] {
             out.push(Field::new(key, label, "int", "Artwork").about("", true).plain(if n == 0 { String::new() } else { n.to_string() }));
         }
 

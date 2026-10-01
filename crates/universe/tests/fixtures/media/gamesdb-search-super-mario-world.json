@@ -1,0 +1,568 @@
+{
+ "items": [
+  {
+   "id": "58900136623579196",
+   "first_release_date": "2001-12-14T00:00:00+0000",
+   "releases": [
+    {
+     "id": "59889348436720583",
+     "platform_id": "d2d",
+     "external_id": "3f33f840e718",
+     "release_per_platform_id": "d2d_3f33f840e718",
+     "availability": 0
+    }
+   ],
+   "title": {
+    "*": "Super Mario World",
+    "en-US": "Super Mario World"
+   },
+   "type": "game",
+   "developers": [
+    {
+     "name": "Nintendo R&D2"
+    }
+   ],
+   "publishers": [
+    {
+     "name": "Nintendo"
+    },
+    {
+     "name": "Gradiente"
+    },
+    {
+     "name": "iQue"
+    }
+   ],
+   "genres": [
+    {
+     "name": {
+      "*": "Platform",
+      "en-US": "Platform"
+     }
+    }
+   ],
+   "summary": {
+    "*": "The remake of Super Mario World included in Super Mario Advance 2 for the Game Boy Advance. In this refreshed version for the portable system, you can choose to play as either Mario or Luigi in single player.\n\nIf you've played the original, you'll find that Mario controls much the same as the Super Nintendo counterpart, but his brother Luigi can jump a bit higher and float a short while, and Luigi's fireballs will bounce higher as well.\n\nSaving in this game is available at any point during game, either on the overworld or inside of a level.",
+    "en-US": "The remake of Super Mario World included in Super Mario Advance 2 for the Game Boy Advance. In this refreshed version for the portable system, you can choose to play as either Mario or Luigi in single player.\n\nIf you've played the original, you'll find that Mario controls much the same as the Super Nintendo counterpart, but his brother Luigi can jump a bit higher and float a short while, and Luigi's fireballs will bounce higher as well.\n\nSaving in this game is available at any point during game, either on the overworld or inside of a level."
+   },
+   "vertical_cover": {
+    "url_format": "https://images.gog.com/e7bfb24f6508cce051be8c34b1b2a84a6cc10652f96b060e70b934188ef003a1{formatter}.{ext}?namespace=gamesdb"
+   },
+   "cover": {
+    "url_format": "https://images.gog.com/e7bfb24f6508cce051be8c34b1b2a84a6cc10652f96b060e70b934188ef003a1{formatter}.{ext}?namespace=gamesdb"
+   },
+   "logo": {
+    "url_format": "https://images.gog.com/e7bfb24f6508cce051be8c34b1b2a84a6cc10652f96b060e70b934188ef003a1{formatter}.{ext}?namespace=gamesdb"
+   },
+   "square_icon": {
+    "url_format": "https://images.gog.com/e7bfb24f6508cce051be8c34b1b2a84a6cc10652f96b060e70b934188ef003a1{formatter}.{ext}?namespace=gamesdb"
+   },
+   "screenshots": [
+    {
+     "url_format": "https://images.gog.com/a9589e6e7aa3d09d45a127be585b868c79e2e3a01b0f5c388043f8d813856e7c{formatter}.{ext}?namespace=gamesdb"
+    },
+    {
+     "url_format": "https://images.gog.com/766d32f134bf30b33a17188d42c808039e5634d032531499baa3de7153d6787c{formatter}.{ext}?namespace=gamesdb"
+    }
+   ]
+  },
+  {
+   "id": "51154291278329341",
+   "first_release_date": "1990-11-21T00:00:00+0000",
+   "releases": [
+    {
+     "id": "52504951172344717",
+     "platform_id": "snes",
+     "external_id": "1334",
+     "release_per_platform_id": "snes_1334",
+     "availability": 0
+    },
+    {
+     "id": "52710688722324827",
+     "platform_id": "snes",
+     "external_id": "Super Mario World",
+     "release_per_platform_id": "snes_Super Mario World",
+     "availability": 0
+    },
+    {
+     "id": "52715812910456662",
+     "platform_id": "snes",
+     "external_id": "2766",
+     "release_per_platform_id": "snes_2766",
+     "availability": 0
+    },
+    {
+     "id": "52715812915418218",
+     "platform_id": "snes",
+     "external_id": "2765",
+     "release_per_platform_id": "snes_2765",
+     "availability": 0
+    },
+    {
+     "id": "52715812924844080",
+     "platform_id": "snes",
+     "external_id": "2767",
+     "release_per_platform_id": "snes_2767",
+     "availability": 0
+    },
+    {
+     "id": "52715812930677782",
+     "platform_id": "snes",
+     "external_id": "2764",
+     "release_per_platform_id": "snes_2764",
+     "availability": 0
+    },
+    {
+     "id": "52727165507630449",
+     "platform_id": "snes",
+     "external_id": "2768",
+     "release_per_platform_id": "snes_2768",
+     "availability": 0
+    },
+    {
+     "id": "52731789629369859",
+     "platform_id": "snes",
+     "external_id": "snes_Super Mario World",
+     "release_per_platform_id": "snes_snes_Super Mario World",
+     "availability": 0
+    },
+    {
+     "id": "52739104463012700",
+     "platform_id": "snes",
+     "external_id": "Super Mario World: Super Mario Bros. 4",
+     "release_per_platform_id": "snes_Super Mario World: Super Mario Bros. 4",
+     "availability": 0
+    },
+    {
+     "id": "52741992442364411",
+     "platform_id": "snes",
+     "external_id": "Super Mario World - Super Mario Bros. 4",
+     "release_per_platform_id": "snes_Super Mario World - Super Mario Bros. 4",
+     "availability": 0
+    },
+    {
+     "id": "52837737383532916",
+     "platform_id": "snes",
+     "external_id": "RA_SNES_130",
+     "release_per_platform_id": "snes_RA_SNES_130",
+     "availability": 0
+    },
+    {
+     "id": "52837791922141945",
+     "platform_id": "snes",
+     "external_id": "RA_SNES_109",
+     "release_per_platform_id": "snes_RA_SNES_109",
+     "availability": 0
+    },
+    {
+     "id": "52888413094425722",
+     "platform_id": "snes",
+     "external_id": "12650540",
+     "release_per_platform_id": "snes_12650540",
+     "availability": 0
+    },
+    {
+     "id": "52942996662492206",
+     "platform_id": "snes",
+     "external_id": "B19ED489",
+     "release_per_platform_id": "snes_B19ED489",
+     "availability": 0
+    },
+    {
+     "id": "53124299562208885",
+     "platform_id": "snes",
+     "external_id": "Super Mario World - The Second Reality Project Reloaded",
+     "release_per_platform_id": "snes_Super Mario World - The Second Reality Project Reloaded",
+     "availability": 0
+    },
+    {
+     "id": "53147350455615864",
+     "platform_id": "snes",
+     "external_id": "Super Mario RPG Mod - Armagedon Easy",
+     "release_per_platform_id": "snes_Super Mario RPG Mod - Armagedon Easy",
+     "availability": 0
+    },
+    {
+     "id": "53147355828582105",
+     "platform_id": "snes",
+     "external_id": "Super Mario RPG Mod - Armageddon",
+     "release_per_platform_id": "snes_Super Mario RPG Mod - Armageddon",
+     "availability": 0
+    },
+    {
+     "id": "53147984909245486",
+     "platform_id": "snes",
+     "external_id": "Super Mario World Mod - The Second Reality Project Reloaded",
+     "release_per_platform_id": "snes_Super Mario World Mod - The Second Reality Project Reloaded",
+     "availability": 0
+    },
+    {
+     "id": "53148008341740711",
+     "platform_id": "snes",
+     "external_id": "Super Mario RPG Mod - Master Quest",
+     "release_per_platform_id": "snes_Super Mario RPG Mod - Master Quest",
+     "availability": 0
+    },
+    {
+     "id": "53248731502144695",
+     "platform_id": "snes",
+     "external_id": "50602273",
+     "release_per_platform_id": "snes_50602273",
+     "availability": 0
+    },
+    {
+     "id": "53271250242113683",
+     "platform_id": "nes",
+     "external_id": "Super Mario World",
+     "release_per_platform_id": "nes_Super Mario World",
+     "availability": 0
+    },
+    {
+     "id": "53382775867086481",
+     "platform_id": "snes",
+     "external_id": "bc54a5a6",
+     "release_per_platform_id": "snes_bc54a5a6",
+     "availability": 0
+    },
+    {
+     "id": "53425012507225517",
+     "platform_id": "snes",
+     "external_id": "Super Mario World - Mario World Super",
+     "release_per_platform_id": "snes_Super Mario World - Mario World Super",
+     "availability": 0
+    },
+    {
+     "id": "53998654182128325",
+     "platform_id": "snes",
+     "external_id": "1619274539",
+     "release_per_platform_id": "snes_1619274539",
+     "availability": 0
+    },
+    {
+     "id": "54133821144668831",
+     "platform_id": "snes",
+     "external_id": "Super Mario World [Esp]",
+     "release_per_platform_id": "snes_Super Mario World [Esp]",
+     "availability": 0
+    }
+   ],
+   "title": {
+    "*": "Super Mario World",
+    "en-US": "Super Mario World"
+   },
+   "type": "game",
+   "developers": [
+    {
+     "name": "Nintendo Entertainment Analysis & Development"
+    }
+   ],
+   "publishers": [
+    {
+     "name": "Nintendo"
+    },
+    {
+     "name": "Gradiente"
+    },
+    {
+     "name": "Hyundai"
+    },
+    {
+     "name": "Playtronic"
+    }
+   ],
+   "genres": [
+    {
+     "name": {
+      "*": "Adventure",
+      "en-US": "Adventure"
+     }
+    },
+    {
+     "name": {
+      "*": "Platform",
+      "en-US": "Platform"
+     }
+    }
+   ],
+   "summary": {
+    "*": "A 2D platformer and first entry on the SNES in the Super Mario franchise, Super Mario World follows Mario as he attempts to defeat Bowser's underlings and rescue Princess Peach from his clutches. The game features a save system, a less linear world map, an expanded movement arsenal and numerous new items for Mario, alongside new approaches to level design and art direction.",
+    "en-US": "A 2D platformer and first entry on the SNES in the Super Mario franchise, Super Mario World follows Mario as he attempts to defeat Bowser's underlings and rescue Princess Peach from his clutches. The game features a save system, a less linear world map, an expanded movement arsenal and numerous new items for Mario, alongside new approaches to level design and art direction."
+   },
+   "horizontal_artwork": {
+    "url_format": "https://images.gog.com/898dcd32f710b3cc0ee5098975c548c6a4ea99dfbfcc6b5d798b3315c1fb9dff{formatter}.{ext}?namespace=gamesdb"
+   },
+   "background": {
+    "url_format": "https://images.gog.com/898dcd32f710b3cc0ee5098975c548c6a4ea99dfbfcc6b5d798b3315c1fb9dff{formatter}.{ext}?namespace=gamesdb"
+   },
+   "vertical_cover": {
+    "url_format": "https://images.gog.com/e679c1755d71f240a428861ae2084a22a21aeec6ec14b297ac1ed8c426a3a300{formatter}.{ext}?namespace=gamesdb"
+   },
+   "cover": {
+    "url_format": "https://images.gog.com/e679c1755d71f240a428861ae2084a22a21aeec6ec14b297ac1ed8c426a3a300{formatter}.{ext}?namespace=gamesdb"
+   },
+   "logo": {
+    "url_format": "https://images.gog.com/e679c1755d71f240a428861ae2084a22a21aeec6ec14b297ac1ed8c426a3a300{formatter}.{ext}?namespace=gamesdb"
+   },
+   "square_icon": {
+    "url_format": "https://images.gog.com/c11b43d25b141ac5175ab4f5edeb383d7ae4f42271e7017c04fae2398e102df4{formatter}.{ext}?namespace=gamesdb"
+   },
+   "screenshots": [
+    {
+     "url_format": "https://images.gog.com/83097e96095fea04de8f56693a9359d77c231558df82a7cf334e696eeef76b5b{formatter}.{ext}?namespace=gamesdb"
+    },
+    {
+     "url_format": "https://images.gog.com/9e3100c6e0aa22892feb3263c9f0b40d1f33117f57cc09b8bec7ab071ae74436{formatter}.{ext}?namespace=gamesdb"
+    }
+   ]
+  },
+  {
+   "id": "51154291313031850",
+   "first_release_date": "1995-08-05T00:00:00+0000",
+   "releases": [
+    {
+     "id": "52690317409941988",
+     "platform_id": "snes",
+     "external_id": "2866",
+     "release_per_platform_id": "snes_2866",
+     "availability": 0
+    },
+    {
+     "id": "52727047415146712",
+     "platform_id": "snes",
+     "external_id": "Super Mario World 2: Yoshis Island",
+     "release_per_platform_id": "snes_Super Mario World 2: Yoshis Island",
+     "availability": 0
+    },
+    {
+     "id": "52727420926731213",
+     "platform_id": "snes",
+     "external_id": "2772",
+     "release_per_platform_id": "snes_2772",
+     "availability": 0
+    },
+    {
+     "id": "52727457166923655",
+     "platform_id": "snes",
+     "external_id": "Super Mario World 2 - Yoshis Island",
+     "release_per_platform_id": "snes_Super Mario World 2 - Yoshis Island",
+     "availability": 0
+    },
+    {
+     "id": "52727524490175021",
+     "platform_id": "snes",
+     "external_id": "2769",
+     "release_per_platform_id": "snes_2769",
+     "availability": 0
+    },
+    {
+     "id": "52738952329339239",
+     "platform_id": "snes",
+     "external_id": "2770",
+     "release_per_platform_id": "snes_2770",
+     "availability": 0
+    },
+    {
+     "id": "52741902381345226",
+     "platform_id": "snes",
+     "external_id": "Super Mario - Yossy Island",
+     "release_per_platform_id": "snes_Super Mario - Yossy Island",
+     "availability": 0
+    },
+    {
+     "id": "52747341711386155",
+     "platform_id": "snes",
+     "external_id": "Super Mario: Yossy Island",
+     "release_per_platform_id": "snes_Super Mario: Yossy Island",
+     "availability": 0
+    },
+    {
+     "id": "52747350019605215",
+     "platform_id": "snes",
+     "external_id": "2750",
+     "release_per_platform_id": "snes_2750",
+     "availability": 0
+    },
+    {
+     "id": "52747375764444208",
+     "platform_id": "snes",
+     "external_id": "2771",
+     "release_per_platform_id": "snes_2771",
+     "availability": 0
+    },
+    {
+     "id": "52747650137342827",
+     "platform_id": "snes",
+     "external_id": "2752",
+     "release_per_platform_id": "snes_2752",
+     "availability": 0
+    },
+    {
+     "id": "52837729309308057",
+     "platform_id": "snes",
+     "external_id": "RA_SNES_110",
+     "release_per_platform_id": "snes_RA_SNES_110",
+     "availability": 0
+    },
+    {
+     "id": "52890230517997529",
+     "platform_id": "snes",
+     "external_id": "729378",
+     "release_per_platform_id": "snes_729378",
+     "availability": 0
+    },
+    {
+     "id": "52942996643593989",
+     "platform_id": "snes",
+     "external_id": "CF98DDAA",
+     "release_per_platform_id": "snes_CF98DDAA",
+     "availability": 0
+    },
+    {
+     "id": "52946768490164077",
+     "platform_id": "snes",
+     "external_id": "D138F224",
+     "release_per_platform_id": "snes_D138F224",
+     "availability": 0
+    },
+    {
+     "id": "52990930609504723",
+     "platform_id": "snes",
+     "external_id": "Super Mario World 2 - Yoshi s Island",
+     "release_per_platform_id": "snes_Super Mario World 2 - Yoshi s Island",
+     "availability": 0
+    },
+    {
+     "id": "53202457480475468",
+     "platform_id": "snes",
+     "external_id": "Super Mario World 2",
+     "release_per_platform_id": "snes_Super Mario World 2",
+     "availability": 0
+    },
+    {
+     "id": "53242069315007890",
+     "platform_id": "snes",
+     "external_id": "6632546965748",
+     "release_per_platform_id": "snes_6632546965748",
+     "availability": 0
+    },
+    {
+     "id": "53382775885257356",
+     "platform_id": "snes",
+     "external_id": "f97ee5fc",
+     "release_per_platform_id": "snes_f97ee5fc",
+     "availability": 0
+    },
+    {
+     "id": "55030097581994759",
+     "platform_id": "snes",
+     "external_id": "1e1dc02c684652f9e927f3873af65ea4b374bb80",
+     "release_per_platform_id": "snes_1e1dc02c684652f9e927f3873af65ea4b374bb80",
+     "availability": 0
+    },
+    {
+     "id": "55100126903843496",
+     "platform_id": "nswitch",
+     "external_id": "53d0f51780b8ff24a171e79e70dbda98ff51178c",
+     "release_per_platform_id": "nswitch_53d0f51780b8ff24a171e79e70dbda98ff51178c",
+     "availability": 0
+    },
+    {
+     "id": "55803017123405030",
+     "platform_id": "snes",
+     "external_id": "Super Mario - Yoshi Island",
+     "release_per_platform_id": "snes_Super Mario - Yoshi Island",
+     "availability": 0
+    },
+    {
+     "id": "55803266919318389",
+     "platform_id": "snes",
+     "external_id": "Yoshis Island",
+     "release_per_platform_id": "snes_Yoshis Island",
+     "availability": 0
+    },
+    {
+     "id": "55803594943953148",
+     "platform_id": "snes",
+     "external_id": "Super Mario World 2+ - Yoshis Island",
+     "release_per_platform_id": "snes_Super Mario World 2+ - Yoshis Island",
+     "availability": 0
+    },
+    {
+     "id": "55803664864415149",
+     "platform_id": "snes",
+     "external_id": "Super Mario World 2+2 - Yoshis Island",
+     "release_per_platform_id": "snes_Super Mario World 2+2 - Yoshis Island",
+     "availability": 0
+    }
+   ],
+   "title": {
+    "*": "Super Mario World 2: Yoshi's Island",
+    "en-US": "Super Mario World 2: Yoshi's Island"
+   },
+   "type": "game",
+   "developers": [
+    {
+     "name": "Nintendo Entertainment Analysis & Development"
+    }
+   ],
+   "publishers": [
+    {
+     "name": "Nintendo"
+    },
+    {
+     "name": "St. GIGA"
+    },
+    {
+     "name": "Hyundai"
+    },
+    {
+     "name": "Playtronic"
+    }
+   ],
+   "genres": [
+    {
+     "name": {
+      "*": "Adventure",
+      "en-US": "Adventure"
+     }
+    },
+    {
+     "name": {
+      "*": "Platform",
+      "en-US": "Platform"
+     }
+    }
+   ],
+   "summary": {
+    "*": "Super Mario World 2: Yoshi's Island is a platform video game acting as a prequel to 1990's Super Mario World. The game casts players as Yoshi as he escorts Baby Mario through 48 levels in order to reunite him with his brother Luigi, who had been kidnapped by Baby Bowser's minions. As a Super Mario series platformer, Yoshi runs and jumps to reach the end of the level while solving puzzles and collecting items. In a style new to the series, the game has a hand-drawn aesthetic and is the first to have Yoshi as its main character. The game introduces his signature abilities to flutter jump, produce eggs from swallowed enemies, and transform into vehicles.",
+    "en-US": "Super Mario World 2: Yoshi's Island is a platform video game acting as a prequel to 1990's Super Mario World. The game casts players as Yoshi as he escorts Baby Mario through 48 levels in order to reunite him with his brother Luigi, who had been kidnapped by Baby Bowser's minions. As a Super Mario series platformer, Yoshi runs and jumps to reach the end of the level while solving puzzles and collecting items. In a style new to the series, the game has a hand-drawn aesthetic and is the first to have Yoshi as its main character. The game introduces his signature abilities to flutter jump, produce eggs from swallowed enemies, and transform into vehicles."
+   },
+   "horizontal_artwork": {
+    "url_format": "https://images.gog.com/a656840c6a3ae8790b3b152ccc1e65437f3da9da901c52d5366a978f5229ee39{formatter}.{ext}?namespace=gamesdb"
+   },
+   "background": {
+    "url_format": "https://images.gog.com/a656840c6a3ae8790b3b152ccc1e65437f3da9da901c52d5366a978f5229ee39{formatter}.{ext}?namespace=gamesdb"
+   },
+   "vertical_cover": {
+    "url_format": "https://images.gog.com/c9eea5ce93461b988a64f365f7da64f2b257fcb8b44bfd3034923c67b5ae22fb{formatter}.{ext}?namespace=gamesdb"
+   },
+   "cover": {
+    "url_format": "https://images.gog.com/c9eea5ce93461b988a64f365f7da64f2b257fcb8b44bfd3034923c67b5ae22fb{formatter}.{ext}?namespace=gamesdb"
+   },
+   "logo": {
+    "url_format": "https://images.gog.com/06441ebcf9ec39fc4e94d3edd2f85e253ef6d45d77d4e796e9c7f922861808c1{formatter}.{ext}?namespace=gamesdb"
+   },
+   "square_icon": {
+    "url_format": "https://images.gog.com/96848ff2d95f3382a09a9dc2c7bb8bb4dcf04d9cf1c6a7b10ce78d49e0c0e8ff{formatter}.{ext}?namespace=gamesdb"
+   },
+   "screenshots": [
+    {
+     "url_format": "https://images.gog.com/5682d6b65aa8fdf3157d334918836221ba480813828bf25608e801122465724a{formatter}.{ext}?namespace=gamesdb"
+    },
+    {
+     "url_format": "https://images.gog.com/6ac0ee466d05ac46ece3317b888074d29e68357eb6e0c3861a31e465c94d3d64{formatter}.{ext}?namespace=gamesdb"
+    }
+   ]
+  }
+ ]
+}

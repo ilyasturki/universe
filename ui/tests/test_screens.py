@@ -364,7 +364,7 @@ def test_launch_form(api, fake):
         expected[1],
         *expected[3:],
         ("Folders", ["paths.games_root", "paths.prefixes_root", "paths.recordings_root"]),
-        ("API keys", ["keys.sgdb", "keys.sgdb_file", "keys.rawg", "keys.rawg_file"]),
+        ("API keys", ["keys.sgdb", "keys.sgdb_file", "keys.prefer_sgdb"]),
         ("Desktop", ["desktop.profile", "desktop.cursor_extension"]),
     ], "with Advanced on: the scaling flags fold into Display, the environment, the programs and config.toml's own sections follow"
     assert form.groups[0]["dividers"] == [{"at": 4, "label": "Advanced · Scaling"}]

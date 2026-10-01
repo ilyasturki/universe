@@ -10,10 +10,16 @@ CONFIG_ROWS = [
     ("Folders", "paths.games_root", "Games", "path", (), "Where sources install games."),
     ("Folders", "paths.prefixes_root", "Wine prefixes", "path", (), "Where a game's prefix is made when it names none."),
     ("Folders", "paths.recordings_root", "Recordings", "path", (), "Where the capture module files its videos."),
-    ("API keys", "keys.sgdb", "SteamGridDB key", "secret", (), "Artwork comes from SteamGridDB with a key from steamgriddb.com."),
+    (
+        "API keys",
+        "keys.sgdb",
+        "SteamGridDB key (optional)",
+        "secret",
+        (),
+        "Your own key from steamgriddb.com adds its community art to the picker, and square art. Without one, art comes from the stores, GOG GamesDB and libretro.",
+    ),
     ("API keys", "keys.sgdb_file", "SteamGridDB key file", "path", (), "A file holding the key, read when the key above is empty."),
-    ("API keys", "keys.rawg", "RAWG key", "secret", (), "Descriptions and metadata come from RAWG with a key from rawg.io."),
-    ("API keys", "keys.rawg_file", "RAWG key file", "path", (), "A file holding the key, read when the key above is empty."),
+    ("API keys", "keys.prefer_sgdb", "Prefer SteamGridDB art", "bool", (), "With a key, SteamGridDB's art fills a slot before the stores' and GamesDB's."),
     (
         "Desktop",
         "desktop.profile",
@@ -39,6 +45,8 @@ def config_row(config, section, key, label, kind, choices, detail):
     value = _dig(config, key)
     if value in (None, ""):
         value = CONFIG_DEFAULTS.get(key, "")
+    if kind == "bool":
+        return _row(section, key, label, kind, bool(value), choices, detail=detail, advanced=True)
     row = _row(section, key, label, "string" if kind == "secret" else kind, str(value or ""), choices, detail=detail, advanced=True)
     if kind == "secret":
         row["display"] = "Set" if value else "—"

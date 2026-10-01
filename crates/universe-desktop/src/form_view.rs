@@ -646,6 +646,6 @@ mod tests {
     #[test]
     fn folders_are_told_from_files_by_their_key() {
         assert!(wants_folder("paths.games_root") && wants_folder("launch.prefix") && wants_folder("sources.gog.games_dir"));
-        assert!(!wants_folder("launch.exe") && !wants_folder("keys.sgdb_file") && !wants_folder("keys.rawg_file"));
+        assert!(!wants_folder("launch.exe") && !wants_folder("keys.sgdb_file"));
     }
 }

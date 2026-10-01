@@ -44,13 +44,19 @@ FocusScope {
                 kind: "candidate",
                 url: candidates[i].thumb,
                 pick: candidates[i].url,
-                caption: candidates[i].votes > 0 ? "▲ " + candidates[i].votes : ""
+                caption: candidates[i].votes > 0 ? "▲ " + candidates[i].votes : candidates[i].providerLabel
             });
         if (form.more)
             out.push({
                 kind: "more",
                 url: "",
                 caption: form.candidatesBusy ? "…" : "More"
+            });
+        if (!form.sgdbKey)
+            out.push({
+                kind: "key",
+                url: "",
+                caption: "Add a SteamGridDB key for more art"
             });
         return out;
     }
@@ -68,7 +74,7 @@ FocusScope {
         },
         {
             glyph: "A",
-            label: cell === null ? "OK" : cell.kind === "now" ? "Shown" : cell.kind === "under" ? "Back to default" : cell.kind === "more" ? "Load more" : "Use this",
+            label: cell === null ? "OK" : cell.kind === "now" ? "Shown" : cell.kind === "under" ? "Back to default" : cell.kind === "more" ? "Load more" : cell.kind === "key" ? "Add a key" : "Use this",
             dim: cell === null || cell.kind === "now"
         }
     ]
@@ -102,6 +108,8 @@ FocusScope {
             form.removeOverride(slot);
         else if (cell.kind === "more")
             form.moreCandidates();
+        else if (cell.kind === "key")
+            Artwork.addKey(shell, form);
         else
             form.apply(slot, cell.pick);
     }
@@ -156,7 +164,7 @@ FocusScope {
         icon: "album"
         title: page.current ? page.current.label : ""
         subtitle: "Artwork · " + (page.game ? page.game.title : "")
-        trailing: page.form.candidatesBusy && page.candidates.length === 0 ? "Fetching…" : page.candidates.length === 0 ? "" : page.candidates.length + (page.form.more ? "+" : "") + " on SteamGridDB" + (page.form.entryDiffers ? " as " + page.form.entry : "")
+        trailing: page.form.candidatesBusy && page.candidates.length === 0 ? "Fetching…" : page.candidates.length === 0 ? "" : page.candidates.length + (page.form.more ? "+" : "") + " to pick from" + (page.form.entryDiffers ? " · " + page.form.catalogue + " has it as " + page.form.entry : "")
     }
 
     CellGrid {
@@ -182,8 +190,8 @@ FocusScope {
                 width: parent.width
                 height: page.artHeight
                 radius: Theme.dp(4)
-                color: entry.kind === "more" ? Theme.slot : page.slot === "logo" ? Theme.artShade : Theme.thumb
-                border.width: entry.kind === "more" ? 2 : 0
+                color: entry.kind === "more" || entry.kind === "key" ? Theme.slot : page.slot === "logo" ? Theme.artShade : Theme.thumb
+                border.width: entry.kind === "more" || entry.kind === "key" ? 2 : 0
                 border.color: Theme.hairline
                 opacity: entry.kind === "under" ? 0.6 : 1.0
 
@@ -197,7 +205,7 @@ FocusScope {
 
                 Label {
                     anchors.centerIn: parent
-                    visible: entry.kind === "more"
+                    visible: entry.kind === "more" || entry.kind === "key"
                     text: "+"
                     font.pixelSize: Theme.dp(Theme.fontTitle)
                     color: Theme.textSecondary

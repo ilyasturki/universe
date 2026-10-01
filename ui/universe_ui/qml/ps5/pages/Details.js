@@ -6,8 +6,9 @@ var SENTENCES = {
     "hidden": "Left out of every list; the CLI still sees it.",
     "sort_title": "The title lists sort by, when it differs from the shown one.",
     "tags": "Comma-separated; each tag is a gamelist in the Game Library.",
-    "metadata.sgdb_id": "The SteamGridDB game the artwork comes from.",
-    "metadata.rawg_id": "The RAWG game the description comes from."
+    "metadata.steam_appid": "The Steam game the art and the description come from.",
+    "metadata.gamesdb_id": "The GOG GamesDB game the art and the description come from.",
+    "metadata.sgdb_id": "The SteamGridDB game the artwork comes from, with your key."
 };
 
 // A module's or a source's row carries its manifest's description; these are the core's own rows.

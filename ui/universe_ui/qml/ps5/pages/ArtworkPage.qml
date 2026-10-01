@@ -124,7 +124,7 @@ FocusScope {
         anchors.right: parent.right
         game: page.game
         title: "Artwork"
-        trailing: page.form.entryDiffers ? "On SteamGridDB as " + page.form.entry : ""
+        trailing: page.form.entryDiffers ? "On " + page.form.catalogue + " as " + page.form.entry : ""
     }
 
     GameCellGrid {

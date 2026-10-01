@@ -488,19 +488,19 @@ pub async fn run(config: &Config, modules: &[Module], sources: &[Source], shell:
             push("runner-eden-stop", "Eden quits on stop", quits, detail, fix, "runners");
         }
     }
-    for (check, label, which_key, file) in
-        [("key-sgdb", "SteamGridDB API key", "sgdb", &config.keys.sgdb_file), ("key-rawg", "RAWG API key", "rawg", &config.keys.rawg_file)]
-    {
-        let present = config.api_key(which_key).is_some();
-        push(
-            check,
-            label,
-            present,
-            if present { "present".into() } else { format!("missing: no key in keys.{which_key} nor in {file}") },
-            format!("put your key in {file}"),
-            "media",
-        );
-    }
+    let present = config.sgdb_key().is_some();
+    push(
+        "key-sgdb",
+        "SteamGridDB API key",
+        true,
+        if present {
+            "present: SteamGridDB's art joins the stores', GamesDB's and libretro's".into()
+        } else {
+            "optional: art comes from the stores, GOG GamesDB and libretro without it".into()
+        },
+        "a key from steamgriddb.com/profile/preferences/api in keys.sgdb adds its community art".into(),
+        "media",
+    );
     let mut reported = Vec::new();
     for m in modules {
         if !m.enabled {

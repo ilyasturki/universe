@@ -1184,7 +1184,7 @@ FocusScope {
             function onFetchRequested(games) {
                 dialog.ask({
                     message: "Fetch the missing art of " + games + (games === 1 ? " game" : " games") + "?",
-                    detail: "From SteamGridDB, into each game's media folder; your picks stay on top. Stop any time from the same button.",
+                    detail: "From the stores, GOG GamesDB and libretro (and SteamGridDB with your key), into each game's media folder; your picks stay on top. Stop any time from the same button.",
                     yes: "Fetch",
                     no: "Not now"
                 }, function (yes) {

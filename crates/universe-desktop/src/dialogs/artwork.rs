@@ -32,8 +32,31 @@ fn origin_label(origin: &str) -> String {
         "picked" => gettext("Your pick"),
         "sgdb" => "SteamGridDB".into(),
         "steam" => "Steam".into(),
+        "gamesdb" => "GOG GamesDB".into(),
+        "libretro" => "libretro".into(),
+        "epic" => "Epic Games Store".into(),
+        "gog" => "GOG".into(),
+        "itch" => "itch.io".into(),
+        universe::media::GENERATED => gettext("Made from the box front"),
         "" => gettext("Fetched"),
         other => other.into(),
+    }
+}
+
+fn entry_title(entry: Option<&Hit>) -> String {
+    match entry {
+        None => gettext("Not matched yet"),
+        Some(e) if e.name.is_empty() => gettext("Entry {}").replace("{}", &e.id.to_string()),
+        Some(e) if e.year > 0 => format!("{} ({})", e.name, e.year),
+        Some(e) => e.name.clone(),
+    }
+}
+
+fn catalogue(sgdb_key: bool) -> &'static str {
+    if sgdb_key {
+        "SteamGridDB"
+    } else {
+        "GOG GamesDB"
     }
 }
 
@@ -51,7 +74,9 @@ struct Artwork {
     win: glib::WeakRef<Window>,
     game: String,
     title: String,
+    source: adw::PreferencesGroup,
     entry: adw::ActionRow,
+    key: adw::ActionRow,
     rows: Vec<(String, adw::ActionRow, Cover, gtk::Button)>,
     status: RefCell<MediaStatus>,
 }
@@ -75,14 +100,11 @@ impl Artwork {
     }
 
     fn show(&self, status: MediaStatus) {
-        let entry = match (status.sgdb_name.is_empty(), status.sgdb_year) {
-            (true, _) if status.sgdb_id == 0 => gettext("Not matched yet"),
-            (true, _) => gettext("Entry {}").replace("{}", &status.sgdb_id.to_string()),
-            (false, 0) => status.sgdb_name.clone(),
-            (false, year) => format!("{} ({year})", status.sgdb_name),
-        };
-        self.entry.set_title(&entry);
-        let differs = !status.sgdb_name.is_empty() && crate::library::fold(&status.sgdb_name) != crate::library::fold(&self.title);
+        self.entry.set_title(&entry_title(status.entry.as_ref()));
+        self.source.set_description(Some(&gettext("The {} game the art comes from").replace("{}", catalogue(status.sgdb_key))));
+        self.key.set_visible(!status.sgdb_key);
+        let named = status.entry.as_ref().map(|e| e.name.as_str()).unwrap_or("");
+        let differs = !named.is_empty() && crate::library::fold(named) != crate::library::fold(&self.title);
         self.entry.set_subtitle(&if differs { gettext("Not named like the game: change it if the art is wrong") } else { String::new() });
         for (slot, row, cover, reset) in &self.rows {
             let found = status.slots.iter().find(|s| s.slot == *slot).cloned().unwrap_or(SlotStatus { kind: "missing".into(), ..SlotStatus::default() });
@@ -230,24 +252,29 @@ impl Artwork {
                     for candidate in &listed.items {
                         let picture = sized(aspect, if aspect < 1.2 { 150 } else { 96 });
                         picture.set_path(if candidate.thumb.is_empty() { candidate.url.clone() } else { candidate.thumb.clone() });
-                        picture.set_tooltip_text(Some(
-                            &ngettext("{} vote", "{} votes", (candidate.score / 1000).max(0) as u32).replace("{}", &(candidate.score / 1000).to_string()),
-                        ));
+                        let votes = (candidate.score / 1000).max(0) as u32;
+                        let tip = if candidate.provider == "sgdb" {
+                            format!("SteamGridDB · {}", ngettext("{} vote", "{} votes", votes).replace("{}", &votes.to_string()))
+                        } else {
+                            origin_label(&candidate.provider)
+                        };
+                        picture.set_tooltip_text(Some(&tip));
                         flow.append(&picture);
                         urls.borrow_mut().push(candidate.url.clone());
                     }
                     more.set_visible(listed.more);
                     following.set(listed.page + 1);
                     if urls.borrow().is_empty() {
-                        status.set_description(Some(&gettext("SteamGridDB has none of this shape for the game")));
+                        let none = gettext("None of this shape for the game");
+                        let hint = gettext("A SteamGridDB key adds its community art");
+                        status.set_description(Some(&if listed.sgdb_key { none } else { format!("{none}\n{hint}") }));
                         stack.set_visible_child_name("status");
                     } else {
                         stack.set_visible_child_name("list");
                     }
-                    if let Some(this) = this.upgrade() {
-                        if let Some(entry) = listed.entry.filter(|_| number == 0) {
-                            this.entry.set_title(&if entry.year > 0 { format!("{} ({})", entry.name, entry.year) } else { entry.name });
-                        }
+                    if let Some(this) = this.upgrade().filter(|_| number == 0) {
+                        this.entry.set_title(&entry_title(listed.entry.as_ref()));
+                        this.key.set_visible(!listed.sgdb_key);
                     }
                 });
             })
@@ -287,8 +314,9 @@ impl Artwork {
         });
     }
 
-    /// SteamGridDB's games by name, to point the art at the right one.
+    /// The catalogue's games by name, to point the art at the right one.
     fn search(self: &Rc<Self>) {
+        let sgdb_key = self.status.borrow().sgdb_key;
         let entry = gtk::SearchEntry::builder().text(&self.title).hexpand(true).search_delay(500).build();
         let header = adw::HeaderBar::builder().title_widget(&adw::Clamp::builder().maximum_size(360).child(&entry).build()).build();
         let list = gtk::ListBox::builder().selection_mode(gtk::SelectionMode::None).css_classes(["boxed-list"]).valign(gtk::Align::Start).build();
@@ -307,7 +335,7 @@ impl Artwork {
         );
         let toolbar = adw::ToolbarView::builder().content(&stack).build();
         toolbar.add_top_bar(&header);
-        let page = adw::NavigationPage::builder().child(&toolbar).title(gettext("SteamGridDB Entry")).build();
+        let page = adw::NavigationPage::builder().child(&toolbar).title(gettext("{} Entry").replace("{}", catalogue(sgdb_key))).build();
 
         let hits: Rc<RefCell<Vec<Hit>>> = Rc::default();
         let (this, list_ref, stack_ref, status_ref, found) = (Rc::downgrade(self), list.downgrade(), stack.downgrade(), status.downgrade(), hits.clone());
@@ -324,7 +352,7 @@ impl Artwork {
                 let result = match result {
                     Ok(result) => result,
                     Err(e) => {
-                        status.set_title(&gettext("SteamGridDB Could Not Be Searched"));
+                        status.set_title(&gettext("{} Could Not Be Searched").replace("{}", catalogue(sgdb_key)));
                         status.set_description(Some(&glib::markup_escape_text(&e.to_string())));
                         stack.set_visible_child_name("status");
                         return;
@@ -389,9 +417,39 @@ impl Artwork {
             }
         });
     }
+
+    fn ask_key(self: &Rc<Self>) {
+        let Some(win) = self.win.upgrade() else { return };
+        let field = adw::PasswordEntryRow::builder().title(gettext("API Key")).build();
+        let list = gtk::ListBox::builder().selection_mode(gtk::SelectionMode::None).css_classes(["boxed-list"]).build();
+        list.append(&field);
+        let ask = adw::AlertDialog::new(
+            Some(&gettext("Add a SteamGridDB Key")),
+            Some(&gettext("Make one at steamgriddb.com/profile/preferences/api: its community art joins the picker, square art too.")),
+        );
+        ask.set_extra_child(Some(&list));
+        ask.add_responses(&[("cancel", &gettext("_Cancel")), ("add", &gettext("_Add"))]);
+        ask.set_response_appearance("add", adw::ResponseAppearance::Suggested);
+        ask.set_default_response(Some("add"));
+        let this = Rc::downgrade(self);
+        ask.connect_response(Some("add"), move |_, _| {
+            let key = field.text().trim().to_string();
+            let Some(this) = this.upgrade().filter(|_| !key.is_empty()) else { return };
+            let weak = Rc::downgrade(&this);
+            glib::spawn_future_local(async move {
+                let result = backend::pinned(move |core| async move { core.set_setting("keys.sgdb", &key).await }).await;
+                let Some(this) = weak.upgrade() else { return };
+                match result {
+                    Ok(()) => this.done(&gettext("SteamGridDB key added")),
+                    Err(e) => this.say(&e.to_string()),
+                }
+            });
+        });
+        ask.present(Some(&win));
+    }
 }
 
-/// A game's art, slot by slot: what shows and where it came from, SteamGridDB's other pictures, a file of the player's.
+/// A game's art, slot by slot: what shows and where it came from, the other pictures the stores and catalogues have, a file of the player's.
 pub fn present(win: &Window, game: &GameObject) {
     let dialog = adw::Dialog::builder().title(gettext("Artwork")).content_width(640).content_height(720).build();
     let toasts = adw::ToastOverlay::new();
@@ -400,12 +458,21 @@ pub fn present(win: &Window, game: &GameObject) {
     dialog.set_child(Some(&toasts));
 
     let prefs = adw::PreferencesPage::new();
-    let source = adw::PreferencesGroup::builder().title(gettext("Fetched From")).description(gettext("The SteamGridDB game the art comes from")).build();
+    let source = adw::PreferencesGroup::builder().title(gettext("Fetched From")).build();
     let entry = crate::rows::plain(adw::ActionRow::builder().build(), gettext("Not matched yet"), "");
     entry.add_prefix(&gtk::Image::from_icon_name("image-x-generic-symbolic"));
     let change = gtk::Button::builder().label(gettext("_Change…")).use_underline(true).valign(gtk::Align::Center).build();
     entry.add_suffix(&change);
     source.add(&entry);
+    let key = crate::rows::plain(
+        adw::ActionRow::builder().visible(false).build(),
+        gettext("Add a SteamGridDB key for more art"),
+        gettext("Your own key brings its community art and square pictures"),
+    );
+    key.add_prefix(&gtk::Image::from_icon_name("dialog-password-symbolic"));
+    let add_key = gtk::Button::builder().label(gettext("_Add Key…")).use_underline(true).valign(gtk::Align::Center).build();
+    key.add_suffix(&add_key);
+    source.add(&key);
     prefs.add(&source);
 
     let group = adw::PreferencesGroup::builder().title(gettext("Pictures")).build();
@@ -451,7 +518,9 @@ pub fn present(win: &Window, game: &GameObject) {
         win: win.downgrade(),
         game: game.id(),
         title: game.title(),
+        source,
         entry,
+        key,
         rows: rows.iter().map(|(slot, row, cover, reset, _)| (slot.clone(), row.clone(), cover.clone(), reset.clone())).collect(),
         status: RefCell::default(),
     });
@@ -472,6 +541,10 @@ pub fn present(win: &Window, game: &GameObject) {
     let weak = Rc::downgrade(&this);
     change.connect_clicked(move |_| {
         weak.upgrade().inspect(|t| t.search());
+    });
+    let weak = Rc::downgrade(&this);
+    add_key.connect_clicked(move |_| {
+        weak.upgrade().inspect(|t| t.ask_key());
     });
     let weak = Rc::downgrade(&this);
     fetch.connect_activated(move |button| {

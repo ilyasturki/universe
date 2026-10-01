@@ -14,7 +14,18 @@ SLOTS = [
 SLOT_LABELS = {slot: label for slot, label, _, _ in SLOTS}
 SLOT_ASPECTS = {slot: aspect for slot, _, aspect, _ in SLOTS}
 SLOT_USES = {slot: use for slot, _, _, use in SLOTS}
-ORIGIN_LABELS = {"picked": "your pick", "sgdb": "SteamGridDB", "steam": "Steam"}
+ORIGIN_LABELS = {
+    "picked": "your pick",
+    "sgdb": "SteamGridDB",
+    "steam": "Steam",
+    "gamesdb": "GOG GamesDB",
+    "libretro": "libretro",
+    "epic": "Epic Games Store",
+    "gog": "GOG",
+    "itch": "itch.io",
+    "generated": "Made from the box front",
+}
+CATALOGUES = {"sgdb": "SteamGridDB", "gamesdb": "GOG GamesDB"}
 RELOAD_MS = 300
 
 
@@ -48,24 +59,37 @@ def _slot_row(raw):
 
 
 def _candidate_row(raw, index):
+    provider = str(raw.get("provider") or "")
     return {
         "index": index,
         "id": int(raw.get("id") or 0),
+        "provider": provider,
+        "providerLabel": ORIGIN_LABELS.get(provider, provider),
         "url": str(raw.get("url") or ""),
         "thumb": file_url(raw.get("thumb") or raw.get("url")).toString(),
-        "votes": int(raw.get("score") or 0) // 1000,
+        "votes": int(raw.get("score") or 0) // 1000 if provider == "sgdb" else 0,
         "slot": str(raw.get("slot") or ""),
     }
 
 
+# GamesDB's ids pass 2^53: QML gets them as text.
 def _hit_row(raw):
     return {
-        "id": int(raw.get("id") or 0),
+        "id": str(raw.get("id") or ""),
+        "provider": str(raw.get("provider") or ""),
         "name": str(raw.get("name") or ""),
         "year": int(raw.get("year") or 0),
         "verified": bool(raw.get("verified")),
         "current": bool(raw.get("current")),
     }
+
+
+def _entry_label(entry):
+    if not entry:
+        return ""
+    if not entry["name"]:
+        return f"entry {entry['id']}"
+    return entry["name"] + (f" ({entry['year']})" if entry["year"] else "")
 
 
 class ArtworkForm(AsyncScreen):
@@ -81,9 +105,8 @@ class ArtworkForm(AsyncScreen):
         super().__init__(client, parent)
         self._game_id = ""
         self._title = ""
-        self._sgdb_id = 0
-        self._sgdb_name = ""
-        self._sgdb_year = 0
+        self._entry = {}
+        self._sgdb_key = False
         self._slots = []
         self._candidates = []
         self._candidates_slot = ""
@@ -120,14 +143,26 @@ class ArtworkForm(AsyncScreen):
         rows = self._client.mediaStatus(self._game_id)
         status = rows[0] if rows else {}
         self._title = str(status.get("title") or self._game_id)
-        sgdb_id = int(status.get("sgdb_id") or 0)
-        # A pin names the entry before the core caches its name; keep it until the status knows.
-        if sgdb_id != self._sgdb_id or status.get("sgdb_name"):
-            self._sgdb_name = str(status.get("sgdb_name") or "")
-            self._sgdb_year = int(status.get("sgdb_year") or 0)
-        self._sgdb_id = sgdb_id
+        self._sgdb_key = bool(status.get("sgdb_key"))
+        self._take_entry(status.get("entry") or {})
         self._slots = [_slot_row(s) for s in status.get("slots") or []]
         self.slotsChanged.emit()
+
+    # A pin names the entry before the core caches its name: the name stays until the core knows it.
+    def _take_entry(self, raw):
+        entry = {
+            "provider": str(raw.get("provider") or ""),
+            "id": str(raw.get("id") or ""),
+            "name": str(raw.get("name") or ""),
+            "year": int(raw.get("year") or 0),
+        }
+        if not entry["id"]:
+            entry = {}
+        elif entry["id"] == self._entry.get("id") and not entry["name"]:
+            return False
+        changed = entry != self._entry
+        self._entry = entry
+        return changed
 
     def _on_media_changed(self, ident):
         if ident == self._game_id:
@@ -175,11 +210,9 @@ class ArtworkForm(AsyncScreen):
             self._candidates = self._candidates + items
             self._page = int(data.get("page") or page)
             self._more = bool(data.get("more"))
-            entry = data.get("entry") or {}
-            if entry and (int(entry.get("id") or 0) != self._sgdb_id or entry.get("name") != self._sgdb_name):
-                self._sgdb_id = int(entry.get("id") or 0)
-                self._sgdb_name = str(entry.get("name") or "")
-                self._sgdb_year = int(entry.get("year") or 0)
+            key = bool(data.get("sgdb_key"))
+            if self._take_entry(data.get("entry") or {}) or key != self._sgdb_key:
+                self._sgdb_key = key
                 self.slotsChanged.emit()
             self.candidatesChanged.emit()
 
@@ -245,22 +278,34 @@ class ArtworkForm(AsyncScreen):
 
         self._run(lambda: self._client.mediaSearch(game_id, query), done)
 
-    @Slot(int)
-    def pin(self, sgdb_id):
-        if not self._client.mediaPin(self._game_id, "sgdb", str(int(sgdb_id))):
-            return
-        self._sgdb_id = int(sgdb_id)
-        self._hits = [dict(h, current=h["id"] == self._sgdb_id) for h in self._hits]
-        hit = next((h for h in self._hits if h["current"]), {"name": "", "year": 0})
-        self._sgdb_name, self._sgdb_year = hit["name"], hit["year"]
-        self.hitsChanged.emit()
-        self.slotsChanged.emit()
-        self._client.libraryChanged.emit([self._game_id])
+    def _reload_candidates(self):
         slot = self._candidates_slot
         self._candidates_slot = ""
         if slot:
             self.loadCandidates(slot)
-        self.message.emit(f"{self._title} now takes its art from {self._sgdb_name or sgdb_id}")
+
+    @Slot(str)
+    def pin(self, hit_id):
+        hit = next((h for h in self._hits if h["id"] == hit_id), None)
+        if hit is None or not self._client.mediaPin(self._game_id, hit["provider"], hit_id):
+            return
+        self._hits = [dict(h, current=h["id"] == hit_id) for h in self._hits]
+        self._entry = {"provider": hit["provider"], "id": hit_id, "name": hit["name"], "year": hit["year"]}
+        self.hitsChanged.emit()
+        self.slotsChanged.emit()
+        self._client.libraryChanged.emit([self._game_id])
+        self._reload_candidates()
+        self.message.emit(f"{self._title} now takes its art from {hit['name'] or hit_id}")
+
+    @Slot(str)
+    def addKey(self, key):
+        key = key.strip()
+        if not key or not self._client.setConfig("keys.sgdb", key):
+            return
+        self._sgdb_key = True
+        self.slotsChanged.emit()
+        self._reload_candidates()
+        self.message.emit("SteamGridDB key added: its art joins the picker")
 
     @Slot()
     def refresh(self):
@@ -269,15 +314,11 @@ class ArtworkForm(AsyncScreen):
 
     gameId = Property(str, lambda self: self._game_id, notify=gameIdChanged)
     title = Property(str, lambda self: self._title, notify=slotsChanged)
-    sgdbId = Property(int, lambda self: self._sgdb_id, notify=slotsChanged)
-    entry = Property(
-        str,
-        lambda self: (
-            (self._sgdb_name + (f" ({self._sgdb_year})" if self._sgdb_year else "")) if self._sgdb_name else (f"entry {self._sgdb_id}" if self._sgdb_id else "")
-        ),
-        notify=slotsChanged,
-    )
-    entryDiffers = Property(bool, lambda self: bool(self._sgdb_name) and self._sgdb_name.casefold() != self._title.casefold(), notify=slotsChanged)
+    matched = Property(bool, lambda self: bool(self._entry), notify=slotsChanged)
+    sgdbKey = Property(bool, lambda self: self._sgdb_key, notify=slotsChanged)
+    catalogue = Property(str, lambda self: CATALOGUES["sgdb" if self._sgdb_key else "gamesdb"], notify=slotsChanged)
+    entry = Property(str, lambda self: _entry_label(self._entry), notify=slotsChanged)
+    entryDiffers = Property(bool, lambda self: bool(self._entry.get("name")) and self._entry["name"].casefold() != self._title.casefold(), notify=slotsChanged)
     slots = Property(list, lambda self: [dict(s) for s in self._slots], notify=slotsChanged)
     candidates = Property(list, lambda self: [dict(c) for c in self._candidates], notify=candidatesChanged)
     candidatesSlot = Property(str, lambda self: self._candidates_slot, notify=candidatesChanged)

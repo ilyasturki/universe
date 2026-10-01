@@ -367,7 +367,7 @@ FocusScope {
                     icon: "download",
                     display: artFetching ? (job.total > 0 ? (job.done + 1) + " of " + job.total : "") : artworkOverview.missingGames === 0 ? "Nothing missing" : Format.plural(artworkOverview.missingGames, "game", "games"),
                     disabled: !artFetching && artworkOverview.missingGames === 0,
-                    detail: "Asks SteamGridDB for every game's missing covers, banners, backgrounds and logos."
+                    detail: "Asks the stores, GOG GamesDB and libretro (and SteamGridDB with your key) for every game's missing covers, banners, backgrounds and logos."
                 }
             ].concat(missing.length > 0 ? [
                 {

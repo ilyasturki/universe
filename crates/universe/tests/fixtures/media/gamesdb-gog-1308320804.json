@@ -1,0 +1,98 @@
+{
+ "id": "51428763078334825",
+ "game_id": "51152975252476092",
+ "platform_id": "gog",
+ "external_id": "1308320804",
+ "game": {
+  "id": "51152975252476092",
+  "first_release_date": "2017-02-24T00:00:00+0000",
+  "releases": [
+   {
+    "id": "51152975251945318",
+    "platform_id": "steam",
+    "external_id": "367520",
+    "release_per_platform_id": "steam_367520",
+    "availability": 0
+   },
+   {
+    "id": "51428763078334825",
+    "platform_id": "gog",
+    "external_id": "1308320804",
+    "release_per_platform_id": "gog_1308320804",
+    "availability": 1
+   },
+   {
+    "id": "53472660609010569",
+    "platform_id": "steam",
+    "external_id": "100006",
+    "release_per_platform_id": "steam_100006",
+    "availability": 0
+   }
+  ],
+  "title": {
+   "*": "Hollow Knight",
+   "en-US": "Hollow Knight"
+  },
+  "type": "game",
+  "developers": [
+   {
+    "name": "Team Cherry"
+   }
+  ],
+  "publishers": [
+   {
+    "name": "Team Cherry"
+   }
+  ],
+  "genres": [
+   {
+    "name": {
+     "*": "Adventure",
+     "en-US": "Adventure"
+    }
+   },
+   {
+    "name": {
+     "*": "Indie",
+     "en-US": "Indie"
+    }
+   },
+   {
+    "name": {
+     "*": "Platform",
+     "en-US": "Platform"
+    }
+   }
+  ],
+  "summary": {
+   "*": "A 2D metroidvania with an emphasis on close combat and exploration in which the player enters the once-prosperous now-bleak insect kingdom of Hallownest, travels through its various districts, meets friendly inhabitants, fights hostile ones and uncovers the kingdom's history while improving their combat abilities and movement arsenal by fighting bosses and accessing out-of-the-way areas.",
+   "en-US": "A 2D metroidvania with an emphasis on close combat and exploration in which the player enters the once-prosperous now-bleak insect kingdom of Hallownest, travels through its various districts, meets friendly inhabitants, fights hostile ones and uncovers the kingdom's history while improving their combat abilities and movement arsenal by fighting bosses and accessing out-of-the-way areas."
+  },
+  "horizontal_artwork": {
+   "url_format": "https://images.gog.com/ecfd18155b46945a7335a5a4a5585aa8a394f602ff7ec56562ba658dcb9e709a{formatter}.{ext}?namespace=gamesdb"
+  },
+  "background": {
+   "url_format": "https://images.gog.com/ecfd18155b46945a7335a5a4a5585aa8a394f602ff7ec56562ba658dcb9e709a{formatter}.{ext}?namespace=gamesdb"
+  },
+  "vertical_cover": {
+   "url_format": "https://images.gog.com/71cfac68718ddcd6b9d3ed7bdbdda3f75a3e61066a81e507f563d104a54f7e12{formatter}.{ext}?namespace=gamesdb"
+  },
+  "cover": {
+   "url_format": "https://images.gog.com/71cfac68718ddcd6b9d3ed7bdbdda3f75a3e61066a81e507f563d104a54f7e12{formatter}.{ext}?namespace=gamesdb"
+  },
+  "logo": {
+   "url_format": "https://images.gog.com/c01560fa767affdb3dce18c569ddaebd81cfdbbee60b84d5515463e8fc6c365a{formatter}.{ext}?namespace=gamesdb"
+  },
+  "square_icon": {
+   "url_format": "https://images.gog.com/8364eded39b13f6ad5880e6c98525efd596ce3279901be7a13c3a14d0c3110a6{formatter}.{ext}?namespace=gamesdb"
+  },
+  "screenshots": [
+   {
+    "url_format": "https://images.gog.com/a2a7862a67aee21ae931097533033ca953eb0b5154144372041656a4915689e0{formatter}.{ext}?namespace=gamesdb"
+   },
+   {
+    "url_format": "https://images.gog.com/b2a90b7bbfe4451dee941c8c87aa2172a6bfa042abaf673d42f337acccf8c481{formatter}.{ext}?namespace=gamesdb"
+   }
+  ]
+ }
+}

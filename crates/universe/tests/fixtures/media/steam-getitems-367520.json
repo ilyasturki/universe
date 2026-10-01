@@ -1,0 +1,28 @@
+{
+ "response": {
+  "store_items": [
+   {
+    "appid": 367520,
+    "name": "Hollow Knight",
+    "assets": {
+     "asset_url_format": "steam/apps/367520/${FILENAME}?t=1776125684",
+     "main_capsule": "f30cc19e25cce7e46cd7dfe89f3ee7852e634232/capsule_616x353.jpg",
+     "main_capsule_2x": "f30cc19e25cce7e46cd7dfe89f3ee7852e634232/capsule_616x353_2x.jpg",
+     "small_capsule": "fba7289f4c7e90ae9c0caa87e4225f3f9111d7dd/capsule_231x87.jpg",
+     "small_capsule_2x": "fba7289f4c7e90ae9c0caa87e4225f3f9111d7dd/capsule_231x87_2x.jpg",
+     "header": "3c3489495136b26b34f8a9543c7f5645b99d388c/header.jpg",
+     "header_2x": "3c3489495136b26b34f8a9543c7f5645b99d388c/header_2x.jpg",
+     "hero_capsule": "e6cd56dba0de70a88e249fcf8721362ba24a9f82/hero_capsule.jpg",
+     "hero_capsule_2x": "e6cd56dba0de70a88e249fcf8721362ba24a9f82/hero_capsule_2x.jpg",
+     "library_capsule": "1eebc7e077ee345f126df35cd99c124273c4e4e3/library_capsule.jpg",
+     "library_capsule_2x": "1eebc7e077ee345f126df35cd99c124273c4e4e3/library_capsule_2x.jpg",
+     "library_hero": "0daf3933d392d7bb7c5a890917e20c917fcc458e/library_hero.jpg",
+     "library_hero_2x": "0daf3933d392d7bb7c5a890917e20c917fcc458e/library_hero_2x.jpg",
+     "community_icon": "f6ab055c2366237200b1a31cccbd6cf81e436d72",
+     "page_background_path": "app/367520?t=1776125684",
+     "last_modified": 1776125684
+    }
+   }
+  ]
+ }
+}

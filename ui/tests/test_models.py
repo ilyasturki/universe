@@ -81,7 +81,7 @@ def test_game_decodes_daemon_shapes(app):
             "platform": "Nintendo Switch",
             "release_year": 2017,
             "source": {"kind": "lutris", "lutris_slug": "y", "gog_id": ""},
-            "metadata": {"developers": ["N"], "metacritic": 97, "players": 0, "rawg_id": 0, "sgdb_id": 12, "hltb_main": 50},
+            "metadata": {"developers": ["N"], "metacritic": 97, "players": 0, "gamesdb_id": 0, "sgdb_id": 12, "hltb_main": 50},
         },
         None,
     )

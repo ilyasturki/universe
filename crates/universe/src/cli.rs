@@ -387,7 +387,7 @@ const MEDIA_SLOTS: [&str; 6] = ["box_front", "square", "banner", "background", "
 
 #[derive(Subcommand, Debug)]
 pub enum MediaCmd {
-    /// Fetch artwork from SteamGridDB, RAWG and Steam
+    /// Fetch art and details from the game's store, Steam, GOG GamesDB, libretro (and SteamGridDB with a key)
     Refresh {
         /// Fetch again even when every slot is filled
         #[arg(long)]
@@ -419,7 +419,7 @@ pub enum MediaCmd {
     Search { query: Vec<String> },
     /// Pin the game to a provider id
     Pin {
-        #[arg(value_parser = ["sgdb", "rawg", "steam"])]
+        #[arg(value_parser = ["steam", "gamesdb", "sgdb"])]
         provider: String,
         /// The game's id at the provider
         id: String,
@@ -1248,10 +1248,11 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
                     }
                     let mut t = table(&["Game", "Entry", "Slot", "Kind", "Origin", "Shows", "Default"]);
                     for g in rows(&list) {
-                        let entry = match (s(&g, "sgdb_name"), g["sgdb_id"].as_u64().unwrap_or(0)) {
-                            (name, id) if !name.is_empty() => format!("{name} ({id})"),
+                        let e = &g["entry"];
+                        let entry = match (s(e, "name"), e["id"].as_u64().unwrap_or(0)) {
                             (_, 0) => String::new(),
-                            (_, id) => id.to_string(),
+                            (name, id) if !name.is_empty() => format!("{name} ({} {id})", s(e, "provider")),
+                            (_, id) => format!("{} {id}", s(e, "provider")),
                         };
                         for slot in g["slots"].as_array().cloned().unwrap_or_default() {
                             t.add_row(vec![
@@ -1997,7 +1998,21 @@ fn game_keys() -> Vec<String> {
         .filter(|k| k.scope != Scope::Global)
         .map(|k| if k.kind == Kind::Map { format!("{}.", k.key) } else { format!("{}=", k.key) })
         .collect();
-    keys.extend(["hide_cursor=", "hidden=", "favorite=", "tags=", "sort_title=", "platform=", "metadata.sgdb_id=", "capture.cursor="].map(String::from));
+    keys.extend(
+        [
+            "hide_cursor=",
+            "hidden=",
+            "favorite=",
+            "tags=",
+            "sort_title=",
+            "platform=",
+            "metadata.sgdb_id=",
+            "metadata.gamesdb_id=",
+            "metadata.steam_appid=",
+            "capture.cursor=",
+        ]
+        .map(String::from),
+    );
     keys
 }
 
@@ -2020,8 +2035,7 @@ fn config_keys() -> Vec<String> {
             "desktop.keep_awake",
             "keys.sgdb",
             "keys.sgdb_file",
-            "keys.rawg",
-            "keys.rawg_file",
+            "keys.prefer_sgdb",
             "controller.enabled",
             "controller.hold_ms",
             "controller.volume_step",
@@ -2054,7 +2068,7 @@ const POSITIONALS: &[(&str, usize, &str)] = &[
     ("media set", 2, "FILES"),
     ("media unset", 1, "SLOTS"),
     ("media candidates", 1, "SLOTS"),
-    ("media pin", 1, "sgdb rawg steam"),
+    ("media pin", 1, "steam gamesdb sgdb"),
     ("module enable", 1, "modules"),
     ("module disable", 1, "modules"),
     ("module settings", 1, "modules"),

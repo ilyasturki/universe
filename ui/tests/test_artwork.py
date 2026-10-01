@@ -7,7 +7,7 @@ def test_slots_carry_both_layers_and_a_pick_sits_over_the_default(api, fake):
     slots = {s["slot"]: s for s in form.slots}
     assert list(slots) == ["box_front", "square", "banner", "background", "logo"]
     assert slots["box_front"]["kind"] == "default" and slots["box_front"]["hasDefault"]
-    assert slots["box_front"]["kindLabel"] == "SteamGridDB", "one label carries the state and the origin"
+    assert slots["box_front"]["origin"] == "steam" and slots["square"]["origin"] == "generated", "a keyless profile's art"
     assert slots["square"]["use"] == "Home rail, Switch 2 tiles"
     assert not slots["box_front"]["hasOverride"]
     assert "?v=" in slots["box_front"]["url"]
@@ -15,8 +15,9 @@ def test_slots_carry_both_layers_and_a_pick_sits_over_the_default(api, fake):
     form.loadCandidates("box_front")
     settle(form)
     assert form.candidatesSlot == "box_front"
-    assert len(form.candidates) == 6 and form.candidates[0]["votes"] == 6
-    assert form.entry == "Dead Cells (2016)" and not form.entryDiffers
+    assert [c["provider"] for c in form.candidates] == ["steam", "gamesdb", "gamesdb"]
+    assert all(c["votes"] == 0 for c in form.candidates), "votes are SteamGridDB's"
+    assert form.matched and not form.entryDiffers and not form.sgdbKey
 
     seen = []
     form.applied.connect(seen.append)
@@ -51,16 +52,32 @@ def test_search_and_pin_reload_the_candidates(api, fake):
     settle(form)
     hits = form.hits
     assert len(hits) == 3 and hits[0]["current"] and not hits[1]["current"]
-    messages = []
-    form.message.connect(messages.append)
+    assert {h["provider"] for h in hits} == {"gamesdb"} and int(hits[0]["id"]) > 2**53, "GamesDB's ids reach QML whole, as text"
     form.pin(hits[1]["id"])
     settle(form)
-    assert form.sgdbId == hits[1]["id"]
-    assert form.entry == "Dead Cells Remastered (2021)" and form.entryDiffers
+    assert form.entryDiffers
     assert [h["current"] for h in form.hits] == [False, True, False]
-    assert fake.game("dead-cells")["metadata"]["sgdb_id"] == str(hits[1]["id"])
+    assert fake.game("dead-cells")["metadata"]["gamesdb_id"] == hits[1]["id"]
     assert form.candidatesSlot == "logo" and form.candidates
-    assert "Remastered" in messages[-1]
+
+
+def test_a_steamgriddb_key_brings_its_art_and_its_entries(api, fake):
+    form = api.screens.artwork
+    form.load("dead-cells")
+    form.loadCandidates("box_front")
+    settle(form)
+    assert not form.sgdbKey
+    form.addKey("  abc123  ")
+    settle(form)
+    assert fake.config()["keys"]["sgdb"] == "abc123" and form.sgdbKey
+    until(lambda: [c["provider"] for c in form.candidates][-1:] == ["sgdb"])
+    assert [c["votes"] for c in form.candidates if c["provider"] == "sgdb"] == [3, 2, 1]
+    form.search("")
+    settle(form)
+    assert {h["provider"] for h in form.hits} == {"sgdb"}
+    form.pin(form.hits[2]["id"])
+    settle(form)
+    assert fake.game("dead-cells")["metadata"]["sgdb_id"] == form.hits[2]["id"]
 
 
 def test_overview_lays_the_library_out_as_games_by_slots(api, fake):

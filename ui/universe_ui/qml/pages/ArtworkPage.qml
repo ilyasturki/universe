@@ -24,7 +24,9 @@ FocusScope {
     readonly property bool browsing: level === "browser"
     readonly property var candidates: form.candidatesSlot === currentSlot ? form.candidates : []
     property int candIndex: 0
-    readonly property int candCount: candidates.length + (form.more ? 1 : 0)
+    readonly property int moreIndex: form.more ? candidates.length : -1
+    readonly property int keyIndex: form.sgdbKey ? -1 : candidates.length + (form.more ? 1 : 0)
+    readonly property int candCount: candidates.length + (form.more ? 1 : 0) + (form.sgdbKey ? 0 : 1)
     readonly property int columns: currentAspect > 1.5 ? 4 : 7
     property int hitIndex: 0
     property string typing: "search"
@@ -46,7 +48,7 @@ FocusScope {
         return [
             {
                 glyph: "A",
-                label: browsing ? (candIndex < candidates.length ? "Use this" : "Load more") : "Open",
+                label: browsing ? (candIndex < candidates.length ? "Use this" : candIndex === keyIndex ? "Add a key" : "Load more") : "Open",
                 dim: browsing && candCount === 0
             },
             {
@@ -178,7 +180,17 @@ FocusScope {
             return;
         }
         Sound.enter();
-        candIndex >= candidates.length ? form.moreCandidates() : form.apply(currentSlot, candidates[candIndex].url);
+        if (candIndex === keyIndex)
+            askKey();
+        else if (candIndex === moreIndex)
+            form.moreCandidates();
+        else
+            form.apply(currentSlot, candidates[candIndex].url);
+    }
+
+    function askKey() {
+        page.typing = "key";
+        keyboard.show("SteamGridDB key", "", "text");
     }
 
     function backToDefault() {
@@ -531,7 +543,7 @@ FocusScope {
             Text {
                 anchors.verticalCenter: parent.verticalCenter
                 visible: page.candidates.length === 0
-                text: page.form.candidatesBusy ? "Fetching…" : page.form.sgdbId > 0 ? "Nothing for this slot" : "No match"
+                text: page.form.candidatesBusy ? "Fetching…" : page.form.matched ? "Nothing for this slot" : "No match"
                 color: Theme.textMuted
                 font.family: Theme.sans
                 font.pixelSize: Theme.dp(19)
@@ -561,8 +573,9 @@ FocusScope {
             highlightMoveDuration: Theme.durView
 
             delegate: Item {
-                readonly property bool isMore: index >= page.candidates.length
-                readonly property var cand: isMore ? null : page.candidates[index]
+                readonly property bool isMore: index === page.moreIndex
+                readonly property bool isKey: index === page.keyIndex
+                readonly property var cand: index < page.candidates.length ? page.candidates[index] : null
                 readonly property bool focused: page.browsing && index === page.candIndex
 
                 width: grid.cellWidth
@@ -606,7 +619,7 @@ FocusScope {
 
                         Image {
                             anchors.fill: parent
-                            visible: !isMore
+                            visible: cand !== null
                             source: cand ? cand.thumb : ""
                             fillMode: page.currentSlot === "logo" ? Image.PreserveAspectFit : Image.PreserveAspectCrop
                             asynchronous: true
@@ -636,11 +649,37 @@ FocusScope {
                             }
                         }
 
+                        Column {
+                            anchors.centerIn: parent
+                            width: parent.width - Theme.dp(24)
+                            visible: isKey
+                            spacing: Theme.dp(6)
+
+                            Text {
+                                anchors.horizontalCenter: parent.horizontalCenter
+                                text: "+"
+                                color: Theme.text
+                                font.family: Theme.sans
+                                font.weight: Font.Bold
+                                font.pixelSize: Theme.dp(44)
+                            }
+
+                            Text {
+                                width: parent.width
+                                horizontalAlignment: Text.AlignHCenter
+                                text: "Add a SteamGridDB key for more art"
+                                color: Theme.textSecondary
+                                font.family: Theme.sans
+                                font.pixelSize: Theme.dp(17)
+                                wrapMode: Text.WordWrap
+                            }
+                        }
+
                         Rectangle {
                             anchors.left: parent.left
                             anchors.bottom: parent.bottom
                             anchors.margins: Theme.dp(8)
-                            visible: !isMore && cand && cand.votes > 0
+                            visible: cand !== null
                             width: votes.width + Theme.dp(16)
                             height: Theme.dp(26)
                             radius: height / 2
@@ -649,7 +688,7 @@ FocusScope {
                             Text {
                                 id: votes
                                 anchors.centerIn: parent
-                                text: cand ? "▲ " + cand.votes : ""
+                                text: cand ? (cand.votes > 0 ? "▲ " + cand.votes : cand.providerLabel) : ""
                                 color: Theme.text
                                 font.family: Theme.sans
                                 font.weight: Font.DemiBold
@@ -667,7 +706,7 @@ FocusScope {
 
         anchors.fill: parent
         z: 4
-        title: "Which game is it on SteamGridDB?"
+        title: "Which game is it on " + page.form.catalogue + "?"
         innerMax: Theme.dp(1000)
         contentHeight: Theme.dp(12) + note.height + Theme.dp(18) + hitsList.height
 
@@ -712,7 +751,7 @@ FocusScope {
             } else if (api.keys.isFilters(event)) {
                 hits.close();
                 page.typing = "search";
-                keyboard.show("Search SteamGridDB", page.form.title, "text");
+                keyboard.show("Search " + page.form.catalogue, page.form.title, "text");
             } else if (event.key === Qt.Key_Up || event.key === Qt.Key_Down) {
                 page.hitIndex = Sound.stepped(page.hitIndex, event.key === Qt.Key_Up ? -1 : 1, list.length);
             }
@@ -724,7 +763,7 @@ FocusScope {
             anchors.topMargin: Theme.dp(12)
             anchors.horizontalCenter: parent.horizontalCenter
             width: hits.inner
-            text: page.searching ? "Searching SteamGridDB…" : page.form.searchError !== "" ? page.form.searchError : page.form.hits.length === 0 ? "Nothing matched — Y searches with another name." : "The candidates and the next fetch follow the one you pick."
+            text: page.searching ? "Searching " + page.form.catalogue + "…" : page.form.searchError !== "" ? page.form.searchError : page.form.hits.length === 0 ? "Nothing matched — Y searches with another name." : "The candidates and the next fetch follow the one you pick."
             color: Theme.textSecondary
             font.family: Theme.sans
             font.pixelSize: Theme.dp(21)
@@ -864,6 +903,9 @@ FocusScope {
         onAccepted: function (value) {
             if (page.typing === "path") {
                 page.form.useFile(page.currentSlot, value);
+                page.forceActiveFocus();
+            } else if (page.typing === "key") {
+                page.form.addKey(value);
                 page.forceActiveFocus();
             } else {
                 page.searchFor(value);

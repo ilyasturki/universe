@@ -1,0 +1,50 @@
+{
+ "367520": {
+  "success": true,
+  "data": {
+   "type": "game",
+   "name": "Hollow Knight",
+   "steam_appid": 367520,
+   "about_the_game": "<h2 class=\"bb_tag\" >Hollow Knight Expands with Free Content</h2><p class=\"bb_paragraph\" ><span class=\"bb_img_ctn\"><img class=\"bb_img\" src=\"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/367520/extras/f7c3e8408b76aee28c4bce238603c80d.avif?t=1776125684\" width=777 height=126 /></span><strong>Godmaster</strong> - Take your place amongst the Gods. New Characters and Quest. New Boss Fights. Available Now! </p><p class=\"bb_paragraph\" ><span class=\"bb_img_ctn\"><img class=\"bb_img\" src=\"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/367520/extras/e526a78d9cb1d0c62b8f0029b827e2d7.avif?t=1776125684\" width=777 height=125 /></span><strong>Lifeblood</strong> - A Kingdom Upgraded! New Boss. Upgraded Bosses. Tweaks and Refinements across the whole game. </p><p class=\"bb_paragraph\" ><span class=\"bb_img_ctn\"><img class=\"bb_img\" src=\"https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/367520/extras/1be95f2536d9ed83305bafee6e6093e2.avif?t=1776125684\" width=776 height=124 /></span><strong>The Grimm Troupe</strong> - Light the Nightmare Lantern. Summon the Troupe. New Major Quest. New Boss Fights. New Charms. New Enemies. New Friends. </p><p class=\"b",
+   "short_description": "Forge your own path in Hollow Knight! An epic action adventure through a vast ruined kingdom of insects and heroes. Explore twisting caverns, battle tainted creatures and befriend bizarre bugs, all in a classic, hand-drawn 2D style.",
+   "developers": [
+    "Team Cherry"
+   ],
+   "publishers": [
+    "Team Cherry"
+   ],
+   "metacritic": {
+    "score": 87,
+    "url": "https://www.metacritic.com/game/pc/hollow-knight?ftag=MCD-06-10aaa1f"
+   },
+   "genres": [
+    {
+     "id": "1",
+     "description": "Action"
+    },
+    {
+     "id": "25",
+     "description": "Adventure"
+    },
+    {
+     "id": "23",
+     "description": "Indie"
+    }
+   ],
+   "release_date": {
+    "coming_soon": false,
+    "date": "24 Feb, 2017"
+   },
+   "screenshots": [
+    {
+     "id": 0,
+     "path_full": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/367520/ss_5384f9f8b96a0b9934b2bc35a4058376211636d2.1920x1080.jpg?t=1776125684"
+    },
+    {
+     "id": 1,
+     "path_full": "https://shared.akamai.steamstatic.com/store_item_assets/steam/apps/367520/ss_d5b6edd94e77ba6db31c44d8a3c09d807ab27751.1920x1080.jpg?t=1776125684"
+    }
+   ]
+  }
+ }
+}

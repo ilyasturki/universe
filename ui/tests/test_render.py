@@ -755,8 +755,8 @@ def test_the_switch2_artwork_page_opens_a_slot_with_what_shows_first(api, fake):
     until(lambda: root.property("depth") == depth + 1)
     top = root.property("topPage")
     until(lambda: top.property("slot") == "square" and form.candidatesSlot == "square" and form.candidates)
-    cells = until(lambda: (cells := top.property("cells").toVariant()) and len(cells) == 1 + len(form.candidates) and cells)
-    assert cells[0]["kind"] == "now" and cells[1]["kind"] == "candidate"
+    cells = until(lambda: (cells := top.property("cells").toVariant()) and len(cells) == 2 + len(form.candidates) and cells)
+    assert cells[0]["kind"] == "now" and cells[1]["kind"] == "candidate" and cells[-1]["kind"] == "key"
     top.setProperty("cellIndex", 2)
     top.activate()
     until(

@@ -606,7 +606,7 @@ fn job_row(job: &Job) -> adw::ActionRow {
 fn confirm_fetch_all(win: &Window) {
     let dialog = adw::AlertDialog::new(
         Some(&gettext("Fetch All the Art Again?")),
-        Some(&gettext("Every fetched picture is replaced by SteamGridDB’s best one. The pictures you picked stay.")),
+        Some(&gettext("Every fetched picture and description is fetched again from the stores, GOG GamesDB and libretro, and SteamGridDB with your key. The pictures you picked stay.")),
     );
     dialog.add_responses(&[("cancel", &gettext("_Cancel")), ("fetch", &gettext("_Fetch All"))]);
     dialog.set_response_appearance("fetch", adw::ResponseAppearance::Suggested);

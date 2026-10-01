@@ -100,8 +100,8 @@ pub struct Desktop {
 #[derive(Default, Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(default)]
 pub struct Metadata {
-    pub rawg_id: u64,
     pub sgdb_id: u64,
+    pub gamesdb_id: u64,
     pub steam_appid: u64,
     pub developers: Vec<String>,
     pub publishers: Vec<String>,

@@ -187,9 +187,8 @@ pub struct SourcesConfig {
 #[serde(default)]
 pub struct Keys {
     pub sgdb: String,
-    pub rawg: String,
     pub sgdb_file: String,
-    pub rawg_file: String,
+    pub prefer_sgdb: bool,
 }
 
 impl Default for Config {
@@ -268,7 +267,7 @@ impl Default for SourcesConfig {
 
 impl Default for Keys {
     fn default() -> Self {
-        Keys { sgdb: String::new(), rawg: String::new(), sgdb_file: "~/.config/steamgriddb/api_key".into(), rawg_file: "~/.config/rawg/api_key".into() }
+        Keys { sgdb: String::new(), sgdb_file: "~/.config/steamgriddb/api_key".into(), prefer_sgdb: false }
     }
 }
 
@@ -393,16 +392,14 @@ impl Config {
         names.into_iter().collect()
     }
 
-    pub fn api_key(&self, which: &str) -> Option<String> {
-        let (inline, file) = match which {
-            "sgdb" => (&self.keys.sgdb, &self.keys.sgdb_file),
-            "rawg" => (&self.keys.rawg, &self.keys.rawg_file),
-            _ => return None,
-        };
-        if !inline.is_empty() {
-            return Some(inline.clone());
+    pub fn sgdb_key(&self) -> Option<String> {
+        if !self.keys.sgdb.is_empty() {
+            return Some(self.keys.sgdb.clone());
         }
-        std::fs::read_to_string(paths::expand(file)).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
+        if self.keys.sgdb_file.is_empty() {
+            return None;
+        }
+        std::fs::read_to_string(paths::expand(&self.keys.sgdb_file)).ok().map(|s| s.trim().to_string()).filter(|s| !s.is_empty())
     }
 
     pub fn to_json(&self) -> serde_json::Value {

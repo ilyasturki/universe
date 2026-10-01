@@ -507,8 +507,9 @@ CORE_ROWS = [
     ("Desktop and library", "favorite", "Favourite", "bool", False),
     ("Desktop and library", "hidden", "Hidden", "bool", False),
     ("Desktop and library", "tags", "Tags", "string", False),
+    ("Artwork", "metadata.steam_appid", "Steam app id", "int", True),
+    ("Artwork", "metadata.gamesdb_id", "GOG GamesDB id", "int", True),
     ("Artwork", "metadata.sgdb_id", "SteamGridDB id", "int", True),
-    ("Artwork", "metadata.rawg_id", "RAWG id", "int", True),
 ]
 
 

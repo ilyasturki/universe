@@ -2094,13 +2094,14 @@ impl Core {
         } else {
             vec![self.get(id).await?.game]
         };
-        Ok(games.iter().map(crate::media::status).collect())
+        let cfg = self.config.read().await.clone();
+        Ok(games.iter().map(|g| crate::media::status(&cfg, g)).collect())
     }
 
     pub async fn media_pin(&self, id: &str, provider: &str, provider_id: &str) -> Result<()> {
         let key = match provider {
             "sgdb" => "metadata.sgdb_id",
-            "rawg" => "metadata.rawg_id",
+            "gamesdb" => "metadata.gamesdb_id",
             "steam" => "metadata.steam_appid",
             _ => return Err(Error::Invalid(format!("unknown provider {provider}"))),
         };

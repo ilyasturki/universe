@@ -1,6 +1,6 @@
 .pragma library
 
-// SteamGridDB's entries for the game's own title first; the last choice takes another name and searches again.
+// The catalogue's entries for the game's own title first; the last choice takes another name and searches again.
 function search(shell, form, query) {
     if (query === undefined)
         query = form.title;
@@ -16,7 +16,7 @@ function search(shell, form, query) {
         var names = hits.map(function(h) { return h.name + (h.year > 0 ? " (" + h.year + ")" : "") + (h.verified ? " ✓" : ""); });
         names.push("Another name…");
         var current = hits.findIndex(function(h) { return h.current; });
-        var title = hits.length > 0 ? "Which game is it on SteamGridDB?" : "Nothing on SteamGridDB matched “" + query + "”";
+        var title = hits.length > 0 ? "Which game is it on " + form.catalogue + "?" : "Nothing on " + form.catalogue + " matched “" + query + "”";
         shell.pick({ title: title, choices: names, index: Math.max(0, current) }, function(i) {
             if (i < 0)
                 return;
@@ -24,7 +24,7 @@ function search(shell, form, query) {
                 form.pin(hits[i].id);
                 return;
             }
-            shell.prompt({ title: "Search SteamGridDB", value: query }, function(next) {
+            shell.prompt({ title: "Search " + form.catalogue, value: query }, function(next) {
                 if (next !== null && next !== "")
                     search(shell, form, next);
             });
@@ -32,4 +32,11 @@ function search(shell, form, query) {
     };
     form.hitsChanged.connect(settled);
     form.search(query);
+}
+
+function addKey(shell, form) {
+    shell.prompt({ title: "SteamGridDB key", value: "" }, function(key) {
+        if (key !== null && key !== "")
+            form.addKey(key);
+    });
 }

@@ -4,7 +4,7 @@ import "../sound"
 import "../ui"
 import "Artwork.js" as Artwork
 
-// One slot's choices: what shows now, the default under a pick of yours, then SteamGridDB's candidates; A uses one.
+// One slot's choices: what shows now, the default under a pick of yours, then the stores' and catalogues' candidates; A uses one.
 FocusScope {
     id: page
 
@@ -46,13 +46,19 @@ FocusScope {
                 kind: "candidate",
                 url: candidates[i].thumb,
                 pick: candidates[i].url,
-                caption: candidates[i].votes > 0 ? "▲ " + candidates[i].votes : ""
+                caption: candidates[i].votes > 0 ? "▲ " + candidates[i].votes : candidates[i].providerLabel
             });
         if (form.more)
             out.push({
                 kind: "more",
                 url: "",
                 caption: form.candidatesBusy ? "…" : "More"
+            });
+        if (!form.sgdbKey)
+            out.push({
+                kind: "key",
+                url: "",
+                caption: "Add a SteamGridDB key for more art"
             });
         return out;
     }
@@ -70,7 +76,7 @@ FocusScope {
         },
         {
             glyph: "A",
-            label: cell === null ? "OK" : cell.kind === "now" ? "Shown" : cell.kind === "under" ? "Back to default" : cell.kind === "more" ? "Load more" : "Use this",
+            label: cell === null ? "OK" : cell.kind === "now" ? "Shown" : cell.kind === "under" ? "Back to default" : cell.kind === "more" ? "Load more" : cell.kind === "key" ? "Add a key" : "Use this",
             dim: cell === null || cell.kind === "now"
         }
     ]
@@ -104,6 +110,8 @@ FocusScope {
             form.removeOverride(slot);
         else if (cell.kind === "more")
             form.moreCandidates();
+        else if (cell.kind === "key")
+            Artwork.addKey(shell, form);
         else
             form.apply(slot, cell.pick);
     }
@@ -118,7 +126,7 @@ FocusScope {
         var items = [];
         if (cell && cell.kind !== "now")
             items.push({
-                label: cell.kind === "under" ? "Back to Default" : cell.kind === "more" ? "Load More" : "Use This",
+                label: cell.kind === "under" ? "Back to Default" : cell.kind === "more" ? "Load More" : cell.kind === "key" ? "Add a Key" : "Use This",
                 glyph: "check",
                 act: "activate"
             });
@@ -172,13 +180,13 @@ FocusScope {
         anchors.right: parent.right
         game: page.game
         title: page.current ? page.current.label : "Artwork"
-        trailing: page.form.candidatesBusy && page.candidates.length === 0 ? "Fetching…" : page.candidates.length === 0 ? "" : page.candidates.length + (page.form.more ? "+" : "") + " on SteamGridDB" + (page.form.entryDiffers ? " as " + page.form.entry : "")
+        trailing: page.form.candidatesBusy && page.candidates.length === 0 ? "Fetching…" : page.candidates.length === 0 ? "" : page.candidates.length + (page.form.more ? "+" : "") + " to pick from" + (page.form.entryDiffers ? " · " + page.form.catalogue + " has it as " + page.form.entry : "")
     }
 
     Label {
         anchors.centerIn: grid
         visible: page.cells.length <= 1 && !page.form.candidatesBusy
-        text: "SteamGridDB has nothing else for this slot."
+        text: "Nothing else for this slot."
         color: Theme.textMuted
         font.pixelSize: Theme.dp(Theme.fontSmall)
     }
@@ -207,9 +215,10 @@ FocusScope {
                 width: parent.width
                 height: page.artHeight
                 radius: Theme.dp(8)
-                color: entry.kind === "more" ? Qt.rgba(1, 1, 1, 0.06) : page.slot === "logo" ? Qt.rgba(0.2, 0.22, 0.27, 0.9) : Qt.rgba(0.06, 0.07, 0.09, 0.9)
-                border.width: entry.kind === "more" ? Theme.dp(2) : 1
-                border.color: entry.kind === "more" ? Qt.rgba(1, 1, 1, 0.18) : Theme.glassEdge
+                readonly property bool action: entry.kind === "more" || entry.kind === "key"
+                color: action ? Qt.rgba(1, 1, 1, 0.06) : page.slot === "logo" ? Qt.rgba(0.2, 0.22, 0.27, 0.9) : Qt.rgba(0.06, 0.07, 0.09, 0.9)
+                border.width: action ? Theme.dp(2) : 1
+                border.color: action ? Qt.rgba(1, 1, 1, 0.18) : Theme.glassEdge
                 opacity: entry.kind === "under" ? 0.6 : 1.0
                 clip: true
 
@@ -224,7 +233,7 @@ FocusScope {
 
                 Glyph {
                     anchors.centerIn: parent
-                    visible: entry.kind === "more"
+                    visible: body.action
                     width: Theme.dp(44)
                     height: width
                     kind: "plus"

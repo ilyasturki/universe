@@ -40,6 +40,7 @@ UNLOCK_S = 1.0
 CLIP_S = 20
 
 SLOTS = ("box_front", "square", "banner", "background", "logo")
+FAKE_ORIGINS = {"box_front": "steam", "square": "generated", "banner": "steam", "background": "gamesdb", "logo": "libretro"}
 
 
 class X11Cards:
@@ -1340,17 +1341,25 @@ class FakeCore:
         media.update({k: v for k, v in (game.get("overrides") or {}).items() if v})
         return media
 
-    def _sgdb_hits(self, game):
-        title, base = game.get("title", game["id"]), 5000 + len(game["id"])
+    def _sgdb_key(self):
+        return bool((self._config.get("keys") or {}).get("sgdb"))
+
+    # SteamGridDB's games with a key, else GOG GamesDB's, whose ids pass 2^53.
+    def _catalogue_hits(self, game):
+        title = game.get("title", game["id"])
+        provider, base = ("sgdb", 5000) if self._sgdb_key() else ("gamesdb", 51152975252476092)
+        base += 1000 * len(game["id"])
+        verified = provider == "sgdb"
         return [
-            {"provider": "sgdb", "id": base, "name": title, "year": 2016, "verified": True},
-            {"provider": "sgdb", "id": base + 1, "name": f"{title} Remastered", "year": 2021, "verified": False},
-            {"provider": "sgdb", "id": base + 2, "name": f"{title} II", "year": 2019, "verified": True},
+            {"provider": provider, "id": base, "name": title, "year": 2016, "verified": verified},
+            {"provider": provider, "id": base + 1, "name": f"{title} Remastered", "year": 2021, "verified": False},
+            {"provider": provider, "id": base + 2, "name": f"{title} II", "year": 2019, "verified": verified},
         ]
 
-    def _sgdb_entry(self, game):
-        hits = self._sgdb_hits(game)
-        pinned = int((game.get("metadata") or {}).get("sgdb_id") or 0) or hits[0]["id"]
+    def _entry(self, game):
+        hits = self._catalogue_hits(game)
+        provider = hits[0]["provider"]
+        pinned = int((game.get("metadata") or {}).get(f"{provider}_id") or 0) or hits[0]["id"]
         return next((h for h in hits if h["id"] == pinned), {**hits[0], "id": pinned})
 
     def _status_of(self, game):
@@ -1366,18 +1375,16 @@ class FakeCore:
                     "path": over or default,
                     "default": default,
                     "override": over,
-                    "origin": "picked" if over else "sgdb" if default else "",
-                    "default_origin": "sgdb" if default else "",
+                    "origin": "picked" if over else FAKE_ORIGINS[slot] if default else "",
+                    "default_origin": FAKE_ORIGINS[slot] if default else "",
                     "kind": kind,
                 }
             )
-        entry = self._sgdb_entry(game)
         return {
             "id": game["id"],
             "title": game.get("title", game["id"]),
-            "sgdb_id": entry["id"],
-            "sgdb_name": entry["name"],
-            "sgdb_year": entry["year"],
+            "entry": {**self._entry(game), "current": True},
+            "sgdb_key": self._sgdb_key(),
             "slots": slots,
         }
 
@@ -1409,13 +1416,14 @@ class FakeCore:
         from .fixtures.art import paint_candidates
 
         game = self._game(ident)
-        items = [] if int(page) > 0 else paint_candidates(self._cache, ident, slot, game.get("title", ident))
-        return {"items": items, "page": int(page), "more": False, "entry": {**self._sgdb_entry(game), "current": True}}
+        key = self._sgdb_key()
+        items = [] if int(page) > 0 else paint_candidates(self._cache, ident, slot, game.get("title", ident), key)
+        return {"items": items, "page": int(page), "more": False, "entry": {**self._entry(game), "current": True}, "sgdb_key": key}
 
     def media_search(self, ident, query):
         game = self._game(ident)
-        current = self._sgdb_entry(game)["id"]
-        return [{**h, "current": h["id"] == current} for h in self._sgdb_hits(game) if query.casefold() in h["name"].casefold()]
+        current = self._entry(game)["id"]
+        return [{**h, "current": h["id"] == current} for h in self._catalogue_hits(game) if query.casefold() in h["name"].casefold()]
 
     def media_pin(self, ident, provider, provider_id):
         game = self._game(ident)

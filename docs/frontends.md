@@ -1064,25 +1064,31 @@ page below unloads it). `load(id)` reads `media_status` into `slots` — one row
 (`picked`, `default`, `missing`), `kindLabel` (the Switch 2 pill: "Your pick", the provider that
 fetched the default, or "Missing"), `originLabel` and `defaultOriginLabel`, `hasOverride`,
 `hasDefault`, `aspect`, `use` (where the themes show the slot, Switch 2's caption) — and `entry`, the
-SteamGridDB entry the candidates come from ("Name (year)"), named above the candidates only
-when `entryDiffers` (its name is not the game's), so a wrong match is seen and a right one says
-nothing. Reprise's page has two levels: the five slots as art cards (`ui/ArtFrame.qml`, the one
+catalogue game the art is matched to ("Name (year)"; `matched` when there is one), GOG GamesDB's, or
+SteamGridDB's once the player's key is set (`sgdbKey`; `catalogue` names the one in use), named
+above the candidates only when `entryDiffers` (its name is not the game's), so a wrong match is
+seen and a right one says nothing. Reprise's page has two levels: the five slots as art cards (`ui/ArtFrame.qml`, the one
 slot tile both the page and the Settings matrix draw — the box front tall on the left, square
 and banner, then background and logo, in two rows beside it, sized to fill the width, each named
 under it and nothing more), then a
 slot's browser — what shows now, the default under a pick dimmed beside it, and the candidates as
-a grid, with no captions (a line only for another game's SteamGridDB entry or no candidates) —
+a grid, each with its provider or, SteamGridDB's, its votes (a line only for another game's entry or no candidates) —
 opened by A, or straight away when the page is opened with a `slot` (the Settings section's A;
 B then leaves the page, the cards were never shown). `loadCandidates(slot)` fetches `media_candidates` off the UI
-thread into `candidates` (`url` is the provider's, `thumb` what the grid shows, `votes`), `more`
-and `candidatesBusy`; `moreCandidates()` takes the next page. `apply(slot, url)` runs
+thread into `candidates` (`url` is the provider's, `thumb` what the grid shows, `provider` and
+`providerLabel`, `votes` — SteamGridDB's only), `more` and `candidatesBusy`; `moreCandidates()`
+takes the next page. Without the player's SteamGridDB key every look ends the candidates with an
+"Add a SteamGridDB key for more art" cell (`kind: "key"` among the Switch 2 and PS5 `cells`): its A
+asks for the key (Reprise's keyboard sheet, the shell's `prompt` in `Artwork.js`) and `addKey(key)`
+writes `keys.sgdb` through `setConfig` and reloads the candidates. `apply(slot, url)` runs
 `media_set_url` on a thread, `useFile(slot, path)` `media_set_slot` (the page's menu, through
 `PathSheet` / the shell's `browse`); both emit `mediaChanged` for the game once the pick landed and
 `applied(slot)`. `removeOverride(slot)` runs `media_unset` (X in Reprise, the "Default under it"
 cell or the options menu on the Switch 2); `refresh()` fetches the missing art. All report
-through `message`. The wrong-match flow is `search(query)` → `hits` (`name`, `year`, `verified`,
-`current`) → `pin(id)`, which writes `metadata.sgdb_id` through `media_pin` and reloads the
-candidates; every look searches the game's own title first — Reprise's Y opens the hits in a sheet
+through `message`. The wrong-match flow is `search(query)` → `hits` (`id` as text — GamesDB's
+pass 2^53 —, `provider`, `name`, `year`, `verified`, `current`) → `pin(id)`, which writes the hit's
+provider's pin (`metadata.gamesdb_id`, or `metadata.sgdb_id` with a key) through `media_pin` and
+reloads the candidates; every look searches the game's own title first — Reprise's Y opens the hits in a sheet
 whose Y takes another name, the Switch 2 look runs it through the shell's `pick` with "Another
 name…" as the last choice, then `prompt` (`switch2/pages/Artwork.js`). Local URLs carry the file's mtime as a query
 (`models.file_url`), so a pick that replaces a file at the same path repaints instead of showing

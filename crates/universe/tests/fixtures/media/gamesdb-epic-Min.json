@@ -1,0 +1,107 @@
+{
+ "id": "52216715336344542",
+ "game_id": "51813465380088086",
+ "platform_id": "epic",
+ "external_id": "Min",
+ "game": {
+  "id": "51813465380088086",
+  "first_release_date": "2020-09-17T00:00:00+0000",
+  "releases": [
+   {
+    "id": "52216715336344542",
+    "platform_id": "epic",
+    "external_id": "Min",
+    "release_per_platform_id": "epic_Min",
+    "availability": 0
+   },
+   {
+    "id": "52615485002855388",
+    "platform_id": "steam",
+    "external_id": "1145360",
+    "release_per_platform_id": "steam_1145360",
+    "availability": 0
+   },
+   {
+    "id": "53410970513494767",
+    "platform_id": "epic",
+    "external_id": "3b586acd98e146ee9a92549c158d870f",
+    "release_per_platform_id": "epic_3b586acd98e146ee9a92549c158d870f",
+    "availability": 0
+   }
+  ],
+  "title": {
+   "*": "Hades",
+   "en-US": "Hades"
+  },
+  "type": "game",
+  "developers": [
+   {
+    "name": "Supergiant Games"
+   }
+  ],
+  "publishers": [
+   {
+    "name": "Supergiant Games"
+   },
+   {
+    "name": "Netflix"
+   }
+  ],
+  "genres": [
+   {
+    "name": {
+     "*": "Role-playing (RPG)",
+     "en-US": "Role-playing (RPG)"
+    }
+   },
+   {
+    "name": {
+     "*": "Adventure",
+     "en-US": "Adventure"
+    }
+   },
+   {
+    "name": {
+     "*": "Indie",
+     "en-US": "Indie"
+    }
+   },
+   {
+    "name": {
+     "*": "Hack and slash/Beat 'em up",
+     "en-US": "Hack and slash/Beat 'em up"
+    }
+   }
+  ],
+  "summary": {
+   "*": "A rogue-lite hack and slash dungeon crawler in which Zagreus, son of Hades the Greek god of the dead, attempts to escape his home and his oppressive father by fighting the souls of the dead through the various layers of the ever-shifting underworld, while getting to know and forging relationships with its inhabitants.",
+   "en-US": "A rogue-lite hack and slash dungeon crawler in which Zagreus, son of Hades the Greek god of the dead, attempts to escape his home and his oppressive father by fighting the souls of the dead through the various layers of the ever-shifting underworld, while getting to know and forging relationships with its inhabitants."
+  },
+  "horizontal_artwork": {
+   "url_format": "https://images.gog.com/346c602497b536d3efb98d84c43e48d9265db2aade0f4fd741c51a35f659dfb1{formatter}.{ext}?namespace=gamesdb"
+  },
+  "background": {
+   "url_format": "https://images.gog.com/346c602497b536d3efb98d84c43e48d9265db2aade0f4fd741c51a35f659dfb1{formatter}.{ext}?namespace=gamesdb"
+  },
+  "vertical_cover": {
+   "url_format": "https://images.gog.com/640696a9ededb419cde9d66881835102b6ac321c1bc428122c65de601b23ae52{formatter}.{ext}?namespace=gamesdb"
+  },
+  "cover": {
+   "url_format": "https://images.gog.com/640696a9ededb419cde9d66881835102b6ac321c1bc428122c65de601b23ae52{formatter}.{ext}?namespace=gamesdb"
+  },
+  "logo": {
+   "url_format": "https://images.gog.com/640696a9ededb419cde9d66881835102b6ac321c1bc428122c65de601b23ae52{formatter}.{ext}?namespace=gamesdb"
+  },
+  "square_icon": {
+   "url_format": "https://images.gog.com/31e2a9b88f0e7dd6ff8c4f1afe59f0c7cfeaee638fafbf1b93d8bda143747b51{formatter}.{ext}?namespace=gamesdb"
+  },
+  "screenshots": [
+   {
+    "url_format": "https://images.gog.com/6238a63df3563ecf1b34b5460ee8f8eb61658c9193c96c1697e03d5423c7be56{formatter}.{ext}?namespace=gamesdb"
+   },
+   {
+    "url_format": "https://images.gog.com/dacfc9750c0966ee55bf415327339d47484b581da7c6b09bdc47e5695027060f{formatter}.{ext}?namespace=gamesdb"
+   }
+  ]
+ }
+}

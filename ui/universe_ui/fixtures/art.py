@@ -63,16 +63,19 @@ def _paint(path, size, ident, title, kind):
     image.save(path)
 
 
-CANDIDATES = 6
+KEYLESS = ("steam", "gamesdb", "gamesdb")
+SGDB_CANDIDATES = 3
 
 
-def paint_candidates(art_dir, ident, slot, title):
+def paint_candidates(art_dir, ident, slot, title, sgdb_key):
     size = SLOTS.get(slot) or SLOTS["box_front"]
+    providers = KEYLESS + (("sgdb",) * SGDB_CANDIDATES if sgdb_key else ())
     items = []
-    for n in range(CANDIDATES):
+    for n, provider in enumerate(providers):
         path = os.path.join(art_dir, f"{ident}-{slot}-candidate{n}.png")
         _paint(path, size, f"{ident}/{slot}/{n}", f"{title}\n№ {n + 1}", slot)
-        items.append({"provider": "sgdb", "id": 100 + n, "url": path, "thumb": path, "score": (CANDIDATES - n) * 1000, "slot": slot})
+        score = (len(providers) - n) * 1000 if provider == "sgdb" else 0
+        items.append({"provider": provider, "id": n, "url": path, "thumb": path, "score": score, "slot": slot})
     return items
 
 

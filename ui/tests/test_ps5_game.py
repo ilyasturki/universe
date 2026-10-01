@@ -158,9 +158,9 @@ def test_the_artwork_opens_a_slot_and_a_pick_puts_the_default_under_it(ps5, api,
     until(lambda: form.candidatesSlot == "square" and len(form.candidates) > 0)
     until(lambda: root.property("depth") == depth + 1 and root.property("topPage").property("slot") == "square")
     top = root.property("topPage")
-    until(lambda: len(value(top, "cells")) == 1 + len(form.candidates))
+    until(lambda: len(value(top, "cells")) == 2 + len(form.candidates))
     cells = value(top, "cells")
-    assert cells[0]["kind"] == "now" and cells[1]["kind"] == "candidate"
+    assert cells[0]["kind"] == "now" and cells[1]["kind"] == "candidate" and cells[-1]["kind"] == "key"
     click(window, Qt.Key.Key_Right, 2)
     until(lambda: top.property("cellIndex") == 2)
     picked = record(fake.mediaChanged)
