@@ -485,6 +485,7 @@ class Api(QObject):
         window.screenChanged.connect(lambda screen: self._modes.clear())
 
     def shutdown(self):
+        self._home.shutdown()
         self._screens.shutdown()
         self._client.shutdown()
 

@@ -115,6 +115,10 @@ class Home(QObject):
         window.show()
         return True
 
+    def shutdown(self):
+        for timer in (self._poll, self._hold, self._swap, self._cue, self._osd_timer):
+            timer.stop()
+
     def _overlay_state(self, input, opacity):
         if self._overlay is not None and self._client.nested:
             self._client.overlay(self._overlay.winId(), input, opacity)
