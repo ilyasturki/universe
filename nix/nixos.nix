@@ -8,10 +8,9 @@
 let
   cfg = config.programs.universe;
   # uaccess only takes from a rule ahead of 73-seat-late.rules; services.udev.extraRules lands in 99-local.rules.
-  padsRules = pkgs.writeTextDir "lib/udev/rules.d/70-universe-pads.rules" ''
-    KERNEL=="uhid", TAG+="uaccess"
-    KERNEL=="hidraw*", KERNELS=="*:0079:555[0-7].*", TAG+="uaccess"
-  '';
+  rules = pkgs.writeTextDir "lib/udev/rules.d/70-universe.rules" (
+    builtins.readFile ../packaging/system/70-universe.rules
+  );
 in
 {
   imports = [
@@ -29,7 +28,7 @@ in
     controller.enable = lib.mkOption {
       type = lib.types.bool;
       default = true;
-      description = "What the controller macros and the pads module need from the system: /dev/uinput (key macros type through it; add your user to the uinput group), the game-devices udev rules that make pads readable by the logged-in user, and /dev/uhid with the virtual pads' hidraw nodes opened to that user (the pads module creates one virtual pad per player there).";
+      description = "What the controller macros and the pads module need from the system: /dev/uinput opened to the logged-in user (key macros type through it), the game-devices udev rules that make pads readable by the logged-in user, and /dev/uhid with the virtual pads' hidraw nodes opened to that user (the pads module creates one virtual pad per player there).";
     };
     gamescope.enable = lib.mkOption {
       type = lib.types.bool;
@@ -51,7 +50,7 @@ in
     hardware.uinput.enable = lib.mkIf cfg.controller.enable true;
     services.udev.packages = lib.mkIf cfg.controller.enable [
       pkgs.game-devices-udev-rules
-      padsRules
+      rules
     ];
     # /dev/uhid is a static node: a user's open does not load the module, and the rule applies once it is loaded.
     boot.kernelModules = lib.mkIf cfg.controller.enable [ "uhid" ];

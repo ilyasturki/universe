@@ -1,0 +1,4 @@
+# uaccess only takes from a rule ahead of 73-seat-late.rules: keep the 70.
+KERNEL=="uhid", TAG+="uaccess"
+KERNEL=="hidraw*", KERNELS=="*:0079:555[0-7].*", TAG+="uaccess"
+KERNEL=="uinput", SUBSYSTEM=="misc", TAG+="uaccess", OPTIONS+="static_node=uinput"

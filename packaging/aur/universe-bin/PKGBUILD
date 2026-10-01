@@ -59,7 +59,7 @@ package_universe-bin() {
     "gpu-screen-recorder: the capture module's recordings"
     "ffmpeg: the capture module's thumbnails and cuts"
     'trash-cli: recordings deleted to the trash'
-    "game-devices-udev: /dev/uinput for the controller's key macros"
+    'game-devices-udev: udev rules that make pads readable by your session'
     'grim: screenshots on sway, hyprland and niri'
     'spectacle: screenshots on KDE Plasma'
     'universe-desktop-bin: the library in a GTK app for mouse and keyboard'
@@ -81,6 +81,8 @@ package_universe-bin() {
   local ext="$pkgdir/usr/share/gnome-shell/extensions/universe@ilyasturki.github.io"
   install -Dm644 "$srcdir/metadata-$pkgver.json" "$ext/metadata.json"
   install -Dm644 "$srcdir/extension-$pkgver.js" "$ext/extension.js"
+  install -Dm644 lib/udev/rules.d/70-universe.rules -t "$pkgdir/usr/lib/udev/rules.d"
+  install -Dm644 lib/modules-load.d/universe.conf -t "$pkgdir/usr/lib/modules-load.d"
   install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname"
 }
 

@@ -86,7 +86,7 @@ package_universe() {
     "gpu-screen-recorder: the capture module's recordings"
     "ffmpeg: the capture module's thumbnails and cuts"
     'trash-cli: recordings deleted to the trash'
-    "game-devices-udev: /dev/uinput for the controller's key macros"
+    'game-devices-udev: udev rules that make pads readable by your session'
     'grim: screenshots on sway, hyprland and niri'
     'spectacle: screenshots on KDE Plasma'
     'universe-desktop: the library in a GTK app for mouse and keyboard'
@@ -105,6 +105,8 @@ package_universe() {
   install -Dm644 gen/universe.fish "$pkgdir/usr/share/fish/vendor_completions.d/universe.fish"
   install -Dm644 gen/universe.bash "$pkgdir/usr/share/bash-completion/completions/universe"
   install -Dm644 gen/_universe "$pkgdir/usr/share/zsh/site-functions/_universe"
+  install -Dm644 packaging/system/70-universe.rules -t "$pkgdir/usr/lib/udev/rules.d"
+  install -Dm644 packaging/system/universe.conf -t "$pkgdir/usr/lib/modules-load.d"
   install -Dm644 LICENSE -t "$pkgdir/usr/share/licenses/$pkgname"
   install -Dm644 ui/universe-ui.desktop -t "$pkgdir/usr/share/applications"
   install -Dm644 ui/icons/hicolor/scalable/apps/universe-ui.svg -t "$pkgdir/usr/share/icons/hicolor/scalable/apps"
