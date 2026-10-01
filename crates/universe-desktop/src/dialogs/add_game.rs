@@ -179,11 +179,12 @@ fn import_row(this: &Rc<AddGame>, kind: Import) -> adw::ActionRow {
             let result = apply(kind).await;
             let Some(this) = weak.upgrade() else { return };
             match result {
-                Ok(n) => {
+                Ok((n, art)) => {
                     button.set_visible(false);
                     this.say(&gettext("Added {}").replace("{}", &plural_games(n)));
                     if let Some(win) = this.win.upgrade() {
                         win.app().library().refresh(&[]).await;
+                        win.app().fetch_art(art);
                     }
                 }
                 Err(e) => {
@@ -210,11 +211,12 @@ async fn preview(kind: Import) -> Result<usize, String> {
     })
 }
 
-async fn apply(kind: Import) -> Result<usize, String> {
+/// How many games came in, and the `(id, title)` of those whose art is still to fetch.
+async fn apply(kind: Import) -> Result<(usize, Vec<(String, String)>), String> {
     backend::pinned(move |core| async move {
         match kind {
-            Import::Lutris => core.import_lutris(true).await.map(|r| r.imported.len()),
-            Import::Roms => core.import_roms(true).await.map(|r| r.imported.len()),
+            Import::Lutris => core.import_lutris(true).await.map(|r| (r.imported.len(), Vec::new())),
+            Import::Roms => core.import_roms(true).await.map(|r| (r.imported.len(), r.imported.into_iter().map(|f| (f.id, f.title)).collect())),
         }
     })
     .await

@@ -544,6 +544,11 @@ class CoreClient(QObject):
     def mediaRefresh(self, ident, force):
         return self._job("media", ident, lambda progress: "{}/{} updated".format(*self._core.media_refresh(ident, force, progress)))
 
+    @Slot("QVariant", result=str)
+    def mediaRefreshMany(self, ids):
+        ids = [str(i) for i in ids]
+        return self._job("media", "", lambda progress: "{}/{} updated".format(*self._core.media_refresh_many(ids, False, progress)))
+
     @Slot(str, result="QVariant")
     def mediaStatus(self, ident):
         return self._guarded([], self._core.media_status, ident)

@@ -436,7 +436,8 @@ impl Core {
         blocking(move || Ok(crate::discover::run(&config))).await.unwrap_or_default()
     }
 
-    /// The games under the emulators' own folders that are not in the library: added when `apply`, their art fetched after.
+    /// The games under the emulators' own folders that are not in the library, added when `apply`; their art is the caller's
+    /// to fetch after (`media_refresh_many`), so the games are in before the network is asked.
     pub async fn import_roms(&self, apply: bool) -> Result<crate::roms::Report> {
         let config = self.config.read().await.clone();
         let existing: Vec<PathBuf> = self.games.read().await.iter().map(|g| paths::expand(&g.game.launch.exe)).filter(|p| !p.as_os_str().is_empty()).collect();
@@ -450,11 +451,6 @@ impl Core {
             match self.add_game_with(&serde_json::json!({"runner": f.runner, "exe": f.path, "title": f.title}), false).await {
                 Ok(_) => added.push(f),
                 Err(e) => report.skipped.push(crate::roms::Skipped { path: f.path, reason: e.to_string() }),
-            }
-        }
-        for f in &added {
-            if let Err(e) = self.media_refresh(&f.id, false, None).await {
-                tracing::warn!("{}: media: {e}", f.id);
             }
         }
         report.imported = added;
@@ -1989,21 +1985,29 @@ impl Core {
     }
 
     /// The whole library when `id` is empty; returns (changed, total). `media_cancel` stops a library run between games.
-    pub async fn media_refresh(&self, id: &str, force: bool, mut progress: Option<Progress<'_, '_>>) -> Result<(usize, usize)> {
+    pub async fn media_refresh(&self, id: &str, force: bool, progress: Option<Progress<'_, '_>>) -> Result<(usize, usize)> {
+        if !id.is_empty() {
+            return self.refresh_media_of(&[self.resolve_one(id).await?], force, progress, false).await;
+        }
+        let ids: Vec<String> = self.games.read().await.iter().filter(|g| g.game.removed_at.is_empty()).map(|g| g.game.id.clone()).collect();
+        self.refresh_media_of(&ids, force, progress, true).await
+    }
+
+    /// Several games' art in turn, what an import just added: `media_cancel` stops it between games.
+    pub async fn media_refresh_many(&self, ids: &[String], force: bool, progress: Option<Progress<'_, '_>>) -> Result<(usize, usize)> {
+        self.refresh_media_of(ids, force, progress, true).await
+    }
+
+    async fn refresh_media_of(&self, ids: &[String], force: bool, mut progress: Option<Progress<'_, '_>>, stoppable: bool) -> Result<(usize, usize)> {
         use std::sync::atomic::Ordering;
-        let ids: Vec<String> = if id.is_empty() {
-            self.games.read().await.iter().filter(|g| g.game.removed_at.is_empty()).map(|g| g.game.id.clone()).collect()
-        } else {
-            vec![self.resolve_one(id).await?]
-        };
         let cfg = self.config.read().await.clone();
         let total = ids.len();
         let mut changed = 0;
-        if id.is_empty() {
+        if stoppable {
             self.media_stop.store(false, Ordering::SeqCst);
         }
         for (i, gid) in ids.iter().enumerate() {
-            if id.is_empty() && self.media_stop.load(Ordering::SeqCst) {
+            if stoppable && self.media_stop.load(Ordering::SeqCst) {
                 break;
             }
             let Ok(r) = self.get(gid).await else { continue };

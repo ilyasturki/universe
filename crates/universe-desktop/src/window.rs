@@ -226,6 +226,9 @@ impl Window {
             let result = backend::pinned(|core| async move { core.rescan().await }).await;
             let Some(win) = win.upgrade() else { return };
             win.app().library().refresh(&[]).await;
+            if let Ok(report) = &result {
+                win.app().fetch_art(report.imported.iter().map(|f| (f.id.clone(), f.title.clone())).collect());
+            }
             let text = match result {
                 Ok(report) if report.imported.is_empty() => gettext("The library is up to date"),
                 Ok(report) => {

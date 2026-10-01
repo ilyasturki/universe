@@ -204,7 +204,7 @@ impl Job {
     }
 }
 
-/// Runs a job on the core over `targets`, `(store id, title)` pairs: one to install, one or more to update, the game whose
+/// Runs a job on the core over `targets`, `(store id, title)` pairs: one to install, one or more to update, the games whose
 /// art to fetch (none: all of them), none for a scan. Progress arrives on the main loop as it comes, the outcome once it ends.
 pub fn start(kind: Kind, source: &str, targets: Vec<(String, String)>, force: bool) -> (Job, impl std::future::Future<Output = Outcome>) {
     let job = Job::new(kind, source, &targets);
@@ -230,6 +230,10 @@ pub fn start(kind: Kind, source: &str, targets: Vec<(String, String)>, force: bo
                 Ok((targets.len(), String::new()))
             }
             Kind::Scan => core.source_scan(&source, Some(&mut progress)).await.map(|n| (n, String::new())),
+            Kind::Artwork if targets.len() > 1 => {
+                let ids: Vec<String> = targets.iter().map(|(id, _)| id.clone()).collect();
+                core.media_refresh_many(&ids, force, Some(&mut progress)).await.map(|(changed, _)| (changed, String::new()))
+            }
             Kind::Artwork => core.media_refresh(&first, force, Some(&mut progress)).await.map(|(changed, _)| (changed, String::new())),
             Kind::Component => Err(universe::Error::Invalid(format!("{first}: a component's job starts through start_component"))),
         }?;

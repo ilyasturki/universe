@@ -387,6 +387,25 @@ impl Application {
         true
     }
 
+    /// The art of games just imported, `(id, title)`: an art job when none runs, else fetched quietly beside it.
+    pub fn fetch_art(&self, games: Vec<(String, String)>) {
+        if games.is_empty() {
+            return;
+        }
+        if self.job().is_none() {
+            self.start_job(Kind::Artwork, "", games, false);
+            return;
+        }
+        let (app, ids): (_, Vec<String>) = (self.downgrade(), games.into_iter().map(|(id, _)| id).collect());
+        glib::spawn_future_local(async move {
+            let wanted = ids.clone();
+            let _ = backend::pinned(move |core| async move { core.media_refresh_many(&ids, false, None).await }).await;
+            if let Some(app) = app.upgrade() {
+                app.library().refresh(&wanted).await;
+            }
+        });
+    }
+
     fn job_ended(&self, job: &Job, outcome: &Outcome) {
         let window = self.active_window().and_downcast::<Window>();
         let toast = adw::Toast::builder()

@@ -358,6 +358,13 @@ impl Core {
             c.media_refresh(&id, force, p.as_deref_mut()).await
         })
     }
+    #[pyo3(signature = (ids, force, progress=None))]
+    fn media_refresh_many(&self, py: Python<'_>, ids: Vec<String>, force: bool, progress: Option<Py<PyAny>>) -> PyResult<(usize, usize)> {
+        self.run(py, |c| async move {
+            let mut p = progress_of(&progress);
+            c.media_refresh_many(&ids, force, p.as_deref_mut()).await
+        })
+    }
     fn media_cancel(&self) {
         self.core.media_cancel();
     }

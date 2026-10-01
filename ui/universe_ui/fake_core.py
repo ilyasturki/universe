@@ -1304,10 +1304,16 @@ class FakeCore:
 
     def media_refresh(self, ident, force, progress=None):
         games = [self._game(ident)] if ident else [g for g in self._data["games"] if not g.get("removed")]
-        if not ident:
+        return self._refresh_media(games, progress, stoppable=not ident)
+
+    def media_refresh_many(self, ids, force, progress=None):
+        return self._refresh_media([g for g in self._data["games"] if g["id"] in ids], progress, stoppable=True)
+
+    def _refresh_media(self, games, progress, stoppable):
+        if stoppable:
             self._media_stop = False
         for i, game in enumerate(games):
-            if not ident and self._media_stop:
+            if stoppable and self._media_stop:
                 break
             if progress:
                 progress(i, len(games), game.get("title", game["id"]))

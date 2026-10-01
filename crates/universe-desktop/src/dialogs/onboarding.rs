@@ -201,12 +201,12 @@ fn launcher_row(this: &Rc<Onboarding>, launcher: &Launcher) -> adw::ActionRow {
             row.remove(&spinner);
             let Some(this) = weak.upgrade() else { return };
             match result {
-                Ok(0) if !IMPORTERS.contains(&via.as_str()) && this.waits_for_sign_in(&via, &name).await => {
+                Ok((0, _)) if !IMPORTERS.contains(&via.as_str()) && this.waits_for_sign_in(&via, &name).await => {
                     row.remove(&button);
                     let store = this.sources.borrow().iter().find(|s| s["id"] == via.as_str()).and_then(|s| s["name"].as_str()).unwrap_or(&via).to_string();
                     row.set_subtitle(&gettext("Sign in to {} to adopt them").replace("{}", &store));
                 }
-                Ok(n) => {
+                Ok((n, art)) => {
                     row.remove(&button);
                     row.add_suffix(&gtk::Image::from_icon_name("object-select-symbolic"));
                     row.set_subtitle(&if n == 0 { gettext("Nothing new") } else { gettext("{} added").replace("{}", &plural_games(n)) });
@@ -215,6 +215,7 @@ fn launcher_row(this: &Rc<Onboarding>, launcher: &Launcher) -> adw::ActionRow {
                     }
                     if let Some(win) = this.win.upgrade() {
                         win.app().library().refresh(&[]).await;
+                        win.app().fetch_art(art);
                     }
                 }
                 Err(e) => {
@@ -228,13 +229,14 @@ fn launcher_row(this: &Rc<Onboarding>, launcher: &Launcher) -> adw::ActionRow {
 }
 
 /// Lutris and the emulators' folders are imported; another launcher's installs are adopted by the scan of the store `via`
-/// names, turned on first when `enable` says it is off (the GOG store's scan reads Heroic's GOG folders too).
-async fn bring_in(via: &str, gog_dirs: Vec<String>, enable: bool) -> Result<usize, String> {
+/// names, turned on first when `enable` says it is off (the GOG store's scan reads Heroic's GOG folders too). The count,
+/// and the `(id, title)` of the games whose art is still to fetch.
+async fn bring_in(via: &str, gog_dirs: Vec<String>, enable: bool) -> Result<(usize, Vec<(String, String)>), String> {
     let via = via.to_string();
     backend::pinned(move |core| async move {
         match via.as_str() {
-            "lutris" => core.import_lutris(true).await.map(|r| r.imported.len()),
-            "roms" => core.import_roms(true).await.map(|r| r.imported.len()),
+            "lutris" => core.import_lutris(true).await.map(|r| (r.imported.len(), Vec::new())),
+            "roms" => core.import_roms(true).await.map(|r| (r.imported.len(), r.imported.into_iter().map(|f| (f.id, f.title)).collect())),
             store => {
                 if enable {
                     core.enable_source(store, true).await?;
@@ -249,7 +251,7 @@ async fn bring_in(via: &str, gog_dirs: Vec<String>, enable: bool) -> Result<usiz
                         core.set_source_setting("gog", "", "scan_dirs", &dirs.join(",")).await?;
                     }
                 }
-                core.source_scan(store, None).await
+                core.source_scan(store, None).await.map(|n| (n, Vec::new()))
             }
         }
     })
@@ -281,8 +283,8 @@ fn stores_page(this: &Rc<Onboarding>) -> adw::NavigationPage {
                 let result = bring_in(&id, Vec::new(), false).await;
                 let Some(this) = weak.upgrade() else { return };
                 match result {
-                    Ok(0) => {}
-                    Ok(n) => {
+                    Ok((0, _)) => {}
+                    Ok((n, _)) => {
                         this.summary.borrow_mut().push((launchers.join(", "), gettext("{} added").replace("{}", &plural_games(n))));
                         if let Some(win) = this.win.upgrade() {
                             win.app().library().refresh(&[]).await;

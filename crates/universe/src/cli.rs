@@ -1613,6 +1613,13 @@ pub async fn run(cli: Cli) -> anyhow::Result<()> {
         Cmd::Controller { action } => return controller(core, action, json).await,
         Cmd::Rescan => {
             let report = core.rescan().await?;
+            let added: Vec<String> = report.imported.iter().map(|f| f.id.clone()).collect();
+            if !added.is_empty() {
+                let mut p = progress_printer(json);
+                if let Err(e) = core.media_refresh_many(&added, false, Some(&mut p)).await {
+                    eprintln!("media: {e}");
+                }
+            }
             if json {
                 return print_json(&serde_json::to_value(&report)?);
             }
