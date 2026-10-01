@@ -2,7 +2,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use adw::prelude::*;
-use gettextrs::gettext;
+use gettextrs::{gettext, ngettext};
 use gtk::glib;
 use serde_json::Value;
 
@@ -23,30 +23,40 @@ fn rarity(v: &Value) -> String {
     }
 }
 
-/// Unlocked first, the newest on top; then the locked ones, the most common first; a hidden one closes the list.
-fn order(items: &mut [Value]) {
+/// Unlocked first, the newest on top; then the locked ones, the most common first. The hidden locked ones leave the
+/// list, their count returned: a greyed copy of their art would give them away.
+fn order(items: &mut Vec<Value>) -> usize {
     let unlocked = |v: &Value| !text(v, "unlocked_at").is_empty();
-    let masked = |v: &Value| v["hidden"].as_bool() == Some(true) && !unlocked(v);
+    let before = items.len();
+    items.retain(|v| unlocked(v) || v["hidden"].as_bool() != Some(true));
     items.sort_by(|a, b| {
         unlocked(b).cmp(&unlocked(a)).then_with(|| {
             if unlocked(a) {
                 text(b, "unlocked_at").cmp(&text(a, "unlocked_at"))
             } else {
-                masked(a).cmp(&masked(b)).then(b["rarity"].as_f64().unwrap_or(-1.0).total_cmp(&a["rarity"].as_f64().unwrap_or(-1.0)))
+                b["rarity"].as_f64().unwrap_or(-1.0).total_cmp(&a["rarity"].as_f64().unwrap_or(-1.0))
             }
         })
     });
+    before - items.len()
+}
+
+fn hidden_row(count: usize) -> adw::ActionRow {
+    let title = ngettext("{} hidden achievement", "{} hidden achievements", count as u32).replace("{}", &count.to_string());
+    let row = crate::rows::plain(adw::ActionRow::builder().build(), title, gettext("Keep playing to find out."));
+    let icon = Cover::new(48, 48);
+    icon.set_placeholder("trophy-symbolic");
+    icon.add_css_class("thumb");
+    icon.add_css_class("locked");
+    icon.set_valign(gtk::Align::Center);
+    row.add_prefix(&icon);
+    row
 }
 
 fn row(item: &Value) -> adw::ActionRow {
     let unlocked = !text(item, "unlocked_at").is_empty();
-    let masked = item["hidden"].as_bool() == Some(true) && !unlocked;
-    let (name, description) = if masked {
-        (gettext("Hidden Achievement"), gettext("Keep playing to find out"))
-    } else {
-        (if text(item, "name").is_empty() { text(item, "key") } else { text(item, "name") }, text(item, "description"))
-    };
-    let row = crate::rows::plain(adw::ActionRow::builder().build(), name, description);
+    let name = if text(item, "name").is_empty() { text(item, "key") } else { text(item, "name") };
+    let row = crate::rows::plain(adw::ActionRow::builder().build(), name, text(item, "description"));
     let icon = Cover::new(48, 48);
     icon.set_placeholder("trophy-symbolic");
     icon.add_css_class("thumb");
@@ -137,10 +147,13 @@ pub fn open(win: &Window, game: &str) {
                 }
                 head.append(&gtk::Label::builder().label(line.join(" · ")).xalign(0.0).css_classes(["dimmed"]).build());
                 column.append(&head);
-                order(&mut items);
+                let hidden = order(&mut items);
                 let group = adw::PreferencesGroup::new();
                 for item in &items {
                     group.add(&row(item));
+                }
+                if hidden > 0 {
+                    group.add(&hidden_row(hidden));
                 }
                 column.append(&group);
                 stack.set_visible_child_name("list");
@@ -175,16 +188,18 @@ mod tests {
     use super::*;
 
     #[test]
-    fn unlocked_come_first_newest_on_top_then_the_common_locked_ones() {
+    fn unlocked_come_first_newest_on_top_then_the_common_locked_ones_and_the_hidden_leave() {
         let mut items = vec![
             serde_json::json!({"key": "rare", "unlocked_at": "", "rarity": 2.0}),
             serde_json::json!({"key": "old", "unlocked_at": "2026-01-01T00:00:00Z"}),
             serde_json::json!({"key": "secret", "unlocked_at": "", "hidden": true, "rarity": 50.0}),
             serde_json::json!({"key": "common", "unlocked_at": "", "rarity": 40.0}),
             serde_json::json!({"key": "new", "unlocked_at": "2026-09-01T00:00:00Z"}),
+            serde_json::json!({"key": "found", "unlocked_at": "2026-08-01T00:00:00Z", "hidden": true}),
+            serde_json::json!({"key": "another", "unlocked_at": "", "hidden": true}),
         ];
-        order(&mut items);
+        assert_eq!(order(&mut items), 2);
         let keys: Vec<String> = items.iter().map(|v| text(v, "key")).collect();
-        assert_eq!(keys, ["new", "old", "common", "rare", "secret"]);
+        assert_eq!(keys, ["new", "found", "old", "common", "rare"]);
     }
 }

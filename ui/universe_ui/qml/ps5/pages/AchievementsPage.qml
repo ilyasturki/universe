@@ -25,7 +25,12 @@ FocusScope {
     property int index: 0
 
     readonly property var rows: {
-        var out = store.rows.slice();
+        var out = store.rows.filter(function (r) {
+            return !r.hidden;
+        });
+        var folded = store.rows.filter(function (r) {
+            return r.hidden;
+        });
         if (order === "rare" || order === "common") {
             var sign = order === "rare" ? 1 : -1;
             out.sort(function (a, b) {
@@ -35,10 +40,10 @@ FocusScope {
             });
         } else if (order === "name") {
             out.sort(function (a, b) {
-                return a.masked !== b.masked ? (a.masked ? 1 : -1) : a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1;
+                return a.name.toLowerCase() < b.name.toLowerCase() ? -1 : 1;
             });
         }
-        return out;
+        return out.concat(folded);
     }
     readonly property var current: index >= 0 && index < rows.length ? rows[index] : null
     readonly property int progress: store.total > 0 ? Math.round(100 * store.unlocked / store.total) : 0
@@ -397,7 +402,7 @@ FocusScope {
                         },
                         {
                             glyph: t.unlocked ? "trophy" : "lock",
-                            value: t.unlocked ? "Earned " + t.dateText : t.masked ? "Hidden until earned" : "Not earned yet",
+                            value: t.unlocked ? "Earned " + t.dateText : t.hidden ? "Hidden until earned" : "Not earned yet",
                             caption: "Status"
                         }
                     ];

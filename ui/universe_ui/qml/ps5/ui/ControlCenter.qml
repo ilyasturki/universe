@@ -1256,6 +1256,7 @@ FocusScope {
 
                             Label {
                                 anchors.right: parent.right
+                                visible: !modelData.hidden
                                 text: modelData.unlocked ? modelData.dateText : "Locked"
                                 color: Theme.textSecondary
                                 font.pixelSize: Theme.dp(Theme.fontSmall)

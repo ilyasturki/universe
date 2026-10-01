@@ -23,13 +23,12 @@ def _rarity(value):
 
 def _row(item):
     unlocked = bool(item.get("unlocked_at"))
-    masked = bool(item.get("hidden")) and not unlocked
     return {
         "key": str(item.get("key") or ""),
-        "name": "Hidden achievement" if masked else str(item.get("name") or item.get("key") or ""),
-        "description": "Keep playing to find out." if masked else str(item.get("description") or ""),
+        "name": str(item.get("name") or item.get("key") or ""),
+        "description": str(item.get("description") or ""),
         "unlocked": unlocked,
-        "masked": masked,
+        "hidden": 1 if item.get("hidden") and not unlocked else 0,
         "unlockedAt": str(item.get("unlocked_at") or ""),
         "dateText": _when(item.get("unlocked_at")) if unlocked else "",
         "icon": str(item.get("icon") or "") if unlocked else str(item.get("icon_locked") or item.get("icon") or ""),
@@ -38,11 +37,28 @@ def _row(item):
     }
 
 
-# Unlocked first, newest on top; then the locked ones, the most common first; a masked one closes the list.
+# A hidden locked one is no row of its own: its icon_locked is a greyed copy of the art, so the lot fold into one row with no icon.
+def _folded(count):
+    return {
+        "key": "hidden",
+        "name": f"{count} hidden achievement" + ("" if count == 1 else "s"),
+        "description": "Keep playing to find out.",
+        "unlocked": False,
+        "hidden": count,
+        "unlockedAt": "",
+        "dateText": "",
+        "icon": "",
+        "rarity": -1.0,
+        "rarityText": "",
+    }
+
+
+# Unlocked first, newest on top; then the locked ones, the most common first; the hidden ones, folded, close the list.
 def _order(rows):
     unlocked = sorted((r for r in rows if r["unlocked"]), key=lambda r: _moment(r["unlockedAt"]) or datetime.min.replace(tzinfo=UTC), reverse=True)
-    locked = sorted((r for r in rows if not r["unlocked"]), key=lambda r: (r["masked"], -r["rarity"]))
-    return unlocked + locked
+    locked = sorted((r for r in rows if not r["unlocked"] and not r["hidden"]), key=lambda r: -r["rarity"])
+    hidden = sum(1 for r in rows if r["hidden"])
+    return unlocked + locked + ([_folded(hidden)] if hidden else [])
 
 
 class AchievementsList(QObject):

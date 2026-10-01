@@ -4,24 +4,38 @@ import os
 from conftest import pump, until
 
 
-def test_the_store_orders_unlocks_first_and_masks_a_hidden_one(api, fake):
+def test_the_store_orders_unlocks_first_and_folds_the_hidden_ones(api, fake):
     store = api.screens.achievements
     store.load("batman-arkham-origins")
     assert store.loading
     until(lambda: not store.loading, "the read runs off the UI thread")
     rows = store.rows
     assert (store.total, store.unlocked, store.loading) == (6, 3, False)
-    assert [r["key"] for r in rows] == ["detective", "blackgate", "rooftops", "combo", "iam", "secret"], "newest unlock first, then the most common locked one"
+    assert [r["key"] for r in rows] == ["detective", "blackgate", "rooftops", "combo", "iam", "hidden"], "newest unlock first, then the most common locked one"
     assert rows[0]["dateText"] == "11 Sep 2026 · 22:18" and rows[0]["rarityText"] == "19% of players"
     assert rows[4]["rarityText"] == "2.1% of players"
-    hidden = rows[-1]
-    assert hidden["masked"] and hidden["name"] == "Hidden achievement" and "Freeze" not in hidden["description"]
+    folded = rows[-1]
+    assert folded["hidden"] == 1 and folded["icon"] == "" and folded["rarity"] < 0 and "Freeze" not in folded["description"]
     assert store.fetchedText == "20 Sep 2026 · 21:14"
 
     store.refresh()
     assert store.loading
     until(lambda: not store.loading)
     assert store.fetchedText != "20 Sep 2026 · 21:14", "asked the store again"
+
+
+def test_every_hidden_locked_one_folds_into_one_last_row():
+    from universe_ui.screens.achievements import _order, _row
+
+    items = [
+        {"key": "a", "unlocked_at": "2026-09-01T00:00:00+00:00", "hidden": True},
+        {"key": "b", "hidden": True, "icon_locked": "https://store/b.png", "rarity": 50},
+        {"key": "c", "rarity": 10},
+        {"key": "d", "hidden": True, "rarity": 1},
+    ]
+    rows = _order([_row(i) for i in items])
+    assert [r["key"] for r in rows] == ["a", "c", "hidden"], "a hidden one found is a row like the others"
+    assert rows[-1]["hidden"] == 2 and rows[-1]["icon"] == ""
 
 
 def test_a_game_no_source_lists_says_so(api, fake):

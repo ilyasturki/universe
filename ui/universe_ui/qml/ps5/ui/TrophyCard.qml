@@ -13,7 +13,7 @@ Item {
     signal picked
 
     readonly property bool unlocked: trophy.unlocked === true
-    readonly property bool masked: trophy.masked === true
+    readonly property bool masked: trophy.hidden > 0
 
     Rectangle {
         anchors.fill: parent

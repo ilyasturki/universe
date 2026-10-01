@@ -95,7 +95,7 @@ def test_the_trophies_list_the_games_achievements_and_sort_them(ps5, api):
     rows = value(page, "rows")
     assert page.property("strip") is False and page.property("progress") == 50
     assert [r["unlocked"] for r in rows] == [True, True, True, False, False, False], "earned first, as the store orders them"
-    assert rows[-1]["masked"] is True and rows[-1]["name"] == "Hidden achievement", "a hidden one keeps its secret"
+    assert rows[-1]["key"] == "hidden" and rows[-1]["hidden"] == 1, "a hidden one keeps its secret"
     click(window, Qt.Key.Key_Down, 2)
     until(lambda: page.property("index") == 2 and value(page, "current")["name"] == rows[2]["name"], "the lit one is told in full")
     click(window, Qt.Key.Key_F1)
@@ -106,8 +106,9 @@ def test_the_trophies_list_the_games_achievements_and_sort_them(ps5, api):
     click(window, Qt.Key.Key_Down)
     click(window, Qt.Key.Key_Return)
     until(lambda: page.property("order") == "rare")
-    rarities = [r["rarity"] for r in value(page, "rows")]
-    assert rarities == sorted(rarities) and page.property("index") == 0
+    rows = value(page, "rows")
+    rarities = [r["rarity"] for r in rows[:-1]]
+    assert rarities == sorted(rarities) and rows[-1]["key"] == "hidden" and page.property("index") == 0, "the hidden ones stay last"
     click(window, Qt.Key.Key_I)
     until(lambda: not store.loading)
     assert store.count == 6, "X asks the store again"
