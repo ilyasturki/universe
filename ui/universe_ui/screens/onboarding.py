@@ -175,7 +175,9 @@ class Onboarding(RowsForm):
 
         # The first sources() of a process asks every store whether its sign-in still holds: off the UI thread, with the rest.
         def look():
-            return client.core.discover(), client.sources(), client.config(), client.gpu(), client.launchKeys("global", None), client.getSourceSettings("gog")
+            everything = client.sources()
+            gog = client.getSourceSettings("gog") if any(s["id"] == "gog" for s in everything) else {}
+            return client.core.discover(), everything, client.config(), client.gpu(), client.launchKeys("global", None), gog
 
         def done(found, error):
             if error:

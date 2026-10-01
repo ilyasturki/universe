@@ -174,7 +174,10 @@ def test_the_load_asks_the_core_off_the_ui_thread(empty_api, empty):
 
     for name in ("discover", "sources", "settings", "gpu", "launch_keys"):
         setattr(empty.core, name, spied(name, getattr(empty.core, name)))
+    empty.core._data["sources"] = [s for s in empty.core._data["sources"] if s["id"] != "gog"]
+    errors = record(empty.error)
     form = loaded(empty_api.screens.onboarding)
+    assert errors == [], "no gog source: its folders are not asked for"
     assert {"discover", "sources", "settings"} <= {name for name, _ in calls}
     assert [name for name, main in calls if main] == [], "the first sources() asks every store over the network"
     while form.stepId != "done":
