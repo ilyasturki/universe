@@ -899,7 +899,7 @@ later, for `-ipc` and `gsr-cli`.
 The capture module records the whole **screen** (`source = "screen"`, the default: gpu-screen-recorder's
 KMS capture of the session's output) or the game's **window** (`source = "window"`, per game). The
 window source needs a desktop whose windows the core lists (see Desktop; on GNOME the
-`universe@ilyasturki.github.io` shell extension, `extension/`, GNOME 45 to 50, installed by the
+`universe@ilyasturki.github.io` shell extension, `extension/`, GNOME 45 to 51, installed by the
 home-manager module on NixOS, the AUR package under `/usr/share`, `universe setup` into
 `~/.local/share/gnome-shell/extensions/` otherwise, loaded
 after one logout, which also hides the resting pointer through `HideCursor(b)`): the module waits for

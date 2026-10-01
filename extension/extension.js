@@ -54,7 +54,9 @@ export default class UniverseExtension extends Extension {
     HideCursor(on) {
         if (on && !this._cursorTimer) {
             this._tracker = global.backend.get_cursor_tracker();
-            this._seat = Clutter.get_default_backend().get_default_seat();
+            // GNOME 51 removed Clutter.get_default_backend(); 45-50 may lack the stage's context
+            const backend = global.stage.context?.get_backend() ?? Clutter.get_default_backend();
+            this._seat = backend.get_default_seat();
             this._cursorMoved = Date.now();
             this._movedId = this._tracker.connect('position-invalidated', () => {
                 this._cursorMoved = Date.now();
