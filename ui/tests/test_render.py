@@ -984,10 +984,16 @@ def test_a_long_journal_paragraph_stops_above_the_hint_bar(api):
         for child in item.childItems():
             yield from walk(child)
 
+    def loaded_page():
+        item = window.activeFocusItem()
+        while item is not None and not item.metaObject().className().startswith("RecordingsPage"):
+            item = item.parentItem()
+        return item
+
+    # The sub loader is asynchronous: walk the page once it has taken the focus, not the tree it is still building.
+    page = until(loaded_page, "the recordings page loads and takes the focus")
     paragraph = until(
-        lambda: next(
-            (o for o in walk(window.contentItem()) if o.property("pitch") is not None and o.property("room") is not None and o.property("text")), None
-        ),
+        lambda: next((o for o in walk(page) if o.property("pitch") is not None and o.property("room") is not None and o.property("text")), None),
         "the fixture recording has an entry",
     )
     paragraph.setProperty("text", "A paragraph that keeps going. " * 60)
